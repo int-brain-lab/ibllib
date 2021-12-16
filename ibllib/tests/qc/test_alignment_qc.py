@@ -359,16 +359,6 @@ class TestUploadToFlatIron(unittest.TestCase):
         channels_id = np.load(alf_path.joinpath('channels.brainLocationIds_ccf_2017.npy'))
         assert(channels_mlapdv.shape[0] == channels_id.shape[0])
 
-        clusters_mlapdv = np.load(alf_path.joinpath('clusters.mlapdv.npy'))
-        assert(np.all(np.abs(clusters_mlapdv) > 0))
-        clusters_id = np.load(alf_path.joinpath('clusters.brainLocationIds_ccf_2017.npy'))
-        assert(clusters_mlapdv.shape[0] == clusters_id.shape[0])
-        assert(np.all(np.in1d(clusters_mlapdv, channels_mlapdv)))
-        assert (np.all(np.in1d(clusters_id, channels_id)))
-        clusters_acro = np.load(alf_path.joinpath('clusters.brainLocationAcronyms_ccf_2017.npy'),
-                                allow_pickle=True)
-        assert(clusters_acro.shape == clusters_id.shape)
-
     def test_upload_to_flatiron(self):
         for file in self.file_paths:
             file_registered = one.alyx.get(f'/datasets?&session={EPHYS_SESSION}'
