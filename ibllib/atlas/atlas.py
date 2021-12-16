@@ -781,7 +781,7 @@ class AllenAtlas(BrainAtlas):
         """
         Converts coordinates to the CCF coordinates, which is assumed to be the cube indices
         times the spacing.
-        :param xyz: mlapdv coordinates in um, origin Bregma
+        :param xyz: mlapdv coordinates in meters, origin Bregma
         :param ccf_order: order that you want values returned 'mlapdv' (ibl) or 'apdvml'
         (Allen mcc vertices)
         :return: coordinates in CCF space um, origin is the front left top corner of the data
