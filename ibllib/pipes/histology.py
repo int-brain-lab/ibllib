@@ -10,7 +10,7 @@ from ibllib.ephys.neuropixel import SITES_COORDINATES
 import ibllib.atlas as atlas
 from ibllib.ephys.spikes import probes_description as extract_probes
 from ibllib.dsp.utils import fcn_cosine
-from ibllib.ephys.neuropixel import TIP_SIZE_UM
+from ibllib.ephys.neuropixel import TIP_SIZE_UM, trace_header
 from ibllib.qc import base
 
 
@@ -168,7 +168,7 @@ def interpolate_along_track(xyz_track, depths):
     return xyz_channels
 
 
-def get_brain_regions(xyz, channels_positions=SITES_COORDINATES, brain_atlas=brain_atlas):
+def get_brain_regions(xyz, channels_positions=None, brain_atlas=brain_atlas):
     """
     :param xyz: numpy array of 3D coordinates corresponding to a picked track or a trajectory
     the deepest point is assumed to be the tip.
@@ -182,6 +182,11 @@ def get_brain_regions(xyz, channels_positions=SITES_COORDINATES, brain_atlas=bra
     this is the depth along the probe (from the first point which is the deepest labeled point)
     Due to the blockiness, depths may not be unique along the track so it has to be prepared
     """
+
+    if channels_positions is None:
+        geometry = trace_header(version=1)
+        channels_positions = np.c_[geometry['x'], geometry['y']]
+
     xyz = xyz[np.argsort(xyz[:, 2]), :]
     d = atlas.cart2sph(xyz[:, 0] - xyz[0, 0], xyz[:, 1] - xyz[0, 1], xyz[:, 2] - xyz[0, 2])[0]
     indsort = np.argsort(d)
@@ -278,8 +283,9 @@ def register_aligned_track(probe_id, xyz_channels, chn_coords=None, one=None, ov
     2) Channel locations are set to the trajectory
     """
     assert one
-    if not np.any(chn_coords):
-        chn_coords = SITES_COORDINATES
+    if chn_coords is None:
+        geometry = trace_header(version=1)
+        chn_coords = np.c_[geometry['x'], geometry['y']]
 
     insertion = atlas.Insertion.from_track(xyz_channels, brain_atlas)
     tdict = create_trajectory_dict(probe_id, insertion, provenance='Ephys aligned histology track')
