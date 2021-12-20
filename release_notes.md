@@ -1,3 +1,12 @@
+## Release Note 2.7
+### Release Notes 2.7.0 2021-12-20
+
+- Remove atlas instantiation from import of histology module
+- Write electodeSites dataset at end of histology and spikesorting pipelines if insertion resolved
+- Removal of native test train support and improved documentation / tests for GLMs
+- LFP destriping functions
+- Version number is now obtained from ibllib/__init__.py
+
 ## Release Notes 2.6
 
 ### Release Notes 2.6.0 2021-12-08
