@@ -11,7 +11,7 @@ class DesignMatrix:
     and allow the generation of a design matrix with specified regressors
     """
 
-    def __init__(self, trialsdf, vartypes=None, binwidth=0.02):
+    def __init__(self, trialsdf, vartypes, binwidth=0.02):
         """
         Class for generating design matrices to model neural data. Provides handy routines for
         describing neural spiking activity using basis functions and other primitives.
@@ -31,7 +31,7 @@ class DesignMatrix:
 
             Obligatory columns for the dataframe are "trial_start" and "trial_end", which tell the
             constructor which time points to associate with that trial.
-        vartypes : dict, optional
+        vartypes : dict
             Dictionary of types for each of the columns in trialsdf. Columns must be of the types:
             -- timing: timing events, in which the column values are times since the start of the
                 session of an event within that trial, e.g. stimulus onset.
@@ -41,32 +41,27 @@ class DesignMatrix:
                 changes within the trial. e.g. pupil diameter.
             Dictionary keys should be columns in trialsdf, values should be strings that are equal
             to one of the above.
-
-            If vartypes is not passed, the constructor will assume you know what you are doing. Be
-            warned that this can result in the class failing in spectacular and vindictive ways.
-            by default None
         binwidth : float, optional
             Length of time bins which will be used for design matrix, by default 0.02
         """
         # Data checks #
-        if vartypes is not None:
-            validtypes = ('timing', 'continuous', 'value')
-            if not all([name in vartypes for name in trialsdf.columns]):
-                raise KeyError("Some columns were not described in vartypes")
-            if not all([value in validtypes for value in vartypes.values()]):
-                raise ValueError("Invalid values were passed in vartypes")
+        validtypes = ('timing', 'continuous', 'value')
+        if not all([name in vartypes for name in trialsdf.columns]):
+            raise KeyError("Some columns were not described in vartypes")
+        if not all([value in validtypes for value in vartypes.values()]):
+            raise ValueError("Invalid values were passed in vartypes")
 
         # Filter out cells which don't meet the criteria for minimum spiking, while doing trial
         # assignment
-        self.vartypes = vartypes
-        if vartypes is not None:
-            self.vartypes['duration'] = 'value'
+        vartypes['duration'] = 'value'
         base_df = trialsdf.copy()
         trialsdf = trialsdf.copy()  # Make sure we don't modify the original dataframe
         trbounds = trialsdf[['trial_start', 'trial_end']]  # Get the start/end of trials
         # Empty trial duration value to use later
         trialsdf['duration'] = np.nan
+        # Figure out which columns are timing variables if vartypes was passed
         timingvars = [col for col in trialsdf.columns if vartypes[col] == 'timing']
+
         for i, (start, end) in trbounds.iterrows():
             if any(np.isnan((start, end))):
                 warn(f"NaN values found in trial start or end at trial number {i}. "
@@ -74,6 +69,8 @@ class DesignMatrix:
                 trialsdf.drop(i, inplace=True)
                 continue
             for col in timingvars:
+                # Round values for the timing variables to the 5th decimal place and subtract
+                # trial start time.
                 trialsdf.at[i, col] = np.round(trialsdf.at[i, col] - start, decimals=5)
             trialsdf.at[i, 'duration'] = end - start
 
@@ -81,6 +78,7 @@ class DesignMatrix:
         self.binwidth = binwidth
         self.covar = {}
         self.trialsdf = trialsdf
+        self.vartypes = vartypes
         self.base_df = base_df
         self.compiled = False
         return
@@ -155,7 +153,7 @@ class DesignMatrix:
         else:
             raise TypeError('deltaval must be None, pandas series, or string reference'
                             f' to trialsdf column. {type(deltaval)} was passed instead.')
-        if eventname in self.vartypes and self.vartypes[eventname] != 'timing':
+        if self.vartypes[eventname] != 'timing':
             raise TypeError(f'Column {eventname} in trialsdf is not registered as a timing')
 
         vecsizes = self.trialsdf['duration'].apply(self.binf)
@@ -174,6 +172,33 @@ class DesignMatrix:
 
     def add_covariate_boxcar(self, covlabel, boxstart, boxend,
                              cond=None, height=None, desc=''):
+        """
+        Convenience wrapped on add_covariate to add a boxcar covariate on the given start and end
+        variables, such that the covariate is a step function with non-zero value between those
+        values.
+
+        Note: This has not been tested yet and is not guaranteed to work, or work correctly.
+
+        Parameters
+        ----------
+        covlabel : str
+            Name of the covariate for accessing later. Can be accessed via dot syntax of the
+            instance usually.
+        boxstart : str
+            Column name in trialsdf which will be used to define the start of the boxcar
+        boxend : str
+            Column name in trialsdf which defines the end of boxcar variable
+        cond : None, list, or func, optional
+            Condition in which to apply this covariate. Can either be a list of trial indices, or
+            a function which takes in a row of the trialsdf and returns a boolen on inclusion,
+            by default None
+        height : None, str, or pandas series, optional
+            Values for the height of the boxcar during the period defined per trial. Can be a
+            reference to a column in trialsdf or a separate series, by default None
+        desc : str, optional
+            Additional information about the covariate to store as a string, by default ''
+
+        """
         if covlabel in self.covar:
             raise AttributeError(f'Covariate {covlabel} already exists in model.')
         self._compile_check()
@@ -210,6 +235,27 @@ class DesignMatrix:
 
     def add_covariate_raw(self, covlabel, raw,
                           cond=None, desc=''):
+        """
+        Convenience wrapper to add a 'raw' covariate, that is to say a covariate which is a
+        continuous value that changes with time during the course of a trial.
+
+        Note: This has not been tested and is not guaranteed to work or to work correctly.
+
+        Parameters
+        ----------
+        covlabel : str
+            String used to reference covariate, can usually be accessed by instance's dot syntax
+        raw : str, func, or pandas series
+            The covariate to add to the design matrix. Can be a str reference to a column in
+            trialsdf, a function which takes in rows of trialsdf and produces a vector for each
+            row of the appropriate size given binwidth and trial duration, or a pandas series
+            of vectors of said appropriate type.
+        cond : None, list, or func, optional
+            Trials in which to apply the given covariate. Can be a list of trial numbers,
+            or a function which accepts rows of the trialsdf and returns a boolean, by default None
+        desc : str, optional
+            Additional information about the covariate for access later, by default ''
+        """
         stimlens = self.trialsdf.duration.apply(self.binf)
         if isinstance(raw, str):
             if raw not in self.trialsdf.columns:
@@ -354,7 +400,6 @@ class DesignMatrix:
             assert self.binnedspikes.shape[0] == dm.shape[0], "Oh shit. Indexing error."
         self.dm = dm
         self.trlabels = trlabels
-        # self.dm = np.roll(dm, -1, axis=0)  # Fix weird +1 offset bug in design matrix
         self.compiled = True
         return
 
@@ -384,7 +429,7 @@ def denseconv(X, bases):
         A = np.zeros((T + TB - 1, int(np.sum(indices[kCov, :]))))
         for i, j in enumerate(np.argwhere(indices[kCov, :]).flat):
             A[:, i] = np.convolve(X[:, kCov], bases[:, j])
-        BX[:, k: sI[kCov]] = A[: T, :]
+        BX[:, k: sI[kCov]] = A[:T, :]
         k = sI[kCov]
     return BX
 
@@ -400,5 +445,5 @@ def convbasis(stim, bases, offset=0):
     if offset < 0:
         X = X[-offset:, :]
     elif offset > 0:
-        X = X[: -(1 + offset), :]
+        X = X[:-offset, :]
     return X
