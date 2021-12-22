@@ -22,6 +22,7 @@ from ibllib.io.extractors import ephys_fpga, ephys_passive, camera
 from ibllib.pipes import tasks
 from ibllib.pipes.training_preprocessing import TrainingRegisterRaw as EphysRegisterRaw
 from ibllib.pipes.misc import create_alyx_probe_insertions
+from ibllib.qc.alignment_qc import get_aligned_channels
 from ibllib.qc.task_extractors import TaskQCExtractor
 from ibllib.qc.task_metrics import TaskQC
 from ibllib.qc.camera import run_all_qc as run_camera_qc
@@ -408,6 +409,18 @@ class SpikeSorting(tasks.Task):
                 tar_dir.mkdir(parents=True, exist_ok=True)
                 out = spikes.ks2_to_tar(ks2_dir, tar_dir, force=self.FORCE_RERUN)
                 out_files.extend(out)
+
+                if self.one:
+                    eid = self.one.path2eid(self.session_path, query_type='remote')
+                    ins = self.one.alyx.rest('insertions', 'list', session=eid, name=label)
+                    if len(ins) != 0:
+                        resolved = ins[0].get('json', {'temp': 0}).get('extended_qc', {'temp': 0}). \
+                            get('alignment_resolved', False)
+                        if resolved:
+                            chns = np.load(probe_out_path.joinpath('channels.localCoordinates.npy'))
+                            out = get_aligned_channels(ins[0], chns, one=self.one, save_dir=probe_out_path)
+                            out_files.extend(out)
+
             except BaseException:
                 _logger.error(traceback.format_exc())
                 self.status = -1
