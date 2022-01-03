@@ -1,25 +1,28 @@
 """Functions for loading IBL ephys and trial data using the Open Neurophysiology Environment."""
+from dataclasses import dataclass
 import logging
 import os
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 from scipy.interpolate import interp1d
 
 from one.api import ONE
+import one.alf.io as alfio
 
 from iblutil.util import Bunch
 
 from ibllib.io import spikeglx
 from ibllib.io.extractors.training_wheel import extract_wheel_moves, extract_first_movement_times
 from ibllib.ephys.neuropixel import SITES_COORDINATES, TIP_SIZE_UM, trace_header
-from ibllib.atlas import atlas
-from ibllib.atlas import AllenAtlas
+from ibllib.atlas import atlas, AllenAtlas
 from ibllib.pipes import histology
 from ibllib.pipes.ephys_alignment import EphysAlignment
 
 from brainbox.core import TimeSeries
 from brainbox.processing import sync
+from brainbox.metrics.single_units import quick_unit_metrics
 
 _logger = logging.getLogger('ibllib')
 
@@ -120,7 +123,7 @@ def _channels_alf2bunch(channels, brain_regions=None):
 
 
 def _load_spike_sorting(eid, one=None, collection=None, revision=None, return_channels=True, dataset_types=None,
-                        brain_regions=None):
+                        brain_regions=None, return_collection=False):
     """
     Generic function to load spike sorting according data using ONE.
 
@@ -143,7 +146,7 @@ def _load_spike_sorting(eid, one=None, collection=None, revision=None, return_ch
         A particular revision return (defaults to latest revision).  See `ALF documentation`_ for
         details.
     return_channels : bool
-        Defaults to False otherwise loads channels from disk (takes longer)
+        Defaults to False otherwise loads channels from disk
 
     .. _ALF documentation: https://one.internationalbrainlab.org/alf_intro.html#optional-components
 
@@ -208,9 +211,9 @@ def _load_channels_locations_from_disk(eid, collection=None, one=None, revision=
         # if the spike sorter has not aligned data, try and get the alignment available
         if 'brainLocationIds_ccf_2017' not in channels[probe].keys():
             aligned_channel_collections = one.list_collections(
-                eid, filename='channels.brainLocationIds_ccf_2017*', collection=f'alf/{probe}', revision=revision)
+                eid, filename='channels.brainLocationIds_ccf_2017*', collection=probe_collection, revision=revision)
             if len(aligned_channel_collections) == 0:
-                _logger.warning(f"no resolved alignment dataset found for {eid}/{probe}")
+                _logger.debug(f"no resolved alignment dataset found for {eid}/{probe}")
                 continue
             _logger.debug(f"looking for a resolved alignment dataset in {aligned_channel_collections}")
             ac_collection = _get_spike_sorting_collection(aligned_channel_collections, probe)
@@ -266,8 +269,8 @@ def channel_locations_interpolation(channels_aligned, channels=None, brain_regio
 
 
 def _load_channel_locations_traj(eid, probe=None, one=None, revision=None, aligned=False,
-                                 brain_atlas=None):
-    print('from traj')
+                                 brain_atlas=None, return_source=False):
+    _logger.debug(f"trying to load from traj {probe}")
     channels = Bunch()
     brain_atlas = brain_atlas or AllenAtlas
     # need to find the collection bruh
@@ -290,10 +293,9 @@ def _load_channel_locations_traj(eid, probe=None, one=None, revision=None, align
         xyz = np.array(insertion['json']['xyz_picks']) / 1e6
         if resolved:
 
-            _logger.info(f'Channel locations for {eid}/{probe} have been resolved. '
-                         f'Channel and cluster locations obtained from ephys aligned histology '
-                         f'track.')
-
+            _logger.debug(f'Channel locations for {eid}/{probe} have been resolved. '
+                          f'Channel and cluster locations obtained from ephys aligned histology '
+                          f'track.')
             traj = one.alyx.rest('trajectories', 'list', session=eid, probe=probe,
                                  provenance='Ephys aligned histology track')[0]
             align_key = insertion['json']['extended_qc']['alignment_stored']
@@ -304,12 +306,12 @@ def _load_channel_locations_traj(eid, probe=None, one=None, revision=None, align
                                         brain_atlas=brain_atlas, speedy=True)
             chans = ephysalign.get_channel_locations(feature, track)
             channels[probe] = _channels_traj2bunch(chans, brain_atlas)
-
+            source = 'resolved'
         elif counts > 0 and aligned:
-            _logger.info(f'Channel locations for {eid}/{probe} have not been '
-                         f'resolved. However, alignment flag set to True so channel and cluster'
-                         f' locations will be obtained from latest available ephys aligned '
-                         f'histology track.')
+            _logger.debug(f'Channel locations for {eid}/{probe} have not been '
+                          f'resolved. However, alignment flag set to True so channel and cluster'
+                          f' locations will be obtained from latest available ephys aligned '
+                          f'histology track.')
             # get the latest user aligned channels
             traj = one.alyx.rest('trajectories', 'list', session=eid, probe=probe,
                                  provenance='Ephys aligned histology track')[0]
@@ -322,28 +324,31 @@ def _load_channel_locations_traj(eid, probe=None, one=None, revision=None, align
             chans = ephysalign.get_channel_locations(feature, track)
 
             channels[probe] = _channels_traj2bunch(chans, brain_atlas)
-
+            source = 'aligned'
         else:
-            _logger.info(f'Channel locations for {eid}/{probe} have not been resolved. '
-                         f'Channel and cluster locations obtained from histology track.')
+            _logger.debug(f'Channel locations for {eid}/{probe} have not been resolved. '
+                          f'Channel and cluster locations obtained from histology track.')
             # get the channels from histology tracing
             xyz = xyz[np.argsort(xyz[:, 2]), :]
             chans = histology.interpolate_along_track(xyz, (depths + TIP_SIZE_UM) / 1e6)
 
             channels[probe] = _channels_traj2bunch(chans, brain_atlas)
-
+            source = 'traced'
         channels[probe]['axial_um'] = chn_coords[:, 1]
         channels[probe]['lateral_um'] = chn_coords[:, 0]
 
     else:
-        _logger.warning(f'Histology tracing for {probe} does not exist. '
-                        f'No channels for {probe}')
+        _logger.warning(f'Histology tracing for {probe} does not exist. No channels for {probe}')
+        source = ''
         channels = None
 
-    return channels
+    if return_source:
+        return channels, source
+    else:
+        return channels
 
 
-def load_channel_locations(eid, probe=None, one=None, aligned=False, brain_atlas=None):
+def load_channel_locations(eid, probe=None, one=None, aligned=False, brain_atlas=None, return_source=False):
     """
     Load the brain locations of each channel for a given session/probe
 
@@ -360,12 +365,14 @@ def load_channel_locations(eid, probe=None, one=None, aligned=False, brain_atlas
         Whether to get the latest user aligned channel when not resolved or use histology track
     brain_atlas : ibllib.atlas.BrainAtlas
         Brain atlas object (default: Allen atlas)
-
+    return_source: bool
+        if True returns the source of the channel lcoations (default False)
     Returns
     -------
     dict of one.alf.io.AlfBunch
         A dict with probe labels as keys, contains channel locations with keys ('acronym',
         'atlas_id', 'x', 'y', 'z').  Atlas IDs non-lateralized.
+    optional: string 'resolved', 'aligned', 'traced' or ''
     """
     one = one or ONE()
     brain_atlas = brain_atlas or AllenAtlas()
@@ -379,8 +386,8 @@ def load_channel_locations(eid, probe=None, one=None, aligned=False, brain_atlas
                                                   brain_regions=brain_atlas.regions)
     incomplete_probes = [k for k in channels if 'x' not in channels[k]]
     for iprobe in incomplete_probes:
-        channels_ = _load_channel_locations_traj(eid, probe=iprobe, one=one, aligned=aligned,
-                                                 brain_atlas=brain_atlas)
+        channels_, source = _load_channel_locations_traj(eid, probe=iprobe, one=one, aligned=aligned,
+                                                         brain_atlas=brain_atlas, return_source=True)
         if channels_ is not None:
             channels[iprobe] = channels_[iprobe]
     return channels
@@ -416,7 +423,7 @@ def load_spike_sorting_fast(eid, one=None, probe=None, dataset_types=None, spike
                   brain_regions=brain_regions)
     spikes, clusters, channels = _load_spike_sorting(**kwargs, return_channels=True)
     clusters = merge_clusters_channels(clusters, channels, keys_to_add_extra=None)
-    if nested is False:
+    if nested is False and len(spikes.keys()) == 1:
         k = list(spikes.keys())[0]
         channels = channels[k]
         clusters = clusters[k]
@@ -428,7 +435,7 @@ def load_spike_sorting_fast(eid, one=None, probe=None, dataset_types=None, spike
 
 
 def load_spike_sorting(eid, one=None, probe=None, dataset_types=None, spike_sorter=None, revision=None,
-                       brain_regions=None):
+                       brain_regions=None, return_collection=False):
     """
     From an eid, loads spikes and clusters for all probes
     The following set of dataset types are loaded:
@@ -445,6 +452,7 @@ def load_spike_sorting(eid, one=None, probe=None, dataset_types=None, spike_sort
     :param spike_sorter: name of the spike sorting you want to load (None for default)
     :param return_channels: (bool) defaults to False otherwise tries and load channels from disk
     :param brain_regions: ibllib.atlas.regions.BrainRegions object - will label acronyms if provided
+    :param return_collection:(bool - False) if True, returns the collection for loading the data
     :return: spikes, clusters (dict of bunch, 1 bunch per probe)
     """
     collection = _collection_filter_from_args(probe, spike_sorter)
@@ -452,11 +460,14 @@ def load_spike_sorting(eid, one=None, probe=None, dataset_types=None, spike_sort
     spikes, clusters = _load_spike_sorting(eid=eid, one=one, collection=collection, revision=revision,
                                            return_channels=False, dataset_types=dataset_types,
                                            brain_regions=brain_regions)
-    return spikes, clusters
+    if return_collection:
+        return spikes, clusters, collection
+    else:
+        return spikes, clusters
 
 
 def load_spike_sorting_with_channel(eid, one=None, probe=None, aligned=False, dataset_types=None,
-                                    spike_sorter=None, brain_atlas=None):
+                                    spike_sorter=None, brain_atlas=None, nested=True, return_collection=False):
     """
     For a given eid, get spikes, clusters and channels information, and merges clusters
     and channels information before returning all three variables.
@@ -479,6 +490,8 @@ def load_spike_sorting_with_channel(eid, one=None, probe=None, aligned=False, da
         available otherwise the default MATLAB kilosort)
     brain_atlas : ibllib.atlas.BrainAtlas
         Brain atlas object (default: Allen atlas)
+    return_collection: bool
+        Returns an extra argument with the collection chosen
 
     Returns
     -------
@@ -495,13 +508,21 @@ def load_spike_sorting_with_channel(eid, one=None, probe=None, aligned=False, da
     # --- Get spikes and clusters data
     one = one or ONE()
     brain_atlas = brain_atlas or AllenAtlas()
-    spikes, clusters = load_spike_sorting(eid, one=one, probe=probe, dataset_types=dataset_types,
-                                          spike_sorter=spike_sorter)
+    spikes, clusters, collection = load_spike_sorting(
+        eid, one=one, probe=probe, dataset_types=dataset_types, spike_sorter=spike_sorter, return_collection=True)
     # -- Get brain regions and assign to clusters
     channels = load_channel_locations(eid, one=one, probe=probe, aligned=aligned,
                                       brain_atlas=brain_atlas)
     clusters = merge_clusters_channels(clusters, channels, keys_to_add_extra=None)
-    return spikes, clusters, channels
+    if nested is False and len(spikes.keys()) == 1:
+        k = list(spikes.keys())[0]
+        channels = channels[k]
+        clusters = clusters[k]
+        spikes = spikes[k]
+    if return_collection:
+        return spikes, clusters, channels, collection
+    else:
+        return spikes, clusters, channels
 
 
 def load_ephys_session(eid, one=None):
@@ -837,3 +858,116 @@ def load_channels_from_insertion(ins, depths=None, one=None, ba=None):
                                         brain_atlas=ba, speedy=True)
             xyz_channels = ephysalign.get_channel_locations(feature, track)
     return xyz_channels
+
+
+@dataclass
+class SpikeSortingLoader:
+    """Class for loading spike sorting"""
+    pid: str
+    one: ONE
+    atlas: atlas.BrainAtlas = None
+    # the following properties are the outcome of the post init funciton
+    eid: str = ''
+    session_path: Path = ''
+    collections: list = None
+    datasets: list = None   # list of all datasets belonging to the sesion
+    # the following properties are the outcome of a reading function
+    files: dict = None
+    collection: str = ''
+    histology: str = ''  # 'alf', 'resolved', 'aligned' or 'traced'
+    spike_sorting_path: Path = None
+
+    def __post_init__(self):
+        self.eid, self.pname = self.one.pid2eid(self.pid)
+        self.session_path = self.one.eid2path(self.eid)
+        self.collections = self.one.list_collections(
+            self.eid, filename='spikes*', collection=f"alf/{self.pname}*")
+        self.datasets = self.one.list_datasets(self.eid)
+        self.files = {}
+
+    @staticmethod
+    def _get_attributes(dataset_types):
+        """returns attributes to load for spikes and clusters objects"""
+        if dataset_types is None:
+            return SPIKES_ATTRIBUTES, CLUSTERS_ATTRIBUTES
+        else:
+            spike_attributes = [sp.split('.')[1] for sp in dataset_types if 'spikes.' in sp]
+            cluster_attributes = [cl.split('.')[1] for cl in dataset_types if 'clusters.' in cl]
+            spike_attributes = list(set(SPIKES_ATTRIBUTES + spike_attributes))
+            cluster_attributes = list(set(CLUSTERS_ATTRIBUTES + cluster_attributes))
+            return spike_attributes, cluster_attributes
+
+    def _get_spike_sorting_collection(self, spike_sorter='pykilosort', revision=None):
+        """
+        Filters a list or array of collections to get the relevant spike sorting dataset
+        if there is a pykilosort, load it
+        """
+        collection = next(filter(lambda c: c == f'alf/{self.pname}/{spike_sorter}', self.collections), None)
+        # otherwise, prefers the shortest
+        collection = collection or next(iter(sorted(filter(lambda c: f'alf/{self.pname}' in c, self.collections), key=len)), None)
+        _logger.debug(f"selecting: {collection} to load amongst candidates: {self.collections}")
+        return collection
+
+    def _download_spike_sorting_object(self, obj, spike_sorter='pykilosort', dataset_types=None):
+        if len(self.collections) == 0:
+            return {}, {}, {}
+        self.collection = self._get_spike_sorting_collection(spike_sorter=spike_sorter)
+        spike_attributes, cluster_attributes = self._get_attributes(dataset_types)
+        attributes = {'spikes': spike_attributes, 'clusters': cluster_attributes, 'channels': None}
+        self.files[obj] = self.one.load_object(self.eid, obj=obj, attribute=attributes[obj],
+                                               collection=self.collection, download_only=True)
+
+    def download_spike_sorting(self, **kwargs):
+        """spike_sorter='pykilosort', dataset_types=None"""
+        for obj in ['spikes', 'clusters', 'channels']:
+            self._download_spike_sorting_object(obj=obj, **kwargs)
+        self.spike_sorting_path = self.files['spikes'][0].parent
+
+    def load_spike_sorting(self, **kwargs):
+        """spike_sorter='pykilosort', dataset_types=None"""
+        if len(self.collections) == 0:
+            return {}, {}, {}
+        self.download_spike_sorting(**kwargs)
+        channels = alfio.load_object(self.files['channels'], wildcards=self.one.wildcards)
+        clusters = alfio.load_object(self.files['clusters'], wildcards=self.one.wildcards)
+        spikes = alfio.load_object(self.files['spikes'], wildcards=self.one.wildcards)
+        if 'brainLocationIds_ccf_2017' not in channels:
+            channels, self.histology = _load_channel_locations_traj(
+                self.eid, probe=self.pname, one=self.one, brain_atlas=self.atlas, return_source=True)
+            channels = channels[self.pname]
+        else:
+            channels = _channels_alf2bunch(channels, brain_regions=self.atlas.regions)
+            self.histology = 'alf'
+        return spikes, clusters, channels
+
+    @staticmethod
+    def merge_clusters(spikes, clusters, channels, cache_dir=None):
+        """merge metrics and channels info - optionally saves a clusters.pqt dataframe"""
+        if spikes == {}:
+            return
+        nc = clusters['channels'].size
+        # recompute metrics if they are not available
+        metrics = None
+        if 'metrics' in clusters:
+            metrics = clusters.pop('metrics')
+            if metrics.shape[0] != nc:
+                metrics = None
+        if metrics is None:
+            _logger.debug("recompute clusters metrics")
+            metrics = pd.DataFrame(quick_unit_metrics(
+                spikes['clusters'], spikes['times'], spikes['amps'], spikes['depths'], cluster_ids=np.arange(nc)))
+            if isinstance(cache_dir, Path):
+                metrics.to_parquet(Path(cache_dir).joinpath('clusters.metrics.pqt'))
+        for k in metrics.keys():
+            clusters[k] = metrics[k].to_numpy()
+
+        for k in channels.keys():
+            clusters[k] = channels[k][clusters['channels']]
+        if cache_dir:
+            pd.DataFrame(clusters).to_parquet(Path(cache_dir).joinpath('clusters.pqt'))
+        return clusters
+
+    @property
+    def url(self):
+        """Gets flatiron URL for the session"""
+        return str(self.session_path).replace(str(self.one.alyx.cache_dir), 'https://ibl.flatironinstitute.org')
