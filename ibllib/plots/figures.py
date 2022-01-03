@@ -299,7 +299,7 @@ def dlc_qc_plot(eid, one=None):
                 logger.warning(f"Could not load _ibl_{cam}Camera.{feat} some DLC QC plots have to be skipped.")
                 data[f'{cam}_{feat}'] = None
             # Sometimes there is a file but the object is empty
-            if len(data[f'{cam}_{feat}']) == 0:
+            if data[f'{cam}_{feat}'] is not None and len(data[f'{cam}_{feat}']) == 0:
                 logger.warning(f"Object loaded from _ibl_{cam}Camera.{feat} is empty, some plots have to be skipped.")
                 data[f'{cam}_{feat}'] = None
                 
@@ -317,7 +317,9 @@ def dlc_qc_plot(eid, one=None):
             data[f'{alf_object}'] = None
     # Simplify to what we actually need
     data['licks'] = data['licks'].times if data['licks'] else None
-    data['left_pupil'] = data['left_features'].pupilDiameter_smooth if data['left_features'] is not None else None
+    data['left_pupil'] = data['left_features'].pupilDiameter_smooth if (
+                data['left_features'] is not None and not np.all(np.isnan(data['left_features'].pupilDiameter_smooth))
+    ) else None
     data['wheel_time'] = data['wheel'].timestamps if data['wheel'] is not None else None
     data['wheel_position'] = data['wheel'].position if data['wheel'] is not None else None
     if data['trials']:

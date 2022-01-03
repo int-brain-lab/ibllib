@@ -922,8 +922,13 @@ class EphysPostDLC(tasks.Task):
                         # Compute pupil diameter, raw and smoothed
                         _logger.info(f"Computing raw pupil diameter for {cam} camera.")
                         features['pupilDiameter_raw'] = get_pupil_diameter(dlc_thresh)
-                        _logger.info(f"Computing smooth pupil diameter for {cam} camera.")
-                        features['pupilDiameter_smooth'] = get_smooth_pupil_diameter(features['pupilDiameter_raw'], cam)
+                        try:
+                            _logger.info(f"Computing smooth pupil diameter for {cam} camera.")
+                            features['pupilDiameter_smooth'] = get_smooth_pupil_diameter(features['pupilDiameter_raw'],
+                                                                                         cam)
+                        except BaseException:
+                            _logger.error(f"Computing smooth pupil diameter for {cam} camera failed, saving all NaNs.")
+                            features['pupilDiameter_smooth'] = np.nan
                         # Safe to pqt
                         features_file = Path(self.session_path).joinpath('alf', f'_ibl_{cam}Camera.features.pqt')
                         features.to_parquet(features_file)
@@ -962,6 +967,7 @@ class EphysPostDLC(tasks.Task):
                     fig_path.parent.mkdir(parents=True, exist_ok=True)
                 fig = dlc_qc_plot(self.one.path2eid(self.session_path), one=self.one)
                 fig.savefig(fig_path)
+                fig.clf()
                 snp = ReportSnapshot(self.session_path, session_id, one=self.one)
                 snp.outputs = [fig_path]
                 snp.register_images(widths=['orig'],

@@ -41,6 +41,8 @@ def insert_idx(array, values):
     idx[np.where(abs(values - array[idx - 1]) < abs(values - array[idx]))] -= 1
     # If 0 index was reduced, revert
     idx[idx == -1] = 0
+    if np.all(idx == 0):
+        raise ValueError('Something is wrong, all values to insert are outside of the array.')
     return idx
 
 
@@ -121,7 +123,7 @@ def get_feature_event_times(dlc, dlc_t, features):
 
 def get_licks(dlc, dlc_t):
     """
-    Compute lick times from the toungue dlc points
+    Compute lick times from the tongue dlc points
     :param dlc: dlc pqt table
     :param dlc_t: dlc times
     :return:
@@ -216,6 +218,9 @@ def get_smooth_pupil_diameter(diameter_raw, camera, std_thresh=5, nan_thresh=1):
     else:
         raise NotImplementedError("camera has to be 'left' or 'right")
 
+    # Raise error if too many NaN time points, in this case it doesn't make sense to interpolate
+    if np.mean(np.isnan(diameter_raw)) > 0.9:
+        raise ValueError(f"Raw pupil diameter for {camera} is too often NaN, cannot smooth.")
     # run savitzy-golay filter on non-nan time points to denoise
     diameter_smoothed = smooth_interpolate_savgol(diameter_raw, window=window, order=3, interp_kind='linear')
 
@@ -488,6 +493,8 @@ def plot_speed_hist(dlc_df, cam_times, trials_df, feature='paw_r', cam='left', l
     """
     # Threshold the dlc traces
     dlc_df = likelihood_threshold(dlc_df)
+    # For pre-GPIO sessions, remove the first few timestamps to match the number of frames
+    cam_times = cam_times[-len(dlc_df):]
     # Get speeds
     speeds = get_speed(dlc_df, cam_times, camera=cam, feature=feature)
     # Windows aligned to align_to
@@ -506,7 +513,7 @@ def plot_speed_hist(dlc_df, cam_times, trials_df, feature='paw_r', cam='left', l
     plt.plot(times, pd.DataFrame.from_dict(dict(zip(incorrect.index, incorrect.values))).mean(axis=1),
              c='gray', label='incorrect trial')
     plt.axvline(x=0, label='stimOn', linestyle='--', c='r')
-    plt.title(f'{feature.split("_")[0].capitalize()} speed')
+    plt.title(f'{feature.split("_")[0].capitalize()} speed ({cam} cam)')
     plt.xticks([-0.5, 0, 0.5, 1, 1.5])
     plt.xlabel('time [sec]')
     plt.ylabel('speed [px/sec]')
@@ -542,7 +549,7 @@ def plot_pupil_diameter_hist(pupil_diameter, cam_times, trials_df, cam='left'):
         plt.plot(times, pupil_mean, label=align_to.split("_")[0], color=color)
         plt.fill_between(times, pupil_mean + pupil_std, pupil_mean - pupil_std, color=color, alpha=0.5)
     plt.axvline(x=0, linestyle='--', c='k')
-    plt.title('Pupil diameter')
+    plt.title(f'Pupil diameter ({cam} cam)')
     plt.xlabel('time [sec]')
     plt.xticks([-0.5, 0, 0.5, 1, 1.5])
     plt.ylabel('pupil diameter [px]')
