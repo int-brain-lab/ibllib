@@ -886,12 +886,12 @@ class EphysDLC(tasks.Task):
             ('_ibl_leftCamera.dlc.pqt', 'alf', True),
             ('_ibl_rightCamera.dlc.pqt', 'alf', True),
             ('_ibl_bodyCamera.dlc.pqt', 'alf', True),
-            ('leftCamera.ROIMotionEnergy.npy', 'alf', False),
-            ('rightCamera.ROIMotionEnergy.npy', 'alf', False),
-            ('bodyCamera.ROIMotionEnergy.npy', 'alf', False),
-            ('leftROIMotionEnergy.position.npy', 'alf', False),
-            ('rightROIMotionEnergy.position.npy', 'alf', False),
-            ('bodyROIMotionEnergy.position.npy', 'alf', False),
+            ('leftCamera.ROIMotionEnergy.npy', 'alf', True),
+            ('rightCamera.ROIMotionEnergy.npy', 'alf', True),
+            ('bodyCamera.ROIMotionEnergy.npy', 'alf', True),
+            ('leftROIMotionEnergy.position.npy', 'alf', True),
+            ('rightROIMotionEnergy.position.npy', 'alf', True),
+            ('bodyROIMotionEnergy.position.npy', 'alf', True),
         ],
     }
 
@@ -916,19 +916,6 @@ class EphysDLC(tasks.Task):
         version = info.decode("utf-8").strip().split('\n')[-1]
         return version
 
-    def _result_exists(self, fname):
-        """ Checks if dlc result is available locally or in database. """
-        if self.session_path.joinpath('alf', fname).exists():
-            _logger.info(f'Using local version of {fname}')
-            return True, self.session_path.joinpath('alf', fname)
-        # try:
-        #     path = self.one.load_dataset(self.session_id, dataset=fname, download_only=True)
-        #     _logger.info(f'Downloaded {fname} from database')
-        #     return True, path
-        # except ALFObjectNotFound:
-        #     pass
-        return False, None
-
     @staticmethod
     def _video_intact(file_mp4):
         """Checks that the downloaded video can be opened and is not empty"""
@@ -944,89 +931,74 @@ class EphysDLC(tasks.Task):
         cams = [assert_valid_label(cam) for cam in cams]
         # Set up
         self.session_id = self.one.path2eid(self.session_path)
-        output_files = []
+        actual_outputs = []
 
         # Loop through cams
         for cam in cams:
             # Catch exceptions so that following cameras can still run
             try:
-                # Compute dlc if overwrite is True or if the result does not exist, then also compute motion energy
-                if overwrite is True or not self._result_exists(f'_ibl_{cam}Camera.dlc.pqt')[0]:
-                    compute_dlc, compute_motion = True, True
-                # If dlc is not computed, check if motion energy results exist, otherwise compute motion energy
-                else:
-                    compute_dlc = False
-                    compute_motion = not (self._result_exists(f'{cam}Camera.ROIMotionEnergy.npy')[0]
-                                          and self._result_exists(f'{cam}ROIMotionEnergy.position.npy')[0])
-                # Now run whatever should be run for this cam
-                if compute_dlc is False and compute_motion is False:
+                # If all results exist and overwrite is False, skip computation
+                expected_outputs_present, expected_outputs = self.assert_expected(self.output_files, silent=True)
+                if overwrite is False and expected_outputs_present is True:
+                    actual_outputs.extend(expected_outputs)
                     continue
                 else:
                     file_mp4 = self.session_path.joinpath('raw_video_data', f'_iblrig_{cam}Camera.raw.mp4')
                     if not self._video_intact(file_mp4):
                         _logger.error(f"Corrupt raw video file {file_mp4}")
                         continue
+                    # Check that dlc environment is ok, shell scripts exists, and get iblvideo version, GPU addressable
+                    self.version = self._check_dlcenv()
+                    check_nvidia_driver()
 
-                    if compute_dlc is True:
-                        # Check that dlc environment is ok, shell scripts exists, and get iblvideo version
-                        self.version = self._check_dlcenv()
-                        # check GPU is addressable
-                        check_nvidia_driver()
-                        _logger.info(f'Running DLC on {cam}Camera.')
-                        command2run = f"{self.scripts.joinpath('run_dlc.sh')} {str(self.dlcenv)} {file_mp4} {overwrite}"
-                        _logger.info(command2run)
-                        process = subprocess.Popen(
-                            command2run,
-                            shell=True,
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE,
-                            executable="/bin/bash",
-                        )
-                        info, error = process.communicate()
-                        info_str = info.decode("utf-8").strip()
-                        _logger.info(info_str)
-                        if process.returncode != 0:
-                            error_str = error.decode("utf-8").strip()
-                            _logger.error(f'DLC failed for {cam}Camera\n {error_str}')
-                            self.status = -1
-                            # We dont' run motion energy, or add any files if dlc failed to run
-                            continue
-                        dlc_result = self.session_path.joinpath('alf', f'_ibl_{cam}Camera.dlc.pqt')
-                        output_files.append(dlc_result)
-                    else:
-                        # If compute_dlc was False, but motion energy is true, use the existing dlc_result
-                        dlc_result = self._result_exists(f'_ibl_{cam}Camera.dlc.pqt')[1]
+                    _logger.info(f'Running DLC on {cam}Camera.')
+                    command2run = f"{self.scripts.joinpath('run_dlc.sh')} {str(self.dlcenv)} {file_mp4} {overwrite}"
+                    _logger.info(command2run)
+                    process = subprocess.Popen(
+                        command2run,
+                        shell=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        executable="/bin/bash",
+                    )
+                    info, error = process.communicate()
+                    info_str = info.decode("utf-8").strip()
+                    _logger.info(info_str)
+                    if process.returncode != 0:
+                        error_str = error.decode("utf-8").strip()
+                        _logger.error(f'DLC failed for {cam}Camera\n {error_str}')
+                        self.status = -1
+                        # We dont' run motion energy, or add any files if dlc failed to run
+                        continue
+                    dlc_result = self.session_path.joinpath('alf', f'_ibl_{cam}Camera.dlc.pqt')
+                    actual_outputs.append(dlc_result)
 
-                    if compute_motion is True:
-                        # Check that dlc environment is ok, shell scripts exists, and get iblvideo version
-                        self.version = self._check_dlcenv()
-                        _logger.info(f'Computing motion energy for {cam}Camera')
-                        command2run = f"{self.scripts.joinpath('run_motion.sh')} {str(self.dlcenv)} {file_mp4} " \
-                                      f"{dlc_result}"
-                        _logger.info(command2run)
-                        process = subprocess.Popen(
-                            command2run,
-                            shell=True,
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE,
-                            executable="/bin/bash",
-                        )
-                        info, error = process.communicate()
-                        info_str = info.decode("utf-8").strip()
-                        _logger.info(info_str)
-                        if process.returncode != 0:
-                            error_str = error.decode("utf-8").strip()
-                            _logger.error(f'Motion energy failed for {cam}Camera \n {error_str}')
-                            self.status = -1
-                            continue
-                        output_files.append(self.session_path.joinpath('alf', f'{cam}Camera.ROIMotionEnergy.npy'))
-                        output_files.append(self.session_path.joinpath('alf', f'{cam}ROIMotionEnergy.position.npy'))
+                    _logger.info(f'Computing motion energy for {cam}Camera')
+                    command2run = f"{self.scripts.joinpath('run_motion.sh')} {str(self.dlcenv)} {file_mp4} {dlc_result}"
+                    _logger.info(command2run)
+                    process = subprocess.Popen(
+                        command2run,
+                        shell=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        executable="/bin/bash",
+                    )
+                    info, error = process.communicate()
+                    info_str = info.decode("utf-8").strip()
+                    _logger.info(info_str)
+                    if process.returncode != 0:
+                        error_str = error.decode("utf-8").strip()
+                        _logger.error(f'Motion energy failed for {cam}Camera \n {error_str}')
+                        self.status = -1
+                        continue
+                    actual_outputs.append(self.session_path.joinpath('alf', f'{cam}Camera.ROIMotionEnergy.npy'))
+                    actual_outputs.append(self.session_path.joinpath('alf', f'{cam}ROIMotionEnergy.position.npy'))
 
             except BaseException:
                 _logger.error(traceback.format_exc())
                 self.status = -1
                 continue
-        return output_files
+        return actual_outputs
 
 
 class EphysPostDLC(tasks.Task):
