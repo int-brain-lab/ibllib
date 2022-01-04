@@ -223,6 +223,21 @@ def interpolate_bad_channels(data, channel_labels=None, h=None, p=1.3, kriging_d
     return data
 
 
+def _get_destripe_parameters(fs, butter_kwargs, k_kwargs, k_filter):
+    """gets the default params for destripe. This is used for both the destripe fcn on a
+    numpy array and the function that actuates on a cbin file"""
+    if butter_kwargs is None:
+        butter_kwargs = {'N': 3, 'Wn': 300 / fs * 2, 'btype': 'highpass'}
+    if k_kwargs is None:
+        k_kwargs = {'ntr_pad': 60, 'ntr_tap': 0, 'lagc': 3000,
+                    'butter_kwargs': {'N': 3, 'Wn': 0.01, 'btype': 'highpass'}}
+    if k_filter:
+        spatial_fcn = lambda dat: kfilt(dat, **k_kwargs)  # noqa
+    else:
+        spatial_fcn = lambda dat: car(dat, **k_kwargs)  # noqa
+    return butter_kwargs, k_kwargs, spatial_fcn
+
+
 def destripe(x, fs, neuropixel_version=1, butter_kwargs=None, k_kwargs=None, channel_labels=None, k_filter=True):
     """Super Car (super slow also...) - far from being set in stone but a good workflow example
     :param x: demultiplexed array (nc, ns)
@@ -244,15 +259,7 @@ def destripe(x, fs, neuropixel_version=1, butter_kwargs=None, k_kwargs=None, cha
     :param k_filter (True): applies k-filter by default, otherwise, apply CAR.
     :return: x, filtered array
     """
-    if butter_kwargs is None:
-        butter_kwargs = {'N': 3, 'Wn': 300 / fs * 2, 'btype': 'highpass'}
-    if k_kwargs is None:
-        k_kwargs = {'ntr_pad': 60, 'ntr_tap': 0, 'lagc': 3000,
-                    'butter_kwargs': {'N': 3, 'Wn': 0.01, 'btype': 'highpass'}}
-    if k_filter:
-        spatial_fcn = lambda dat: kfilt(dat, **k_kwargs)  # noqa
-    else:
-        spatial_fcn = lambda dat: car(dat, **k_kwargs)  # noqa
+    butter_kwargs, k_kwargs, spatial_fcn = _get_destripe_parameters(fs, butter_kwargs, k_kwargs, k_filter)
     h = neuropixel.trace_header(version=neuropixel_version)
     if channel_labels is True:
         channel_labels, _ = detect_bad_channels(x, fs)
@@ -262,8 +269,7 @@ def destripe(x, fs, neuropixel_version=1, butter_kwargs=None, k_kwargs=None, cha
     # channel interpolation
     # apply ADC shift
     if neuropixel_version is not None:
-        sample_shift = h['sample_shift'] if (30000 / fs) < 10 else h['sample_shift'] * fs / 30000
-        x = fshift(x, sample_shift, axis=1)
+        x = fshift(x, h['sample_shift'], axis=1)
     # apply spatial filter only on channels that are inside of the brain
     if channel_labels is not None:
         x = interpolate_bad_channels(x, channel_labels, h)
@@ -275,7 +281,8 @@ def destripe(x, fs, neuropixel_version=1, butter_kwargs=None, k_kwargs=None, cha
 
 
 def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, append=False, nc_out=None, butter_kwargs=None,
-                             dtype=np.int16, ns2add=0, nbatch=None, nprocesses=None, compute_rms=True, reject_channels=True):
+                             dtype=np.int16, ns2add=0, nbatch=None, nprocesses=None, compute_rms=True, reject_channels=True,
+                             k_kwargs=None, k_filter=True):
     """
     From a spikeglx Reader object, decompresses and apply ADC.
     Saves output as a flat binary file in int16
@@ -295,6 +302,8 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
      interp 3:outside of brain and discard
     :param reject_channels: (True) detects noisy or bad channels and interpolate them. Channels outside of the brain are left
      untouched
+    :param k_kwargs: (None) arguments for the kfilter function
+    :param k_filter: (True) Performs a k-filter - if False will do median common average referencing
     :return:
     """
     import pyfftw
@@ -306,9 +315,7 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
     if reject_channels:  # get bad channels if option is on
         channel_labels = detect_bad_channels_cbin(sr)
     assert isinstance(sr_file, str) or isinstance(sr_file, Path)
-    butter_kwargs = butter_kwargs or {'N': 3, 'Wn': 300 / sr.fs * 2, 'btype': 'highpass'}
-    k_kwargs = {'ntr_pad': 60, 'ntr_tap': 0, 'lagc': 3000,
-                'butter_kwargs': {'N': 3, 'Wn': 0.01, 'btype': 'highpass'}}
+    butter_kwargs, k_kwargs, spatial_fcn = _get_destripe_parameters(sr.fs, butter_kwargs, k_kwargs, k_filter)
     h = neuropixel.trace_header(version=1) if h is None else h
     ncv = h['sample_shift'].size  # number of channels
     output_file = sr.file_bin.with_suffix('.bin') if output_file is None else output_file
@@ -412,9 +419,9 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
             if reject_channels:
                 chunk = interpolate_bad_channels(chunk, channel_labels, h=h)
                 inside_brain = np.where(channel_labels != 3)[0]
-                chunk[inside_brain, :] = kfilt(chunk[inside_brain, :], **k_kwargs)  # apply the k-filter
+                chunk[inside_brain, :] = spatial_fcn(chunk[inside_brain, :])  # apply the k-filter / CAR
             else:
-                chunk = kfilt(chunk, **k_kwargs)  # apply the k-filter
+                chunk = spatial_fcn(chunk)  # apply the k-filter / CAR
             # add back sync trace and save
             chunk = np.r_[chunk, _sr[first_s:last_s, ncv:].T].T
             intnorm = 1 / _sr.channel_conversion_sample2v['ap'] if dtype == np.int16 else 1.
@@ -476,7 +483,7 @@ def rcoeff(x, y):
     return rcor
 
 
-def detect_bad_channels(raw, fs, similarity_threshold=(-0.5, 1), psd_hf_threshold=0.02):
+def detect_bad_channels(raw, fs, similarity_threshold=(-0.5, 1), psd_hf_threshold=None):
     """
     Bad channels detection for Neuropixel probes
     Labels channels
@@ -540,7 +547,9 @@ def detect_bad_channels(raw, fs, similarity_threshold=(-0.5, 1), psd_hf_threshol
     raw = raw - np.mean(raw, axis=-1)[:, np.newaxis]  # removes DC offset
     xcor = channels_similarity(raw)
     fscale, psd = scipy.signal.welch(raw * 1e6, fs=fs)  # units; uV ** 2 / Hz
-
+    if psd_hf_threshold is None:
+        # the LFP band data is obviously much stronger so auto-adjust the default threshold
+        psd_hf_threshold = 1.4 if fs < 5000 else 0.02
     sos_hp = scipy.signal.butter(**{'N': 3, 'Wn': 300 / fs * 2, 'btype': 'highpass'}, output='sos')
     hf = scipy.signal.sosfiltfilt(sos_hp, raw)
     xcorf = channels_similarity(hf)

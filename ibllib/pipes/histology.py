@@ -10,22 +10,21 @@ from ibllib.ephys.neuropixel import SITES_COORDINATES
 import ibllib.atlas as atlas
 from ibllib.ephys.spikes import probes_description as extract_probes
 from ibllib.dsp.utils import fcn_cosine
-from ibllib.ephys.neuropixel import TIP_SIZE_UM
+from ibllib.ephys.neuropixel import TIP_SIZE_UM, trace_header
 from ibllib.qc import base
 
 
 _logger = logging.getLogger('ibllib')
 
-# origin Allen left, front, up
-brain_atlas = atlas.AllenAtlas(res_um=25)
 
-
-def load_track_csv(file_track):
+def load_track_csv(file_track, brain_atlas=None):
     """
     Loads a lasagna track and convert to IBL-ALlen coordinate framework
     :param file_track:
     :return: xyz
     """
+
+    brain_atlas = brain_atlas or atlas.AllenAtlas(25)
     # apmldv in the histology file is flipped along y direction
     file_track = Path(file_track)
     if file_track.stat().st_size == 0:
@@ -38,12 +37,13 @@ def load_track_csv(file_track):
     return xyz
 
 
-def get_picked_tracks(histology_path, glob_pattern="*_pts_transformed.csv"):
+def get_picked_tracks(histology_path, glob_pattern="*_pts_transformed.csv", brain_atlas=None):
     """
     This outputs reads in the Lasagna output and converts the picked tracks in the IBL coordinates
     :param histology_path: Path object: folder path containing tracks
     :return: xyz coordinates in
     """
+    brain_atlas = brain_atlas or atlas.AllenAtlas()
     xyzs = []
     histology_path = Path(histology_path)
     if histology_path.is_file():
@@ -51,7 +51,7 @@ def get_picked_tracks(histology_path, glob_pattern="*_pts_transformed.csv"):
     else:
         files_track = list(histology_path.rglob(glob_pattern))
     for file_track in files_track:
-        xyzs.append(load_track_csv(file_track))
+        xyzs.append(load_track_csv(file_track, brain_atlas=brain_atlas))
     return {'files': files_track, 'xyz': xyzs}
 
 
@@ -100,13 +100,14 @@ def get_micro_manipulator_data(subject, one=None, force_extract=False):
     return probes
 
 
-def plot2d_all(trajectories, tracks):
+def plot2d_all(trajectories, tracks, brain_atlas=None):
     """
     Plot all tracks on a single 2d slice
     :param trajectories: dictionary output of the Alyx REST query on trajectories
     :param tracks:
     :return:
     """
+    brain_atlas = brain_atlas or atlas.AllenAtlas(25)
     plt.figure()
     axs = brain_atlas.plot_sslice(brain_atlas.bc.i2x(190), cmap=plt.get_cmap('bone'))
     plt.figure()
@@ -121,7 +122,7 @@ def plot2d_all(trajectories, tracks):
         axs.plot(xyz[:, 1] * 1e3, xyz[:, 2] * 1e6, 'r')
 
 
-def plot3d_all(trajectories, tracks):
+def plot3d_all(trajectories, tracks, brain_atlas=None):
     """
     Plot all tracks on a single 2d slice
     :param trajectories: dictionary output of the Alyx REST query on trajectories
@@ -129,6 +130,7 @@ def plot3d_all(trajectories, tracks):
     :return:
     """
     from mayavi import mlab
+    brain_atlas = brain_atlas or atlas.AllenAtlas()
     src = mlab.pipeline.scalar_field(brain_atlas.label)
     mlab.pipeline.iso_surface(src, contours=[0.5, ], opacity=0.3)
 
@@ -168,7 +170,7 @@ def interpolate_along_track(xyz_track, depths):
     return xyz_channels
 
 
-def get_brain_regions(xyz, channels_positions=SITES_COORDINATES, brain_atlas=brain_atlas):
+def get_brain_regions(xyz, channels_positions=None, brain_atlas=None):
     """
     :param xyz: numpy array of 3D coordinates corresponding to a picked track or a trajectory
     the deepest point is assumed to be the tip.
@@ -182,6 +184,12 @@ def get_brain_regions(xyz, channels_positions=SITES_COORDINATES, brain_atlas=bra
     this is the depth along the probe (from the first point which is the deepest labeled point)
     Due to the blockiness, depths may not be unique along the track so it has to be prepared
     """
+
+    brain_atlas = brain_atlas or atlas.AllenAtlas(25)
+    if channels_positions is None:
+        geometry = trace_header(version=1)
+        channels_positions = np.c_[geometry['x'], geometry['y']]
+
     xyz = xyz[np.argsort(xyz[:, 2]), :]
     d = atlas.cart2sph(xyz[:, 0] - xyz[0, 0], xyz[:, 1] - xyz[0, 1], xyz[:, 2] - xyz[0, 2])[0]
     indsort = np.argsort(d)
@@ -210,7 +218,7 @@ def get_brain_regions(xyz, channels_positions=SITES_COORDINATES, brain_atlas=bra
     return brain_regions, insertion
 
 
-def register_track(probe_id, picks=None, one=None, overwrite=False, channels=True):
+def register_track(probe_id, picks=None, one=None, overwrite=False, channels=True, brain_atlas=None):
     """
     Register the user picks to a probe in Alyx
     Here we update Alyx models on the database in 3 steps
@@ -220,6 +228,7 @@ def register_track(probe_id, picks=None, one=None, overwrite=False, channels=Tru
     3) Channel locations are set in the table
     """
     assert one
+    brain_atlas = brain_atlas or atlas.AllenAtlas()
     # 0) if it's an empty track, create a null trajectory and exit
     if picks is None or picks.size == 0:
         tdict = {'probe_insertion': probe_id,
@@ -236,7 +245,7 @@ def register_track(probe_id, picks=None, one=None, overwrite=False, channels=Tru
         insertion_histology = None
         # Here need to change the track qc to critical and also extended qc to zero
     else:
-        brain_locations, insertion_histology = get_brain_regions(picks)
+        brain_locations, insertion_histology = get_brain_regions(picks, brain_atlas=brain_atlas)
         # 1) update the alyx models, first put the picked points in the insertion json
         one.alyx.json_field_update(endpoint='insertions', uuid=probe_id, field_name='json',
                                    data={'xyz_picks': np.int32(picks * 1e6).tolist()})
@@ -270,7 +279,7 @@ def register_track(probe_id, picks=None, one=None, overwrite=False, channels=Tru
 
 
 def register_aligned_track(probe_id, xyz_channels, chn_coords=None, one=None, overwrite=False,
-                           channels=True):
+                           channels=True, brain_atlas=None):
     """
     Register ephys aligned trajectory and channel locations to Alyx
     Here we update Alyx models on the database in 2 steps
@@ -278,8 +287,10 @@ def register_aligned_track(probe_id, xyz_channels, chn_coords=None, one=None, ov
     2) Channel locations are set to the trajectory
     """
     assert one
-    if not np.any(chn_coords):
-        chn_coords = SITES_COORDINATES
+    brain_atlas = brain_atlas or atlas.AllenAtlas(25)
+    if chn_coords is None:
+        geometry = trace_header(version=1)
+        chn_coords = np.c_[geometry['x'], geometry['y']]
 
     insertion = atlas.Insertion.from_track(xyz_channels, brain_atlas)
     tdict = create_trajectory_dict(probe_id, insertion, provenance='Ephys aligned histology track')
@@ -368,14 +379,14 @@ def _parse_filename(track_file):
     return search_filter
 
 
-def register_track_files(path_tracks, one=None, overwrite=False):
+def register_track_files(path_tracks, one=None, overwrite=False, brain_atlas=None):
     """
     :param path_tracks: path to directory containing tracks; also works with a single file name
     :param one:
     :return:
     """
+    brain_atlas = brain_atlas or atlas.AllenAtlas()
     glob_pattern = "*_probe*_pts*.csv"
-
     path_tracks = Path(path_tracks)
 
     if not path_tracks.is_dir():
@@ -409,15 +420,15 @@ def register_track_files(path_tracks, one=None, overwrite=False):
             raise ValueError("Multiple probes found.")
         probe_id = probe['id']
         try:
-            xyz_picks = load_track_csv(track_file)
-            register_track(probe_id, xyz_picks, one=one, overwrite=overwrite)
+            xyz_picks = load_track_csv(track_file, brain_atlas=brain_atlas)
+            register_track(probe_id, xyz_picks, one=one, overwrite=overwrite, brain_atlas=brain_atlas)
         except Exception as e:
             _logger.error(str(track_file))
             raise e
         _logger.info(f"{ind + 1}/{ntracks}, {str(track_file)}")
 
 
-def detect_missing_histology_tracks(path_tracks=None, one=None, subject=None):
+def detect_missing_histology_tracks(path_tracks=None, one=None, subject=None, brain_atlas=None):
     """
     Compares the number of probe insertions to the number of registered histology tracks to see if
     there is a discrepancy so that missing tracks can be properly logged in the database
@@ -425,6 +436,7 @@ def detect_missing_histology_tracks(path_tracks=None, one=None, subject=None):
     :param subject: subject nickname for which to detect missing tracks
     """
 
+    brain_atlas = brain_atlas or atlas.AllenAtlas()
     if path_tracks:
         glob_pattern = "*_probe*_pts*.csv"
 
@@ -473,7 +485,7 @@ def detect_missing_histology_tracks(path_tracks=None, one=None, subject=None):
                     probe_id = insertions[idx]['id']
                     print(insertions[idx]['session'])
                     print(probe_id)
-                    register_track(probe_id, one=one)
+                    register_track(probe_id, one=one, brain_atlas=brain_atlas)
                 else:
                     _logger.info('Histology track for this probe insertion will not be registered')
                     continue
