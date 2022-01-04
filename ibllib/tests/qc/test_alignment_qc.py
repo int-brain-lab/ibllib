@@ -56,7 +56,7 @@ class TestTracingQc(unittest.TestCase):
 
     def test_tracing_exists(self):
         register_track(self.probe00_id, picks=self.xyz_picks, one=one, overwrite=True,
-                       channels=False)
+                       channels=False, brain_atlas=brain_atlas)
         insertion = one.alyx.get('/insertions/' + self.probe00_id, clobber=True)
 
         assert (insertion['json']['qc'] == 'NOT_SET')
@@ -64,7 +64,7 @@ class TestTracingQc(unittest.TestCase):
 
     def test_tracing_not_exists(self):
         register_track(self.probe01_id, picks=None, one=one, overwrite=True,
-                       channels=False)
+                       channels=False, brain_atlas=brain_atlas)
         insertion = one.alyx.get('/insertions/' + self.probe01_id, clobber=True)
         assert (insertion['json']['qc'] == 'CRITICAL')
         assert (insertion['json']['extended_qc']['tracing_exists'] == 0)
@@ -358,16 +358,6 @@ class TestUploadToFlatIron(unittest.TestCase):
         assert(np.all(np.abs(channels_mlapdv) > 0))
         channels_id = np.load(alf_path.joinpath('channels.brainLocationIds_ccf_2017.npy'))
         assert(channels_mlapdv.shape[0] == channels_id.shape[0])
-
-        clusters_mlapdv = np.load(alf_path.joinpath('clusters.mlapdv.npy'))
-        assert(np.all(np.abs(clusters_mlapdv) > 0))
-        clusters_id = np.load(alf_path.joinpath('clusters.brainLocationIds_ccf_2017.npy'))
-        assert(clusters_mlapdv.shape[0] == clusters_id.shape[0])
-        assert(np.all(np.in1d(clusters_mlapdv, channels_mlapdv)))
-        assert (np.all(np.in1d(clusters_id, channels_id)))
-        clusters_acro = np.load(alf_path.joinpath('clusters.brainLocationAcronyms_ccf_2017.npy'),
-                                allow_pickle=True)
-        assert(clusters_acro.shape == clusters_id.shape)
 
     def test_upload_to_flatiron(self):
         for file in self.file_paths:

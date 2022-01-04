@@ -17,7 +17,7 @@ from .neural_model import NeuralModel
 class LinearGLM(NeuralModel):
     def __init__(self, design_matrix, spk_times, spk_clu,
                  binwidth=0.02, metric='rsq', estimator=None,
-                 train=0.8, blocktrain=False, mintrials=100):
+                 mintrials=100):
         """
         Fit a linear model using a DesignMatrix object and spike data. Can use ridge regression
         or pure linear regression
@@ -48,13 +48,15 @@ class LinearGLM(NeuralModel):
             fitting, by default 100
         """
         super().__init__(design_matrix, spk_times, spk_clu,
-                         binwidth, train, blocktrain, mintrials)
+                         binwidth, mintrials)
         if estimator is None:
             estimator = LinearRegression()
         if not isinstance(estimator, BaseEstimator):
             raise ValueError('Estimator must be a scikit-learn estimator, e.g. LinearRegression')
         self.metric = metric
         self.estimator = estimator
+        self.link = lambda x: x
+        self.invlink = self.link
 
     def _fit(self, dm, binned, cells=None):
         """
@@ -94,26 +96,3 @@ class LinearGLM(NeuralModel):
             coefs.at[cell] = weight[cell_idx, :]
             intercepts.at[cell] = intercept[cell_idx]
         return coefs, intercepts
-
-    def score(self):
-        """
-        Score model using chosen metric
-
-        Returns
-        -------
-        pandas.Series
-            Score using chosen metric (defined at instantiation) for each unit fit by the model.
-        """
-        if not hasattr(self, 'coefs'):
-            raise AttributeError('Model has not been fit yet.')
-        testmask = np.isin(self.design.trlabels, self.testinds).flatten()
-        dm, binned = self.design[testmask, :], self.binnedspikes[testmask]
-
-        scores = pd.Series(index=self.coefs.index, name='scores')
-        for cell in self.coefs.index:
-            cell_idx = np.argwhere(self.clu_ids == cell)[0, 0]
-            wt = self.coefs.loc[cell].reshape(-1, 1)
-            bias = self.intercepts.loc[cell]
-            y = binned[:, cell_idx]
-            scores.at[cell] = self._scorer(wt, bias, dm, y)
-        return scores

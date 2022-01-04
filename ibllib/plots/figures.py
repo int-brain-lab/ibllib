@@ -12,54 +12,98 @@ import scipy.signal
 import matplotlib.pyplot as plt
 
 from ibllib.dsp import voltage
-from ibllib.plots.snapshot import ReportSnapshot
+from ibllib.plots.snapshot import ReportSnapshotProbe
 from one.api import ONE
 import one.alf.io as alfio
 from one.alf.exceptions import ALFObjectNotFound
 from ibllib.io.video import get_video_frame, url_from_eid
+from brainbox.plot import driftmap
 from brainbox.behavior.dlc import SAMPLING, plot_trace_on_frame, plot_wheel_position, plot_lick_hist, \
     plot_lick_raster, plot_motion_energy_hist, plot_speed_hist, plot_pupil_diameter_hist
+from brainbox.io.one import load_spike_sorting_fast
+from brainbox.ephys_plots import plot_brain_regions
+
 
 logger = logging.getLogger('ibllib')
 
 
-class BadChannelsAp(ReportSnapshot):
+class SpikeSorting(ReportSnapshotProbe):
     """
     Plots raw electrophysiology AP band
     :param session_path: session path
     :param probe_id: str, UUID of the probe insertion for which to create the plot
     :param **kwargs: keyword arguments passed to tasks.Task
     """
-    signature = {
-        'input_files': [],  # see setUp method for declaration of inputs
-        'output_files': []  # see setUp method for declaration of inputs
-    }
 
-    def __init__(self, session_path, probe_id, **kwargs):
-        self.content_type = 'probeinsertion'
-        self.pid = probe_id
-        super(BadChannelsAp, self).__init__(session_path, probe_id, content_type=self.content_type, **kwargs)
+    def _run(self, collection=None):
+        """runs for initiated PID, streams data, destripe and check bad channels"""
+        all_here, output_files = self.assert_expected(self.output_files, silent=True)
+        spike_sorting_runs = self.one.list_datasets(self.eid, filename='spikes.times.npy', collection=f'alf/{self.pname}*')
+        if all_here and len(output_files) == len(spike_sorting_runs):
+            return output_files
+        logger.info(self.output_directory)
+        output_files = []
+        for run in spike_sorting_runs:
+            collection = str(Path(run).parent)
+            spikes, clusters, channels = load_spike_sorting_fast(
+                eid=self.eid, probe=self.pname, one=self.one, nested=False, collection=collection,
+                dataset_types=['spikes.depths'], brain_regions=self.brain_regions)
 
-    @staticmethod
-    def spike_sorting_signature(pname=None):
-        pname = pname if pname is not None else "probe*"
+            fig, axs = plt.subplots(1, 2, gridspec_kw={'width_ratios': [.95, .05]}, sharey=True, figsize=(16, 9))
+            driftmap(spikes.times, spikes.depths, t_bin=0.007, d_bin=10, vmax=0.5, ax=axs[0])
+            if 'atlas_id' in channels.keys():
+                plot_brain_regions(channels['atlas_id'], channel_depths=channels['axial_um'],
+                                   brain_regions=None, display=True, ax=axs[1])
+            title_str = f"{self.pid_label}, {collection}, {self.pid} \n " \
+                        f"{spikes.clusters.size:_} spikes, {clusters.depths.size:_} clusters"
+            logger.info(title_str.replace("\n", ""))
+            axs[0].set(ylim=[0, 3800], title=title_str)
+            run_label = str(Path(collection).relative_to(f'alf/{self.pname}'))
+            run_label = "" if run_label == '.' else run_label
+            output_files.append(self.output_directory.joinpath(f"spike_sorting_raster_{run_label}.png"))
+            fig.savefig(output_files[-1])
+            plt.close(fig)
+        return output_files
+
+    def get_probe_signature(self):
+        input_signature = [('spikes.times.npy', f'alf/{self.pname}', True),
+                           ('spikes.amps.npy', f'alf/{self.pname}', True),
+                           ('spikes.depths.npy', f'alf/{self.pname}', True)]
+        output_signature = [('spike_sorting_raster*.png', f'snapshot/{self.pname}', True)]
+        self.signature = {'input_files': input_signature, 'output_files': output_signature}
+
+
+class BadChannelsAp(ReportSnapshotProbe):
+    """
+    Plots raw electrophysiology AP band
+    task = BadChannelsAp(pid, one=one=one)
+    :param session_path: session path
+    :param probe_id: str, UUID of the probe insertion for which to create the plot
+    :param **kwargs: keyword arguments passed to tasks.Task
+    """
+
+    def get_probe_signature(self):
+        pname = self.pname
         input_signature = [('*ap.meta', f'raw_ephys_data/{pname}', True),
-                           ('*ap.ch', f'raw_ephys_data/{pname}', False),
-                           ('*ap.cbin', f'raw_ephys_data/{pname}', False)]
-        output_signature = [('destripe.png', f'snapshot/{pname}', True),
-                            ('highpass.png', f'snapshot/{pname}', True)]
-        return input_signature, output_signature
+                           ('*ap.ch', f'raw_ephys_data/{pname}', False)]
+        # ('*ap.cbin', f'raw_ephys_data/{pname}', False)]
+        output_signature = [('raw_ephys_bad_channels.png', f'snapshot/{pname}', True),
+                            ('raw_ephys_bad_channels_highpass.png', f'snapshot/{pname}', True),
+                            ('raw_ephys_bad_channels_highpass.png', f'snapshot/{pname}', True),
+                            ('raw_ephys_bad_channels_destripe.png', f'snapshot/{pname}', True),
+                            ('raw_ephys_bad_channels_difference.png', f'snapshot/{pname}', True),
+                            ]
+        self.signature = {'input_files': input_signature, 'output_files': output_signature}
 
     def _run(self):
         """runs for initiated PID, streams data, destripe and check bad channels"""
         assert self.pid
         SNAPSHOT_LABEL = "raw_ephys_bad_channels"
         eid, pname = self.one.pid2eid(self.pid)
-        output_directory = self.session_path.joinpath('snapshot', pname)
-        output_files = list(output_directory.glob(f'{SNAPSHOT_LABEL}*'))
+        output_files = list(self.output_directory.glob(f'{SNAPSHOT_LABEL}*'))
         if len(output_files) == 4:
             return output_files
-        output_directory.mkdir(exist_ok=True, parents=True)
+        self.output_directory.mkdir(exist_ok=True, parents=True)
         from brainbox.io.spikeglx import stream
         T0 = 60 * 30
         sr, t0 = stream(self.pid, T0, nsecs=1, one=self.one)
@@ -67,7 +111,7 @@ class BadChannelsAp(ReportSnapshot):
         channel_labels, channel_features = voltage.detect_bad_channels(raw, sr.fs)
         _, _, output_files = ephys_bad_channels(
             raw=raw, fs=sr.fs, channel_labels=channel_labels, channel_features=channel_features,
-            title=SNAPSHOT_LABEL, destripe=True, save_dir=output_directory)
+            title=SNAPSHOT_LABEL, destripe=True, save_dir=self.output_directory)
         return output_files
 
 
