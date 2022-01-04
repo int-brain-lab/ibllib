@@ -12,7 +12,6 @@ import numpy as np
 import pandas as pd
 
 import one.alf.io as alfio
-from one.alf.exceptions import ALFObjectNotFound
 
 from ibllib.misc import check_nvidia_driver
 from ibllib.ephys import ephysqc, spikes, sync_probes
@@ -30,7 +29,7 @@ from ibllib.qc.dlc import DlcQC
 from ibllib.dsp import rms
 from ibllib.plots.figures import dlc_qc_plot
 from ibllib.plots.snapshot import ReportSnapshot
-from brainbox.behavior.dlc import likelihood_threshold, get_licks
+from brainbox.behavior.dlc import likelihood_threshold, get_licks, get_pupil_diameter, get_smooth_pupil_diameter
 
 _logger = logging.getLogger("ibllib")
 
@@ -898,8 +897,10 @@ class EphysDLC(tasks.Task):
 
     def _check_dlcenv(self):
         """Check that scripts are present, dlcenv can be activated and get iblvideo version"""
-        assert len(list(self.scripts.rglob('run_dlc.*'))) == 2, f'Scripts run_dlc.sh and run_dlc.py do not exist in {self.scripts}'
-        assert len(list(self.scripts.rglob('run_motion.*'))) == 2, f'Scripts run_motion.sh and run_motion.py do not exist in {self.scripts}'
+        assert len(list(self.scripts.rglob('run_dlc.*'))) == 2, \
+            f'Scripts run_dlc.sh and run_dlc.py do not exist in {self.scripts}'
+        assert len(list(self.scripts.rglob('run_motion.*'))) == 2, \
+            f'Scripts run_motion.sh and run_motion.py do not exist in {self.scripts}'
         assert self.dlcenv.exists(), f"DLC environment does not exist in assumed location {self.dlcenv}"
         command2run = f"source {self.dlcenv}; python -c 'import iblvideo; print(iblvideo.__version__)'"
         process = subprocess.Popen(
@@ -941,9 +942,6 @@ class EphysDLC(tasks.Task):
         # Default to all three cams
         cams = cams or ['left', 'right', 'body']
         cams = [assert_valid_label(cam) for cam in cams]
-        # Check that dlc environment is ok, shell scripts exists, and get iblvideo version, check GPU is addressable
-        self.version = self._check_dlcenv()
-        check_nvidia_driver()
         # Set up
         self.session_id = self.one.path2eid(self.session_path)
         output_files = []
@@ -970,6 +968,10 @@ class EphysDLC(tasks.Task):
                         continue
 
                     if compute_dlc is True:
+                        # Check that dlc environment is ok, shell scripts exists, and get iblvideo version
+                        self.version = self._check_dlcenv()
+                        # check GPU is addressable
+                        check_nvidia_driver()
                         _logger.info(f'Running DLC on {cam}Camera.')
                         command2run = f"{self.scripts.joinpath('run_dlc.sh')} {str(self.dlcenv)} {file_mp4} {overwrite}"
                         _logger.info(command2run)
@@ -996,8 +998,11 @@ class EphysDLC(tasks.Task):
                         dlc_result = self._result_exists(f'_ibl_{cam}Camera.dlc.pqt')[1]
 
                     if compute_motion is True:
+                        # Check that dlc environment is ok, shell scripts exists, and get iblvideo version
+                        self.version = self._check_dlcenv()
                         _logger.info(f'Computing motion energy for {cam}Camera')
-                        command2run = f"{self.scripts.joinpath('run_motion.sh')} {str(self.dlcenv)} {file_mp4} {dlc_result}"
+                        command2run = f"{self.scripts.joinpath('run_motion.sh')} {str(self.dlcenv)} {file_mp4} " \
+                                      f"{dlc_result}"
                         _logger.info(command2run)
                         process = subprocess.Popen(
                             command2run,
