@@ -873,6 +873,7 @@ class EphysDLC(tasks.Task):
     cpu = 4
     io_charge = 90
     level = 2
+    force = True
 
     dlcenv = Path.home().joinpath('Documents', 'PYTHON', 'envs', 'dlcenv', 'bin', 'activate')
     scripts = Path.home().joinpath('Documents', 'PYTHON', 'iblscripts', 'deploy', 'serverpc', 'dlc')
@@ -925,7 +926,7 @@ class EphysDLC(tasks.Task):
         cap.release()
         return intact
 
-    def _run(self, cams=None, frames=None, overwrite=False):
+    def _run(self, cams=None, overwrite=False):
         # Default to all three cams
         cams = cams or ['left', 'right', 'body']
         cams = [assert_valid_label(cam) for cam in cams]
@@ -944,11 +945,15 @@ class EphysDLC(tasks.Task):
                     continue
                 else:
                     file_mp4 = self.session_path.joinpath('raw_video_data', f'_iblrig_{cam}Camera.raw.mp4')
+                    if not file_mp4.exists():
+                        _logger.error(f"Raw video file not found {file_mp4}")
+                        continue
                     if not self._video_intact(file_mp4):
                         _logger.error(f"Corrupt raw video file {file_mp4}")
                         continue
                     # Check that dlc environment is ok, shell scripts exists, and get iblvideo version, GPU addressable
                     self.version = self._check_dlcenv()
+                    _logger.info(f'iblvideo version {self.version}')
                     check_nvidia_driver()
 
                     _logger.info(f'Running DLC on {cam}Camera.')
