@@ -22,14 +22,18 @@ class ReportSnapshot(tasks.Task):
         # Can be used to generate the image if desired
         pass
 
-    def register_images(self, widths=None, function=None):
+    def register_images(self, widths=None, function=None, extra_dict=None):
         report_tag = '## report ##'
         snapshot = Snapshot(one=self.one, object_id=self.object_id, content_type=self.content_type)
         jsons = []
         texts = []
         for f in self.outputs:
-            jsons.append(dict(tag=report_tag, version=version.ibllib(),
-                              function=(function or str(self.__class__).split("'")[1]), name=f.stem))
+            json_dict = dict(tag=report_tag, version=version.ibllib(),
+                             function=(function or str(self.__class__).split("'")[1]), name=f.stem)
+            if extra_dict is not None:
+                assert isinstance(extra_dict, dict)
+                json_dict.update(extra_dict)
+            jsons.append(json_dict)
             texts.append(f"{f.stem}")
         return snapshot.register_images(self.outputs, jsons=jsons, texts=texts, widths=widths)
 
@@ -40,21 +44,26 @@ class ReportSnapshotProbe(ReportSnapshot):
         'output_files': []  # see setUp method for declaration of inputs
     }
 
-    def __init__(self, pid, one=None, brain_regions=None, **kwargs):
+    def __init__(self, pid, one=None, brain_regions=None, brain_atlas=None, **kwargs):
         """
         :param pid: probe insertion UUID from Alyx
         :param one: one instance
         :param brain_regions: (optional) ibllib.atlas.BrainRegion object
+        :param brain_atlas: (optional) ibllib.atlas.AllenAtlas object
         :param kwargs:
         """
         assert one
         self.one = one
         self.brain_regions = brain_regions
+        self.brain_atlas = brain_atlas
         self.content_type = 'probeinsertion'
         self.pid = pid
         self.eid, self.pname = self.one.pid2eid(self.pid)
         self.session_path = self.one.eid2path(self.eid)
         self.output_directory = self.session_path.joinpath('snapshot', self.pname)
+        self.output_directory.mkdir(exist_ok=True, parents=True)
+        # Should this be here or in the individual functions as it hits database??
+        self.histology_status = self.get_histology_status()
         self.get_probe_signature()
         super(ReportSnapshotProbe, self).__init__(self.session_path, object_id=pid, content_type=self.content_type, **kwargs)
 
@@ -68,6 +77,35 @@ class ReportSnapshotProbe(ReportSnapshot):
         # method that gets input and output signatures from the probe name. The format is a dictionary as follows:
         # return {'input_files': input_signature, 'output_files': output_signature}
         pass
+
+    def get_histology_status(self):
+        """
+        Finds at which point in histology pipeline the probe insertion is
+        :return:
+        """
+
+        self.hist_lookup = {'Resolved': 3,
+                            'Aligned': 2,
+                            'Traced': 1,
+                            'None': 0}
+
+        self.ins = self.one.alyx.rest('insertions', 'list', id=self.pid)[0]
+        traced = self.ins.get('json', {}).get('extended_qc', {}).get('tracing_exists', False)
+        aligned = self.ins.get('json', {}).get('extended_qc', {}).get('alignment_count', 0)
+        resolved = self.ins.get('json', {}).get('extended_qc', {}).get('alignment_resolved', False)
+
+        if resolved:
+            return 'Resolved'
+        elif aligned > 0:
+            return 'Aligned'
+        elif traced:
+            return 'Traced'
+        else:
+            return 'None'
+
+    def register_images(self, widths=None, function=None):
+        super(ReportSnapshotProbe, self).register_images(widths=widths, function=function,
+                                                         extra_dict={'channels': self.histology_status})
 
 
 class Snapshot:
