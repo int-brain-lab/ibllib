@@ -894,6 +894,16 @@ class EphysPostDLC(tasks.Task):
                  }
 
     def _run(self, overwrite=False, run_qc=True, plot_qc=True):
+        """
+        Run the EphysPostDLC task. Returns a list of file locations for the output files in signature. The created plot
+        (dlc_qc_plot.png) is not returned, but saved in session_path/snapshots and uploaded to Alyx as a note.
+
+        :param overwrite: bool, whether to recompute existing output files (default is False).
+                          Note that the dlc_qc_plot will be computed even if overwrite = False
+        :param run_qc: bool, whether to run the DLC QC (default is True)
+        :param plot_qc: book, whether to create the dlc_qc_plot (default is True)
+
+        """
         # Check if output files exist locally
         exist, output_files = self.assert_expected(self.signature['output_files'], silent=True)
         if exist and not overwrite:
