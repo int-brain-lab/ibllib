@@ -877,6 +877,9 @@ class EphysDLC(tasks.Task):
 class EphysPostDLC(tasks.Task):
     """
     The post_dlc task takes dlc traces as input and computes useful quantities, as well as qc.
+
+    For creating the full dlc_qc_plot, several other inputs are required that can be found in the docstring of
+    :py:func:ibllib.plots.figures.dlc_qc_plot
     """
     io_charge = 90
     level = 3
