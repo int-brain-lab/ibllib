@@ -103,7 +103,7 @@ class HistologySlices(ReportSnapshotProbe):
 
             if self.hist_lookup[self.histology_status] >= 2:
                 traj = self.one.alyx.rest('trajectories', 'list', provenance='Ephys aligned histology track',
-                                          probe_insertion=self.pid)
+                                          probe_insertion=self.pid)[0]
                 align_key = self.ins['json']['extended_qc']['alignment_stored']
                 feature = traj['json'][align_key][0]
                 track = traj['json'][align_key][1]
@@ -178,7 +178,7 @@ class LfpApRmsPsd(ReportSnapshotProbe):
 
             if self.hist_lookup[self.histology_status] >= 2:
                 traj = self.one.alyx.rest('trajectories', 'list', provenance='Ephys aligned histology track',
-                                          probe_insertion=self.pid)
+                                          probe_insertion=self.pid)[0]
                 align_key = self.ins['json']['extended_qc']['alignment_stored']
                 feature = traj['json'][align_key][0]
                 track = traj['json'][align_key][1]

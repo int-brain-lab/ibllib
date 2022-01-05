@@ -65,7 +65,8 @@ class ReportSnapshotProbe(ReportSnapshot):
         # Should this be here or in the individual functions as it hits database??
         self.histology_status = self.get_histology_status()
         self.get_probe_signature()
-        super(ReportSnapshotProbe, self).__init__(self.session_path, object_id=pid, content_type=self.content_type, **kwargs)
+        super(ReportSnapshotProbe, self).__init__(self.session_path, object_id=pid, content_type=self.content_type, one=self.one,
+                                                  **kwargs)
 
     @property
     def pid_label(self):
