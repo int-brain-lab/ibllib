@@ -946,10 +946,13 @@ class EphysDLC(tasks.Task):
                 else:
                     file_mp4 = self.session_path.joinpath('raw_video_data', f'_iblrig_{cam}Camera.raw.mp4')
                     if not file_mp4.exists():
-                        _logger.error(f"Raw video file not found {file_mp4}")
+                        # In this case we set the status to Incomplete.
+                        _logger.error(f"No raw video file available for {cam}, skipping.")
+                        self.status = -3
                         continue
                     if not self._video_intact(file_mp4):
                         _logger.error(f"Corrupt raw video file {file_mp4}")
+                        self.status = -1
                         continue
                     # Check that dlc environment is ok, shell scripts exists, and get iblvideo version, GPU addressable
                     self.version = self._check_dlcenv()
@@ -1003,6 +1006,11 @@ class EphysDLC(tasks.Task):
                 _logger.error(traceback.format_exc())
                 self.status = -1
                 continue
+        # If status is Incomplete, check that there is at least one output.
+        # # Otherwise make sure it gets set to Empty (outputs = None), and set status to -1 to make sure it doesn't slip
+        if self.status == -3 and len(actual_outputs) == 0:
+            actual_outputs = None
+            self.status = -1
         return actual_outputs
 
 
