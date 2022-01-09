@@ -72,6 +72,7 @@ class PoissonGLM(NeuralModel):
         if cells.shape[0] != binned.shape[1]:
             raise ValueError('Length of cells does not match shape of binned')
 
+        # TODO: Make this malleable to accept either an estimator or a GridSearchCV meta-estimator
         coefs = pd.Series(index=cells, name='coefficients', dtype=object)
         intercepts = pd.Series(index=cells, name='intercepts')
         nonconverged = []

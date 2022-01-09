@@ -9,7 +9,7 @@ International Brain Lab, 2020
 """
 import numpy as np
 import pandas as pd
-from sklearn.base import BaseEstimator
+from sklearn.base import BaseEstimator, MetaEstimatorMixin
 from sklearn.linear_model import LinearRegression
 from .neural_model import NeuralModel
 
@@ -90,7 +90,11 @@ class LinearGLM(NeuralModel):
         intercepts = pd.Series(index=cells, name='intercepts')
 
         lm = self.estimator.fit(dm, binned)
-        weight, intercept = lm.coef_, lm.intercept_
+        if isinstance(lm, MetaEstimatorMixin):
+            est = lm.best_estimator_
+            weight, intercept = est.coef_, est.intercept_
+        else:
+            weight, intercept = lm.coef_, lm.intercept_
         for cell in cells:
             cell_idx = np.argwhere(cells == cell)[0, 0]
             coefs.at[cell] = weight[cell_idx, :]
