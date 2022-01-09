@@ -316,7 +316,7 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
         channel_labels = detect_bad_channels_cbin(sr)
     assert isinstance(sr_file, str) or isinstance(sr_file, Path)
     butter_kwargs, k_kwargs, spatial_fcn = _get_destripe_parameters(sr.fs, butter_kwargs, k_kwargs, k_filter)
-    h = neuropixel.trace_header(version=1) if h is None else h
+    h = sr.geometry if h is None else h
     ncv = h['sample_shift'].size  # number of channels
     output_file = sr.file_bin.with_suffix('.bin') if output_file is None else output_file
     assert output_file != sr.file_bin
