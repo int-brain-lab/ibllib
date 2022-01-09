@@ -865,7 +865,7 @@ class SpikeSortingLoader:
     """Class for loading spike sorting"""
     pid: str
     one: ONE
-    atlas: atlas.BrainAtlas = None
+    atlas: None
     # the following properties are the outcome of the post init funciton
     eid: str = ''
     session_path: Path = ''
