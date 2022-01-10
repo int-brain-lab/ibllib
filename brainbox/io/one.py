@@ -27,7 +27,7 @@ from brainbox.metrics.single_units import quick_unit_metrics
 _logger = logging.getLogger('ibllib')
 
 
-SPIKES_ATTRIBUTES = ['clusters', 'times']
+SPIKES_ATTRIBUTES = ['clusters', 'times', 'amps', 'depths']
 CLUSTERS_ATTRIBUTES = ['channels', 'depths', 'metrics']
 
 
