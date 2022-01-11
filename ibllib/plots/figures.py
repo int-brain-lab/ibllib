@@ -30,7 +30,7 @@ logger = logging.getLogger('ibllib')
 
 def set_axis_label_size(ax, labels=14, ticklabels=12, title=14, cmap=False):
     """
-
+    Function to normalise size of all axis labels
     :param ax:
     :param labels:
     :param ticklabels:
@@ -52,7 +52,7 @@ def set_axis_label_size(ax, labels=14, ticklabels=12, title=14, cmap=False):
 
 def remove_axis_outline(ax):
     """
-
+    Function to remove outline of empty axis
     :param ax:
     :return:
     """
@@ -364,7 +364,6 @@ class BadChannelsAp(ReportSnapshotProbe):
         pname = self.pname
         input_signature = [('*ap.meta', f'raw_ephys_data/{pname}', True),
                            ('*ap.ch', f'raw_ephys_data/{pname}', False)]
-                           # ('*ap.cbin', f'raw_ephys_data/{pname}', False)]
         output_signature = [('raw_ephys_bad_channels.png', f'snapshot/{pname}', True),
                             ('raw_ephys_bad_channels_highpass.png', f'snapshot/{pname}', True),
                             ('raw_ephys_bad_channels_highpass.png', f'snapshot/{pname}', True),

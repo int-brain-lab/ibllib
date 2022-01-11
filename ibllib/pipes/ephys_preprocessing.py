@@ -133,7 +133,7 @@ class RawEphysQC(tasks.Task):
             try:
                 eqc = ephysqc.EphysQC(pid, session_path=self.session_path, one=self.one)
                 qc_files.extend(eqc.run(update=True, overwrite=overwrite))
-
+                _logger.info("Creating LFP QC plots")
                 plot_task = LfpPlots(pid, session_path=self.session_path, one=self.one)
                 _ = plot_task.run()
                 self.plot_tasks.append(plot_task)
@@ -418,6 +418,7 @@ class SpikeSorting(tasks.Task):
                     eid = self.one.path2eid(self.session_path, query_type='remote')
                     ins = self.one.alyx.rest('insertions', 'list', session=eid, name=label, query_type='remote')
                     if len(ins) != 0:
+                        _logger.info("Creating SpikeSorting QC plots")
                         plot_task = ApPlots(ins[0]['id'], session_path=self.session_path, one=self.one)
                         _ = plot_task.run()
                         self.plot_tasks.append(plot_task)
