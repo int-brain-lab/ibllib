@@ -19,13 +19,9 @@ from ibllib.io.video import get_video_frame, url_from_eid
 from brainbox.plot import driftmap
 from brainbox.behavior.dlc import SAMPLING, plot_trace_on_frame, plot_wheel_position, plot_lick_hist, \
     plot_lick_raster, plot_motion_energy_hist, plot_speed_hist, plot_pupil_diameter_hist
-from brainbox.ephys_plots import image_lfp_spectrum_plot, image_rms_plot
+from brainbox.ephys_plots import image_lfp_spectrum_plot, image_rms_plot, plot_brain_regions
 from brainbox.io.one import load_spike_sorting_fast
-from brainbox.ephys_plots import plot_brain_regions
 from brainbox.behavior import training
-from ibllib.pipes.ephys_alignment import EphysAlignment
-from ibllib.ephys.neuropixel import trace_header, TIP_SIZE_UM
-from ibllib.pipes.histology import interpolate_along_track
 
 
 logger = logging.getLogger('ibllib')
@@ -42,18 +38,19 @@ class BehaviourPlots(ReportSnapshot):
                                   ('reaction_time_with_trials.png', 'snapshot/behaviour', True)]
                  }
 
-    def __init__(self, eid, one=None, **kwargs):
+    def __init__(self, eid, session_path=None, one=None, **kwargs):
         self.one = one or ONE()
         self.eid = eid
-        self.session_path = self.one.eid2path(eid)
-        super(BehaviourPlots, self).__init__(self.session_path, eid, **kwargs)
+        self.session_path = session_path or self.one.eid2path(self.eid)
+        super(BehaviourPlots, self).__init__(self.session_path, self.eid,
+                                             **kwargs)
         self.output_directory = self.session_path.joinpath('snapshot', 'behaviour')
         self.output_directory.mkdir(exist_ok=True, parents=True)
 
     def _run(self):
 
         output_files = []
-        trials = self.one.load_object(self.eid, 'trials')
+        trials = alfio.load_object(self.session_path.joinpath('alf'), 'trials')
         title = '_'.join(list(self.session_path.parts[-3:]))
         fig, ax = training.plot_psychometric(trials, title=title, figsize=(8, 6))
         save_path = Path(self.output_directory).joinpath("psychometric_curve.png")
@@ -75,60 +72,32 @@ class BehaviourPlots(ReportSnapshot):
 
         return output_files
 
-
+# TODO put into histology and alignment pipeline
 class HistologySlices(ReportSnapshotProbe):
     """
     Plots coronal and sagittal slice showing electrode locations
     """
 
     def _run(self):
+
         assert self.pid
+        assert self.brain_atlas
 
         output_files = []
 
-        electrodes = {}
-        if self.hist_lookup[self.histology_status] == 3:
-            try:
-                electrodes = self.one.load_object(self.eid, 'electrodeSites', collection=f'alf/{self.pname}')
-                electrodes['atlas_id'] = electrodes['brainLocationIds_ccf_2017']
-
-            except ALFObjectNotFound:
-                logger.warning('Insertion resolved but electrodeSites datasets do not exist')
-
-        if self.hist_lookup[self.histology_status] > 0 and 'atlas_id' not in electrodes.keys():
-            geometry = trace_header(version=1)
-            electrodes['localCoordinates'] = np.c_[geometry['x'], geometry['y']]
-            depths = geometry['y']
-            xyz = np.array(self.ins['json']['xyz_picks']) / 1e6
-
-            if self.hist_lookup[self.histology_status] >= 2:
-                traj = self.one.alyx.rest('trajectories', 'list', provenance='Ephys aligned histology track',
-                                          probe_insertion=self.pid)[0]
-                align_key = self.ins['json']['extended_qc']['alignment_stored']
-                feature = traj['json'][align_key][0]
-                track = traj['json'][align_key][1]
-                ephysalign = EphysAlignment(xyz, depths, track_prev=track,
-                                            feature_prev=feature,
-                                            brain_atlas=self.brain_atlas, speedy=True)
-                electrodes['mlapdv'] = ephysalign.get_channel_locations(feature, track)
-                electrodes['atlas_id'] = self.brain_atlas.regions.get(self.brain_atlas.get_labels(electrodes['mlapdv']))['id']
-
-            if self.hist_lookup[self.histology_status] == 1:
-                xyz = xyz[np.argsort(xyz[:, 2]), :]
-                electrodes['mlapdv'] = interpolate_along_track(xyz, (depths + TIP_SIZE_UM) / 1e6)
-                electrodes['atlas_id'] = self.brain_atlas.regions.get(self.brain_atlas.get_labels(electrodes['mlapdv']))['id']
+        electrodes = self.get_channels('electrodeSites', f'alf/{self.pname}')
 
         if self.hist_lookup[self.histology_status] > 0:
             fig = plt.figure(figsize=(12, 9))
             gs = fig.add_gridspec(2, 2, width_ratios=[.95, .05])
             ax1 = fig.add_subplot(gs[0, 0])
             self.brain_atlas.plot_tilted_slice(electrodes['mlapdv'], 1, ax=ax1)
-            ax1.scatter(xyz[:, 0] * 1e6, xyz[:, 2] * 1e6, s=8, c='r')
+            ax1.scatter(electrodes['mlapdv'][:, 0] * 1e6, electrodes['mlapdv'][:, 2] * 1e6, s=8, c='r')
             ax1.set_title(f"{self.pid_label}")
 
             ax2 = fig.add_subplot(gs[1, 0])
             self.brain_atlas.plot_tilted_slice(electrodes['mlapdv'], 0, ax=ax2)
-            ax2.scatter(xyz[:, 1] * 1e6, xyz[:, 2] * 1e6, s=8, c='r')
+            ax2.scatter(electrodes['mlapdv'][:, 1] * 1e6, electrodes['mlapdv'][:, 2] * 1e6, s=8, c='r')
 
             ax3 = fig.add_subplot(gs[:, 1])
             plot_brain_regions(electrodes['atlas_id'], brain_regions=self.brain_regions, display=True, ax=ax3,
@@ -143,62 +112,34 @@ class HistologySlices(ReportSnapshotProbe):
 
     def get_probe_signature(self):
         input_signature = [('electrodeSites.localCoordinates.npy', f'alf/{self.pname}', False),
-                           ('electrodeSites.brainLocationIds_ccf_2017.npy', f'alf/{self.pname}', False)]
-        output_signature = [('lfp_spectrum.png', f'snapshot/{self.pname}', True),
-                            ('ap_rms.png', f'snapshot/{self.pname}', True),
-                            ('lfp_rms.png', f'snapshot/{self.pname}', True)]
+                           ('electrodeSites.brainLocationIds_ccf_2017.npy', f'alf/{self.pname}', False),
+                           ('electrodeSites.mlapdv.npy', f'alf/{self.pname}', False)]
+        output_signature = [('histology_slices.png', f'snapshot/{self.pname}', True)]
         self.signature = {'input_files': input_signature, 'output_files': output_signature}
 
 
-class LfpApRmsPsd(ReportSnapshotProbe):
+class LfpPlots(ReportSnapshotProbe):
     """
-    Plots LFP spectrum and AP RMS AND LF RMS plots
+    Plots LFP spectrum and LFP RMS plots
     """
 
     def _run(self):
+
         assert self.pid
 
         output_files = []
 
-        # TODO add/ remove depending on whether we have this in init or not
-        # self.histology_status = self.get_histology_status()
-        electrodes = {}
-        if self.hist_lookup[self.histology_status] == 3:
-            try:
-                electrodes = self.one.load_object(self.eid, 'electrodeSites', collection=f'alf/{self.pname}')
-                electrodes['atlas_id'] = electrodes['brainLocationIds_ccf_2017']
-            except ALFObjectNotFound:
-                logger.warning('Insertion resolved but electrodeSites datasets do not exist')
-
-        if self.hist_lookup[self.histology_status] > 0 and 'atlas_id' not in electrodes.keys():
-            geometry = trace_header(version=1)
-            electrodes['localCoordinates'] = np.c_[geometry['x'], geometry['y']]
-            depths = geometry['y']
-            xyz = np.array(self.ins['json']['xyz_picks']) / 1e6
-
-            if self.hist_lookup[self.histology_status] >= 2:
-                traj = self.one.alyx.rest('trajectories', 'list', provenance='Ephys aligned histology track',
-                                          probe_insertion=self.pid)[0]
-                align_key = self.ins['json']['extended_qc']['alignment_stored']
-                feature = traj['json'][align_key][0]
-                track = traj['json'][align_key][1]
-                ephysalign = EphysAlignment(xyz, depths, track_prev=track,
-                                            feature_prev=feature,
-                                            brain_atlas=self.brain_atlas, speedy=True)
-                chans = ephysalign.get_channel_locations(feature, track)
-                electrodes['atlas_id'] = self.brain_atlas.regions.get(self.brain_atlas.get_labels(chans))['id']
-
-            if self.hist_lookup[self.histology_status] == 1:
-                xyz = xyz[np.argsort(xyz[:, 2]), :]
-                chans = interpolate_along_track(xyz, (depths + TIP_SIZE_UM) / 1e6)
-                electrodes['atlas_id'] = self.brain_atlas.regions.get(self.brain_atlas.get_labels(chans))['id']
+        if self.location != 'server':
+            self.histology_status = self.get_histology_status()
+            electrodes = self.get_channels('electrodeSites', f'alf/{self.pname}')
 
         # lfp spectrum
         fig, axs = plt.subplots(1, 2, gridspec_kw={'width_ratios': [.95, .05]}, figsize=(16, 9))
-        lfp = self.one.load_object(self.eid, 'ephysSpectralDensityLF', collection=f'raw_ephys_data/{self.pname}')
+        lfp = alfio.load_object(self.session_path.joinpath(f'raw_ephys_data/{self.pname}'), 'ephysSpectralDensityLF',
+                                namespace='iblqc')
         _, _, _ = image_lfp_spectrum_plot(lfp.power, lfp.freqs, clim=[-65, -95], fig_kwargs={'figsize': (8, 6)}, ax=axs[0],
                                           display=True, title=f"{self.pid_label}")
-        if self.hist_lookup[self.histology_status] > 0:
+        if self.histology_status:
             plot_brain_regions(electrodes['atlas_id'], brain_regions=self.brain_regions, display=True, ax=axs[1],
                                title=self.histology_status)
 
@@ -210,10 +151,10 @@ class LfpApRmsPsd(ReportSnapshotProbe):
         # lfp rms
         # TODO need to figure out the clim range
         fig, axs = plt.subplots(1, 2, gridspec_kw={'width_ratios': [.95, .05]}, figsize=(16, 9))
-        lfp = self.one.load_object(self.eid, 'ephysTimeRmsLF', collection=f'raw_ephys_data/{self.pname}')
+        lfp = alfio.load_object(self.session_path.joinpath(f'raw_ephys_data/{self.pname}'), 'ephysTimeRmsLF', namespace='iblqc')
         _, _, _ = image_rms_plot(lfp.rms, lfp.timestamps, median_subtract=False, band='LFP', clim=[-35, -45], ax=axs[0],
                                  cmap='inferno', fig_kwargs={'figsize': (8, 6)}, display=True, title=f"{self.pid_label}")
-        if self.hist_lookup[self.histology_status] > 0:
+        if self.histology_status:
             plot_brain_regions(electrodes['atlas_id'], brain_regions=self.brain_regions, display=True, ax=axs[1],
                                title=self.histology_status)
 
@@ -222,12 +163,42 @@ class LfpApRmsPsd(ReportSnapshotProbe):
         fig.savefig(save_path)
         plt.close(fig)
 
+        return output_files
+
+    def get_probe_signature(self):
+        input_signature = [('_iblqc_ephysTimeRmsLF.rms.npy', f'raw_ephys_data/{self.pname}', True),
+                           ('_iblqc_ephysTimeRmsLF.timestamps.npy', f'raw_ephys_data/{self.pname}', True),
+                           ('_iblqc_ephysSpectralDensityLF.freqs.npy', f'raw_ephys_data/{self.pname}', True),
+                           ('_iblqc_ephysSpectralDensityLF.power.npy', f'raw_ephys_data/{self.pname}', True),
+                           ('electrodeSites.localCoordinates.npy', f'alf/{self.pname}', False),
+                           ('electrodeSites.brainLocationIds_ccf_2017.npy', f'alf/{self.pname}', False),
+                           ('electrodeSites.mlapdv.npy', f'alf/{self.pname}', False)]
+        output_signature = [('lfp_spectrum.png', f'snapshot/{self.pname}', True),
+                            ('lfp_rms.png', f'snapshot/{self.pname}', True)]
+        self.signature = {'input_files': input_signature, 'output_files': output_signature}
+
+
+class ApPlots(ReportSnapshotProbe):
+    """
+    Plots AP RMS plots
+    """
+
+    def _run(self):
+
+        assert self.pid
+
+        output_files = []
+
+        if self.location != 'server':
+            self.histology_status = self.get_histology_status()
+            electrodes = self.get_channels('electrodeSites', f'alf/{self.pname}')
+
         # TODO need to figure out the clim range
         fig, axs = plt.subplots(1, 2, gridspec_kw={'width_ratios': [.95, .05]}, figsize=(16, 9))
-        ap = self.one.load_object(self.eid, 'ephysTimeRmsAP', collection=f'raw_ephys_data/{self.pname}')
+        ap = alfio.load_object(self.session_path.joinpath(f'raw_ephys_data/{self.pname}'), 'ephysTimeRmsAP', namespace='iblqc')
         _, _, _ = image_rms_plot(ap.rms, ap.timestamps, median_subtract=False, band='AP', clim=[5, 10], ax=axs[0],
                                  fig_kwargs={'figsize': (8, 6)}, display=True, title=f"{self.pid_label}")
-        if self.hist_lookup[self.histology_status] > 0:
+        if self.histology_status:
             plot_brain_regions(electrodes['atlas_id'], brain_regions=self.brain_regions, display=True, ax=axs[1],
                                title=self.histology_status)
 
@@ -241,15 +212,10 @@ class LfpApRmsPsd(ReportSnapshotProbe):
     def get_probe_signature(self):
         input_signature = [('_iblqc_ephysTimeRmsAP.rms.npy', f'raw_ephys_data/{self.pname}', True),
                            ('_iblqc_ephysTimeRmsAP.timestamps.npy', f'raw_ephys_data/{self.pname}', True),
-                           ('_iblqc_ephysTimeRmsLF.rms.npy', f'raw_ephys_data/{self.pname}', True),
-                           ('_iblqc_ephysTimeRmsLF.timestamps.npy', f'raw_ephys_data/{self.pname}', True),
-                           ('_iblqc_ephysSpectralDensityLF.freqs.npy', f'raw_ephys_data/{self.pname}', True),
-                           ('_iblqc_ephysSpectralDensityLF.power.npy', f'raw_ephys_data/{self.pname}', True),
                            ('electrodeSites.localCoordinates.npy', f'alf/{self.pname}', False),
-                           ('electrodeSites.brainLocationIds_ccf_2017.npy', f'alf/{self.pname}', False)]
-        output_signature = [('lfp_spectrum.png', f'snapshot/{self.pname}', True),
-                            ('ap_rms.png', f'snapshot/{self.pname}', True),
-                            ('lfp_rms.png', f'snapshot/{self.pname}', True)]
+                           ('electrodeSites.brainLocationIds_ccf_2017.npy', f'alf/{self.pname}', False),
+                           ('electrodeSites.mlapdv.npy', f'alf/{self.pname}', False)]
+        output_signature = [('ap_rms.png', f'snapshot/{self.pname}', True)]
         self.signature = {'input_files': input_signature, 'output_files': output_signature}
 
 
@@ -263,38 +229,65 @@ class SpikeSorting(ReportSnapshotProbe):
 
     def _run(self, collection=None):
         """runs for initiated PID, streams data, destripe and check bad channels"""
-        all_here, output_files = self.assert_expected(self.output_files, silent=True)
-        spike_sorting_runs = self.one.list_datasets(self.eid, filename='spikes.times.npy', collection=f'alf/{self.pname}*')
-        if all_here and len(output_files) == len(spike_sorting_runs):
-            return output_files
-        logger.info(self.output_directory)
-        output_files = []
-        for run in spike_sorting_runs:
-            collection = str(Path(run).parent)
-            spikes, clusters, channels = load_spike_sorting_fast(
-                eid=self.eid, probe=self.pname, one=self.one, nested=False, collection=collection,
-                dataset_types=['spikes.depths'], brain_regions=self.brain_regions)
 
+        def plot_driftmap(self, spikes, clusters, channels, collection):
             fig, axs = plt.subplots(1, 2, gridspec_kw={'width_ratios': [.95, .05]}, sharey=True, figsize=(16, 9))
             driftmap(spikes.times, spikes.depths, t_bin=0.007, d_bin=10, vmax=0.5, ax=axs[0])
-            if 'atlas_id' in channels.keys():
-                plot_brain_regions(channels['atlas_id'], channel_depths=channels['axial_um'],
-                                   brain_regions=self.brain_regions, display=True, ax=axs[1])
             title_str = f"{self.pid_label}, {collection}, {self.pid} \n " \
                         f"{spikes.clusters.size:_} spikes, {clusters.depths.size:_} clusters"
-            logger.info(title_str.replace("\n", ""))
             axs[0].set(ylim=[0, 3800], title=title_str)
             run_label = str(Path(collection).relative_to(f'alf/{self.pname}'))
-            run_label = "" if run_label == '.' else run_label
-            output_files.append(self.output_directory.joinpath(f"spike_sorting_raster_{run_label}.png"))
-            fig.savefig(output_files[-1])
+            run_label = "ks2matlab" if run_label == '.' else run_label
+            outfile = self.output_directory.joinpath(f"spike_sorting_raster_{run_label}.png")
+
+            if self.histology_status:
+                plot_brain_regions(channels['atlas_id'], channel_depths=channels['axial_um'],
+                                   brain_regions=self.brain_regions, display=True, ax=axs[1])
+
+            fig.savefig(outfile)
             plt.close(fig)
-        return output_files
+
+            return outfile, fig, axs
+
+        output_files = []
+        if self.location == 'server':
+            assert collection
+            spikes = alfio.load_object(self.session_path.joinpath(collection), 'spikes')
+            clusters = alfio.load_object(self.session_path.joinpath(collection), 'clusters')
+            channels = alfio.load_object(self.session_path.joinpath(collection), 'channels')
+
+            out, fig, axs = plot_driftmap(self, spikes, clusters, channels, collection)
+            output_files.append(out)
+
+        else:
+            self.histology_status = self.get_histology_status()
+            all_here, output_files = self.assert_expected(self.output_files, silent=True)
+            spike_sorting_runs = self.one.list_datasets(self.eid, filename='spikes.times.npy', collection=f'alf/{self.pname}*')
+            if all_here and len(output_files) == len(spike_sorting_runs):
+                return output_files
+            logger.info(self.output_directory)
+            for run in spike_sorting_runs:
+                collection = str(Path(run).parent.as_posix())
+                spikes, clusters, channels = load_spike_sorting_fast(
+                    eid=self.eid, probe=self.pname, one=self.one, nested=False, collection=collection,
+                    dataset_types=['spikes.depths'], brain_regions=self.brain_regions)
+
+                if 'atlas_id' not in channels.keys():
+                    channels = self.get_channels('channels', collection)
+
+                out, fig, axs = plot_driftmap(self, spikes, clusters, channels, collection)
+                output_files.append(out)
+
+            return output_files
 
     def get_probe_signature(self):
-        input_signature = [('spikes.times.npy', f'alf/{self.pname}', True),
-                           ('spikes.amps.npy', f'alf/{self.pname}', True),
-                           ('spikes.depths.npy', f'alf/{self.pname}', True)]
+        input_signature = [('spikes.times.npy', f'alf/{self.pname}*', True),
+                           ('spikes.amps.npy', f'alf/{self.pname}*', True),
+                           ('spikes.depths.npy', f'alf/{self.pname}*', True),
+                           ('clusters.depths.npy', f'alf/{self.pname}*', True),
+                           ('channels.localCoordinates.npy', f'alf/{self.pname}*', False),
+                           ('channels.mlapdv.npy', f'alf/{self.pname}*', False),
+                           ('channels.brainLocationIds_ccf_2017.npy', f'alf/{self.pname}*', False)]
         output_signature = [('spike_sorting_raster*.png', f'snapshot/{self.pname}', True)]
         self.signature = {'input_files': input_signature, 'output_files': output_signature}
 
@@ -312,7 +305,7 @@ class BadChannelsAp(ReportSnapshotProbe):
         pname = self.pname
         input_signature = [('*ap.meta', f'raw_ephys_data/{pname}', True),
                            ('*ap.ch', f'raw_ephys_data/{pname}', False)]
-        # ('*ap.cbin', f'raw_ephys_data/{pname}', False)]
+                         # ('*ap.cbin', f'raw_ephys_data/{pname}', False)]
         output_signature = [('raw_ephys_bad_channels.png', f'snapshot/{pname}', True),
                             ('raw_ephys_bad_channels_highpass.png', f'snapshot/{pname}', True),
                             ('raw_ephys_bad_channels_highpass.png', f'snapshot/{pname}', True),

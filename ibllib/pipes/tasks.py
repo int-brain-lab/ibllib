@@ -33,6 +33,7 @@ class Task(abc.ABC):
     version = version.ibllib()
     signature = {'input_files': [], 'output_files': []}  # list of tuples (filename, collection, required_flag)
     force = False  # whether or not to re-download missing input files on local server if not present
+    plot_tasks = []  # Plotting task/ tasks to create plot outputs during the task
 
     def __init__(self, session_path, parents=None, taskid=None, one=None,
                  machine=None, clobber=True, location='server'):
@@ -152,7 +153,22 @@ class Task(abc.ABC):
         :param kwargs: directly passed to the register_dataset function
         :return:
         """
+        _ = self.register_images()
+
         return self.data_handler.uploadData(self.outputs, self.version, **kwargs)
+
+    def register_images(self, **kwargs):
+        """
+        Registers images to alyx database
+        :return:
+        """
+        if self.one and len(self.plot_tasks) > 0:
+            for plot_task in self.plot_tasks:
+                try:
+                    _ = plot_task.register_images()
+                except Exception:
+                    _logger.error(traceback.format_exc())
+                    continue
 
     def rerun(self):
         self.run(overwrite=True)

@@ -433,34 +433,34 @@ class BrainAtlas:
                 index = bc.xyz2i(np.array([coordinate] * 3))[axis]
             return _take(region_values, index, axis=self.xyz2dims[axis])
 
-    def plot_cslice(self, ap_coordinate, volume='image', mapping='Allen', **kwargs):
+    def plot_cslice(self, ap_coordinate, volume='image', mapping='Allen', region_values=None, **kwargs):
         """
         Imshow a coronal slice
         :param: ap_coordinate (m)
         :param volume: 'image' or 'annotation'
         :return: ax
         """
-        cslice = self.slice(ap_coordinate, axis=1, volume=volume, mapping=mapping)
+        cslice = self.slice(ap_coordinate, axis=1, volume=volume, mapping=mapping, region_values=region_values)
         return self._plot_slice(cslice.T, extent=self.extent(axis=1), **kwargs)
 
-    def plot_hslice(self, dv_coordinate, volume='image', mapping='Allen', **kwargs):
+    def plot_hslice(self, dv_coordinate, volume='image', mapping='Allen', region_values=None, **kwargs):
         """
         Imshow a horizontal slice
         :param: dv_coordinate (m)
         :param volume: 'image' or 'annotation'
         :return: ax
         """
-        hslice = self.slice(dv_coordinate, axis=2, volume=volume, mapping=mapping)
+        hslice = self.slice(dv_coordinate, axis=2, volume=volume, mapping=mapping, region_values=region_values)
         return self._plot_slice(hslice, extent=self.extent(axis=2), **kwargs)
 
-    def plot_sslice(self, ml_coordinate, volume='image', mapping='Allen', **kwargs):
+    def plot_sslice(self, ml_coordinate, volume='image', mapping='Allen', region_values=None, **kwargs):
         """
         Imshow a sagittal slice
         :param: ml_coordinate (m)
         :param volume: 'image' or 'annotation'
         :return: ax
         """
-        sslice = self.slice(ml_coordinate, axis=0, volume=volume, mapping=mapping)
+        sslice = self.slice(ml_coordinate, axis=0, volume=volume, mapping=mapping, region_values=region_values)
         return self._plot_slice(np.swapaxes(sslice, 0, 1), extent=self.extent(axis=0), **kwargs)
 
     def plot_top(self, ax=None):
