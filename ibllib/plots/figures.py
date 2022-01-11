@@ -28,6 +28,42 @@ from brainbox.behavior import training
 logger = logging.getLogger('ibllib')
 
 
+def set_axis_label_size(ax, labels=14, ticklabels=12, title=14, cmap=False):
+    """
+
+    :param ax:
+    :param labels:
+    :param ticklabels:
+    :param title:
+    :param cmap:
+    :return:
+    """
+
+    ax.xaxis.get_label().set_fontsize(labels)
+    ax.yaxis.get_label().set_fontsize(labels)
+    ax.tick_params(labelsize=ticklabels)
+    ax.title.set_fontsize(title)
+
+    if cmap:
+        cbar = ax.images[-1].colorbar
+        cbar.ax.tick_params(labelsize=ticklabels)
+        cbar.ax.yaxis.get_label().set_fontsize(labels)
+
+
+def remove_axis_outline(ax):
+    """
+
+    :param ax:
+    :return:
+    """
+    ax.get_xaxis().set_visible(False)
+    ax.get_yaxis().set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    ax.spines['bottom'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+
+
 class BehaviourPlots(ReportSnapshot):
     """
     Behavioural plots
@@ -53,25 +89,30 @@ class BehaviourPlots(ReportSnapshot):
         output_files = []
         trials = alfio.load_object(self.session_path.joinpath('alf'), 'trials')
         title = '_'.join(list(self.session_path.parts[-3:]))
+
         fig, ax = training.plot_psychometric(trials, title=title, figsize=(8, 6))
+        set_axis_label_size(ax)
         save_path = Path(self.output_directory).joinpath("psychometric_curve.png")
         output_files.append(save_path)
         fig.savefig(save_path)
         plt.close(fig)
 
         fig, ax = training.plot_reaction_time(trials, title=title, figsize=(8, 6))
+        set_axis_label_size(ax)
         save_path = Path(self.output_directory).joinpath("chronometric_curve.png")
         output_files.append(save_path)
         fig.savefig(save_path)
         plt.close(fig)
 
         fig, ax = training.plot_reaction_time_over_trials(trials, title=title, figsize=(8, 6))
+        set_axis_label_size(ax)
         save_path = Path(self.output_directory).joinpath("reaction_time_with_trials.png")
         output_files.append(save_path)
         fig.savefig(save_path)
         plt.close(fig)
 
         return output_files
+
 
 # TODO put into histology and alignment pipeline
 class HistologySlices(ReportSnapshotProbe):
@@ -140,9 +181,13 @@ class LfpPlots(ReportSnapshotProbe):
                                 namespace='iblqc')
         _, _, _ = image_lfp_spectrum_plot(lfp.power, lfp.freqs, clim=[-65, -95], fig_kwargs={'figsize': (8, 6)}, ax=axs[0],
                                           display=True, title=f"{self.pid_label}")
+        set_axis_label_size(axs[0], cmap=True)
         if self.histology_status:
             plot_brain_regions(electrodes['atlas_id'], brain_regions=self.brain_regions, display=True, ax=axs[1],
                                title=self.histology_status)
+            set_axis_label_size(axs[1])
+        else:
+            remove_axis_outline(axs[1])
 
         save_path = Path(self.output_directory).joinpath("lfp_spectrum.png")
         output_files.append(save_path)
@@ -155,9 +200,13 @@ class LfpPlots(ReportSnapshotProbe):
         lfp = alfio.load_object(self.session_path.joinpath(f'raw_ephys_data/{self.pname}'), 'ephysTimeRmsLF', namespace='iblqc')
         _, _, _ = image_rms_plot(lfp.rms, lfp.timestamps, median_subtract=False, band='LFP', clim=[-35, -45], ax=axs[0],
                                  cmap='inferno', fig_kwargs={'figsize': (8, 6)}, display=True, title=f"{self.pid_label}")
+        set_axis_label_size(axs[0], cmap=True)
         if self.histology_status:
             plot_brain_regions(electrodes['atlas_id'], brain_regions=self.brain_regions, display=True, ax=axs[1],
                                title=self.histology_status)
+            set_axis_label_size(axs[1])
+        else:
+            remove_axis_outline(axs[1])
 
         save_path = Path(self.output_directory).joinpath("lfp_rms.png")
         output_files.append(save_path)
@@ -199,9 +248,13 @@ class ApPlots(ReportSnapshotProbe):
         ap = alfio.load_object(self.session_path.joinpath(f'raw_ephys_data/{self.pname}'), 'ephysTimeRmsAP', namespace='iblqc')
         _, _, _ = image_rms_plot(ap.rms, ap.timestamps, median_subtract=False, band='AP', clim=[5, 10], ax=axs[0],
                                  fig_kwargs={'figsize': (8, 6)}, display=True, title=f"{self.pid_label}")
+        set_axis_label_size(axs[0], cmap=True)
         if self.histology_status:
             plot_brain_regions(electrodes['atlas_id'], brain_regions=self.brain_regions, display=True, ax=axs[1],
                                title=self.histology_status)
+            set_axis_label_size(axs[1])
+        else:
+            remove_axis_outline(axs[1])
 
         save_path = Path(self.output_directory).joinpath("ap_rms.png")
         output_files.append(save_path)
@@ -232,7 +285,7 @@ class SpikeSorting(ReportSnapshotProbe):
         """runs for initiated PID, streams data, destripe and check bad channels"""
 
         def plot_driftmap(self, spikes, clusters, channels, collection):
-            fig, axs = plt.subplots(1, 2, gridspec_kw={'width_ratios': [.95, .05]}, sharey=True, figsize=(16, 9))
+            fig, axs = plt.subplots(1, 2, gridspec_kw={'width_ratios': [.95, .05]}, figsize=(16, 9))
             driftmap(spikes.times, spikes.depths, t_bin=0.007, d_bin=10, vmax=0.5, ax=axs[0])
             title_str = f"{self.pid_label}, {collection}, {self.pid} \n " \
                         f"{spikes.clusters.size:_} spikes, {clusters.depths.size:_} clusters"
@@ -240,10 +293,15 @@ class SpikeSorting(ReportSnapshotProbe):
             run_label = str(Path(collection).relative_to(f'alf/{self.pname}'))
             run_label = "ks2matlab" if run_label == '.' else run_label
             outfile = self.output_directory.joinpath(f"spike_sorting_raster_{run_label}.png")
+            set_axis_label_size(axs[0])
 
             if self.histology_status:
                 plot_brain_regions(channels['atlas_id'], channel_depths=channels['axial_um'],
                                    brain_regions=self.brain_regions, display=True, ax=axs[1])
+                axs[1].set(ylim=[0, 3800])
+                set_axis_label_size(axs[1])
+            else:
+                remove_axis_outline(axs[1])
 
             fig.savefig(outfile)
             plt.close(fig)
@@ -279,7 +337,7 @@ class SpikeSorting(ReportSnapshotProbe):
                 out, fig, axs = plot_driftmap(self, spikes, clusters, channels, collection)
                 output_files.append(out)
 
-            return output_files
+        return output_files
 
     def get_probe_signature(self):
         input_signature = [('spikes.times.npy', f'alf/{self.pname}*', True),
@@ -306,7 +364,7 @@ class BadChannelsAp(ReportSnapshotProbe):
         pname = self.pname
         input_signature = [('*ap.meta', f'raw_ephys_data/{pname}', True),
                            ('*ap.ch', f'raw_ephys_data/{pname}', False)]
-                         # ('*ap.cbin', f'raw_ephys_data/{pname}', False)]
+                           # ('*ap.cbin', f'raw_ephys_data/{pname}', False)]
         output_signature = [('raw_ephys_bad_channels.png', f'snapshot/{pname}', True),
                             ('raw_ephys_bad_channels_highpass.png', f'snapshot/{pname}', True),
                             ('raw_ephys_bad_channels_highpass.png', f'snapshot/{pname}', True),
