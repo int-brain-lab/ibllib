@@ -284,12 +284,12 @@ class SpikeSorting(ReportSnapshotProbe):
     def _run(self, collection=None):
         """runs for initiated PID, streams data, destripe and check bad channels"""
 
-        def plot_driftmap(self, spikes, clusters, channels, collection):
+        def plot_driftmap(self, spikes, clusters, channels, collection, ylim=(0, 3840)):
             fig, axs = plt.subplots(1, 2, gridspec_kw={'width_ratios': [.95, .05]}, figsize=(16, 9))
             driftmap(spikes.times, spikes.depths, t_bin=0.007, d_bin=10, vmax=0.5, ax=axs[0])
             title_str = f"{self.pid_label}, {collection}, {self.pid} \n " \
                         f"{spikes.clusters.size:_} spikes, {clusters.depths.size:_} clusters"
-            axs[0].set(ylim=[0, 3800], title=title_str)
+            axs[0].set(ylim=ylim, title=title_str)
             run_label = str(Path(collection).relative_to(f'alf/{self.pname}'))
             run_label = "ks2matlab" if run_label == '.' else run_label
             outfile = self.output_directory.joinpath(f"spike_sorting_raster_{run_label}.png")
@@ -298,7 +298,7 @@ class SpikeSorting(ReportSnapshotProbe):
             if self.histology_status:
                 plot_brain_regions(channels['atlas_id'], channel_depths=channels['axial_um'],
                                    brain_regions=self.brain_regions, display=True, ax=axs[1])
-                axs[1].set(ylim=[0, 3800])
+                axs[1].set(ylim=ylim)
                 set_axis_label_size(axs[1])
             else:
                 remove_axis_outline(axs[1])
