@@ -297,7 +297,7 @@ class SpikeSorting(ReportSnapshotProbe):
 
             if self.histology_status:
                 plot_brain_regions(channels['atlas_id'], channel_depths=channels['axial_um'],
-                                   brain_regions=self.brain_regions, display=True, ax=axs[1])
+                                   brain_regions=self.brain_regions, display=True, ax=axs[1], title=self.histology_status)
                 axs[1].set(ylim=ylim)
                 set_axis_label_size(axs[1])
             else:
