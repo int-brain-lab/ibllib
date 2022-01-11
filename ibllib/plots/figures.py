@@ -3,6 +3,7 @@ Module that produces figures, usually for the extraction pipeline
 """
 import logging
 from pathlib import Path
+import traceback
 from string import ascii_uppercase
 
 import numpy as np
@@ -561,6 +562,11 @@ def dlc_qc_plot(eid, one=None):
             else:
                 logger.warning(f"Could not load _ibl_{cam}Camera.{feat} some DLC QC plots have to be skipped.")
                 data[f'{cam}_{feat}'] = None
+            # Sometimes there is a file but the object is empty
+            if data[f'{cam}_{feat}'] is not None and len(data[f'{cam}_{feat}']) == 0:
+                logger.warning(f"Object loaded from _ibl_{cam}Camera.{feat} is empty, some plots have to be skipped.")
+                data[f'{cam}_{feat}'] = None
+
     # Session data
     for alf_object in ['trials', 'wheel', 'licks']:
         try:
@@ -575,7 +581,9 @@ def dlc_qc_plot(eid, one=None):
             data[f'{alf_object}'] = None
     # Simplify to what we actually need
     data['licks'] = data['licks'].times if data['licks'] else None
-    data['left_pupil'] = data['left_features'].pupilDiameter_smooth if data['left_features'] is not None else None
+    data['left_pupil'] = data['left_features'].pupilDiameter_smooth if (
+        data['left_features'] is not None and not np.all(np.isnan(data['left_features'].pupilDiameter_smooth))
+    ) else None
     data['wheel_time'] = data['wheel'].timestamps if data['wheel'] is not None else None
     data['wheel_position'] = data['wheel'].position if data['wheel'] is not None else None
     if data['trials']:
@@ -613,7 +621,8 @@ def dlc_qc_plot(eid, one=None):
         ax = plt.subplot(2, 5, i + 1)
         ax.text(-0.1, 1.15, ascii_uppercase[i], transform=ax.transAxes, fontsize=16, fontweight='bold')
         # Check if any of the inputs is None
-        if any([v is None for v in panel[1].values()]):
+        if any([v is None for v in panel[1].values()]) or any([v.values() is None for v in panel[1].values()
+                                                               if isinstance(v, dict)]):
             ax.text(.5, .5, f"Data incomplete\n{panel[0].__name__}", color='r', fontweight='bold',
                     fontsize=12, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
             plt.axis('off')
@@ -621,6 +630,7 @@ def dlc_qc_plot(eid, one=None):
             try:
                 panel[0](**panel[1])
             except BaseException:
+                logger.error(f'Error in {panel[0].__name__}\n' + traceback.format_exc())
                 ax.text(.5, .5, f'Error in \n{panel[0].__name__}', color='r', fontweight='bold',
                         fontsize=12, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
                 plt.axis('off')

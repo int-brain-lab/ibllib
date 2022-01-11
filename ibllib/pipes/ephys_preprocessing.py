@@ -905,6 +905,9 @@ class EphysDLC(tasks.Task):
 class EphysPostDLC(tasks.Task):
     """
     The post_dlc task takes dlc traces as input and computes useful quantities, as well as qc.
+
+    For creating the full dlc_qc_plot, several other inputs are required that can be found in the docstring of
+    :py:func:ibllib.plots.figures.dlc_qc_plot
     """
     io_charge = 90
     level = 3
@@ -922,6 +925,16 @@ class EphysPostDLC(tasks.Task):
                  }
 
     def _run(self, overwrite=False, run_qc=True, plot_qc=True):
+        """
+        Run the EphysPostDLC task. Returns a list of file locations for the output files in signature. The created plot
+        (dlc_qc_plot.png) is not returned, but saved in session_path/snapshots and uploaded to Alyx as a note.
+
+        :param overwrite: bool, whether to recompute existing output files (default is False).
+                          Note that the dlc_qc_plot will be computed even if overwrite = False
+        :param run_qc: bool, whether to run the DLC QC (default is True)
+        :param plot_qc: book, whether to create the dlc_qc_plot (default is True)
+
+        """
         # Check if output files exist locally
         exist, output_files = self.assert_expected(self.signature['output_files'], silent=True)
         if exist and not overwrite:
@@ -944,15 +957,13 @@ class EphysPostDLC(tasks.Task):
                     dlc = pd.read_parquet(dlc_file)
                     dlc_thresh = likelihood_threshold(dlc, 0.9)
                     # try to load respective camera times
-                    try:
-                        dlc_t = np.load(next(Path(self.session_path).joinpath('alf').glob(f'_ibl_{cam}Camera.times.*npy')))
-                        times = True
-                    except StopIteration:
-                        _logger.error(f'No camera.times found for {cam} camera. '
+                    dlc_t = np.load(next(Path(self.session_path).joinpath('alf').glob(f'_ibl_{cam}Camera.times.*npy')))
+                    times = True
+                    if dlc_t.shape[0] == 0:
+                        _logger.error(f'camera.times empty for {cam} camera. '
                                       f'Computations using camera.times will be skipped')
                         self.status = -1
                         times = False
-
                     # These features are only computed from left and right cam
                     if cam in ('left', 'right'):
                         features = pd.DataFrame()
@@ -965,8 +976,13 @@ class EphysPostDLC(tasks.Task):
                         # Compute pupil diameter, raw and smoothed
                         _logger.info(f"Computing raw pupil diameter for {cam} camera.")
                         features['pupilDiameter_raw'] = get_pupil_diameter(dlc_thresh)
-                        _logger.info(f"Computing smooth pupil diameter for {cam} camera.")
-                        features['pupilDiameter_smooth'] = get_smooth_pupil_diameter(features['pupilDiameter_raw'], cam)
+                        try:
+                            _logger.info(f"Computing smooth pupil diameter for {cam} camera.")
+                            features['pupilDiameter_smooth'] = get_smooth_pupil_diameter(features['pupilDiameter_raw'],
+                                                                                         cam)
+                        except BaseException:
+                            _logger.error(f"Computing smooth pupil diameter for {cam} camera failed, saving all NaNs.")
+                            features['pupilDiameter_smooth'] = np.nan
                         # Safe to pqt
                         features_file = Path(self.session_path).joinpath('alf', f'_ibl_{cam}Camera.features.pqt')
                         features.to_parquet(features_file)
@@ -1005,6 +1021,7 @@ class EphysPostDLC(tasks.Task):
                     fig_path.parent.mkdir(parents=True, exist_ok=True)
                 fig = dlc_qc_plot(self.one.path2eid(self.session_path), one=self.one)
                 fig.savefig(fig_path)
+                fig.clf()
                 snp = ReportSnapshot(self.session_path, session_id, one=self.one)
                 snp.outputs = [fig_path]
                 snp.register_images(widths=['orig'],
@@ -1088,5 +1105,6 @@ class EphysExtractionPipeline(tasks.Pipeline):
         tasks["EphysCellsQc"] = EphysCellsQc(self.session_path, parents=[tasks["SpikeSorting"]])
         tasks["EphysDLC"] = EphysDLC(self.session_path, parents=[tasks["EphysVideoCompress"]])
         # level 3
-        tasks["EphysPostDLC"] = EphysPostDLC(self.session_path, parents=[tasks["EphysDLC"]])
+        tasks["EphysPostDLC"] = EphysPostDLC(self.session_path, parents=[tasks["EphysDLC"], tasks["EphysTrials"],
+                                                                         tasks["EphysVideoSyncQc"]])
         self.tasks = tasks

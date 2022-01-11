@@ -41,6 +41,8 @@ def insert_idx(array, values):
     idx[np.where(abs(values - array[idx - 1]) < abs(values - array[idx]))] -= 1
     # If 0 index was reduced, revert
     idx[idx == -1] = 0
+    if np.all(idx == 0):
+        raise ValueError('Something is wrong, all values to insert are outside of the array.')
     return idx
 
 
@@ -121,7 +123,7 @@ def get_feature_event_times(dlc, dlc_t, features):
 
 def get_licks(dlc, dlc_t):
     """
-    Compute lick times from the toungue dlc points
+    Compute lick times from the tongue dlc points
     :param dlc: dlc pqt table
     :param dlc_t: dlc times
     :return:
@@ -216,6 +218,9 @@ def get_smooth_pupil_diameter(diameter_raw, camera, std_thresh=5, nan_thresh=1):
     else:
         raise NotImplementedError("camera has to be 'left' or 'right")
 
+    # Raise error if too many NaN time points, in this case it doesn't make sense to interpolate
+    if np.mean(np.isnan(diameter_raw)) > 0.9:
+        raise ValueError(f"Raw pupil diameter for {camera} is too often NaN, cannot smooth.")
     # run savitzy-golay filter on non-nan time points to denoise
     diameter_smoothed = smooth_interpolate_savgol(diameter_raw, window=window, order=3, interp_kind='linear')
 
@@ -440,19 +445,26 @@ def plot_motion_energy_hist(camera_dict, trials_df):
               'body': '#035382'}
 
     start_window, end_window = plt_window(trials_df['stimOn_times'])
+    missing_data = []
     for cam in camera_dict.keys():
-        try:
-            motion_energy = zscore(camera_dict[cam]['motion_energy'], nan_policy='omit')
-            start_idx = insert_idx(camera_dict[cam]['times'], start_window)
-            end_idx = np.array(start_idx + int(WINDOW_LEN * SAMPLING[cam]), dtype='int64')
-            me_all = [motion_energy[start_idx[i]:end_idx[i]] for i in range(len(start_idx))]
-            times = np.arange(len(me_all[0])) / SAMPLING[cam] + WINDOW_LAG
-            me_mean = np.mean(me_all, axis=0)
-            me_std = np.std(me_all, axis=0) / np.sqrt(len(me_all))
-            plt.plot(times, me_mean, label=f'{cam} cam', color=colors[cam], linewidth=2)
-            plt.fill_between(times, me_mean + me_std, me_mean - me_std, color=colors[cam], alpha=0.2)
-        except AttributeError:
-            logger.warning(f"Cannot load motion energy AND times data for {cam} camera")
+        if (camera_dict[cam]['motion_energy'] is not None and len(camera_dict[cam]['motion_energy']) > 0
+                and camera_dict[cam]['times'] is not None and len(camera_dict[cam]['times']) > 0):
+            try:
+                motion_energy = zscore(camera_dict[cam]['motion_energy'], nan_policy='omit')
+                start_idx = insert_idx(camera_dict[cam]['times'], start_window)
+                end_idx = np.array(start_idx + int(WINDOW_LEN * SAMPLING[cam]), dtype='int64')
+                me_all = [motion_energy[start_idx[i]:end_idx[i]] for i in range(len(start_idx))]
+                times = np.arange(len(me_all[0])) / SAMPLING[cam] + WINDOW_LAG
+                me_mean = np.mean(me_all, axis=0)
+                me_std = np.std(me_all, axis=0) / np.sqrt(len(me_all))
+                plt.plot(times, me_mean, label=f'{cam} cam', color=colors[cam], linewidth=2)
+                plt.fill_between(times, me_mean + me_std, me_mean - me_std, color=colors[cam], alpha=0.2)
+            except AttributeError:
+                logger.warning(f"Cannot load motion energy and/or times data for {cam} camera")
+                missing_data.append(cam)
+        else:
+            logger.warning(f"Data missing or empty for motion energy and/or times data for {cam} camera")
+            missing_data.append(cam)
 
     plt.xticks([-0.5, 0, 0.5, 1, 1.5])
     plt.ylabel('z-scored motion energy [a.u.]')
@@ -460,6 +472,10 @@ def plot_motion_energy_hist(camera_dict, trials_df):
     plt.axvline(x=0, label='stimOn', linestyle='--', c='k')
     plt.legend(loc='lower right')
     plt.title('Motion Energy')
+    if len(missing_data) > 0:
+        ax = plt.gca()
+        ax.text(.95, .35, f"Data incomplete for\n{' and '.join(missing_data)} camera", color='r', fontsize=10,
+                horizontalalignment='right', verticalalignment='center', transform=ax.transAxes)
     return plt.gca()
 
 
@@ -477,6 +493,8 @@ def plot_speed_hist(dlc_df, cam_times, trials_df, feature='paw_r', cam='left', l
     """
     # Threshold the dlc traces
     dlc_df = likelihood_threshold(dlc_df)
+    # For pre-GPIO sessions, remove the first few timestamps to match the number of frames
+    cam_times = cam_times[-len(dlc_df):]
     # Get speeds
     speeds = get_speed(dlc_df, cam_times, camera=cam, feature=feature)
     # Windows aligned to align_to
@@ -495,7 +513,7 @@ def plot_speed_hist(dlc_df, cam_times, trials_df, feature='paw_r', cam='left', l
     plt.plot(times, pd.DataFrame.from_dict(dict(zip(incorrect.index, incorrect.values))).mean(axis=1),
              c='gray', label='incorrect trial')
     plt.axvline(x=0, label='stimOn', linestyle='--', c='r')
-    plt.title(f'{feature.split("_")[0].capitalize()} speed')
+    plt.title(f'{feature.split("_")[0].capitalize()} speed ({cam} cam)')
     plt.xticks([-0.5, 0, 0.5, 1, 1.5])
     plt.xlabel('time [sec]')
     plt.ylabel('speed [px/sec]')
@@ -531,7 +549,7 @@ def plot_pupil_diameter_hist(pupil_diameter, cam_times, trials_df, cam='left'):
         plt.plot(times, pupil_mean, label=align_to.split("_")[0], color=color)
         plt.fill_between(times, pupil_mean + pupil_std, pupil_mean - pupil_std, color=color, alpha=0.5)
     plt.axvline(x=0, linestyle='--', c='k')
-    plt.title('Pupil diameter')
+    plt.title(f'Pupil diameter ({cam} cam)')
     plt.xlabel('time [sec]')
     plt.xticks([-0.5, 0, 0.5, 1, 1.5])
     plt.ylabel('pupil diameter [px]')
