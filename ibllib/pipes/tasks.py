@@ -33,7 +33,6 @@ class Task(abc.ABC):
     version = version.ibllib()
     signature = {'input_files': [], 'output_files': []}  # list of tuples (filename, collection, required_flag)
     force = False  # whether or not to re-download missing input files on local server if not present
-    plot_tasks = []  # Plotting task/ tasks to create plot outputs during the task
 
     def __init__(self, session_path, parents=None, taskid=None, one=None,
                  machine=None, clobber=True, location='server'):
@@ -60,6 +59,7 @@ class Task(abc.ABC):
         self.machine = machine
         self.clobber = clobber
         self.location = location
+        self.plot_tasks = []  # Plotting task/ tasks to create plot outputs during the task
 
     @property
     def name(self):
