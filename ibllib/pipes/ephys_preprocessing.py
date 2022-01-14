@@ -929,7 +929,7 @@ class EphysDLC(tasks.Task):
     def _run(self, cams=None, overwrite=False):
         # Default to all three cams
         cams = cams or ['left', 'right', 'body']
-        cams = [assert_valid_label(cam) for cam in cams]
+        cams = assert_valid_label(cams)
         # Set up
         self.session_id = self.one.path2eid(self.session_path)
         actual_outputs = []
@@ -944,7 +944,7 @@ class EphysDLC(tasks.Task):
                     actual_outputs.extend(expected_outputs)
                     continue
                 else:
-                    file_mp4 = self.session_path.joinpath('raw_video_data', f'_iblrig_{cam}Camera.raw.mp4')
+                    file_mp4 = next(self.session_path.joinpath('raw_video_data').glob(f'_iblrig_{cam}Camera.raw*.mp4'))
                     if not file_mp4.exists():
                         # In this case we set the status to Incomplete.
                         _logger.error(f"No raw video file available for {cam}, skipping.")
@@ -978,7 +978,7 @@ class EphysDLC(tasks.Task):
                         self.status = -1
                         # We dont' run motion energy, or add any files if dlc failed to run
                         continue
-                    dlc_result = self.session_path.joinpath('alf', f'_ibl_{cam}Camera.dlc.pqt')
+                    dlc_result = next(self.session_path.joinpath('alf').glob(f'_ibl_{cam}Camera.dlc*.pqt'))
                     actual_outputs.append(dlc_result)
 
                     _logger.info(f'Computing motion energy for {cam}Camera')
@@ -999,9 +999,10 @@ class EphysDLC(tasks.Task):
                         _logger.error(f'Motion energy failed for {cam}Camera \n {error_str}')
                         self.status = -1
                         continue
-                    actual_outputs.append(self.session_path.joinpath('alf', f'{cam}Camera.ROIMotionEnergy.npy'))
-                    actual_outputs.append(self.session_path.joinpath('alf', f'{cam}ROIMotionEnergy.position.npy'))
-
+                    actual_outputs.append(next(self.session_path.joinpath('alf').glob(
+                        f'{cam}Camera.ROIMotionEnergy*.npy')))
+                    actual_outputs.append(next(self.session_path.joinpath('alf').glob(
+                        f'{cam}ROIMotionEnergy.position*.npy')))
             except BaseException:
                 _logger.error(traceback.format_exc())
                 self.status = -1
