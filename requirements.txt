@@ -9,7 +9,7 @@ jupyterlab>=1.0
 matplotlib>=3.0.3
 mtscomp>=1.0.1
 numba
-numpy>=1.18
+numpy<=1.21
 opencv-python
 pandas>=0.24.2
 phylib>=2.4
