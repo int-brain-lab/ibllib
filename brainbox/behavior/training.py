@@ -12,6 +12,13 @@ import pandas as pd
 
 _logger = logging.getLogger('ibllib')
 
+TRIALS_KEYS = ['contrastLeft',
+               'contrastRight',
+               'feedbackType',
+               'probabilityLeft',
+               'choice',
+               'response_times',
+               'stimOn_times']
 
 def get_lab_training_status(lab, date=None, details=True, one=None):
     """
@@ -308,14 +315,14 @@ def concatenate_trials(trials):
     """
     Concatenate trials from different training sessions
 
-    :param trials: dict containing trials objects from three consective training sessions,
+    :param trials: dict containing trials objects from three consecutive training sessions,
     keys are session dates
     :type trials: Bunch
     :return: trials object with data concatenated over three training sessions
     :rtype: dict
     """
     trials_all = Bunch()
-    for k in trials[list(trials.keys())[0]].keys():
+    for k in TRIALS_KEYS:
         trials_all[k] = np.concatenate(list(trials[kk][k] for kk in trials.keys()))
 
     return trials_all

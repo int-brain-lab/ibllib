@@ -246,7 +246,7 @@ class ApPlots(ReportSnapshotProbe):
         # TODO need to figure out the clim range
         fig, axs = plt.subplots(1, 2, gridspec_kw={'width_ratios': [.95, .05]}, figsize=(16, 9))
         ap = alfio.load_object(self.session_path.joinpath(f'raw_ephys_data/{self.pname}'), 'ephysTimeRmsAP', namespace='iblqc')
-        _, _, _ = image_rms_plot(ap.rms, ap.timestamps, median_subtract=False, band='AP', clim=[5, 10], ax=axs[0],
+        _, _, _ = image_rms_plot(ap.rms, ap.timestamps, median_subtract=False, band='AP', ax=axs[0],
                                  fig_kwargs={'figsize': (8, 6)}, display=True, title=f"{self.pid_label}")
         set_axis_label_size(axs[0], cmap=True)
         if self.histology_status:
