@@ -165,7 +165,7 @@ class Task(abc.ABC):
         if self.one and len(self.plot_tasks) > 0:
             for plot_task in self.plot_tasks:
                 try:
-                    _ = plot_task.register_images()
+                    _ = plot_task.register_images(widths=['orig'])
                 except Exception:
                     _logger.error(traceback.format_exc())
                     continue

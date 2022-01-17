@@ -350,6 +350,22 @@ class SpikeSorting(ReportSnapshotProbe):
         output_signature = [('spike_sorting_raster*.png', f'snapshot/{self.pname}', True)]
         self.signature = {'input_files': input_signature, 'output_files': output_signature}
 
+    def get_signatures(self, **kwargs):
+        files_spikes = Path(self.session_path).joinpath('alf').rglob('spikes.times.npy')
+        folder_probes = [f.parent for f in files_spikes]
+
+        full_input_files = []
+        for sig in self.signature['input_files']:
+            for folder in folder_probes:
+                full_input_files.append((sig[0], str(folder.relative_to(self.session_path)), sig[2]))
+        if len(full_input_files) != 0:
+            self.input_files = full_input_files
+        else:
+            self.input_files = self.signature['input_files']
+
+        self.output_files = self.signature['output_files']
+
+
 
 class BadChannelsAp(ReportSnapshotProbe):
     """
