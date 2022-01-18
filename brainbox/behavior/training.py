@@ -20,6 +20,7 @@ TRIALS_KEYS = ['contrastLeft',
                'response_times',
                'stimOn_times']
 
+
 def get_lab_training_status(lab, date=None, details=True, one=None):
     """
     Computes the training status of all alive and water restricted subjects in a specified lab

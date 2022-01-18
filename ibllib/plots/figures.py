@@ -366,7 +366,6 @@ class SpikeSorting(ReportSnapshotProbe):
         self.output_files = self.signature['output_files']
 
 
-
 class BadChannelsAp(ReportSnapshotProbe):
     """
     Plots raw electrophysiology AP band
