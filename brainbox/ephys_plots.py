@@ -7,14 +7,14 @@ from brainbox.processing import bincount2D, compute_cluster_average
 from ibllib.atlas.regions import BrainRegions
 
 
-def image_lfp_spectrum_plot(lfp_power, lfp_freq, chn_coords, chn_inds, freq_range=(0, 300),
-                            avg_across_depth=False, cmap='viridis', display=False):
+def image_lfp_spectrum_plot(lfp_power, lfp_freq, chn_coords=None, chn_inds=None, freq_range=(0, 300),
+                            avg_across_depth=False, clim=None, cmap='viridis', display=False, title=None, **kwargs):
     """
     Prepare data for 2D image plot of LFP power spectrum along depth of probe
 
     :param lfp_power:
     :param lfp_freq:
-    :param chn_coords:
+    :param chn_depths:
     :param chn_inds:
     :param freq_range:
     :param avg_across_depth: Whether to average across channels at same depth
@@ -23,17 +23,21 @@ def image_lfp_spectrum_plot(lfp_power, lfp_freq, chn_coords, chn_inds, freq_rang
     :return: ImagePlot object, if display=True also returns matplotlib fig and ax objects
     """
 
+    ylabel = 'Channel index' if chn_coords is None else 'Distance from probe tip (um)'
+    title = title or 'LFP Power Spectrum'
+    chn_inds = chn_inds or np.arange(lfp_power.shape[1])
+    y = np.arange(lfp_power.shape[1]) if chn_coords is None else chn_coords[:, 1]
+
     freq_idx = np.where((lfp_freq >= freq_range[0]) & (lfp_freq < freq_range[1]))[0]
     freqs = lfp_freq[freq_idx]
     lfp = np.take(lfp_power[freq_idx], chn_inds, axis=1)
     lfp_db = 10 * np.log10(lfp)
     lfp_db[np.isinf(lfp_db)] = np.nan
     x = freqs
-    y = chn_coords[:, 1]
 
     # Average across channels that are at the same depth
     if avg_across_depth:
-        chn_depth, chn_idx, chn_count = np.unique(chn_coords[:, 1], return_index=True,
+        chn_depth, chn_idx, chn_count = np.unique(y, return_index=True,
                                                   return_counts=True)
         chn_idx_eq = np.copy(chn_idx)
         chn_idx_eq[np.where(chn_count == 2)] += 1
@@ -45,19 +49,20 @@ def image_lfp_spectrum_plot(lfp_power, lfp_freq, chn_coords, chn_inds, freq_rang
         y = chn_depth
 
     data = ImagePlot(lfp_db, x=x, y=y, cmap=cmap)
-    data.set_labels(title='LFP Power Spectrum', xlabel='Frequency (Hz)',
-                    ylabel='Distance from probe tip (um)', clabel='LFP Power (dB)')
-    data.set_clim(clim=np.quantile(lfp_db, [0.1, 0.9]))
+    data.set_labels(title=title, xlabel='Frequency (Hz)',
+                    ylabel=ylabel, clabel='LFP Power (dB)')
+    clim = clim or np.quantile(lfp_db, [0.1, 0.9])
+    data.set_clim(clim=clim)
 
     if display:
-        fig, ax = plot_image(data.convert2dict())
+        ax, fig = plot_image(data.convert2dict(), **kwargs)
         return data.convert2dict(), fig, ax
 
     return data
 
 
-def image_rms_plot(rms_amps, rms_times, chn_coords, chn_inds, avg_across_depth=False,
-                   median_subtract=True, cmap='plasma', band='AP', display=False):
+def image_rms_plot(rms_amps, rms_times, chn_coords=None, chn_inds=None, avg_across_depth=False,
+                   median_subtract=True, clim=None, cmap='plasma', band='AP', display=False, title=None, **kwargs):
     """
     Prepare data for 2D image plot of RMS data along depth of probe
 
@@ -73,13 +78,17 @@ def image_rms_plot(rms_amps, rms_times, chn_coords, chn_inds, avg_across_depth=F
     :return: ImagePlot object, if display=True also returns matplotlib fig and ax objects
     """
 
-    rms = rms_amps[:, chn_inds] * 1e6
+    ylabel = 'Channel index' if chn_coords is None else 'Distance from probe tip (um)'
+    title = title or f'{band} RMS'
+    chn_inds = chn_inds or np.arange(rms_amps.shape[1])
+    y = np.arange(rms_amps.shape[1]) if chn_coords is None else chn_coords[:, 1]
+
+    rms = rms_amps[:, chn_inds]
+    rms = 10 * np.log10(rms)
     x = rms_times
-    y = chn_coords[:, 1]
 
     if avg_across_depth:
-        chn_depth, chn_idx, chn_count = np.unique(chn_coords[:, 1], return_index=True,
-                                                  return_counts=True)
+        chn_depth, chn_idx, chn_count = np.unique(y, return_index=True, return_counts=True)
         chn_idx_eq = np.copy(chn_idx)
         chn_idx_eq[np.where(chn_count == 2)] += 1
         rms = np.apply_along_axis(lambda a: np.mean([a[chn_idx], a[chn_idx_eq]], axis=0), 1, rms)
@@ -90,19 +99,19 @@ def image_rms_plot(rms_amps, rms_times, chn_coords, chn_inds, avg_across_depth=F
         rms = np.apply_along_axis(lambda a: a - np.median(a), 1, rms) + median
 
     data = ImagePlot(rms, x=x, y=y, cmap=cmap)
-    data.set_labels(title=f'{band} RMS', xlabel='Time (s)',
-                    ylabel='Distance from probe tip (um)', clabel=f'{band} RMS (uV)')
-    data.set_clim(clim=np.quantile(rms, [0.1, 0.9]))
+    data.set_labels(title=title, xlabel='Time (s)', ylabel=ylabel, clabel=f'{band} RMS (dB)')
+    clim = clim or np.quantile(rms, [0.1, 0.9])
+    data.set_clim(clim=clim)
 
     if display:
-        fig, ax = plot_image(data.convert2dict())
+        ax, fig = plot_image(data.convert2dict(), **kwargs)
         return data.convert2dict(), fig, ax
 
     return data
 
 
 def scatter_raster_plot(spike_amps, spike_depths, spike_times, n_amp_bins=10, cmap='BuPu',
-                        subsample_factor=100, display=False):
+                        subsample_factor=100, display=False, title=None, **kwargs):
     """
     Prepare data for 2D raster plot of spikes with colour and size indicative of spike amplitude
 
@@ -117,6 +126,7 @@ def scatter_raster_plot(spike_amps, spike_depths, spike_times, n_amp_bins=10, cm
     :return: ScatterPlot object, if display=True also returns matplotlib fig and ax objects
     """
 
+    title = title or 'Spike times vs Spike depths'
     amp_range = np.quantile(spike_amps, [0, 0.9])
     amp_bins = np.linspace(amp_range[0], amp_range[1], n_amp_bins)
     color_bin = np.linspace(0.0, 1.0, n_amp_bins + 1)
@@ -142,18 +152,18 @@ def scatter_raster_plot(spike_amps, spike_depths, spike_times, n_amp_bins=10, cm
     data.set_color(color=spike_colors)
     data.set_clim(clim=amp_range * 1e6)
     data.set_marker_size(marker_size=spike_size)
-    data.set_labels(title='Spike times vs Spike depths', xlabel='Time (s)',
+    data.set_labels(title=title, xlabel='Time (s)',
                     ylabel='Distance from probe tip (um)', clabel='Spike amplitude (uV)')
 
     if display:
-        fig, ax = plot_scatter(data.convert2dict())
+        ax, fig = plot_scatter(data.convert2dict(), **kwargs)
         return data.convert2dict(), fig, ax
 
     return data
 
 
 def image_fr_plot(spike_depths, spike_times, chn_coords, t_bin=0.05, d_bin=5, cmap='binary',
-                  display=False):
+                  display=False, title=None, **kwargs):
     """
     Prepare data 2D raster plot of firing rate across recording
 
@@ -167,23 +177,24 @@ def image_fr_plot(spike_depths, spike_times, chn_coords, t_bin=0.05, d_bin=5, cm
     :return: ImagePlot object, if display=True also returns matplotlib fig and ax objects
     """
 
+    title = title or 'Firing Rate'
     n, x, y = bincount2D(spike_times, spike_depths, t_bin, d_bin,
                          ylim=[0, np.max(chn_coords[:, 1])])
     fr = n.T / t_bin
 
     data = ImagePlot(fr, x=x, y=y, cmap=cmap)
-    data.set_labels(title='Firing Rate', xlabel='Time (s)',
+    data.set_labels(title=title, xlabel='Time (s)',
                     ylabel='Distance from probe tip (um)', clabel='Firing Rate (Hz)')
     data.set_clim(clim=(np.min(np.mean(fr, axis=0)), np.max(np.mean(fr, axis=0))))
     if display:
-        fig, ax = plot_image(data.convert2dict())
+        ax, fig = plot_image(data.convert2dict(), **kwargs)
         return data.convert2dict(), fig, ax
 
     return data
 
 
 def image_crosscorr_plot(spike_depths, spike_times, chn_coords, t_bin=0.05, d_bin=40,
-                         cmap='viridis', display=False):
+                         cmap='viridis', display=False, title=None, **kwargs):
     """
     Prepare data for 2D cross correlation plot of data across depth
 
@@ -197,24 +208,25 @@ def image_crosscorr_plot(spike_depths, spike_times, chn_coords, t_bin=0.05, d_bi
     :return: ImagePlot object, if display=True also returns matploltlib fig and ax objects
     """
 
+    title = title or 'Correlation'
     n, x, y = bincount2D(spike_times, spike_depths, t_bin, d_bin,
                          ylim=[0, np.max(chn_coords[:, 1])])
     corr = np.corrcoef(n)
     corr[np.isnan(corr)] = 0
 
     data = ImagePlot(corr, x=y, y=y, cmap=cmap)
-    data.set_labels(title='Correlation', xlabel='Distance from probe tip (um)',
+    data.set_labels(title=title, xlabel='Distance from probe tip (um)',
                     ylabel='Distance from probe tip (um)', clabel='Correlation')
 
     if display:
-        fig, ax = plot_image(data.convert2dict())
+        ax, fig = plot_image(data.convert2dict(), **kwargs)
         return data.convert2dict(), fig, ax
 
     return data
 
 
 def scatter_amp_depth_fr_plot(spike_amps, spike_clusters, spike_depths, spike_times, cmap='hot',
-                              display=False):
+                              display=False, title=None, **kwargs):
     """
     Prepare data for 2D scatter plot of cluster depth vs cluster amp with colour indicating cluster
     firing rate
@@ -228,6 +240,7 @@ def scatter_amp_depth_fr_plot(spike_amps, spike_clusters, spike_depths, spike_ti
     :return: ScatterPlot object, if display=True also returns matplotlib fig and ax objects
     """
 
+    title = title or 'Cluster depth vs amp vs firing rate'
     cluster, cluster_depth, n_cluster = compute_cluster_average(spike_clusters, spike_depths)
     _, cluster_amp, _ = compute_cluster_average(spike_clusters, spike_amps)
     cluster_amp = cluster_amp * 1e6
@@ -235,16 +248,17 @@ def scatter_amp_depth_fr_plot(spike_amps, spike_clusters, spike_depths, spike_ti
 
     data = ScatterPlot(x=cluster_amp, y=cluster_depth, c=cluster_fr, cmap=cmap)
     data.set_xlim((0.9 * np.min(cluster_amp), 1.1 * np.max(cluster_amp)))
-
+    data.set_labels(title=title, xlabel='Cluster Amplitude (uV)', ylabel='Distance from probe tip (um)',
+                    clabel='Firing rate (Hz)')
     if display:
-        fig, ax = plot_scatter(data.convert2dict())
+        ax, fig = plot_scatter(data.convert2dict(), **kwargs)
         return data.convert2dict(), fig, ax
 
     return data
 
 
 def probe_lfp_spectrum_plot(lfp_power, lfp_freq, chn_coords, chn_inds, freq_range=(0, 4),
-                            display=False, pad=True, x_offset=1):
+                            display=False, pad=True, x_offset=1, **kwargs):
     """
     Prepare data for 2D probe plot of LFP power spectrum along depth of probe
 
@@ -275,14 +289,14 @@ def probe_lfp_spectrum_plot(lfp_power, lfp_freq, chn_coords, chn_inds, freq_rang
     data.set_clim(clim)
 
     if display:
-        fig, ax = plot_probe(data.convert2dict())
+        ax, fig = plot_probe(data.convert2dict(), **kwargs)
         return data.convert2dict(), fig, ax
 
     return data
 
 
 def probe_rms_plot(rms_amps, chn_coords, chn_inds, cmap='plasma', band='AP',
-                   display=False, pad=True, x_offset=1):
+                   display=False, pad=True, x_offset=1, **kwargs):
     """
     Prepare data for 2D probe plot of RMS along depth of probe
 
@@ -309,13 +323,13 @@ def probe_rms_plot(rms_amps, chn_coords, chn_inds, cmap='plasma', band='AP',
     data.set_clim(clim)
 
     if display:
-        fig, ax = plot_probe(data.convert2dict())
+        ax, fig = plot_probe(data.convert2dict(), **kwargs)
         return data.convert2dict(), fig, ax
 
     return data
 
 
-def line_fr_plot(spike_depths, spike_times, chn_coords, d_bin=10, display=False):
+def line_fr_plot(spike_depths, spike_times, chn_coords, d_bin=10, display=False, title=None, **kwargs):
     """
     Prepare data for 1D line plot of average firing rate across depth
 
@@ -326,6 +340,8 @@ def line_fr_plot(spike_depths, spike_times, chn_coords, d_bin=10, display=False)
     :param display:
     :return:
     """
+
+    title = title or 'Avg Firing Rate'
     t_bin = np.max(spike_times)
     n, x, y = bincount2D(spike_times, spike_depths, t_bin, d_bin,
                          ylim=[0, np.max(chn_coords[:, 1])])
@@ -333,17 +349,17 @@ def line_fr_plot(spike_depths, spike_times, chn_coords, d_bin=10, display=False)
 
     data = LinePlot(x=mean_fr, y=y)
     data.set_xlim((0, np.max(mean_fr)))
-    data.set_labels(title='Avg Firing Rate', xlabel='Firing Rate (Hz)',
+    data.set_labels(title=title, xlabel='Firing Rate (Hz)',
                     ylabel='Distance from probe tip (um)')
 
     if display:
-        fig, ax = plot_line(data.convert2dict())
+        ax, fig = plot_line(data.convert2dict(), **kwargs)
         return data.convert2dict(), fig, ax
 
     return data
 
 
-def line_amp_plot(spike_amps, spike_depths, spike_times, chn_coords, d_bin=10, display=False):
+def line_amp_plot(spike_amps, spike_depths, spike_times, chn_coords, d_bin=10, display=False, title=None, **kwargs):
     """
     Prepare data for 1D line plot of average firing rate across depth
     :param spike_amps:
@@ -354,6 +370,7 @@ def line_amp_plot(spike_amps, spike_depths, spike_times, chn_coords, d_bin=10, d
     :param display:
     :return:
     """
+    title = title or 'Avg Amplitude'
     t_bin = np.max(spike_times)
     n, _, _ = bincount2D(spike_times, spike_depths, t_bin, d_bin,
                          ylim=[0, np.max(chn_coords[:, 1])])
@@ -367,15 +384,15 @@ def line_amp_plot(spike_amps, spike_depths, spike_times, chn_coords, d_bin=10, d
 
     data = LinePlot(x=mean_amp, y=y)
     data.set_xlim((0, np.max(mean_amp)))
-    data.set_labels(title='Avg Amplitude', xlabel='Amplitude (uV)',
+    data.set_labels(title=title, xlabel='Amplitude (uV)',
                     ylabel='Distance from probe tip (um)')
     if display:
-        fig, ax = plot_line(data.convert2dict())
+        ax, fig = plot_line(data.convert2dict(), **kwargs)
         return data.convert2dict(), fig, ax
     return data
 
 
-def plot_brain_regions(channel_ids, channel_depths=None, brain_regions=None, display=True, ax=None):
+def plot_brain_regions(channel_ids, channel_depths=None, brain_regions=None, display=True, ax=None, title=None):
     """
     Plot brain regions along probe, if channel depths is provided will plot along depth otherwise along channel idx
     :param channel_ids: atlas ids for each channel
@@ -383,11 +400,14 @@ def plot_brain_regions(channel_ids, channel_depths=None, brain_regions=None, dis
     :param brain_regions: BrainRegions object
     :param display: whether to output plot
     :param ax: axis to plot on
+    :param title: title for plot
     :return:
     """
 
     if channel_depths is not None:
         assert channel_ids.shape[0] == channel_depths.shape[0]
+    else:
+        channel_depths = np.arange(channel_ids.shape[0])
 
     br = brain_regions or BrainRegions()
 
@@ -413,11 +433,14 @@ def plot_brain_regions(channel_ids, channel_depths=None, brain_regions=None, dis
             ax.bar(x=0.5, height=height, width=1, color=color, bottom=reg[0], edgecolor='w')
         ax.set_yticks(region_labels[:, 0].astype(int))
         ax.yaxis.set_tick_params(labelsize=8)
+        ax.set_ylim(np.nanmin(channel_depths), np.nanmax(channel_depths))
         ax.get_xaxis().set_visible(False)
         ax.set_yticklabels(region_labels[:, 1])
         ax.spines['right'].set_visible(False)
         ax.spines['top'].set_visible(False)
         ax.spines['bottom'].set_visible(False)
+        if title:
+            ax.set_title(title)
 
         return fig, ax
     else:
@@ -468,7 +491,7 @@ def plot_cdf(spike_amps, spike_depths, spike_times, n_amp_bins=10, d_bin=40, amp
                     ylabel='Distance from probe tip (um)', clabel='Firing Rate (Hz)')
 
     if display:
-        fig, ax = plot_image(data.convert2dict(), fig_kwargs={'figsize': [3, 7]}, ax=ax)
+        ax, fig = plot_image(data.convert2dict(), fig_kwargs={'figsize': [3, 7]}, ax=ax)
         return data.convert2dict(), fig, ax
 
     return data

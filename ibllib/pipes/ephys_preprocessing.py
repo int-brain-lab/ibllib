@@ -26,7 +26,8 @@ from ibllib.qc.task_metrics import TaskQC
 from ibllib.qc.camera import run_all_qc as run_camera_qc
 from ibllib.qc.dlc import DlcQC
 from ibllib.dsp import rms
-from ibllib.plots.figures import dlc_qc_plot
+from ibllib.plots.figures import dlc_qc_plot, BehaviourPlots, LfpPlots, ApPlots
+from ibllib.plots.figures import SpikeSorting as SpikeSortingPlots
 from ibllib.plots.snapshot import ReportSnapshot
 from brainbox.behavior.dlc import likelihood_threshold, get_licks, get_pupil_diameter, get_smooth_pupil_diameter
 
@@ -132,6 +133,11 @@ class RawEphysQC(tasks.Task):
             try:
                 eqc = ephysqc.EphysQC(pid, session_path=self.session_path, one=self.one)
                 qc_files.extend(eqc.run(update=True, overwrite=overwrite))
+                _logger.info("Creating LFP QC plots")
+                plot_task = LfpPlots(pid, session_path=self.session_path, one=self.one)
+                _ = plot_task.run()
+                self.plot_tasks.append(plot_task)
+
             except AssertionError:
                 _logger.error(traceback.format_exc())
                 self.status = -1
@@ -410,8 +416,17 @@ class SpikeSorting(tasks.Task):
 
                 if self.one:
                     eid = self.one.path2eid(self.session_path, query_type='remote')
-                    ins = self.one.alyx.rest('insertions', 'list', session=eid, name=label)
+                    ins = self.one.alyx.rest('insertions', 'list', session=eid, name=label, query_type='remote')
                     if len(ins) != 0:
+                        _logger.info("Creating SpikeSorting QC plots")
+                        plot_task = ApPlots(ins[0]['id'], session_path=self.session_path, one=self.one)
+                        _ = plot_task.run()
+                        self.plot_tasks.append(plot_task)
+
+                        plot_task = SpikeSortingPlots(ins[0]['id'], session_path=self.session_path, one=self.one)
+                        _ = plot_task.run(collection=str(probe_out_path.relative_to(self.session_path)))
+                        self.plot_tasks.append(plot_task)
+
                         resolved = ins[0].get('json', {'temp': 0}).get('extended_qc', {'temp': 0}). \
                             get('alignment_resolved', False)
                         if resolved:
@@ -636,7 +651,7 @@ class EphysTrials(tasks.Task):
             "sessions", eid, "extended_qc", {"behavior": int(good_enough)}
         )
 
-    def _run(self):
+    def _run(self, plot_qc=True):
         dsets, out_files = ephys_fpga.extract_all(self.session_path, save=True)
 
         if not self.one or self.one.offline:
@@ -651,6 +666,20 @@ class EphysTrials(tasks.Task):
         qc.extractor.extract_data()
         # Aggregate and update Alyx QC fields
         qc.run(update=True)
+
+        if plot_qc:
+            _logger.info("Creating Trials QC plots")
+            try:
+                session_id = self.one.path2eid(self.session_path)
+                plot_task = BehaviourPlots(session_id, self.session_path, one=self.one)
+                _ = plot_task.run()
+                self.plot_tasks.append(plot_task)
+
+            except BaseException:
+                _logger.error('Could not create Trials QC Plot')
+                _logger.error(traceback.format_exc())
+                self.status = -1
+
         return out_files
 
     def get_signatures(self, **kwargs):
