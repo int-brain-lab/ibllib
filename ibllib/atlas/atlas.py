@@ -2,7 +2,6 @@ from dataclasses import dataclass
 import logging
 import matplotlib.pyplot as plt
 from pathlib import Path, PurePosixPath
-from functools import lru_cache
 import numpy as np
 import nrrd
 
@@ -121,7 +120,7 @@ class BrainCoordinates:
         return ind * self.dz + self.z0
 
     def i2xyz(self, iii):
-        iii = np.array(iii)
+        iii = np.array(iii, dtype=float)
         out = np.zeros_like(iii)
         out[..., 0] = self.i2x(iii[..., 0])
         out[..., 1] = self.i2y(iii[..., 1])
@@ -197,6 +196,7 @@ class BrainAtlas:
         bc = BrainCoordinates(nxyz=nxyz, xyz0=(0, 0, 0), dxyz=dxyz)
         self.bc = BrainCoordinates(nxyz=nxyz, xyz0=- bc.i2xyz(iorigin), dxyz=dxyz)
 
+        # Computes the outer
         self.compute_surface()
 
     def compute_surface(self):
@@ -227,6 +227,16 @@ class BrainAtlas:
         self.boundaries = self.boundaries + np.diff(self.label, axis=1, append=0)
         self.boundaries = self.boundaries + np.diff(self.label, axis=2, append=0)
         self.boundaries[self.boundaries != 0] = 1
+
+        # Compute boundary on top view
+        ix, iy = np.meshgrid(np.arange(self.bc.nx), np.arange(self.bc.ny))
+        iz = self.bc.z2i(self.top)
+        inds = self._lookup_inds(np.stack((ix, iy, iz), axis=-1))
+        vals = np.random.random(self.regions.acronym.shape[0])
+        _top_boundary = vals[self.label.flat[inds]]
+        self.top_boundary = np.diff(_top_boundary, axis=0, append=0)
+        self.top_boundary = self.top_boundary + np.diff(_top_boundary, axis=1, append=0)
+        self.top_boundary[self.top_boundary != 0] = 1
 
     def _lookup_inds(self, ixyz):
         """
@@ -476,16 +486,30 @@ class BrainAtlas:
         sslice = self.slice(ml_coordinate, axis=0, volume=volume, mapping=mapping, region_values=region_values)
         return self._plot_slice(np.swapaxes(sslice, 0, 1), extent=self.extent(axis=0), **kwargs)
 
-    def plot_top(self, ax=None):
+    def plot_top(self, volume='annotation', mapping='Allen', region_values=None, ax=None, **kwargs):
+
         ix, iy = np.meshgrid(np.arange(self.bc.nx), np.arange(self.bc.ny))
         iz = self.bc.z2i(self.top)
         inds = self._lookup_inds(np.stack((ix, iy, iz), axis=-1))
-        if not ax:
-            ax = plt.gca()
-            ax.axis('equal')
-        ax.imshow(self._label2rgb(self.label.flat[inds]),
-                  extent=self.extent(axis=2), origin='upper')
-        return ax
+
+        regions = self._get_mapping(mapping=mapping)[self.label.flat[inds]]
+
+        if volume == 'annotation':
+            im = self._label2rgb(regions)
+        elif volume == 'image':
+            im = self.top
+        elif volume == 'value':
+            im = region_values[regions]
+        elif volume == 'volume':
+            im = np.zeros((iz.shape))
+            for x in range(im.shape[0]):
+                for y in range(im.shape[1]):
+                    im[x, y] = region_values[x, y, iz[x, y]]
+        elif volume == 'boundary':
+            im = self.top_boundary
+
+        return self._plot_slice(im, self.extent(axis=2), ax=ax, **kwargs)
+
 
 
 @dataclass
