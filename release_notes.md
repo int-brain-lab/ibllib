@@ -1,3 +1,10 @@
+## Release Note 2.8
+
+### Release Notes 2.8.0 2022-01-19
+- Add lfp, aprms, spike raster and behaviour report plots to task infastructure
+- Computation of apRMS in decompress_destripe_cbin before conversion to normalised units
+- Add SpikeSortingLoader class in brainbox.io.one
+
 ## Release Note 2.7
 
 ### Release Notes 2.7.1 2022-01-05

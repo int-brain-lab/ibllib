@@ -58,11 +58,12 @@ class Reader:
             self._raw.open(self.file_bin, self.file_bin.with_suffix('.ch'))
             if self._raw.shape != (self.ns, self.nc):
                 ftsec = self._raw.shape[0] / self.fs
-                _logger.warning(f"{sglx_file} : meta data and compressed chunks dont checkout\n"
-                                f"File duration: expected {self.meta['fileTimeSecs']},"
-                                f" actual {ftsec}\n"
-                                f"Will attempt to fudge the meta-data information.")
                 self.meta['fileTimeSecs'] = ftsec
+                if ftsec > 1:  # avoid the checks for streaming data
+                    _logger.warning(f"{sglx_file} : meta data and compressed chunks dont checkout\n"
+                                    f"File duration: expected {self.meta['fileTimeSecs']},"
+                                    f" actual {ftsec}\n"
+                                    f"Will attempt to fudge the meta-data information.")
         else:
             if self.nc * self.ns * 2 != self.nbytes:
                 ftsec = self.file_bin.stat().st_size / 2 / self.nc / self.fs

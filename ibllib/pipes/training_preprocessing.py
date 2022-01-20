@@ -110,10 +110,6 @@ class TrainingAudio(tasks.Task):
 
 # level 1
 class TrainingDLC(tasks.Task):
-    gpu = 1
-    cpu = 4
-    io_charge = 90
-    level = 1
 
     def _run(self):
         """empty placeholder for job creation only"""

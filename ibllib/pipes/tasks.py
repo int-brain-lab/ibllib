@@ -59,6 +59,7 @@ class Task(abc.ABC):
         self.machine = machine
         self.clobber = clobber
         self.location = location
+        self.plot_tasks = []  # Plotting task/ tasks to create plot outputs during the task
 
     @property
     def name(self):
@@ -152,7 +153,22 @@ class Task(abc.ABC):
         :param kwargs: directly passed to the register_dataset function
         :return:
         """
+        _ = self.register_images()
+
         return self.data_handler.uploadData(self.outputs, self.version, **kwargs)
+
+    def register_images(self, **kwargs):
+        """
+        Registers images to alyx database
+        :return:
+        """
+        if self.one and len(self.plot_tasks) > 0:
+            for plot_task in self.plot_tasks:
+                try:
+                    _ = plot_task.register_images(widths=['orig'])
+                except Exception:
+                    _logger.error(traceback.format_exc())
+                    continue
 
     def rerun(self):
         self.run(overwrite=True)
