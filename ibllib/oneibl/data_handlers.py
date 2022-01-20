@@ -118,7 +118,7 @@ class ServerGlobusDataHandler(DataHandler):
         :param signature: input and output file signatures
         :param one: ONE instance
         """
-        from one.globus import Globus, get_lab_from_endpoint_id  # noqa
+        from one.remote.globus import Globus, get_lab_from_endpoint_id  # noqa
         super().__init__(session_path, signatures, one=one)
         self.globus = Globus(client_name='server')
 
