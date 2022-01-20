@@ -44,8 +44,13 @@ class AWS:
                 _logger.info(f'{file_path} already exists wont redownload')
                 continue
 
+            if self.one._index_type() is int:
+                uuid = np2str(np.r_[d.name[0], d.name[1]])
+            elif self.one._index_type() is str:
+                uuid = d.name
+
             aws_path = AWS_ROOT_PATH.joinpath(
-                add_uuid_string(rel_file_path, np2str(np.r_[d.name[0], d.name[1]]))).as_posix()
+                add_uuid_string(rel_file_path, uuid)).as_posix()
             # maybe should avoid this and do a try catch instead?, see here
             # https://boto3.amazonaws.com/v1/documentation/api/latest/guide/collections.html#filtering
             # probably better to do filter on collection ? Not for today

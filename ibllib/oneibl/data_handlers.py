@@ -128,14 +128,12 @@ class ServerGlobusDataHandler(DataHandler):
         # Find the lab
         labs = get_lab_from_endpoint_id(alyx=self.one.alyx)
 
-        # TODO fix for floferlab
-        #if len(labs) == 2:
-        #    # for flofer lab
-        #    subject = self.one.path2ref(self.session_path)['subject']
-        #    self.lab = self.one.alyx.rest('subjects', 'list', nickname=subject)[0]['lab']
-        #else:
-        #    self.lab = labs[0]
-        self.lab = labs
+        if len(labs) == 2:
+            # for flofer lab
+            subject = self.one.path2ref(self.session_path)['subject']
+            self.lab = self.one.alyx.rest('subjects', 'list', nickname=subject)[0]['lab']
+        else:
+            self.lab = labs[0]
 
         # For cortex lab we need to get the endpoint from the ibl alyx
         if self.lab == 'cortexlab':
@@ -174,9 +172,15 @@ class ServerGlobusDataHandler(DataHandler):
             sess_path = Path(rel_sess_path).joinpath(d['rel_path'])
             full_local_path = Path(self.globus.endpoints['local']['root_path']).joinpath(sess_path)
             if not full_local_path.exists():
+
+                if self.one._index_type() is int:
+                    uuid = np2str(np.r_[d.name[0], d.name[1]])
+                elif self.one._index_type() is str:
+                    uuid = d.name
+
                 self.local_paths.append(full_local_path)
                 target_paths.append(sess_path)
-                source_paths.append(add_uuid_string(sess_path, np2str(np.r_[d.name[0], d.name[1]])))
+                source_paths.append(add_uuid_string(sess_path, uuid))
 
         if len(target_paths) != 0:
             ts = time()
@@ -246,7 +250,7 @@ class RemoteAwsDataHandler(DataHandler):
         :param signature: input and output file signatures
         :param one: ONE instance
         """
-        from one.globus import Globus # noqa
+        from one.remote.globus import Globus # noqa
         super().__init__(session_path, signature, one=one)
         self.task = task
         self.aws = AWS(one=self.one)
@@ -389,7 +393,13 @@ class SDSCDataHandler(DataHandler):
         SDSC_TMP = Path(SDSC_PATCH_PATH.joinpath(self.task.__class__.__name__))
         for _, d in df.iterrows():
             file_path = Path(d['session_path']).joinpath(d['rel_path'])
-            file_uuid = add_uuid_string(file_path, np2str(np.r_[d.name[0], d.name[1]]))
+
+            if self.one._index_type() is int:
+                uuid = np2str(np.r_[d.name[0], d.name[1]])
+            elif self.one._index_type() is str:
+                uuid = d.name
+
+            file_uuid = add_uuid_string(file_path, uuid)
             file_link = SDSC_TMP.joinpath(file_path)
             file_link.parent.mkdir(exist_ok=True, parents=True)
             file_link.symlink_to(
