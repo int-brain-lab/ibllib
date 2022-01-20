@@ -184,6 +184,7 @@ class BrainAtlas:
         self.top: 2d np array (ap, ml) containing the z-coordinate (m) of the surface of the brain
         self.dims2xyz and self.zyz2dims: map image axis order to xyz coordinates order
         """
+
         self.image = image
         self.label = label
         self.regions = regions
@@ -196,6 +197,9 @@ class BrainAtlas:
         bc = BrainCoordinates(nxyz=nxyz, xyz0=(0, 0, 0), dxyz=dxyz)
         self.bc = BrainCoordinates(nxyz=nxyz, xyz0=- bc.i2xyz(iorigin), dxyz=dxyz)
 
+        self.compute_surface()
+
+    def compute_surface(self):
         """
         Get the volume top, bottom, left and right surfaces, and from these the outer surface of
         the image volume. This is needed to compute probe insertions intersections
@@ -214,6 +218,15 @@ class BrainAtlas:
         self.surface[idx_srf] = 1
         self.srf_xyz = self.bc.i2xyz(np.c_[idx_srf[self.xyz2dims[0]], idx_srf[self.xyz2dims[1]],
                                            idx_srf[self.xyz2dims[2]]].astype(float))
+
+    def compute_boundaries(self):
+        """
+        Compute the boundaries between regions
+        """
+        self.boundaries = np.diff(self.label, axis=0, append=0)
+        self.boundaries = self.boundaries + np.diff(self.label, axis=1, append=0)
+        self.boundaries = self.boundaries + np.diff(self.label, axis=2, append=0)
+        self.boundaries[self.boundaries != 0] = 1
 
     def _lookup_inds(self, ixyz):
         """
@@ -710,7 +723,6 @@ class Insertion:
         return Insertion._get_surface_intersection(traj, brain_atlas, surface='top')
 
 
-@lru_cache(maxsize=1)
 class AllenAtlas(BrainAtlas):
     """
     Instantiates an atlas.BrainAtlas corresponding to the Allen CCF at the given resolution
@@ -725,6 +737,7 @@ class AllenAtlas(BrainAtlas):
         :param hist_path
         :return: atlas.BrainAtlas
         """
+
         par = one.params.get(silent=True)
         FLAT_IRON_ATLAS_REL_PATH = PurePosixPath('histology', 'ATLAS', 'Needles', 'Allen')
         LUT_VERSION = "v01"  # version 01 is the lateralized version
