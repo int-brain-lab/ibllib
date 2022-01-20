@@ -126,19 +126,22 @@ class ServerGlobusDataHandler(DataHandler):
         self.globus.endpoints['local']['root_path'] = '/mnt/s0/Data/Subjects'
 
         # Find the lab
-        labs = get_lab_from_endpoint_id(one=self.one)
-        if len(labs) == 2:
-            # for flofer lab
-            subject = self.one.path2ref(self.session_path)['subject']
-            self.lab = self.one.alyx.rest('subjects', 'list', nickname=subject)[0]['lab']
-        else:
-            self.lab = labs[0]
+        labs = get_lab_from_endpoint_id(alyx=self.one.alyx)
+
+        # TODO fix for floferlab
+        #if len(labs) == 2:
+        #    # for flofer lab
+        #    subject = self.one.path2ref(self.session_path)['subject']
+        #    self.lab = self.one.alyx.rest('subjects', 'list', nickname=subject)[0]['lab']
+        #else:
+        #    self.lab = labs[0]
+        self.lab = labs
 
         # For cortex lab we need to get the endpoint from the ibl alyx
         if self.lab == 'cortexlab':
-            self.globus.add_endpoint(f'flatiron_{self.lab}', one=ONE(base_url='https://alyx.internationalbrainlab.org'))
+            self.globus.add_endpoint(f'flatiron_{self.lab}', alyx=ONE(base_url='https://alyx.internationalbrainlab.org').alyx)
         else:
-            self.globus.add_endpoint(f'flatiron_{self.lab}')
+            self.globus.add_endpoint(f'flatiron_{self.lab}', alyx=self.one.alyx)
 
     def setUp(self):
         """
