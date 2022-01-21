@@ -236,5 +236,7 @@ def _get_pipeline_from_task_type(stype):
         return 'ephys'
     elif stype in ['habituation', 'training', 'biased', 'biased_opto']:
         return 'training'
+    elif 'widefield' in stype:
+        return 'widefield'
     else:
         return stype

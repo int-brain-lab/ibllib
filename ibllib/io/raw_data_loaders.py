@@ -804,3 +804,31 @@ def get_port_events(trial: dict, name: str = '') -> list:
     out = sorted(out)
 
     return out
+
+
+def load_widefield_mmap(session_path, dtype=np.uint16, shape=(540, 640), n_frames=None, mode='r'):
+    """
+    TODO Document this function
+
+    Parameters
+    ----------
+    session_path
+
+    Returns
+    -------
+
+    """
+    filepath = Path(session_path).joinpath('raw_widefield_data').glob('widefield.raw.*.dat')
+    filepath = next(filepath, None)
+    if not filepath:
+        _logger.warning("No data loaded: could not find raw data file")
+        return None
+
+    if type(dtype) is str:
+        dtype = np.dtype(dtype)
+
+    if n_frames is None:
+        # Get the number of samples from the file size
+        n_frames = int(filepath.stat().st_size / (np.prod(shape) * dtype.itemsize))
+
+    return np.memmap(str(filepath), mode=mode, dtype=dtype, shape=(int(n_frames), *shape))

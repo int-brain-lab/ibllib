@@ -23,3 +23,5 @@ seaborn>=0.9.0
 tqdm>=4.32.1
 iblutil
 ONE-api
+wfield > 0.2.2 # widefield extractor
+labcams # widefield extractor

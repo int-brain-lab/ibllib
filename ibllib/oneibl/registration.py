@@ -27,6 +27,7 @@ REGISTRATION_GLOB_PATTERNS = ['alf/**/*.*',
                               'raw_ephys_data/**/_iblrig_*.*',
                               'raw_ephys_data/**/_spikeglx_*.*',
                               'raw_ephys_data/**/_iblqc_*.*',
+                              'raw_widefield_data/**/_ibl_*.*',
                               'spikesorters/**/_kilosort_*.*'
                               ]
 
@@ -130,7 +131,7 @@ def register_session_raw_data(session_path, one=None, overwrite=False, dry=False
     # filter 1/2 filter out datasets that do not match any dataset type
     files_2_register = list(filter(lambda f: _check_filename_for_registration(
         f, registration_patterns), files_2_register))
-    # filter 2/2 unless overwrite is True, filter out the datasets that already exists
+    # filter 2/2 unless overwrite is True, filter out the datasets that already exist
     if not overwrite:
         files_2_register = list(filter(lambda f: f not in already_registered, files_2_register))
     response = register_dataset(files_2_register, one=one, versions=None, dry=dry, **kwargs)
