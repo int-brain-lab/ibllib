@@ -1144,7 +1144,7 @@ class EphysPostDLC(tasks.Task):
                         output_files.append(features_file)
 
                     # For all cams, compute DLC qc if times available
-                    if times is True or times =='short' and run_qc:
+                    if times is True or times == 'short' and run_qc:
                         # Setting download_data to False because at this point the data should be there
                         qc = DlcQC(self.session_path, side=cam, one=self.one, download_data=False)
                         qc.run(update=True)

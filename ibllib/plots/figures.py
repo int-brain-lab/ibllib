@@ -701,13 +701,13 @@ def dlc_qc_plot(eid, one=None):
         ax.text(-0.1, 1.15, ascii_uppercase[i], transform=ax.transAxes, fontsize=16, fontweight='bold')
         # Check if we have the cam times issue:
         if panel[1] == 'cam_times':
-            ax.text(.5, .5, f"Issue with camera.times\nsee task logs", color='r', fontweight='bold',
+            ax.text(.5, .5, "Issue with camera.times\nsee task logs", color='r', fontweight='bold',
                     fontsize=12, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
             plt.axis('off')
 
         # Check if any of the inputs is None
         elif any([v is None for v in panel[1].values()]) or any([v.values() is None for v in panel[1].values()
-                                                               if isinstance(v, dict)]):
+                                                                 if isinstance(v, dict)]):
             ax.text(.5, .5, f"Data incomplete\n{panel[0].__name__}", color='r', fontweight='bold',
                     fontsize=12, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
             plt.axis('off')
