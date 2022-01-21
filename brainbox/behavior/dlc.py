@@ -373,7 +373,11 @@ def _bin_window_licks(lick_times, trials_df):
     lick_bins = np.squeeze(lick_bins)
     start_window, end_window = plt_window(trials_df['feedback_times'])
     # Translating the time window into an index window
-    start_idx = insert_idx(bin_times, start_window)
+    try:
+        start_idx = insert_idx(bin_times, start_window)
+    except ValueError:
+        logger.error('Lick time stamps are outside of the trials windows')
+        raise
     end_idx = np.array(start_idx + int(WINDOW_LEN / T_BIN), dtype='int64')
     # Get the binned licks for each window
     trials_df['lick_bins'] = [lick_bins[start_idx[i]:end_idx[i]] for i in range(len(start_idx))]
@@ -394,7 +398,7 @@ def plot_lick_hist(lick_times, trials_df):
     """
     licks_df = _bin_window_licks(lick_times, trials_df)
     # Plot
-    times = np.arange(len(licks_df['lick_bins'][0])) * T_BIN + WINDOW_LAG
+    times = np.arange(len(licks_df['lick_bins'].iloc[0])) * T_BIN + WINDOW_LAG
     correct = licks_df[licks_df['feedbackType'] == 1]['lick_bins']
     incorrect = licks_df[licks_df['feedbackType'] == -1]['lick_bins']
     plt.plot(times, pd.DataFrame.from_dict(dict(zip(correct.index, correct.values))).mean(axis=1),
@@ -420,7 +424,7 @@ def plot_lick_raster(lick_times, trials_df):
     """
     licks_df = _bin_window_licks(lick_times, trials_df)
     plt.imshow(list(licks_df[licks_df['feedbackType'] == 1]['lick_bins']), aspect='auto',
-               extent=[-0.5, 1.5, len(licks_df['lick_bins'][0]), 0], cmap='gray_r')
+               extent=[-0.5, 1.5, len(licks_df['lick_bins'].iloc[0]), 0], cmap='gray_r')
     plt.xticks([-0.5, 0, 0.5, 1, 1.5])
     plt.ylabel('trials')
     plt.xlabel('time [sec]')
@@ -451,7 +455,11 @@ def plot_motion_energy_hist(camera_dict, trials_df):
                 and camera_dict[cam]['times'] is not None and len(camera_dict[cam]['times']) > 0):
             try:
                 motion_energy = zscore(camera_dict[cam]['motion_energy'], nan_policy='omit')
-                start_idx = insert_idx(camera_dict[cam]['times'], start_window)
+                try:
+                    start_idx = insert_idx(camera_dict[cam]['times'], start_window)
+                except ValueError:
+                    logger.error("Camera.times are outside of the trial windows")
+                    raise
                 end_idx = np.array(start_idx + int(WINDOW_LEN * SAMPLING[cam]), dtype='int64')
                 me_all = [motion_energy[start_idx[i]:end_idx[i]] for i in range(len(start_idx))]
                 times = np.arange(len(me_all[0])) / SAMPLING[cam] + WINDOW_LAG
@@ -506,7 +514,7 @@ def plot_speed_hist(dlc_df, cam_times, trials_df, feature='paw_r', cam='left', l
     # Add speeds to trials_df
     trials_df[f'speed_{feature}'] = [speeds[start_idx[i]:end_idx[i]] for i in range(len(start_idx))]
     # Plot
-    times = np.arange(len(trials_df[f'speed_{feature}'][0])) / SAMPLING[cam] + WINDOW_LAG
+    times = np.arange(len(trials_df[f'speed_{feature}'].iloc[0])) / SAMPLING[cam] + WINDOW_LAG
     # Need to expand the series of lists into a dataframe first, for the nan skipping to work
     correct = trials_df[trials_df['feedbackType'] == 1][f'speed_{feature}']
     incorrect = trials_df[trials_df['feedbackType'] == -1][f'speed_{feature}']
