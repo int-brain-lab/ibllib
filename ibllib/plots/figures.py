@@ -23,6 +23,7 @@ from brainbox.behavior.dlc import SAMPLING, plot_trace_on_frame, plot_wheel_posi
 from brainbox.ephys_plots import image_lfp_spectrum_plot, image_rms_plot, plot_brain_regions
 from brainbox.io.one import load_spike_sorting_fast
 from brainbox.behavior import training
+from iblutil.numerical import ismember
 
 
 logger = logging.getLogger('ibllib')
@@ -132,7 +133,7 @@ class HistologySlices(ReportSnapshotProbe):
         assert self.brain_atlas
 
         output_files = []
-
+        self.histology_status = self.get_histology_status()
         electrodes = self.get_channels('electrodeSites', f'alf/{self.pname}')
 
         if self.hist_lookup[self.histology_status] > 0:
@@ -396,6 +397,16 @@ class BadChannelsAp(ReportSnapshotProbe):
     def _run(self):
         """runs for initiated PID, streams data, destripe and check bad channels"""
         assert self.pid
+        self.eqcs = []
+        self.histology_status = self.get_histology_status()
+        electrodes = self.get_channels('electrodeSites', f'alf/{self.pname}')
+        if 'atlas_id' in electrodes.keys():
+            electrodes['ibr'] = ismember(electrodes['atlas_id'], self.brain_regions.id)[1]
+            electrodes['acronym'] = self.brain_regions.acronym[electrodes['ibr']]
+            electrodes['name'] = self.brain_regions.name[electrodes['ibr']]
+        else:
+            electrodes = None
+
         SNAPSHOT_LABEL = "raw_ephys_bad_channels"
         eid, pname = self.one.pid2eid(self.pid)
         output_files = list(self.output_directory.glob(f'{SNAPSHOT_LABEL}*'))
@@ -407,14 +418,15 @@ class BadChannelsAp(ReportSnapshotProbe):
         sr, t0 = stream(self.pid, T0, nsecs=1, one=self.one)
         raw = sr[:, :-sr.nsync].T
         channel_labels, channel_features = voltage.detect_bad_channels(raw, sr.fs)
-        _, _, output_files = ephys_bad_channels(
-            raw=raw, fs=sr.fs, channel_labels=channel_labels, channel_features=channel_features,
-            title=SNAPSHOT_LABEL, destripe=True, save_dir=self.output_directory)
+        _, eqcs, output_files = ephys_bad_channels(
+            raw=raw, fs=sr.fs, channel_labels=channel_labels, channel_features=channel_features, channels=electrodes,
+            title=SNAPSHOT_LABEL, destripe=True, save_dir=self.output_directory, br=self.brain_regions)
+        self.eqcs = eqcs
         return output_files
 
 
-def ephys_bad_channels(raw, fs, channel_labels, channel_features, title="ephys_bad_channels", save_dir=None,
-                       destripe=False, eqcs=None):
+def ephys_bad_channels(raw, fs, channel_labels, channel_features, channels=None, title="ephys_bad_channels", save_dir=None,
+                       destripe=False, eqcs=None, br=None):
     nc, ns = raw.shape
     rl = ns / fs
     if fs >= 2600:  # AP band
@@ -434,18 +446,19 @@ def ephys_bad_channels(raw, fs, channel_labels, channel_features, title="ephys_b
     inoisy = np.where(channel_labels == 2)[0]
     idead = np.where(channel_labels == 1)[0]
     ioutside = np.where(channel_labels == 3)[0]
-    from easyqc.gui import viewseis
+    from viewspikes.gui import viewephys
 
     # display voltage traces
     eqcs = [] if eqcs is None else eqcs
     # butterworth, for display only
     sos = scipy.signal.butter(**butter_kwargs, output='sos')
     butt = scipy.signal.sosfiltfilt(sos, raw)
-    eqcs.append(viewseis(butt.T, si=1 / fs * 1e3, title='highpass', taxis=0))
+    eqcs.append(viewephys(butt, fs=fs, channels=channels, title='highpass', br=br))
     if destripe:
         dest = voltage.destripe(raw, fs=fs, channel_labels=channel_labels)
-        eqcs.append(viewseis(dest.T, si=1 / fs * 1e3, title='destripe', taxis=0))
-        eqcs.append(viewseis((butt - dest).T, si=1 / fs * 1e3, title='difference', taxis=0))
+        eqcs.append(viewephys(dest, fs=fs, channels=channels, title='destripe', br=br))
+        eqcs.append(viewephys((butt - dest), fs=fs, channels=channels, title='difference', br=br))
+
     for eqc in eqcs:
         y, x = np.meshgrid(ioutside, np.linspace(0, rl * 1e3, 500))
         eqc.ctrl.add_scatter(x.flatten(), y.flatten(), rgb=(164, 142, 35), label='outside')
