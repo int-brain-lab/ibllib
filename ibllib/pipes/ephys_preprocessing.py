@@ -896,7 +896,7 @@ class EphysMtscomp(tasks.Task):
 class EphysDLC(tasks.Task):
     """
     This task relies on a correctly installed dlc environment as per
-    https://github.com/int-brain-lab/iblvideo#installing-dlc-locally-on-an-ibl-server
+    https://docs.google.com/document/d/1g0scP6_3EmaXCU4SsDNZWwDTaD9MG0es_grLA-d0gh0/edit#
     """
     gpu = 1
     cpu = 4
