@@ -862,7 +862,11 @@ def load_channels_from_insertion(ins, depths=None, one=None, ba=None):
 
 @dataclass
 class SpikeSortingLoader:
-    """Class for loading spike sorting"""
+    """
+    Object that will load spike sorting data for a given probe insertion.
+
+
+    """
     pid: str
     one: ONE
     atlas: None
@@ -909,6 +913,13 @@ class SpikeSortingLoader:
         return collection
 
     def _download_spike_sorting_object(self, obj, spike_sorter='pykilosort', dataset_types=None):
+        """
+        Downloads an ALF object
+        :param obj: object name, str between 'spikes', 'clusters' or 'channels'
+        :param spike_sorter: (defaults to 'pykilosort')
+        :param dataset_types: list of extra dataset types
+        :return:
+        """
         if len(self.collections) == 0:
             return {}, {}, {}
         self.collection = self._get_spike_sorting_collection(spike_sorter=spike_sorter)
@@ -918,13 +929,33 @@ class SpikeSortingLoader:
                                                collection=self.collection, download_only=True)
 
     def download_spike_sorting(self, **kwargs):
-        """spike_sorter='pykilosort', dataset_types=None"""
+        """
+        Downloads spikes, clusters and channels
+        :param spike_sorter: (defaults to 'pykilosort')
+        :param dataset_types: list of extra dataset types
+        :return:
+        """
         for obj in ['spikes', 'clusters', 'channels']:
             self._download_spike_sorting_object(obj=obj, **kwargs)
         self.spike_sorting_path = self.files['spikes'][0].parent
 
     def load_spike_sorting(self, **kwargs):
-        """spike_sorter='pykilosort', dataset_types=None"""
+        """
+        Loads spikes, clusters and channels
+
+        There could be several spike sorting collections, by default the loader will get the pykilosort collection
+
+        The channel locations can come from several sources, it will load the most advanced version of the histology available,
+        regardless of the spike sorting version loaded. The steps are (from most advanced to fresh out of the imaging):
+        -   alf: the final version of channel locations, same as resolved with the difference that data has been written out to files
+        -   resolved: channel locations alignments have been agreed upon
+        -   aligned: channel locations have been aligned, but review or other alignments are pending, potentially not accurate
+        -   traced: the histology track has been recovered from microscopy, however the depths may not match, inacurate data
+
+        :param spike_sorter: (defaults to 'pykilosort')
+        :param dataset_types: list of extra dataset types
+        :return:
+        """
         if len(self.collections) == 0:
             return {}, {}, {}
         self.download_spike_sorting(**kwargs)
