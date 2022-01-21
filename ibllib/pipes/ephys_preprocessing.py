@@ -897,6 +897,11 @@ class EphysDLC(tasks.Task):
     """
     This task relies on a correctly installed dlc environment as per
     https://docs.google.com/document/d/1g0scP6_3EmaXCU4SsDNZWwDTaD9MG0es_grLA-d0gh0/edit#
+
+    If your environment is set up otherwise, make sure that you set the respective attributes:
+    t = EphysDLC(session_path)
+    t.dlcenv = Path('/path/to/your/dlcenv/bin/activate')
+    t.scripts = Path('/path/to/your/iblscripts/deploy/serverpc/dlc')
     """
     gpu = 1
     cpu = 4
