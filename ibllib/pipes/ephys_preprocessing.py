@@ -1111,15 +1111,22 @@ class EphysPostDLC(tasks.Task):
                                       f'Computations using camera.times will be skipped')
                         self.status = -1
                         times = False
+                    elif dlc_t.shape[0] < len(dlc_thresh):
+                        _logger.error(f'Camera times shorter than DLC traces for {cam} camera. '
+                                      f'Computations using camera.times will be skipped')
+                        self.status = -1
+                        times = 'short'
                     # These features are only computed from left and right cam
                     if cam in ('left', 'right'):
                         features = pd.DataFrame()
                         # If camera times are available, get the lick time stamps for combined array
-                        if times:
+                        if times is True:
                             _logger.info(f"Computing lick times for {cam} camera.")
                             combined_licks.append(get_licks(dlc_thresh, dlc_t))
-                        else:
-                            _logger.warning(f"Skipping lick times for {cam} camera as no camera.times available.")
+                        elif times is False:
+                            _logger.warning(f"Skipping lick times for {cam} camera as no camera.times available")
+                        elif times == 'short':
+                            _logger.warning(f"Skipping lick times for {cam} camera as camera.times are too short")
                         # Compute pupil diameter, raw and smoothed
                         _logger.info(f"Computing raw pupil diameter for {cam} camera.")
                         features['pupilDiameter_raw'] = get_pupil_diameter(dlc_thresh)
@@ -1129,6 +1136,7 @@ class EphysPostDLC(tasks.Task):
                                                                                          cam)
                         except BaseException:
                             _logger.error(f"Computing smooth pupil diameter for {cam} camera failed, saving all NaNs.")
+                            _logger.error(traceback.format_exc())
                             features['pupilDiameter_smooth'] = np.nan
                         # Safe to pqt
                         features_file = Path(self.session_path).joinpath('alf', f'_ibl_{cam}Camera.features.pqt')
@@ -1136,12 +1144,12 @@ class EphysPostDLC(tasks.Task):
                         output_files.append(features_file)
 
                     # For all cams, compute DLC qc if times available
-                    if times and run_qc:
+                    if times is True or times =='short' and run_qc:
                         # Setting download_data to False because at this point the data should be there
                         qc = DlcQC(self.session_path, side=cam, one=self.one, download_data=False)
                         qc.run(update=True)
                     else:
-                        if not times:
+                        if times is False:
                             _logger.warning(f"Skipping QC for {cam} camera as no camera.times available")
                         if not run_qc:
                             _logger.warning(f"Skipping QC for {cam} camera as run_qc=False")

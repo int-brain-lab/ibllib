@@ -341,7 +341,7 @@ def plot_wheel_position(wheel_position, wheel_time, trials_df):
     trials_df['wheel_position'] = [wheel_position[start_idx[w]: end_idx[w]] - wheel_position[start_idx[w]]
                                    for w in range(len(start_idx))]
     # Plotting
-    times = np.arange(len(trials_df['wheel_position'][0])) * T_BIN + WINDOW_LAG
+    times = np.arange(len(trials_df['wheel_position'].iloc[0])) * T_BIN + WINDOW_LAG
     for side, label, color in zip([-1, 1], ['right', 'left'], ['darkred', '#1f77b4']):
         side_df = trials_df[trials_df['choice'] == side]
         for idx in side_df.index:
@@ -495,6 +495,8 @@ def plot_speed_hist(dlc_df, cam_times, trials_df, feature='paw_r', cam='left', l
     dlc_df = likelihood_threshold(dlc_df)
     # For pre-GPIO sessions, remove the first few timestamps to match the number of frames
     cam_times = cam_times[-len(dlc_df):]
+    if len(cam_times) != len(dlc_df):
+        raise ValueError("Camera times length and DLC length are inconsistent")
     # Get speeds
     speeds = get_speed(dlc_df, cam_times, camera=cam, feature=feature)
     # Windows aligned to align_to
