@@ -270,6 +270,8 @@ def channel_locations_interpolation(channels_aligned, channels=None, brain_regio
 
 def _load_channel_locations_traj(eid, probe=None, one=None, revision=None, aligned=False,
                                  brain_atlas=None, return_source=False):
+    if not hasattr(one, 'alyx'):
+        return {}, None
     _logger.debug(f"trying to load from traj {probe}")
     channels = Bunch()
     brain_atlas = brain_atlas or AllenAtlas
@@ -416,6 +418,8 @@ def load_spike_sorting_fast(eid, one=None, probe=None, dataset_types=None, spike
     :param return_collection: (False) if True, will return the collection used to load
     :return: spikes, clusters, channels (dict of bunch, 1 bunch per probe)
     """
+    _logger.warning('Deprecation warning: brainbox.io.one.load_spike_sorting_fast will be removed in future versions.'
+                    'Use brainbox.io.one.SpikeSortingLoader instead')
     if collection is None:
         collection = _collection_filter_from_args(probe, spike_sorter)
     _logger.debug(f"load spike sorting with collection filter {collection}")
@@ -455,6 +459,8 @@ def load_spike_sorting(eid, one=None, probe=None, dataset_types=None, spike_sort
     :param return_collection:(bool - False) if True, returns the collection for loading the data
     :return: spikes, clusters (dict of bunch, 1 bunch per probe)
     """
+    _logger.warning('Deprecation warning: brainbox.io.one.load_spike_sorting will be removed in future versions.'
+                    'Use brainbox.io.one.SpikeSortingLoader instead')
     collection = _collection_filter_from_args(probe, spike_sorter)
     _logger.debug(f"load spike sorting with collection filter {collection}")
     spikes, clusters = _load_spike_sorting(eid=eid, one=one, collection=collection, revision=revision,
@@ -506,6 +512,8 @@ def load_spike_sorting_with_channel(eid, one=None, probe=None, aligned=False, da
         'atlas_id', 'x', 'y', 'z').  Atlas IDs non-lateralized.
     """
     # --- Get spikes and clusters data
+    _logger.warning('Deprecation warning: brainbox.io.one.load_spike_sorting will be removed in future versions.'
+                    'Use brainbox.io.one.SpikeSortingLoader instead')
     one = one or ONE()
     brain_atlas = brain_atlas or AllenAtlas()
     spikes, clusters, collection = load_spike_sorting(
@@ -867,11 +875,12 @@ class SpikeSortingLoader:
 
 
     """
-    pid: str
     one: ONE
-    atlas: None
-    # the following properties are the outcome of the post init funciton
+    atlas: None = None
+    pid: str = None
     eid: str = ''
+    pname: str = ''
+    # the following properties are the outcome of the post init funciton
     session_path: Path = ''
     collections: list = None
     datasets: list = None   # list of all datasets belonging to the sesion
@@ -882,7 +891,10 @@ class SpikeSortingLoader:
     spike_sorting_path: Path = None
 
     def __post_init__(self):
-        self.eid, self.pname = self.one.pid2eid(self.pid)
+        if self.pid is not None:
+            self.eid, self.pname = self.one.pid2eid(self.pid)
+        if self.atlas is None:
+            self.atlas = AllenAtlas()
         self.session_path = self.one.eid2path(self.eid)
         self.collections = self.one.list_collections(
             self.eid, filename='spikes*', collection=f"alf/{self.pname}*")
@@ -923,6 +935,7 @@ class SpikeSortingLoader:
         if len(self.collections) == 0:
             return {}, {}, {}
         self.collection = self._get_spike_sorting_collection(spike_sorter=spike_sorter)
+        _logger.debug(f"loading spike sorting from {self.collection}")
         spike_attributes, cluster_attributes = self._get_attributes(dataset_types)
         attributes = {'spikes': spike_attributes, 'clusters': cluster_attributes, 'channels': None}
         self.files[obj] = self.one.load_object(self.eid, obj=obj, attribute=attributes[obj],
@@ -947,7 +960,7 @@ class SpikeSortingLoader:
 
         The channel locations can come from several sources, it will load the most advanced version of the histology available,
         regardless of the spike sorting version loaded. The steps are (from most advanced to fresh out of the imaging):
-        -   alf: the final version of channel locations, same as resolved with the difference that data has been written out to files
+        -   alf: the final version of channel locations, same as resolved with the difference that data is on file
         -   resolved: channel locations alignments have been agreed upon
         -   aligned: channel locations have been aligned, but review or other alignments are pending, potentially not accurate
         -   traced: the histology track has been recovered from microscopy, however the depths may not match, inacurate data
@@ -963,9 +976,10 @@ class SpikeSortingLoader:
         clusters = alfio.load_object(self.files['clusters'], wildcards=self.one.wildcards)
         spikes = alfio.load_object(self.files['spikes'], wildcards=self.one.wildcards)
         if 'brainLocationIds_ccf_2017' not in channels:
-            channels, self.histology = _load_channel_locations_traj(
+            _channels, self.histology = _load_channel_locations_traj(
                 self.eid, probe=self.pname, one=self.one, brain_atlas=self.atlas, return_source=True)
-            channels = channels[self.pname]
+            if _channels:
+                channels = _channels[self.pname]
         else:
             channels = _channels_alf2bunch(channels, brain_regions=self.atlas.regions)
             self.histology = 'alf'
