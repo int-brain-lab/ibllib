@@ -398,12 +398,16 @@ class BadChannelsAp(ReportSnapshotProbe):
         """runs for initiated PID, streams data, destripe and check bad channels"""
         assert self.pid
         self.eqcs = []
-        self.histology_status = self.get_histology_status()
-        electrodes = self.get_channels('electrodeSites', f'alf/{self.pname}')
-        if 'atlas_id' in electrodes.keys():
-            electrodes['ibr'] = ismember(electrodes['atlas_id'], self.brain_regions.id)[1]
-            electrodes['acronym'] = self.brain_regions.acronym[electrodes['ibr']]
-            electrodes['name'] = self.brain_regions.name[electrodes['ibr']]
+        if self.location != 'server':
+            self.histology_status = self.get_histology_status()
+            electrodes = self.get_channels('electrodeSites', f'alf/{self.pname}')
+
+            if 'atlas_id' in electrodes.keys():
+                electrodes['ibr'] = ismember(electrodes['atlas_id'], self.brain_regions.id)[1]
+                electrodes['acronym'] = self.brain_regions.acronym[electrodes['ibr']]
+                electrodes['name'] = self.brain_regions.name[electrodes['ibr']]
+            else:
+                electrodes = None
         else:
             electrodes = None
 
