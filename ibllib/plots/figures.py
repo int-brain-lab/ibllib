@@ -652,7 +652,7 @@ def dlc_qc_plot(eid, one=None):
             logger.warning(f"Could not load {alf_object} object for session {eid}, some plots have to be skipped.")
             data[f'{alf_object}'] = None
     # Simplify to what we actually need
-    data['licks'] = data['licks'].times if data['licks'] else None
+    data['licks'] = data['licks'].times if data['licks'] and data['licks'].times.shape[0] > 0 else None
     data['left_pupil'] = data['left_features'].pupilDiameter_smooth if (
         data['left_features'] is not None and not np.all(np.isnan(data['left_features'].pupilDiameter_smooth))
     ) else None
@@ -686,15 +686,28 @@ def dlc_qc_plot(eid, one=None):
               (plot_pupil_diameter_hist,
                {'pupil_diameter': data['left_pupil'], 'cam_times': data['left_times'], 'trials_df': data['trials']})
               ]
+
+    # If camera times is shorter than dlc traces, many plots will fail. Don't even try those and give informative error
+    if data['left_dlc'] is not None and data['left_times'] is not None:
+        if len(data['left_times']) < len(data['left_dlc']):
+            for p in range(5, 10):
+                panels[p] = (panels[p][0], 'cam_times')
+
     # Plotting
     plt.rcParams.update({'font.size': 10})
     fig = plt.figure(figsize=(17, 10))
     for i, panel in enumerate(panels):
         ax = plt.subplot(2, 5, i + 1)
         ax.text(-0.1, 1.15, ascii_uppercase[i], transform=ax.transAxes, fontsize=16, fontweight='bold')
+        # Check if we have the cam times issue:
+        if panel[1] == 'cam_times':
+            ax.text(.5, .5, "Issue with camera.times\nsee task logs", color='r', fontweight='bold',
+                    fontsize=12, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
+            plt.axis('off')
+
         # Check if any of the inputs is None
-        if any([v is None for v in panel[1].values()]) or any([v.values() is None for v in panel[1].values()
-                                                               if isinstance(v, dict)]):
+        elif any([v is None for v in panel[1].values()]) or any([v.values() is None for v in panel[1].values()
+                                                                 if isinstance(v, dict)]):
             ax.text(.5, .5, f"Data incomplete\n{panel[0].__name__}", color='r', fontweight='bold',
                     fontsize=12, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
             plt.axis('off')
