@@ -4,7 +4,6 @@ Module that hold techniques to project the brain volume onto 2D images for visua
 from functools import lru_cache
 from ibllib.atlas import AllenAtlas
 import numpy as np
-import matplotlib.pyplot as plt
 from brainbox.core import Bunch
 from scipy.interpolate import interp1d
 
@@ -18,7 +17,6 @@ def circles(N=5, atlas=None, display='flat'):
     :param display: "flat" or "pyramid"
     :return:
     """
-    NPIXELS = 5000
     atlas = atlas if atlas else AllenAtlas()
 
     sz = np.array([])
@@ -32,19 +30,16 @@ def circles(N=5, atlas=None, display='flat'):
         sz = np.r_[sz, r * np.exp(1j * theta)]
         level = np.r_[level, theta * 0 + k]
 
-
     iy, ix = np.where(~np.isnan(atlas.top))
     centroid = np.array([np.mean(iy), np.mean(ix)])
     xlim = np.array([np.min(ix), np.max(ix)])
     ylim = np.array([np.min(iy), np.max(iy)])
-
 
     s = Bunch(
         x=np.real(sz) * np.diff(xlim) + centroid[1],
         y=np.imag(sz) * np.diff(ylim) + centroid[0]
     )
     s['distance'] = np.r_[0, np.cumsum(np.abs(np.diff(s['x'] + 1j * s['y'])))]
-
 
     fcn = interp1d(s['distance'], s['x'] + 1j * s['y'])
 
@@ -56,7 +51,6 @@ def circles(N=5, atlas=None, display='flat'):
         'level': interp1d(s['distance'], level, kind='nearest')(d)
     })
     s_['distance'] = np.r_[0, np.cumsum(np.abs(np.diff(s_['x'] + 1j * s_['y'])))]
-
 
     if display == 'flat':
         ih = np.arange(atlas.bc.nz)
@@ -86,7 +80,6 @@ def circles(N=5, atlas=None, display='flat'):
             ih = atlas.bc.nz * i + np.arange(atlas.bc.nz)
 
             iw, ih = np.meshgrid(iw, ih)
-            i2d = np.ravel_multi_index((ih[:], iw[:]), image_map.shape)
             iml, _ = np.meshgrid(np.round(s_.x[ind]).astype(np.int32), np.arange(atlas.bc.nz))
             iap, idv = np.meshgrid(np.round(s_.y[ind]).astype(np.int32), np.arange(atlas.bc.nz))
             i3d = atlas._lookup_inds(np.c_[iml.flat, iap.flat, idv.flat])
@@ -101,6 +94,3 @@ def circles(N=5, atlas=None, display='flat'):
     # ax[1].imshow(ba.top)
     # ax[1].plot(centroid[1], centroid[0], '*')
     # ax[1].plot(s.x, s.y)
-
-
-
