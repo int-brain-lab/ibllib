@@ -1,11 +1,16 @@
 ## Release Note 2.9
 
+### Release Notes 2.9.1 2022-01-24
+- deprecation warnings and documentation for spike sorting loading method
+- bugfix: remove lru_cache on AllenAtlas class for iblviewer
+
 ### Release Note 2.9.0 2022-01-24
 - Adding EphysDLC task in ephys_preprocessing pipeline
 - NOTE: requires DLC environment to be set up on local servers! 
 - Fixes to EphysPostDLC dlc_qc_plot
 
 ## Release Note 2.8
+ 
 
 ### Release Notes 2.8.0 2022-01-19
 - Add lfp, aprms, spike raster and behaviour report plots to task infastructure
