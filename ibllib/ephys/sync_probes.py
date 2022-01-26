@@ -144,6 +144,10 @@ def version3B(ses_path, display=True, type=None, tol=2.5):
             assert(np.isclose(sync_nidq.times.size, sync_probe.times.size, rtol=0.1))
         except AssertionError:
             raise Neuropixel3BSyncFrontsNonMatching(f"{ses_path}")
+
+        # Find the indexes in case the sizes don't match
+        sync_idx = np.min([sync_nidq.times.size, sync_probe.times.size])
+
         # if the qc of the diff finds anomalies, do not attempt to smooth the interp function
         qcdiff = _check_diff_3b(sync_probe)
         if not qcdiff:
@@ -151,7 +155,7 @@ def version3B(ses_path, display=True, type=None, tol=2.5):
             type_probe = type or 'exact'
         else:
             type_probe = type or DEFAULT_TYPE
-        timestamps, qc = sync_probe_front_times(sync_probe.times, sync_nidq.times, sr,
+        timestamps, qc = sync_probe_front_times(sync_probe.times[:sync_idx], sync_nidq.times[:sync_idx], sr,
                                                 display=display, type=type_probe, tol=tol)
         qc_all &= qc
         out_files.extend(_save_timestamps_npy(ef, timestamps, sr))
