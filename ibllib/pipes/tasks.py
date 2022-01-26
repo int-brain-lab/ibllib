@@ -87,11 +87,13 @@ class Task(abc.ABC):
                         '\n\n=============================RERUN=============================\n')
 
         # Setup the console handler with a StringIO object
+        logger_level = _logger.level
         log_capture_string = io.StringIO()
         ch = logging.StreamHandler(log_capture_string)
         str_format = '%(asctime)s,%(msecs)d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s'
         ch.setFormatter(logging.Formatter(str_format))
         _logger.addHandler(ch)
+        _logger.setLevel(logging.INFO)
         _logger.info(f"Starting job {self.__class__}")
         if self.machine:
             _logger.info(f"Running on machine: {self.machine}")
@@ -125,7 +127,6 @@ class Task(abc.ABC):
             self.status = -1
 
         self.time_elapsed_secs = time.time() - start_time
-
         # log the outputs
         if isinstance(self.outputs, list):
             nout = len(self.outputs)
@@ -141,6 +142,7 @@ class Task(abc.ABC):
         self.log = new_log if self.clobber else self.log + new_log
         log_capture_string.close()
         _logger.removeHandler(ch)
+        _logger.setLevel(logger_level)
         # tear down
         self.tearDown()
         return self.status
