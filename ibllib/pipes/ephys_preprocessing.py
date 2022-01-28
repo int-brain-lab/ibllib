@@ -976,7 +976,7 @@ class EphysDLC(tasks.Task):
                 expected_outputs_present, expected_outputs = self.assert_expected(self.output_files, silent=True)
                 if overwrite is False and expected_outputs_present is True:
                     actual_outputs.extend(expected_outputs)
-                    continue
+                    return actual_outputs
                 else:
                     file_mp4 = next(self.session_path.joinpath('raw_video_data').glob(f'_iblrig_{cam}Camera.raw*.mp4'))
                     if not file_mp4.exists():
