@@ -349,29 +349,96 @@ class TestPipesMisc(unittest.TestCase):
         self.root_test_folder.cleanup()
 
 
-@unittest.skip('unfinished')
+# @unittest.skip('unfinished')
 class TestSyncWidefieldData(unittest.TestCase):
     """TODO Tests for the ibllib.pipes.misc.confirm_widefield_remote_folder"""
+    raw_widefield = [
+        'dorsal_cortex_landmarks.json',
+        'fakemouse_SpatialSparrow_19000101_182010.camlog',
+        'fakemouse_SpatialSparrow_19000101_182010_2_540_640_uint16-002.dat',
+        'snapshots/19000101_190154_1photon.tif'
+    ]
 
     def setUp(self):
         # Data emulating local rig data
         self.root_test_folder = tempfile.TemporaryDirectory()
         self.addCleanup(self.root_test_folder.cleanup)
 
-        # Create two rig sessions, one with 3A probe data and one with 3B probe data
-        self.session_path_3A = fu.create_fake_session_folder(self.root_test_folder.name)
-        # fu.create_fake_raw_behavior_data_folder(self.session_path_3A)
-        self.session_path_3B = fu.create_fake_session_folder(self.root_test_folder.name)
-        fu.create_fake_raw_behavior_data_folder(self.session_path_3B)
+        # Change location of transfer list
+        par_file = Path(self.root_test_folder.name).joinpath('.ibl_local_transfers').as_posix()
+        self.patch = unittest.mock.patch('iblutil.io.params.getfile', return_value=par_file)
+        self.patch.start()
+        self.addCleanup(self.patch.stop)
 
-        # Make some files
-        fu.populate_raw_spikeglx(self.session_path_3B / 'raw_ephys_data', '3B', n_probes=3)
+        self.remote_repo = Path(self.root_test_folder.name).joinpath('remote_repo')
+        self.remote_repo.joinpath('fakelab/Subjects').mkdir(parents=True)
 
-        ephys_folder = self.session_path_3A / 'raw_ephys_data'
-        fu.populate_raw_spikeglx(ephys_folder, '3A', legacy=True, n_probes=1)
-        # IBL protocol is for users to copy data to the right probe folder
-        shutil.move(ephys_folder.joinpath('raw_ephys_folder'),
-                    ephys_folder.joinpath('my_run_probe00'))
+        self.local_repo = Path(self.root_test_folder.name).joinpath('local_repo')
+        self.local_repo.mkdir()
+
+        self.session_path = fu.create_fake_session_folder(self.local_repo)
+        widefield_path = self.session_path.joinpath('raw_widefield_data')
+        for file in self.raw_widefield:
+            p = widefield_path.joinpath(file)
+            p.parent.mkdir(exist_ok=True)
+            p.touch()
+
+    @mock.patch('ibllib.pipes.misc.check_create_raw_session_flag')
+    def test_confirm_widefield_remote_folder(self, chk_fcn):
+        # With no data in the remote repo, no data should be transferred
+        with mock.patch('builtins.input', new=self.assertFalse):
+            misc.confirm_widefield_remote_folder(self.local_repo, self.remote_repo)
+        self.assertFalse(list(filter(lambda x: x.is_file(), self.remote_repo.rglob('*'))))
+
+        # Create a remote session with behaviour data
+        remote_session = fu.create_fake_session_folder(self.remote_repo)
+        fu.create_fake_raw_behavior_data_folder(remote_session)
+        with mock.patch('builtins.input', new=self.assertFalse):
+            misc.confirm_widefield_remote_folder(self.local_repo, self.remote_repo)
+            chk_fcn.assert_called()
+
+        # Check files were copied
+        n_copied = sum(map(lambda x: x.is_file(), remote_session.joinpath('raw_widefield_data').rglob('*')))
+        self.assertEqual(n_copied, 4)
+        local_transfers_file = Path(self.root_test_folder.name).joinpath('.ibl_local_transfers')
+        self.assertTrue(local_transfers_file.exists())
+        # Transfers file should be empty as all files transferred successfully
+        with open(local_transfers_file) as fp:
+            self.assertCountEqual(json.load(fp), [])
+
+        # Delete transferred widefield folder and test user prompt
+        shutil.rmtree(remote_session.joinpath('raw_widefield_data'))
+        # New session for same date and subject
+        new_remote_session = fu.create_fake_session_folder(self.remote_repo)
+        fu.create_fake_raw_behavior_data_folder(new_remote_session)
+        with mock.patch('builtins.input', return_value='002'):
+            misc.confirm_widefield_remote_folder(self.local_repo, self.remote_repo)
+        # Data should have been copied into session #2
+        n_copied = sum(map(lambda x: x.is_file(), new_remote_session.joinpath('raw_widefield_data').rglob('*')))
+        self.assertEqual(n_copied, 4)
+        # Local data should have been renamed
+        expected = 'fakemouse/1900-01-01/002/raw_widefield_data'
+        self.assertTrue(expected in next(self.local_repo.rglob('raw_widefield_data')).as_posix())
+
+        # Test behaviour when a transfer fails
+        shutil.rmtree(remote_session)
+        with unittest.mock.patch('ibllib.pipes.misc.check_transfer', side_effect=AssertionError),\
+                self.assertRaises(AssertionError):
+            misc.confirm_widefield_remote_folder(self.local_repo, self.remote_repo)
+        with open(local_transfers_file) as fp:
+            transfer_data = json.load(fp)
+            self.assertEqual(len(transfer_data), 1)
+
+
+
+
+
+
+
+
+
+
+
 
 
 class TestScanFixPassiveFiles(unittest.TestCase):
