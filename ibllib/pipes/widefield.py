@@ -176,12 +176,9 @@ class WidefieldExtractionPipeline(tasks.Pipeline):
         tasks = OrderedDict()
         self.session_path = session_path
         # level 0
-        tasks['WidefieldRegisterRaw'] = WidefieldRegisterRaw(self.session_path)
-        tasks['WidefieldCompress'] = WidefieldCompress(self.session_path)
-        # tasks['WidefieldRawQC'] = WidefieldRawQC(self.session_path)
-        tasks['EphysAudio'] = EphysAudio(self.session_path)
-        tasks['EphysMtscomp'] = EphysMtscomp(self.session_path)
-        tasks['EphysVideoCompress'] = EphysVideoCompress(self.session_path)
+        for Task in (WidefieldRegisterRaw, WidefieldCompress, EphysPulses, WidefieldPreprocess, EphysAudio, EphysVideoCompress):
+            task = Task(session_path)
+            tasks[task.name] = task
         # level 1
         tasks["EphysTrials"] = EphysTrials(self.session_path, parents=[tasks["EphysPulses"]])
         tasks["EphysPassive"] = EphysPassive(self.session_path, parents=[tasks["EphysPulses"]])

@@ -1,3 +1,6 @@
+import datetime
+import os
+import ctypes
 import json
 import logging
 import shutil
@@ -7,6 +10,7 @@ import re
 from typing import Union, List
 
 from iblutil.io import hashfile, params
+from iblutil.util import range_str
 from one.alf.spec import is_uuid_string, is_session_path
 from one.alf.files import get_session_path
 from one.api import ONE
@@ -15,7 +19,6 @@ import ibllib.io.flags as flags
 import ibllib.io.raw_data_loaders as raw
 import ibllib.io.spikeglx as spikeglx
 from ibllib.io.misc import delete_empty_folders
-from ibllib.misc import range_str
 
 log = logging.getLogger("ibllib")
 
@@ -73,7 +76,7 @@ def behavior_exists(session_path: str) -> bool:
     return False
 
 
-def check_transfer(src_session_path: str, dst_session_path: str):
+def check_transfer(src_session_path, dst_session_path):
     """
     Check all the files in the source directory match those in the destination directory.
     :param src_session_path: The source directory that was copied
@@ -88,11 +91,14 @@ def check_transfer(src_session_path: str, dst_session_path: str):
         assert s.stat().st_size == d.stat().st_size, 'file size mismatch'
 
 
-def rename_session(session_path: str) -> Path:
+def rename_session(session_path: str, new_subject=None, new_date=None, new_number=None) -> Path:
     """
     Rename a session.  Prompts the user for the new subject name, data and number then moves
     session path to new session path.
     :param session_path: A session path to rename
+    :param new_subject: A new subject name, if none provided, the user is prompted for one
+    :param new_date: A new session date, if none provided, the user is prompted for one
+    :param new_number: A new session number, if none provided, the user is prompted for one
     :return: The renamed session path
     """
     session_path = get_session_path(session_path)
@@ -101,9 +107,9 @@ def rename_session(session_path: str) -> Path:
     mouse = session_path.parts[-3]
     date = session_path.parts[-2]
     sess = session_path.parts[-1]
-    new_mouse = input(f"Please insert subject NAME [current value: {mouse}]> ") or mouse
-    new_date = input(f"Please insert new session DATE [current value: {date}]> ") or date
-    new_sess = input(f"Please insert new session NUMBER [current value: {sess}]> ") or sess
+    new_mouse = new_subject or input(f"Please insert subject NAME [current value: {mouse}]> ") or mouse
+    new_date = new_date or input(f"Please insert new session DATE [current value: {date}]> ") or date
+    new_sess = new_number or input(f"Please insert new session NUMBER [current value: {sess}]> ") or sess
     new_session_path = Path(*session_path.parts[:-3]) / new_mouse / new_date / new_sess.zfill(3)
     assert is_session_path(new_session_path), 'invalid subject, date or number'
 
@@ -114,13 +120,28 @@ def rename_session(session_path: str) -> Path:
     return new_session_path
 
 
+def copy_with_check(src, dst, **kwargs):
+    if Path(dst).exists() and Path(src).stat().st_size == Path(dst).stat().st_size:
+        return dst
+    elif dst.exists():
+        dst.unlink()
+    return shutil.copy2(src, dst, **kwargs)
+
+
 def transfer_folder(src: Path, dst: Path, force: bool = False) -> None:
     print(f"Attempting to copy:\n{src}\n--> {dst}")
     if force:
         print(f"Removing {dst}")
         shutil.rmtree(dst, ignore_errors=True)
+    else:
+        try:
+            check_transfer(src, dst)
+            print("All files already copied, use force=True to re-copy")
+            return
+        except AssertionError:
+            pass
     print(f"Copying all files:\n{src}\n--> {dst}")
-    shutil.copytree(src, dst)
+    shutil.copytree(src, dst, dirs_exist_ok=True, copy_function=copy_with_check)
     # If folder was created delete the src_flag_file
     if check_transfer(src, dst) is None:
         print("All files copied")
@@ -382,7 +403,7 @@ def confirm_ephys_remote_folder(
         check_create_raw_session_flag(remote_session_path)
 
 
-def confirm_widefield_remote_folder(local_folder=False, remote_folder=False, force=False):
+def confirm_widefield_remote_folder(local_folder=False, remote_folder=False, force=False, n_days=None):
     """
     Copy local widefield data to the local server.
 
@@ -394,6 +415,8 @@ def confirm_widefield_remote_folder(local_folder=False, remote_folder=False, for
         Optional path to the remote data directory (i.e. on the local lab server).
     force : bool
         If True, any existing remote data are overwritten.
+    n_days : int
+        The number of days back to check.
 
     """
 
@@ -414,7 +437,16 @@ def confirm_widefield_remote_folder(local_folder=False, remote_folder=False, for
 
     print('LOCAL:', local_folder)
     print('REMOTE:', remote_folder)
-    src_session_paths = [x.parent for x in local_folder.rglob('transfer_me.flag')]
+    src_session_paths = (x.parent for x in local_folder.rglob('raw_widefield_data'))
+
+    def is_recent(x):
+        try:
+            return (datetime.date.today() - datetime.date.fromisoformat(x.parts[-2])).days <= n_days
+        except ValueError:  # ignore none date formatted folders
+            return False
+
+    if n_days is not None:
+        src_session_paths = filter(is_recent, src_session_paths)
 
     # Load incomplete transfer list
     transfer_records = params.getfile('ibl_local_transfers')
@@ -426,6 +458,7 @@ def confirm_widefield_remote_folder(local_folder=False, remote_folder=False, for
     else:
         transfers = []
 
+    src_session_paths = list(src_session_paths)
     if not src_session_paths and not transfers:
         print('Nothing to transfer, exiting...')
         return
@@ -435,51 +468,57 @@ def confirm_widefield_remote_folder(local_folder=False, remote_folder=False, for
             continue  # Already on pile
 
         remote_session_path = remote_folder.joinpath(*session_path.parts[-3:])
-        # Check any remote sessions for this subject on this date
-        if not remote_session_path.parent.exists():
+
+        # Check remote and local session number folders are the same
+        def _get_session_numbers(session_path):
+            contents = session_path.parent.glob('*')
+            folders = filter(lambda x: x.is_dir() and re.match('^\d{3}$', x.name), contents)
+            return set(map(lambda x: x.name, folders))
+
+        remote_numbers = _get_session_numbers(remote_session_path)
+        if not remote_numbers:
             print(f'No behavior folder found in {remote_session_path}: skipping session...')
             continue
-        # Check remote and local session number folders are the same
-        # if remote_session_path.parent.exists()
-        print(f'\nFound session: {session_path}')
 
-        msg = f'Transfer to {remote_folder} with the same name?'
-        resp = input(msg + '\n[y]es/[r]ename/[s]kip/[e]xit\n ^\n> ') or 'y'
-        resp = resp.lower()
-        print(resp)
-        if resp not in ['y', 'r', 's', 'e', 'yes', 'rename', 'skip', 'exit']:
-            return confirm_widefield_remote_folder(
-                local_folder=local_folder, remote_folder=remote_folder, force=force
-            )
-        elif resp == 'y' or resp == 'yes':
-            pass
-        elif resp == 'r' or resp == 'rename':
-            session_path = rename_session(session_path)
-        elif resp == 's' or resp == 'skip':
-            continue
-        elif resp == 'e' or resp == 'exit':
-            return
-
+        print(f"\nFound session: {session_path}")
+        if _get_session_numbers(session_path) != remote_numbers:
+            not_valid = True
+            resp = 's'
+            while not_valid:
+                resp = input(f'Which session number to use? Options: '
+                             f'{range_str(map(int, remote_numbers))} or [s]kip/[e]xit').strip()
+                not_valid = resp != 's' and resp != 'e' and resp not in remote_numbers
+            if resp == 's':
+                continue
+            if resp == 'e':
+                print('Exiting.  No files transferred.')
+                return
+            subj, date = session_path.parts[-3:-1]
+            session_path = rename_session(session_path, new_subject=subj, new_date=date, new_number=resp)
         remote_session_path = remote_folder / Path(*session_path.parts[-3:])
-        transfers.append((session_path, remote_session_path))
+        transfers.append((session_path.as_posix(), remote_session_path.as_posix()))
+        with open(transfer_records, 'w') as fp:
+            json.dump(transfers, fp)
 
     # Start transfers
+    if os.name == 'nt':
+        WindowsInhibitor().inhibit()
     for i, (session_path, remote_session_path) in enumerate(transfers):
         if not behavior_exists(remote_session_path):
             print(f'No behavior folder found in {remote_session_path}: skipping session...')
             continue
         transfer_folder(
-            session_path / 'raw_widefield_data',
-            remote_session_path / 'raw_widefield_data', force=force
+            Path(session_path) / 'raw_widefield_data',
+            Path(remote_session_path) / 'raw_widefield_data', force=force
         )
-        flag_file = session_path / 'transfer_me.flag'
-        flag_file.unlink()
-        create_video_transfer_done_flag(remote_session_path)  # FIXME Wrong flag
+        flags.write_flag_file(Path(remote_session_path) / 'widefield_data_transferred.flag')
         check_create_raw_session_flag(remote_session_path)
         # Done. Remove from list
         transfers.pop(i)
-        with open(transfer_records, 'r') as fp:
+        with open(transfer_records, 'w') as fp:
             json.dump(transfers, fp)
+    if os.name == 'nt':
+        WindowsInhibitor().uninhibit()
 
 
 def probe_labels_from_session_path(session_path: Union[str, Path]) -> List[str]:
@@ -815,3 +854,24 @@ def multi_parts_flags_creation(root_paths: Union[list, str, Path]) -> List[Path]
                                files=list(map(str, recordings[k]))), fid)
             log.info(f"{k}: {i}/{nrecs} written sequence file {recordings}")
     return recordings
+
+
+class WindowsInhibitor:
+    """Prevent OS sleep/hibernate in windows; code from:
+    https://github.com/h3llrais3r/Deluge-PreventSuspendPlus/blob/master/preventsuspendplus/core.py
+    API documentation:
+    https://msdn.microsoft.com/en-us/library/windows/desktop/aa373208(v=vs.85).aspx"""
+    ES_CONTINUOUS = 0x80000000
+    ES_SYSTEM_REQUIRED = 0x00000001
+
+    def __init__(self):
+        pass
+
+    def inhibit(self):
+        print("Preventing Windows from going to sleep")
+        ctypes.windll.kernel32.SetThreadExecutionState(
+            WindowsInhibitor.ES_CONTINUOUS | WindowsInhibitor.ES_SYSTEM_REQUIRED)
+
+    def uninhibit(self):
+        print("Allowing Windows to go to sleep")
+        ctypes.windll.kernel32.SetThreadExecutionState(WindowsInhibitor.ES_CONTINUOUS)
