@@ -1,3 +1,6 @@
+## To be added to next release
+- Fix in EphysDLC task to not return multiple copies of outputs
+
 ## Release Note 2.9
 
 ### Release Notes 2.9.1 2022-01-24
