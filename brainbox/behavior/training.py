@@ -430,15 +430,13 @@ def compute_performance(trials, signed_contrast=None, block=None, prob_right=Fal
 
     contrasts, n_contrasts = np.unique(signed_contrast[block_idx], return_counts=True)
 
-    rightward = trials.choice == -1
-    # Calculate the proportion rightward for each contrast type
-    performance = np.vectorize(lambda x: np.mean(rightward[(x == signed_contrast) &
-                                                                 block_idx]))(contrasts)
-
     if not prob_right:
         correct = trials.feedbackType == 1
-        performance = np.vectorize(lambda x: np.mean(correct[(x == signed_contrast) &
-                                                               block_idx]))(contrasts)
+        performance = np.vectorize(lambda x: np.mean(correct[(x == signed_contrast) & block_idx]))(contrasts)
+    else:
+        rightward = trials.choice == -1
+        # Calculate the proportion rightward for each contrast type
+        performance = np.vectorize(lambda x: np.mean(rightward[(x == signed_contrast) & block_idx]))(contrasts)
 
     return performance, contrasts, n_contrasts
 

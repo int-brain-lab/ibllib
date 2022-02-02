@@ -328,5 +328,3 @@ def filter_trials(trials, event_raster, event, contrast=(1, 0.5, 0.25, 0.125, 0.
         raster, psth = filter_correct_incorrect_left_right(trials, event_raster, event, contrast, order)
 
     return raster, psth
-
-
