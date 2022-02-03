@@ -27,7 +27,7 @@ from ibllib.qc.task_metrics import TaskQC
 from ibllib.qc.camera import run_all_qc as run_camera_qc
 from ibllib.qc.dlc import DlcQC
 from ibllib.dsp import rms
-from ibllib.plots.figures import dlc_qc_plot, BehaviourPlots, LfpPlots, ApPlots
+from ibllib.plots.figures import dlc_qc_plot, BehaviourPlots, LfpPlots, ApPlots, BadChannelsAp
 from ibllib.plots.figures import SpikeSorting as SpikeSortingPlots
 from ibllib.plots.snapshot import ReportSnapshot
 from brainbox.behavior.dlc import likelihood_threshold, get_licks, get_pupil_diameter, get_smooth_pupil_diameter
@@ -136,6 +136,9 @@ class RawEphysQC(tasks.Task):
                 qc_files.extend(eqc.run(update=True, overwrite=overwrite))
                 _logger.info("Creating LFP QC plots")
                 plot_task = LfpPlots(pid, session_path=self.session_path, one=self.one)
+                _ = plot_task.run()
+                self.plot_tasks.append(plot_task)
+                plot_task = BadChannelsAp(pid, session_path=self.session_path, one=self.one)
                 _ = plot_task.run()
                 self.plot_tasks.append(plot_task)
 
