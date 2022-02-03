@@ -146,6 +146,9 @@ def version3B(ses_path, display=True, type=None, tol=2.5):
             raise Neuropixel3BSyncFrontsNonMatching(f"{ses_path}")
 
         # Find the indexes in case the sizes don't match
+        if sync_nidq.times.size != sync_probe.times.size:
+            _logger.warning(f'Sync mismatch by {np.abs(sync_nidq.times.size - sync_probe.times.size)} '
+                            f'NIDQ sync times: {sync_nidq.times.size}, Probe sync times {sync_probe.times.size}')
         sync_idx = np.min([sync_nidq.times.size, sync_probe.times.size])
 
         # if the qc of the diff finds anomalies, do not attempt to smooth the interp function
