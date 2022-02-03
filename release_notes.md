@@ -1,5 +1,7 @@
 ## To be added to next release
 - Fix in EphysDLC task to not return multiple copies of outputs
+- Loading examples for different IBL data types
+- Fix for probe syncing when Nidq and probe pulses don't match
 
 ## Release Note 2.9
 

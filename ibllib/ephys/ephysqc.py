@@ -389,14 +389,17 @@ def validate_ttl_test(ses_path, display=False):
     return ok
 
 
-def spike_sorting_metrics_ks2(ks2_path=None, m=None, save=True):
+def spike_sorting_metrics_ks2(ks2_path=None, m=None, save=True, save_path=None):
     """
     Given a path containing kilosort 2 output, compute quality metrics and optionally save them
     to a clusters_metric.csv file
     :param ks2_path:
     :param save
+    :param save_path: If not given will save into the path given as ks2_path
     :return:
     """
+
+    save_path = save_path or ks2_path
 
     # ensure that either a ks2_path or a phylib `TemplateModel` object with unit info is given
     assert not(ks2_path is None and m is None), 'Must either specify a path to a ks2 output ' \
@@ -419,8 +422,9 @@ def spike_sorting_metrics_ks2(ks2_path=None, m=None, save=True):
         c = c.set_index('cluster_id', drop=False).join(ks2_labels.set_index('cluster_id'))
 
     if save:
+        Path(save_path).mkdir(exist_ok=True, parents=True)
         #  the file name contains the label of the probe (directory name in this case)
-        c.to_csv(ks2_path.joinpath('cluster_metrics.csv'))
+        c.to_csv(Path(save_path).joinpath('cluster_metrics.csv'))
 
     return c
 

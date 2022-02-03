@@ -408,7 +408,7 @@ def compute_performance_easy(trials):
     return np.sum(trials['feedbackType'][easy_trials] == 1) / easy_trials.shape[0]
 
 
-def compute_performance(trials, signed_contrast=None, block=None):
+def compute_performance(trials, signed_contrast=None, block=None, prob_right=False):
     """
     Compute performance on all trials at each contrast level from trials object
 
@@ -429,12 +429,16 @@ def compute_performance(trials, signed_contrast=None, block=None):
         return np.nan * np.zeros(3)
 
     contrasts, n_contrasts = np.unique(signed_contrast[block_idx], return_counts=True)
-    rightward = trials.choice == -1
-    # Calculate the proportion rightward for each contrast type
-    prob_choose_right = np.vectorize(lambda x: np.mean(rightward[(x == signed_contrast) &
-                                                                 block_idx]))(contrasts)
 
-    return prob_choose_right, contrasts, n_contrasts
+    if not prob_right:
+        correct = trials.feedbackType == 1
+        performance = np.vectorize(lambda x: np.mean(correct[(x == signed_contrast) & block_idx]))(contrasts)
+    else:
+        rightward = trials.choice == -1
+        # Calculate the proportion rightward for each contrast type
+        performance = np.vectorize(lambda x: np.mean(rightward[(x == signed_contrast) & block_idx]))(contrasts)
+
+    return performance, contrasts, n_contrasts
 
 
 def compute_n_trials(trials):
@@ -472,7 +476,8 @@ def compute_psychometric(trials, signed_contrast=None, block=None):
     if not np.any(block_idx):
         return np.nan * np.zeros(4)
 
-    prob_choose_right, contrasts, n_contrasts = compute_performance(trials, signed_contrast=signed_contrast, block=block)
+    prob_choose_right, contrasts, n_contrasts = compute_performance(trials, signed_contrast=signed_contrast, block=block,
+                                                                    prob_right=True)
 
     psych, _ = psy.mle_fit_psycho(
         np.vstack([contrasts, n_contrasts, prob_choose_right]),
@@ -584,15 +589,15 @@ def plot_psychometric(trials, ax=None, title=None, **kwargs):
     signed_contrast = get_signed_contrast(trials)
     contrasts_fit = np.arange(-100, 100)
 
-    prob_right_50, contrasts_50, _ = compute_performance(trials, signed_contrast=signed_contrast, block=0.5)
+    prob_right_50, contrasts_50, _ = compute_performance(trials, signed_contrast=signed_contrast, block=0.5, prob_right=True)
     pars_50 = compute_psychometric(trials, signed_contrast=signed_contrast, block=0.5)
     prob_right_fit_50 = psy.erf_psycho_2gammas(pars_50, contrasts_fit)
 
-    prob_right_20, contrasts_20, _ = compute_performance(trials, signed_contrast=signed_contrast, block=0.2)
+    prob_right_20, contrasts_20, _ = compute_performance(trials, signed_contrast=signed_contrast, block=0.2, prob_right=True)
     pars_20 = compute_psychometric(trials, signed_contrast=signed_contrast, block=0.2)
     prob_right_fit_20 = psy.erf_psycho_2gammas(pars_20, contrasts_fit)
 
-    prob_right_80, contrasts_80, _ = compute_performance(trials, signed_contrast=signed_contrast, block=0.8)
+    prob_right_80, contrasts_80, _ = compute_performance(trials, signed_contrast=signed_contrast, block=0.8, prob_right=True)
     pars_80 = compute_psychometric(trials, signed_contrast=signed_contrast, block=0.8)
     prob_right_fit_80 = psy.erf_psycho_2gammas(pars_80, contrasts_fit)
 
