@@ -444,7 +444,7 @@ def _get_analog_sync_trace_indices_from_meta(md):
 
 
 def _get_nchannels_from_meta(md):
-    return md.get('nSavedChans')
+         return int(md.get('nSavedChans'))
 
 
 def _get_fs_from_meta(md):
