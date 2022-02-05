@@ -8,11 +8,11 @@ import numpy as np
 import pandas as pd
 from scipy.interpolate import interp1d
 
-from one.api import ONE
+from one.api import ONE, One
 import one.alf.io as alfio
+from one.alf import cache
 
 from iblutil.util import Bunch
-
 from ibllib.io import spikeglx
 from ibllib.io.extractors.training_wheel import extract_wheel_moves, extract_first_movement_times
 from ibllib.ephys.neuropixel import SITES_COORDINATES, TIP_SIZE_UM, trace_header
@@ -872,10 +872,15 @@ def load_channels_from_insertion(ins, depths=None, one=None, ba=None):
 class SpikeSortingLoader:
     """
     Object that will load spike sorting data for a given probe insertion.
-
-
+    This class can be instantiated in several manners
+    - With Alyx database probe id:
+            SpikeSortingLoader(pid=pid, one=one)
+    - With Alyx database eic and probe name:
+            SpikeSortingLoader(eid=eid, pname='probe00', one=one)
+    - From a local session and probe name:
+            SpikeSortingLoader(session_path=session_path, pname='probe00')
     """
-    one: ONE
+    one: ONE = None
     atlas: None = None
     pid: str = None
     eid: str = ''
@@ -891,14 +896,26 @@ class SpikeSortingLoader:
     spike_sorting_path: Path = None
 
     def __post_init__(self):
+        # pid gets precedence
         if self.pid is not None:
             self.eid, self.pname = self.one.pid2eid(self.pid)
-        if self.atlas is None:
-            self.atlas = AllenAtlas()
-        self.session_path = self.one.eid2path(self.eid)
+            self.session_path = self.one.eid2path(self.eid)
+        # then eid / pname combination
+        elif self.session_path is None:
+            self.session_path = self.one.eid2path(self.eid)
+        # fully local providing a session path
+        else:
+            self.one = One(cache_dir=self.session_path.parents[2], mode='local')
+            df_sessions = cache._make_sessions_df(self.session_path)
+            self.one._cache['sessions'] = df_sessions.set_index('id')
+            self.one._cache['datasets'] = cache._make_datasets_df(self.session_path, hash_files=False)
+            self.eid = str(self.session_path.relative_to(self.session_path.parents[2]))
+        # populates default properties
         self.collections = self.one.list_collections(
             self.eid, filename='spikes*', collection=f"alf/{self.pname}*")
         self.datasets = self.one.list_datasets(self.eid)
+        if self.atlas is None:
+            self.atlas = AllenAtlas()
         self.files = {}
 
     @staticmethod
