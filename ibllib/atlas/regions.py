@@ -23,6 +23,7 @@ class _BrainRegions:
     rgb: np.uint8
     level: np.ndarray
     parent: np.ndarray
+    order: np.uint16
 
 
 class BrainRegions(_BrainRegions):
@@ -51,7 +52,8 @@ class BrainRegions(_BrainRegions):
                          acronym=df_regions.acronym.to_numpy(),
                          rgb=c,
                          level=df_regions.depth.to_numpy(),
-                         parent=df_regions.parent_structure_id.to_numpy())
+                         parent=df_regions.parent_structure_id.to_numpy(),
+                         order=df_regions.graph_order.to_numpy())
         # mappings are indices not ids: they range from 0 to n regions -1
         mappings = pd.read_parquet(FILE_MAPPINGS)
         self.mappings = {k: mappings[k].to_numpy() for k in mappings}
