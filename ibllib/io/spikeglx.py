@@ -3,6 +3,7 @@ import logging
 from pathlib import Path
 import re
 import shutil
+from abc import ABC
 
 import numpy as np
 import mtscomp
@@ -27,7 +28,7 @@ class Reader:
     Note: To release system resources the close method must be called
     """
 
-    def __init__(self, sglx_file, open=True):
+    def __init__(self, sglx_file, open=True, nc=None, ns=None, fs=None, dtype='int16', s2mv=1):
         """
         An interface for reading data from a SpikeGLX file
         :param sglx_file: Path to a SpikeGLX file (compressed or otherwise)
@@ -35,18 +36,20 @@ class Reader:
         """
         self.file_bin = Path(sglx_file)
         self.nbytes = self.file_bin.stat().st_size
+        self.dtype = dtype
         file_meta_data = Path(sglx_file).with_suffix('.meta')
         if not file_meta_data.exists():
+            err_str = "Instantiating an Reader without meta data requires providing nc, fs and nc parameters"
+            assert (nc is not None and fs is not None and nc is not None), err_str
             self.file_meta_data = None
             self.meta = None
-            self.channel_conversion_sample2v = 1
-            _logger.warning(str(sglx_file) + " : no metadata file found. Very limited support")
-            return
-        # normal case we continue reading and interpreting the metadata file
-        self.file_meta_data = file_meta_data
-        self.meta = read_meta_data(file_meta_data)
-        self.channel_conversion_sample2v = _conversion_sample2v_from_meta(self.meta)
-        self._raw = None
+            self._nc, self._fs, self._ns, self.channel_conversion_sample2v = (nc, fs, ns, s2mv)
+        else:
+            # normal case we continue reading and interpreting the metadata file
+            self.file_meta_data = file_meta_data
+            self.meta = read_meta_data(file_meta_data)
+            self.channel_conversion_sample2v = _conversion_sample2v_from_meta(self.meta)
+            self._raw = None
         if open:
             self.open()
 
@@ -74,7 +77,7 @@ class Reader:
                                 f" actual {ftsec}\n"
                                 f"Will attempt to fudge the meta-data information.")
                 self.meta['fileTimeSecs'] = ftsec
-            self._raw = np.memmap(sglx_file, dtype='int16', mode='r', shape=(self.ns, self.nc))
+            self._raw = np.memmap(sglx_file, dtype=self.dtype, mode='r', shape=(self.ns, self.nc))
 
     def close(self):
         if self.is_open:
@@ -138,21 +141,17 @@ class Reader:
     @property
     def fs(self):
         """ :return: sampling frequency (Hz) """
-        if not self.meta:
-            return 1
-        return _get_fs_from_meta(self.meta)
+        return self._fs if self.meta is None else _get_fs_from_meta(self.meta)
 
     @property
     def nc(self):
         """ :return: number of channels """
-        if not self.meta:
-            return
-        return _get_nchannels_from_meta(self.meta)
+        return self._nc if self.meta is None else _get_nchannels_from_meta(self.meta)
 
     @property
     def nsync(self):
         """:return: number of sync channels"""
-        return len(_get_sync_trace_indices_from_meta(self.meta))
+        return self._nsync if self.meta is None else len(_get_sync_trace_indices_from_meta(self.meta))
 
     @property
     def ns(self):
