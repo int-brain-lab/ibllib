@@ -2,6 +2,8 @@
 - Fix in EphysDLC task to not return multiple copies of outputs
 - Loading examples for different IBL data types
 - Fix for probe syncing when Nidq and probe pulses don't match
+- Use one.remote.globus module for datahandler, account for str uuids
+- Add bad channels plots into RawEphysQc task
 
 ## Release Note 2.9
 
