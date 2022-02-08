@@ -779,7 +779,7 @@ def download_raw_partial(url_cbin, url_ch, first_chunk=0, last_chunk=0, one=None
         ch_file = url_ch
     else:
         ch_file = Path(webclient.download_file(
-            url_ch, cache_dir=target_dir, clobber=True, return_md5=False))
+            url_ch, target_dir=target_dir, clobber=True, return_md5=False))
         ch_file = remove_uuid_file(ch_file)
     ch_file_stream = target_dir.joinpath(ch_file.name).with_suffix('.stream.ch')
 
@@ -836,7 +836,7 @@ def download_raw_partial(url_cbin, url_ch, first_chunk=0, last_chunk=0, one=None
     # Download the requested chunks
     cbin_local_path = webclient.download_file(
         url_cbin, chunks=(first_byte, n_bytes),
-        cache_dir=target_dir, clobber=True, return_md5=False)
+        target_dir=target_dir, clobber=True, return_md5=False)
     cbin_local_path = remove_uuid_file(cbin_local_path)
     cbin_local_path_renamed = cbin_local_path.with_suffix('.stream.cbin')
     cbin_local_path.replace(cbin_local_path_renamed)

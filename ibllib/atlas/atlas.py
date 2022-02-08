@@ -982,4 +982,4 @@ def _download_atlas_allen(file_image, FLAT_IRON_ATLAS_REL_PATH, par):
         raise ValueError('Unrecognized file image')
 
     cache_dir = Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH)
-    return http_download_file(url, cache_dir=cache_dir)
+    return http_download_file(url, target_dir=cache_dir)
