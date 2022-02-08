@@ -496,7 +496,7 @@ class BrainAtlas:
         """
 
         cslice = self.slice(ap_coordinate, axis=1, volume=volume, mapping=mapping, region_values=region_values)
-        return self._plot_slice(cslice.T, extent=self.extent(axis=1), **kwargs)
+        return self._plot_slice(np.moveaxis(cslice, 0, 1), extent=self.extent(axis=1), **kwargs)
 
     def plot_hslice(self, dv_coordinate, volume='image', mapping='Allen', region_values=None, **kwargs):
         """

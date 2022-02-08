@@ -173,6 +173,76 @@ class BrainRegions(_BrainRegions):
         return self.id[self.mappings[target_map][inds]]
 
 
+    def acronym2acronym(self, acronym, mapping='Allen', hemisphere='both'):
+        mapping = self._infer_mapping(mapping, hemisphere)
+        inds = self._find_inds(acronym, self.acronym)
+        print(inds)
+        return self.acronym[self.mappings[mapping]][self._filter_lr(inds, hemisphere)]
+
+    def acronym2atlasID(self, acronym, mapping='Allen', hemisphere='both'):
+        mapping = self._infer_mapping(mapping, hemisphere)
+        inds = self._find_inds(acronym, self.acronym)
+        print(inds)
+        return self.id[self.mappings[mapping]][self._filter_lr(inds, hemisphere)]
+
+    # need to think more carefully
+    # Do we want to find all or just the first? All for sure
+    def acronym2index(self, acronym, mapping='Allen', hemisphere='both'):
+        mapping = self._infer_mapping(mapping, hemisphere)
+        inds = self._find_inds(acronym, self.acronym[self.mappings[mapping]])
+
+        #_, inds = ismember(acronym, self.acronym)
+        return self._filter_lr(inds, hemisphere)
+
+    # TODO check it works with list or with array
+    def atlasID2acronym(self, atlas_id, mapping='Allen', hemisphere='both'):
+        mapping = self._infer_mapping(mapping, hemisphere)
+        inds = self._find_inds(atlas_id, self.id)
+        return self.acronym[self.mappings[mapping]][self._filter_lr(inds, hemisphere)]
+
+    def atlasID2atlasID(self, atlas_id, mapping='Allen', hemisphere='both'):
+        mapping = self._infer_mapping(mapping, hemisphere)
+        inds = self._find_inds(atlas_id, self.id)
+        return self.id[self.mappings[mapping]][self._filter_lr(inds, hemisphere)]
+
+    #def atlasID2index(self, atlas_id, mapping='Allen', hemisphere='both'):
+    #    _, inds = ismember(atlas_id, self.id)
+    #    return self._filter_lr(inds)
+
+    #def index2acronym(self, index, mapping='Allen', hemisphere='both'):
+    #    return np.where(br.acronym == acronym)[0]
+#
+    #def index2atlasID(self, acronym, mapping='Allen', hemisphere='both'):
+    #    return np.where(br.acronym == acronym)[0]
+
+    def _infer_mapping(self, mapping, hemisphere):
+        if '-lr' in mapping:
+            return mapping
+        elif 'both' not in hemisphere:
+            return mapping + '-lr'
+        else:
+            return mapping
+
+    def _filter_lr(self, values, hemisphere):
+        if hemisphere != 'left':
+            return values[:, 0]
+        else:
+            return values[:, 1]
+
+    def _find_inds(self, values, all_values):
+        print(values)
+        if not isinstance(values, list) and not isinstance(values, np.ndarray):
+            print('here')
+            values = np.array([values])
+        loc, inds = ismember(all_values, np.array(values))
+        inds = np.where(loc)[0][np.argsort(inds)]
+        print(inds)
+        if len(inds) == 0:
+            la  = 1
+            #warning that it aint possible
+        return inds.reshape(np.int16(inds.shape[0] / 2), 2)
+
+
 def regions_from_allen_csv():
     """
     Reads csv file containing the ALlen Ontology and instantiates a BrainRegions object
@@ -181,3 +251,4 @@ def regions_from_allen_csv():
     _logger.warning("ibllib.atlas.regions.regions_from_allen_csv() is deprecated. "
                     "Use BrainRegions() instead")
     return BrainRegions()
+
