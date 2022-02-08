@@ -3,7 +3,6 @@ import logging
 from pathlib import Path
 import re
 import shutil
-from abc import ABC
 
 import numpy as np
 import mtscomp
@@ -25,6 +24,11 @@ class Reader:
     Some format description was found looking at the Matlab SDK here
     https://github.com/billkarsh/SpikeGLX/blob/master/MATLAB-SDK/DemoReadSGLXData.m
 
+    To open a spikeglx file that has an associated meta-data file:
+    sr = spikeglx.Reader(bin_file_path)
+
+    To open a flat binary file:
+    sr = spikeglx.Reader(bin_file_path, nc=385, ns=nsamples, fs=30000, dtype='int16)
     Note: To release system resources the close method must be called
     """
 
@@ -36,14 +40,15 @@ class Reader:
         """
         self.file_bin = Path(sglx_file)
         self.nbytes = self.file_bin.stat().st_size
-        self.dtype = dtype
+        self.dtype = np.dtype(dtype)
         file_meta_data = Path(sglx_file).with_suffix('.meta')
         if not file_meta_data.exists():
             err_str = "Instantiating an Reader without meta data requires providing nc, fs and nc parameters"
             assert (nc is not None and fs is not None and nc is not None), err_str
             self.file_meta_data = None
             self.meta = None
-            self._nc, self._fs, self._ns, self.channel_conversion_sample2v = (nc, fs, ns, s2mv)
+            self._nc, self._fs, self._ns = (nc, fs, ns)
+            self.channel_conversion_sample2v = {'samples': np.ones(nc) * s2mv}
         else:
             # normal case we continue reading and interpreting the metadata file
             self.file_meta_data = file_meta_data
@@ -68,8 +73,8 @@ class Reader:
                                     f" actual {ftsec}\n"
                                     f"Will attempt to fudge the meta-data information.")
         else:
-            if self.nc * self.ns * 2 != self.nbytes:
-                ftsec = self.file_bin.stat().st_size / 2 / self.nc / self.fs
+            if self.nc * self.ns * self.dtype.itemsize != self.nbytes:
+                ftsec = self.file_bin.stat().st_size / self.dtype.itemsize / self.nc / self.fs
                 _logger.warning(f"{sglx_file} : meta data and filesize do not checkout\n"
                                 f"File size: expected {self.meta['fileSizeBytes']},"
                                 f" actual {self.file_bin.stat().st_size}\n"
@@ -135,7 +140,7 @@ class Reader:
     def type(self):
         """:return: ap, lf or nidq. Useful to index dictionaries """
         if not self.meta:
-            return 0
+            return 'samples'
         return _get_type_from_meta(self.meta)
 
     @property
@@ -156,8 +161,8 @@ class Reader:
     @property
     def ns(self):
         """ :return: number of samples """
-        if not self.meta:
-            return
+        if self.meta is None:
+            return self._ns
         return int(np.round(self.meta.get('fileTimeSecs') * self.fs))
 
     def read(self, nsel=slice(0, 10000), csel=slice(None), sync=True):
@@ -169,7 +174,7 @@ class Reader:
         """
         if not self.is_open:
             raise IOError('Reader not open; call `open` before `read`')
-        darray = np.float32(self._raw[nsel, csel])
+        darray = self._raw[nsel, csel].astype(np.float32, copy=True)
         darray *= self.channel_conversion_sample2v[self.type][csel]
         if sync:
             return darray, self.read_sync(nsel)
@@ -443,7 +448,7 @@ def _get_analog_sync_trace_indices_from_meta(md):
 
 
 def _get_nchannels_from_meta(md):
-         return int(md.get('nSavedChans'))
+    return int(md.get('nSavedChans'))
 
 
 def _get_fs_from_meta(md):

@@ -6,6 +6,8 @@
 - Fix for probe syncing when Nidq and probe pulses don't match
 - Account for new ONE tables in ond datahandler
 - Add bad channels plots into RawEphysQc task
+- SpikeGlx:
+  - supports reading of flat binary files without meta data
 
 ## Release Note 2.9
 

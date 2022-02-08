@@ -482,3 +482,17 @@ class TestsSpikeGLX_Meta(unittest.TestCase):
         chns = np.r_[np.arange(30, 101), np.arange(250, 301), 384]
         subset = spikeglx._get_savedChans_subset(chns)
         self.assertEqual(subset, '30:100,250:300,384')
+
+
+class TestsBasicReader(unittest.TestCase):
+    """
+    Tests the basic usage where there is a flat binary and no metadata associated
+    """
+    def test_read_flat_binary(self):
+        kwargs = dict(ns=60000, nc=384, fs=30000, dtype=np.float32)
+        data = np.random.randn(kwargs['ns'], kwargs['nc']).astype(np.float32)
+        with tempfile.NamedTemporaryFile() as tf:
+            with open(tf.name, mode='w') as fp:
+                data.tofile(fp)
+            sr = spikeglx.Reader(tf.name, **kwargs)
+            assert np.all(sr[:, :] == data)
