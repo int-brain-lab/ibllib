@@ -33,7 +33,7 @@ class AWS:
     def _download_datasets(self, datasets):
 
         files = []
-        for _, d in datasets.iterrows():
+        for i, d in datasets.iterrows():
             rel_file_path = Path(d['session_path']).joinpath(d['rel_path'])
             file_path = Path(self.one.cache_dir).joinpath(rel_file_path)
             file_path.parent.mkdir(exist_ok=True, parents=True)
@@ -45,9 +45,9 @@ class AWS:
                 continue
 
             if self.one._index_type() is int:
-                uuid = np2str(np.r_[d.name[0], d.name[1]])
+                uuid = np2str(np.r_[i[2], i[3]])
             elif self.one._index_type() is str:
-                uuid = d.name
+                uuid = i[1]
 
             aws_path = AWS_ROOT_PATH.joinpath(
                 add_uuid_string(rel_file_path, uuid)).as_posix()
