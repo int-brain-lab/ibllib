@@ -408,7 +408,7 @@ def compute_performance_easy(trials):
     return np.sum(trials['feedbackType'][easy_trials] == 1) / easy_trials.shape[0]
 
 
-def compute_performance(trials, signed_contrast=None, block=None):
+def compute_performance(trials, signed_contrast=None, block=None, prob_right=False):
     """
     Compute performance on all trials at each contrast level from trials object
 
@@ -426,15 +426,19 @@ def compute_performance(trials, signed_contrast=None, block=None):
         block_idx = trials.probabilityLeft == block
 
     if not np.any(block_idx):
-        return np.nan * np.zeros(2)
+        return np.nan * np.zeros(3)
 
     contrasts, n_contrasts = np.unique(signed_contrast[block_idx], return_counts=True)
-    rightward = trials.choice == -1
-    # Calculate the proportion rightward for each contrast type
-    prob_choose_right = np.vectorize(lambda x: np.mean(rightward[(x == signed_contrast) &
-                                                                 block_idx]))(contrasts)
 
-    return prob_choose_right, contrasts, n_contrasts
+    if not prob_right:
+        correct = trials.feedbackType == 1
+        performance = np.vectorize(lambda x: np.mean(correct[(x == signed_contrast) & block_idx]))(contrasts)
+    else:
+        rightward = trials.choice == -1
+        # Calculate the proportion rightward for each contrast type
+        performance = np.vectorize(lambda x: np.mean(rightward[(x == signed_contrast) & block_idx]))(contrasts)
+
+    return performance, contrasts, n_contrasts
 
 
 def compute_n_trials(trials):
@@ -472,7 +476,8 @@ def compute_psychometric(trials, signed_contrast=None, block=None):
     if not np.any(block_idx):
         return np.nan * np.zeros(4)
 
-    prob_choose_right, contrasts, n_contrasts = compute_performance(trials, signed_contrast=signed_contrast, block=block)
+    prob_choose_right, contrasts, n_contrasts = compute_performance(trials, signed_contrast=signed_contrast, block=block,
+                                                                    prob_right=True)
 
     psych, _ = psy.mle_fit_psycho(
         np.vstack([contrasts, n_contrasts, prob_choose_right]),
@@ -584,15 +589,15 @@ def plot_psychometric(trials, ax=None, title=None, **kwargs):
     signed_contrast = get_signed_contrast(trials)
     contrasts_fit = np.arange(-100, 100)
 
-    prob_right_50, contrasts, _ = compute_performance(trials, signed_contrast=signed_contrast, block=0.5)
+    prob_right_50, contrasts_50, _ = compute_performance(trials, signed_contrast=signed_contrast, block=0.5, prob_right=True)
     pars_50 = compute_psychometric(trials, signed_contrast=signed_contrast, block=0.5)
     prob_right_fit_50 = psy.erf_psycho_2gammas(pars_50, contrasts_fit)
 
-    prob_right_20, contrasts, _ = compute_performance(trials, signed_contrast=signed_contrast, block=0.2)
+    prob_right_20, contrasts_20, _ = compute_performance(trials, signed_contrast=signed_contrast, block=0.2, prob_right=True)
     pars_20 = compute_psychometric(trials, signed_contrast=signed_contrast, block=0.2)
     prob_right_fit_20 = psy.erf_psycho_2gammas(pars_20, contrasts_fit)
 
-    prob_right_80, contrasts, _ = compute_performance(trials, signed_contrast=signed_contrast, block=0.8)
+    prob_right_80, contrasts_80, _ = compute_performance(trials, signed_contrast=signed_contrast, block=0.8, prob_right=True)
     pars_80 = compute_psychometric(trials, signed_contrast=signed_contrast, block=0.8)
     prob_right_fit_80 = psy.erf_psycho_2gammas(pars_80, contrasts_fit)
 
@@ -606,11 +611,11 @@ def plot_psychometric(trials, ax=None, title=None, **kwargs):
     # TODO error bars
 
     fit_50 = ax.plot(contrasts_fit, prob_right_fit_50, color=cmap[1])
-    data_50 = ax.scatter(contrasts, prob_right_50, color=cmap[1])
+    data_50 = ax.scatter(contrasts_50, prob_right_50, color=cmap[1])
     fit_20 = ax.plot(contrasts_fit, prob_right_fit_20, color=cmap[0])
-    data_20 = ax.scatter(contrasts, prob_right_20, color=cmap[0])
+    data_20 = ax.scatter(contrasts_20, prob_right_20, color=cmap[0])
     fit_80 = ax.plot(contrasts_fit, prob_right_fit_80, color=cmap[2])
-    data_80 = ax.scatter(contrasts, prob_right_80, color=cmap[2])
+    data_80 = ax.scatter(contrasts_80, prob_right_80, color=cmap[2])
     ax.legend([fit_50[0], data_50, fit_20[0], data_20, fit_80[0], data_80],
               ['p_left=0.5 fit', 'p_left=0.5 data', 'p_left=0.2 fit', 'p_left=0.2 data', 'p_left=0.8 fit', 'p_left=0.8 data'],
               loc='upper left')
@@ -631,9 +636,9 @@ def plot_reaction_time(trials, ax=None, title=None, **kwargs):
     """
 
     signed_contrast = get_signed_contrast(trials)
-    reaction_50, contrasts, _ = compute_reaction_time(trials, signed_contrast=signed_contrast, block=0.5)
-    reaction_20, contrasts, _ = compute_reaction_time(trials, signed_contrast=signed_contrast, block=0.2)
-    reaction_80, contrasts, _ = compute_reaction_time(trials, signed_contrast=signed_contrast, block=0.8)
+    reaction_50, contrasts_50, _ = compute_reaction_time(trials, signed_contrast=signed_contrast, block=0.5)
+    reaction_20, contrasts_20, _ = compute_reaction_time(trials, signed_contrast=signed_contrast, block=0.2)
+    reaction_80, contrasts_80, _ = compute_reaction_time(trials, signed_contrast=signed_contrast, block=0.8)
 
     cmap = sns.diverging_palette(20, 220, n=3, center="dark")
 
@@ -642,9 +647,9 @@ def plot_reaction_time(trials, ax=None, title=None, **kwargs):
     else:
         fig = plt.gcf()
 
-    data_50 = ax.plot(contrasts, reaction_50, '-o', color=cmap[1])
-    data_20 = ax.plot(contrasts, reaction_20, '-o', color=cmap[0])
-    data_80 = ax.plot(contrasts, reaction_80, '-o', color=cmap[2])
+    data_50 = ax.plot(contrasts_50, reaction_50, '-o', color=cmap[1])
+    data_20 = ax.plot(contrasts_20, reaction_20, '-o', color=cmap[0])
+    data_80 = ax.plot(contrasts_80, reaction_80, '-o', color=cmap[2])
 
     # TODO error bars
 

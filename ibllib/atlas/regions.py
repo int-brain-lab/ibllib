@@ -11,6 +11,7 @@ _logger = logging.getLogger('ibllib')
 # 'Beryl' is the name given to an atlas containing a subset of the most relevant allen annotations
 FILE_BERYL = str(Path(__file__).parent.joinpath('beryl.npy'))
 FILE_COSMOS = str(Path(__file__).parent.joinpath('cosmos.npy'))
+FILE_MAPPINGS = str(Path(__file__).parent.joinpath('mappings.pqt'))
 FILE_REGIONS = str(Path(__file__).parent.joinpath('allen_structure_tree.csv'))
 
 
@@ -33,8 +34,6 @@ class BrainRegions(_BrainRegions):
     """
     def __init__(self):
         df_regions = pd.read_csv(FILE_REGIONS)
-        beryl = np.load(FILE_BERYL)
-        cosmos = np.load(FILE_COSMOS)
         # lateralize
         df_regions_left = df_regions.iloc[np.array(df_regions.id > 0), :].copy()
         df_regions_left['id'] = - df_regions_left['id']
@@ -54,6 +53,18 @@ class BrainRegions(_BrainRegions):
                          level=df_regions.depth.to_numpy(),
                          parent=df_regions.parent_structure_id.to_numpy())
         # mappings are indices not ids: they range from 0 to n regions -1
+        mappings = pd.read_parquet(FILE_MAPPINGS)
+        self.mappings = {k: mappings[k].to_numpy() for k in mappings}
+
+    def _compute_mappings(self):
+        """
+        Recomputes the mapping indices for all mappings
+        This is left mainly as a reference for adding future mappings as this take a few seconds
+        to execute. In production,we use the MAPPING_FILES npz to avoid recompuing at each \
+        instantiation
+        """
+        beryl = np.load(FILE_BERYL)
+        cosmos = np.load(FILE_COSMOS)
         self.mappings = {
             'Allen': self._mapping_from_regions_list(np.unique(np.abs(self.id)), lateralize=False),
             'Allen-lr': np.arange(self.id.size),
@@ -62,6 +73,7 @@ class BrainRegions(_BrainRegions):
             'Cosmos': self._mapping_from_regions_list(cosmos, lateralize=False),
             'Cosmos-lr': self._mapping_from_regions_list(cosmos, lateralize=True),
         }
+        pd.DataFrame(self.mappings).to_parquet(FILE_MAPPINGS)
 
     def get(self, ids) -> Bunch:
         """
