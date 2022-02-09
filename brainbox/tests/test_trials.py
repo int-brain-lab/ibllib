@@ -159,13 +159,12 @@ class TestTrials(unittest.TestCase):
         # Test when nans have trials - these are removed from the raster
         use_trials[10:12] = np.nan
         raster, t = get_event_aligned_raster(spikes, use_trials)
-        assert(raster.shape[0] == len(use_trials) - 2)
-        assert(all(np.isnan(raster[0:5, :]).ravel()))
-        assert(all(np.isnan(raster[-5:, :]).ravel()))
+        assert (raster.shape[0] == len(use_trials))
+        assert (all(np.isnan(raster[10:12, :]).ravel()))
+        assert (all(~np.isnan(raster[12:15, :]).ravel()))
 
         use_trials[0:2] = np.nan
         raster, t = get_event_aligned_raster(spikes, use_trials)
-        assert(raster.shape[0] == len(use_trials) - 4)
-        assert(all(np.isnan(raster[0:3, :]).ravel()))
-        assert(all(~np.isnan(raster[4, :]).ravel()))
-        assert(all(np.isnan(raster[-5:, :]).ravel()))
+        assert (raster.shape[0] == len(use_trials))
+        assert (all(np.isnan(raster[0:2, :]).ravel()))
+        assert (all(np.isnan(raster[-5:, :]).ravel()))

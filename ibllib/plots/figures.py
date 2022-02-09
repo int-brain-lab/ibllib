@@ -12,19 +12,275 @@ import scipy.signal
 import matplotlib.pyplot as plt
 
 from ibllib.dsp import voltage
-from ibllib.plots.snapshot import ReportSnapshotProbe
+from ibllib.plots.snapshot import ReportSnapshotProbe, ReportSnapshot
 from one.api import ONE
 import one.alf.io as alfio
 from one.alf.exceptions import ALFObjectNotFound
 from ibllib.io.video import get_video_frame, url_from_eid
+from ibllib.io import spikeglx
 from brainbox.plot import driftmap
+from brainbox.io.spikeglx import stream
 from brainbox.behavior.dlc import SAMPLING, plot_trace_on_frame, plot_wheel_position, plot_lick_hist, \
     plot_lick_raster, plot_motion_energy_hist, plot_speed_hist, plot_pupil_diameter_hist
+from brainbox.ephys_plots import image_lfp_spectrum_plot, image_rms_plot, plot_brain_regions
 from brainbox.io.one import load_spike_sorting_fast
-from brainbox.ephys_plots import plot_brain_regions
+from brainbox.behavior import training
+from iblutil.numerical import ismember
+from ibllib.plots.misc import Density
 
 
 logger = logging.getLogger('ibllib')
+
+
+def set_axis_label_size(ax, labels=14, ticklabels=12, title=14, cmap=False):
+    """
+    Function to normalise size of all axis labels
+    :param ax:
+    :param labels:
+    :param ticklabels:
+    :param title:
+    :param cmap:
+    :return:
+    """
+
+    ax.xaxis.get_label().set_fontsize(labels)
+    ax.yaxis.get_label().set_fontsize(labels)
+    ax.tick_params(labelsize=ticklabels)
+    ax.title.set_fontsize(title)
+
+    if cmap:
+        cbar = ax.images[-1].colorbar
+        cbar.ax.tick_params(labelsize=ticklabels)
+        cbar.ax.yaxis.get_label().set_fontsize(labels)
+
+
+def remove_axis_outline(ax):
+    """
+    Function to remove outline of empty axis
+    :param ax:
+    :return:
+    """
+    ax.get_xaxis().set_visible(False)
+    ax.get_yaxis().set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    ax.spines['bottom'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+
+
+class BehaviourPlots(ReportSnapshot):
+    """
+    Behavioural plots
+    """
+
+    signature = {'input_files': [('*trials.contrastLeft.npy', 'alf', True),
+                                 ('*trials.contrastRight.npy', 'alf', True),
+                                 ('*trials.feedbackType.npy', 'alf', True),
+                                 ('*trials.probabilityLeft.npy', 'alf', True),
+                                 ('*trials.choice.npy', 'alf', True),
+                                 ('*trials.response_times.npy', 'alf', True),
+                                 ('*trials.stimOn_times.npy', 'alf', True)],
+                 'output_files': [('psychometric_curve.png', 'snapshot/behaviour', True),
+                                  ('chronometric_curve.png', 'snapshot/behaviour', True),
+                                  ('reaction_time_with_trials.png', 'snapshot/behaviour', True)]
+                 }
+
+    def __init__(self, eid, session_path=None, one=None, **kwargs):
+        self.one = one or ONE()
+        self.eid = eid
+        self.session_path = session_path or self.one.eid2path(self.eid)
+        super(BehaviourPlots, self).__init__(self.session_path, self.eid,
+                                             **kwargs)
+        self.output_directory = self.session_path.joinpath('snapshot', 'behaviour')
+        self.output_directory.mkdir(exist_ok=True, parents=True)
+
+    def _run(self):
+
+        output_files = []
+        trials = alfio.load_object(self.session_path.joinpath('alf'), 'trials')
+        title = '_'.join(list(self.session_path.parts[-3:]))
+
+        fig, ax = training.plot_psychometric(trials, title=title, figsize=(8, 6))
+        set_axis_label_size(ax)
+        save_path = Path(self.output_directory).joinpath("psychometric_curve.png")
+        output_files.append(save_path)
+        fig.savefig(save_path)
+        plt.close(fig)
+
+        fig, ax = training.plot_reaction_time(trials, title=title, figsize=(8, 6))
+        set_axis_label_size(ax)
+        save_path = Path(self.output_directory).joinpath("chronometric_curve.png")
+        output_files.append(save_path)
+        fig.savefig(save_path)
+        plt.close(fig)
+
+        fig, ax = training.plot_reaction_time_over_trials(trials, title=title, figsize=(8, 6))
+        set_axis_label_size(ax)
+        save_path = Path(self.output_directory).joinpath("reaction_time_with_trials.png")
+        output_files.append(save_path)
+        fig.savefig(save_path)
+        plt.close(fig)
+
+        return output_files
+
+
+# TODO put into histology and alignment pipeline
+class HistologySlices(ReportSnapshotProbe):
+    """
+    Plots coronal and sagittal slice showing electrode locations
+    """
+
+    def _run(self):
+
+        assert self.pid
+        assert self.brain_atlas
+
+        output_files = []
+        self.histology_status = self.get_histology_status()
+        electrodes = self.get_channels('electrodeSites', f'alf/{self.pname}')
+
+        if self.hist_lookup[self.histology_status] > 0:
+            fig = plt.figure(figsize=(12, 9))
+            gs = fig.add_gridspec(2, 2, width_ratios=[.95, .05])
+            ax1 = fig.add_subplot(gs[0, 0])
+            self.brain_atlas.plot_tilted_slice(electrodes['mlapdv'], 1, ax=ax1)
+            ax1.scatter(electrodes['mlapdv'][:, 0] * 1e6, electrodes['mlapdv'][:, 2] * 1e6, s=8, c='r')
+            ax1.set_title(f"{self.pid_label}")
+
+            ax2 = fig.add_subplot(gs[1, 0])
+            self.brain_atlas.plot_tilted_slice(electrodes['mlapdv'], 0, ax=ax2)
+            ax2.scatter(electrodes['mlapdv'][:, 1] * 1e6, electrodes['mlapdv'][:, 2] * 1e6, s=8, c='r')
+
+            ax3 = fig.add_subplot(gs[:, 1])
+            plot_brain_regions(electrodes['atlas_id'], brain_regions=self.brain_regions, display=True, ax=ax3,
+                               title=self.histology_status)
+
+            save_path = Path(self.output_directory).joinpath("histology_slices.png")
+            output_files.append(save_path)
+            fig.savefig(save_path)
+            plt.close(fig)
+
+        return output_files
+
+    def get_probe_signature(self):
+        input_signature = [('electrodeSites.localCoordinates.npy', f'alf/{self.pname}', False),
+                           ('electrodeSites.brainLocationIds_ccf_2017.npy', f'alf/{self.pname}', False),
+                           ('electrodeSites.mlapdv.npy', f'alf/{self.pname}', False)]
+        output_signature = [('histology_slices.png', f'snapshot/{self.pname}', True)]
+        self.signature = {'input_files': input_signature, 'output_files': output_signature}
+
+
+class LfpPlots(ReportSnapshotProbe):
+    """
+    Plots LFP spectrum and LFP RMS plots
+    """
+
+    def _run(self):
+
+        assert self.pid
+
+        output_files = []
+
+        if self.location != 'server':
+            self.histology_status = self.get_histology_status()
+            electrodes = self.get_channels('electrodeSites', f'alf/{self.pname}')
+
+        # lfp spectrum
+        fig, axs = plt.subplots(1, 2, gridspec_kw={'width_ratios': [.95, .05]}, figsize=(16, 9))
+        lfp = alfio.load_object(self.session_path.joinpath(f'raw_ephys_data/{self.pname}'), 'ephysSpectralDensityLF',
+                                namespace='iblqc')
+        _, _, _ = image_lfp_spectrum_plot(lfp.power, lfp.freqs, clim=[-65, -95], fig_kwargs={'figsize': (8, 6)}, ax=axs[0],
+                                          display=True, title=f"{self.pid_label}")
+        set_axis_label_size(axs[0], cmap=True)
+        if self.histology_status:
+            plot_brain_regions(electrodes['atlas_id'], brain_regions=self.brain_regions, display=True, ax=axs[1],
+                               title=self.histology_status)
+            set_axis_label_size(axs[1])
+        else:
+            remove_axis_outline(axs[1])
+
+        save_path = Path(self.output_directory).joinpath("lfp_spectrum.png")
+        output_files.append(save_path)
+        fig.savefig(save_path)
+        plt.close(fig)
+
+        # lfp rms
+        # TODO need to figure out the clim range
+        fig, axs = plt.subplots(1, 2, gridspec_kw={'width_ratios': [.95, .05]}, figsize=(16, 9))
+        lfp = alfio.load_object(self.session_path.joinpath(f'raw_ephys_data/{self.pname}'), 'ephysTimeRmsLF', namespace='iblqc')
+        _, _, _ = image_rms_plot(lfp.rms, lfp.timestamps, median_subtract=False, band='LFP', clim=[-35, -45], ax=axs[0],
+                                 cmap='inferno', fig_kwargs={'figsize': (8, 6)}, display=True, title=f"{self.pid_label}")
+        set_axis_label_size(axs[0], cmap=True)
+        if self.histology_status:
+            plot_brain_regions(electrodes['atlas_id'], brain_regions=self.brain_regions, display=True, ax=axs[1],
+                               title=self.histology_status)
+            set_axis_label_size(axs[1])
+        else:
+            remove_axis_outline(axs[1])
+
+        save_path = Path(self.output_directory).joinpath("lfp_rms.png")
+        output_files.append(save_path)
+        fig.savefig(save_path)
+        plt.close(fig)
+
+        return output_files
+
+    def get_probe_signature(self):
+        input_signature = [('_iblqc_ephysTimeRmsLF.rms.npy', f'raw_ephys_data/{self.pname}', True),
+                           ('_iblqc_ephysTimeRmsLF.timestamps.npy', f'raw_ephys_data/{self.pname}', True),
+                           ('_iblqc_ephysSpectralDensityLF.freqs.npy', f'raw_ephys_data/{self.pname}', True),
+                           ('_iblqc_ephysSpectralDensityLF.power.npy', f'raw_ephys_data/{self.pname}', True),
+                           ('electrodeSites.localCoordinates.npy', f'alf/{self.pname}', False),
+                           ('electrodeSites.brainLocationIds_ccf_2017.npy', f'alf/{self.pname}', False),
+                           ('electrodeSites.mlapdv.npy', f'alf/{self.pname}', False)]
+        output_signature = [('lfp_spectrum.png', f'snapshot/{self.pname}', True),
+                            ('lfp_rms.png', f'snapshot/{self.pname}', True)]
+        self.signature = {'input_files': input_signature, 'output_files': output_signature}
+
+
+class ApPlots(ReportSnapshotProbe):
+    """
+    Plots AP RMS plots
+    """
+
+    def _run(self):
+
+        assert self.pid
+
+        output_files = []
+
+        if self.location != 'server':
+            self.histology_status = self.get_histology_status()
+            electrodes = self.get_channels('electrodeSites', f'alf/{self.pname}')
+
+        # TODO need to figure out the clim range
+        fig, axs = plt.subplots(1, 2, gridspec_kw={'width_ratios': [.95, .05]}, figsize=(16, 9))
+        ap = alfio.load_object(self.session_path.joinpath(f'raw_ephys_data/{self.pname}'), 'ephysTimeRmsAP', namespace='iblqc')
+        _, _, _ = image_rms_plot(ap.rms, ap.timestamps, median_subtract=False, band='AP', ax=axs[0],
+                                 fig_kwargs={'figsize': (8, 6)}, display=True, title=f"{self.pid_label}")
+        set_axis_label_size(axs[0], cmap=True)
+        if self.histology_status:
+            plot_brain_regions(electrodes['atlas_id'], brain_regions=self.brain_regions, display=True, ax=axs[1],
+                               title=self.histology_status)
+            set_axis_label_size(axs[1])
+        else:
+            remove_axis_outline(axs[1])
+
+        save_path = Path(self.output_directory).joinpath("ap_rms.png")
+        output_files.append(save_path)
+        fig.savefig(save_path)
+        plt.close(fig)
+
+        return output_files
+
+    def get_probe_signature(self):
+        input_signature = [('_iblqc_ephysTimeRmsAP.rms.npy', f'raw_ephys_data/{self.pname}', True),
+                           ('_iblqc_ephysTimeRmsAP.timestamps.npy', f'raw_ephys_data/{self.pname}', True),
+                           ('electrodeSites.localCoordinates.npy', f'alf/{self.pname}', False),
+                           ('electrodeSites.brainLocationIds_ccf_2017.npy', f'alf/{self.pname}', False),
+                           ('electrodeSites.mlapdv.npy', f'alf/{self.pname}', False)]
+        output_signature = [('ap_rms.png', f'snapshot/{self.pname}', True)]
+        self.signature = {'input_files': input_signature, 'output_files': output_signature}
 
 
 class SpikeSorting(ReportSnapshotProbe):
@@ -37,40 +293,87 @@ class SpikeSorting(ReportSnapshotProbe):
 
     def _run(self, collection=None):
         """runs for initiated PID, streams data, destripe and check bad channels"""
-        all_here, output_files = self.assert_expected(self.output_files, silent=True)
-        spike_sorting_runs = self.one.list_datasets(self.eid, filename='spikes.times.npy', collection=f'alf/{self.pname}*')
-        if all_here and len(output_files) == len(spike_sorting_runs):
-            return output_files
-        logger.info(self.output_directory)
-        output_files = []
-        for run in spike_sorting_runs:
-            collection = str(Path(run).parent)
-            spikes, clusters, channels = load_spike_sorting_fast(
-                eid=self.eid, probe=self.pname, one=self.one, nested=False, collection=collection,
-                dataset_types=['spikes.depths'], brain_regions=self.brain_regions)
 
-            fig, axs = plt.subplots(1, 2, gridspec_kw={'width_ratios': [.95, .05]}, sharey=True, figsize=(16, 9))
+        def plot_driftmap(self, spikes, clusters, channels, collection, ylim=(0, 3840)):
+            fig, axs = plt.subplots(1, 2, gridspec_kw={'width_ratios': [.95, .05]}, figsize=(16, 9))
             driftmap(spikes.times, spikes.depths, t_bin=0.007, d_bin=10, vmax=0.5, ax=axs[0])
-            if 'atlas_id' in channels.keys():
-                plot_brain_regions(channels['atlas_id'], channel_depths=channels['axial_um'],
-                                   brain_regions=None, display=True, ax=axs[1])
             title_str = f"{self.pid_label}, {collection}, {self.pid} \n " \
                         f"{spikes.clusters.size:_} spikes, {clusters.depths.size:_} clusters"
-            logger.info(title_str.replace("\n", ""))
-            axs[0].set(ylim=[0, 3800], title=title_str)
+            axs[0].set(ylim=ylim, title=title_str)
             run_label = str(Path(collection).relative_to(f'alf/{self.pname}'))
-            run_label = "" if run_label == '.' else run_label
-            output_files.append(self.output_directory.joinpath(f"spike_sorting_raster_{run_label}.png"))
-            fig.savefig(output_files[-1])
+            run_label = "ks2matlab" if run_label == '.' else run_label
+            outfile = self.output_directory.joinpath(f"spike_sorting_raster_{run_label}.png")
+            set_axis_label_size(axs[0])
+
+            if self.histology_status:
+                plot_brain_regions(channels['atlas_id'], channel_depths=channels['axial_um'],
+                                   brain_regions=self.brain_regions, display=True, ax=axs[1], title=self.histology_status)
+                axs[1].set(ylim=ylim)
+                set_axis_label_size(axs[1])
+            else:
+                remove_axis_outline(axs[1])
+
+            fig.savefig(outfile)
             plt.close(fig)
+
+            return outfile, fig, axs
+
+        output_files = []
+        if self.location == 'server':
+            assert collection
+            spikes = alfio.load_object(self.session_path.joinpath(collection), 'spikes')
+            clusters = alfio.load_object(self.session_path.joinpath(collection), 'clusters')
+            channels = alfio.load_object(self.session_path.joinpath(collection), 'channels')
+
+            out, fig, axs = plot_driftmap(self, spikes, clusters, channels, collection)
+            output_files.append(out)
+
+        else:
+            self.histology_status = self.get_histology_status()
+            all_here, output_files = self.assert_expected(self.output_files, silent=True)
+            spike_sorting_runs = self.one.list_datasets(self.eid, filename='spikes.times.npy', collection=f'alf/{self.pname}*')
+            if all_here and len(output_files) == len(spike_sorting_runs):
+                return output_files
+            logger.info(self.output_directory)
+            for run in spike_sorting_runs:
+                collection = str(Path(run).parent.as_posix())
+                spikes, clusters, channels = load_spike_sorting_fast(
+                    eid=self.eid, probe=self.pname, one=self.one, nested=False, collection=collection,
+                    dataset_types=['spikes.depths'], brain_regions=self.brain_regions)
+
+                if 'atlas_id' not in channels.keys():
+                    channels = self.get_channels('channels', collection)
+
+                out, fig, axs = plot_driftmap(self, spikes, clusters, channels, collection)
+                output_files.append(out)
+
         return output_files
 
     def get_probe_signature(self):
-        input_signature = [('spikes.times.npy', f'alf/{self.pname}', True),
-                           ('spikes.amps.npy', f'alf/{self.pname}', True),
-                           ('spikes.depths.npy', f'alf/{self.pname}', True)]
+        input_signature = [('spikes.times.npy', f'alf/{self.pname}*', True),
+                           ('spikes.amps.npy', f'alf/{self.pname}*', True),
+                           ('spikes.depths.npy', f'alf/{self.pname}*', True),
+                           ('clusters.depths.npy', f'alf/{self.pname}*', True),
+                           ('channels.localCoordinates.npy', f'alf/{self.pname}*', False),
+                           ('channels.mlapdv.npy', f'alf/{self.pname}*', False),
+                           ('channels.brainLocationIds_ccf_2017.npy', f'alf/{self.pname}*', False)]
         output_signature = [('spike_sorting_raster*.png', f'snapshot/{self.pname}', True)]
         self.signature = {'input_files': input_signature, 'output_files': output_signature}
+
+    def get_signatures(self, **kwargs):
+        files_spikes = Path(self.session_path).joinpath('alf').rglob('spikes.times.npy')
+        folder_probes = [f.parent for f in files_spikes]
+
+        full_input_files = []
+        for sig in self.signature['input_files']:
+            for folder in folder_probes:
+                full_input_files.append((sig[0], str(folder.relative_to(self.session_path)), sig[2]))
+        if len(full_input_files) != 0:
+            self.input_files = full_input_files
+        else:
+            self.input_files = self.signature['input_files']
+
+        self.output_files = self.signature['output_files']
 
 
 class BadChannelsAp(ReportSnapshotProbe):
@@ -86,7 +389,6 @@ class BadChannelsAp(ReportSnapshotProbe):
         pname = self.pname
         input_signature = [('*ap.meta', f'raw_ephys_data/{pname}', True),
                            ('*ap.ch', f'raw_ephys_data/{pname}', False)]
-        # ('*ap.cbin', f'raw_ephys_data/{pname}', False)]
         output_signature = [('raw_ephys_bad_channels.png', f'snapshot/{pname}', True),
                             ('raw_ephys_bad_channels_highpass.png', f'snapshot/{pname}', True),
                             ('raw_ephys_bad_channels_highpass.png', f'snapshot/{pname}', True),
@@ -98,33 +400,61 @@ class BadChannelsAp(ReportSnapshotProbe):
     def _run(self):
         """runs for initiated PID, streams data, destripe and check bad channels"""
         assert self.pid
+        self.eqcs = []
+        T0 = 60 * 30
         SNAPSHOT_LABEL = "raw_ephys_bad_channels"
-        eid, pname = self.one.pid2eid(self.pid)
         output_files = list(self.output_directory.glob(f'{SNAPSHOT_LABEL}*'))
         if len(output_files) == 4:
             return output_files
+
         self.output_directory.mkdir(exist_ok=True, parents=True)
-        from brainbox.io.spikeglx import stream
-        T0 = 60 * 30
-        sr, t0 = stream(self.pid, T0, nsecs=1, one=self.one)
-        raw = sr[:, :-sr.nsync].T
+
+        if self.location != 'server':
+            self.histology_status = self.get_histology_status()
+            electrodes = self.get_channels('electrodeSites', f'alf/{self.pname}')
+
+            if 'atlas_id' in electrodes.keys():
+                electrodes['ibr'] = ismember(electrodes['atlas_id'], self.brain_regions.id)[1]
+                electrodes['acronym'] = self.brain_regions.acronym[electrodes['ibr']]
+                electrodes['name'] = self.brain_regions.name[electrodes['ibr']]
+                electrodes['title'] = self.histology_status
+            else:
+                electrodes = None
+
+            sr, t0 = stream(self.pid, T0, nsecs=1, one=self.one)
+            raw = sr[:, :-sr.nsync].T
+        else:
+            electrodes = None
+            ap_file = next(self.session_path.joinpath('raw_ephys_data', self.pname).glob('*ap.*bin'), None)
+            if ap_file is not None:
+                sr = spikeglx.Reader(ap_file)
+                raw = sr[int((sr.fs * T0)):int((sr.fs * (T0 + 1))), :-sr.nsync].T
+            else:
+                return []
+
         channel_labels, channel_features = voltage.detect_bad_channels(raw, sr.fs)
-        _, _, output_files = ephys_bad_channels(
-            raw=raw, fs=sr.fs, channel_labels=channel_labels, channel_features=channel_features,
-            title=SNAPSHOT_LABEL, destripe=True, save_dir=self.output_directory)
+        _, eqcs, output_files = ephys_bad_channels(
+            raw=raw, fs=sr.fs, channel_labels=channel_labels, channel_features=channel_features, channels=electrodes,
+            title=SNAPSHOT_LABEL, destripe=True, save_dir=self.output_directory, br=self.brain_regions, pid_info=self.pid_label)
+        self.eqcs = eqcs
         return output_files
 
 
-def ephys_bad_channels(raw, fs, channel_labels, channel_features, title="ephys_bad_channels", save_dir=None,
-                       destripe=False, eqcs=None):
+def ephys_bad_channels(raw, fs, channel_labels, channel_features, channels=None, title="ephys_bad_channels",
+                       save_dir=None, destripe=False, eqcs=None, br=None, pid_info=None, plot_backend='matplotlib'):
     nc, ns = raw.shape
     rl = ns / fs
+
+    def gain2level(gain):
+        return 10 ** (gain / 20) * 4 * np.array([-1, 1])
+
     if fs >= 2600:  # AP band
         ylim_rms = [0, 100]
         ylim_psd_hf = [0, 0.1]
         eqc_xrange = [450, 500]
         butter_kwargs = {'N': 3, 'Wn': 300 / fs * 2, 'btype': 'highpass'}
         eqc_gain = - 90
+        eqc_levels = gain2level(eqc_gain)
     else:
         # we are working with the LFP
         ylim_rms = [0, 1000]
@@ -132,33 +462,79 @@ def ephys_bad_channels(raw, fs, channel_labels, channel_features, title="ephys_b
         eqc_xrange = [450, 950]
         butter_kwargs = {'N': 3, 'Wn': np.array([2, 125]) / fs * 2, 'btype': 'bandpass'}
         eqc_gain = - 78
+        eqc_levels = gain2level(eqc_gain)
 
     inoisy = np.where(channel_labels == 2)[0]
     idead = np.where(channel_labels == 1)[0]
     ioutside = np.where(channel_labels == 3)[0]
-    from easyqc.gui import viewseis
 
     # display voltage traces
     eqcs = [] if eqcs is None else eqcs
     # butterworth, for display only
     sos = scipy.signal.butter(**butter_kwargs, output='sos')
     butt = scipy.signal.sosfiltfilt(sos, raw)
-    eqcs.append(viewseis(butt.T, si=1 / fs * 1e3, title='highpass', taxis=0))
-    if destripe:
-        dest = voltage.destripe(raw, fs=fs, channel_labels=channel_labels)
-        eqcs.append(viewseis(dest.T, si=1 / fs * 1e3, title='destripe', taxis=0))
-        eqcs.append(viewseis((butt - dest).T, si=1 / fs * 1e3, title='difference', taxis=0))
-    for eqc in eqcs:
-        y, x = np.meshgrid(ioutside, np.linspace(0, rl * 1e3, 500))
-        eqc.ctrl.add_scatter(x.flatten(), y.flatten(), rgb=(164, 142, 35), label='outside')
-        y, x = np.meshgrid(inoisy, np.linspace(0, rl * 1e3, 500))
-        eqc.ctrl.add_scatter(x.flatten(), y.flatten(), rgb=(255, 0, 0), label='noisy')
-        y, x = np.meshgrid(idead, np.linspace(0, rl * 1e3, 500))
-        eqc.ctrl.add_scatter(x.flatten(), y.flatten(), rgb=(0, 0, 255), label='dead')
+
+    if plot_backend == 'matplotlib':
+        _, axs = plt.subplots(1, 2, gridspec_kw={'width_ratios': [.95, .05]}, figsize=(16, 9))
+        eqcs.append(Density(butt, fs=fs, taxis=1, ax=axs[0], title='highpass', vmin=eqc_levels[0], vmax=eqc_levels[1],
+                            cmap='Greys'))
+
+        if destripe:
+            dest = voltage.destripe(raw, fs=fs, channel_labels=channel_labels)
+            _, axs = plt.subplots(1, 2, gridspec_kw={'width_ratios': [.95, .05]}, figsize=(16, 9))
+            eqcs.append(Density(dest, fs=fs, taxis=1, ax=axs[0], title='destripe', vmin=eqc_levels[0], vmax=eqc_levels[1],
+                                cmap='Greys'))
+            _, axs = plt.subplots(1, 2, gridspec_kw={'width_ratios': [.95, .05]}, figsize=(16, 9))
+            eqcs.append(Density((butt - dest), fs=fs, taxis=1, ax=axs[0], title='difference', vmin=eqc_levels[0],
+                                vmax=eqc_levels[1], cmap='Greys'))
+
+        for eqc in eqcs:
+            y, x = np.meshgrid(ioutside, np.linspace(0, rl * 1e3, 500))
+            eqc.ax.scatter(x.flatten(), y.flatten(), c='goldenrod', s=4)
+            y, x = np.meshgrid(inoisy, np.linspace(0, rl * 1e3, 500))
+            eqc.ax.scatter(x.flatten(), y.flatten(), c='r', s=4)
+            y, x = np.meshgrid(idead, np.linspace(0, rl * 1e3, 500))
+            eqc.ax.scatter(x.flatten(), y.flatten(), c='b', s=4)
+
+            eqc.ax.set_xlim(*eqc_xrange)
+            eqc.ax.set_ylim(0, nc)
+            eqc.ax.set_ylabel('Channel index')
+            eqc.ax.set_title(f'{pid_info}_{eqc.title}')
+            set_axis_label_size(eqc.ax)
+
+            ax = eqc.figure.axes[1]
+            if channels is not None:
+                chn_title = channels.get('title', None)
+                plot_brain_regions(channels['atlas_id'], brain_regions=br, display=True, ax=ax,
+                                   title=chn_title)
+                set_axis_label_size(ax)
+            else:
+                remove_axis_outline(ax)
+    else:
+        from viewspikes.gui import viewephys  # noqa
+        eqcs.append(viewephys(butt, fs=fs, channels=channels, title='highpass', br=br))
+
+        if destripe:
+            dest = voltage.destripe(raw, fs=fs, channel_labels=channel_labels)
+            eqcs.append(viewephys(dest, fs=fs, channels=channels, title='destripe', br=br))
+            eqcs.append(viewephys((butt - dest), fs=fs, channels=channels, title='difference', br=br))
+
+        for eqc in eqcs:
+            y, x = np.meshgrid(ioutside, np.linspace(0, rl * 1e3, 500))
+            eqc.ctrl.add_scatter(x.flatten(), y.flatten(), rgb=(164, 142, 35), label='outside')
+            y, x = np.meshgrid(inoisy, np.linspace(0, rl * 1e3, 500))
+            eqc.ctrl.add_scatter(x.flatten(), y.flatten(), rgb=(255, 0, 0), label='noisy')
+            y, x = np.meshgrid(idead, np.linspace(0, rl * 1e3, 500))
+            eqc.ctrl.add_scatter(x.flatten(), y.flatten(), rgb=(0, 0, 255), label='dead')
+
+        eqcs[0].ctrl.set_gain(eqc_gain)
+        eqcs[0].resize(1960, 1200)
+        eqcs[0].viewBox_seismic.setXRange(*eqc_xrange)
+        eqcs[0].viewBox_seismic.setYRange(0, nc)
+        eqcs[0].ctrl.propagate()
+
     # display features
     fig, axs = plt.subplots(2, 2, sharex=True, figsize=[16, 9], tight_layout=True)
-
-    # fig.suptitle(f"pid:{pid}, \n eid:{eid}, \n {one.eid2path(eid).parts[-3:]}, {pname}")
     fig.suptitle(title)
     axs[0, 0].plot(channel_features['rms_raw'] * 1e6)
     axs[0, 0].set(title='rms', xlabel='channel number', ylabel='rms (uV)', ylim=ylim_rms)
@@ -184,18 +560,16 @@ def ephys_bad_channels(raw, fs, channel_labels, channel_features, title="ephys_b
     axs[1, 1].plot(inoisy, inoisy * 0 + fs / 4, 'xr')
     axs[1, 1].plot(ioutside, ioutside * 0 + fs / 4, 'xy')
 
-    eqcs[0].ctrl.set_gain(eqc_gain)
-    eqcs[0].resize(1960, 1200)
-    eqcs[0].viewBox_seismic.setXRange(*eqc_xrange)
-    eqcs[0].viewBox_seismic.setYRange(0, nc)
-    eqcs[0].ctrl.propagate()
-
     if save_dir is not None:
         output_files = [Path(save_dir).joinpath(f"{title}.png")]
         fig.savefig(output_files[0])
         for eqc in eqcs:
-            output_files.append(Path(save_dir).joinpath(f"{title}_{eqc.windowTitle()}.png"))
-            eqc.grab().save(str(output_files[-1]))
+            if plot_backend == 'matplotlib':
+                output_files.append(Path(save_dir).joinpath(f"{title}_{eqc.title}.png"))
+                eqc.figure.savefig(str(output_files[-1]))
+            else:
+                output_files.append(Path(save_dir).joinpath(f"{title}_{eqc.windowTitle()}.png"))
+                eqc.grab().save(str(output_files[-1]))
         return fig, eqcs, output_files
     else:
         return fig, eqcs
@@ -360,7 +734,7 @@ def dlc_qc_plot(eid, one=None):
             logger.warning(f"Could not load {alf_object} object for session {eid}, some plots have to be skipped.")
             data[f'{alf_object}'] = None
     # Simplify to what we actually need
-    data['licks'] = data['licks'].times if data['licks'] else None
+    data['licks'] = data['licks'].times if data['licks'] and data['licks'].times.shape[0] > 0 else None
     data['left_pupil'] = data['left_features'].pupilDiameter_smooth if (
         data['left_features'] is not None and not np.all(np.isnan(data['left_features'].pupilDiameter_smooth))
     ) else None
@@ -394,15 +768,28 @@ def dlc_qc_plot(eid, one=None):
               (plot_pupil_diameter_hist,
                {'pupil_diameter': data['left_pupil'], 'cam_times': data['left_times'], 'trials_df': data['trials']})
               ]
+
+    # If camera times is shorter than dlc traces, many plots will fail. Don't even try those and give informative error
+    if data['left_dlc'] is not None and data['left_times'] is not None:
+        if len(data['left_times']) < len(data['left_dlc']):
+            for p in range(5, 10):
+                panels[p] = (panels[p][0], 'cam_times')
+
     # Plotting
     plt.rcParams.update({'font.size': 10})
     fig = plt.figure(figsize=(17, 10))
     for i, panel in enumerate(panels):
         ax = plt.subplot(2, 5, i + 1)
         ax.text(-0.1, 1.15, ascii_uppercase[i], transform=ax.transAxes, fontsize=16, fontweight='bold')
+        # Check if we have the cam times issue:
+        if panel[1] == 'cam_times':
+            ax.text(.5, .5, "Issue with camera.times\nsee task logs", color='r', fontweight='bold',
+                    fontsize=12, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
+            plt.axis('off')
+
         # Check if any of the inputs is None
-        if any([v is None for v in panel[1].values()]) or any([v.values() is None for v in panel[1].values()
-                                                               if isinstance(v, dict)]):
+        elif any([v is None for v in panel[1].values()]) or any([v.values() is None for v in panel[1].values()
+                                                                 if isinstance(v, dict)]):
             ax.text(.5, .5, f"Data incomplete\n{panel[0].__name__}", color='r', fontweight='bold',
                     fontsize=12, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
             plt.axis('off')

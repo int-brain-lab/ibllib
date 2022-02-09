@@ -316,7 +316,7 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
         channel_labels = detect_bad_channels_cbin(sr)
     assert isinstance(sr_file, str) or isinstance(sr_file, Path)
     butter_kwargs, k_kwargs, spatial_fcn = _get_destripe_parameters(sr.fs, butter_kwargs, k_kwargs, k_filter)
-    h = neuropixel.trace_header(version=1) if h is None else h
+    h = sr.geometry if h is None else h
     ncv = h['sample_shift'].size  # number of channels
     output_file = sr.file_bin.with_suffix('.bin') if output_file is None else output_file
     assert output_file != sr.file_bin
@@ -422,16 +422,20 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
                 chunk[inside_brain, :] = spatial_fcn(chunk[inside_brain, :])  # apply the k-filter / CAR
             else:
                 chunk = spatial_fcn(chunk)  # apply the k-filter / CAR
+
             # add back sync trace and save
             chunk = np.r_[chunk, _sr[first_s:last_s, ncv:].T].T
-            intnorm = 1 / _sr.channel_conversion_sample2v['ap'] if dtype == np.int16 else 1.
-            chunk = chunk[slice(*ind2save), :] * intnorm
+
             # Compute rms - we get it before applying the whitening
             if compute_rms:
                 ap_rms = rms(chunk[:, :ncv], axis=0)
                 ap_t = t0 + (first_s + (last_s - first_s - 1) / 2) / _sr.fs
                 ap_rms.astype(np.float32).tofile(aid)
                 ap_t.astype(np.float32).tofile(tid)
+
+            # convert to normalised
+            intnorm = 1 / _sr.channel_conversion_sample2v['ap'] if dtype == np.int16 else 1.
+            chunk = chunk[slice(*ind2save), :] * intnorm
             # apply the whitening matrix if necessary
             if wrot is not None:
                 chunk[:, :ncv] = np.dot(chunk[:, :ncv], wrot)
