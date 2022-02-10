@@ -123,6 +123,10 @@ class Reader:
             return self.read(nsel=item[0], csel=item[1], sync=False)
 
     @property
+    def sample2volts(self):
+        return self.channel_conversion_sample2v[self.type]
+
+    @property
     def geometry(self):
         """
         Gets the geometry, ie. the full trace header for the recording

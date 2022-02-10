@@ -498,12 +498,15 @@ class TestsBasicReader(unittest.TestCase):
             sr = spikeglx.Reader(tf.name, **kwargs)
             assert np.all(sr[:, :] == data)
             assert sr.nsync == 0
+            assert np.all(sr.sample2volts == 1)
 
     def test_read_flat_binary_int16(self):
         # here we expect scaling on all channels but the sync channel
         np.random.seed(42)
         kwargs = dict(ns=60000, nc=385, fs=30000, dtype=np.int16)
-        data = np.random.randn(kwargs['ns'], kwargs['nc']) / spikeglx.S2V_AP
+        s2v = np.ones(385) * spikeglx.S2V_AP
+        s2v[-1] = 1
+        data = np.random.randn(kwargs['ns'], kwargs['nc']) / s2v
         data[:, -1] = 1
         data = data.astype(np.int16)
         with tempfile.NamedTemporaryFile() as tf:
@@ -512,3 +515,4 @@ class TestsBasicReader(unittest.TestCase):
             sr = spikeglx.Reader(tf.name, **kwargs)
             assert np.all(np.isclose(sr[:, :-1], data[:, :-1].astype(np.float32) * spikeglx.S2V_AP))
             assert sr.nsync == 1
+            assert np.all(sr.sample2volts == s2v)
