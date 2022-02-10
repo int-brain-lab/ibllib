@@ -3,9 +3,31 @@ Module that has convenience plotting functions for 2D atlas slices
 """
 
 from ibllib.atlas import AllenAtlas
+from iblutil.numerical import ismember
 import matplotlib
 import numpy as np
 import matplotlib.pyplot as plt
+
+
+def prepare_lr_data(acronyms_lh, values_lh, acronyms_rh, values_rh):
+    """
+    Prepare data in format needed for plotting when providing different region values per hemisphere
+
+    :param acronyms_lh: array of acronyms on left hemisphere
+    :param values_lh: values for each acronym on left hemisphere
+    :param acronyms_rh: array of acronyms on right hemisphere
+    :param values_rh: values for each acronym on left hemisphere
+    :return: combined acronyms and two column array of values
+    """
+    #TODO docstring and test
+    acronyms = np.unique(np.r_[acronyms_lh, acronyms_rh])
+    values = np.nan * np.ones((acronyms.shape[0], 2))
+    _, l_idx = ismember(acronyms_lh, acronyms)
+    _, r_idx = ismember(acronyms_rh, acronyms)
+    values[l_idx, 0] = values_lh
+    values[r_idx, 1] = values_rh
+
+    return acronyms, values
 
 
 def plot_scalar_on_slice(regions, values, coord=-1000, slice='coronal', mapping='Allen', hemisphere='left',
@@ -28,14 +50,16 @@ def plot_scalar_on_slice(regions, values, coord=-1000, slice='coronal', mapping=
     """
 
     if clevels is None:
-        clevels = (np.min(values), np.max(values))
+        clevels = (np.nanmin(values), np.nanmax(values))
 
     ba = brain_atlas or AllenAtlas()
     br = ba.regions
 
     # Find the mapping to use
-    map_ext = '-lr'
-    map = mapping + map_ext
+    if '-lr' in mapping:
+        map = mapping
+    else:
+        map = mapping + '-lr'
 
     region_values = np.zeros_like(br.id) * np.nan
 
@@ -47,11 +71,10 @@ def plot_scalar_on_slice(regions, values, coord=-1000, slice='coronal', mapping=
         for r, v in zip(regions, values):
             region_values[np.where(br.acronym[br.mappings[map]] == r)[0]] = v
 
-        lr_divide = int((br.id.shape[0] - 1) / 2)
         if hemisphere == 'left':
-            region_values[0:lr_divide] = np.nan
+            region_values[0:(br.n_lr + 1)] = np.nan
         elif hemisphere == 'right':
-            region_values[lr_divide:] = np.nan
+            region_values[br.n_lr:] = np.nan
             region_values[0] = np.nan
 
     if ax:

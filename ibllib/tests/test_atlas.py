@@ -60,9 +60,171 @@ class TestBrainRegions(unittest.TestCase):
     def test_remap(self):
         # Test mapping atlas ids from one map to another
         atlas_id = np.array([463, 685])  # CA3 and PO
-        cosmos_atlas_id = self.brs.remap(atlas_id, source_map='Allen', target_map='Cosmos')
-        expectd_cosmos_id = [1089, 549]  # HPF and TH
-        assert np.all(cosmos_atlas_id == expectd_cosmos_id)
+        cosmos_id = self.brs.remap(atlas_id, source_map='Allen', target_map='Cosmos')
+        expected_cosmos_id = [1089, 549]  # HPF and TH
+        assert np.all(cosmos_id == expected_cosmos_id)
+
+    def test_id2id(self):
+        # Test remapping of atlas id to atlas id
+        atlas_id = np.array([463, 685])
+        # Allen mapping, positive ids -> positive ids
+        allen_id = self.brs.id2id(atlas_id, mapping='Allen')
+        assert np.all(allen_id == atlas_id)
+        # Allen mapping, negative ids -> positive ids
+        allen_id = self.brs.id2id(-1 * atlas_id, mapping='Allen')
+        assert np.all(allen_id == atlas_id)
+        # Allen-lr mapping, positive ids -> positive ids
+        allen_id = self.brs.id2id(atlas_id, mapping='Allen-lr')
+        assert np.all(allen_id == atlas_id)
+        # Allen-lr mapping, negative ids -> negative ids
+        allen_id = self.brs.id2id(-1 * atlas_id, mapping='Allen-lr')
+        assert np.all(allen_id == -1 * atlas_id)
+
+        expected_cosmos_id = np.array([1089, 549])  # HPF and TH
+        # Cosmos mapping, negative ids -> positive ids
+        cosmos_id = self.brs.id2id(-1 * atlas_id, mapping='Cosmos')
+        assert np.all(cosmos_id == expected_cosmos_id)
+        # Cosmos-lr mapping, negative ids -> negative ids
+        cosmos_id = self.brs.id2id(-1 * atlas_id, mapping='Cosmos-lr')
+        assert np.all(cosmos_id == -1 * expected_cosmos_id)
+
+    def test_id2acro(self):
+        atlas_id = np.array([463, 685])  # CA3 and VM
+        expected_allen_acronym = np.array(['CA3', 'VM'])
+        # Allen mapping, positive ids,
+        allen_acronym = self.brs.id2acronym(atlas_id, mapping='Allen')
+        assert np.all(allen_acronym == expected_allen_acronym)
+        # Allen-lr mapping, negative ids
+        allen_acronym = self.brs.id2acronym(-1 * atlas_id, mapping='Allen-lr')
+        assert np.all(allen_acronym == expected_allen_acronym)
+
+        expected_cosmos_acronym = np.array(['HPF', 'TH'])
+        cosmos_acronym = self.brs.id2acronym(atlas_id, mapping='Cosmos')
+        assert np.all(cosmos_acronym == expected_cosmos_acronym)
+
+    def test_id2index(self):
+        atlas_id = np.array([463, 685])
+
+        # Allen mapping, positive ids -> returns index on both side
+        allen_id, index_both = self.brs.id2index(atlas_id, mapping='Allen')
+        assert np.all(allen_id == atlas_id)
+        for exp, ind in zip(atlas_id, index_both):
+            assert np.all(ind == np.where(self.brs.id[self.brs.mappings['Allen']] == exp)[0])
+
+        # Allen mapping, negative ids -> returns index on both side
+        allen_id, index_both = self.brs.id2index(-1 * atlas_id, mapping='Allen')
+        assert np.all(allen_id == atlas_id)
+        for exp, ind in zip(atlas_id, index_both):
+            assert np.all(ind == np.where(self.brs.id[self.brs.mappings['Allen']] == exp)[0])
+
+        # Allen-lr mapping, positive ids ->  returns index on right side
+        allen_id, index = self.brs.id2index(atlas_id, mapping='Allen-lr')
+        assert np.all(allen_id == atlas_id)
+        for i, (exp, ind) in enumerate(zip(atlas_id, index)):
+            assert np.all(ind == index_both[i][index_both[i] <= self.brs.n_lr])
+
+        # Allen-lr mapping, negative ids ->  returns index on left side
+        allen_id, index = self.brs.id2index(-1 * atlas_id, mapping='Allen-lr')
+        assert np.all(allen_id == -1 * atlas_id)
+        for i, (exp, ind) in enumerate(zip(atlas_id, index)):
+            assert np.all(ind == index_both[i][index_both[i] > self.brs.n_lr])
+
+        # Cosmos mapping, positive ids ->  returns index on both sides
+        expected_cosmos_id = [1089, 549]  # HPF and TH
+        cosmos_id, index_both = self.brs.id2index(atlas_id, mapping='Cosmos')
+        assert np.all(cosmos_id == expected_cosmos_id)
+        for exp, ind in zip(expected_cosmos_id, index_both):
+            assert np.all(ind == np.where(self.brs.id[self.brs.mappings['Cosmos']] == exp)[0])
+
+    def test_acro2acro(self):
+        acronym = np.array(['CA3', 'VM'])
+        # Allen mapping
+        allen_acronym = self.brs.acronym2acronym(acronym, mapping='Allen')
+        assert np.all(acronym == allen_acronym)
+
+        expected_cosmos_acronym = np.array(['HPF', 'TH'])
+        # Cosmos mapping
+        cosmos_acronym = self.brs.acronym2acronym(acronym, mapping='Cosmos-lr')
+        assert np.all(cosmos_acronym == expected_cosmos_acronym)
+
+    def test_acro2id(self):
+        acronym = np.array(['CA3', 'VM'])
+        expected_allen_id = np.array([463, 685])
+        # Allen mapping, both hemisphere -> positive ids
+        allen_id = self.brs.acronym2id(acronym, mapping='Allen', hemisphere=None)
+        assert np.all(allen_id == expected_allen_id)
+        # Allen mapping, left hemisphere -> positive ids
+        allen_id = self.brs.acronym2id(acronym, mapping='Allen', hemisphere='left')
+        assert np.all(allen_id == expected_allen_id)
+        # Allen mapping, right hemisphere -> positive ids
+        allen_id = self.brs.acronym2id(acronym, mapping='Allen', hemisphere='right')
+        assert np.all(allen_id == expected_allen_id)
+
+        # Allen-lr mapping, both hemisphere -> negative and positive ids
+        allen_id = self.brs.acronym2id(acronym, mapping='Allen-lr', hemisphere=None)
+        assert np.all(allen_id.ravel() == np.c_[-1 * expected_allen_id, expected_allen_id].ravel())
+        # Allen-lr mapping, left hemisphere -> negative ids
+        allen_id = self.brs.acronym2id(acronym, mapping='Allen-lr', hemisphere='left')
+        assert np.all(allen_id == -1 * expected_allen_id)
+        # Allen-lr mapping, right hemisphere -> positive ids
+        allen_id = self.brs.acronym2id(acronym, mapping='Allen-lr', hemisphere='right')
+        assert np.all(allen_id == expected_allen_id)
+
+        expected_cosmos_id = np.array([1089, 549])
+        # Cosmos-lr mapping, left hemisphere -> negative ids
+        cosmos_id = self.brs.acronym2id(acronym, mapping='Cosmos-lr', hemisphere='left')
+        assert np.all(cosmos_id == -1 * expected_cosmos_id)
+        # Cosmos mapping, left hemisphere -> positive ids
+        cosmos_id = self.brs.acronym2id(acronym, mapping='Cosmos', hemisphere='left')
+        assert np.all(cosmos_id == expected_cosmos_id)
+
+    def test_acro2index(self):
+        acronym = np.array(['CA3', 'VM'])
+        # Expect it to be same regardless of lateralised or non lateralised mapping
+        for map, expected_acronym in zip(['Allen', 'Allen-lr', 'Cosmos', 'Cosmos-lr'],
+                                         [np.array(['CA3', 'VM']), np.array(['CA3', 'VM']),
+                                          np.array(['HPF', 'TH']), np.array(['HPF', 'TH'])]):
+            # Mapping, both hemisphere, returns index on both sides
+            map_acronym, index_both = self.brs.acronym2index(acronym, mapping=map, hemisphere=None)
+            assert np.all(map_acronym == expected_acronym)
+            for exp, ind in zip(expected_acronym, index_both):
+                assert np.all(ind == np.where(self.brs.acronym[self.brs.mappings[map]] == exp)[0])
+
+            # Mapping, left hemisphere, returns index that are > 1327
+            map_acronym, index = self.brs.acronym2index(acronym, mapping=map, hemisphere='left')
+            assert np.all(map_acronym == expected_acronym)
+            for i, (exp, ind) in enumerate(zip(expected_acronym, index)):
+                assert np.all(ind == index_both[i][index_both[i] > self.brs.n_lr])
+
+            # Mapping, right hemisphere, returns index that are < 1327
+            map_acronym, index = self.brs.acronym2index(acronym, mapping=map, hemisphere='right')
+            assert np.all(map_acronym == expected_acronym)
+            for i, (exp, ind) in enumerate(zip(expected_acronym, index)):
+                assert np.all(ind == index_both[i][index_both[i] <= self.brs.n_lr])
+
+    def test_index2id(self):
+        index = np.array([468, 646, 1973])
+        # Allen mapping
+        allen_id = np.array([463, 685, 685])
+        assert np.all(self.brs.index2id(index, mapping='Allen') == allen_id)
+        # Allen-lr mapping
+        allen_id = np.array([463, 685, -685])
+        assert np.all(self.brs.index2id(index, mapping='Allen-lr') == allen_id)
+        # Cosmos-lr mapping
+        cosmos_id = np.array([1089, 549, -549])
+        assert np.all(self.brs.index2id(index, mapping='Cosmos-lr') == cosmos_id)
+
+    def test_index2acronym(self):
+        index = np.array([468, 646, 1973])
+        # Allen mapping
+        allen_acronym = np.array(['CA3', 'VM', 'VM'])
+        assert np.all(self.brs.index2acronym(index, mapping='Allen') == allen_acronym)
+        # Allen-lr mapping
+        allen_acronym = np.array(['CA3', 'VM', 'VM'])
+        assert np.all(self.brs.index2acronym(index, mapping='Allen-lr') == allen_acronym)
+        # Cosmos-lr mapping
+        cosmos_acronym = np.array(['HPF', 'TH', 'TH'])
+        assert np.all(self.brs.index2acronym(index, mapping='Cosmos-lr') == cosmos_acronym)
 
 
 class TestAtlasSlicesConversion(unittest.TestCase):
