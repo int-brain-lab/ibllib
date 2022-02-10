@@ -148,6 +148,7 @@ class BrainRegions(_BrainRegions):
         iid, inm = ismember(self.id, new_map)
         iid = np.where(iid)[0]
         mapind = np.zeros_like(self.id) + I_ROOT  # non assigned regions are root
+        # TO DO should root be lateralised?
         mapind[iid] = iid  # regions present in the list have the same index
         # Starting by the higher up levels in the hierarchy, assign all descendants to the mapping
         for i in np.argsort(self.level[iid]):
@@ -172,38 +173,82 @@ class BrainRegions(_BrainRegions):
         _, inds = ismember(region_ids, self.id[self.mappings[source_map]])
         return self.id[self.mappings[target_map][inds]]
 
+    def remap_id2id(self, atlas_ids, source_map='Allen', target_map='Beryl'):
+        """
+        Remap atlas ids from source map to target map
+        :param region_ids: atlas ids to map
+        :param source_map: map name which original atlas_ids are in
+        :param target_map: map name onto which to map
+        :return:
+        """
+        _, inds = ismember(atlas_ids, self.id[self.mappings[source_map]])
+        return self.id[self.mappings[target_map][inds]]
 
-    def acronym2acronym(self, acronym, mapping='Allen', hemisphere='both'):
+    def remap_acro2acro(self, acronyms, source_map='Allen', target_map='Beryl'):
+        """
+        Remap atlas acronyms from source map to target map
+        :param acronyms: acronyms to map
+        :param source_map: map name which original acronyms are in
+        :param target_map: map name onto which to map
+        :return:
+        """
+        _, inds = ismember(acronyms, self.acronym[self.mappings[source_map]])
+        return self.acronym[self.mappings[target_map][inds]]
+
+    def remap_acro2id(self, acronyms, source_map='Allen', target_map='Beryl'):
+        """
+        Remap atlas acronyms from source map to target map and convert to atlas ids
+        :param acronyms: acronyms to map
+        :param source_map: map name which original acronyms are in
+        :param target_map: map name onto which to map
+        :return:
+        """
+        _, inds = ismember(acronyms, self.acronym[self.mappings[source_map]])
+        return self.id[self.mappings[target_map][inds]]
+
+    def remap_id2acro(self, atlas_ids, source_map='Allen', target_map='Beryl'):
+        """
+        Remap atlas ids from source map to target map and convert to acronyms
+        :param atlas_ids: atlas ids to map
+        :param source_map: map name which original region_ids are in
+        :param target_map: map name onto which to map
+        :return:
+        """
+        _, inds = ismember(atlas_ids, self.id[self.mappings[source_map]])
+        return self.acronym[self.mappings[target_map][inds]]
+
+
+    def acronym2acronym(self, acronym, mapping='Allen'):
+        inds = self._find_inds(acronym, self.acronym)
+        return self.acronym[self.mappings[mapping]][inds]
+
+    def acronym2atlasID(self, acronym, mapping='Allen', hemisphere=None):
         mapping = self._infer_mapping(mapping, hemisphere)
         inds = self._find_inds(acronym, self.acronym)
-        print(inds)
-        return self.acronym[self.mappings[mapping]][self._filter_lr(inds, hemisphere)]
-
-    def acronym2atlasID(self, acronym, mapping='Allen', hemisphere='both'):
-        mapping = self._infer_mapping(mapping, hemisphere)
-        inds = self._find_inds(acronym, self.acronym)
-        print(inds)
-        return self.id[self.mappings[mapping]][self._filter_lr(inds, hemisphere)]
+        #return self.id[self.mappings[mapping]][inds]
+        return self.id[self.mappings[mapping]][self._filter_lr_acro(inds, mapping, hemisphere)]
 
     # need to think more carefully
     # Do we want to find all or just the first? All for sure
-    def acronym2index(self, acronym, mapping='Allen', hemisphere='both'):
-        mapping = self._infer_mapping(mapping, hemisphere)
-        inds = self._find_inds(acronym, self.acronym[self.mappings[mapping]])
+    def acronym2index(self, acronym, mapping='Allen', hemisphere=None):
 
-        #_, inds = ismember(acronym, self.acronym)
-        return self._filter_lr(inds, hemisphere)
+        mapping = self._infer_mapping(mapping, hemisphere)
+        index = dict()
+        # make a dict of arrays for each acronym
+        for acro in acronym:
+            inds = self._find_inds(acro, self.acronym[self.mappings[mapping]])
+            index[acro] = self._filter_lr_index(inds, hemisphere)
+
+        return index
 
     # TODO check it works with list or with array
-    def atlasID2acronym(self, atlas_id, mapping='Allen', hemisphere='both'):
-        mapping = self._infer_mapping(mapping, hemisphere)
-        inds = self._find_inds(atlas_id, self.id)
-        return self.acronym[self.mappings[mapping]][self._filter_lr(inds, hemisphere)]
+    def atlasID2acronym(self, atlas_id, mapping='Allen'):
+        inds = self._find_inds(atlas_id, self.id, vtype='ids')
+        return self.acronym[self.mappings[mapping]][inds]
 
-    def atlasID2atlasID(self, atlas_id, mapping='Allen', hemisphere='both'):
-        mapping = self._infer_mapping(mapping, hemisphere)
-        inds = self._find_inds(atlas_id, self.id)
-        return self.id[self.mappings[mapping]][self._filter_lr(inds, hemisphere)]
+    def atlasID2atlasID(self, atlas_id, mapping='Allen'):
+        inds = self._find_inds(atlas_id, self.id, vtype='ids')
+        return self.id[self.mappings[mapping]][inds]
 
     #def atlasID2index(self, atlas_id, mapping='Allen', hemisphere='both'):
     #    _, inds = ismember(atlas_id, self.id)
@@ -218,29 +263,53 @@ class BrainRegions(_BrainRegions):
     def _infer_mapping(self, mapping, hemisphere):
         if '-lr' in mapping:
             return mapping
-        elif 'both' not in hemisphere:
-            return mapping + '-lr'
-        else:
+        elif hemisphere is None:
             return mapping
+        else:
+            return mapping + '-lr'
 
-    def _filter_lr(self, values, hemisphere):
-        if hemisphere != 'left':
+    def _filter_lr_acro(self, values, mapping, hemisphere):
+        if hemisphere == 'left':
+            return values + 1327
+        elif hemisphere == 'right':
+            return values
+        elif 'lr' in mapping:
+            # we want left - negative values to be returned first
+            return np.c_[values + 1327, values]
+        else:
+            return values
+
+    def _filter_lr_index(self, values, hemisphere):
+        if hemisphere == 'left':
+            return values[:, 1]
+        elif hemisphere == 'right':
             return values[:, 0]
         else:
-            return values[:, 1]
+            return np.fliplr(values)
 
-    def _find_inds(self, values, all_values):
-        print(values)
+    def _find_inds(self, values, all_values, vtype='acronym'):
         if not isinstance(values, list) and not isinstance(values, np.ndarray):
-            print('here')
+            values = np.array([values])
+        #loc, inds = ismember(all_values, np.array(values))
+
+        #inds = all_values[inds]
+        #inds = np.where(loc)[0][np.argsort(inds)]
+        loc, inds = ismember(np.array(values), all_values)
+
+        return inds
+
+        #if vtype == 'acronym':
+        #    return inds.reshape(np.int16(inds.shape[0] / 2), 2)
+        #else:
+        #    return inds
+
+
+    def _find_inds_multi(self, values, all_values):
+        if not isinstance(values, list) and not isinstance(values, np.ndarray):
             values = np.array([values])
         loc, inds = ismember(all_values, np.array(values))
-        inds = np.where(loc)[0][np.argsort(inds)]
-        print(inds)
-        if len(inds) == 0:
-            la  = 1
-            #warning that it aint possible
-        return inds.reshape(np.int16(inds.shape[0] / 2), 2)
+        inds = np.where(loc)[0]
+        return inds.reshape(2, np.int16(inds.shape[0] / 2)).T
 
 
 def regions_from_allen_csv():

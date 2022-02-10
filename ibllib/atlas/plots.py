@@ -106,3 +106,50 @@ def plot_scalar_on_slice(regions, values, coord=-1000, slice='coronal', mapping=
                         cmap=cmap_bound, vmin=0.01, vmax=0.8)
 
     return fig, ax
+
+
+
+def plot_scalar_on_flatmap(regions, values, depth=0, mapping='Allen', hemisphere='left',
+                           cmap='viridis', background='image', clevels=None, brain_atlas=None, ax=None):
+
+    if clevels is None:
+        clevels = (np.min(values), np.max(values))
+
+    ba = brain_atlas or AllenAtlas()
+    br = ba.regions
+
+    # Find the mapping to use
+    map_ext = '-lr'
+    map = mapping + map_ext
+
+    region_values = np.zeros_like(br.id) * np.nan
+
+    if len(values.shape) == 2:
+        for r, vL, vR in zip(regions, values[:, 0], values[:, 1]):
+            region_values[np.where(br.acronym[br.mappings[map]] == r)[0][0]] = vR
+            region_values[np.where(br.acronym[br.mappings[map]] == r)[0][1]] = vL
+    else:
+        for r, v in zip(regions, values):
+            region_values[np.where(br.acronym[br.mappings[map]] == r)[0]] = v
+
+        lr_divide = int((br.id.shape[0] - 1) / 2)
+        if hemisphere == 'left':
+            region_values[0:lr_divide] = np.nan
+        elif hemisphere == 'right':
+            region_values[lr_divide:] = np.nan
+            region_values[0] = np.nan
+
+    flmap = np.load(r'C:\Users\Mayo\Downloads\new_vol_25_index.npy')
+
+    d_idx = int(np.round(depth / 25)) # need to find nearest to 25
+    im = region_values[br.mappings[map][flmap[:, :, d_idx]]]
+
+    if ax:
+        fig = ax.get_figure()
+    else:
+        fig, ax = plt.subplots()
+
+    ax.imshow(im, cmap=cmap, vmin=clevels[0], vmax=clevels[1])
+
+    return fig, ax
+
