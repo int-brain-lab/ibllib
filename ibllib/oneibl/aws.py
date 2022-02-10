@@ -45,9 +45,9 @@ class AWS:
                 continue
 
             if self.one._index_type() is int:
-                uuid = np2str(np.r_[i[2], i[3]])
+                uuid = np2str(np.r_[i[0], i[1]])
             elif self.one._index_type() is str:
-                uuid = i[1]
+                uuid = i
 
             aws_path = AWS_ROOT_PATH.joinpath(
                 add_uuid_string(rel_file_path, uuid)).as_posix()

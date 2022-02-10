@@ -174,9 +174,9 @@ class ServerGlobusDataHandler(DataHandler):
             if not full_local_path.exists():
 
                 if self.one._index_type() is int:
-                    uuid = np2str(np.r_[i[2], i[3]])
+                    uuid = np2str(np.r_[i[0], i[1]])
                 elif self.one._index_type() is str:
-                    uuid = i[1]
+                    uuid = i
 
                 self.local_paths.append(full_local_path)
                 target_paths.append(sess_path)
@@ -395,9 +395,9 @@ class SDSCDataHandler(DataHandler):
             file_path = Path(d['session_path']).joinpath(d['rel_path'])
 
             if self.one._index_type() is int:
-                uuid = np2str(np.r_[i[2], i[3]])
+                uuid = np2str(np.r_[i[0], i[1]])
             elif self.one._index_type() is str:
-                uuid = i[1]
+                uuid = i
 
             file_uuid = add_uuid_string(file_path, uuid)
             file_link = SDSC_TMP.joinpath(file_path)
