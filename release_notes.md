@@ -8,6 +8,11 @@
 - Add bad channels plots into RawEphysQc task
 - SpikeGlx:
   - supports reading of flat binary files without meta data
+- atlas.Regions:
+  - add support for region ordering in BrainRegions object
+  - bugfix in transposing of RGB image data for coronal slice plots
+- voltage: decompress cbin
+  - add support for custom spikeglx.Reader
 
 ## Release Note 2.9
 

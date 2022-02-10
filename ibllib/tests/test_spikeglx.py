@@ -488,7 +488,8 @@ class TestsBasicReader(unittest.TestCase):
     """
     Tests the basic usage where there is a flat binary and no metadata associated
     """
-    def test_read_flat_binary(self):
+    def test_read_flat_binary_float32(self):
+        # here we expect no scaling to V applied and no sync trace as the format is float32
         kwargs = dict(ns=60000, nc=384, fs=30000, dtype=np.float32)
         data = np.random.randn(kwargs['ns'], kwargs['nc']).astype(np.float32)
         with tempfile.NamedTemporaryFile() as tf:
@@ -496,3 +497,17 @@ class TestsBasicReader(unittest.TestCase):
                 data.tofile(fp)
             sr = spikeglx.Reader(tf.name, **kwargs)
             assert np.all(sr[:, :] == data)
+            assert sr.nsync == 0
+
+    def test_read_flat_binary_int16(self):
+        # here we expect
+        np.random.seed(42)
+        kwargs = dict(ns=60000, nc=385, fs=30000, dtype=np.int16)
+        data = np.random.randn(kwargs['ns'], kwargs['nc']) / spikeglx.S2V_AP
+        data = data.astype(np.int16)
+        with tempfile.NamedTemporaryFile() as tf:
+            with open(tf.name, mode='w') as fp:
+                data.tofile(fp)
+            sr = spikeglx.Reader(tf.name, **kwargs)
+            assert np.all(np.isclose(sr[:, :], data.astype(np.float32) * spikeglx.S2V_AP))
+            assert sr.nsync == 1

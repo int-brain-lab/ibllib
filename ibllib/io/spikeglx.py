@@ -16,6 +16,9 @@ from ibllib.ephys import neuropixel as neuropixel
 SAMPLE_SIZE = 2  # int16
 DEFAULT_BATCH_SIZE = 1e6
 _logger = logging.getLogger('ibllib')
+# provided as convenience if no meta-data is provided, always better to read from meta
+S2V_AP = 2.34375e-06
+S2V_LFP = 4.6875e-06
 
 
 class Reader:
@@ -28,11 +31,20 @@ class Reader:
     sr = spikeglx.Reader(bin_file_path)
 
     To open a flat binary file:
-    sr = spikeglx.Reader(bin_file_path, nc=385, ns=nsamples, fs=30000, dtype='int16)
+
+    sr = spikeglx.Reader(bin_file_path, nc=385, ns=nsamples, fs=30000)
+    one can provide more options to the reader:
+    sr = spikeglx.Reader(..., dtype='int16, s2mv=2.34375e-06)
+
+    usual sample 2 mv conversion factors:
+        s2mv = 2.34375e-06 (NP1 ap banc) : default value used
+        s2mv = 4.6875e-06 (NP1 lfp band)
+
     Note: To release system resources the close method must be called
     """
 
-    def __init__(self, sglx_file, open=True, nc=None, ns=None, fs=None, dtype='int16', s2mv=1):
+    def __init__(self, sglx_file, open=True, nc=None, ns=None, fs=None, dtype='int16', s2v=None,
+                 nsync=None):
         """
         An interface for reading data from a SpikeGLX file
         :param sglx_file: Path to a SpikeGLX file (compressed or otherwise)
@@ -48,7 +60,14 @@ class Reader:
             self.file_meta_data = None
             self.meta = None
             self._nc, self._fs, self._ns = (nc, fs, ns)
-            self.channel_conversion_sample2v = {'samples': np.ones(nc) * s2mv}
+            # handles default parameters: if int16 we assume it's a raw recording with 1 sync and sample2mv
+            # if its' float32 or something else, we assume the sync channel has been removed and the scaling applied
+            if nsync is None:
+                nsync = 1 if self.dtype == np.dtype('int16') else 0
+            self._nsync = nsync
+            if s2v is None:
+                s2v = S2V_AP if self.dtype == np.dtype('int16') else 1.0
+            self.channel_conversion_sample2v = {'samples': np.ones(nc) * s2v}
         else:
             # normal case we continue reading and interpreting the metadata file
             self.file_meta_data = file_meta_data
