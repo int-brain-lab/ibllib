@@ -68,6 +68,7 @@ class Reader:
             if s2v is None:
                 s2v = S2V_AP if self.dtype == np.dtype('int16') else 1.0
             self.channel_conversion_sample2v = {'samples': np.ones(nc) * s2v}
+            self.channel_conversion_sample2v['samples'][-nsync:] = 1
         else:
             # normal case we continue reading and interpreting the metadata file
             self.file_meta_data = file_meta_data
