@@ -23,7 +23,7 @@ ba = AllenAtlas()
 
 insertions = one.alyx.rest('insertions', 'list')
 pid = insertions[0]['id']
-sl = SpikeSortingLoader(pid, one=one, atlas=ba)
+sl = SpikeSortingLoader(pid=pid, one=one, atlas=ba)
 spikes, clusters, channels = sl.load_spike_sorting()
 clusters_labeled = SpikeSortingLoader.merge_clusters(spikes, clusters, channels)
 

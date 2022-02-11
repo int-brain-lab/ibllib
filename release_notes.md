@@ -1,3 +1,12 @@
+## Release Note 2.10
+
+## Release Note 2.10.0 2022-02-11
+- Fix in EphysDLC task to not return multiple copies of outputs
+- Loading examples for different IBL data types
+- Fix for probe syncing when Nidq and probe pulses don't match
+- Account for new ONE tables in ond datahandler
+- Add bad channels plots into RawEphysQc task
+
 ## Release Note 2.9
 
 ### Release Notes 2.9.1 2022-01-24

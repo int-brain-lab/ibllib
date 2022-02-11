@@ -72,7 +72,7 @@ def wiggle(w, fs=1, gain=0.71, color='k', ax=None, fill=True, linewidth=0.5, t0=
 
 
 class Density:
-    def __init__(self, w, fs=1, cmap='bone', ax=None, taxis=0, **kwargs):
+    def __init__(self, w, fs=1, cmap='bone', ax=None, taxis=0, title=None, **kwargs):
         """
         Matplotlib display of traces as a density display
 
@@ -101,6 +101,7 @@ class Density:
         ax.set_xlabel(xlabel)
         self.cid_key = self.figure.canvas.mpl_connect('key_press_event', self.on_key_press)
         self.ax = ax
+        self.title = title or None
 
     def on_key_press(self, event):
         if event.key == 'ctrl+a':

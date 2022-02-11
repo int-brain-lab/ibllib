@@ -21,6 +21,7 @@ def find_trial_ids(trials, side='all', choice='all', order='trial num', sort='id
     """
     if event:
         idx = ~np.isnan(trials[event])
+        nan_idx = np.where(idx)[0]
     else:
         idx = np.ones_like(trials['feedbackType'], dtype=bool)
 
@@ -118,6 +119,9 @@ def find_trial_ids(trials, side='all', choice='all', order='trial num', sort='id
     if side == 'right' and choice == 'incorrect':
         trial_id = _order_by(incor_r, order)
 
+    if event:
+        trial_id = nan_idx[trial_id]
+
     return trial_id, dividers
 
 
@@ -146,8 +150,9 @@ def get_event_aligned_raster(times, events, tbin=0.02, values=None, epoch=[-0.4,
         nbin = t.shape[0]
 
     # remove nan trials
-    events = events[~np.isnan(events)]
-    intervals = np.c_[events + epoch[0], events + epoch[1]]
+    non_nan_events = events[~np.isnan(events)]
+    nan_idx = np.where(~np.isnan(events))
+    intervals = np.c_[non_nan_events + epoch[0], non_nan_events + epoch[1]]
 
     # Remove any trials that are later than the last value in bin_times
     out_intervals = intervals[:, 1] > bin_times[-1]
@@ -170,7 +175,11 @@ def get_event_aligned_raster(times, events, tbin=0.02, values=None, epoch=[-0.4,
                                                     event_raster.shape[1]), np.nan)]
         assert(event_raster.shape[0] == intervals.shape[0])
 
-    return event_raster, t
+    # Reindex if we have removed any nan values
+    all_event_raster = np.full((events.shape[0], event_raster.shape[1]), np.nan)
+    all_event_raster[nan_idx, :] = event_raster
+
+    return all_event_raster, t
 
 
 def get_psth(raster, trial_ids=None):
@@ -298,7 +307,7 @@ def filter_left_right(trials, event_raster, event, contrast, order='trial num'):
     return raster, psth
 
 
-def filter_trials(trials, event_raster, event, contrast, order='trial num', sort='choice'):
+def filter_trials(trials, event_raster, event, contrast=(1, 0.5, 0.25, 0.125, 0.0625, 0), order='trial num', sort='choice'):
     """
     Wrapper to get out psth and raster for trial choice
     :param trials: trials object

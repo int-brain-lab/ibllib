@@ -17,13 +17,16 @@ from one.api import ONE
 import one.alf.io as alfio
 from one.alf.exceptions import ALFObjectNotFound
 from ibllib.io.video import get_video_frame, url_from_eid
+from ibllib.io import spikeglx
 from brainbox.plot import driftmap
+from brainbox.io.spikeglx import stream
 from brainbox.behavior.dlc import SAMPLING, plot_trace_on_frame, plot_wheel_position, plot_lick_hist, \
     plot_lick_raster, plot_motion_energy_hist, plot_speed_hist, plot_pupil_diameter_hist
 from brainbox.ephys_plots import image_lfp_spectrum_plot, image_rms_plot, plot_brain_regions
 from brainbox.io.one import load_spike_sorting_fast
 from brainbox.behavior import training
 from iblutil.numerical import ismember
+from ibllib.plots.misc import Density
 
 
 logger = logging.getLogger('ibllib')
@@ -398,6 +401,14 @@ class BadChannelsAp(ReportSnapshotProbe):
         """runs for initiated PID, streams data, destripe and check bad channels"""
         assert self.pid
         self.eqcs = []
+        T0 = 60 * 30
+        SNAPSHOT_LABEL = "raw_ephys_bad_channels"
+        output_files = list(self.output_directory.glob(f'{SNAPSHOT_LABEL}*'))
+        if len(output_files) == 4:
+            return output_files
+
+        self.output_directory.mkdir(exist_ok=True, parents=True)
+
         if self.location != 'server':
             self.histology_status = self.get_histology_status()
             electrodes = self.get_channels('electrodeSites', f'alf/{self.pname}')
@@ -406,39 +417,44 @@ class BadChannelsAp(ReportSnapshotProbe):
                 electrodes['ibr'] = ismember(electrodes['atlas_id'], self.brain_regions.id)[1]
                 electrodes['acronym'] = self.brain_regions.acronym[electrodes['ibr']]
                 electrodes['name'] = self.brain_regions.name[electrodes['ibr']]
+                electrodes['title'] = self.histology_status
             else:
                 electrodes = None
+
+            sr, t0 = stream(self.pid, T0, nsecs=1, one=self.one)
+            raw = sr[:, :-sr.nsync].T
         else:
             electrodes = None
+            ap_file = next(self.session_path.joinpath('raw_ephys_data', self.pname).glob('*ap.*bin'), None)
+            if ap_file is not None:
+                sr = spikeglx.Reader(ap_file)
+                raw = sr[int((sr.fs * T0)):int((sr.fs * (T0 + 1))), :-sr.nsync].T
+            else:
+                return []
 
-        SNAPSHOT_LABEL = "raw_ephys_bad_channels"
-        eid, pname = self.one.pid2eid(self.pid)
-        output_files = list(self.output_directory.glob(f'{SNAPSHOT_LABEL}*'))
-        if len(output_files) == 4:
-            return output_files
-        self.output_directory.mkdir(exist_ok=True, parents=True)
-        from brainbox.io.spikeglx import stream
-        T0 = 60 * 30
-        sr, t0 = stream(self.pid, T0, nsecs=1, one=self.one)
-        raw = sr[:, :-sr.nsync].T
         channel_labels, channel_features = voltage.detect_bad_channels(raw, sr.fs)
         _, eqcs, output_files = ephys_bad_channels(
             raw=raw, fs=sr.fs, channel_labels=channel_labels, channel_features=channel_features, channels=electrodes,
-            title=SNAPSHOT_LABEL, destripe=True, save_dir=self.output_directory, br=self.brain_regions)
+            title=SNAPSHOT_LABEL, destripe=True, save_dir=self.output_directory, br=self.brain_regions, pid_info=self.pid_label)
         self.eqcs = eqcs
         return output_files
 
 
-def ephys_bad_channels(raw, fs, channel_labels, channel_features, channels=None, title="ephys_bad_channels", save_dir=None,
-                       destripe=False, eqcs=None, br=None):
+def ephys_bad_channels(raw, fs, channel_labels, channel_features, channels=None, title="ephys_bad_channels",
+                       save_dir=None, destripe=False, eqcs=None, br=None, pid_info=None, plot_backend='matplotlib'):
     nc, ns = raw.shape
     rl = ns / fs
+
+    def gain2level(gain):
+        return 10 ** (gain / 20) * 4 * np.array([-1, 1])
+
     if fs >= 2600:  # AP band
         ylim_rms = [0, 100]
         ylim_psd_hf = [0, 0.1]
         eqc_xrange = [450, 500]
         butter_kwargs = {'N': 3, 'Wn': 300 / fs * 2, 'btype': 'highpass'}
         eqc_gain = - 90
+        eqc_levels = gain2level(eqc_gain)
     else:
         # we are working with the LFP
         ylim_rms = [0, 1000]
@@ -446,34 +462,79 @@ def ephys_bad_channels(raw, fs, channel_labels, channel_features, channels=None,
         eqc_xrange = [450, 950]
         butter_kwargs = {'N': 3, 'Wn': np.array([2, 125]) / fs * 2, 'btype': 'bandpass'}
         eqc_gain = - 78
+        eqc_levels = gain2level(eqc_gain)
 
     inoisy = np.where(channel_labels == 2)[0]
     idead = np.where(channel_labels == 1)[0]
     ioutside = np.where(channel_labels == 3)[0]
-    from viewspikes.gui import viewephys
 
     # display voltage traces
     eqcs = [] if eqcs is None else eqcs
     # butterworth, for display only
     sos = scipy.signal.butter(**butter_kwargs, output='sos')
     butt = scipy.signal.sosfiltfilt(sos, raw)
-    eqcs.append(viewephys(butt, fs=fs, channels=channels, title='highpass', br=br))
-    if destripe:
-        dest = voltage.destripe(raw, fs=fs, channel_labels=channel_labels)
-        eqcs.append(viewephys(dest, fs=fs, channels=channels, title='destripe', br=br))
-        eqcs.append(viewephys((butt - dest), fs=fs, channels=channels, title='difference', br=br))
 
-    for eqc in eqcs:
-        y, x = np.meshgrid(ioutside, np.linspace(0, rl * 1e3, 500))
-        eqc.ctrl.add_scatter(x.flatten(), y.flatten(), rgb=(164, 142, 35), label='outside')
-        y, x = np.meshgrid(inoisy, np.linspace(0, rl * 1e3, 500))
-        eqc.ctrl.add_scatter(x.flatten(), y.flatten(), rgb=(255, 0, 0), label='noisy')
-        y, x = np.meshgrid(idead, np.linspace(0, rl * 1e3, 500))
-        eqc.ctrl.add_scatter(x.flatten(), y.flatten(), rgb=(0, 0, 255), label='dead')
+    if plot_backend == 'matplotlib':
+        _, axs = plt.subplots(1, 2, gridspec_kw={'width_ratios': [.95, .05]}, figsize=(16, 9))
+        eqcs.append(Density(butt, fs=fs, taxis=1, ax=axs[0], title='highpass', vmin=eqc_levels[0], vmax=eqc_levels[1],
+                            cmap='Greys'))
+
+        if destripe:
+            dest = voltage.destripe(raw, fs=fs, channel_labels=channel_labels)
+            _, axs = plt.subplots(1, 2, gridspec_kw={'width_ratios': [.95, .05]}, figsize=(16, 9))
+            eqcs.append(Density(dest, fs=fs, taxis=1, ax=axs[0], title='destripe', vmin=eqc_levels[0], vmax=eqc_levels[1],
+                                cmap='Greys'))
+            _, axs = plt.subplots(1, 2, gridspec_kw={'width_ratios': [.95, .05]}, figsize=(16, 9))
+            eqcs.append(Density((butt - dest), fs=fs, taxis=1, ax=axs[0], title='difference', vmin=eqc_levels[0],
+                                vmax=eqc_levels[1], cmap='Greys'))
+
+        for eqc in eqcs:
+            y, x = np.meshgrid(ioutside, np.linspace(0, rl * 1e3, 500))
+            eqc.ax.scatter(x.flatten(), y.flatten(), c='goldenrod', s=4)
+            y, x = np.meshgrid(inoisy, np.linspace(0, rl * 1e3, 500))
+            eqc.ax.scatter(x.flatten(), y.flatten(), c='r', s=4)
+            y, x = np.meshgrid(idead, np.linspace(0, rl * 1e3, 500))
+            eqc.ax.scatter(x.flatten(), y.flatten(), c='b', s=4)
+
+            eqc.ax.set_xlim(*eqc_xrange)
+            eqc.ax.set_ylim(0, nc)
+            eqc.ax.set_ylabel('Channel index')
+            eqc.ax.set_title(f'{pid_info}_{eqc.title}')
+            set_axis_label_size(eqc.ax)
+
+            ax = eqc.figure.axes[1]
+            if channels is not None:
+                chn_title = channels.get('title', None)
+                plot_brain_regions(channels['atlas_id'], brain_regions=br, display=True, ax=ax,
+                                   title=chn_title)
+                set_axis_label_size(ax)
+            else:
+                remove_axis_outline(ax)
+    else:
+        from viewspikes.gui import viewephys  # noqa
+        eqcs.append(viewephys(butt, fs=fs, channels=channels, title='highpass', br=br))
+
+        if destripe:
+            dest = voltage.destripe(raw, fs=fs, channel_labels=channel_labels)
+            eqcs.append(viewephys(dest, fs=fs, channels=channels, title='destripe', br=br))
+            eqcs.append(viewephys((butt - dest), fs=fs, channels=channels, title='difference', br=br))
+
+        for eqc in eqcs:
+            y, x = np.meshgrid(ioutside, np.linspace(0, rl * 1e3, 500))
+            eqc.ctrl.add_scatter(x.flatten(), y.flatten(), rgb=(164, 142, 35), label='outside')
+            y, x = np.meshgrid(inoisy, np.linspace(0, rl * 1e3, 500))
+            eqc.ctrl.add_scatter(x.flatten(), y.flatten(), rgb=(255, 0, 0), label='noisy')
+            y, x = np.meshgrid(idead, np.linspace(0, rl * 1e3, 500))
+            eqc.ctrl.add_scatter(x.flatten(), y.flatten(), rgb=(0, 0, 255), label='dead')
+
+        eqcs[0].ctrl.set_gain(eqc_gain)
+        eqcs[0].resize(1960, 1200)
+        eqcs[0].viewBox_seismic.setXRange(*eqc_xrange)
+        eqcs[0].viewBox_seismic.setYRange(0, nc)
+        eqcs[0].ctrl.propagate()
+
     # display features
     fig, axs = plt.subplots(2, 2, sharex=True, figsize=[16, 9], tight_layout=True)
-
-    # fig.suptitle(f"pid:{pid}, \n eid:{eid}, \n {one.eid2path(eid).parts[-3:]}, {pname}")
     fig.suptitle(title)
     axs[0, 0].plot(channel_features['rms_raw'] * 1e6)
     axs[0, 0].set(title='rms', xlabel='channel number', ylabel='rms (uV)', ylim=ylim_rms)
@@ -499,18 +560,16 @@ def ephys_bad_channels(raw, fs, channel_labels, channel_features, channels=None,
     axs[1, 1].plot(inoisy, inoisy * 0 + fs / 4, 'xr')
     axs[1, 1].plot(ioutside, ioutside * 0 + fs / 4, 'xy')
 
-    eqcs[0].ctrl.set_gain(eqc_gain)
-    eqcs[0].resize(1960, 1200)
-    eqcs[0].viewBox_seismic.setXRange(*eqc_xrange)
-    eqcs[0].viewBox_seismic.setYRange(0, nc)
-    eqcs[0].ctrl.propagate()
-
     if save_dir is not None:
         output_files = [Path(save_dir).joinpath(f"{title}.png")]
         fig.savefig(output_files[0])
         for eqc in eqcs:
-            output_files.append(Path(save_dir).joinpath(f"{title}_{eqc.windowTitle()}.png"))
-            eqc.grab().save(str(output_files[-1]))
+            if plot_backend == 'matplotlib':
+                output_files.append(Path(save_dir).joinpath(f"{title}_{eqc.title}.png"))
+                eqc.figure.savefig(str(output_files[-1]))
+            else:
+                output_files.append(Path(save_dir).joinpath(f"{title}_{eqc.windowTitle()}.png"))
+                eqc.grab().save(str(output_files[-1]))
         return fig, eqcs, output_files
     else:
         return fig, eqcs

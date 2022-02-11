@@ -25,8 +25,9 @@ def image_lfp_spectrum_plot(lfp_power, lfp_freq, chn_coords=None, chn_inds=None,
 
     ylabel = 'Channel index' if chn_coords is None else 'Distance from probe tip (um)'
     title = title or 'LFP Power Spectrum'
-    chn_inds = chn_inds or np.arange(lfp_power.shape[1])
+
     y = np.arange(lfp_power.shape[1]) if chn_coords is None else chn_coords[:, 1]
+    chn_inds = np.arange(lfp_power.shape[1]) if chn_inds is None else chn_inds
 
     freq_idx = np.where((lfp_freq >= freq_range[0]) & (lfp_freq < freq_range[1]))[0]
     freqs = lfp_freq[freq_idx]
@@ -80,7 +81,7 @@ def image_rms_plot(rms_amps, rms_times, chn_coords=None, chn_inds=None, avg_acro
 
     ylabel = 'Channel index' if chn_coords is None else 'Distance from probe tip (um)'
     title = title or f'{band} RMS'
-    chn_inds = chn_inds or np.arange(rms_amps.shape[1])
+    chn_inds = np.arange(rms_amps.shape[1]) if chn_inds is None else chn_inds
     y = np.arange(rms_amps.shape[1]) if chn_coords is None else chn_coords[:, 1]
 
     rms = rms_amps[:, chn_inds]
