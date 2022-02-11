@@ -118,7 +118,7 @@ class ServerGlobusDataHandler(DataHandler):
         :param signature: input and output file signatures
         :param one: ONE instance
         """
-        from one.remote.globus import Globus, get_lab_from_endpoint_id  # noqa
+        from one.globus import Globus, get_lab_from_endpoint_id  # noqa
         super().__init__(session_path, signatures, one=one)
         self.globus = Globus(client_name='server')
 
@@ -126,7 +126,7 @@ class ServerGlobusDataHandler(DataHandler):
         self.globus.endpoints['local']['root_path'] = '/mnt/s0/Data/Subjects'
 
         # Find the lab
-        labs = get_lab_from_endpoint_id(alyx=self.one.alyx)
+        labs = get_lab_from_endpoint_id(one=self.one)
 
         if len(labs) == 2:
             # for flofer lab
@@ -137,9 +137,9 @@ class ServerGlobusDataHandler(DataHandler):
 
         # For cortex lab we need to get the endpoint from the ibl alyx
         if self.lab == 'cortexlab':
-            self.globus.add_endpoint(f'flatiron_{self.lab}', alyx=ONE(base_url='https://alyx.internationalbrainlab.org').alyx)
+            self.globus.add_endpoint(f'flatiron_{self.lab}', one=ONE(base_url='https://alyx.internationalbrainlab.org'))
         else:
-            self.globus.add_endpoint(f'flatiron_{self.lab}', alyx=self.one.alyx)
+            self.globus.add_endpoint(f'flatiron_{self.lab}')
 
     def setUp(self):
         """
@@ -250,7 +250,7 @@ class RemoteAwsDataHandler(DataHandler):
         :param signature: input and output file signatures
         :param one: ONE instance
         """
-        from one.remote.globus import Globus # noqa
+        from one.globus import Globus # noqa
         super().__init__(session_path, signature, one=one)
         self.task = task
         self.aws = AWS(one=self.one)

@@ -1,8 +1,10 @@
-## To be added to next release
+## Release Note 2.10
+
+## Release Note 2.10.0 2022-02-11
 - Fix in EphysDLC task to not return multiple copies of outputs
 - Loading examples for different IBL data types
 - Fix for probe syncing when Nidq and probe pulses don't match
-- Use one.remote.globus module for datahandler, account for new ONE tables
+- Account for new ONE tables in ond datahandler
 - Add bad channels plots into RawEphysQc task
 
 ## Release Note 2.9
