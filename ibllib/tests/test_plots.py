@@ -37,7 +37,7 @@ class TestSnapshot(unittest.TestCase):
         try:
             img_file = list(Path('/var/www/').rglob(rel_path))[0]
         except IndexError:
-            img_file = http_download_file(url, cache_dir=Path(self.tmp_dir.name), username=TEST_DB['username'],
+            img_file = http_download_file(url, target_dir=Path(self.tmp_dir.name), username=TEST_DB['username'],
                                           password=TEST_DB['password'], silent=True)
         return img_file
 

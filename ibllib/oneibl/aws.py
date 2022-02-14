@@ -33,7 +33,7 @@ class AWS:
     def _download_datasets(self, datasets):
 
         files = []
-        for _, d in datasets.iterrows():
+        for i, d in datasets.iterrows():
             rel_file_path = Path(d['session_path']).joinpath(d['rel_path'])
             file_path = Path(self.one.cache_dir).joinpath(rel_file_path)
             file_path.parent.mkdir(exist_ok=True, parents=True)
@@ -44,8 +44,13 @@ class AWS:
                 _logger.info(f'{file_path} already exists wont redownload')
                 continue
 
+            if self.one._index_type() is int:
+                uuid = np2str(np.r_[i[0], i[1]])
+            elif self.one._index_type() is str:
+                uuid = i
+
             aws_path = AWS_ROOT_PATH.joinpath(
-                add_uuid_string(rel_file_path, np2str(np.r_[d.name[0], d.name[1]]))).as_posix()
+                add_uuid_string(rel_file_path, uuid)).as_posix()
             # maybe should avoid this and do a try catch instead?, see here
             # https://boto3.amazonaws.com/v1/documentation/api/latest/guide/collections.html#filtering
             # probably better to do filter on collection ? Not for today
