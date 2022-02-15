@@ -5,6 +5,7 @@ import numpy as np
 from ibllib.atlas import (BrainCoordinates, cart2sph, sph2cart, Trajectory,
                           Insertion, ALLEN_CCF_LANDMARKS_MLAPDV_UM, AllenAtlas)
 from ibllib.atlas.regions import BrainRegions
+from ibllib.atlas.plots import prepare_lr_data
 
 
 def _create_mock_atlas():
@@ -225,6 +226,18 @@ class TestBrainRegions(unittest.TestCase):
         # Cosmos-lr mapping
         cosmos_acronym = np.array(['HPF', 'TH', 'TH'])
         assert np.all(self.brs.index2acronym(index, mapping='Cosmos-lr') == cosmos_acronym)
+
+    def test_prepare_lr_data(self):
+        acronyms_lh = np.array(['VPM', 'VPL', 'PO'])
+        values_lh = np.array([0, 1, 2])
+        acronyms_rh = np.array(['VPL', 'PO', 'CA1'])
+        values_rh = np.array([3, 4, 5])
+        acronyms, values = prepare_lr_data(acronyms_lh, values_lh, acronyms_rh, values_rh)
+
+        assert np.array_equal(np.unique(np.r_[acronyms_lh, acronyms_rh]), acronyms)
+        assert np.array_equal(values[acronyms == 'VPL'][0], np.array([1, 3]))
+        np.testing.assert_equal(values[acronyms == 'VPM'][0], np.array([0, np.nan]))
+        np.testing.assert_equal(values[acronyms == 'CA1'][0], np.array([np.nan, 5]))
 
 
 class TestAtlasSlicesConversion(unittest.TestCase):

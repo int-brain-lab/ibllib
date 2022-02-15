@@ -2,7 +2,7 @@
 Module that has convenience plotting functions for 2D atlas slices
 """
 
-from ibllib.atlas import AllenAtlas
+from ibllib.atlas import AllenAtlas, FlatMap
 from iblutil.numerical import ismember
 import matplotlib
 import numpy as np
@@ -19,7 +19,7 @@ def prepare_lr_data(acronyms_lh, values_lh, acronyms_rh, values_rh):
     :param values_rh: values for each acronym on left hemisphere
     :return: combined acronyms and two column array of values
     """
-    #TODO docstring and test
+    # TODO and test
     acronyms = np.unique(np.r_[acronyms_lh, acronyms_rh])
     values = np.nan * np.ones((acronyms.shape[0], 2))
     _, l_idx = ismember(acronyms_lh, acronyms)
@@ -65,17 +65,17 @@ def plot_scalar_on_slice(regions, values, coord=-1000, slice='coronal', mapping=
 
     if len(values.shape) == 2:
         for r, vL, vR in zip(regions, values[:, 0], values[:, 1]):
-            region_values[np.where(br.acronym[br.mappings[map]] == r)[0][0]] = vR
-            region_values[np.where(br.acronym[br.mappings[map]] == r)[0][1]] = vL
+            _, idx_lh = br.acronym2index(r, mapping=map, hemisphere='left')
+            _, idx_rh = br.acronym2index(r, mapping=map, hemisphere='right')
+            region_values[idx_rh[0]] = vR
+            region_values[idx_lh[0]] = vL
     else:
         for r, v in zip(regions, values):
-            region_values[np.where(br.acronym[br.mappings[map]] == r)[0]] = v
-
-        if hemisphere == 'left':
-            region_values[0:(br.n_lr + 1)] = np.nan
-        elif hemisphere == 'right':
-            region_values[br.n_lr:] = np.nan
-            region_values[0] = np.nan
+            if hemisphere == 'both':
+                _, idx = br.acronym2index(r, mapping=map)
+            else:
+                _, idx = br.acronym2index(r, mapping=map, hemisphere=hemisphere)
+            region_values[idx[0]] = v
 
     if ax:
         fig = ax.get_figure()
@@ -131,48 +131,76 @@ def plot_scalar_on_slice(regions, values, coord=-1000, slice='coronal', mapping=
     return fig, ax
 
 
-
-def plot_scalar_on_flatmap(regions, values, depth=0, mapping='Allen', hemisphere='left',
-                           cmap='viridis', background='image', clevels=None, brain_atlas=None, ax=None):
+def plot_scalar_on_flatmap(regions, values, depth=0, flatmap='dorsal_cortex', mapping='Allen', hemisphere='left',
+                           cmap='viridis', background='boundary', clevels=None, flmap_atlas=None, ax=None):
+    """
+    Function to plot scalar value per allen region on histology slice
+    :param regions: array of acronyms of Allen regions
+    :param values: array of scalar value per acronym. If hemisphere is 'both' and different values want to be shown on each
+    hemispheres, values should contain 2 columns, 1st column for LH values, 2nd column for RH values
+    :param depth: depth in flatmap in um
+    :param flatmap: name of flatmap (currently only option is 'dorsal_cortex')
+    :param mapping: atlas mapping to use, options are 'Allen', 'Beryl' or 'Cosmos'
+    :param hemisphere: hemisphere to display, options are 'left', 'right', 'both'
+    :param background: background slice to overlay onto, options are 'image' or 'boundary'
+    :param cmap: colormap to use
+    :param clevels: min max color levels [cim, cmax]
+    :param brain_atlas: FlatMap object
+    :param ax: optional axis object to plot on
+    :return:
+    """
 
     if clevels is None:
         clevels = (np.min(values), np.max(values))
 
-    ba = brain_atlas or AllenAtlas()
+    ba = flmap_atlas or FlatMap(flatmap=flatmap)
     br = ba.regions
 
     # Find the mapping to use
-    map_ext = '-lr'
-    map = mapping + map_ext
+    if '-lr' in mapping:
+        map = mapping
+    else:
+        map = mapping + '-lr'
 
     region_values = np.zeros_like(br.id) * np.nan
 
     if len(values.shape) == 2:
         for r, vL, vR in zip(regions, values[:, 0], values[:, 1]):
-            region_values[np.where(br.acronym[br.mappings[map]] == r)[0][0]] = vR
-            region_values[np.where(br.acronym[br.mappings[map]] == r)[0][1]] = vL
+            _, idx_lh = br.acronym2index(r, mapping=map, hemisphere='left')
+            _, idx_rh = br.acronym2index(r, mapping=map, hemisphere='right')
+            region_values[idx_rh[0]] = vR
+            region_values[idx_lh[0]] = vL
     else:
         for r, v in zip(regions, values):
-            region_values[np.where(br.acronym[br.mappings[map]] == r)[0]] = v
+            if hemisphere == 'both':
+                _, idx = br.acronym2index(r, mapping=map)
+            else:
+                _, idx = br.acronym2index(r, mapping=map, hemisphere=hemisphere)
+            region_values[idx[0]] = v
 
-        lr_divide = int((br.id.shape[0] - 1) / 2)
-        if hemisphere == 'left':
-            region_values[0:lr_divide] = np.nan
-        elif hemisphere == 'right':
-            region_values[lr_divide:] = np.nan
-            region_values[0] = np.nan
+    d_idx = int(np.round(depth / ba.res_um))  # need to find nearest to 25
 
-    flmap = np.load(r'C:\Users\Mayo\Downloads\new_vol_25_index.npy')
-
-    d_idx = int(np.round(depth / 25)) # need to find nearest to 25
-    im = region_values[br.mappings[map][flmap[:, :, d_idx]]]
+    if background == 'boundary':
+        cmap_bound = matplotlib.cm.get_cmap("bone_r").copy()
+        cmap_bound.set_under([1, 1, 1], 0)
 
     if ax:
         fig = ax.get_figure()
     else:
         fig, ax = plt.subplots()
 
-    ax.imshow(im, cmap=cmap, vmin=clevels[0], vmax=clevels[1])
+    if background == 'image':
+        ba.plot_flatmap(d_idx, volume='image', mapping=map, ax=ax)
+        ba.plot_flatmap(d_idx, volume='value', region_values=region_values, mapping=map, cmap=cmap, vmin=clevels[0],
+                        vmax=clevels[1], ax=ax)
+    else:
+        ba.plot_flatmap(d_idx, volume='value', region_values=region_values, mapping=map, cmap=cmap, vmin=clevels[0],
+                        vmax=clevels[1], ax=ax)
+        ba.plot_flatmap(d_idx, volume='boundary', mapping=map, ax=ax, cmap=cmap_bound, vmin=0.01, vmax=0.8)
+
+    if hemisphere == 'left':
+        ax.set_xlim(0, np.ceil(ba.flatmap.shape[1] / 2))
+    elif hemisphere == 'right':
+        ax.set_xlim(np.ceil(ba.flatmap.shape[1] / 2), ba.flatmap.shape[1])
 
     return fig, ax
-

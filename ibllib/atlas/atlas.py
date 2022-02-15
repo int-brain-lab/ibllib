@@ -220,27 +220,6 @@ class BrainAtlas:
             self.srf_xyz = self.bc.i2xyz(np.c_[idx_srf[self.xyz2dims[0]], idx_srf[self.xyz2dims[1]],
                                                idx_srf[self.xyz2dims[2]]].astype(float))
 
-    def compute_boundaries(self):
-        """
-        Compute the boundaries between regions
-        """
-        if self.boundary is None:  # only compute if it hasn't already been computed
-            self.boundary = np.diff(self.label, axis=0, append=0)
-            self.boundary = self.boundary + np.diff(self.label, axis=1, append=0)
-            self.boundary = self.boundary + np.diff(self.label, axis=2, append=0)
-            self.boundary[self.boundary != 0] = 1
-
-            # Compute boundary on top view
-            self.compute_surface()
-            ix, iy = np.meshgrid(np.arange(self.bc.nx), np.arange(self.bc.ny))
-            iz = self.bc.z2i(self.top)
-            inds = self._lookup_inds(np.stack((ix, iy, iz), axis=-1))
-            vals = np.random.random(self.regions.acronym.shape[0])
-            _top_boundary = vals[self.label.flat[inds]]
-            self.top_boundary = np.diff(_top_boundary, axis=0, append=0)
-            self.top_boundary = self.top_boundary + np.diff(_top_boundary, axis=1, append=0)
-            self.top_boundary[self.top_boundary != 0] = 1
-
     def _lookup_inds(self, ixyz):
         """
         Performs a 3D lookup from volume indices ixyz to the image volume
@@ -467,12 +446,19 @@ class BrainAtlas:
             self.compute_surface()
             return _take(self.surface, index, axis=self.xyz2dims[axis])
         elif volume == 'boundary':
-            self.compute_boundaries()
-            return _take(self.boundary, index, axis=self.xyz2dims[axis])
+            iregion = _take_remap(self.label, index, self.xyz2dims[axis], mapping)
+            return self.compute_boundaries(iregion)
+
         elif volume == 'volume':
             if bc is not None:
                 index = bc.xyz2i(np.array([coordinate] * 3))[axis]
             return _take(region_values, index, axis=self.xyz2dims[axis])
+
+    def compute_boundaries(self, values):
+        boundary = np.diff(values, axis=0, append=0)
+        boundary = boundary + np.diff(values, axis=1, append=0)
+        boundary[boundary != 0] = 1
+        return boundary
 
     def plot_cslice(self, ap_coordinate, volume='image', mapping='Allen', region_values=None, **kwargs):
         """
@@ -582,8 +568,7 @@ class BrainAtlas:
                 for y in range(im.shape[1]):
                     im[x, y] = region_values[x, y, iz[x, y]]
         elif volume == 'boundary':
-            self.compute_boundaries()
-            im = self.top_boundary
+            im = self.compute_boundaries(regions)
 
         return self._plot_slice(im, self.extent(axis=2), ax=ax, **kwargs)
 
@@ -983,3 +968,60 @@ def _download_atlas_allen(file_image, FLAT_IRON_ATLAS_REL_PATH, par):
 
     cache_dir = Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH)
     return http_download_file(url, cache_dir=cache_dir)
+
+
+def _download_flatmap(file_image, FLAT_IRON_ATLAS_REL_PATH, par):
+    """
+    Download flatmap volumes
+    :param file_image:
+    :param FLAT_IRON_ATLAS_REL_PATH:
+    :param par:
+    :return:
+    """
+    file_image.parent.mkdir(exist_ok=True, parents=True)
+    base_url = (par.HTTP_DATA_SERVER + '/histology/ATLAS/Needles/Allen/flatmaps')
+    flatmap_url = base_url + '/' + file_image.name
+
+    cache_dir = Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH)
+    return http_download_file(flatmap_url, target_dir=cache_dir, username=par.HTTP_DATA_SERVER_LOGIN,
+                              password=par.HTTP_DATA_SERVER_PWD)
+
+
+class FlatMap(AllenAtlas):
+
+    def __init__(self, flatmap='dorsal_cortex', res_um=25):
+
+        super().__init__(res_um=res_um)
+        # Load in the flatmap with the given name
+        par = one.params.get(silent=True)
+        FLAT_IRON_ATLAS_REL_PATH = PurePosixPath('histology', 'ATLAS', 'Needles', 'Allen', 'flatmaps')
+        path_atlas = Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH)
+        file_flatmap = path_atlas.joinpath(f'{flatmap}_{res_um}.nrrd')
+        if not file_flatmap.exists():
+            _download_flatmap(file_flatmap, FLAT_IRON_ATLAS_REL_PATH, par)
+
+        # TODO probably best to store depth as the c order??
+        self.flatmap, _ = nrrd.read(file_flatmap)
+
+    def plot_flatmap(self, depth, volume='annotation', mapping='Allen', region_values=None, ax=None, **kwargs):
+
+        inds = np.int64(self.flatmap[:, :, depth])
+        regions = self._get_mapping(mapping=mapping)[self.label.flat[inds]]
+
+        if volume == 'annotation':
+            im = self._label2rgb(regions)
+        elif volume == 'value':
+            im = region_values[regions]
+        elif volume == 'boundary':
+            im = self.compute_boundaries(regions)
+        elif volume == 'image':
+            im = self.image.flat[inds]
+
+        if not ax:
+            ax = plt.gca()
+
+        return self._plot_slice(im, self.extent_flmap(), ax=ax, **kwargs)
+
+    def extent_flmap(self):
+        extent = np.r_[0, self.flatmap.shape[1], 0, self.flatmap.shape[0]]
+        return extent
