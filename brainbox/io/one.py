@@ -901,7 +901,7 @@ class SpikeSortingLoader:
             self.eid, self.pname = self.one.pid2eid(self.pid)
             self.session_path = self.one.eid2path(self.eid)
         # then eid / pname combination
-        elif self.session_path is None:
+        elif self.session_path is None or self.session_path == '':
             self.session_path = self.one.eid2path(self.eid)
         # fully local providing a session path
         else:

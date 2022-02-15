@@ -436,7 +436,7 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
                 ap_t.astype(np.float32).tofile(tid)
 
             # convert to normalised
-            intnorm = 1 / sr.sample2volts
+            intnorm = 1 / _sr.sample2volts
             chunk = chunk[slice(*ind2save), :] * intnorm
             # apply the whitening matrix if necessary
             if wrot is not None:
