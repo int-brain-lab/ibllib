@@ -5,7 +5,8 @@ import numpy as np
 from ibllib.atlas import (BrainCoordinates, cart2sph, sph2cart, Trajectory,
                           Insertion, ALLEN_CCF_LANDMARKS_MLAPDV_UM, AllenAtlas)
 from ibllib.atlas.regions import BrainRegions
-from ibllib.atlas.plots import prepare_lr_data
+from ibllib.atlas.plots import prepare_lr_data, reorder_data
+from iblutil.numerical import ismember
 
 
 def _create_mock_atlas():
@@ -238,6 +239,18 @@ class TestBrainRegions(unittest.TestCase):
         assert np.array_equal(values[acronyms == 'VPL'][0], np.array([1, 3]))
         np.testing.assert_equal(values[acronyms == 'VPM'][0], np.array([0, np.nan]))
         np.testing.assert_equal(values[acronyms == 'CA1'][0], np.array([np.nan, 5]))
+
+    def test_reorder_data(self):
+        acronyms = np.array(['AUDp1', 'AUDpo1', 'AUDv1', 'SSp-m1', 'SSp-n1'])
+        values = np.array([0, 1, 2, 3, 4])
+        _, idx = ismember(acronyms, self.brs.acronym)
+        expected_acronyms = acronyms[np.argsort(self.brs.order[idx])]
+        expected_values = values[np.argsort(self.brs.order[idx])]
+        values = np.array([0, 1, 2, 3, 4])
+        acronnyms_ordered, values_ordered = reorder_data(acronyms, values)
+        assert np.array_equal(acronnyms_ordered, expected_acronyms)
+        assert np.array_equal(values_ordered, expected_values)
+
 
 
 class TestAtlasSlicesConversion(unittest.TestCase):

@@ -455,6 +455,11 @@ class BrainAtlas:
             return _take(region_values, index, axis=self.xyz2dims[axis])
 
     def compute_boundaries(self, values):
+        """
+        Compute the boundaries between regions on slice
+        :param values:
+        :return:
+        """
         boundary = np.diff(values, axis=0, append=0)
         boundary = boundary + np.diff(values, axis=1, append=0)
         boundary[boundary != 0] = 1

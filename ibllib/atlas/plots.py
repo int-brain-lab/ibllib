@@ -3,8 +3,10 @@ Module that has convenience plotting functions for 2D atlas slices
 """
 
 from ibllib.atlas import AllenAtlas, FlatMap
+from ibllib.atlas.regions import BrainRegions
 from iblutil.numerical import ismember
 import matplotlib
+import seaborn as sns
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -19,7 +21,7 @@ def prepare_lr_data(acronyms_lh, values_lh, acronyms_rh, values_rh):
     :param values_rh: values for each acronym on left hemisphere
     :return: combined acronyms and two column array of values
     """
-    # TODO and test
+
     acronyms = np.unique(np.r_[acronyms_lh, acronyms_rh])
     values = np.nan * np.ones((acronyms.shape[0], 2))
     _, l_idx = ismember(acronyms_lh, acronyms)
@@ -28,6 +30,31 @@ def prepare_lr_data(acronyms_lh, values_lh, acronyms_rh, values_rh):
     values[r_idx, 1] = values_rh
 
     return acronyms, values
+
+
+def reorder_data(acronyms, values, brain_regions=None):
+    """
+    Reorder list of acronyms and values to match the Allen ordering
+    :param acronyms: array of acronyms
+    :param values: array of values
+    :param brain_regions: BrainRegions object
+    :return: ordered array of acronyms and values
+    """
+    # TODO test
+    br = brain_regions or BrainRegions()
+    atlas_id = br.acronym2id(acronyms, hemisphere='right')
+    all_ids = br.id[br.order][:br.n_lr + 1]
+    ordered_ids = np.zeros_like(all_ids) * np.nan
+    ordered_values = np.zeros_like(all_ids) * np.nan
+    _, idx = ismember(atlas_id, all_ids)
+    ordered_ids[idx] = atlas_id
+    ordered_values[idx] = values
+
+    ordered_ids = ordered_ids[~np.isnan(ordered_ids)]
+    ordered_values = ordered_values[~np.isnan(ordered_values)]
+    ordered_acronyms = br.id2acronym(ordered_ids)
+
+    return ordered_acronyms, ordered_values
 
 
 def plot_scalar_on_slice(regions, values, coord=-1000, slice='coronal', mapping='Allen', hemisphere='left',
