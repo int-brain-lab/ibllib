@@ -253,7 +253,6 @@ class TestBrainRegions(unittest.TestCase):
         assert np.array_equal(values_ordered, expected_values)
 
 
-
 class TestAtlasPlots(unittest.TestCase):
 
     @classmethod
