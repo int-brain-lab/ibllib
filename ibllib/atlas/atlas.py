@@ -975,44 +975,74 @@ def _download_atlas_allen(file_image, FLAT_IRON_ATLAS_REL_PATH, par):
     return http_download_file(url, cache_dir=cache_dir)
 
 
-def _download_flatmap(file_image, FLAT_IRON_ATLAS_REL_PATH, par):
-    """
-    Download flatmap volumes
-    :param file_image:
-    :param FLAT_IRON_ATLAS_REL_PATH:
-    :param par:
-    :return:
-    """
-    file_image.parent.mkdir(exist_ok=True, parents=True)
-    base_url = (par.HTTP_DATA_SERVER + '/histology/ATLAS/Needles/Allen/flatmaps')
-    flatmap_url = base_url + '/' + file_image.name
-
-    cache_dir = Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH)
-    return http_download_file(flatmap_url, target_dir=cache_dir, username=par.HTTP_DATA_SERVER_LOGIN,
-                              password=par.HTTP_DATA_SERVER_PWD)
-
-
 class FlatMap(AllenAtlas):
 
     def __init__(self, flatmap='dorsal_cortex', res_um=25):
-
+        """
+        Avaiable flatmaps are currently 'dorsal_cortex', 'circles' and 'pyramid'
+        :param flatmap:
+        :param res_um:
+        """
         super().__init__(res_um=res_um)
-        # Load in the flatmap with the given name
+        self.name = flatmap
+        if flatmap == 'dorsal_cortex':
+            self._get_flatmap_from_file()
+        elif flatmap == 'circles':
+            from ibllib.atlas.flatmaps import circles
+            if res_um != 25:
+                raise NotImplementedError('Pyramid circles not implemented for resolution other than 25um')
+            self.flatmap, self.ml_scale, self.ap_scale = circles(N=5, atlas=self, display='flat')
+        elif flatmap == 'pyramid':
+            from ibllib.atlas.flatmaps import circles
+            if res_um != 25:
+                raise NotImplementedError('Pyramid circles not implemented for resolution other than 25um')
+            self.flatmap, self.ml_scale, self.ap_scale = circles(N=5, atlas=self, display='pyramid')
+
+    def _get_flatmap_from_file(self):
+        # TODO probably best to store depth as the c order??
+        # gets the file in the ONE cache for the flatmap name in the property, downloads it if needed
         par = one.params.get(silent=True)
         FLAT_IRON_ATLAS_REL_PATH = PurePosixPath('histology', 'ATLAS', 'Needles', 'Allen', 'flatmaps')
         path_atlas = Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH)
-        file_flatmap = path_atlas.joinpath(f'{flatmap}_{res_um}.nrrd')
+        file_flatmap = path_atlas.joinpath(f'{self.name}_{self.res_um}.nrrd')
         if not file_flatmap.exists():
-            _download_flatmap(file_flatmap, FLAT_IRON_ATLAS_REL_PATH, par)
-
-        # TODO probably best to store depth as the c order??
+            self._download_flatmap(file_flatmap, FLAT_IRON_ATLAS_REL_PATH, par)
         self.flatmap, _ = nrrd.read(file_flatmap)
 
-    def plot_flatmap(self, depth, volume='annotation', mapping='Allen', region_values=None, ax=None, **kwargs):
+    @staticmethod
+    def _download_flatmap(file_image, FLAT_IRON_ATLAS_REL_PATH, par):
+        """
+        Download flatmap volumes
+        :param file_image:
+        :param FLAT_IRON_ATLAS_REL_PATH:
+        :param par:
+        :return:
+        """
+        file_image.parent.mkdir(exist_ok=True, parents=True)
+        base_url = (par.HTTP_DATA_SERVER + '/histology/ATLAS/Needles/Allen/flatmaps')
+        flatmap_url = base_url + '/' + file_image.name
 
-        inds = np.int64(self.flatmap[:, :, depth])
+        cache_dir = Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH)
+        return http_download_file(flatmap_url, target_dir=cache_dir, username=par.HTTP_DATA_SERVER_LOGIN,
+                                  password=par.HTTP_DATA_SERVER_PWD)
+
+    def plot_flatmap(self, depth=0, volume='annotation', mapping='Allen', region_values=None, ax=None, **kwargs):
+        """
+        Displays the 2D image corresponding to the flatmap. If there are several depths, by default it
+        will display the first one
+        :param depth: index of the depth to display in the flatmap volume (the last dimension)
+        :param volume:
+        :param mapping:
+        :param region_values:
+        :param ax:
+        :param kwargs:
+        :return:
+        """
+        if self.flatmap.ndim == 3:
+            inds = np.int32(self.flatmap[:, :, depth])
+        else:
+            inds = np.int32(self.flatmap[:, :])
         regions = self._get_mapping(mapping=mapping)[self.label.flat[inds]]
-
         if volume == 'annotation':
             im = self._label2rgb(regions)
         elif volume == 'value':
@@ -1021,7 +1051,6 @@ class FlatMap(AllenAtlas):
             im = self.compute_boundaries(regions)
         elif volume == 'image':
             im = self.image.flat[inds]
-
         if not ax:
             ax = plt.gca()
 

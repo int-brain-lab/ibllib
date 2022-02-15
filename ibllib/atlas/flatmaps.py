@@ -4,18 +4,17 @@ Module that hold techniques to project the brain volume onto 2D images for visua
 from functools import lru_cache
 from ibllib.atlas import AllenAtlas
 import numpy as np
-from brainbox.core import Bunch
+from iblutil.util import Bunch
 from scipy.interpolate import interp1d
 
 
 @lru_cache(maxsize=1, typed=False)
 def circles(N=5, atlas=None, display='flat'):
     """
-
-    :param N:
-    :param atlas:
+    :param N: number of circles
+    :param atlas: brain atlas at 25 m
     :param display: "flat" or "pyramid"
-    :return:
+    :return: 2D map of indices, ap_coordinate, ml_coordinate
     """
     atlas = atlas if atlas else AllenAtlas()
 
@@ -24,12 +23,12 @@ def circles(N=5, atlas=None, display='flat'):
     for k in np.arange(N):
         nlast = 2000  # 25 um for 5mm diameter
         n = int((k + 1) * nlast / N)
-        print(n, k)
         r = .4 * (k + 1) / N
         theta = np.linspace(0, 2 * np.pi, n) - np.pi / 2
         sz = np.r_[sz, r * np.exp(1j * theta)]
         level = np.r_[level, theta * 0 + k]
 
+    atlas.compute_surface()
     iy, ix = np.where(~np.isnan(atlas.top))
     centroid = np.array([np.mean(iy), np.mean(ix)])
     xlim = np.array([np.min(ix), np.max(ix)])
@@ -85,7 +84,8 @@ def circles(N=5, atlas=None, display='flat'):
             i3d = atlas._lookup_inds(np.c_[iml.flat, iap.flat, idv.flat])
             i3d = np.reshape(i3d, [atlas.bc.nz, s_['x'][ind].size])
             image_map[ih, iw] = i3d
-    return image_map
+    x, y = (atlas.bc.i2x(s.x), atlas.bc.i2y(s.y))
+    return image_map, x, y
     # if display == 'flat':
     #     fig, ax = plt.subplots(2, 1, figsize=(16, 5))
     # elif display == 'pyramid':
