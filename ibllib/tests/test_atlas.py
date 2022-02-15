@@ -1,6 +1,7 @@
 import unittest
 
 import numpy as np
+import matplotlib.pyplot as plt
 
 from ibllib.atlas import (BrainCoordinates, cart2sph, sph2cart, Trajectory,
                           Insertion, ALLEN_CCF_LANDMARKS_MLAPDV_UM, AllenAtlas)
@@ -251,6 +252,46 @@ class TestBrainRegions(unittest.TestCase):
         assert np.array_equal(acronnyms_ordered, expected_acronyms)
         assert np.array_equal(values_ordered, expected_values)
 
+
+
+class TestAtlasPlots(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(self):
+        self.ba = _create_mock_atlas()
+
+    def test_coronal_slice(self):
+        ax = self.ba.plot_cslice(ap_coordinate=0)
+        im = ax.get_images()[0]
+        assert im.get_array().shape == (self.ba.bc.nz, self.ba.bc.nx)
+        ax.clear()
+        ax = self.ba.plot_cslice(ap_coordinate=0, volume='annotation')
+        im = ax.get_images()[0]
+        assert im.get_array().shape == (self.ba.bc.nz, self.ba.bc.nx, 3)
+        ax.clear()
+
+    def test_sagittal_slice(self):
+        ax = self.ba.plot_sslice(ml_coordinate=0)
+        im = ax.get_images()[0]
+        assert im.get_array().shape == (self.ba.bc.nz, self.ba.bc.ny)
+        ax.clear()
+        ax = self.ba.plot_sslice(ml_coordinate=0, volume='annotation')
+        im = ax.get_images()[0]
+        assert im.get_array().shape == (self.ba.bc.nz, self.ba.bc.ny, 3)
+        ax.clear()
+
+    def test_horizontal_slice(self):
+        ax = self.ba.plot_hslice(dv_coordinate=0.002)
+        im = ax.get_images()[0]
+        assert im.get_array().shape == (self.ba.bc.ny, self.ba.bc.nx)
+        ax.clear()
+        ax = self.ba.plot_hslice(dv_coordinate=0.002, volume='annotation')
+        im = ax.get_images()[0]
+        assert im.get_array().shape == (self.ba.bc.ny, self.ba.bc.nx, 3)
+        ax.clear()
+
+    def tearDown(self) -> None:
+        plt.close('all')
 
 
 class TestAtlasSlicesConversion(unittest.TestCase):
