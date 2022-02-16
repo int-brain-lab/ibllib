@@ -59,6 +59,17 @@ class BrainRegions(_BrainRegions):
         self.mappings = {k: mappings[k].to_numpy() for k in mappings}
         self.n_lr = int((len(self.id) - 1) / 2)
 
+    def _compute_order(self):
+        """
+        Compute the order of regions, per region order by left hemisphere and then right hemisphere
+        :return:
+        """
+        orders = np.zeros_like(self.id)
+        # Left hemisphere first
+        orders[1::2] = np.arange(self.n_lr) + self.n_lr + 1
+        # Then right hemisphere
+        orders[2::2] = np.arange(self.n_lr) + 1
+
     def _compute_mappings(self):
         """
         Recomputes the mapping indices for all mappings

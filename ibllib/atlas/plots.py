@@ -39,7 +39,7 @@ def reorder_data(acronyms, values, brain_regions=None):
     :param brain_regions: BrainRegions object
     :return: ordered array of acronyms and values
     """
-    # TODO test
+
     br = brain_regions or BrainRegions()
     atlas_id = br.acronym2id(acronyms, hemisphere='right')
     all_ids = br.id[br.order][:br.n_lr + 1]
@@ -228,10 +228,12 @@ def plot_scalar_on_flatmap(regions, values, depth=0, flatmap='dorsal_cortex', ma
                         vmax=clevels[1], ax=ax)
         ba.plot_flatmap(d_idx, volume='boundary', mapping=map, ax=ax, cmap=cmap_bound, vmin=0.01, vmax=0.8)
 
-    if hemisphere == 'left':
-        ax.set_xlim(0, np.ceil(ba.flatmap.shape[1] / 2))
-    elif hemisphere == 'right':
-        ax.set_xlim(np.ceil(ba.flatmap.shape[1] / 2), ba.flatmap.shape[1])
+    # For circle flatmap we don't want to cut the axis
+    if ba.name != 'circles':
+        if hemisphere == 'left':
+            ax.set_xlim(0, np.ceil(ba.flatmap.shape[1] / 2))
+        elif hemisphere == 'right':
+            ax.set_xlim(np.ceil(ba.flatmap.shape[1] / 2), ba.flatmap.shape[1])
 
     return fig, ax
 
