@@ -523,7 +523,7 @@ def plot_speed_hist(dlc_df, cam_times, trials_df, feature='paw_r', cam='left', l
     plt.plot(times, pd.DataFrame.from_dict(dict(zip(incorrect.index, incorrect.values))).mean(axis=1),
              c='gray', label='incorrect trial')
     plt.axvline(x=0, label='stimOn', linestyle='--', c='r')
-    plt.title(f'{feature.split("_")[0].capitalize()} speed ({cam} cam)')
+    plt.title(f'{feature.capitalize()} speed ({cam} cam)')
     plt.xticks([-0.5, 0, 0.5, 1, 1.5])
     plt.xlabel('time [sec]')
     plt.ylabel('speed [px/sec]')
