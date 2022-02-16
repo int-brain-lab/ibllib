@@ -350,6 +350,7 @@ def plot_wheel_position(wheel_position, wheel_time, trials_df):
 
     plt.axvline(x=0, linestyle='--', c='k', label='stimOn')
     plt.axhline(y=-0.26, linestyle='--', c='g', label='reward')
+    plt.axhline(y=0.26, linestyle='--', c='g', label='reward')
     plt.ylim([-0.27, 0.27])
     plt.xlabel('time [sec]')
     plt.ylabel('wheel position [rad]')

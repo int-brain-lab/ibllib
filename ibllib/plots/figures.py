@@ -734,9 +734,9 @@ def dlc_qc_plot(session_path, one=None):
                 data[f'{cam}_{feat}'] = None
 
     # If we have no frame and/or no DLC and/or no times for all cams, raise an error, something is really wrong
-    assert any([data[f'{cam}_frame'] for cam in cams])
-    assert any([data[f'{cam}_dlc'] for cam in cams])
-    assert any([data[f'{cam}_times'] for cam in cams])
+    assert any([data[f'{cam}_frame'] is not None for cam in cams])
+    assert any([data[f'{cam}_dlc'] is not None for cam in cams])
+    assert any([data[f'{cam}_times'] is not None for cam in cams])
 
     # Load session level data
     for alf_object in ['trials', 'wheel', 'licks']:
@@ -764,14 +764,14 @@ def dlc_qc_plot(session_path, one=None):
     panels = []
     # Panel A, B, C: Trace on frame
     for cam in cams:
-        if all([data[f'{cam}_frame'], data[f'{cam}_dlc']]):
+        if data[f'{cam}_frame'] is not None and data[f'{cam}_dlc'] is not None:
             panels.append((plot_trace_on_frame,
                            {'frame': data[f'{cam}_frame'], 'dlc_df': data[f'{cam}_dlc'], 'cam': cam}))
         else:
             panels.append((None, f'Cannot plot {cam} cam trace on frame.\nData missing.'))
 
     # If trials data is not there, we cannot plot any of the trial average plots, skip all remaining panels
-    if not data['trials']:
+    if data['trials'] is None:
         panels.extend([(None, 'Cannot compute trial averages.\nNo trial data.') for i in range(7)])
     else:
         # Panel D: Motion energy
@@ -779,7 +779,7 @@ def dlc_qc_plot(session_path, one=None):
                        'right': {'motion_energy': data['right_ROIMotionEnergy'], 'times': data['right_times']},
                        'body': {'motion_energy': data['body_ROIMotionEnergy'], 'times': data['body_times']}}
         for cam in ['left', 'right', 'body']:  # Remove cameras where we don't have motion energy AND camera times
-            if not all(camera_dict[cam].values()):
+            if any([camera_dict[cam].values() is None]):
                 _ = camera_dict.pop(cam)
         if len(camera_dict) > 0:
             panels.append((plot_motion_energy_hist, {'camera_dict': camera_dict, 'trials_df': data['trials']}))
@@ -788,9 +788,9 @@ def dlc_qc_plot(session_path, one=None):
 
         # Panel E: Wheel position
         if data['wheel']:
-            panels.append(plot_wheel_position, {'wheel_position': data['wheel'].position,
+            panels.append((plot_wheel_position, {'wheel_position': data['wheel'].position,
                                                 'wheel_time': data['wheel'].timestamps,
-                                                'trials_df': data['trials']})
+                                                'trials_df': data['trials']}))
         else:
             panels.append((None, f'Cannot plot wheel position.\nData missing.'))
 
@@ -798,7 +798,8 @@ def dlc_qc_plot(session_path, one=None):
         # Try if all data is there for left cam first, otherwise right
         for cam in ['left', 'right']:
             fail = False
-            if data[f'{cam}_dlc'] and data[f'{cam}_times'] and len(data[f'{cam}_times']) >= len(data[f'{cam}_dlc']):
+            if (data[f'{cam}_dlc'] is not None and data[f'{cam}_times'] is not None
+                    and len(data[f'{cam}_times']) >= len(data[f'{cam}_dlc'])):
                 break
             fail = True
         if not fail:
@@ -822,7 +823,7 @@ def dlc_qc_plot(session_path, one=None):
         # Try if all data is there for left cam first, otherwise right
         for cam in ['left', 'right']:
             fail = False
-            if (data[f'{cam}_times'] and data[f'{cam}_features']
+            if (data[f'{cam}_times'] is not None and data[f'{cam}_features'] is not None
                     and len(data[f'{cam}_times']) >= len(data[f'{cam}_features'])
                     and not np.all(np.isnan(data['left_features'].pupilDiameter_smooth))):
                 break
