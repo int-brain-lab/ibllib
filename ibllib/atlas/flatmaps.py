@@ -24,7 +24,7 @@ def circles(N=5, atlas=None, display='flat'):
         nlast = 2000  # 25 um for 5mm diameter
         n = int((k + 1) * nlast / N)
         r = .4 * (k + 1) / N
-        theta = np.linspace(0, 2 * np.pi, n) - np.pi / 2
+        theta = (np.linspace(0, 2 * np.pi, n) + np.pi / 2)
         sz = np.r_[sz, r * np.exp(1j * theta)]
         level = np.r_[level, theta * 0 + k]
 
@@ -36,20 +36,28 @@ def circles(N=5, atlas=None, display='flat'):
 
     s = Bunch(
         x=np.real(sz) * np.diff(xlim) + centroid[1],
-        y=np.imag(sz) * np.diff(ylim) + centroid[0]
+        y=np.imag(sz) * np.diff(ylim) + centroid[0],
+        level=level,
+        distance=level * 0,
     )
-    s['distance'] = np.r_[0, np.cumsum(np.abs(np.diff(s['x'] + 1j * s['y'])))]
 
-    fcn = interp1d(s['distance'], s['x'] + 1j * s['y'])
+    # compute the overall linear distance for each circle
+    d0 = 0
+    for lev in np.unique(s['level']):
+        ind = s['level'] == lev
+        diff = np.abs(np.diff(s['x'][ind] + 1j * s['y'][ind]))
+        s['distance'][ind] = np.cumsum(np.r_[0, diff]) + d0
+        d0 = s['distance'][ind][-1]
 
+    fcn = interp1d(s['distance'], s['x'] + 1j * s['y'], fill_value='extrap')
     d = np.arange(0, np.ceil(s['distance'][-1]))
 
     s_ = Bunch({
         'x': np.real(fcn(d)),
         'y': np.imag(fcn(d)),
-        'level': interp1d(s['distance'], level, kind='nearest')(d)
+        'level': interp1d(s['distance'], level, kind='nearest')(d),
+        'distance': d
     })
-    s_['distance'] = np.r_[0, np.cumsum(np.abs(np.diff(s_['x'] + 1j * s_['y'])))]
 
     if display == 'flat':
         ih = np.arange(atlas.bc.nz)
