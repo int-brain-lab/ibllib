@@ -91,17 +91,19 @@ def plot_scalar_on_slice(regions, values, coord=-1000, slice='coronal', mapping=
 
     if len(values.shape) == 2:
         for r, vL, vR in zip(regions, values[:, 0], values[:, 1]):
-            _, idx_lh = br.acronym2index(r, mapping=map, hemisphere='left')
-            _, idx_rh = br.acronym2index(r, mapping=map, hemisphere='right')
-            region_values[idx_rh[0]] = vR
-            region_values[idx_lh[0]] = vL
+            idx = np.where(br.acronym[br.mappings[map]] == r)[0]
+            idx_lh = idx[idx > br.n_lr]
+            idx_rh = idx[idx <= br.n_lr]
+            region_values[idx_rh] = vR
+            region_values[idx_lh] = vL
     else:
         for r, v in zip(regions, values):
-            if hemisphere == 'both':
-                _, idx = br.acronym2index(r, mapping=map)
-            else:
-                _, idx = br.acronym2index(r, mapping=map, hemisphere=hemisphere)
-            region_values[idx[0]] = v
+            region_values[np.where(br.acronym[br.mappings[map]] == r)[0]] = v
+            if hemisphere == 'left':
+                region_values[0:(br.n_lr + 1)] = np.nan
+            elif hemisphere == 'right':
+                region_values[br.n_lr:] = np.nan
+                region_values[0] = np.nan
 
     if ax:
         fig = ax.get_figure()
@@ -192,17 +194,19 @@ def plot_scalar_on_flatmap(regions, values, depth=0, flatmap='dorsal_cortex', ma
 
     if len(values.shape) == 2:
         for r, vL, vR in zip(regions, values[:, 0], values[:, 1]):
-            _, idx_lh = br.acronym2index(r, mapping=map, hemisphere='left')
-            _, idx_rh = br.acronym2index(r, mapping=map, hemisphere='right')
-            region_values[idx_rh[0]] = vR
-            region_values[idx_lh[0]] = vL
+            idx = np.where(br.acronym[br.mappings[map]] == r)[0]
+            idx_lh = idx[idx > br.n_lr]
+            idx_rh = idx[idx <= br.n_lr]
+            region_values[idx_rh] = vR
+            region_values[idx_lh] = vL
     else:
         for r, v in zip(regions, values):
-            if hemisphere == 'both':
-                _, idx = br.acronym2index(r, mapping=map)
-            else:
-                _, idx = br.acronym2index(r, mapping=map, hemisphere=hemisphere)
-            region_values[idx[0]] = v
+            region_values[np.where(br.acronym[br.mappings[map]] == r)[0]] = v
+            if hemisphere == 'left':
+                region_values[0:(br.n_lr + 1)] = np.nan
+            elif hemisphere == 'right':
+                region_values[br.n_lr:] = np.nan
+                region_values[0] = np.nan
 
     d_idx = int(np.round(depth / ba.res_um))  # need to find nearest to 25
 
@@ -228,5 +232,24 @@ def plot_scalar_on_flatmap(regions, values, depth=0, flatmap='dorsal_cortex', ma
         ax.set_xlim(0, np.ceil(ba.flatmap.shape[1] / 2))
     elif hemisphere == 'right':
         ax.set_xlim(np.ceil(ba.flatmap.shape[1] / 2), ba.flatmap.shape[1])
+
+    return fig, ax
+
+
+def plot_scalar_on_barplot(acronyms, values, errors=None, order=True, ylim=None, ax=None, brain_regions=None):
+    br = brain_regions or BrainRegions()
+
+    if order:
+        acronyms, values = reorder_data(acronyms, values, brain_regions)
+
+    _, idx = ismember(acronyms, br.acronym)
+    colours = br.rgb[idx]
+
+    if ax:
+        fig = ax.get_figure()
+    else:
+        fig, ax = plt.subplots()
+
+    ax.bar(np.arange(acronyms.size), values, color=colours)
 
     return fig, ax
