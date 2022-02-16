@@ -280,6 +280,21 @@ def destripe(x, fs, neuropixel_version=1, butter_kwargs=None, k_kwargs=None, cha
     return x
 
 
+def destripe_lfp(x, fs):
+    """
+    Wrapper around the destipe function with some default parameters to destripe the LFP band
+    :param x:
+    :param fs:
+    :return:
+    """
+    butter_kwargs = {'N': 3, 'Wn': 2 / fs * 2, 'btype': 'highpass'}
+    k_kwargs = {'ntr_pad': 60, 'ntr_tap': 0, 'lagc': None,
+                'butter_kwargs': {'N': 3, 'Wn': 0.001, 'btype': 'highpass'}}
+    # butterworth, for display only
+    channel_labels, channel_features = detect_bad_channels(x, fs=fs, psd_hf_threshold=1.4)
+    return destripe(x, fs, butter_kwargs=butter_kwargs, channel_labels=channel_labels, k_kwargs=k_kwargs)
+
+
 def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, append=False, nc_out=None, butter_kwargs=None,
                              dtype=np.int16, ns2add=0, nbatch=None, nprocesses=None, compute_rms=True, reject_channels=True,
                              k_kwargs=None, k_filter=True, reader_kwargs=None):
