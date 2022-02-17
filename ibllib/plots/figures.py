@@ -768,11 +768,11 @@ def dlc_qc_plot(session_path, one=None):
             panels.append((plot_trace_on_frame,
                            {'frame': data[f'{cam}_frame'], 'dlc_df': data[f'{cam}_dlc'], 'cam': cam}))
         else:
-            panels.append((None, f'Cannot plot {cam} cam trace on frame.\nData missing.'))
+            panels.append((None, f'Data missing\n{cam.capitalize()} cam trace on frame'))
 
     # If trials data is not there, we cannot plot any of the trial average plots, skip all remaining panels
     if data['trials'] is None:
-        panels.extend([(None, 'Cannot compute trial averages.\nNo trial data.') for i in range(7)])
+        panels.extend([(None, 'No trial data\ncannot compute trial avgs') for i in range(7)])
     else:
         # Panel D: Motion energy
         camera_dict = {'left': {'motion_energy': data['left_ROIMotionEnergy'], 'times': data['left_times']},
@@ -784,7 +784,7 @@ def dlc_qc_plot(session_path, one=None):
         if len(camera_dict) > 0:
             panels.append((plot_motion_energy_hist, {'camera_dict': camera_dict, 'trials_df': data['trials']}))
         else:
-            panels.append((None, 'Cannot display motion energy.\nData missing.'))
+            panels.append((None, 'Data missing\nMotion energy'))
 
         # Panel E: Wheel position
         if data['wheel']:
@@ -792,7 +792,7 @@ def dlc_qc_plot(session_path, one=None):
                                                 'wheel_time': data['wheel'].timestamps,
                                                 'trials_df': data['trials']}))
         else:
-            panels.append((None, f'Cannot plot wheel position.\nData missing.'))
+            panels.append((None, f'Data missing\nWheel position'))
 
         # Panel F, G: Paw speed and nose speed
         # Try if all data is there for left cam first, otherwise right
@@ -810,14 +810,14 @@ def dlc_qc_plot(session_path, one=None):
                                              'trials_df': data['trials'], 'feature': 'nose_tip', 'legend': False,
                                              'cam': cam}))
         else:
-            panels.extend([(None, 'Cannot plot speed histograms.\nData missing or corrupt.') for i in range(2)])
+            panels.extend([(None, 'Data missing or corrupt\nSpeed histograms') for i in range(2)])
 
         # Panel H and I: Lick plots
         if data['licks'] and data['licks'].times.shape[0] > 0:
             panels.append((plot_lick_hist, {'lick_times': data['licks'].times, 'trials_df': data['trials']}))
             panels.append((plot_lick_raster, {'lick_times': data['licks'].times, 'trials_df': data['trials']}))
         else:
-            panels.extend([(None, 'Cannot plot licks.\nData missing.') for i in range(2)])
+            panels.extend([(None, 'Data missing\nLicks plots') for i in range(2)])
 
         # Panel J: pupil plot
         # Try if all data is there for left cam first, otherwise right
@@ -833,7 +833,7 @@ def dlc_qc_plot(session_path, one=None):
                            {'pupil_diameter': data[f'{cam}_features'].pupilDiameter_smooth,
                             'cam_times': data[f'{cam}_times'], 'trials_df': data['trials'], 'cam': cam}))
         else:
-            panels.append((None, 'Cannot plot pupil diameter.\nData missing or corrupt.'))
+            panels.append((None, 'Data missing or corrupt\nPupil diameter'))
 
     # Plotting
     plt.rcParams.update({'font.size': 10})
