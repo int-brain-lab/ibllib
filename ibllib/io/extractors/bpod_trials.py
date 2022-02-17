@@ -3,6 +3,7 @@ This module will extract the Bpod trials and wheel data based on the task protoc
 i.e. habituation, training or biased.
 """
 import logging
+from collections import OrderedDict
 
 from ibllib.io.extractors import (habituation_trials, training_trials, biased_trials,
                                   training_wheel, opto_trials)
@@ -31,10 +32,12 @@ def extract_all(session_path, save=True, bpod_trials=None, settings=None):
     settings = settings or rawio.load_settings(session_path)
     _logger.info(f'{extractor_type} session on {settings["PYBPOD_BOARD"]}')
     if extractor_type == 'training':
-        wheel, files_wheel = training_wheel.extract_all(
-            session_path, bpod_trials=bpod_trials, settings=settings, save=save)
         trials, files_trials = training_trials.extract_all(
             session_path, bpod_trials=bpod_trials, settings=settings, save=save)
+        # This is hacky but avoids extracting the wheel twice.
+        # files_trials should contain wheel files at the end.
+        files_wheel = []
+        wheel = OrderedDict({k: trials.pop(k) for k in tuple(trials.keys()) if 'wheel' in k})
     elif extractor_type in ['biased', 'ephys']:
         wheel, files_wheel = training_wheel.extract_all(
             session_path, bpod_trials=bpod_trials, settings=settings, save=save)
