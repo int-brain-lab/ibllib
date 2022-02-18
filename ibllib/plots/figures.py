@@ -825,7 +825,7 @@ def dlc_qc_plot(session_path, one=None):
             fail = False
             if (data[f'{cam}_times'] is not None and data[f'{cam}_features'] is not None
                     and len(data[f'{cam}_times']) >= len(data[f'{cam}_features'])
-                    and not np.all(np.isnan(data['left_features'].pupilDiameter_smooth))):
+                    and not np.all(np.isnan(data[f'{cam}_features'].pupilDiameter_smooth))):
                 break
             fail = True
         if not fail:
