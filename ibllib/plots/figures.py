@@ -694,25 +694,25 @@ def dlc_qc_plot(session_path, one=None):
     # Load data for each camera
     for cam in cams:
         # Load a single frame for each video
-        try:
-            # Check if video data is available locally,if yes, load a single frame
-            video_path = session_path.joinpath('raw_video_data', f'_iblrig_{cam}Camera.raw.mp4')
-            if video_path.exists():
-                data[f'{cam}_frame'] = get_video_frame(video_path, frame_number=5 * 60 * SAMPLING[cam])[:, :, 0]
-            # If not, try to stream a frame (try three times)
-            else:
-                video_url = url_from_eid(one.path2eid(session_path), one=one)[cam]
-                tries = 0
-                while tries < 3:
-                    try:
-                        data[f'{cam}_frame'] = get_video_frame(video_url, frame_number=5 * 60 * SAMPLING[cam])[:, :, 0]
-                        break
-                    except KeyError:
+        # Check if video data is available locally,if yes, load a single frame
+        video_path = session_path.joinpath('raw_video_data', f'_iblrig_{cam}Camera.raw.mp4')
+        if video_path.exists():
+            data[f'{cam}_frame'] = get_video_frame(video_path, frame_number=5 * 60 * SAMPLING[cam])[:, :, 0]
+        # If not, try to stream a frame (try three times)
+        else:
+            video_url = url_from_eid(one.path2eid(session_path), one=one)[cam]
+            for tries in range(3):
+                try:
+                    data[f'{cam}_frame'] = get_video_frame(video_url, frame_number=5 * 60 * SAMPLING[cam])[:, :, 0]
+                    break
+                except BaseException:
+                    if tries < 2:
                         tries += 1
-                        time.sleep(60)
-        except BaseException:
-            logger.warning(f"Could not load video frame for {cam} cam. Skipping trace on frame.")
-            data[f'{cam}_frame'] = None
+                        logger.info(f"Streaming {cam} video failed, retrying x{tries}")
+                        time.sleep(30)
+                    else:
+                        logger.warning(f"Could not load video frame for {cam} cam. Skipping trace on frame.")
+                        data[f'{cam}_frame'] = None
         # Other camera associated data
         for feat in ['dlc', 'times', 'features', 'ROIMotionEnergy']:
             # Check locally first, then try to load from alyx, if nothing works, set to None
@@ -734,9 +734,9 @@ def dlc_qc_plot(session_path, one=None):
                 data[f'{cam}_{feat}'] = None
 
     # If we have no frame and/or no DLC and/or no times for all cams, raise an error, something is really wrong
-    assert any([data[f'{cam}_frame'] is not None for cam in cams])
-    assert any([data[f'{cam}_dlc'] is not None for cam in cams])
-    assert any([data[f'{cam}_times'] is not None for cam in cams])
+    assert any([data[f'{cam}_frame'] is not None for cam in cams]), "No camera data could be loaded, aborting."
+    assert any([data[f'{cam}_dlc'] is not None for cam in cams]), "No DLC data could be loaded, aborting."
+    assert any([data[f'{cam}_times'] is not None for cam in cams]), "No camera times data could be loaded, aborting."
 
     # Load session level data
     for alf_object in ['trials', 'wheel', 'licks']:
@@ -772,14 +772,14 @@ def dlc_qc_plot(session_path, one=None):
 
     # If trials data is not there, we cannot plot any of the trial average plots, skip all remaining panels
     if data['trials'] is None:
-        panels.extend([(None, 'No trial data\ncannot compute trial avgs') for i in range(7)])
+        panels.extend([(None, 'No trial data,\ncannot compute trial avgs') for i in range(7)])
     else:
         # Panel D: Motion energy
         camera_dict = {'left': {'motion_energy': data['left_ROIMotionEnergy'], 'times': data['left_times']},
                        'right': {'motion_energy': data['right_ROIMotionEnergy'], 'times': data['right_times']},
                        'body': {'motion_energy': data['body_ROIMotionEnergy'], 'times': data['body_times']}}
         for cam in ['left', 'right', 'body']:  # Remove cameras where we don't have motion energy AND camera times
-            if any([camera_dict[cam].values() is None]):
+            if camera_dict[cam]['motion_energy'] is None or camera_dict[cam]['times'] is None:
                 _ = camera_dict.pop(cam)
         if len(camera_dict) > 0:
             panels.append((plot_motion_energy_hist, {'camera_dict': camera_dict, 'trials_df': data['trials']}))
@@ -789,8 +789,8 @@ def dlc_qc_plot(session_path, one=None):
         # Panel E: Wheel position
         if data['wheel']:
             panels.append((plot_wheel_position, {'wheel_position': data['wheel'].position,
-                                                'wheel_time': data['wheel'].timestamps,
-                                                'trials_df': data['trials']}))
+                                                 'wheel_time': data['wheel'].timestamps,
+                                                 'trials_df': data['trials']}))
         else:
             panels.append((None, f'Data missing\nWheel position'))
 

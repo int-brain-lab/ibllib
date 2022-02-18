@@ -524,7 +524,7 @@ def plot_speed_hist(dlc_df, cam_times, trials_df, feature='paw_r', cam='left', l
     plt.plot(times, pd.DataFrame.from_dict(dict(zip(incorrect.index, incorrect.values))).mean(axis=1),
              c='gray', label='incorrect trial')
     plt.axvline(x=0, label='stimOn', linestyle='--', c='r')
-    plt.title(f'{feature.capitalize()} speed trial avg\n({cam} cam)')
+    plt.title(f'{feature.capitalize()} speed trial avg\n({cam.upper()} cam)')
     plt.xticks([-0.5, 0, 0.5, 1, 1.5])
     plt.xlabel('time [sec]')
     plt.ylabel('speed [px/sec]')
@@ -560,7 +560,7 @@ def plot_pupil_diameter_hist(pupil_diameter, cam_times, trials_df, cam='left'):
         plt.plot(times, pupil_mean, label=align_to.split("_")[0], color=color)
         plt.fill_between(times, pupil_mean + pupil_std, pupil_mean - pupil_std, color=color, alpha=0.5)
     plt.axvline(x=0, linestyle='--', c='k')
-    plt.title(f'Pupil diameter trial avg\n({cam} cam)')
+    plt.title(f'Pupil diameter trial avg\n({cam.upper()} cam)')
     plt.xlabel('time [sec]')
     plt.xticks([-0.5, 0, 0.5, 1, 1.5])
     plt.ylabel('z-scored smoothed pupil diameter [px]')
