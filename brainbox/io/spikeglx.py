@@ -137,8 +137,8 @@ def stream(pid, t0, nsecs=1, one=None, cache_folder=None, remove_cached=False, t
     with open(ch_file) as fid:
         chinfo = json.load(fid)
     tbounds = np.array(chinfo['chunk_bounds']) / chinfo['sample_rate']
-    first_chunk = np.maximum(0, np.searchsorted(tbounds, t0) - 1)
-    last_chunk = np.maximum(0, np.searchsorted(tbounds, t0 + nsecs) - 2)
+    first_chunk = np.maximum(0, np.searchsorted(tbounds, t0 + 0.01) - 1)
+    last_chunk = np.maximum(0, np.searchsorted(tbounds, t0 + + 0.01 + nsecs) - 2)
     t0 = tbounds[first_chunk]
 
     samples_folder.mkdir(exist_ok=True, parents=True)
