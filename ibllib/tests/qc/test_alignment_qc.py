@@ -22,22 +22,6 @@ one = ONE(**TEST_DB)
 brain_atlas = AllenAtlas(25)
 
 
-class TestProbeInsertion(unittest.TestCase):
-
-    def test_creation(self):
-        probe = [''.join(random.choices(string.ascii_letters, k=5)),
-                 ''.join(random.choices(string.ascii_letters, k=5))]
-        create_alyx_probe_insertions(session_path=EPHYS_SESSION, model='3B2', labels=probe,
-                                     one=one, force=True)
-        insertion = one.alyx.get(f'/insertions?&session={EPHYS_SESSION}', clobber=True)
-        assert(len(insertion) == 2)
-        assert (insertion[0]['json']['qc'] == 'NOT_SET')
-        assert (len(insertion[0]['json']['extended_qc']) == 0)
-
-        one.alyx.rest('insertions', 'delete', id=insertion[0]['id'])
-        one.alyx.rest('insertions', 'delete', id=insertion[1]['id'])
-
-
 class TestTracingQc(unittest.TestCase):
     probe01_id = None
     probe00_id = None
