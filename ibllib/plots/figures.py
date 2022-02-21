@@ -690,6 +690,7 @@ def dlc_qc_plot(session_path, one=None):
     one = one or ONE()
     data = {}
     cams = ['left', 'right', 'body']
+    session_path = Path(session_path)
 
     # Load data for each camera
     for cam in cams:
