@@ -1070,7 +1070,7 @@ class EphysPostDLC(tasks.Task):
                                  # In particular the raw videos don't need to be downloaded as they can be streamed
                                  ('_iblrig_bodyCamera.raw.mp4', 'raw_video_data', False),
                                  ('_iblrig_leftCamera.raw.mp4', 'raw_video_data', False),
-                                 ('_iblrig_rightCamera.raw.mp4','raw_video_data', False),
+                                 ('_iblrig_rightCamera.raw.mp4', 'raw_video_data', False),
                                  ('rightROIMotionEnergy.position.npy', 'alf', False),
                                  ('leftROIMotionEnergy.position.npy', 'alf', False),
                                  ('bodyROIMotionEnergy.position.npy', 'alf', False),

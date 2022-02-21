@@ -746,7 +746,7 @@ def dlc_qc_plot(session_path, one=None):
         except ALFObjectNotFound:
             pass
         try:
-            data[f'{alf_object}'] = one.load_object(one.path2eid(session_path), alf_object) # then try from alyx
+            data[f'{alf_object}'] = one.load_object(one.path2eid(session_path), alf_object)  # then try from alyx
         except ALFObjectNotFound:
             logger.warning(f"Could not load {alf_object} object, some plots have to be skipped.")
             data[f'{alf_object}'] = None
@@ -792,7 +792,7 @@ def dlc_qc_plot(session_path, one=None):
                                                  'wheel_time': data['wheel'].timestamps,
                                                  'trials_df': data['trials']}))
         else:
-            panels.append((None, f'Data missing\nWheel position'))
+            panels.append((None, 'Data missing\nWheel position'))
 
         # Panel F, G: Paw speed and nose speed
         # Try if all data is there for left cam first, otherwise right
