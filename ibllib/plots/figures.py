@@ -701,19 +701,23 @@ def dlc_qc_plot(session_path, one=None):
             data[f'{cam}_frame'] = get_video_frame(video_path, frame_number=5 * 60 * SAMPLING[cam])[:, :, 0]
         # If not, try to stream a frame (try three times)
         else:
-            video_url = url_from_eid(one.path2eid(session_path), one=one)[cam]
-            for tries in range(3):
-                try:
-                    data[f'{cam}_frame'] = get_video_frame(video_url, frame_number=5 * 60 * SAMPLING[cam])[:, :, 0]
-                    break
-                except BaseException:
-                    if tries < 2:
-                        tries += 1
-                        logger.info(f"Streaming {cam} video failed, retrying x{tries}")
-                        time.sleep(30)
-                    else:
-                        logger.warning(f"Could not load video frame for {cam} cam. Skipping trace on frame.")
-                        data[f'{cam}_frame'] = None
+            try:
+                video_url = url_from_eid(one.path2eid(session_path), one=one)[cam]
+                for tries in range(3):
+                    try:
+                        data[f'{cam}_frame'] = get_video_frame(video_url, frame_number=5 * 60 * SAMPLING[cam])[:, :, 0]
+                        break
+                    except BaseException:
+                        if tries < 2:
+                            tries += 1
+                            logger.info(f"Streaming {cam} video failed, retrying x{tries}")
+                            time.sleep(30)
+                        else:
+                            logger.warning(f"Could not load video frame for {cam} cam. Skipping trace on frame.")
+                            data[f'{cam}_frame'] = None
+            except KeyError:
+                logger.warning(f"Could not load video frame for {cam} cam. Skipping trace on frame.")
+                data[f'{cam}_frame'] = None
         # Other camera associated data
         for feat in ['dlc', 'times', 'features', 'ROIMotionEnergy']:
             # Check locally first, then try to load from alyx, if nothing works, set to None
