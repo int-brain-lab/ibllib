@@ -81,6 +81,9 @@ class Task(abc.ABC):
         # if taskid of one properties are not available, local run only without alyx
         use_alyx = self.one is not None and self.taskid is not None
         if use_alyx:
+            # check that alyx user is logged in
+            if not self.one.alyx.is_logged_in:
+                self.one.alyx.authenticate()
             tdict = self.one.alyx.rest('tasks', 'partial_update', id=self.taskid,
                                        data={'status': 'Started'})
             self.log = ('' if not tdict['log'] else tdict['log'] +
