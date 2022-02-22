@@ -215,6 +215,8 @@ class Snapshot:
         :returns: dict, note as registered in database
         """
         # the protocol is not compatible with byte streaming and json, so serialize the json object here
+        # Make sure that user is logged in, if not, try to log in
+        assert self.one.alyx.is_logged_in, "No Alyx user is logged in, try running one.alyx.authenticate() first"
         note = {
             'user': self.one.alyx.user, 'content_type': self.content_type, 'object_id': self.object_id,
             'text': text, 'width': width, 'json': json.dumps(json_field)}

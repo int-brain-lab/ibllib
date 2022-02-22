@@ -185,7 +185,11 @@ class ImagePlot(DefaultPlot):
         :param axis: 'x' or 'y'
         :return:
         """
-        lim = self._set_lim(axis)
+        if axis == 'x':
+            lim = self.xlim
+        else:
+            lim = self.ylim
+        lim = self._set_lim(axis, lim=lim)
         scale = (lim[1] - lim[0]) / self.data['c'].shape[axis_dict[axis]]
         return scale
 
