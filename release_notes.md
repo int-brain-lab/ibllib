@@ -1,11 +1,8 @@
 ## Release Note 2.10
 
-## Release Note 2.10.0 2022-02-11
-- Fix in EphysDLC task to not return multiple copies of outputs
-- Loading examples for different IBL data types
-- Fix for probe syncing when Nidq and probe pulses don't match
-- Account for new ONE tables in ond datahandler
-- Add bad channels plots into RawEphysQc task
+## Release Note 2.10.1 2022-02-22
+- Authenticate alyx user in Task class
+- Some fixes to make dlc_qc_plot in EphysPostDLC more reliable
 - SpikeGlx:
   - supports reading of flat binary files without meta data
 - atlas.Regions:
@@ -13,6 +10,13 @@
   - bugfix in transposing of RGB image data for coronal slice plots
 - voltage: decompress cbin
   - add support for custom spikeglx.Reader
+
+## Release Note 2.10.0 2022-02-11
+- Fix in EphysDLC task to not return multiple copies of outputs
+- Loading examples for different IBL data types
+- Fix for probe syncing when Nidq and probe pulses don't match
+- Account for new ONE tables in ond datahandler
+- Add bad channels plots into RawEphysQc task
 
 ## Release Note 2.9
 
@@ -26,7 +30,6 @@
 - Fixes to EphysPostDLC dlc_qc_plot
 
 ## Release Note 2.8
- 
 
 ### Release Notes 2.8.0 2022-01-19
 - Add lfp, aprms, spike raster and behaviour report plots to task infastructure
