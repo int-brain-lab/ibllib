@@ -12,7 +12,7 @@ from typing import Union, List
 
 from iblutil.io import hashfile, params
 from iblutil.util import range_str
-from one.alf.spec import is_uuid_string, is_session_path
+from one.alf.spec import is_uuid_string, is_session_path, describe
 from one.alf.files import get_session_path
 from one.api import ONE
 
@@ -316,7 +316,11 @@ def confirm_video_remote_folder(local_folder=False, remote_folder=False, force=F
             resp = 's'
             while not_valid:
                 resp = input(f'Which session number to use? Options: '
-                             f'{range_str(map(int, remote_numbers))} or [s]kip/[e]xit> ').strip()
+                             f'{range_str(map(int, remote_numbers))} or [s]kip/[h]elp/[e]xit> ').strip()
+                if resp == 'h':
+                    print('An example session filepath:\n')
+                    describe('number')  # Explain what a session number is
+                    input('Press enter to continue')
                 not_valid = resp != 's' and resp != 'e' and resp not in remote_numbers
             if resp == 's':
                 continue

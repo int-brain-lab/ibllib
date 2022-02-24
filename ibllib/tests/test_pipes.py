@@ -463,7 +463,7 @@ class TestSyncData(unittest.TestCase):
         new_remote_session = fu.create_fake_session_folder(self.remote_repo)
         fu.create_fake_raw_behavior_data_folder(new_remote_session)
         self.session_path.joinpath('transfer_me.flag').touch()
-        with mock.patch('builtins.input', return_value='002'):
+        with mock.patch('builtins.input', side_effect=['h', '\n', '002']):
             misc.confirm_video_remote_folder(self.local_repo, self.remote_repo)
         # Data should have been copied into session #2
         n_copied = sum(1 for _ in self.remote_repo.rglob('raw_video_data/*'))
