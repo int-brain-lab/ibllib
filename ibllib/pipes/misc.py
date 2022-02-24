@@ -316,7 +316,7 @@ def confirm_video_remote_folder(local_folder=False, remote_folder=False, force=F
             resp = 's'
             while not_valid:
                 resp = input(f'Which session number to use? Options: '
-                             f'{range_str(map(int, remote_numbers)).zfill(3)} or [s]kip/[e]xit> ').strip()
+                             f'{range_str(map(int, remote_numbers))} or [s]kip/[e]xit> ').strip()
                 not_valid = resp != 's' and resp != 'e' and resp not in remote_numbers
             if resp == 's':
                 continue
