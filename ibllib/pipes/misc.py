@@ -324,7 +324,7 @@ def confirm_video_remote_folder(local_folder=False, remote_folder=False, force=F
                     describe('number')  # Explain what a session number is
                     input('Press enter to continue')
                 not_valid = resp != 's' and resp != 'e'
-                not_valid = not_valid or not re.match(r'^\d+$', resp) or int(resp) not in remote_numbers
+                not_valid = not_valid and (not re.match(r'^\d+$', resp) or int(resp) not in remote_numbers)
             if resp == 's':
                 continue
             if resp == 'e':
