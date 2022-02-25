@@ -331,6 +331,9 @@ def confirm_video_remote_folder(local_folder=False, remote_folder=False, force=F
                 return
             subj, date = session_path.parts[-3:-1]
             session_path = rename_session(session_path, new_subject=subj, new_date=date, new_number=resp)
+            if session_path is None:
+                log.info('Skipping session...')
+                continue
             remote_session_path = remote_folder / Path(*session_path.parts[-3:])
         transfers.append((session_path.as_posix(), remote_session_path.as_posix()))
         log.info('Added to transfers list:\n' + str(transfers[-1]))
