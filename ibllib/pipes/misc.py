@@ -326,6 +326,7 @@ def confirm_video_remote_folder(local_folder=False, remote_folder=False, force=F
                 not_valid = resp != 's' and resp != 'e'
                 not_valid = not_valid and (not re.match(r'^\d+$', resp) or int(resp) not in remote_numbers)
             if resp == 's':
+                log.info('Skipping session...')
                 continue
             if resp == 'e':
                 print('Exiting.  No files transferred.')
@@ -337,7 +338,7 @@ def confirm_video_remote_folder(local_folder=False, remote_folder=False, force=F
                 continue
             remote_session_path = remote_folder / Path(*session_path.parts[-3:])
         transfers.append((session_path.as_posix(), remote_session_path.as_posix()))
-        log.info('Added to transfers list:\n' + str(transfers[-1]))
+        log.debug('Added to transfers list:\n' + str(transfers[-1]))
         with open(transfer_records, 'w') as fp:
             json.dump(transfers, fp)
 
@@ -349,13 +350,12 @@ def confirm_video_remote_folder(local_folder=False, remote_folder=False, force=F
             print(f'No behavior folder found in {remote_session_path}: skipping session...')
             continue
         try:
-            log.info('Tranfering ' + str(Path(session_path) / 'raw_video_data') + '-->' + str(Path(remote_session_path) / 'raw_video_data'))
             transfer_folder(Path(session_path) / 'raw_video_data', Path(remote_session_path) / 'raw_video_data', force=force)
         except AssertionError as ex:
             log.error(f'Video transfer failed: {ex}')
             continue
         flag_file = Path(session_path) / 'transfer_me.flag'
-        log.info('Removing ' + str(flag_file))
+        log.debug('Removing ' + str(flag_file))
         flag_file.unlink()
         create_video_transfer_done_flag(remote_session_path)
         check_create_raw_session_flag(remote_session_path)
