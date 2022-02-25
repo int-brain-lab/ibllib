@@ -315,15 +315,16 @@ def confirm_video_remote_folder(local_folder=False, remote_folder=False, force=F
         if _get_session_numbers(session_path) != remote_numbers:
             not_valid = True
             resp = 's'
+            remote_numbers = list(map(int, remote_numbers))
             while not_valid:
                 resp = input(f'Which session number to use? Options: '
-                             f'{range_str(map(int, remote_numbers))} or [s]kip/[h]elp/[e]xit> ').strip()
+                             f'{range_str(remote_numbers)} or [s]kip/[h]elp/[e]xit> ').strip()
                 if resp == 'h':
                     print('An example session filepath:\n')
                     describe('number')  # Explain what a session number is
                     input('Press enter to continue')
-                #FIXME Allow none-padded number inputs
-                not_valid = resp != 's' and resp != 'e' and resp not in remote_numbers
+                not_valid = resp != 's' and resp != 'e'
+                not_valid = not_valid or not re.match(r'^\d+$', resp) or int(resp) not in remote_numbers
             if resp == 's':
                 continue
             if resp == 'e':
@@ -353,8 +354,8 @@ def confirm_video_remote_folder(local_folder=False, remote_folder=False, force=F
         except AssertionError as ex:
             log.error(f'Video transfer failed: {ex}')
             continue
-        log.info('Removing ' + str(flag_file))
         flag_file = Path(session_path) / 'transfer_me.flag'
+        log.info('Removing ' + str(flag_file))
         flag_file.unlink()
         create_video_transfer_done_flag(remote_session_path)
         check_create_raw_session_flag(remote_session_path)
