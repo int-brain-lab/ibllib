@@ -2,6 +2,7 @@ import shutil
 import logging
 from pathlib import Path
 import time
+import json
 
 import numpy as np
 
@@ -126,14 +127,22 @@ def stream(pid, t0, nsecs=1, one=None, cache_folder=None, remove_cached=False, t
     if cache_folder is None:
         samples_folder = Path(one.alyx._par.CACHE_DIR).joinpath('cache', typ)
 
+    def _get_file(one_rec):
+        fpath = Path(one.alyx._par.CACHE_DIR).joinpath(
+            str(one_rec['session_path'].values[0]),
+            str(one_rec['rel_path'].values[0]))
+        if fpath.exists():
+            return fpath
+        else:
+            return one._download_datasets(one_rec)[0]
+
     eid, pname = one.pid2eid(pid)
     cbin_rec = one.list_datasets(eid, collection=f"*{pname}", filename=f'*{typ}.*bin', details=True)
     ch_rec = one.list_datasets(eid, collection=f"*{pname}", filename=f'*{typ}.ch', details=True)
     meta_rec = one.list_datasets(eid, collection=f"*{pname}", filename=f'*{typ}.meta', details=True)
-    ch_file = one._download_datasets(ch_rec)[0]
-    one._download_datasets(meta_rec)[0]
+    ch_file = _get_file(ch_rec)
+    _get_file(meta_rec)
 
-    import json
     with open(ch_file) as fid:
         chinfo = json.load(fid)
     tbounds = np.array(chinfo['chunk_bounds']) / chinfo['sample_rate']
