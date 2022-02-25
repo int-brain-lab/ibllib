@@ -291,6 +291,7 @@ def confirm_video_remote_folder(local_folder=False, remote_folder=False, force=F
 
     for session_path in src_session_paths:
         if session_path in (x[0] for x in transfers):
+            log.info(f'{session_path} already in transfers list')
             continue  # Already on pile
 
         remote_session_path = remote_folder.joinpath(*session_path.parts[-3:])
@@ -321,6 +322,7 @@ def confirm_video_remote_folder(local_folder=False, remote_folder=False, force=F
                     print('An example session filepath:\n')
                     describe('number')  # Explain what a session number is
                     input('Press enter to continue')
+                #FIXME Allow none-padded number inputs
                 not_valid = resp != 's' and resp != 'e' and resp not in remote_numbers
             if resp == 's':
                 continue
@@ -331,32 +333,34 @@ def confirm_video_remote_folder(local_folder=False, remote_folder=False, force=F
             session_path = rename_session(session_path, new_subject=subj, new_date=date, new_number=resp)
             remote_session_path = remote_folder / Path(*session_path.parts[-3:])
         transfers.append((session_path.as_posix(), remote_session_path.as_posix()))
+        log.info('Added to transfers list:\n' + str(transfers[-1]))
         with open(transfer_records, 'w') as fp:
             json.dump(transfers, fp)
 
-        # Start transfers
-        if os.name == 'nt':
-            WindowsInhibitor().inhibit()
-        for i, (session_path, remote_session_path) in enumerate(transfers):
-            if not behavior_exists(remote_session_path):
-                print(f'No behavior folder found in {remote_session_path}: skipping session...')
-                continue
-            try:
-                transfer_folder(Path(session_path) / 'raw_video_data', Path(remote_session_path) / 'raw_video_data', force=force)
-            except AssertionError as ex:
-                log.error(f'Video transfer failed: {ex}')
-                continue
-            check_create_raw_session_flag(remote_session_path)
-            flag_file = Path(session_path) / 'transfer_me.flag'
-            flag_file.unlink()
-            create_video_transfer_done_flag(remote_session_path)
-            check_create_raw_session_flag(remote_session_path)
-            # Done. Remove from list
-            transfers.pop(i)
-            with open(transfer_records, 'w') as fp:
-                json.dump(transfers, fp)
-        if os.name == 'nt':
-            WindowsInhibitor().uninhibit()
+    # Start transfers
+    if os.name == 'nt':
+        WindowsInhibitor().inhibit()
+    for i, (session_path, remote_session_path) in enumerate(transfers):
+        if not behavior_exists(remote_session_path):
+            print(f'No behavior folder found in {remote_session_path}: skipping session...')
+            continue
+        try:
+            log.info('Tranfering ' + str(Path(session_path) / 'raw_video_data') + '-->' + str(Path(remote_session_path) / 'raw_video_data'))
+            transfer_folder(Path(session_path) / 'raw_video_data', Path(remote_session_path) / 'raw_video_data', force=force)
+        except AssertionError as ex:
+            log.error(f'Video transfer failed: {ex}')
+            continue
+        log.info('Removing ' + str(flag_file))
+        flag_file = Path(session_path) / 'transfer_me.flag'
+        flag_file.unlink()
+        create_video_transfer_done_flag(remote_session_path)
+        check_create_raw_session_flag(remote_session_path)
+        # Done. Remove from list
+        transfers.pop(i)
+        with open(transfer_records, 'w') as fp:
+            json.dump(transfers, fp)
+    if os.name == 'nt':
+        WindowsInhibitor().uninhibit()
 
 
 def confirm_ephys_remote_folder(
