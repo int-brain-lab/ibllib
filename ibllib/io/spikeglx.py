@@ -16,6 +16,9 @@ from ibllib.ephys import neuropixel as neuropixel
 SAMPLE_SIZE = 2  # int16
 DEFAULT_BATCH_SIZE = 1e6
 _logger = logging.getLogger('ibllib')
+# provided as convenience if no meta-data is provided, always better to read from meta
+S2V_AP = 2.34375e-06
+S2V_LFP = 4.6875e-06
 
 
 class Reader:
@@ -24,10 +27,24 @@ class Reader:
     Some format description was found looking at the Matlab SDK here
     https://github.com/billkarsh/SpikeGLX/blob/master/MATLAB-SDK/DemoReadSGLXData.m
 
+    To open a spikeglx file that has an associated meta-data file:
+    sr = spikeglx.Reader(bin_file_path)
+
+    To open a flat binary file:
+
+    sr = spikeglx.Reader(bin_file_path, nc=385, ns=nsamples, fs=30000)
+    one can provide more options to the reader:
+    sr = spikeglx.Reader(..., dtype='int16, s2mv=2.34375e-06)
+
+    usual sample 2 mv conversion factors:
+        s2mv = 2.34375e-06 (NP1 ap banc) : default value used
+        s2mv = 4.6875e-06 (NP1 lfp band)
+
     Note: To release system resources the close method must be called
     """
 
-    def __init__(self, sglx_file, open=True):
+    def __init__(self, sglx_file, open=True, nc=None, ns=None, fs=None, dtype='int16', s2v=None,
+                 nsync=None):
         """
         An interface for reading data from a SpikeGLX file
         :param sglx_file: Path to a SpikeGLX file (compressed or otherwise)
@@ -35,18 +52,29 @@ class Reader:
         """
         self.file_bin = Path(sglx_file)
         self.nbytes = self.file_bin.stat().st_size
+        self.dtype = np.dtype(dtype)
         file_meta_data = Path(sglx_file).with_suffix('.meta')
         if not file_meta_data.exists():
+            err_str = "Instantiating an Reader without meta data requires providing nc, fs and nc parameters"
+            assert (nc is not None and fs is not None and nc is not None), err_str
             self.file_meta_data = None
             self.meta = None
-            self.channel_conversion_sample2v = 1
-            _logger.warning(str(sglx_file) + " : no metadata file found. Very limited support")
-            return
-        # normal case we continue reading and interpreting the metadata file
-        self.file_meta_data = file_meta_data
-        self.meta = read_meta_data(file_meta_data)
-        self.channel_conversion_sample2v = _conversion_sample2v_from_meta(self.meta)
-        self._raw = None
+            self._nc, self._fs, self._ns = (nc, fs, ns)
+            # handles default parameters: if int16 we assume it's a raw recording with 1 sync and sample2mv
+            # if its' float32 or something else, we assume the sync channel has been removed and the scaling applied
+            if nsync is None:
+                nsync = 1 if self.dtype == np.dtype('int16') else 0
+            self._nsync = nsync
+            if s2v is None:
+                s2v = S2V_AP if self.dtype == np.dtype('int16') else 1.0
+            self.channel_conversion_sample2v = {'samples': np.ones(nc) * s2v}
+            self.channel_conversion_sample2v['samples'][-nsync:] = 1
+        else:
+            # normal case we continue reading and interpreting the metadata file
+            self.file_meta_data = file_meta_data
+            self.meta = read_meta_data(file_meta_data)
+            self.channel_conversion_sample2v = _conversion_sample2v_from_meta(self.meta)
+            self._raw = None
         if open:
             self.open()
 
@@ -65,8 +93,8 @@ class Reader:
                                     f" actual {ftsec}\n"
                                     f"Will attempt to fudge the meta-data information.")
         else:
-            if self.nc * self.ns * 2 != self.nbytes:
-                ftsec = self.file_bin.stat().st_size / 2 / self.nc / self.fs
+            if self.nc * self.ns * self.dtype.itemsize != self.nbytes:
+                ftsec = self.file_bin.stat().st_size / self.dtype.itemsize / self.nc / self.fs
                 _logger.warning(f"{sglx_file} : meta data and filesize do not checkout\n"
                                 f"File size: expected {self.meta['fileSizeBytes']},"
                                 f" actual {self.file_bin.stat().st_size}\n"
@@ -74,7 +102,7 @@ class Reader:
                                 f" actual {ftsec}\n"
                                 f"Will attempt to fudge the meta-data information.")
                 self.meta['fileTimeSecs'] = ftsec
-            self._raw = np.memmap(sglx_file, dtype='int16', mode='r', shape=(self.ns, self.nc))
+            self._raw = np.memmap(sglx_file, dtype=self.dtype, mode='r', shape=(self.ns, self.nc))
 
     def close(self):
         if self.is_open:
@@ -93,6 +121,10 @@ class Reader:
             return self.read(nsel=item, sync=False)
         elif len(item) == 2:
             return self.read(nsel=item[0], csel=item[1], sync=False)
+
+    @property
+    def sample2volts(self):
+        return self.channel_conversion_sample2v[self.type]
 
     @property
     def geometry(self):
@@ -132,33 +164,29 @@ class Reader:
     def type(self):
         """:return: ap, lf or nidq. Useful to index dictionaries """
         if not self.meta:
-            return 0
+            return 'samples'
         return _get_type_from_meta(self.meta)
 
     @property
     def fs(self):
         """ :return: sampling frequency (Hz) """
-        if not self.meta:
-            return 1
-        return _get_fs_from_meta(self.meta)
+        return self._fs if self.meta is None else _get_fs_from_meta(self.meta)
 
     @property
     def nc(self):
         """ :return: number of channels """
-        if not self.meta:
-            return
-        return _get_nchannels_from_meta(self.meta)
+        return self._nc if self.meta is None else _get_nchannels_from_meta(self.meta)
 
     @property
     def nsync(self):
         """:return: number of sync channels"""
-        return len(_get_sync_trace_indices_from_meta(self.meta))
+        return self._nsync if self.meta is None else len(_get_sync_trace_indices_from_meta(self.meta))
 
     @property
     def ns(self):
         """ :return: number of samples """
-        if not self.meta:
-            return
+        if self.meta is None:
+            return self._ns
         return int(np.round(self.meta.get('fileTimeSecs') * self.fs))
 
     def read(self, nsel=slice(0, 10000), csel=slice(None), sync=True):
@@ -170,7 +198,7 @@ class Reader:
         """
         if not self.is_open:
             raise IOError('Reader not open; call `open` before `read`')
-        darray = np.float32(self._raw[nsel, csel])
+        darray = self._raw[nsel, csel].astype(np.float32, copy=True)
         darray *= self.channel_conversion_sample2v[self.type][csel]
         if sync:
             return darray, self.read_sync(nsel)
@@ -444,11 +472,7 @@ def _get_analog_sync_trace_indices_from_meta(md):
 
 
 def _get_nchannels_from_meta(md):
-    typ = _get_type_from_meta(md)
-    if typ == 'nidq':
-        return int(np.round(np.sum(md.get('snsMnMaXaDw'))))
-    elif typ in ['lf', 'ap']:
-        return int(np.round(sum(md.get('snsApLfSy'))))
+    return int(md.get('nSavedChans'))
 
 
 def _get_fs_from_meta(md):
@@ -541,7 +565,7 @@ def _conversion_sample2v_from_meta(meta_data):
         sy_gain = np.ones(int(meta_data['snsApLfSy'][-1]), dtype=np.float32)
         # imroTbl has 384 entries regardless of no of channels saved, so need to index by n_ch
         # TODO need to look at snsSaveChanMap and index channels to get correct gain
-        n_chn = _get_nchannels_from_meta(meta_data) - 1
+        n_chn = _get_nchannels_from_meta(meta_data) - len(_get_sync_trace_indices_from_meta(meta_data))
         if 'NP2' in version:
             # NP 2.0; APGain = 80 for all AP
             # return 0 for LFgain (no LF channels)
@@ -779,7 +803,7 @@ def download_raw_partial(url_cbin, url_ch, first_chunk=0, last_chunk=0, one=None
         ch_file = url_ch
     else:
         ch_file = Path(webclient.download_file(
-            url_ch, cache_dir=target_dir, clobber=True, return_md5=False))
+            url_ch, target_dir=target_dir, clobber=True, return_md5=False))
         ch_file = remove_uuid_file(ch_file)
     ch_file_stream = target_dir.joinpath(ch_file.name).with_suffix('.stream.ch')
 
@@ -836,7 +860,7 @@ def download_raw_partial(url_cbin, url_ch, first_chunk=0, last_chunk=0, one=None
     # Download the requested chunks
     cbin_local_path = webclient.download_file(
         url_cbin, chunks=(first_byte, n_bytes),
-        cache_dir=target_dir, clobber=True, return_md5=False)
+        target_dir=target_dir, clobber=True, return_md5=False)
     cbin_local_path = remove_uuid_file(cbin_local_path)
     cbin_local_path_renamed = cbin_local_path.with_suffix('.stream.cbin')
     cbin_local_path.replace(cbin_local_path_renamed)

@@ -280,9 +280,24 @@ def destripe(x, fs, neuropixel_version=1, butter_kwargs=None, k_kwargs=None, cha
     return x
 
 
+def destripe_lfp(x, fs):
+    """
+    Wrapper around the destipe function with some default parameters to destripe the LFP band
+    :param x:
+    :param fs:
+    :return:
+    """
+    butter_kwargs = {'N': 3, 'Wn': 2 / fs * 2, 'btype': 'highpass'}
+    k_kwargs = {'ntr_pad': 60, 'ntr_tap': 0, 'lagc': None,
+                'butter_kwargs': {'N': 3, 'Wn': 0.001, 'btype': 'highpass'}}
+    # butterworth, for display only
+    channel_labels, channel_features = detect_bad_channels(x, fs=fs, psd_hf_threshold=1.4)
+    return destripe(x, fs, butter_kwargs=butter_kwargs, channel_labels=channel_labels, k_kwargs=k_kwargs)
+
+
 def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, append=False, nc_out=None, butter_kwargs=None,
                              dtype=np.int16, ns2add=0, nbatch=None, nprocesses=None, compute_rms=True, reject_channels=True,
-                             k_kwargs=None, k_filter=True):
+                             k_kwargs=None, k_filter=True, reader_kwargs=None):
     """
     From a spikeglx Reader object, decompresses and apply ADC.
     Saves output as a flat binary file in int16
@@ -303,6 +318,7 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
     :param reject_channels: (True) detects noisy or bad channels and interpolate them. Channels outside of the brain are left
      untouched
     :param k_kwargs: (None) arguments for the kfilter function
+    :param reader_kwargs: (None) optional arguments for the spikeglx Reader instance
     :param k_filter: (True) Performs a k-filter - if False will do median common average referencing
     :return:
     """
@@ -311,7 +327,8 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
     SAMPLES_TAPER = 1024
     NBATCH = nbatch or 65536
     # handles input parameters
-    sr = spikeglx.Reader(sr_file, open=True)
+    reader_kwargs = {} if reader_kwargs is None else reader_kwargs
+    sr = spikeglx.Reader(sr_file, open=True, **reader_kwargs)
     if reject_channels:  # get bad channels if option is on
         channel_labels = detect_bad_channels_cbin(sr)
     assert isinstance(sr_file, str) or isinstance(sr_file, Path)
@@ -365,7 +382,7 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
     CHUNK_SIZE = int(sr.ns / nprocesses)
 
     def my_function(i_chunk, n_chunk):
-        _sr = spikeglx.Reader(sr_file)
+        _sr = spikeglx.Reader(sr_file, **reader_kwargs)
 
         n_batch = int(np.ceil(i_chunk * CHUNK_SIZE / NBATCH))
         first_s = (NBATCH - SAMPLES_TAPER * 2) * n_batch
@@ -434,7 +451,7 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
                 ap_t.astype(np.float32).tofile(tid)
 
             # convert to normalised
-            intnorm = 1 / _sr.channel_conversion_sample2v['ap'] if dtype == np.int16 else 1.
+            intnorm = 1 / _sr.sample2volts
             chunk = chunk[slice(*ind2save), :] * intnorm
             # apply the whitening matrix if necessary
             if wrot is not None:
