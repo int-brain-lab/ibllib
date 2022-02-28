@@ -1,4 +1,5 @@
 import datetime
+import sys
 import os
 import ctypes
 import json
@@ -21,7 +22,7 @@ import ibllib.io.raw_data_loaders as raw
 import ibllib.io.spikeglx as spikeglx
 from ibllib.io.misc import delete_empty_folders
 
-log = logging.getLogger("ibllib")
+log = logging.getLogger(__name__)
 
 
 def subjects_data_folder(folder: Path, rglob: bool = False) -> Path:
@@ -148,7 +149,12 @@ def transfer_folder(src: Path, dst: Path, force: bool = False) -> None:
         except AssertionError:
             pass
     print(f"Copying all files:\n{src}\n--> {dst}")
-    shutil.copytree(src, dst, dirs_exist_ok=True, copy_function=copy_with_check)
+    if sys.version_info.minor < 8:
+        # dirs_exist_ok kwarg not supported in < 3.8
+        shutil.rmtree(dst, ignore_errors=True)
+        shutil.copytree(src, dst, copy_function=copy_with_check)
+    else:
+        shutil.copytree(src, dst, dirs_exist_ok=True, copy_function=copy_with_check)
     # If folder was created delete the src_flag_file
     if check_transfer(src, dst) is None:
         print("All files copied")
