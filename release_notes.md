@@ -1,5 +1,8 @@
 ## Release Note 2.10
 
+## Release Note 2.10.2 2022-02-28
+- Small fixes to local server task queues
+
 ## Release Note 2.10.1 2022-02-22
 - Authenticate alyx user in Task class
 - Some fixes to make dlc_qc_plot in EphysPostDLC more reliable
