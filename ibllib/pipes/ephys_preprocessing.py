@@ -1068,24 +1068,25 @@ class EphysPostDLC(tasks.Task):
                                  # the following are required for the DLC plot only
                                  # they are not strictly required, some plots just might be skipped
                                  # In particular the raw videos don't need to be downloaded as they can be streamed
-                                 ('_iblrig_bodyCamera.raw.mp4', 'raw_video_data', False),
-                                 ('_iblrig_leftCamera.raw.mp4', 'raw_video_data', False),
-                                 ('_iblrig_rightCamera.raw.mp4', 'raw_video_data', False),
-                                 ('rightROIMotionEnergy.position.npy', 'alf', False),
-                                 ('leftROIMotionEnergy.position.npy', 'alf', False),
-                                 ('bodyROIMotionEnergy.position.npy', 'alf', False),
-                                 ('_ibl_trials.choice.npy', 'alf', False),
-                                 ('_ibl_trials.feedbackType.npy', 'alf', False),
-                                 ('_ibl_trials.feedback_times.npy', 'alf', False),
-                                 ('_ibl_trials.stimOn_times.npy', 'alf', False),
-                                 ('_ibl_wheel.position.npy', 'alf', False),
-                                 ('_ibl_wheel.timestamps.npy', 'alf', False),
+                                 ('_iblrig_bodyCamera.raw.mp4', 'raw_video_data', True),
+                                 ('_iblrig_leftCamera.raw.mp4', 'raw_video_data', True),
+                                 ('_iblrig_rightCamera.raw.mp4', 'raw_video_data', True),
+                                 ('rightROIMotionEnergy.position.npy', 'alf', True),
+                                 ('leftROIMotionEnergy.position.npy', 'alf', True),
+                                 ('bodyROIMotionEnergy.position.npy', 'alf', True),
+                                 ('_ibl_trials.choice.npy', 'alf', True),
+                                 ('_ibl_trials.feedbackType.npy', 'alf', True),
+                                 ('_ibl_trials.feedback_times.npy', 'alf', True),
+                                 ('_ibl_trials.stimOn_times.npy', 'alf', True),
+                                 ('_ibl_wheel.position.npy', 'alf', True),
+                                 ('_ibl_wheel.timestamps.npy', 'alf', True),
                                  ],
                  # More files are required for all panels of the DLC QC plot to function
                  'output_files': [('_ibl_leftCamera.features.pqt', 'alf', True),
                                   ('_ibl_rightCamera.features.pqt', 'alf', True),
                                   ('licks.times.npy', 'alf', True),
-                                  ('dlc_qc_plot.png', 'snapshot', False)]
+                                  # ('dlc_qc_plot.png', 'snapshot', False)
+                                 ]
                  }
 
     def _run(self, overwrite=False, run_qc=True, plot_qc=True):
