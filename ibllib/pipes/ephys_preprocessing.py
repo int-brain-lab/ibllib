@@ -1089,7 +1089,7 @@ class EphysPostDLC(tasks.Task):
                                  ]
                  }
 
-    def _run(self, overwrite=False, run_qc=True, plot_qc=True):
+    def _run(self, overwrite=True, run_qc=True, plot_qc=True):
         """
         Run the EphysPostDLC task. Returns a list of file locations for the output files in signature. The created plot
         (dlc_qc_plot.png) is not returned, but saved in session_path/snapshots and uploaded to Alyx as a note.
