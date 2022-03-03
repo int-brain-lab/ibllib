@@ -76,7 +76,7 @@ def unit_stability(units_b, units=None, feat_names=['amps'], dist='norm', test='
         distributions are presumed to belong to.
     test : string (optional)
         The statistical test used to compute the probability that the empirical spike feature
-        distributions come from `dist`.
+        distributions come from `dist`.noise
 
     Returns
     -------
@@ -757,7 +757,7 @@ def slidingRP_viol(ts, bin_size=0.25, thresh=0.1, acceptThresh=0.1):
     return didpass
 
 
-def noise_cutoff(amps, quartile_length=.2, n_bins=100, n_low_bins=2):
+def noise_cutoff(amps, quantile_length=.2, n_bins=100, n_low_bins=2):
     """
     A metric to determine whether a unit's amplitude distribution is cut off
     (at floor), without assuming a Gaussian distribution.
@@ -770,7 +770,7 @@ def noise_cutoff(amps, quartile_length=.2, n_bins=100, n_low_bins=2):
     ----------
     amps : ndarray_like
         The amplitudes (in uV) of the spikes.
-    quartile_length : float
+    quantile_length : float
         The size of the upper quartile of the amplitude distribution.
     n_bins : int
         The number of bins used to compute a histogram of the amplitude
@@ -797,22 +797,21 @@ def noise_cutoff(amps, quartile_length=.2, n_bins=100, n_low_bins=2):
     """
 
     if amps.size > 1:
-        bins_list = np.linspace(0, np.max(amps), n_bins)
-        n, bins = np.histogram(amps, bins=bins_list)
-        dx = np.diff(n)
-        idx_nz = np.nonzero(dx)  # indices of nonzeros
-        idx_peak = np.argmax(n)
-        length_top_half = idx_nz[0][-1] - idx_peak
-        high_quartile = 1 - (2 * quartile_length)
+        bins_list = np.linspace(0, np.max(amps), n_bins) #list of bins to compute the amplitude histogram
+        n, bins = np.histogram(amps, bins=bins_list) #construct amplitude histogram
+        idx_nz = np.nonzero(np.diff(n))  # indices of all non-zero differences in bins
+        idx_peak = np.argmax(n)  #peak of amplitude distributions
+        length_top_half = idx_nz[0][-1] - idx_peak   #compute the length of the top half of the distribution -- ignoring zero bins
+        high_quantile = 1 - (2 * quantile_length) #the remaining part of the distribution, which we will compare the low quantile to
 
-        high_quartile_start_ind = int(np.ceil(high_quartile * length_top_half + idx_peak))
-        xx = idx_nz[0][idx_nz[0] > high_quartile_start_ind]
+        high_quantile_start_ind = int(np.ceil(high_quantile * length_top_half + idx_peak)) #the first bin (index) of the high quantile part of the distribution
+        xx = idx_nz[0][idx_nz[0] > high_quantile_start_ind] #x indices that are non zero, in the high quantile 
         if len(n[xx]) > 0:
-            mean_high_quartile = np.mean(n[xx])
-            std_high_quartile = np.std(n[xx])
-            first_low_quartile = np.mean(n[idx_nz[0][1:n_low_bins]])
-            if std_high_quartile > 0:
-                cutoff = (first_low_quartile - mean_high_quartile) / std_high_quartile
+            mean_high_quantile = np.mean(n[xx])
+            std_high_quantile = np.std(n[xx])
+            first_low_quantile = np.mean(n[idx_nz[0][1:n_low_bins]])
+            if std_high_quantile > 0:
+                cutoff = (first_low_quantile - mean_high_quantile) / std_high_quantile
             else:
                 cutoff = np.float64(np.nan)
         else:
