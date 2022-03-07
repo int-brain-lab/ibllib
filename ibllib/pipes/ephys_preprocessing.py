@@ -1122,18 +1122,24 @@ class EphysPostDLC(tasks.Task):
                     dlc = pd.read_parquet(dlc_file)
                     dlc_thresh = likelihood_threshold(dlc, 0.9)
                     # try to load respective camera times
-                    dlc_t = np.load(next(Path(self.session_path).joinpath('alf').glob(f'_ibl_{cam}Camera.times.*npy')))
-                    times = True
-                    if dlc_t.shape[0] == 0:
-                        _logger.error(f'camera.times empty for {cam} camera. '
-                                      f'Computations using camera.times will be skipped')
+                    try:
+                        dlc_t = np.load(next(Path(self.session_path).joinpath('alf').glob(f'_ibl_{cam}Camera.times.*npy')))
+                        times = True
+                        if dlc_t.shape[0] == 0:
+                            _logger.error(f'camera.times empty for {cam} camera. '
+                                          f'Computations using camera.times will be skipped')
+                            self.status = -1
+                            times = False
+                        elif dlc_t.shape[0] < len(dlc_thresh):
+                            _logger.error(f'Camera times shorter than DLC traces for {cam} camera. '
+                                          f'Computations using camera.times will be skipped')
+                            self.status = -1
+                            times = 'short'
+                    except StopIteration:
                         self.status = -1
                         times = False
-                    elif dlc_t.shape[0] < len(dlc_thresh):
-                        _logger.error(f'Camera times shorter than DLC traces for {cam} camera. '
+                        _logger.error(f'No camera.times for {cam} camera. '
                                       f'Computations using camera.times will be skipped')
-                        self.status = -1
-                        times = 'short'
                     # These features are only computed from left and right cam
                     if cam in ('left', 'right'):
                         features = pd.DataFrame()
