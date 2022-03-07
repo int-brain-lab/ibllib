@@ -1086,7 +1086,7 @@ class EphysPostDLC(tasks.Task):
                                   ('_ibl_rightCamera.features.pqt', 'alf', True),
                                   ('licks.times.npy', 'alf', True),
                                   # ('dlc_qc_plot.png', 'snapshot', False)
-                                 ]
+                                  ]
                  }
 
     def _run(self, overwrite=True, run_qc=True, plot_qc=True):
