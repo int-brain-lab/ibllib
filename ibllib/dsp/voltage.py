@@ -296,8 +296,8 @@ def destripe_lfp(x, fs, channel_labels=None, **kwargs):
 
 
 def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, append=False, nc_out=None, butter_kwargs=None,
-                             dtype=np.int16, ns2add=0, nbatch=None, nprocesses=None, compute_rms=True, reject_channels=True,
-                             k_kwargs=None, k_filter=True, reader_kwargs=None):
+                             dtype=np.int16, ns2add=0, nbatch=None, nprocesses=None, nthreads=4, compute_rms=True,
+                             reject_channels=True, k_kwargs=None, k_filter=True, reader_kwargs=None):
     """
     From a spikeglx Reader object, decompresses and apply ADC.
     Saves output as a flat binary file in int16
@@ -313,8 +313,9 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
     :param ns2add: (optional) for kilosort, adds padding samples at the end of the file so the total
     number of samples is a multiple of the batchsize
     :param nbatch: (optional) batch size
-    :param nprocesses: (optional) number of parallel processes to run, defaults to number or processes detected with joblib
-     interp 3:outside of brain and discard
+    :param nprocesses: (optional) number of parallel processes to run, defaults to number of processes detected with joblib
+    :param nthreads: (optional) number of threads to use for each FFTW computation. Defaults to 4. Note that the total
+     number of CPUs used is nprocesses * nthreads
     :param reject_channels: (True) detects noisy or bad channels and interpolate them. Channels outside of the brain are left
      untouched
     :param k_kwargs: (None) arguments for the kfilter function
@@ -346,7 +347,7 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
     nprocesses = nprocesses or int(cpu_count() - cpu_count() / 4)
     win = pyfftw.empty_aligned((ncv, NBATCH), dtype='float32')
     WIN = pyfftw.empty_aligned((ncv, int(NBATCH / 2 + 1)), dtype='complex64')
-    fft_object = pyfftw.FFTW(win, WIN, axes=(1,), direction='FFTW_FORWARD', threads=4)
+    fft_object = pyfftw.FFTW(win, WIN, axes=(1,), direction='FFTW_FORWARD', threads=nthreads)
     dephas = np.zeros((ncv, NBATCH), dtype=np.float32)
     dephas[:, 1] = 1.
     DEPHAS = np.exp(1j * np.angle(fft_object(dephas)) * h['sample_shift'][:, np.newaxis])
@@ -392,8 +393,8 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
         # need to redefine this here to avoid 4 byte boundary error
         win = pyfftw.empty_aligned((ncv, NBATCH), dtype='float32')
         WIN = pyfftw.empty_aligned((ncv, int(NBATCH / 2 + 1)), dtype='complex64')
-        fft_object = pyfftw.FFTW(win, WIN, axes=(1,), direction='FFTW_FORWARD', threads=4)
-        ifft_object = pyfftw.FFTW(WIN, win, axes=(1,), direction='FFTW_BACKWARD', threads=4)
+        fft_object = pyfftw.FFTW(win, WIN, axes=(1,), direction='FFTW_FORWARD', threads=nthreads)
+        ifft_object = pyfftw.FFTW(WIN, win, axes=(1,), direction='FFTW_BACKWARD', threads=nthreads)
 
         fid = open(output_file, 'r+b')
         if i_chunk == 0:
