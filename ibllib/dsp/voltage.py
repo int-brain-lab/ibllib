@@ -481,8 +481,8 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
         rms_data = np.frombuffer(rms_data, dtype=np.float32)
         assert(rms_data.shape[0] == time_data.shape[0] * ncv)
         rms_data = rms_data.reshape(time_data.shape[0], ncv)
-        np.save(Path(sr_file).parent.joinpath('_iblqc_ephysTimeRmsAP.rms.npy'), rms_data)
-        np.save(Path(sr_file).parent.joinpath('_iblqc_ephysTimeRmsAP.timestamps.npy'), time_data)
+        np.save(output_file.parent.joinpath('_iblqc_ephysTimeRmsAP.rms.npy'), rms_data)
+        np.save(output_file.parent.joinpath('_iblqc_ephysTimeRmsAP.timestamps.npy'), time_data)
 
 
 def rcoeff(x, y):
