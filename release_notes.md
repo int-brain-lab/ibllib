@@ -1,5 +1,9 @@
 ## Release Note 2.10
 
+## Release Note 2.10.3 2022-03-09
+- Fixes to EphysPostDLC
+- Small change to storing in dsp.voltage.decompress_destripe_cbin function
+
 ## Release Note 2.10.2 2022-02-28
 - Small fixes to local server task queues
 
