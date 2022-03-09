@@ -335,7 +335,7 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
     butter_kwargs, k_kwargs, spatial_fcn = _get_destripe_parameters(sr.fs, butter_kwargs, k_kwargs, k_filter)
     h = sr.geometry if h is None else h
     ncv = h['sample_shift'].size  # number of channels
-    output_file = sr.file_bin.with_suffix('.bin') if output_file is None else output_file
+    output_file = sr.file_bin.with_suffix('.bin') if output_file is None else Path(output_file)
     assert output_file != sr.file_bin
     taper = np.r_[0, scipy.signal.windows.cosine((SAMPLES_TAPER - 1) * 2), 0]
     # create the FFT stencils
