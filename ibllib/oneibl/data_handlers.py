@@ -147,8 +147,10 @@ class ServerGlobusDataHandler(DataHandler):
         :return:
         """
         if self.lab == 'cortexlab':
-            df = super().getData(one=ONE(base_url='https://alyx.internationalbrainlab.org'))
+            one = ONE(base_url='https://alyx.internationalbrainlab.org')
+            df = super().getData(one=one)
         else:
+            one = self.one
             df = super().getData()
 
         if len(df) == 0:
@@ -173,9 +175,9 @@ class ServerGlobusDataHandler(DataHandler):
             full_local_path = Path(self.globus.endpoints['local']['root_path']).joinpath(sess_path)
             if not full_local_path.exists():
 
-                if self.one._index_type() is int:
+                if one._index_type() is int:
                     uuid = np2str(np.r_[i[0], i[1]])
-                elif self.one._index_type() is str:
+                elif one._index_type() is str:
                     uuid = i
 
                 self.local_paths.append(full_local_path)
