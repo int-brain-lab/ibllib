@@ -148,9 +148,10 @@ class TestDlcQcPlot(unittest.TestCase):
 
     def test_without_inputs(self):
         eid = '3473f9d2-aa5d-41a6-9048-c65d0b7ab97c'
-        with self.assertLogs('ibllib', 'WARNING'):
-            fig = dlc_qc_plot(eid, self.one)
-        fig_path = (Path(self.tmp_dir.name).joinpath('dlc_qc_plot.png'))
-        fig.savefig(fig_path)
-        with Image.open(fig_path) as im:
-            self.assertEqual(im.size, (1700, 1000))
+        with self.assertRaises(AssertionError):
+            dlc_qc_plot(self.one.eid2path(eid), self.one)
+            # fig = dlc_qc_plot(self.one.eid2path(eid), self.one)
+        # fig_path = (Path(self.tmp_dir.name).joinpath('dlc_qc_plot.png'))
+        # fig.savefig(fig_path)
+        # with Image.open(fig_path) as im:
+        #     self.assertEqual(im.size, (1700, 1000))

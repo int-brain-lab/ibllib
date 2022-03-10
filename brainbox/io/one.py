@@ -941,7 +941,7 @@ class SpikeSortingLoader:
         _logger.debug(f"selecting: {collection} to load amongst candidates: {self.collections}")
         return collection
 
-    def _download_spike_sorting_object(self, obj, spike_sorter='pykilosort', dataset_types=None):
+    def download_spike_sorting_object(self, obj, spike_sorter='pykilosort', dataset_types=None):
         """
         Downloads an ALF object
         :param obj: object name, str between 'spikes', 'clusters' or 'channels'
@@ -954,7 +954,8 @@ class SpikeSortingLoader:
         self.collection = self._get_spike_sorting_collection(spike_sorter=spike_sorter)
         _logger.debug(f"loading spike sorting from {self.collection}")
         spike_attributes, cluster_attributes = self._get_attributes(dataset_types)
-        attributes = {'spikes': spike_attributes, 'clusters': cluster_attributes, 'channels': None}
+        attributes = {'spikes': spike_attributes, 'clusters': cluster_attributes, 'channels': None,
+                      'templates': None, 'spikes_subset': None}
         self.files[obj] = self.one.load_object(self.eid, obj=obj, attribute=attributes[obj],
                                                collection=self.collection, download_only=True)
 
@@ -966,7 +967,7 @@ class SpikeSortingLoader:
         :return:
         """
         for obj in ['spikes', 'clusters', 'channels']:
-            self._download_spike_sorting_object(obj=obj, **kwargs)
+            self.download_spike_sorting_object(obj=obj, **kwargs)
         self.spike_sorting_path = self.files['spikes'][0].parent
 
     def load_spike_sorting(self, **kwargs):
