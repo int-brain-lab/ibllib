@@ -1,5 +1,8 @@
 ## Release Note 2.10
 
+## Release Note 2.10.5 2022-03-11
+- Fix moot release accident
+
 ## Release Note 2.10.4 2022-03-11
 - Data handler connects to correct alyx database on cortexlab
 

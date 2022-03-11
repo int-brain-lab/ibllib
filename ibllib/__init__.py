@@ -1,4 +1,4 @@
-__version__ = "2.10.4"
+__version__ = "2.10.5"
 import warnings
 
 from ibllib.misc import logger_config
