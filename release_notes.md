@@ -1,5 +1,8 @@
 ## Release Note 2.10
 
+## Release Note 2.10.4 2022-03-11
+- Data handler connects to correct alyx database on cortexlab
+
 ## Release Note 2.10.3 2022-03-09
 - Fixes to EphysPostDLC
 - Small change to storing in dsp.voltage.decompress_destripe_cbin function
