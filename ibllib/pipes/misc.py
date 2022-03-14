@@ -139,7 +139,7 @@ def backup_session(session_path):
         bk_session_path = Path(*session_path.parts[:-4]).joinpath("Subjects_backup_renamed_sessions", Path(*session_path.parts[-3:]))
         Path(bk_session_path.parent).mkdir(parents=True, exist_ok=True)
         shutil.copytree(str(session_path), str(bk_session_path))
-    except BaseException
+    except BaseException:
         log.error(f"A backup of this session already exist: {bk_session_path}")
 
 
