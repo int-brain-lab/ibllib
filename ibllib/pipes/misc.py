@@ -93,7 +93,7 @@ def check_transfer(src_session_path, dst_session_path):
         assert s.stat().st_size == d.stat().st_size, 'file size mismatch'
 
 
-def rename_session(session_path: str, new_subject=None, new_date=None, new_number=None) -> Path:
+def rename_session(session_path: str, new_subject=None, new_date=None, new_number=None, ask: bool = False) -> Path:
     """
     Rename a session.  Prompts the user for the new subject name, data and number then moves
     session path to new session path.
@@ -109,22 +109,38 @@ def rename_session(session_path: str, new_subject=None, new_date=None, new_numbe
     mouse = session_path.parts[-3]
     date = session_path.parts[-2]
     sess = session_path.parts[-1]
-    new_mouse = new_subject or input(f"Please insert subject NAME [current value: {mouse}]> ") or mouse
-    new_date = new_date or input(f"Please insert new session DATE [current value: {date}]> ") or date
-    new_sess = new_number or input(f"Please insert new session NUMBER [current value: {sess}]> ") or sess
-    new_session_path = Path(*session_path.parts[:-3]) / new_mouse / new_date / new_sess.zfill(3)
+    new_mouse = new_subject or mouse
+    new_date = new_date or date
+    new_sess = new_number or sess
+    if ask:
+        new_mouse = input(f"Please insert subject NAME [current value: {mouse}]> ")
+        new_date = input(f"Please insert new session DATE [current value: {date}]> ")
+        new_sess = input(f"Please insert new session NUMBER [current value: {sess}]> ")
+            
+    new_session_path = Path(*session_path.parts[:-3]).joinpath(new_mouse, new_date, new_sess.zfill(3))
     assert is_session_path(new_session_path), 'invalid subject, date or number'
 
     if new_session_path.exists():
         ans = input(f'Warning: session path {new_session_path} already exists.\nOverwrite? [y/N]')
-        if (ans or 'n').lower()[0] == 'n':
+        if (ans or 'n').lower() in ['n', 'no']:
             return
-
+        backup_session(new_session_path)
+        shutil.rmtree(str(new_session_path), ignore_errors=True)
+    # shutil.copytree(str(session_path), str(new_session_path))
     shutil.move(str(session_path), str(new_session_path))
     print(session_path, "--> renamed to:")
     print(new_session_path)
 
     return new_session_path
+
+def backup_session(session_path):
+    # Move the contents to a bk folder before removing them
+    try:
+        bk_session_path = Path(*session_path.parts[:-4]).joinpath("Subjects_backup_renamed_sessions", Path(*session_path.parts[-3:]))
+        Path(bk_session_path.parent).mkdir(parents=True, exist_ok=True)
+        shutil.copytree(str(session_path), str(bk_session_path))
+    except BaseException
+        log.error(f"A backup of this session already exist: {bk_session_path}")
 
 
 def copy_with_check(src, dst, **kwargs):
@@ -337,8 +353,7 @@ def confirm_video_remote_folder(local_folder=False, remote_folder=False, force=F
             if resp == 'e':
                 print('Exiting.  No files transferred.')
                 return
-            subj, date = session_path.parts[-3:-1]
-            session_path = rename_session(session_path, new_subject=subj, new_date=date, new_number=resp)
+            session_path = rename_session(session_path, new_number=resp)
             if session_path is None:
                 log.info('Skipping session...')
                 continue
