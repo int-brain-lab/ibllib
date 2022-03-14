@@ -39,15 +39,15 @@ def extract_all(session_path, save=True, bpod_trials=None, settings=None):
         files_wheel = []
         wheel = OrderedDict({k: trials.pop(k) for k in tuple(trials.keys()) if 'wheel' in k})
     elif extractor_type in ['biased', 'ephys']:
-        wheel, files_wheel = training_wheel.extract_all(
-            session_path, bpod_trials=bpod_trials, settings=settings, save=save)
         trials, files_trials = biased_trials.extract_all(
             session_path, bpod_trials=bpod_trials, settings=settings, save=save)
+        files_wheel = []
+        wheel = OrderedDict({k: trials.pop(k) for k in tuple(trials.keys()) if 'wheel' in k})
     elif extractor_type in ['biased_opto', 'ephys_biased_opto']:
-        wheel, files_wheel = training_wheel.extract_all(
-            session_path, bpod_trials=bpod_trials, settings=settings, save=save)
         trials, files_trials = opto_trials.extract_all(
             session_path, bpod_trials=bpod_trials, settings=settings, save=save)
+        files_wheel = []
+        wheel = OrderedDict({k: trials.pop(k) for k in tuple(trials.keys()) if 'wheel' in k})
     elif extractor_type == 'habituation':
         if settings['IBLRIG_VERSION_TAG'] and version.le(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
             _logger.warning("No extraction of legacy habituation sessions")

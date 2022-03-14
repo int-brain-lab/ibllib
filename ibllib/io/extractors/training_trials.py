@@ -664,7 +664,7 @@ class TrialsTable(BaseBpodTrialsExtractor):
     var_names = ('table', 'wheel_timestamps', 'wheel_position', 'wheel_moves_intervals',
                  'wheel_moves_peak_amplitude')
 
-    def _extract(self, **kwargs):
+    def _extract(self, extractor_classes=None, **kwargs):
         base = [Intervals, GoCueTimes, ResponseTimes, Choice, StimOnOffFreezeTimes, ContrastLR, FeedbackTimes, FeedbackType,
                 RewardVolume, ProbabilityLeft, Wheel]
         exclude = [
@@ -717,7 +717,7 @@ def extract_all(session_path, save=False, bpod_trials=None, settings=None):
     else:
         base.extend([
             Intervals, Wheel, FeedbackType, ContrastLR, ProbabilityLeft, Choice, IncludedTrials, ItiDuration,
-            StimOnTimes_deprecated, RewardVolume, FeedbackTimes, Intervals, ResponseTimes, GoCueTimes
+            StimOnTimes_deprecated, RewardVolume, FeedbackTimes, ResponseTimes, GoCueTimes
         ])
 
     out, fil = run_extractor_classes(

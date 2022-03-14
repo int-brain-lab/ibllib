@@ -1,7 +1,9 @@
 import numpy as np
+from one.alf.io import AlfBunch
 
 from ibllib.io.extractors.base import BaseBpodTrialsExtractor, run_extractor_classes
 import ibllib.io.raw_data_loaders as raw
+from ibllib.io.extractors.training_wheel import Wheel
 from ibllib.io.extractors.training_trials import (
     Choice, FeedbackTimes, FeedbackType, GoCueTimes, GoCueTriggerTimes,
     IncludedTrials, Intervals, ItiDuration, ProbabilityLeft, ResponseTimes, RewardVolume,
@@ -25,8 +27,42 @@ class ContrastLR(BaseBpodTrialsExtractor):
         return contrastLeft, contrastRight
 
 
-def extract_all(session_path, save=False, bpod_trials=False, settings=False, extra_classes=None):
+class TrialsTable(BaseBpodTrialsExtractor):
     """
+    Extracts the following into a table from Bpod raw data:
+        intervals, goCue_times, response_times, choice, stimOn_times, contrastLeft, contrastRight,
+        feedback_times, feedbackType, rewardVolume, probabilityLeft, firstMovement_times
+    Additionally extracts the following wheel data:
+        wheel_timestamps, wheel_position, wheel_moves_intervals, wheel_moves_peak_amplitude
+    """
+    save_names = ('_ibl_trials.table.pqt', '_ibl_wheel.timestamps.npy', '_ibl_wheel.position.npy',
+                  '_ibl_wheelMoves.intervals.npy', '_ibl_wheelMoves.peakAmplitude.npy')
+    var_names = ('table', 'wheel_timestamps', 'wheel_position', 'wheel_moves_intervals',
+                 'wheel_moves_peak_amplitude')
+
+    def _extract(self, extractor_classes=None, **kwargs):
+        base = [Intervals, GoCueTimes, ResponseTimes, Choice, StimOnOffFreezeTimes, ContrastLR, FeedbackTimes, FeedbackType,
+                RewardVolume, ProbabilityLeft, Wheel]
+        exclude = [
+            'stimOff_times', 'stimFreeze_times', 'wheel_timestamps', 'wheel_position',
+            'wheel_moves_intervals', 'wheel_moves_peak_amplitude', 'peakVelocity_times', 'is_final_movement'
+        ]
+        out, _ = run_extractor_classes(base,
+            session_path=self.session_path, bpod_trials=self.bpod_trials, settings=self.settings, save=False
+        )
+        table = AlfBunch({k: v for k, v in out.items() if k not in exclude})
+        assert len(table.keys()) == 12
+
+        return table.to_df(), *(out.pop(x) for x in self.var_names if x != 'table')
+
+
+def extract_all(session_path, save=False, bpod_trials=False, settings=False):
+    """
+    Same as training_trials.extract_all except...
+     - there is no RepNum
+     - ContrastLR is extracted differently
+     - IncludedTrials is only extracted for 5.0.0 or greater
+
     :param session_path:
     :param save:
     :param bpod_trials:
@@ -40,18 +76,20 @@ def extract_all(session_path, save=False, bpod_trials=False, settings=False, ext
         settings = raw.load_settings(session_path)
     if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
         settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
-    base = [FeedbackType, ContrastLR, ProbabilityLeft, Choice, RewardVolume,
-            FeedbackTimes, Intervals, ResponseTimes, GoCueTriggerTimes, GoCueTimes]
 
-    # Version specific extractions
+    base = [GoCueTriggerTimes]
+    # Version check
     if version.ge(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
-        base.extend([StimOnTriggerTimes, IncludedTrials, StimOnOffFreezeTimes, ItiInTimes,
-                     StimOffTriggerTimes, StimFreezeTriggerTimes, ErrorCueTriggerTimes])
+        # We now extract a single trials table
+        base.extend([
+            StimOnTriggerTimes, ItiInTimes, StimOffTriggerTimes, StimFreezeTriggerTimes, ErrorCueTriggerTimes, TrialsTable,
+            IncludedTrials
+        ])
     else:
-        base.extend([ItiDuration, StimOnTimes_deprecated])
-
-    if extra_classes:
-        base.extend(extra_classes)
+        base.extend([
+            Intervals, Wheel, FeedbackType, ContrastLR, ProbabilityLeft, Choice, ItiDuration,
+            StimOnTimes_deprecated, RewardVolume, FeedbackTimes, ResponseTimes, GoCueTimes
+        ])
 
     out, fil = run_extractor_classes(
         base, save=save, session_path=session_path, bpod_trials=bpod_trials, settings=settings)
