@@ -1,5 +1,8 @@
 ## Release Note 2.10
 
+## For next release:
+- Allow parent tasks to be 'Incomplete' to run task on local server
+
 ## Release Note 2.10.5 2022-03-11
 - Fix moot release accident
 
