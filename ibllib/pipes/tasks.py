@@ -522,7 +522,7 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
         parent_tasks = filter(lambda x: x['id'] in tdict['parents'], job_deck)
         parent_statuses = [j['status'] for j in parent_tasks]
         # if any of the parent tasks is not complete, throw a warning
-        if any(map(lambda s: s != 'Complete', parent_statuses)):
+        if any(map(lambda s: s not in ['Complete', 'Incomplete'], parent_statuses)):
             _logger.warning(f"{tdict['name']} has unmet dependencies")
             # if parents are just waiting, don't do anything, but if they have a failed status
             # set the current task status to Held
