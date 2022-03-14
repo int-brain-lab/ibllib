@@ -280,19 +280,19 @@ def destripe(x, fs, neuropixel_version=1, butter_kwargs=None, k_kwargs=None, cha
     return x
 
 
-def destripe_lfp(x, fs):
+def destripe_lfp(x, fs, channel_labels=None, **kwargs):
     """
     Wrapper around the destipe function with some default parameters to destripe the LFP band
+    See help destripe function for documentation
     :param x:
     :param fs:
     :return:
     """
-    butter_kwargs = {'N': 3, 'Wn': 2 / fs * 2, 'btype': 'highpass'}
-    k_kwargs = {'ntr_pad': 60, 'ntr_tap': 0, 'lagc': None,
-                'butter_kwargs': {'N': 3, 'Wn': 0.001, 'btype': 'highpass'}}
-    # butterworth, for display only
-    channel_labels, channel_features = detect_bad_channels(x, fs=fs, psd_hf_threshold=1.4)
-    return destripe(x, fs, butter_kwargs=butter_kwargs, channel_labels=channel_labels, k_kwargs=k_kwargs)
+    kwargs['butter_kwargs'] = {'N': 3, 'Wn': 2 / fs * 2, 'btype': 'highpass'}
+    kwargs['k_filter'] = False
+    if channel_labels is True:
+        kwargs['channel_labels'], _ = detect_bad_channels(x, fs=fs, psd_hf_threshold=1.4)
+    return destripe(x, fs, **kwargs)
 
 
 def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, append=False, nc_out=None, butter_kwargs=None,
@@ -335,7 +335,7 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
     butter_kwargs, k_kwargs, spatial_fcn = _get_destripe_parameters(sr.fs, butter_kwargs, k_kwargs, k_filter)
     h = sr.geometry if h is None else h
     ncv = h['sample_shift'].size  # number of channels
-    output_file = sr.file_bin.with_suffix('.bin') if output_file is None else output_file
+    output_file = sr.file_bin.with_suffix('.bin') if output_file is None else Path(output_file)
     assert output_file != sr.file_bin
     taper = np.r_[0, scipy.signal.windows.cosine((SAMPLES_TAPER - 1) * 2), 0]
     # create the FFT stencils
@@ -481,8 +481,8 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
         rms_data = np.frombuffer(rms_data, dtype=np.float32)
         assert(rms_data.shape[0] == time_data.shape[0] * ncv)
         rms_data = rms_data.reshape(time_data.shape[0], ncv)
-        np.save(Path(sr_file).parent.joinpath('_iblqc_ephysTimeRmsAP.rms.npy'), rms_data)
-        np.save(Path(sr_file).parent.joinpath('_iblqc_ephysTimeRmsAP.timestamps.npy'), time_data)
+        np.save(output_file.parent.joinpath('_iblqc_ephysTimeRmsAP.rms.npy'), rms_data)
+        np.save(output_file.parent.joinpath('_iblqc_ephysTimeRmsAP.timestamps.npy'), time_data)
 
 
 def rcoeff(x, y):

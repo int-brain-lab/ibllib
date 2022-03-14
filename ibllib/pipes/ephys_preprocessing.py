@@ -1055,9 +1055,6 @@ class EphysDLC(tasks.Task):
 class EphysPostDLC(tasks.Task):
     """
     The post_dlc task takes dlc traces as input and computes useful quantities, as well as qc.
-
-    For creating the full dlc_qc_plot, several other inputs are required that can be found in the docstring of
-    :py:func:ibllib.plots.figures.dlc_qc_plot
     """
     io_charge = 90
     level = 3
@@ -1067,20 +1064,38 @@ class EphysPostDLC(tasks.Task):
                                  ('_ibl_rightCamera.dlc.pqt', 'alf', True),
                                  ('_ibl_rightCamera.times.npy', 'alf', True),
                                  ('_ibl_leftCamera.times.npy', 'alf', True),
-                                 ('_ibl_bodyCamera.times.npy', 'alf', True)],
+                                 ('_ibl_bodyCamera.times.npy', 'alf', True),
+                                 # the following are required for the DLC plot only
+                                 # they are not strictly required, some plots just might be skipped
+                                 # In particular the raw videos don't need to be downloaded as they can be streamed
+                                 ('_iblrig_bodyCamera.raw.mp4', 'raw_video_data', True),
+                                 ('_iblrig_leftCamera.raw.mp4', 'raw_video_data', True),
+                                 ('_iblrig_rightCamera.raw.mp4', 'raw_video_data', True),
+                                 ('rightROIMotionEnergy.position.npy', 'alf', True),
+                                 ('leftROIMotionEnergy.position.npy', 'alf', True),
+                                 ('bodyROIMotionEnergy.position.npy', 'alf', True),
+                                 ('_ibl_trials.choice.npy', 'alf', True),
+                                 ('_ibl_trials.feedbackType.npy', 'alf', True),
+                                 ('_ibl_trials.feedback_times.npy', 'alf', True),
+                                 ('_ibl_trials.stimOn_times.npy', 'alf', True),
+                                 ('_ibl_wheel.position.npy', 'alf', True),
+                                 ('_ibl_wheel.timestamps.npy', 'alf', True),
+                                 ],
                  # More files are required for all panels of the DLC QC plot to function
                  'output_files': [('_ibl_leftCamera.features.pqt', 'alf', True),
                                   ('_ibl_rightCamera.features.pqt', 'alf', True),
-                                  ('licks.times.npy', 'alf', True)]
+                                  ('licks.times.npy', 'alf', True),
+                                  # ('dlc_qc_plot.png', 'snapshot', False)
+                                  ]
                  }
 
-    def _run(self, overwrite=False, run_qc=True, plot_qc=True):
+    def _run(self, overwrite=True, run_qc=True, plot_qc=True):
         """
         Run the EphysPostDLC task. Returns a list of file locations for the output files in signature. The created plot
         (dlc_qc_plot.png) is not returned, but saved in session_path/snapshots and uploaded to Alyx as a note.
 
         :param overwrite: bool, whether to recompute existing output files (default is False).
-                          Note that the dlc_qc_plot will be computed even if overwrite = False
+                          Note that the dlc_qc_plot will be (re-)computed even if overwrite = False
         :param run_qc: bool, whether to run the DLC QC (default is True)
         :param plot_qc: book, whether to create the dlc_qc_plot (default is True)
 
@@ -1092,7 +1107,7 @@ class EphysPostDLC(tasks.Task):
         else:
             if exist and overwrite:
                 _logger.warning('EphysPostDLC outputs exist and overwrite=True, overwriting existing outputs.')
-            # Find all available dlc traces and dlc times
+            # Find all available dlc files
             dlc_files = list(Path(self.session_path).joinpath('alf').glob('_ibl_*Camera.dlc.*'))
             for dlc_file in dlc_files:
                 _logger.debug(dlc_file)
@@ -1107,18 +1122,24 @@ class EphysPostDLC(tasks.Task):
                     dlc = pd.read_parquet(dlc_file)
                     dlc_thresh = likelihood_threshold(dlc, 0.9)
                     # try to load respective camera times
-                    dlc_t = np.load(next(Path(self.session_path).joinpath('alf').glob(f'_ibl_{cam}Camera.times.*npy')))
-                    times = True
-                    if dlc_t.shape[0] == 0:
-                        _logger.error(f'camera.times empty for {cam} camera. '
-                                      f'Computations using camera.times will be skipped')
+                    try:
+                        dlc_t = np.load(next(Path(self.session_path).joinpath('alf').glob(f'_ibl_{cam}Camera.times.*npy')))
+                        times = True
+                        if dlc_t.shape[0] == 0:
+                            _logger.error(f'camera.times empty for {cam} camera. '
+                                          f'Computations using camera.times will be skipped')
+                            self.status = -1
+                            times = False
+                        elif dlc_t.shape[0] < len(dlc_thresh):
+                            _logger.error(f'Camera times shorter than DLC traces for {cam} camera. '
+                                          f'Computations using camera.times will be skipped')
+                            self.status = -1
+                            times = 'short'
+                    except StopIteration:
                         self.status = -1
                         times = False
-                    elif dlc_t.shape[0] < len(dlc_thresh):
-                        _logger.error(f'Camera times shorter than DLC traces for {cam} camera. '
+                        _logger.error(f'No camera.times for {cam} camera. '
                                       f'Computations using camera.times will be skipped')
-                        self.status = -1
-                        times = 'short'
                     # These features are only computed from left and right cam
                     if cam in ('left', 'right'):
                         features = pd.DataFrame()
@@ -1147,7 +1168,7 @@ class EphysPostDLC(tasks.Task):
                         output_files.append(features_file)
 
                     # For all cams, compute DLC qc if times available
-                    if times is True or times == 'short' and run_qc:
+                    if run_qc is True and times in [True, 'short']:
                         # Setting download_data to False because at this point the data should be there
                         qc = DlcQC(self.session_path, side=cam, one=self.one, download_data=False)
                         qc.run(update=True)
@@ -1177,7 +1198,7 @@ class EphysPostDLC(tasks.Task):
                 fig_path = self.session_path.joinpath('snapshot', 'dlc_qc_plot.png')
                 if not fig_path.parent.exists():
                     fig_path.parent.mkdir(parents=True, exist_ok=True)
-                fig = dlc_qc_plot(self.one.path2eid(self.session_path), one=self.one)
+                fig = dlc_qc_plot(self.session_path, one=self.one)
                 fig.savefig(fig_path)
                 fig.clf()
                 snp = ReportSnapshot(self.session_path, session_id, one=self.one)

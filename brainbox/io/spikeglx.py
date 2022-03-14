@@ -2,6 +2,7 @@ import shutil
 import logging
 from pathlib import Path
 import time
+import json
 
 import numpy as np
 
@@ -116,26 +117,38 @@ def stream(pid, t0, nsecs=1, one=None, cache_folder=None, remove_cached=False, t
     :param one: An instance of ONE
     :param cache_folder:
     :param typ: 'ap' or 'lf'
-    :return: sr, dsets, t0
+    :return: sr, t0
     """
-    CHUNK_DURATION_SECS = 1  # the mtscomp chunk duration. Right now it's a constant
     if nsecs > 10:
-        ValueError(f'Streamer works only with 10 or less seconds, set nsecs to lesss than {nsecs}')
+        ValueError(f'Streamer works only with 10 or less seconds, set nsecs to less than {nsecs}')
     assert one
     assert typ in ['lf', 'ap']
-    t0 = np.floor(t0 / CHUNK_DURATION_SECS) * CHUNK_DURATION_SECS
+
     if cache_folder is None:
         samples_folder = Path(one.alyx._par.CACHE_DIR).joinpath('cache', typ)
+
+    def _get_file(one_rec):
+        fpath = Path(one.alyx._par.CACHE_DIR).joinpath(
+            str(one_rec['session_path'].values[0]),
+            str(one_rec['rel_path'].values[0]))
+        if fpath.exists():
+            return fpath
+        else:
+            return one._download_datasets(one_rec)[0]
 
     eid, pname = one.pid2eid(pid)
     cbin_rec = one.list_datasets(eid, collection=f"*{pname}", filename=f'*{typ}.*bin', details=True)
     ch_rec = one.list_datasets(eid, collection=f"*{pname}", filename=f'*{typ}.ch', details=True)
     meta_rec = one.list_datasets(eid, collection=f"*{pname}", filename=f'*{typ}.meta', details=True)
-    ch_file = one._download_datasets(ch_rec)[0]
-    one._download_datasets(meta_rec)[0]
+    ch_file = _get_file(ch_rec)
+    _get_file(meta_rec)
 
-    first_chunk = int(t0 / CHUNK_DURATION_SECS)
-    last_chunk = int((t0 + nsecs) / CHUNK_DURATION_SECS) - 1
+    with open(ch_file) as fid:
+        chinfo = json.load(fid)
+    tbounds = np.array(chinfo['chunk_bounds']) / chinfo['sample_rate']
+    first_chunk = np.maximum(0, np.searchsorted(tbounds, t0 + 0.01) - 1)
+    last_chunk = np.maximum(0, np.searchsorted(tbounds, t0 + + 0.01 + nsecs) - 2)
+    t0 = tbounds[first_chunk]
 
     samples_folder.mkdir(exist_ok=True, parents=True)
     sr = spikeglx.download_raw_partial(
