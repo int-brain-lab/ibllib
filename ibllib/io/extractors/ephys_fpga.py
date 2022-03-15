@@ -14,7 +14,7 @@ from iblutil.util import Bunch
 import ibllib.dsp as dsp
 import ibllib.exceptions as err
 from ibllib.io import raw_data_loaders, spikeglx
-from ibllib.io.extractors import bpod_trials as bpod_extract_all
+from ibllib.io.extractors.bpod_trials import extract_all as bpod_extract_all
 import ibllib.io.extractors.base as extractors_base
 from ibllib.io.extractors.training_wheel import extract_wheel_moves
 import ibllib.plots as plots
@@ -590,9 +590,9 @@ class FpgaTrials(extractors_base.BaseExtractor):
                  'goCueTrigger_times', 'stimOnTrigger_times',
                  'stimOffTrigger_times', 'stimFreezeTrigger_times', 'errorCueTrigger_times',
                  'errorCue_times', 'itiIn_times',
-                 'stimFreeze_times', 'stimOff_times', 'valveOpen_times',
+                 'stimFreeze_times', 'stimOff_times', 'valveOpen_times', 'table',
                  'wheel_timestamps', 'wheel_position',
-                 'wheelMoves_intervals', 'wheelMoves_peakAmplitude', 'trialsTable')
+                 'wheelMoves_intervals', 'wheelMoves_peakAmplitude')
 
     # Fields from bpod extractor that we want to resync to FPGA
     bpod_rsync_fields = ['intervals', 'response_times', 'goCueTrigger_times',
@@ -620,9 +620,9 @@ class FpgaTrials(extractors_base.BaseExtractor):
 
         bpod_trials = self._extract_bpod(bpod_raw, save=False)
         # Explode trials table df
-        trials_table = bpod_trials.pop('table')
-        table_columns = trials_table.columns
-        bpod_trials = {**bpod_trials, **alfio.AlfBunch.from_df(trials_table)}
+        trials_table = alfio.AlfBunch.from_df(bpod_trials.pop('table'))
+        table_columns = trials_table.keys()
+        bpod_trials.update(trials_table)
         # synchronize
         bpod_trials['intervals_bpod'] = np.copy(bpod_trials['intervals'])
         fpga_trials = extract_behaviour_sync(sync=sync, chmap=chmap, bpod_trials=bpod_trials)
@@ -657,7 +657,7 @@ class FpgaTrials(extractors_base.BaseExtractor):
                                         moves['intervals'], moves['peakAmplitude']]
 
     def _extract_bpod(self, bpod_trials, save=False):
-        bpod_trials, _ = bpod_extract_all(
+        bpod_trials, *_ = bpod_extract_all(
             session_path=self.session_path, save=save, bpod_trials=bpod_trials)
 
         return bpod_trials
