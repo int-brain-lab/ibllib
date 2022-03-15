@@ -30,21 +30,27 @@ def extract_all(session_path, save=True, bpod_trials=None, settings=None):
     bpod_trials = bpod_trials or rawio.load_data(session_path)
     settings = settings or rawio.load_settings(session_path)
     _logger.info(f'{extractor_type} session on {settings["PYBPOD_BOARD"]}')
-    if extractor_type == 'training':
+    if extractor_type in ['training', 'ephys_training']:
         trials, files_trials = training_trials.extract_all(
             session_path, bpod_trials=bpod_trials, settings=settings, save=save)
         # This is hacky but avoids extracting the wheel twice.
         # files_trials should contain wheel files at the end.
         files_wheel = []
         wheel = OrderedDict({k: trials.pop(k) for k in tuple(trials.keys()) if 'wheel' in k})
-    elif extractor_type in ['biased', 'ephys']:
+    elif extractor_type in ['biased_opto', 'ephys_biased_opto']:
+        trials, files_trials = opto_trials.extract_all(
+            session_path, bpod_trials=bpod_trials, settings=settings, save=save)
+        files_wheel = []
+        wheel = OrderedDict({k: trials.pop(k) for k in tuple(trials.keys()) if 'wheel' in k})
+    elif extractor_type in ['biased', 'ephys_biased']:
         trials, files_trials = biased_trials.extract_all(
             session_path, bpod_trials=bpod_trials, settings=settings, save=save)
         files_wheel = []
         wheel = OrderedDict({k: trials.pop(k) for k in tuple(trials.keys()) if 'wheel' in k})
-    elif extractor_type in ['biased_opto', 'ephys_biased_opto']:
-        trials, files_trials = opto_trials.extract_all(
-            session_path, bpod_trials=bpod_trials, settings=settings, save=save)
+    elif 'ephys' in extractor_type:
+        extra = [biased_trials.TrialsTableEphys]
+        trials, files_trials = biased_trials.extract_all(
+            session_path, bpod_trials=bpod_trials, settings=settings, save=save, extra_classes=extra)
         files_wheel = []
         wheel = OrderedDict({k: trials.pop(k) for k in tuple(trials.keys()) if 'wheel' in k})
     elif extractor_type == 'habituation':

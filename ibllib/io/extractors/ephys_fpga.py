@@ -3,19 +3,18 @@ Complete FPGA data extraction depends on Bpod extraction
 """
 from collections import OrderedDict
 import logging
-from pathlib import Path, PureWindowsPath
+from pathlib import Path
 import uuid
 
 import matplotlib.pyplot as plt
 import numpy as np
-from pkg_resources import parse_version
 
 import one.alf.io as alfio
 from iblutil.util import Bunch
 import ibllib.dsp as dsp
 import ibllib.exceptions as err
 from ibllib.io import raw_data_loaders, spikeglx
-from ibllib.io.extractors import biased_trials, training_trials
+from ibllib.io.extractors import bpod_trials as bpod_extract_all
 import ibllib.io.extractors.base as extractors_base
 from ibllib.io.extractors.training_wheel import extract_wheel_moves
 import ibllib.plots as plots
@@ -580,64 +579,6 @@ def get_main_probe_sync(session_path, bin_exists=False):
     return sync, sync_chmap
 
 
-class ProbaContrasts(extractors_base.BaseBpodTrialsExtractor):
-    """
-    Bpod pre-generated values for probabilityLeft, contrastLR, phase, quiescence
-    """
-    save_names = ('_ibl_trials.contrastLeft.npy', '_ibl_trials.contrastRight.npy', None, None,
-                  '_ibl_trials.probabilityLeft.npy', None)
-    var_names = ('contrastLeft', 'contrastRight', 'phase',
-                 'position', 'probabilityLeft', 'quiescence')
-
-    def _extract(self, **kwargs):
-        """Extracts positions, contrasts, quiescent delay, stimulus phase and probability left
-        from pregenerated session files.
-        Optional: saves alf contrastLR and probabilityLeft npy files"""
-        pe = self.get_pregenerated_events(self.bpod_trials, self.settings)
-        return [pe[k] for k in sorted(pe.keys())]
-
-    @staticmethod
-    def get_pregenerated_events(bpod_trials, settings):
-        num = settings.get("PRELOADED_SESSION_NUM", None)
-        if num is None:
-            num = settings.get("PREGENERATED_SESSION_NUM", None)
-        if num is None:
-            fn = settings.get('SESSION_LOADED_FILE_PATH', '')
-            fn = PureWindowsPath(fn).name
-            num = ''.join([d for d in fn if d.isdigit()])
-            if num == '':
-                raise ValueError("Can't extract left probability behaviour.")
-        # Load the pregenerated file
-        ntrials = len(bpod_trials)
-        sessions_folder = Path(raw_data_loaders.__file__).parent.joinpath(
-            "extractors", "ephys_sessions")
-        fname = f"session_{num}_ephys_pcqs.npy"
-        pcqsp = np.load(sessions_folder.joinpath(fname))
-        pos = pcqsp[:, 0]
-        con = pcqsp[:, 1]
-        pos = pos[: ntrials]
-        con = con[: ntrials]
-        contrastRight = con.copy()
-        contrastLeft = con.copy()
-        contrastRight[pos < 0] = np.nan
-        contrastLeft[pos > 0] = np.nan
-        qui = pcqsp[:, 2]
-        qui = qui[: ntrials]
-        phase = pcqsp[:, 3]
-        phase = phase[: ntrials]
-        pLeft = pcqsp[:, 4]
-        pLeft = pLeft[: ntrials]
-
-        phase_path = sessions_folder.joinpath(f"session_{num}_stim_phase.npy")
-        is_patched_version = parse_version(
-            settings.get('IBLRIG_VERSION_TAG', 0)) > parse_version('6.4.0')
-        if phase_path.exists() and is_patched_version:
-            phase = np.load(phase_path)[:ntrials]
-
-        return {'position': pos, 'quiescence': qui, 'phase': phase, 'probabilityLeft': pLeft,
-                'contrastRight': contrastRight, 'contrastLeft': contrastLeft}
-
-
 class FpgaTrials(extractors_base.BaseExtractor):
     save_names = ('_ibl_trials.intervals_bpod.npy',
                   '_ibl_trials.goCueTrigger_times.npy', None, None, None, None, None, None, None,
@@ -668,7 +609,7 @@ class FpgaTrials(extractors_base.BaseExtractor):
         # load the bpod data and performs a biased choice world training extraction
         bpod_raw = raw_data_loaders.load_data(self.session_path)
         assert bpod_raw is not None, "No task trials data in raw_behavior_data - Exit"
-        bpod_trials, _ = biased_trials.extract_all(
+        bpod_trials, _ = bpod_extract_all(
             session_path=self.session_path, save=False, bpod_trials=bpod_raw)
         # Explode trials table df
         trials_table = bpod_trials.pop('table')
@@ -727,18 +668,7 @@ def extract_all(session_path, save=True, bin_exists=False):
     """
     extractor_type = extractors_base.get_session_extractor_type(session_path)
     _logger.info(f"Extracting {session_path} as {extractor_type}")
-    basecls = [FpgaTrials]
-    if extractor_type in ['ephys', 'mock_ephys', 'sync_ephys']:
-        basecls.extend([ProbaContrasts])
-    elif extractor_type in ['ephys_biased']:
-        basecls.extend([biased_trials.ProbabilityLeft, biased_trials.ContrastLR])
-    elif extractor_type in ['ephys_training']:
-        basecls.extend([training_trials.ProbabilityLeft, training_trials.ContrastLR])
-    elif extractor_type in ['ephys_biased_opto']:
-        from ibllib.io.extractors import opto_trials
-        basecls.extend([biased_trials.ProbabilityLeft, biased_trials.ContrastLR,
-                        opto_trials.LaserBool])
     sync, chmap = get_main_probe_sync(session_path, bin_exists=bin_exists)
     outputs, files = extractors_base.run_extractor_classes(
-        basecls, session_path=session_path, save=save, sync=sync, chmap=chmap)
+        FpgaTrials, session_path=session_path, save=save, sync=sync, chmap=chmap)
     return outputs, files
