@@ -585,14 +585,22 @@ class FpgaTrials(extractors_base.BaseExtractor):
                   '_ibl_trials.stimOff_times.npy', None,
                   '_ibl_wheel.timestamps.npy',
                   '_ibl_wheel.position.npy', '_ibl_wheelMoves.intervals.npy',
-                  '_ibl_wheelMoves.peakAmplitude.npy')
+                  '_ibl_wheelMoves.peakAmplitude.npy', '_ibl_trials.table.pqt')
     var_names = ('intervals_bpod',
                  'goCueTrigger_times', 'stimOnTrigger_times',
                  'stimOffTrigger_times', 'stimFreezeTrigger_times', 'errorCueTrigger_times',
                  'errorCue_times', 'itiIn_times',
                  'stimFreeze_times', 'stimOff_times', 'valveOpen_times',
                  'wheel_timestamps', 'wheel_position',
-                 'wheelMoves_intervals', 'wheelMoves_peakAmplitude')
+                 'wheelMoves_intervals', 'wheelMoves_peakAmplitude', 'trialsTable')
+
+    # Fields from bpod extractor that we want to resync to FPGA
+    bpod_rsync_fields = ['intervals', 'response_times', 'goCueTrigger_times',
+                         'stimOnTrigger_times', 'stimOffTrigger_times',
+                         'stimFreezeTrigger_times', 'errorCueTrigger_times']
+
+    # Fields from bpod extractor that we want to save
+    bpod_fields = ['feedbackType', 'choice', 'rewardVolume', 'contrastLeft', 'contrastRight', 'probabilityLeft', 'intervals_bpod']
 
     def __init__(self, *args, **kwargs):
         """An extractor for all ephys trial data, in FPGA time"""
@@ -609,8 +617,8 @@ class FpgaTrials(extractors_base.BaseExtractor):
         # load the bpod data and performs a biased choice world training extraction
         bpod_raw = raw_data_loaders.load_data(self.session_path)
         assert bpod_raw is not None, "No task trials data in raw_behavior_data - Exit"
-        bpod_trials, _ = bpod_extract_all(
-            session_path=self.session_path, save=False, bpod_trials=bpod_raw)
+
+        bpod_trials = self._extract_bpod(bpod_raw, save=False)
         # Explode trials table df
         trials_table = bpod_trials.pop('table')
         table_columns = trials_table.columns
@@ -629,15 +637,9 @@ class FpgaTrials(extractors_base.BaseExtractor):
         if drift_ppm > BPOD_FPGA_DRIFT_THRESHOLD_PPM:
             _logger.warning('BPOD/FPGA synchronization shows values greater than %i ppm',
                             BPOD_FPGA_DRIFT_THRESHOLD_PPM)
-        # those fields get directly in the output
-        bpod_fields = ['feedbackType', 'choice', 'rewardVolume', 'intervals_bpod']
-        # those fields have to be resynced
-        bpod_rsync_fields = ['intervals', 'response_times', 'goCueTrigger_times',
-                             'stimOnTrigger_times', 'stimOffTrigger_times',
-                             'stimFreezeTrigger_times', 'errorCueTrigger_times']
         out = OrderedDict()
-        out.update({k: bpod_trials[k][ibpod] for k in bpod_fields})
-        out.update({k: self.bpod2fpga(bpod_trials[k][ibpod]) for k in bpod_rsync_fields})
+        out.update({k: bpod_trials[k][ibpod] for k in self.bpod_fields})
+        out.update({k: self.bpod2fpga(bpod_trials[k][ibpod]) for k in self.bpod_rsync_fields})
         out.update({k: fpga_trials[k][ifpga] for k in sorted(fpga_trials.keys())})
         # extract the wheel data
         wheel, moves = get_wheel_positions(sync=sync, chmap=chmap)
@@ -653,6 +655,12 @@ class FpgaTrials(extractors_base.BaseExtractor):
         assert tuple(filter(lambda x: 'wheel' not in x, self.var_names)) == tuple(out.keys())
         return [out[k] for k in out] + [wheel['timestamps'], wheel['position'],
                                         moves['intervals'], moves['peakAmplitude']]
+
+    def _extract_bpod(self, bpod_trials, save=False):
+        bpod_trials, _ = bpod_extract_all(
+            session_path=self.session_path, save=save, bpod_trials=bpod_trials)
+
+        return bpod_trials
 
 
 def extract_all(session_path, save=True, bin_exists=False):
