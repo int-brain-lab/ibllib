@@ -9,6 +9,7 @@ from ibllib.io.extractors.training_wheel import get_wheel_position
 from ibllib.io.extractors import ephys_fpga
 import ibllib.io.raw_data_loaders as raw
 from one.alf.spec import is_session_path
+import one.alf.io as alfio
 from one.api import ONE
 
 
@@ -176,6 +177,10 @@ class TaskQCExtractor(object):
         :param data: A dict of task data returned by the task extractors
         :return: the same dict after modifying the keys
         """
+        # Expand trials dataframe into key value pairs
+        trials_table = data.pop('table', None)
+        if trials_table:
+            data = {**data, **alfio.AlfBunch.from_df(trials_table)}
         correct = data['feedbackType'] > 0
         # get valve_time and errorCue_times from feedback_times
         if 'errorCue_times' not in data:

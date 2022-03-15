@@ -3,12 +3,12 @@ from one.alf.io import AlfBunch
 
 from ibllib.io.extractors.base import BaseBpodTrialsExtractor, run_extractor_classes
 import ibllib.io.raw_data_loaders as raw
-from ibllib.io.extractors.training_wheel import Wheel
 from ibllib.io.extractors.training_trials import (
     Choice, FeedbackTimes, FeedbackType, GoCueTimes, GoCueTriggerTimes,
     IncludedTrials, Intervals, ItiDuration, ProbabilityLeft, ResponseTimes, RewardVolume,
     StimOnTimes_deprecated, StimOnTriggerTimes, StimOnOffFreezeTimes, ItiInTimes,
     StimOffTriggerTimes, StimFreezeTriggerTimes, ErrorCueTriggerTimes)
+from ibllib.io.extractors.training_wheel import Wheel
 from ibllib.misc import version
 
 
@@ -47,8 +47,8 @@ class TrialsTable(BaseBpodTrialsExtractor):
             'stimOff_times', 'stimFreeze_times', 'wheel_timestamps', 'wheel_position',
             'wheel_moves_intervals', 'wheel_moves_peak_amplitude', 'peakVelocity_times', 'is_final_movement'
         ]
-        out, _ = run_extractor_classes(base,
-            session_path=self.session_path, bpod_trials=self.bpod_trials, settings=self.settings, save=False
+        out, _ = run_extractor_classes(
+            base, session_path=self.session_path, bpod_trials=self.bpod_trials, settings=self.settings, save=False
         )
         table = AlfBunch({k: v for k, v in out.items() if k not in exclude})
         assert len(table.keys()) == 12

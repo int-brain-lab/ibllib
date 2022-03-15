@@ -671,8 +671,8 @@ class TrialsTable(BaseBpodTrialsExtractor):
             'stimOff_times', 'stimFreeze_times', 'wheel_timestamps', 'wheel_position',
             'wheel_moves_intervals', 'wheel_moves_peak_amplitude', 'peakVelocity_times', 'is_final_movement'
         ]
-        out, _ = run_extractor_classes(base,
-            session_path=self.session_path, bpod_trials=self.bpod_trials, settings=self.settings, save=False
+        out, _ = run_extractor_classes(
+            base, session_path=self.session_path, bpod_trials=self.bpod_trials, settings=self.settings, save=False
         )
         table = AlfBunch({k: v for k, v in out.items() if k not in exclude})
         assert len(table.keys()) == 12

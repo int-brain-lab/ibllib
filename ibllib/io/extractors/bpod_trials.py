@@ -5,8 +5,7 @@ i.e. habituation, training or biased.
 import logging
 from collections import OrderedDict
 
-from ibllib.io.extractors import (habituation_trials, training_trials, biased_trials,
-                                  training_wheel, opto_trials)
+from ibllib.io.extractors import habituation_trials, training_trials, biased_trials, opto_trials
 import ibllib.io.extractors.base
 import ibllib.io.raw_data_loaders as rawio
 from ibllib.misc import version

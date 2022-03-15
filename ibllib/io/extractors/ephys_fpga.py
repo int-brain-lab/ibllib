@@ -639,21 +639,18 @@ class ProbaContrasts(extractors_base.BaseBpodTrialsExtractor):
 
 
 class FpgaTrials(extractors_base.BaseExtractor):
-    save_names = ('_ibl_trials.feedbackType.npy', '_ibl_trials.choice.npy',
-                  '_ibl_trials.rewardVolume.npy', '_ibl_trials.intervals_bpod.npy',
-                  '_ibl_trials.intervals.npy', '_ibl_trials.response_times.npy',
-                  '_ibl_trials.goCueTrigger_times.npy', None, None, None, None, None,
-                  '_ibl_trials.feedback_times.npy', '_ibl_trials.goCue_times.npy', None, None,
-                  '_ibl_trials.stimOff_times.npy', '_ibl_trials.stimOn_times.npy', None,
-                  '_ibl_trials.firstMovement_times.npy', '_ibl_wheel.timestamps.npy',
+    save_names = ('_ibl_trials.intervals_bpod.npy',
+                  '_ibl_trials.goCueTrigger_times.npy', None, None, None, None, None, None, None,
+                  '_ibl_trials.stimOff_times.npy', None,
+                  '_ibl_wheel.timestamps.npy',
                   '_ibl_wheel.position.npy', '_ibl_wheelMoves.intervals.npy',
                   '_ibl_wheelMoves.peakAmplitude.npy')
-    var_names = ('feedbackType', 'choice', 'rewardVolume', 'intervals_bpod', 'intervals',
-                 'response_times', 'goCueTrigger_times', 'stimOnTrigger_times',
+    var_names = ('intervals_bpod',
+                 'goCueTrigger_times', 'stimOnTrigger_times',
                  'stimOffTrigger_times', 'stimFreezeTrigger_times', 'errorCueTrigger_times',
-                 'errorCue_times', 'feedback_times', 'goCue_times', 'itiIn_times',
-                 'stimFreeze_times', 'stimOff_times', 'stimOn_times', 'valveOpen_times',
-                 'firstMovement_times', 'wheel_timestamps', 'wheel_position',
+                 'errorCue_times', 'itiIn_times',
+                 'stimFreeze_times', 'stimOff_times', 'valveOpen_times',
+                 'wheel_timestamps', 'wheel_position',
                  'wheelMoves_intervals', 'wheelMoves_peakAmplitude')
 
     def __init__(self, *args, **kwargs):
@@ -673,6 +670,11 @@ class FpgaTrials(extractors_base.BaseExtractor):
         assert bpod_raw is not None, "No task trials data in raw_behavior_data - Exit"
         bpod_trials, _ = biased_trials.extract_all(
             session_path=self.session_path, save=False, bpod_trials=bpod_raw)
+        # Explode trials table df
+        trials_table = bpod_trials.pop('table')
+        table_columns = trials_table.columns
+        bpod_trials = {**bpod_trials, **alfio.AlfBunch.from_df(trials_table)}
+        # synchronize
         bpod_trials['intervals_bpod'] = np.copy(bpod_trials['intervals'])
         fpga_trials = extract_behaviour_sync(sync=sync, chmap=chmap, bpod_trials=bpod_trials)
         # checks consistency and compute dt with bpod
@@ -703,6 +705,9 @@ class FpgaTrials(extractors_base.BaseExtractor):
         min_qt = settings.get('QUIESCENT_PERIOD', None)
         first_move_onsets, *_ = extract_first_movement_times(moves, out, min_qt=min_qt)
         out.update({'firstMovement_times': first_move_onsets})
+        # Re-create trials table
+        trials_table = alfio.AlfBunch({x: out.pop(x) for x in table_columns})
+        out['table'] = trials_table.to_df()
 
         assert tuple(filter(lambda x: 'wheel' not in x, self.var_names)) == tuple(out.keys())
         return [out[k] for k in out] + [wheel['timestamps'], wheel['position'],
