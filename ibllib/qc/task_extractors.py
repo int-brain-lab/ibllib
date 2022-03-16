@@ -141,8 +141,8 @@ class TaskQCExtractor(object):
         # Run extractors
         if self.type == 'ephys' and not self.bpod_only:
             data, _ = ephys_fpga.extract_all(self.session_path)
-            bpod2fpga = interp1d(data['intervals_bpod'][:, 0], data['intervals'][:, 0],
-                                 fill_value="extrapolate")
+            bpod2fpga = interp1d(data['intervals_bpod'][:, 0], data['table']['intervals_0'],
+                                 fill_value='extrapolate')
             # Add Bpod wheel data
             re_ts, pos = get_wheel_position(self.session_path, self.raw_data)
             data['wheel_timestamps_bpod'] = bpod2fpga(re_ts)
@@ -179,7 +179,7 @@ class TaskQCExtractor(object):
         """
         # Expand trials dataframe into key value pairs
         trials_table = data.pop('table', None)
-        if trials_table:
+        if trials_table is not None:
             data = {**data, **alfio.AlfBunch.from_df(trials_table)}
         correct = data['feedbackType'] > 0
         # get valve_time and errorCue_times from feedback_times

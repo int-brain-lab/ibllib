@@ -126,13 +126,14 @@ class TrialsTableEphys(BaseBpodTrialsExtractor):
         wheel_timestamps, wheel_position, wheel_moves_intervals, wheel_moves_peak_amplitude
     """
     save_names = ('_ibl_trials.table.pqt', '_ibl_wheel.timestamps.npy', '_ibl_wheel.position.npy',
-                  '_ibl_wheelMoves.intervals.npy', '_ibl_wheelMoves.peakAmplitude.npy')
+                  '_ibl_wheelMoves.intervals.npy', '_ibl_wheelMoves.peakAmplitude.npy', None, None, None)
     var_names = ('table', 'wheel_timestamps', 'wheel_position', 'wheel_moves_intervals',
-                 'wheel_moves_peak_amplitude')
+                 'wheel_moves_peak_amplitude', 'phase', 'position', 'quiescence')
 
     def _extract(self, extractor_classes=None, **kwargs):
         base = [Intervals, GoCueTimes, ResponseTimes, Choice, StimOnOffFreezeTimes, ProbaContrasts,
                 FeedbackTimes, FeedbackType, RewardVolume, Wheel]
+        # Exclude from trials table
         exclude = [
             'stimOff_times', 'stimFreeze_times', 'wheel_timestamps', 'wheel_position',
             'wheel_moves_intervals', 'wheel_moves_peak_amplitude', 'peakVelocity_times', 'is_final_movement',
