@@ -1,7 +1,8 @@
 ## Release Note 2.10
 
-## For next release:
+## Release Note 2.10.6 2022-03-15
 - Allow parent tasks to be 'Incomplete' to run task on local server
+- Change one base_rul for dlc_qc_plot on cortexlab 
 
 ## Release Note 2.10.5 2022-03-11
 - Fix moot release accident
