@@ -17,8 +17,5 @@
  "_habituationChoiceWorld": "habituation",
  "_trainingChoiceWorld": "training",
  "ephysMockChoiceWorld": "mock_ephys",
- "ephys_certification": "sync_ephys",
- "_bandit_laser_blocks_ephysChoiceWorld": "ephys_bandit",
- "_bandit_biasedChoiceWorld": "training_bandit",
- "_bandit_100_0_biasedChoiceWorld6.4.2": "training_bandit"
+ "ephys_certification": "sync_ephys"
 }

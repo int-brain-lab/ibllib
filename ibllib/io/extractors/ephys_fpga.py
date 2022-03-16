@@ -582,15 +582,15 @@ def get_main_probe_sync(session_path, bin_exists=False):
 class FpgaTrials(extractors_base.BaseExtractor):
     save_names = ('_ibl_trials.intervals_bpod.npy',
                   '_ibl_trials.goCueTrigger_times.npy', None, None, None, None, None, None, None,
-                  '_ibl_trials.stimOff_times.npy', None,
+                  '_ibl_trials.stimOff_times.npy', None, None, None, None,
                   '_ibl_trials.table.pqt', '_ibl_wheel.timestamps.npy',
                   '_ibl_wheel.position.npy', '_ibl_wheelMoves.intervals.npy',
                   '_ibl_wheelMoves.peakAmplitude.npy')
     var_names = ('intervals_bpod',
                  'goCueTrigger_times', 'stimOnTrigger_times',
                  'stimOffTrigger_times', 'stimFreezeTrigger_times', 'errorCueTrigger_times',
-                 'errorCue_times', 'itiIn_times',
-                 'stimFreeze_times', 'stimOff_times', 'valveOpen_times', 'table',
+                 'errorCue_times', 'itiIn_times', 'stimFreeze_times', 'stimOff_times',
+                 'valveOpen_times', 'phase', 'position', 'quiescence', 'table',
                  'wheel_timestamps', 'wheel_position',
                  'wheelMoves_intervals', 'wheelMoves_peakAmplitude')
 
@@ -600,7 +600,8 @@ class FpgaTrials(extractors_base.BaseExtractor):
                          'stimFreezeTrigger_times', 'errorCueTrigger_times']
 
     # Fields from bpod extractor that we want to save
-    bpod_fields = ['feedbackType', 'choice', 'rewardVolume', 'contrastLeft', 'contrastRight', 'probabilityLeft', 'intervals_bpod']
+    bpod_fields = ['feedbackType', 'choice', 'rewardVolume', 'contrastLeft', 'contrastRight', 'probabilityLeft',
+                   'intervals_bpod', 'phase', 'position', 'quiescence']
 
     def __init__(self, *args, **kwargs):
         """An extractor for all ephys trial data, in FPGA time"""
@@ -652,6 +653,7 @@ class FpgaTrials(extractors_base.BaseExtractor):
         trials_table = alfio.AlfBunch({x: out.pop(x) for x in table_columns})
         out['table'] = trials_table.to_df()
 
+        out = {k: out[k] for k in self.var_names if k in out}  # Reorder output
         assert tuple(filter(lambda x: 'wheel' not in x, self.var_names)) == tuple(out.keys())
         return [out[k] for k in out] + [wheel['timestamps'], wheel['position'],
                                         moves['intervals'], moves['peakAmplitude']]
