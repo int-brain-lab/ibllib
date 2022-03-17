@@ -99,6 +99,23 @@ class FibrePhotometryRegisterRaw(tasks.Task):
             snapshots_path.rmdir()
 
 
+class FibrePhotometry(tasks.Task):
+    # TODO
+    signature = {
+        'input_files': [('fpData.raw*', 'raw_fp_data', True), ],
+        'output_files': [('_ibl_fibrephotometry.green.npy', 'alf/fibre*', True),
+                         ('_ibl_fibrephotometry.red.npy', 'alf/fibre*', True)]
+    }
+    priority = 100
+
+    def _run(self, overwrite=False):
+        self.rename_files(symlink_old=True)
+        self.register_snapshots()
+        out_files, _ = register_session_raw_data(self.session_path, one=self.one, dry=True)
+        return out_files
+
+
+
 #  level 1
 class FibrePhotometryPreprocess(tasks.Task):
     priority = 60

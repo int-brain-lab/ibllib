@@ -41,6 +41,7 @@ DEFAULT_CHMAP = {
     },
 }
 
+
 class FibrePhotometry(BaseExtractor):
     save_names = ('_ibl_photometry.green.npy', '_ibl_photometry.red.npy',
                   'ibl_photometry.isosbestic.npy', 'ibl_photometry.timestamps.npy')
