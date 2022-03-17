@@ -152,8 +152,8 @@ class TestRegistrationEndpoint(unittest.TestCase):
             self.assertEqual(out, to[1])
         # also makes sure that all task types have a defined procedure
         task_types = ibllib.io.extractors.base._get_task_types_json_config()
-        for task_type in list(set([task_types[tt] for tt in task_types])):
-            assert registration._alyx_procedure_from_task_type(task_type) is not None
+        for task_type in set([task_types[tt] for tt in task_types]):
+            assert registration._alyx_procedure_from_task_type(task_type) is not None, task_type + ' has no associate procedure'
 
 
 class TestRegistration(unittest.TestCase):

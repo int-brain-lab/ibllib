@@ -88,7 +88,7 @@ class ProbaContrasts(BaseBpodTrialsExtractor):
                 'contrastRight': contrastRight, 'contrastLeft': contrastLeft}
 
 
-class TrialsTable(BaseBpodTrialsExtractor):
+class TrialsTableBiased(BaseBpodTrialsExtractor):
     """
     Extracts the following into a table from Bpod raw data:
         intervals, goCue_times, response_times, choice, stimOn_times, contrastLeft, contrastRight,
@@ -96,22 +96,18 @@ class TrialsTable(BaseBpodTrialsExtractor):
     Additionally extracts the following wheel data:
         wheel_timestamps, wheel_position, wheel_moves_intervals, wheel_moves_peak_amplitude
     """
-    save_names = ('_ibl_trials.table.pqt', '_ibl_wheel.timestamps.npy', '_ibl_wheel.position.npy',
-                  '_ibl_wheelMoves.intervals.npy', '_ibl_wheelMoves.peakAmplitude.npy')
-    var_names = ('table', 'wheel_timestamps', 'wheel_position', 'wheel_moves_intervals',
-                 'wheel_moves_peak_amplitude')
+    save_names = ('_ibl_trials.table.pqt', None, None, '_ibl_wheel.timestamps.npy', '_ibl_wheel.position.npy',
+                  '_ibl_wheelMoves.intervals.npy', '_ibl_wheelMoves.peakAmplitude.npy', None, None)
+    var_names = ('table', 'stimOff_times', 'stimFreeze_times', 'wheel_timestamps', 'wheel_position', 'wheel_moves_intervals',
+                 'wheel_moves_peak_amplitude', 'peakVelocity_times', 'is_final_movement')
 
     def _extract(self, extractor_classes=None, **kwargs):
         base = [Intervals, GoCueTimes, ResponseTimes, Choice, StimOnOffFreezeTimes, ContrastLR, FeedbackTimes, FeedbackType,
                 RewardVolume, ProbabilityLeft, Wheel]
-        exclude = [
-            'stimOff_times', 'stimFreeze_times', 'wheel_timestamps', 'wheel_position',
-            'wheel_moves_intervals', 'wheel_moves_peak_amplitude', 'peakVelocity_times', 'is_final_movement'
-        ]
         out, _ = run_extractor_classes(
             base, session_path=self.session_path, bpod_trials=self.bpod_trials, settings=self.settings, save=False
         )
-        table = AlfBunch({k: v for k, v in out.items() if k not in exclude})
+        table = AlfBunch({k: out.pop(k) for k in list(out.keys()) if k not in self.var_names})
         assert len(table.keys()) == 12
 
         return table.to_df(), *(out.pop(x) for x in self.var_names if x != 'table')
@@ -125,23 +121,20 @@ class TrialsTableEphys(BaseBpodTrialsExtractor):
     Additionally extracts the following wheel data:
         wheel_timestamps, wheel_position, wheel_moves_intervals, wheel_moves_peak_amplitude
     """
-    save_names = ('_ibl_trials.table.pqt', '_ibl_wheel.timestamps.npy', '_ibl_wheel.position.npy',
-                  '_ibl_wheelMoves.intervals.npy', '_ibl_wheelMoves.peakAmplitude.npy')
-    var_names = ('table', 'wheel_timestamps', 'wheel_position', 'wheel_moves_intervals',
-                 'wheel_moves_peak_amplitude')
+    save_names = ('_ibl_trials.table.pqt', None, None, '_ibl_wheel.timestamps.npy', '_ibl_wheel.position.npy',
+                  '_ibl_wheelMoves.intervals.npy', '_ibl_wheelMoves.peakAmplitude.npy', None, None, None, None, None)
+    var_names = ('table', 'stimOff_times', 'stimFreeze_times', 'wheel_timestamps', 'wheel_position', 'wheel_moves_intervals',
+                 'wheel_moves_peak_amplitude', 'peakVelocity_times', 'is_final_movement',
+                 'phase', 'position', 'quiescence')
 
     def _extract(self, extractor_classes=None, **kwargs):
         base = [Intervals, GoCueTimes, ResponseTimes, Choice, StimOnOffFreezeTimes, ProbaContrasts,
                 FeedbackTimes, FeedbackType, RewardVolume, Wheel]
-        exclude = [
-            'stimOff_times', 'stimFreeze_times', 'wheel_timestamps', 'wheel_position',
-            'wheel_moves_intervals', 'wheel_moves_peak_amplitude', 'peakVelocity_times', 'is_final_movement',
-            'phase', 'position', 'quiescence'
-        ]
+        # Exclude from trials table
         out, _ = run_extractor_classes(
             base, session_path=self.session_path, bpod_trials=self.bpod_trials, settings=self.settings, save=False
         )
-        table = AlfBunch({k: v for k, v in out.items() if k not in exclude})
+        table = AlfBunch({k: v for k, v in out.items() if k not in self.var_names})
         assert len(table.keys()) == 12
 
         return table.to_df(), *(out.pop(x) for x in self.var_names if x != 'table')
@@ -174,7 +167,7 @@ def extract_all(session_path, save=False, bpod_trials=False, settings=False, ext
         # We now extract a single trials table
         base.extend([
             StimOnTriggerTimes, ItiInTimes, StimOffTriggerTimes, StimFreezeTriggerTimes, ErrorCueTriggerTimes,
-            TrialsTable, IncludedTrials
+            TrialsTableBiased, IncludedTrials
         ])
     else:
         base.extend([
