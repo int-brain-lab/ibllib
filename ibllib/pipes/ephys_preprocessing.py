@@ -1012,7 +1012,7 @@ class EphysDLC(tasks.Task):
                     if process.returncode != 0:
                         error_str = error.decode("utf-8").strip()
                         _logger.error(f'DLC failed for {cam}Camera.\n\n'
-                                      f'++++ Output of subprocess for debugging ++++\n\n'
+                                      f'++++++++ Output of subprocess for debugging ++++++++\n\n'
                                       f'{error_str}\n'
                                       f'++++++++++++++++++++++++++++++++++++++++++++\n')
                         self.status = -1
@@ -1037,7 +1037,7 @@ class EphysDLC(tasks.Task):
                     if process.returncode != 0:
                         error_str = error.decode("utf-8").strip()
                         _logger.error(f'Motion energy failed for {cam}Camera.\n\n'
-                                      f'++++ Output of subprocess for debugging ++++\n\n'
+                                      f'++++++++ Output of subprocess for debugging ++++++++\n\n'
                                       f'{error_str}\n'
                                       f'++++++++++++++++++++++++++++++++++++++++++++\n')
                         self.status = -1
