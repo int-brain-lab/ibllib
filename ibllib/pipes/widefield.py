@@ -42,7 +42,7 @@ _logger = logging.getLogger('ibllib')
 
 class WidefieldRegisterRaw(tasks.Task):
     signature = {
-        'input_files': [('dorsal_cortex_landmarks.json', 'raw_widefield', True),
+        'input_files': [('dorsal_cortex_landmarks.json', 'raw_widefield_data', False),
                         ('*.camlog', 'raw_widefield_data', True)],
         'output_files': [('widefieldLandmarks.dorsalCortex.json', 'alf', True),
                          ('widefieldEvents.raw.camlog', 'raw_widefield_data', True)]
