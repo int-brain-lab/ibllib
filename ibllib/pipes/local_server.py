@@ -16,7 +16,7 @@ from ibllib.time import date2isostr
 import ibllib.oneibl.registration as registration
 
 _logger = logging.getLogger('ibllib')
-LARGE_TASKS = ['EphysVideoCompress', 'TrainingVideoCompress', 'SpikeSorting']  # 'EphysDLC', 'TrainingDLC',
+LARGE_TASKS = ['EphysVideoCompress', 'TrainingVideoCompress', 'SpikeSorting', 'EphysDLC']  # 'TrainingDLC',
 
 
 def _get_pipeline_class(session_path, one):
@@ -165,6 +165,9 @@ def job_runner(subjects_path, mode='all', lab=None, dry=False, one=None, count=5
     elif mode == 'large':
         tasks = one.alyx.rest('tasks', 'list', status='Waiting',
                               django=f'session__lab__name__in,{lab},name__in,{LARGE_TASKS}', no_cache=True)
+
+    # Order tasks by priority
+    tasks = sorted(tasks, key=lambda d: d['priority'], reverse=True)
 
     tasks_runner(subjects_path, tasks, one=one, count=count, time_out=3600, dry=dry)
 

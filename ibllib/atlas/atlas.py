@@ -2,7 +2,6 @@ from dataclasses import dataclass
 import logging
 import matplotlib.pyplot as plt
 from pathlib import Path, PurePosixPath
-
 import numpy as np
 import nrrd
 
@@ -121,7 +120,7 @@ class BrainCoordinates:
         return ind * self.dz + self.z0
 
     def i2xyz(self, iii):
-        iii = np.array(iii)
+        iii = np.array(iii, dtype=float)
         out = np.zeros_like(iii)
         out[..., 0] = self.i2x(iii[..., 0])
         out[..., 1] = self.i2y(iii[..., 1])
@@ -184,6 +183,7 @@ class BrainAtlas:
         self.top: 2d np array (ap, ml) containing the z-coordinate (m) of the surface of the brain
         self.dims2xyz and self.zyz2dims: map image axis order to xyz coordinates order
         """
+
         self.image = image
         self.label = label
         self.regions = regions
@@ -196,24 +196,29 @@ class BrainAtlas:
         bc = BrainCoordinates(nxyz=nxyz, xyz0=(0, 0, 0), dxyz=dxyz)
         self.bc = BrainCoordinates(nxyz=nxyz, xyz0=- bc.i2xyz(iorigin), dxyz=dxyz)
 
+        self.surface = None
+        self.boundary = None
+
+    def compute_surface(self):
         """
         Get the volume top, bottom, left and right surfaces, and from these the outer surface of
         the image volume. This is needed to compute probe insertions intersections
         """
-        axz = self.xyz2dims[2]  # this is the dv axis
-        _surface = (self.label == 0).astype(np.int8) * 2
-        l0 = np.diff(_surface, axis=axz, append=2)
-        _top = np.argmax(l0 == -2, axis=axz).astype(float)
-        _top[_top == 0] = np.nan
-        _bottom = self.bc.nz - np.argmax(np.flip(l0, axis=axz) == 2, axis=axz).astype(float)
-        _bottom[_bottom == self.bc.nz] = np.nan
-        self.top = self.bc.i2z(_top + 1)
-        self.bottom = self.bc.i2z(_bottom - 1)
-        self.surface = np.diff(_surface, axis=self.xyz2dims[0], append=2) + l0
-        idx_srf = np.where(self.surface != 0)
-        self.surface[idx_srf] = 1
-        self.srf_xyz = self.bc.i2xyz(np.c_[idx_srf[self.xyz2dims[0]], idx_srf[self.xyz2dims[1]],
-                                           idx_srf[self.xyz2dims[2]]].astype(float))
+        if self.surface is None:  # only compute if it hasn't already been computed
+            axz = self.xyz2dims[2]  # this is the dv axis
+            _surface = (self.label == 0).astype(np.int8) * 2
+            l0 = np.diff(_surface, axis=axz, append=2)
+            _top = np.argmax(l0 == -2, axis=axz).astype(float)
+            _top[_top == 0] = np.nan
+            _bottom = self.bc.nz - np.argmax(np.flip(l0, axis=axz) == 2, axis=axz).astype(float)
+            _bottom[_bottom == self.bc.nz] = np.nan
+            self.top = self.bc.i2z(_top + 1)
+            self.bottom = self.bc.i2z(_bottom - 1)
+            self.surface = np.diff(_surface, axis=self.xyz2dims[0], append=2) + l0
+            idx_srf = np.where(self.surface != 0)
+            self.surface[idx_srf] = 1
+            self.srf_xyz = self.bc.i2xyz(np.c_[idx_srf[self.xyz2dims[0]], idx_srf[self.xyz2dims[1]],
+                                               idx_srf[self.xyz2dims[2]]].astype(float))
 
     def _lookup_inds(self, ixyz):
         """
@@ -374,6 +379,7 @@ class BrainAtlas:
          (0 = x for sagittal slice)
         :return:
         """
+
         if axis == 0:
             extent = np.r_[self.bc.ylim, np.flip(self.bc.zlim)] * 1e6
         elif axis == 1:
@@ -385,16 +391,27 @@ class BrainAtlas:
     def slice(self, coordinate, axis, volume='image', mode='raise', region_values=None,
               mapping="Allen", bc=None):
         """
-        :param coordinate: float
+        Get slice through atlas
+
+        :param coordinate: coordinate to slice in metres, float
         :param axis: xyz convention:  0 for ml, 1 for ap, 2 for dv
             - 0: sagittal slice (along ml axis)
             - 1: coronal slice (along ap axis)
             - 2: horizontal slice (along dv axis)
-        :param volume: 'image' or 'annotation'
+        :param volume:
+            - 'image' - allen image volume
+            - 'annotation' - allen annotation volume
+            - 'surface' - outer surface of mesh
+            - 'boundary' - outline of boundaries between all regions
+            - 'volume' - custom volume, must pass in volume of shape ba.image.shape as regions_value argument
+            - 'value' - custom value per allen region, must pass in array of shape ba.regions.id as regions_value argument
         :param mode: error mode for out of bounds coordinates
             -   'raise' raise an error
             -   'clip' gets the first or last index
-        :param region_values
+        :param region_values: custom values to plot
+            - if volume='volume', region_values must have shape ba.image.shape
+            - if volume='value', region_values must have shape ba.regions.id
+        :param mapping: mapping to use. Options can be found using ba.regions.mappings.keys()
         :return: 2d array or 3d RGB numpy int8 array
         """
         index = self.bc.xyz2i(np.array([coordinate] * 3))[axis]
@@ -416,63 +433,149 @@ class BrainAtlas:
 
         if isinstance(volume, np.ndarray):
             return _take(volume, index, axis=self.xyz2dims[axis])
-        # add annotation_ids
-        # add annotation_indices
-        # rename annoatation_rgb ?
         elif volume in 'annotation':
             iregion = _take_remap(self.label, index, self.xyz2dims[axis], mapping)
             return self._label2rgb(iregion)
+        elif volume == 'image':
+            return _take(self.image, index, axis=self.xyz2dims[axis])
         elif volume == 'value':
             return region_values[_take_remap(self.label, index, self.xyz2dims[axis], mapping)]
         elif volume == 'image':
             return _take(self.image, index, axis=self.xyz2dims[axis])
         elif volume in ['surface', 'edges']:
+            self.compute_surface()
             return _take(self.surface, index, axis=self.xyz2dims[axis])
+        elif volume == 'boundary':
+            iregion = _take_remap(self.label, index, self.xyz2dims[axis], mapping)
+            return self.compute_boundaries(iregion)
+
         elif volume == 'volume':
             if bc is not None:
                 index = bc.xyz2i(np.array([coordinate] * 3))[axis]
             return _take(region_values, index, axis=self.xyz2dims[axis])
 
-    def plot_cslice(self, ap_coordinate, volume='image', mapping='Allen', **kwargs):
+    def compute_boundaries(self, values):
         """
-        Imshow a coronal slice
-        :param: ap_coordinate (m)
-        :param volume: 'image' or 'annotation'
-        :return: ax
+        Compute the boundaries between regions on slice
+        :param values:
+        :return:
         """
-        cslice = self.slice(ap_coordinate, axis=1, volume=volume, mapping=mapping)
-        return self._plot_slice(cslice.T, extent=self.extent(axis=1), **kwargs)
+        boundary = np.diff(values, axis=0, append=0)
+        boundary = boundary + np.diff(values, axis=1, append=0)
+        boundary[boundary != 0] = 1
+        return boundary
 
-    def plot_hslice(self, dv_coordinate, volume='image', mapping='Allen', **kwargs):
+    def plot_cslice(self, ap_coordinate, volume='image', mapping='Allen', region_values=None, **kwargs):
         """
-        Imshow a horizontal slice
+        Plot coronal slice through atlas at given ap_coordinate
+
+        :param: ap_coordinate (m)
+        :param volume:
+            - 'image' - allen image volume
+            - 'annotation' - allen annotation volume
+            - 'surface' - outer surface of mesh
+            - 'boundary' - outline of boundaries between all regions
+            - 'volume' - custom volume, must pass in volume of shape ba.image.shape as regions_value argument
+            - 'value' - custom value per allen region, must pass in array of shape ba.regions.id as regions_value argument
+        :param mapping: mapping to use. Options can be found using ba.regions.mappings.keys()
+        :param region_values: custom values to plot
+            - if volume='volume', region_values must have shape ba.image.shape
+            - if volume='value', region_values must have shape ba.regions.id
+        :param mapping: mapping to use. Options can be found using ba.regions.mappings.keys()
+        :param **kwargs: matplotlib.pyplot.imshow kwarg arguments
+        :return: matplotlib ax object
+        """
+
+        cslice = self.slice(ap_coordinate, axis=1, volume=volume, mapping=mapping, region_values=region_values)
+        return self._plot_slice(np.moveaxis(cslice, 0, 1), extent=self.extent(axis=1), **kwargs)
+
+    def plot_hslice(self, dv_coordinate, volume='image', mapping='Allen', region_values=None, **kwargs):
+        """
+        Plot horizontal slice through atlas at given dv_coordinate
+
         :param: dv_coordinate (m)
-        :param volume: 'image' or 'annotation'
-        :return: ax
+        :param volume:
+            - 'image' - allen image volume
+            - 'annotation' - allen annotation volume
+            - 'surface' - outer surface of mesh
+            - 'boundary' - outline of boundaries between all regions
+            - 'volume' - custom volume, must pass in volume of shape ba.image.shape as regions_value argument
+            - 'value' - custom value per allen region, must pass in array of shape ba.regions.id as regions_value argument
+        :param mapping: mapping to use. Options can be found using ba.regions.mappings.keys()
+        :param region_values: custom values to plot
+            - if volume='volume', region_values must have shape ba.image.shape
+            - if volume='value', region_values must have shape ba.regions.id
+        :param mapping: mapping to use. Options can be found using ba.regions.mappings.keys()
+        :param **kwargs: matplotlib.pyplot.imshow kwarg arguments
+        :return: matplotlib ax object
         """
-        hslice = self.slice(dv_coordinate, axis=2, volume=volume, mapping=mapping)
+
+        hslice = self.slice(dv_coordinate, axis=2, volume=volume, mapping=mapping, region_values=region_values)
         return self._plot_slice(hslice, extent=self.extent(axis=2), **kwargs)
 
-    def plot_sslice(self, ml_coordinate, volume='image', mapping='Allen', **kwargs):
+    def plot_sslice(self, ml_coordinate, volume='image', mapping='Allen', region_values=None, **kwargs):
         """
-        Imshow a sagittal slice
+        Plot sagittal slice through atlas at given ml_coordinate
+
         :param: ml_coordinate (m)
-        :param volume: 'image' or 'annotation'
-        :return: ax
+        :param volume:
+            - 'image' - allen image volume
+            - 'annotation' - allen annotation volume
+            - 'surface' - outer surface of mesh
+            - 'boundary' - outline of boundaries between all regions
+            - 'volume' - custom volume, must pass in volume of shape ba.image.shape as regions_value argument
+            - 'value' - custom value per allen region, must pass in array of shape ba.regions.id as regions_value argument
+        :param mapping: mapping to use. Options can be found using ba.regions.mappings.keys()
+        :param region_values: custom values to plot
+            - if volume='volume', region_values must have shape ba.image.shape
+            - if volume='value', region_values must have shape ba.regions.id
+        :param mapping: mapping to use. Options can be found using ba.regions.mappings.keys()
+        :param **kwargs: matplotlib.pyplot.imshow kwarg arguments
+        :return: matplotlib ax object
         """
-        sslice = self.slice(ml_coordinate, axis=0, volume=volume, mapping=mapping)
+
+        sslice = self.slice(ml_coordinate, axis=0, volume=volume, mapping=mapping, region_values=region_values)
         return self._plot_slice(np.swapaxes(sslice, 0, 1), extent=self.extent(axis=0), **kwargs)
 
-    def plot_top(self, ax=None):
+    def plot_top(self, volume='annotation', mapping='Allen', region_values=None, ax=None, **kwargs):
+        """
+        Plot top view of atlas
+        :param volume:
+            - 'image' - allen image volume
+            - 'annotation' - allen annotation volume
+            - 'boundary' - outline of boundaries between all regions
+            - 'volume' - custom volume, must pass in volume of shape ba.image.shape as regions_value argument
+            - 'value' - custom value per allen region, must pass in array of shape ba.regions.id as regions_value argument
+
+        :param mapping: mapping to use. Options can be found using ba.regions.mappings.keys()
+        :param region_values:
+        :param ax:
+        :param kwargs:
+        :return:
+        """
+
+        self.compute_surface()
         ix, iy = np.meshgrid(np.arange(self.bc.nx), np.arange(self.bc.ny))
         iz = self.bc.z2i(self.top)
         inds = self._lookup_inds(np.stack((ix, iy, iz), axis=-1))
-        if not ax:
-            ax = plt.gca()
-            ax.axis('equal')
-        ax.imshow(self._label2rgb(self.label.flat[inds]),
-                  extent=self.extent(axis=2), origin='upper')
-        return ax
+
+        regions = self._get_mapping(mapping=mapping)[self.label.flat[inds]]
+
+        if volume == 'annotation':
+            im = self._label2rgb(regions)
+        elif volume == 'image':
+            im = self.top
+        elif volume == 'value':
+            im = region_values[regions]
+        elif volume == 'volume':
+            im = np.zeros((iz.shape))
+            for x in range(im.shape[0]):
+                for y in range(im.shape[1]):
+                    im[x, y] = region_values[x, y, iz[x, y]]
+        elif volume == 'boundary':
+            im = self.compute_boundaries(regions)
+
+        return self._plot_slice(im, self.extent(axis=2), ax=ax, **kwargs)
 
 
 @dataclass
@@ -665,6 +768,8 @@ class Insertion:
     @staticmethod
     def _get_surface_intersection(traj, brain_atlas, surface='top'):
 
+        brain_atlas.compute_surface()
+
         distance = traj.mindist(brain_atlas.srf_xyz)
         dist_sort = np.argsort(distance)
         # In some cases the nearest two intersection points are not the top and bottom of brain
@@ -724,6 +829,7 @@ class AllenAtlas(BrainAtlas):
         :param hist_path
         :return: atlas.BrainAtlas
         """
+
         par = one.params.get(silent=True)
         FLAT_IRON_ATLAS_REL_PATH = PurePosixPath('histology', 'ATLAS', 'Needles', 'Allen')
         LUT_VERSION = "v01"  # version 01 is the lateralized version
@@ -764,6 +870,7 @@ class AllenAtlas(BrainAtlas):
             # loads the files
             label = self._read_volume(file_label_remap)
             image = self._read_volume(file_image)
+
         super().__init__(image, label, dxyz, regions, ibregma,
                          dims2xyz=dims2xyz, xyz2dims=xyz2dims)
 
@@ -799,7 +906,7 @@ class AllenAtlas(BrainAtlas):
         volume
         :param ccf_order: order of ccf coordinates given 'mlapdv' (ibl) or 'apdvml'
         (Allen mcc vertices)
-        :return: xyz: mlapdv coordinates in um, origin Bregma
+        :return: xyz: mlapdv coordinates in m, origin Bregma
         """
         ordre = self._ccf_order(ccf_order, reverse=True)
         return self.bc.i2xyz((ccf[..., ordre] / float(self.res_um)))
@@ -865,4 +972,90 @@ def _download_atlas_allen(file_image, FLAT_IRON_ATLAS_REL_PATH, par):
         raise ValueError('Unrecognized file image')
 
     cache_dir = Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH)
-    return http_download_file(url, cache_dir=cache_dir)
+    return http_download_file(url, target_dir=cache_dir)
+
+
+class FlatMap(AllenAtlas):
+
+    def __init__(self, flatmap='dorsal_cortex', res_um=25):
+        """
+        Avaiable flatmaps are currently 'dorsal_cortex', 'circles' and 'pyramid'
+        :param flatmap:
+        :param res_um:
+        """
+        super().__init__(res_um=res_um)
+        self.name = flatmap
+        if flatmap == 'dorsal_cortex':
+            self._get_flatmap_from_file()
+        elif flatmap == 'circles':
+            from ibllib.atlas.flatmaps import circles
+            if res_um != 25:
+                raise NotImplementedError('Pyramid circles not implemented for resolution other than 25um')
+            self.flatmap, self.ml_scale, self.ap_scale = circles(N=5, atlas=self, display='flat')
+        elif flatmap == 'pyramid':
+            from ibllib.atlas.flatmaps import circles
+            if res_um != 25:
+                raise NotImplementedError('Pyramid circles not implemented for resolution other than 25um')
+            self.flatmap, self.ml_scale, self.ap_scale = circles(N=5, atlas=self, display='pyramid')
+
+    def _get_flatmap_from_file(self):
+        # TODO probably best to store depth as the c order??
+        # gets the file in the ONE cache for the flatmap name in the property, downloads it if needed
+        par = one.params.get(silent=True)
+        FLAT_IRON_ATLAS_REL_PATH = PurePosixPath('histology', 'ATLAS', 'Needles', 'Allen', 'flatmaps')
+        path_atlas = Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH)
+        file_flatmap = path_atlas.joinpath(f'{self.name}_{self.res_um}.nrrd')
+        if not file_flatmap.exists():
+            self._download_flatmap(file_flatmap, FLAT_IRON_ATLAS_REL_PATH, par)
+        self.flatmap, _ = nrrd.read(file_flatmap)
+
+    @staticmethod
+    def _download_flatmap(file_image, FLAT_IRON_ATLAS_REL_PATH, par):
+        """
+        Download flatmap volumes
+        :param file_image:
+        :param FLAT_IRON_ATLAS_REL_PATH:
+        :param par:
+        :return:
+        """
+        file_image.parent.mkdir(exist_ok=True, parents=True)
+        base_url = (par.HTTP_DATA_SERVER + '/histology/ATLAS/Needles/Allen/flatmaps')
+        flatmap_url = base_url + '/' + file_image.name
+
+        cache_dir = Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH)
+        return http_download_file(flatmap_url, target_dir=cache_dir, username=par.HTTP_DATA_SERVER_LOGIN,
+                                  password=par.HTTP_DATA_SERVER_PWD)
+
+    def plot_flatmap(self, depth=0, volume='annotation', mapping='Allen', region_values=None, ax=None, **kwargs):
+        """
+        Displays the 2D image corresponding to the flatmap. If there are several depths, by default it
+        will display the first one
+        :param depth: index of the depth to display in the flatmap volume (the last dimension)
+        :param volume:
+        :param mapping:
+        :param region_values:
+        :param ax:
+        :param kwargs:
+        :return:
+        """
+        if self.flatmap.ndim == 3:
+            inds = np.int32(self.flatmap[:, :, depth])
+        else:
+            inds = np.int32(self.flatmap[:, :])
+        regions = self._get_mapping(mapping=mapping)[self.label.flat[inds]]
+        if volume == 'annotation':
+            im = self._label2rgb(regions)
+        elif volume == 'value':
+            im = region_values[regions]
+        elif volume == 'boundary':
+            im = self.compute_boundaries(regions)
+        elif volume == 'image':
+            im = self.image.flat[inds]
+        if not ax:
+            ax = plt.gca()
+
+        return self._plot_slice(im, self.extent_flmap(), ax=ax, **kwargs)
+
+    def extent_flmap(self):
+        extent = np.r_[0, self.flatmap.shape[1], 0, self.flatmap.shape[0]]
+        return extent

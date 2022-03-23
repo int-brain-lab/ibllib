@@ -11,6 +11,7 @@ _logger = logging.getLogger('ibllib')
 # 'Beryl' is the name given to an atlas containing a subset of the most relevant allen annotations
 FILE_BERYL = str(Path(__file__).parent.joinpath('beryl.npy'))
 FILE_COSMOS = str(Path(__file__).parent.joinpath('cosmos.npy'))
+FILE_MAPPINGS = str(Path(__file__).parent.joinpath('mappings.pqt'))
 FILE_REGIONS = str(Path(__file__).parent.joinpath('allen_structure_tree.csv'))
 
 
@@ -22,6 +23,7 @@ class _BrainRegions:
     rgb: np.uint8
     level: np.ndarray
     parent: np.ndarray
+    order: np.uint16
 
 
 class BrainRegions(_BrainRegions):
@@ -33,8 +35,6 @@ class BrainRegions(_BrainRegions):
     """
     def __init__(self):
         df_regions = pd.read_csv(FILE_REGIONS)
-        beryl = np.load(FILE_BERYL)
-        cosmos = np.load(FILE_COSMOS)
         # lateralize
         df_regions_left = df_regions.iloc[np.array(df_regions.id > 0), :].copy()
         df_regions_left['id'] = - df_regions_left['id']
@@ -52,8 +52,33 @@ class BrainRegions(_BrainRegions):
                          acronym=df_regions.acronym.to_numpy(),
                          rgb=c,
                          level=df_regions.depth.to_numpy(),
-                         parent=df_regions.parent_structure_id.to_numpy())
+                         parent=df_regions.parent_structure_id.to_numpy(),
+                         order=df_regions.graph_order.to_numpy().astype(np.uint16))
         # mappings are indices not ids: they range from 0 to n regions -1
+        mappings = pd.read_parquet(FILE_MAPPINGS)
+        self.mappings = {k: mappings[k].to_numpy() for k in mappings}
+        self.n_lr = int((len(self.id) - 1) / 2)
+
+    def _compute_order(self):
+        """
+        Compute the order of regions, per region order by left hemisphere and then right hemisphere
+        :return:
+        """
+        orders = np.zeros_like(self.id)
+        # Left hemisphere first
+        orders[1::2] = np.arange(self.n_lr) + self.n_lr + 1
+        # Then right hemisphere
+        orders[2::2] = np.arange(self.n_lr) + 1
+
+    def _compute_mappings(self):
+        """
+        Recomputes the mapping indices for all mappings
+        This is left mainly as a reference for adding future mappings as this take a few seconds
+        to execute. In production,we use the MAPPING_FILES npz to avoid recompuing at each \
+        instantiation
+        """
+        beryl = np.load(FILE_BERYL)
+        cosmos = np.load(FILE_COSMOS)
         self.mappings = {
             'Allen': self._mapping_from_regions_list(np.unique(np.abs(self.id)), lateralize=False),
             'Allen-lr': np.arange(self.id.size),
@@ -62,6 +87,7 @@ class BrainRegions(_BrainRegions):
             'Cosmos': self._mapping_from_regions_list(cosmos, lateralize=False),
             'Cosmos-lr': self._mapping_from_regions_list(cosmos, lateralize=True),
         }
+        pd.DataFrame(self.mappings).to_parquet(FILE_MAPPINGS)
 
     def get(self, ids) -> Bunch:
         """
@@ -136,6 +162,7 @@ class BrainRegions(_BrainRegions):
         iid, inm = ismember(self.id, new_map)
         iid = np.where(iid)[0]
         mapind = np.zeros_like(self.id) + I_ROOT  # non assigned regions are root
+        # TO DO should root be lateralised?
         mapind[iid] = iid  # regions present in the list have the same index
         # Starting by the higher up levels in the hierarchy, assign all descendants to the mapping
         for i in np.argsort(self.level[iid]):
@@ -159,6 +186,148 @@ class BrainRegions(_BrainRegions):
         """
         _, inds = ismember(region_ids, self.id[self.mappings[source_map]])
         return self.id[self.mappings[target_map][inds]]
+
+    def acronym2acronym(self, acronym, mapping='Allen'):
+        """
+        Remap acronyms onto mapping
+
+        :param acronym: list or array of acronyms
+        :param mapping: target map to remap acronyms
+        :return: array of remapped acronyms
+        """
+        inds = self._find_inds(acronym, self.acronym)
+        return self.acronym[self.mappings[mapping]][inds]
+
+    def acronym2id(self, acronym, mapping='Allen', hemisphere=None):
+        """
+        Convert acronyms to atlas ids and remap
+
+        :param acronym: list or array of acronyms
+        :param mapping: target map to remap atlas_ids
+        :param hemisphere: which hemisphere to return atlas ids for, options left or right
+        :return: array of remapped atlas ids
+        """
+        inds = self._find_inds(acronym, self.acronym)
+        return self.id[self.mappings[mapping]][self._filter_lr(inds, mapping, hemisphere)]
+
+    def acronym2index(self, acronym, mapping='Allen', hemisphere=None):
+        """
+        Convert acronym to index and remap
+        :param acronym:
+        :param mapping:
+        :param hemisphere:
+        :return: array of remapped acronyms and list of indexes for each acronnym
+        """
+        acronym = self.acronym2acronym(acronym, mapping=mapping)
+        index = list()
+        for id in acronym:
+            inds = np.where(self.acronym[self.mappings[mapping]] == id)[0]
+            index.append(self._filter_lr_index(inds, hemisphere))
+
+        return acronym, index
+
+    def id2acronym(self, atlas_id, mapping='Allen'):
+        """
+        Convert atlas id to acronym and remap
+
+        :param acronym: list or array of atlas ids
+        :param mapping: target map to remap acronyms
+        :return: array of remapped acronyms
+        """
+        inds = self._find_inds(atlas_id, self.id)
+        return self.acronym[self.mappings[mapping]][inds]
+
+    def id2id(self, atlas_id, mapping='Allen'):
+        """
+        Remap atlas id onto mapping
+
+        :param acronym: list or array of atlas ids
+        :param mapping: target map to remap acronyms
+        :return: array of remapped atlas ids
+        """
+
+        inds = self._find_inds(atlas_id, self.id)
+        return self.id[self.mappings[mapping]][inds]
+
+    def id2index(self, atlas_id, mapping='Allen'):
+        """
+        Convert atlas id to index and remap
+
+        :param atlas_id: list or array of atlas ids
+        :param mapping: mapping to use
+        :return: dict of indices for each atlas_id
+        """
+
+        atlas_id = self.id2id(atlas_id, mapping=mapping)
+        index = list()
+        for id in atlas_id:
+            inds = np.where(self.id[self.mappings[mapping]] == id)[0]
+            index.append(inds)
+
+        return atlas_id, index
+
+    def index2acronym(self, index, mapping='Allen'):
+        """
+        Convert index to acronym and remap
+
+        :param index:
+        :param mapping:
+        :return:
+        """
+        inds = self.acronym[self.mappings[mapping]][index]
+        return inds
+
+    def index2id(self, index, mapping='Allen'):
+        """
+        Convert index to atlas id and remap
+
+        :param index:
+        :param mapping:
+        :return:
+        """
+        inds = self.id[self.mappings[mapping]][index]
+        return inds
+
+    def _filter_lr(self, values, mapping, hemisphere):
+        """
+        Filter values by those on left or right hemisphere
+        :param values: array of index values
+        :param mapping: mapping to use
+        :param hemisphere: hemisphere
+        :return:
+        """
+        if 'lr' in mapping:
+            if hemisphere == 'left':
+                return values + self.n_lr
+            elif hemisphere == 'right':
+                return values
+            else:
+                return np.c_[values + self.n_lr, values]
+        else:
+            return values
+
+    def _filter_lr_index(self, values, hemisphere):
+        """
+        Filter index values  by those on left or right hemisphere
+
+        :param values: array of index values
+        :param mapping: mapping to use
+        :param hemisphere: hemisphere
+        :return:
+        """
+        if hemisphere == 'left':
+            return values[values > self.n_lr]
+        elif hemisphere == 'right':
+            return values[values <= self.n_lr]
+        else:
+            return values
+
+    def _find_inds(self, values, all_values):
+        if not isinstance(values, list) and not isinstance(values, np.ndarray):
+            values = np.array([values])
+        _, inds = ismember(np.array(values), all_values)
+
+        return inds
 
 
 def regions_from_allen_csv():

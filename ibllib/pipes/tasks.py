@@ -59,6 +59,7 @@ class Task(abc.ABC):
         self.machine = machine
         self.clobber = clobber
         self.location = location
+        self.plot_tasks = []  # Plotting task/ tasks to create plot outputs during the task
 
     @property
     def name(self):
@@ -80,17 +81,22 @@ class Task(abc.ABC):
         # if taskid of one properties are not available, local run only without alyx
         use_alyx = self.one is not None and self.taskid is not None
         if use_alyx:
+            # check that alyx user is logged in
+            if not self.one.alyx.is_logged_in:
+                self.one.alyx.authenticate()
             tdict = self.one.alyx.rest('tasks', 'partial_update', id=self.taskid,
                                        data={'status': 'Started'})
             self.log = ('' if not tdict['log'] else tdict['log'] +
                         '\n\n=============================RERUN=============================\n')
 
         # Setup the console handler with a StringIO object
+        logger_level = _logger.level
         log_capture_string = io.StringIO()
         ch = logging.StreamHandler(log_capture_string)
         str_format = '%(asctime)s,%(msecs)d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s'
         ch.setFormatter(logging.Formatter(str_format))
         _logger.addHandler(ch)
+        _logger.setLevel(logging.INFO)
         _logger.info(f"Starting job {self.__class__}")
         if self.machine:
             _logger.info(f"Running on machine: {self.machine}")
@@ -124,7 +130,6 @@ class Task(abc.ABC):
             self.status = -1
 
         self.time_elapsed_secs = time.time() - start_time
-
         # log the outputs
         if isinstance(self.outputs, list):
             nout = len(self.outputs)
@@ -140,6 +145,7 @@ class Task(abc.ABC):
         self.log = new_log if self.clobber else self.log + new_log
         log_capture_string.close()
         _logger.removeHandler(ch)
+        _logger.setLevel(logger_level)
         # tear down
         self.tearDown()
         return self.status
@@ -152,7 +158,22 @@ class Task(abc.ABC):
         :param kwargs: directly passed to the register_dataset function
         :return:
         """
+        _ = self.register_images()
+
         return self.data_handler.uploadData(self.outputs, self.version, **kwargs)
+
+    def register_images(self, **kwargs):
+        """
+        Registers images to alyx database
+        :return:
+        """
+        if self.one and len(self.plot_tasks) > 0:
+            for plot_task in self.plot_tasks:
+                try:
+                    _ = plot_task.register_images(widths=['orig'])
+                except Exception:
+                    _logger.error(traceback.format_exc())
+                    continue
 
     def rerun(self):
         self.run(overwrite=True)
@@ -501,7 +522,7 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
         parent_tasks = filter(lambda x: x['id'] in tdict['parents'], job_deck)
         parent_statuses = [j['status'] for j in parent_tasks]
         # if any of the parent tasks is not complete, throw a warning
-        if any(map(lambda s: s != 'Complete', parent_statuses)):
+        if any(map(lambda s: s not in ['Complete', 'Incomplete'], parent_statuses)):
             _logger.warning(f"{tdict['name']} has unmet dependencies")
             # if parents are just waiting, don't do anything, but if they have a failed status
             # set the current task status to Held

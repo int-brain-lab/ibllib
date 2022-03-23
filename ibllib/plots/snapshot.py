@@ -2,10 +2,19 @@ import logging
 import requests
 import traceback
 import json
+import abc
+import numpy as np
 
 from one.api import ONE
 from ibllib.pipes import tasks
 from ibllib.misc import version
+from one.alf.exceptions import ALFObjectNotFound
+
+from ibllib.pipes.ephys_alignment import EphysAlignment
+from ibllib.ephys.neuropixel import trace_header, TIP_SIZE_UM
+from ibllib.pipes.histology import interpolate_along_track
+from ibllib.atlas import AllenAtlas
+
 _logger = logging.getLogger('ibllib')
 
 
@@ -21,16 +30,139 @@ class ReportSnapshot(tasks.Task):
         # Can be used to generate the image if desired
         pass
 
-    def register_images(self, widths=None, function=None):
+    def register_images(self, widths=None, function=None, extra_dict=None):
         report_tag = '## report ##'
         snapshot = Snapshot(one=self.one, object_id=self.object_id, content_type=self.content_type)
         jsons = []
         texts = []
         for f in self.outputs:
-            jsons.append(dict(tag=report_tag, version=version.ibllib(),
-                              function=(function or str(self.__class__).split("'")[1]), name=f.stem))
+            json_dict = dict(tag=report_tag, version=version.ibllib(),
+                             function=(function or str(self.__class__).split("'")[1]), name=f.stem)
+            if extra_dict is not None:
+                assert isinstance(extra_dict, dict)
+                json_dict.update(extra_dict)
+            jsons.append(json_dict)
             texts.append(f"{f.stem}")
         return snapshot.register_images(self.outputs, jsons=jsons, texts=texts, widths=widths)
+
+
+class ReportSnapshotProbe(ReportSnapshot):
+    signature = {
+        'input_files': [],  # see setUp method for declaration of inputs
+        'output_files': []  # see setUp method for declaration of inputs
+    }
+
+    def __init__(self, pid, session_path=None, one=None, brain_regions=None, brain_atlas=None, **kwargs):
+        """
+        :param pid: probe insertion UUID from Alyx
+        :param one: one instance
+        :param brain_regions: (optional) ibllib.atlas.BrainRegion object
+        :param brain_atlas: (optional) ibllib.atlas.AllenAtlas object
+        :param kwargs:
+        """
+        assert one
+        self.one = one
+        self.brain_atlas = brain_atlas
+        self.brain_regions = brain_regions
+        if self.brain_atlas and not self.brain_regions:
+            self.brain_regions = self.brain_atlas.regions
+        self.content_type = 'probeinsertion'
+        self.pid = pid
+        self.eid, self.pname = self.one.pid2eid(self.pid)
+        self.session_path = session_path or self.one.eid2path(self.eid)
+        self.output_directory = self.session_path.joinpath('snapshot', self.pname)
+        self.output_directory.mkdir(exist_ok=True, parents=True)
+        self.histology_status = None
+        self.get_probe_signature()
+        super(ReportSnapshotProbe, self).__init__(self.session_path, object_id=pid, content_type=self.content_type, one=self.one,
+                                                  **kwargs)
+
+    @property
+    def pid_label(self):
+        """returns a probe insertion stub to label titles, for example: 'SWC_054_2020-10-05_001_probe01'"""
+        return '_'.join(list(self.session_path.parts[-3:]) + [self.pname])
+
+    @abc.abstractmethod
+    def get_probe_signature(self):
+        # method that gets input and output signatures from the probe name. The format is a dictionary as follows:
+        # return {'input_files': input_signature, 'output_files': output_signature}
+        pass
+
+    def get_histology_status(self):
+        """
+        Finds at which point in histology pipeline the probe insertion is
+        :return:
+        """
+
+        self.hist_lookup = {'Resolved': 3,
+                            'Aligned': 2,
+                            'Traced': 1,
+                            None: 0}  # is this bad practice?
+
+        self.ins = self.one.alyx.rest('insertions', 'list', id=self.pid)[0]
+        traced = self.ins.get('json', {}).get('extended_qc', {}).get('tracing_exists', False)
+        aligned = self.ins.get('json', {}).get('extended_qc', {}).get('alignment_count', 0)
+        resolved = self.ins.get('json', {}).get('extended_qc', {}).get('alignment_resolved', False)
+
+        if resolved:
+            return 'Resolved'
+        elif aligned > 0:
+            return 'Aligned'
+        elif traced:
+            return 'Traced'
+        else:
+            return None
+
+    def get_channels(self, alf_object, collection):
+        electrodes = {}
+
+        try:
+            electrodes = self.one.load_object(self.eid, alf_object, collection=collection)
+            electrodes['axial_um'] = electrodes['localCoordinates'][:, 1]
+        except ALFObjectNotFound:
+            _logger.warning(f'{alf_object} does not yet exist')
+
+        if self.hist_lookup[self.histology_status] == 3:
+            try:
+                electrodes['atlas_id'] = electrodes['brainLocationIds_ccf_2017']
+                electrodes['mlapdv'] = electrodes['mlapdv'] / 1e6
+            except KeyError:
+                _logger.warning('Insertion resolved but brainLocationIds_ccf_2017 attribute do not exist')
+
+        if self.hist_lookup[self.histology_status] > 0 and 'atlas_id' not in electrodes.keys():
+            if not self.brain_atlas:
+                self.brain_atlas = AllenAtlas()
+                self.brain_regions = self.brain_regions or self.brain_atlas.regions
+            if 'localCoordinates' not in electrodes.keys():
+                geometry = trace_header(version=1)
+                electrodes['localCoordinates'] = np.c_[geometry['x'], geometry['y']]
+                electrodes['axial_um'] = electrodes['localCoordinates'][:, 1]
+
+            depths = electrodes['localCoordinates'][:, 1]
+            xyz = np.array(self.ins['json']['xyz_picks']) / 1e6
+
+            if self.hist_lookup[self.histology_status] >= 2:
+                traj = self.one.alyx.rest('trajectories', 'list', provenance='Ephys aligned histology track',
+                                          probe_insertion=self.pid)[0]
+                align_key = self.ins['json']['extended_qc']['alignment_stored']
+                feature = traj['json'][align_key][0]
+                track = traj['json'][align_key][1]
+                ephysalign = EphysAlignment(xyz, depths, track_prev=track,
+                                            feature_prev=feature,
+                                            brain_atlas=self.brain_atlas, speedy=True)
+                electrodes['mlapdv'] = ephysalign.get_channel_locations(feature, track)
+                electrodes['atlas_id'] = self.brain_atlas.regions.get(self.brain_atlas.get_labels(electrodes['mlapdv']))['id']
+
+            if self.hist_lookup[self.histology_status] == 1:
+                xyz = xyz[np.argsort(xyz[:, 2]), :]
+                electrodes['mlapdv'] = interpolate_along_track(xyz, (depths + TIP_SIZE_UM) / 1e6)
+                electrodes['atlas_id'] = self.brain_atlas.regions.get(self.brain_atlas.get_labels(electrodes['mlapdv']))['id']
+
+        return electrodes
+
+    def register_images(self, widths=None, function=None):
+        super(ReportSnapshotProbe, self).register_images(widths=widths, function=function,
+                                                         extra_dict={'channels': self.histology_status})
 
 
 class Snapshot:
@@ -83,6 +215,8 @@ class Snapshot:
         :returns: dict, note as registered in database
         """
         # the protocol is not compatible with byte streaming and json, so serialize the json object here
+        # Make sure that user is logged in, if not, try to log in
+        assert self.one.alyx.is_logged_in, "No Alyx user is logged in, try running one.alyx.authenticate() first"
         note = {
             'user': self.one.alyx.user, 'content_type': self.content_type, 'object_id': self.object_id,
             'text': text, 'width': width, 'json': json.dumps(json_field)}

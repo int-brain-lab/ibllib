@@ -3,6 +3,8 @@ from unittest import mock
 import json
 from one.api import ONE
 from ibllib.tests import TEST_DB
+import random
+import string
 
 import ibllib.qc.critical_reasons as usrpmt
 
@@ -25,22 +27,15 @@ class TestUserPmtSess(unittest.TestCase):
         one.alyx.clear_rest_cache()
         self.sess_id = one.alyx.rest('sessions', 'list', task_protocol='ephys')[0]['url'][-36:]
 
-        # Make sure tests use correct insertion ID
-        # 1. Find and delete any previous insertions
-        ins = one.alyx.get('/insertions', clobber=True)
-        if len(ins) > 0:
-            ins_id = [item['id'] for item in ins]
-            for ins_id_i in ins_id:
-                one.alyx.rest('insertions', 'delete', id=ins_id_i)
-        # 2. Create new insertion
-        data = {'name': 'probe01',
+        # Make new insertion with random name
+        data = {'name': ''.join(random.choices(string.ascii_letters, k=5)),
                 'session': self.sess_id,
                 'model': '3A',
                 'json': None,
                 'datasets': []}
         one.alyx.rest('insertions', 'create', data=data)
         # 3. Save ins id in global variable for test access
-        self.ins_id = one.alyx.rest('insertions', 'list', no_cache=True)[0]['id']
+        self.ins_id = one.alyx.rest('insertions', 'list', session=self.sess_id, name=data['name'], no_cache=True)[0]['id']
 
     def test_reason_addnumberstr(self):
         outstr = usrpmt._reason_addnumberstr(reason_list=['a', 'b'])

@@ -17,9 +17,9 @@ def get_on_off_times_and_positions(rf_map):
     Returns
     -------
     rf_map_times: time of each receptive field map frame np.array(len(stim_frames)
-    rf_map_pos: unique position of each pixel on scree np.array(len(x_pos), len(y_pos))
+    rf_map_pos: unique position of each pixel on screen np.array(len(x_pos), len(y_pos))
     rf_stim_frames: for each pixel on screen stores array of stimulus frames where stim onset
-    occured. For both white squares 'on' and black squares 'off'
+    occurred. For both white squares 'on' and black squares 'off'
 
     """
 

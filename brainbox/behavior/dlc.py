@@ -41,6 +41,8 @@ def insert_idx(array, values):
     idx[np.where(abs(values - array[idx - 1]) < abs(values - array[idx]))] -= 1
     # If 0 index was reduced, revert
     idx[idx == -1] = 0
+    if np.all(idx == 0):
+        raise ValueError('Something is wrong, all values to insert are outside of the array.')
     return idx
 
 
@@ -121,7 +123,7 @@ def get_feature_event_times(dlc, dlc_t, features):
 
 def get_licks(dlc, dlc_t):
     """
-    Compute lick times from the toungue dlc points
+    Compute lick times from the tongue dlc points
     :param dlc: dlc pqt table
     :param dlc_t: dlc times
     :return:
@@ -216,6 +218,9 @@ def get_smooth_pupil_diameter(diameter_raw, camera, std_thresh=5, nan_thresh=1):
     else:
         raise NotImplementedError("camera has to be 'left' or 'right")
 
+    # Raise error if too many NaN time points, in this case it doesn't make sense to interpolate
+    if np.mean(np.isnan(diameter_raw)) > 0.9:
+        raise ValueError(f"Raw pupil diameter for {camera} is too often NaN, cannot smooth.")
     # run savitzy-golay filter on non-nan time points to denoise
     diameter_smoothed = smooth_interpolate_savgol(diameter_raw, window=window, order=3, interp_kind='linear')
 
@@ -336,7 +341,7 @@ def plot_wheel_position(wheel_position, wheel_time, trials_df):
     trials_df['wheel_position'] = [wheel_position[start_idx[w]: end_idx[w]] - wheel_position[start_idx[w]]
                                    for w in range(len(start_idx))]
     # Plotting
-    times = np.arange(len(trials_df['wheel_position'][0])) * T_BIN + WINDOW_LAG
+    times = np.arange(len(trials_df['wheel_position'].iloc[0])) * T_BIN + WINDOW_LAG
     for side, label, color in zip([-1, 1], ['right', 'left'], ['darkred', '#1f77b4']):
         side_df = trials_df[trials_df['choice'] == side]
         for idx in side_df.index:
@@ -345,11 +350,12 @@ def plot_wheel_position(wheel_position, wheel_time, trials_df):
 
     plt.axvline(x=0, linestyle='--', c='k', label='stimOn')
     plt.axhline(y=-0.26, linestyle='--', c='g', label='reward')
+    plt.axhline(y=0.26, linestyle='--', c='g', label='reward')
     plt.ylim([-0.27, 0.27])
     plt.xlabel('time [sec]')
-    plt.ylabel('wheel position [rad]')
+    plt.ylabel('wheel position diff to first value [rad]')
     plt.legend(loc='center right')
-    plt.title('Wheel position')
+    plt.title('Wheel position trial avg\n(and individual trials)')
     plt.tight_layout()
 
     return plt.gca()
@@ -368,7 +374,11 @@ def _bin_window_licks(lick_times, trials_df):
     lick_bins = np.squeeze(lick_bins)
     start_window, end_window = plt_window(trials_df['feedback_times'])
     # Translating the time window into an index window
-    start_idx = insert_idx(bin_times, start_window)
+    try:
+        start_idx = insert_idx(bin_times, start_window)
+    except ValueError:
+        logger.error('Lick time stamps are outside of the trials windows')
+        raise
     end_idx = np.array(start_idx + int(WINDOW_LEN / T_BIN), dtype='int64')
     # Get the binned licks for each window
     trials_df['lick_bins'] = [lick_bins[start_idx[i]:end_idx[i]] for i in range(len(start_idx))]
@@ -389,7 +399,7 @@ def plot_lick_hist(lick_times, trials_df):
     """
     licks_df = _bin_window_licks(lick_times, trials_df)
     # Plot
-    times = np.arange(len(licks_df['lick_bins'][0])) * T_BIN + WINDOW_LAG
+    times = np.arange(len(licks_df['lick_bins'].iloc[0])) * T_BIN + WINDOW_LAG
     correct = licks_df[licks_df['feedbackType'] == 1]['lick_bins']
     incorrect = licks_df[licks_df['feedbackType'] == -1]['lick_bins']
     plt.plot(times, pd.DataFrame.from_dict(dict(zip(correct.index, correct.values))).mean(axis=1),
@@ -397,7 +407,7 @@ def plot_lick_hist(lick_times, trials_df):
     plt.plot(times, pd.DataFrame.from_dict(dict(zip(correct.index, incorrect.values))).mean(axis=1),
              c='gray', label='incorrect trial')
     plt.axvline(x=0, label='feedback', linestyle='--', c='purple')
-    plt.title('Lick events')
+    plt.title('Lick events trial avg')
     plt.xlabel('time [sec]')
     plt.ylabel('lick events [a.u.]')
     plt.legend(loc='lower right')
@@ -415,7 +425,7 @@ def plot_lick_raster(lick_times, trials_df):
     """
     licks_df = _bin_window_licks(lick_times, trials_df)
     plt.imshow(list(licks_df[licks_df['feedbackType'] == 1]['lick_bins']), aspect='auto',
-               extent=[-0.5, 1.5, len(licks_df['lick_bins'][0]), 0], cmap='gray_r')
+               extent=[-0.5, 1.5, len(licks_df['lick_bins'].iloc[0]), 0], cmap='gray_r')
     plt.xticks([-0.5, 0, 0.5, 1, 1.5])
     plt.ylabel('trials')
     plt.xlabel('time [sec]')
@@ -440,26 +450,42 @@ def plot_motion_energy_hist(camera_dict, trials_df):
               'body': '#035382'}
 
     start_window, end_window = plt_window(trials_df['stimOn_times'])
+    missing_data = []
     for cam in camera_dict.keys():
-        try:
-            motion_energy = zscore(camera_dict[cam]['motion_energy'], nan_policy='omit')
-            start_idx = insert_idx(camera_dict[cam]['times'], start_window)
-            end_idx = np.array(start_idx + int(WINDOW_LEN * SAMPLING[cam]), dtype='int64')
-            me_all = [motion_energy[start_idx[i]:end_idx[i]] for i in range(len(start_idx))]
-            times = np.arange(len(me_all[0])) / SAMPLING[cam] + WINDOW_LAG
-            me_mean = np.mean(me_all, axis=0)
-            me_std = np.std(me_all, axis=0) / np.sqrt(len(me_all))
-            plt.plot(times, me_mean, label=f'{cam} cam', color=colors[cam], linewidth=2)
-            plt.fill_between(times, me_mean + me_std, me_mean - me_std, color=colors[cam], alpha=0.2)
-        except AttributeError:
-            logger.warning(f"Cannot load motion energy AND times data for {cam} camera")
+        if (camera_dict[cam]['motion_energy'] is not None and len(camera_dict[cam]['motion_energy']) > 0
+                and camera_dict[cam]['times'] is not None and len(camera_dict[cam]['times']) > 0):
+            try:
+                motion_energy = zscore(camera_dict[cam]['motion_energy'], nan_policy='omit')
+                try:
+                    start_idx = insert_idx(camera_dict[cam]['times'], start_window)
+                    end_idx = np.array(start_idx + int(WINDOW_LEN * SAMPLING[cam]), dtype='int64')
+                    me_all = [motion_energy[start_idx[i]:end_idx[i]] for i in range(len(start_idx))]
+                    me_all = [m for m in me_all if len(m) > 0]
+                    times = np.arange(len(me_all[0])) / SAMPLING[cam] + WINDOW_LAG
+                    me_mean = np.mean(me_all, axis=0)
+                    me_std = np.std(me_all, axis=0) / np.sqrt(len(me_all))
+                    plt.plot(times, me_mean, label=f'{cam} cam', color=colors[cam], linewidth=2)
+                    plt.fill_between(times, me_mean + me_std, me_mean - me_std, color=colors[cam], alpha=0.2)
+                except ValueError:
+                    logger.error(f"{cam}Camera camera.times are outside of the trial windows")
+                    missing_data.append(cam)
+            except AttributeError:
+                logger.warning(f"Cannot load motion energy and/or times data for {cam} camera")
+                missing_data.append(cam)
+        else:
+            logger.warning(f"Data missing or empty for motion energy and/or times data for {cam} camera")
+            missing_data.append(cam)
 
     plt.xticks([-0.5, 0, 0.5, 1, 1.5])
     plt.ylabel('z-scored motion energy [a.u.]')
     plt.xlabel('time [sec]')
     plt.axvline(x=0, label='stimOn', linestyle='--', c='k')
     plt.legend(loc='lower right')
-    plt.title('Motion Energy')
+    plt.title('Motion Energy trial avg\n(+/- std)')
+    if len(missing_data) > 0:
+        ax = plt.gca()
+        ax.text(.95, .35, f"Data incomplete for\n{' and '.join(missing_data)} camera", color='r', fontsize=10,
+                fontweight='bold', horizontalalignment='right', verticalalignment='center', transform=ax.transAxes)
     return plt.gca()
 
 
@@ -477,6 +503,10 @@ def plot_speed_hist(dlc_df, cam_times, trials_df, feature='paw_r', cam='left', l
     """
     # Threshold the dlc traces
     dlc_df = likelihood_threshold(dlc_df)
+    # For pre-GPIO sessions, remove the first few timestamps to match the number of frames
+    cam_times = cam_times[-len(dlc_df):]
+    if len(cam_times) != len(dlc_df):
+        raise ValueError("Camera times length and DLC length are inconsistent")
     # Get speeds
     speeds = get_speed(dlc_df, cam_times, camera=cam, feature=feature)
     # Windows aligned to align_to
@@ -486,7 +516,7 @@ def plot_speed_hist(dlc_df, cam_times, trials_df, feature='paw_r', cam='left', l
     # Add speeds to trials_df
     trials_df[f'speed_{feature}'] = [speeds[start_idx[i]:end_idx[i]] for i in range(len(start_idx))]
     # Plot
-    times = np.arange(len(trials_df[f'speed_{feature}'][0])) / SAMPLING[cam] + WINDOW_LAG
+    times = np.arange(len(trials_df[f'speed_{feature}'].iloc[0])) / SAMPLING[cam] + WINDOW_LAG
     # Need to expand the series of lists into a dataframe first, for the nan skipping to work
     correct = trials_df[trials_df['feedbackType'] == 1][f'speed_{feature}']
     incorrect = trials_df[trials_df['feedbackType'] == -1][f'speed_{feature}']
@@ -495,7 +525,7 @@ def plot_speed_hist(dlc_df, cam_times, trials_df, feature='paw_r', cam='left', l
     plt.plot(times, pd.DataFrame.from_dict(dict(zip(incorrect.index, incorrect.values))).mean(axis=1),
              c='gray', label='incorrect trial')
     plt.axvline(x=0, label='stimOn', linestyle='--', c='r')
-    plt.title(f'{feature.split("_")[0].capitalize()} speed')
+    plt.title(f'{feature.capitalize()} speed trial avg\n({cam.upper()} cam)')
     plt.xticks([-0.5, 0, 0.5, 1, 1.5])
     plt.xlabel('time [sec]')
     plt.ylabel('speed [px/sec]')
@@ -531,8 +561,8 @@ def plot_pupil_diameter_hist(pupil_diameter, cam_times, trials_df, cam='left'):
         plt.plot(times, pupil_mean, label=align_to.split("_")[0], color=color)
         plt.fill_between(times, pupil_mean + pupil_std, pupil_mean - pupil_std, color=color, alpha=0.5)
     plt.axvline(x=0, linestyle='--', c='k')
-    plt.title('Pupil diameter')
+    plt.title(f'Pupil diameter trial avg\n({cam.upper()} cam)')
     plt.xlabel('time [sec]')
     plt.xticks([-0.5, 0, 0.5, 1, 1.5])
-    plt.ylabel('pupil diameter [px]')
+    plt.ylabel('z-scored smoothed pupil diameter [px]')
     plt.legend(loc='lower right', title='aligned to')
