@@ -32,6 +32,7 @@ from ibllib.pipes.ephys_preprocessing import (
     EphysPulses, EphysMtscomp, EphysAudio, EphysVideoCompress, EphysVideoSyncQc, EphysTrials, EphysPassive, EphysDLC, EphysPostDLC
 )
 from ibllib.oneibl.registration import register_session_raw_data
+from ibllib.io.video import get_video_meta
 from ibllib.pipes.misc import create_alyx_probe_insertions
 from ibllib.qc.task_extractors import TaskQCExtractor
 from ibllib.qc.task_metrics import TaskQC
@@ -84,7 +85,8 @@ class WidefieldRegisterRaw(tasks.Task):
 
     def register_snapshots(self, unlink=False):
         """
-        Register any photos in the snapshots folder to the session.
+        Register any photos in the snapshots folder to the session. Typically user will take photo of dorsal cortex before
+        and after session
 
         Returns
         -------
@@ -120,7 +122,7 @@ class WidefieldCompress(tasks.Task):
         'output_files': [('widefield.raw.mov', 'raw_widefield_data', True)]
     }
 
-    def _run(self, remove_uncompressed=False, **kwargs):
+    def _run(self, remove_uncompressed=False, verify_output=True, **kwargs):
         # Find raw data dat file
         filename, collection, _ = self.input_files[0]
         filepath = next(self.session_path.rglob(str(Path(collection).joinpath(filename))))
@@ -132,9 +134,15 @@ class WidefieldCompress(tasks.Task):
         stack = labcams.io.mmap_dat(str(filepath))
         labcams.io.stack_to_mj2_lossless(stack, str(output_file), rate=30)
 
+        assert output_file.exists(), 'Failed to compress data: no output file found'
+
+        if verify_output:
+            meta = get_video_meta(output_file)
+            assert meta.length > 0 and meta.size > 0, f'Video file empty: {output_file}
+
         if remove_uncompressed:
             filepath.unlink()
-        assert output_file.exists(), 'Failed to compress data: no output file found'
+
         return output_file
 
 
@@ -146,26 +154,45 @@ class WidefieldPreprocess(tasks.Task):
     signature = {
         'input_files': [('widefield.raw.*', 'raw_widefield_data', True),
                         ('widefieldEvents.raw.*', 'raw_widefield_data', True)],
-        'output_files': [('*trials.choice.npy', 'alf', True), ]  # TODO
+        'output_files': [('widefieldChannels.frameAverage.npy', 'raw_widefield_data', True),
+                         ('widefieldU.images.npy', 'alf', True),
+                         ('widefieldSVT.uncorrected', 'alf', True),
+                         ('widefieldSVT.haemoCorrected.npy', 'alf', True)]
     }
 
     def _run(self, **kwargs):
-        dsets, out_files = WidefieldExtractor(self.session_path).extract(save=True)
+        self.wf = WidefieldExtractor(self.session_path)
+        dsets, out_files = self.wf.extract(save=True)
+        # rename files
 
         # QC could be run here
         return out_files
 
+    def tearDown(self):
+        super(WidefieldPreprocess, self).tearDown()
+        self.wf.remove_files()
 
-def _extract_haemo_corrected():
-    U = np.load('U.npy')
-    SVT = np.load('SVT.npy')
 
-    frame_rate = 30.  # acquisition rate (2 channels)
-    output_folder = None  # write to current directory or path
+class WideFieldSync(tasks.Tasks):
+    priority = 60
+    level = 1
+    force = False
+    signature = {
+        'input_files': [('widefield.raw.*', 'raw_widefield_data', True), # sync files for ephys data
+                        ('widefieldEvents.raw.*', 'raw_widefield_data', True)],
+        'output_files': [('widefield.times.npy', 'alf', True)]
+    }
 
-    from wfield.ncaas import dual_color_hemodymamic_correction
+    def _run(self):
 
-    SVTcorr = dual_color_hemodymamic_correction(U, SVTa, SVTb, frame_rate=frame_rate, output_folder=output_folder);
+        self.wf = WidefieldExtractor(self.session_path)
+        out_files = self.wf.sync_timestamps(bin_exists=False, save=True)
+
+        return out_files
+
+
+
+
 
 # pipeline
 class WidefieldExtractionPipeline(tasks.Pipeline):
