@@ -151,8 +151,9 @@ def backup_session(session_path):
         bk_session_path = Path(*session_path.parts[:-4]).joinpath(
             "Subjects_backup_renamed_sessions", Path(*session_path.parts[-3:]))
         Path(bk_session_path.parent).mkdir(parents=True, exist_ok=True)
-        shutil.copytree(str(session_path), str(bk_session_path))
-    except BaseException as e:
+        shutil.copytree(session_path, bk_session_path)
+        log.debug(f'copied {session_path} to {bk_session_path}')
+    except Exception as e:
         log.error(f"A backup of this session already exist: {bk_session_path}, manual intervention"
                   f" is necessary.")
         log.exception(e)
@@ -192,7 +193,7 @@ def transfer_folder(src: Path, dst: Path, force: bool = False) -> None:
         print("All files copied")
 
 
-def load_params_dict(params_fname: str) -> dict:
+def load_params_dict(params_fname: str) -> None:
     params_fpath = Path(params.getfile(params_fname))
     if not params_fpath.exists():
         return None
@@ -565,6 +566,58 @@ def confirm_widefield_remote_folder(local_folder=False, remote_folder=False, for
             print(f'No behavior folder found in {remote_session_path}: skipping session...')
             continue
 
+        # Check if multiple runs are found
+        imaging_files = list(session_path.joinpath('raw_widefield_data').glob('*.dat'))
+        if len(imaging_files) == 0:
+            log.warning('No widefield DAT file found')
+        elif len(imaging_files) > 1:
+            sizes = [x.stat().st_size / 1024 ** 3 for x in imaging_files]
+            print('Multiple DAT files found:',
+                  *(f'{i}: {x} ({sz:.2f} GB)' for i, (x, sz) in enumerate(zip(imaging_files, sizes))), sep='\n')
+            while True:
+                # Select an action
+                ans = input('[D]elete or [m]ove the extra files? (you will be prompted which to keep next)> ')
+                if len(ans) == 0 or ans.lower()[0] not in 'dm':
+                    print('Invalid response...')
+                    continue
+                action = 'delete' if ans.lower()[0] == 'd' else 'move'
+                # Select a file to perform action on
+                ans = input(f'Which file to keep, i.e. NOT {action} [{range_str(range(len(imaging_files)))}]?> ')
+                if ans not in map(str, range(len(imaging_files))):
+                    print('Invalid response...')
+                    continue
+
+                to_change = [x for i, x in enumerate(imaging_files) if i != int(ans)]
+                if action == 'delete':
+                    print('The following file(s) will be deleted: ', *to_change, sep='\n')
+                    ans = input(f'Type "delete" to confirm> ')
+                    if ans.lower() != 'delete':
+                        print('Invalid response...')
+                        continue
+                    for to_delete in to_change:
+                        to_delete.unlink()
+                        assert not to_delete.exists()
+                    break
+                else:
+                    suggested = Path.home().joinpath('widefield', *session_path.parts[-3:])
+                    ans = input(f'Press enter to move to "{suggested}" or type an alternative path> ')
+                    try:
+                        new_location = Path(ans or suggested).resolve()
+                        assert new_location != session_path.joinpath('raw_widefield_data'), \
+                            'New location can not be the same as the current one'
+                        if not new_location.exists():
+                            new_location.mkdir()
+                        for to_move in to_change:
+                            destination = new_location.joinpath(to_move.name)
+                            print(f'Moving {to_move} --> {destination}')
+                            shutil.move(to_move, destination)
+                        break
+                    except Exception as ex:
+                        log.error('Failed to move file:')
+                        log.exception(ex)
+                        print(flush=True)
+
+        # TODO Move to separate function
         print(f"\nFound session: {session_path}")
         if _get_session_numbers(session_path) != remote_numbers:
             not_valid = True
