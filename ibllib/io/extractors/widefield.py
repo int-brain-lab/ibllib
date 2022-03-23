@@ -79,17 +79,17 @@ class Widefield(BaseExtractor):
         data_path = self.session_path.joinpath('raw_widefield_data')
 
         # MOTION CORRECTION
-        wfield_cli._motion(data_path)
+        wfield_cli._motion(str(data_path))
         # COMPUTE AVERAGE FOR BASELINE
-        wfield_cli._baseline(data_path, nbaseline_frames)
+        wfield_cli._baseline(str(data_path), nbaseline_frames)
         # DATA REDUCTION
-        wfield_cli._decompose(data_path, k=k)
+        wfield_cli._decompose(str(data_path), k=k)
         # HAEMODYNAMIC CORRECTION
         # check if it is 2 channel
-        dat = wfield_cli.load_stack(data_path)
+        dat = wfield_cli.load_stack(str(data_path))
         if dat.shape[1] == 2:
             del dat
-            wfield_cli._hemocorrect(data_path, fs=fs, functional_channel=functional_channel)
+            wfield_cli._hemocorrect(str(data_path), fs=fs, functional_channel=functional_channel)
 
     def rename_files(self, session_folder) -> bool:
         """
