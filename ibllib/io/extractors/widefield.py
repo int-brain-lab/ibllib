@@ -46,9 +46,8 @@ FILENAME_MAP = {
 
 
 class Widefield(BaseExtractor):
-    save_names = (None, None, None, ('widefieldChannels.frameAverage.npy', 'raw_widefield_data'),
-                  ('widefieldU.images.npy', 'alf'), ('widefieldSVT.uncorrected.npy', 'alf'),  None, None,
-                  ('widefieldSVT.haemoCorrected.npy', 'alf'), ('widefield.times', 'alf'))
+    save_names = (None, None, None, 'widefieldChannels.frameAverage.npy', 'widefieldU.images.npy', 'widefieldSVT.uncorrected.npy'
+                  , None, None, 'widefieldSVT.haemoCorrected.npy', 'widefield.times')
     raw_names = ('motioncorrect_2_540_640_uint16.bin', 'motion_correction_shifts.npy', 'motion_correction_rotation.npy',
                  'frames_average.npy', 'U.npy', 'SVT.npy', 'rcoeffs.npy', 'T.npy', 'SVTcorr.npy', 'timestamps.npy')
     var_names = ()
@@ -78,7 +77,7 @@ class Widefield(BaseExtractor):
 
         return None
 
-    def _save(self):
+    def _save(self, collection='alf'):
 
         new_files = []
         if not self.data_path.exists():
@@ -91,7 +90,7 @@ class Widefield(BaseExtractor):
             else:
                 try:
                     file_orig = next(self.data_path.glob(before))
-                    file_new = self.session_path.joinpath(after[0], after[1])
+                    file_new = self.session_path.joinpath(collection, after)
                     shutil.move(file_orig, file_new)
                     new_files.append(file_new)
                 except StopIteration:

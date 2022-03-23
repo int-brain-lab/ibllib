@@ -162,10 +162,7 @@ class WidefieldPreprocess(tasks.Task):
 
     def _run(self, **kwargs):
         self.wf = WidefieldExtractor(self.session_path)
-        dsets, out_files = self.wf.extract(save=True)
-        # rename files
-
-        # QC could be run here
+        _, out_files = self.wf.extract(save=True, extract_timestamps=False)
         return out_files
 
     def tearDown(self):
@@ -173,7 +170,7 @@ class WidefieldPreprocess(tasks.Task):
         self.wf.remove_files()
 
 
-class WideFieldSync(tasks.Tasks):
+class WideFieldSync(tasks.Task):
     priority = 60
     level = 1
     force = False
@@ -186,7 +183,9 @@ class WideFieldSync(tasks.Tasks):
     def _run(self):
 
         self.wf = WidefieldExtractor(self.session_path)
-        out_files = self.wf.sync_timestamps(bin_exists=False, save=True)
+        save_path = self.session_path.joinpath(self.signature['output_files'][0][1], self.signature['output_files'][0][0])
+        out_files = self.wf.sync_timestamps(bin_exists=False, save=True, save_path=save_path)
+        # TODO QC
 
         return out_files
 
@@ -203,12 +202,14 @@ class WidefieldExtractionPipeline(tasks.Pipeline):
         tasks = OrderedDict()
         self.session_path = session_path
         # level 0
-        for Task in (WidefieldRegisterRaw, WidefieldCompress, EphysPulses, WidefieldPreprocess, EphysAudio, EphysVideoCompress):
+        for Task in (WidefieldRegisterRaw, WidefieldCompress, EphysMtscomp, EphysPulses, WidefieldPreprocess, EphysAudio,
+                     EphysVideoCompress):
             task = Task(session_path)
             tasks[task.name] = task
         # level 1
         tasks["EphysTrials"] = EphysTrials(self.session_path, parents=[tasks["EphysPulses"]])
         tasks["EphysPassive"] = EphysPassive(self.session_path, parents=[tasks["EphysPulses"]])
+        tasks["WideFieldSync"] = WideFieldSync(self.session_path, parents=[tasks["EphysPulses"]])
         # level 2
         tasks["EphysVideoSyncQc"] = EphysVideoSyncQc(
             self.session_path, parents=[tasks["EphysVideoCompress"], tasks["EphysPulses"], tasks["EphysTrials"]])
