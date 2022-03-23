@@ -121,7 +121,7 @@ def rename_session(session_path: str, new_subject=None, new_date=None, new_numbe
         new_mouse = input(f"Please insert subject NAME [current value: {mouse}]> ")
         new_date = input(f"Please insert new session DATE [current value: {date}]> ")
         new_sess = input(f"Please insert new session NUMBER [current value: {sess}]> ")
-            
+
     new_session_path = Path(*session_path.parts[:-3]).joinpath(new_mouse, new_date,
                                                                new_sess.zfill(3))
     assert is_session_path(new_session_path), 'invalid subject, date or number'
@@ -303,14 +303,8 @@ def confirm_video_remote_folder(local_folder=False, remote_folder=False, force=F
     print('REMOTE:', remote_folder)
     src_session_paths = (x.parent for x in local_folder.rglob('transfer_me.flag'))
 
-    def is_recent(x):
-        try:
-            return (datetime.date.today() - datetime.date.fromisoformat(x.parts[-2])).days <= n_days
-        except ValueError:  # ignore none date formatted folders
-            return False
-
     if n_days is not None:
-        src_session_paths = filter(is_recent, src_session_paths)
+        src_session_paths = filter(lambda x: _is_recent(x, n_days), src_session_paths)
 
     # Load incomplete transfer list
     transfer_records = params.getfile('ibl_local_transfers')
@@ -335,11 +329,6 @@ def confirm_video_remote_folder(local_folder=False, remote_folder=False, force=F
         remote_session_path = remote_folder.joinpath(*session_path.parts[-3:])
 
         # Check remote and local session number folders are the same
-        def _get_session_numbers(session_path):
-            contents = session_path.parent.glob('*')
-            folders = filter(lambda x: x.is_dir() and re.match(r'^\d{3}$', x.name), contents)
-            return set(map(lambda x: x.name, folders))
-
         remote_numbers = _get_session_numbers(remote_session_path)
         if not remote_numbers:
             print(f'No behavior folder found in {remote_session_path}: skipping session...')
@@ -483,6 +472,34 @@ def confirm_ephys_remote_folder(
         check_create_raw_session_flag(remote_session_path)
 
 
+def _is_recent(session_path, n_days_cutoff) -> bool:
+    """
+    Determine whether session occurred within a given number of days.
+
+    Parameters
+    ----------
+    session_path : pathlib.Path, pathlib.PurePath
+        The session path for which to check the date.
+    n_days_cutoff : int
+        The maximum number of days between the session path date and today in order to return True.
+
+    Returns
+    -------
+    bool
+        True if session path date occurred less than n_days ago
+    """
+    try:
+        return (datetime.date.today() - datetime.date.fromisoformat(session_path.parts[-2])).days <= n_days_cutoff
+    except ValueError:  # ignore none date formatted folders
+        return False
+
+
+def _get_session_numbers(session_path):
+    contents = session_path.parent.glob('*')
+    folders = filter(lambda x: x.is_dir() and re.match(r'^\d{3}$', x.name), contents)
+    return set(map(lambda x: x.name, folders))
+
+
 def confirm_widefield_remote_folder(local_folder=False, remote_folder=False, force=False, n_days=None):
     """
     Copy local widefield data to the local server.
@@ -499,7 +516,6 @@ def confirm_widefield_remote_folder(local_folder=False, remote_folder=False, for
         The number of days back to check.
 
     """
-
     pars = None
 
     if not local_folder:
@@ -519,14 +535,7 @@ def confirm_widefield_remote_folder(local_folder=False, remote_folder=False, for
     print('REMOTE:', remote_folder)
     src_session_paths = (x.parent for x in local_folder.rglob('raw_widefield_data'))
 
-    def is_recent(x):
-        try:
-            return (datetime.date.today() - datetime.date.fromisoformat(x.parts[-2])).days <= n_days
-        except ValueError:  # ignore none date formatted folders
-            return False
-
-    if n_days is not None:
-        src_session_paths = filter(is_recent, src_session_paths)
+    src_session_paths = filter(lambda x: _is_recent(x, n_days), src_session_paths)
 
     # Load incomplete transfer list
     transfer_records = params.getfile('ibl_local_transfers')
@@ -545,16 +554,12 @@ def confirm_widefield_remote_folder(local_folder=False, remote_folder=False, for
 
     for session_path in src_session_paths:
         if session_path in (x[0] for x in transfers):
+            log.info(f'{session_path} already in transfers list')
             continue  # Already on pile
 
         remote_session_path = remote_folder.joinpath(*session_path.parts[-3:])
 
         # Check remote and local session number folders are the same
-        def _get_session_numbers(session_path):
-            contents = session_path.parent.glob('*')
-            folders = filter(lambda x: x.is_dir() and re.match(r'^\d{3}$', x.name), contents)
-            return set(map(lambda x: x.name, folders))
-
         remote_numbers = _get_session_numbers(remote_session_path)
         if not remote_numbers:
             print(f'No behavior folder found in {remote_session_path}: skipping session...')
@@ -564,19 +569,29 @@ def confirm_widefield_remote_folder(local_folder=False, remote_folder=False, for
         if _get_session_numbers(session_path) != remote_numbers:
             not_valid = True
             resp = 's'
+            remote_numbers = list(map(int, remote_numbers))
             while not_valid:
                 resp = input(f'Which session number to use? Options: '
-                             f'{range_str(map(int, remote_numbers))} or [s]kip/[e]xit').strip()
-                not_valid = resp != 's' and resp != 'e' and resp not in remote_numbers
+                             f'{range_str(remote_numbers)} or [s]kip/[h]elp/[e]xit> ').strip()
+                if resp == 'h':
+                    print('An example session filepath:\n')
+                    describe('number')  # Explain what a session number is
+                    input('Press enter to continue')
+                not_valid = resp != 's' and resp != 'e'
+                not_valid = not_valid and (not re.match(r'^\d+$', resp) or int(resp) not in remote_numbers)
             if resp == 's':
+                log.info('Skipping session...')
                 continue
             if resp == 'e':
                 print('Exiting.  No files transferred.')
                 return
-            subj, date = session_path.parts[-3:-1]
-            session_path = rename_session(session_path, new_subject=subj, new_date=date, new_number=resp)
+            session_path = rename_session(session_path, new_number=resp)
+            if session_path is None:
+                log.info('Skipping session...')
+                continue
             remote_session_path = remote_folder / Path(*session_path.parts[-3:])
         transfers.append((session_path.as_posix(), remote_session_path.as_posix()))
+        log.debug('Added to transfers list:\n' + str(transfers[-1]))
         with open(transfer_records, 'w') as fp:
             json.dump(transfers, fp)
 
