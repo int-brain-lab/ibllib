@@ -77,7 +77,10 @@ class Widefield(BaseExtractor):
 
         return None
 
-    def _save(self, collection='alf'):
+    def _save(self, path_out=None):
+        if not path_out:
+            path_out = self.session_path.joinpath(self.default_path)
+        path_out.mkdir(exist_ok=True, parents=True)
 
         new_files = []
         if not self.data_path.exists():
@@ -90,7 +93,7 @@ class Widefield(BaseExtractor):
             else:
                 try:
                     file_orig = next(self.data_path.glob(before))
-                    file_new = self.session_path.joinpath(collection, after)
+                    file_new = path_out.joinpath(after)
                     shutil.move(file_orig, file_new)
                     new_files.append(file_new)
                 except StopIteration:

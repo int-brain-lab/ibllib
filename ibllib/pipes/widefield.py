@@ -42,7 +42,7 @@ _logger = logging.getLogger('ibllib')
 
 class WidefieldRegisterRaw(tasks.Task):
     signature = {
-        'input_files': [('dorsal_cortex_landmarks.json', 'raw_widefield_data', True),
+        'input_files': [('dorsal_cortex_landmarks.json', 'alf', True),
                         ('*.camlog', 'raw_widefield_data', True)],
         'output_files': [('widefieldLandmarks.dorsalCortex.json', 'raw_widefield_data', True),
                          ('widefieldEvents.raw.camlog', 'raw_widefield_data', True)]
@@ -138,7 +138,7 @@ class WidefieldCompress(tasks.Task):
 
         if verify_output:
             meta = get_video_meta(output_file)
-            assert meta.length > 0 and meta.size > 0, f'Video file empty: {output_file}
+            assert meta.length > 0 and meta.size > 0, f'Video file empty: {output_file}'
 
         if remove_uncompressed:
             filepath.unlink()
@@ -213,7 +213,6 @@ class WidefieldExtractionPipeline(tasks.Pipeline):
         # level 2
         tasks["EphysVideoSyncQc"] = EphysVideoSyncQc(
             self.session_path, parents=[tasks["EphysVideoCompress"], tasks["EphysPulses"], tasks["EphysTrials"]])
-        # tasks["EphysCellsQc"] = EphysCellsQc(self.session_path, parents=[tasks["SpikeSorting"]])
         tasks["EphysDLC"] = EphysDLC(self.session_path, parents=[tasks["EphysVideoCompress"]])
         # level 3
         tasks["EphysPostDLC"] = EphysPostDLC(self.session_path, parents=[tasks["EphysDLC"]])
