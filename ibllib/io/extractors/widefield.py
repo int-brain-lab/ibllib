@@ -77,7 +77,7 @@ class Widefield(BaseExtractor):
 
         return None
 
-    def _save(self, path_out=None):
+    def _save(self, out, path_out=None):
         if not path_out:
             path_out = self.session_path.joinpath(self.default_path)
         path_out.mkdir(exist_ok=True, parents=True)
