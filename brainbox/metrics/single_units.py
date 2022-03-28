@@ -881,7 +881,8 @@ def noise_cutoff(amps, quantile_length=.2, n_bins=100, n_low_bins=1,low_bin_star
             cutoff = np.float64(np.nan)
     else:
         cutoff = np.float64(np.nan)
-        
+     
+    cutoff = 1    
     return cutoff#, first_low_quantile,mean_high_quantile,std_high_quantile
 
 
