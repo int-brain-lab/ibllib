@@ -170,7 +170,7 @@ class WidefieldPreprocess(tasks.Task):
         self.wf.remove_files()
 
 
-class WideFieldSync(tasks.Task):
+class WidefieldSync(tasks.Task):
     priority = 60
     level = 1
     force = False
@@ -190,9 +190,6 @@ class WideFieldSync(tasks.Task):
         return out_files
 
 
-
-
-
 # pipeline
 class WidefieldExtractionPipeline(tasks.Pipeline):
     label = __name__
@@ -209,7 +206,7 @@ class WidefieldExtractionPipeline(tasks.Pipeline):
         # level 1
         tasks["EphysTrials"] = EphysTrials(self.session_path, parents=[tasks["EphysPulses"]])
         tasks["EphysPassive"] = EphysPassive(self.session_path, parents=[tasks["EphysPulses"]])
-        tasks["WideFieldSync"] = WideFieldSync(self.session_path, parents=[tasks["EphysPulses"]])
+        tasks["WidefieldSync"] = WidefieldSync(self.session_path, parents=[tasks["EphysPulses"]])
         # level 2
         tasks["EphysVideoSyncQc"] = EphysVideoSyncQc(
             self.session_path, parents=[tasks["EphysVideoCompress"], tasks["EphysPulses"], tasks["EphysTrials"]])
