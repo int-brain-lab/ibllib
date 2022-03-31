@@ -688,6 +688,9 @@ def dlc_qc_plot(session_path, one=None):
     """
 
     one = one or ONE()
+    # hack for running on cortexlab local server
+    if one.alyx.base_url == 'https://alyx.cortexlab.net':
+        one = ONE(base_url='https://alyx.internationalbrainlab.org')
     data = {}
     cams = ['left', 'right', 'body']
     session_path = Path(session_path)
