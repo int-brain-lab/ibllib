@@ -1,4 +1,6 @@
 ## Release Note 2.10
+## unreleased
+- brainbox.io.one.SpikeSortingLoader: option to load using `collection` argument
 
 ## Release Note 2.10.6 2022-03-15
 - Allow parent tasks to be 'Incomplete' to run task on local server
