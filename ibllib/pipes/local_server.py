@@ -16,8 +16,7 @@ from ibllib.time import date2isostr
 import ibllib.oneibl.registration as registration
 
 _logger = logging.getLogger('ibllib')
-# LARGE_TASKS = ['EphysVideoCompress', 'TrainingVideoCompress', 'SpikeSorting', 'EphysDLC']  # 'TrainingDLC'
-LARGE_TASKS = ['SpikeSorting', 'EphysDLC']
+LARGE_TASKS = ['EphysVideoCompress', 'TrainingVideoCompress', 'SpikeSorting', 'EphysDLC']
 
 
 def _get_pipeline_class(session_path, one):
@@ -148,7 +147,7 @@ def task_queue(mode='all', lab=None, one=None):
     if one is None:
         one = ONE(cache_rest=None)
     if lab is None:
-        _logger.warning("Trying to infer lab from globus installation")
+        _logger.info("Trying to infer lab from globus installation")
         lab = _get_lab(one)
     if lab is None:
         _logger.error("No lab provided or found")
