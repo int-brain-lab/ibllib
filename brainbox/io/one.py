@@ -14,7 +14,8 @@ from one.alf import cache
 
 from iblutil.util import Bunch
 from ibllib.io import spikeglx
-from ibllib.io.extractors.training_wheel import extract_wheel_moves, extract_first_movement_times
+# from ibllib.io.extractors.training_wheel import extract_wheel_moves, extract_first_movement_times
+import ibllib.io.extractors.training_wheel
 from ibllib.ephys.neuropixel import SITES_COORDINATES, TIP_SIZE_UM, trace_header
 from ibllib.atlas import atlas, AllenAtlas
 from ibllib.pipes import histology
