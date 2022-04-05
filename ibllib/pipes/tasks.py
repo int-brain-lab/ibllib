@@ -235,7 +235,7 @@ class Task(abc.ABC):
             self.data_handler = self.get_data_handler()
             self.data_handler.setUp()
             self.get_signatures(**kwargs)
-            # self.assert_expected_inputs()
+            self.assert_expected_inputs()
             return True
 
     def tearDown(self):
