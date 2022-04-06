@@ -14,7 +14,7 @@ from ibllib.dsp import fshift, rms
 from ibllib.ephys import neuropixel
 
 
-def agc(x, wl=.5, si=.002, epsilon=1e-8):
+def agc(x, wl=.5, si=.002, epsilon=1e-8, gpu=False):
     """
     Automatic gain control
     w_agc, gain = agc(w, wl=.5, si=.002, epsilon=1e-8)
@@ -23,14 +23,23 @@ def agc(x, wl=.5, si=.002, epsilon=1e-8):
     :param wl: window length (secs)
     :param si: sampling interval (secs)
     :param epsilon: whitening (useful mainly for synthetic data)
+    :param gpu: bool
     :return: AGC data array, gain applied to data
     """
-    ns_win = np.round(wl / si / 2) * 2 + 1
-    w = np.hanning(ns_win)
-    w /= np.sum(w)
-    gain = fdsp.convolve(np.abs(x), w, mode='same')
-    gain += (np.sum(gain, axis=1) * epsilon / x.shape[-1])[:, np.newaxis]
+    if gpu:
+        import cupy as gp
+    else:
+        gp = np
+    ns_win = int(gp.round(wl / si / 2) * 2 + 1)
+    w = gp.hanning(ns_win)
+    w /= gp.sum(w)
+    gain = fdsp.convolve(gp.abs(x), w, mode='same', gpu=gpu)
+    gain += (gp.sum(gain, axis=1) * epsilon / x.shape[-1])[:, gp.newaxis]
     gain = 1 / gain
+
+    if gpu:
+        return (x * gain).astype('float32'), gain.astype('float32')
+
     return x * gain, gain
 
 
@@ -140,7 +149,7 @@ def car(x, collection=None, lagc=300, butter_kwargs=None, **kwargs):
     return xf / gain
 
 
-def kfilt(x, collection=None, ntr_pad=0, ntr_tap=None, lagc=300, butter_kwargs=None):
+def kfilt(x, collection=None, ntr_pad=0, ntr_tap=None, lagc=300, butter_kwargs=None, gpu=False):
     """
     Applies a butterworth filter on the 0-axis with tapering / padding
     :param x: the input array to be filtered. dimension, the filtering is considering
@@ -150,13 +159,19 @@ def kfilt(x, collection=None, ntr_pad=0, ntr_tap=None, lagc=300, butter_kwargs=N
     :param ntr_tap: n traces for apodizatin on each side
     :param lagc: window size for time domain automatic gain control (no agc otherwise)
     :param butter_kwargs: filtering parameters: defaults: {'N': 3, 'Wn': 0.1, 'btype': 'highpass'}
+    :param gpu: bool
     :return:
     """
+    if gpu:
+        import cupy as gp
+    else:
+        gp = np
+
     if butter_kwargs is None:
         butter_kwargs = {'N': 3, 'Wn': 0.1, 'btype': 'highpass'}
     if collection is not None:
-        xout = np.zeros_like(x)
-        for c in np.unique(collection):
+        xout = gp.zeros_like(x)
+        for c in gp.unique(collection):
             sel = collection == c
             xout[sel, :] = kfilt(x=x[sel, :], ntr_pad=0, ntr_tap=None, collection=None,
                                  butter_kwargs=butter_kwargs)
@@ -170,54 +185,64 @@ def kfilt(x, collection=None, ntr_pad=0, ntr_tap=None, lagc=300, butter_kwargs=N
 
     # apply agc and keep the gain in handy
     if not lagc:
-        xf = np.copy(x)
+        xf = gp.copy(x)
         gain = 1
     else:
-        xf, gain = agc(x, wl=lagc, si=1.0)
+        xf, gain = agc(x, wl=lagc, si=1.0, gpu=gpu)
     if ntr_pad > 0:
         # pad the array with a mirrored version of itself and apply a cosine taper
-        xf = np.r_[np.flipud(xf[:ntr_pad]), xf, np.flipud(xf[-ntr_pad:])]
+        xf = gp.r_[gp.flipud(xf[:ntr_pad]), xf, gp.flipud(xf[-ntr_pad:])]
     if ntr_tap > 0:
-        taper = fdsp.fcn_cosine([0, ntr_tap])(np.arange(nxp))  # taper up
-        taper *= 1 - fdsp.fcn_cosine([nxp - ntr_tap, nxp])(np.arange(nxp))   # taper down
-        xf = xf * taper[:, np.newaxis]
+        taper = fdsp.fcn_cosine([0, ntr_tap], gpu=gpu)(gp.arange(nxp))  # taper up
+        taper *= 1 - fdsp.fcn_cosine([nxp - ntr_tap, nxp], gpu=gpu)(gp.arange(nxp))   # taper down
+        xf = xf * taper[:, gp.newaxis]
     sos = scipy.signal.butter(**butter_kwargs, output='sos')
-    xf = scipy.signal.sosfiltfilt(sos, xf, axis=0)
+    if gpu:
+        from .filter_gpu import sosfiltfilt_gpu
+        xf = sosfiltfilt_gpu(sos, xf, axis=0)
+    else:
+        xf = scipy.signal.sosfiltfilt(sos, xf, axis=0)
 
     if ntr_pad > 0:
         xf = xf[ntr_pad:-ntr_pad, :]
     return xf / gain
 
 
-def interpolate_bad_channels(data, channel_labels=None, h=None, p=1.3, kriging_distance_um=20):
+def interpolate_bad_channels(data, channel_labels=None, x=None, y=None, p=1.3, kriging_distance_um=20, gpu=False):
     """
     Interpolate the channel labeled as bad channels using linear interpolation.
     The weights applied to neighbouring channels come from an exponential decay function
     :param data: (nc, ns) np.ndarray
     :param channel_labels; (nc) np.ndarray: 0: channel is good, 1: dead, 2:noisy, 3: out of the brain
-    :param h: dict with fields 'x' and 'y', np.ndarrays
+    :param x: channel x-coordinates, np.ndarray
+    :param y: channel y-coordinates, np.ndarray
     :param p:
     :param kriging_distance_um:
+    :param gpu: bool
     :return:
     """
+    if gpu:
+        import cupy as gp
+    else:
+        gp = np
+
     # from ibllib.plots.figures import ephys_bad_channels
     # ephys_bad_channels(x, 30000, channel_labels[0], channel_labels[1])
-    x = h['x']
-    y = h['y']
+
     # we interpolate only noisy channels or dead channels (0: good), out of the brain channels are left
-    bad_channels = np.where(np.logical_or(channel_labels == 1, channel_labels == 2))[0]
+    bad_channels = gp.where(np.logical_or(channel_labels == 1, channel_labels == 2))[0]
     for i in bad_channels:
         # compute the weights to apply to neighbouring traces
-        offset = np.abs(x - x[i] + 1j * (y - y[i]))
-        weights = np.exp(-(offset / kriging_distance_um) ** p)
+        offset = gp.abs(x - x[i] + 1j * (y - y[i]))
+        weights = gp.exp(-(offset / kriging_distance_um) ** p)
         weights[bad_channels] = 0
         weights[weights < 0.005] = 0
-        weights = weights / np.sum(weights)
-        imult = np.where(weights > 0.005)[0]
+        weights = weights / gp.sum(weights)
+        imult = gp.where(weights > 0.005)[0]
         if imult.size == 0:
             data[i, :] = 0
             continue
-        data[i, :] = np.matmul(weights[imult], data[imult, :])
+        data[i, :] = gp.matmul(weights[imult], data[imult, :])
     # from viewephys.gui import viewephys
     # f = viewephys(data.T, fs=1/30, h=h, title='interp2')
     return data
@@ -272,7 +297,7 @@ def destripe(x, fs, neuropixel_version=1, butter_kwargs=None, k_kwargs=None, cha
         x = fshift(x, h['sample_shift'], axis=1)
     # apply spatial filter only on channels that are inside of the brain
     if channel_labels is not None:
-        x = interpolate_bad_channels(x, channel_labels, h)
+        x = interpolate_bad_channels(x, channel_labels, h['x'], h['y'])
         inside_brain = np.where(channel_labels != 3)[0]
         x[inside_brain, :] = spatial_fcn(x[inside_brain, :])  # apply the k-filter
     else:
@@ -434,7 +459,7 @@ def decompress_destripe_cbin(sr_file, output_file=None, h=None, wrot=None, appen
             # interpolate missing traces after the low-cut filter it's important to leave the
             # channels outside of the brain outside of the computation
             if reject_channels:
-                chunk = interpolate_bad_channels(chunk, channel_labels, h=h)
+                chunk = interpolate_bad_channels(chunk, channel_labels, h['x'], h['y'])
                 inside_brain = np.where(channel_labels != 3)[0]
                 chunk[inside_brain, :] = spatial_fcn(chunk[inside_brain, :])  # apply the k-filter / CAR
             else:
