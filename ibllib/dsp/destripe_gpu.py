@@ -41,7 +41,6 @@ def destripe_array(data, fs=30000, fshigh=300., taper_size=64, sample_shifts=Non
     if sample_shifts is not None:
         sample_shifts = cp.array(sample_shifts, dtype='float32')
         data = channel_shift(data, sample_shifts)
-    print(data.dtype)
 
     # apply spatial filter
     #TODO: Currently using default settings, should allow user to change this in function arguments
