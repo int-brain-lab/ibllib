@@ -1,32 +1,60 @@
 """
 Low-level functions to work in frequency domain for n-dim arrays
 """
+from math import pi
 
 import numpy as np
 import scipy.fft
 from ibllib.dsp.utils import fcn_cosine
 
 
-def convolve(x, w, mode='full'):
+def channel_shift(data, sample_shifts):
+    """
+    Shifts channel signals via a Fourier transform to correct for different sampling times
+    :param data: cupy array with shape (n_channels, n_times)
+    :param sample_shifts: channel shifts, cupy array with shape (n_channels)
+    :return: Aligned data, cupy array with shape (n_channels, n_times)
+    """
+    import cupy as cp
+
+    n_channels, n_times = data.shape
+
+    dephas = cp.tile(-2*pi/n_times * cp.arange(n_times), (n_channels, 1))
+    dephas += 2*pi*(dephas < -pi)  # angles in the range (-pi,pi)
+    dephas = cp.exp(1j * dephas * sample_shifts[:, cp.newaxis])
+
+    data_shifted = cp.real(cp.fft.ifft(cp.fft.fft(data) * dephas))
+
+    return cp.array(data_shifted, dtype='float32')
+
+
+def convolve(x, w, mode='full', gpu=False):
     """
     Frequency domain convolution along the last dimension (2d arrays)
     Will broadcast if a matrix is convolved with a vector
     :param x:
     :param w:
+    :param mode:
+    :param gpu: bool
     :return: convolution
     """
+    if gpu:
+        import cupy as gp
+    else:
+        gp = np
+
     nsx = x.shape[-1]
     nsw = w.shape[-1]
     ns = ns_optim_fft(nsx + nsw)
-    x_ = np.concatenate((x, np.zeros([*x.shape[:-1], ns - nsx], dtype=x.dtype)), axis=-1)
-    w_ = np.concatenate((w, np.zeros([*w.shape[:-1], ns - nsw], dtype=w.dtype)), axis=-1)
-    xw = np.real(np.fft.irfft(np.fft.rfft(x_, axis=-1) * np.fft.rfft(w_, axis=-1), axis=-1))
+    x_ = gp.concatenate((x, gp.zeros([*x.shape[:-1], ns - nsx], dtype=x.dtype)), axis=-1)
+    w_ = gp.concatenate((w, gp.zeros([*w.shape[:-1], ns - nsw], dtype=w.dtype)), axis=-1)
+    xw = gp.real(gp.fft.irfft(gp.fft.rfft(x_, axis=-1) * gp.fft.rfft(w_, axis=-1), axis=-1))
     xw = xw[..., :(nsx + nsw)]  # remove 0 padding
     if mode == 'full':
         return xw
     elif mode == 'same':
-        first = int(np.floor(nsw / 2)) - ((nsw + 1) % 2)
-        last = int(np.ceil(nsw / 2)) + ((nsw + 1) % 2)
+        first = int(gp.floor(nsw / 2)) - ((nsw + 1) % 2)
+        last = int(gp.ceil(nsw / 2)) + ((nsw + 1) % 2)
         return xw[..., first:-last]
 
 

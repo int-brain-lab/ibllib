@@ -118,17 +118,22 @@ def _fcn_extrap(x, f, bounds):
     return y
 
 
-def fcn_cosine(bounds):
+def fcn_cosine(bounds, gpu=False):
     """
     Returns a soft thresholding function with a cosine taper:
     values <= bounds[0]: values
     values < bounds[0] < bounds[1] : cosine taper
     values < bounds[1]: bounds[1]
     :param bounds:
+    :param gpu: bool
     :return: lambda function
     """
+    if gpu:
+        import cupy as gp
+    else:
+        gp = np
     def _cos(x):
-        return (1 - np.cos((x - bounds[0]) / (bounds[1] - bounds[0]) * np.pi)) / 2
+        return (1 - gp.cos((x - bounds[0]) / (bounds[1] - bounds[0]) * gp.pi)) / 2
     func = lambda x: _fcn_extrap(x, _cos, bounds)  # noqa
     return func
 
