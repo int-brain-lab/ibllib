@@ -65,6 +65,7 @@ class WidefieldRegisterRaw(tasks.Task):
 
             new_file, new_collection, _ = after
             new_path = self.session_path.joinpath(new_collection, new_file)
+            new_path.parent.mkdir(parents=True, exist_ok=True)
             old_path.replace(new_path)
             if symlink_old:
                 old_path.symlink_to(new_path)
