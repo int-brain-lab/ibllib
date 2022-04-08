@@ -941,17 +941,18 @@ class SpikeSortingLoader:
         _logger.debug(f"selecting: {collection} to load amongst candidates: {self.collections}")
         return collection
 
-    def download_spike_sorting_object(self, obj, spike_sorter='pykilosort', dataset_types=None):
+    def download_spike_sorting_object(self, obj, spike_sorter='pykilosort', dataset_types=None, collection=None):
         """
         Downloads an ALF object
         :param obj: object name, str between 'spikes', 'clusters' or 'channels'
         :param spike_sorter: (defaults to 'pykilosort')
-        :param dataset_types: list of extra dataset types
+        :param dataset_types: list of extra dataset types, for example ['spikes.samples']
+        :param collection: string specifiying the collection, for example 'alf/probe01/pykilosort'
         :return:
         """
         if len(self.collections) == 0:
             return {}, {}, {}
-        self.collection = self._get_spike_sorting_collection(spike_sorter=spike_sorter)
+        self.collection = collection or self._get_spike_sorting_collection(spike_sorter=spike_sorter)
         _logger.debug(f"loading spike sorting from {self.collection}")
         spike_attributes, cluster_attributes = self._get_attributes(dataset_types)
         attributes = {'spikes': spike_attributes, 'clusters': cluster_attributes, 'channels': None,
