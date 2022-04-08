@@ -11,31 +11,17 @@ Pipeline:
 """
 import logging
 from collections import OrderedDict
-import traceback
 from pathlib import Path
-import packaging.version
 
-import numpy as np
-import pandas as pd
-import labcams.io
-
-import one.alf.io as alfio
-
-from ibllib.misc import check_nvidia_driver
-from ibllib.ephys import ephysqc, spikes, sync_probes
-from ibllib.io import ffmpeg, spikeglx
-from ibllib.io.video import label_from_path
 from ibllib.io.extractors.widefield import Widefield as WidefieldExtractor
 from ibllib.pipes import tasks
-from ibllib.pipes.training_preprocessing import TrainingRegisterRaw as EphysRegisterRaw
 from ibllib.pipes.ephys_preprocessing import (
     EphysPulses, EphysMtscomp, EphysAudio, EphysVideoCompress, EphysVideoSyncQc, EphysTrials, EphysPassive, EphysDLC, EphysPostDLC
 )
 from ibllib.oneibl.registration import register_session_raw_data
 from ibllib.io.video import get_video_meta
-from ibllib.pipes.misc import create_alyx_probe_insertions
-from ibllib.qc.task_extractors import TaskQCExtractor
-from ibllib.qc.task_metrics import TaskQC
+
+import labcams.io
 
 _logger = logging.getLogger('ibllib')
 
@@ -175,16 +161,17 @@ class WidefieldSync(tasks.Task):
     level = 1
     force = False
     signature = {
-        'input_files': [('widefield.raw.*', 'raw_widefield_data', True), # sync files for ephys data
+        'input_files': [('widefield.raw.*', 'raw_widefield_data', True),
                         ('widefieldEvents.raw.*', 'raw_widefield_data', True)],
-        'output_files': [('widefield.times.npy', 'alf', True)]
+        'output_files': [('widefield.times.npy', 'alf', True),
+                         ('widefield.widefieldLightSource.npy', 'alf', True)]
     }
 
     def _run(self):
 
         self.wf = WidefieldExtractor(self.session_path)
-        save_path = self.session_path.joinpath(self.signature['output_files'][0][1], self.signature['output_files'][0][0])
-        out_files = self.wf.sync_timestamps(bin_exists=False, save=True, save_path=save_path)
+        save_paths = [self.session_path.joinpath(sig[1], sig[0]) for sig in self.signature['output_files']]
+        out_files = self.wf.sync_timestamps(bin_exists=False, save=True, save_path=save_paths)
         # TODO QC
 
         return out_files

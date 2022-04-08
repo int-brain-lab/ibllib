@@ -1,32 +1,18 @@
 """Data extraction from widefield binary file"""
-from collections import OrderedDict
+
 import logging
-from pathlib import Path, PureWindowsPath
-import uuid
-
-from tqdm import tqdm
-import matplotlib.pyplot as plt
 import numpy as np
-from pkg_resources import parse_version
-# from wfield.decomposition import approximate_svd
-# from wfield.plots import plot_summary_motion_correction
-# from wfield.registration import motion_correct
-import wfield.cli as wfield_cli
+import shutil
 
-from wfield import decomposition, plots, registration, utils, io as wfield_io
-from labcams.io import parse_cam_log
-
-import one.alf.io as alfio
-from iblutil.util import Bunch
 import ibllib.dsp as dsp
 import ibllib.exceptions as err
-from ibllib.io.raw_data_loaders import load_widefield_mmap
-from ibllib.io.extractors import biased_trials, training_trials
 from ibllib.io.extractors.base import BaseExtractor
-from ibllib.dsp.utils import sync_timestamps
 from ibllib.io.extractors.ephys_fpga import get_main_probe_sync, get_sync_fronts
 from ibllib.io.video import get_video_meta
-import shutil
+
+import wfield.cli as wfield_cli
+from labcams.io import parse_cam_log
+
 
 _logger = logging.getLogger('ibllib')
 FILENAME_MAP = {
@@ -34,9 +20,9 @@ FILENAME_MAP = {
     'U.npy': ('widefieldU.images.npy', 'alf'),
     'SVT.npy': ('widefieldSVT.uncorrected.npy', 'alf'),
     'SVTcorr.npy': ('widefieldSVT.haemoCorrected.npy', 'alf'),
-    # 'U-warped.npy': 'widefieldU.images_atlas_corrected.npy' # TODO need to see if we need this
 
     # Below here keep for now, but probably don't need to rename or register
+    # 'U-warped.npy': 'widefieldU.images_atlas_corrected.npy' # TODO need to see if we need this
     # 'rcoeffs.npy': 'rcoeffs.npy',
     # 'T.npy': 'widefieldT.uncorrected.npy',
     # 'motioncorrect_*.bin': 'widefield.motionCorrected.bin',
@@ -46,10 +32,10 @@ FILENAME_MAP = {
 
 
 class Widefield(BaseExtractor):
-    save_names = (None, None, None, 'widefieldChannels.frameAverage.npy', 'widefieldU.images.npy', 'widefieldSVT.uncorrected.npy'
-                  , None, None, 'widefieldSVT.haemoCorrected.npy', 'widefield.times')
+    save_names = (None, None, None, 'widefieldChannels.frameAverage.npy', 'widefieldU.images.npy', 'widefieldSVT.uncorrected.npy',
+                  None, None, 'widefieldSVT.haemoCorrected.npy', 'widefield.times', 'widefield.widefieldLightSource')
     raw_names = ('motioncorrect_2_540_640_uint16.bin', 'motion_correction_shifts.npy', 'motion_correction_rotation.npy',
-                 'frames_average.npy', 'U.npy', 'SVT.npy', 'rcoeffs.npy', 'T.npy', 'SVTcorr.npy', 'timestamps.npy')
+                 'frames_average.npy', 'U.npy', 'SVT.npy', 'rcoeffs.npy', 'T.npy', 'SVTcorr.npy', 'timestamps.npy', 'led.npy')
     var_names = ()
 
     def __init__(self, *args, **kwargs):
@@ -122,7 +108,11 @@ class Widefield(BaseExtractor):
             _logger.info(f'Removing {file}')
             file.unlink()
 
-    def sync_timestamps(self, bin_exists=False, save=False, save_path=None):
+    def sync_timestamps(self, bin_exists=False, save=False, save_paths=None):
+
+        if save and save_paths:
+            assert len(save_paths) == 2, 'Must provide save_path as list with 2 paths'
+
         filepath = next(self.data_path.glob('*.camlog'))
         fpga_sync, chmap = get_main_probe_sync(self.session_path, bin_exists=bin_exists)
         bpod = get_sync_fronts(fpga_sync, chmap['bpod'])
@@ -134,23 +124,28 @@ class Widefield(BaseExtractor):
         fcn, drift, iteensy, ifpga = dsp.utils.sync_timestamps(sync.timestamp.values / 1e3, bpod['times'], return_indices=True)
 
         _logger.debug(f'Widefield-FPGA clock drift: {drift} ppm')
-        assert led.frame.is_monotonic_increasing  # FIXME Need to check whether to use logdata instead
+        assert led.frame.is_monotonic_increasing
         video_path = next(self.data_path.glob('widefield.raw*.mov'))
         video_meta = get_video_meta(video_path)
-        assert video_meta.length == len(led)  # FIXME This fails
+
+        diff = len(led) - video_meta.length
+        if diff < 0:
+            raise ValueError('More frames than timestamps detected')
+        if diff > 2:
+            raise ValueError('Timestamps and frames differ by more than 2')
+
+        led = led[0:video_meta.length]
+        # just gonna take the first led times for the frames
         widefield_times = fcn(led.timestamp.values / 1e3)
+        widefield_leds = led.led
 
         if save:
-            if save_path is None:
-                save_path = self.data_path.joinpath('timestamps.npy')
-            else:
-                save_path = Path(save_path)
-            np.save(save_path, widefield_times)
-            return save_path
+            save_time = save_paths[0] if save_paths else self.data_path.joinpath('timestamps.npy')
+            save_led = save_paths[1] if save_paths else self.data_path.joinpath('led.npy')
+            save_paths = [save_time, save_led]
+            np.save(save_time, widefield_times)
+            np.save(save_led, widefield_leds)
+
+            return save_paths
         else:
-            return widefield_times # FIXME Need to sort frame mismatch
-        # TODO Add QC check for
-
-
-
-
+            return widefield_times, widefield_leds
