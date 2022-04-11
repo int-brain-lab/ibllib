@@ -45,7 +45,7 @@ METRICS_PARAMS = {
     'nc_bins': 100,
     'nc_n_low_bins': 2,
     'nc_quartile_length': 0.2,
-    'nc_thresh': 20,
+    'nc_thresh': 5,
     'presence_window': 10,
     'refractory_period': 0.0015,
     'RPslide_thresh': 0.1,
