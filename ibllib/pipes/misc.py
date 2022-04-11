@@ -152,19 +152,26 @@ def backup_session(session_path):
     :rtype: Bool
     """
     bk_session_path = Path()
-    try:
-        bk_session_path = Path(*session_path.parts[:-4]).joinpath(
-            "Subjects_backup_renamed_sessions", Path(*session_path.parts[-3:]))
-        Path(bk_session_path.parent).mkdir(parents=True, exist_ok=True)
-        print(f"Created path: {bk_session_path.parent}")
-        shutil.copytree(session_path, bk_session_path, dirs_exist_ok=True)
-        print(f"Copied contents from {session_path} to {bk_session_path}")
-        return True
-    except BaseException as e:
-        log.error(f"A backup of this session already exist: {bk_session_path}, manual intervention"
-                  f" is necessary.")
-        log.exception(e)
-        exit(1)
+    if Path(session_path).exists():
+        try:
+            bk_session_path = Path(*session_path.parts[:-4]).joinpath(
+                "Subjects_backup_renamed_sessions", Path(*session_path.parts[-3:]))
+            Path(bk_session_path.parent).mkdir(parents=True)
+            print(f"Created path: {bk_session_path.parent}")
+            shutil.copytree(session_path, bk_session_path, dirs_exist_ok=True)
+            print(f"Copied contents from {session_path} to {bk_session_path}")
+            return True
+        except FileExistsError:
+            log.error(f"A backup session for the given path already exists: {bk_session_path}, "
+                      f"manual intervention is necessary.")
+            sys.exit(1)
+        except shutil.Error:
+            log.error(f'Some kind of copy error occurred when moving files from {session_path} to '
+                      f'{bk_session_path}')
+            log.error(shutil.Error)
+    else:
+        log.error(f"The given session path does not exist: {session_path}")
+        sys.exit(1)
 
 
 def copy_with_check(src, dst, **kwargs):

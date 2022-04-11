@@ -483,7 +483,21 @@ class TestSyncData(unittest.TestCase):
             self.assertEqual(len(transfer_data), 1)
 
     def test_backup_session(self):
+        # Test when backup path does NOT already exist
         self.assertTrue(misc.backup_session(self.session_path))
+
+        # Test when backup path does exist
+        bk_session_path = Path(*self.session_path.parts[:-4]).joinpath(
+            "Subjects_backup_renamed_sessions", Path(*self.session_path.parts[-3:]))
+        Path(bk_session_path.parent).mkdir(parents=True, exist_ok=True)
+        with self.assertRaises(SystemExit):
+            misc.backup_session(self.session_path)
+        print(">>> Error messages regarding a 'backup session already exists' or a 'given session "
+              "path does not exist' is expected in this test. <<< ")
+
+        # Test when a bad session path is given
+        with self.assertRaises(SystemExit):
+            misc.backup_session("a session path that does NOT exist")
 
 
 class TestScanFixPassiveFiles(unittest.TestCase):
