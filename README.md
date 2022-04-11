@@ -12,9 +12,9 @@ The library is currently 2 main modules:
 [Release Notes here](release_notes.md)
 
 ## Requirements
-**OS**: Deployed on Linux and Windows. Minimally tested for Mac.
+**OS**: Only tested on Linux. Windows and Mac may work, but are not supported.
 
-**Python Module**: Python 3.7 or higher, we develop on 3.8.
+**Python Module**: Python 3.8 or higher
 
 ## Installation, documentation and examples
 https://docs.internationalbrainlab.org
@@ -25,7 +25,7 @@ See https://int-brain-lab.github.io/iblenv/07_contribution.html
 
 We use gitflow and Semantic Versioning.
 
-Before commiting to your branch:
+Before committing to your branch:
 -   run tests
 -   flake8
 This is also enforced by continuous integration.

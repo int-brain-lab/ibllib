@@ -17,8 +17,8 @@ jobs:
       fail-fast: false  # Whether to stop execution of other instances
       max-parallel: 4
       matrix:
-        os: ["ubuntu-latest"] #  "windows-latest"]  #  , "macos-latest"
-        python-version: ["3.8"]  # "3.7",
+        os: ["ubuntu-latest"]
+        python-version: ["3.8"]
     steps:
     - uses: actions/checkout@v2
     - name: Set up Python ${{ matrix.python-version }}
