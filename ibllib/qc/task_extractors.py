@@ -158,14 +158,7 @@ class TaskQCExtractor(object):
                 # Nasty hack to trim last trial due to stim off events happening at trial num + 1
                 data = {k: v[:n_trials] for k, v in data.items()}
             else:
-                quiescence = np.array([t['quiescent_period'] for t in self.raw_data[:n_trials]])
-                data = {
-                    **trials,
-                    **wheel,
-                    'quiescence': quiescence,
-                    'position': np.array([t['position'] for t in self.raw_data[:n_trials]]),
-                    'phase': np.array([t['stim_phase'] for t in self.raw_data[:n_trials]])
-                }
+                data = {**trials, **wheel}
         # Update the data attribute with extracted data
         self.data = self.rename_data(data)
 

@@ -15,6 +15,7 @@ import ibllib.dsp as dsp
 import ibllib.exceptions as err
 from ibllib.io import raw_data_loaders, spikeglx
 from ibllib.io.extractors.bpod_trials import extract_all as bpod_extract_all
+from ibllib.io.extractors.opto_trials import LaserBool
 import ibllib.io.extractors.base as extractors_base
 from ibllib.io.extractors.training_wheel import extract_wheel_moves
 import ibllib.plots as plots
@@ -595,13 +596,13 @@ class FpgaTrials(extractors_base.BaseExtractor):
                  'wheelMoves_intervals', 'wheelMoves_peakAmplitude')
 
     # Fields from bpod extractor that we want to resync to FPGA
-    bpod_rsync_fields = ['intervals', 'response_times', 'goCueTrigger_times',
+    bpod_rsync_fields = ('intervals', 'response_times', 'goCueTrigger_times',
                          'stimOnTrigger_times', 'stimOffTrigger_times',
-                         'stimFreezeTrigger_times', 'errorCueTrigger_times']
+                         'stimFreezeTrigger_times', 'errorCueTrigger_times')
 
     # Fields from bpod extractor that we want to save
-    bpod_fields = ['feedbackType', 'choice', 'rewardVolume', 'contrastLeft', 'contrastRight', 'probabilityLeft',
-                   'intervals_bpod', 'phase', 'position', 'quiescence']
+    bpod_fields = ('feedbackType', 'choice', 'rewardVolume', 'contrastLeft', 'contrastRight', 'probabilityLeft',
+                   'intervals_bpod', 'phase', 'position', 'quiescence')
 
     def __init__(self, *args, **kwargs):
         """An extractor for all ephys trial data, in FPGA time"""
@@ -679,6 +680,9 @@ def extract_all(session_path, save=True, bin_exists=False):
     extractor_type = extractors_base.get_session_extractor_type(session_path)
     _logger.info(f"Extracting {session_path} as {extractor_type}")
     sync, chmap = get_main_probe_sync(session_path, bin_exists=bin_exists)
+    base = [FpgaTrials]
+    if extractor_type == 'ephys_biased_opto':
+        base.append(LaserBool)
     outputs, files = extractors_base.run_extractor_classes(
-        FpgaTrials, session_path=session_path, save=save, sync=sync, chmap=chmap)
+        base, session_path=session_path, save=save, sync=sync, chmap=chmap)
     return outputs, files
