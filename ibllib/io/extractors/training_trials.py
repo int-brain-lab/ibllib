@@ -651,6 +651,20 @@ class StimOnOffFreezeTimes(BaseBpodTrialsExtractor):
         return stimOn_times, stimOff_times, stimFreeze_times
 
 
+class PhasePosQuiescence(BaseBpodTrialsExtractor):
+    """Extracts stimulus phase, position and quiescence from Bpod data.
+    For extraction of pre-generated events, use the ProbaContrasts extractor instead.
+    """
+    save_names = (None, None, None)
+    var_names = ('phase', 'position', 'quiescence')
+
+    def _extract(self, **kwargs):
+        phase = np.array([t['stim_phase'] for t in self.bpod_trials])
+        position = np.array([t['position'] for t in self.bpod_trials])
+        quiescence = np.array([t['quiescent_period'] for t in self.bpod_trials])
+        return phase, position, quiescence
+
+
 class TrialsTable(BaseBpodTrialsExtractor):
     """
     Extracts the following into a table from Bpod raw data:
@@ -708,12 +722,13 @@ def extract_all(session_path, save=False, bpod_trials=None, settings=None):
     if version.ge(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
         # We now extract a single trials table
         base.extend([
-            StimOnTriggerTimes, ItiInTimes, StimOffTriggerTimes, StimFreezeTriggerTimes, ErrorCueTriggerTimes, TrialsTable
+            StimOnTriggerTimes, ItiInTimes, StimOffTriggerTimes, StimFreezeTriggerTimes,
+            ErrorCueTriggerTimes, TrialsTable, PhasePosQuiescence
         ])
     else:
         base.extend([
             Intervals, Wheel, FeedbackType, ContrastLR, ProbabilityLeft, Choice, IncludedTrials, ItiDuration,
-            StimOnTimes_deprecated, RewardVolume, FeedbackTimes, ResponseTimes, GoCueTimes
+            StimOnTimes_deprecated, RewardVolume, FeedbackTimes, ResponseTimes, GoCueTimes, PhasePosQuiescence
         ])
 
     out, fil = run_extractor_classes(

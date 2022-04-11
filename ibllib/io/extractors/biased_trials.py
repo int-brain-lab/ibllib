@@ -10,7 +10,7 @@ from ibllib.io.extractors.training_trials import (
     Choice, FeedbackTimes, FeedbackType, GoCueTimes, GoCueTriggerTimes,
     IncludedTrials, Intervals, ItiDuration, ProbabilityLeft, ResponseTimes, RewardVolume,
     StimOnTimes_deprecated, StimOnTriggerTimes, StimOnOffFreezeTimes, ItiInTimes,
-    StimOffTriggerTimes, StimFreezeTriggerTimes, ErrorCueTriggerTimes)
+    StimOffTriggerTimes, StimFreezeTriggerTimes, ErrorCueTriggerTimes, PhasePosQuiescence)
 from ibllib.io.extractors.training_wheel import Wheel
 from ibllib.misc import version
 
@@ -86,20 +86,6 @@ class ProbaContrasts(BaseBpodTrialsExtractor):
 
         return {'position': pos, 'quiescence': qui, 'phase': phase, 'probabilityLeft': pLeft,
                 'contrastRight': contrastRight, 'contrastLeft': contrastLeft}
-
-
-class PhasePosQuiescence(BaseBpodTrialsExtractor):
-    """Extracts stimulus phase, position and quiescence from Bpod data.
-    For extraction of pre-generated events, use the ProbaContrasts extractor instead.
-    """
-    save_names = (None, None, None)
-    var_names = ('phase', 'position', 'quiescence')
-
-    def _extract(self, **kwargs):
-        phase = np.array([t['stim_phase'] for t in self.bpod_trials])
-        position = np.array([t['position'] for t in self.bpod_trials])
-        quiescence = np.array([t['quiescent_period'] for t in self.bpod_trials])
-        return phase, position, quiescence
 
 
 class TrialsTableBiased(BaseBpodTrialsExtractor):
@@ -186,7 +172,7 @@ def extract_all(session_path, save=False, bpod_trials=False, settings=False, ext
     else:
         base.extend([
             Intervals, Wheel, FeedbackType, ContrastLR, ProbabilityLeft, Choice, ItiDuration,
-            StimOnTimes_deprecated, RewardVolume, FeedbackTimes, ResponseTimes, GoCueTimes
+            StimOnTimes_deprecated, RewardVolume, FeedbackTimes, ResponseTimes, GoCueTimes, PhasePosQuiescence
         ])
 
     if extra_classes:
