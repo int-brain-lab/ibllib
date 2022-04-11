@@ -482,6 +482,9 @@ class TestSyncData(unittest.TestCase):
             transfer_data = json.load(fp)
             self.assertEqual(len(transfer_data), 1)
 
+    def test_backup_session(self):
+        self.assertTrue(misc.backup_session(self.session_path))
+
 
 class TestScanFixPassiveFiles(unittest.TestCase):
     """"""

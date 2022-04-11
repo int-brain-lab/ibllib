@@ -145,13 +145,18 @@ def backup_session(session_path):
     removed.
 
     :param session_path: A session path to be backed up
+    :return: True if directory was backed up or exits if something went wrong
+    :rtype: Bool
     """
-    bk_session_path = ''
+    bk_session_path = Path()
     try:
         bk_session_path = Path(*session_path.parts[:-4]).joinpath(
             "Subjects_backup_renamed_sessions", Path(*session_path.parts[-3:]))
         Path(bk_session_path.parent).mkdir(parents=True, exist_ok=True)
-        shutil.copytree(str(session_path), str(bk_session_path))
+        print(f"Created path: {bk_session_path.parent}")
+        shutil.copytree(session_path, bk_session_path, dirs_exist_ok=True)
+        print(f"Copied contents from {session_path} to {bk_session_path}")
+        return True
     except BaseException as e:
         log.error(f"A backup of this session already exist: {bk_session_path}, manual intervention"
                   f" is necessary.")
