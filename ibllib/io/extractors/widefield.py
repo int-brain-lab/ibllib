@@ -3,6 +3,7 @@
 import logging
 import numpy as np
 import shutil
+from pathlib import Path
 
 import ibllib.dsp as dsp
 import ibllib.exceptions as err
@@ -113,6 +114,8 @@ class Widefield(BaseExtractor):
 
         if save and save_paths:
             assert len(save_paths) == 2, 'Must provide save_path as list with 2 paths'
+            Path(save_paths[0]).parent.mkdir(parents=True, exist_ok=True)
+            Path(save_paths[1]).parent.mkdir(parents=True, exist_ok=True)
 
         filepath = next(self.data_path.glob('*.camlog'))
         fpga_sync, chmap = get_main_probe_sync(self.session_path, bin_exists=bin_exists)
@@ -121,6 +124,10 @@ class Widefield(BaseExtractor):
         if bpod.times.size == 0:
             raise err.SyncBpodFpgaException('No Bpod event found in FPGA. No behaviour extraction. '
                                             'Check channel maps.')
+
+        # Check that the no. of syncs from bpod and teensy match
+        assert len(bpod['times']) == len(sync), 'Number of detected sync pulses on bpod and teensy do not match'
+
         # convert to seconds
         fcn, drift, iteensy, ifpga = dsp.utils.sync_timestamps(sync.timestamp.values / 1e3, bpod['times'], return_indices=True)
 
@@ -130,13 +137,14 @@ class Widefield(BaseExtractor):
         video_meta = get_video_meta(video_path)
 
         diff = len(led) - video_meta.length
+        print(diff)
         if diff < 0:
             raise ValueError('More frames than timestamps detected')
         if diff > 2:
             raise ValueError('Timestamps and frames differ by more than 2')
 
         led = led[0:video_meta.length]
-        # just gonna take the first led times for the frames
+        # Take the first led times for the frames
         widefield_times = fcn(led.timestamp.values / 1e3)
         widefield_leds = led.led
 

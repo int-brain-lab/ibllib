@@ -130,7 +130,7 @@ class WidefieldCompress(tasks.Task):
         if remove_uncompressed:
             filepath.unlink()
 
-        return output_file
+        return [output_file]
 
 
 #  level 1
@@ -141,9 +141,9 @@ class WidefieldPreprocess(tasks.Task):
     signature = {
         'input_files': [('widefield.raw.*', 'raw_widefield_data', True),
                         ('widefieldEvents.raw.*', 'raw_widefield_data', True)],
-        'output_files': [('widefieldChannels.frameAverage.npy', 'raw_widefield_data', True),
+        'output_files': [('widefieldChannels.frameAverage.npy', 'alf', True),
                          ('widefieldU.images.npy', 'alf', True),
-                         ('widefieldSVT.uncorrected', 'alf', True),
+                         ('widefieldSVT.uncorrected.npy', 'alf', True),
                          ('widefieldSVT.haemoCorrected.npy', 'alf', True)]
     }
 
@@ -172,7 +172,7 @@ class WidefieldSync(tasks.Task):
 
         self.wf = WidefieldExtractor(self.session_path)
         save_paths = [self.session_path.joinpath(sig[1], sig[0]) for sig in self.signature['output_files']]
-        out_files = self.wf.sync_timestamps(bin_exists=False, save=True, save_path=save_paths)
+        out_files = self.wf.sync_timestamps(bin_exists=False, save=True, save_paths=save_paths)
         # TODO QC
 
         return out_files
