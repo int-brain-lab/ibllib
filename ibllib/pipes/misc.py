@@ -128,11 +128,14 @@ def rename_session(session_path: str, new_subject=None, new_date=None, new_numbe
 
     if new_session_path.exists():
         ans = input(f'Warning: session path {new_session_path} already exists.\nWould you like to '
-                    f'move {new_session_path} to a backup directory? [y/N]')
+                    f'move {new_session_path} to a backup directory? [y/N] ')
         if (ans or 'n').lower() in ['n', 'no']:
-            return
-        backup_session(new_session_path)
-        shutil.rmtree(str(new_session_path), ignore_errors=True)
+            print(f'Manual intervention required, data exists in the following directory: '
+                  f'{session_path}')
+            exit(1)
+        if backup_session(new_session_path):
+            print(f'Backup was successful, removing directory {new_session_path}...')
+            shutil.rmtree(str(new_session_path), ignore_errors=True)
     shutil.move(str(session_path), str(new_session_path))
     print(session_path, "--> renamed to:")
     print(new_session_path)
@@ -304,8 +307,8 @@ def confirm_video_remote_folder(local_folder=False, remote_folder=False, force=F
     local_folder = subjects_data_folder(local_folder, rglob=True)
     remote_folder = subjects_data_folder(remote_folder, rglob=True)
 
-    print('LOCAL:', local_folder)
-    print('REMOTE:', remote_folder)
+    print('\nLocal subjects folder: ', local_folder)
+    print('Remote subjects folder:', remote_folder)
     src_session_paths = (x.parent for x in local_folder.rglob('transfer_me.flag'))
 
     def is_recent(x):
@@ -354,13 +357,13 @@ def confirm_video_remote_folder(local_folder=False, remote_folder=False, force=F
             warnings.warn(f'No raw_video_data folder for session {session_path}')
             continue
 
-        print(f"\nFound session: {session_path}")
+        print(f"\nFound local session: {session_path}")
         if _get_session_numbers(session_path) != remote_numbers:
             not_valid = True
             resp = 's'
             remote_numbers = list(map(int, remote_numbers))
             while not_valid:
-                resp = input(f'Which session number to use? Options: '
+                resp = input(f'Which remote session number would you like to use? Options: '
                              f'{range_str(remote_numbers)} or [s]kip/[h]elp/[e]xit> ').strip()
                 if resp == 'h':
                     print('An example session filepath:\n')
