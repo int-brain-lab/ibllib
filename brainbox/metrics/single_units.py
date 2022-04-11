@@ -757,69 +757,7 @@ def slidingRP_viol(ts, bin_size=0.25, thresh=0.1, acceptThresh=0.1):
     return didpass
 
 
-# def noise_cutoff(amps, quantile_length=.2, n_bins=100, n_low_bins=2):
-#     """
-#     A metric to determine whether a unit's amplitude distribution is cut off
-#     (at floor), without assuming a Gaussian distribution.
-
-#     This metric takes the amplitude distribution, computes the mean and std
-#     of an upper quartile of the distribution, and determines how many standard
-#     deviations away from that mean a lower quartile lies.
-
-#     Parameters
-#     ----------
-#     amps : ndarray_like
-#         The amplitudes (in uV) of the spikes.
-#     quantile_length : float
-#         The size of the upper quartile of the amplitude distribution.
-#     n_bins : int
-#         The number of bins used to compute a histogram of the amplitude
-#         distribution.
-#     n_low_bins : int
-#         The number of bins used in the lower part of the distribution (where
-#         cutoff is determined).
-#     Returns
-#     -------
-#     cutoff : float
-#         Number of standard deviations that the lower mean is outside of the
-#         mean of the upper quartile.
-
-#     See Also
-#     --------
-#     missed_spikes_est
-
-#     Examples
-#     --------
-#     1) Compute whether a unit's amplitude distribution is cut off
-#         >>> amps = spks_b['amps'][unit_idxs]
-#         >>> cutoff = bb.metrics.noise_cutoff(amps, quartile_length=.2,
-#                                              n_bins=100, n_low_bins=2)
-#     """
-
-#     if amps.size > 1:
-#         bins_list = np.linspace(0, np.max(amps), n_bins) #list of bins to compute the amplitude histogram
-#         n, bins = np.histogram(amps, bins=bins_list) #construct amplitude histogram
-#         idx_nz = np.nonzero(np.diff(n))  # indices of all non-zero differences in bins
-#         idx_peak = np.argmax(n)  #peak of amplitude distributions
-#         length_top_half = idx_nz[0][-1] - idx_peak   #compute the length of the top half of the distribution -- ignoring zero bins
-#         high_quantile = 1 - (2 * quantile_length) #the remaining part of the distribution, which we will compare the low quantile to
-
-#         high_quantile_start_ind = int(np.ceil(high_quantile * length_top_half + idx_peak)) #the first bin (index) of the high quantile part of the distribution
-#         xx = idx_nz[0][idx_nz[0] > high_quantile_start_ind] #x indices that are non zero, in the high quantile 
-#         if len(n[xx]) > 0:
-#             mean_high_quantile = np.mean(n[xx])
-#             std_high_quantile = np.std(n[xx])
-#             first_low_quantile = np.mean(n[idx_nz[0][1:n_low_bins]])
-#             if std_high_quantile > 0:
-#                 cutoff = (first_low_quantile - mean_high_quantile) / std_high_quantile
-#             else:
-#                 cutoff = np.float64(np.nan)
-#         else:
-#             cutoff = np.float64(np.nan)
-#     else:
-#         cutoff = np.float64(np.nan)
-#     return cutoff
-def noise_cutoff(amps, quantile_length=.2, n_bins=100, n_low_bins=1,low_bin_start = 1):
+def noise_cutoff(amps, quantile_length=.25, n_bins=100, n_low_bins=1,low_bin_start = 1):
     """
     A metric to determine whether a unit's amplitude distribution is cut off
     (at floor), without assuming a Gaussian distribution.
@@ -859,20 +797,20 @@ def noise_cutoff(amps, quantile_length=.2, n_bins=100, n_low_bins=1,low_bin_star
     """
 
     if len(amps) > 1: #ensure there are amplitudes available to analyze
-        print('hi')    
         bins_list = np.linspace(0, np.max(amps), n_bins) #list of bins to compute the amplitude histogram
         n, bins = np.histogram(amps, bins=bins_list) #construct amplitude histogram
         idx_nz = np.nonzero(np.diff(n))  #indices of nonzero bins; this ensures we are discarding many early bins mostly below detection threshold
         idx_peak = np.argmax(n)  #peak of amplitude distribution
-        length_top_half = idx_nz[0][-1] - idx_peak   #compute the length of the top half of the distribution -- ignoring zero bins
-        high_quantile = 1 - (2 * quantile_length) #the remaining part of the distribution, which we will compare the low quantile to
-
+        length_top_half =len(np.where(n[idx_peak:-1]>0)[0])  #don't count zeros #len(n) - idx_peak   #compute the length of the top half of the distribution -- ignoring zero bins
+        high_quantile =2*quantile_length  #the remaining part of the distribution, which we will compare the low quantile to
         high_quantile_start_ind = int(np.ceil(high_quantile * length_top_half + idx_peak)) #the first bin (index) of the high quantile part of the distribution
         indices_bins_high_quantile = np.arange(high_quantile_start_ind,len(n)) # bins to consider in the high quantile (of all non-zero bins)
+        idx_use = [np.where(n[indices_bins_high_quantile]>=1)]
+        idx_highlight = idx_use[0][0][0] + high_quantile_start_ind
         if len(n[indices_bins_high_quantile]) > 0: #e nsure there are amplitudes in these bins 
-            mean_high_quantile = np.mean(n[indices_bins_high_quantile]) # mean of all amp values in high quantile bins
-            std_high_quantile = np.std(n[indices_bins_high_quantile])
-            first_low_quantile = n[(n!=0).argmax()+1]#np.mean(n[idx_nz[0][low_bin_start:(low_bin_start+n_low_bins)]]) # take the second bin
+            mean_high_quantile = np.mean(n[indices_bins_high_quantile][idx_use]) # mean of all amp values in high quantile bins
+            std_high_quantile = np.std(n[indices_bins_high_quantile][idx_use])
+            first_low_quantile = n[(n!=0)][1]#.argmax()+1]#np.mean(n[idx_nz[0][low_bin_start:(low_bin_start+n_low_bins)]]) # take the second bin
             if std_high_quantile > 0:
                 cutoff = (first_low_quantile - mean_high_quantile) / std_high_quantile
             else:
@@ -881,9 +819,8 @@ def noise_cutoff(amps, quantile_length=.2, n_bins=100, n_low_bins=1,low_bin_star
             cutoff = np.float64(np.nan)
     else:
         cutoff = np.float64(np.nan)
-     
-    cutoff = 1    
-    return cutoff#, first_low_quantile,mean_high_quantile,std_high_quantile
+        
+    return cutoff
 
 
 def spike_sorting_metrics(times, clusters, amps, depths, cluster_ids=None, params=METRICS_PARAMS):
