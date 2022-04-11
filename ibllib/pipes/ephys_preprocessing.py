@@ -487,7 +487,7 @@ class SpikeSorting(tasks.Task):
 
 
 class EphysVideoCompress(tasks.Task):
-    priority = 40
+    priority = 90
     level = 0
     force = False
     signature = {
