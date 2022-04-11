@@ -1,3 +1,6 @@
+# unreleased
+- Set video compression jobs to priority 90
+
 ## Release Notes 2.11
 
 ### Release Notes 2.11.0 2022-03-08

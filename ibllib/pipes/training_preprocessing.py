@@ -77,6 +77,8 @@ class TrainingTrials(tasks.Task):
 
 class TrainingVideoCompress(tasks.Task):
 
+    priority = 90
+
     def _run(self):
         # avi to mp4 compression
         command = ('ffmpeg -i {file_in} -y -nostdin -codec:v libx264 -preset slow -crf 29 '
