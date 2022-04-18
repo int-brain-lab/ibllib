@@ -19,7 +19,7 @@ import time
 import logging
 
 import numpy as np
-import scipy.ndimage.filters as filters
+import scipy.ndimage
 import scipy.stats as stats
 import pandas as pd
 
@@ -47,7 +47,7 @@ METRICS_PARAMS = {
     'nc_low_bin_start': 1,
     'nc_quartile_length': 0.25,
     'nc_threshold': 5,
-    'nc_percent_peak': 0.1,                              
+    'nc_percent_peak': 0.1,
     'presence_window': 10,
     'refractory_period': 0.0015,
     'RPslide_thresh': 0.1,
@@ -201,7 +201,7 @@ def missed_spikes_est(feat, spks_per_bin=20, sigma=5, min_num_bins=50):
     # compute the spike feature histogram and pdf:
     num_bins = int(feat.size / spks_per_bin)
     hist, bins = np.histogram(feat, num_bins, density=True)
-    pdf = filters.gaussian_filter1d(hist, sigma)
+    pdf = scipy.ndimage.gaussian_filter1d(hist, sigma)   # FIXME warning non-tuple sequence for multidim indexing
 
     # Find where the distribution stops being symmetric around the peak:
     peak_idx = np.argmax(pdf)
@@ -759,7 +759,8 @@ def slidingRP_viol(ts, bin_size=0.25, thresh=0.1, acceptThresh=0.1):
     return didpass
 
 
-def noise_cutoff(amps, quantile_length=.25, n_bins=100, n_low_bins=1, low_bin_start = 1, nc_threshold = 5, percent_peak = 0.10):
+def noise_cutoff(amps, quantile_length=.25, n_bins=100, n_low_bins=1, low_bin_start=1,
+                 nc_threshold=5, percent_peak=0.10):
     """
     A metric to determine whether a unit's amplitude distribution is cut off
     (at floor), without assuming a Gaussian distribution.
@@ -797,43 +798,37 @@ def noise_cutoff(amps, quantile_length=.25, n_bins=100, n_low_bins=1, low_bin_st
         >>> cutoff = bb.metrics.noise_cutoff(amps, quartile_length=.2,
                                              n_bins=100, n_low_bins=2)
     """
-    nc_threshold = 5 #the noise cutoff result has to be greater than 5
-    percent_threshold = 0.10 # the first bin has to be greater than 10% the peak bin 
+    nc_threshold = 5  # the noise cutoff result has to be greater than 5
+    percent_threshold = 0.10  # the first bin has to be greater than 10% the peak bin
 
-    if len(amps) > 1: #ensure there are amplitudes available to analyze
-        bins_list = np.linspace(0, np.max(amps), n_bins) #list of bins to compute the amplitude histogram
-        n, bins = np.histogram(amps, bins=bins_list) #construct amplitude histogram
-        idx_nz = np.nonzero(np.diff(n))  #indices of nonzero bins; this ensures we are discarding many early bins mostly below detection threshold
-        idx_peak = np.argmax(n)  #peak of amplitude distribution
-        length_top_half =len(np.where(n[idx_peak:-1]>0)[0])  #don't count zeros #len(n) - idx_peak   #compute the length of the top half of the distribution -- ignoring zero bins
-        high_quantile =2*quantile_length  #the remaining part of the distribution, which we will compare the low quantile to
-        high_quantile_start_ind = int(np.ceil(high_quantile * length_top_half + idx_peak)) #the first bin (index) of the high quantile part of the distribution
-        indices_bins_high_quantile = np.arange(high_quantile_start_ind,len(n)) # bins to consider in the high quantile (of all non-zero bins)
-        idx_use = [np.where(n[indices_bins_high_quantile]>=1)]
-        idx_highlight = idx_use[0][0][0] + high_quantile_start_ind
-        if len(n[indices_bins_high_quantile]) > 0: #e nsure there are amplitudes in these bins 
-            mean_high_quantile = np.mean(n[indices_bins_high_quantile][idx_use]) # mean of all amp values in high quantile bins
-            std_high_quantile = np.std(n[indices_bins_high_quantile][idx_use])
-            first_low_quantile = n[(n!=0)][1]#.argmax()+1]#np.mean(n[idx_nz[0][low_bin_start:(low_bin_start+n_low_bins)]]) # take the second bin
-            if std_high_quantile > 0:
-                cutoff = (first_low_quantile - mean_high_quantile) / std_high_quantile
-                peak_bin_height = np.max(n)
-                percent_of_peak = percent_threshold * peak_bin_height
+    if amps.size == 0:   # ensure there are amplitudes available to analyze
+        return 0.0
 
-                fail_criteria = (cutoff > nc_threshold) & (first_bin_height > percent_of_peak)            
-            else:
-                cutoff = np.float64(np.nan)
-                fail_criteria = True
-        else:
-            cutoff = np.float64(np.nan)
-            fail_criteria = True
-
-    else:
-        cutoff = np.float64(np.nan)
-        fail_criteria = True
-
-    nc_pass = int(~fail_criteria)
-    return nc_pass
+    bins_list = np.linspace(0, np.max(amps), n_bins)  # list of bins to compute the amplitude histogram
+    n, bins = np.histogram(amps, bins=bins_list)  # construct amplitude histogram
+    idx_peak = np.argmax(n)  # peak of amplitude distribution
+    # compute the length of the top half of the distribution -- ignoring zero bins
+    length_top_half = np.where(n[idx_peak:-1] > 0)[0].size
+    # the remaining part of the distribution, which we will compare the low quantile to
+    high_quantile = 2 * quantile_length
+    # the first bin (index) of the high quantile part of the distribution
+    high_quantile_start_ind = int(np.ceil(high_quantile * length_top_half + idx_peak))
+    # bins to consider in the high quantile (of all non-zero bins)
+    indices_bins_high_quantile = np.arange(high_quantile_start_ind, n.size)
+    idx_use = np.where(n[indices_bins_high_quantile] >= 1)[0]
+    if indices_bins_high_quantile.size == 0:  # ensure there are amplitudes in these bins
+        return 0.0
+    # mean of all amp values in high quantile bins
+    mean_high_quantile = np.mean(n[indices_bins_high_quantile][idx_use])
+    std_high_quantile = np.std(n[indices_bins_high_quantile][idx_use])
+    first_low_quantile = n[(n != 0)][1]  # take the second bin
+    if std_high_quantile == 0:
+        return 0.0
+    cutoff = (first_low_quantile - mean_high_quantile) / std_high_quantile
+    peak_bin_height = np.max(n)
+    first_bin_versus_peak = n[np.argmax(n > 0)] / peak_bin_height
+    fail_criteria = (cutoff > nc_threshold) & (first_bin_versus_peak > percent_threshold)
+    return ~fail_criteria
 
 
 def spike_sorting_metrics(times, clusters, amps, depths, cluster_ids=None, params=METRICS_PARAMS):
@@ -1011,12 +1006,12 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
                                               thresh=params['RPslide_thresh'],
                                               acceptThresh=params['acceptable_contamination'])
         r.noise_cutoff[ic] = noise_cutoff(amps,
-                                          quartile_length=params['nc_quartile_length'],
+                                          quantile_length=params['nc_quartile_length'],
                                           n_bins=params['nc_bins'],
-                                          n_low_bins=params['nc_n_low_bins'],                                        
-                                          low_bin_start = params['nc_low_bin_start'], 
-                                          nc_threshold = params['nc_threshold'],
-                                          percent_peak = params['nc_percent_peak'])
+                                          n_low_bins=params['nc_n_low_bins'],
+                                          low_bin_start=params['nc_low_bin_start'],
+                                          nc_threshold=params['nc_threshold'],
+                                          percent_peak=params['nc_percent_peak'])
 
         r.missed_spikes_est[ic], _, _ = missed_spikes_est(
             amps, spks_per_bin=params['spks_per_bin_for_missed_spks_est'],
