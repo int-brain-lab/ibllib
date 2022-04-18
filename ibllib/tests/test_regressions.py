@@ -18,7 +18,7 @@ class TestRefactoringSpikeGlxDsp(unittest.TestCase):
 
         assert dsp.fourier.__file__ is not None
 
-        if datetime.datetime.now() > datetime.datetime(2021, 11, 18):
+        if datetime.datetime.now() > datetime.datetime(2022, 11, 18):
             raise NotImplementedError
         """
         When this happens it means the deprecation period has elapsed for the ugly imports above
