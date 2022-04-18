@@ -157,7 +157,7 @@ def _assign_events_bpod(bpod_t, bpod_polarities, ignore_first_valve=True):
     :return: numpy arrays of times t_trial_start, t_valve_open and t_iti_in
     """
     TRIAL_START_TTL_LEN = 2.33e-4  # the TTL length is 0.1ms but this has proven to drift on
-    #some bpods and this is the highest possible value that discriminates trial start from valve
+    # some bpods and this is the highest possible value that discriminates trial start from valve
     ITI_TTL_LEN = 0.4
     # make sure that there are no 2 consecutive fall or consecutive rise events
     assert(np.all(np.abs(np.diff(bpod_polarities)) == 2))
