@@ -23,5 +23,5 @@ seaborn>=0.9.0
 tqdm>=4.32.1
 # ibl libraries
 iblutil
-ibl-neuropixel>=1.0.0
+ibl-neuropixel
 ONE-api>=1.8.1
