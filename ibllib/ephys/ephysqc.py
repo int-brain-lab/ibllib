@@ -11,12 +11,13 @@ from scipy import signal, stats
 from tqdm import tqdm
 import one.alf.io as alfio
 from iblutil.util import Bunch
+import spikeglx
+import neurodsp as dsp
+import neuropixel
 
 from brainbox.metrics.single_units import spike_sorting_metrics
 from brainbox.io.spikeglx import stream as sglx_streamer
-from ibllib.ephys import sync_probes, neuropixel, spikes
-from ibllib.io import spikeglx
-import ibllib.dsp as dsp
+from ibllib.ephys import sync_probes, spikes
 from ibllib.qc import base
 from ibllib.io.extractors import ephys_fpga, training_wheel
 from ibllib.misc import print_progress
@@ -97,7 +98,7 @@ class EphysQC(base.QC):
         and performs a simple spike detection
         :param raw: voltage numpy.array(ntraces, nsamples)
         :param fs: sampling frequency (Hz)
-        :param h: dictionary containing sensor coordinates, see ibllib.ephys.neuropixel.trace_header
+        :param h: dictionary containing sensor coordinates, see neuropixel.trace_header
         :return: 3 numpy vectors nchannels length
         """
         destripe = dsp.destripe(raw, fs=fs, neuropixel_version=1)

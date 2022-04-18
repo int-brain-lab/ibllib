@@ -12,7 +12,7 @@ import pandas as pd
 import scipy.signal
 import matplotlib.pyplot as plt
 
-from ibllib.dsp import voltage
+from neurodsp import voltage
 from ibllib.plots.snapshot import ReportSnapshotProbe, ReportSnapshot
 from one.api import ONE
 import one.alf.io as alfio
@@ -599,7 +599,7 @@ def raw_destripe(raw, fs, t0, i_plt, n_plt,
     '''
 
     # Import
-    from ibllib.dsp import voltage
+    from neurodsp import voltage
     from ibllib.plots import Density
 
     # Init fig

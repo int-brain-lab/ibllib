@@ -1,5 +1,5 @@
-from ibllib.io import spikeglx
-from ibllib.dsp.utils import WindowGenerator
+import spikeglx
+from neurodsp.utils import WindowGenerator
 import scipy.signal
 import numpy as np
 from pathlib import Path

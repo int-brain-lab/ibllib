@@ -3,15 +3,15 @@ import logging
 import numpy as np
 from pathlib import Path
 
+from neuropixel import trace_header
+import spikeglx
+
 from ibllib.atlas import AllenAtlas
 from ibllib.pipes import histology
 from ibllib.pipes.ephys_alignment import EphysAlignment
 from ibllib.qc import base
 from ibllib.oneibl.patcher import FTPPatcher
 from ibllib.qc.base import CRITERIA as CRITERIA_BASE
-from ibllib.ephys.neuropixel import trace_header
-
-import spikeglx
 
 _log = logging.getLogger('ibllib')
 CRITERIA = {"PASS": 0.8}

@@ -5,11 +5,13 @@ from tempfile import TemporaryDirectory
 import numpy as np
 import scipy.signal
 
-from ibllib.ephys import ephysqc, neuropixel, spikes
-from ibllib.dsp import voltage
+from one.api import ONE
+import neuropixel
+from neurodsp import voltage
+
+from ibllib.ephys import ephysqc, spikes
 from ibllib.tests import TEST_DB
 from ibllib.tests.fixtures import utils
-from one.api import ONE
 
 
 def a_little_spike(nsw=121, nc=1):
