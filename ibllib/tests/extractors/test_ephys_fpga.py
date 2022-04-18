@@ -45,7 +45,7 @@ class TestsFolderStructure(unittest.TestCase):
 class TestSyncExtraction(unittest.TestCase):
 
     def setUp(self):
-        self.workdir = Path(spikeglx.__file__).parent / 'tests' / 'fixtures'
+        self.workdir = Path(__file__).parents[1] / 'fixtures' / 'sync_ephys_fpga'
         self.meta_files = list(Path.glob(self.workdir, '*.meta'))
 
     def test_sync_nidq(self):
