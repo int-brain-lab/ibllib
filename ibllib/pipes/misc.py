@@ -408,7 +408,17 @@ def confirm_video_remote_folder(local_folder=False, remote_folder=False, force=F
             continue
         flag_file = Path(session_path) / 'transfer_me.flag'
         log.debug('Removing ' + str(flag_file))
-        flag_file.unlink()
+        try:
+            flag_file.unlink()
+        except FileNotFoundError as e:
+            log.info('An error occurred when attempting to remove the following file: ' +
+                     str(flag_file) + '\nThe status of the transfers are in an unknown state; '
+                     'clearing out the ibl_local_transfers file, uninhibiting windows, and '
+                     'intentionally stopping the script. Please rerun the script.')
+            Path(transfer_records).unlink()
+            if os.name == 'nt':
+                WindowsInhibitor().uninhibit()
+            exit(1)
         create_video_transfer_done_flag(remote_session_path)
         check_create_raw_session_flag(remote_session_path)
         # Done. Remove from list

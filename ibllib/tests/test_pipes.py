@@ -469,8 +469,8 @@ class TestSyncData(unittest.TestCase):
         n_copied = sum(1 for _ in self.remote_repo.rglob('raw_video_data/*'))
         self.assertEqual(n_copied, 13)
         # Local data should have been renamed
-        expected = 'fakemouse/1900-01-01/002/raw_widefield_data'
-        self.assertTrue(expected in next(self.local_repo.rglob('raw_widefield_data')).as_posix())
+        expected = 'fakemouse/1900-01-01/002/raw_video_data'
+        self.assertTrue(expected in next(self.local_repo.rglob('raw_video_data')).as_posix())
 
         # Test behaviour when a transfer fails
         self.session_path.parent.joinpath('002', 'transfer_me.flag').touch()
