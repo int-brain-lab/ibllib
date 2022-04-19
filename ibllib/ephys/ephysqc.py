@@ -12,8 +12,8 @@ from tqdm import tqdm
 import one.alf.io as alfio
 from iblutil.util import Bunch
 import spikeglx
-import neurodsp as dsp
 import neuropixel
+from neurodsp import fourier, utils, voltage
 
 from brainbox.metrics.single_units import spike_sorting_metrics
 from brainbox.io.spikeglx import stream as sglx_streamer
@@ -101,12 +101,12 @@ class EphysQC(base.QC):
         :param h: dictionary containing sensor coordinates, see neuropixel.trace_header
         :return: 3 numpy vectors nchannels length
         """
-        destripe = dsp.destripe(raw, fs=fs, neuropixel_version=1)
-        rms_raw = dsp.rms(raw)
-        rms_pre_proc = dsp.rms(destripe)
+        destripe = voltage.destripe(raw, fs=fs, neuropixel_version=1)
+        rms_raw = utils.rms(raw)
+        rms_pre_proc = utils.rms(destripe)
         detections = spikes.detection(data=destripe.T, fs=fs, h=h, detect_threshold=SPIKE_THRESHOLD_UV * 1e-6)
         spike_rate = np.bincount(detections.trace, minlength=raw.shape[0]).astype(np.float32)
-        channel_labels, _ = dsp.voltage.detect_bad_channels(raw, fs=fs)
+        channel_labels, _ = voltage.detect_bad_channels(raw, fs=fs)
         _, psd = signal.welch(destripe, fs=fs, window='hanning', nperseg=WELCH_WIN_LENGTH_SAMPLES,
                               detrend='constant', return_onesided=True, scaling='density', axis=-1)
         return rms_raw, rms_pre_proc, spike_rate, channel_labels, psd
@@ -154,7 +154,7 @@ class EphysQC(base.QC):
                 t0s = np.arange(TMIN, rl - SAMPLE_LENGTH, BATCHES_SPACING)
                 all_rms = np.zeros((2, nc, t0s.shape[0]))
                 all_srs, channel_ok = (np.zeros((nc, t0s.shape[0])) for _ in range(2))
-                psds = np.zeros((nc, dsp.fscale(WELCH_WIN_LENGTH_SAMPLES, 1, one_sided=True).size))
+                psds = np.zeros((nc, fourier.fscale(WELCH_WIN_LENGTH_SAMPLES, 1, one_sided=True).size))
                 # If the ap.bin file is not present locally, stream it
                 if self.data.ap is None and self.stream is True:
                     _logger.warning(f'Streaming .ap data to compute RMS samples for probe {self.pid}')
@@ -181,7 +181,7 @@ class EphysQC(base.QC):
                 results = {'rms': np.median(all_rms, axis=-1),
                            'spike_rate': np.median(all_srs, axis=-1),
                            'channel_labels': stats.mode(channel_ok, axis=1)[0],
-                           'ap_freqs': dsp.fscale(WELCH_WIN_LENGTH_SAMPLES, 1 / fs, one_sided=True),
+                           'ap_freqs': fourier.fscale(WELCH_WIN_LENGTH_SAMPLES, 1 / fs, one_sided=True),
                            'ap_power': psds.T / len(t0s),  # shape: (nfreqs, nchannels)
                            }
                 for k in files:
@@ -211,20 +211,20 @@ def rmsmap(sglx):
     """
     rms_win_length_samples = 2 ** np.ceil(np.log2(sglx.fs * RMS_WIN_LENGTH_SECS))
     # the window generator will generates window indices
-    wingen = dsp.WindowGenerator(ns=sglx.ns, nswin=rms_win_length_samples, overlap=0)
+    wingen = utils.WindowGenerator(ns=sglx.ns, nswin=rms_win_length_samples, overlap=0)
     # pre-allocate output dictionary of numpy arrays
     win = {'TRMS': np.zeros((wingen.nwin, sglx.nc)),
            'nsamples': np.zeros((wingen.nwin,)),
-           'fscale': dsp.fscale(WELCH_WIN_LENGTH_SAMPLES, 1 / sglx.fs, one_sided=True),
+           'fscale': fourier.fscale(WELCH_WIN_LENGTH_SAMPLES, 1 / sglx.fs, one_sided=True),
            'tscale': wingen.tscale(fs=sglx.fs)}
     win['spectral_density'] = np.zeros((len(win['fscale']), sglx.nc))
     # loop through the whole session
     for first, last in wingen.firstlast:
         D = sglx.read_samples(first_sample=first, last_sample=last)[0].transpose()
         # remove low frequency noise below 1 Hz
-        D = dsp.hp(D, 1 / sglx.fs, [0, 1])
+        D = fourier.hp(D, 1 / sglx.fs, [0, 1])
         iw = wingen.iw
-        win['TRMS'][iw, :] = dsp.rms(D)
+        win['TRMS'][iw, :] = utils.rms(D)
         win['nsamples'][iw] = D.shape[1]
         # the last window may be smaller than what is needed for welch
         if last - first < WELCH_WIN_LENGTH_SAMPLES:
