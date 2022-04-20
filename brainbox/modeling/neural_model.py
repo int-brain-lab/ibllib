@@ -107,7 +107,7 @@ class NeuralModel:
             spkarrs.append(arr.T)
         y = np.vstack(spkarrs)
         if hasattr(self.design, 'dm'):
-            assert y.shape[0] == self.design.dm.shape[0], "Oh shit. Indexing error."
+            assert y.shape[0] == self.design.dm.shape[0], f"Oh shit. Indexing error. {y.shape} not equal to {self.design.dm.shape}"
         self.binnedspikes = y
 
     def combine_weights(self):
@@ -195,7 +195,7 @@ class NeuralModel:
         # operate on. If all data indices are in train indices, train and test are the same set.
         self.traininds = train_idx
         if not np.all(np.isin(self.design.trialsdf.index, train_idx)):
-            self.testinds = self.design.trialsdf.index[~self.trialsdf.index.isin(train_idx)]
+            self.testinds = self.design.trialsdf.index[~self.design.trialsdf.index.isin(train_idx)]
         else:
             self.testinds = train_idx
 
