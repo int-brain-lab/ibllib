@@ -19,11 +19,11 @@ import time
 import logging
 
 import numpy as np
-import scipy.ndimage
+import scipy.ndimage.filters as filters
 import scipy.stats as stats
 import pandas as pd
 
-import spikeglx
+from ibllib.io import spikeglx
 from phylib.stats import correlograms
 from iblutil.util import Bunch
 from iblutil.numerical import ismember, between_sorted
@@ -43,11 +43,9 @@ METRICS_PARAMS = {
     'min_isi': 0.0001,
     'min_num_bins_for_missed_spks_est': 50,
     'nc_bins': 100,
-    'nc_n_low_bins': 1,
-    'nc_low_bin_start': 1,
-    'nc_quartile_length': 0.25,
-    'nc_threshold': 5,
-    'nc_percent_peak': 0.1,
+    'nc_n_low_bins': 2,
+    'nc_quartile_length': 0.2,
+    'nc_thresh': 20,
     'presence_window': 10,
     'refractory_period': 0.0015,
     'RPslide_thresh': 0.1,
@@ -78,7 +76,7 @@ def unit_stability(units_b, units=None, feat_names=['amps'], dist='norm', test='
         distributions are presumed to belong to.
     test : string (optional)
         The statistical test used to compute the probability that the empirical spike feature
-        distributions come from `dist`.noise
+        distributions come from `dist`.
 
     Returns
     -------
@@ -201,7 +199,7 @@ def missed_spikes_est(feat, spks_per_bin=20, sigma=5, min_num_bins=50):
     # compute the spike feature histogram and pdf:
     num_bins = int(feat.size / spks_per_bin)
     hist, bins = np.histogram(feat, num_bins, density=True)
-    pdf = scipy.ndimage.gaussian_filter1d(hist, sigma)   # FIXME warning non-tuple sequence for multidim indexing
+    pdf = filters.gaussian_filter1d(hist, sigma)
 
     # Find where the distribution stops being symmetric around the peak:
     peak_idx = np.argmax(pdf)
@@ -759,8 +757,7 @@ def slidingRP_viol(ts, bin_size=0.25, thresh=0.1, acceptThresh=0.1):
     return didpass
 
 
-def noise_cutoff(amps, quantile_length=.25, n_bins=100, n_low_bins=1, low_bin_start=1,
-                 nc_threshold=5, percent_peak=0.10):
+def noise_cutoff(amps, quartile_length=.2, n_bins=100, n_low_bins=2):
     """
     A metric to determine whether a unit's amplitude distribution is cut off
     (at floor), without assuming a Gaussian distribution.
@@ -773,7 +770,7 @@ def noise_cutoff(amps, quantile_length=.25, n_bins=100, n_low_bins=1, low_bin_st
     ----------
     amps : ndarray_like
         The amplitudes (in uV) of the spikes.
-    quantile_length : float
+    quartile_length : float
         The size of the upper quartile of the amplitude distribution.
     n_bins : int
         The number of bins used to compute a histogram of the amplitude
@@ -798,37 +795,31 @@ def noise_cutoff(amps, quantile_length=.25, n_bins=100, n_low_bins=1, low_bin_st
         >>> cutoff = bb.metrics.noise_cutoff(amps, quartile_length=.2,
                                              n_bins=100, n_low_bins=2)
     """
-    nc_threshold = 5  # the noise cutoff result has to be greater than 5
-    percent_threshold = 0.10  # the first bin has to be greater than 10% the peak bin
 
-    if amps.size == 0:   # ensure there are amplitudes available to analyze
-        return 0.0
+    if amps.size > 1:
+        bins_list = np.linspace(0, np.max(amps), n_bins)
+        n, bins = np.histogram(amps, bins=bins_list)
+        dx = np.diff(n)
+        idx_nz = np.nonzero(dx)  # indices of nonzeros
+        idx_peak = np.argmax(n)
+        length_top_half = idx_nz[0][-1] - idx_peak
+        high_quartile = 1 - (2 * quartile_length)
 
-    bins_list = np.linspace(0, np.max(amps), n_bins)  # list of bins to compute the amplitude histogram
-    n, bins = np.histogram(amps, bins=bins_list)  # construct amplitude histogram
-    idx_peak = np.argmax(n)  # peak of amplitude distribution
-    # compute the length of the top half of the distribution -- ignoring zero bins
-    length_top_half = np.where(n[idx_peak:-1] > 0)[0].size
-    # the remaining part of the distribution, which we will compare the low quantile to
-    high_quantile = 2 * quantile_length
-    # the first bin (index) of the high quantile part of the distribution
-    high_quantile_start_ind = int(np.ceil(high_quantile * length_top_half + idx_peak))
-    # bins to consider in the high quantile (of all non-zero bins)
-    indices_bins_high_quantile = np.arange(high_quantile_start_ind, n.size)
-    idx_use = np.where(n[indices_bins_high_quantile] >= 1)[0]
-    if indices_bins_high_quantile.size == 0:  # ensure there are amplitudes in these bins
-        return 0.0
-    # mean of all amp values in high quantile bins
-    mean_high_quantile = np.mean(n[indices_bins_high_quantile][idx_use])
-    std_high_quantile = np.std(n[indices_bins_high_quantile][idx_use])
-    first_low_quantile = n[(n != 0)][1]  # take the second bin
-    if std_high_quantile == 0:
-        return 0.0
-    cutoff = (first_low_quantile - mean_high_quantile) / std_high_quantile
-    peak_bin_height = np.max(n)
-    first_bin_versus_peak = n[np.argmax(n > 0)] / peak_bin_height
-    fail_criteria = (cutoff > nc_threshold) & (first_bin_versus_peak > percent_threshold)
-    return ~fail_criteria
+        high_quartile_start_ind = int(np.ceil(high_quartile * length_top_half + idx_peak))
+        xx = idx_nz[0][idx_nz[0] > high_quartile_start_ind]
+        if len(n[xx]) > 0:
+            mean_high_quartile = np.mean(n[xx])
+            std_high_quartile = np.std(n[xx])
+            first_low_quartile = np.mean(n[idx_nz[0][1:n_low_bins]])
+            if std_high_quartile > 0:
+                cutoff = (first_low_quartile - mean_high_quartile) / std_high_quartile
+            else:
+                cutoff = np.float64(np.nan)
+        else:
+            cutoff = np.float64(np.nan)
+    else:
+        cutoff = np.float64(np.nan)
+    return cutoff
 
 
 def spike_sorting_metrics(times, clusters, amps, depths, cluster_ids=None, params=METRICS_PARAMS):
@@ -1006,13 +997,9 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
                                               thresh=params['RPslide_thresh'],
                                               acceptThresh=params['acceptable_contamination'])
         r.noise_cutoff[ic] = noise_cutoff(amps,
-                                          quantile_length=params['nc_quartile_length'],
+                                          quartile_length=params['nc_quartile_length'],
                                           n_bins=params['nc_bins'],
-                                          n_low_bins=params['nc_n_low_bins'],
-                                          low_bin_start=params['nc_low_bin_start'],
-                                          nc_threshold=params['nc_threshold'],
-                                          percent_peak=params['nc_percent_peak'])
-
+                                          n_low_bins=params['nc_n_low_bins'])
         r.missed_spikes_est[ic], _, _ = missed_spikes_est(
             amps, spks_per_bin=params['spks_per_bin_for_missed_spks_est'],
             sigma=params['std_smoothing_kernel_for_missed_spks_est'],
@@ -1036,7 +1023,7 @@ def compute_labels(r, params=METRICS_PARAMS, return_details=False):
     # we could eventually do a bitwise qc
     labels = np.c_[
         r.slidingRP_viol,
-        r.noise_cutoff,
+        r.noise_cutoff < params['nc_thresh'],
         r.amp_median > params['med_amp_thresh_uv'] / 1e6,
     ]
     if not return_details:
