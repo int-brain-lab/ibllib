@@ -5,8 +5,9 @@ import time
 import json
 
 import numpy as np
+from one.alf.io import remove_uuid_file
 
-from ibllib.io import spikeglx
+import spikeglx
 
 _logger = logging.getLogger('ibllib')
 
@@ -116,52 +117,138 @@ def stream(pid, t0, nsecs=1, one=None, cache_folder=None, remove_cached=False, t
     :param nsecs: duration of the streamed data
     :param one: An instance of ONE
     :param cache_folder:
+    :param remove_cached:
     :param typ: 'ap' or 'lf'
     :return: sr, t0
     """
+    import warnings
+    warnings.warn('brainbox.io.spikeglx.stream is deprecated in favour of brainbox.io.spikeglx.Streamer',
+                  DeprecationWarning)
     if nsecs > 10:
         ValueError(f'Streamer works only with 10 or less seconds, set nsecs to less than {nsecs}')
     assert one
     assert typ in ['lf', 'ap']
-
-    if cache_folder is None:
-        samples_folder = Path(one.alyx._par.CACHE_DIR).joinpath('cache', typ)
-
-    def _get_file(one_rec):
-        fpath = Path(one.alyx._par.CACHE_DIR).joinpath(
-            str(one_rec['session_path'].values[0]),
-            str(one_rec['rel_path'].values[0]))
-        if fpath.exists():
-            return fpath
-        else:
-            return one._download_datasets(one_rec)[0]
-
-    eid, pname = one.pid2eid(pid)
-    cbin_rec = one.list_datasets(eid, collection=f"*{pname}", filename=f'*{typ}.*bin', details=True)
-    ch_rec = one.list_datasets(eid, collection=f"*{pname}", filename=f'*{typ}.ch', details=True)
-    meta_rec = one.list_datasets(eid, collection=f"*{pname}", filename=f'*{typ}.meta', details=True)
-    ch_file = _get_file(ch_rec)
-    _get_file(meta_rec)
-
-    with open(ch_file) as fid:
-        chinfo = json.load(fid)
+    sr = Streamer(pid=pid, one=one, cache_folder=cache_folder, remove_cached=remove_cached, typ=typ)
+    chinfo = sr.file_chunks
     tbounds = np.array(chinfo['chunk_bounds']) / chinfo['sample_rate']
     first_chunk = np.maximum(0, np.searchsorted(tbounds, t0 + 0.01) - 1)
     last_chunk = np.maximum(0, np.searchsorted(tbounds, t0 + + 0.01 + nsecs) - 2)
     t0 = tbounds[first_chunk]
-
-    samples_folder.mkdir(exist_ok=True, parents=True)
-    sr = spikeglx.download_raw_partial(
-        one=one,
-        url_cbin=one.record2url(cbin_rec)[0],
-        url_ch=ch_file,
-        first_chunk=first_chunk,
-        last_chunk=last_chunk,
-        cache_dir=samples_folder)
-
+    sr_small, target_dir = sr._download_raw_partial(first_chunk=first_chunk, last_chunk=last_chunk)
     if remove_cached:
-        probe_cache = samples_folder.joinpath(one.eid2path(eid).relative_to(one.alyx._par.CACHE_DIR),
-                                              'raw_ephys_data', f'{pname}')
-        shutil.rmtree(probe_cache, ignore_errors=True)
+        shutil.rmtree(target_dir, ignore_errors=True)
+    return sr_small, t0
 
-    return sr, t0
+
+class Streamer(spikeglx.Reader):
+    """
+    pid = 'e31b4e39-e350-47a9-aca4-72496d99ff2a'
+    one = ONE()
+    sr = Streamer(pid=pid, one=one)
+    raw_voltage = sr[int(t0 * sr.fs):int((t0 + nsecs) * sr.fs), :]
+    """
+    def __init__(self, pid, one, typ='ap', cache_folder=None, remove_cached=False):
+        self.one = one
+        self.pid = pid
+        self.cache_folder = cache_folder or Path(self.one.alyx._par.CACHE_DIR).joinpath('cache', typ)
+        self.remove_cached = remove_cached
+        self.eid, self.pname = self.one.pid2eid(pid)
+        self.file_chunks = self.one.load_dataset(self.eid, f'*.{typ}.ch', collection=f"*{self.pname}")
+        meta_file = self.one.load_dataset(self.eid, f'*.{typ}.meta', collection=f"*{self.pname}")
+        cbin_rec = self.one.list_datasets(self.eid, collection=f"*{self.pname}", filename=f'*{typ}.*bin', details=True)
+        self.url_cbin = self.one.record2url(cbin_rec)[0]
+        with open(self.file_chunks, 'r') as f:
+            self.chunks = json.load(f)
+            self.chunks['chunk_bounds'] = np.array(self.chunks['chunk_bounds'])
+        super(Streamer, self).__init__(meta_file, ignore_warnings=True)
+
+    def read(self, nsel=slice(0, 10000), csel=slice(None), sync=True):
+        """
+        overload the read function by downloading the necessary chunks
+        """
+        first_chunk = np.maximum(0, np.searchsorted(self.chunks['chunk_bounds'], nsel.start + 0.01 * self.fs) - 1)
+        last_chunk = np.maximum(0, np.searchsorted(self.chunks['chunk_bounds'], nsel.stop + 0.01 * self.fs) - 2)
+        n0 = self.chunks['chunk_bounds'][first_chunk]
+        self.cache_folder.mkdir(exist_ok=True, parents=True)
+        sr, target_dir = self._download_raw_partial(first_chunk=first_chunk, last_chunk=last_chunk)
+        data = sr[nsel.start - n0: nsel.stop - n0, :]
+        sr.close()
+        if self.remove_cached:
+            shutil.rmtree(target_dir)
+        return data
+
+    def _download_raw_partial(self, first_chunk=0, last_chunk=0):
+        """
+        downloads one or several chunks of a mtscomp file and copy ch files and metadata to return
+        a spikeglx.Reader object
+        :param first_chunk:
+        :param last_chunk:
+        :return:
+        """
+        assert str(self.url_cbin).endswith('.cbin')
+        webclient = self.one.alyx
+        relpath = Path(self.url_cbin.replace(webclient._par.HTTP_DATA_SERVER, '.')).parents[0]
+        # write the temp file into a subdirectory
+        tdir_chunk = f"chunk_{str(first_chunk).zfill(6)}_to_{str(last_chunk).zfill(6)}"
+        target_dir = Path(self.cache_folder, relpath, tdir_chunk)
+        Path(target_dir).mkdir(parents=True, exist_ok=True)
+        ch_file_stream = target_dir.joinpath(self.file_chunks.name).with_suffix('.stream.ch')
+
+        # Get the first sample index, and the number of samples to download.
+        i0 = self.chunks['chunk_bounds'][first_chunk]
+        ns_stream = self.chunks['chunk_bounds'][last_chunk + 1] - i0
+        total_samples = self.chunks['chunk_bounds'][-1]
+
+        # handles the meta file
+        meta_local_path = ch_file_stream.with_suffix('.meta')
+        if not meta_local_path.exists():
+            shutil.copy(self.file_chunks.with_suffix('.meta'), meta_local_path)
+
+        # if the cached version happens to be the same as the one on disk, just load it
+        if ch_file_stream.exists():
+            with open(ch_file_stream, 'r') as f:
+                cmeta_stream = json.load(f)
+            if (cmeta_stream.get('chopped_first_sample', None) == i0 and
+                    cmeta_stream.get('chopped_total_samples', None) == total_samples):
+                return spikeglx.Reader(ch_file_stream.with_suffix('.cbin'), ignore_warnings=True)
+        else:
+            shutil.copy(self.file_chunks, ch_file_stream)
+        assert ch_file_stream.exists()
+
+        cmeta = self.chunks.copy()
+        # prepare the metadata file
+        cmeta['chunk_bounds'] = cmeta['chunk_bounds'][first_chunk:last_chunk + 2]
+        cmeta['chunk_bounds'] = [int(_ - i0) for _ in cmeta['chunk_bounds']]
+        assert len(cmeta['chunk_bounds']) >= 2
+        assert cmeta['chunk_bounds'][0] == 0
+
+        first_byte = cmeta['chunk_offsets'][first_chunk]
+        cmeta['chunk_offsets'] = cmeta['chunk_offsets'][first_chunk:last_chunk + 2]
+        cmeta['chunk_offsets'] = [_ - first_byte for _ in cmeta['chunk_offsets']]
+        assert len(cmeta['chunk_offsets']) >= 2
+        assert cmeta['chunk_offsets'][0] == 0
+        n_bytes = cmeta['chunk_offsets'][-1]
+        assert n_bytes > 0
+
+        # Save the chopped chunk bounds and offsets.
+        cmeta['sha1_compressed'] = None
+        cmeta['sha1_uncompressed'] = None
+        cmeta['chopped'] = True
+        cmeta['chopped_first_sample'] = int(i0)
+        cmeta['chopped_samples'] = int(ns_stream)
+        cmeta['chopped_total_samples'] = int(total_samples)
+
+        with open(ch_file_stream, 'w') as f:
+            json.dump(cmeta, f, indent=2, sort_keys=True)
+
+        # Download the requested chunks
+        cbin_local_path = webclient.download_file(
+            self.url_cbin, chunks=(first_byte, n_bytes),
+            target_dir=target_dir, clobber=True, return_md5=False)
+        cbin_local_path = remove_uuid_file(cbin_local_path)
+        cbin_local_path_renamed = cbin_local_path.with_suffix('.stream.cbin')
+        cbin_local_path.replace(cbin_local_path_renamed)
+        assert cbin_local_path_renamed.exists()
+
+        reader = spikeglx.Reader(cbin_local_path_renamed, ignore_warnings=True)
+        return reader, target_dir
