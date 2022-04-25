@@ -704,7 +704,8 @@ def load_wheel_reaction_times(eid, one=None):
 
 
 def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_wheel=False,
-                   ret_abswheel=False, wheel_binsize=0.02, addtl_types=[]):
+                   ret_abswheel=False, wheel_binsize=0.02, addtl_types=[], 
+                   align_event='stimOn_times', keeptrials=None):
     """
     Generate a pandas dataframe of per-trial timing information about a given session.
     Each row in the frame will correspond to a single trial, with timing values indicating timing
@@ -779,18 +780,19 @@ def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_whee
     endtimes = trials.feedback_times
     tmp = {key: value for key, value in trials.items() if key in trialstypes}
 
-    if maxlen is not None:
-        with np.errstate(invalid='ignore'):
-            keeptrials = (endtimes - starttimes) <= maxlen
-    else:
-        keeptrials = range(len(starttimes))
+    if keeptrials is None:
+        if maxlen is not None:
+            with np.errstate(invalid='ignore'):
+                keeptrials = (endtimes - starttimes) <= maxlen
+        else:
+            keeptrials = range(len(starttimes))
     trialdata = {x: tmp[x][keeptrials] for x in trialstypes}
     trialdata['probabilityLeft'] = remap_trialp(trialdata['probabilityLeft'])
     trialsdf = pd.DataFrame(trialdata)
     if maxlen is not None:
         trialsdf.set_index(np.nonzero(keeptrials)[0], inplace=True)
-    trialsdf['trial_start'] = trialsdf['stimOn_times'] - t_before
-    trialsdf['trial_end'] = trialsdf['feedback_times'] + t_after
+    trialsdf['trial_start'] = trialsdf[align_event] - t_before
+    trialsdf['trial_end'] = trialsdf[align_event] + t_after
     tdiffs = trialsdf['trial_end'] - np.roll(trialsdf['trial_start'], -1)
     if np.any(tdiffs[:-1] > 0):
         logging.warning(f'{sum(tdiffs[:-1] > 0)} trials overlapping due to t_before and t_after '

@@ -107,7 +107,7 @@ class NeuralModel:
             spkarrs.append(arr.T)
         y = np.vstack(spkarrs)
         if hasattr(self.design, 'dm'):
-            assert y.shape[0] == self.design.dm.shape[0], f"Oh shit. Indexing error. {y.shape} not equal to {self.design.dm.shape}"
+            assert y.shape[0] == self.design.dm.shape[0], f"Oh shit. Indexing error."
         self.binnedspikes = y
 
     def combine_weights(self):
@@ -226,7 +226,7 @@ class NeuralModel:
         testmask = np.isin(self.design.trlabels, testinds).flatten()
         dm, binned = self.design[testmask, :], self.binnedspikes[testmask]
 
-        scores = pd.Series(index=self.coefs.index, name='scores')
+        scores = pd.Series(index=self.coefs.index, name='scores', dtype=object)
         for cell in self.coefs.index:
             cell_idx = np.argwhere(self.clu_ids == cell)[0, 0]
             wt = self.coefs.loc[cell].reshape(-1, 1)

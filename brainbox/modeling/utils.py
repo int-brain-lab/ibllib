@@ -38,7 +38,9 @@ def neglog(weights, x, y):
 
 
 class SequentialSelector:
-    def __init__(self, model, traininds, testinds, n_features_to_select=None, direction='forward', scoring=None):
+    def __init__(self, model, n_features_to_select=None, 
+                 direction='forward', scoring=None,
+                 train=None, test=None):
         """
         Sequential feature selection for neural models
 
@@ -67,8 +69,8 @@ class SequentialSelector:
         self.scoring = scoring
         self.delta_scores = pd.DataFrame(index=self.model.clu_ids)
         self.trlabels = self.design.trlabels
-        self.train = np.isin(self.trlabels, traininds).flatten() #np.isin(self.trlabels, self.model.traininds).flatten()
-        self.test = np.isin(self.trlabels, testinds).flatten() #~self.train
+        self.train = np.isin(self.trlabels, self.model.traininds).flatten() if train is None else train
+        self.test = ~self.train if test is None else test
         self.features = np.array(list(self.design.covar.keys()))
 
     def fit(self, progress=False):
