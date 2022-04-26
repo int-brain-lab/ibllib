@@ -7,7 +7,7 @@ import numpy as np
 from scipy import signal
 from scipy.io import wavfile
 
-from ibllib import dsp
+import neurodsp as dsp
 import ibllib.io.raw_data_loaders as ioraw
 from ibllib.io.extractors.training_trials import GoCueTimes
 

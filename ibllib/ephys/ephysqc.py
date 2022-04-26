@@ -8,15 +8,14 @@ import shutil
 import numpy as np
 import pandas as pd
 from scipy import signal, stats
-from tqdm import tqdm
 import one.alf.io as alfio
 from iblutil.util import Bunch
 import spikeglx
 import neuropixel
 from neurodsp import fourier, utils, voltage
 
+from brainbox.io.spikeglx import Streamer
 from brainbox.metrics.single_units import spike_sorting_metrics
-from brainbox.io.spikeglx import stream as sglx_streamer
 from ibllib.ephys import sync_probes, spikes
 from ibllib.qc import base
 from ibllib.io.extractors import ephys_fpga, training_wheel
@@ -89,7 +88,14 @@ class EphysQC(base.QC):
             else:
                 self.data[f'{dstype}_meta'] = spikeglx.read_meta_data(meta_file)
                 bin_file = next(meta_file.parent.glob(f'*{dstype}.*bin'), None)
-                self.data[f'{dstype}'] = spikeglx.Reader(bin_file, open=True) if bin_file is not None else None
+                if bin_file:
+                    self.data[f'{dstype}'] = spikeglx.Reader(bin_file, open=True)
+                else:
+                    # we only stream the AP file, we won't stream the full LF file...
+                    if dstype == 'ap':
+                        self.data[f'{dstype}'] = Streamer(pid=self.pid, one=self.one, remove_cached=True)
+                    else:
+                        self.data[f'{dstype}'] = None
 
     @staticmethod
     def _compute_metrics_array(raw, fs, h):
@@ -141,47 +147,31 @@ class EphysQC(base.QC):
                                 f'Use overwrite option.')
                 results = {k: np.load(files[k]) for k in files}
             else:
-                rl = self.data.ap_meta.fileTimeSecs
-                nsync = len(spikeglx._get_sync_trace_indices_from_meta(self.data.ap_meta))
-                nc = spikeglx._get_nchannels_from_meta(self.data.ap_meta) - nsync
-                neuropixel_version = spikeglx._get_neuropixel_major_version_from_meta(self.data.ap_meta)
+                sr = self.data['ap']
+                nc = sr.nc - sr.nsync
                 # verify that the channel layout is correct according to IBL layout
-                h = neuropixel.trace_header(neuropixel_version)
-                th = spikeglx._geometry_from_meta(self.data.ap_meta)
+                h = neuropixel.trace_header(sr.major_version)
+                th = sr.geometry
                 if not (np.all(h['x'] == th['x']) and np.all(h['y'] == th['y'])):
                     _logger.critical("Channel geometry seems incorrect")
                     raise ValueError("Wrong Neuropixel channel mapping used - ABORT")
-                t0s = np.arange(TMIN, rl - SAMPLE_LENGTH, BATCHES_SPACING)
+                t0s = np.arange(TMIN, sr.rl - SAMPLE_LENGTH, BATCHES_SPACING)
                 all_rms = np.zeros((2, nc, t0s.shape[0]))
                 all_srs, channel_ok = (np.zeros((nc, t0s.shape[0])) for _ in range(2))
                 psds = np.zeros((nc, fourier.fscale(WELCH_WIN_LENGTH_SAMPLES, 1, one_sided=True).size))
-                # If the ap.bin file is not present locally, stream it
-                if self.data.ap is None and self.stream is True:
-                    _logger.warning(f'Streaming .ap data to compute RMS samples for probe {self.pid}')
-                    for i, t0 in enumerate(tqdm(t0s)):
-                        sr, _ = sglx_streamer(self.pid, t0=t0, nsecs=1, one=self.one, remove_cached=True)
-                        raw = sr[:, :-nsync].T
-                        all_rms[0, :, i], all_rms[1, :, i], all_srs[:, i], channel_ok[:, i], psd =\
-                            self._compute_metrics_array(raw, sr.fs, h)
-                        psds += psd
-                        fs = sr.fs
-                elif self.data.ap is None and self.stream is not True:
-                    _logger.warning('Raw .ap data is not available locally. Run with stream=True in order to stream '
-                                    'data for calculating RMS samples.')
-                else:
-                    _logger.info(f'Computing RMS samples for .ap data using local data in {self.probe_path}')
-                    for i, t0 in enumerate(t0s):
-                        sl = slice(int(t0 * self.data.ap.fs), int((t0 + SAMPLE_LENGTH) * self.data.ap.fs))
-                        raw = self.data.ap[sl, :-nsync].T
-                        all_rms[0, :, i], all_rms[1, :, i], all_srs[:, i], channel_ok[:, i], psd =\
-                            self._compute_metrics_array(raw, self.data.ap.fs, h)
-                        fs = self.data.ap.fs
-                        psds += psd
+
+                _logger.info(f'Computing RMS samples for .ap data {self.probe_path}')
+                for i, t0 in enumerate(t0s):
+                    sl = slice(int(t0 * sr.fs), int((t0 + SAMPLE_LENGTH) * sr.fs))
+                    raw = sr[sl, :-sr.nsync].T
+                    all_rms[0, :, i], all_rms[1, :, i], all_srs[:, i], channel_ok[:, i], psd =\
+                        self._compute_metrics_array(raw, sr.fs, h)
+                    psds += psd
                 # Calculate the median RMS across all samples per channel
                 results = {'rms': np.median(all_rms, axis=-1),
                            'spike_rate': np.median(all_srs, axis=-1),
                            'channel_labels': stats.mode(channel_ok, axis=1)[0],
-                           'ap_freqs': fourier.fscale(WELCH_WIN_LENGTH_SAMPLES, 1 / fs, one_sided=True),
+                           'ap_freqs': fourier.fscale(WELCH_WIN_LENGTH_SAMPLES, 1 / sr.fs, one_sided=True),
                            'ap_power': psds.T / len(t0s),  # shape: (nfreqs, nchannels)
                            }
                 for k in files:

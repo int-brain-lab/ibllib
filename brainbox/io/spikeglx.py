@@ -129,14 +129,15 @@ def stream(pid, t0, nsecs=1, one=None, cache_folder=None, remove_cached=False, t
     assert one
     assert typ in ['lf', 'ap']
     sr = Streamer(pid=pid, one=one, cache_folder=cache_folder, remove_cached=remove_cached, typ=typ)
-    chinfo = sr.file_chunks
+    chinfo = sr.chunks
     tbounds = np.array(chinfo['chunk_bounds']) / chinfo['sample_rate']
     first_chunk = np.maximum(0, np.searchsorted(tbounds, t0 + 0.01) - 1)
     last_chunk = np.maximum(0, np.searchsorted(tbounds, t0 + + 0.01 + nsecs) - 2)
     t0 = tbounds[first_chunk]
-    sr_small, target_dir = sr._download_raw_partial(first_chunk=first_chunk, last_chunk=last_chunk)
+    sr_small = sr._download_raw_partial(first_chunk=first_chunk, last_chunk=last_chunk)
     if remove_cached:
-        shutil.rmtree(target_dir, ignore_errors=True)
+        sr_small = sr_small[:, :]
+        shutil.rmtree(sr.target_dir, ignore_errors=True)
     return sr_small, t0
 
 
@@ -148,6 +149,7 @@ class Streamer(spikeglx.Reader):
     raw_voltage = sr[int(t0 * sr.fs):int((t0 + nsecs) * sr.fs), :]
     """
     def __init__(self, pid, one, typ='ap', cache_folder=None, remove_cached=False):
+        self.target_dir = None  # last chunk directory download or read
         self.one = one
         self.pid = pid
         self.cache_folder = cache_folder or Path(self.one.alyx._par.CACHE_DIR).joinpath('cache', typ)
@@ -170,11 +172,11 @@ class Streamer(spikeglx.Reader):
         last_chunk = np.maximum(0, np.searchsorted(self.chunks['chunk_bounds'], nsel.stop + 0.01 * self.fs) - 2)
         n0 = self.chunks['chunk_bounds'][first_chunk]
         self.cache_folder.mkdir(exist_ok=True, parents=True)
-        sr, target_dir = self._download_raw_partial(first_chunk=first_chunk, last_chunk=last_chunk)
-        data = sr[nsel.start - n0: nsel.stop - n0, :]
+        sr = self._download_raw_partial(first_chunk=first_chunk, last_chunk=last_chunk)
+        data = sr[nsel.start - n0: nsel.stop - n0, csel]
         sr.close()
         if self.remove_cached:
-            shutil.rmtree(target_dir)
+            shutil.rmtree(self.target_dir)
         return data
 
     def _download_raw_partial(self, first_chunk=0, last_chunk=0):
@@ -183,7 +185,7 @@ class Streamer(spikeglx.Reader):
         a spikeglx.Reader object
         :param first_chunk:
         :param last_chunk:
-        :return:
+        :return: spikeglx.Reader of the current chunk, Pathlib.Path of the directory where it is stored
         """
         assert str(self.url_cbin).endswith('.cbin')
         webclient = self.one.alyx
@@ -191,6 +193,7 @@ class Streamer(spikeglx.Reader):
         # write the temp file into a subdirectory
         tdir_chunk = f"chunk_{str(first_chunk).zfill(6)}_to_{str(last_chunk).zfill(6)}"
         target_dir = Path(self.cache_folder, relpath, tdir_chunk)
+        self.target_dir = target_dir
         Path(target_dir).mkdir(parents=True, exist_ok=True)
         ch_file_stream = target_dir.joinpath(self.file_chunks.name).with_suffix('.stream.ch')
 
@@ -211,6 +214,7 @@ class Streamer(spikeglx.Reader):
             if (cmeta_stream.get('chopped_first_sample', None) == i0 and
                     cmeta_stream.get('chopped_total_samples', None) == total_samples):
                 return spikeglx.Reader(ch_file_stream.with_suffix('.cbin'), ignore_warnings=True)
+
         else:
             shutil.copy(self.file_chunks, ch_file_stream)
         assert ch_file_stream.exists()
@@ -251,4 +255,4 @@ class Streamer(spikeglx.Reader):
         assert cbin_local_path_renamed.exists()
 
         reader = spikeglx.Reader(cbin_local_path_renamed, ignore_warnings=True)
-        return reader, target_dir
+        return reader
