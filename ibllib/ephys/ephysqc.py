@@ -88,14 +88,14 @@ class EphysQC(base.QC):
             else:
                 self.data[f'{dstype}_meta'] = spikeglx.read_meta_data(meta_file)
                 bin_file = next(meta_file.parent.glob(f'*{dstype}.*bin'), None)
-                if bin_file:
-                    self.data[f'{dstype}'] = spikeglx.Reader(bin_file, open=True)
-                else:
+                if not bin_file:
                     # we only stream the AP file, we won't stream the full LF file...
                     if dstype == 'ap':
                         self.data[f'{dstype}'] = Streamer(pid=self.pid, one=self.one, remove_cached=True)
                     else:
                         self.data[f'{dstype}'] = None
+                else:
+                    self.data[f'{dstype}'] = spikeglx.Reader(bin_file, open=True)
 
     @staticmethod
     def _compute_metrics_array(raw, fs, h):

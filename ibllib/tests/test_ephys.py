@@ -163,14 +163,6 @@ class TestEphysQC(unittest.TestCase):
         utils.create_fake_raw_ephys_data_folder(self.one.eid2path(self.eid), populate=True)
         self.qc._ensure_required_data()
 
-    def test_load_data(self):
-        # In case that hasn't been run
-        utils.create_fake_raw_ephys_data_folder(self.one.eid2path(self.eid), populate=True)
-        # Remove the fake bin files because they won't be able to load
-        for fbin in ['_spikeglx_ephysData_g0_t0.imec.lf.bin', '_spikeglx_ephysData_g0_t0.imec.ap.bin']:
-            self.one.eid2path(self.eid).joinpath('raw_ephys_data', self.pname, fbin).unlink()
-        self.qc.load_data()
-
 
 class TestDetectSpikes(unittest.TestCase):
 
