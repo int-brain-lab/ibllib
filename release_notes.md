@@ -1,9 +1,10 @@
-# unreleased
-- Set video compression jobs to priority 90
-
 ## Release Notes 2.11
 
-### Release Notes 2.11.0 2022-03-08
+### Release Notes 2.11.1 2022-04-12
+- Set video compression jobs to priority 90
+- Set jobs to Held if parents are Waiting
+
+### Release Notes 2.11.0 2022-04-08
 - brainbox.io.one.SpikeSortingLoader: option to load using `collection` argument
 - Restructuring of how jobs are run on local servers, run large jobs as service
 
