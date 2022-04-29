@@ -5,6 +5,7 @@ import ctypes
 import json
 import logging
 import shutil
+import subprocess
 import hashlib
 import warnings
 from pathlib import Path
@@ -181,6 +182,71 @@ def copy_with_check(src, dst, **kwargs):
     elif dst.exists():
         dst.unlink()
     return shutil.copy2(src, dst, **kwargs)
+
+
+def rsync_folder(src, dst, exclude, verbosity=1) -> bool:
+    """
+    Used to run the rsync algorithm via a rdiff-backup command on the given directories.
+
+    :param src: source folder (win) or directory (linux)
+    :type src: path or string is expected
+    :param dst: destination folder (win) or directory (linux)
+    :type dst: path or string is expected
+    :param exclude: one or more files to be excluded from the file transfer
+    :type exclude: path to file, string of path to file, or a list of strings or paths
+    :param verbosity: (optional) verbosity for the transfer, defaults to 1 for minimal feedback, 5
+    is the highest level of feedback
+    :type verbosity: int is expected
+    :return: True if directory was backed up successfully or False if something went wrong
+    :rtype: bool
+    """
+    rsync_command = []
+    # Ensure src var is set to a string
+    if isinstance(src, Path):
+        # append to rsync command list
+        pass
+    elif isinstance(src, str):
+        # append to rsync command list
+        pass
+    else:
+        # error message
+        exit(1)
+
+    # Ensure dst var is set to a string
+    if isinstance(dst, Path):
+        # append to rsync command list
+        pass
+    elif isinstance(dst, str):
+        # append to rsync command list
+        pass
+    else:
+        # error message
+        exit(1)
+
+    # Ensure exclude is set to a string or a list of strings
+    if isinstance(exclude, str):
+        # append to rsync command list
+        # exclude_file = dir_1.name + '/transfer_me.flag'
+        pass
+    elif isinstance(exclude, list):
+        # append to rsync command list
+        pass
+    else:
+        # error message
+        exit(1)
+
+    try:
+        subprocess.run(rsync_command)
+        # subprocess.run([
+        #     'rdiff-backup',
+        #     '-v5',
+        #     '--exclude', exclude_file,
+        #     dir_1.name,
+        #     dir_2.name])
+        return True
+    except subprocess.CalledProcessError:
+        # error message
+        return False
 
 
 def transfer_folder(src: Path, dst: Path, force: bool = False) -> None:
