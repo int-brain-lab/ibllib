@@ -81,10 +81,12 @@ def behavior_exists(session_path: str) -> bool:
 
 def check_transfer(src_session_path, dst_session_path):
     """
-    Check all the files in the source directory match those in the destination directory.
+    Check all the files in the source directory match those in the destination directory. Function
+    will throw assertion errors/exceptions if number of files do not match, file names do not
+    match, or if file sizes do not match.
+
     :param src_session_path: The source directory that was copied
     :param dst_session_path: The copy target directory
-    :return:
     """
     src_files = sorted([x for x in Path(src_session_path).rglob('*') if x.is_file()])
     dst_files = sorted([x for x in Path(dst_session_path).rglob('*') if x.is_file()])
@@ -184,9 +186,11 @@ def copy_with_check(src, dst, **kwargs):
     return shutil.copy2(src, dst, **kwargs)
 
 
-def rsync_folder(src, dst, exclude, verbosity=1) -> bool:
+def rsync_folder(src, dst, exclude, verbosity:int=3) -> bool:
     """
-    Used to run the rsync algorithm via a rdiff-backup command on the given directories.
+    Used to run the rsync algorithm via a rdiff-backup command on the given directories. For
+    future modifications for the rdiff-backup command line, full documentation can be found here -
+    https://rdiff-backup.net/docs/rdiff-backup.1.html
 
     :param src: source folder (win) or directory (linux)
     :type src: path or string is expected
@@ -194,55 +198,58 @@ def rsync_folder(src, dst, exclude, verbosity=1) -> bool:
     :type dst: path or string is expected
     :param exclude: one or more files to be excluded from the file transfer
     :type exclude: path to file, string of path to file, or a list of strings or paths
-    :param verbosity: (optional) verbosity for the transfer, defaults to 1 for minimal feedback, 5
-    is the highest level of feedback
+    :param verbosity: (optional) verbosity for the transfer, 3 for default feedback, value must be
+    between 0 (silent) and 9 (noisiest)
     :type verbosity: int is expected
     :return: True if directory was backed up successfully or False if something went wrong
     :rtype: bool
     """
-    rsync_command = []
-    # Ensure src var is set to a string
-    if isinstance(src, Path):
-        # append to rsync command list
-        pass
-    elif isinstance(src, str):
-        # append to rsync command list
-        pass
+    # Begin building out command
+    rsync_command = ['rdiff_backup']
+
+    # Validate verbosity arg, append to command
+    if 0 <= verbosity <= 9:
+        rsync_command.append('--verbosity')
+        rsync_command.append(str(verbosity))
     else:
         # error message
-        exit(1)
+        return False
 
-    # Ensure dst var is set to a string
-    if isinstance(dst, Path):
-        # append to rsync command list
-        pass
-    elif isinstance(dst, str):
-        # append to rsync command list
-        pass
-    else:
-        # error message
-        exit(1)
+    # add the statistics for debug?
+    rsync_command.append('--print-statistics')
 
-    # Ensure exclude is set to a string or a list of strings
+    # Ensure exclude is set to a string or a list of strings, append to command
     if isinstance(exclude, str):
-        # append to rsync command list
-        # exclude_file = dir_1.name + '/transfer_me.flag'
-        pass
+        rsync_command.append('--exclude')
+        rsync_command.append(exclude)
     elif isinstance(exclude, list):
-        # append to rsync command list
-        pass
+        for item in exclude:
+            rsync_command.append('--exclude')
+            rsync_command.append(item)
     else:
         # error message
-        exit(1)
+        return False
+
+    # Ensure src var is set to str, append to command
+    if isinstance(src, Path):
+        rsync_command.append(src.name)
+    elif isinstance(src, str):
+        rsync_command.append(src)
+    else:
+        # error message
+        return False
+
+    # Ensure dst arg is set to str, append to command
+    if isinstance(dst, Path):
+        rsync_command.append(dst.name)
+    elif isinstance(dst, str):
+        rsync_command.append(dst)
+    else:
+        # error message
+        return False
 
     try:
         subprocess.run(rsync_command)
-        # subprocess.run([
-        #     'rdiff-backup',
-        #     '-v5',
-        #     '--exclude', exclude_file,
-        #     dir_1.name,
-        #     dir_2.name])
         return True
     except subprocess.CalledProcessError:
         # error message
