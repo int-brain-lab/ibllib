@@ -59,6 +59,12 @@ class BrainRegions(_BrainRegions):
         self.mappings = {k: mappings[k].to_numpy() for k in mappings}
         self.n_lr = int((len(self.id) - 1) / 2)
 
+    @property
+    def rgba(self):
+        rgba = np.c_[self.rgb, self.rgb[:, 0] * 0 + 255]
+        rgba[0, :] = 0  # set the void to transparent
+        return rgba
+
     def _compute_order(self):
         """
         Compute the order of regions, per region order by left hemisphere and then right hemisphere
