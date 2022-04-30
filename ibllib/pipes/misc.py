@@ -186,7 +186,7 @@ def copy_with_check(src, dst, **kwargs):
     return shutil.copy2(src, dst, **kwargs)
 
 
-def rsync_folder(src, dst, exclude, verbosity:int=3) -> bool:
+def rsync_folder(src, dst, exclude, verbosity: int = 0) -> bool:
     """
     Used to run the rsync algorithm via a rdiff-backup command on the given directories. For
     future modifications for the rdiff-backup command line, full documentation can be found here -
@@ -198,14 +198,14 @@ def rsync_folder(src, dst, exclude, verbosity:int=3) -> bool:
     :type dst: path or string is expected
     :param exclude: one or more files to be excluded from the file transfer
     :type exclude: path to file, string of path to file, or a list of strings or paths
-    :param verbosity: (optional) verbosity for the transfer, 3 for default feedback, value must be
-    between 0 (silent) and 9 (noisiest)
+    :param verbosity: (optional) verbosity for the transfer, value must be between 0 (silent) and 9
+    (noisiest)
     :type verbosity: int is expected
     :return: True if directory was backed up successfully or False if something went wrong
     :rtype: bool
     """
     # Begin building out command
-    rsync_command = ['rdiff_backup']
+    rsync_command = ['rdiff-backup']
 
     # Validate verbosity arg, append to command
     if 0 <= verbosity <= 9:
@@ -215,8 +215,11 @@ def rsync_folder(src, dst, exclude, verbosity:int=3) -> bool:
         # error message
         return False
 
-    # add the statistics for debug?
-    rsync_command.append('--print-statistics')
+    # Options, may want to enable/disable via kwargs
+    rsync_command.append('--backup-mode')  # Force backup mode
+    # rsync_command.append('--print-statistics')  # Summary of statistics will be printed
+    rsync_command.append('--no-acls')  # Disable backup of Access Control Lists
+    rsync_command.append('--no-eas')  # Disable backup of Extended Attributes
 
     # Ensure exclude is set to a string or a list of strings, append to command
     if isinstance(exclude, str):

@@ -333,6 +333,18 @@ class TestPipesMisc(unittest.TestCase):
         with self.assertRaises(ValueError):
             misc.rename_session(self.root_test_folder.name)  # Not a valid session path
 
+    def test_rsync_folder(self):
+        # create temp directories
+        src_dir = tempfile.TemporaryDirectory()
+        dst_dir = tempfile.TemporaryDirectory()
+
+        # generate some files in src_dir
+        Path(src_dir.name).joinpath('video_file').touch()
+        Path(src_dir.name).joinpath('transfer_me.flag').touch()
+
+        # call rsync (rdiff-backup) command
+        self.assertTrue(misc.rsync_folder(src_dir.name, dst_dir.name, '**transfer_me.flag', 0))
+
     def _input_side_effect(self, prompt):
         """input mock function to verify prompts"""
         if 'NAME' in prompt:
