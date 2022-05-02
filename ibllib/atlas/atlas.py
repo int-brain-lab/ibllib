@@ -5,13 +5,18 @@ from pathlib import Path, PurePosixPath
 import numpy as np
 import nrrd
 
-from iblutil.numerical import ismember
-from ibllib.atlas.regions import BrainRegions
+import boto3
+
 from one.webclient import http_download_file
 import one.params
 
+from iblutil.numerical import ismember
+from ibllib.atlas.regions import BrainRegions
+
+
 _logger = logging.getLogger('ibllib')
 ALLEN_CCF_LANDMARKS_MLAPDV_UM = {'bregma': np.array([5739, 5400, 332])}
+S3_BUCKET_IBL = 'ibl-brain-wide-map-public'
 
 
 def cart2sph(x, y, z):
@@ -198,6 +203,12 @@ class BrainAtlas:
 
         self.surface = None
         self.boundary = None
+
+    @staticmethod
+    def _get_cache_dir():
+        par = one.params.get(silent=True)
+        path_atlas = Path(par.CACHE_DIR).joinpath(PurePosixPath('histology', 'ATLAS', 'Needles', 'Allen', 'flatmaps'))
+        return path_atlas
 
     def compute_surface(self):
         """
@@ -999,32 +1010,12 @@ class FlatMap(AllenAtlas):
             self.flatmap, self.ml_scale, self.ap_scale = circles(N=5, atlas=self, display='pyramid')
 
     def _get_flatmap_from_file(self):
-        # TODO probably best to store depth as the c order??
         # gets the file in the ONE cache for the flatmap name in the property, downloads it if needed
-        par = one.params.get(silent=True)
-        FLAT_IRON_ATLAS_REL_PATH = PurePosixPath('histology', 'ATLAS', 'Needles', 'Allen', 'flatmaps')
-        path_atlas = Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH)
-        file_flatmap = path_atlas.joinpath(f'{self.name}_{self.res_um}.nrrd')
+        file_flatmap = self._get_cache_dir().joinpath(f'{self.name}_{self.res_um}.nrrd')
         if not file_flatmap.exists():
-            self._download_flatmap(file_flatmap, FLAT_IRON_ATLAS_REL_PATH, par)
+            file_flatmap.parent.mkdir(exist_ok=True, parents=True)
+            boto3.client('s3').download_file(S3_BUCKET_IBL, f'atlas/{file_flatmap.name}', str(file_flatmap))
         self.flatmap, _ = nrrd.read(file_flatmap)
-
-    @staticmethod
-    def _download_flatmap(file_image, FLAT_IRON_ATLAS_REL_PATH, par):
-        """
-        Download flatmap volumes
-        :param file_image:
-        :param FLAT_IRON_ATLAS_REL_PATH:
-        :param par:
-        :return:
-        """
-        file_image.parent.mkdir(exist_ok=True, parents=True)
-        base_url = (par.HTTP_DATA_SERVER + '/histology/ATLAS/Needles/Allen/flatmaps')
-        flatmap_url = base_url + '/' + file_image.name
-
-        cache_dir = Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH)
-        return http_download_file(flatmap_url, target_dir=cache_dir, username=par.HTTP_DATA_SERVER_LOGIN,
-                                  password=par.HTTP_DATA_SERVER_PWD)
 
     def plot_flatmap(self, depth=0, volume='annotation', mapping='Allen', region_values=None, ax=None, **kwargs):
         """
