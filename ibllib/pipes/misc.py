@@ -217,9 +217,10 @@ def rsync_folder(src, dst, exclude=None, verbosity: int = 0) -> bool:
         log.error('verbosity for rsync/rdiff-backup command was invalid.')
         return False
 
-    # Options, may want to enable/disable via kwargs
-    rsync_command.append('--backup-mode')  # Force backup mode
+    # Additional options to speed up transfers, may want to enable/disable via kwargs
+    # rsync_command.append('--backup-mode')  # Force backup mode
     # rsync_command.append('--print-statistics')  # Summary of statistics will be printed
+    rsync_command.append('--create-full-path')  # all missing dirs on the dst path will be  created
     rsync_command.append('--no-acls')  # Disable backup of Access Control Lists
     rsync_command.append('--no-eas')  # Disable backup of Extended Attributes
 
@@ -259,7 +260,7 @@ def rsync_folder(src, dst, exclude=None, verbosity: int = 0) -> bool:
 
     try:
         subprocess.run(rsync_command)
-        time.sleep(1)  # give rdiff-backup a second to complete all logging operations
+        time.sleep(1)  # give rdiff-backup a second to complete logging operations
         return True
     except subprocess.CalledProcessError:
         log.error('The following subprocess.run command resulted in an error: ' +
@@ -280,6 +281,7 @@ def transfer_folder(src: Path, dst: Path, force: bool = False) -> None:
         except AssertionError:
             pass
     print(f"Copying all files:\n{src}\n--> {dst}")
+    # rsync_folder(src, dst, '**transfer_me.flag')
     if sys.version_info.minor < 8:
         # dirs_exist_ok kwarg not supported in < 3.8
         shutil.rmtree(dst, ignore_errors=True)
@@ -289,6 +291,8 @@ def transfer_folder(src: Path, dst: Path, force: bool = False) -> None:
     # If folder was created delete the src_flag_file
     if check_transfer(src, dst) is None:
         print("All files copied")
+    # rdiff-backup --compare /tmp/tmpw9o1zgn0 /tmp/tmp82gg36rm
+    # No changes found.  Directory matches archive data.
 
 
 def load_params_dict(params_fname: str) -> dict:

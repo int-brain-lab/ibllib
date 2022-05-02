@@ -351,7 +351,7 @@ class TestPipesMisc(unittest.TestCase):
         self.assertTrue(Path(dst_dir.name).joinpath('video_file2').exists())
         self.assertFalse(Path(dst_dir.name).joinpath('transfer_me.flag').exists())
 
-        # generate complete file in src, and a partially complete file in dst dir to emulate a
+        # generate a complete file in src, and an incomplete file in dst dir to emulate a
         # failed network transfer
         with open(Path(src_dir.name).joinpath('network_failed.txt'), 'w') as nf:
             nf.write('1234567890')
