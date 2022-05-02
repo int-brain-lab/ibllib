@@ -1,18 +1,20 @@
+import filecmp
+import json
 import logging
 import shutil
 import tempfile
+import time
 import unittest
-from unittest import mock
 from pathlib import Path
-import json
+from unittest import mock
 
 from one.api import ONE
 
 import ibllib.io.extractors.base
+import ibllib.pipes.scan_fix_passive_files as fix
 import ibllib.tests.fixtures.utils as fu
 from ibllib.pipes import misc
 from ibllib.tests import TEST_DB
-import ibllib.pipes.scan_fix_passive_files as fix
 
 
 class TestExtractors2Tasks(unittest.TestCase):
@@ -339,11 +341,43 @@ class TestPipesMisc(unittest.TestCase):
         dst_dir = tempfile.TemporaryDirectory()
 
         # generate some files in src_dir
-        Path(src_dir.name).joinpath('video_file').touch()
+        Path(src_dir.name).joinpath('video_file1').touch()
+        Path(src_dir.name).joinpath('video_file2').touch()
         Path(src_dir.name).joinpath('transfer_me.flag').touch()
 
-        # call rsync (rdiff-backup) command
-        self.assertTrue(misc.rsync_folder(src_dir.name, dst_dir.name, '**transfer_me.flag', 0))
+        # call rsync (rdiff-backup) command, verify command completes, and files were transferred
+        self.assertTrue(misc.rsync_folder(src_dir.name, dst_dir.name, '**transfer_me.flag'))
+        self.assertTrue(Path(dst_dir.name).joinpath('video_file1').exists())
+        self.assertTrue(Path(dst_dir.name).joinpath('video_file2').exists())
+        self.assertFalse(Path(dst_dir.name).joinpath('transfer_me.flag').exists())
+
+        # generate complete file in src, and a partially complete file in dst dir to emulate a
+        # failed network transfer
+        with open(Path(src_dir.name).joinpath('network_failed.txt'), 'w') as nf:
+            nf.write('1234567890')
+        with open(Path(dst_dir.name).joinpath('network_failed.txt'), 'w') as nf:
+            nf.write('123')
+
+        # call rsync (rdiff-backup) command, without excluding any files
+        self.assertTrue(misc.rsync_folder(src_dir.name, dst_dir.name))
+
+        # verify command completed and network_failed.txt file was fully transferred
+        self.assertTrue(Path(src_dir.name).joinpath('network_failed.txt').exists())
+        self.assertTrue(Path(dst_dir.name).joinpath('network_failed.txt').exists())
+        self.assertTrue(filecmp.cmp(
+            Path(src_dir.name).joinpath('network_failed.txt'),
+            Path(dst_dir.name).joinpath('network_failed.txt'),
+            shallow=False
+        ))
+
+        # call rsync (rdiff-backup) command with invalid settings
+        print('\n>>> Error messages in red are expected in the block below <<<')
+        self.assertFalse(misc.rsync_folder(src_dir.name, dst_dir.name, 'exclusion_file', 123))
+        self.assertFalse(misc.rsync_folder(src_dir.name, dst_dir.name, 'exclusion_file', '123'))
+        self.assertTrue(misc.rsync_folder(src_dir.name, dst_dir.name))
+        self.assertFalse(misc.rsync_folder(123, dst_dir.name))
+        self.assertFalse(misc.rsync_folder(src_dir.name, 123))
+        # NOTE: Invalid src or dst directories are handled by the rdiff-backup command natively
 
     def _input_side_effect(self, prompt):
         """input mock function to verify prompts"""

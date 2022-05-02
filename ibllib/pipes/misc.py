@@ -7,11 +7,13 @@ import logging
 import shutil
 import subprocess
 import hashlib
+import time
 import warnings
 from pathlib import Path
 import re
 from typing import Union, List
 
+import psutil
 from iblutil.io import hashfile, params
 from iblutil.util import range_str
 from one.alf.spec import is_uuid_string, is_session_path, describe
@@ -186,7 +188,7 @@ def copy_with_check(src, dst, **kwargs):
     return shutil.copy2(src, dst, **kwargs)
 
 
-def rsync_folder(src, dst, exclude, verbosity: int = 0) -> bool:
+def rsync_folder(src, dst, exclude=None, verbosity: int = 0) -> bool:
     """
     Used to run the rsync algorithm via a rdiff-backup command on the given directories. For
     future modifications for the rdiff-backup command line, full documentation can be found here -
@@ -196,7 +198,7 @@ def rsync_folder(src, dst, exclude, verbosity: int = 0) -> bool:
     :type src: path or string is expected
     :param dst: destination folder (win) or directory (linux)
     :type dst: path or string is expected
-    :param exclude: one or more files to be excluded from the file transfer
+    :param exclude: (optional) one or more files to be excluded from the file transfer
     :type exclude: path to file, string of path to file, or a list of strings or paths
     :param verbosity: (optional) verbosity for the transfer, value must be between 0 (silent) and 9
     (noisiest)
@@ -207,12 +209,12 @@ def rsync_folder(src, dst, exclude, verbosity: int = 0) -> bool:
     # Begin building out command
     rsync_command = ['rdiff-backup']
 
-    # Validate verbosity arg, append to command
-    if 0 <= verbosity <= 9:
+    # Validate verbosity arg, append to comman
+    if isinstance(verbosity, int) and (0 <= verbosity <= 9):
         rsync_command.append('--verbosity')
         rsync_command.append(str(verbosity))
     else:
-        # error message
+        log.error('verbosity for rsync/rdiff-backup command was invalid.')
         return False
 
     # Options, may want to enable/disable via kwargs
@@ -221,17 +223,19 @@ def rsync_folder(src, dst, exclude, verbosity: int = 0) -> bool:
     rsync_command.append('--no-acls')  # Disable backup of Access Control Lists
     rsync_command.append('--no-eas')  # Disable backup of Extended Attributes
 
-    # Ensure exclude is set to a string or a list of strings, append to command
-    if isinstance(exclude, str):
-        rsync_command.append('--exclude')
-        rsync_command.append(exclude)
-    elif isinstance(exclude, list):
-        for item in exclude:
+    # Ensure exclude exists and is set to a string or a list of strings, append to command
+    if exclude:
+        if isinstance(exclude, str):
             rsync_command.append('--exclude')
-            rsync_command.append(item)
-    else:
-        # error message
-        return False
+            rsync_command.append(exclude)
+        elif isinstance(exclude, list):
+            for item in exclude:
+                rsync_command.append('--exclude')
+                rsync_command.append(item)
+        else:
+            log.error('exclude parameter was not a string or list, rsync/rdiff-backup command was '
+                      'invalid.')
+            return False
 
     # Ensure src var is set to str, append to command
     if isinstance(src, Path):
@@ -239,7 +243,8 @@ def rsync_folder(src, dst, exclude, verbosity: int = 0) -> bool:
     elif isinstance(src, str):
         rsync_command.append(src)
     else:
-        # error message
+        log.error('src parameter was not a string or path, rsync/rdiff-backup command was '
+                  'invalid.')
         return False
 
     # Ensure dst arg is set to str, append to command
@@ -248,14 +253,17 @@ def rsync_folder(src, dst, exclude, verbosity: int = 0) -> bool:
     elif isinstance(dst, str):
         rsync_command.append(dst)
     else:
-        # error message
+        log.error('dst parameter was not a string or path, rsync/rdiff-backup command was '
+                  'invalid.')
         return False
 
     try:
         subprocess.run(rsync_command)
+        time.sleep(1)  # give rdiff-backup a second to complete all logging operations
         return True
     except subprocess.CalledProcessError:
-        # error message
+        log.error('The following subprocess.run command resulted in an error: ' +
+                  subprocess.CalledProcessError.cmd)
         return False
 
 
