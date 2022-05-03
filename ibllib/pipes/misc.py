@@ -126,7 +126,7 @@ def rename_session(session_path: str, new_subject=None, new_date=None, new_numbe
         new_mouse = input(f"Please insert subject NAME [current value: {mouse}]> ")
         new_date = input(f"Please insert new session DATE [current value: {date}]> ")
         new_sess = input(f"Please insert new session NUMBER [current value: {sess}]> ")
-            
+
     new_session_path = Path(*session_path.parts[:-3]).joinpath(new_mouse, new_date,
                                                                new_sess.zfill(3))
     assert is_session_path(new_session_path), 'invalid subject, date or number'
@@ -163,7 +163,8 @@ def backup_session(session_path):
                 "Subjects_backup_renamed_sessions", Path(*session_path.parts[-3:]))
             Path(bk_session_path.parent).mkdir(parents=True)
             print(f"Created path: {bk_session_path.parent}")
-            shutil.copytree(session_path, bk_session_path, dirs_exist_ok=True)
+            # shutil.copytree(session_path, bk_session_path, dirs_exist_ok=True)
+            shutil.copytree(session_path, bk_session_path)  # python 3.7 compatibility
             print(f"Copied contents from {session_path} to {bk_session_path}")
             return True
         except FileExistsError:
@@ -498,7 +499,7 @@ def confirm_video_remote_folder(local_folder=False, remote_folder=False, force=F
         log.debug('Removing ' + str(flag_file))
         try:
             flag_file.unlink()
-        except FileNotFoundError as e:
+        except FileNotFoundError:
             log.info('An error occurred when attempting to remove the following file: ' +
                      str(flag_file) + '\nThe status of the transfers are in an unknown state; '
                      'clearing out the ibl_local_transfers file, uninhibiting windows, and '
