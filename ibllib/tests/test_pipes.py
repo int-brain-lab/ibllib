@@ -334,50 +334,6 @@ class TestPipesMisc(unittest.TestCase):
         with self.assertRaises(ValueError):
             misc.rename_session(self.root_test_folder.name)  # Not a valid session path
 
-    def test_rsync_folder(self):
-        # create temp directories
-        src_dir = tempfile.TemporaryDirectory()
-        dst_dir = tempfile.TemporaryDirectory()
-
-        # generate some files in src_dir
-        Path(src_dir.name).joinpath('video_file1').touch()
-        Path(src_dir.name).joinpath('video_file2').touch()
-        Path(src_dir.name).joinpath('transfer_me.flag').touch()
-
-        # call rsync (rdiff-backup) command, verify command completes, and files were transferred
-        self.assertTrue(misc.rsync_folder(src_dir.name, dst_dir.name, '**transfer_me.flag'))
-        self.assertTrue(Path(dst_dir.name).joinpath('video_file1').exists())
-        self.assertTrue(Path(dst_dir.name).joinpath('video_file2').exists())
-        self.assertFalse(Path(dst_dir.name).joinpath('transfer_me.flag').exists())
-
-        # generate a complete file in src, and an incomplete file in dst dir to emulate a
-        # failed network transfer
-        with open(Path(src_dir.name).joinpath('network_failed.txt'), 'w') as nf:
-            nf.write('1234567890')
-        with open(Path(dst_dir.name).joinpath('network_failed.txt'), 'w') as nf:
-            nf.write('123')
-
-        # call rsync (rdiff-backup) command, without excluding any files
-        self.assertTrue(misc.rsync_folder(src_dir.name, dst_dir.name))
-
-        # verify command completed and network_failed.txt file was fully transferred
-        self.assertTrue(Path(src_dir.name).joinpath('network_failed.txt').exists())
-        self.assertTrue(Path(dst_dir.name).joinpath('network_failed.txt').exists())
-        self.assertTrue(filecmp.cmp(
-            Path(src_dir.name).joinpath('network_failed.txt'),
-            Path(dst_dir.name).joinpath('network_failed.txt'),
-            shallow=False
-        ))
-
-        # call rsync (rdiff-backup) command with invalid settings
-        print('\n>>> Error messages in red are expected in the block below <<<')
-        self.assertFalse(misc.rsync_folder(src_dir.name, dst_dir.name, 'exclusion_file', 123))
-        self.assertFalse(misc.rsync_folder(src_dir.name, dst_dir.name, 'exclusion_file', '123'))
-        self.assertTrue(misc.rsync_folder(src_dir.name, dst_dir.name))
-        self.assertFalse(misc.rsync_folder(123, dst_dir.name))
-        self.assertFalse(misc.rsync_folder(src_dir.name, 123))
-        # NOTE: Invalid src or dst directories are handled by the rdiff-backup command natively
-
     def _input_side_effect(self, prompt):
         """input mock function to verify prompts"""
         if 'NAME' in prompt:
@@ -515,9 +471,59 @@ class TestSyncData(unittest.TestCase):
         # Test behaviour when a transfer fails
         self.session_path.parent.joinpath('002', 'transfer_me.flag').touch()
         shutil.rmtree(remote_session)
+        with self.assertLogs(logging.getLogger('ibllib'), logging.ERROR):
+            misc.rsync_video_folders(self.local_repo, self.remote_repo)
+
+    @mock.patch('ibllib.pipes.misc.check_create_raw_session_flag')
+    def test_confirm_video_remote_folder(self, chk_fcn):
+        # NB Mock check_create_raw_session_flag which requires a valid task settings file
+        # With no data in the remote repo, no data should be transferred
+        with mock.patch('builtins.input', new=self.assertFalse):
+            misc.confirm_video_remote_folder(self.local_repo, self.remote_repo)
+        self.assertFalse(list(filter(lambda x: x.is_file(), self.remote_repo.rglob('*'))))
+
+        # Create a remote session with behaviour data
+        remote_session = fu.create_fake_session_folder(self.remote_repo)
+        fu.create_fake_raw_behavior_data_folder(remote_session)
+        # Create transfer_me flag
+        self.session_path.joinpath('transfer_me.flag').touch()
+        with mock.patch('builtins.input', new=self.assertFalse):
+            misc.confirm_video_remote_folder(self.local_repo, self.remote_repo)
+            chk_fcn.assert_called()
+
+        # Check files were copied
+        n_copied = sum(1 for _ in self.remote_repo.rglob('raw_video_data/*'))
+        self.assertEqual(n_copied, 13)
+        local_transfers_file = Path(self.root_test_folder.name).joinpath('.ibl_local_transfers')
+        self.assertTrue(local_transfers_file.exists())
+        # Transfers file should be empty as all files transferred successfully
+        with open(local_transfers_file) as fp:
+            self.assertCountEqual(json.load(fp), [])
+
+        # Delete transferred video folder and test user prompt
+        shutil.rmtree(remote_session.joinpath('raw_video_data'))
+        # New session for same date and subject
+        new_remote_session = fu.create_fake_session_folder(self.remote_repo)
+        fu.create_fake_raw_behavior_data_folder(new_remote_session)
+        self.session_path.joinpath('transfer_me.flag').touch()
+        with mock.patch('builtins.input', side_effect=['h', '\n', '002']):
+            misc.confirm_video_remote_folder(self.local_repo, self.remote_repo)
+        # Data should have been copied into session #2
+        n_copied = sum(1 for _ in self.remote_repo.rglob('raw_video_data/*'))
+        self.assertEqual(n_copied, 13)
+        # Local data should have been renamed
+        expected = 'fakemouse/1900-01-01/002/raw_video_data'
+        self.assertTrue(expected in next(self.local_repo.rglob('raw_video_data')).as_posix())
+
+        # Test behaviour when a transfer fails
+        self.session_path.parent.joinpath('002', 'transfer_me.flag').touch()
+        shutil.rmtree(remote_session)
         with unittest.mock.patch('ibllib.pipes.misc.check_transfer', side_effect=AssertionError), \
                 self.assertLogs(logging.getLogger('ibllib'), logging.ERROR):
-            misc.rsync_video_folders(self.local_repo, self.remote_repo)
+            misc.confirm_video_remote_folder(self.local_repo, self.remote_repo)
+        with open(local_transfers_file) as fp:
+            transfer_data = json.load(fp)
+            self.assertEqual(len(transfer_data), 1)
 
     def test_backup_session(self):
         # Test when backup path does NOT already exist

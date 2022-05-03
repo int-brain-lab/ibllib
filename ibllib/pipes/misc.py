@@ -189,86 +189,6 @@ def copy_with_check(src, dst, **kwargs):
     return shutil.copy2(src, dst, **kwargs)
 
 
-def rsync_folder(src, dst, exclude=None, verbosity: int = 0) -> bool:
-    """
-    Used to run the rsync algorithm via a rdiff-backup command on the given directories. For
-    future modifications for the rdiff-backup command line, full documentation can be found here -
-    https://rdiff-backup.net/docs/rdiff-backup.1.html
-
-    :param src: source folder (win) or directory (linux)
-    :type src: path or string is expected
-    :param dst: destination folder (win) or directory (linux)
-    :type dst: path or string is expected
-    :param exclude: (optional) one or more files to be excluded from the file transfer
-    :type exclude: path to file, string of path to file, or a list of strings or paths
-    :param verbosity: (optional) verbosity for the transfer, value must be between 0 (silent) and 9
-    (noisiest)
-    :type verbosity: int is expected
-    :return: True if directory was backed up successfully or False if something went wrong
-    :rtype: bool
-    """
-    # Begin building out command
-    rsync_command = ['rdiff-backup']
-
-    # Validate verbosity arg, append to comman
-    if isinstance(verbosity, int) and (0 <= verbosity <= 9):
-        rsync_command.append('--verbosity')
-        rsync_command.append(str(verbosity))
-    else:
-        log.error('verbosity for rsync/rdiff-backup command was invalid.')
-        return False
-
-    # Additional options to speed up transfers, may want to enable/disable via kwargs
-    # rsync_command.append('--backup-mode')  # Force backup mode
-    # rsync_command.append('--print-statistics')  # Summary of statistics will be printed
-    rsync_command.append('--create-full-path')  # all missing dirs on the dst path will be  created
-    rsync_command.append('--no-acls')  # Disable backup of Access Control Lists
-    rsync_command.append('--no-eas')  # Disable backup of Extended Attributes
-
-    # Ensure exclude exists and is set to a string or a list of strings, append to command
-    if exclude:
-        if isinstance(exclude, str):
-            rsync_command.append('--exclude')
-            rsync_command.append(exclude)
-        elif isinstance(exclude, list):
-            for item in exclude:
-                rsync_command.append('--exclude')
-                rsync_command.append(item)
-        else:
-            log.error('exclude parameter was not a string or list, rsync/rdiff-backup command was '
-                      'invalid.')
-            return False
-
-    # Ensure src var is set to str, append to command
-    if isinstance(src, Path):
-        rsync_command.append(src.name)
-    elif isinstance(src, str):
-        rsync_command.append(src)
-    else:
-        log.error('src parameter was not a string or path, rsync/rdiff-backup command was '
-                  'invalid.')
-        return False
-
-    # Ensure dst arg is set to str, append to command
-    if isinstance(dst, Path):
-        rsync_command.append(dst.name)
-    elif isinstance(dst, str):
-        rsync_command.append(dst)
-    else:
-        log.error('dst parameter was not a string or path, rsync/rdiff-backup command was '
-                  'invalid.')
-        return False
-
-    try:
-        subprocess.run(rsync_command)
-        time.sleep(1)  # give rdiff-backup a second to complete logging operations
-        return True
-    except subprocess.CalledProcessError:
-        log.error('The following subprocess.run command resulted in an error: ' +
-                  subprocess.CalledProcessError.cmd)
-        return False
-
-
 def transfer_folder(src: Path, dst: Path, force: bool = False) -> None:
     print(f"Attempting to copy:\n{src}\n--> {dst}")
     if force:
@@ -387,7 +307,16 @@ def create_ephyspc_params(force=False, silent=False):
     return param_dict
 
 
-def rsync_video_folders(local_folder=False, remote_folder=False, force=False):
+def rsync_video_folders(local_folder=False, remote_folder=False):
+    """
+    Used to run the rsync algorithm via a rdiff-backup command on the given directories. This
+    function relies on the rdiff-backup package and is run from the command line, i.e.
+    subprocess.run(). Full documentation can be found here -
+    https://rdiff-backup.net/docs/rdiff-backup.1.html
+
+    :param local_folder: folder that contains the video data to be transferred
+    :param remote_folder: folder that will receive the video data
+    """
     # Set local and remote folders
     pars = None
     if not local_folder:
@@ -408,6 +337,7 @@ def rsync_video_folders(local_folder=False, remote_folder=False, force=False):
     src_session_paths = list(x.parent for x in local_folder.rglob('transfer_me.flag'))
 
     transfer_list = []
+    skipped_list = []
     for session_path in src_session_paths:
         # set remote folder location
         remote_session_folder = remote_folder.joinpath(*session_path.parts[-3:])
@@ -424,6 +354,7 @@ def rsync_video_folders(local_folder=False, remote_folder=False, force=False):
         # Skip session if no remote behavior folder is found or local raw_video_data does not exist
         if not remote_session_numbers:
             print(f'Skipping session, no behavior folder found in folder {remote_session_folder}')
+            skipped_list.append(session_path)
             continue
         if not session_path.joinpath('raw_video_data').exists():
             warnings.warn(f'Skipping session, no raw_video_data folder {session_path}')
@@ -446,9 +377,10 @@ def rsync_video_folders(local_folder=False, remote_folder=False, force=False):
                 not_valid = not_valid and (not re.match(r'^\d+$', resp) or int(resp) not in remote_session_numbers)
             if resp == 's':
                 log.info('Skipping session based on user response...')
+                skipped_list.append(session_path)
                 continue
             if resp == 'e':
-                print('Exiting. No files transferred.')
+                print('Exiting, no files transferred')
                 return
             session_path = rename_session(str(session_path), new_number=resp)
             if session_path is None:
@@ -464,6 +396,7 @@ def rsync_video_folders(local_folder=False, remote_folder=False, force=False):
     for i, (session_path, remote_session_folder) in enumerate(transfer_list):
         if not behavior_exists(remote_session_folder):
             print(f'Skipping session, no behavior folder found in {remote_session_folder}')
+            skipped_list.append(session_path)
             continue
         try:
             rsync_command = ['rdiff-backup',
@@ -482,38 +415,175 @@ def rsync_video_folders(local_folder=False, remote_folder=False, force=False):
         except subprocess.CalledProcessError as ex:
             log.error(f'Video transfer failed for: ',
                       session_path, ' with the following error: ', ex)
-            continue
-        except AssertionError as ex:
-            log.error(f'Video transfer failed for: ',
-                      session_path, ' with the following error: ', ex)
+            skipped_list.append(session_path)
             continue
         flag_file = Path(session_path) / 'transfer_me.flag'
-        log.debug('Removing ' + str(flag_file))
+        log.debug('Removing ' + str(flag_file) + ' and rdiff-backup-data folder')
         try:
+            # Validate the transfers succeeded, remove flag_file and rdiff-backup-data folder
             rsync_validate = ['rdiff-backup',
                               '--verify',
                               str(Path(remote_session_folder) / 'raw_video_data')]
             if subprocess.run(rsync_validate, capture_output=True).returncode == 0:
                 shutil.rmtree(Path(remote_session_folder) / 'raw_video_data' / 'rdiff-backup-data')
-
-            # remove rdiff-backup-data in dst
-            flag_file.unlink()
+                flag_file.unlink()
+            else:
+                log.error(f'Video transfer could not be validated for: ' + str(session_path))
+                skipped_list.append(session_path)
+                continue
         except FileNotFoundError:
             log.info('An error occurred when attempting to remove the flag file: ' +
                      str(flag_file) + '\nThe status of the transfers are in an unknown state; '
-                     'uninhibiting windows and intentionally stopping the script. Please rerun the '
-                     'script after corrections.')
+                     'uninhibiting windows and intentionally stopping the script. Please rerun '
+                     'the script after corrections.')
             WindowsInhibitor().uninhibit() if os.name == 'nt' else None
+            log.info('File transfers that were not completed: ' + str(skipped_list))
             exit(1)
         except subprocess.CalledProcessError as ex:
             log.info('An error occurred when attempting to validate the transfer. The status of '
                      'the transfers are in an unknown state; uninhibiting windows and '
-                     'intentionally stopping the script. Please rerun the script after correction.')
+                     'intentionally stopping the script. Please rerun the script after '
+                     'correction.')
             WindowsInhibitor().uninhibit() if os.name == 'nt' else None
+            log.info('Files not transferred: ' + str(skipped_list))
             exit(1)
         create_video_transfer_done_flag(remote_session_folder)
         check_create_raw_session_flag(remote_session_folder)
     WindowsInhibitor().uninhibit() if os.name == 'nt' else None
+    # Notify of any files not transferred to the end user
+    if skipped_list:
+        log.info('File transfers that were not completed: ' + str(skipped_list))
+
+
+def confirm_video_remote_folder(local_folder=False, remote_folder=False, force=False, n_days=None):
+    pars = None
+
+    if not local_folder:
+        pars = pars or load_ephyspc_params()
+        local_folder = pars['DATA_FOLDER_PATH']
+    if not remote_folder:
+        pars = pars or load_ephyspc_params()
+        remote_folder = pars['REMOTE_DATA_FOLDER_PATH']
+    local_folder = Path(local_folder)
+    remote_folder = Path(remote_folder)
+
+    # Check for Subjects folder
+    local_folder = subjects_data_folder(local_folder, rglob=True)
+    remote_folder = subjects_data_folder(remote_folder, rglob=True)
+
+    print('\nLocal subjects folder: ', local_folder)
+    print('Remote subjects folder:', remote_folder)
+    src_session_paths = (x.parent for x in local_folder.rglob('transfer_me.flag'))
+
+    def is_recent(x):
+        try:
+            return (datetime.date.today() - datetime.date.fromisoformat(x.parts[-2])).days <= n_days
+        except ValueError:  # ignore none date formatted folders
+            return False
+
+    if n_days is not None:
+        src_session_paths = filter(is_recent, src_session_paths)
+
+    # Load incomplete transfer list
+    transfer_records = params.getfile('ibl_local_transfers')
+    if Path(transfer_records).exists():
+        with open(transfer_records, 'r') as fp:
+            transfers = json.load(fp)
+        # if transfers:  # TODO prompt for action here
+        #     answer = input('Previous incomplete transfers found, add them to queue?')
+    else:
+        transfers = []
+
+    src_session_paths = list(src_session_paths)
+    if not src_session_paths and not transfers:
+        print('Nothing to transfer, exiting...')
+        return
+
+    for session_path in src_session_paths:
+        if session_path in (x[0] for x in transfers):
+            log.info(f'{session_path} already in transfers list')
+            continue  # Already on pile
+
+        remote_session_path = remote_folder.joinpath(*session_path.parts[-3:])
+
+        # Check remote and local session number folders are the same
+        def _get_session_numbers(session_path):
+            contents = session_path.parent.glob('*')
+            folders = filter(lambda x: x.is_dir() and re.match(r'^\d{3}$', x.name), contents)
+            return set(map(lambda x: x.name, folders))
+
+        remote_numbers = _get_session_numbers(remote_session_path)
+        if not remote_numbers:
+            print(f'No behavior folder found in {remote_session_path}: skipping session...')
+            continue
+
+        if not session_path.joinpath('raw_video_data').exists():
+            warnings.warn(f'No raw_video_data folder for session {session_path}')
+            continue
+
+        print(f"\nFound local session: {session_path}")
+        if _get_session_numbers(session_path) != remote_numbers:
+            not_valid = True
+            resp = 's'
+            remote_numbers = list(map(int, remote_numbers))
+            while not_valid:
+                resp = input(f'Which remote session number would you like to use? Options: '
+                             f'{range_str(remote_numbers)} or [s]kip/[h]elp/[e]xit> ').strip()
+                if resp == 'h':
+                    print('An example session filepath:\n')
+                    describe('number')  # Explain what a session number is
+                    input('Press enter to continue')
+                not_valid = resp != 's' and resp != 'e'
+                not_valid = not_valid and (not re.match(r'^\d+$', resp) or int(resp) not in remote_numbers)
+            if resp == 's':
+                log.info('Skipping session...')
+                continue
+            if resp == 'e':
+                print('Exiting.  No files transferred.')
+                return
+            session_path = rename_session(session_path, new_number=resp)
+            if session_path is None:
+                log.info('Skipping session...')
+                continue
+            remote_session_path = remote_folder / Path(*session_path.parts[-3:])
+        transfers.append((session_path.as_posix(), remote_session_path.as_posix()))
+        log.debug('Added to transfers list:\n' + str(transfers[-1]))
+        with open(transfer_records, 'w') as fp:
+            json.dump(transfers, fp)
+
+    # Start transfers
+    if os.name == 'nt':
+        WindowsInhibitor().inhibit()
+    for i, (session_path, remote_session_path) in enumerate(transfers):
+        if not behavior_exists(remote_session_path):
+            print(f'No behavior folder found in {remote_session_path}: skipping session...')
+            continue
+        try:
+            transfer_folder(Path(session_path) / 'raw_video_data', Path(remote_session_path) / 'raw_video_data', force=force)
+        except AssertionError as ex:
+            log.error(f'Video transfer failed: {ex}')
+            continue
+        flag_file = Path(session_path) / 'transfer_me.flag'
+        log.debug('Removing ' + str(flag_file))
+        try:
+            flag_file.unlink()
+        except FileNotFoundError:
+            log.info('An error occurred when attempting to remove the following file: ' +
+                     str(flag_file) + '\nThe status of the transfers are in an unknown state; '
+                     'clearing out the ibl_local_transfers file, uninhibiting windows, and '
+                     'intentionally stopping the script. Please rerun the script.')
+            Path(transfer_records).unlink()
+            if os.name == 'nt':
+                WindowsInhibitor().uninhibit()
+            exit(1)
+        create_video_transfer_done_flag(remote_session_path)
+        check_create_raw_session_flag(remote_session_path)
+        # Done. Remove from list
+        transfers.pop(i)
+        with open(transfer_records, 'w') as fp:
+            json.dump(transfers, fp)
+    if os.name == 'nt':
+        WindowsInhibitor().uninhibit()
 
 
 def confirm_ephys_remote_folder(
