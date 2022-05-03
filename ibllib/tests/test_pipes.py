@@ -1,6 +1,7 @@
 import json
 import logging
 import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -431,11 +432,25 @@ class TestSyncData(unittest.TestCase):
             transfer_data = json.load(fp)
             self.assertEqual(len(transfer_data), 1)
 
-    @mock.patch('ibllib.pipes.misc.check_create_raw_session_flag')
+    def test_rdiff_install(self):
+        # remove rdiff-backup package for testing
+        self.assertTrue(subprocess.run(
+            ["pip", "uninstall", "rdiff-backup", "--yes"], capture_output=True).returncode == 0)
+        # verify rdiff-backup command is intentionally not functioning
+        try:
+            subprocess.run(["rdiff-backup", "--version"])
+        except FileNotFoundError:
+            # call function to have rdiff-backup reinstalled
+            self.assertTrue(misc.rdiff_install())
+            # assert rdiff-backup command is functioning
+            self.assertTrue(subprocess.run(
+                ["rdiff-backup", "--version"], capture_output=True).returncode == 0)
+
+    @mock.patch("ibllib.pipes.misc.check_create_raw_session_flag")
     def test_rsync_video_folders(self, chk_fcn):
         # NB Mock check_create_raw_session_flag which requires a valid task settings file
         # With no data in the remote repo, no data should be transferred
-        with mock.patch('builtins.input', new=self.assertFalse):
+        with mock.patch("builtins.input", new=self.assertFalse):
             misc.rsync_video_folders(self.local_repo, self.remote_repo)
         self.assertFalse(list(filter(lambda x: x.is_file(), self.remote_repo.rglob('*'))))
 
@@ -443,32 +458,27 @@ class TestSyncData(unittest.TestCase):
         remote_session = fu.create_fake_session_folder(self.remote_repo)
         fu.create_fake_raw_behavior_data_folder(remote_session)
         # Create transfer_me flag
-        self.session_path.joinpath('transfer_me.flag').touch()
-        with mock.patch('builtins.input', new=self.assertFalse):
+        self.session_path.joinpath("transfer_me.flag").touch()
+        with mock.patch("builtins.input", new=self.assertFalse):
             misc.rsync_video_folders(self.local_repo, self.remote_repo)
             chk_fcn.assert_called()
-
         # Check files were copied
-        n_copied = sum(1 for _ in self.remote_repo.rglob('raw_video_data/*'))
+        n_copied = sum(1 for _ in self.remote_repo.rglob("raw_video_data/*"))
         self.assertEqual(n_copied, 13)
 
-        # Delete transferred video folder and test user prompt
-        shutil.rmtree(remote_session.joinpath('raw_video_data'))
-        # New session for same date and subject
+        # Delete transferred video folder
+        shutil.rmtree(remote_session.joinpath("raw_video_data"))
+
+        # New session with same date and subject as existing session
         new_remote_session = fu.create_fake_session_folder(self.remote_repo)
         fu.create_fake_raw_behavior_data_folder(new_remote_session)
-        self.session_path.joinpath('transfer_me.flag').touch()
-        with mock.patch('builtins.input', side_effect=['h', '\n', '002']):
+        self.session_path.joinpath("transfer_me.flag").touch()
+        with mock.patch("builtins.input", new=self.assertFalse):
             misc.rsync_video_folders(self.local_repo, self.remote_repo)
-        # Data should have been copied into session #2
-        n_copied = sum(1 for _ in self.remote_repo.rglob('raw_video_data/*'))
-        self.assertEqual(n_copied, 13)
-        # Local data should have been renamed
-        expected = 'fakemouse/1900-01-01/002/raw_video_data'
-        self.assertTrue(expected in next(self.local_repo.rglob('raw_video_data')).as_posix())
 
         # Test behaviour when a transfer fails
-        self.session_path.parent.joinpath('002', 'transfer_me.flag').touch()
+        Path(self.session_path.parent / "002").mkdir()
+        self.session_path.parent.joinpath("002", "transfer_me.flag").touch()
         shutil.rmtree(remote_session)
         with self.assertLogs(logging.getLogger('ibllib'), logging.ERROR):
             misc.rsync_video_folders(self.local_repo, self.remote_repo)
