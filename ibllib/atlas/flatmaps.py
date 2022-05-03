@@ -4,14 +4,13 @@ Module that hold techniques to project the brain volume onto 2D images for visua
 from functools import lru_cache
 
 import pandas as pd
-import boto3
 import numpy as np
 from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
 
 from iblutil.numerical import ismember
 from iblutil.util import Bunch
-from ibllib.atlas import AllenAtlas, S3_BUCKET_IBL, BrainRegions
+from ibllib.atlas.atlas import AllenAtlas, S3_BUCKET_IBL, BrainRegions, s3_download_public
 
 
 @lru_cache(maxsize=1, typed=False)
@@ -127,7 +126,7 @@ def plot_swanson(acronyms=None, values=None, ax=None, hemisphere=None, br=None, 
     npz_file = AllenAtlas._get_cache_dir().joinpath('swanson2allen.npz')
     if not npz_file.exists():
         npz_file.parent.mkdir(exist_ok=True, parents=True)
-        boto3.client('s3').download_file(S3_BUCKET_IBL, f'atlas/{npz_file.name}', str(npz_file))
+        s3_download_public(S3_BUCKET_IBL, f'atlas/{npz_file.name}', str(npz_file))
     s2a = np.load(npz_file)['swanson2allen']  # inds contains regions ids
     if hemisphere == 'both':
         _s2a = s2a + np.sum(br.id > 0)

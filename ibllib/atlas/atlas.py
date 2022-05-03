@@ -6,6 +6,8 @@ import numpy as np
 import nrrd
 
 import boto3
+from botocore.config import Config
+from botocore import UNSIGNED
 
 from one.webclient import http_download_file
 import one.params
@@ -17,6 +19,18 @@ from ibllib.atlas.regions import BrainRegions
 _logger = logging.getLogger('ibllib')
 ALLEN_CCF_LANDMARKS_MLAPDV_UM = {'bregma': np.array([5739, 5400, 332])}
 S3_BUCKET_IBL = 'ibl-brain-wide-map-public'
+
+
+def s3_download_public(bucket, object, destination):
+    """
+    downloads file from public bucket
+    :param bucket:
+    :param object:
+    :param destination:
+    :return:
+    """
+    boto3.client('s3', config=Config(signature_version=UNSIGNED)).download_file(
+        S3_BUCKET_IBL, object, str(destination))
 
 
 def cart2sph(x, y, z):
@@ -1014,7 +1028,7 @@ class FlatMap(AllenAtlas):
         file_flatmap = self._get_cache_dir().joinpath(f'{self.name}_{self.res_um}.nrrd')
         if not file_flatmap.exists():
             file_flatmap.parent.mkdir(exist_ok=True, parents=True)
-            boto3.client('s3').download_file(S3_BUCKET_IBL, f'atlas/{file_flatmap.name}', str(file_flatmap))
+            s3_download_public(S3_BUCKET_IBL, f'atlas/{file_flatmap.name}', str(file_flatmap))
         self.flatmap, _ = nrrd.read(file_flatmap)
 
     def plot_flatmap(self, depth=0, volume='annotation', mapping='Allen', region_values=None, ax=None, **kwargs):
