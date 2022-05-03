@@ -158,7 +158,8 @@ def backup_session(session_path):
                 "Subjects_backup_renamed_sessions", Path(*session_path.parts[-3:]))
             Path(bk_session_path.parent).mkdir(parents=True)
             print(f"Created path: {bk_session_path.parent}")
-            shutil.copytree(session_path, bk_session_path, dirs_exist_ok=True)
+            # shutil.copytree(session_path, bk_session_path, dirs_exist_ok=True)
+            shutil.copytree(session_path, bk_session_path)  # python 3.7 compatibility
             print(f"Copied contents from {session_path} to {bk_session_path}")
             return True
         except FileExistsError:

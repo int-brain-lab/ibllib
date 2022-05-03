@@ -322,14 +322,14 @@ class TestPipesMisc(unittest.TestCase):
     def test_rename_session(self):
         self._inputs = ('foo', '2020-02-02', '002')
         with mock.patch('builtins.input', self._input_side_effect):
-            new_path = misc.rename_session(self.session_path_3B)
+            new_path = misc.rename_session(self.session_path_3B, ask=True)
         self.assertEqual(self.session_path_3B.parents[2].joinpath(*self._inputs), new_path)
         self.assertTrue(new_path.exists())
         # Test assertions
         self._inputs = ('foo', 'May-21', '000')
         with mock.patch('builtins.input', self._input_side_effect):
             with self.assertRaises(AssertionError):
-                misc.rename_session(self.session_path_3B)
+                misc.rename_session(self.session_path_3B, ask=True)
         with self.assertRaises(ValueError):
             misc.rename_session(self.root_test_folder.name)  # Not a valid session path
 
