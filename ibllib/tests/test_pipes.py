@@ -3,7 +3,6 @@ import json
 import logging
 import shutil
 import tempfile
-import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -478,11 +477,11 @@ class TestSyncData(unittest.TestCase):
             self.assertEqual(len(transfer_data), 1)
 
     @mock.patch('ibllib.pipes.misc.check_create_raw_session_flag')
-    def test_confirm_video_remote_folder(self, chk_fcn):
+    def test_rsync_video_folders(self, chk_fcn):
         # NB Mock check_create_raw_session_flag which requires a valid task settings file
         # With no data in the remote repo, no data should be transferred
         with mock.patch('builtins.input', new=self.assertFalse):
-            misc.confirm_video_remote_folder(self.local_repo, self.remote_repo)
+            misc.rsync_video_folders(self.local_repo, self.remote_repo)
         self.assertFalse(list(filter(lambda x: x.is_file(), self.remote_repo.rglob('*'))))
 
         # Create a remote session with behaviour data
@@ -491,17 +490,12 @@ class TestSyncData(unittest.TestCase):
         # Create transfer_me flag
         self.session_path.joinpath('transfer_me.flag').touch()
         with mock.patch('builtins.input', new=self.assertFalse):
-            misc.confirm_video_remote_folder(self.local_repo, self.remote_repo)
+            misc.rsync_video_folders(self.local_repo, self.remote_repo)
             chk_fcn.assert_called()
 
         # Check files were copied
         n_copied = sum(1 for _ in self.remote_repo.rglob('raw_video_data/*'))
         self.assertEqual(n_copied, 13)
-        local_transfers_file = Path(self.root_test_folder.name).joinpath('.ibl_local_transfers')
-        self.assertTrue(local_transfers_file.exists())
-        # Transfers file should be empty as all files transferred successfully
-        with open(local_transfers_file) as fp:
-            self.assertCountEqual(json.load(fp), [])
 
         # Delete transferred video folder and test user prompt
         shutil.rmtree(remote_session.joinpath('raw_video_data'))
@@ -510,7 +504,7 @@ class TestSyncData(unittest.TestCase):
         fu.create_fake_raw_behavior_data_folder(new_remote_session)
         self.session_path.joinpath('transfer_me.flag').touch()
         with mock.patch('builtins.input', side_effect=['h', '\n', '002']):
-            misc.confirm_video_remote_folder(self.local_repo, self.remote_repo)
+            misc.rsync_video_folders(self.local_repo, self.remote_repo)
         # Data should have been copied into session #2
         n_copied = sum(1 for _ in self.remote_repo.rglob('raw_video_data/*'))
         self.assertEqual(n_copied, 13)
@@ -521,12 +515,9 @@ class TestSyncData(unittest.TestCase):
         # Test behaviour when a transfer fails
         self.session_path.parent.joinpath('002', 'transfer_me.flag').touch()
         shutil.rmtree(remote_session)
-        with unittest.mock.patch('ibllib.pipes.misc.check_transfer', side_effect=AssertionError),\
+        with unittest.mock.patch('ibllib.pipes.misc.check_transfer', side_effect=AssertionError), \
                 self.assertLogs(logging.getLogger('ibllib'), logging.ERROR):
-            misc.confirm_video_remote_folder(self.local_repo, self.remote_repo)
-        with open(local_transfers_file) as fp:
-            transfer_data = json.load(fp)
-            self.assertEqual(len(transfer_data), 1)
+            misc.rsync_video_folders(self.local_repo, self.remote_repo)
 
     def test_backup_session(self):
         # Test when backup path does NOT already exist
