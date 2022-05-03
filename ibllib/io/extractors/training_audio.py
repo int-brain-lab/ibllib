@@ -8,6 +8,7 @@ from scipy import signal
 from scipy.io import wavfile
 
 import neurodsp as dsp
+from neurodsp.utils import WindowGenerator
 import ibllib.io.raw_data_loaders as ioraw
 from ibllib.io.extractors.training_trials import GoCueTimes
 
@@ -67,7 +68,7 @@ def welchogram(fs, wav, nswin=NS_WIN, overlap=OVERLAP, nperseg=NS_WELCH):
     :return: tscale, fscale, downsampled_spectrogram
     """
     ns = wav.shape[0]
-    window_generator = dsp.WindowGenerator(ns=ns, nswin=nswin, overlap=overlap)
+    window_generator = WindowGenerator(ns=ns, nswin=nswin, overlap=overlap)
     nwin = window_generator.nwin
     fscale = dsp.fscale(nperseg, 1 / fs, one_sided=True)
     W = np.zeros((nwin, len(fscale)))
