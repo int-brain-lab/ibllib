@@ -2,6 +2,7 @@
 Module that hold techniques to project the brain volume onto 2D images for visualisation purposes
 """
 from functools import lru_cache
+import logging
 
 import pandas as pd
 import numpy as np
@@ -11,6 +12,8 @@ import matplotlib.pyplot as plt
 from iblutil.numerical import ismember
 from iblutil.util import Bunch
 from ibllib.atlas.atlas import AllenAtlas, S3_BUCKET_IBL, BrainRegions, s3_download_public
+
+_logger = logging.getLogger(__file__)
 
 
 @lru_cache(maxsize=1, typed=False)
@@ -109,6 +112,18 @@ def circles(N=5, atlas=None, display='flat'):
     # ax[1].plot(s.x, s.y)
 
 
+def swanson(filename="swanson2allen.npz"):
+    # filename could be "swanson2allen_original.npz", or "swanson2allen.npz" for remapped indices to match
+    # existing labels in the brain atlas
+    npz_file = AllenAtlas._get_cache_dir().joinpath(filename)
+    if not npz_file.exists():
+        npz_file.parent.mkdir(exist_ok=True, parents=True)
+        _logger.info(f'downloading swanson image from {S3_BUCKET_IBL} s3 bucket...')
+        s3_download_public(S3_BUCKET_IBL, f'atlas/{npz_file.name}', str(npz_file))
+    s2a = np.load(npz_file)['swanson2allen']  # inds contains regions ids
+    return s2a
+
+
 def plot_swanson(acronyms=None, values=None, ax=None, hemisphere=None, br=None, **kwargs):
     """
     Displays the 2D image corresponding to the swanson flatmap.
@@ -123,11 +138,7 @@ def plot_swanson(acronyms=None, values=None, ax=None, hemisphere=None, br=None, 
     :return:
     """
     br = BrainRegions() if br is None else br
-    npz_file = AllenAtlas._get_cache_dir().joinpath('swanson2allen.npz')
-    if not npz_file.exists():
-        npz_file.parent.mkdir(exist_ok=True, parents=True)
-        s3_download_public(S3_BUCKET_IBL, f'atlas/{npz_file.name}', str(npz_file))
-    s2a = np.load(npz_file)['swanson2allen']  # inds contains regions ids
+    s2a = swanson()
     if hemisphere == 'both':
         _s2a = s2a + np.sum(br.id > 0)
         _s2a[s2a == 0] = 0
