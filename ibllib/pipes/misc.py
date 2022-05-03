@@ -1,23 +1,22 @@
-import datetime
-import sys
-import os
 import ctypes
+import datetime
+import hashlib
 import json
 import logging
+import os
+import re
 import shutil
 import subprocess
-import hashlib
+import sys
 import time
 import warnings
 from pathlib import Path
-import re
 from typing import Union, List
 
-import psutil
 from iblutil.io import hashfile, params
 from iblutil.util import range_str
-from one.alf.spec import is_uuid_string, is_session_path, describe
 from one.alf.files import get_session_path
+from one.alf.spec import is_uuid_string, is_session_path, describe
 from one.api import ONE
 
 import ibllib.io.flags as flags
@@ -413,8 +412,8 @@ def rsync_video_folders(local_folder=False, remote_folder=False):
             subprocess.run(rsync_command)
             time.sleep(1)  # give rdiff-backup a second to complete all logging operations
         except subprocess.CalledProcessError as ex:
-            log.error(f'Video transfer failed for: ',
-                      session_path, ' with the following error: ', ex)
+            log.error('Video transfer failed for: ' + str(session_path) +
+                      ' with the following error: ' + str(ex))
             skipped_list.append(session_path)
             continue
         flag_file = Path(session_path) / 'transfer_me.flag'
@@ -428,7 +427,7 @@ def rsync_video_folders(local_folder=False, remote_folder=False):
                 shutil.rmtree(Path(remote_session_folder) / 'raw_video_data' / 'rdiff-backup-data')
                 flag_file.unlink()
             else:
-                log.error(f'Video transfer could not be validated for: ' + str(session_path))
+                log.error('Video transfer could not be validated for: ' + str(session_path))
                 skipped_list.append(session_path)
                 continue
         except FileNotFoundError:
@@ -439,7 +438,7 @@ def rsync_video_folders(local_folder=False, remote_folder=False):
             WindowsInhibitor().uninhibit() if os.name == 'nt' else None
             log.info('File transfers that were not completed: ' + str(skipped_list))
             exit(1)
-        except subprocess.CalledProcessError as ex:
+        except subprocess.CalledProcessError:
             log.info('An error occurred when attempting to validate the transfer. The status of '
                      'the transfers are in an unknown state; uninhibiting windows and '
                      'intentionally stopping the script. Please rerun the script after '

@@ -1,4 +1,3 @@
-import filecmp
 import json
 import logging
 import shutil
