@@ -487,7 +487,7 @@ class SpikeSorting(tasks.Task):
 
 
 class EphysVideoCompress(tasks.Task):
-    priority = 40
+    priority = 90
     level = 0
     force = False
     signature = {
@@ -1007,11 +1007,14 @@ class EphysDLC(tasks.Task):
                         executable="/bin/bash",
                     )
                     info, error = process.communicate()
-                    info_str = info.decode("utf-8").strip()
-                    _logger.info(info_str)
+                    # info_str = info.decode("utf-8").strip()
+                    # _logger.info(info_str)
                     if process.returncode != 0:
                         error_str = error.decode("utf-8").strip()
-                        _logger.error(f'DLC failed for {cam}Camera\n {error_str}')
+                        _logger.error(f'DLC failed for {cam}Camera.\n\n'
+                                      f'++++++++ Output of subprocess for debugging ++++++++\n\n'
+                                      f'{error_str}\n'
+                                      f'++++++++++++++++++++++++++++++++++++++++++++\n')
                         self.status = -1
                         # We dont' run motion energy, or add any files if dlc failed to run
                         continue
@@ -1029,11 +1032,14 @@ class EphysDLC(tasks.Task):
                         executable="/bin/bash",
                     )
                     info, error = process.communicate()
-                    info_str = info.decode("utf-8").strip()
-                    _logger.info(info_str)
+                    # info_str = info.decode("utf-8").strip()
+                    # _logger.info(info_str)
                     if process.returncode != 0:
                         error_str = error.decode("utf-8").strip()
-                        _logger.error(f'Motion energy failed for {cam}Camera \n {error_str}')
+                        _logger.error(f'Motion energy failed for {cam}Camera.\n\n'
+                                      f'++++++++ Output of subprocess for debugging ++++++++\n\n'
+                                      f'{error_str}\n'
+                                      f'++++++++++++++++++++++++++++++++++++++++++++\n')
                         self.status = -1
                         continue
                     actual_outputs.append(next(self.session_path.joinpath('alf').glob(

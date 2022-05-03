@@ -218,8 +218,8 @@ def interpolate_bad_channels(data, channel_labels=None, h=None, p=1.3, kriging_d
             data[i, :] = 0
             continue
         data[i, :] = np.matmul(weights[imult], data[imult, :])
-    # from easyqc.gui import viewseis
-    # f = viewseis(data.T, si=1/30, h=h, title='interp2', taxis=0)
+    # from viewephys.gui import viewephys
+    # f = viewephys(data.T, fs=1/30, h=h, title='interp2')
     return data
 
 

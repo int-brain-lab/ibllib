@@ -156,7 +156,8 @@ def _assign_events_bpod(bpod_t, bpod_polarities, ignore_first_valve=True):
     :param ignore_first_valve (True): removes detected valve events at indices le 2
     :return: numpy arrays of times t_trial_start, t_valve_open and t_iti_in
     """
-    TRIAL_START_TTL_LEN = 2.33e-4
+    TRIAL_START_TTL_LEN = 2.33e-4  # the TTL length is 0.1ms but this has proven to drift on
+    # some bpods and this is the highest possible value that discriminates trial start from valve
     ITI_TTL_LEN = 0.4
     # make sure that there are no 2 consecutive fall or consecutive rise events
     assert(np.all(np.abs(np.diff(bpod_polarities)) == 2))
@@ -190,12 +191,12 @@ def _assign_events_bpod(bpod_t, bpod_polarities, ignore_first_valve=True):
     # t_abnormal = events['t'][bpod_polarities != -1][i_abnormal]
     # assert(np.all(events != 0))
     # plt.figure()
-    # plots.squares(bpod_t, bpod_polarities)
-    # plots.vertical_lines(t_trial_start, ymin=-0.2, ymax=1.1, linewidth=0.5)
-    # plots.vertical_lines(t_valve_open, ymin=-0.2, ymax=1.1, linewidth=0.5)
-    # plots.vertical_lines(t_iti_in, ymin=-0.2, ymax=1.1, linewidth=0.5)
+    # plots.squares(bpod_t, bpod_polarities, label='raw fronts')
+    # plots.vertical_lines(t_trial_start, ymin=-0.2, ymax=1.1, linewidth=0.5, label='trial start')
+    # plots.vertical_lines(t_valve_open, ymin=-0.2, ymax=1.1, linewidth=0.5, label='valve open')
+    # plots.vertical_lines(t_iti_in, ymin=-0.2, ymax=1.1, linewidth=0.5, label='iti_in')
     # plt.plot(t_abnormal, t_abnormal * 0 + .5, 'k*')
-    # plt.legend(['raw fronts', 'trial start', 'valve open', 'iti_in'])
+    # plt.legend()
 
     return t_trial_start, t_valve_open, t_iti_in
 
