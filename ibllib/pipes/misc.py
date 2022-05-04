@@ -407,7 +407,7 @@ def rsync_video_folders(local_folder=False, remote_folder=False):
     src_session_paths = list(x.parent for x in local_folder.rglob("transfer_me.flag"))
     if src_session_paths:
         log.info("The following local session(s) have the 'transfer_me.flag' set:")
-        [log.info(str(i)) for i in src_session_paths]
+        [log.info(i) for i in src_session_paths]
     else:
         log.info("No local sessions were found to have the 'transfer_me.flag' set.")
         return
@@ -455,6 +455,7 @@ def rsync_video_folders(local_folder=False, remote_folder=False):
             log.warning(f"Skipping session, no behavior folder found in {remote_session_folder}")
             skip_list.append(session_path)
             continue
+        log.info("Transferring video data: " + session_path + " --> " + remote_session_folder)
         try:
             rsync_command = [rdiff_cmd_loc, "--verbosity", str(0),
                              "--create-full-path", "--backup-mode", "--no-acls", "--no-eas",
@@ -488,7 +489,7 @@ def rsync_video_folders(local_folder=False, remote_folder=False):
             WindowsInhibitor().uninhibit() if os.name == 'nt' else None
             if skip_list:
                 log.warning("File transfers that were not completed:")
-                [log.warning(f"{i}") for i in skip_list]
+                [log.warning(i) for i in skip_list]
             exit(1)
         except subprocess.CalledProcessError:
             log.error("An error occurred when attempting to validate the transfer. The status of "
@@ -498,7 +499,7 @@ def rsync_video_folders(local_folder=False, remote_folder=False):
             WindowsInhibitor().uninhibit() if os.name == 'nt' else None
             if skip_list:
                 log.warning("Files not transferred:")
-                [log.warning(f"{i}") for i in skip_list]
+                [log.warning(i) for i in skip_list]
             exit(1)
         create_video_transfer_done_flag(remote_session_folder)
         check_create_raw_session_flag(remote_session_folder)
@@ -506,7 +507,8 @@ def rsync_video_folders(local_folder=False, remote_folder=False):
     # Notify of any files not transferred to the end user
     if skip_list:
         log.warning('File transfers that were not completed:')
-        [log.warning(f"{i}") for i in skip_list]
+        [log.warning(i) for i in skip_list]
+    print("\nVideo transfers script completed, please review the log messages above.")
 
 
 def confirm_video_remote_folder(local_folder=False, remote_folder=False, force=False, n_days=None):
