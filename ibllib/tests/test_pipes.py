@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import shutil
 import subprocess
 import tempfile
@@ -433,10 +434,16 @@ class TestSyncData(unittest.TestCase):
             self.assertEqual(len(transfer_data), 1)
 
     def test_rdiff_install(self):
-        # remove rdiff-backup package for testing
-        self.assertTrue(subprocess.run(
-            ["pip", "uninstall", "rdiff-backup", "--yes"], capture_output=True).returncode == 0)
-        # verify rdiff-backup command is intentionally not functioning
+        # remove rdiff-backup for testing
+        if os.name == "nt" and Path("C:\\tools\\rdiff-backup.exe").exists():
+            # remove executable if on windows
+            Path("C:\\tools\\rdiff-backup.exe").unlink()
+        else:  # anything not Windows
+            # remove package with pip
+            self.assertTrue(subprocess.run(
+                ["pip", "uninstall", "rdiff-backup", "--yes"], capture_output=True).returncode == 0)
+
+        # verify rdiff-backup command is intentionally not functioning anymore
         try:
             subprocess.run(["rdiff-backup", "--version"])
         except FileNotFoundError:

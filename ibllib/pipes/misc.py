@@ -318,33 +318,33 @@ def rdiff_install() -> bool:
 
     :return: true when install is successful, false when an error is encountered
     """
-    if os.name == 'nt':
+    if os.name == "nt":
         rdiff_cmd_loc = "C:\\tools\\rdiff-backup.exe"
         if not Path(rdiff_cmd_loc).exists():
             import requests
             import zipfile
             from io import BytesIO
 
-            url = 'https://github.com/rdiff-backup/rdiff-backup/releases/download/v2.0.5/rdiff-backup-2.0.5.win32exe.zip'
-            log.info('Downloading zip file for rdiff-backup.')
+            url = "https://github.com/rdiff-backup/rdiff-backup/releases/download/v2.0.5/rdiff-backup-2.0.5.win32exe.zip"
+            log.info("Downloading zip file for rdiff-backup.")
             # Download the file by sending the request to the URL, ensure success by status code
             if requests.get(url).status_code == 200:
-                log.info('Download complete for rdiff-backup zip file.')
+                log.info("Download complete for rdiff-backup zip file.")
                 # extracting the zip file contents
                 zipfile = zipfile.ZipFile(BytesIO(requests.get(url).content))
                 zipfile.extractall("C:\\Temp")
                 rdiff_folder_name = zipfile.namelist()[0]  # attempting a bit of future-proofing
                 # move the executable to the C:\tools folder
-                shutil.copy('C:\\Temp\\' + rdiff_folder_name + 'rdiff-backup.exe', rdiff_cmd_loc)
-                shutil.rmtree('C:\\Temp\\' + rdiff_folder_name)  # cleanup
+                shutil.copy("C:\\Temp\\" + rdiff_folder_name + "rdiff-backup.exe", rdiff_cmd_loc)
+                shutil.rmtree("C:\\Temp\\" + rdiff_folder_name)  # cleanup
                 try:  # reattempt to call the rdiff command
                     subprocess.run([rdiff_cmd_loc, "--version"])
                 except FileNotFoundError:
-                    log.error('rdiff-backup installation did not complete.')
+                    log.error("rdiff-backup installation did not complete.")
                     return False
                 return True
             else:
-                log.error('Download request status code not 200, something did not go as expected.')
+                log.error("Download request status code not 200, something did not go as expected.")
                 return False
         # Automating the addition of 'C:\tools\' to Windows Path proving more difficult than
         # assumed, may revisit in the future, call the 'C:\tools\rdiff-backup.exe' directly as a
@@ -361,7 +361,7 @@ def rdiff_install() -> bool:
         try:  # package should already be installed via the requirements.txt, but just in case
             subprocess.run(["pip", "install", "rdiff-backup"])
         except subprocess.CalledProcessError:
-            log.error('rdiff-backup pip install did not complete.')
+            log.error("rdiff-backup pip install did not complete.")
             return False
         return True
 
