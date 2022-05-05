@@ -15,7 +15,7 @@ import one.alf.io as alfio
 from iblutil.util import Bunch
 
 import ibllib.exceptions as err
-from ibllib.io import raw_data_loaders, spikeglx
+from ibllib.io import raw_data_loaders
 from ibllib.io.extractors.bpod_trials import extract_all as bpod_extract_all
 from ibllib.io.extractors.opto_trials import LaserBool
 import ibllib.io.extractors.base as extractors_base

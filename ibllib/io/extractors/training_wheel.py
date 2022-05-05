@@ -5,7 +5,6 @@ import numpy as np
 from scipy import interpolate
 
 from neurodsp.utils import sync_timestamps
-from ibllib.io.extractors import training_trials
 from ibllib.io.extractors.base import BaseBpodTrialsExtractor, run_extractor_classes
 import ibllib.io.raw_data_loaders as raw
 from ibllib.misc import structarr
