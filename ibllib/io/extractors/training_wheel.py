@@ -396,6 +396,7 @@ class Wheel(BaseBpodTrialsExtractor):
         moves = extract_wheel_moves(ts, pos)
 
         # need some trial based info to output the first movement times
+        from ibllib.io.extractors import training_trials  # Avoids circular imports
         goCue_times, _ = training_trials.GoCueTimes(self.session_path).extract(
             save=False, bpod_trials=self.bpod_trials, settings=self.settings)
         feedback_times, _ = training_trials.FeedbackTimes(self.session_path).extract(
@@ -410,5 +411,24 @@ class Wheel(BaseBpodTrialsExtractor):
 
 
 def extract_all(session_path, bpod_trials=None, settings=None, save=False):
+    """Extract the wheel data.
+
+    NB: Wheel extraction is now called through ibllib.io.training_trials.extract_all
+
+    Parameters
+    ----------
+    session_path : str, pathlib.Path
+        The path to the session
+    save : bool
+        If true save the data files to ALF
+    bpod_trials : list of dicts
+        The Bpod trial dicts loaded from the _iblrig_taskData.raw dataset
+    settings : dict
+        The Bpod settings loaded from the _iblrig_taskSettings.raw dataset
+
+    Returns
+    -------
+    A list of extracted data and a list of file paths if save is True (otherwise None)
+    """
     return run_extractor_classes(Wheel, save=save, session_path=session_path,
                                  bpod_trials=bpod_trials, settings=settings)

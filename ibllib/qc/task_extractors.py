@@ -9,6 +9,7 @@ from ibllib.io.extractors.training_wheel import get_wheel_position
 from ibllib.io.extractors import ephys_fpga
 import ibllib.io.raw_data_loaders as raw
 from one.alf.spec import is_session_path
+import one.alf.io as alfio
 from one.api import ONE
 
 
@@ -140,8 +141,8 @@ class TaskQCExtractor(object):
         # Run extractors
         if self.type == 'ephys' and not self.bpod_only:
             data, _ = ephys_fpga.extract_all(self.session_path)
-            bpod2fpga = interp1d(data['intervals_bpod'][:, 0], data['intervals'][:, 0],
-                                 fill_value="extrapolate")
+            bpod2fpga = interp1d(data['intervals_bpod'][:, 0], data['table']['intervals_0'],
+                                 fill_value='extrapolate')
             # Add Bpod wheel data
             re_ts, pos = get_wheel_position(self.session_path, self.raw_data)
             data['wheel_timestamps_bpod'] = bpod2fpga(re_ts)
@@ -157,14 +158,7 @@ class TaskQCExtractor(object):
                 # Nasty hack to trim last trial due to stim off events happening at trial num + 1
                 data = {k: v[:n_trials] for k, v in data.items()}
             else:
-                quiescence = np.array([t['quiescent_period'] for t in self.raw_data[:n_trials]])
-                data = {
-                    **trials,
-                    **wheel,
-                    'quiescence': quiescence,
-                    'position': np.array([t['position'] for t in self.raw_data[:n_trials]]),
-                    'phase': np.array([t['stim_phase'] for t in self.raw_data[:n_trials]])
-                }
+                data = {**trials, **wheel}
         # Update the data attribute with extracted data
         self.data = self.rename_data(data)
 
@@ -176,6 +170,10 @@ class TaskQCExtractor(object):
         :param data: A dict of task data returned by the task extractors
         :return: the same dict after modifying the keys
         """
+        # Expand trials dataframe into key value pairs
+        trials_table = data.pop('table', None)
+        if trials_table is not None:
+            data = {**data, **alfio.AlfBunch.from_df(trials_table)}
         correct = data['feedbackType'] > 0
         # get valve_time and errorCue_times from feedback_times
         if 'errorCue_times' not in data:
