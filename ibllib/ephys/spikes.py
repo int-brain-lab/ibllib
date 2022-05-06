@@ -6,13 +6,14 @@ import tarfile
 
 import numpy as np
 from one.alf.files import get_session_path
+import spikeglx
 
 from iblutil.util import Bunch
 import phylib.io.alf
 from ibllib.ephys.sync_probes import apply_sync
 import ibllib.ephys.ephysqc as ephysqc
 from ibllib.ephys import sync_probes
-from ibllib.io import spikeglx, raw_data_loaders
+from ibllib.io import raw_data_loaders
 
 _logger = logging.getLogger('ibllib')
 
@@ -221,7 +222,7 @@ def detection(data, fs, h, detect_threshold=-4, time_tol=.002, distance_threshol
 
     :param data: 2D numpy array nsamples x nchannels
     :param fs: sampling frequency (Hz)
-    :param h: dictionary with neuropixel geometry header: see. ibllib.ephys.neuropixel.trace_header
+    :param h: dictionary with neuropixel geometry header: see. neuropixel.trace_header
     :param detect_threshold: negative value below which the voltage is considered to be a spike
     :param time_tol: time in seconds for which samples before and after are assumed to be part of the spike
     :param distance_threshold_um: distance for which exceeding threshold values are assumed to part of the same spike

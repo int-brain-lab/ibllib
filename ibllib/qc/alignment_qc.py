@@ -3,14 +3,15 @@ import logging
 import numpy as np
 from pathlib import Path
 
+from neuropixel import trace_header
+import spikeglx
+
 from ibllib.atlas import AllenAtlas
 from ibllib.pipes import histology
 from ibllib.pipes.ephys_alignment import EphysAlignment
 from ibllib.qc import base
 from ibllib.oneibl.patcher import FTPPatcher
 from ibllib.qc.base import CRITERIA as CRITERIA_BASE
-from ibllib.io.spikeglx import _geometry_from_meta, read_meta_data
-from ibllib.ephys.neuropixel import trace_header
 
 _log = logging.getLogger('ibllib')
 CRITERIA = {"PASS": 0.8}
@@ -287,7 +288,7 @@ class AlignmentQC(base.QC):
             meta_file = self.one.load_dataset(self.insertion['session'], meta_dset[0].split('/')[-1],
                                               collection=f'raw_ephys_data/{self.insertion["name"]}',
                                               download_only=True)
-            geometry = _geometry_from_meta(read_meta_data(meta_file))
+            geometry = spikeglx.read_geometry(meta_file)
             chns = np.c_[geometry['x'], geometry['y']]
         except Exception as err:
             self.log.warning(f"Could not compute channel locations from meta file, errored with message: {err}. "

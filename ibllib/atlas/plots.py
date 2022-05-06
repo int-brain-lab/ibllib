@@ -291,7 +291,7 @@ def plot_points_on_slice(xyz, values=None, coord=-1000, slice='coronal', mapping
 
 def compute_volume_from_points(xyz, values=None, aggr='sum', fwhm=100, ba=None):
     """
-    Creates a 3D volume with xyz points placed in correspoding voxel in volume. Points that fall into the same voxel within the
+    Creates a 3D volume with xyz points placed in corresponding voxel in volume. Points that fall into the same voxel within the
     volume are aggregated according to the method specified in aggr. Gaussian smoothing with a 3D kernel with distance specified
     by fwhm (full width half max) argument is applied. If fwhm = 0, no gaussian smoothing is applied.
 
@@ -300,7 +300,7 @@ def compute_volume_from_points(xyz, values=None, aggr='sum', fwhm=100, ba=None):
     returned
     :param aggr: aggregation method. Options are sum, count, mean, std, median, min and max. Can also give in custom function
     (https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.binned_statistic.html)
-    :param fwhm: fwhm distance of gaussian kernel in um
+    :param fwhm: full width at half maximum of gaussian kernel in um
     :param ba: AllenAtlas object
     :return:
     """

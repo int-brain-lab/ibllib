@@ -6,9 +6,9 @@ import numpy as np
 from scipy.interpolate import interp1d
 import one.alf.io as alfio
 from iblutil.util import Bunch
+import spikeglx
 
 from ibllib.exceptions import Neuropixel3BSyncFrontsNonMatching
-import ibllib.io.spikeglx as spikeglx
 from ibllib.io.extractors.ephys_fpga import get_sync_fronts, get_ibl_sync_map
 
 _logger = logging.getLogger('ibllib')
@@ -190,7 +190,7 @@ def sync_probe_front_times(t, tref, sr, display=False, type='smooth', tol=2.0):
         to the sampling rate of digital channels. The residual is fit using frequency domain
         smoothing
         """
-        import ibllib.dsp as dsp
+        import neurodsp.fourier
         CAMERA_UPSAMPLING_RATE_HZ = 300
         PAD_LENGTH_SECS = 60
         STAT_LENGTH_SECS = 30  # median length to compute padding value
@@ -205,7 +205,7 @@ def sync_probe_front_times(t, tref, sr, display=False, type='smooth', tol=2.0):
         res_filt = np.pad(res_upsamp, lpad, mode='median',
                           stat_length=CAMERA_UPSAMPLING_RATE_HZ * STAT_LENGTH_SECS)
         fbounds = [0.001, 0.002]
-        res_filt = dsp.lp(res_filt, 1 / CAMERA_UPSAMPLING_RATE_HZ, fbounds)[lpad[0]:-lpad[1]]
+        res_filt = neurodsp.fourier.lp(res_filt, 1 / CAMERA_UPSAMPLING_RATE_HZ, fbounds)[lpad[0]:-lpad[1]]
         tout = np.arange(0, np.max(tref) + SYNC_SAMPLING_RATE_SECS, 20)
         sync_points = np.c_[tout, np.polyval(pol, tout) + np.interp(tout, t_upsamp, res_filt)]
         if display:

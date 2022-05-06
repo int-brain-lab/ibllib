@@ -9,8 +9,6 @@ from iblutil.numerical import ismember
 
 _logger = logging.getLogger('ibllib')
 # 'Beryl' is the name given to an atlas containing a subset of the most relevant allen annotations
-FILE_BERYL = str(Path(__file__).parent.joinpath('beryl.npy'))
-FILE_COSMOS = str(Path(__file__).parent.joinpath('cosmos.npy'))
 FILE_MAPPINGS = str(Path(__file__).parent.joinpath('mappings.pqt'))
 FILE_REGIONS = str(Path(__file__).parent.joinpath('allen_structure_tree.csv'))
 
@@ -59,6 +57,12 @@ class BrainRegions(_BrainRegions):
         self.mappings = {k: mappings[k].to_numpy() for k in mappings}
         self.n_lr = int((len(self.id) - 1) / 2)
 
+    @property
+    def rgba(self):
+        rgba = np.c_[self.rgb, self.rgb[:, 0] * 0 + 255]
+        rgba[0, :] = 0  # set the void to transparent
+        return rgba
+
     def _compute_order(self):
         """
         Compute the order of regions, per region order by left hemisphere and then right hemisphere
@@ -74,11 +78,12 @@ class BrainRegions(_BrainRegions):
         """
         Recomputes the mapping indices for all mappings
         This is left mainly as a reference for adding future mappings as this take a few seconds
-        to execute. In production,we use the MAPPING_FILES npz to avoid recompuing at each \
+        to execute. In production,we use the MAPPING_FILES pqt to avoid recompuing at each \
         instantiation
         """
-        beryl = np.load(FILE_BERYL)
-        cosmos = np.load(FILE_COSMOS)
+        beryl = np.load(Path(__file__).parent.joinpath('beryl.npy'))
+        cosmos = np.load(Path(__file__).parent.joinpath('cosmos.npy'))
+        swanson = np.load(Path(__file__).parent.joinpath('swanson.npy'))
         self.mappings = {
             'Allen': self._mapping_from_regions_list(np.unique(np.abs(self.id)), lateralize=False),
             'Allen-lr': np.arange(self.id.size),
@@ -86,6 +91,8 @@ class BrainRegions(_BrainRegions):
             'Beryl-lr': self._mapping_from_regions_list(beryl, lateralize=True),
             'Cosmos': self._mapping_from_regions_list(cosmos, lateralize=False),
             'Cosmos-lr': self._mapping_from_regions_list(cosmos, lateralize=True),
+            'Swanson': self._mapping_from_regions_list(swanson, lateralize=False),
+            'Swanson-lr': self._mapping_from_regions_list(swanson, lateralize=True),
         }
         pd.DataFrame(self.mappings).to_parquet(FILE_MAPPINGS)
 

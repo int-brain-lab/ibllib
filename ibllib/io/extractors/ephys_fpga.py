@@ -9,11 +9,13 @@ import uuid
 import matplotlib.pyplot as plt
 import numpy as np
 
+import spikeglx
+import neurodsp.utils
 import one.alf.io as alfio
 from iblutil.util import Bunch
-import ibllib.dsp as dsp
+
 import ibllib.exceptions as err
-from ibllib.io import raw_data_loaders, spikeglx
+from ibllib.io import raw_data_loaders
 from ibllib.io.extractors.bpod_trials import extract_all as bpod_extract_all
 from ibllib.io.extractors.opto_trials import LaserBool
 import ibllib.io.extractors.base as extractors_base
@@ -118,16 +120,14 @@ def _sync_to_alf(raw_ephys_apfile, output_path=None, save=False, parts=''):
     file_ftcp = Path(output_path).joinpath(f'fronts_times_channel_polarity{str(uuid.uuid4())}.bin')
 
     # loop over chunks of the raw ephys file
-    wg = dsp.WindowGenerator(sr.ns, int(SYNC_BATCH_SIZE_SECS * sr.fs), overlap=1)
+    wg = neurodsp.utils.WindowGenerator(sr.ns, int(SYNC_BATCH_SIZE_SECS * sr.fs), overlap=1)
     fid_ftcp = open(file_ftcp, 'wb')
     for sl in wg.slice:
         ss = sr.read_sync(sl)
-        ind, fronts = dsp.fronts(ss, axis=0)
+        ind, fronts = neurodsp.utils.fronts(ss, axis=0)
         # a = sr.read_sync_analog(sl)
         sav = np.c_[(ind[0, :] + sl.start) / sr.fs, ind[1, :], fronts.astype(np.double)]
         sav.tofile(fid_ftcp)
-        # print progress
-        wg.print_progress()
     # close temp file, read from it and delete
     fid_ftcp.close()
     tim_chan_pol = np.fromfile(str(file_ftcp))
@@ -431,7 +431,7 @@ def extract_behaviour_sync(sync, chmap=None, display=False, bpod_trials=None):
     # perform the sync bpod/FPGA, and add the start that have not been detected
     if bpod_trials:
         bpod_start = bpod_trials['intervals_bpod'][:, 0]
-        fcn, drift, ibpod, ifpga = dsp.utils.sync_timestamps(
+        fcn, drift, ibpod, ifpga = neurodsp.utils.sync_timestamps(
             bpod_start, t_trial_start, return_indices=True)
         # if it's drifting too much
         if drift > 200 and bpod_start.size != t_trial_start.size:
@@ -630,7 +630,7 @@ class FpgaTrials(extractors_base.BaseExtractor):
         bpod_trials['intervals_bpod'] = np.copy(bpod_trials['intervals'])
         fpga_trials = extract_behaviour_sync(sync=sync, chmap=chmap, bpod_trials=bpod_trials)
         # checks consistency and compute dt with bpod
-        self.bpod2fpga, drift_ppm, ibpod, ifpga = dsp.utils.sync_timestamps(
+        self.bpod2fpga, drift_ppm, ibpod, ifpga = neurodsp.utils.sync_timestamps(
             bpod_trials['intervals_bpod'][:, 0], fpga_trials.pop('intervals')[:, 0],
             return_indices=True)
         nbpod = bpod_trials['intervals_bpod'].shape[0]

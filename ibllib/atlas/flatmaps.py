@@ -2,10 +2,18 @@
 Module that hold techniques to project the brain volume onto 2D images for visualisation purposes
 """
 from functools import lru_cache
-from ibllib.atlas import AllenAtlas
+import logging
+
+import pandas as pd
 import numpy as np
-from iblutil.util import Bunch
 from scipy.interpolate import interp1d
+import matplotlib.pyplot as plt
+
+from iblutil.numerical import ismember
+from iblutil.util import Bunch
+from ibllib.atlas.atlas import AllenAtlas, S3_BUCKET_IBL, BrainRegions, s3_download_public
+
+_logger = logging.getLogger(__file__)
 
 
 @lru_cache(maxsize=1, typed=False)
@@ -102,3 +110,71 @@ def circles(N=5, atlas=None, display='flat'):
     # ax[1].imshow(ba.top)
     # ax[1].plot(centroid[1], centroid[0], '*')
     # ax[1].plot(s.x, s.y)
+
+
+def swanson(filename="swanson2allen.npz"):
+    # filename could be "swanson2allen_original.npz", or "swanson2allen.npz" for remapped indices to match
+    # existing labels in the brain atlas
+    npz_file = AllenAtlas._get_cache_dir().joinpath(filename)
+    if not npz_file.exists():
+        npz_file.parent.mkdir(exist_ok=True, parents=True)
+        _logger.info(f'downloading swanson image from {S3_BUCKET_IBL} s3 bucket...')
+        s3_download_public(S3_BUCKET_IBL, f'atlas/{npz_file.name}', str(npz_file))
+    s2a = np.load(npz_file)['swanson2allen']  # inds contains regions ids
+    return s2a
+
+
+def plot_swanson(acronyms=None, values=None, ax=None, hemisphere=None, br=None, **kwargs):
+    """
+    Displays the 2D image corresponding to the swanson flatmap.
+    This case is different from the others in the sense that only a region maps to another regions, there
+    is no correspondency from the spatial 3D coordinates.
+    :param acronyms:
+    :param values:
+    :param hemisphere: hemisphere to display, options are 'left', 'right' or 'both'
+    :param br: ibllib.atlas.BrainRegions object
+    :param ax:
+    :param kwargs:
+    :return:
+    """
+    br = BrainRegions() if br is None else br
+    s2a = swanson()
+    if hemisphere == 'both':
+        _s2a = s2a + np.sum(br.id > 0)
+        _s2a[s2a == 0] = 0
+        _s2a[s2a == 1] = 1
+        s2a = np.r_[s2a, np.flipud(_s2a)]
+    if acronyms is None:
+        regions = br.mappings['Swanson'][s2a]
+        im = br.rgba[regions]
+    else:
+        # first get the allen region ids regardless of the input type
+        acronyms = np.array(acronyms)
+        # if the user provides acronyms they're not signed by definition
+        if not np.issubdtype(acronyms.dtype, np.number):
+            user_aids = br.acronym2id(acronyms)
+        else:
+            user_aids = acronyms
+        # the user may have input non-unique regions
+        df = pd.DataFrame(dict(aid=user_aids, value=values)).groupby('aid').mean()
+        aids, vals = (df.index.values, df['value'].values)
+        # apply mapping and perform another round of aggregation
+        _, _, ibr = np.intersect1d(aids, br.id, return_indices=True)
+        ibr = br.mappings['Swanson-lr'][ibr]
+        df = pd.DataFrame(dict(ibr=ibr, value=vals)).groupby('ibr').mean()
+        ibr, vals = (df.index.values, df['value'].values)
+        # we now have the mapped regions and aggregated values, map values onto swanson map
+        iswan, iv = ismember(s2a, ibr)
+        im = np.zeros_like(s2a, dtype=np.float32)
+        im[iswan] = vals[iv]
+        im[~iswan] = np.nan
+    if not ax:
+        ax = plt.gca()
+        ax.set_axis_off()  # unless provided we don't need scales here
+    ax.imshow(im, **kwargs)
+    # overlay the boundaries if value plot
+    imb = np.zeros((*s2a.shape[:2], 4), dtype=np.uint8)
+    imb[s2a == 0] = 255
+    imb[s2a == 1] = np.array([167, 169, 172, 255])
+    ax.imshow(imb)
+    return ax

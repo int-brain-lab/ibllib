@@ -4,7 +4,7 @@ from collections.abc import Sized
 import numpy as np
 from scipy import interpolate
 
-from ibllib.dsp.utils import sync_timestamps
+from neurodsp.utils import sync_timestamps
 from ibllib.io.extractors.base import BaseBpodTrialsExtractor, run_extractor_classes
 import ibllib.io.raw_data_loaders as raw
 from ibllib.misc import structarr

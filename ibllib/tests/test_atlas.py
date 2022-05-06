@@ -28,6 +28,9 @@ class TestBrainRegions(unittest.TestCase):
     def setUpClass(self):
         self.brs = BrainRegions()
 
+    def test_rgba(self):
+        assert self.brs.rgba.shape == (self.brs.rgb.shape[0], 4)
+
     def test_get(self):
         ctx = self.brs.get(688)
         self.assertTrue(len(ctx.acronym) == 1 and ctx.acronym == 'CTX')

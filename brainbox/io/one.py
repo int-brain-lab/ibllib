@@ -12,11 +12,11 @@ from one.api import ONE, One
 import one.alf.io as alfio
 from one.alf.files import get_alf_path
 from one.alf import cache
+from neuropixel import SITES_COORDINATES, TIP_SIZE_UM, trace_header
+import spikeglx
 
 from iblutil.util import Bunch
-from ibllib.io import spikeglx
 from ibllib.io.extractors.training_wheel import extract_wheel_moves, extract_first_movement_times
-from ibllib.ephys.neuropixel import SITES_COORDINATES, TIP_SIZE_UM, trace_header
 from ibllib.atlas import atlas, AllenAtlas
 from ibllib.pipes import histology
 from ibllib.pipes.ephys_alignment import EphysAlignment

@@ -477,7 +477,7 @@ def plot_image(data, ax=None, show_cbar=True, fig_kwargs=dict(), line_kwargs=dic
 
 
 def plot_scatter(data, ax=None, show_cbar=True, fig_kwargs=dict(), line_kwargs=dict(),
-                 scat_kwargs=dict()):
+                 scat_kwargs=None):
     """
     Function to create matplotlib plot from ScatterPlot object. If data['colors'] is given for each
     data point it will override automatic colours that would be generated from data['data']['c']
@@ -491,6 +491,7 @@ def plot_scatter(data, ax=None, show_cbar=True, fig_kwargs=dict(), line_kwargs=d
     :param scat_kwargs: dict of matplotlib keywords associated with matplotlib.scatter
     :return: matplotlib axis and figure handles
     """
+    scat_kwargs = scat_kwargs or dict()
     if not isinstance(data, dict):
         data = data.convert2dict()
 
