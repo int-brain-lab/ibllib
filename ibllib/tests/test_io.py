@@ -399,10 +399,13 @@ class TestVideo(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.one = ONE(**TEST_DB)
+        if 'public' in cls.one.alyx._par.HTTP_DATA_SERVER:
+            cls.one.alyx._par = cls.one.alyx._par.set(
+                'HTTP_DATA_SERVER', cls.one.alyx._par.HTTP_DATA_SERVER.rsplit('/', 1)[0])
 
     def setUp(self) -> None:
         self.eid = '8dd0fcb0-1151-4c97-ae35-2e2421695ad7'
-        self.url = ('https://ibl.flatironinstitute.org/public/mainenlab/'
+        self.url = ('https://ibl.flatironinstitute.org/mainenlab/'
                     'Subjects/ZM_1743/2019-06-14/001/raw_video_data/'
                     '_iblrig_leftCamera.raw.71cfeef2-2aa5-46b5-b88f-ca07e3d92474.mp4')
 
