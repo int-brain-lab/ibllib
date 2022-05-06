@@ -429,20 +429,26 @@ def rsync_video_folders(local_folder=False, remote_folder=False):
 
         # Skip session if no remote behavior folder is found or local raw_video_data does not exist
         if not remote_session_numbers:
-            log.warning(f"Skipping session, no behavior folder found in remote folder "
+            log.warning(f"Skipping session, no behavior data found in remote folder "
                         f"{remote_session_folder}")
-            skip_list.append(session_path)
+            skip_list.append(f"{session_path} - No behavior data found in remote folder "
+                             f"{remote_session_folder}")
             continue
         if not session_path.joinpath("raw_video_data").exists():
             log.warning(f"Skipping session, no raw_video_data folder {session_path}")
+            skip_list.append(f"{session_path} - Skipping session, no raw_video_data folder")
             continue
 
         log.info(f"Evaluating local session: {session_path}")
         if _get_session_numbers(session_path) != remote_session_numbers:
-            log.error(f"Local session number does not match any remote session number. Please "
-                      f"correct before reattempting to transfer.\nRemote session date folder: "
-                      f"{remote_session_folder.parent}")
-            skip_list.append(session_path)
+            # TODO: Re-add the user prompts
+            #       Potentially add flag to skip prompt?
+
+            log.error(f"Local session number does not match any remote session number. \nRemote "
+                      f"session date folder: {remote_session_folder.parent}")
+            skip_list.append(f"{session_path} - Local session number does not match any remote "
+                             f"session number. \nRemote session date folder: "
+                             f"{remote_session_folder.parent}")
             continue
 
         # Append to transfer_list
@@ -453,7 +459,8 @@ def rsync_video_folders(local_folder=False, remote_folder=False):
     for i, (session_path, remote_session_folder) in enumerate(transfer_list):
         if not behavior_exists(remote_session_folder):
             log.warning(f"Skipping session, no behavior folder found in {remote_session_folder}")
-            skip_list.append(session_path)
+            skip_list.append(f"{session_path} - Skipping session, no behavior folder found in "
+                             f"{remote_session_folder}")
             continue
         log.info("Transferring video data: " + session_path + " --> " + remote_session_folder)
         try:
@@ -467,20 +474,23 @@ def rsync_video_folders(local_folder=False, remote_folder=False):
         except subprocess.CalledProcessError as ex:
             log.error("Video transfer failed for: " + str(session_path) +
                       " with the following error: " + str(ex))
-            skip_list.append(session_path)
+            skip_list.append(f"{session_path} - Video transfer failed, likely a networking problem")
             continue
         flag_file = Path(session_path) / "transfer_me.flag"
         log.info("Removing " + str(flag_file) + " and rdiff-backup-data folder")
         try:  # Validate the transfers succeeded, remove flag_file and rdiff-backup-data folder
             rsync_validate = [rdiff_cmd_loc, "--verify",
                               str(Path(remote_session_folder) / "raw_video_data")]
+
+            # subprocess.check_output()  # TODO: use to trigger the CalledProcessError
             if subprocess.run(rsync_validate, capture_output=True).returncode == 0:
                 shutil.rmtree(Path(remote_session_folder) / "raw_video_data" / "rdiff-backup-data")
                 flag_file.unlink()
             else:
                 log.error("Video transfer could not be validated for: " + str(session_path))
-                skip_list.append(session_path)
+                skip_list.append(f"{session_path} - Video transfer could not be validated")
                 continue
+        # TODO: e error output to terminal
         except FileNotFoundError:
             log.warning("An error occurred when attempting to remove the flag file: " +
                         str(flag_file) + "\nThe status of the transfers are in an unknown state; "
@@ -490,7 +500,7 @@ def rsync_video_folders(local_folder=False, remote_folder=False):
             if skip_list:
                 log.warning("File transfers that were not completed:")
                 [log.warning(i) for i in skip_list]
-            exit(1)
+            raise FileNotFoundError
         except subprocess.CalledProcessError:
             log.error("An error occurred when attempting to validate the transfer. The status of "
                       "the transfers are in an unknown state; uninhibiting windows and "
@@ -500,7 +510,7 @@ def rsync_video_folders(local_folder=False, remote_folder=False):
             if skip_list:
                 log.warning("Files not transferred:")
                 [log.warning(i) for i in skip_list]
-            exit(1)
+            raise subprocess.CalledProcessError
         create_video_transfer_done_flag(remote_session_folder)
         check_create_raw_session_flag(remote_session_folder)
     WindowsInhibitor().uninhibit() if os.name == 'nt' else None
