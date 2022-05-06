@@ -69,8 +69,8 @@ class SequentialSelector:
         self.scoring = scoring
         self.delta_scores = pd.DataFrame(index=self.model.clu_ids)
         self.trlabels = self.design.trlabels
-        self.train = np.isin(self.trlabels, self.model.traininds).flatten() if train is None else train
-        self.test = ~self.train if test is None else test
+        self.train = np.isin(self.trlabels, self.model.traininds).flatten() if train is None else np.isin(self.trlabels, train).flatten()
+        self.test = ~self.train if test is None else np.isin(self.trlabels, test).flatten()
         self.features = np.array(list(self.design.covar.keys()))
 
     def fit(self, progress=False):
