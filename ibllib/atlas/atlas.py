@@ -880,18 +880,32 @@ class AllenAtlas(BrainAtlas):
                 _download_atlas_allen(file_label, FLAT_IRON_ATLAS_REL_PATH, par)
             file_label_remap = path_atlas.joinpath(f'annotation_{res_um}_lut_{LUT_VERSION}.npz')
             if not file_label_remap.exists():
-                label = self._read_volume(file_label)
+                label = self._read_volume(file_label).astype(dtype=np.int32)
                 _logger.info("computing brain atlas annotations lookup table")
                 # lateralize atlas: for this the regions of the left hemisphere have primary
                 # keys opposite to to the normal ones
                 lateral = np.zeros(label.shape[xyz2dims[0]])
                 lateral[int(np.floor(ibregma[0]))] = 1
                 lateral = np.sign(np.cumsum(lateral)[np.newaxis, :, np.newaxis] - 0.5)
-                label = label * lateral
-                _, im = ismember(label, regions.id)
-                label = np.reshape(im.astype(np.uint16), label.shape)
-                _logger.info(f"saving {file_label_remap} ...")
+                label = label * lateral.astype(np.int32)
+                # the 10 um atlas is too big to fit in memory so work by chunks instead
+                if res_um == 10:
+                    first, ncols = (0, 10)
+                    while True:
+                        last = np.minimum(first + ncols, label.shape[-1])
+                        _logger.info(f"Computing... {last} on {label.shape[-1]}")
+                        _, im = ismember(label[:, :, first:last], regions.id)
+                        label[:, :, first:last] = np.reshape(im, label[:, :, first:last].shape)
+                        if last == label.shape[-1]:
+                            break
+                        first += ncols
+                    label = label.astype(dtype=np.uint16)
+                    _logger.info(f"Saving npz, this can take a long time")
+                else:
+                    _, im = ismember(label, regions.id)
+                    label = np.reshape(im.astype(np.uint16), label.shape)
                 np.savez_compressed(file_label_remap, label)
+                _logger.info(f"Cached remapping file {file_label_remap} ...")
             # loads the files
             label = self._read_volume(file_label_remap)
             image = self._read_volume(file_image)
