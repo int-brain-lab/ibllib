@@ -900,7 +900,7 @@ class AllenAtlas(BrainAtlas):
                             break
                         first += ncols
                     label = label.astype(dtype=np.uint16)
-                    _logger.info(f"Saving npz, this can take a long time")
+                    _logger.info("Saving npz, this can take a long time")
                 else:
                     _, im = ismember(label, regions.id)
                     label = np.reshape(im.astype(np.uint16), label.shape)
