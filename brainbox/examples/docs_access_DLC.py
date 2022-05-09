@@ -9,27 +9,24 @@ each camera ('left' only for training sessions, 'left',
 'right' and 'body' for ephys sessions).
 See also
 
-https://github.com/int-brain-lab/iblapps/blob/
-develop/dlc/DLC_labeled_video.py to
+https://github.com/int-brain-lab/iblapps/blob/develop/dlc/DLC_labeled_video.py
 
-make a labeled video, and
+to make a labeled video, and
 
-https://github.com/int-brain-lab/ibllib/blob/
-camera_extractor/ibllib/qc/stream_dlc_labeled_frames.py
+https://github.com/int-brain-lab/ibllib/blob/camera_extractor/ibllib/qc/stream_dlc_labeled_frames.py
 
 to stream some frames and paint dlc labels on top.
 """
 
 # Author: Michael
-
-
-import alf.io
 import numpy as np
-from oneibl.one import ONE
+from one.api import ONE
+
+from ibllib.io.video import assert_valid_label
 
 
 def get_DLC(eid, video_type):
-    '''load dlc traces
+    """load dlc traces
     load dlc traces for a given session and
     video type.
 
@@ -51,26 +48,20 @@ def get_DLC(eid, video_type):
 
     x_frame_500 = XYs['nose_tip'][0][500]
     t_frame_500 = Times[500]
-    '''
+    """
 
     one = ONE()
-    alf_path = one.path_from_eid(eid) / 'alf'
-    cam0 = alf.io.load_object(
-        alf_path,
-        '%sCamera' %
-        video_type,
-        namespace='ibl')
-    Times = cam0['times']
-    cam = cam0['dlc']
-    points = np.unique(['_'.join(x.split('_')[:-1]) for x in cam.keys()])
+    video_type = assert_valid_label(video_type)
+    cam = one.load_object(eid, f'{video_type}Camera', collection='alf')
+    points = np.unique(['_'.join(x.split('_')[:-1]) for x in cam.dlc.columns])
     XYs = {}
     for point in points:
         x = np.ma.masked_where(
-            cam[point + '_likelihood'] < 0.9, cam[point + '_x'])
+            cam.dlc[point + '_likelihood'] < 0.9, cam.dlc[point + '_x'])
         x = x.filled(np.nan)
         y = np.ma.masked_where(
-            cam[point + '_likelihood'] < 0.9, cam[point + '_y'])
+            cam.dlc[point + '_likelihood'] < 0.9, cam.dlc[point + '_y'])
         y = y.filled(np.nan)
         XYs[point] = np.array([x, y])
 
-    return Times, XYs
+    return cam.times, XYs

@@ -1,8 +1,6 @@
 import numpy as np
 
-import ibllib.dsp as dsp
-from ibllib.dsp import smooth
-from ibllib.dsp.utils import parabolic_max
+from neurodsp import smooth, utils, fourier
 from brainbox.processing import bincount2D
 
 
@@ -44,7 +42,7 @@ def estimate_drift(spike_times, spike_amps, spike_depths, display=False):
 
     fdscale = np.abs(np.fft.fftfreq(nd, d=DEPTH_BIN_UM))
     # k-filter along the depth direction
-    lp = dsp.fourier._freq_vector(fdscale, np.array([1 / 16, 1 / 8]), typ='lp')
+    lp = fourier._freq_vector(fdscale, np.array([1 / 16, 1 / 8]), typ='lp')
     # compute the depth lag by xcorr
     # to experiment: LP the fft for a better tracking ?
     atd_ = np.fft.fft(atd_hist, axis=-1)
@@ -57,11 +55,11 @@ def estimate_drift(spike_times, spike_amps, spike_depths, display=False):
     # easyqc.viewdata(xcorr - np.mean(xcorr, 1)[:, np.newaxis], DEPTH_BIN_UM, title='xcor')
 
     # to experiment: parabolic fit to get max values
-    raw_drift = (parabolic_max(xcorr)[0] - NXCORR) * DEPTH_BIN_UM
+    raw_drift = (utils.parabolic_max(xcorr)[0] - NXCORR) * DEPTH_BIN_UM
     drift = smooth.rolling_window(raw_drift, window_len=NT_SMOOTH, window='hanning')
     drift = drift - np.mean(drift)
     ts = DT_SECS * np.arange(drift.size)
-    if display:
+    if display:  # pragma: no cover
         import matplotlib.pyplot as plt
         from brainbox.plot import driftmap
         fig1, axs = plt.subplots(2, 1, gridspec_kw={'height_ratios': [.15, .85]},

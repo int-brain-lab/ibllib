@@ -1,12 +1,11 @@
 """
 For a given session eid, plot spectrogram of sound recorded via the microphone.
 """
-# Author: Gaelle Chapuis
+# Author: Gaelle Chapuis, Miles Wells
 
 import numpy as np
 import matplotlib.pyplot as plt
-import alf.io
-from oneibl.one import ONE
+from one.api import ONE
 
 one = ONE()
 
@@ -17,16 +16,11 @@ dataset_types = [
 
 eid = '098bdac5-0e25-4f51-ae63-995be7fe81c7'  # TEST EXAMPLE
 
-one.load(eid, dataset_types=dataset_types, download_only=True)
-session_path = one.path_from_eid(eid)
-
-# -- Get spectrogram
-TF = alf.io.load_object(session_path.joinpath('raw_behavior_data'),
-                        'audioSpectrogram', namespace='iblmic')
+TF = one.load_object(eid, 'audioSpectrogram', collection='raw_behavior_data')
 
 # -- Plot spectrogram
-tlims = TF['times_mic'][[0, -1]].flatten()
-flims = TF['frequencies'][0, [0, -1]].flatten()
+tlims = TF['times_mic'][[0, -1]]
+flims = TF['frequencies'][0, [0, -1]]
 fig = plt.figure(figsize=[16, 7])
 ax = plt.axes()
 im = ax.imshow(20 * np.log10(TF['power'].T), aspect='auto', cmap=plt.get_cmap('magma'),

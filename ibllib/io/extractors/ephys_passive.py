@@ -79,6 +79,20 @@ def _load_passive_session_fixtures(session_path: str) -> dict:
     return fixture
 
 
+def _load_task_protocol(session_path: str) -> str:
+    """Find the IBL rig version used for the session
+
+    :param session_path: the path to a session
+    :type session_path: str
+    :return: ibl rig task protocol version
+    :rtype: str
+    """
+    settings = rawio.load_settings(session_path)
+    ses_ver = settings["IBLRIG_VERSION_TAG"]
+
+    return ses_ver
+
+
 def _load_passive_stim_meta() -> dict:
     """load_passive_stim_meta Loads the passive protocol metadata
 
@@ -125,7 +139,19 @@ def _get_spacer_times(spacer_template, jitter, ttl_signal, t_quiet):
     # adjust indices for
     # - `np.where` call above
     # - length of spacer_model
-    idxs_spacer_middle += 2 - int((np.floor(len(spacer_model) / 2)))
+    spacer_around = int((np.floor(len(spacer_model) / 2)))
+    idxs_spacer_middle += 2 - spacer_around
+
+    # for each spacer make sure the times are monotonically increasing before
+    # and monotonically decreasing afterwards
+    is_valid = np.zeros((idxs_spacer_middle.size), dtype=bool)
+    for i, t in enumerate(idxs_spacer_middle):
+        before = all(np.diff(dttl[t - spacer_around:t]) > 0)
+        after = all(np.diff(dttl[t + 1:t + 1 + spacer_around]) < 0)
+        is_valid[i] = np.bitwise_and(before, after)
+
+    idxs_spacer_middle = idxs_spacer_middle[is_valid]
+
     # pull out spacer times (middle)
     ts_spacer_middle = ttl_signal[idxs_spacer_middle]
     # put beginning/end of spacer times into an array
@@ -146,7 +172,8 @@ def _get_passive_spacers(session_path, sync=None, sync_map=None):
         sync, sync_map = ephys_fpga.get_main_probe_sync(session_path, bin_exists=False)
     meta = _load_passive_stim_meta()
     # t_end_ephys = passive.ephysCW_end(session_path=session_path)
-    fttl = ephys_fpga._get_sync_fronts(sync, sync_map["frame2ttl"], tmin=None)
+    fttl = ephys_fpga.get_sync_fronts(sync, sync_map["frame2ttl"], tmin=None)
+    fttl = ephys_fpga._clean_frame2ttl(fttl, display=False)
     spacer_template = (
         np.array(meta["VISUAL_STIM_0"]["ttl_frame_nums"], dtype=np.float32) / FRAME_FS
     )
@@ -308,38 +335,72 @@ def _extract_passiveValve_intervals(bpod: dict) -> np.array:
 
     # check all values are within bpod tolerance of 100µs
     assert np.allclose(
-        valveOff_times - valveOn_times, valveOff_times[0] - valveOn_times[0], atol=0.0001
+        valveOff_times - valveOn_times, valveOff_times[1] - valveOn_times[1], atol=0.0001
     ), "Some valve outputs are longer or shorter than others"
 
     return np.array([(x, y) for x, y in zip(valveOn_times, valveOff_times)])
 
 
-def _extract_passiveAudio_intervals(audio: dict) -> Tuple[np.array, np.array]:
-    # Get Tone and Noise cue intervals
+def _extract_passiveAudio_intervals(audio: dict, rig_version: str) -> Tuple[np.array, np.array]:
 
-    # Get all sound onsets and offsets
-    soundOn_times = audio["times"][audio["polarities"] > 0]
-    soundOff_times = audio["times"][audio["polarities"] < 0]
-    # Check they are the correct number
-    assert len(soundOn_times) == NTONES + NNOISES, "Wrong number of sound ONSETS"
-    assert len(soundOff_times) == NTONES + NNOISES, "Wrong number of sound OFFSETS"
+    # make an exception for task version = 6.2.5 where things are strange but data is recoverable
+    if rig_version == '6.2.5':
+        # Get all sound onsets and offsets
+        soundOn_times = audio["times"][audio["polarities"] > 0]
+        soundOff_times = audio["times"][audio["polarities"] < 0]
 
-    diff = soundOff_times - soundOn_times
-    # Tone is ~100ms so check if diff < 0.3
-    toneOn_times = soundOn_times[diff <= 0.3]
-    toneOff_times = soundOff_times[diff <= 0.3]
-    # Noise is ~500ms so check if diff > 0.3
-    noiseOn_times = soundOn_times[diff > 0.3]
-    noiseOff_times = soundOff_times[diff > 0.3]
+        # Have a couple that are wayyy too long!
+        time_threshold = 10
+        diff = soundOff_times - soundOn_times
+        stupid = np.where(diff > time_threshold)[0]
+        NREMOVE = len(stupid)
+        not_stupid = np.where(diff < time_threshold)[0]
 
-    assert len(toneOn_times) == NTONES
-    assert len(toneOff_times) == NTONES
-    assert len(noiseOn_times) == NNOISES
-    assert len(noiseOff_times) == NNOISES
+        assert len(soundOn_times) == NTONES + NNOISES - NREMOVE, "Wrong number of sound ONSETS"
+        assert len(soundOff_times) == NTONES + NNOISES - NREMOVE, "Wrong number of sound OFFSETS"
 
-    # Fixed delays from soundcard ~500µs
-    np.allclose(toneOff_times - toneOn_times, 0.1, atol=0.0006)
-    np.allclose(noiseOff_times - noiseOn_times, 0.5, atol=0.0006)
+        soundOn_times = soundOn_times[not_stupid]
+        soundOff_times = soundOff_times[not_stupid]
+
+        diff = soundOff_times - soundOn_times
+        # Tone is ~100ms so check if diff < 0.3
+        toneOn_times = soundOn_times[diff <= 0.3]
+        toneOff_times = soundOff_times[diff <= 0.3]
+        # Noise is ~500ms so check if diff > 0.3
+        noiseOn_times = soundOn_times[diff > 0.3]
+        noiseOff_times = soundOff_times[diff > 0.3]
+
+        # append with nans
+        toneOn_times = np.r_[toneOn_times, np.full((NTONES - len(toneOn_times)), np.NAN)]
+        toneOff_times = np.r_[toneOff_times, np.full((NTONES - len(toneOff_times)), np.NAN)]
+        noiseOn_times = np.r_[noiseOn_times, np.full((NNOISES - len(noiseOn_times)), np.NAN)]
+        noiseOff_times = np.r_[noiseOff_times, np.full((NNOISES - len(noiseOff_times)), np.NAN)]
+
+    else:
+        # Get all sound onsets and offsets
+        soundOn_times = audio["times"][audio["polarities"] > 0]
+        soundOff_times = audio["times"][audio["polarities"] < 0]
+
+        # Check they are the correct number
+        assert len(soundOn_times) == NTONES + NNOISES, "Wrong number of sound ONSETS"
+        assert len(soundOff_times) == NTONES + NNOISES, "Wrong number of sound OFFSETS"
+
+        diff = soundOff_times - soundOn_times
+        # Tone is ~100ms so check if diff < 0.3
+        toneOn_times = soundOn_times[diff <= 0.3]
+        toneOff_times = soundOff_times[diff <= 0.3]
+        # Noise is ~500ms so check if diff > 0.3
+        noiseOn_times = soundOn_times[diff > 0.3]
+        noiseOff_times = soundOff_times[diff > 0.3]
+
+        assert len(toneOn_times) == NTONES
+        assert len(toneOff_times) == NTONES
+        assert len(noiseOn_times) == NNOISES
+        assert len(noiseOff_times) == NNOISES
+
+        # Fixed delays from soundcard ~500µs
+        np.allclose(toneOff_times - toneOn_times, 0.1, atol=0.0006)
+        np.allclose(noiseOff_times - noiseOn_times, 0.5, atol=0.0006)
 
     passiveTone_intervals = np.append(
         toneOn_times.reshape((len(toneOn_times), 1)),
@@ -392,8 +453,8 @@ def extract_rfmapping(
         passivePeriods_df = extract_passive_periods(session_path, sync=sync, sync_map=sync_map)
         trfm = passivePeriods_df.RFM.values
 
-    fttl = ephys_fpga._get_sync_fronts(sync, sync_map["frame2ttl"], tmin=trfm[0], tmax=trfm[1])
-
+    fttl = ephys_fpga.get_sync_fronts(sync, sync_map["frame2ttl"], tmin=trfm[0], tmax=trfm[1])
+    fttl = ephys_fpga._clean_frame2ttl(fttl)
     RF_file = Path().joinpath(session_path, "raw_passive_data", "_iblrig_RFMapStim.raw.bin")
     passiveRFM_frames, RF_ttl_trace = _reshape_RF(RF_file=RF_file, meta_stim=meta[mkey])
     rf_id_up, rf_id_dw, RF_n_ttl_expected = _get_id_raisefall_from_analogttl(RF_ttl_trace)
@@ -424,14 +485,17 @@ def extract_task_replay(
         passivePeriods_df = extract_passive_periods(session_path, sync=sync, sync_map=sync_map)
         treplay = passivePeriods_df.taskReplay.values
 
-    fttl = ephys_fpga._get_sync_fronts(sync, sync_map["frame2ttl"], tmin=treplay[0])
+    fttl = ephys_fpga.get_sync_fronts(sync, sync_map["frame2ttl"], tmin=treplay[0])
+    fttl = ephys_fpga._clean_frame2ttl(fttl)
     passiveGabor_df = _extract_passiveGabor_df(fttl, session_path)
 
-    bpod = ephys_fpga._get_sync_fronts(sync, sync_map["bpod"], tmin=treplay[0])
+    bpod = ephys_fpga.get_sync_fronts(sync, sync_map["bpod"], tmin=treplay[0])
     passiveValve_intervals = _extract_passiveValve_intervals(bpod)
 
-    audio = ephys_fpga._get_sync_fronts(sync, sync_map["audio"], tmin=treplay[0])
-    passiveTone_intervals, passiveNoise_intervals = _extract_passiveAudio_intervals(audio)
+    task_version = _load_task_protocol(session_path)
+    audio = ephys_fpga.get_sync_fronts(sync, sync_map["audio"], tmin=treplay[0])
+    passiveTone_intervals, passiveNoise_intervals = _extract_passiveAudio_intervals(audio,
+                                                                                    task_version)
 
     passiveStims_df = np.concatenate(
         [passiveValve_intervals, passiveTone_intervals, passiveNoise_intervals], axis=1
@@ -471,16 +535,18 @@ def extract_replay_debug(
 
     plot_passive_periods(passivePeriods_df, ax=ax)
 
-    fttl = ephys_fpga._get_sync_fronts(sync, sync_map["frame2ttl"], tmin=treplay[0])
+    fttl = ephys_fpga.get_sync_fronts(sync, sync_map["frame2ttl"], tmin=treplay[0])
     passiveGabor_df = _extract_passiveGabor_df(fttl, session_path)
     plot_gabor_times(passiveGabor_df, ax=ax)
 
-    bpod = ephys_fpga._get_sync_fronts(sync, sync_map["bpod"], tmin=treplay[0])
+    bpod = ephys_fpga.get_sync_fronts(sync, sync_map["bpod"], tmin=treplay[0])
     passiveValve_intervals = _extract_passiveValve_intervals(bpod)
     plot_valve_times(passiveValve_intervals, ax=ax)
 
-    audio = ephys_fpga._get_sync_fronts(sync, sync_map["audio"], tmin=treplay[0])
-    passiveTone_intervals, passiveNoise_intervals = _extract_passiveAudio_intervals(audio)
+    task_version = _load_task_protocol(session_path)
+    audio = ephys_fpga.get_sync_fronts(sync, sync_map["audio"], tmin=treplay[0])
+    passiveTone_intervals, passiveNoise_intervals = _extract_passiveAudio_intervals(audio,
+                                                                                    task_version)
     plot_audio_times(passiveTone_intervals, passiveNoise_intervals, ax=ax)
 
     passiveStims_df = np.concatenate(
@@ -495,7 +561,7 @@ def extract_replay_debug(
     )  # _ibl_passiveGabor.table.csv, _ibl_passiveStims.table.csv
 
 
-# Maan passiveCWe xtractor, calls all others
+# Main passiveCW extractor, calls all others
 class PassiveChoiceWorld(BaseExtractor):
     save_names = (
         "_ibl_passivePeriods.intervalsTable.csv",
@@ -516,20 +582,12 @@ class PassiveChoiceWorld(BaseExtractor):
         if sync is None or sync_map is None:
             sync, sync_map = ephys_fpga.get_main_probe_sync(self.session_path, bin_exists=False)
 
-        try:
-            # Passive periods
-            passivePeriods_df = extract_passive_periods(
-                self.session_path, sync=sync, sync_map=sync_map
-            )
-            trfm = passivePeriods_df.RFM.values
-            treplay = passivePeriods_df.taskReplay.values
-
-        except BaseException as e:
-            log.error(f"Failed to extract passive periods: {e}")
-            passivePeriods_df = None
-            trfm = None
-            treplay = None
-            return (None, None, None, None)
+        # Passive periods
+        passivePeriods_df = extract_passive_periods(
+            self.session_path, sync=sync, sync_map=sync_map
+        )
+        trfm = passivePeriods_df.RFM.values
+        treplay = passivePeriods_df.taskReplay.values
 
         try:
             # RFMapping
@@ -546,10 +604,8 @@ class PassiveChoiceWorld(BaseExtractor):
             )
         except Exception as e:
             log.error(f"Failed to extract task replay stimuli: {e}")
-            (passiveGabor_df, passiveStims_df,) = (
-                None,
-                None,
-            )
+            passiveGabor_df, passiveStims_df = (None, None)
+
         if plot:
             f, ax = plt.subplots(1, 1)
             f.suptitle("/".join(str(self.session_path).split("/")[-5:]))
@@ -560,59 +616,13 @@ class PassiveChoiceWorld(BaseExtractor):
             plot_stims_times(passiveStims_df, ax=ax)
             plt.show()
 
-        return (
+        data = (
             passivePeriods_df,  # _ibl_passivePeriods.intervalsTable.csv
             passiveRFM_times,  # _ibl_passiveRFM.times.npy
             passiveGabor_df,  # _ibl_passiveGabor.table.csv,
-            passiveStims_df,  # _ibl_passiveStims.table.csv
+            passiveStims_df  # _ibl_passiveStims.table.csv
         )
 
-
-if __name__ == "__main__":
-    # Working session
-    session_path = "/home/nico/Downloads/FlatIron/mrsicflogellab/Subjects/SWC_054/2020-10-10/001"
-    # # Broken session
-    #     session_path = "/home/nico/Downloads/FlatIron/integration/ephys/\
-    # choice_world/KS022/2019-12-10/001"
-    pcw = PassiveChoiceWorld(session_path)
-    data, paths = pcw.extract(save=False)
-    (
-        passivePeriods_df,
-        passiveRFM_times,
-        passiveGabor_df,
-        passiveStims_df
-    ) = data
-    # sp = '/home/nico/Downloads/FlatIron/mrsicflogellab/Subjects/SWC_029/2020-10-07/001'
-    # extract_passive_choice_world(sp)
-    # extract_passive_choice_world(sp, plot=True)
-    # from oneibl.one import ONE
-    # import alf.io
-
-    # one = ONE()
-
-    # eids = one.search(dataset_types=min_dataset_types)
-    # session_paths = []
-    # for i, eid in enumerate(eids):
-    #     try:
-    #         local_paths = one.load(eid, dataset_types=dataset_types, download_only=True)
-    #         session_paths.append(alf.io.get_session_path(local_paths[0]))
-    #     except BaseException as e:
-    #         print(f"{i+1}/{len(eids)} - Failed to DL session: {eid}\n\n{e}")
-    #     print(f"\n\n{i+1}/{len(eids)}\n\n")
-
-    # failed = []
-    # for i, sp in enumerate(session_paths):
-    #     try:
-    #         extract_passive_choice_world(sp)
-    #     except BaseException as e:
-    #         failed.append((sp, e))
-    #     print(f"\n{i+1}/{len(session_paths)}")
-    # print(f"nfailed = {len(failed)} / {len(session_paths)}")
-
-    # for s in all_session_paths[:20]:
-    #     try:
-    #         extract_passive_choice_world_plot(s)
-    #     except BaseException as e:
-    #         print(e)
-    #         continue
-    print(".")
+        # Set save names to None if data not extracted - these will not be saved or registered
+        self.save_names = tuple(None if y is None else x for x, y in zip(self.save_names, data))
+        return data

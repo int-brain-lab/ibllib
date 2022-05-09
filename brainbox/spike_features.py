@@ -3,7 +3,7 @@ Functions that compute spike features from spike waveforms.
 '''
 
 import numpy as np
-import brainbox as bb
+from brainbox.io.spikeglx import extract_waveforms
 
 
 def depth(ephys_file, spks_b, clstrs_b, chnls_b, tmplts_b, unit, n_ch=12, n_ch_probe=385, sr=30000,
@@ -90,8 +90,8 @@ def depth(ephys_file, spks_b, clstrs_b, chnls_b, tmplts_b, unit, n_ch=12, n_ch_p
     tmplt_wfs = tmplts_b['waveforms']
     unit_tmplt = tmplt_wfs[unit, :, ch].T
     wf_t = tmplt_wfs.shape[1] / (sr / 1000)  # duration (ms) of each waveform
-    wf = bb.io.extract_waveforms(ephys_file=ephys_file, ts=ts, ch=ch, t=wf_t, sr=sr,
-                                 n_ch_probe=n_ch_probe, dtype='int16', car=car)
+    wf = extract_waveforms(ephys_file=ephys_file, ts=ts, ch=ch, t=wf_t, sr=sr,
+                           n_ch_probe=n_ch_probe, dtype='int16', car=car)
 
     # Compute center-of-mass: #
     ch_depths = chnls_b['localCoordinates'][[ch], [1]]

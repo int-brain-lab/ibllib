@@ -6,8 +6,8 @@ import os
 
 from ibllib.ephys import sync_probes
 from ibllib.pipes import ephys_preprocessing as ephys
-from oneibl.patcher import FTPPatcher
-from oneibl.one import ONE
+from ibllib.oneibl.patcher import FTPPatcher
+from one.api import ONE
 
 _logger = logging.getLogger('ibllib')
 
@@ -108,7 +108,7 @@ def job_run_ks2():
     flag_files[0].unlink()
 
     # Instantiate one
-    one = ONE()
+    one = ONE(cache_rest=None)
 
     # sync the probes
     status, sync_files = sync_probes.sync(session_path)
@@ -120,7 +120,7 @@ def job_run_ks2():
         _logger.info(f'{session}: Probes successfully synced')
 
     # run ks2
-    task = ephys.SpikeSorting_KS2_Matlab(session_path, one=one)
+    task = ephys.SpikeSorting(session_path, one=one)
     status = task.run()
 
     if status != 0:

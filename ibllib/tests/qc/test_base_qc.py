@@ -3,13 +3,10 @@ import unittest
 import numpy as np
 
 from ibllib.qc.base import QC
-from oneibl.one import ONE
+from one.api import ONE
+from ibllib.tests import TEST_DB
 
-one = ONE(
-    base_url="https://test.alyx.internationalbrainlab.org",
-    username="test_user",
-    password="TapetesBloc18",
-)
+one = ONE(**TEST_DB)
 
 
 class TestQC(unittest.TestCase):
@@ -26,7 +23,7 @@ class TestQC(unittest.TestCase):
         """Test setting both the eid and session path when providing one or the other"""
         # Check that eid was set by constructor
         self.assertEqual(self.qc.eid, self.eid, 'failed to set eid in constructor')
-        expected_path = one.path_from_eid(self.eid)
+        expected_path = one.eid2path(self.eid)
         self.assertEqual(self.qc.session_path, expected_path, 'failed to set path in constructor')
         self.qc.eid = self.qc.session_path = None  # Reset both properties
 
@@ -58,7 +55,7 @@ class TestQC(unittest.TestCase):
         current = self.qc.update(outcome)
         self.assertEqual(outcome, current, 'Failed to update QC field')
         # Check that extended QC field was updated
-        extended = one.alyx.rest('sessions', 'read', id=self.eid)['extended_qc']
+        extended = one.alyx.get('/sessions/' + self.eid, clobber=True)['extended_qc']
         updated = 'experimenter' in extended and extended['experimenter'] == outcome
         self.assertTrue(updated, 'failed to update extended_qc field')
         # Check that outcome property is set
@@ -69,7 +66,7 @@ class TestQC(unittest.TestCase):
         namespace = 'task'
         current = self.qc.update(outcome, namespace=namespace)
         self.assertEqual(outcome.upper(), current, 'Failed to update QC field')
-        extended = one.alyx.rest('sessions', 'read', id=self.eid)['extended_qc']
+        extended = one.alyx.get('/sessions/' + self.eid, clobber=True)['extended_qc']
         updated = namespace in extended and extended[namespace] == outcome.upper()
         self.assertTrue(updated, 'failed to update extended_qc field')
 
@@ -78,7 +75,7 @@ class TestQC(unittest.TestCase):
         namespace = 'task'
         current = self.qc.update(outcome)
         self.assertNotEqual(outcome, current, 'QC field updated with less severe outcome')
-        extended = one.alyx.rest('sessions', 'read', id=self.eid)['extended_qc']
+        extended = one.alyx.get('/sessions/' + self.eid, clobber=True)['extended_qc']
         updated = namespace in extended and extended[namespace] != outcome
         self.assertTrue(updated, 'failed to update extended_qc field')
 
@@ -87,7 +84,7 @@ class TestQC(unittest.TestCase):
         namespace = 'task'
         current = self.qc.update(outcome, override=True, namespace=namespace)
         self.assertEqual(outcome, current, 'QC field updated with less severe outcome')
-        extended = one.alyx.rest('sessions', 'read', id=self.eid)['extended_qc']
+        extended = one.alyx.get('/sessions/' + self.eid, clobber=True)['extended_qc']
         updated = namespace in extended and extended[namespace] == outcome
         self.assertTrue(updated, 'failed to update extended_qc field')
 
@@ -125,5 +122,5 @@ class TestQC(unittest.TestCase):
         self.assertEqual(QC.overall_outcome(['PASS', 'NOT_SET', None, 'FAIL']), 'FAIL')
 
 
-if __name__ == '__main__':
-    unittest.main()
+if __name__ == "__main__":
+    unittest.main(exit=False, verbosity=2)

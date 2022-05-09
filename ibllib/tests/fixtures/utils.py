@@ -55,6 +55,10 @@ def create_fake_raw_ephys_data_folder(session_path, populate=True):
             "probe01/_spikeglx_ephysData_g0_t0.imec1.lf.cbin",
             "probe01/_spikeglx_ephysData_g0_t0.imec1.ap.ch",
             "probe01/_spikeglx_ephysData_g0_t0.imec1.wiring.json",
+            "probe02/_spikeglx_ephysData_g0_t0.imec.ap.meta",  # 3A
+            "probe02/_spikeglx_ephysData_g0_t0.imec.lf.meta",
+            "probe02/_spikeglx_ephysData_g0_t0.imec.ap.bin",
+            "probe02/_spikeglx_ephysData_g0_t0.imec.lf.bin",
             "_spikeglx_ephysData_g0_t0.nidq.sync.npy",
             "_spikeglx_ephysData_g0_t0.nidq.meta",
             "_spikeglx_ephysData_g0_t0.nidq.cbin",
@@ -67,6 +71,59 @@ def create_fake_raw_ephys_data_folder(session_path, populate=True):
             fpath.touch()
 
     return session_path
+
+
+def populate_raw_spikeglx(session_path,
+                          model='3B', legacy=False, user_label='my_run', n_probes=2):
+    """
+    Touch file tree to emulate files saved by SpikeGLX
+    :param session_path: The raw ephys data path to place files
+    :param model: Probe model file structure ('3A' or '3B')
+    :param legacy: If true, the emulate older SpikeGLX version where all files are saved
+    into a single folder
+    :param user_label: User may input any name into SpikeGLX and filenames will include this
+    :param n_probes: Number of probe datafiles to touch
+    :return:
+
+    Examples:
+        populate_raw_spikeglx('3A_folder', model='3A', legacy=True, n_probes=1)
+        3A_folder
+            └───raw_ephys_folder
+                    my_run_probe00_g0_t0.imec.ap.bin
+                    my_run_probe00_g0_t0.imec.ap.meta
+                    my_run_probe00_g0_t0.imec.lf.bin
+                    my_run_probe00_g0_t0.imec.lf.meta
+
+        populate_raw_spikeglx('3B_folder', model='3B', n_probes=3)
+        3B_folder
+            └───my_run_g0_t0
+                    my_run_g0_t0.imec0.ap.bin
+                    my_run_g0_t0.imec0.ap.meta
+                    my_run_g0_t0.imec0.lf.bin
+                    my_run_g0_t0.imec0.lf.meta
+                    my_run_g0_t0.imec1.ap.bin
+                    my_run_g0_t0.imec1.ap.meta
+                    my_run_g0_t0.imec1.lf.bin
+                    my_run_g0_t0.imec1.lf.meta
+                    my_run_g0_t0.imec2.ap.bin
+                    my_run_g0_t0.imec2.ap.meta
+                    my_run_g0_t0.imec2.lf.bin
+                    my_run_g0_t0.imec2.lf.meta
+                    my_run_g0_t0.nidq.bin
+                    my_run_g0_t0.nidq.meta
+
+    See also: http://billkarsh.github.io/SpikeGLX/help/parsing/
+    """
+    for i in range(n_probes):
+        label = (user_label + f'_probe{i:02}') if legacy and model == '3A' else user_label
+        root = session_path.joinpath('raw_ephys_folder' if legacy else f'{user_label}_g0_t0')
+        root.mkdir(exist_ok=True, parents=True)
+        for ext in ('meta', 'bin'):
+            for freq in ('lf', 'ap'):
+                filename = f'{label}_g0_t0.imec{i if model == "3B" else ""}.{freq}.{ext}'
+                root.joinpath(filename).touch()
+            if model == '3B':
+                root.joinpath(f'{label}_g0_t0.nidq.{ext}').touch()
 
 
 def create_fake_raw_video_data_folder(session_path, populate=True):
@@ -91,6 +148,27 @@ def create_fake_raw_video_data_folder(session_path, populate=True):
         ]
         for f in file_list:
             fpath = raw_video_data_path / Path(f)
+            fpath.parent.mkdir(parents=True, exist_ok=True)
+            fpath.touch()
+
+
+def create_fake_alf_folder_dlc_data(session_path, populate=True):
+    session_path = Path(session_path)
+    alf_path = session_path / "alf"
+    alf_path.mkdir(exist_ok=True, parents=True)
+    if populate:
+        file_list = [
+            "_ibl_leftCamera.dlc.pqt",
+            "_ibl_rightCamera.dlc.pqt",
+            "_ibl_bodyCamera.dlc.pqt",
+            "_ibl_leftCamera.times.npy",
+            "_ibl_rightCamera.times.npy",
+            "_ibl_bodyCamera.times.npy",
+            "_ibl_leftCamera.features.npy",
+            "_ibl_rightCamera.features.npy",
+        ]
+        for f in file_list:
+            fpath = alf_path / Path(f)
             fpath.parent.mkdir(parents=True, exist_ok=True)
             fpath.touch()
 
@@ -195,24 +273,3 @@ def create_fake_ephys_recording_bad_passive_transfer_sessions(
     populate_task_settings(fpath, passive_settings)
 
     return session_path, passive_session_path
-
-
-if __name__ == "__main__":
-    pass
-    # root_data_path = "/home/nico/Projects/IBL/scratch/serverpc/_mnt_s0_Data"
-    # # Create a fake ephys session
-    # session_path = create_fake_session_folder(
-    #     root_data_path, lab="fakelab", mouse="fakemouse", date="1900-01-01", num="001"
-    # )
-    # create_fake_raw_ephys_data_folder(session_path, populate=True)
-    # create_fake_raw_video_data_folder(session_path, populate=True)
-    # create_fake_raw_behavior_data_folder(session_path, populate=True, task="ephys")
-    # # create a fake passive session that was not transferred
-    # passive_session_path = create_fake_session_folder(
-    #     root_data_path, lab="fakelab", mouse="fakemouse", date="1900-01-01", num="002"
-    # )
-    # create_fake_raw_behavior_data_folder(passive_session_path, populate=True, task="passive")
-
-    # fpath = Path(passive_session_path) / "raw_behavior_data" / "_iblrig_taskSettings.raw.json"
-    # passive_settings = {"CORRESPONDING_EPHYS_SESSION": str(session_path)}
-    # populate_task_settings(fpath, passive_settings)

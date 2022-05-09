@@ -1,12 +1,14 @@
-import numpy as np
-import alf.io
-import matplotlib.pyplot as plt
-import ibllib.plots as iblplt
-from ibllib.time import convert_pgts, uncycle_pgts
-from oneibl.one import ONE
 from pathlib import Path
 import csv
 import json
+
+import numpy as np
+import matplotlib.pyplot as plt
+from one.api import ONE
+
+import ibllib.plots as iblplt
+from ibllib.time import convert_pgts, uncycle_pgts
+
 plt.ion()
 
 
@@ -118,11 +120,11 @@ def get_timestamps_from_ssv_file(alf_path):
 
 
 def plot_mean_std_around_event(event, diameter, times, eid):
-    '''
+    """
 
     event in {'stimOn_times', 'feedback_times', 'stimOff_times'}
 
-    '''
+    """
     event_times = trials[event]
 
     window_size = 70
@@ -159,24 +161,18 @@ if __name__ == "__main__":
     one = ONE()
 
     # one.list(None, 'dataset-types') # to check dataset types, 'camera.times'?
-    # one.search(dataset_types=['camera.dlc', 'camera.times'])
+    # one.search(dataset=['camera.dlc.pqt', 'camera.times.npy'])
     eid = '61393bca-f1ff-4e7d-b2d8-da7475219866'
+    camera_label = 'left'
 
-    D = one.load(eid)
-    D = one.load(
-        eid,
-        dataset_types=[
-            'camera.dlc',
-            '_iblrig_Camera.timestamps'],
-        dclass_output=True)
-    alf_path = Path(D.local_path[0]).parent.parent / 'alf'
-
-    trials = alf.io.load_object(alf_path, 'trials')
+    trials = one.load_object(eid, 'trials', collection='alf')
     add_stim_off_times(trials)
 
-    times = np.load(alf_path / '_ibl_leftCamera.times.npy')
+    times = one.load_dataset(eid, f'_ibl_{camera_label}Camera.times.npy', collection='alf')
+    dlc_path = one.load_dataset(eid, f'_ibl_{camera_label}Camera.dlc.pqt',
+                                collection='alf', download_only=True)
 
-    diameter = get_pupil_diameter(alf_path)
+    diameter = get_pupil_diameter(one.eid2path / 'alf')
 
     # get trial number for each time bin
     trial_numbers = np.digitize(times, trials['goCue_times'])

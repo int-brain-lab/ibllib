@@ -1,10 +1,8 @@
 import unittest
 import logging
 import time
-import types
 
 from ibllib.misc import (version, print_progress)
-from ibllib.misc import flatten as flt
 
 
 class TestPrintProgress(unittest.TestCase):
@@ -66,15 +64,5 @@ class TestLoggingSystem(unittest.TestCase):
         logger.debug('ROOT This is a debug message')
 
 
-class TestFlatten(unittest.TestCase):
-
-    def test_flatten(self):
-        x = (1, 2, 3, [1, 2], 'string', 0.1, {1: None}, [[1, 2, 3], {1: 1}, 1])
-        self.assertEqual(flt.iflatten(x), flt.flatten(x))
-        self.assertEqual(flt.flatten(x)[:5], [1, 2, 3, 1, 2])
-        self.assertEqual(list(flt.gflatten(x)), list(flt.flatten(x, generator=True)))
-        self.assertIsInstance(flt.flatten(x, generator=True), types.GeneratorType)
-
-
 if __name__ == "__main__":
-    unittest.main(exit=False)
+    unittest.main(exit=False, verbosity=2)

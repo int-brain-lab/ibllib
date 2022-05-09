@@ -25,7 +25,7 @@ def plot_sync_channels(sync, sync_map, ax=None):
     if ax is None:
         f, ax = plt.subplots(1, 1)
     for i, device in enumerate(["frame2ttl", "audio", "bpod"]):
-        sy = ephys_fpga._get_sync_fronts(sync, sync_map[device])  # , tmin=t_start_passive)
+        sy = ephys_fpga.get_sync_fronts(sync, sync_map[device])  # , tmin=t_start_passive)
         squares(sy["times"], sy["polarities"], yrange=[0.1 + i, 0.9 + i], color="k", ax=ax)
 
 

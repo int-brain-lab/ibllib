@@ -6,13 +6,15 @@ Ensure you are on 'ibllib@brainbox'.
 
 import time
 from pathlib import Path
+
 import numpy as np
 import pandas as pd
-import brainbox as bb
-import alf.io as aio
+from one.api import ONE
 
+from brainbox import metrics
+from brainbox.processing import get_units_bunch
 
-def gen_metrics(alf_dir, ks_dir, ephys_file_path=None):
+def gen_metrics(exp_id, ks_dir, probe_label, ephys_file_path=None):
     """
     Tries to generate single unit metrics for all units metric-by-metric and save the metrics
     as .tsv files, and displays an error if unable to create one of the metric .tsv files,
@@ -20,10 +22,12 @@ def gen_metrics(alf_dir, ks_dir, ephys_file_path=None):
 
     Parameters
     ----------
-    alf_dir : string
-        Full path to alf output directory.
+    exp_id : string
+        Session path or eid.
     ks_dir : string
         Full path to the ks2 output directory. The .tsv files will be saved here.
+    probe_label : string
+        Name of the probe, e.g. 'probe00'
     ephys_file_path : string (optional)
         Full path to binary ephys file.
 
@@ -49,15 +53,11 @@ def gen_metrics(alf_dir, ks_dir, ephys_file_path=None):
 
     # Setup #
     # ----- #
+    one = ONE()
 
-    # Extract alf objects from `alf_dir` and get units info
-    alf_dir = Path(alf_dir)
-    if not (Path.exists(alf_dir)):
-        raise FileNotFoundError('The given alf directory {} does not exist!'.format(alf_dir))
-
-    spks_b = aio.load_object(alf_dir, 'spikes')
-    clstrs_b = aio.load_object(alf_dir, 'clusters')
-    units_b = bb.processing.get_units_bunch(spks_b)
+    spks_b = one.load_object(exp_id, 'spikes', collection=f'alf/{probe_label}')
+    clstrs_b = one.load_object(exp_id, 'clusters', collection=f'alf/{probe_label}')
+    units_b = get_units_bunch(spks_b)
     units = list(units_b.amps.keys())
     n_units = np.max(spks_b.clusters) + 1
 
@@ -91,7 +91,7 @@ def gen_metrics(alf_dir, ks_dir, ephys_file_path=None):
 
         # Cumulative drift of spike amplitudes, normalized by total number of spikes.
         try:
-            cum_amp_drift[int(unit)] = bb.metrics.cum_drift(amps)
+            cum_amp_drift[int(unit)] = metrics.cum_drift(amps)
         except Exception as err:
             print("Failed to compute 'cum_drift(amps)' for unit {}. Details: \n {}"
                   .format(unit, err))
@@ -99,7 +99,7 @@ def gen_metrics(alf_dir, ks_dir, ephys_file_path=None):
 
         # Cumulative drift of spike depths, normalized by total number of spikes.
         try:
-            cum_depth_drift[int(unit)] = bb.metrics.cum_drift(depths)
+            cum_depth_drift[int(unit)] = metrics.cum_drift(depths)
         except Exception as err:
             print("Failed to compute 'cum_drift(depths)' for unit {}. Details: \n {}"
                   .format(unit, err))
@@ -122,7 +122,7 @@ def gen_metrics(alf_dir, ks_dir, ephys_file_path=None):
 
         # Fraction of isi violations.
         try:
-            frac_isi_viol[int(unit)], _, _ = bb.metrics.isi_viol(ts, rp=0.002)
+            frac_isi_viol[int(unit)], _, _ = metrics.isi_viol(ts, rp=0.002)
         except Exception as err:
             print("Failed to compute 'frac_isi_viol' for unit {}. Details: \n {}"
                   .format(unit, err))
@@ -130,7 +130,7 @@ def gen_metrics(alf_dir, ks_dir, ephys_file_path=None):
 
         # Estimated fraction of missing spikes.
         try:
-            fn_est[int(unit)], _, _ = bb.metrics.missed_spikes_est(
+            fn_est[int(unit)], _, _ = metrics.missed_spikes_est(
                 amps, spks_per_bin=10, sigma=4, min_num_bins=50)
         except Exception as err:
             print("Failed to compute 'missed_spikes_est' for unit {}. Details: \n {}"
@@ -139,21 +139,21 @@ def gen_metrics(alf_dir, ks_dir, ephys_file_path=None):
 
         # Estimated fraction of false positives.
         try:
-            fp_est[int(unit)] = bb.metrics.contamination(ts, rp=0.002)
+            fp_est[int(unit)] = metrics.contamination(ts, rp=0.002)
         except Exception as err:
             print("Failed to compute 'contamination' for unit {}. Details: \n {}".format(unit, err))
             units_missing_metrics.add(unit)
 
         # Presence ratio
         try:
-            pres_ratio[int(unit)], _ = bb.metrics.pres_ratio(ts, hist_win=10)
+            pres_ratio[int(unit)], _ = metrics.pres_ratio(ts, hist_win=10)
         except Exception as err:
             print("Failed to compute 'pres_ratio' for unit {}. Details: \n {}".format(unit, err))
             units_missing_metrics.add(unit)
 
         # Presence ratio over the standard deviation of spike counts in each bin
         try:
-            pr, pr_bins = bb.metrics.pres_ratio(ts, hist_win=10)
+            pr, pr_bins = metrics.pres_ratio(ts, hist_win=10)
             pres_ratio_std[int(unit)] = pr / np.std(pr_bins)
         except Exception as err:
             print("Failed to compute 'pres_ratio_std' for unit {}. Details: \n {}"
@@ -164,7 +164,7 @@ def gen_metrics(alf_dir, ks_dir, ephys_file_path=None):
         if ephys_file_path:
             try:
                 ch = clstrs_b['channels'][int(unit)]  # channel of max amplitude
-                ptp_sigma[int(unit)] = bb.metrics.ptp_over_noise(
+                ptp_sigma[int(unit)] = metrics.ptp_over_noise(
                     ephys_file_path, ts, ch, t=2.0, sr=30000, n_ch_probe=385,
                     dtype='int16', car=False)
             except Exception as err:

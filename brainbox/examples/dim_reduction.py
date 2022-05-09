@@ -1,12 +1,14 @@
+import itertools
+
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 from mpl_toolkits.mplot3d import Axes3D
 from sklearn.manifold import Isomap, MDS, TSNE, LocallyLinearEmbedding
 from sklearn.decomposition import PCA, FactorAnalysis, FastICA
-import alf.io
+from one.api import ONE
+
 from brainbox.processing import bincount2D
-import itertools
 
 
 def find_nearest(array, value):
@@ -26,7 +28,7 @@ def filliti(v):
 
 
 def bin_types(spikes, trials, t_bin, clusters):
-    '''
+    """
     This creates a dictionary of binned time series,
     all having the same number of observations.
 
@@ -44,7 +46,7 @@ def bin_types(spikes, trials, t_bin, clusters):
     binned_data['choice']: observations
     binned_data['trial_number']: observations
 
-    '''
+    """
 
     # TO GET MEAN: bincount2D(..., weight=positions) / bincount2D(...,
     # weight=None)
@@ -116,10 +118,10 @@ def color_3D_projection(
         variable_data,
         title,
         color_map='jet'):
-    '''
+    """
     Plot a 3d scatter plot, each point being neural activity at a certain
     time bin, colored by the corresponding behavioral variable
-    '''
+    """
     x, y, z = np.split(data_projection, 3, axis=1)
     fig = plt.figure(title[:3])
     ax = Axes3D(fig)
@@ -131,30 +133,32 @@ def color_3D_projection(
 
 
 if __name__ == "__main__":
-    '''
+    """
     Starting from an alf folder, neural IBL data is read in,
     restricted to specific trials, restricted to a specific brain region.
     These many channels of neural activity are dimensionally
     reduced to 3 and plotted as a scatter plot, colored either
     by "choice" or "reward". Several dimensionalty-reduction
     methods are used and the scatter plots displayed.
-    '''
+    """
+    one = ONE()
 
     # read in the alf objects [brain region info only for code camp data now]
-    alf_path = '/home/mic/Downloads/ZM_1735_2019-08-01_001/mnt/s0/Data/Subjects/ZM_1735/2019-08-01/001/alf'
+    session_path = 'ZM_1735/2019-08-01/001'
+    probe_label = 'probe00'
     # can be addressed as spikes['time'] or spikes.time
-    spikes = alf.io.load_object(alf_path, 'spikes')
-    clusters = alf.io.load_object(alf_path, 'clusters')
-    channels = alf.io.load_object(alf_path, 'channels')
-    trials = alf.io.load_object(alf_path, 'trials')
-    
+    spikes = one.load_object(session_path, 'spikes', collection=f'alf{probe_label}')
+    clusters = one.load_object(session_path, 'clusters', collection=f'alf{probe_label}')
+    channels = one.load_object(session_path, 'channels', collection=f'alf{probe_label}')
+    trials = one.load_object(session_path, 'trials', collection='alf')
+
     # Print number of clusters for each brain region
     locDict_bothProbes = clusters['brainAcronyms']['brainAcronyms'].to_dict()
-    cluster_idx_probe1 = np.unique(spikes['clusters']) 
+    cluster_idx_probe1 = np.unique(spikes['clusters'])
     locDict = {}
     for i in locDict_bothProbes:
         if i in cluster_idx_probe1:
-            locDict[i] = locDict_bothProbes[i] 
+            locDict[i] = locDict_bothProbes[i]
     print([(k, len(list(v))) for k, v in itertools.groupby(sorted(locDict.values()))])
 
     # set key parameters

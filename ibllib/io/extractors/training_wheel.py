@@ -4,7 +4,7 @@ from collections.abc import Sized
 import numpy as np
 from scipy import interpolate
 
-from ibllib.io.extractors import training_trials
+from neurodsp.utils import sync_timestamps
 from ibllib.io.extractors.base import BaseBpodTrialsExtractor, run_extractor_classes
 import ibllib.io.raw_data_loaders as raw
 from ibllib.misc import structarr
@@ -73,6 +73,12 @@ def sync_rotary_encoder(session_path, bpod_data=None, re_events=None):
     else:
         bp, re = raw.sync_trials_robust(bpod['closed_loop'], rote['closed_loop'],
                                         diff_threshold=DIFF_THRESHOLD, max_shift=5)
+        # we dont' want to change the extractor, but in rare cases the following method may save the day
+        if len(bp) == 0:
+            _, _, ib, ir = sync_timestamps(bpod['closed_loop'], rote['closed_loop'], return_indices=True)
+            bp = bpod['closed_loop'][ib]
+            re = rote['closed_loop'][ir]
+
         indko = np.array([])
         # raise ValueError("Can't sync bpod and rotary encoder: non-contiguous sync pulses")
     # remove faulty indices due to missing or bad syncs
@@ -389,6 +395,7 @@ class Wheel(BaseBpodTrialsExtractor):
         moves = extract_wheel_moves(ts, pos)
 
         # need some trial based info to output the first movement times
+        from ibllib.io.extractors import training_trials  # Avoids circular imports
         goCue_times, _ = training_trials.GoCueTimes(self.session_path).extract(
             save=False, bpod_trials=self.bpod_trials, settings=self.settings)
         feedback_times, _ = training_trials.FeedbackTimes(self.session_path).extract(
@@ -403,5 +410,24 @@ class Wheel(BaseBpodTrialsExtractor):
 
 
 def extract_all(session_path, bpod_trials=None, settings=None, save=False):
+    """Extract the wheel data.
+
+    NB: Wheel extraction is now called through ibllib.io.training_trials.extract_all
+
+    Parameters
+    ----------
+    session_path : str, pathlib.Path
+        The path to the session
+    save : bool
+        If true save the data files to ALF
+    bpod_trials : list of dicts
+        The Bpod trial dicts loaded from the _iblrig_taskData.raw dataset
+    settings : dict
+        The Bpod settings loaded from the _iblrig_taskSettings.raw dataset
+
+    Returns
+    -------
+    A list of extracted data and a list of file paths if save is True (otherwise None)
+    """
     return run_extractor_classes(Wheel, save=save, session_path=session_path,
                                  bpod_trials=bpod_trials, settings=settings)

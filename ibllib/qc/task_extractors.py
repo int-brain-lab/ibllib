@@ -1,14 +1,17 @@
 import logging
 
 import numpy as np
+from scipy.interpolate import interp1d
 
 from ibllib.io.extractors import bpod_trials
 from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.io.extractors.training_wheel import get_wheel_position
-from ibllib.io.extractors.ephys_fpga import get_main_probe_sync, FpgaTrials
+from ibllib.io.extractors import ephys_fpga
 import ibllib.io.raw_data_loaders as raw
-from alf.io import is_session_path
-from oneibl.one import ONE
+from one.alf.spec import is_session_path
+import one.alf.io as alfio
+from one.api import ONE
+
 
 _logger = logging.getLogger("ibllib")
 
@@ -71,18 +74,24 @@ class TaskQCExtractor(object):
             "_iblrig_encoderTrialInfo.raw",
             "_iblrig_ambientSensorData.raw",
         ]
-        eid = self.one.eid_from_path(self.session_path)
+        eid = self.one.path2eid(self.session_path)
+        self.log.info(f"Downloading data for session {eid}")
         # Ensure we have the settings
-        settings = self.one.load(eid, ["_iblrig_taskSettings.raw"], download_only=True)
+        settings, _ = self.one.load_datasets(eid, ["_iblrig_taskSettings.raw.json"],
+                                             collections=['raw_behavior_data'],
+                                             download_only=True, assert_present=False)
         if settings and get_session_extractor_type(self.session_path) == 'ephys':
+
             dstypes.extend(['_spikeglx_sync.channels',
                             '_spikeglx_sync.polarities',
                             '_spikeglx_sync.times',
                             'ephysData.raw.meta',
                             'ephysData.raw.wiring'])
-        self.log.info(f"Downloading data for session {eid}")
-        files = self.one.load(eid, dataset_types=dstypes, download_only=True)
-        missing = [True for _ in dstypes] if not files else [x is None for x in files]
+
+        dataset = self.one.type2datasets(eid, dstypes, details=True)
+        files = self.one._download_datasets(dataset)
+
+        missing = [True] * len(dstypes) if not files else [x is None for x in files]
         if self.session_path is None or all(missing):
             self.lazy = True
             self.log.error("Data not found on server, can't calculate QC.")
@@ -104,7 +113,7 @@ class TaskQCExtractor(object):
             self.frame_ttls, self.audio_ttls = raw.load_bpod_fronts(
                 self.session_path, data=self.raw_data)
         else:  # Extract from FPGA
-            sync, chmap = get_main_probe_sync(self.session_path)
+            sync, chmap = ephys_fpga.get_main_probe_sync(self.session_path)
 
             def channel_events(name):
                 """Fetches the polarities and times for a given channel"""
@@ -112,7 +121,9 @@ class TaskQCExtractor(object):
                 mask = sync['channels'] == chmap[name]
                 return dict(zip(keys, (sync[k][mask] for k in keys)))
 
-            ttls = [channel_events(ch) for ch in ('frame2ttl', 'audio', 'bpod')]
+            ttls = [ephys_fpga._clean_frame2ttl(channel_events('frame2ttl')),
+                    ephys_fpga._clean_audio(channel_events('audio')),
+                    channel_events('bpod')]
             self.frame_ttls, self.audio_ttls, self.bpod_ttls = ttls
 
     def extract_data(self):
@@ -127,15 +138,14 @@ class TaskQCExtractor(object):
 
         if not self.raw_data:
             self.load_raw_data()
-
         # Run extractors
         if self.type == 'ephys' and not self.bpod_only:
-            trials_extractor = FpgaTrials(self.session_path)
-            data, _ = trials_extractor.extract(save=False)
-            data = dict(zip(trials_extractor.var_names, data))
+            data, _ = ephys_fpga.extract_all(self.session_path)
+            bpod2fpga = interp1d(data['intervals_bpod'][:, 0], data['table']['intervals_0'],
+                                 fill_value='extrapolate')
             # Add Bpod wheel data
             re_ts, pos = get_wheel_position(self.session_path, self.raw_data)
-            data['wheel_timestamps_bpod'] = trials_extractor.bpod2fpga(re_ts)
+            data['wheel_timestamps_bpod'] = bpod2fpga(re_ts)
             data['wheel_position_bpod'] = pos
         else:
             kwargs = dict(save=False, bpod_trials=self.raw_data, settings=self.settings)
@@ -148,14 +158,7 @@ class TaskQCExtractor(object):
                 # Nasty hack to trim last trial due to stim off events happening at trial num + 1
                 data = {k: v[:n_trials] for k, v in data.items()}
             else:
-                quiescence = np.array([t['quiescent_period'] for t in self.raw_data[:n_trials]])
-                data = {
-                    **trials,
-                    **wheel,
-                    'quiescence': quiescence,
-                    'position': np.array([t['position'] for t in self.raw_data[:n_trials]]),
-                    'phase': np.array([t['stim_phase'] for t in self.raw_data[:n_trials]])
-                }
+                data = {**trials, **wheel}
         # Update the data attribute with extracted data
         self.data = self.rename_data(data)
 
@@ -167,6 +170,10 @@ class TaskQCExtractor(object):
         :param data: A dict of task data returned by the task extractors
         :return: the same dict after modifying the keys
         """
+        # Expand trials dataframe into key value pairs
+        trials_table = data.pop('table', None)
+        if trials_table is not None:
+            data = {**data, **alfio.AlfBunch.from_df(trials_table)}
         correct = data['feedbackType'] > 0
         # get valve_time and errorCue_times from feedback_times
         if 'errorCue_times' not in data:

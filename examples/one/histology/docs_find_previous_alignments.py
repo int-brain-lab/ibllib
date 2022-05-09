@@ -8,10 +8,11 @@ channel locations shown
 """
 
 # import modules
-from oneibl.one import ONE
-from ibllib.pipes.ephys_alignment import EphysAlignment
 import numpy as np
 import matplotlib.pyplot as plt
+from one.api import ONE
+
+from ibllib.pipes.ephys_alignment import EphysAlignment
 import ibllib.atlas as atlas
 
 # Instantiate brain atlas and one
@@ -26,7 +27,8 @@ probe_label = 'probe01'
 eid = one.search(subject=subject, date=date, number=sess_no)[0]
 
 # Load in channels.localCoordinates dataset type
-chn_coords = one.load(eid, dataset_types=['channels.localCoordinates'])[0]
+chn_coords = one.load_dataset(eid, 'channels.localCoordinates.npy',
+                              collection=f'alf/{probe_label}')
 depths = chn_coords[:, 1]
 
 # Find the ephys aligned trajectory for eid probe combination

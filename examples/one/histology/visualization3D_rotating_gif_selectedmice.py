@@ -6,15 +6,17 @@ the penetrations done in selected animals (a color is given per animal).
 # Author: Gaelle Chapuis
 # environment installation guide https://github.com/int-brain-lab/iblenv
 # run "%qui qt" magic command from Ipython prompt for interactive mode
+
+from pathlib import Path
+
 import numpy as np
 from mayavi import mlab
-from pathlib import Path
+from one.api import ONE
 
 import ibllib.plots
 from atlaselectrophysiology import rendering
 import ibllib.atlas as atlas
-from oneibl.one import ONE
-from brainbox.core import Bunch
+from iblutil.util import Bunch
 
 one = ONE(base_url="https://alyx.internationalbrainlab.org")
 subjects = ['CSHL045', 'SWC_023', 'KS020']
@@ -25,7 +27,7 @@ EXAMPLE_OVERWRITE = True  # Put to False when wanting to save in the above locat
 # ======== DO NOT EDIT BELOW (used for example testing) ====
 
 if EXAMPLE_OVERWRITE:
-    cachepath = Path(one._par.CACHE_DIR)
+    cachepath = Path(one.alyx.cache_dir)
     output_video = cachepath.joinpath('rotating_selectedmice.webm')
 
 fig = rendering.figure()

@@ -1,21 +1,37 @@
 import logging
+import time
 from datetime import datetime
 from pathlib import Path
-
 import pkg_resources
 import re
 import subprocess
 import sys
+import traceback
 
-from ibllib.io.extractors.base import get_session_extractor_type
-from ibllib.pipes import ephys_preprocessing, training_preprocessing, tasks
-import ibllib.exceptions
+from one.api import ONE
+
+from ibllib.io.extractors.base import get_pipeline, get_task_protocol, get_session_extractor_type
+from ibllib.pipes import tasks, training_preprocessing, ephys_preprocessing
 from ibllib.time import date2isostr
-
-import oneibl.registration as registration
-from oneibl.one import ONE
+import ibllib.oneibl.registration as registration
 
 _logger = logging.getLogger('ibllib')
+LARGE_TASKS = ['EphysVideoCompress', 'TrainingVideoCompress', 'SpikeSorting', 'EphysDLC']
+
+
+def _get_pipeline_class(session_path, one):
+    pipeline = get_pipeline(session_path)
+    if pipeline == 'training':
+        PipelineClass = training_preprocessing.TrainingExtractionPipeline
+    elif pipeline == 'ephys':
+        PipelineClass = ephys_preprocessing.EphysExtractionPipeline
+    else:
+        # try and look if there is a custom extractor in the personal projects extraction class
+        import projects.base
+        task_type = get_session_extractor_type(session_path)
+        PipelineClass = projects.base.get_pipeline(task_type)
+    _logger.info(f"Using {PipelineClass} pipeline for {session_path}")
+    return PipelineClass(session_path=session_path, one=one)
 
 
 def _get_lab(one):
@@ -79,7 +95,7 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
     :return:
     """
     if not one:
-        one = ONE()
+        one = ONE(cache_rest=None)
     rc = registration.RegistrationClient(one=one)
     flag_files = list(Path(root_path).glob('**/raw_session.flag'))
     all_datasets = []
@@ -88,52 +104,70 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
         _logger.info(f'creating session for {session_path}')
         if dry:
             continue
-        # if the subject doesn't exist in the database, skip
+
         try:
-            rc.create_session(session_path)
-        except ibllib.exceptions.AlyxSubjectNotFound:
+            # if the subject doesn't exist in the database, skip
+            ses = rc.create_session(session_path)
+            eid = ses['url'][-36:]
+            if one.path2eid(session_path, query_type='remote') is None:
+                raise ValueError(f'Session ALF path mismatch: {ses["url"][-36:]} \n '
+                                 f'{one.eid2path(eid, query_type="remote")} in params \n'
+                                 f'{session_path} on disk \n')
+            files, dsets = registration.register_session_raw_data(
+                session_path, one=one, max_md5_size=max_md5_size)
+            if dsets is not None:
+                all_datasets.extend(dsets)
+            pipe = _get_pipeline_class(session_path, one)
+            if pipe is None:
+                task_protocol = get_task_protocol(session_path)
+                _logger.info(f'Session task protocol {task_protocol} has no matching pipeline pattern {session_path}')
+            if rerun:
+                rerun__status__in = '__all__'
+            else:
+                rerun__status__in = ['Waiting']
+            pipe.create_alyx_tasks(rerun__status__in=rerun__status__in)
+            flag_file.unlink()
+        except BaseException:
+            _logger.error(traceback.format_exc())
+            _logger.warning(f'Creating session / registering raw datasets {session_path} errored')
             continue
-        files, dsets = registration.register_session_raw_data(
-            session_path, one=one, max_md5_size=max_md5_size)
-        if dsets is not None:
-            all_datasets.extend(dsets)
-        session_type = get_session_extractor_type(session_path)
-        if session_type in ['biased', 'habituation', 'training']:
-            pipe = training_preprocessing.TrainingExtractionPipeline(session_path, one=one)
-        # only start extracting ephys on a raw_session.flag
-        elif session_type in ['ephys'] and flag_file.name == 'raw_session.flag':
-            pipe = ephys_preprocessing.EphysExtractionPipeline(session_path, one=one)
-        else:
-            _logger.info(f"Session type {session_type} as no matching extractor {session_path}")
-            return
-        if rerun:
-            rerun__status__in = '__all__'
-        else:
-            rerun__status__in = ['Waiting']
-        pipe.create_alyx_tasks(rerun__status__in=rerun__status__in)
-        flag_file.unlink()
+
     return all_datasets
 
 
-def job_runner(subjects_path, lab=None, dry=False, one=None, count=5):
+def task_queue(mode='all', lab=None, one=None):
     """
-    Function to be used as a process to run the jobs as they are created on the database
-    THis will query waiting jobs from the specified Lab
-    :param subjects_path: on servers: /mnt/s0/Data/Subjects. Contains sessions
-    :param lab: lab name as per Alyx
-    :param dry:
-    :param count:
-    :return:
+    Query waiting jobs from the specified Lab
+    :param mode: Whether to return all waiting tasks, or only small or large (specified in LARGE_TASKS) jobs
+    :param lab: lab name as per Alyx, otherwise try to infer from local globus install
+    :param one: ONE instance
+    -------
+
     """
     if one is None:
-        one = ONE()
+        one = ONE(cache_rest=None)
     if lab is None:
+        _logger.info("Trying to infer lab from globus installation")
         lab = _get_lab(one)
     if lab is None:
+        _logger.error("No lab provided or found")
         return  # if the lab is none, this will return empty tasks each time
-    tasks = one.alyx.rest('tasks', 'list', status='Waiting',
-                          django=f'session__lab__name__in,{lab}')
-    tasks_runner(subjects_path, tasks, one=one, count=count, time_out=3600, dry=dry)
+    # Filter for tasks
+    if mode == 'all':
+        waiting_tasks = one.alyx.rest('tasks', 'list', status='Waiting',
+                                      django=f'session__lab__name__in,{lab}', no_cache=True)
+    elif mode == 'small':
+        tasks_all = one.alyx.rest('tasks', 'list', status='Waiting',
+                                  django=f'session__lab__name__in,{lab}', no_cache=True)
+        waiting_tasks = [t for t in tasks_all if t['name'] not in LARGE_TASKS]
+    elif mode == 'large':
+        waiting_tasks = one.alyx.rest('tasks', 'list', status='Waiting',
+                                      django=f'session__lab__name__in,{lab},name__in,{LARGE_TASKS}', no_cache=True)
+
+    # Order tasks by priority
+    sorted_tasks = sorted(waiting_tasks, key=lambda d: d['priority'], reverse=True)
+
+    return sorted_tasks
 
 
 def tasks_runner(subjects_path, tasks_dict, one=None, dry=False, count=5, time_out=None, **kwargs):
@@ -149,8 +183,7 @@ def tasks_runner(subjects_path, tasks_dict, one=None, dry=False, count=5, time_o
     :return: list of dataset dictionaries
     """
     if one is None:
-        one = ONE()
-    import time
+        one = ONE(cache_rest=None)
     tstart = time.time()
     c = 0
     last_session = None

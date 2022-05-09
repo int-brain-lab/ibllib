@@ -1,12 +1,18 @@
+import shutil
+import logging
+from pathlib import Path
 import time
+import json
+
 import numpy as np
-# (Previously required `os.path` to get file info before memmapping)
-# import os.path as op
-from ibllib.io import spikeglx
+from one.alf.io import remove_uuid_file
+
+import spikeglx
+
+_logger = logging.getLogger('ibllib')
 
 
-def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype='int16',
-                      offset=0, car=True):
+def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, car=True):
     """
     Extracts spike waveforms from binary ephys data file, after (optionally)
     common-average-referencing (CAR) spatial noise.
@@ -25,10 +31,6 @@ def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype
         The sampling rate (in hz) that the ephys data was acquired at.
     n_ch_probe : int (optional)
         The number of channels of the recording.
-    dtype: str (optional)
-        The datatype represented by the bytes in `ephys_file`.
-    offset: int (optional)
-        The offset (in bytes) from the start of `ephys_file`.
     car: bool (optional)
         A flag to perform CAR before extracting waveforms.
 
@@ -64,48 +66,193 @@ def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, dtype
         >>> wf_car = bb.io.extract_waveforms(path_to_ephys_file, ts, ch, car=True)
     """
 
-    # (Previously memmaped the file manually, but now use `spikeglx.Reader`)
-    # item_bytes = np.dtype(dtype).itemsize
-    # n_samples = (op.getsize(ephys_file) - offset) // (item_bytes * n_ch_probe)
-    # file_m = np.memmap(ephys_file, shape=(n_samples, n_ch_probe), dtype=dtype, mode='r')
-
     # Get memmapped array of `ephys_file`
-    s_reader = spikeglx.Reader(ephys_file)
-    file_m = s_reader.data  # the memmapped array
-    n_wf_samples = int(sr / 1000 * (t / 2))  # number of samples to return on each side of a ts
-    ts_samples = np.array(ts * sr).astype(int)  # the samples corresponding to `ts`
-    t_sample_first = ts_samples[0] - n_wf_samples
+    with spikeglx.Reader(ephys_file) as s_reader:
+        file_m = s_reader.data  # the memmapped array
+        n_wf_samples = int(sr / 1000 * (t / 2))  # number of samples to return on each side of a ts
+        ts_samples = np.array(ts * sr).astype(int)  # the samples corresponding to `ts`
+        t_sample_first = ts_samples[0] - n_wf_samples
 
-    # Exception handling for impossible channels
-    ch = np.asarray(ch)
-    ch = ch.reshape((ch.size, 1)) if ch.size == 1 else ch
-    if np.any(ch < 0) or np.any(ch > n_ch_probe):
-        raise Exception('At least one specified channel number is impossible. The minimum channel'
-                        ' number was {}, and the maximum channel number was {}. Check specified'
-                        ' channel numbers and try again.'.format(np.min(ch), np.max(ch)))
+        # Exception handling for impossible channels
+        ch = np.asarray(ch)
+        ch = ch.reshape((ch.size, 1)) if ch.size == 1 else ch
+        if np.any(ch < 0) or np.any(ch > n_ch_probe):
+            raise Exception('At least one specified channel number is impossible. '
+                            f'The minimum channel number was {np.min(ch)}, '
+                            f'and the maximum channel number was {np.max(ch)}. '
+                            'Check specified channel numbers and try again.')
 
-    if car:  # compute spatial noise in chunks
-        # see https://github.com/int-brain-lab/iblenv/issues/5
-        raise NotImplementedError("CAR option is not available")
+        if car:  # compute spatial noise in chunks
+            # see https://github.com/int-brain-lab/iblenv/issues/5
+            raise NotImplementedError("CAR option is not available")
 
-    # Initialize `waveforms`, extract waveforms from `file_m`, and CAR.
-    waveforms = np.zeros((len(ts), 2 * n_wf_samples, ch.size))
-    # Give time estimate for extracting waveforms.
-    t0 = time.perf_counter()
-    for i in range(5):
-        waveforms[i, :, :] = \
-            file_m[i * n_wf_samples * 2 + t_sample_first:
-                   i * n_wf_samples * 2 + t_sample_first + n_wf_samples * 2, ch].reshape(
-                       (n_wf_samples * 2, ch.size))
-    dt = time.perf_counter() - t0
-    print('Performing waveform extraction. Estimated time is {:.2f} mins. ({})'
-          .format(dt * len(ts) / 60 / 5, time.ctime()))
-    for spk, _ in enumerate(ts):  # extract waveforms
-        spk_ts_sample = ts_samples[spk]
-        spk_samples = np.arange(spk_ts_sample - n_wf_samples, spk_ts_sample + n_wf_samples)
-        # have to reshape to add an axis to broadcast `file_m` into `waveforms`
-        waveforms[spk, :, :] = \
-            file_m[spk_samples[0]:spk_samples[-1] + 1, ch].reshape((spk_samples.size, ch.size))
-    print('Done. ({})'.format(time.ctime()))
+        # Initialize `waveforms`, extract waveforms from `file_m`, and CAR.
+        waveforms = np.zeros((len(ts), 2 * n_wf_samples, ch.size))
+        # Give time estimate for extracting waveforms.
+        t0 = time.perf_counter()
+        for i in range(5):
+            waveforms[i, :, :] = \
+                file_m[i * n_wf_samples * 2 + t_sample_first:
+                       i * n_wf_samples * 2 + t_sample_first + n_wf_samples * 2, ch].reshape(
+                           (n_wf_samples * 2, ch.size))
+        dt = time.perf_counter() - t0
+        print('Performing waveform extraction. Estimated time is {:.2f} mins. ({})'
+              .format(dt * len(ts) / 60 / 5, time.ctime()))
+        for spk, _ in enumerate(ts):  # extract waveforms
+            spk_ts_sample = ts_samples[spk]
+            spk_samples = np.arange(spk_ts_sample - n_wf_samples, spk_ts_sample + n_wf_samples)
+            # have to reshape to add an axis to broadcast `file_m` into `waveforms`
+            waveforms[spk, :, :] = \
+                file_m[spk_samples[0]:spk_samples[-1] + 1, ch].reshape((spk_samples.size, ch.size))
+        print('Done. ({})'.format(time.ctime()))
 
     return waveforms
+
+
+def stream(pid, t0, nsecs=1, one=None, cache_folder=None, remove_cached=False, typ='ap'):
+    """
+    NB: returned Reader object must be closed after use
+    :param pid: Probe UUID
+    :param t0: time of the first sample
+    :param nsecs: duration of the streamed data
+    :param one: An instance of ONE
+    :param cache_folder:
+    :param remove_cached:
+    :param typ: 'ap' or 'lf'
+    :return: sr, t0
+    """
+    import warnings
+    warnings.warn('brainbox.io.spikeglx.stream is deprecated in favour of brainbox.io.spikeglx.Streamer',
+                  DeprecationWarning)
+    if nsecs > 10:
+        ValueError(f'Streamer works only with 10 or less seconds, set nsecs to less than {nsecs}')
+    assert one
+    assert typ in ['lf', 'ap']
+    sr = Streamer(pid=pid, one=one, cache_folder=cache_folder, remove_cached=remove_cached, typ=typ)
+    chinfo = sr.chunks
+    tbounds = np.array(chinfo['chunk_bounds']) / chinfo['sample_rate']
+    first_chunk = np.maximum(0, np.searchsorted(tbounds, t0 + 0.01) - 1)
+    last_chunk = np.maximum(0, np.searchsorted(tbounds, t0 + + 0.01 + nsecs) - 2)
+    t0 = tbounds[first_chunk]
+    sr_small = sr._download_raw_partial(first_chunk=first_chunk, last_chunk=last_chunk)
+    if remove_cached:
+        sr_small = sr_small[:, :]
+        shutil.rmtree(sr.target_dir, ignore_errors=True)
+    return sr_small, t0
+
+
+class Streamer(spikeglx.Reader):
+    """
+    pid = 'e31b4e39-e350-47a9-aca4-72496d99ff2a'
+    one = ONE()
+    sr = Streamer(pid=pid, one=one)
+    raw_voltage = sr[int(t0 * sr.fs):int((t0 + nsecs) * sr.fs), :]
+    """
+    def __init__(self, pid, one, typ='ap', cache_folder=None, remove_cached=False):
+        self.target_dir = None  # last chunk directory download or read
+        self.one = one
+        self.pid = pid
+        self.cache_folder = cache_folder or Path(self.one.alyx._par.CACHE_DIR).joinpath('cache', typ)
+        self.remove_cached = remove_cached
+        self.eid, self.pname = self.one.pid2eid(pid)
+        self.file_chunks = self.one.load_dataset(self.eid, f'*.{typ}.ch', collection=f"*{self.pname}")
+        meta_file = self.one.load_dataset(self.eid, f'*.{typ}.meta', collection=f"*{self.pname}")
+        cbin_rec = self.one.list_datasets(self.eid, collection=f"*{self.pname}", filename=f'*{typ}.*bin', details=True)
+        self.url_cbin = self.one.record2url(cbin_rec)[0]
+        with open(self.file_chunks, 'r') as f:
+            self.chunks = json.load(f)
+            self.chunks['chunk_bounds'] = np.array(self.chunks['chunk_bounds'])
+        super(Streamer, self).__init__(meta_file, ignore_warnings=True)
+
+    def read(self, nsel=slice(0, 10000), csel=slice(None), sync=True):
+        """
+        overload the read function by downloading the necessary chunks
+        """
+        first_chunk = np.maximum(0, np.searchsorted(self.chunks['chunk_bounds'], nsel.start + 0.01 * self.fs) - 1)
+        last_chunk = np.maximum(0, np.searchsorted(self.chunks['chunk_bounds'], nsel.stop + 0.01 * self.fs) - 2)
+        n0 = self.chunks['chunk_bounds'][first_chunk]
+        self.cache_folder.mkdir(exist_ok=True, parents=True)
+        sr = self._download_raw_partial(first_chunk=first_chunk, last_chunk=last_chunk)
+        data = sr[nsel.start - n0: nsel.stop - n0, csel]
+        sr.close()
+        if self.remove_cached:
+            shutil.rmtree(self.target_dir)
+        return data
+
+    def _download_raw_partial(self, first_chunk=0, last_chunk=0):
+        """
+        downloads one or several chunks of a mtscomp file and copy ch files and metadata to return
+        a spikeglx.Reader object
+        :param first_chunk:
+        :param last_chunk:
+        :return: spikeglx.Reader of the current chunk, Pathlib.Path of the directory where it is stored
+        """
+        assert str(self.url_cbin).endswith('.cbin')
+        webclient = self.one.alyx
+        relpath = Path(self.url_cbin.replace(webclient._par.HTTP_DATA_SERVER, '.')).parents[0]
+        # write the temp file into a subdirectory
+        tdir_chunk = f"chunk_{str(first_chunk).zfill(6)}_to_{str(last_chunk).zfill(6)}"
+        target_dir = Path(self.cache_folder, relpath, tdir_chunk)
+        self.target_dir = target_dir
+        Path(target_dir).mkdir(parents=True, exist_ok=True)
+        ch_file_stream = target_dir.joinpath(self.file_chunks.name).with_suffix('.stream.ch')
+
+        # Get the first sample index, and the number of samples to download.
+        i0 = self.chunks['chunk_bounds'][first_chunk]
+        ns_stream = self.chunks['chunk_bounds'][last_chunk + 1] - i0
+        total_samples = self.chunks['chunk_bounds'][-1]
+
+        # handles the meta file
+        meta_local_path = ch_file_stream.with_suffix('.meta')
+        if not meta_local_path.exists():
+            shutil.copy(self.file_chunks.with_suffix('.meta'), meta_local_path)
+
+        # if the cached version happens to be the same as the one on disk, just load it
+        if ch_file_stream.exists():
+            with open(ch_file_stream, 'r') as f:
+                cmeta_stream = json.load(f)
+            if (cmeta_stream.get('chopped_first_sample', None) == i0 and
+                    cmeta_stream.get('chopped_total_samples', None) == total_samples):
+                return spikeglx.Reader(ch_file_stream.with_suffix('.cbin'), ignore_warnings=True)
+
+        else:
+            shutil.copy(self.file_chunks, ch_file_stream)
+        assert ch_file_stream.exists()
+
+        cmeta = self.chunks.copy()
+        # prepare the metadata file
+        cmeta['chunk_bounds'] = cmeta['chunk_bounds'][first_chunk:last_chunk + 2]
+        cmeta['chunk_bounds'] = [int(_ - i0) for _ in cmeta['chunk_bounds']]
+        assert len(cmeta['chunk_bounds']) >= 2
+        assert cmeta['chunk_bounds'][0] == 0
+
+        first_byte = cmeta['chunk_offsets'][first_chunk]
+        cmeta['chunk_offsets'] = cmeta['chunk_offsets'][first_chunk:last_chunk + 2]
+        cmeta['chunk_offsets'] = [_ - first_byte for _ in cmeta['chunk_offsets']]
+        assert len(cmeta['chunk_offsets']) >= 2
+        assert cmeta['chunk_offsets'][0] == 0
+        n_bytes = cmeta['chunk_offsets'][-1]
+        assert n_bytes > 0
+
+        # Save the chopped chunk bounds and offsets.
+        cmeta['sha1_compressed'] = None
+        cmeta['sha1_uncompressed'] = None
+        cmeta['chopped'] = True
+        cmeta['chopped_first_sample'] = int(i0)
+        cmeta['chopped_samples'] = int(ns_stream)
+        cmeta['chopped_total_samples'] = int(total_samples)
+
+        with open(ch_file_stream, 'w') as f:
+            json.dump(cmeta, f, indent=2, sort_keys=True)
+
+        # Download the requested chunks
+        cbin_local_path = webclient.download_file(
+            self.url_cbin, chunks=(first_byte, n_bytes),
+            target_dir=target_dir, clobber=True, return_md5=False)
+        cbin_local_path = remove_uuid_file(cbin_local_path)
+        cbin_local_path_renamed = cbin_local_path.with_suffix('.stream.cbin')
+        cbin_local_path.replace(cbin_local_path_renamed)
+        assert cbin_local_path_renamed.exists()
+
+        reader = spikeglx.Reader(cbin_local_path_renamed, ignore_warnings=True)
+        return reader

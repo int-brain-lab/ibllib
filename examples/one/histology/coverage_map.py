@@ -1,20 +1,18 @@
 import matplotlib.pyplot as plt
 import numpy as np
+from one.api import ONE
+from neurodsp.utils import fcn_cosine
 
-from ibllib.dsp import fcn_cosine
 import ibllib.atlas as atlas
 from ibllib.pipes.histology import coverage
 
-from oneibl.one import ONE
-one = ONE()
-
 ba = atlas.AllenAtlas()
-# trajs = one.alyx.rest('trajectories', 'list', provenance='Ephys aligned histology track')
+# trajs = ONE().alyx.rest('trajectories', 'list', provenance='Ephys aligned histology track')
 
-trajs = one.alyx.rest('trajectories', 'list', provenance='Micro-manipulator',
-                      django='probe_insertion__session__project__name__icontains,'
-                             'ibl_neuropixel_brainwide_01,'
-                             'probe_insertion__session__qc__lt,40')
+trajs = ONE().alyx.rest('trajectories', 'list', provenance='Micro-manipulator',
+                        django='probe_insertion__session__project__name__icontains,'
+                               'ibl_neuropixel_brainwide_01,'
+                               'probe_insertion__session__qc__lt,40')
 
 full_coverage = coverage(trajs)
 

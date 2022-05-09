@@ -13,16 +13,15 @@ One color per pair.
 # run "%qui qt" magic command from Ipython prompt for interactive mode
 import numpy as np
 from mayavi import mlab
+from one.api import ONE
+from iblutil.util import Bunch
 
 import ibllib.plots
 from atlaselectrophysiology import rendering
 import ibllib.atlas as atlas
-from oneibl.one import ONE
-from brainbox.core import Bunch
 
-one = ONE(base_url="https://alyx.internationalbrainlab.org")
-subject = 'KS003'
-
+one = ONE(base_url='https://openalyx.internationalbrainlab.org')
+subject = 'KS023'
 
 ba = atlas.AllenAtlas(25)
 channels_rest = one.alyx.rest('channels', 'list', subject=subject)

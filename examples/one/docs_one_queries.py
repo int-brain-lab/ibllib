@@ -3,8 +3,8 @@ List of useful one queries
 ===========================
 """
 
-from oneibl.one import ONE
-one = ONE()
+from one.api import ONE
+one = ONE(base_url='https://openalyx.internationalbrainlab.org', silent=True)
 
 ##################################################################################################
 # Query session for several subjects
@@ -44,7 +44,7 @@ trajs = one.alyx.rest('trajectories', 'list', django='channels__brain_region__na
 ##################################################################################################
 # Query spikesorting tasks that have errored in angelaki lab
 errored = one.alyx.rest('tasks', 'list', status='Errored', lab='angelakilab',
-                        name='SpikeSorting_KS2_Matlab')
+                        name='SpikeSorting')
 
 ##################################################################################################
 # Query ephys sessions that have errored tasks
@@ -57,14 +57,14 @@ ins = one.alyx.rest('insertions', 'list', django='json__extended_qc__alignment_r
 ##################################################################################################
 # Get names of users who have aligned specified insertion
 names = one.alyx.rest('trajectories', 'list', provenance='Ephys aligned histology track',
-                      probe_insertion='341ef9bb-25f9-4eeb-8f1d-bdd054b22ba8')[0]['json'].keys()
+                      probe_insertion='b749446c-18e3-4987-820a-50649ab0f826')[0]['json'].keys()
 
 ##################################################################################################
 # List all sessions which any video QC set
 keys = ('videoLeft', 'videoRight', 'videoBody')
-one.alyx.rest('sessions', 'list', django=f'extended_qc__has_any_keys,{keys}')
+ses = one.alyx.rest('sessions', 'list', django=f'extended_qc__has_any_keys,{keys}')
 
 ##################################################################################################
 # List all weighings for a given date
 date = '2021-02-05'
-one.alyx.rest('weighings', 'list', django=f'date_time__date,{date}')
+weighings = one.alyx.rest('weighings', 'list', django=f'date_time__date,{date}')

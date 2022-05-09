@@ -7,13 +7,11 @@ on the channels along probe against frequency
 """
 
 # import modules
-import alf.io
-from oneibl.one import ONE
+from one.api import ONE
 from brainbox.metrics import electrode_drift
-import matplotlib.pyplot as plt
 
 # instantiate one
-one = ONE()
+one = ONE(base_url='https://openalyx.internationalbrainlab.org', silent=True)
 
 # Specify subject, date and probe we are interested in
 subject = 'CSHL049'
@@ -22,17 +20,9 @@ sess_no = 1
 probe_label = 'probe00'
 eid = one.search(subject=subject, date=date, number=sess_no)[0]
 
-# define datasets to download
-dtypes = ['spikes.times',
-          'spikes.depths',
-          'spikes.amps']
+# Download and load the spikes data
+spikes = one.load_object(eid, 'spikes', collection=f'alf/{probe_label}')
 
-# Download the data and get paths to downloaded data
-_ = one.load(eid, dataset_types=dtypes, download_only=True)
-alf_path = one.path_from_eid(eid).joinpath('alf', probe_label)
-
-# Load in spikes object and use brainbox function to compute drift over session
-spikes = alf.io.load_object(alf_path, 'spikes')
+# Use brainbox function to compute drift over session
 drift = electrode_drift.estimate_drift(spikes['times'], spikes['amps'], spikes['depths'],
                                        display=True)
-plt.show()

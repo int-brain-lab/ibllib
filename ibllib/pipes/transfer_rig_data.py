@@ -10,6 +10,7 @@ from shutil import ignore_patterns as ig
 
 import ibllib.io.extractors.base
 import ibllib.io.flags as flags
+import ibllib.io.raw_data_loaders as raw
 
 log = logging.getLogger('ibllib')
 log.setLevel(logging.INFO)
@@ -49,14 +50,17 @@ def main(local_folder: str, remote_folder: str, force: bool = False) -> None:
             task_type = ibllib.io.extractors.base.get_session_extractor_type(Path(src))
             if task_type not in ['ephys', 'ephys_sync', 'ephys_mock']:
                 flags.write_flag_file(dst.joinpath('raw_session.flag'))
+                settings = raw.load_settings(dst)
+                if 'ephys' in settings['PYBPOD_BOARD']:  # Any traing task on an ephys rig
+                    dst.joinpath('raw_session.flag').unlink()
             log.info(f"Copied to {remote_folder}: Session {src_flag_file.parent}")
             src_flag_file.unlink()
 
         # Cleanup
-        src_audio_file = src / 'raw_behavior_data' / '_iblrig_micData.raw.wav'
         src_video_file = src / 'raw_video_data' / '_iblrig_leftCamera.raw.avi'
-        dst_audio_file = dst / 'raw_behavior_data' / '_iblrig_micData.raw.wav'
         dst_video_file = dst / 'raw_video_data' / '_iblrig_leftCamera.raw.avi'
+        src_audio_file = src / 'raw_behavior_data' / '_iblrig_micData.raw.wav'
+        dst_audio_file = dst / 'raw_behavior_data' / '_iblrig_micData.raw.wav'
 
         if src_audio_file.exists() and \
                 src_audio_file.stat().st_size == dst_audio_file.stat().st_size:

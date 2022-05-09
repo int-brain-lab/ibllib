@@ -4,11 +4,12 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from brainbox.core import Bunch
-from brainbox.numerical import ismember
+from iblutil.util import Bunch
+from iblutil.numerical import ismember
 
 _logger = logging.getLogger('ibllib')
-BERYL = np.array([184, 985, 993, 353, 329, 480149202, 337, 345, 369, 361, 182305689, 378, 1057, 677, 1011, 480149230, 1002, 1027, 1018, 402, 394, 409, 385, 425, 533, 312782574, 312782628, 39, 48, 972, 44, 723, 731, 738, 746, 104, 111, 119, 894, 879, 886, 312782546, 417, 541, 922, 895, 507, 151, 159, 597, 605, 814, 961, 619, 639, 647, 788, 566, 382, 423, 463, 726, 982, 19, 918, 926, 843, 1037, 1084, 502, 484682470, 589508447, 484682508, 583, 952, 966, 131, 295, 319, 780, 672, 56, 998, 754, 250, 258, 266, 310, 333, 23, 292, 536, 1105, 403, 1022, 1031, 342, 298, 564, 596, 581, 351, 629, 685, 718, 725, 733, 741, 563807435, 406, 609, 1044, 475, 170, 218, 1020, 1029, 325, 560581551, 255, 127, 64, 1120, 1113, 155, 59, 362, 366, 1077, 149, 15, 181, 560581559, 189, 599, 907, 575, 930, 560581563, 262, 1014, 27, 563807439, 178, 321, 483, 186, 1097, 390, 38, 30, 118, 223, 72, 263, 272, 830, 452, 523, 1109, 126, 133, 347, 286, 338, 576073699, 689, 88, 210, 491, 525, 557, 515, 980, 1004, 63, 693, 946, 194, 226, 364, 576073704, 173, 470, 614, 797, 302, 4, 580, 271, 874, 381, 749, 607344830, 246, 128, 294, 795, 50, 67, 587, 215, 531, 628, 634, 706, 1061, 549009203, 616, 214, 35, 549009211, 975, 115, 606826663, 757, 231, 66, 75, 58, 374, 1052, 12, 100, 197, 591, 872, 612, 7, 867, 398, 280, 880, 599626927, 898, 931, 1093, 318, 534, 574, 621, 549009215, 549009219, 549009223, 549009227, 679, 147, 162, 604, 146, 238, 350, 358, 207, 96, 101, 711, 1039, 903, 642, 651, 429, 437, 445, 589508451, 653, 661, 135, 839, 1048, 372, 83, 136, 106, 203, 235, 307, 395, 852, 859, 938, 177, 169, 995, 1069, 209, 202, 225, 217, 765, 773, 781, 206, 230, 222, 912, 976, 984, 1091, 936, 944, 951, 957, 968, 1007, 1056, 1064, 1025, 1033, 1041, 1049, 989, 91, 846, 589508455,])  # noqa
+# 'Beryl' is the name given to an atlas containing a subset of the most relevant allen annotations
+FILE_MAPPINGS = str(Path(__file__).parent.joinpath('mappings.pqt'))
 FILE_REGIONS = str(Path(__file__).parent.joinpath('allen_structure_tree.csv'))
 
 
@@ -20,6 +21,7 @@ class _BrainRegions:
     rgb: np.uint8
     level: np.ndarray
     parent: np.ndarray
+    order: np.uint16
 
 
 class BrainRegions(_BrainRegions):
@@ -47,15 +49,52 @@ class BrainRegions(_BrainRegions):
                          name=df_regions.name.to_numpy(),
                          acronym=df_regions.acronym.to_numpy(),
                          rgb=c,
-                         level=df_regions.depth.to_numpy(),
-                         parent=df_regions.parent_structure_id.to_numpy())
+                         level=df_regions.depth.to_numpy().astype(np.uint16),
+                         parent=df_regions.parent_structure_id.to_numpy(),
+                         order=df_regions.graph_order.to_numpy().astype(np.uint16))
         # mappings are indices not ids: they range from 0 to n regions -1
+        mappings = pd.read_parquet(FILE_MAPPINGS)
+        self.mappings = {k: mappings[k].to_numpy() for k in mappings}
+        self.n_lr = int((len(self.id) - 1) / 2)
+
+    @property
+    def rgba(self):
+        rgba = np.c_[self.rgb, self.rgb[:, 0] * 0 + 255]
+        rgba[0, :] = 0  # set the void to transparent
+        return rgba
+
+    def _compute_order(self):
+        """
+        Compute the order of regions, per region order by left hemisphere and then right hemisphere
+        :return:
+        """
+        orders = np.zeros_like(self.id)
+        # Left hemisphere first
+        orders[1::2] = np.arange(self.n_lr) + self.n_lr + 1
+        # Then right hemisphere
+        orders[2::2] = np.arange(self.n_lr) + 1
+
+    def _compute_mappings(self):
+        """
+        Recomputes the mapping indices for all mappings
+        This is left mainly as a reference for adding future mappings as this take a few seconds
+        to execute. In production,we use the MAPPING_FILES pqt to avoid recompuing at each \
+        instantiation
+        """
+        beryl = np.load(Path(__file__).parent.joinpath('beryl.npy'))
+        cosmos = np.load(Path(__file__).parent.joinpath('cosmos.npy'))
+        swanson = np.load(Path(__file__).parent.joinpath('swanson_regions.npy'))
         self.mappings = {
             'Allen': self._mapping_from_regions_list(np.unique(np.abs(self.id)), lateralize=False),
             'Allen-lr': np.arange(self.id.size),
-            'Beryl': self._mapping_from_regions_list(BERYL, lateralize=False),
-            'Beryl-lr': self._mapping_from_regions_list(BERYL, lateralize=True),
+            'Beryl': self._mapping_from_regions_list(beryl, lateralize=False),
+            'Beryl-lr': self._mapping_from_regions_list(beryl, lateralize=True),
+            'Cosmos': self._mapping_from_regions_list(cosmos, lateralize=False),
+            'Cosmos-lr': self._mapping_from_regions_list(cosmos, lateralize=True),
+            'Swanson': self._mapping_from_regions_list(swanson, lateralize=False),
+            'Swanson-lr': self._mapping_from_regions_list(swanson, lateralize=True),
         }
+        pd.DataFrame(self.mappings).to_parquet(FILE_MAPPINGS)
 
     def get(self, ids) -> Bunch:
         """
@@ -68,11 +107,14 @@ class BrainRegions(_BrainRegions):
             b[k] = self.__getattribute__(k)[iself[uind]]
         return b
 
-    def _navigate_tree(self, ids, direction='down'):
+    def _navigate_tree(self, ids, direction='down', return_indices=False):
         """
-        Private method to navigate the tree and get all related objects either up or down
-        :param ids:
-        :param direction:
+        Private method to navigate the tree and get all related objects either up, down or along the branch.
+        By convention the provided id is returned in the list of regions
+        :param ids: array or single allen id (int32)
+        :param direction: 'up' returns ancestors, 'down' descendants
+        :param return indices: Bool (False), if true returns a second argument with indices mapping
+        to the current br object
         :return: Bunch
         """
         indices = ismember(self.id, ids)[0]
@@ -88,23 +130,45 @@ class BrainRegions(_BrainRegions):
                 break
             else:
                 count = np.sum(indices)
-        return self.get(self.id[indices])
+        if return_indices:
+            return self.get(self.id[indices]), np.where(indices)[0]
+        else:
+            return self.get(self.id[indices])
 
-    def descendants(self, ids):
+    def subtree(self, scalar_id, return_indices=False):
+        """
+        Given a node, returns the subtree containing the node along with ancestors
+        :param return indices: Bool (False), if true returns a second argument with indices mapping
+        to the current br object
+        :return: Bunch
+        """
+        if not np.isscalar(scalar_id):
+            assert scalar_id.size == 1
+        _, idown = self._navigate_tree(scalar_id, direction='down', return_indices=True)
+        _, iup = self._navigate_tree(scalar_id, direction='up', return_indices=True)
+        indices = np.unique(np.r_[idown, iup])
+        if return_indices:
+            return self.get(self.id[indices]), np.where(indices)[0]
+        else:
+            return self.get(self.id[indices])
+
+    def descendants(self, ids, **kwargs):
         """
         Get descendants from one or an array of ids
         :param ids: np.array or scalar representing the region primary key
+        :param return_indices: Bool (False) returns the indices in the current br obj
         :return: Bunch
         """
-        return self._navigate_tree(ids, direction='down')
+        return self._navigate_tree(ids, direction='down', **kwargs)
 
-    def ancestors(self, ids):
+    def ancestors(self, ids, **kwargs):
         """
         Get ancestors from one or an array of ids
         :param ids: np.array or scalar representing the region primary key
+        :param return_indices: Bool (False) returns the indices in the current br obj
         :return: Bunch
         """
-        return self._navigate_tree(ids, direction='up')
+        return self._navigate_tree(ids, direction='up', **kwargs)
 
     def leaves(self):
         """
@@ -130,6 +194,7 @@ class BrainRegions(_BrainRegions):
         iid, inm = ismember(self.id, new_map)
         iid = np.where(iid)[0]
         mapind = np.zeros_like(self.id) + I_ROOT  # non assigned regions are root
+        # TO DO should root be lateralised?
         mapind[iid] = iid  # regions present in the list have the same index
         # Starting by the higher up levels in the hierarchy, assign all descendants to the mapping
         for i in np.argsort(self.level[iid]):
@@ -142,6 +207,159 @@ class BrainRegions(_BrainRegions):
             _, iregion = ismember(np.abs(self.id), self.id)
             mapind = mapind[iregion]
         return mapind
+
+    def remap(self, region_ids, source_map='Allen', target_map='Beryl'):
+        """
+        Remap atlas regions ids from source map to target map
+        :param region_ids: atlas ids to map
+        :param source_map: map name which original region_ids are in
+        :param target_map: map name onto which to map
+        :return:
+        """
+        _, inds = ismember(region_ids, self.id[self.mappings[source_map]])
+        return self.id[self.mappings[target_map][inds]]
+
+    def acronym2acronym(self, acronym, mapping='Allen'):
+        """
+        Remap acronyms onto mapping
+
+        :param acronym: list or array of acronyms
+        :param mapping: target map to remap acronyms
+        :return: array of remapped acronyms
+        """
+        inds = self._find_inds(acronym, self.acronym)
+        return self.acronym[self.mappings[mapping]][inds]
+
+    def acronym2id(self, acronym, mapping='Allen', hemisphere=None):
+        """
+        Convert acronyms to atlas ids and remap
+
+        :param acronym: list or array of acronyms
+        :param mapping: target map to remap atlas_ids
+        :param hemisphere: which hemisphere to return atlas ids for, options left or right
+        :return: array of remapped atlas ids
+        """
+        inds = self._find_inds(acronym, self.acronym)
+        return self.id[self.mappings[mapping]][self._filter_lr(inds, mapping, hemisphere)]
+
+    def acronym2index(self, acronym, mapping='Allen', hemisphere=None):
+        """
+        Convert acronym to index and remap
+        :param acronym:
+        :param mapping:
+        :param hemisphere:
+        :return: array of remapped acronyms and list of indexes for each acronnym
+        """
+        acronym = self.acronym2acronym(acronym, mapping=mapping)
+        index = list()
+        for id in acronym:
+            inds = np.where(self.acronym[self.mappings[mapping]] == id)[0]
+            index.append(self._filter_lr_index(inds, hemisphere))
+
+        return acronym, index
+
+    def id2acronym(self, atlas_id, mapping='Allen'):
+        """
+        Convert atlas id to acronym and remap
+
+        :param acronym: list or array of atlas ids
+        :param mapping: target map to remap acronyms
+        :return: array of remapped acronyms
+        """
+        inds = self._find_inds(atlas_id, self.id)
+        return self.acronym[self.mappings[mapping]][inds]
+
+    def id2id(self, atlas_id, mapping='Allen'):
+        """
+        Remap atlas id onto mapping
+
+        :param acronym: list or array of atlas ids
+        :param mapping: target map to remap acronyms
+        :return: array of remapped atlas ids
+        """
+
+        inds = self._find_inds(atlas_id, self.id)
+        return self.id[self.mappings[mapping]][inds]
+
+    def id2index(self, atlas_id, mapping='Allen'):
+        """
+        Convert atlas id to index and remap
+
+        :param atlas_id: list or array of atlas ids
+        :param mapping: mapping to use
+        :return: dict of indices for each atlas_id
+        """
+
+        atlas_id = self.id2id(atlas_id, mapping=mapping)
+        index = list()
+        for id in atlas_id:
+            inds = np.where(self.id[self.mappings[mapping]] == id)[0]
+            index.append(inds)
+
+        return atlas_id, index
+
+    def index2acronym(self, index, mapping='Allen'):
+        """
+        Convert index to acronym and remap
+
+        :param index:
+        :param mapping:
+        :return:
+        """
+        inds = self.acronym[self.mappings[mapping]][index]
+        return inds
+
+    def index2id(self, index, mapping='Allen'):
+        """
+        Convert index to atlas id and remap
+
+        :param index:
+        :param mapping:
+        :return:
+        """
+        inds = self.id[self.mappings[mapping]][index]
+        return inds
+
+    def _filter_lr(self, values, mapping, hemisphere):
+        """
+        Filter values by those on left or right hemisphere
+        :param values: array of index values
+        :param mapping: mapping to use
+        :param hemisphere: hemisphere
+        :return:
+        """
+        if 'lr' in mapping:
+            if hemisphere == 'left':
+                return values + self.n_lr
+            elif hemisphere == 'right':
+                return values
+            else:
+                return np.c_[values + self.n_lr, values]
+        else:
+            return values
+
+    def _filter_lr_index(self, values, hemisphere):
+        """
+        Filter index values  by those on left or right hemisphere
+
+        :param values: array of index values
+        :param mapping: mapping to use
+        :param hemisphere: hemisphere
+        :return:
+        """
+        if hemisphere == 'left':
+            return values[values > self.n_lr]
+        elif hemisphere == 'right':
+            return values[values <= self.n_lr]
+        else:
+            return values
+
+    def _find_inds(self, values, all_values):
+        if not isinstance(values, list) and not isinstance(values, np.ndarray):
+            values = np.array([values])
+        _, inds = ismember(np.array(values), all_values)
+
+        return inds
 
 
 def regions_from_allen_csv():

@@ -5,13 +5,15 @@ import shutil
 import tarfile
 
 import numpy as np
+from one.alf.files import get_session_path
+import spikeglx
 
-import alf.io
+from iblutil.util import Bunch
 import phylib.io.alf
 from ibllib.ephys.sync_probes import apply_sync
 import ibllib.ephys.ephysqc as ephysqc
 from ibllib.ephys import sync_probes
-from ibllib.io import spikeglx, raw_data_loaders
+from ibllib.io import raw_data_loaders
 
 _logger = logging.getLogger('ibllib')
 
@@ -27,7 +29,7 @@ def probes_description(ses_path, one=None, bin_exists=True):
         alf/probes.trajectory.npy
     """
 
-    eid = one.eid_from_path(ses_path)
+    eid = one.path2eid(ses_path, query_type='remote')
     ses_path = Path(ses_path)
     ephys_files = spikeglx.glob_ephys_files(ses_path, ext='meta')
     subdirs, labels, efiles_sorted = zip(
@@ -65,7 +67,7 @@ def probes_description(ses_path, one=None, bin_exists=True):
     bpod_meta = raw_data_loaders.load_settings(ses_path)
     if not bpod_meta.get('PROBE_DATA'):
         _logger.error('No probe information in settings JSON. Skipping probes.trajectory')
-        return
+        return []
 
     def prb2alf(prb, label):
         return {'label': label, 'x': prb['X'], 'y': prb['Y'], 'z': prb['Z'], 'phi': prb['A'],
@@ -121,7 +123,7 @@ def sync_spike_sorting(ap_file, out_path):
         ap_file.name.replace('.ap.', '.sync.')).with_suffix('.npy')
     # try to get probe sync if it doesn't exist
     if not sync_file.exists():
-        _, sync_files = sync_probes.sync(alf.io.get_session_path(ap_file))
+        _, sync_files = sync_probes.sync(get_session_path(ap_file))
         out_files.extend(sync_files)
     # if it still not there, full blown error
     if not sync_file.exists():
@@ -140,8 +142,10 @@ def sync_spike_sorting(ap_file, out_path):
     np.save(st_file, interp_times)
     # get the list of output files
     out_files.extend([f for f in out_path.glob("*.*") if
-                      f.name.startswith(('channels.', 'clusters.', 'spikes.', 'templates.',
-                                         '_kilosort_', '_phy_spikes_subset'))])
+                      f.name.startswith(('channels.', 'drift', 'clusters.', 'spikes.', 'templates.',
+                                         '_kilosort_', '_phy_spikes_subset', '_ibl_log.info'))])
+    # the QC files computed during spike sorting stay within the raw ephys data folder
+    out_files.extend(list(ap_file.parent.glob('_iblqc_*AP.*.npy')))
     return out_files, 0
 
 
@@ -158,7 +162,7 @@ def ks2_to_alf(ks_path, bin_path, out_path, bin_file=None, ampfactor=1, label=No
     ac.convert(out_path, label=label, force=force, ampfactor=ampfactor)
 
 
-def ks2_to_tar(ks_path, out_path):
+def ks2_to_tar(ks_path, out_path, force=False):
     """
     Compress output from kilosort 2 into tar file in order to register to flatiron and move to
     spikesorters/ks2_matlab/probexx path. Output file to register
@@ -198,13 +202,64 @@ def ks2_to_tar(ks_path, out_path):
                   'whitening_mat_inv.npy']
 
     out_file = Path(out_path).joinpath('_kilosort_raw.output.tar')
-    if out_file.exists():
+    if out_file.exists() and not force:
         _logger.info(f"Already converted ks2 to tar: for {ks_path}, skipping.")
         return [out_file]
 
-    with tarfile.open(out_file, 'x') as tar_dir:
+    with tarfile.open(out_file, 'w') as tar_dir:
         for file in Path(ks_path).iterdir():
             if file.name in ks2_output:
                 tar_dir.add(file, file.name)
 
     return [out_file]
+
+
+def detection(data, fs, h, detect_threshold=-4, time_tol=.002, distance_threshold_um=70):
+    """
+    Detects and de-duplicates negative voltage spikes based on voltage thresholding.
+    The de-duplication step locks in maximum amplitude events. To account for collisions the amplitude
+    is assumed to be decaying from the peak. If this is a multipeak event, each is labeled as a spike.
+
+    :param data: 2D numpy array nsamples x nchannels
+    :param fs: sampling frequency (Hz)
+    :param h: dictionary with neuropixel geometry header: see. neuropixel.trace_header
+    :param detect_threshold: negative value below which the voltage is considered to be a spike
+    :param time_tol: time in seconds for which samples before and after are assumed to be part of the spike
+    :param distance_threshold_um: distance for which exceeding threshold values are assumed to part of the same spike
+    :return: spikes dictionary of vectors with keys "time", "trace", "amp" and "ispike"
+    """
+    multipeak = False
+    time_bracket = np.array([-1, 1]) * time_tol
+    inds, indtr = np.where(data < detect_threshold)
+    picks = Bunch(time=inds / fs, trace=indtr, amp=data[inds, indtr], ispike=np.zeros(inds.size))
+    amp_order = np.argsort(picks.amp)
+
+    hxy = h['x'] + 1j * h['y']
+
+    spike_id = 1
+    while np.any(picks.ispike == 0):
+        # find the first unassigned spike with the highest amplitude
+        iamp = np.where(picks.ispike[amp_order] == 0)[0][0]
+        imax = amp_order[iamp]
+        # look only within the time range
+        itlims = np.searchsorted(picks.time, picks.time[imax] + time_bracket)
+        itlims = np.arange(itlims[0], itlims[1])
+
+        offset = np.abs(hxy[picks.trace[itlims]] - hxy[picks.trace[imax]])
+        iit = np.where(offset < distance_threshold_um)[0]
+
+        picks.ispike[itlims[iit]] = -1
+        picks.ispike[imax] = spike_id
+        # handles collision with a simple amplitude decay model: if amplitude doesn't decay
+        # as a function of offset, then it's a collision and another spike is set
+        if multipeak:  # noqa
+            iii = np.lexsort((picks.amp[itlims[iit]], offset[iit]))
+            sorted_amps_db = 20 * np.log10(np.abs(picks.amp[itlims[iit][iii]]))
+            idetect = np.r_[0, np.where(np.diff(sorted_amps_db) > 12)[0] + 1]
+            picks.ispike[itlims[iit[iii[idetect]]]] = np.arange(idetect.size) + spike_id
+            spike_id += idetect.size
+        else:
+            spike_id += 1
+
+    detects = Bunch({k: picks[k][picks.ispike > 0] for k in picks})
+    return detects

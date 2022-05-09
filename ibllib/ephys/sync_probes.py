@@ -4,12 +4,12 @@ import matplotlib.axes
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.interpolate import interp1d
+import one.alf.io as alfio
+from iblutil.util import Bunch
+import spikeglx
 
-import alf.io
-from brainbox.core import Bunch
 from ibllib.exceptions import Neuropixel3BSyncFrontsNonMatching
-import ibllib.io.spikeglx as spikeglx
-from ibllib.io.extractors.ephys_fpga import _get_sync_fronts, get_ibl_sync_map
+from ibllib.io.extractors.ephys_fpga import get_sync_fronts, get_ibl_sync_map
 
 _logger = logging.getLogger('ibllib')
 
@@ -68,7 +68,7 @@ def version3A(ses_path, display=True, type='smooth', tol=2.1):
         d = Bunch({'times': [], 'nsync': np.zeros(nprobes, )})
         # auxiliary_name: frame2ttl or right_camera
         for ind, ephys_file in enumerate(ephys_files):
-            sync = alf.io.load_object(
+            sync = alfio.load_object(
                 ephys_file.ap.parent, 'sync', namespace='spikeglx', short_keys=True)
             sync_map = get_ibl_sync_map(ephys_file, '3A')
             # exits if sync label not found for current probe
@@ -125,24 +125,32 @@ def version3B(ses_path, display=True, type=None, tol=2.5):
     DEFAULT_TYPE = 'smooth'
     ephys_files = spikeglx.glob_ephys_files(ses_path, ext='meta', bin_exists=False)
     for ef in ephys_files:
-        ef['sync'] = alf.io.load_object(ef.path, 'sync', namespace='spikeglx', short_keys=True)
+        ef['sync'] = alfio.load_object(ef.path, 'sync', namespace='spikeglx', short_keys=True)
         ef['sync_map'] = get_ibl_sync_map(ef, '3B')
     nidq_file = [ef for ef in ephys_files if ef.get('nidq')]
     ephys_files = [ef for ef in ephys_files if not ef.get('nidq')]
     # should have at least 2 probes and only one nidq
     assert(len(nidq_file) == 1)
     nidq_file = nidq_file[0]
-    sync_nidq = _get_sync_fronts(nidq_file.sync, nidq_file.sync_map['imec_sync'])
+    sync_nidq = get_sync_fronts(nidq_file.sync, nidq_file.sync_map['imec_sync'])
 
     qc_all = True
     out_files = []
     for ef in ephys_files:
-        sync_probe = _get_sync_fronts(ef.sync, ef.sync_map['imec_sync'])
+        sync_probe = get_sync_fronts(ef.sync, ef.sync_map['imec_sync'])
         sr = _get_sr(ef)
         try:
-            assert(sync_nidq.times.size == sync_probe.times.size)
+            # we say that the number of pulses should be within 10 %
+            assert(np.isclose(sync_nidq.times.size, sync_probe.times.size, rtol=0.1))
         except AssertionError:
             raise Neuropixel3BSyncFrontsNonMatching(f"{ses_path}")
+
+        # Find the indexes in case the sizes don't match
+        if sync_nidq.times.size != sync_probe.times.size:
+            _logger.warning(f'Sync mismatch by {np.abs(sync_nidq.times.size - sync_probe.times.size)} '
+                            f'NIDQ sync times: {sync_nidq.times.size}, Probe sync times {sync_probe.times.size}')
+        sync_idx = np.min([sync_nidq.times.size, sync_probe.times.size])
+
         # if the qc of the diff finds anomalies, do not attempt to smooth the interp function
         qcdiff = _check_diff_3b(sync_probe)
         if not qcdiff:
@@ -150,7 +158,7 @@ def version3B(ses_path, display=True, type=None, tol=2.5):
             type_probe = type or 'exact'
         else:
             type_probe = type or DEFAULT_TYPE
-        timestamps, qc = sync_probe_front_times(sync_probe.times, sync_nidq.times, sr,
+        timestamps, qc = sync_probe_front_times(sync_probe.times[:sync_idx], sync_nidq.times[:sync_idx], sr,
                                                 display=display, type=type_probe, tol=tol)
         qc_all &= qc
         out_files.extend(_save_timestamps_npy(ef, timestamps, sr))
@@ -182,7 +190,7 @@ def sync_probe_front_times(t, tref, sr, display=False, type='smooth', tol=2.0):
         to the sampling rate of digital channels. The residual is fit using frequency domain
         smoothing
         """
-        import ibllib.dsp as dsp
+        import neurodsp.fourier
         CAMERA_UPSAMPLING_RATE_HZ = 300
         PAD_LENGTH_SECS = 60
         STAT_LENGTH_SECS = 30  # median length to compute padding value
@@ -197,7 +205,7 @@ def sync_probe_front_times(t, tref, sr, display=False, type='smooth', tol=2.0):
         res_filt = np.pad(res_upsamp, lpad, mode='median',
                           stat_length=CAMERA_UPSAMPLING_RATE_HZ * STAT_LENGTH_SECS)
         fbounds = [0.001, 0.002]
-        res_filt = dsp.lp(res_filt, 1 / CAMERA_UPSAMPLING_RATE_HZ, fbounds)[lpad[0]:-lpad[1]]
+        res_filt = neurodsp.fourier.lp(res_filt, 1 / CAMERA_UPSAMPLING_RATE_HZ, fbounds)[lpad[0]:-lpad[1]]
         tout = np.arange(0, np.max(tref) + SYNC_SAMPLING_RATE_SECS, 20)
         sync_points = np.c_[tout, np.polyval(pol, tout) + np.interp(tout, t_upsamp, res_filt)]
         if display:

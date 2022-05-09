@@ -6,16 +6,13 @@ processed data from raw hardware files and optionally save them.
 import abc
 from collections import OrderedDict
 import json
-import logging
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from alf.io import get_session_path
+from one.alf.files import get_session_path
 from ibllib.io import raw_data_loaders as raw
 from ibllib.io.raw_data_loaders import load_settings, _logger
-
-log = logging.getLogger("ibllib")
 
 
 class BaseExtractor(abc.ABC):
@@ -66,7 +63,7 @@ class BaseExtractor(abc.ABC):
                 np.save(file_path, data)
             elif file_path.suffix in [".parquet", ".pqt"]:
                 if not isinstance(data, pd.DataFrame):
-                    log.error("Data is not a panda's DataFrame object")
+                    _logger.error("Data is not a panda's DataFrame object")
                     raise TypeError("Data is not a panda's DataFrame object")
                 data.to_parquet(file_path)
             elif file_path.suffix in [".csv", ".ssv", ".tsv"]:
@@ -74,7 +71,7 @@ class BaseExtractor(abc.ABC):
                 data.to_csv(file_path, sep=sep)
                 # np.savetxt(file_path, data, delimiter=sep)
             else:
-                log.error(f"Don't know how to save {file_path.suffix} files yet")
+                _logger.error(f"Don't know how to save {file_path.suffix} files yet")
 
         if self.save_names is None:
             file_paths = []
@@ -167,7 +164,28 @@ def run_extractor_classes(classes, session_path=None, **kwargs):
 def _get_task_types_json_config():
     with open(Path(__file__).parent.joinpath('extractor_types.json')) as fp:
         task_types = json.load(fp)
+    try:
+        # look if there are custom extractor types in the personal projects repo
+        import projects.base
+        custom_extractors = Path(projects.base.__file__).parent.joinpath('extractor_types.json')
+        with open(custom_extractors) as fp:
+            custom_task_types = json.load(fp)
+        task_types.update(custom_task_types)
+    except (ModuleNotFoundError, FileNotFoundError):
+        pass
     return task_types
+
+
+def get_task_protocol(session_path):
+    try:
+        settings = load_settings(get_session_path(session_path))
+    except json.decoder.JSONDecodeError:
+        _logger.error(f"Can't read settings for {session_path}")
+        return
+    if settings:
+        return settings.get('PYBPOD_PROTOCOL', None)
+    else:
+        return
 
 
 def get_task_extractor_type(task_name):
@@ -179,16 +197,17 @@ def get_task_extractor_type(task_name):
     :return: one of ['biased', 'habituation', 'training', 'ephys', 'mock_ephys', 'sync_ephys']
     """
     if isinstance(task_name, Path):
-        try:
-            settings = load_settings(get_session_path(task_name))
-        except json.decoder.JSONDecodeError:
-            return
-        if settings:
-            task_name = settings.get('PYBPOD_PROTOCOL', None)
-        else:
+        task_name = get_task_protocol(task_name)
+        if task_name is None:
             return
     task_types = _get_task_types_json_config()
-    return next((task_types[tt] for tt in task_types if tt in task_name), None)
+
+    task_type = task_types.get(task_name, None)
+    if task_type is None:
+        task_type = next((task_types[tt] for tt in task_types if tt in task_name), None)
+    if task_type is None:
+        _logger.warning(f"No extractor type found for {task_name}")
+    return task_type
 
 
 def get_session_extractor_type(session_path):
@@ -206,6 +225,28 @@ def get_session_extractor_type(session_path):
     if extractor_type:
         return extractor_type
     else:
-        _logger.warning(str(session_path) +
-                        f" No extractors were found for {extractor_type} ChoiceWorld")
         return False
+
+
+def get_pipeline(session_path):
+    """
+    Get the pre-processinf pipeline name from a session path
+    :param session_path:
+    :return:
+    """
+    stype = get_session_extractor_type(session_path)
+    return _get_pipeline_from_task_type(stype)
+
+
+def _get_pipeline_from_task_type(stype):
+    """
+    Returns the pipeline from the task type. Some tasks types directly define the pipeline
+    :param stype: session_type or task extractor type
+    :return:
+    """
+    if stype in ['ephys_biased_opto', 'ephys', 'ephys_training', 'mock_ephys', 'sync_ephys']:
+        return 'ephys'
+    elif stype in ['habituation', 'training', 'biased', 'biased_opto']:
+        return 'training'
+    else:
+        return stype

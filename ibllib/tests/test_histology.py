@@ -19,7 +19,7 @@ class TestHistology(unittest.TestCase):
     def test_histology_get_brain_regions(self):
         # first part of the test is to check on an actual track file
         for file_track in self.path_tracks.rglob("*_pts.csv"):
-            xyz = histology.load_track_csv(file_track)
+            xyz = histology.load_track_csv(file_track, brain_atlas=brain_atlas)
             channels, ins = histology.get_brain_regions(xyz=xyz, brain_atlas=brain_atlas)
         # also check that it works from an insertion
         channels, ins2 = histology.get_brain_regions(xyz=ins.xyz, brain_atlas=brain_atlas)
@@ -32,7 +32,7 @@ class TestHistology(unittest.TestCase):
     def test_histology_insertion_from_track(self):
 
         for file_track in self.path_tracks.rglob("*_pts.csv"):
-            xyz = histology.load_track_csv(file_track)
+            xyz = histology.load_track_csv(file_track, brain_atlas=brain_atlas)
             insertion = atlas.Insertion.from_track(xyz, brain_atlas=brain_atlas)
             # checks that the tip coordinate is not the deepest point but its projection
             self.assertFalse(np.all(np.isclose(insertion.tip, xyz[-1])))
@@ -159,3 +159,7 @@ class TestsEphysReconstruction(unittest.TestCase):
         self.assertTrue(np.all(np.isclose(xyz_channels[-1, :], xyz_channels_ref[-1])))
         brain_regions = self.ephysalign.get_brain_locations(xyz_channels)
         self.assertTrue(np.all(np.equal(np.unique(brain_regions.acronym), brain_regions_ref)))
+
+
+if __name__ == "__main__":
+    unittest.main(exit=False, verbosity=2)

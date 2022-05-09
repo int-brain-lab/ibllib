@@ -11,7 +11,7 @@ from brainbox.population.decode import get_spike_counts_in_bins
 
 
 def responsive_units(spike_times, spike_clusters, event_times,
-                     pre_time=[0.5, 0], post_time=[0, 0.5], alpha=0.05):
+                     pre_time=[0.5, 0], post_time=[0, 0.5], alpha=0.05, use_fr=False):
     """
     Determine responsive neurons by doing a Wilcoxon Signed-Rank test between a baseline period
     before a certain task event (e.g. stimulus onset) and a period after the task event.
@@ -31,6 +31,8 @@ def responsive_units(spike_times, spike_clusters, event_times,
         time (in seconds) to follow the event times
     alpha : float
         alpha to use for statistical significance
+    use_fr : bool
+        whether to use the firing rate instead of total spike count
 
     Returns
     -------
@@ -51,18 +53,12 @@ def responsive_units(spike_times, spike_clusters, event_times,
     times = np.column_stack(((event_times + post_time[0]), (event_times + post_time[1])))
     spike_counts, cluster_ids = get_spike_counts_in_bins(spike_times, spike_clusters, times)
 
-    # Do statistics
-    p_values = np.empty(spike_counts.shape[0])
-    stats = np.empty(spike_counts.shape[0])
-    for i in range(spike_counts.shape[0]):
-        if np.sum(baseline_counts[i, :] - spike_counts[i, :]) == 0:
-            p_values[i] = 1
-            stats[i] = 0
-        else:
-            stats[i], p_values[i] = wilcoxon(baseline_counts[i, :], spike_counts[i, :])
+    if use_fr:
+        baseline_counts = baseline_counts / (pre_time[0] - pre_time[1])
+        spike_counts = spike_counts / (post_time[1] - post_time[0])
 
-    # Perform FDR correction for multiple testing
-    sig_units, p_values, _, _ = multipletests(p_values, alpha, method='fdr_bh')
+    # Do statistics
+    sig_units, stats, p_values = compute_comparison_statistics(baseline_counts, spike_counts, test='signrank', alpha=alpha)
     significant_units = cluster_ids[sig_units]
 
     return significant_units, stats, p_values, cluster_ids
@@ -125,27 +121,66 @@ def differentiate_units(spike_times, spike_clusters, event_times, event_groups,
     counts_2, cluster_ids = get_spike_counts_in_bins(spike_times, spike_clusters, times_2)
 
     # Do statistics
-    p_values = np.empty(len(cluster_ids))
-    stats = np.empty(len(cluster_ids))
-    for i in range(len(cluster_ids)):
-        if (np.sum(counts_1[i, :]) == 0) and (np.sum(counts_2[i, :]) == 0):
-            p_values[i] = 1
-            stats[i] = 0
-        else:
-            if test == 'ranksums':
-                stats[i], p_values[i] = ranksums(counts_1[i, :], counts_2[i, :])
-            elif test == 'signrank':
-                stats[i], p_values[i] = wilcoxon(counts_1[i, :], counts_2[i, :])
-            elif test == 'ttest':
-                stats[i], p_values[i] = ttest_ind(counts_1[i, :], counts_2[i, :])
-            elif test == 'paired_ttest':
-                stats[i], p_values[i] = ttest_rel(counts_1[i, :], counts_2[i, :])
-
-    # Perform FDR correction for multiple testing
-    sig_units, p_values, _, _ = multipletests(p_values, alpha, method='fdr_bh')
+    sig_units, stats, p_values = compute_comparison_statistics(counts_1, counts_2, test=test, alpha=alpha)
     significant_units = cluster_ids[sig_units]
 
     return significant_units, stats, p_values, cluster_ids
+
+
+def compute_comparison_statistics(value1, value2, test='ranksums', alpha=0.05):
+    """
+    Compute statistical test between two arrays
+
+    Parameters
+    ----------
+    value1 : 1D array
+        first array of values to compare
+    value2 : 1D array
+        second array of values to compare
+    test : string
+        which statistical test to use, options are:
+            'ranksums'      Wilcoxon Rank Sums test
+            'signrank'      Wilcoxon Signed Rank test (for paired observations)
+            'ttest'         independent samples t-test
+            'paired_ttest'  paired t-test
+    alpha : float
+        alpha to use for statistical significance
+
+    Returns
+    -------
+    significant_units : 1D array
+        an array with the indices of values that are significatly modulated
+    stats : 1D array
+        the statistic of the test that was performed
+    p_values : 1D array
+        the p-values of all the values
+    """
+
+    p_values = np.empty(len(value1))
+    stats = np.empty(len(value1))
+    for i in range(len(value1)):
+        if test == 'signrank':
+            if np.sum(value1[i, :] - value2[i, :]) == 0:
+                p_values[i] = 1
+                stats[i] = 0
+            else:
+                stats[i], p_values[i] = wilcoxon(value1[i, :], value2[i, :])
+        else:
+            if (np.sum(value1[i, :]) == 0) and (np.sum(value2[i, :]) == 0):
+                p_values[i] = 1
+                stats[i] = 0
+            else:
+                if test == 'ranksums':
+                    stats[i], p_values[i] = ranksums(value1[i, :], value2[i, :])
+                elif test == 'ttest':
+                    stats[i], p_values[i] = ttest_ind(value1[i, :], value2[i, :])
+                elif test == 'paired_ttest':
+                    stats[i], p_values[i] = ttest_rel(value1[i, :], value2[i, :])
+
+    # Perform FDR correction for multiple testing
+    sig_units, p_values, _, _ = multipletests(p_values, alpha, method='fdr_bh')
+
+    return sig_units, stats, p_values
 
 
 def roc_single_event(spike_times, spike_clusters, event_times,
@@ -305,7 +340,7 @@ def generate_pseudo_blocks(n_trials, factor=60, min_=20, max_=100, first5050=90)
     return np.array([0.5] * first5050 + block_ids[:n_trials - first5050])
 
 
-def generate_pseudo_stimuli(n_trials, contrast_set=[0.06, 0.12, 0.25, 1], first5050=90):
+def generate_pseudo_stimuli(n_trials, contrast_set=[0, 0.06, 0.12, 0.25, 1], first5050=90):
     """
     Generate a block structure with stimuli
 
@@ -336,7 +371,7 @@ def generate_pseudo_stimuli(n_trials, contrast_set=[0.06, 0.12, 0.25, 1], first5
     contrast_right[:] = np.nan
 
     # Generate block structure
-    p_left = generate_pseudo_blocks(n_trials)
+    p_left = generate_pseudo_blocks(n_trials, first5050=first5050)
 
     for i in range(n_trials):
 

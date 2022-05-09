@@ -9,17 +9,17 @@ sessions before a specified date.
 
 # import modules
 import numpy as np
-from oneibl.one import ONE
+from one.api import ONE
 one = ONE()
 
 dataset_types = ['spikes.times',
                  'spikes.clusters']
 
 # eid1, det1 = one.search(project='ibl_certif_neuropix_recording',
-#                         dataset_types=dataset_types, details=True)
+#                         dataset=dataset_types, details=True)
 
-eid, det = one.search(task_protocol='ephys_certification',
-                      dataset_types=dataset_types, details=True)
+eids, det = one.search(task_protocol='ephys_certification',
+                       dataset=dataset_types, details=True)
 
 sub = [p['subject'] for p in det]
 # sub_unique = list(set(sub))
@@ -45,5 +45,5 @@ for i_su in range(0, len(su)):
           f' - N planned traces: {len(tr_pl)} - N tracked traces: {len(tr_tr)}')
 
 # TODO -- How many recording sessions were done per lab
-# prob_des = one.load(eid, dataset_types=['probes.description'])
+# prob_des = one.load_dataset(eids[0], 'probes.description.json')
 # n_probe = len(prob_des[0])

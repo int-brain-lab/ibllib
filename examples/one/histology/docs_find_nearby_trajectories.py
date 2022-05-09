@@ -8,31 +8,30 @@ their location in a 3D image. Additionally prints out the information of closeby
 # Author: Mayo Faulkner
 # import modules
 import numpy as np
+from one.api import ONE
+from mayavi import mlab
+
 import ibllib.pipes.histology as histology
 import ibllib.atlas as atlas
-from oneibl.one import ONE
-from mayavi import mlab
 from atlaselectrophysiology import rendering
 
-mlab.init_notebook()
 # Instantiate brain atlas and one
 brain_atlas = atlas.AllenAtlas(25)
-one = ONE()
+one = ONE(base_url='https://openalyx.internationalbrainlab.org')
 
 # Find all trajectories with histology tracing
-all_hist = one.alyx.rest('trajectories', 'list', provenance='Histology track')
+all_hist = one.alyx.rest('trajectories', 'list', provenance='Ephys aligned histology track')
 # Some do not have tracing, exclude these ones
 sess_with_hist = [sess for sess in all_hist if sess['x'] is not None]
 traj_ids = [sess['id'] for sess in sess_with_hist]
 # Compute trajectory objects for each of the trajectories
 trajectories = [atlas.Insertion.from_dict(sess) for sess in sess_with_hist]
 
-
 # Find the trajectory of the id that you want to find closeby probe insertions for
-subject = 'SWC_023'
-date = '2020-02-13'
-probe_label = 'probe00'
-traj_origin_id = one.alyx.rest('trajectories', 'list', provenance='Histology track',
+subject = 'CSH_ZAD_029'
+date = '2020-09-19'
+probe_label = 'probe01'
+traj_origin_id = one.alyx.rest('trajectories', 'list', provenance='Ephys aligned histology track',
                                subject=subject, date=date, probe=probe_label)[0]['id']
 # Find the index of this trajectory in the list of all trajectories
 chosen_traj = traj_ids.index(traj_origin_id)

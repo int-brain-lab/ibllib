@@ -10,13 +10,12 @@ The trajectory plotted are:
 # environment installation guide https://github.com/int-brain-lab/iblenv
 # run "%qui qt" magic command from Ipython prompt for interactive mode
 from mayavi import mlab
+from one.api import ONE
 
 from atlaselectrophysiology import rendering
 import ibllib.atlas as atlas
-from oneibl.one import ONE
 
 one = ONE(base_url="https://alyx.internationalbrainlab.org")
-
 
 fig = rendering.figure()
 subject = 'KS003'

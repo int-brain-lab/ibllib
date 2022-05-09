@@ -1,9 +1,9 @@
-'''
+"""
 Get list of subjects associated to the repeated site probe trajectory from ONE.
-'''
+"""
 # Author: Gaelle Chapuis
 
-from oneibl.one import ONE
+from one.api import ONE
 
 one = ONE()
 # find projects: proj = one.alyx.rest('projects', 'list')

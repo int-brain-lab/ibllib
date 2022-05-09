@@ -6,11 +6,11 @@ projection of the probe track onto non-tilted cor/sag slices.
 
 """
 # Author: Olivier Winter
+import numpy as np
+import matplotlib.pyplot as plt
 
 from ibllib.pipes import histology
 import ibllib.atlas as atlas
-import numpy as np
-import matplotlib.pyplot as plt
 
 # === Parameters section (edit) ===
 

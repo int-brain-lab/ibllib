@@ -3,12 +3,13 @@ import logging
 import shutil
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-import alf.io
+import one.alf.io as alfio
 from ibllib.io.extractors import training_trials, biased_trials, camera
 from ibllib.io import raw_data_loaders as raw
 from ibllib.io.extractors.base import BaseExtractor
@@ -270,23 +271,23 @@ class TestExtractTrialData(unittest.TestCase):
 
     def test_get_stimOn_times_lt5(self):
         # TRAINING SESSIONS
-        st = training_trials.StimOnTimes(
+        st = training_trials.StimOnTimes_deprecated(
             self.training_lt5['path']).extract()[0]
         self.assertTrue(isinstance(st, np.ndarray))
 
         # BIASED SESSIONS
-        st = biased_trials.StimOnTimes(
+        st = biased_trials.StimOnTimes_deprecated(
             self.biased_lt5['path']).extract()[0]
         self.assertTrue(isinstance(st, np.ndarray))
 
     def test_get_stimOn_times_ge5(self):
         # TRAINING SESSIONS
-        st = training_trials.StimOnTimes(
+        st = training_trials.StimOnTimes_deprecated(
             self.training_ge5['path']).extract()[0]
         self.assertTrue(isinstance(st, np.ndarray))
 
         # BIASED SESSIONS
-        st = biased_trials.StimOnTimes(
+        st = biased_trials.StimOnTimes_deprecated(
             self.biased_ge5['path']).extract()[0]
         self.assertTrue(isinstance(st, np.ndarray))
 
@@ -310,33 +311,6 @@ class TestExtractTrialData(unittest.TestCase):
         st = biased_trials.StimOnOffFreezeTimes(
             self.biased_ge5['path']).extract()[0]
         self.assertTrue(isinstance(st[0], np.ndarray))
-
-    @unittest.skip("not there yet")
-    def test_stimOn_extractor_values(self):
-        # Training lt5
-        st_old = training_trials.StimOnTimes(
-            self.training_lt5['path']).extract()[0]
-        st_new = training_trials.StimOnOffFreezeTimes(
-            self.training_lt5['path']).extract()[0]
-        self.assertTrue(np.all(st_old == st_new[0]))
-        # Training ge5
-        st_old = training_trials.StimOnTimes(
-            self.training_ge5['path']).extract()[0]
-        st_new = training_trials.StimOnOffFreezeTimes(
-            self.training_ge5['path']).extract()[0]
-        self.assertTrue(np.all(st_old == st_new[0]))
-        # Biased lt5
-        st_old = biased_trials.StimOnTimes(
-            self.biased_lt5['path']).extract()[0]
-        st_new = biased_trials.StimOnOffFreezeTimes(
-            self.biased_lt5['path']).extract()[0]
-        self.assertTrue(np.all(st_old == st_new[0]))
-        # Biased ge5
-        st_old = biased_trials.StimOnTimes(
-            self.biased_ge5['path']).extract()[0]
-        st_new = biased_trials.StimOnOffFreezeTimes(
-            self.biased_ge5['path']).extract()[0]
-        self.assertTrue(np.all(st_old == st_new[0]))
 
     def test_get_intervals(self):
         # TRAINING SESSIONS
@@ -489,8 +463,13 @@ class TestExtractTrialData(unittest.TestCase):
         out, files = training_trials.extract_all(
             self.training_ge5['path'], save=True)
         # BIASED SESSIONS
-        out, files = biased_trials.extract_all(
-            self.biased_lt5['path'], settings={'IBLRIG_VERSION_TAG': '4.9.9'}, save=True)
+        # The new trials extractor additionally extracts the wheel data and this fails for the < 5.0
+        # test data so we will stub the wheel extractor
+        with unittest.mock.patch('ibllib.io.extractors.biased_trials.Wheel') as Wheel:
+            Wheel.var_names = tuple()
+            Wheel().extract.return_value = ({}, [])
+            out, files = biased_trials.extract_all(
+                self.biased_lt5['path'], settings={'IBLRIG_VERSION_TAG': '4.9.9'}, save=True)
         # -- version >= 5.0.0
         out, files = biased_trials.extract_all(
             self.biased_ge5['path'], save=True)
@@ -554,14 +533,14 @@ class TestExtractTrialData(unittest.TestCase):
         # check the output dimensions
         from ibllib.io.extractors.bpod_trials import extract_all
         extract_all(self.training_ge5['path'])
-        trials = alf.io.load_object(self.training_ge5['path'] / 'alf', object='trials')
-        self.assertTrue(alf.io.check_dimensions(trials) == 0)
+        trials = alfio.load_object(self.training_ge5['path'] / 'alf', object='trials')
+        self.assertTrue(alfio.check_dimensions(trials) == 0)
         extract_all(self.training_lt5['path'])
-        trials = alf.io.load_object(self.training_lt5['path'] / 'alf', object='trials')
-        self.assertTrue(alf.io.check_dimensions(trials) == 0)
+        trials = alfio.load_object(self.training_lt5['path'] / 'alf', object='trials')
+        self.assertTrue(alfio.check_dimensions(trials) == 0)
         extract_all(self.biased_ge5['path'])
-        trials = alf.io.load_object(self.biased_ge5['path'] / 'alf', object='trials')
-        self.assertTrue(alf.io.check_dimensions(trials) == 0)
+        trials = alfio.load_object(self.biased_ge5['path'] / 'alf', object='trials')
+        self.assertTrue(alfio.check_dimensions(trials) == 0)
         # Wheel moves extraction fails for these wheel data; skipping
         # extract_training(self.biased_lt5['path'])
         # trials = alf.io.load_object(self.biased_lt5['path'] / 'alf', object='_ibl_trials')
@@ -677,11 +656,6 @@ class TestBaseExtractorSavingMethods(unittest.TestCase):
         self.tempdir.cleanup()
 
 
-if __name__ == "__main__":
-    unittest.main(exit=False)
-    print('.')
-
-
 class TestCameraExtractors(unittest.TestCase):
     def test_groom_pin_state(self):
         # UNIT DATA
@@ -774,3 +748,7 @@ class TestCameraExtractors(unittest.TestCase):
         # Check input validation
         with self.assertRaises(ValueError):
             camera.attribute_times(tsa, tsb, injective=False, take='closest')
+
+
+if __name__ == "__main__":
+    unittest.main(exit=False, verbosity=2)

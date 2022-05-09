@@ -1,9 +1,11 @@
 import logging
 import numpy as np
 from pkg_resources import parse_version
+from one.alf.io import AlfBunch
 
 import ibllib.io.raw_data_loaders as raw
 from ibllib.io.extractors.base import BaseBpodTrialsExtractor, run_extractor_classes
+from ibllib.io.extractors.training_wheel import Wheel
 from ibllib.misc import version
 
 
@@ -19,7 +21,7 @@ class FeedbackType(BaseBpodTrialsExtractor):
     Will raise an error if more than one of the mutually exclusive states have
     been triggered.
 
-    Sets feedbackType to -1 if error state was trigered (applies to no-go)
+    Sets feedbackType to -1 if error state was triggered (applies to no-go)
     Sets feedbackType to +1 if reward state was triggered
     """
     save_names = '_ibl_trials.feedbackType.npy'
@@ -69,7 +71,7 @@ class ProbabilityLeft(BaseBpodTrialsExtractor):
     save_names = '_ibl_trials.probabilityLeft.npy'
     var_names = 'probabilityLeft'
 
-    def _extract(self):
+    def _extract(self, **kwargs):
         return np.array([t['stim_probability_left'] for t in self.bpod_trials])
 
 
@@ -496,7 +498,7 @@ class StimOnTriggerTimes(BaseBpodTrialsExtractor):
         return stim_on_state[:, 0].T
 
 
-class StimOnTimes(BaseBpodTrialsExtractor):
+class StimOnTimes_deprecated(BaseBpodTrialsExtractor):
     save_names = '_ibl_trials.stimOn_times.npy'
     var_names = 'stimOn_times'
 
@@ -509,6 +511,8 @@ class StimOnTimes(BaseBpodTrialsExtractor):
         (Frame changes are in BNC1 High and BNC1 Low)
         """
         # Version check
+        _logger.warning("Deprecation Warning: this is an old version of stimOn extraction."
+                        "From version 5., use StimOnOffFreezeTimes")
         if version.ge(self.settings['IBLRIG_VERSION_TAG'], '5.0.0'):
             stimOn_times = self.get_stimOn_times_ge5(self.session_path, data=self.bpod_trials)
         else:
@@ -584,8 +588,8 @@ class StimOnTimes(BaseBpodTrialsExtractor):
                 bnc_l.append(np.array([np.NINF]))
 
         stim_on = np.array(stim_on)
-        bnc_h = np.array(bnc_h)
-        bnc_l = np.array(bnc_l)
+        bnc_h = np.array(bnc_h, dtype=object)
+        bnc_l = np.array(bnc_l, dtype=object)
 
         count_missing = 0
         stimOn_times = np.zeros_like(stim_on)
@@ -610,8 +614,8 @@ class StimOnOffFreezeTimes(BaseBpodTrialsExtractor):
     """
     Extracts stim on / off and freeze times from Bpod BNC1 detected fronts
     """
-    save_names = ["_ibl_trials.stimOn_times.npy", None, None]
-    var_names = ['stimOn_times', 'stimOff_times', 'stimFreeze_times']
+    save_names = ("_ibl_trials.stimOn_times.npy", None, None)
+    var_names = ('stimOn_times', 'stimOff_times', 'stimFreeze_times')
 
     def _extract(self):
         choice = Choice(self.session_path).extract(
@@ -636,7 +640,7 @@ class StimOnOffFreezeTimes(BaseBpodTrialsExtractor):
                 stimOff_times = np.append(stimOff_times, np.nan)
                 stimFreeze_times = np.append(stimFreeze_times, np.nan)
 
-        # In no_go trials no stimFreeze happens jsut stim Off
+        # In no_go trials no stimFreeze happens just stim Off
         stimFreeze_times[choice == 0] = np.nan
         # Check for trigger times
         # 2nd order criteria:
@@ -647,24 +651,65 @@ class StimOnOffFreezeTimes(BaseBpodTrialsExtractor):
         return stimOn_times, stimOff_times, stimFreeze_times
 
 
-class LaserBool(BaseBpodTrialsExtractor):
-    save_names = ['_ibl_trials.laser_stimulation.npy', '_ibl_trials.laser_probability.npy']
-    var_names = ['laser_stimulation', 'laser_probability']
+class PhasePosQuiescence(BaseBpodTrialsExtractor):
+    """Extracts stimulus phase, position and quiescence from Bpod data.
+    For extraction of pre-generated events, use the ProbaContrasts extractor instead.
+    """
+    save_names = (None, None, None)
+    var_names = ('phase', 'position', 'quiescence')
 
-    def _extract(self):
-        lstim = np.array([np.float(t.get('laser_stimulation', np.NaN)) for t in self.bpod_trials])
-        lprob = np.array([np.float(t.get('laser_probability', np.NaN)) for t in self.bpod_trials])
-        _logger.info('Extracting laser datasets')
-        if np.all(np.isnan(lprob)):
-            self.save_names[1] = None  # this prevents the file from being saved when no data
-            _logger.info('No laser probability found in bpod data')
-        if np.all(np.isnan(lstim)):
-            self.save_names[0] = None  # this prevents the file from being saved when no data
-            _logger.info('No laser stimulation found in bpod data')
-        return lstim, lprob
+    def _extract(self, **kwargs):
+        phase = np.array([t['stim_phase'] for t in self.bpod_trials])
+        position = np.array([t['position'] for t in self.bpod_trials])
+        quiescence = np.array([t['quiescent_period'] for t in self.bpod_trials])
+        return phase, position, quiescence
+
+
+class TrialsTable(BaseBpodTrialsExtractor):
+    """
+    Extracts the following into a table from Bpod raw data:
+        intervals, goCue_times, response_times, choice, stimOn_times, contrastLeft, contrastRight,
+        feedback_times, feedbackType, rewardVolume, probabilityLeft, firstMovement_times
+    Additionally extracts the following wheel data:
+        wheel_timestamps, wheel_position, wheel_moves_intervals, wheel_moves_peak_amplitude
+    """
+    save_names = ('_ibl_trials.table.pqt', None, None, '_ibl_wheel.timestamps.npy', '_ibl_wheel.position.npy',
+                  '_ibl_wheelMoves.intervals.npy', '_ibl_wheelMoves.peakAmplitude.npy', None, None)
+    var_names = ('table', 'stimOff_times', 'stimFreeze_times', 'wheel_timestamps', 'wheel_position', 'wheel_moves_intervals',
+                 'wheel_moves_peak_amplitude', 'peakVelocity_times', 'is_final_movement')
+
+    def _extract(self, extractor_classes=None, **kwargs):
+        base = [Intervals, GoCueTimes, ResponseTimes, Choice, StimOnOffFreezeTimes, ContrastLR, FeedbackTimes, FeedbackType,
+                RewardVolume, ProbabilityLeft, Wheel]
+        out, _ = run_extractor_classes(
+            base, session_path=self.session_path, bpod_trials=self.bpod_trials, settings=self.settings, save=False
+        )
+        table = AlfBunch({k: v for k, v in out.items() if k not in self.var_names})
+        assert len(table.keys()) == 12
+
+        return table.to_df(), *(out.pop(x) for x in self.var_names if x != 'table')
 
 
 def extract_all(session_path, save=False, bpod_trials=None, settings=None):
+    """Extract trials and wheel data.
+
+    For task versions >= 5.0.0, outputs wheel data and trials.table dataset (+ some extra datasets)
+
+    Parameters
+    ----------
+    session_path : str, pathlib.Path
+        The path to the session
+    save : bool
+        If true save the data files to ALF
+    bpod_trials : list of dicts
+        The Bpod trial dicts loaded from the _iblrig_taskData.raw dataset
+    settings : dict
+        The Bpod settings loaded from the _iblrig_taskSettings.raw dataset
+
+    Returns
+    -------
+    A list of extracted data and a list of file paths if save is True (otherwise None)
+    """
     if not bpod_trials:
         bpod_trials = raw.load_data(session_path)
     if not settings:
@@ -672,14 +717,19 @@ def extract_all(session_path, save=False, bpod_trials=None, settings=None):
     if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
         settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
 
-    base = [FeedbackType, ContrastLR, ProbabilityLeft, Choice, RepNum, RewardVolume, LaserBool,
-            FeedbackTimes, Intervals, ResponseTimes, GoCueTriggerTimes, GoCueTimes]
+    base = [RepNum, GoCueTriggerTimes]
     # Version check
     if version.ge(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
-        base.extend([StimOnTriggerTimes, StimOnOffFreezeTimes, ItiInTimes,
-                     StimOffTriggerTimes, StimFreezeTriggerTimes, ErrorCueTriggerTimes])
+        # We now extract a single trials table
+        base.extend([
+            StimOnTriggerTimes, ItiInTimes, StimOffTriggerTimes, StimFreezeTriggerTimes,
+            ErrorCueTriggerTimes, TrialsTable, PhasePosQuiescence
+        ])
     else:
-        base.extend([IncludedTrials, ItiDuration, StimOnTimes])
+        base.extend([
+            Intervals, Wheel, FeedbackType, ContrastLR, ProbabilityLeft, Choice, IncludedTrials, ItiDuration,
+            StimOnTimes_deprecated, RewardVolume, FeedbackTimes, ResponseTimes, GoCueTimes, PhasePosQuiescence
+        ])
 
     out, fil = run_extractor_classes(
         base, save=save, session_path=session_path, bpod_trials=bpod_trials, settings=settings)

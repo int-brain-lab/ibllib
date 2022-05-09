@@ -1,41 +1,43 @@
 import unittest
 from tempfile import TemporaryDirectory
 from pathlib import Path
+import logging
 
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 
-from oneibl.one import ONE
+from one.api import ONE
+from ibllib.tests import TEST_DB
 from ibllib.qc.camera import CameraQC
 from ibllib.io.raw_data_loaders import load_camera_ssv_times
 from ibllib.tests.fixtures import utils
-from brainbox.core import Bunch
+from iblutil.util import Bunch
 
 
 class TestCameraQC(unittest.TestCase):
+    backend = ''
 
     @classmethod
     def setUpClass(cls) -> None:
-        cls.one = ONE(
-            base_url="https://test.alyx.internationalbrainlab.org",
-            username="test_user",
-            password="TapetesBloc18",
-        )
+        cls.one = ONE(**TEST_DB)
         cls.backend = matplotlib.get_backend()
         matplotlib.use('Agg')
 
     @classmethod
     def tearDownClass(cls) -> None:
-        matplotlib.use(cls.backend)
+        if cls.backend:
+            matplotlib.use(cls.backend)
+        # Clear overwritten methods by destroying cached instance
+        ONE.cache_clear()
 
     def setUp(self) -> None:
         self.tempdir = TemporaryDirectory()
         self.session_path = utils.create_fake_session_folder(self.tempdir.name)
         utils.create_fake_raw_video_data_folder(self.session_path)
         self.eid = 'd3372b15-f696-4279-9be5-98f15783b5bb'
-        self.qc = CameraQC(self.session_path, one=self.one, n_samples=5,
-                           side='left', stream=False, download_data=False)
+        self.qc = CameraQC(self.session_path, 'left', one=self.one, n_samples=5,
+                           stream=False, download_data=False)
         self.qc._type = 'ephys'
 
     def tearDown(self) -> None:
@@ -45,16 +47,21 @@ class TestCameraQC(unittest.TestCase):
     def test_check_brightness(self):
         self.qc.data['frame_samples'] = self.qc.load_reference_frames('left')
         n = len(self.qc.data['frame_samples'])
-        self.qc.frame_samples_idx = np.linspace(0, 1000, n, dtype=int)
+        self.qc.frame_samples_idx = np.arange(n)
+        self.qc.n_samples = 3
         self.assertEqual('PASS', self.qc.check_brightness(display=True))
         # Check plots
         fig = plt.gcf()
         self.assertEqual(3, len(fig.axes))
-        expected = np.array([58.07007217, 56.55802917, 46.09558182])
+        expected = np.array([72.00794903, 70.98228997, 78.25575987])
         np.testing.assert_array_almost_equal(fig.axes[0].lines[0]._y, expected)
         # Make frames a third as bright
         self.qc.data['frame_samples'] = (self.qc.data['frame_samples'] / 3).astype(np.int32)
+        self.assertEqual('WARNING', self.qc.check_brightness())
+        # Change proportion of passing frames
+        self.qc.n_samples = 1000
         self.assertEqual('FAIL', self.qc.check_brightness())
+        self.qc.n_samples = 3
         # Change thresholds
         self.qc.data['frame_samples'] = self.qc.load_reference_frames('left')
         self.assertEqual('FAIL', self.qc.check_brightness(bounds=(10, 20)))
@@ -134,23 +141,23 @@ class TestCameraQC(unittest.TestCase):
         self.assertEqual('NOT_SET', self.qc.check_dropped_frames())
 
     def test_check_focus(self):
-        self.qc.side = 'left'
+        self.qc.label = 'left'
         self.qc.frame_samples_idx = np.linspace(0, 100, 20, dtype=int)
         outcome = self.qc.check_focus(test=True, display=True)
-        self.assertEqual('FAIL', outcome)
+        self.assertEqual('PASS', outcome)
         # Verify figures
         figs = plt.get_fignums()
         self.assertEqual(len(plt.figure(figs[0]).axes), 16)
         # Verify Laplacian on blurred images
-        expected = np.array([13.19, 14.24, 15.44, 16.64, 18.67, 21.51, 25.99, 31.77,
-                             40.75, 52.52, 71.12, 98.26, 149.85, 229.96, 563.53, 563.53])
+        expected = np.array([11.82, 12.94, 13.84, 14.52, 15.68, 16.76, 18.85, 21.9,
+                             25.45, 31.3, 40.48, 54.05, 81.53, 133.19, 425.15, 425.15])
         actual = [round(x, 2) for x in plt.figure(figs[1]).axes[3].lines[0]._y.tolist()]
         np.testing.assert_array_equal(expected, actual)
         # Verify fft on blurred images
         expected = np.array([6.91, 7.2, 7.61, 8.08, 8.76, 9.47, 10.35, 11.22,
                              11.04, 11.42, 11.35, 11.94, 12.45, 13.22, 13.6, 13.6])
         actual = [round(x, 2) for x in plt.figure(figs[2]).axes[3].lines[0]._y.tolist()]
-        np.testing.assert_array_equal(expected, actual)
+        np.testing.assert_array_almost_equal(expected, actual, 1)
 
         # Verify not set outcome
         outcome = self.qc.check_focus()
@@ -212,9 +219,9 @@ class TestCameraQC(unittest.TestCase):
         self.assertEqual('NOT_SET', outcome)
 
         # Verify passes
-        self.qc.side = 'body'
+        self.qc.label = 'body'
         ts_path = Path(__file__).parents[1].joinpath('extractors', 'data', 'session_ephys')
-        ssv_times = load_camera_ssv_times(ts_path, self.qc.side)
+        ssv_times = load_camera_ssv_times(ts_path, self.qc.label)
         self.qc.data.bonsai_times, self.qc.data.camera_times = ssv_times
         self.qc.data.video = Bunch({'length': self.qc.data.bonsai_times.size})
 
@@ -229,16 +236,49 @@ class TestCameraQC(unittest.TestCase):
         self.assertEqual('WARNING', outcome)
         self.assertEqual(n_over, actual)
 
+    def test_check_wheel_alignment(self):
+        """This just checks data validation.  Integration tests test the MotionAlignment class"""
+        outcome = self.qc.check_wheel_alignment()
+        self.assertEqual('NOT_SET', outcome)
+
+        # Expect FAIL when no overlapping timestamps between wheel and camera
+        self.qc.data['wheel'] = {
+            'timestamps': np.arange(4000),
+            'position': np.random.random(4000),
+            'period': np.array([3000, 3050])
+        }
+        self.qc.data['timestamps'] = np.arange(5000, 6000)
+        outcome = self.qc.check_wheel_alignment()
+        self.assertEqual('FAIL', outcome)
+
+        # Expect NOT_SET when some overlapping timestamps but chosen period out of range
+        self.qc.data['timestamps'] -= 1500
+        with self.assertLogs(logging.getLogger('ibllib'), logging.WARNING):
+            outcome = self.qc.check_wheel_alignment()
+        self.assertEqual('NOT_SET', outcome)
+
+    def test_get_active_wheel_period(self):
+        """Check that warning is raised, period is returned None, and QC is NOT_SET
+         if there is active wheel period to be found"""
+        wheel_keys = ('timestamps', 'position')
+        wheel_data = (np.arange(1000), np.ones(1000))
+        self.qc.data['wheel'] = Bunch(zip(wheel_keys, wheel_data))
+        with self.assertLogs(logging.getLogger('ibllib'), logging.WARNING):
+            period = self.qc.get_active_wheel_period(self.qc.data['wheel'])
+        self.assertEqual(None, period)
+        outcome = self.qc.check_wheel_alignment()
+        self.assertEqual('NOT_SET', outcome)
+
     def test_ensure_data(self):
         self.qc.eid = self.eid
         self.qc.download_data = False
         # If data for this session exists locally, overwrite the methods so it is not found
-        if self.one.path_from_eid(self.eid).exists():
+        if self.one.eid2path(self.eid).exists():
             self.qc.one.to_eid = lambda _: self.eid
-            self.qc.one.download_datasets = lambda _: None
+            self.qc.one._download_datasets = lambda _: None
         with self.assertRaises(AssertionError):
-            self.qc.run(update=False)
+            self.qc.ensure_required_data()
 
 
-if __name__ == '__main__':
-    unittest.main()
+if __name__ == "__main__":
+    unittest.main(exit=False, verbosity=2)

@@ -18,7 +18,7 @@ import seaborn as sns
 
 
 from ibllib.ephys import ephysqc
-import alf.io
+import one.alf.io as alfio
 # from IPython import embed as shell
 
 
@@ -27,7 +27,7 @@ def _plot_spectra(outpath, typ, savefig=True):
     TODO document this function
     '''
 
-    spec = alf.io.load_object(outpath, 'ephysQcFreq' + typ.upper(), namespace='spikeglx')
+    spec = alfio.load_object(outpath, 'ephysQcFreq' + typ.upper(), namespace='spikeglx')
 
     # hack to ensure a single key name
     if 'power.probe_00' in spec.keys():
@@ -62,7 +62,7 @@ def _plot_rmsmap(outpath, typ, savefig=True):
     TODO document this function
     '''
 
-    rmsmap = alf.io.load_object(outpath, 'ephysQcTime' + typ.upper(), namespace='spikeglx')
+    rmsmap = alfio.load_object(outpath, 'ephysQcTime' + typ.upper(), namespace='spikeglx')
 
     # hack to ensure a single key name
     if 'times.probe_00' in rmsmap.keys():

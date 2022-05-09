@@ -3,7 +3,7 @@ Programmatically add a new water administration onto the Alyx database via ONE.
 '''
 #  Author: Olivier Winter
 
-from oneibl.one import ONE
+from one.api import ONE
 
 one = ONE(base_url='https://dev.alyx.internationalbrainlab.org')
 
@@ -20,5 +20,5 @@ wa_ = {
 
 # Change the data on the database
 # Do not use the example on anything else than alyx-dev !
-if one.alyx._base_url == 'https://dev.alyx.internationalbrainlab.org':
+if one.alyx.base_url == 'https://dev.alyx.internationalbrainlab.org':
     rep = one.alyx.rest('water-administrations', 'create', data=wa_)

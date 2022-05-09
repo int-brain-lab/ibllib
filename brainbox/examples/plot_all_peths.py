@@ -1,37 +1,10 @@
-import numpy as np
 import os
+
+import numpy as np
 import matplotlib.pyplot as plt
-from pathlib import Path
+from oneibl.one import ONE
 
 from brainbox.singlecell import calculate_peths
-from oneibl.one import ONE
-import alf.io as ioalf
-
-
-def get_session_path(sess_data_info):
-    """
-    Return local session path given output of one.search
-
-    Example usage:
-        one = ONE()
-        eid = one.search(subject=subject, date=date, number=number)
-        files_paths = one.load(eid[0], download_only=True)
-        session_path = get_session_path(files_paths)
-    """
-    alf_file = None
-    fid = 0
-    while alf_file is None:
-        tmp = np.where(
-            [part == 'alf' for part in Path(sess_data_info.local_path[fid]).parts])[0]
-        if len(tmp) != 0:
-            alf_file = tmp
-        else:
-            fid += 1
-    if alf_file is None:
-        raise FileNotFoundError('Did not find alf directory')
-    else:
-        session_path = os.path.join(*Path(sess_data_info.local_path[0]).parts[:alf_file[0]])
-    return session_path
 
 
 def filter_trials(trials, choice, stim_side, stim_contrast):
@@ -251,15 +224,13 @@ if __name__ == '__main__':
     date = '2019-09-25'
     number = 1
     one = ONE()
+    probe_label = 'probe00'
     eid = one.search(subject=subject, date=date, number=number, task_protocol='ephysChoiceWorld')
-    session_info = one.load(eid[0], clobber=False, download_only=True)
-    session_path = get_session_path(session_info)
-    alf_path = os.path.join(session_path, 'alf')
 
     # load objects
-    spikes = ioalf.load_object(alf_path, 'spikes')
-    clusters = ioalf.load_object(alf_path, 'clusters')
-    trials = ioalf.load_object(alf_path, 'trials')
+    spikes = one.load_object(eid, 'spikes', collection=f'alf/{probe_label}')
+    clusters = one.load_object(eid, 'clusters', collection=f'alf/{probe_label}')
+    trials = one.load_object(eid, 'trials', collection='alf')
 
     # containers to store results
     align_events = ['stimOn', 'stimOff', 'feedback']

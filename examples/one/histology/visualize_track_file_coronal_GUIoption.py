@@ -1,10 +1,9 @@
-'''
+"""
 Plot a coronal slice (best fit) that contains a given probe track.
 As input, use the path to a probe track (_pts.csv).
 environment installation guide https://github.com/int-brain-lab/iblenv
-'''
+"""
 # Author: Olivier Winter
-
 import numpy as np
 
 from ibllib.pipes import histology

@@ -8,7 +8,7 @@ from ibllib.io.extractors import training_audio, bpod_trials, camera
 from ibllib.qc.camera import CameraQC
 from ibllib.qc.task_metrics import TaskQC, HabituationQC
 from ibllib.qc.task_extractors import TaskQCExtractor
-from oneibl.registration import register_session_raw_data
+from ibllib.oneibl.registration import register_session_raw_data
 
 _logger = logging.getLogger('ibllib')
 
@@ -25,6 +25,20 @@ class TrainingRegisterRaw(tasks.Task):
 class TrainingTrials(tasks.Task):
     priority = 90
     level = 0
+    force = False
+    signature = {
+        'input_files': [('_iblrig_taskData.raw.*', 'raw_behavior_data', True),
+                        ('_iblrig_taskSettings.raw.*', 'raw_behavior_data', True),
+                        ('_iblrig_encoderEvents.raw*', 'raw_behavior_data', True),
+                        ('_iblrig_encoderPositions.raw*', 'raw_behavior_data', True)],
+        'output_files': [('*trials.goCueTrigger_times.npy', 'alf', True),
+                         ('*trials.itiDuration.npy', 'alf', False),
+                         ('*trials.table.pqt', 'alf', True),
+                         ('*wheel.position.npy', 'alf', True),
+                         ('*wheel.timestamps.npy', 'alf', True),
+                         ('*wheelMoves.intervals.npy', 'alf', True),
+                         ('*wheelMoves.peakAmplitude.npy', 'alf', True)]
+    }
 
     def _run(self):
         """
@@ -33,7 +47,8 @@ class TrainingTrials(tasks.Task):
         trials, wheel, output_files = bpod_trials.extract_all(self.session_path, save=True)
         if trials is None:
             return None
-
+        if self.one is None or self.one.offline:
+            return output_files
         # Run the task QC
         # Compile task data for QC
         type = get_session_extractor_type(self.session_path)
@@ -50,6 +65,8 @@ class TrainingTrials(tasks.Task):
 
 
 class TrainingVideoCompress(tasks.Task):
+
+    priority = 90
 
     def _run(self):
         # avi to mp4 compression
@@ -84,10 +101,6 @@ class TrainingAudio(tasks.Task):
 
 # level 1
 class TrainingDLC(tasks.Task):
-    gpu = 1
-    cpu = 4
-    io_charge = 90
-    level = 1
 
     def _run(self):
         """empty placeholder for job creation only"""

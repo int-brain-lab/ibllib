@@ -1,10 +1,13 @@
 import unittest
 
 import numpy as np
+import matplotlib.pyplot as plt
 
 from ibllib.atlas import (BrainCoordinates, cart2sph, sph2cart, Trajectory,
                           Insertion, ALLEN_CCF_LANDMARKS_MLAPDV_UM, AllenAtlas)
 from ibllib.atlas.regions import BrainRegions
+from ibllib.atlas.plots import prepare_lr_data, reorder_data
+from iblutil.numerical import ismember
 
 
 def _create_mock_atlas():
@@ -25,6 +28,9 @@ class TestBrainRegions(unittest.TestCase):
     def setUpClass(self):
         self.brs = BrainRegions()
 
+    def test_rgba(self):
+        assert self.brs.rgba.shape == (self.brs.rgb.shape[0], 4)
+
     def test_get(self):
         ctx = self.brs.get(688)
         self.assertTrue(len(ctx.acronym) == 1 and ctx.acronym == 'CTX')
@@ -37,6 +43,23 @@ class TestBrainRegions(unittest.TestCase):
         leaves = self.brs.leaves()
         d = self.brs.descendants(ids=leaves['id'])
         self.assertTrue(np.all(np.sort(leaves['id']) == np.sort(d['id'])))
+
+    def test_ancestors_descendants_indices(self):
+        br = self.brs
+        tpath = np.array([997, 8, 567, 688, 695, 315, 453, 12993])
+        # /997/8/567/688/695/315/453/12993/
+        # check ancestors
+        ancs = br.ancestors(12993)
+        assert np.all(ancs.id == tpath)
+        # check ancestors with indices
+        ancs, inds = br.ancestors(12993, return_indices=True)
+        assert np.all(ancs.id == tpath)
+        # check descendants with indices
+        desdc, inds = br.descendants(12993, return_indices=True)
+        assert(inds == np.where(br.id == 12993))
+        # check full subtree
+        chemin = br.subtree(453)
+        assert np.all(np.sort(chemin.id) == np.unique(np.r_[br.descendants(453).id, br.ancestors(453).id]))
 
     def test_mappings_lateralized(self):
         # the mapping assigns all non found regions to root (1:997), except for the void (0:0)
@@ -57,6 +80,238 @@ class TestBrainRegions(unittest.TestCase):
         inds_[0] = 0
         assert np.all(inds == inds_)
 
+    def test_remap(self):
+        # Test mapping atlas ids from one map to another
+        atlas_id = np.array([463, 685])  # CA3 and PO
+        cosmos_id = self.brs.remap(atlas_id, source_map='Allen', target_map='Cosmos')
+        expected_cosmos_id = [1089, 549]  # HPF and TH
+        assert np.all(cosmos_id == expected_cosmos_id)
+
+    def test_id2id(self):
+        # Test remapping of atlas id to atlas id
+        atlas_id = np.array([463, 685])
+        # Allen mapping, positive ids -> positive ids
+        allen_id = self.brs.id2id(atlas_id, mapping='Allen')
+        assert np.all(allen_id == atlas_id)
+        # Allen mapping, negative ids -> positive ids
+        allen_id = self.brs.id2id(-1 * atlas_id, mapping='Allen')
+        assert np.all(allen_id == atlas_id)
+        # Allen-lr mapping, positive ids -> positive ids
+        allen_id = self.brs.id2id(atlas_id, mapping='Allen-lr')
+        assert np.all(allen_id == atlas_id)
+        # Allen-lr mapping, negative ids -> negative ids
+        allen_id = self.brs.id2id(-1 * atlas_id, mapping='Allen-lr')
+        assert np.all(allen_id == -1 * atlas_id)
+
+        expected_cosmos_id = np.array([1089, 549])  # HPF and TH
+        # Cosmos mapping, negative ids -> positive ids
+        cosmos_id = self.brs.id2id(-1 * atlas_id, mapping='Cosmos')
+        assert np.all(cosmos_id == expected_cosmos_id)
+        # Cosmos-lr mapping, negative ids -> negative ids
+        cosmos_id = self.brs.id2id(-1 * atlas_id, mapping='Cosmos-lr')
+        assert np.all(cosmos_id == -1 * expected_cosmos_id)
+
+    def test_id2acro(self):
+        atlas_id = np.array([463, 685])  # CA3 and VM
+        expected_allen_acronym = np.array(['CA3', 'VM'])
+        # Allen mapping, positive ids,
+        allen_acronym = self.brs.id2acronym(atlas_id, mapping='Allen')
+        assert np.all(allen_acronym == expected_allen_acronym)
+        # Allen-lr mapping, negative ids
+        allen_acronym = self.brs.id2acronym(-1 * atlas_id, mapping='Allen-lr')
+        assert np.all(allen_acronym == expected_allen_acronym)
+
+        expected_cosmos_acronym = np.array(['HPF', 'TH'])
+        cosmos_acronym = self.brs.id2acronym(atlas_id, mapping='Cosmos')
+        assert np.all(cosmos_acronym == expected_cosmos_acronym)
+
+    def test_id2index(self):
+        atlas_id = np.array([463, 685])
+
+        # Allen mapping, positive ids -> returns index on both side
+        allen_id, index_both = self.brs.id2index(atlas_id, mapping='Allen')
+        assert np.all(allen_id == atlas_id)
+        for exp, ind in zip(atlas_id, index_both):
+            assert np.all(ind == np.where(self.brs.id[self.brs.mappings['Allen']] == exp)[0])
+
+        # Allen mapping, negative ids -> returns index on both side
+        allen_id, index_both = self.brs.id2index(-1 * atlas_id, mapping='Allen')
+        assert np.all(allen_id == atlas_id)
+        for exp, ind in zip(atlas_id, index_both):
+            assert np.all(ind == np.where(self.brs.id[self.brs.mappings['Allen']] == exp)[0])
+
+        # Allen-lr mapping, positive ids ->  returns index on right side
+        allen_id, index = self.brs.id2index(atlas_id, mapping='Allen-lr')
+        assert np.all(allen_id == atlas_id)
+        for i, (exp, ind) in enumerate(zip(atlas_id, index)):
+            assert np.all(ind == index_both[i][index_both[i] <= self.brs.n_lr])
+
+        # Allen-lr mapping, negative ids ->  returns index on left side
+        allen_id, index = self.brs.id2index(-1 * atlas_id, mapping='Allen-lr')
+        assert np.all(allen_id == -1 * atlas_id)
+        for i, (exp, ind) in enumerate(zip(atlas_id, index)):
+            assert np.all(ind == index_both[i][index_both[i] > self.brs.n_lr])
+
+        # Cosmos mapping, positive ids ->  returns index on both sides
+        expected_cosmos_id = [1089, 549]  # HPF and TH
+        cosmos_id, index_both = self.brs.id2index(atlas_id, mapping='Cosmos')
+        assert np.all(cosmos_id == expected_cosmos_id)
+        for exp, ind in zip(expected_cosmos_id, index_both):
+            assert np.all(ind == np.where(self.brs.id[self.brs.mappings['Cosmos']] == exp)[0])
+
+    def test_acro2acro(self):
+        acronym = np.array(['CA3', 'VM'])
+        # Allen mapping
+        allen_acronym = self.brs.acronym2acronym(acronym, mapping='Allen')
+        assert np.all(acronym == allen_acronym)
+
+        expected_cosmos_acronym = np.array(['HPF', 'TH'])
+        # Cosmos mapping
+        cosmos_acronym = self.brs.acronym2acronym(acronym, mapping='Cosmos-lr')
+        assert np.all(cosmos_acronym == expected_cosmos_acronym)
+
+    def test_acro2id(self):
+        acronym = np.array(['CA3', 'VM'])
+        expected_allen_id = np.array([463, 685])
+        # Allen mapping, both hemisphere -> positive ids
+        allen_id = self.brs.acronym2id(acronym, mapping='Allen', hemisphere=None)
+        assert np.all(allen_id == expected_allen_id)
+        # Allen mapping, left hemisphere -> positive ids
+        allen_id = self.brs.acronym2id(acronym, mapping='Allen', hemisphere='left')
+        assert np.all(allen_id == expected_allen_id)
+        # Allen mapping, right hemisphere -> positive ids
+        allen_id = self.brs.acronym2id(acronym, mapping='Allen', hemisphere='right')
+        assert np.all(allen_id == expected_allen_id)
+
+        # Allen-lr mapping, both hemisphere -> negative and positive ids
+        allen_id = self.brs.acronym2id(acronym, mapping='Allen-lr', hemisphere=None)
+        assert np.all(allen_id.ravel() == np.c_[-1 * expected_allen_id, expected_allen_id].ravel())
+        # Allen-lr mapping, left hemisphere -> negative ids
+        allen_id = self.brs.acronym2id(acronym, mapping='Allen-lr', hemisphere='left')
+        assert np.all(allen_id == -1 * expected_allen_id)
+        # Allen-lr mapping, right hemisphere -> positive ids
+        allen_id = self.brs.acronym2id(acronym, mapping='Allen-lr', hemisphere='right')
+        assert np.all(allen_id == expected_allen_id)
+
+        expected_cosmos_id = np.array([1089, 549])
+        # Cosmos-lr mapping, left hemisphere -> negative ids
+        cosmos_id = self.brs.acronym2id(acronym, mapping='Cosmos-lr', hemisphere='left')
+        assert np.all(cosmos_id == -1 * expected_cosmos_id)
+        # Cosmos mapping, left hemisphere -> positive ids
+        cosmos_id = self.brs.acronym2id(acronym, mapping='Cosmos', hemisphere='left')
+        assert np.all(cosmos_id == expected_cosmos_id)
+
+    def test_acro2index(self):
+        acronym = np.array(['CA3', 'VM'])
+        # Expect it to be same regardless of lateralised or non lateralised mapping
+        for map, expected_acronym in zip(['Allen', 'Allen-lr', 'Cosmos', 'Cosmos-lr'],
+                                         [np.array(['CA3', 'VM']), np.array(['CA3', 'VM']),
+                                          np.array(['HPF', 'TH']), np.array(['HPF', 'TH'])]):
+            # Mapping, both hemisphere, returns index on both sides
+            map_acronym, index_both = self.brs.acronym2index(acronym, mapping=map, hemisphere=None)
+            assert np.all(map_acronym == expected_acronym)
+            for exp, ind in zip(expected_acronym, index_both):
+                assert np.all(ind == np.where(self.brs.acronym[self.brs.mappings[map]] == exp)[0])
+
+            # Mapping, left hemisphere, returns index that are > 1327
+            map_acronym, index = self.brs.acronym2index(acronym, mapping=map, hemisphere='left')
+            assert np.all(map_acronym == expected_acronym)
+            for i, (exp, ind) in enumerate(zip(expected_acronym, index)):
+                assert np.all(ind == index_both[i][index_both[i] > self.brs.n_lr])
+
+            # Mapping, right hemisphere, returns index that are < 1327
+            map_acronym, index = self.brs.acronym2index(acronym, mapping=map, hemisphere='right')
+            assert np.all(map_acronym == expected_acronym)
+            for i, (exp, ind) in enumerate(zip(expected_acronym, index)):
+                assert np.all(ind == index_both[i][index_both[i] <= self.brs.n_lr])
+
+    def test_index2id(self):
+        index = np.array([468, 646, 1973])
+        # Allen mapping
+        allen_id = np.array([463, 685, 685])
+        assert np.all(self.brs.index2id(index, mapping='Allen') == allen_id)
+        # Allen-lr mapping
+        allen_id = np.array([463, 685, -685])
+        assert np.all(self.brs.index2id(index, mapping='Allen-lr') == allen_id)
+        # Cosmos-lr mapping
+        cosmos_id = np.array([1089, 549, -549])
+        assert np.all(self.brs.index2id(index, mapping='Cosmos-lr') == cosmos_id)
+
+    def test_index2acronym(self):
+        index = np.array([468, 646, 1973])
+        # Allen mapping
+        allen_acronym = np.array(['CA3', 'VM', 'VM'])
+        assert np.all(self.brs.index2acronym(index, mapping='Allen') == allen_acronym)
+        # Allen-lr mapping
+        allen_acronym = np.array(['CA3', 'VM', 'VM'])
+        assert np.all(self.brs.index2acronym(index, mapping='Allen-lr') == allen_acronym)
+        # Cosmos-lr mapping
+        cosmos_acronym = np.array(['HPF', 'TH', 'TH'])
+        assert np.all(self.brs.index2acronym(index, mapping='Cosmos-lr') == cosmos_acronym)
+
+    def test_prepare_lr_data(self):
+        acronyms_lh = np.array(['VPM', 'VPL', 'PO'])
+        values_lh = np.array([0, 1, 2])
+        acronyms_rh = np.array(['VPL', 'PO', 'CA1'])
+        values_rh = np.array([3, 4, 5])
+        acronyms, values = prepare_lr_data(acronyms_lh, values_lh, acronyms_rh, values_rh)
+
+        assert np.array_equal(np.unique(np.r_[acronyms_lh, acronyms_rh]), acronyms)
+        assert np.array_equal(values[acronyms == 'VPL'][0], np.array([1, 3]))
+        np.testing.assert_equal(values[acronyms == 'VPM'][0], np.array([0, np.nan]))
+        np.testing.assert_equal(values[acronyms == 'CA1'][0], np.array([np.nan, 5]))
+
+    def test_reorder_data(self):
+        acronyms = np.array(['AUDp1', 'AUDpo1', 'AUDv1', 'SSp-m1', 'SSp-n1'])
+        values = np.array([0, 1, 2, 3, 4])
+        _, idx = ismember(acronyms, self.brs.acronym)
+        expected_acronyms = acronyms[np.argsort(self.brs.order[idx])]
+        expected_values = values[np.argsort(self.brs.order[idx])]
+        values = np.array([0, 1, 2, 3, 4])
+        acronnyms_ordered, values_ordered = reorder_data(acronyms, values)
+        assert np.array_equal(acronnyms_ordered, expected_acronyms)
+        assert np.array_equal(values_ordered, expected_values)
+
+
+class TestAtlasPlots(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(self):
+        self.ba = _create_mock_atlas()
+
+    def test_coronal_slice(self):
+        ax = self.ba.plot_cslice(ap_coordinate=0)
+        im = ax.get_images()[0]
+        assert im.get_array().shape == (self.ba.bc.nz, self.ba.bc.nx)
+        ax.clear()
+        ax = self.ba.plot_cslice(ap_coordinate=0, volume='annotation')
+        im = ax.get_images()[0]
+        assert im.get_array().shape == (self.ba.bc.nz, self.ba.bc.nx, 3)
+        ax.clear()
+
+    def test_sagittal_slice(self):
+        ax = self.ba.plot_sslice(ml_coordinate=0)
+        im = ax.get_images()[0]
+        assert im.get_array().shape == (self.ba.bc.nz, self.ba.bc.ny)
+        ax.clear()
+        ax = self.ba.plot_sslice(ml_coordinate=0, volume='annotation')
+        im = ax.get_images()[0]
+        assert im.get_array().shape == (self.ba.bc.nz, self.ba.bc.ny, 3)
+        ax.clear()
+
+    def test_horizontal_slice(self):
+        ax = self.ba.plot_hslice(dv_coordinate=0.002)
+        im = ax.get_images()[0]
+        assert im.get_array().shape == (self.ba.bc.ny, self.ba.bc.nx)
+        ax.clear()
+        ax = self.ba.plot_hslice(dv_coordinate=0.002, volume='annotation')
+        im = ax.get_images()[0]
+        assert im.get_array().shape == (self.ba.bc.ny, self.ba.bc.nx, 3)
+        ax.clear()
+
+    def tearDown(self) -> None:
+        plt.close('all')
+
 
 class TestAtlasSlicesConversion(unittest.TestCase):
 
@@ -76,6 +331,9 @@ class TestAtlasSlicesConversion(unittest.TestCase):
         # unlike the retina, root stays root whatever the mapping
         assert self.ba.get_labels([0, 0, 0]) == 0  # void !
         assert self.ba.get_labels([0, 0, 0], mapping='Beryl') == 0  # root
+        # Check the cosmos mapping too
+        assert self.ba.get_labels([0, 0, self.ba.bc.i2z(103)], mapping='Cosmos') == 997
+        assert self.ba.get_labels([0, 0, 0], mapping='Cosmos') == 0
 
     def test_slice(self):
         ba = self.ba
@@ -120,6 +378,39 @@ class TestAtlasSlicesConversion(unittest.TestCase):
         self.assertTrue(np.all(np.isclose(self.ba.xyz2ccf(vxyz, ccf_order='mlapdv'), vertices)))
         vxyz = self.ba.ccf2xyz(vertices, ccf_order='apdvml')
         self.assertTrue(np.all(np.isclose(self.ba.xyz2ccf(vxyz, ccf_order='apdvml'), vertices)))
+
+        # check if we have the ccf origin we get extremes of bregma atlas
+        ccf_apdvml = np.array([0, 0, 0])
+        xyz_mlapdv = self.ba.ccf2xyz(ccf_apdvml, ccf_order='apdvml')
+        assert np.all(np.isclose(xyz_mlapdv, np.array([self.ba.bc.xlim[0], self.ba.bc.ylim[0],
+                                                       self.ba.bc.zlim[0]])))
+        # check that if we move in one direction in ccf the correct dimension in xyz change
+        # Move in ML
+        ccf_apdvml = np.array([0, 0, 1000])
+        xyz_mlapdv = self.ba.ccf2xyz(ccf_apdvml, ccf_order='apdvml')
+        assert np.all(np.isclose(xyz_mlapdv[1:], np.array([self.ba.bc.ylim[0],
+                                                           self.ba.bc.zlim[0]])))
+        self.assertFalse(xyz_mlapdv[0] == self.ba.bc.xlim[0])
+        self.assertTrue(self.ba.bc.xlim[0] < xyz_mlapdv[0] < self.ba.bc.xlim[1])
+        assert np.all(np.isclose(self.ba.xyz2ccf(xyz_mlapdv, 'apdvml'), ccf_apdvml))
+
+        # Move in DV
+        ccf_apdvml = np.array([0, 1000, 0])
+        xyz_mlapdv = self.ba.ccf2xyz(ccf_apdvml, ccf_order='apdvml')
+        assert np.all(np.isclose(xyz_mlapdv[0:2], np.array([self.ba.bc.xlim[0],
+                                                            self.ba.bc.ylim[0]])))
+        self.assertFalse(xyz_mlapdv[2] == self.ba.bc.zlim[0])
+        self.assertTrue(self.ba.bc.zlim[0] > xyz_mlapdv[2] > self.ba.bc.zlim[1])
+        assert np.all(np.isclose(self.ba.xyz2ccf(xyz_mlapdv, 'apdvml'), ccf_apdvml))
+
+        # Move in AP
+        ccf_apdvml = np.array([1000, 0, 0])
+        xyz_mlapdv = self.ba.ccf2xyz(ccf_apdvml, ccf_order='apdvml')
+        assert np.all(np.isclose(xyz_mlapdv[[0, 2]], np.array([self.ba.bc.xlim[0],
+                                                               self.ba.bc.zlim[0]])))
+        self.assertFalse(xyz_mlapdv[1] == self.ba.bc.ylim[0])
+        self.assertTrue(self.ba.bc.ylim[0] > xyz_mlapdv[1] > self.ba.bc.ylim[1])
+        assert np.all(np.isclose(self.ba.xyz2ccf(xyz_mlapdv, 'apdvml'), ccf_apdvml))
 
 
 class TestInsertion(unittest.TestCase):
@@ -287,4 +578,4 @@ class TestsCoordinatesSimples(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main(exit=False)
+    unittest.main(exit=False, verbosity=2)

@@ -10,15 +10,16 @@ def get_on_off_times_and_positions(rf_map):
     """
 
     Prepares passive receptive field mapping into format for analysis
+    Parameters
     ----------
-    rf_map: output from alf.io.load_object(alf_path, object='passiveRFM', namespace='ibl')
+    rf_map: output from brainbox.io.one.load_passive_rfmap
 
     Returns
     -------
     rf_map_times: time of each receptive field map frame np.array(len(stim_frames)
-    rf_map_pos: unique position of each pixel on scree np.array(len(x_pos), len(y_pos))
+    rf_map_pos: unique position of each pixel on screen np.array(len(x_pos), len(y_pos))
     rf_stim_frames: for each pixel on screen stores array of stimulus frames where stim onset
-    occured. For both white squares 'on' and black squares 'off'
+    occurred. For both white squares 'on' and black squares 'off'
 
     """
 
@@ -106,15 +107,25 @@ def get_rf_map_over_depth(rf_map_times, rf_map_pos, rf_stim_frames, spike_times,
             x_pos = pos[0]
             y_pos = pos[1]
 
+            # Case where there is no stimulus at this position
+            if len(stim_frame[0]) == 0:
+                _rf_map[:, x_pos, y_pos, :] = np.zeros((depths.shape[0], n_bins))
+                continue
+
             stim_on_times = rf_map_times[stim_frame[0]]
             stim_intervals = np.c_[stim_on_times - pre_stim, stim_on_times + post_stim]
 
-            idx_intervals = np.searchsorted(times, stim_intervals)
+            out_intervals = stim_intervals[:, 1] > times[-1]
+            idx_intervals = np.searchsorted(times, stim_intervals)[np.invert(out_intervals)]
 
-            stim_trials = np.zeros((depths.shape[0], n_bins, idx_intervals.shape[0]))
-            for i, on in enumerate(idx_intervals):
-                stim_trials[:, :, i] = binned_array[:, on[0]:on[1]]
-            avg_stim_trials = np.mean(stim_trials, axis=2)
+            # Case when no spikes during the passive period
+            if idx_intervals.shape[0] == 0:
+                avg_stim_trials = np.zeros((depths.shape[0], n_bins))
+            else:
+                stim_trials = np.zeros((depths.shape[0], n_bins, idx_intervals.shape[0]))
+                for i, on in enumerate(idx_intervals):
+                    stim_trials[:, :, i] = binned_array[:, on[0]:on[1]]
+                avg_stim_trials = np.mean(stim_trials, axis=2)
 
             _rf_map[:, x_pos, y_pos, :] = avg_stim_trials
 
@@ -189,10 +200,14 @@ def get_stim_aligned_activity(stim_events, spike_times, spike_depths, z_score_fl
     stim_activity = {}
     for stim_type, stim_times in stim_events.items():
 
+        # Get rid of any nan values
+        stim_times = stim_times[~np.isnan(stim_times)]
         stim_intervals = np.c_[stim_times - pre_stim, stim_times + post_stim]
         base_intervals = np.c_[stim_times - base_stim, stim_times - pre_stim]
-        idx_stim = np.searchsorted(times, stim_intervals)
-        idx_base = np.searchsorted(times, base_intervals)
+        out_intervals = stim_intervals[:, 1] > times[-1]
+
+        idx_stim = np.searchsorted(times, stim_intervals, side='right')[np.invert(out_intervals)]
+        idx_base = np.searchsorted(times, base_intervals, side='right')[np.invert(out_intervals)]
 
         stim_trials = np.zeros((depths.shape[0], n_bins, idx_stim.shape[0]))
         noise_trials = np.zeros((depths.shape[0], n_bins_base, idx_stim.shape[0]))

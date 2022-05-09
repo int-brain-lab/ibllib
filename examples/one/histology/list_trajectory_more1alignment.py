@@ -1,13 +1,13 @@
-'''
+"""
 List sessions with 2 or more histology-ephys alignment done.
 TODO: remove session with multiple alingment done by 1 user only.
-'''
+"""
 # Author: Gaelle Chapuis
-from oneibl.one import ONE
 import numpy as np
 import pandas as pd
-one = ONE()
-rec_with_hist = one.alyx.rest('trajectories', 'list', provenance='Ephys aligned histology track')
+from one.api import ONE
+
+rec_with_hist = ONE().alyx.rest('trajectories', 'list', provenance='Ephys aligned histology track')
 eids = np.array([s['id'] for s in rec_with_hist])
 
 json = [s['json'] for s in rec_with_hist]
