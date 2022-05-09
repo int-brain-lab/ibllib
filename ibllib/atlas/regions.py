@@ -83,7 +83,7 @@ class BrainRegions(_BrainRegions):
         """
         beryl = np.load(Path(__file__).parent.joinpath('beryl.npy'))
         cosmos = np.load(Path(__file__).parent.joinpath('cosmos.npy'))
-        swanson = np.load(Path(__file__).parent.joinpath('swanson.npy'))
+        swanson = np.load(Path(__file__).parent.joinpath('swanson_regions.npy'))
         self.mappings = {
             'Allen': self._mapping_from_regions_list(np.unique(np.abs(self.id)), lateralize=False),
             'Allen-lr': np.arange(self.id.size),
@@ -132,7 +132,7 @@ class BrainRegions(_BrainRegions):
                 count = np.sum(indices)
         if return_indices:
             return self.get(self.id[indices]), np.where(indices)[0]
-        else:    
+        else:
             return self.get(self.id[indices])
 
     def subtree(self, scalar_id, return_indices=False):
@@ -149,10 +149,9 @@ class BrainRegions(_BrainRegions):
         indices = np.unique(np.r_[idown, iup])
         if return_indices:
             return self.get(self.id[indices]), np.where(indices)[0]
-        else:    
+        else:
             return self.get(self.id[indices])
-        
-        
+
     def descendants(self, ids, **kwargs):
         """
         Get descendants from one or an array of ids

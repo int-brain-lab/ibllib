@@ -46,7 +46,7 @@ class TestBrainRegions(unittest.TestCase):
 
     def test_ancestors_descendants_indices(self):
         br = self.brs
-        tpath =  np.array([  997,     8,   567,   688,   695,   315,   453, 12993])
+        tpath = np.array([997, 8, 567, 688, 695, 315, 453, 12993])
         # /997/8/567/688/695/315/453/12993/
         # check ancestors
         ancs = br.ancestors(12993)
@@ -60,7 +60,6 @@ class TestBrainRegions(unittest.TestCase):
         # check full subtree
         chemin = br.subtree(453)
         assert np.all(np.sort(chemin.id) == np.unique(np.r_[br.descendants(453).id, br.ancestors(453).id]))
-
 
     def test_mappings_lateralized(self):
         # the mapping assigns all non found regions to root (1:997), except for the void (0:0)
