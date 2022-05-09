@@ -181,4 +181,11 @@ def plot_swanson(acronyms=None, values=None, ax=None, hemisphere=None, br=None, 
     imb[s2a == 0] = 255
     imb[s2a == 1] = np.array([167, 169, 172, 255])
     ax.imshow(imb)
+
+    # provides the mean to sea the region on axis
+    def format_coord(x, y):
+        acronym = br.acronym[s2a[int(y), int(x)]]
+        return f'x={x:1.4f}, y={x:1.4f}, {acronym}'
+
+    ax.format_coord = format_coord
     return ax
