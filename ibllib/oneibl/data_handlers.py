@@ -47,10 +47,15 @@ class DataHandler(abc.ABC):
 
         one = one or self.one
         session_datasets = one.list_datasets(one.path2eid(self.session_path), details=True)
-        df = pd.DataFrame(columns=one._cache.datasets.columns)
+        dfs = []
         for file in self.signature['input_files']:
-            df = df.append(filter_datasets(session_datasets, filename=file[0], collection=file[1],
-                           wildcards=True, assert_unique=False))
+            dfs.append(filter_datasets(session_datasets, filename=file[0], collection=file[1],
+                       wildcards=True, assert_unique=False))
+        df = pd.concat(dfs)
+
+        # Some cases the eid is stored in the index. If so we drop this level
+        if 'eid' in df.index.names:
+            df = df.droplevel(level='eid')
         return df
 
     def uploadData(self, outputs, version):
@@ -147,8 +152,10 @@ class ServerGlobusDataHandler(DataHandler):
         :return:
         """
         if self.lab == 'cortexlab':
-            df = super().getData(one=ONE(base_url='https://alyx.internationalbrainlab.org'))
+            one = ONE(base_url='https://alyx.internationalbrainlab.org')
+            df = super().getData(one=one)
         else:
+            one = self.one
             df = super().getData()
 
         if len(df) == 0:
@@ -173,9 +180,9 @@ class ServerGlobusDataHandler(DataHandler):
             full_local_path = Path(self.globus.endpoints['local']['root_path']).joinpath(sess_path)
             if not full_local_path.exists():
 
-                if self.one._index_type() is int:
+                if one._index_type() is int:
                     uuid = np2str(np.r_[i[0], i[1]])
-                elif self.one._index_type() is str:
+                elif one._index_type() is str:
                     uuid = i
 
                 self.local_paths.append(full_local_path)
@@ -226,7 +233,7 @@ class RemoteHttpDataHandler(DataHandler):
         :return:
         """
         df = super().getData()
-        self.one._download_datasets(df)
+        self.one._check_filesystem(df)
 
     def uploadData(self, outputs, version, **kwargs):
         """

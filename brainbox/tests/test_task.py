@@ -108,6 +108,36 @@ class TestTask(unittest.TestCase):
         pseudo_trials = task.generate_pseudo_session(test_trials)
         self.assertTrue(pseudo_trials.shape[0] == test_trials.shape[0])
 
+    def test_get_impostor_target(self):
+        # labels between 3 and 14
+        labels = np.array([str(np.random.randint(12) + 3) for i in range(1000)])
+        # targets with the same label are equal
+        targets = [np.ones((2, 3, int(labels[i]))) * int(labels[i]) for i in range(len(labels))]
+
+        impostor_target = task.get_impostor_target(targets, labels, '3')
+        self.assertTrue(impostor_target.shape[-1] == 3)
+        self.assertTrue(impostor_target.shape[0] == 2)
+        self.assertTrue(impostor_target.shape[1] == 3)
+
+        impostor_target = task.get_impostor_target(targets, labels, '14')
+        self.assertTrue(impostor_target.shape[-1] == 14)
+        self.assertTrue(impostor_target.shape[0] == 2)
+        self.assertTrue(impostor_target.shape[1] == 3)
+
+        try:
+            # assertion should be thrown because '2' is not a valid label
+            impostor_target = task.get_impostor_target(targets, labels, '2')
+            # code shouldn't make it here
+            self.assertTrue(False)
+        except AssertionError:
+            self.assertTrue(True)
+
+        # seed should make output deterministic
+        for i in range(10):
+            impostor_target1 = task.get_impostor_target(targets, labels, seed_idx=i)
+            impostor_target2 = task.get_impostor_target(targets, labels, seed_idx=i)
+            self.assertTrue(np.all(impostor_target1 == impostor_target2))
+
 
 if __name__ == "__main__":
     unittest.main(exit=False)

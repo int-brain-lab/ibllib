@@ -461,3 +461,77 @@ def generate_pseudo_session(trials, generate_choices=True):
     pseudo_trials.loc[pseudo_trials['signed_contrast'].isnull(),
                       'signed_contrast'] = -pseudo_trials['contrastLeft']
     return pseudo_trials
+
+
+def get_impostor_target(targets, labels, current_label=None,
+                        seed_idx=None, verbose=False):
+    """
+    Generate impostor targets by selecting from a list of current targets of variable length.
+    Targets are selected and stitched together to the length of the current labeled target,
+    aka 'Frankenstein' targets, often used for evaluating a null distribution while decoding.
+
+    Parameters
+    ----------
+    targets : list of all targets
+            targets may be arrays of any dimension (a,b,...,z)
+            but must have the same shape except for the last dimension, z.  All targets must
+            have z > 0.
+    labels : numpy array of strings
+            labels corresponding to each target e.g. session eid.
+            only targets with unique labels are used to create impostor target.  Typically,
+            use eid as the label because each eid has a unique target.
+    current_label : string
+            targets with the current label are not used to create impostor
+            target.  Size of corresponding target is used to determine size of impostor
+            target.  If None, a random selection from the set of unique labels is used.
+
+    Returns
+    --------
+    impostor_final : numpy array, same shape as all targets except last dimension
+
+    """
+
+    np.random.seed(seed_idx)
+
+    unique_labels, unique_label_idxs = np.unique(labels, return_index=True)
+    unique_targets = [targets[unique_label_idxs[i]] for i in range(len(unique_label_idxs))]
+    if current_label is None:
+        current_label = np.random.choice(unique_labels)
+    avoid_same_label = ~(unique_labels == current_label)
+    # current label must correspond to exactly one unique label
+    assert len(np.nonzero(~avoid_same_label)[0]) == 1
+    avoided_index = np.nonzero(~avoid_same_label)[0][0]
+    nonavoided_indices = np.nonzero(avoid_same_label)[0]
+    ntargets = len(nonavoided_indices)
+    all_impostor_targets = [unique_targets[nonavoided_indices[i]] for i in range(ntargets)]
+    all_impostor_sizes = np.array([all_impostor_targets[i].shape[-1] for i in range(ntargets)])
+    current_target_size = unique_targets[avoided_index].shape[-1]
+    if verbose:
+        print('impostor target has length %s' % (current_target_size))
+    assert np.min(all_impostor_sizes) > 0  # all targets must be nonzero in size
+    max_needed_to_tile = int(np.max(all_impostor_sizes) / np.min(all_impostor_sizes)) + 1
+    tile_indices = np.random.choice(np.arange(len(all_impostor_targets), dtype=int),
+                                    size=max_needed_to_tile,
+                                    replace=False)
+    impostor_tiles = [all_impostor_targets[tile_indices[i]] for i in range(len(tile_indices))]
+    impostor_tile_sizes = all_impostor_sizes[tile_indices]
+    if verbose:
+        print('Randomly chose %s targets to tile the impostor target' % (max_needed_to_tile))
+        print('with the following sizes:', impostor_tile_sizes)
+
+    number_of_tiles_needed = np.sum(np.cumsum(impostor_tile_sizes) < current_target_size) + 1
+    impostor_tiles = impostor_tiles[:number_of_tiles_needed]
+    if verbose:
+        print('%s of %s needed to tile the entire impostor target' % (number_of_tiles_needed,
+                                                                      max_needed_to_tile))
+
+    impostor_stitch = np.concatenate(impostor_tiles, axis=-1)
+    start_ind = np.random.randint((impostor_stitch.shape[-1] - current_target_size) + 1)
+    impostor_final = impostor_stitch[..., start_ind:start_ind + current_target_size]
+    if verbose:
+        print('%s targets stitched together with shift of %s\n' % (number_of_tiles_needed,
+                                                                   start_ind))
+
+    np.random.seed(None)  # reset numpy seed to None
+
+    return impostor_final

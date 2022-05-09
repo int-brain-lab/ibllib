@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import scipy.interpolate as interpolate
 from scipy.stats import zscore
 
-from ibllib.dsp.smooth import smooth_interpolate_savgol
+from neurodsp.smooth import smooth_interpolate_savgol
 from brainbox.processing import bincount2D
 import brainbox.behavior.wheel as bbox_wheel
 
@@ -458,16 +458,17 @@ def plot_motion_energy_hist(camera_dict, trials_df):
                 motion_energy = zscore(camera_dict[cam]['motion_energy'], nan_policy='omit')
                 try:
                     start_idx = insert_idx(camera_dict[cam]['times'], start_window)
+                    end_idx = np.array(start_idx + int(WINDOW_LEN * SAMPLING[cam]), dtype='int64')
+                    me_all = [motion_energy[start_idx[i]:end_idx[i]] for i in range(len(start_idx))]
+                    me_all = [m for m in me_all if len(m) > 0]
+                    times = np.arange(len(me_all[0])) / SAMPLING[cam] + WINDOW_LAG
+                    me_mean = np.mean(me_all, axis=0)
+                    me_std = np.std(me_all, axis=0) / np.sqrt(len(me_all))
+                    plt.plot(times, me_mean, label=f'{cam} cam', color=colors[cam], linewidth=2)
+                    plt.fill_between(times, me_mean + me_std, me_mean - me_std, color=colors[cam], alpha=0.2)
                 except ValueError:
-                    logger.error("Camera.times are outside of the trial windows")
-                    raise
-                end_idx = np.array(start_idx + int(WINDOW_LEN * SAMPLING[cam]), dtype='int64')
-                me_all = [motion_energy[start_idx[i]:end_idx[i]] for i in range(len(start_idx))]
-                times = np.arange(len(me_all[0])) / SAMPLING[cam] + WINDOW_LAG
-                me_mean = np.mean(me_all, axis=0)
-                me_std = np.std(me_all, axis=0) / np.sqrt(len(me_all))
-                plt.plot(times, me_mean, label=f'{cam} cam', color=colors[cam], linewidth=2)
-                plt.fill_between(times, me_mean + me_std, me_mean - me_std, color=colors[cam], alpha=0.2)
+                    logger.error(f"{cam}Camera camera.times are outside of the trial windows")
+                    missing_data.append(cam)
             except AttributeError:
                 logger.warning(f"Cannot load motion energy and/or times data for {cam} camera")
                 missing_data.append(cam)
@@ -484,7 +485,7 @@ def plot_motion_energy_hist(camera_dict, trials_df):
     if len(missing_data) > 0:
         ax = plt.gca()
         ax.text(.95, .35, f"Data incomplete for\n{' and '.join(missing_data)} camera", color='r', fontsize=10,
-                horizontalalignment='right', verticalalignment='center', transform=ax.transAxes)
+                fontweight='bold', horizontalalignment='right', verticalalignment='center', transform=ax.transAxes)
     return plt.gca()
 
 

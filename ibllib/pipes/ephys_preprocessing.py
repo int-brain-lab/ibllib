@@ -12,10 +12,12 @@ import numpy as np
 import pandas as pd
 
 import one.alf.io as alfio
+from neurodsp.utils import rms
+import spikeglx
 
 from ibllib.misc import check_nvidia_driver
 from ibllib.ephys import ephysqc, spikes, sync_probes
-from ibllib.io import ffmpeg, spikeglx
+from ibllib.io import ffmpeg
 from ibllib.io.video import label_from_path, assert_valid_label
 from ibllib.io.extractors import ephys_fpga, ephys_passive, camera
 from ibllib.pipes import tasks
@@ -26,7 +28,6 @@ from ibllib.qc.task_extractors import TaskQCExtractor
 from ibllib.qc.task_metrics import TaskQC
 from ibllib.qc.camera import run_all_qc as run_camera_qc
 from ibllib.qc.dlc import DlcQC
-from ibllib.dsp import rms
 from ibllib.plots.figures import dlc_qc_plot, BehaviourPlots, LfpPlots, ApPlots, BadChannelsAp
 from ibllib.plots.figures import SpikeSorting as SpikeSortingPlots
 from ibllib.plots.snapshot import ReportSnapshot
@@ -487,7 +488,7 @@ class SpikeSorting(tasks.Task):
 
 
 class EphysVideoCompress(tasks.Task):
-    priority = 40
+    priority = 90
     level = 0
     force = False
     signature = {
@@ -1007,11 +1008,14 @@ class EphysDLC(tasks.Task):
                         executable="/bin/bash",
                     )
                     info, error = process.communicate()
-                    info_str = info.decode("utf-8").strip()
-                    _logger.info(info_str)
+                    # info_str = info.decode("utf-8").strip()
+                    # _logger.info(info_str)
                     if process.returncode != 0:
                         error_str = error.decode("utf-8").strip()
-                        _logger.error(f'DLC failed for {cam}Camera\n {error_str}')
+                        _logger.error(f'DLC failed for {cam}Camera.\n\n'
+                                      f'++++++++ Output of subprocess for debugging ++++++++\n\n'
+                                      f'{error_str}\n'
+                                      f'++++++++++++++++++++++++++++++++++++++++++++\n')
                         self.status = -1
                         # We dont' run motion energy, or add any files if dlc failed to run
                         continue
@@ -1029,11 +1033,14 @@ class EphysDLC(tasks.Task):
                         executable="/bin/bash",
                     )
                     info, error = process.communicate()
-                    info_str = info.decode("utf-8").strip()
-                    _logger.info(info_str)
+                    # info_str = info.decode("utf-8").strip()
+                    # _logger.info(info_str)
                     if process.returncode != 0:
                         error_str = error.decode("utf-8").strip()
-                        _logger.error(f'Motion energy failed for {cam}Camera \n {error_str}')
+                        _logger.error(f'Motion energy failed for {cam}Camera.\n\n'
+                                      f'++++++++ Output of subprocess for debugging ++++++++\n\n'
+                                      f'{error_str}\n'
+                                      f'++++++++++++++++++++++++++++++++++++++++++++\n')
                         self.status = -1
                         continue
                     actual_outputs.append(next(self.session_path.joinpath('alf').glob(
@@ -1068,27 +1075,25 @@ class EphysPostDLC(tasks.Task):
                                  # the following are required for the DLC plot only
                                  # they are not strictly required, some plots just might be skipped
                                  # In particular the raw videos don't need to be downloaded as they can be streamed
-                                 ('_iblrig_bodyCamera.raw.mp4', 'raw_video_data', False),
-                                 ('_iblrig_leftCamera.raw.mp4', 'raw_video_data', False),
-                                 ('_iblrig_rightCamera.raw.mp4', 'raw_video_data', False),
-                                 ('rightROIMotionEnergy.position.npy', 'alf', False),
-                                 ('leftROIMotionEnergy.position.npy', 'alf', False),
-                                 ('bodyROIMotionEnergy.position.npy', 'alf', False),
-                                 ('_ibl_trials.choice.npy', 'alf', False),
-                                 ('_ibl_trials.feedbackType.npy', 'alf', False),
-                                 ('_ibl_trials.feedback_times.npy', 'alf', False),
-                                 ('_ibl_trials.stimOn_times.npy', 'alf', False),
-                                 ('_ibl_wheel.position.npy', 'alf', False),
-                                 ('_ibl_wheel.timestamps.npy', 'alf', False),
+                                 ('_iblrig_bodyCamera.raw.mp4', 'raw_video_data', True),
+                                 ('_iblrig_leftCamera.raw.mp4', 'raw_video_data', True),
+                                 ('_iblrig_rightCamera.raw.mp4', 'raw_video_data', True),
+                                 ('rightROIMotionEnergy.position.npy', 'alf', True),
+                                 ('leftROIMotionEnergy.position.npy', 'alf', True),
+                                 ('bodyROIMotionEnergy.position.npy', 'alf', True),
+                                 ('_ibl_trials.table.pqt', 'alf', True),
+                                 ('_ibl_wheel.position.npy', 'alf', True),
+                                 ('_ibl_wheel.timestamps.npy', 'alf', True),
                                  ],
                  # More files are required for all panels of the DLC QC plot to function
                  'output_files': [('_ibl_leftCamera.features.pqt', 'alf', True),
                                   ('_ibl_rightCamera.features.pqt', 'alf', True),
                                   ('licks.times.npy', 'alf', True),
-                                  ('dlc_qc_plot.png', 'snapshot', False)]
+                                  # ('dlc_qc_plot.png', 'snapshot', False)
+                                  ]
                  }
 
-    def _run(self, overwrite=False, run_qc=True, plot_qc=True):
+    def _run(self, overwrite=True, run_qc=True, plot_qc=True):
         """
         Run the EphysPostDLC task. Returns a list of file locations for the output files in signature. The created plot
         (dlc_qc_plot.png) is not returned, but saved in session_path/snapshots and uploaded to Alyx as a note.
@@ -1121,18 +1126,24 @@ class EphysPostDLC(tasks.Task):
                     dlc = pd.read_parquet(dlc_file)
                     dlc_thresh = likelihood_threshold(dlc, 0.9)
                     # try to load respective camera times
-                    dlc_t = np.load(next(Path(self.session_path).joinpath('alf').glob(f'_ibl_{cam}Camera.times.*npy')))
-                    times = True
-                    if dlc_t.shape[0] == 0:
-                        _logger.error(f'camera.times empty for {cam} camera. '
-                                      f'Computations using camera.times will be skipped')
+                    try:
+                        dlc_t = np.load(next(Path(self.session_path).joinpath('alf').glob(f'_ibl_{cam}Camera.times.*npy')))
+                        times = True
+                        if dlc_t.shape[0] == 0:
+                            _logger.error(f'camera.times empty for {cam} camera. '
+                                          f'Computations using camera.times will be skipped')
+                            self.status = -1
+                            times = False
+                        elif dlc_t.shape[0] < len(dlc_thresh):
+                            _logger.error(f'Camera times shorter than DLC traces for {cam} camera. '
+                                          f'Computations using camera.times will be skipped')
+                            self.status = -1
+                            times = 'short'
+                    except StopIteration:
                         self.status = -1
                         times = False
-                    elif dlc_t.shape[0] < len(dlc_thresh):
-                        _logger.error(f'Camera times shorter than DLC traces for {cam} camera. '
+                        _logger.error(f'No camera.times for {cam} camera. '
                                       f'Computations using camera.times will be skipped')
-                        self.status = -1
-                        times = 'short'
                     # These features are only computed from left and right cam
                     if cam in ('left', 'right'):
                         features = pd.DataFrame()
@@ -1161,7 +1172,7 @@ class EphysPostDLC(tasks.Task):
                         output_files.append(features_file)
 
                     # For all cams, compute DLC qc if times available
-                    if times is True or times == 'short' and run_qc:
+                    if run_qc is True and times in [True, 'short']:
                         # Setting download_data to False because at this point the data should be there
                         qc = DlcQC(self.session_path, side=cam, one=self.one, download_data=False)
                         qc.run(update=True)

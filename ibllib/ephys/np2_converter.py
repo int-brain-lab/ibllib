@@ -1,5 +1,5 @@
-from ibllib.io import spikeglx
-from ibllib.dsp.utils import WindowGenerator
+import spikeglx
+from neurodsp.utils import WindowGenerator
 import scipy.signal
 import numpy as np
 from pathlib import Path
@@ -135,8 +135,6 @@ class NP2Converter:
             self._split2shanks(chunk_ap2save, etype='ap')
             self._split2shanks(chunk_lf2save, etype='lf')
 
-            wg.print_progress(desc='Extracting LFP + Splitting:')
-
         self._closefiles(etype='ap')
         self._closefiles(etype='lf')
 
@@ -228,8 +226,6 @@ class NP2Converter:
 
             self._split2shanks(chunk_lf2save, etype='lf')
 
-            wg.print_progress(desc='Extracting LFP:')
-
         self._closefiles(etype='lf')
 
         self._writemetadata_lf()
@@ -297,8 +293,6 @@ class NP2Converter:
                         self.shank_info[sh]['sr'][first:last, :-1]
             assert np.array_equal(expected, chunk), \
                 'data in original file and split files do no match'
-
-            wg.print_progress(desc='Checking:')
 
         # close the sglx instances once we are done checking
         for sh in self.shank_info.keys():
