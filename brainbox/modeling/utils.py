@@ -69,54 +69,96 @@ class SequentialSelector:
         self.scoring = scoring
         self.delta_scores = pd.DataFrame(index=self.model.clu_ids)
         self.trlabels = self.design.trlabels
-        self.train = np.isin(self.trlabels, self.model.traininds).flatten() if train is None else np.isin(self.trlabels, train).flatten()
-        self.test = ~self.train if test is None else np.isin(self.trlabels, test).flatten()
+        if train is None:
+            self.train = np.isin(self.trlabels, self.model.traininds).flatten()
+        else:
+            self.train = np.isin(self.trlabels, train).flatten()
+        if test is None:
+            self.test = ~self.train
+        else:
+            self.test = np.isin(self.trlabels, test).flatten()
         self.features = np.array(list(self.design.covar.keys()))
 
-    def fit(self, progress=False):
+    def fit(self, train_idx=None, full_scores=False, progress=False):
         """
         Fit the sequential feature selection
-
         Parameters
         ----------
+        train_idx : array-like
+            indices of trials to use in the training set. If the model passed to the SFS instance
+            did not already have training indices, this must be specified. If it did have indices,
+            then this will override those.
+        full_scores : bool, optional
+            Whether to store the full set of submodel scores at each step. Produces additional
+            attributes .full_scores_train_ and .full_scores_test_
         progress : bool, optional
             Whether to show a progress bar, by default False
         """
+        if train_idx is None and self.train is None:
+            raise ValueError('train_idx cannot be None if model used to create SFS did not have '
+                             'any training indices')
+        if train_idx is not None:
+            self.train = np.isin(self.trlabels, train_idx).flatten()
+            self.test = ~self.train
         n_features = len(self.features)
         maskdf = pd.DataFrame(index=self.model.clu_ids, columns=self.features, dtype=bool)
         maskdf.loc[:, :] = False
         seqdf = pd.DataFrame(index=self.model.clu_ids, columns=range(self.n_features_to_select))
-        scoredf = pd.DataFrame(index=self.model.clu_ids, columns=range(self.n_features_to_select))
+        trainscoredf = pd.DataFrame(index=self.model.clu_ids,
+                                    columns=range(self.n_features_to_select))
+        testscoredf = pd.DataFrame(index=self.model.clu_ids,
+                                   columns=range(self.n_features_to_select))
 
         if not 0 < self.n_features_to_select <= n_features:
             raise ValueError('n_features_to_select is not a valid number in the context'
                              ' of the model.')
 
-        n_iterations = (
-            self.n_features_to_select if self.direction == 'forward'
-            else n_features - self.n_features_to_select
-        )
+        n_iterations = (self.n_features_to_select if self.direction == 'forward' else n_features -
+                        self.n_features_to_select)
+        if full_scores:
+            fullindex = pd.MultiIndex.from_product([self.model.clu_ids, np.arange(n_iterations)],
+                                                   names=['clu_id', 'feature_iter'])
+            fulltrain = pd.DataFrame(index=fullindex, columns=range(len(self.design.covar)))
+            fulltest = pd.DataFrame(index=fullindex, columns=range(len(self.design.covar)))
+
         for i in tqdm(range(n_iterations), desc='step', leave=False, disable=not progress):
             masks_set = maskdf.groupby(self.features.tolist()).groups
             for current_mask in tqdm(masks_set, desc='feature subset', leave=False):
                 cells = masks_set[current_mask]
-                new_feature_idx, nf_score, all_scores = self._get_best_new_feature(current_mask, cells)
+                outputs = self._get_best_new_feature(current_mask, cells, full_scores)
+                if full_scores:
+                    new_feature_idx, nf_train, nf_test, nf_fulltrain, nf_fulltest = outputs
+                else:
+                    new_feature_idx, nf_train, nf_test = outputs
                 for cell in cells:
                     maskdf.at[cell, self.features[new_feature_idx.loc[cell]]] = True
                     seqdf.loc[cell, i] = self.features[new_feature_idx.loc[cell]]
-                    scoredf.loc[cell, i] = nf_score.loc[cell]
+                    trainscoredf.loc[cell, i] = nf_train.loc[cell]
+                    testscoredf.loc[cell, i] = nf_test.loc[cell]
+                    if full_scores:
+                        fulltest.loc[cell, i] = nf_fulltest.loc[cell]
+                        fulltrain.loc[cell, i] = nf_fulltrain.loc[cell]
         self.support_ = maskdf
         self.sequences_ = seqdf
-        self.scores_ = scoredf
-        self.all_scores = all_scores
+        self.scores_test_ = testscoredf
+        self.scores_train_ = trainscoredf
+        if full_scores:
+            self.full_scores_train_ = fulltrain
+            self.full_scores_test_ = fulltest
 
-    def _get_best_new_feature(self, mask, cells):
+    def _get_best_new_feature(self, mask, cells, full_scores=False):
+        """
+        Returns
+        -------
+        maxind, trainmax, testmax, trainscores, testscores
+        """
         mask = np.array(mask)
         candidate_features = np.flatnonzero(~mask)
         cell_idxs = np.argwhere(np.isin(self.model.clu_ids, cells)).flatten()
         my = self.model.binnedspikes[np.ix_(self.train, cell_idxs)]
         my_test = self.model.binnedspikes[np.ix_(self.test, cell_idxs)]
-        scores = pd.DataFrame(index=cells, columns=candidate_features, dtype=float)
+        trainscores = pd.DataFrame(index=cells, columns=candidate_features, dtype=float)
+        testscores = pd.DataFrame(index=cells, columns=candidate_features, dtype=float)
         for feature_idx in candidate_features:
             candidate_mask = mask.copy()
             candidate_mask[feature_idx] = True
@@ -126,9 +168,26 @@ class SequentialSelector:
             feat_idx = np.hstack([self.design.covar[feat]['dmcol_idx'] for feat in fitfeatures])
             mdm = self.design[np.ix_(self.train, feat_idx)]
             mdm_test = self.design[np.ix_(self.test, feat_idx)]
+
             coefs, intercepts = self.model._fit(mdm, my, cells=cells)
             for i, cell in enumerate(cells):
-                scores.at[cell, feature_idx] = self.model._scorer(coefs.loc[cell],
-                                                                  intercepts.loc[cell],
-                                                                  mdm_test, my_test[:, i])
-        return scores.idxmax(axis=1), scores.max(axis=1), scores
+                trainscores.at[cell,
+                               feature_idx] = self.model._scorer(coefs.loc[cell],
+                                                                 intercepts.loc[cell], mdm, my[:,
+                                                                                               i])
+                testscores.at[cell,
+                              feature_idx] = self.model._scorer(coefs.loc[cell],
+                                                                intercepts.loc[cell], mdm_test,
+                                                                my_test[:, i])
+
+        maxind = trainscores.idxmax(axis=1)
+        trainmax = trainscores.max(axis=1)
+        # Ugly kludge to compensate for DataFrame.lookup being deprecated
+        midx, cols = pd.factorize(maxind)
+        testmax = pd.Series(testscores.reindex(cols, axis=1).to_numpy()[np.arange(len(testscores)),
+                                                                        midx],
+                            index=testscores.index)
+        if full_scores:
+            return maxind, trainmax, testmax, trainscores, testscores
+        else:
+            return maxind, trainmax, testmax
