@@ -87,10 +87,10 @@ class BehaviourPlots(ReportSnapshot):
                  }
 
     def __init__(self, eid, session_path=None, one=None, **kwargs):
-        self.one = one or ONE()
+        self.one = one
         self.eid = eid
         self.session_path = session_path or self.one.eid2path(self.eid)
-        super(BehaviourPlots, self).__init__(self.session_path, self.eid,
+        super(BehaviourPlots, self).__init__(self.session_path, self.eid, one=self.one,
                                              **kwargs)
         self.output_directory = self.session_path.joinpath('snapshot', 'behaviour')
         self.output_directory.mkdir(exist_ok=True, parents=True)
