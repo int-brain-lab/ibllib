@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 
 from iblutil.numerical import ismember
 from iblutil.util import Bunch
+from iblutil.io.hashfile import md5
 from ibllib.atlas.atlas import AllenAtlas, S3_BUCKET_IBL, BrainRegions, s3_download_public
 
 _logger = logging.getLogger(__file__)
@@ -115,8 +116,11 @@ def circles(N=5, atlas=None, display='flat'):
 def swanson(filename="swanson2allen.npz"):
     # filename could be "swanson2allen_original.npz", or "swanson2allen.npz" for remapped indices to match
     # existing labels in the brain atlas
+    OLD_MD5 = [
+        'bb0554ecc704dd4b540151ab57f73822',  # version 2022-05-02
+    ]
     npz_file = AllenAtlas._get_cache_dir().joinpath(filename)
-    if not npz_file.exists():
+    if not npz_file.exists() or md5(npz_file) in OLD_MD5:
         npz_file.parent.mkdir(exist_ok=True, parents=True)
         _logger.info(f'downloading swanson image from {S3_BUCKET_IBL} s3 bucket...')
         s3_download_public(S3_BUCKET_IBL, f'atlas/{npz_file.name}', str(npz_file))
