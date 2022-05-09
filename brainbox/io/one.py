@@ -700,7 +700,7 @@ def load_wheel_reaction_times(eid, one=None):
     return firstMove_times - trials['goCue_times']
 
 
-def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_wheel=False,
+def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0.2, ret_wheel=False,
                    ret_abswheel=False, wheel_binsize=0.02, addtl_types=[],
                    align_event='stimOn_times', keeptrials=None):
     """
