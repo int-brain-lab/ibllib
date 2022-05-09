@@ -195,7 +195,7 @@ class NeuralModel:
         # operate on. If all data indices are in train indices, train and test are the same set.
         self.traininds = train_idx
         if not np.all(np.isin(self.design.trialsdf.index, train_idx)):
-            self.testinds = self.design.trialsdf.index[~self.trialsdf.index.isin(train_idx)]
+            self.testinds = self.design.trialsdf.index[~self.design.trialsdf.index.isin(train_idx)]
         else:
             self.testinds = train_idx
 
@@ -226,7 +226,7 @@ class NeuralModel:
         testmask = np.isin(self.design.trlabels, testinds).flatten()
         dm, binned = self.design[testmask, :], self.binnedspikes[testmask]
 
-        scores = pd.Series(index=self.coefs.index, name='scores')
+        scores = pd.Series(index=self.coefs.index, name='scores', dtype=object)
         for cell in self.coefs.index:
             cell_idx = np.argwhere(self.clu_ids == cell)[0, 0]
             wt = self.coefs.loc[cell].reshape(-1, 1)

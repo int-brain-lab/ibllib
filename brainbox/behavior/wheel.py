@@ -213,10 +213,8 @@ def movements(t, pos, freq=1000, pos_thresh=8, t_thresh=.2, min_gap=.1, pos_thre
         if i2proc[-1] == t.size - 1:
             break
 
-    moving = max_disp > pos_thresh  # for each window is the change in position greater than
-    # our threshold?
-    moving = np.insert(moving, 0, False)  # First sample should always be not moving to ensure
-    # we have an onset
+    moving = max_disp > pos_thresh  # for each window is the change in position greater than our threshold?
+    moving = np.insert(moving, 0, False)  # First sample should always be not moving to ensure we have an onset
     moving[-1] = False  # Likewise, ensure we always end on an offset
 
     onset_samps = np.where(~moving[:-1] & moving[1:])[0]

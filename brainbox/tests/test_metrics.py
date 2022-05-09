@@ -1,6 +1,6 @@
 import numpy as np
 from brainbox.metrics import electrode_drift
-from brainbox.metrics.single_units import quick_unit_metrics
+from brainbox.metrics.single_units import quick_unit_metrics, noise_cutoff
 from iblutil.numerical import ismember
 
 REC_LEN_SECS = 1000
@@ -89,3 +89,9 @@ def test_drift_estimate():
     # plt.plot(ts, drift_)
     # plt.plot(ts, drift)
     assert np.all(np.abs(drift - drift_)[2:] < 4)
+
+
+def test_noise_cut_off():
+    np.random.seed(45)
+    amps = np.random.randn(400,) * 1.2 + 4
+    assert noise_cutoff(amps)

@@ -12,10 +12,12 @@ import numpy as np
 import pandas as pd
 
 import one.alf.io as alfio
+from neurodsp.utils import rms
+import spikeglx
 
 from ibllib.misc import check_nvidia_driver
 from ibllib.ephys import ephysqc, spikes, sync_probes
-from ibllib.io import ffmpeg, spikeglx
+from ibllib.io import ffmpeg
 from ibllib.io.video import label_from_path, assert_valid_label
 from ibllib.io.extractors import ephys_fpga, ephys_passive, camera
 from ibllib.pipes import tasks
@@ -26,7 +28,6 @@ from ibllib.qc.task_extractors import TaskQCExtractor
 from ibllib.qc.task_metrics import TaskQC
 from ibllib.qc.camera import run_all_qc as run_camera_qc
 from ibllib.qc.dlc import DlcQC
-from ibllib.dsp import rms
 from ibllib.plots.figures import dlc_qc_plot, BehaviourPlots, LfpPlots, ApPlots, BadChannelsAp
 from ibllib.plots.figures import SpikeSorting as SpikeSortingPlots
 from ibllib.plots.snapshot import ReportSnapshot
@@ -1080,10 +1081,7 @@ class EphysPostDLC(tasks.Task):
                                  ('rightROIMotionEnergy.position.npy', 'alf', True),
                                  ('leftROIMotionEnergy.position.npy', 'alf', True),
                                  ('bodyROIMotionEnergy.position.npy', 'alf', True),
-                                 ('_ibl_trials.choice.npy', 'alf', True),
-                                 ('_ibl_trials.feedbackType.npy', 'alf', True),
-                                 ('_ibl_trials.feedback_times.npy', 'alf', True),
-                                 ('_ibl_trials.stimOn_times.npy', 'alf', True),
+                                 ('_ibl_trials.table.pqt', 'alf', True),
                                  ('_ibl_wheel.position.npy', 'alf', True),
                                  ('_ibl_wheel.timestamps.npy', 'alf', True),
                                  ],

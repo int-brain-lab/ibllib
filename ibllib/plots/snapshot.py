@@ -9,9 +9,9 @@ from one.api import ONE
 from ibllib.pipes import tasks
 from ibllib.misc import version
 from one.alf.exceptions import ALFObjectNotFound
+from neuropixel import trace_header, TIP_SIZE_UM
 
 from ibllib.pipes.ephys_alignment import EphysAlignment
-from ibllib.ephys.neuropixel import trace_header, TIP_SIZE_UM
 from ibllib.pipes.histology import interpolate_along_track
 from ibllib.atlas import AllenAtlas
 

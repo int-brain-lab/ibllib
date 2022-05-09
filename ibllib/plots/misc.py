@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import scipy
 
-import ibllib.dsp as dsp
+import neurodsp as dsp
 
 
 def wiggle(w, fs=1, gain=0.71, color='k', ax=None, fill=True, linewidth=0.5, t0=0, clip=2,

@@ -28,6 +28,9 @@ class TestBrainRegions(unittest.TestCase):
     def setUpClass(self):
         self.brs = BrainRegions()
 
+    def test_rgba(self):
+        assert self.brs.rgba.shape == (self.brs.rgb.shape[0], 4)
+
     def test_get(self):
         ctx = self.brs.get(688)
         self.assertTrue(len(ctx.acronym) == 1 and ctx.acronym == 'CTX')
@@ -40,6 +43,23 @@ class TestBrainRegions(unittest.TestCase):
         leaves = self.brs.leaves()
         d = self.brs.descendants(ids=leaves['id'])
         self.assertTrue(np.all(np.sort(leaves['id']) == np.sort(d['id'])))
+
+    def test_ancestors_descendants_indices(self):
+        br = self.brs
+        tpath = np.array([997, 8, 567, 688, 695, 315, 453, 12993])
+        # /997/8/567/688/695/315/453/12993/
+        # check ancestors
+        ancs = br.ancestors(12993)
+        assert np.all(ancs.id == tpath)
+        # check ancestors with indices
+        ancs, inds = br.ancestors(12993, return_indices=True)
+        assert np.all(ancs.id == tpath)
+        # check descendants with indices
+        desdc, inds = br.descendants(12993, return_indices=True)
+        assert(inds == np.where(br.id == 12993))
+        # check full subtree
+        chemin = br.subtree(453)
+        assert np.all(np.sort(chemin.id) == np.unique(np.r_[br.descendants(453).id, br.ancestors(453).id]))
 
     def test_mappings_lateralized(self):
         # the mapping assigns all non found regions to root (1:997), except for the void (0:0)
