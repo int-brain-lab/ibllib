@@ -38,7 +38,7 @@ def neglog(weights, x, y):
 
 
 class SequentialSelector:
-    def __init__(self, model, n_features_to_select=None, 
+    def __init__(self, model, n_features_to_select=None,
                  direction='forward', scoring=None,
                  train=None, test=None):
         """
