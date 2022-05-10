@@ -128,28 +128,37 @@ def swanson(filename="swanson2allen.npz"):
     return s2a
 
 
-def plot_swanson(acronyms=None, values=None, ax=None, hemisphere=None, br=None, **kwargs):
+def plot_swanson(acronyms=None, values=None, ax=None, hemisphere=None, br=None,
+                 orientation='landscape', **kwargs):
     """
     Displays the 2D image corresponding to the swanson flatmap.
     This case is different from the others in the sense that only a region maps to another regions, there
     is no correspondency from the spatial 3D coordinates.
     :param acronyms:
     :param values:
-    :param hemisphere: hemisphere to display, options are 'left', 'right' or 'both'
+    :param hemisphere: hemisphere to display, options are 'left', 'right', 'both' or 'mirror'
     :param br: ibllib.atlas.BrainRegions object
-    :param ax:
-    :param kwargs:
+    :param ax: matplotlib axis object to plot onto
+    :param orientation: 'landscape' (default) or 'portrait'
+    :param kwargs: arguments for imshow
     :return:
     """
+    mapping = 'Swanson'
     br = BrainRegions() if br is None else br
     s2a = swanson()
+    # both hemishpere
     if hemisphere == 'both':
         _s2a = s2a + np.sum(br.id > 0)
         _s2a[s2a == 0] = 0
         _s2a[s2a == 1] = 1
         s2a = np.r_[s2a, np.flipud(_s2a)]
+        mapping = 'Swanson-lr'
+    elif hemisphere == 'mirror':
+        s2a = np.r_[s2a, np.flipud(s2a)]
+    if orientation == 'portrait':
+        s2a = np.transpose(s2a)
     if acronyms is None:
-        regions = br.mappings['Swanson'][s2a]
+        regions = br.mappings[mapping][s2a]
         im = br.rgba[regions]
     else:
         # first get the allen region ids regardless of the input type
@@ -157,6 +166,7 @@ def plot_swanson(acronyms=None, values=None, ax=None, hemisphere=None, br=None, 
         # if the user provides acronyms they're not signed by definition
         if not np.issubdtype(acronyms.dtype, np.number):
             user_aids = br.acronym2id(acronyms)
+            assert user_aids.size == acronyms.size, "All acronyms should exist in Allen ontology"
         else:
             user_aids = acronyms
         # the user may have input non-unique regions
@@ -179,7 +189,8 @@ def plot_swanson(acronyms=None, values=None, ax=None, hemisphere=None, br=None, 
     # overlay the boundaries if value plot
     imb = np.zeros((*s2a.shape[:2], 4), dtype=np.uint8)
     imb[s2a == 0] = 255
-    imb[s2a == 1] = np.array([167, 169, 172, 255])
+    # imb[s2a == 1] = np.array([167, 169, 172, 255])
+    imb[s2a == 1] = np.array([0, 0, 0, 255])
     ax.imshow(imb)
 
     # provides the mean to sea the region on axis
