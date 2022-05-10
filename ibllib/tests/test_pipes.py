@@ -438,20 +438,23 @@ class TestSyncData(unittest.TestCase):
         if os.name == "nt" and Path("C:\\tools\\rdiff-backup.exe").exists():
             # remove executable if on windows
             Path("C:\\tools\\rdiff-backup.exe").unlink()
-        else:  # anything not Windows
-            # remove package with pip
-            self.assertTrue(subprocess.run(
-                ["pip", "uninstall", "rdiff-backup", "--yes"], capture_output=True).returncode == 0)
+        else:  # anything not Windows, remove package with pip
+            try:
+                subprocess.run(["pip", "uninstall", "rdiff-backup", "--yes"], check=True)
+            except subprocess.CalledProcessError as e:
+                print(e)
 
         # verify rdiff-backup command is intentionally not functioning anymore
         try:
-            subprocess.run(["rdiff-backup", "--version"])
+            subprocess.run(["rdiff-backup", "--version"], check=True)  # should throw FileNotFound
         except FileNotFoundError:
             # call function to have rdiff-backup reinstalled
             self.assertTrue(misc.rdiff_install())
             # assert rdiff-backup command is functioning
             self.assertTrue(subprocess.run(
                 ["rdiff-backup", "--version"], capture_output=True).returncode == 0)
+        except subprocess.CalledProcessError as e:
+            print(e)  # something went wrong with the test
 
     @mock.patch("ibllib.pipes.misc.check_create_raw_session_flag")
     def test_rsync_video_folders(self, chk_fcn):

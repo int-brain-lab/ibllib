@@ -338,9 +338,9 @@ def rdiff_install() -> bool:
                 shutil.copy("C:\\Temp\\" + rdiff_folder_name + "rdiff-backup.exe", rdiff_cmd_loc)
                 shutil.rmtree("C:\\Temp\\" + rdiff_folder_name)  # cleanup
                 try:  # reattempt to call the rdiff command
-                    subprocess.run([rdiff_cmd_loc, "--version"])
-                except FileNotFoundError:
-                    log.error("rdiff-backup installation did not complete.")
+                    subprocess.run([rdiff_cmd_loc, "--version"], check=True)
+                except (FileNotFoundError, subprocess.CalledProcessError) as e:
+                    log.error("rdiff-backup installation did not complete.\n", e)
                     return False
                 return True
             else:
@@ -359,9 +359,9 @@ def rdiff_install() -> bool:
         # return True
     else:  # anything not Windows
         try:  # package should already be installed via the requirements.txt, but just in case
-            subprocess.run(["pip", "install", "rdiff-backup"])
-        except subprocess.CalledProcessError:
-            log.error("rdiff-backup pip install did not complete.")
+            subprocess.run(["pip", "install", "rdiff-backup"], check=True)
+        except subprocess.CalledProcessError as e:
+            log.error("rdiff-backup pip install did not complete.\n", e)
             return False
         return True
 
@@ -379,13 +379,12 @@ def rsync_video_folders(local_folder=False, remote_folder=False):
     # Set rdiff_cmd_loc based on OS type (assumption that C:\tools is not in Windows PATH environ)
     rdiff_cmd_loc = "C:\\tools\\rdiff-backup.exe" if os.name == "nt" else "rdiff-backup"
 
-    # Check if rdiff-backup command is available
-    try:
-        subprocess.run([rdiff_cmd_loc, "--verbosity", str(0), "--version"])
-    except FileNotFoundError:
+    try:  # Check if rdiff-backup command is available
+        subprocess.run([rdiff_cmd_loc, "--version"], check=True)
+    except (FileNotFoundError, subprocess.CalledProcessError) as e:
         if not rdiff_install():
-            log.error('rdiff-backup command is unavailable, video transfers can not continue.')
-            exit(1)
+            log.error('rdiff-backup command is unavailable, video transfers can not continue.\n', e)
+            raise
 
     # Set local and remote folders
     pars = None
@@ -413,7 +412,7 @@ def rsync_video_folders(local_folder=False, remote_folder=False):
         return
 
     transfer_list = []  # list of video sessions to transfer
-    skip_list = []  # list of video sessions to skip
+    skip_list = []  # list of video sessions to skip and the reason for the skip
     for session_path in src_session_paths:
         # set remote folder location
         remote_session_folder = remote_folder.joinpath(*session_path.parts[-3:])
@@ -469,11 +468,10 @@ def rsync_video_folders(local_folder=False, remote_folder=False):
                              "--no-file-statistics", "--exclude", "**transfer_me.flag",
                              str(Path(session_path) / "raw_video_data"),
                              str(Path(remote_session_folder) / "raw_video_data")]
-            subprocess.run(rsync_command)
+            subprocess.run(rsync_command, check=True)
             time.sleep(1)  # give rdiff-backup a second to complete all logging operations
-        except subprocess.CalledProcessError as ex:
-            log.error("Video transfer failed for: " + str(session_path) +
-                      " with the following error: " + str(ex))
+        except (FileNotFoundError, subprocess.CalledProcessError) as e:
+            log.error("Video transfer failed for: " + str(session_path) + "\n", e)
             skip_list.append(f"{session_path} - Video transfer failed, likely a networking problem")
             continue
         flag_file = Path(session_path) / "transfer_me.flag"
@@ -481,36 +479,29 @@ def rsync_video_folders(local_folder=False, remote_folder=False):
         try:  # Validate the transfers succeeded, remove flag_file and rdiff-backup-data folder
             rsync_validate = [rdiff_cmd_loc, "--verify",
                               str(Path(remote_session_folder) / "raw_video_data")]
-
-            # subprocess.check_output()  # TODO: use to trigger the CalledProcessError
-            if subprocess.run(rsync_validate, capture_output=True).returncode == 0:
-                shutil.rmtree(Path(remote_session_folder) / "raw_video_data" / "rdiff-backup-data")
-                flag_file.unlink()
-            else:
-                log.error("Video transfer could not be validated for: " + str(session_path))
-                skip_list.append(f"{session_path} - Video transfer could not be validated")
-                continue
-        # TODO: e error output to terminal
-        except FileNotFoundError:
+            subprocess.run(rsync_validate, check=True)
+            shutil.rmtree(Path(remote_session_folder) / "raw_video_data" / "rdiff-backup-data")
+            flag_file.unlink()
+        except FileNotFoundError as e:
             log.warning("An error occurred when attempting to remove the flag file: " +
                         str(flag_file) + "\nThe status of the transfers are in an unknown state; "
                         "uninhibiting windows and intentionally stopping the script. Please "
-                        "rerun the script after corrections.")
+                        "rerun the script after corrections.\n", e)
             WindowsInhibitor().uninhibit() if os.name == 'nt' else None
             if skip_list:
                 log.warning("File transfers that were not completed:")
                 [log.warning(i) for i in skip_list]
-            raise FileNotFoundError
-        except subprocess.CalledProcessError:
+            raise
+        except subprocess.CalledProcessError as e:
             log.error("An error occurred when attempting to validate the transfer. The status of "
                       "the transfers are in an unknown state; uninhibiting windows and "
                       "intentionally stopping the script. Please rerun the script after "
-                      "correction.")
+                      "correction.\n", e)
+            skip_list.append(f"{session_path} - Video transfer could not be validated")
             WindowsInhibitor().uninhibit() if os.name == 'nt' else None
-            if skip_list:
-                log.warning("Files not transferred:")
-                [log.warning(i) for i in skip_list]
-            raise subprocess.CalledProcessError
+            log.warning("Files not transferred:")
+            [log.warning(i) for i in skip_list]
+            continue
         create_video_transfer_done_flag(remote_session_folder)
         check_create_raw_session_flag(remote_session_folder)
     WindowsInhibitor().uninhibit() if os.name == 'nt' else None
