@@ -366,6 +366,23 @@ def rdiff_install() -> bool:
         return True
 
 
+def get_session_size(session_path):
+    """
+    Used to determine total size of all files in a given session_path, including all child
+    directories
+
+    :param session_path: folder that contains the files
+    :return: sum size of all files in the given session_path
+    """
+    if Path(session_path).exists():
+        size = 0
+        for session in os.scandir(session_path):
+            size += os.stat(session).st_size
+        return size  # in bytes
+    else:
+        raise
+
+
 def rsync_video_folders(local_folder=False, remote_folder=False):
     """
     Used to run the rsync algorithm via a rdiff-backup command on the given directories. This
@@ -418,13 +435,13 @@ def rsync_video_folders(local_folder=False, remote_folder=False):
         remote_session_folder = remote_folder.joinpath(*session_path.parts[-3:])
 
         # retrieves session numbers when given a session folder
-        def _get_session_numbers(sf):
-            contents = sf.parent.glob('*')
+        def _get_session_folder_numbers(session_folder):
+            contents = session_folder.parent.glob('*')
             folders = filter(lambda x: x.is_dir() and re.match(r'^\d{3}$', x.name), contents)
             return set(map(lambda x: x.name, folders))
 
         # Get remote session numbers form remote session folder
-        remote_session_numbers = _get_session_numbers(remote_session_folder)
+        remote_session_numbers = _get_session_folder_numbers(remote_session_folder)
 
         # Skip session if no remote behavior folder is found or local raw_video_data does not exist
         if not remote_session_numbers:
@@ -439,16 +456,59 @@ def rsync_video_folders(local_folder=False, remote_folder=False):
             continue
 
         log.info(f"Evaluating local session: {session_path}")
-        if _get_session_numbers(session_path) != remote_session_numbers:
-            # TODO: Re-add the user prompts
-            #       Potentially add flag to skip prompt?
-
+        local_session_numbers = _get_session_folder_numbers(session_path)
+        if local_session_numbers != remote_session_numbers:
+            # ------
+            # Simplified "Do not prompt the user for input" code:
             log.error(f"Local session number does not match any remote session number. \nRemote "
                       f"session date folder: {remote_session_folder.parent}")
             skip_list.append(f"{session_path} - Local session number does not match any remote "
                              f"session number. \nRemote session date folder: "
                              f"{remote_session_folder.parent}")
             continue
+            # ------
+
+            # what to do if there is a single session on local and a single session on remote, but
+            # the numbers do not match? i.e. local = 001, remote = 002
+            # What to do if there is a single session on local and multiple sessions on remote?
+            # local = 002, remote = 008, 009, 010
+
+            # formatted_local_session_number_list = []
+            # for lsn in local_session_numbers:
+            #     size_in_gb = round(get_session_size(session_path) / 1024 / 1024, 4)
+            #     formatted_local_session_number_list.append(str(lsn) + " (" + str(size_in_gb) +
+            #                                                " GB)")
+            #
+            # # session path vars are currently sets, could convert to something else for readability
+            # log.info(f"USER INPUT NEEDED FOR SESSION:\n{session_path}\n\nThe following session "
+            #          f"sub-folders are present on this *video/ephys* PC:\n")
+            # for flsnl in formatted_local_session_number_list: log.info(f"{flsnl}\n")
+            # log.info(f"\nThe following session sub-folders are "
+            #          f"present on the server:\n{remote_session_numbers}\n\nA given server "
+            #          f"subfolder can only be attributed 1 *video/ephys* subfolder. In the case of "
+            #          f"a crash on this *video/ephys* PC and having multiple *video/ephys* "
+            #          f"subfolders (that should be all attributed to a single session), you can "
+            #          f"only attribute 1 *video/ephys* sub-folder to the target server sub-folder. "
+            #          f"Choose carefully!! The data in the other sub-folders for that session "
+            #          f"should not be transferred (select NONE) and will be lost !!\n\nIn the case "
+            #          f"of a crash on the behavior PC (and therefore having multiple subfolders on "
+            #          f"the server for a given *video/ephys* PC subfolder), chose carefully which "
+            #          f"server subfolder should be the target.")
+            #
+            # not_valid = True
+            # while not_valid:
+            #     resp = input(f"This is 1 session out of {local_session_numbers.__len__()} to be "
+            #                  f"resolved. Do you want to resolve it now? [y]es, [n]o: ")
+            #     if resp == "yes" or resp == "y":
+            #         remote_numbers = list(map(int, remote_session_numbers))
+            #         for flsnl in formatted_local_session_number_list:
+            #             resp = input(f"Where would you like to transfer *video/ephys* PC subfolder:"
+            #                          f"{flsnl} → NONE [n], {range_str(remote_numbers)}  (server)")
+            #     elif resp == "no" or resp == "n":
+            #         skip_list.append(f"{session_path} - Local session numbers do not match remote "
+            #                          f"session numbers. User deferred resolution.\nRemote session "
+            #                          f"date folder: {remote_session_folder.parent}")
+            #         continue
 
         # Append to transfer_list
         transfer_list.append((session_path.as_posix(), remote_session_folder.as_posix()))
