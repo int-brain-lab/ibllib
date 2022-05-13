@@ -349,7 +349,7 @@ def compute_training_info(trials, trials_all):
     perf_easy = np.array([compute_performance_easy(trials[k]) for k in trials.keys()])
     n_trials = np.array([compute_n_trials(trials[k]) for k in trials.keys()])
     psych = compute_psychometric(trials_all, signed_contrast=signed_contrast)
-    rt = compute_median_reaction_time(trials_all, signed_contrast=signed_contrast)
+    rt = compute_median_reaction_time(trials_all, contrast=0, signed_contrast=signed_contrast)
 
     return perf_easy, n_trials, psych, rt
 
@@ -376,7 +376,7 @@ def compute_bias_info(trials, trials_all):
     n_trials = np.array([compute_n_trials(trials[k]) for k in trials.keys()])
     psych_20 = compute_psychometric(trials_all, signed_contrast=signed_contrast, block=0.2)
     psych_80 = compute_psychometric(trials_all, signed_contrast=signed_contrast, block=0.8)
-    rt = compute_median_reaction_time(trials_all, signed_contrast=signed_contrast)
+    rt = compute_median_reaction_time(trials_all, contrast=0, signed_contrast=signed_contrast)
 
     return perf_easy, n_trials, psych_20, psych_80, rt
 
@@ -489,7 +489,7 @@ def compute_psychometric(trials, signed_contrast=None, block=None):
     return psych
 
 
-def compute_median_reaction_time(trials, stim_on_type='stimOn_times', signed_contrast=None):
+def compute_median_reaction_time(trials, stim_on_type='stimOn_times', contrast=None, signed_contrast=None):
     """
     Compute median reaction time on zero contrast trials from trials object
 
@@ -505,10 +505,15 @@ def compute_median_reaction_time(trials, stim_on_type='stimOn_times', signed_con
     """
     if signed_contrast is None:
         signed_contrast = get_signed_contrast(trials)
-    zero_trials = (trials.response_times - trials[stim_on_type])[signed_contrast == 0]
-    if np.any(zero_trials):
+
+    if contrast is None:
+        contrast_idx = np.full(trials.probabilityLeft.shape, True, dtype=bool)
+    else:
+        contrast_idx = signed_contrast == contrast
+
+    if np.any(contrast_idx):
         reaction_time = np.nanmedian((trials.response_times - trials[stim_on_type])
-                                     [signed_contrast == 0])
+                                     [contrast_idx])
     else:
         reaction_time = np.nan
 
