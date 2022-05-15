@@ -1,7 +1,7 @@
 """
 Module that hold techniques to project the brain volume onto 2D images for visualisation purposes
 """
-from functools import lru_cache
+from functools import lru_cache, cache
 import logging
 
 import pandas as pd
@@ -117,7 +117,8 @@ def swanson(filename="swanson2allen.npz"):
     # filename could be "swanson2allen_original.npz", or "swanson2allen.npz" for remapped indices to match
     # existing labels in the brain atlas
     OLD_MD5 = [
-        'bb0554ecc704dd4b540151ab57f73822',  # version 2022-05-02
+        'bb0554ecc704dd4b540151ab57f73822',  # version 2022-05-02 (remapped)
+        '7722c1307cf9a6f291ad7632e5dcc88b',  # version 2022-05-09 (removed wolf pixels and 2 artefact regions)
     ]
     npz_file = AllenAtlas._get_cache_dir().joinpath(filename)
     if not npz_file.exists() or md5(npz_file) in OLD_MD5:
@@ -129,7 +130,7 @@ def swanson(filename="swanson2allen.npz"):
 
 
 def plot_swanson(acronyms=None, values=None, ax=None, hemisphere=None, br=None,
-                 orientation='landscape', **kwargs):
+                 orientation='landscape', annotate=False, **kwargs):
     """
     Displays the 2D image corresponding to the swanson flatmap.
     This case is different from the others in the sense that only a region maps to another regions, there
@@ -140,6 +141,7 @@ def plot_swanson(acronyms=None, values=None, ax=None, hemisphere=None, br=None,
     :param br: ibllib.atlas.BrainRegions object
     :param ax: matplotlib axis object to plot onto
     :param orientation: 'landscape' (default) or 'portrait'
+    :param annotate: (False) if True, labels regions with acronyms
     :param kwargs: arguments for imshow
     :return:
     """
@@ -192,11 +194,68 @@ def plot_swanson(acronyms=None, values=None, ax=None, hemisphere=None, br=None,
     # imb[s2a == 1] = np.array([167, 169, 172, 255])
     imb[s2a == 1] = np.array([0, 0, 0, 255])
     ax.imshow(imb)
+    if annotate:
+        annotate_swanson(ax=ax, orientation=orientation, br=br)
 
-    # provides the mean to sea the region on axis
+    # provides the mean to see the region on axis
     def format_coord(x, y):
         acronym = br.acronym[s2a[int(y), int(x)]]
         return f'x={x:1.4f}, y={x:1.4f}, {acronym}'
 
     ax.format_coord = format_coord
     return ax
+
+
+@cache
+def _swanson_labels_positions():
+    """
+    This functions computes label positions to overlay on the Swanson flatmap
+    :return: dictionary where keys are acronyms
+    """
+    NPIX_THRESH = 20000  # number of pixels above which region is labeled
+    s2a = swanson()
+    iw, ih = np.meshgrid(np.arange(s2a.shape[1]), np.arange(s2a.shape[0]))
+    # compute the center of mass of all regions (fast enough to do on the fly)
+    bc = np.maximum(1, np.bincount(s2a.flatten()))
+    cmw = np.bincount(s2a.flatten(), weights=iw.flatten()) / bc
+    cmh = np.bincount(s2a.flatten(), weights=ih.flatten()) / bc
+    bc[0] = 1
+
+    NWH, NWW = (200, 600)
+    h, w = s2a.shape
+    labels = {}
+    for ilabel in np.where(bc > NPIX_THRESH)[0]:
+        x, y = (cmw[ilabel], cmh[ilabel])
+        # the polygon is convex and the label is outside. Dammit !!!
+        if s2a[int(y), int(x)] != ilabel:
+            # find the nearest point to the center of mass
+            ih, iw = np.where(s2a == ilabel)
+            iimin = np.argmin(np.abs((x - iw) + 1j * (y - ih)))
+            # get the center of mass of a window around this point
+            sh = np.arange(np.maximum(0, ih[iimin] - NWH), np.minimum(ih[iimin] + NWH, h))
+            sw = np.arange(np.maximum(0, iw[iimin] - NWW), np.minimum(iw[iimin] + NWW, w))
+            roi = s2a[sh][:, sw] == ilabel
+            roi = roi / np.sum(roi)
+            # ax.plot(x, y, 'k+')
+            # ax.plot(iw[iimin], ih[iimin], '*k')
+            x = sw[np.searchsorted(np.cumsum(np.sum(roi, axis=0)), .5) - 1]
+            y = sh[np.searchsorted(np.cumsum(np.sum(roi, axis=1)), .5) - 1]
+            # ax.plot(x, y, 'r+')
+        labels[ilabel] = (x, y)
+    return labels
+
+
+def annotate_swanson(ax, orientation='landscape', br=None, **kwargs):
+    """
+    Display annotations on the flatmap
+    :param ax:
+    :param orientation:
+    :param br: BrainRegions object
+    :param kwargs: arguments for the annotate function
+    :return:
+    """
+    br = br or BrainRegions()
+    labels = _swanson_labels_positions()
+    labels = {k: tuple(reversed(labels[k])) for k in labels} if orientation == 'portrait' else labels
+    for ilabel in labels:
+        ax.annotate(br.acronym[ilabel], xy=labels[ilabel], ha='center', va='center', **kwargs)
