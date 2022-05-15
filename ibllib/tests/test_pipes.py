@@ -479,18 +479,18 @@ class TestSyncData(unittest.TestCase):
         # Delete transferred video folder
         shutil.rmtree(remote_session.joinpath("raw_video_data"))
 
-        # New session with same date and subject as existing session
+        # New session for same date and subject
         new_remote_session = fu.create_fake_session_folder(self.remote_repo)
         fu.create_fake_raw_behavior_data_folder(new_remote_session)
-        self.session_path.joinpath("transfer_me.flag").touch()
-        with mock.patch("builtins.input", new=self.assertFalse):
+        self.session_path.joinpath('transfer_me.flag').touch()
+        with mock.patch('builtins.input', side_effect=['h', '\n', '002']):
             misc.rsync_video_folders(self.local_repo, self.remote_repo)
 
         # Test behaviour when a transfer fails
         Path(self.session_path.parent / "002").mkdir()
         self.session_path.parent.joinpath("002", "transfer_me.flag").touch()
         shutil.rmtree(remote_session)
-        with self.assertLogs(logging.getLogger('ibllib'), logging.ERROR):
+        with self.assertLogs(logging.getLogger('ibllib'), logging.WARNING):
             misc.rsync_video_folders(self.local_repo, self.remote_repo)
 
     @mock.patch('ibllib.pipes.misc.check_create_raw_session_flag')
