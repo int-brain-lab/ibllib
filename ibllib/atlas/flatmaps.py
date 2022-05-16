@@ -163,14 +163,7 @@ def plot_swanson(acronyms=None, values=None, ax=None, hemisphere=None, br=None,
         regions = br.mappings[mapping][s2a]
         im = br.rgba[regions]
     else:
-        # first get the allen region ids regardless of the input type
-        acronyms = np.array(acronyms)
-        # if the user provides acronyms they're not signed by definition
-        if not np.issubdtype(acronyms.dtype, np.number):
-            user_aids = br.acronym2id(acronyms)
-            assert user_aids.size == acronyms.size, "All acronyms should exist in Allen ontology"
-        else:
-            user_aids = acronyms
+        user_aids = br.parse_acronyms_argument(acronyms)
         # the user may have input non-unique regions
         df = pd.DataFrame(dict(aid=user_aids, value=values)).groupby('aid').mean()
         aids, vals = (df.index.values, df['value'].values)
@@ -245,17 +238,25 @@ def _swanson_labels_positions():
     return labels
 
 
-def annotate_swanson(ax, orientation='landscape', br=None, **kwargs):
+def annotate_swanson(ax, acronyms=None, orientation='landscape', br=None, **kwargs):
     """
     Display annotations on the flatmap
     :param ax:
+    :param acronyms: (None) list or np.array of acronyms or allen region ids. If None plot all.
     :param orientation:
     :param br: BrainRegions object
     :param kwargs: arguments for the annotate function
     :return:
     """
     br = br or BrainRegions()
+    aids = br.id if acronyms is None else br.parse_acronyms_argument(acronyms)
+    aids = np.unique(br.remap(aids, 'Swanson-lr'))
+    _, indices, _ = np.intersect1d(br.id, np.unique(br.remap(aids, 'Swanson-lr')), return_indices=True)
     labels = _swanson_labels_positions()
-    labels = {k: tuple(reversed(labels[k])) for k in labels} if orientation == 'portrait' else labels
     for ilabel in labels:
-        ax.annotate(br.acronym[ilabel], xy=labels[ilabel], ha='center', va='center', **kwargs)
+        # do not display uwanted labels
+        if ilabel not in indices:
+            continue
+        # rotate the labels if the dislay is in portrait mode
+        xy = reversed(labels[ilabel]) if orientation == 'portrait' else labels[ilabel]
+        ax.annotate(br.acronym[ilabel], xy=xy, ha='center', va='center', **kwargs)
