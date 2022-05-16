@@ -365,21 +365,21 @@ def rdiff_install() -> bool:
         return True
 
 
-def get_session_size(session_path):
+def get_directory_size(dir_path):
     """
     Used to determine total size of all files in a given session_path, including all child directories
 
-    :param session_path: folder that contains the files
-    :return: sum size of all files in the given session_path in bytes
+    :param dir_path: directory we want to get the total size of
+    :return: sum of all files in the given directory path, in bytes
     """
     total = 0
-    with os.scandir(session_path) as it:
+    with iter(os.scandir(dir_path)) as it:
         for entry in it:
             if entry.is_file():
                 total += entry.stat().st_size
             elif entry.is_dir():
-                total += get_session_size(entry.path)
-    return total
+                total += get_directory_size(entry.path)
+    return total  # in bytes
 
 
 def rsync_video_folders(local_folder=False, remote_folder=False):
@@ -454,19 +454,26 @@ def rsync_video_folders(local_folder=False, remote_folder=False):
         log.info(f"Evaluating local session: {session_path}")
         local_session_numbers = _get_session_folder_numbers(session_path)
         if local_session_numbers != remote_session_numbers:
-            # vars for user interaction
-            not_valid = True
-            resp = "s"
             remote_numbers = list(map(int, remote_session_numbers))
             local_session_number_with_size = ""
             for lsn in local_session_numbers:
-                size_in_gb = round(get_session_size(session_path) / 1024 / 1024 / 1024, 2)
+                size_in_gb = round(get_directory_size(session_path) / 1024 / 1024 / 1024, 2)
                 local_session_number_with_size += str(lsn) + " (" + str(size_in_gb) + " GB)\n"
             remote_session_numbers_with_padding = ""
             for rsn in remote_numbers:
                 remote_session_numbers_with_padding += str(rsn).zfill(3) + "\n"
+            # --- Start - Informative output for user, no input ---
+            # log.error(f"Local session number does not match any remote session number. \nRemote session date folder: "
+            #           f"{remote_session_folder.parent}")
+            # skip_list.append(f"{session_path} - Local session number does not match any remote session number. \nRemote "
+            #                  f"session date folder: {remote_session_folder.parent}")
+            # continue
+            # --- End - Informative output for user, no input ---
+            # vars for user interaction
 
-            # informational loop for user input
+            # informational loop, user input
+            not_valid = True
+            resp = "s"
             while not_valid:
                 log.info(f"\n\n--- USER INPUT NEEDED ---\n\nThe following session sub-folders are present on this *video/ephys* "
                          f"PC:\n\n{local_session_number_with_size}\nThe following session sub-folders are present on the server:"
