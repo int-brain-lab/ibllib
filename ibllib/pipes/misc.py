@@ -372,13 +372,14 @@ def get_session_size(session_path):
     :param session_path: folder that contains the files
     :return: sum size of all files in the given session_path in bytes
     """
-    if Path(session_path).exists():
-        size = 0
-        for session in os.scandir(session_path):
-            size += os.stat(session).st_size
-        return size  # in bytes
-    else:
-        raise
+    total = 0
+    with os.scandir(session_path) as it:
+        for entry in it:
+            if entry.is_file():
+                total += entry.stat().st_size
+            elif entry.is_dir():
+                total += get_session_size(entry.path)
+    return total
 
 
 def rsync_video_folders(local_folder=False, remote_folder=False):
@@ -459,7 +460,7 @@ def rsync_video_folders(local_folder=False, remote_folder=False):
             remote_numbers = list(map(int, remote_session_numbers))
             local_session_number_with_size = ""
             for lsn in local_session_numbers:
-                size_in_gb = round(get_session_size(session_path) / 1024 / 1024, 4)
+                size_in_gb = round(get_session_size(session_path) / 1024 / 1024 / 1024, 2)
                 local_session_number_with_size += str(lsn) + " (" + str(size_in_gb) + " GB)\n"
             remote_session_numbers_with_padding = ""
             for rsn in remote_numbers:
