@@ -400,17 +400,17 @@ def rsync_video_folders(local_folder=False, remote_folder=False):
         subprocess.run([rdiff_cmd_loc, "--version"], check=True)
     except (FileNotFoundError, subprocess.CalledProcessError) as e:
         if not rdiff_install():
-            log.error('rdiff-backup command is unavailable, video transfers can not continue.\n', e)
+            log.error("rdiff-backup command is unavailable, video transfers can not continue.\n", e)
             raise
 
     # Set local and remote folders
     pars = None
     if not local_folder:
         pars = pars or load_ephyspc_params()
-        local_folder = pars['DATA_FOLDER_PATH']
+        local_folder = pars["DATA_FOLDER_PATH"]
     if not remote_folder:
         pars = pars or load_ephyspc_params()
-        remote_folder = pars['REMOTE_DATA_FOLDER_PATH']
+        remote_folder = pars["REMOTE_DATA_FOLDER_PATH"]
     local_folder = Path(local_folder)
     remote_folder = Path(remote_folder)
 
@@ -460,7 +460,7 @@ def rsync_video_folders(local_folder=False, remote_folder=False):
         if local_session_numbers != remote_session_numbers:
             # vars for user interaction
             not_valid = True
-            resp = 's'
+            resp = "s"
             remote_numbers = list(map(int, remote_session_numbers))
             local_session_number_with_size = ""
             for lsn in local_session_numbers:
@@ -482,13 +482,13 @@ def rsync_video_folders(local_folder=False, remote_folder=False):
                          f"that session should not be transferred.\n\nIn the case of a crash on the behavior PC (and "
                          f"therefore having multiple subfolders on the server for a given *video/ephys* PC subfolder), "
                          f"chose carefully which server subfolder should be the target.")
-                resp = input(f'Which remote session number would you like to use? Options: '
-                             f'{range_str(remote_numbers)} or [s]kip/[h]elp/[e]xit> ').strip()
-                if resp == 'h':
-                    print('An example session filepath:\n')
-                    describe('number')  # Explain what a session number is
-                    input('Press enter to continue')
-                not_valid = resp != 's' and resp != 'e'
+                resp = input(f"Which remote session number would you like to use? Options: "
+                             f"{range_str(remote_numbers)} or [s]kip/[h]elp/[e]xit> ").strip()
+                if resp == "h":
+                    print("An example session filepath:\n")
+                    describe("number")  # Explain what a session number is
+                    input("Press enter to continue")
+                not_valid = resp != "s" and resp != "e"
                 not_valid = not_valid and (not re.match(r'^\d+$', resp) or int(resp) not in remote_numbers)
             if resp == 's':
                 log.info('Skipping session...')
@@ -496,11 +496,11 @@ def rsync_video_folders(local_folder=False, remote_folder=False):
                                  f"session number. \nRemote session date folder: "
                                  f"{remote_session_folder.parent}")
                 continue
-            if resp == 'e':
-                log.info('Exiting.  No files transferred.')
+            if resp == "e":
+                log.info("Exiting. No files transferred.")
                 return
             if session_path is None:
-                log.info('Skipping session...')
+                log.info("Skipping session...")
                 skip_list.append(f"{session_path} - Local session number does not match any remote "
                                  f"session number. \nRemote session date folder: "
                                  f"{remote_session_folder.parent}")
@@ -511,7 +511,7 @@ def rsync_video_folders(local_folder=False, remote_folder=False):
         transfer_list.append((session_path.as_posix(), remote_session_folder.as_posix()))
 
     # Inhibit Windows and start transfers based on transfer_list
-    WindowsInhibitor().inhibit() if os.name == 'nt' else None
+    WindowsInhibitor().inhibit() if os.name == "nt" else None
     for i, (session_path, remote_session_folder) in enumerate(transfer_list):
         if not behavior_exists(remote_session_folder):
             log.warning(f"Skipping session, no behavior folder found in {remote_session_folder}")
@@ -564,7 +564,7 @@ def rsync_video_folders(local_folder=False, remote_folder=False):
     WindowsInhibitor().uninhibit() if os.name == 'nt' else None
     # Notify of any files not transferred to the end user
     if skip_list:
-        log.warning('File transfers that were not completed:')
+        log.warning("File transfers that were not completed:")
         [log.warning(i) for i in skip_list]
     print("\nVideo transfers script completed, please review the log messages above.")
 
