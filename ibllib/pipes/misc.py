@@ -346,9 +346,8 @@ def rdiff_install() -> bool:
             else:
                 log.error("Download request status code not 200, something did not go as expected.")
                 return False
-        # Automating the addition of 'C:\tools\' to Windows Path proving more difficult than
-        # assumed, may revisit in the future, call the 'C:\tools\rdiff-backup.exe' directly as a
-        # workaround
+        # Automating the addition of 'C:\tools\' to Windows Path proving more difficult than assumed, may revisit in the future,
+        # call the 'C:\tools\rdiff-backup.exe' directly as a workaround
         # os.environ['Path'] = (os.environ['Path'] + 'C:\\tools\\;')
         # try:
         #     subprocess.run(["rdiff-backup", "--version"])
@@ -368,11 +367,10 @@ def rdiff_install() -> bool:
 
 def get_session_size(session_path):
     """
-    Used to determine total size of all files in a given session_path, including all child
-    directories
+    Used to determine total size of all files in a given session_path, including all child directories
 
     :param session_path: folder that contains the files
-    :return: sum size of all files in the given session_path
+    :return: sum size of all files in the given session_path in bytes
     """
     if Path(session_path).exists():
         size = 0
@@ -385,9 +383,8 @@ def get_session_size(session_path):
 
 def rsync_video_folders(local_folder=False, remote_folder=False):
     """
-    Used to run the rsync algorithm via a rdiff-backup command on the given directories. This
-    function relies on the rdiff-backup package and is run from the command line, i.e.
-    subprocess.run(). Full documentation can be found here -
+    Used to run the rsync algorithm via a rdiff-backup command on the given directories. This function relies on the rdiff-backup
+    package and is run from the command line, i.e. subprocess.run(). Full documentation can be found here -
     https://rdiff-backup.net/docs/rdiff-backup.1.html
 
     :param local_folder: folder that contains the video data to be transferred
@@ -445,10 +442,8 @@ def rsync_video_folders(local_folder=False, remote_folder=False):
 
         # Skip session if no remote behavior folder is found or local raw_video_data does not exist
         if not remote_session_numbers:
-            log.warning(f"Skipping session, no behavior data found in remote folder "
-                        f"{remote_session_folder}")
-            skip_list.append(f"{session_path} - No behavior data found in remote folder "
-                             f"{remote_session_folder}")
+            log.warning(f"Skipping session, no behavior data found in remote folder {remote_session_folder}")
+            skip_list.append(f"{session_path} - No behavior data found in remote folder {remote_session_folder}")
             continue
         if not session_path.joinpath("raw_video_data").exists():
             log.warning(f"Skipping session, no raw_video_data folder {session_path}")
@@ -472,18 +467,17 @@ def rsync_video_folders(local_folder=False, remote_folder=False):
 
             # informational loop for user input
             while not_valid:
-                log.info("\n\n--- USER INPUT NEEDED ---\n\nThe following session sub-folders are present on this "
-                         f"*video/ephys* PC:\n\n{local_session_number_with_size}\nThe following session sub-folders "
-                         f"are present on the server:\n\n{remote_session_numbers_with_padding}\nA given server "
-                         f"subfolder can only be attributed 1 *video/ephys* subfolder. In the case of a crash on this "
-                         f"*video/ephys* PC and having multiple *video/ephys* subfolders (that should be all "
-                         f"attributed to a single session), you can only attribute 1 *video/ephys* sub-folder to the "
-                         f"target server sub-folder. Please chose carefully. The data in the other sub-folders for "
-                         f"that session should not be transferred.\n\nIn the case of a crash on the behavior PC (and "
-                         f"therefore having multiple subfolders on the server for a given *video/ephys* PC subfolder), "
-                         f"chose carefully which server subfolder should be the target.")
-                resp = input(f"Which remote session number would you like to use? Options: "
-                             f"{range_str(remote_numbers)} or [s]kip/[h]elp/[e]xit> ").strip()
+                log.info(f"\n\n--- USER INPUT NEEDED ---\n\nThe following session sub-folders are present on this *video/ephys* "
+                         f"PC:\n\n{local_session_number_with_size}\nThe following session sub-folders are present on the server:"
+                         f"\n\n{remote_session_numbers_with_padding}\nA given server subfolder can only be attributed 1 "
+                         f"*video/ephys* subfolder. In the case of a crash on this *video/ephys* PC and having multiple "
+                         f"*video/ephys* subfolders (that should be all attributed to a single session), you can only attribute "
+                         f"1 *video/ephys* sub-folder to the target server sub-folder. Please chose carefully. The data in the "
+                         f"other sub-folders for that session should not be transferred.\n\nIn the case of a crash on the "
+                         f"behavior PC (and therefore having multiple subfolders on the server for a given *video/ephys* PC "
+                         f"subfolder), choose carefully which server subfolder should be the target.")
+                resp = input(f"Which remote session number would you like to use? Options: {range_str(remote_numbers)} or "
+                             f"[s]kip/[h]elp/[e]xit> ").strip()
                 if resp == "h":
                     print("An example session filepath:\n")
                     describe("number")  # Explain what a session number is
@@ -492,18 +486,16 @@ def rsync_video_folders(local_folder=False, remote_folder=False):
                 not_valid = not_valid and (not re.match(r'^\d+$', resp) or int(resp) not in remote_numbers)
             if resp == 's':
                 log.info('Skipping session...')
-                skip_list.append(f"{session_path} - Local session number does not match any remote "
-                                 f"session number. \nRemote session date folder: "
-                                 f"{remote_session_folder.parent}")
+                skip_list.append(f"{session_path} - Local session number does not match any remote session number.\nRemote "
+                                 f"session date folder: {remote_session_folder.parent}")
                 continue
             if resp == "e":
                 log.info("Exiting. No files transferred.")
                 return
             if session_path is None:
                 log.info("Skipping session...")
-                skip_list.append(f"{session_path} - Local session number does not match any remote "
-                                 f"session number. \nRemote session date folder: "
-                                 f"{remote_session_folder.parent}")
+                skip_list.append(f"{session_path} - Local session number does not match any remote session number.\nRemote "
+                                 f"session date folder: {remote_session_folder.parent}")
                 continue
             remote_session_folder = remote_folder / Path(*session_path.parts[-3:])
 
@@ -515,8 +507,7 @@ def rsync_video_folders(local_folder=False, remote_folder=False):
     for i, (session_path, remote_session_folder) in enumerate(transfer_list):
         if not behavior_exists(remote_session_folder):
             log.warning(f"Skipping session, no behavior folder found in {remote_session_folder}")
-            skip_list.append(f"{session_path} - Skipping session, no behavior folder found in "
-                             f"{remote_session_folder}")
+            skip_list.append(f"{session_path} - Skipping session, no behavior folder found in {remote_session_folder}")
             continue
         log.info("Transferring video data: " + session_path + " --> " + remote_session_folder)
         try:
@@ -534,8 +525,7 @@ def rsync_video_folders(local_folder=False, remote_folder=False):
         flag_file = Path(session_path) / "transfer_me.flag"
         log.info("Removing " + str(flag_file) + " and rdiff-backup-data folder")
         try:  # Validate the transfers succeeded, remove flag_file and rdiff-backup-data folder
-            rsync_validate = [rdiff_cmd_loc, "--verify",
-                              str(Path(remote_session_folder) / "raw_video_data")]
+            rsync_validate = [rdiff_cmd_loc, "--verify", str(Path(remote_session_folder) / "raw_video_data")]
             subprocess.run(rsync_validate, check=True)
             shutil.rmtree(Path(remote_session_folder) / "raw_video_data" / "rdiff-backup-data")
             flag_file.unlink()
@@ -550,9 +540,8 @@ def rsync_video_folders(local_folder=False, remote_folder=False):
                 [log.warning(i) for i in skip_list]
             raise
         except subprocess.CalledProcessError as e:
-            log.error("An error occurred when attempting to validate the transfer. The status of "
-                      "the transfers are in an unknown state; uninhibiting windows and "
-                      "intentionally stopping the script. Please rerun the script after "
+            log.error("An error occurred when attempting to validate the transfer. The status of the transfers are in an unknown "
+                      "state; uninhibiting windows and intentionally stopping the script. Please rerun the script after "
                       "correction.\n", e)
             skip_list.append(f"{session_path} - Video transfer could not be validated")
             WindowsInhibitor().uninhibit() if os.name == 'nt' else None
@@ -566,7 +555,7 @@ def rsync_video_folders(local_folder=False, remote_folder=False):
     if skip_list:
         log.warning("File transfers that were not completed:")
         [log.warning(i) for i in skip_list]
-    print("\nVideo transfers script completed, please review the log messages above.")
+    log.info("\nVideo transfers script completed, please review the log messages above.")
 
 
 def confirm_video_remote_folder(local_folder=False, remote_folder=False, force=False, n_days=None):
