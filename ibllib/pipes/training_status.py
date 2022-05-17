@@ -101,7 +101,9 @@ def load_combined_trials(sess_paths, one):
     """
     trials_dict = {}
     for sess_path in sess_paths:
-        trials_dict[Path(sess_path).stem] = load_trials(Path(sess_path), one)
+        trials = load_trials(Path(sess_path), one)
+        if trials is not None:
+            trials_dict[Path(sess_path).stem] = load_trials(Path(sess_path), one)
 
     return training.concatenate_trials(trials_dict)
 
