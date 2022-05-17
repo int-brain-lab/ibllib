@@ -105,6 +105,8 @@ def load_trials(sess_path, one):
                 task = get_trials_task(sess_path, one=one)
                 task.run()
                 trials = alfio.load_object(sess_path.joinpath('alf'), 'trials')
+                if 'probabilityLeft' not in trials.keys():
+                    raise ALFObjectNotFound
             except Exception:  # TODO how can i make this more specific
                 trials = None
     return trials
