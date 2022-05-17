@@ -6,7 +6,7 @@ from one.alf.exceptions import ALFObjectNotFound
 from ibllib.io.raw_data_loaders import load_data
 from ibllib.oneibl.registration import _read_settings_json_compatibility_enforced, _get_session_times
 from ibllib.io.extractors.base import get_session_extractor_type
-from ibllib.pipes.local_server import _get_pipeline_class
+# from ibllib.pipes.local_server import _get_pipeline_class
 from ibllib.plots.snapshot import ReportSnapshot
 from iblutil.numerical import ismember
 from brainbox.behavior import training
@@ -78,16 +78,17 @@ def load_trials(sess_path, one):
             if 'probabilityLeft' not in trials.keys():
                 raise ALFObjectNotFound
         except ALFObjectNotFound:
-            try:
-                # attempt to extract the trials if they can't be obtained another way
-                print(sess_path)
-                pipeline = _get_pipeline_class(sess_path, one)
-                trials_task_name = next(task for task in pipeline.tasks if 'Trials' in task)
-                trials_task = pipeline.tasks.get(trials_task_name)
-                trials_task.run()
-                trials = alfio.load_object(sess_path.joinpath('alf'), 'trials')
-            except Exception:  # TODO how can i make this more specific
-                trials = None
+            trials = None
+            # try:
+            #     # attempt to extract the trials if they can't be obtained another way
+            #     print(sess_path)
+            #     pipeline = _get_pipeline_class(sess_path, one)
+            #     trials_task_name = next(task for task in pipeline.tasks if 'Trials' in task)
+            #     trials_task = pipeline.tasks.get(trials_task_name)
+            #     trials_task.run()
+            #     trials = alfio.load_object(sess_path.joinpath('alf'), 'trials')
+            # except Exception:  # TODO how can i make this more specific
+            #     trials = None
     return trials
 
 
