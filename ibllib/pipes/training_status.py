@@ -457,7 +457,7 @@ def plot_over_days(df, y1, y2, subject, ax=None):
     ax1.xaxis.set_major_formatter(month_format)
     week_locator = mdates.WeekdayLocator(byweekday=mdates.MO, interval=1)
     ax1.xaxis.set_minor_locator(week_locator)
-    ax1.grid(visible=True, which='minor', axis='x', linestyle='--')
+    ax1.grid(True, which='minor', axis='x', linestyle='--')
 
     ax1.spines['left'].set_visible(False)
     ax1.spines['right'].set_visible(False)
