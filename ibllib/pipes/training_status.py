@@ -144,6 +144,8 @@ def get_latest_training_information(sess_path, one):
         df = compute_training_status(df, date, one)
     save_dataframe(df, subj_path)
 
+    return df
+
 
 def find_earliest_recompute_date(df):
     """
