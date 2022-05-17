@@ -5,8 +5,8 @@ from one.alf.exceptions import ALFObjectNotFound
 
 from ibllib.io.raw_data_loaders import load_data
 from ibllib.oneibl.registration import _read_settings_json_compatibility_enforced, _get_session_times
-from ibllib.io.extractors.base import get_session_extractor_type
-# from ibllib.pipes.local_server import _get_pipeline_class
+from ibllib.io.extractors.base import get_pipeline, get_session_extractor_type
+
 from ibllib.plots.snapshot import ReportSnapshot
 from iblutil.numerical import ismember
 from brainbox.behavior import training
@@ -28,6 +28,29 @@ TRAINING_STATUS = {'not_computed': (-2, (0, 0, 0, 0)),
                    'ready4ephysrig': (3, (28, 20, 255, 255)),
                    'ready4delay': (4, (117, 117, 117, 255)),
                    'ready4recording': (5, (20, 255, 91, 255))}
+
+
+def get_trials_task(session_path, one):
+    pipeline = get_pipeline(session_path)
+    if pipeline == 'training':
+        from ibllib.pipes.training_preprocessing import TrainingTrials
+        task = TrainingTrials(session_path, one=one)
+    elif pipeline == 'ephys':
+        from ibllib.pipes.ephys_preprocessing import EphysTrials
+        task = EphysTrials(session_path, one=one)
+    else:
+        try:
+            # try and look if there is a custom extractor in the personal projects extraction class
+            import projects.base
+            task_type = get_session_extractor_type(session_path)
+            PipelineClass = projects.base.get_pipeline(task_type)
+            pipeline = PipelineClass(session_path, one)
+            trials_task_name = next(task for task in pipeline.tasks if 'Trials' in task)
+            task = pipeline.tasks.get(trials_task_name)
+        except Exception:
+            task = None
+
+    return task
 
 
 def save_path(subj_path):
@@ -77,18 +100,13 @@ def load_trials(sess_path, one):
             trials = one.load_object(one.path2eid(sess_path), 'trials')
             if 'probabilityLeft' not in trials.keys():
                 raise ALFObjectNotFound
-        except ALFObjectNotFound:
-            trials = None
-            # try:
-            #     # attempt to extract the trials if they can't be obtained another way
-            #     print(sess_path)
-            #     pipeline = _get_pipeline_class(sess_path, one)
-            #     trials_task_name = next(task for task in pipeline.tasks if 'Trials' in task)
-            #     trials_task = pipeline.tasks.get(trials_task_name)
-            #     trials_task.run()
-            #     trials = alfio.load_object(sess_path.joinpath('alf'), 'trials')
-            # except Exception:  # TODO how can i make this more specific
-            #     trials = None
+        except Exception:
+            try:
+                task = get_trials_task(sess_path, one=one)
+                task.run()
+                trials = alfio.load_object(sess_path.joinpath('alf'), 'trials')
+            except Exception:  # TODO how can i make this more specific
+                trials = None
     return trials
 
 
