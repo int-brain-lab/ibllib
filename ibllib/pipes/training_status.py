@@ -517,7 +517,7 @@ def plot_heatmap_performance_over_days(df, subject):
     ax1.xaxis.set_major_formatter(month_format)
     week_locator = mdates.WeekdayLocator(byweekday=mdates.MO, interval=1)
     ax1.xaxis.set_minor_locator(week_locator)
-    ax1.grid(visible=True, which='minor', axis='x', linestyle='--')
+    ax1.grid(True, which='minor', axis='x', linestyle='--')
     ax1.set_yticks(np.arange(0.5, 11.5, 1))
     ax1.set_yticklabels(np.sort(df.combined_contrasts.unique()))
     ax1.set_ylabel('Contrast (%)')
@@ -537,7 +537,7 @@ def make_plots(session_path, one, df=None, save=False, upload=False):
     subject = one.path2ref(session_path)['subject']
     subj_path = session_path.parent.parent
 
-    df = df or load_existing_dataframe(subj_path)
+    df = load_existing_dataframe(subj_path) if df is None else df
 
     df = df[df['task_protocol'] != 'habituation']
 
