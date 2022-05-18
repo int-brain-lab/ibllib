@@ -458,8 +458,18 @@ class TestSyncData(unittest.TestCase):
 
     @mock.patch("ibllib.pipes.misc.check_create_raw_session_flag")
     def test_rsync_video_folders(self, chk_fcn):
+        # When there are multiple local session folders
+        self.session_path.joinpath("transfer_me.flag").touch()
+        local_session = fu.create_fake_session_folder(self.local_repo)
+        fu.create_fake_raw_video_data_folder(local_session)
+        local_session.joinpath("transfer_me.flag").touch()
+        remote_session = fu.create_fake_session_folder(self.remote_repo)
+        with mock.patch("builtins.input", side_effect=["h", "\n", "002"]):
+            misc.rsync_video_folders(self.local_repo, self.remote_repo)
+
         # NB Mock check_create_raw_session_flag which requires a valid task settings file
         # With no data in the remote repo, no data should be transferred
+        shutil.rmtree(remote_session)
         with mock.patch("builtins.input", new=self.assertFalse):
             misc.rsync_video_folders(self.local_repo, self.remote_repo)
         self.assertFalse(list(filter(lambda x: x.is_file(), self.remote_repo.rglob('*'))))
