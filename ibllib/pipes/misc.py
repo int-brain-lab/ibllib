@@ -432,6 +432,7 @@ def rsync_video_folders(local_folder=False, remote_folder=False):
     for session_path in src_session_paths:
 
         # check transfer_list, ensure this is not a session that is meant to be skipped
+        # (not sure if this is entirely necessary after the correction to the raw_behavior_data search on remote session)
         skippable_session = False
         for entry in transfer_list:
             if session_path.parent == Path(entry[0]).parent:
@@ -454,7 +455,7 @@ def rsync_video_folders(local_folder=False, remote_folder=False):
         remote_session_numbers = _get_session_folder_numbers(remote_session_folder)
 
         # Skip session if no remote behavior folder is found or local raw_video_data does not exist
-        if not remote_session_numbers:
+        if not (remote_session_folder / 'raw_behavior_data').exists():
             # Assuming there is no behavior data because no remote session number found
             log.warning(f"Skipping session, no behavior data found in remote folder {remote_session_folder}")
             skip_list += f"{session_path} - No behavior data found in remote folder {remote_session_folder}\n"

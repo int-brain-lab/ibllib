@@ -464,8 +464,10 @@ class TestSyncData(unittest.TestCase):
         fu.create_fake_raw_video_data_folder(local_session)
         local_session.joinpath("transfer_me.flag").touch()
         remote_session = fu.create_fake_session_folder(self.remote_repo)
+        fu.create_fake_raw_behavior_data_folder(remote_session)
         with mock.patch("builtins.input", side_effect=["h", "\n", "002"]):
             misc.rsync_video_folders(self.local_repo, self.remote_repo)
+        shutil.rmtree(local_session)  # clean up secondary local repo
 
         # NB Mock check_create_raw_session_flag which requires a valid task settings file
         # With no data in the remote repo, no data should be transferred
@@ -474,7 +476,7 @@ class TestSyncData(unittest.TestCase):
             misc.rsync_video_folders(self.local_repo, self.remote_repo)
         self.assertFalse(list(filter(lambda x: x.is_file(), self.remote_repo.rglob('*'))))
 
-        # Create a remote session with behaviour data
+        # Create a remote session with behavior data
         remote_session = fu.create_fake_session_folder(self.remote_repo)
         fu.create_fake_raw_behavior_data_folder(remote_session)
         # Create transfer_me flag
