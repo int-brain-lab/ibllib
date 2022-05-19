@@ -12,7 +12,7 @@ import pandas as pd
 import scipy.signal
 import matplotlib.pyplot as plt
 
-from ibllib.dsp import voltage
+from neurodsp import voltage
 from ibllib.plots.snapshot import ReportSnapshotProbe, ReportSnapshot
 from one.api import ONE
 import one.alf.io as alfio
@@ -87,10 +87,10 @@ class BehaviourPlots(ReportSnapshot):
                  }
 
     def __init__(self, eid, session_path=None, one=None, **kwargs):
-        self.one = one or ONE()
+        self.one = one
         self.eid = eid
         self.session_path = session_path or self.one.eid2path(self.eid)
-        super(BehaviourPlots, self).__init__(self.session_path, self.eid,
+        super(BehaviourPlots, self).__init__(self.session_path, self.eid, one=self.one,
                                              **kwargs)
         self.output_directory = self.session_path.joinpath('snapshot', 'behaviour')
         self.output_directory.mkdir(exist_ok=True, parents=True)
@@ -599,7 +599,7 @@ def raw_destripe(raw, fs, t0, i_plt, n_plt,
     '''
 
     # Import
-    from ibllib.dsp import voltage
+    from neurodsp import voltage
     from ibllib.plots import Density
 
     # Init fig

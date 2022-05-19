@@ -362,6 +362,14 @@ def _alyx_procedure_from_task_type(task_type):
               'ephys_training': 'Ephys recording with acute probe(s)',
               'mock_ephys': 'Ephys recording with acute probe(s)',
               'sync_ephys': 'Ephys recording with acute probe(s)'}
+    try:
+        # look if there are tasks in the personal projects repo with proceedures
+        import projects.base
+        custom_tasks = Path(projects.base.__file__).parent.joinpath('task_type_procedures.json')
+        with open(custom_tasks) as fp:
+            lookup.update(json.load(fp))
+    except (ModuleNotFoundError, FileNotFoundError):
+        pass
     if task_type in lookup:
         return lookup[task_type]
 

@@ -7,7 +7,8 @@ import numpy as np
 from scipy import signal
 from scipy.io import wavfile
 
-from ibllib import dsp
+from neurodsp.utils import WindowGenerator
+from neurodsp import fourier
 import ibllib.io.raw_data_loaders as ioraw
 from ibllib.io.extractors.training_trials import GoCueTimes
 
@@ -29,7 +30,7 @@ def _running_mean(x, N):
 def _detect_ready_tone(w, fs):
     # get envelope of DC free signal and envelope of BP signal around freq of interest
     h = np.abs(signal.hilbert(w - np.median(w)))
-    fh = np.abs(signal.hilbert(dsp.bp(w, si=1 / fs, b=FTONE * np.array([0.9, 0.95, 1.15, 1.1]))))
+    fh = np.abs(signal.hilbert(fourier.bp(w, si=1 / fs, b=FTONE * np.array([0.9, 0.95, 1.15, 1.1]))))
     dtect = _running_mean(fh / (h + 1e-3), int(fs * 0.1)) > 0.8
     return np.where(np.diff(dtect.astype(int)) == 1)[0]
     # tone = np.sin(2 * np.pi * FTONE * np.arange(0, fs * 0.1) / fs)
@@ -67,9 +68,9 @@ def welchogram(fs, wav, nswin=NS_WIN, overlap=OVERLAP, nperseg=NS_WELCH):
     :return: tscale, fscale, downsampled_spectrogram
     """
     ns = wav.shape[0]
-    window_generator = dsp.WindowGenerator(ns=ns, nswin=nswin, overlap=overlap)
+    window_generator = WindowGenerator(ns=ns, nswin=nswin, overlap=overlap)
     nwin = window_generator.nwin
-    fscale = dsp.fscale(nperseg, 1 / fs, one_sided=True)
+    fscale = fourier.fscale(nperseg, 1 / fs, one_sided=True)
     W = np.zeros((nwin, len(fscale)))
     tscale = window_generator.tscale(fs=fs)
     detect = []
@@ -87,9 +88,6 @@ def welchogram(fs, wav, nswin=NS_WIN, overlap=OVERLAP, nperseg=NS_WELCH):
         iw = window_generator.iw
         _, W[iw, :] = signal.welch(w, fs=fs, window='hanning', nperseg=nperseg, axis=-1,
                                    detrend='constant', return_onesided=True, scaling='density')
-        if (iw % 50) == 0:
-            window_generator.print_progress()
-    window_generator.print_progress()
     # the onset detection may have duplicates with sliding window, average them and remove
     detect = np.sort(np.array(detect)) / fs
     ind = np.where(np.diff(detect) < 0.1)[0]

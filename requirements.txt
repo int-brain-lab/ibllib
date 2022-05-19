@@ -4,6 +4,7 @@ colorlog>=4.0.2
 flake8>=3.7.8
 globus-sdk==3.2.1
 graphviz
+ibl-neuropixel>=0.0.1
 iblutil
 jupyter>=1.0
 jupyterlab>=1.0

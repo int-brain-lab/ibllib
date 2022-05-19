@@ -1,3 +1,13 @@
+## Release Notes 2.12
+
+### Release Notes 2.12.0 2022-05-10
+- ibllib.atlas: add the Swanson flatmap backend (Olivier)
+- ibllib.io.extractors: output of task extractions are trial tables, not individual datasets (Miles)
+- Documentation: data release examples (Mayo)
+- ibl-neuropixel new repository contains `ibllib.dsp`, `illlib.ephys.neuropixel` and `ibllib.io.spikeglx` modules (Olivier)
+- brainbox.task.closed loop get impostor targets to evaluate null distribution  (Brandon)
+- minimum supported version of Python is 3.8 (Michele)
+
 ## Release Notes 2.11
 
 ### Release Notes 2.11.1 2022-04-12
