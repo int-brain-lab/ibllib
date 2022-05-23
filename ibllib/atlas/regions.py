@@ -24,6 +24,35 @@ class _BrainRegions:
     order: np.uint16
 
 
+class FranklinPaxinos(_BrainRegions):
+    def __init__(self):
+        df_regions = pd.read_csv(FILE_REGIONS)
+        # lateralize
+        df_regions_left = df_regions.iloc[np.array(df_regions.id > 0), :].copy()
+        df_regions_left['id'] = - df_regions_left['id']
+        df_regions_left['parent_structure_id'] = - df_regions_left['parent_structure_id']
+        df_regions_left['name'] = df_regions_left['name'].apply(lambda x: x + ' (left)')
+        df_regions = pd.concat((df_regions, df_regions_left), axis=0)
+        # converts colors to RGB uint8 array
+        c = np.uint32(df_regions.color_hex_triplet.map(
+            lambda x: int(x, 16) if isinstance(x, str) else 256 ** 3 - 1))
+        c = np.flip(np.reshape(c.view(np.uint8), (df_regions.id.size, 4))[:, :3], 1)
+        c[0, :] = 0  # set the void region to black
+        # creates the BrainRegion instance
+        super().__init__(id=df_regions.id.to_numpy(),
+                         name=df_regions.name.to_numpy(),
+                         acronym=df_regions.acronym.to_numpy(),
+                         rgb=c,
+                         level=df_regions.depth.to_numpy().astype(np.uint16),
+                         parent=df_regions.parent_structure_id.to_numpy(),
+                         order=df_regions.graph_order.to_numpy().astype(np.uint16))
+        # mappings are indices not ids: they range from 0 to n regions -1
+        mappings = pd.read_parquet(FILE_MAPPINGS)
+        self.mappings = {k: mappings[k].to_numpy() for k in mappings}
+        self.n_lr = int((len(self.id) - 1) / 2)
+
+
+
 class BrainRegions(_BrainRegions):
     """
     ibllib.atlas.regions.BrainRegions(brainmap='Allen')
