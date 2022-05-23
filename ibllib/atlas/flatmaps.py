@@ -249,9 +249,11 @@ def annotate_swanson(ax, acronyms=None, orientation='landscape', br=None, **kwar
     :return:
     """
     br = br or BrainRegions()
-    aids = br.id if acronyms is None else br.parse_acronyms_argument(acronyms)
-    aids = np.unique(br.remap(aids, 'Swanson-lr'))
-    _, indices, _ = np.intersect1d(br.id, np.unique(br.remap(aids, 'Swanson-lr')), return_indices=True)
+    if acronyms is None:
+        indices = np.arange(br.id.size)
+    else:  # tech debt: here in fact we should remap and compute labels for hierarchical regions
+        aids = br.parse_acronyms_argument(acronyms)
+        _, indices, _ = np.intersect1d(br.id, br.remap(aids, 'Swanson-lr'), return_indices=True)
     labels = _swanson_labels_positions()
     for ilabel in labels:
         # do not display uwanted labels
