@@ -13,12 +13,12 @@ from one.webclient import http_download_file
 import one.params
 
 from iblutil.numerical import ismember
-from ibllib.atlas.regions import BrainRegions
+from ibllib.atlas.regions import BrainRegions, FranklinPaxinos
 
 
 _logger = logging.getLogger(__name__)
 ALLEN_CCF_LANDMARKS_MLAPDV_UM = {'bregma': np.array([5739, 5400, 332])}
-KIM_LANDMARKS_MLAPDV_UM = {'bregma': np.array([4300, 5400, 332])}
+KIM_LANDMARKS_MLAPDV_UM = {'bregma': np.array([5700, 4300, 330])}
 
 S3_BUCKET_IBL = 'ibl-brain-wide-map-public'
 
@@ -1184,8 +1184,8 @@ class KimAtlas(BrainAtlas):
         # TODO interpolate?
         par = one.params.get(silent=True)
         FLAT_IRON_ATLAS_REL_PATH = PurePosixPath('histology', 'ATLAS', 'Needles', 'Kim')
-        # LUT_VERSION = "v01"  # version 01 is the lateralized version
-        regions = BrainRegions()
+        LUT_VERSION = "v01"  # version 01 is the lateralized version
+        regions = FranklinPaxinos()
         xyz2dims = np.array([1, 0, 2])  # this is the c-contiguous ordering
         dims2xyz = np.array([1, 0, 2])
         # we use Bregma as the origin
@@ -1197,46 +1197,51 @@ class KimAtlas(BrainAtlas):
             label[:, :, 100:105] = 1327  # lookup index for retina, id 304325711 (no id 1327)
         else:
             path_atlas = Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH)
-            #file_image = hist_path or path_atlas.joinpath(f'average_template_{res_um}.nrrd')
-            ## get the image volume
-            #if not file_image.exists():
+            # file_image = hist_path or path_atlas.joinpath(f'average_template_{res_um}.nrrd')
+            # # get the image volume
+            # if not file_image.exists():
             #    _download_atlas_allen(file_image, FLAT_IRON_ATLAS_REL_PATH, par)
-            ## get the remapped label volume
-            #file_label = path_atlas.joinpath(f'annotation_{res_um}.nrrd')
-            #if not file_label.exists():
+            # # get the remapped label volume
+            # file_label = path_atlas.joinpath(f'annotation_{res_um}.nrrd')
+            # if not file_label.exists():
             #    _download_atlas_allen(file_label, FLAT_IRON_ATLAS_REL_PATH, par)
-            #file_label_remap = path_atlas.joinpath(f'annotation_{res_um}_lut_{LUT_VERSION}.npz')
-            #if not file_label_remap.exists():
-            #    label = self._read_volume(file_label).astype(dtype=np.int32)
-            #    _logger.info("computing brain atlas annotations lookup table")
-            #    # lateralize atlas: for this the regions of the left hemisphere have primary
-            #    # keys opposite to to the normal ones
-            #    lateral = np.zeros(label.shape[xyz2dims[0]])
-            #    lateral[int(np.floor(ibregma[0]))] = 1
-            #    lateral = np.sign(np.cumsum(lateral)[np.newaxis, :, np.newaxis] - 0.5)
-            #    label = label * lateral.astype(np.int32)
-            #    # the 10 um atlas is too big to fit in memory so work by chunks instead
-            #    if res_um == 10:
-            #        first, ncols = (0, 10)
-            #        while True:
-            #            last = np.minimum(first + ncols, label.shape[-1])
-            #            _logger.info(f"Computing... {last} on {label.shape[-1]}")
-            #            _, im = ismember(label[:, :, first:last], regions.id)
-            #            label[:, :, first:last] = np.reshape(im, label[:, :, first:last].shape)
-            #            if last == label.shape[-1]:
-            #                break
-            #            first += ncols
-            #        label = label.astype(dtype=np.uint16)
-            #        _logger.info("Saving npz, this can take a long time")
-            #    else:
-            #        _, im = ismember(label, regions.id)
-            #        label = np.reshape(im.astype(np.uint16), label.shape)
-            #    np.savez_compressed(file_label_remap, label)
-            #    _logger.info(f"Cached remapping file {file_label_remap} ...")
+            file_label_remap = path_atlas.joinpath(f'annotation_{res_um}_lut_{LUT_VERSION}.npz')
+
+            label = np.load(path_atlas.joinpath('kim_atlas.npz'))['arr_0']
+            image = np.load(path_atlas.joinpath('kim_atlas.npz'))['arr_0']
+
+
+            if not file_label_remap.exists():
+               #label = self._read_volume(file_label).astype(dtype=np.int32)
+               _logger.info("computing brain atlas annotations lookup table")
+               # lateralize atlas: for this the regions of the left hemisphere have primary
+               # keys opposite to to the normal ones
+               lateral = np.zeros(label.shape[xyz2dims[0]])
+               lateral[int(np.floor(ibregma[0]))] = 1
+               lateral = np.sign(np.cumsum(lateral)[np.newaxis, :, np.newaxis] - 0.5)
+               label = label * lateral.astype(np.int32)
+               # the 10 um atlas is too big to fit in memory so work by chunks instead
+               # if res_um == 10:
+               #     first, ncols = (0, 10)
+               #     while True:
+               #         last = np.minimum(first + ncols, label.shape[-1])
+               #         _logger.info(f"Computing... {last} on {label.shape[-1]}")
+               #         _, im = ismember(label[:, :, first:last], regions.id)
+               #         label[:, :, first:last] = np.reshape(im, label[:, :, first:last].shape)
+               #         if last == label.shape[-1]:
+               #             break
+               #         first += ncols
+               #     label = label.astype(dtype=np.uint16)
+               #     _logger.info("Saving npz, this can take a long time")
+               # else:
+               _, im = ismember(label, regions.id)
+               label = np.reshape(im.astype(np.uint16), label.shape)
+               np.savez_compressed(file_label_remap, label)
+               _logger.info(f"Cached remapping file {file_label_remap} ...")
             # loads the files
             #label = self._read_volume(file_label_remap)
             #image = self._read_volume(file_image)
-            label = np.load(path_atlas.joinpath('kim_atlas.npz'))['arr_0']
+            label = np.load(file_label_remap)['arr_0']
             image = np.load(path_atlas.joinpath('kim_atlas.npz'))['arr_0']
 
         super().__init__(image, label, dxyz, regions, ibregma,
