@@ -502,11 +502,14 @@ def plot_heatmap_performance_over_days(df, subject):
     full_date_range = pd.date_range(start=df_perf.index.min(), end=df_perf.index.max(), freq="D")
     df_perf = df_perf.reindex(full_date_range, fill_value=np.nan)
 
+    n_contrasts = len(df.combined_contrasts.unique())
+
     dates = df_perf.index.to_pydatetime()
     dnum = mdates.date2num(dates)
     start = dnum[0] - (dnum[1] - dnum[0]) / 2.
     stop = dnum[-1] + (dnum[1] - dnum[0]) / 2.
-    extent = [start, stop, 0, 11]
+
+    extent = [start, stop, 0, n_contrasts]
 
     fig, ax1 = plt.subplots(figsize=(12, 6))
     im = ax1.imshow(df_perf.T.values, extent=extent, aspect="auto", cmap='PuOr')
@@ -518,7 +521,7 @@ def plot_heatmap_performance_over_days(df, subject):
     week_locator = mdates.WeekdayLocator(byweekday=mdates.MO, interval=1)
     ax1.xaxis.set_minor_locator(week_locator)
     ax1.grid(True, which='minor', axis='x', linestyle='--')
-    ax1.set_yticks(np.arange(0.5, 11.5, 1))
+    ax1.set_yticks(np.arange(0.5, n_contrasts + 0.5, 1))
     ax1.set_yticklabels(np.sort(df.combined_contrasts.unique()))
     ax1.set_ylabel('Contrast (%)')
     ax1.set_xlabel('Date')
