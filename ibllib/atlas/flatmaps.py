@@ -164,6 +164,16 @@ def plot_swanson(acronyms=None, values=None, ax=None, hemisphere=None, br=None,
         im = br.rgba[regions]
     else:
         user_aids = br.parse_acronyms_argument(acronyms)
+        # if the user provided inputs are higher level than swanson propagate down
+        swaids = br.id[np.unique(s2a)]
+        maids = np.setdiff1d(user_aids, swaids)  # those are the indices not in Swanson
+        for i, maid in enumerate(maids):
+            if maid <= 1:
+                continue
+            childs_in_sw = np.intersect1d(br.descendants(maid)['id'][1:], swaids)
+            if childs_in_sw.size > 0:
+                user_aids = np.r_[user_aids, childs_in_sw]
+                values = np.r_[values, values[i] + childs_in_sw * 0]
         # the user may have input non-unique regions
         df = pd.DataFrame(dict(aid=user_aids, value=values)).groupby('aid').mean()
         aids, vals = (df.index.values, df['value'].values)
