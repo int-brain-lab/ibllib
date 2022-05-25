@@ -13,12 +13,12 @@ from one.webclient import http_download_file
 import one.params
 
 from iblutil.numerical import ismember
-from ibllib.atlas.regions import BrainRegions, FranklinPaxinos
+from ibllib.atlas.regions import BrainRegions, FranklinPaxinosRegions
 
 
 _logger = logging.getLogger('ibllib')
 ALLEN_CCF_LANDMARKS_MLAPDV_UM = {'bregma': np.array([5739, 5400, 332])}
-KIM_LANDMARKS_MLAPDV_UM = {'bregma': np.array([5700, 4300, 330])}
+PAXINOS_CCF_LANDMARKS_MLAPDV_UM = {'bregma': np.array([5700, 4300 + 160, 330])}
 
 S3_BUCKET_IBL = 'ibl-brain-wide-map-public'
 
@@ -266,7 +266,7 @@ class BrainAtlas:
         """
         return self._lookup_inds(self.bc.xyz2i(xyz))
 
-    def get_labels(self, xyz, mapping='Allen'):
+    def get_labels(self, xyz, mapping=None):
         """
         Performs a 3D lookup from real world coordinates to the volume labels
         and return the regions ids according to the mapping
@@ -274,15 +274,17 @@ class BrainAtlas:
         :param mapping: brain region mapping (defaults to original Allen mapping)
         :return: n array of region ids
         """
+        mapping = mapping or self.regions.default_mapping
         regions_indices = self._get_mapping(mapping=mapping)[self.label.flat[self._lookup(xyz)]]
         return self.regions.id[regions_indices]
 
-    def _get_mapping(self, mapping='Allen'):
+    def _get_mapping(self, mapping=None):
         """
         Safe way to get mappings if nothing defined in regions.
         A mapping transforms from the full allen brain Atlas ids to the remapped ids
         new_ids = ids[mapping]
         """
+        mapping = mapping or self.regions.default_mapping
         if hasattr(self.regions, 'mappings'):
             return self.regions.mappings[mapping]
         else:
@@ -416,7 +418,7 @@ class BrainAtlas:
         return extent
 
     def slice(self, coordinate, axis, volume='image', mode='raise', region_values=None,
-              mapping="Allen", bc=None):
+              mapping=None, bc=None):
         """
         Get slice through atlas
 
@@ -492,7 +494,7 @@ class BrainAtlas:
         boundary[boundary != 0] = 1
         return boundary
 
-    def plot_cslice(self, ap_coordinate, volume='image', mapping='Allen', region_values=None, **kwargs):
+    def plot_cslice(self, ap_coordinate, volume='image', mapping=None, region_values=None, **kwargs):
         """
         Plot coronal slice through atlas at given ap_coordinate
 
@@ -516,7 +518,7 @@ class BrainAtlas:
         cslice = self.slice(ap_coordinate, axis=1, volume=volume, mapping=mapping, region_values=region_values)
         return self._plot_slice(np.moveaxis(cslice, 0, 1), extent=self.extent(axis=1), **kwargs)
 
-    def plot_hslice(self, dv_coordinate, volume='image', mapping='Allen', region_values=None, **kwargs):
+    def plot_hslice(self, dv_coordinate, volume='image', mapping=None, region_values=None, **kwargs):
         """
         Plot horizontal slice through atlas at given dv_coordinate
 
@@ -540,7 +542,7 @@ class BrainAtlas:
         hslice = self.slice(dv_coordinate, axis=2, volume=volume, mapping=mapping, region_values=region_values)
         return self._plot_slice(hslice, extent=self.extent(axis=2), **kwargs)
 
-    def plot_sslice(self, ml_coordinate, volume='image', mapping='Allen', region_values=None, **kwargs):
+    def plot_sslice(self, ml_coordinate, volume='image', mapping=None, region_values=None, **kwargs):
         """
         Plot sagittal slice through atlas at given ml_coordinate
 
@@ -564,7 +566,7 @@ class BrainAtlas:
         sslice = self.slice(ml_coordinate, axis=0, volume=volume, mapping=mapping, region_values=region_values)
         return self._plot_slice(np.swapaxes(sslice, 0, 1), extent=self.extent(axis=0), **kwargs)
 
-    def plot_top(self, volume='annotation', mapping='Allen', region_values=None, ax=None, **kwargs):
+    def plot_top(self, volume='annotation', mapping=None, region_values=None, ax=None, **kwargs):
         """
         Plot top view of atlas
         :param volume:
@@ -1082,7 +1084,7 @@ class FlatMap(AllenAtlas):
         return extent
 
 
-class KimAtlas(BrainAtlas):
+class FranklinPaxinosAtlas(BrainAtlas):
     """
     Instantiates an atlas.BrainAtlas corresponding to the Allen CCF at the given resolution
     using the IBL Bregma and coordinate system
@@ -1098,66 +1100,59 @@ class KimAtlas(BrainAtlas):
         """
         # TODO interpolate?
         par = one.params.get(silent=True)
-        FLAT_IRON_ATLAS_REL_PATH = PurePosixPath('histology', 'ATLAS', 'Needles', 'Kim')
+        FLAT_IRON_ATLAS_REL_PATH = PurePosixPath('histology', 'ATLAS', 'Needles', 'FranklinPaxinos')
         LUT_VERSION = "v01"  # version 01 is the lateralized version
-        regions = FranklinPaxinos()
+        regions = FranklinPaxinosRegions()
         xyz2dims = np.array([1, 0, 2])  # this is the c-contiguous ordering
         dims2xyz = np.array([1, 0, 2])
         # we use Bregma as the origin
         self.res_um = res_um
-        ibregma = (KIM_LANDMARKS_MLAPDV_UM['bregma'] / self.res_um)
+        ibregma = (PAXINOS_CCF_LANDMARKS_MLAPDV_UM['bregma'] / self.res_um)
         dxyz = self.res_um * 1e-6 * np.array([1, -1, -1]) * scaling
         if mock:
             image, label = [np.zeros((528, 456, 320), dtype=np.int16) for _ in range(2)]
             label[:, :, 100:105] = 1327  # lookup index for retina, id 304325711 (no id 1327)
         else:
             path_atlas = Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH)
-            # file_image = hist_path or path_atlas.joinpath(f'average_template_{res_um}.nrrd')
+            file_image = hist_path or path_atlas.joinpath(f'average_template_{res_um[0]}_{res_um[1]}_{res_um[2]}.npz')
             # # get the image volume
-            # if not file_image.exists():
-            #    _download_atlas_allen(file_image, FLAT_IRON_ATLAS_REL_PATH, par)
+            if not file_image.exists():
+                path_atlas.mkdir(exist_ok=True, parents=True)
+                s3_download_public(S3_BUCKET_IBL, f'atlas/FranklinPaxinos/{file_image.name}', str(file_image))
             # # get the remapped label volume
-            # file_label = path_atlas.joinpath(f'annotation_{res_um}.nrrd')
-            # if not file_label.exists():
-            #    _download_atlas_allen(file_label, FLAT_IRON_ATLAS_REL_PATH, par)
-            file_label_remap = path_atlas.joinpath(f'annotation_{res_um}_lut_{LUT_VERSION}.npz')
+            file_label = path_atlas.joinpath(f'annotation_{res_um[0]}_{res_um[1]}_{res_um[2]}.npz')
+            if not file_image.exists():
+                path_atlas.mkdir(exist_ok=True, parents=True)
+                s3_download_public(S3_BUCKET_IBL, f'atlas/FranklinPaxinos/{file_label.name}', str(file_label))
 
-            label = np.load(path_atlas.joinpath('kim_atlas.npz'))['arr_0']
-            image = np.load(path_atlas.joinpath('kim_atlas.npz'))['arr_0']
-
+            file_label_remap = path_atlas.joinpath(f'annotation_{res_um[0]}_{res_um[1]}_{res_um[2]}_lut_{LUT_VERSION}.npz')
 
             if not file_label_remap.exists():
-               #label = self._read_volume(file_label).astype(dtype=np.int32)
-               _logger.info("computing brain atlas annotations lookup table")
-               # lateralize atlas: for this the regions of the left hemisphere have primary
-               # keys opposite to to the normal ones
-               lateral = np.zeros(label.shape[xyz2dims[0]])
-               lateral[int(np.floor(ibregma[0]))] = 1
-               lateral = np.sign(np.cumsum(lateral)[np.newaxis, :, np.newaxis] - 0.5)
-               label = label * lateral.astype(np.int32)
-               # the 10 um atlas is too big to fit in memory so work by chunks instead
-               # if res_um == 10:
-               #     first, ncols = (0, 10)
-               #     while True:
-               #         last = np.minimum(first + ncols, label.shape[-1])
-               #         _logger.info(f"Computing... {last} on {label.shape[-1]}")
-               #         _, im = ismember(label[:, :, first:last], regions.id)
-               #         label[:, :, first:last] = np.reshape(im, label[:, :, first:last].shape)
-               #         if last == label.shape[-1]:
-               #             break
-               #         first += ncols
-               #     label = label.astype(dtype=np.uint16)
-               #     _logger.info("Saving npz, this can take a long time")
-               # else:
-               _, im = ismember(label, regions.id)
-               label = np.reshape(im.astype(np.uint16), label.shape)
-               np.savez_compressed(file_label_remap, label)
-               _logger.info(f"Cached remapping file {file_label_remap} ...")
+                label = self._read_volume(file_label).astype(dtype=np.int32)
+                _logger.info("computing brain atlas annotations lookup table")
+                # lateralize atlas: for this the regions of the left hemisphere have primary
+                # keys opposite to to the normal ones
+                lateral = np.zeros(label.shape[xyz2dims[0]])
+                lateral[int(np.floor(ibregma[0]))] = 1
+                lateral = np.sign(np.cumsum(lateral)[np.newaxis, :, np.newaxis] - 0.5)
+                label = label * lateral.astype(np.int32)
+                _, im = ismember(label, regions.id)
+                label = np.reshape(im.astype(np.uint16), label.shape)
+                np.savez_compressed(file_label_remap, label)
+                _logger.info(f"Cached remapping file {file_label_remap} ...")
             # loads the files
-            #label = self._read_volume(file_label_remap)
-            #image = self._read_volume(file_image)
-            label = np.load(file_label_remap)['arr_0']
-            image = np.load(path_atlas.joinpath('kim_atlas.npz'))['arr_0']
+            label = self._read_volume(file_label_remap)
+            image = self._read_volume(file_image)
 
         super().__init__(image, label, dxyz, regions, ibregma,
                          dims2xyz=dims2xyz, xyz2dims=xyz2dims)
+
+    @staticmethod
+    def _read_volume(file_volume):
+        if file_volume.suffix == '.nrrd':
+            volume, _ = nrrd.read(file_volume, index_order='C')  # ml, dv, ap
+            # we want the coronal slice to be the most contiguous
+            volume = np.transpose(volume, (2, 0, 1))  # image[iap, iml, idv]
+        elif file_volume.suffix == '.npz':
+            volume = np.load(file_volume)['arr_0']
+        return volume
