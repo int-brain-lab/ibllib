@@ -111,14 +111,14 @@ def get_sessions(subj, date=None, one=None):
         latest_sess = date
 
     sessions = one.alyx.rest('sessions', 'list', subject=subj, date_range=[latest_minus_week,
-                             latest_sess], dataset_types='trials.intervals')
+                             latest_sess], dataset_types='trials.goCueTrigger_times')
 
     # If not enough sessions in the last week, then just fetch them all
     if len(sessions) < 3:
         specified_date_plus = (specified_date + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
         django_query = 'start_time__lte,' + specified_date_plus
         sessions = one.alyx.rest('sessions', 'list', subject=subj,
-                                 dataset_types='trials.intervals', django=django_query)
+                                 dataset_types='trials.goCueTrigger_times', django=django_query)
 
         # If still 0 sessions then return with warning
         if len(sessions) == 0:
