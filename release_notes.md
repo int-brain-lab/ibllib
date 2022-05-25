@@ -1,4 +1,6 @@
 ## Release Notes 2.12
+### develop
+- ibllib.pipes.training_status: pipeline to compute training status of mice on local servers, new TrainingStatus task
 
 ### Release Notes 2.12.0 2022-05-10
 - ibllib.atlas: add the Swanson flatmap backend (Olivier)

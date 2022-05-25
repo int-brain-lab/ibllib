@@ -1,7 +1,7 @@
 import logging
 from collections import OrderedDict
 
-from ibllib.pipes import tasks
+from ibllib.pipes import tasks, training_status
 from ibllib.io import ffmpeg
 from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.io.extractors import training_audio, bpod_trials, camera
@@ -107,6 +107,27 @@ class TrainingDLC(tasks.Task):
         pass
 
 
+class TrainingStatus(tasks.Task):
+    priority = 90
+    level = 1
+    force = False
+    signature = {
+        'input_files': [('_iblrig_taskData.raw.*', 'raw_behavior_data', True),
+                        ('_iblrig_taskSettings.raw.*', 'raw_behavior_data', True),
+                        ('*trials.table.pqt', 'alf', True)],
+        'output_files': []
+    }
+
+    def _run(self, upload=True):
+        """
+        Extracts training status for subject
+        """
+        df = training_status.get_latest_training_information(self.session_path, self.one)
+        training_status.make_plots(self.session_path, self.one, df=df, save=True, upload=upload)
+        output_files = []
+        return output_files
+
+
 class TrainingExtractionPipeline(tasks.Pipeline):
     label = __name__
 
@@ -120,6 +141,7 @@ class TrainingExtractionPipeline(tasks.Pipeline):
         tasks['TrainingVideoCompress'] = TrainingVideoCompress(self.session_path)
         tasks['TrainingAudio'] = TrainingAudio(self.session_path)
         # level 1
+        tasks['TrainingStatus'] = TrainingStatus(self.session_path, parents=[tasks['TrainingTrials']])
         tasks['TrainingDLC'] = TrainingDLC(
             self.session_path, parents=[tasks['TrainingVideoCompress']])
         self.tasks = tasks
