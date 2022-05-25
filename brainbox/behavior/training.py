@@ -482,9 +482,10 @@ def compute_psychometric(trials, signed_contrast=None, block=None):
     psych, _ = psy.mle_fit_psycho(
         np.vstack([contrasts, n_contrasts, prob_choose_right]),
         P_model='erf_psycho_2gammas',
-        parstart=np.array([np.mean(contrasts), 20., 0.05, 0.05]),
-        parmin=np.array([np.min(contrasts), 0., 0., 0.]),
-        parmax=np.array([np.max(contrasts), 100., 1, 1]))
+        parstart=np.array([0., 40., 0.1, 0.1]),
+        parmin=np.array([-50., 10., 0., 0.]),
+        parmax=np.array([50., 50., 0.2, 0.2]),
+        nfits=10)
 
     return psych
 
