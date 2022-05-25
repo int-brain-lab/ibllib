@@ -554,7 +554,7 @@ def make_plots(session_path, one, df=None, save=False, upload=False):
 
     outputs = []
     if save:
-        save_path = Path(subj_path).joinpath('training_results')
+        save_path = Path(subj_path)
         save_name = save_path.joinpath('subj_trial_count_session_duration.png')
         outputs.append(save_name)
         ax1.get_figure().savefig(save_name, bbox_inches='tight')
