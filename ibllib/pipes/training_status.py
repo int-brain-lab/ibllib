@@ -390,7 +390,7 @@ def check_up_to_date(subj_path, df):
         # recorded_session_paths = df['session_path'].values
         isin, _ = ismember(df_session.date.unique(), df.date.unique())
         missing_dates = df_session.date.unique()[~isin]
-        return df_session[df_session['date'].isin(missing_dates)]
+        return df_session[df_session['date'].isin(missing_dates)].sort_values('date')
 
 
 def plot_trial_count_and_session_duration(df, subject):
