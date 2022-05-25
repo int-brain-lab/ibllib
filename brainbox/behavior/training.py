@@ -452,7 +452,7 @@ def compute_n_trials(trials):
     return trials['choice'].shape[0]
 
 
-def compute_psychometric(trials, signed_contrast=None, block=None):
+def compute_psychometric(trials, signed_contrast=None, block=None, plotting=False):
     """
     Compute psychometric fit parameters for trials object
 
@@ -479,13 +479,22 @@ def compute_psychometric(trials, signed_contrast=None, block=None):
     prob_choose_right, contrasts, n_contrasts = compute_performance(trials, signed_contrast=signed_contrast, block=block,
                                                                     prob_right=True)
 
-    psych, _ = psy.mle_fit_psycho(
-        np.vstack([contrasts, n_contrasts, prob_choose_right]),
-        P_model='erf_psycho_2gammas',
-        parstart=np.array([0., 40., 0.1, 0.1]),
-        parmin=np.array([-50., 10., 0., 0.]),
-        parmax=np.array([50., 50., 0.2, 0.2]),
-        nfits=10)
+    if plotting:
+        psych, _ = psy.mle_fit_psycho(
+            np.vstack([contrasts, n_contrasts, prob_choose_right]),
+            P_model='erf_psycho_2gammas',
+            parstart=np.array([0., 40., 0.1, 0.1]),
+            parmin=np.array([-50., 10., 0., 0.]),
+            parmax=np.array([50., 50., 0.2, 0.2]),
+            nfits=10)
+    else:
+
+        psych, _ = psy.mle_fit_psycho(
+            np.vstack([contrasts, n_contrasts, prob_choose_right]),
+            P_model='erf_psycho_2gammas',
+            parstart=np.array([np.mean(contrasts), 20., 0.05, 0.05]),
+            parmin=np.array([np.min(contrasts), 0., 0., 0.]),
+            parmax=np.array([np.max(contrasts), 100., 1, 1]))
 
     return psych
 
@@ -596,15 +605,15 @@ def plot_psychometric(trials, ax=None, title=None, **kwargs):
     contrasts_fit = np.arange(-100, 100)
 
     prob_right_50, contrasts_50, _ = compute_performance(trials, signed_contrast=signed_contrast, block=0.5, prob_right=True)
-    pars_50 = compute_psychometric(trials, signed_contrast=signed_contrast, block=0.5)
+    pars_50 = compute_psychometric(trials, signed_contrast=signed_contrast, block=0.5, plotting=True)
     prob_right_fit_50 = psy.erf_psycho_2gammas(pars_50, contrasts_fit)
 
     prob_right_20, contrasts_20, _ = compute_performance(trials, signed_contrast=signed_contrast, block=0.2, prob_right=True)
-    pars_20 = compute_psychometric(trials, signed_contrast=signed_contrast, block=0.2)
+    pars_20 = compute_psychometric(trials, signed_contrast=signed_contrast, block=0.2, plotting=True)
     prob_right_fit_20 = psy.erf_psycho_2gammas(pars_20, contrasts_fit)
 
     prob_right_80, contrasts_80, _ = compute_performance(trials, signed_contrast=signed_contrast, block=0.8, prob_right=True)
-    pars_80 = compute_psychometric(trials, signed_contrast=signed_contrast, block=0.8)
+    pars_80 = compute_psychometric(trials, signed_contrast=signed_contrast, block=0.8, plotting=True)
     prob_right_fit_80 = psy.erf_psycho_2gammas(pars_80, contrasts_fit)
 
     cmap = sns.diverging_palette(20, 220, n=3, center="dark")

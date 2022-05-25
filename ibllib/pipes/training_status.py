@@ -506,8 +506,12 @@ def plot_heatmap_performance_over_days(df, subject):
 
     dates = df_perf.index.to_pydatetime()
     dnum = mdates.date2num(dates)
-    start = dnum[0] - (dnum[1] - dnum[0]) / 2.
-    stop = dnum[-1] + (dnum[1] - dnum[0]) / 2.
+    if len(dnum) > 1:
+        start = dnum[0] - (dnum[1] - dnum[0]) / 2.
+        stop = dnum[-1] + (dnum[1] - dnum[0]) / 2.
+    else:
+        start = dnum[0] + 0.5
+        stop = dnum[0] + 1.5
 
     extent = [start, stop, 0, n_contrasts]
 
