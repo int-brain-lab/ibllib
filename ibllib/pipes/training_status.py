@@ -54,7 +54,7 @@ def get_trials_task(session_path, one):
 
 
 def save_path(subj_path):
-    return Path(subj_path).joinpath('training_results', 'training.csv')
+    return Path(subj_path).joinpath('training.csv')
 
 
 def save_dataframe(df, subj_path):
