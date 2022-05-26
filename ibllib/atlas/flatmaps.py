@@ -1,7 +1,7 @@
 """
 Module that hold techniques to project the brain volume onto 2D images for visualisation purposes
 """
-from functools import lru_cache, cache
+from functools import lru_cache
 import logging
 
 import pandas as pd
@@ -209,7 +209,7 @@ def plot_swanson(acronyms=None, values=None, ax=None, hemisphere=None, br=None,
     return ax
 
 
-@cache
+@lru_cache(maxsize=None)
 def _swanson_labels_positions():
     """
     This functions computes label positions to overlay on the Swanson flatmap
