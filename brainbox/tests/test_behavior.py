@@ -152,7 +152,7 @@ class TestTraining(unittest.TestCase):
         perf_easy = np.array([train.compute_performance_easy(trials[k]) for k in trials.keys()])
         n_trials = np.array([train.compute_n_trials(trials[k]) for k in trials.keys()])
         psych = train.compute_psychometric(trials_all)
-        rt = train.compute_median_reaction_time(trials_all)
+        rt = train.compute_median_reaction_time(trials_all, contrast=0)
         np.testing.assert_allclose(perf_easy, [0.91489362, 0.9, 0.90853659])
         np.testing.assert_array_equal(n_trials, [617, 532, 719])
         np.testing.assert_allclose(psych, [4.04487042, 21.6293942, 1.91451396e-02, 1.72669957e-01],

@@ -272,6 +272,18 @@ class TestBrainRegions(unittest.TestCase):
         assert np.array_equal(acronnyms_ordered, expected_acronyms)
         assert np.array_equal(values_ordered, expected_values)
 
+    def test_argument_parser(self):
+        acronyms = ['AUDp1', 'AUDpo1', 'AUDv1', 'SSp-m1', 'SSp-n1']
+        ids = self.brs.acronym2id(acronyms)
+        assert np.all(self.brs.parse_acronyms_argument(acronyms) == ids)
+        assert np.all(self.brs.parse_acronyms_argument(np.array(acronyms)) == ids)
+        assert np.all(self.brs.parse_acronyms_argument(ids) == ids)
+        assert np.all(self.brs.parse_acronyms_argument(list(ids)) == ids)
+        # makes sure it handles exception
+        with self.assertRaises(AssertionError):
+            self.brs.parse_acronyms_argument(acronyms + ['toto'])
+        assert np.all(self.brs.parse_acronyms_argument(acronyms + ['toto'], mode='clip') == ids)
+
 
 class TestAtlasPlots(unittest.TestCase):
 
