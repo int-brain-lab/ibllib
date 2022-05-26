@@ -9,8 +9,6 @@ from iblutil.numerical import ismember
 
 _logger = logging.getLogger('ibllib')
 # 'Beryl' is the name given to an atlas containing a subset of the most relevant allen annotations
-FILE_BERYL = str(Path(__file__).parent.joinpath('beryl.npy'))
-FILE_COSMOS = str(Path(__file__).parent.joinpath('cosmos.npy'))
 FILE_MAPPINGS = str(Path(__file__).parent.joinpath('mappings.pqt'))
 FILE_REGIONS = str(Path(__file__).parent.joinpath('allen_structure_tree.csv'))
 
@@ -51,13 +49,19 @@ class BrainRegions(_BrainRegions):
                          name=df_regions.name.to_numpy(),
                          acronym=df_regions.acronym.to_numpy(),
                          rgb=c,
-                         level=df_regions.depth.to_numpy(),
+                         level=df_regions.depth.to_numpy().astype(np.uint16),
                          parent=df_regions.parent_structure_id.to_numpy(),
                          order=df_regions.graph_order.to_numpy().astype(np.uint16))
         # mappings are indices not ids: they range from 0 to n regions -1
         mappings = pd.read_parquet(FILE_MAPPINGS)
         self.mappings = {k: mappings[k].to_numpy() for k in mappings}
         self.n_lr = int((len(self.id) - 1) / 2)
+
+    @property
+    def rgba(self):
+        rgba = np.c_[self.rgb, self.rgb[:, 0] * 0 + 255]
+        rgba[0, :] = 0  # set the void to transparent
+        return rgba
 
     def _compute_order(self):
         """
@@ -74,11 +78,12 @@ class BrainRegions(_BrainRegions):
         """
         Recomputes the mapping indices for all mappings
         This is left mainly as a reference for adding future mappings as this take a few seconds
-        to execute. In production,we use the MAPPING_FILES npz to avoid recompuing at each \
+        to execute. In production,we use the MAPPING_FILES pqt to avoid recompuing at each \
         instantiation
         """
-        beryl = np.load(FILE_BERYL)
-        cosmos = np.load(FILE_COSMOS)
+        beryl = np.load(Path(__file__).parent.joinpath('beryl.npy'))
+        cosmos = np.load(Path(__file__).parent.joinpath('cosmos.npy'))
+        swanson = np.load(Path(__file__).parent.joinpath('swanson_regions.npy'))
         self.mappings = {
             'Allen': self._mapping_from_regions_list(np.unique(np.abs(self.id)), lateralize=False),
             'Allen-lr': np.arange(self.id.size),
@@ -86,6 +91,8 @@ class BrainRegions(_BrainRegions):
             'Beryl-lr': self._mapping_from_regions_list(beryl, lateralize=True),
             'Cosmos': self._mapping_from_regions_list(cosmos, lateralize=False),
             'Cosmos-lr': self._mapping_from_regions_list(cosmos, lateralize=True),
+            'Swanson': self._mapping_from_regions_list(swanson, lateralize=False),
+            'Swanson-lr': self._mapping_from_regions_list(swanson, lateralize=True),
         }
         pd.DataFrame(self.mappings).to_parquet(FILE_MAPPINGS)
 
@@ -100,11 +107,14 @@ class BrainRegions(_BrainRegions):
             b[k] = self.__getattribute__(k)[iself[uind]]
         return b
 
-    def _navigate_tree(self, ids, direction='down'):
+    def _navigate_tree(self, ids, direction='down', return_indices=False):
         """
-        Private method to navigate the tree and get all related objects either up or down
-        :param ids:
-        :param direction:
+        Private method to navigate the tree and get all related objects either up, down or along the branch.
+        By convention the provided id is returned in the list of regions
+        :param ids: array or single allen id (int32)
+        :param direction: 'up' returns ancestors, 'down' descendants
+        :param return indices: Bool (False), if true returns a second argument with indices mapping
+        to the current br object
         :return: Bunch
         """
         indices = ismember(self.id, ids)[0]
@@ -120,23 +130,45 @@ class BrainRegions(_BrainRegions):
                 break
             else:
                 count = np.sum(indices)
-        return self.get(self.id[indices])
+        if return_indices:
+            return self.get(self.id[indices]), np.where(indices)[0]
+        else:
+            return self.get(self.id[indices])
 
-    def descendants(self, ids):
+    def subtree(self, scalar_id, return_indices=False):
+        """
+        Given a node, returns the subtree containing the node along with ancestors
+        :param return indices: Bool (False), if true returns a second argument with indices mapping
+        to the current br object
+        :return: Bunch
+        """
+        if not np.isscalar(scalar_id):
+            assert scalar_id.size == 1
+        _, idown = self._navigate_tree(scalar_id, direction='down', return_indices=True)
+        _, iup = self._navigate_tree(scalar_id, direction='up', return_indices=True)
+        indices = np.unique(np.r_[idown, iup])
+        if return_indices:
+            return self.get(self.id[indices]), np.where(indices)[0]
+        else:
+            return self.get(self.id[indices])
+
+    def descendants(self, ids, **kwargs):
         """
         Get descendants from one or an array of ids
         :param ids: np.array or scalar representing the region primary key
+        :param return_indices: Bool (False) returns the indices in the current br obj
         :return: Bunch
         """
-        return self._navigate_tree(ids, direction='down')
+        return self._navigate_tree(ids, direction='down', **kwargs)
 
-    def ancestors(self, ids):
+    def ancestors(self, ids, **kwargs):
         """
         Get ancestors from one or an array of ids
         :param ids: np.array or scalar representing the region primary key
+        :param return_indices: Bool (False) returns the indices in the current br obj
         :return: Bunch
         """
-        return self._navigate_tree(ids, direction='up')
+        return self._navigate_tree(ids, direction='up', **kwargs)
 
     def leaves(self):
         """
@@ -328,6 +360,25 @@ class BrainRegions(_BrainRegions):
         _, inds = ismember(np.array(values), all_values)
 
         return inds
+
+    def parse_acronyms_argument(self, acronyms, mode='raise'):
+        """
+        Parse an input acronym arguments: returns a numpy array of allen regions ids
+        regardless of the input: list of acronyms, np.array of acronyms strings or np aray of allen ids
+        To be used into functions to provide flexible input type
+        :param acronyms: List, np.array of acronym strings or np.array of allen ids
+        :return: np.array of int ids
+        """
+        # first get the allen region ids regardless of the input type
+        acronyms = np.array(acronyms)
+        # if the user provides acronyms they're not signed by definition
+        if not np.issubdtype(acronyms.dtype, np.number):
+            user_aids = self.acronym2id(acronyms)
+            if mode == 'raise':
+                assert user_aids.size == acronyms.size, "All acronyms should exist in Allen ontology"
+        else:
+            user_aids = acronyms
+        return user_aids
 
 
 def regions_from_allen_csv():

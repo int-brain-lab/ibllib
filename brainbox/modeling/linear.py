@@ -87,7 +87,7 @@ class LinearGLM(NeuralModel):
             raise ValueError('Length of cells does not match shape of binned')
 
         coefs = pd.Series(index=cells, name='coefficients', dtype=object)
-        intercepts = pd.Series(index=cells, name='intercepts')
+        intercepts = pd.Series(index=cells, name='intercepts', dtype=object)
 
         lm = self.estimator.fit(dm, binned)
         weight, intercept = lm.coef_, lm.intercept_

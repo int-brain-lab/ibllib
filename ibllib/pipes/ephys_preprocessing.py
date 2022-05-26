@@ -12,21 +12,23 @@ import numpy as np
 import pandas as pd
 
 import one.alf.io as alfio
+from neurodsp.utils import rms
+import spikeglx
 
 from ibllib.misc import check_nvidia_driver
 from ibllib.ephys import ephysqc, spikes, sync_probes
-from ibllib.io import ffmpeg, spikeglx
+from ibllib.io import ffmpeg
 from ibllib.io.video import label_from_path, assert_valid_label
 from ibllib.io.extractors import ephys_fpga, ephys_passive, camera
 from ibllib.pipes import tasks
 from ibllib.pipes.training_preprocessing import TrainingRegisterRaw as EphysRegisterRaw
+from ibllib.pipes.training_preprocessing import TrainingStatus as EphysTrainingStatus
 from ibllib.pipes.misc import create_alyx_probe_insertions
 from ibllib.qc.alignment_qc import get_aligned_channels
 from ibllib.qc.task_extractors import TaskQCExtractor
 from ibllib.qc.task_metrics import TaskQC
 from ibllib.qc.camera import run_all_qc as run_camera_qc
 from ibllib.qc.dlc import DlcQC
-from ibllib.dsp import rms
 from ibllib.plots.figures import dlc_qc_plot, BehaviourPlots, LfpPlots, ApPlots, BadChannelsAp
 from ibllib.plots.figures import SpikeSorting as SpikeSortingPlots
 from ibllib.plots.snapshot import ReportSnapshot
@@ -487,7 +489,7 @@ class SpikeSorting(tasks.Task):
 
 
 class EphysVideoCompress(tasks.Task):
-    priority = 40
+    priority = 90
     level = 0
     force = False
     signature = {
@@ -1007,11 +1009,14 @@ class EphysDLC(tasks.Task):
                         executable="/bin/bash",
                     )
                     info, error = process.communicate()
-                    info_str = info.decode("utf-8").strip()
-                    _logger.info(info_str)
+                    # info_str = info.decode("utf-8").strip()
+                    # _logger.info(info_str)
                     if process.returncode != 0:
                         error_str = error.decode("utf-8").strip()
-                        _logger.error(f'DLC failed for {cam}Camera\n {error_str}')
+                        _logger.error(f'DLC failed for {cam}Camera.\n\n'
+                                      f'++++++++ Output of subprocess for debugging ++++++++\n\n'
+                                      f'{error_str}\n'
+                                      f'++++++++++++++++++++++++++++++++++++++++++++\n')
                         self.status = -1
                         # We dont' run motion energy, or add any files if dlc failed to run
                         continue
@@ -1029,11 +1034,14 @@ class EphysDLC(tasks.Task):
                         executable="/bin/bash",
                     )
                     info, error = process.communicate()
-                    info_str = info.decode("utf-8").strip()
-                    _logger.info(info_str)
+                    # info_str = info.decode("utf-8").strip()
+                    # _logger.info(info_str)
                     if process.returncode != 0:
                         error_str = error.decode("utf-8").strip()
-                        _logger.error(f'Motion energy failed for {cam}Camera \n {error_str}')
+                        _logger.error(f'Motion energy failed for {cam}Camera.\n\n'
+                                      f'++++++++ Output of subprocess for debugging ++++++++\n\n'
+                                      f'{error_str}\n'
+                                      f'++++++++++++++++++++++++++++++++++++++++++++\n')
                         self.status = -1
                         continue
                     actual_outputs.append(next(self.session_path.joinpath('alf').glob(
@@ -1074,10 +1082,7 @@ class EphysPostDLC(tasks.Task):
                                  ('rightROIMotionEnergy.position.npy', 'alf', True),
                                  ('leftROIMotionEnergy.position.npy', 'alf', True),
                                  ('bodyROIMotionEnergy.position.npy', 'alf', True),
-                                 ('_ibl_trials.choice.npy', 'alf', True),
-                                 ('_ibl_trials.feedbackType.npy', 'alf', True),
-                                 ('_ibl_trials.feedback_times.npy', 'alf', True),
-                                 ('_ibl_trials.stimOn_times.npy', 'alf', True),
+                                 ('_ibl_trials.table.pqt', 'alf', True),
                                  ('_ibl_wheel.position.npy', 'alf', True),
                                  ('_ibl_wheel.timestamps.npy', 'alf', True),
                                  ],
@@ -1283,6 +1288,7 @@ class EphysExtractionPipeline(tasks.Pipeline):
             self.session_path, parents=[tasks["EphysVideoCompress"], tasks["EphysPulses"], tasks["EphysTrials"]])
         tasks["EphysCellsQc"] = EphysCellsQc(self.session_path, parents=[tasks["SpikeSorting"]])
         tasks["EphysDLC"] = EphysDLC(self.session_path, parents=[tasks["EphysVideoCompress"]])
+        tasks['EphysTrainingStatus'] = EphysTrainingStatus(self.session_path, parents=[tasks["EphysTrials"]])
         # level 3
         tasks["EphysPostDLC"] = EphysPostDLC(self.session_path, parents=[tasks["EphysDLC"], tasks["EphysTrials"],
                                                                          tasks["EphysVideoSyncQc"]])

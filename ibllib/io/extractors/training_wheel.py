@@ -4,8 +4,7 @@ from collections.abc import Sized
 import numpy as np
 from scipy import interpolate
 
-from ibllib.dsp.utils import sync_timestamps
-from ibllib.io.extractors import training_trials
+from neurodsp.utils import sync_timestamps
 from ibllib.io.extractors.base import BaseBpodTrialsExtractor, run_extractor_classes
 import ibllib.io.raw_data_loaders as raw
 from ibllib.misc import structarr
@@ -396,6 +395,7 @@ class Wheel(BaseBpodTrialsExtractor):
         moves = extract_wheel_moves(ts, pos)
 
         # need some trial based info to output the first movement times
+        from ibllib.io.extractors import training_trials  # Avoids circular imports
         goCue_times, _ = training_trials.GoCueTimes(self.session_path).extract(
             save=False, bpod_trials=self.bpod_trials, settings=self.settings)
         feedback_times, _ = training_trials.FeedbackTimes(self.session_path).extract(

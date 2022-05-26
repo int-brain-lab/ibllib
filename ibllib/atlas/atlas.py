@@ -5,13 +5,32 @@ from pathlib import Path, PurePosixPath
 import numpy as np
 import nrrd
 
-from iblutil.numerical import ismember
-from ibllib.atlas.regions import BrainRegions
+import boto3
+from botocore.config import Config
+from botocore import UNSIGNED
+
 from one.webclient import http_download_file
 import one.params
 
+from iblutil.numerical import ismember
+from ibllib.atlas.regions import BrainRegions
+
+
 _logger = logging.getLogger('ibllib')
 ALLEN_CCF_LANDMARKS_MLAPDV_UM = {'bregma': np.array([5739, 5400, 332])}
+S3_BUCKET_IBL = 'ibl-brain-wide-map-public'
+
+
+def s3_download_public(bucket, object, destination):
+    """
+    downloads file from public bucket
+    :param bucket:
+    :param object:
+    :param destination:
+    :return:
+    """
+    boto3.client('s3', config=Config(signature_version=UNSIGNED)).download_file(
+        S3_BUCKET_IBL, object, str(destination))
 
 
 def cart2sph(x, y, z):
@@ -198,6 +217,12 @@ class BrainAtlas:
 
         self.surface = None
         self.boundary = None
+
+    @staticmethod
+    def _get_cache_dir():
+        par = one.params.get(silent=True)
+        path_atlas = Path(par.CACHE_DIR).joinpath(PurePosixPath('histology', 'ATLAS', 'Needles', 'Allen', 'flatmaps'))
+        return path_atlas
 
     def compute_surface(self):
         """
@@ -855,18 +880,32 @@ class AllenAtlas(BrainAtlas):
                 _download_atlas_allen(file_label, FLAT_IRON_ATLAS_REL_PATH, par)
             file_label_remap = path_atlas.joinpath(f'annotation_{res_um}_lut_{LUT_VERSION}.npz')
             if not file_label_remap.exists():
-                label = self._read_volume(file_label)
+                label = self._read_volume(file_label).astype(dtype=np.int32)
                 _logger.info("computing brain atlas annotations lookup table")
                 # lateralize atlas: for this the regions of the left hemisphere have primary
                 # keys opposite to to the normal ones
                 lateral = np.zeros(label.shape[xyz2dims[0]])
                 lateral[int(np.floor(ibregma[0]))] = 1
                 lateral = np.sign(np.cumsum(lateral)[np.newaxis, :, np.newaxis] - 0.5)
-                label = label * lateral
-                _, im = ismember(label, regions.id)
-                label = np.reshape(im.astype(np.uint16), label.shape)
-                _logger.info(f"saving {file_label_remap} ...")
+                label = label * lateral.astype(np.int32)
+                # the 10 um atlas is too big to fit in memory so work by chunks instead
+                if res_um == 10:
+                    first, ncols = (0, 10)
+                    while True:
+                        last = np.minimum(first + ncols, label.shape[-1])
+                        _logger.info(f"Computing... {last} on {label.shape[-1]}")
+                        _, im = ismember(label[:, :, first:last], regions.id)
+                        label[:, :, first:last] = np.reshape(im, label[:, :, first:last].shape)
+                        if last == label.shape[-1]:
+                            break
+                        first += ncols
+                    label = label.astype(dtype=np.uint16)
+                    _logger.info("Saving npz, this can take a long time")
+                else:
+                    _, im = ismember(label, regions.id)
+                    label = np.reshape(im.astype(np.uint16), label.shape)
                 np.savez_compressed(file_label_remap, label)
+                _logger.info(f"Cached remapping file {file_label_remap} ...")
             # loads the files
             label = self._read_volume(file_label_remap)
             image = self._read_volume(file_image)
@@ -999,32 +1038,12 @@ class FlatMap(AllenAtlas):
             self.flatmap, self.ml_scale, self.ap_scale = circles(N=5, atlas=self, display='pyramid')
 
     def _get_flatmap_from_file(self):
-        # TODO probably best to store depth as the c order??
         # gets the file in the ONE cache for the flatmap name in the property, downloads it if needed
-        par = one.params.get(silent=True)
-        FLAT_IRON_ATLAS_REL_PATH = PurePosixPath('histology', 'ATLAS', 'Needles', 'Allen', 'flatmaps')
-        path_atlas = Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH)
-        file_flatmap = path_atlas.joinpath(f'{self.name}_{self.res_um}.nrrd')
+        file_flatmap = self._get_cache_dir().joinpath(f'{self.name}_{self.res_um}.nrrd')
         if not file_flatmap.exists():
-            self._download_flatmap(file_flatmap, FLAT_IRON_ATLAS_REL_PATH, par)
+            file_flatmap.parent.mkdir(exist_ok=True, parents=True)
+            s3_download_public(S3_BUCKET_IBL, f'atlas/{file_flatmap.name}', str(file_flatmap))
         self.flatmap, _ = nrrd.read(file_flatmap)
-
-    @staticmethod
-    def _download_flatmap(file_image, FLAT_IRON_ATLAS_REL_PATH, par):
-        """
-        Download flatmap volumes
-        :param file_image:
-        :param FLAT_IRON_ATLAS_REL_PATH:
-        :param par:
-        :return:
-        """
-        file_image.parent.mkdir(exist_ok=True, parents=True)
-        base_url = (par.HTTP_DATA_SERVER + '/histology/ATLAS/Needles/Allen/flatmaps')
-        flatmap_url = base_url + '/' + file_image.name
-
-        cache_dir = Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH)
-        return http_download_file(flatmap_url, target_dir=cache_dir, username=par.HTTP_DATA_SERVER_LOGIN,
-                                  password=par.HTTP_DATA_SERVER_PWD)
 
     def plot_flatmap(self, depth=0, volume='annotation', mapping='Allen', region_values=None, ax=None, **kwargs):
         """

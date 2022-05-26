@@ -10,7 +10,7 @@ from ibllib.io.extractors.training_trials import (
     Choice, FeedbackTimes, FeedbackType, GoCueTimes, GoCueTriggerTimes,
     IncludedTrials, Intervals, ItiDuration, ProbabilityLeft, ResponseTimes, RewardVolume,
     StimOnTimes_deprecated, StimOnTriggerTimes, StimOnOffFreezeTimes, ItiInTimes,
-    StimOffTriggerTimes, StimFreezeTriggerTimes, ErrorCueTriggerTimes)
+    StimOffTriggerTimes, StimFreezeTriggerTimes, ErrorCueTriggerTimes, PhasePosQuiescence)
 from ibllib.io.extractors.training_wheel import Wheel
 from ibllib.misc import version
 
@@ -167,12 +167,12 @@ def extract_all(session_path, save=False, bpod_trials=False, settings=False, ext
         # We now extract a single trials table
         base.extend([
             StimOnTriggerTimes, ItiInTimes, StimOffTriggerTimes, StimFreezeTriggerTimes, ErrorCueTriggerTimes,
-            TrialsTableBiased, IncludedTrials
+            TrialsTableBiased, IncludedTrials, PhasePosQuiescence
         ])
     else:
         base.extend([
             Intervals, Wheel, FeedbackType, ContrastLR, ProbabilityLeft, Choice, ItiDuration,
-            StimOnTimes_deprecated, RewardVolume, FeedbackTimes, ResponseTimes, GoCueTimes
+            StimOnTimes_deprecated, RewardVolume, FeedbackTimes, ResponseTimes, GoCueTimes, PhasePosQuiescence
         ])
 
     if extra_classes:

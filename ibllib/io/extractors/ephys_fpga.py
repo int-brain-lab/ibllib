@@ -9,12 +9,15 @@ import uuid
 import matplotlib.pyplot as plt
 import numpy as np
 
+import spikeglx
+import neurodsp.utils
 import one.alf.io as alfio
 from iblutil.util import Bunch
-import ibllib.dsp as dsp
+
 import ibllib.exceptions as err
-from ibllib.io import raw_data_loaders, spikeglx
+from ibllib.io import raw_data_loaders
 from ibllib.io.extractors.bpod_trials import extract_all as bpod_extract_all
+from ibllib.io.extractors.opto_trials import LaserBool
 import ibllib.io.extractors.base as extractors_base
 from ibllib.io.extractors.training_wheel import extract_wheel_moves
 import ibllib.plots as plots
@@ -117,16 +120,14 @@ def _sync_to_alf(raw_ephys_apfile, output_path=None, save=False, parts=''):
     file_ftcp = Path(output_path).joinpath(f'fronts_times_channel_polarity{str(uuid.uuid4())}.bin')
 
     # loop over chunks of the raw ephys file
-    wg = dsp.WindowGenerator(sr.ns, int(SYNC_BATCH_SIZE_SECS * sr.fs), overlap=1)
+    wg = neurodsp.utils.WindowGenerator(sr.ns, int(SYNC_BATCH_SIZE_SECS * sr.fs), overlap=1)
     fid_ftcp = open(file_ftcp, 'wb')
     for sl in wg.slice:
         ss = sr.read_sync(sl)
-        ind, fronts = dsp.fronts(ss, axis=0)
+        ind, fronts = neurodsp.utils.fronts(ss, axis=0)
         # a = sr.read_sync_analog(sl)
         sav = np.c_[(ind[0, :] + sl.start) / sr.fs, ind[1, :], fronts.astype(np.double)]
         sav.tofile(fid_ftcp)
-        # print progress
-        wg.print_progress()
     # close temp file, read from it and delete
     fid_ftcp.close()
     tim_chan_pol = np.fromfile(str(file_ftcp))
@@ -155,7 +156,8 @@ def _assign_events_bpod(bpod_t, bpod_polarities, ignore_first_valve=True):
     :param ignore_first_valve (True): removes detected valve events at indices le 2
     :return: numpy arrays of times t_trial_start, t_valve_open and t_iti_in
     """
-    TRIAL_START_TTL_LEN = 2.33e-4
+    TRIAL_START_TTL_LEN = 2.33e-4  # the TTL length is 0.1ms but this has proven to drift on
+    # some bpods and this is the highest possible value that discriminates trial start from valve
     ITI_TTL_LEN = 0.4
     # make sure that there are no 2 consecutive fall or consecutive rise events
     assert(np.all(np.abs(np.diff(bpod_polarities)) == 2))
@@ -189,12 +191,12 @@ def _assign_events_bpod(bpod_t, bpod_polarities, ignore_first_valve=True):
     # t_abnormal = events['t'][bpod_polarities != -1][i_abnormal]
     # assert(np.all(events != 0))
     # plt.figure()
-    # plots.squares(bpod_t, bpod_polarities)
-    # plots.vertical_lines(t_trial_start, ymin=-0.2, ymax=1.1, linewidth=0.5)
-    # plots.vertical_lines(t_valve_open, ymin=-0.2, ymax=1.1, linewidth=0.5)
-    # plots.vertical_lines(t_iti_in, ymin=-0.2, ymax=1.1, linewidth=0.5)
+    # plots.squares(bpod_t, bpod_polarities, label='raw fronts')
+    # plots.vertical_lines(t_trial_start, ymin=-0.2, ymax=1.1, linewidth=0.5, label='trial start')
+    # plots.vertical_lines(t_valve_open, ymin=-0.2, ymax=1.1, linewidth=0.5, label='valve open')
+    # plots.vertical_lines(t_iti_in, ymin=-0.2, ymax=1.1, linewidth=0.5, label='iti_in')
     # plt.plot(t_abnormal, t_abnormal * 0 + .5, 'k*')
-    # plt.legend(['raw fronts', 'trial start', 'valve open', 'iti_in'])
+    # plt.legend()
 
     return t_trial_start, t_valve_open, t_iti_in
 
@@ -429,7 +431,7 @@ def extract_behaviour_sync(sync, chmap=None, display=False, bpod_trials=None):
     # perform the sync bpod/FPGA, and add the start that have not been detected
     if bpod_trials:
         bpod_start = bpod_trials['intervals_bpod'][:, 0]
-        fcn, drift, ibpod, ifpga = dsp.utils.sync_timestamps(
+        fcn, drift, ibpod, ifpga = neurodsp.utils.sync_timestamps(
             bpod_start, t_trial_start, return_indices=True)
         # if it's drifting too much
         if drift > 200 and bpod_start.size != t_trial_start.size:
@@ -595,13 +597,13 @@ class FpgaTrials(extractors_base.BaseExtractor):
                  'wheelMoves_intervals', 'wheelMoves_peakAmplitude')
 
     # Fields from bpod extractor that we want to resync to FPGA
-    bpod_rsync_fields = ['intervals', 'response_times', 'goCueTrigger_times',
+    bpod_rsync_fields = ('intervals', 'response_times', 'goCueTrigger_times',
                          'stimOnTrigger_times', 'stimOffTrigger_times',
-                         'stimFreezeTrigger_times', 'errorCueTrigger_times']
+                         'stimFreezeTrigger_times', 'errorCueTrigger_times')
 
     # Fields from bpod extractor that we want to save
-    bpod_fields = ['feedbackType', 'choice', 'rewardVolume', 'contrastLeft', 'contrastRight', 'probabilityLeft',
-                   'intervals_bpod', 'phase', 'position', 'quiescence']
+    bpod_fields = ('feedbackType', 'choice', 'rewardVolume', 'contrastLeft', 'contrastRight', 'probabilityLeft',
+                   'intervals_bpod', 'phase', 'position', 'quiescence')
 
     def __init__(self, *args, **kwargs):
         """An extractor for all ephys trial data, in FPGA time"""
@@ -628,7 +630,7 @@ class FpgaTrials(extractors_base.BaseExtractor):
         bpod_trials['intervals_bpod'] = np.copy(bpod_trials['intervals'])
         fpga_trials = extract_behaviour_sync(sync=sync, chmap=chmap, bpod_trials=bpod_trials)
         # checks consistency and compute dt with bpod
-        self.bpod2fpga, drift_ppm, ibpod, ifpga = dsp.utils.sync_timestamps(
+        self.bpod2fpga, drift_ppm, ibpod, ifpga = neurodsp.utils.sync_timestamps(
             bpod_trials['intervals_bpod'][:, 0], fpga_trials.pop('intervals')[:, 0],
             return_indices=True)
         nbpod = bpod_trials['intervals_bpod'].shape[0]
@@ -679,6 +681,9 @@ def extract_all(session_path, save=True, bin_exists=False):
     extractor_type = extractors_base.get_session_extractor_type(session_path)
     _logger.info(f"Extracting {session_path} as {extractor_type}")
     sync, chmap = get_main_probe_sync(session_path, bin_exists=bin_exists)
+    base = [FpgaTrials]
+    if extractor_type == 'ephys_biased_opto':
+        base.append(LaserBool)
     outputs, files = extractors_base.run_extractor_classes(
-        FpgaTrials, session_path=session_path, save=save, sync=sync, chmap=chmap)
+        base, session_path=session_path, save=save, sync=sync, chmap=chmap)
     return outputs, files

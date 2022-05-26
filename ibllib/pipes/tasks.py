@@ -235,7 +235,7 @@ class Task(abc.ABC):
             self.data_handler = self.get_data_handler()
             self.data_handler.setUp()
             self.get_signatures(**kwargs)
-            # self.assert_expected_inputs()
+            self.assert_expected_inputs()
             return True
 
     def tearDown(self):
@@ -524,9 +524,9 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
         # if any of the parent tasks is not complete, throw a warning
         if any(map(lambda s: s not in ['Complete', 'Incomplete'], parent_statuses)):
             _logger.warning(f"{tdict['name']} has unmet dependencies")
-            # if parents are just waiting, don't do anything, but if they have a failed status
-            # set the current task status to Held
-            if any(map(lambda s: s in ['Errored', 'Held', 'Empty'], parent_statuses)):
+            # if parents are waiting or failed, set the current task status to Held
+            # once the parents ran, the descendent tasks will be set from Held to Waiting (see below)
+            if any(map(lambda s: s in ['Errored', 'Held', 'Empty', 'Waiting'], parent_statuses)):
                 tdict = one.alyx.rest('tasks', 'partial_update', id=tdict['id'],
                                       data={'status': 'Held'})
             return tdict, registered_dsets

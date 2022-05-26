@@ -2,10 +2,19 @@
 Module that hold techniques to project the brain volume onto 2D images for visualisation purposes
 """
 from functools import lru_cache
-from ibllib.atlas import AllenAtlas
+import logging
+
+import pandas as pd
 import numpy as np
-from iblutil.util import Bunch
 from scipy.interpolate import interp1d
+import matplotlib.pyplot as plt
+
+from iblutil.numerical import ismember
+from iblutil.util import Bunch
+from iblutil.io.hashfile import md5
+from ibllib.atlas.atlas import AllenAtlas, S3_BUCKET_IBL, BrainRegions, s3_download_public
+
+_logger = logging.getLogger(__file__)
 
 
 @lru_cache(maxsize=1, typed=False)
@@ -102,3 +111,164 @@ def circles(N=5, atlas=None, display='flat'):
     # ax[1].imshow(ba.top)
     # ax[1].plot(centroid[1], centroid[0], '*')
     # ax[1].plot(s.x, s.y)
+
+
+def swanson(filename="swanson2allen.npz"):
+    # filename could be "swanson2allen_original.npz", or "swanson2allen.npz" for remapped indices to match
+    # existing labels in the brain atlas
+    OLD_MD5 = [
+        'bb0554ecc704dd4b540151ab57f73822',  # version 2022-05-02 (remapped)
+        '7722c1307cf9a6f291ad7632e5dcc88b',  # version 2022-05-09 (removed wolf pixels and 2 artefact regions)
+    ]
+    npz_file = AllenAtlas._get_cache_dir().joinpath(filename)
+    if not npz_file.exists() or md5(npz_file) in OLD_MD5:
+        npz_file.parent.mkdir(exist_ok=True, parents=True)
+        _logger.info(f'downloading swanson image from {S3_BUCKET_IBL} s3 bucket...')
+        s3_download_public(S3_BUCKET_IBL, f'atlas/{npz_file.name}', str(npz_file))
+    s2a = np.load(npz_file)['swanson2allen']  # inds contains regions ids
+    return s2a
+
+
+def plot_swanson(acronyms=None, values=None, ax=None, hemisphere=None, br=None,
+                 orientation='landscape', annotate=False, **kwargs):
+    """
+    Displays the 2D image corresponding to the swanson flatmap.
+    This case is different from the others in the sense that only a region maps to another regions, there
+    is no correspondency from the spatial 3D coordinates.
+    :param acronyms:
+    :param values:
+    :param hemisphere: hemisphere to display, options are 'left', 'right', 'both' or 'mirror'
+    :param br: ibllib.atlas.BrainRegions object
+    :param ax: matplotlib axis object to plot onto
+    :param orientation: 'landscape' (default) or 'portrait'
+    :param annotate: (False) if True, labels regions with acronyms
+    :param kwargs: arguments for imshow
+    :return:
+    """
+    mapping = 'Swanson'
+    br = BrainRegions() if br is None else br
+    s2a = swanson()
+    # both hemishpere
+    if hemisphere == 'both':
+        _s2a = s2a + np.sum(br.id > 0)
+        _s2a[s2a == 0] = 0
+        _s2a[s2a == 1] = 1
+        s2a = np.r_[s2a, np.flipud(_s2a)]
+        mapping = 'Swanson-lr'
+    elif hemisphere == 'mirror':
+        s2a = np.r_[s2a, np.flipud(s2a)]
+    if orientation == 'portrait':
+        s2a = np.transpose(s2a)
+    if acronyms is None:
+        regions = br.mappings[mapping][s2a]
+        im = br.rgba[regions]
+    else:
+        user_aids = br.parse_acronyms_argument(acronyms)
+        # if the user provided inputs are higher level than swanson propagate down
+        swaids = br.id[np.unique(s2a)]
+        maids = np.setdiff1d(user_aids, swaids)  # those are the indices not in Swanson
+        for i, maid in enumerate(maids):
+            if maid <= 1:
+                continue
+            childs_in_sw = np.intersect1d(br.descendants(maid)['id'][1:], swaids)
+            if childs_in_sw.size > 0:
+                user_aids = np.r_[user_aids, childs_in_sw]
+                values = np.r_[values, values[i] + childs_in_sw * 0]
+        # the user may have input non-unique regions
+        df = pd.DataFrame(dict(aid=user_aids, value=values)).groupby('aid').mean()
+        aids, vals = (df.index.values, df['value'].values)
+        # apply mapping and perform another round of aggregation
+        _, _, ibr = np.intersect1d(aids, br.id, return_indices=True)
+        ibr = br.mappings['Swanson-lr'][ibr]
+        df = pd.DataFrame(dict(ibr=ibr, value=vals)).groupby('ibr').mean()
+        ibr, vals = (df.index.values, df['value'].values)
+        # we now have the mapped regions and aggregated values, map values onto swanson map
+        iswan, iv = ismember(s2a, ibr)
+        im = np.zeros_like(s2a, dtype=np.float32)
+        im[iswan] = vals[iv]
+        im[~iswan] = np.nan
+    if not ax:
+        ax = plt.gca()
+        ax.set_axis_off()  # unless provided we don't need scales here
+    ax.imshow(im, **kwargs)
+    # overlay the boundaries if value plot
+    imb = np.zeros((*s2a.shape[:2], 4), dtype=np.uint8)
+    imb[s2a == 0] = 255
+    # imb[s2a == 1] = np.array([167, 169, 172, 255])
+    imb[s2a == 1] = np.array([0, 0, 0, 255])
+    ax.imshow(imb)
+    if annotate:
+        annotate_swanson(ax=ax, orientation=orientation, br=br)
+
+    # provides the mean to see the region on axis
+    def format_coord(x, y):
+        acronym = br.acronym[s2a[int(y), int(x)]]
+        return f'x={x:1.4f}, y={x:1.4f}, {acronym}'
+
+    ax.format_coord = format_coord
+    return ax
+
+
+@lru_cache(maxsize=None)
+def _swanson_labels_positions():
+    """
+    This functions computes label positions to overlay on the Swanson flatmap
+    :return: dictionary where keys are acronyms
+    """
+    NPIX_THRESH = 20000  # number of pixels above which region is labeled
+    s2a = swanson()
+    iw, ih = np.meshgrid(np.arange(s2a.shape[1]), np.arange(s2a.shape[0]))
+    # compute the center of mass of all regions (fast enough to do on the fly)
+    bc = np.maximum(1, np.bincount(s2a.flatten()))
+    cmw = np.bincount(s2a.flatten(), weights=iw.flatten()) / bc
+    cmh = np.bincount(s2a.flatten(), weights=ih.flatten()) / bc
+    bc[0] = 1
+
+    NWH, NWW = (200, 600)
+    h, w = s2a.shape
+    labels = {}
+    for ilabel in np.where(bc > NPIX_THRESH)[0]:
+        x, y = (cmw[ilabel], cmh[ilabel])
+        # the polygon is convex and the label is outside. Dammit !!!
+        if s2a[int(y), int(x)] != ilabel:
+            # find the nearest point to the center of mass
+            ih, iw = np.where(s2a == ilabel)
+            iimin = np.argmin(np.abs((x - iw) + 1j * (y - ih)))
+            # get the center of mass of a window around this point
+            sh = np.arange(np.maximum(0, ih[iimin] - NWH), np.minimum(ih[iimin] + NWH, h))
+            sw = np.arange(np.maximum(0, iw[iimin] - NWW), np.minimum(iw[iimin] + NWW, w))
+            roi = s2a[sh][:, sw] == ilabel
+            roi = roi / np.sum(roi)
+            # ax.plot(x, y, 'k+')
+            # ax.plot(iw[iimin], ih[iimin], '*k')
+            x = sw[np.searchsorted(np.cumsum(np.sum(roi, axis=0)), .5) - 1]
+            y = sh[np.searchsorted(np.cumsum(np.sum(roi, axis=1)), .5) - 1]
+            # ax.plot(x, y, 'r+')
+        labels[ilabel] = (x, y)
+    return labels
+
+
+def annotate_swanson(ax, acronyms=None, orientation='landscape', br=None, **kwargs):
+    """
+    Display annotations on the flatmap
+    :param ax:
+    :param acronyms: (None) list or np.array of acronyms or allen region ids. If None plot all.
+    :param orientation:
+    :param br: BrainRegions object
+    :param kwargs: arguments for the annotate function
+    :return:
+    """
+    br = br or BrainRegions()
+    if acronyms is None:
+        indices = np.arange(br.id.size)
+    else:  # tech debt: here in fact we should remap and compute labels for hierarchical regions
+        aids = br.parse_acronyms_argument(acronyms)
+        _, indices, _ = np.intersect1d(br.id, br.remap(aids, 'Swanson-lr'), return_indices=True)
+    labels = _swanson_labels_positions()
+    for ilabel in labels:
+        # do not display uwanted labels
+        if ilabel not in indices:
+            continue
+        # rotate the labels if the dislay is in portrait mode
+        xy = reversed(labels[ilabel]) if orientation == 'portrait' else labels[ilabel]
+        ax.annotate(br.acronym[ilabel], xy=xy, ha='center', va='center', **kwargs)
