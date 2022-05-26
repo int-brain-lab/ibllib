@@ -163,7 +163,10 @@ class WidefieldSync(tasks.Task):
     force = False
     signature = {
         'input_files': [('widefield.raw.*', 'raw_widefield_data', True),
-                        ('widefieldEvents.raw.*', 'raw_widefield_data', True)],
+                        ('widefieldEvents.raw.*', 'raw_widefield_data', True),
+                        ('_spikeglx_sync*.npy', 'raw_ephys_data*', True),
+                        ('_spikeglx_sync.polarities*.npy', 'raw_ephys_data*', True),
+                        ('_spikeglx_sync.times*.npy', 'raw_ephys_data*', True)],
         'output_files': [('widefield.times.npy', 'alf', True),
                          ('widefield.widefieldLightSource.npy', 'alf', True)]
     }
@@ -178,6 +181,23 @@ class WidefieldSync(tasks.Task):
         return out_files
 
 
+class WidefieldFOV(tasks.Task):
+    priority = 60
+    level = 2
+    force = False
+    signature = {
+        'input_files': [('widefieldLandmarks.dorsalCortex.json', 'alf', True),
+                        ('widefieldSVT.uncorrected.npy', 'alf', True),
+                        ('widefieldSVT.haemoCorrected.npy', 'alf', True)],
+        'output_files': []
+    }
+
+    def _run(self):
+        # TODO make task that computes location
+
+        return []
+
+
 # pipeline
 class WidefieldExtractionPipeline(tasks.Pipeline):
     label = __name__
@@ -187,7 +207,7 @@ class WidefieldExtractionPipeline(tasks.Pipeline):
         tasks = OrderedDict()
         self.session_path = session_path
         # level 0
-        for Task in (WidefieldRegisterRaw, WidefieldCompress, EphysMtscomp, EphysPulses, WidefieldPreprocess, EphysAudio,
+        for Task in (WidefieldRegisterRaw, WidefieldCompress, EphysMtscomp, EphysPulses, EphysAudio,
                      EphysVideoCompress):
             task = Task(session_path)
             tasks[task.name] = task
@@ -195,10 +215,12 @@ class WidefieldExtractionPipeline(tasks.Pipeline):
         tasks["EphysTrials"] = EphysTrials(self.session_path, parents=[tasks["EphysPulses"]])
         tasks["EphysPassive"] = EphysPassive(self.session_path, parents=[tasks["EphysPulses"]])
         tasks["WidefieldSync"] = WidefieldSync(self.session_path, parents=[tasks["EphysPulses"]])
+        tasks["WidefieldPreprocess"] = WidefieldPreprocess(self.session_path, parents=[tasks["EphysPulses"]])
         # level 2
         tasks["EphysVideoSyncQc"] = EphysVideoSyncQc(
             self.session_path, parents=[tasks["EphysVideoCompress"], tasks["EphysPulses"], tasks["EphysTrials"]])
         tasks["EphysDLC"] = EphysDLC(self.session_path, parents=[tasks["EphysVideoCompress"]])
+        tasks['WidefieldFOV'] = WidefieldSync(self.session_path, parents=[tasks["WidefieldPreprocess"]])
         # level 3
         tasks["EphysPostDLC"] = EphysPostDLC(self.session_path, parents=[tasks["EphysDLC"]])
         self.tasks = tasks
