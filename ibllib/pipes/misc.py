@@ -121,7 +121,7 @@ def rename_session(session_path: str, new_subject=None, new_date=None, new_numbe
         new_mouse = input(f"Please insert subject NAME [current value: {mouse}]> ")
         new_date = input(f"Please insert new session DATE [current value: {date}]> ")
         new_sess = input(f"Please insert new session NUMBER [current value: {sess}]> ")
-            
+
     new_session_path = Path(*session_path.parts[:-3]).joinpath(new_mouse, new_date,
                                                                new_sess.zfill(3))
     assert is_session_path(new_session_path), 'invalid subject, date or number'
@@ -779,6 +779,7 @@ def confirm_fp_remote_folder(local_folder=False, remote_folder=False, force=Fals
     if os.name == 'nt':
         WindowsInhibitor().uninhibit()
 
+
 def rename_fp_files(session_folder: str) -> None:
     """rename_ephys_files is system agnostic (3A, 3B1, 3B2).
     Renames all ephys files to Alyx compatible filenames. Uses get_new_filename.
@@ -805,8 +806,9 @@ def rename_fp_files(session_folder: str) -> None:
     return new_files
 
 
-def copy_fp_wiring_files(session_folder: str)-> None:
+def copy_fp_wiring_files(session_folder: str) -> None:
     pass
+
 
 def probe_labels_from_session_path(session_path: Union[str, Path]) -> List[str]:
     """

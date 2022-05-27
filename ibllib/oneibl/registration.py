@@ -28,7 +28,8 @@ REGISTRATION_GLOB_PATTERNS = ['alf/**/*.*',
                               'raw_ephys_data/**/_spikeglx_*.*',
                               'raw_ephys_data/**/_iblqc_*.*',
                               'spikesorters/**/_kilosort_*.*',
-                              'raw_widefield_data/**/_ibl_*.*'
+                              'raw_widefield_data/**/_ibl_*.*',
+                              'raw_photometry_data/**/_neurophotometrics_*.*'
                               ]
 
 

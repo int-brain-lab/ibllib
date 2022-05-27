@@ -115,4 +115,3 @@ class FibrePhotometry(BaseExtractor):
             An array of timestamps, one per frame.
         """
         raise NotImplementedError  # To subclass
-
