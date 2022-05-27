@@ -16,8 +16,8 @@ from pathlib import Path
 from ibllib.io.extractors.widefield import Widefield as WidefieldExtractor
 from ibllib.pipes import tasks
 from ibllib.pipes.ephys_preprocessing import (
-    EphysPulses, EphysMtscomp, EphysAudio, EphysVideoCompress, EphysVideoSyncQc, EphysTrials, EphysPassive, EphysDLC, EphysPostDLC
-)
+    EphysPulses, EphysMtscomp, EphysAudio, EphysVideoCompress, EphysVideoSyncQc, EphysTrials, EphysPassive, EphysDLC,
+    EphysPostDLC, EphysRegisterRaw)
 from ibllib.oneibl.registration import register_session_raw_data
 from ibllib.io.video import get_video_meta
 
@@ -36,7 +36,10 @@ class WidefieldRegisterRaw(tasks.Task):
     priority = 100
 
     def _run(self, overwrite=False):
-        out_files = self.rename_files(symlink_old=True)
+        out_files, _ = register_session_raw_data(self.session_path, one=self.one, dry=True)
+        widefield_out_files = self.rename_files(symlink_old=True)
+        if len(widefield_out_files) > 0:
+            out_files = out_files + widefield_out_files
         self.register_snapshots()
         return out_files
 
