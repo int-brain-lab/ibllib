@@ -36,9 +36,8 @@ class WidefieldRegisterRaw(tasks.Task):
     priority = 100
 
     def _run(self, overwrite=False):
-        self.rename_files(symlink_old=True)
+        out_files = self.rename_files(symlink_old=True)
         self.register_snapshots()
-        out_files, _ = register_session_raw_data(self.session_path, one=self.one, dry=True)
         return out_files
 
     def rename_files(self, symlink_old=True):
@@ -55,7 +54,8 @@ class WidefieldRegisterRaw(tasks.Task):
         session_path = Path(self.session_path).joinpath('raw_widefield_data')
         if not session_path.exists():
             _logger.warning(f'Path does not exist: {session_path}')
-            return
+            return []
+        out_files = []
         for before, after in zip(self.input_files, self.output_files):
             old_file, old_collection, required = before
             old_path = self.session_path.rglob(str(Path(old_collection).joinpath(old_file)))
@@ -69,6 +69,9 @@ class WidefieldRegisterRaw(tasks.Task):
             old_path.replace(new_path)
             if symlink_old:
                 old_path.symlink_to(new_path)
+            out_files.append(new_path)
+
+        return out_files
 
     def register_snapshots(self, unlink=False):
         """
