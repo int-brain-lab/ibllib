@@ -16,7 +16,7 @@ from ibllib.time import date2isostr
 import ibllib.oneibl.registration as registration
 
 _logger = logging.getLogger('ibllib')
-LARGE_TASKS = ['EphysVideoCompress', 'TrainingVideoCompress', 'SpikeSorting', 'EphysDLC']  # 'TrainingDLC',
+LARGE_TASKS = ['EphysVideoCompress', 'TrainingVideoCompress', 'SpikeSorting', 'EphysDLC']
 
 
 def _get_pipeline_class(session_path, one):
@@ -137,39 +137,39 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
     return all_datasets
 
 
-def job_runner(subjects_path, mode='all', lab=None, dry=False, one=None, count=5):
+def task_queue(mode='all', lab=None, one=None):
     """
-    Function to be used as a process to run the jobs as they are created on the database
-    This will query waiting jobs from the specified Lab
-    :param subjects_path: on servers: /mnt/s0/Data/Subjects. Contains sessions
-    :param mode: Whether to run all jobs, or only small or large (video compression, DLC, spike sorting) jobs
-    :param lab: lab name as per Alyx
-    :param dry:
-    :param count:
-    :return:
+    Query waiting jobs from the specified Lab
+    :param mode: Whether to return all waiting tasks, or only small or large (specified in LARGE_TASKS) jobs
+    :param lab: lab name as per Alyx, otherwise try to infer from local globus install
+    :param one: ONE instance
+    -------
+
     """
     if one is None:
         one = ONE(cache_rest=None)
     if lab is None:
+        _logger.info("Trying to infer lab from globus installation")
         lab = _get_lab(one)
     if lab is None:
+        _logger.error("No lab provided or found")
         return  # if the lab is none, this will return empty tasks each time
     # Filter for tasks
     if mode == 'all':
-        tasks = one.alyx.rest('tasks', 'list', status='Waiting',
-                              django=f'session__lab__name__in,{lab}', no_cache=True)
+        waiting_tasks = one.alyx.rest('tasks', 'list', status='Waiting',
+                                      django=f'session__lab__name__in,{lab}', no_cache=True)
     elif mode == 'small':
         tasks_all = one.alyx.rest('tasks', 'list', status='Waiting',
                                   django=f'session__lab__name__in,{lab}', no_cache=True)
-        tasks = [t for t in tasks_all if t['name'] not in LARGE_TASKS]
+        waiting_tasks = [t for t in tasks_all if t['name'] not in LARGE_TASKS]
     elif mode == 'large':
-        tasks = one.alyx.rest('tasks', 'list', status='Waiting',
-                              django=f'session__lab__name__in,{lab},name__in,{LARGE_TASKS}', no_cache=True)
+        waiting_tasks = one.alyx.rest('tasks', 'list', status='Waiting',
+                                      django=f'session__lab__name__in,{lab},name__in,{LARGE_TASKS}', no_cache=True)
 
     # Order tasks by priority
-    tasks = sorted(tasks, key=lambda d: d['priority'], reverse=True)
+    sorted_tasks = sorted(waiting_tasks, key=lambda d: d['priority'], reverse=True)
 
-    tasks_runner(subjects_path, tasks, one=one, count=count, time_out=3600, dry=dry)
+    return sorted_tasks
 
 
 def tasks_runner(subjects_path, tasks_dict, one=None, dry=False, count=5, time_out=None, **kwargs):

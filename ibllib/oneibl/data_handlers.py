@@ -47,10 +47,15 @@ class DataHandler(abc.ABC):
 
         one = one or self.one
         session_datasets = one.list_datasets(one.path2eid(self.session_path), details=True)
-        df = pd.DataFrame(columns=one._cache.datasets.columns)
+        dfs = []
         for file in self.signature['input_files']:
-            df = df.append(filter_datasets(session_datasets, filename=file[0], collection=file[1],
-                           wildcards=True, assert_unique=False))
+            dfs.append(filter_datasets(session_datasets, filename=file[0], collection=file[1],
+                       wildcards=True, assert_unique=False))
+        df = pd.concat(dfs)
+
+        # Some cases the eid is stored in the index. If so we drop this level
+        if 'eid' in df.index.names:
+            df = df.droplevel(level='eid')
         return df
 
     def uploadData(self, outputs, version):
@@ -228,7 +233,7 @@ class RemoteHttpDataHandler(DataHandler):
         :return:
         """
         df = super().getData()
-        self.one._download_datasets(df)
+        self.one._check_filesystem(df)
 
     def uploadData(self, outputs, version, **kwargs):
         """

@@ -164,6 +164,15 @@ def run_extractor_classes(classes, session_path=None, **kwargs):
 def _get_task_types_json_config():
     with open(Path(__file__).parent.joinpath('extractor_types.json')) as fp:
         task_types = json.load(fp)
+    try:
+        # look if there are custom extractor types in the personal projects repo
+        import projects.base
+        custom_extractors = Path(projects.base.__file__).parent.joinpath('extractor_types.json')
+        with open(custom_extractors) as fp:
+            custom_task_types = json.load(fp)
+        task_types.update(custom_task_types)
+    except (ModuleNotFoundError, FileNotFoundError):
+        pass
     return task_types
 
 
@@ -192,7 +201,10 @@ def get_task_extractor_type(task_name):
         if task_name is None:
             return
     task_types = _get_task_types_json_config()
-    task_type = next((task_types[tt] for tt in task_types if tt in task_name), None)
+
+    task_type = task_types.get(task_name, None)
+    if task_type is None:
+        task_type = next((task_types[tt] for tt in task_types if tt in task_name), None)
     if task_type is None:
         _logger.warning(f"No extractor type found for {task_name}")
     return task_type

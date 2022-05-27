@@ -12,7 +12,7 @@ import pandas as pd
 import scipy.signal
 import matplotlib.pyplot as plt
 
-from ibllib.dsp import voltage
+from neurodsp import voltage
 from ibllib.plots.snapshot import ReportSnapshotProbe, ReportSnapshot
 from one.api import ONE
 import one.alf.io as alfio
@@ -599,7 +599,7 @@ def raw_destripe(raw, fs, t0, i_plt, n_plt,
     '''
 
     # Import
-    from ibllib.dsp import voltage
+    from neurodsp import voltage
     from ibllib.plots import Density
 
     # Init fig
@@ -688,6 +688,9 @@ def dlc_qc_plot(session_path, one=None):
     """
 
     one = one or ONE()
+    # hack for running on cortexlab local server
+    if one.alyx.base_url == 'https://alyx.cortexlab.net':
+        one = ONE(base_url='https://alyx.internationalbrainlab.org')
     data = {}
     cams = ['left', 'right', 'body']
     session_path = Path(session_path)

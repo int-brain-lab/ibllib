@@ -5,11 +5,13 @@ from tempfile import TemporaryDirectory
 import numpy as np
 import scipy.signal
 
-from ibllib.ephys import ephysqc, neuropixel, spikes
-from ibllib.dsp import voltage
+from one.api import ONE
+import neuropixel
+from neurodsp import voltage
+
+from ibllib.ephys import ephysqc, spikes
 from ibllib.tests import TEST_DB
 from ibllib.tests.fixtures import utils
-from one.api import ONE
 
 
 def a_little_spike(nsw=121, nc=1):
@@ -160,14 +162,6 @@ class TestEphysQC(unittest.TestCase):
         # Make sure it runs through fine when meta files are present
         utils.create_fake_raw_ephys_data_folder(self.one.eid2path(self.eid), populate=True)
         self.qc._ensure_required_data()
-
-    def test_load_data(self):
-        # In case that hasn't been run
-        utils.create_fake_raw_ephys_data_folder(self.one.eid2path(self.eid), populate=True)
-        # Remove the fake bin files because they won't be able to load
-        for fbin in ['_spikeglx_ephysData_g0_t0.imec.lf.bin', '_spikeglx_ephysData_g0_t0.imec.ap.bin']:
-            self.one.eid2path(self.eid).joinpath('raw_ephys_data', self.pname, fbin).unlink()
-        self.qc.load_data()
 
 
 class TestDetectSpikes(unittest.TestCase):

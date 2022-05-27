@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import scipy
 
-import ibllib.dsp as dsp
+import neurodsp as dsp
 
 
 def wiggle(w, fs=1, gain=0.71, color='k', ax=None, fill=True, linewidth=0.5, t0=0, clip=2,
@@ -23,7 +23,7 @@ def wiggle(w, fs=1, gain=0.71, color='k', ax=None, fill=True, linewidth=0.5, t0=
     """
     nech, ntr = w.shape
     tscale = np.arange(nech) / fs
-    sf = gain / np.sqrt(dsp.rms(w.flatten()))
+    sf = gain / np.sqrt(dsp.utils.rms(w.flatten()))
 
     def insert_zeros(trace):
         # Insert zero locations in data trace and tt vector based on linear fit
@@ -126,7 +126,7 @@ class Traces:
         w = w.reshape(w.shape[0], -1)
         nech, ntr = w.shape
         tscale = np.arange(nech) / fs * 1e3
-        sf = gain / dsp.rms(w.flatten()) / 2
+        sf = gain / dsp.utils.rms(w.flatten()) / 2
         if ax is None:
             self.figure, ax = plt.subplots()
         else:
@@ -212,7 +212,7 @@ def spectrum(w, fs, smooth=None, unwrap=True, axis=0, **kwargs):
     unwrap = True
 
     ns = w.shape[axis]
-    fscale = dsp.fscale(ns, 1 / fs, one_sided=True)
+    fscale = dsp.fourier.fscale(ns, 1 / fs, one_sided=True)
     W = scipy.fft.rfft(w, axis=axis)
     amp = 20 * np.log10(np.abs(W))
     phi = np.angle(W)
@@ -222,8 +222,8 @@ def spectrum(w, fs, smooth=None, unwrap=True, axis=0, **kwargs):
 
     if smooth:
         nf = np.round(smooth / fscale[1] / 2) * 2 + 1
-        amp = dsp.smooth.mwa(amp, nf)
-        phi = dsp.smooth.mwa(phi, nf)
+        amp = scipy.signal.medfilt(amp, nf)
+        phi = scipy.signal.medfilt(phi, nf)
 
     fig, ax = plt.subplots(2, 1, sharex=True)
     ax[0].plot(fscale, amp, **kwargs)
