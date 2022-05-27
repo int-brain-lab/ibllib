@@ -220,7 +220,7 @@ class WidefieldExtractionPipeline(tasks.Pipeline):
         tasks["EphysVideoSyncQc"] = EphysVideoSyncQc(
             self.session_path, parents=[tasks["EphysVideoCompress"], tasks["EphysPulses"], tasks["EphysTrials"]])
         tasks["EphysDLC"] = EphysDLC(self.session_path, parents=[tasks["EphysVideoCompress"]])
-        tasks['WidefieldFOV'] = WidefieldSync(self.session_path, parents=[tasks["WidefieldPreprocess"]])
+        tasks['WidefieldFOV'] = WidefieldFOV(self.session_path, parents=[tasks["WidefieldPreprocess"]])
         # level 3
         tasks["EphysPostDLC"] = EphysPostDLC(self.session_path, parents=[tasks["EphysDLC"]])
         self.tasks = tasks
