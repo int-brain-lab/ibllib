@@ -656,144 +656,15 @@ def confirm_widefield_remote_folder(local_folder=False, remote_folder=False, for
 
 
 def confirm_fp_remote_folder(local_folder=False, remote_folder=False, force=False, n_days=None, pars=None):
-
-    if not local_folder:
-        pars = pars or load_fppc_params()
-        local_folder = pars['DATA_FOLDER_PATH']
-    if not remote_folder:
-        pars = pars or load_fppc_params()
-        remote_folder = pars['REMOTE_DATA_FOLDER_PATH']
-    local_folder = Path(local_folder)
-    remote_folder = Path(remote_folder)
-
-    # Check for Subjects folder
-    local_folder = subjects_data_folder(local_folder, rglob=True)
-    remote_folder = subjects_data_folder(remote_folder, rglob=True)
-
-    print('LOCAL:', local_folder)
-    print('REMOTE:', remote_folder)
-    src_session_paths = (x.parent for x in local_folder.rglob('raw_fp_data'))
-
-    def is_recent(x):
-        try:
-            return (datetime.date.today() - datetime.date.fromisoformat(x.parts[-2])).days <= n_days
-        except ValueError:  # ignore none date formatted folders
-            return False
-
-    if n_days is not None:
-        src_session_paths = filter(is_recent, src_session_paths)
-
-    # Load incomplete transfer list
-    transfer_records = params.getfile('ibl_local_transfers')
-    if Path(transfer_records).exists():
-        with open(transfer_records, 'r') as fp:
-            transfers = json.load(fp)
-        # if transfers:  # TODO prompt for action here
-        #     answer = input('Previous incomplete transfers found, add them to queue?')
-    else:
-        transfers = []
-
-    src_session_paths = list(src_session_paths)
-    if not src_session_paths and not transfers:
-        print('Nothing to transfer, exiting...')
-        return
-
-    for session_path in src_session_paths:
-        if session_path in (x[0] for x in transfers):
-            log.info(f'{session_path} already in transfers list')
-            continue  # Already on pile
-
-        remote_session_path = remote_folder.joinpath(*session_path.parts[-3:])
-
-        # Check remote and local session number folders are the same
-        def _get_session_numbers(session_path):
-            contents = session_path.parent.glob('*')
-            folders = filter(lambda x: x.is_dir() and re.match(r'^\d{3}$', x.name), contents)
-            return set(map(lambda x: x.name, folders))
-
-        remote_numbers = _get_session_numbers(remote_session_path)
-        if not remote_numbers:
-            print(f'No behavior folder found in {remote_session_path}: skipping session...')
-            continue
-
-        if not session_path.joinpath('raw_fp_data').exists():
-            warnings.warn(f'No raw_fp_data folder for session {session_path}')
-            continue
-
-        print(f"\nFound session: {session_path}")
-        if _get_session_numbers(session_path) != remote_numbers:
-            not_valid = True
-            resp = 's'
-            remote_numbers = list(map(int, remote_numbers))
-            while not_valid:
-                resp = input(f'Which session number to use? Options: '
-                             f'{range_str(remote_numbers)} or [s]kip/[h]elp/[e]xit> ').strip()
-                if resp == 'h':
-                    print('An example session filepath:\n')
-                    describe('number')  # Explain what a session number is
-                    input('Press enter to continue')
-                not_valid = resp != 's' and resp != 'e'
-                not_valid = not_valid and (not re.match(r'^\d+$', resp) or int(resp) not in remote_numbers)
-            if resp == 's':
-                log.info('Skipping session...')
-                continue
-            if resp == 'e':
-                print('Exiting.  No files transferred.')
-                return
-            session_path = rename_session(session_path, new_number=resp)
-            if session_path is None:
-                log.info('Skipping session...')
-                continue
-            remote_session_path = remote_folder / Path(*session_path.parts[-3:])
-        transfers.append((session_path.as_posix(), remote_session_path.as_posix()))
-        log.debug('Added to transfers list:\n' + str(transfers[-1]))
-        with open(transfer_records, 'w') as fp:
-            json.dump(transfers, fp)
-
-    # Start transfers
-    if os.name == 'nt':
-        WindowsInhibitor().inhibit()
-    for i, (session_path, remote_session_path) in enumerate(transfers):
-        if not behavior_exists(remote_session_path):
-            print(f'No behavior folder found in {remote_session_path}: skipping session...')
-            continue
-        try:
-            fp_files = rename_fp_files(Path(session_path))
-            for file in fp_files:
-                transfer_files(Path(session_path) / 'raw_fp_data' / file.name,
-                               Path(remote_session_path) / 'raw_fp_data' / file.name, force=force)
-
-        except AssertionError as ex:
-            log.error(f'Fibre photometry transfer failed: {ex}')
-            continue
-        flag_file = Path(session_path) / 'transfer_me.flag'
-        log.debug('Removing ' + str(flag_file))
-        flag_file.unlink()
-
-        create_fp_transfer_done_flag(remote_session_path)
-        check_create_raw_session_flag(remote_session_path)
-        # Done. Remove from list
-        transfers.pop(i)
-        with open(transfer_records, 'w') as fp:
-            json.dump(transfers, fp)
-    if os.name == 'nt':
-        WindowsInhibitor().uninhibit()
+    raise NotImplementedError
 
 
-def rename_fp_files(session_folder: str) -> None:
-    """rename_ephys_files is system agnostic (3A, 3B1, 3B2).
-    Renames all ephys files to Alyx compatible filenames. Uses get_new_filename.
-
-    :param session_folder: Session folder path
-    :type session_folder: str
-    :return: None - Changes names of files on filesystem
-    :rtype: None
-    """
-
+def rename_fp_files(session_folder: str) -> list:
+    """Rename output of Neurophotometrics Bonsai workflow to ALF compliant datasets"""
     new_files = []
     session_path = Path(session_folder)
     orig_names = ["*.tdms", "FPData"]
-    new_names = ["fpData.daq.tdms", "fpData.raw.csv"]
+    new_names = ["_mcc_fpData.daq.tdms", "_neurophotometrics_fpData.raw.csv"]
 
     for o_name, n_name in zip(orig_names, new_names):
         new_file = session_path.joinpath('raw_fp_data', n_name)
@@ -806,8 +677,14 @@ def rename_fp_files(session_folder: str) -> None:
     return new_files
 
 
-def copy_fp_wiring_files(session_folder: str) -> None:
-    pass
+def copy_fp_wiring_files(session_folder: str, iblscripts_folder: str) -> None:
+    """Copy default fibrephotometry channels file to the session folder"""
+    iblscripts_path = Path(iblscripts_folder)
+    channels_path = iblscripts_path / 'deploy' / 'fppc'
+    source = next(channels_path.glob('*fpData.channels.csv'))
+    destination = Path(session_folder).joinpath('raw_photometry_data', source.name)
+    shutil.copy(source, destination)
+    print(f'Copied {source} to {destination}')
 
 
 def probe_labels_from_session_path(session_path: Union[str, Path]) -> List[str]:
