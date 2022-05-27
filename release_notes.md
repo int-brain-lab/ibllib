@@ -1,4 +1,6 @@
 ## Release Notes 2.12
+## Release Noter 2.12.2 2022-05-27
+- Fixes to plotting in training_status
 
 ## Release Notes 2.12.1 2022-05-26
 - ibllib.pipes.training_status: pipeline to compute training status of mice on local servers, new TrainingStatus task (Mayo)
