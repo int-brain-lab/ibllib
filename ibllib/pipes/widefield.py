@@ -17,7 +17,7 @@ from ibllib.io.extractors.widefield import Widefield as WidefieldExtractor
 from ibllib.pipes import tasks
 from ibllib.pipes.ephys_preprocessing import (
     EphysPulses, EphysMtscomp, EphysAudio, EphysVideoCompress, EphysVideoSyncQc, EphysTrials, EphysPassive, EphysDLC,
-    EphysPostDLC, EphysRegisterRaw)
+    EphysPostDLC)
 from ibllib.oneibl.registration import register_session_raw_data
 from ibllib.io.video import get_video_meta
 
