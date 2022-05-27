@@ -1,6 +1,9 @@
 ## Release Notes 2.12
-### develop
-- ibllib.pipes.training_status: pipeline to compute training status of mice on local servers, new TrainingStatus task
+
+## Release Notes 2.12.1 2022-05-26
+- ibllib.pipes.training_status: pipeline to compute training status of mice on local servers, new TrainingStatus task (Mayo)
+- Fix swanson regions (Olivier)
+- Swanson to Beryl mapping
 
 ### Release Notes 2.12.0 2022-05-10
 - ibllib.atlas: add the Swanson flatmap backend (Olivier)
