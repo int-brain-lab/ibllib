@@ -361,6 +361,25 @@ class BrainRegions(_BrainRegions):
 
         return inds
 
+    def parse_acronyms_argument(self, acronyms, mode='raise'):
+        """
+        Parse an input acronym arguments: returns a numpy array of allen regions ids
+        regardless of the input: list of acronyms, np.array of acronyms strings or np aray of allen ids
+        To be used into functions to provide flexible input type
+        :param acronyms: List, np.array of acronym strings or np.array of allen ids
+        :return: np.array of int ids
+        """
+        # first get the allen region ids regardless of the input type
+        acronyms = np.array(acronyms)
+        # if the user provides acronyms they're not signed by definition
+        if not np.issubdtype(acronyms.dtype, np.number):
+            user_aids = self.acronym2id(acronyms)
+            if mode == 'raise':
+                assert user_aids.size == acronyms.size, "All acronyms should exist in Allen ontology"
+        else:
+            user_aids = acronyms
+        return user_aids
+
 
 def regions_from_allen_csv():
     """
