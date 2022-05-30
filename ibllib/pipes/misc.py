@@ -136,7 +136,7 @@ def rename_session(session_path: str, new_subject=None, new_date=None, new_numbe
         if (ans or 'n').lower() in ['n', 'no']:
             print(f'Manual intervention required, data exists in the following directory: '
                   f'{session_path}')
-            exit(1)
+            return
         if backup_session(new_session_path):
             print(f'Backup was successful, removing directory {new_session_path}...')
             shutil.rmtree(str(new_session_path), ignore_errors=True)
@@ -169,14 +169,14 @@ def backup_session(session_path):
         except FileExistsError:
             log.error(f"A backup session for the given path already exists: {bk_session_path}, "
                       f"manual intervention is necessary.")
-            sys.exit(1)
+            raise
         except shutil.Error:
             log.error(f'Some kind of copy error occurred when moving files from {session_path} to '
                       f'{bk_session_path}')
             log.error(shutil.Error)
     else:
         log.error(f"The given session path does not exist: {session_path}")
-        sys.exit(1)
+        return False
 
 
 def copy_with_check(src, dst, **kwargs):
@@ -705,7 +705,7 @@ def confirm_video_remote_folder(local_folder=False, remote_folder=False, force=F
             Path(transfer_records).unlink()
             if os.name == 'nt':
                 WindowsInhibitor().uninhibit()
-            exit(1)
+            raise
         create_video_transfer_done_flag(remote_session_path)
         check_create_raw_session_flag(remote_session_path)
         # Done. Remove from list
