@@ -144,8 +144,25 @@ class Widefield(BaseExtractor):
             raise ValueError('Timestamps and frames differ by more than 2')
 
         led = led[0:video_meta.length]
-        # Take the first led times for the frames
-        widefield_times = fcn(led.timestamp.values / 1e3)
+
+        # Find led times that are outside of the sync pulses
+        led_times = np.copy(led.timestamp.values)
+        pre_times = led_times < np.min(sync.timestamp)
+        post_times = led_times > np.max(sync.timestamp)
+        led_times[pre_times] = np.nan
+        led_times[post_times] = np.nan
+
+        # Interpolate frames that lie within sync pulses timeframe
+        widefield_times = fcn(led_times / 1e3)
+        kp = ~np.isnan(widefield_times)
+        # Extrapolate times that lie outside sync pulses timeframe (i.e before or after)
+        pol = np.polyfit(led_times[kp] / 1e3, widefield_times[kp], 1)
+        extrap_vals = np.polyval(pol, led.timestamp.values / 1e3)
+        widefield_times[~kp] = extrap_vals[~kp]
+
+        assert np.all(np.diff(widefield_times) > 0)
+
+        # TODO change to the correct properties
         widefield_leds = led.led
 
         if save:
