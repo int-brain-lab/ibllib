@@ -771,6 +771,8 @@ def confirm_ephys_remote_folder(
             pass
         elif resp == "r" or resp == "rename":
             session_path = rename_session(session_path)
+            if not session_path:
+                continue
         elif resp == "s" or resp == "skip":
             continue
         elif resp == "e" or resp == "exit":
@@ -887,6 +889,8 @@ def confirm_widefield_remote_folder(local_folder=False, remote_folder=False, for
                 return
             subj, date = session_path.parts[-3:-1]
             session_path = rename_session(session_path, new_subject=subj, new_date=date, new_number=resp)
+            if not session_path:
+                continue
             remote_session_path = remote_folder / Path(*session_path.parts[-3:])
         transfers.append((session_path.as_posix(), remote_session_path.as_posix()))
         with open(transfer_records, 'w') as fp:
