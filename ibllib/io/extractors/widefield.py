@@ -4,8 +4,9 @@ import logging
 import numpy as np
 import shutil
 from pathlib import Path
+import pandas as pd
 
-import ibllib.dsp as dsp
+import neurodsp as dsp
 import ibllib.exceptions as err
 from ibllib.io.extractors.base import BaseExtractor
 from ibllib.io.extractors.ephys_fpga import get_main_probe_sync, get_sync_fronts
@@ -16,19 +17,12 @@ from labcams.io import parse_cam_log
 
 
 _logger = logging.getLogger('ibllib')
-FILENAME_MAP = {
-    'frames_average.npy': ('widefieldChannels.frameAverage.npy', 'raw_widefield_data'),
-    'U.npy': ('widefieldU.images.npy', 'alf'),
-    'SVT.npy': ('widefieldSVT.uncorrected.npy', 'alf'),
-    'SVTcorr.npy': ('widefieldSVT.haemoCorrected.npy', 'alf'),
 
-    # Below here keep for now, but probably don't need to rename or register
-    # 'U-warped.npy': 'widefieldU.images_atlas_corrected.npy' # TODO need to see if we need this
-    # 'rcoeffs.npy': 'rcoeffs.npy',
-    # 'T.npy': 'widefieldT.uncorrected.npy',
-    # 'motioncorrect_*.bin': 'widefield.motionCorrected.bin',
-    # 'motion_correction_shifts.npy': 'widefield.motionCorrectionShifts.npy',
-    # 'motion_correction_rotation.npy': 'widefield.motionCorrectionRotation.npy',
+"""Available LEDs for Widefield Imaging"""
+LIGHT_SOURCE_MAP = {
+    0: 'None',
+    405: 'Violet',
+    470: 'Blue',
 }
 
 
@@ -43,6 +37,26 @@ class Widefield(BaseExtractor):
         """An extractor for all widefield data"""
         super().__init__(*args, **kwargs)
         self.data_path = self.session_path.joinpath('raw_widefield_data')
+
+    def _channel_meta(self, light_source_map=None):
+        """
+        Return table of light source wavelengths and corresponding colour labels.
+
+        Parameters
+        ----------
+        light_source_map : dict
+            An optional map of light source wavelengths (nm) used and their corresponding colour name.
+
+        Returns
+        -------
+        pandas.DataFrame
+            A sorted table of wavelength and colour name.
+        """
+        light_source_map = light_source_map or LIGHT_SOURCE_MAP
+        names = ('wavelength', 'color')
+        meta = pd.DataFrame(sorted(light_source_map.items()), columns=names)
+        meta.index.rename('channel_id', inplace=True)
+        return meta
 
     def _extract(self, extract_timestamps=True, save=False, **kwargs):
         """
