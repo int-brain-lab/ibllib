@@ -426,7 +426,7 @@ class TestSyncData(unittest.TestCase):
 
         # Test behaviour when a transfer fails
         shutil.rmtree(remote_session)
-        with unittest.mock.patch('ibllib.pipes.misc.check_transfer', side_effect=AssertionError),\
+        with unittest.mock.patch('ibllib.pipes.misc.check_transfer', side_effect=AssertionError), \
                 self.assertLogs(logging.getLogger('ibllib'), logging.ERROR):
             misc.confirm_widefield_remote_folder(self.local_repo, self.remote_repo)
         with open(local_transfers_file) as fp:
@@ -457,53 +457,91 @@ class TestSyncData(unittest.TestCase):
             print(e)  # something went wrong with the test
 
     @mock.patch("ibllib.pipes.misc.check_create_raw_session_flag")
-    def test_rsync_video_folders(self, chk_fcn):
-        # When there are multiple local session folders
+    def test_transfer_video_folders(self, chk_fcn):
+        # --- Test - 1 local session w/ transfer_me.flag 1900-01-01, 1 remote session w/ raw_behavior_data 1900-01-01
         self.session_path.joinpath("transfer_me.flag").touch()
-        local_session = fu.create_fake_session_folder(self.local_repo)
-        fu.create_fake_raw_video_data_folder(local_session)
-        local_session.joinpath("transfer_me.flag").touch()
         remote_session = fu.create_fake_session_folder(self.remote_repo)
         fu.create_fake_raw_behavior_data_folder(remote_session)
-        with mock.patch("builtins.input", side_effect=["h", "\n", "002"]):
-            misc.rsync_video_folders(self.local_repo, self.remote_repo)
-        shutil.rmtree(local_session)  # clean up secondary local repo
+        misc.transfer_video_folders(self.local_repo, self.remote_repo)
+        # --- Test clean up
+        shutil.rmtree(self.remote_repo)
 
-        # NB Mock check_create_raw_session_flag which requires a valid task settings file
-        # With no data in the remote repo, no data should be transferred
-        shutil.rmtree(remote_session)
-        with mock.patch("builtins.input", new=self.assertFalse):
-            misc.rsync_video_folders(self.local_repo, self.remote_repo)
-        self.assertFalse(list(filter(lambda x: x.is_file(), self.remote_repo.rglob('*'))))
-
-        # Create a remote session with behavior data
+        # --- Test - 1 local session w/o transfer_me.flag 1900-01-01, 1 remote session w/ raw_behavior_data 1900-01-01
         remote_session = fu.create_fake_session_folder(self.remote_repo)
         fu.create_fake_raw_behavior_data_folder(remote_session)
-        # Create transfer_me flag
+        misc.transfer_video_folders(self.local_repo, self.remote_repo)
+        # --- Test clean up
+        shutil.rmtree(self.remote_repo)
+
+        # --- Test - 1 local session w/ transfer_me.flag 1900-01-01, 1 remote session w/o behavior folder
         self.session_path.joinpath("transfer_me.flag").touch()
-        with mock.patch("builtins.input", new=self.assertFalse):
-            misc.rsync_video_folders(self.local_repo, self.remote_repo)
-            chk_fcn.assert_called()
+        remote_session = fu.create_fake_session_folder(self.remote_repo)
+        fu.create_fake_raw_behavior_data_folder(remote_session)
+        shutil.rmtree(self.remote_repo / "fakelab" / "Subjects" / "fakemouse" / "1900-01-01" / "001" / "raw_behavior_data")
+        # with self.assertLogs(logging.getLogger("ibllib"), logging.WARNING):
+        misc.transfer_video_folders(self.local_repo, self.remote_repo)
+        # --- Test clean up
+        self.session_path.joinpath("transfer_me.flag").unlink()
+        shutil.rmtree(self.remote_repo)
+
+        # --- Test - 1 local session w/ transfer_me.flag 1900-01-01, 1 remote session w/o date folder
+        self.session_path.joinpath("transfer_me.flag").touch()
+        fu.create_fake_raw_behavior_data_folder(remote_session)
+        shutil.rmtree(self.remote_repo / "fakelab" / "Subjects" / "fakemouse")
+        misc.transfer_video_folders(self.local_repo, self.remote_repo)
+        # --- Test clean up
+        self.session_path.joinpath("transfer_me.flag").unlink()
+        shutil.rmtree(self.remote_repo)
+
+        # --- Test - 1 local sessions w/ transfer_me.flag 1900-01-01, 2 remote sessions w/ raw_behavior_data 1900-01-01
+        self.session_path.joinpath("transfer_me.flag").touch()
+        remote_session = fu.create_fake_session_folder(self.remote_repo)
+        fu.create_fake_raw_behavior_data_folder(remote_session)
+        remote_session002 = fu.create_fake_session_folder(self.remote_repo, date="1900-01-01")
+        fu.create_fake_raw_behavior_data_folder(remote_session002)
+        with mock.patch("builtins.input", side_effect=["002"]):
+            misc.transfer_video_folders(self.local_repo, self.remote_repo)
+        # --- Test clean up
+        shutil.rmtree(self.remote_repo)
+
+        # Test - 2 local sessions w/ transfer_me.flag 1900-01-01, 2 remote sessions w/ raw_behavior_data 1900-01-01
+        self.session_path.joinpath("transfer_me.flag").touch()
+        local_session002 = fu.create_fake_session_folder(self.local_repo, date="1900-01-01")
+        fu.create_fake_raw_video_data_folder(local_session002)
+        local_session002.joinpath("transfer_me.flag").touch()
+        remote_session = fu.create_fake_session_folder(self.remote_repo)
+        fu.create_fake_raw_behavior_data_folder(remote_session)
+        remote_session002 = fu.create_fake_session_folder(self.remote_repo, date="1900-01-01")
+        fu.create_fake_raw_behavior_data_folder(remote_session002)
+        with mock.patch("builtins.input", side_effect=["001", "002"]):
+            misc.transfer_video_folders(self.local_repo, self.remote_repo)
+        # --- Test clean up
+        shutil.rmtree(local_session002)
+        shutil.rmtree(self.remote_repo)
+
+        # Test - 2 local sessions w/ transfer_me.flag 1900-01-01, 1 remote sessions w/ raw_behavior_data 1900-01-01
+        self.session_path.joinpath("transfer_me.flag").touch()
+        local_session002 = fu.create_fake_session_folder(self.local_repo, date="1900-01-01")
+        fu.create_fake_raw_video_data_folder(local_session002)
+        local_session002.joinpath("transfer_me.flag").touch()
+        remote_session = fu.create_fake_session_folder(self.remote_repo)
+        fu.create_fake_raw_behavior_data_folder(remote_session)
+        with mock.patch("builtins.input", side_effect=["002"]):
+            misc.transfer_video_folders(self.local_repo, self.remote_repo)
+        # --- Test clean up
+        shutil.rmtree(local_session002)
+        shutil.rmtree(self.remote_repo)
+
+    @mock.patch("ibllib.pipes.misc.check_create_raw_session_flag")
+    def test_rsync_paths(self, chk_fcn):
+        remote_session = fu.create_fake_session_folder(self.remote_repo)
+        fu.create_fake_raw_behavior_data_folder(remote_session)
+        src = self.local_repo / "fakelab/Subjects/fakemouse/1900-01-01/001/raw_video_data"
+        dst = self.remote_repo / "fakelab/Subjects/fakemouse/1900-01-01/001/raw_video_data"
+        misc.rsync_paths(src, dst)
         # Check files were copied
         n_copied = sum(1 for _ in self.remote_repo.rglob("raw_video_data/*"))
         self.assertEqual(n_copied, 13)
-
-        # Delete transferred video folder
-        shutil.rmtree(remote_session.joinpath("raw_video_data"))
-
-        # New session for same date and subject
-        new_remote_session = fu.create_fake_session_folder(self.remote_repo)
-        fu.create_fake_raw_behavior_data_folder(new_remote_session)
-        self.session_path.joinpath("transfer_me.flag").touch()
-        with mock.patch("builtins.input", side_effect=["h", "\n", "002"]):
-            misc.rsync_video_folders(self.local_repo, self.remote_repo)
-
-        # Test behaviour when a transfer fails
-        Path(self.session_path.parent / "002").mkdir()
-        self.session_path.parent.joinpath("002", "transfer_me.flag").touch()
-        shutil.rmtree(remote_session)
-        with self.assertLogs(logging.getLogger("ibllib"), logging.WARNING):
-            misc.rsync_video_folders(self.local_repo, self.remote_repo)
 
     @mock.patch('ibllib.pipes.misc.check_create_raw_session_flag')
     def test_confirm_video_remote_folder(self, chk_fcn):

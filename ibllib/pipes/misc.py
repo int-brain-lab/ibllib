@@ -365,12 +365,16 @@ def rdiff_install() -> bool:
         return True
 
 
-def get_directory_size(dir_path):
+def get_directory_size(dir_path: Path, in_gb=False) -> float:
     """
     Used to determine total size of all files in a given session_path, including all child directories
 
-    :param dir_path: directory we want to get the total size of
-    :return: sum of all files in the given directory path, in bytes
+    Args:
+        dir_path (Path): path we want to get the total size of
+        in_gb (bool): set to True for returned value to be in gigabytes
+
+    Returns:
+        float: sum of all files in the given directory path (in bytes by default, in GB if specified)
     """
     total = 0
     with iter(os.scandir(dir_path)) as it:
@@ -379,29 +383,38 @@ def get_directory_size(dir_path):
                 total += entry.stat().st_size
             elif entry.is_dir():
                 total += get_directory_size(entry.path)
+    if in_gb:
+        return total / 1024 / 1024 / 1024  # in GB
     return total  # in bytes
 
 
-def rsync_video_folders(local_folder=False, remote_folder=False):
+def get_session_numbers_from_date_path(date_path: Path) -> list:
     """
-    Used to run the rsync algorithm via a rdiff-backup command on the given directories. This function relies on the rdiff-backup
-    package and is run from the command line, i.e. subprocess.run(). Full documentation can be found here -
-    https://rdiff-backup.net/docs/rdiff-backup.1.html
+    Retrieves session numbers when given a date path
 
-    :param local_folder: folder that contains the video data to be transferred
-    :param remote_folder: folder that will receive the video data
+    Args:
+        date_path (Path): path to date, i.e. \\server\some_lab\Subjects\Date
+
+    Returns:
+        (list): Found sessions as a sorted list
     """
-    # Set rdiff_cmd_loc based on OS type (assumption that C:\tools is not in Windows PATH environ)
-    rdiff_cmd_loc = "C:\\tools\\rdiff-backup.exe" if os.name == "nt" else "rdiff-backup"
+    contents = Path(date_path).glob('*')
+    folders = filter(lambda x: x.is_dir() and re.match(r'^\d{3}$', x.name), contents)
+    sessions_as_set = set(map(lambda x: x.name, folders))
+    sessions_as_sorted_list = sorted(sessions_as_set)
+    return sessions_as_sorted_list
 
-    try:  # Check if rdiff-backup command is available
-        subprocess.run([rdiff_cmd_loc, "--version"], check=True)
-    except (FileNotFoundError, subprocess.CalledProcessError) as e:
-        if not rdiff_install():
-            log.error("rdiff-backup command is unavailable, video transfers can not continue.\n", e)
-            raise
 
-    # Set local and remote folders
+def transfer_video_folders(local_folder=False, remote_folder=False):
+    """
+    Used to interact with user to determine which local video session folders should be transferred to which remote session
+    folders.
+
+    Args:
+        local_folder: folder that contains the video data to be transferred
+        remote_folder: folder that will receive the video data
+    """
+    # Set local and remote folders if nothing is passed into the function (logic should be moved into iblscripts repo)
     pars = None
     if not local_folder:
         pars = pars or load_ephyspc_params()
@@ -418,171 +431,333 @@ def rsync_video_folders(local_folder=False, remote_folder=False):
     log.info(f"Local subjects folder: {local_subject_folder}")
     log.info(f"Remote subjects folder: {remote_subject_folder}")
 
-    # Find all src folders that have 'transfer_me.flag' set and build out list
-    src_session_paths = list(x.parent for x in local_subject_folder.rglob("transfer_me.flag"))
-    if src_session_paths:
+    # Find all local folders that have 'transfer_me.flag' set and build out list
+    local_sessions = sorted(x.parent for x in local_subject_folder.rglob("transfer_me.flag"))
+    if local_sessions:
         log.info("The following local session(s) have the 'transfer_me.flag' set:")
-        [log.info(i) for i in src_session_paths]
+        [log.info(i) for i in local_sessions]
     else:
-        log.info("No local sessions were found to have the 'transfer_me.flag' set.")
+        log.info("No local sessions were found to have the 'transfer_me.flag' set, nothing to transfer.")
         return
 
     transfer_list = []  # list of video sessions to transfer
-    skip_list = ""  # list of video sessions to skip and the reason for the skip
-    for session_path in src_session_paths:
+    skip_list = ""  # "list" of video sessions to skip and the reason for the skip
+    backup_list = []  # list of video sessions to be moved to a backup directory, required?
+    user_intervention_dates = []  # list of video sessions that require user intervention
 
-        # check transfer_list, ensure this is not a session that is meant to be skipped
-        # (not sure if this is entirely necessary after the correction to the raw_behavior_data search on remote session)
-        skippable_session = False
+    # Determine if there are multiple transfer_me.flag files locally for the same subject/date
+    compare_sessions = local_sessions.copy()
+    for session in local_sessions:
+        compare_sessions.remove(session)
+        for compare_session in compare_sessions:
+            if session.parent == compare_session.parent:
+                user_intervention_dates.append(session.parent)
+
+    # Iterate through every local session that has the transfer_me.flag
+    for local_session in local_sessions:
+        # Set expected remote_session location and perform simple error state checks
+        remote_session = remote_subject_folder.joinpath(*local_session.parts[-3:])
+        # Skip session if ...
+        if not local_session.joinpath("raw_video_data").exists():
+            msg = f"{local_session} - skipping session, no 'raw_video_data' folder found locally"
+            log.warning(msg)
+            skip_list += msg + "\n"
+            continue
+        transfer_queued = False  # check transfer_list in case local session is already queued
         for entry in transfer_list:
-            if session_path.parent == Path(entry[0]).parent:
-                skip_list += f"{session_path} - Skipped, another session on this date is already in the transfer list.\n"
-                skippable_session = True
-        if skippable_session:
+            if str(local_session.parent)[-10:] == str(entry[1].parent)[-10:]:
+                transfer_queued = True
+                break
+        if transfer_queued:
+            msg = f"{local_session} - skipping session, a transfer is already queued for this date"
+            log.warning(msg)
+            skip_list += msg + "\n"
+            continue
+        if not remote_session.parent.exists():
+            msg = f"{local_session} - no matching remote session date folder found for the given local session"
+            log.info(msg)
+            skip_list += msg + "\n"
+            continue
+        if not (remote_session / "raw_behavior_data").exists():
+            msg = f"{local_session} - skipping session, no behavior data found in remote folder {remote_session}"
+            log.warning(msg)
+            skip_list += msg + "\n"
             continue
 
-        # set remote folder location
-        remote_session_folder = remote_subject_folder.joinpath(*session_path.parts[-3:])
+        # Determine if there are multiple local or remote sessions for the given date
+        local_sessions_for_date = get_session_numbers_from_date_path(local_session.parent)
+        remote_sessions_for_date = get_session_numbers_from_date_path(remote_session.parent)
+        if local_session.parent in user_intervention_dates:  # multiple local sessions
+            if len(remote_sessions_for_date) == 1:  # single remote session (multiple local sessions)
+                # Provide size in GB of local and remote sessions
+                local_session_numbers_with_size = ""
+                for lsfd in local_sessions_for_date:
+                    size_in_gb = round(get_directory_size(local_session.parent / lsfd, in_gb=True), 2)
+                    local_session_numbers_with_size += lsfd + " (" + str(size_in_gb) + " GB)\n"
+                remote_session_number_with_size = remote_sessions_for_date[0] + " (" + str(round(get_directory_size(
+                    remote_session, in_gb=True), 2)) + " GB)\n"
+                log.info(f"\n\nThe following local session folders are present on this *video/ephys* PC:\n\n"
+                         f"{local_session_numbers_with_size}\nThe following remote session folder is present on the server:\n\n"
+                         f"{''.join(remote_session_number_with_size)}\n")
 
-        # retrieves session numbers when given a session folder
-        def _get_session_folder_numbers(session_folder):
-            contents = session_folder.parent.glob('*')
-            folders = filter(lambda x: x.is_dir() and re.match(r'^\d{3}$', x.name), contents)
-            return set(map(lambda x: x.name, folders))
-
-        # Get local and remote session numbers form respective session folder
-        local_session_numbers = _get_session_folder_numbers(session_path)
-        remote_session_numbers = _get_session_folder_numbers(remote_session_folder)
-
-        # Skip session if no remote behavior folder is found or local raw_video_data does not exist
-        if not (remote_session_folder / 'raw_behavior_data').exists():
-            # Assuming there is no behavior data because no remote session number found
-            log.warning(f"Skipping session, no behavior data found in remote folder {remote_session_folder}")
-            skip_list += f"{session_path} - No behavior data found in remote folder {remote_session_folder}\n"
-            continue
-        if not session_path.joinpath("raw_video_data").exists():
-            log.warning(f"Skipping session, no 'raw_video_data' folder {session_path}")
-            skip_list += f"{session_path} - Skipping session, no 'raw_video_data' folder\n"
-            continue
-
-        log.info(f"Evaluating local session: {session_path}")
-        if local_session_numbers != remote_session_numbers:
-            if len(remote_session_numbers) > 1:
-                log.warning(f"It appears that there are multiple remote session folders. This may have occurred due to a "
-                            f"number of different scenarios. Skipping session, manual intervention is required for "
-                            f"{session_path}.\n")
-                skip_list += f"{session_path} - Local session skipped due to multiple remote session folders being " \
-                             f"present, remote session date folder: {remote_session_folder.parent}\n"
-                continue
-
-            # Provide size in GB of local sessions found
-            local_session_number_with_size = ""
-            for lsn in local_session_numbers:
-                size_in_gb = round(get_directory_size(session_path) / 1024 / 1024 / 1024, 2)
-                local_session_number_with_size += str(lsn) + " (" + str(size_in_gb) + " GB)\n"
-            # --- Start - Informative output for user, no input ---
-            # log.error(f"Local session number does not match any remote session number. \nRemote session date folder: "
-            #           f"{remote_session_folder.parent}")
-            # skip_list.append(f"{session_path} - Local session number does not match any remote session number. \nRemote "
-            #                  f"session date folder: {remote_session_folder.parent}")
-            # continue
-            # --- End - Informative output for user, no input ---
-            # vars for user interaction
-
-            log.info(f"\n\nThe following local session folders are present on this *video/ephys* PC:\n\n"
-                     f"{local_session_number_with_size}\nThe following remote session folders are present on the server:\n\n"
-                     f"{''.join(remote_session_numbers)}\n")
-
-            resp = "s"
-            resp_invalid = True
-            while resp_invalid:  # loop until valid user input
-                resp = input(f"\n\n--- USER INPUT NEEDED ---\nIt appears that there are multiple local session folders and a "
-                             f"single remote session folder. This may have occurred due to a crash on the *video/ephys* PC "
-                             f"or some sort of other error.\nWhich local session number would you like to use? "
-                             f"Options {range_str(list(map(int, local_session_numbers)))} or "
-                             f"[s]kip/[h]elp/[e]xit> ").strip().lower()
-                if resp == "h":
-                    print("An example session filepath:\n")
-                    describe("number")  # Explain what a session number is
-                    input("Press enter to continue")
-                elif resp == "s" or resp == "e":  # exit loop
-                    resp_invalid = False
-                elif len(resp) <= 3:
-                    resp_invalid = False if [i for i in local_session_numbers if int(resp) == int(i)] else None
+                # User interaction for remote session response
+                resp = "s"
+                resp_invalid = True
+                while resp_invalid:  # loop until valid user input
+                    resp = input(f"\n\n--- USER INPUT NEEDED ---\nIt appears that there are multiple local session folders and "
+                                 f"a single remote session folder. This may have occurred due to a crash on the *video/ephys* "
+                                 f"PC or some sort of other error.\nWhich local session number would you like to use? Options "
+                                 f"{range_str(map(int, local_sessions_for_date))} or [s]kip/[h]elp/[e]xit> ").strip().lower()
+                    if resp == "h":
+                        print("An example session filepath:\n")
+                        describe("number")  # Explain what a session number is
+                        input("Press enter to continue")
+                    elif resp == "s" or resp == "e":  # exit loop
+                        resp_invalid = False
+                    elif len(resp) <= 3:
+                        resp_invalid = False if [i for i in local_sessions_for_date if int(resp) == int(i)] else None
+                    else:
+                        print("Invalid response. Please try again.")
+                if resp == "s":  # out of the while loop
+                    msg = f"{local_session} - Local session skipped due to user input"
+                    log.info(msg)
+                    skip_list += msg + "\n"
+                    continue
+                elif resp == "e":
+                    log.info("Exiting, no files transferred.")
+                    return
+                elif Path(local_session.parent / resp.zfill(3)).exists():
+                    transfer_tuple = (local_session.parent / resp.zfill(3), remote_session)
+                    transfer_list.append(transfer_tuple)
+                    log.info(f"{transfer_tuple[0]}, {transfer_tuple[1]} - Added to transfer list")
+                    # TODO - backup/move unpicked sessions, build out backup list?
+                    #      - rename picked session?
                 else:
-                    print("Invalid response. Please try again.")
+                    msg = f"{local_session} - Unknown state of local and remote session folders. Skipping session, manual " \
+                          f"intervention is required."
+                    log.warning(msg)
+                    skip_list += msg + "\n"
+                    continue
+            else:  # multiple remote sessions (multiple local sessions)
+                # Provide size in GB of local and remote sessions
+                local_session_numbers_with_size = ""
+                remote_session_numbers_with_size = ""
+                for lsfd in local_sessions_for_date:
+                    size_in_gb = round(get_directory_size(local_session.parent / lsfd, in_gb=True), 2)
+                    local_session_numbers_with_size += lsfd + " (" + str(size_in_gb) + " GB)\n"
+                for rsfd in remote_sessions_for_date:
+                    size_in_gb = round(get_directory_size(remote_session.parent / rsfd, in_gb=True), 2)
+                    remote_session_numbers_with_size += rsfd + " (" + str(size_in_gb) + " GB)\n"
+                log.info(f"\n\nThe following local session folders are present on this *video/ephys* PC:\n\n"
+                         f"{local_session_numbers_with_size}\nThe following remote session folders are present on the server:\n\n"
+                         f"{''.join(remote_session_numbers_with_size)}\n")
 
-            if resp == "s":  # out of the while loop
-                log.info(f"Local session skipped due to user input: {session_path}")
-                skip_list += f"{session_path} - Local session skipped due to user input, remote session date folder: " \
-                             f"{remote_session_folder.parent}\n"
-                continue
-            elif resp == "e":
-                log.info("Exiting, no files transferred.")
-                return
-            elif Path(session_path.parent / resp.zfill(3)).exists():
-                session_path = session_path.parent / resp.zfill(3)
-                remote_session_folder = remote_subject_folder / Path(*session_path.parts[-3:])
-            else:
-                log.warning(
-                    f"Unknown state of local and remote session folders. Skipping session, manual intervention is "
-                    f"required for {session_path}.\n")
-                skip_list += f"{session_path} - Local session skipped due to being in an unknown state present, remote " \
-                             f"session date folder: {remote_session_folder.parent}\n"
-                continue
+                # User interaction for local session response
+                resp = "s"
+                resp_invalid = True
+                local_session_resp = ""
+                while resp_invalid:  # loop until valid user input
+                    resp = input(f"\n\n--- USER INPUT NEEDED ---\nIt appears that there are multiple local session folders and "
+                                 f"multiple remote session folders. This may have occurred due to a crash on the *video/ephys* "
+                                 f"PC or some sort of other error.\nWhich LOCAL session number would you like to use? Options "
+                                 f"{range_str(map(int, local_sessions_for_date))} or [s]kip/[h]elp/[e]xit> ").strip().lower()
+                    if resp == "h":
+                        print("An example session filepath:\n")
+                        describe("number")  # Explain what a session number is
+                        input("Press enter to continue")
+                    elif resp == "s" or resp == "e":  # exit loop
+                        resp_invalid = False
+                    elif len(resp) <= 3:
+                        resp_invalid = False if [i for i in local_sessions_for_date if int(resp) == int(i)] else None
+                    else:
+                        print("Invalid response. Please try again.")
+                if resp == "s":  # out of the while loop
+                    msg = f"{local_session} - Local session skipped due to user input"
+                    log.info(msg)
+                    skip_list += msg + "\n"
+                    continue
+                elif resp == "e":
+                    log.info("Exiting, no files transferred.")
+                    return
+                elif Path(local_session.parent / resp.zfill(3)).exists():
+                    local_session_resp = local_session.parent / resp.zfill(3)  # append to transfer list after next user response
+                else:
+                    msg = f"{local_session} - Unknown state of local and remote session folders. Skipping session, manual " \
+                          f"intervention is required."
+                    log.warning(msg)
+                    skip_list += msg + "\n"
+                    continue
+                # User interaction for remote session response
+                resp = "s"
+                resp_invalid = True
+                while resp_invalid:  # loop until valid user input
+                    resp = input(f"\nWhich REMOTE session number would you like to use? Options "
+                                 f"{range_str(map(int, remote_sessions_for_date))} or [s]kip/[h]elp/[e]xit> ").strip().lower()
+                    if resp == "h":
+                        print("An example session filepath:\n")
+                        describe("number")  # Explain what a session number is
+                        input("Press enter to continue")
+                    elif resp == "s" or resp == "e":  # exit loop
+                        resp_invalid = False
+                    elif len(resp) <= 3:
+                        resp_invalid = False if [i for i in remote_sessions_for_date if int(resp) == int(i)] else None
+                    else:
+                        print("Invalid response. Please try again.")
+                if resp == "s":  # out of the while loop
+                    msg = f"{local_session} - Local session skipped due to user input"
+                    log.info(msg)
+                    skip_list += msg + "\n"
+                    continue
+                elif resp == "e":
+                    log.info("Exiting, no files transferred.")
+                    return
+                elif Path(remote_session.parent / resp.zfill(3)).exists():
+                    transfer_tuple = (local_session_resp, remote_session.parent / resp.zfill(3))
+                    transfer_list.append(transfer_tuple)
+                    log.info(f"{transfer_tuple[0]}, {transfer_tuple[1]} - Added to transfer list")
+                    # TODO - backup/move unpicked sessions, build out backup list?
+                    #      - rename picked session?
+                else:
+                    msg = f"{local_session} - Unknown state of local and remote session folders. Skipping session, manual " \
+                          f"intervention is required."
+                    log.warning(msg)
+                    skip_list += msg + "\n"
+                    continue
 
-        # Append to transfer_list
-        transfer_list.append((session_path.as_posix(), remote_session_folder.as_posix()))
+        else:  # single local session
+            if len(remote_sessions_for_date) == 1:  # single remote session (single local session)
+                transfer_tuple = (local_session, remote_session)
+                transfer_list.append(transfer_tuple)
+                log.info(f"{transfer_tuple[0]}, {transfer_tuple[1]} - Added to transfer list")
+                # Check for session number mismatch?
+                # if local_sessions_for_date[0] == remote_sessions_for_date[0]:
+                #     transfer_list.append((local_session, remote_session))
+                #     log.info(f"{local_session} - Added to transfer list")
+                # else:
+                #     # TODO - user interaction to decide how to rename/backup/move local session when session numbers mismatch?
+                #     msg = f"{local_session} - There looks to be a mismatch of the session numbers. Skipping session, manual " \
+                #           f"intervention is required."
+                #     log.warning(msg)
+                #     skip_list += msg + "\n"
+                #     continue
+            else:  # multiple remote sessions (single local session)
+                # Provide size in GB of local and remote sessions
+                remote_session_numbers_with_size = ""
+                local_session_number_with_size = local_sessions_for_date[0] + " (" + str(round(get_directory_size(
+                    local_session, in_gb=True), 2)) + " GB)\n"
+                for rsfd in remote_sessions_for_date:
+                    size_in_gb = round(get_directory_size(remote_session.parent / rsfd, in_gb=True), 2)
+                    remote_session_numbers_with_size += rsfd + " (" + str(size_in_gb) + " GB)\n"
+                log.info(f"\n\nThe following local session folder is present on this *video/ephys* PC:\n\n"
+                         f"{local_session_number_with_size}\nThe following remote session folder is present on the server:\n\n"
+                         f"{''.join(remote_session_numbers_with_size)}\n")
 
-    # Inhibit Windows and start transfers based on transfer_list
-    WindowsInhibitor().inhibit() if os.name == "nt" else None
-    for i, (session_path, remote_session_folder) in enumerate(transfer_list):
-        if not behavior_exists(remote_session_folder):
-            log.warning(f"Skipping session, no behavior folder found in {remote_session_folder}")
-            skip_list += f"{session_path} - Skipping session, no behavior folder found in {remote_session_folder}\n"
-            continue
-        log.info("Transferring video data: " + session_path + " --> " + remote_session_folder)
-        try:
-            rsync_command = [rdiff_cmd_loc, "--verbosity", str(0),
-                             "--create-full-path", "--backup-mode", "--no-acls", "--no-eas",
-                             "--no-file-statistics", "--exclude", "**transfer_me.flag",
-                             str(Path(session_path) / "raw_video_data"),
-                             str(Path(remote_session_folder) / "raw_video_data")]
-            subprocess.run(rsync_command, check=True)
-            time.sleep(1)  # give rdiff-backup a second to complete all logging operations
-        except (FileNotFoundError, subprocess.CalledProcessError) as e:
-            log.error("Video transfer failed for: " + str(session_path) + "\n", e)
-            skip_list += f"{session_path} - Video transfer failed, likely a networking problem\n"
-            continue
-        flag_file = Path(session_path) / "transfer_me.flag"
-        log.info("Removing " + str(flag_file) + " and rdiff-backup-data folder")
-        try:  # Validate the transfers succeeded, remove flag_file and rdiff-backup-data folder
-            rsync_validate = [rdiff_cmd_loc, "--verify", str(Path(remote_session_folder) / "raw_video_data")]
-            subprocess.run(rsync_validate, check=True)
-            flag_file.unlink()
-            shutil.rmtree(Path(remote_session_folder) / "raw_video_data" / "rdiff-backup-data")
-        except FileNotFoundError as e:
-            log.warning("An error occurred when attempting to remove the flag file: " +
-                        str(flag_file) + "\nThe status of the transfers are in an unknown state; "
-                        "uninhibiting windows and intentionally stopping the script. Please "
-                        "rerun the script after corrections.\n", e)
-            WindowsInhibitor().uninhibit() if os.name == 'nt' else None
-            log.warning(f"Video transfers that were not completed:\n\n{skip_list}") if skip_list else None
+                # User interaction for remote session response
+                resp = "s"
+                resp_invalid = True
+                while resp_invalid:  # loop until valid user input
+                    resp = input(f"\n\n--- USER INPUT NEEDED ---\nIt appears that there is a single local session folder and "
+                                 f"multiple remote session folders. This may have occurred due to a crash on the *video/ephys* "
+                                 f"PC or some sort of other error.\nWhich REMOTE session number would you like to use? Options "
+                                 f"{range_str(map(int, remote_sessions_for_date))} or [s]kip/[h]elp/[e]xit> ").strip().lower()
+                    if resp == "h":
+                        print("An example session filepath:\n")
+                        describe("number")  # Explain what a session number is
+                        input("Press enter to continue")
+                    elif resp == "s" or resp == "e":  # exit loop
+                        resp_invalid = False
+                    elif len(resp) <= 3:
+                        resp_invalid = False if [i for i in remote_sessions_for_date if int(resp) == int(i)] else None
+                    else:
+                        print("Invalid response. Please try again.")
+                if resp == "s":  # out of the while loop
+                    msg = f"{local_session} - Local session skipped due to user input"
+                    log.info(msg)
+                    skip_list += msg + "\n"
+                    continue
+                elif resp == "e":
+                    log.info("Exiting, no files transferred.")
+                    return
+                elif Path(remote_session.parent / resp.zfill(3)).exists():
+                    transfer_tuple = (local_session, remote_session.parent / resp.zfill(3))
+                    transfer_list.append(transfer_tuple)
+                    log.info(f"{transfer_tuple[0]}, {transfer_tuple[1]} - Added to the transfer list")
+                    # TODO - backup/move unpicked sessions? build out backup list?
+                    #      - rename picked session?
+                else:
+                    msg = f"{local_session} - Unknown state of local and remote session folders. Skipping session, manual " \
+                          f"intervention is required."
+                    log.warning(msg)
+                    skip_list += msg + "\n"
+                    continue
+
+    # Call rsync/rdiff function for every entry in the transfer list
+    for entry in transfer_list:
+        if rsync_paths(entry[0] / "raw_video_data", entry[1] / "raw_video_data"):
+            log.info("rsync file transfer success")
+            flag_file = Path(entry[0]) / "transfer_me.flag"
+            log.info("Removing flag file - " + str(flag_file))
+            try:
+                flag_file.unlink()
+            except FileNotFoundError as e:
+                log.warning("An error occurred when attempting to remove the flag file.\n", e)
+            create_video_transfer_done_flag(str(entry[1]))
+            check_create_raw_session_flag(str(entry[1]))
+        else:
+            log.error("File transfer failed, check log for reason.")
+
+    # Notification to user if any transfers were skipped
+    log.warning(f"Video transfers that were not completed:\n\n{skip_list}") if skip_list else log.info("No transfers skipped.")
+
+
+def rsync_paths(src: Path, dst: Path) -> bool:
+    """
+    Used to run the rsync algorithm via a rdiff-backup command on the paths contained on the provided source and destination.
+    This function relies on the rdiff-backup package and is run from the command line, i.e. subprocess.run(). Full documentation
+    can be found here - https://rdiff-backup.net/docs/rdiff-backup.1.html
+
+    Args:
+        src (Path): source path that contains data to be transferred
+        dst (Path): destination path that will receive the transferred data
+
+    Returns:
+       True for success, False for failure
+
+    Raises:
+       FileNotFoundError, subprocess.CalledProcessError
+    """
+    # Set rdiff_cmd_loc based on OS type (assuming C:\tools is not in Windows PATH environ)
+    rdiff_cmd_loc = "C:\\tools\\rdiff-backup.exe" if os.name == "nt" else "rdiff-backup"
+    try:  # Check if rdiff-backup command is available
+        subprocess.run([rdiff_cmd_loc, "--version"], check=True)
+    except (FileNotFoundError, subprocess.CalledProcessError) as e:
+        if not rdiff_install():  # Attempt to install rdiff
+            log.error("rdiff-backup command is unavailable, transfers can not continue.\n", e)
             raise
-        except subprocess.CalledProcessError as e:
-            log.error("An error occurred when attempting to validate the transfer. The status of the transfers are in an unknown "
-                      "state; uninhibiting windows and intentionally stopping the script. Please rerun the script after "
-                      "correction.\n", e)
-            skip_list += f"{session_path} - Video transfer could not be validated\n"
-            WindowsInhibitor().uninhibit() if os.name == 'nt' else None
-            log.warning(f"Video transfers that were not completed:\n\n{skip_list}")
-            continue
-        create_video_transfer_done_flag(remote_session_folder)
-        check_create_raw_session_flag(remote_session_folder)
-    WindowsInhibitor().uninhibit() if os.name == 'nt' else None
-    # Notify of any files not transferred to the end user
-    log.warning(f"Video transfers that were not completed:\n\n{skip_list}") if skip_list else None
-    log.info("Video transfers script completed, please review the log messages above for any issues.")
+
+    log.info("Attempting to transfer data: " + str(src) + " -> " + str(dst))
+    WindowsInhibitor().inhibit() if os.name == "nt" else None  # prevent Windows from going to sleep
+    try:
+        rsync_command = [rdiff_cmd_loc, "--verbosity", str(0),
+                         "--create-full-path", "--backup-mode", "--no-acls", "--no-eas",
+                         "--no-file-statistics", "--exclude", "**transfer_me.flag",
+                         str(src), str(dst)]
+        subprocess.run(rsync_command, check=True)
+        time.sleep(1)  # give rdiff-backup a second to complete all logging operations
+    except (FileNotFoundError, subprocess.CalledProcessError) as e:
+        log.error("Transfer failed.\n", e)
+        return False
+    log.info("Validating transfer completed...")
+    try:  # Validate the transfers succeeded
+        rsync_validate = [rdiff_cmd_loc, "--verify", str(dst)]
+        subprocess.run(rsync_validate, check=True)
+    except (FileNotFoundError, subprocess.CalledProcessError) as e:
+        log.error(f"Validation for destination {dst} failed.\n", e)
+        return False
+    log.info("Cleaning up rdiff files...")
+    shutil.rmtree(dst / "rdiff-backup-data")
+    WindowsInhibitor().uninhibit() if os.name == 'nt' else None  # allow Windows to go to sleep
+    return True
 
 
 def confirm_video_remote_folder(local_folder=False, remote_folder=False, force=False, n_days=None):
@@ -1232,8 +1407,7 @@ class WindowsInhibitor:
 
     def inhibit(self):
         print("Preventing Windows from going to sleep")
-        ctypes.windll.kernel32.SetThreadExecutionState(
-            WindowsInhibitor.ES_CONTINUOUS | WindowsInhibitor.ES_SYSTEM_REQUIRED)
+        ctypes.windll.kernel32.SetThreadExecutionState(WindowsInhibitor.ES_CONTINUOUS | WindowsInhibitor.ES_SYSTEM_REQUIRED)
 
     def uninhibit(self):
         print("Allowing Windows to go to sleep")
