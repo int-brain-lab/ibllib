@@ -25,3 +25,4 @@ tqdm>=4.32.1
 iblutil
 ibl-neuropixel>=0.0.1
 ONE-api>=1.8.1
+neurodsp

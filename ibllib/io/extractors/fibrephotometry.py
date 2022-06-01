@@ -40,10 +40,11 @@ class FibrePhotometry(BaseExtractor):
     var_names = ('signal', 'lightSource', 'lightSource_properties', 'timestamps')
 
     def __init__(self, *args, **kwargs):
-        """An extractor for all widefield data"""
+        """An extractor for all Neuophotometrics fibrephotometry data"""
         super().__init__(*args, **kwargs)
 
-    def _channel_meta(self, light_source_map=None):
+    @staticmethod
+    def _channel_meta(light_source_map=None):
         """
         Return table of light source wavelengths and corresponding colour labels.
 
