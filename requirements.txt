@@ -24,4 +24,4 @@ tqdm>=4.32.1
 # ibl libraries
 iblutil
 ibl-neuropixel>=0.2.0
-ONE-api>=1.8.1
+ONE-api>=1.12.0
