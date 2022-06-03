@@ -12,7 +12,7 @@ from one.api import ONE, One
 import one.alf.io as alfio
 from one.alf.files import get_alf_path
 from one.alf import cache
-from neuropixel import SITES_COORDINATES, TIP_SIZE_UM, trace_header
+from neuropixel import TIP_SIZE_UM, trace_header
 import spikeglx
 
 from iblutil.util import Bunch
@@ -843,19 +843,19 @@ def load_channels_from_insertion(ins, depths=None, one=None, ba=None):
     idx = np.argmax(val)
     traj = traj[idx]
     if depths is None:
-        depths = SITES_COORDINATES[:, 1]
+        depths = trace_header(version=1)['y']
     if traj['provenance'] == 'Planned' or traj['provenance'] == 'Micro-manipulator':
         ins = atlas.Insertion.from_dict(traj)
         # Deepest coordinate first
         xyz = np.c_[ins.tip, ins.entry].T
-        xyz_channels = histology.interpolate_along_track(xyz, (depths +
-                                                               TIP_SIZE_UM) / 1e6)
+        xyz_channels = histology.interpolate_along_track(
+            xyz, (depths + TIP_SIZE_UM) / 1e6)
     else:
         xyz = np.array(ins['json']['xyz_picks']) / 1e6
         if traj['provenance'] == 'Histology track':
             xyz = xyz[np.argsort(xyz[:, 2]), :]
-            xyz_channels = histology.interpolate_along_track(xyz, (depths +
-                                                                   TIP_SIZE_UM) / 1e6)
+            xyz_channels = histology.interpolate_along_track(
+                xyz, (depths + TIP_SIZE_UM) / 1e6)
         else:
             align_key = ins['json']['extended_qc']['alignment_stored']
             feature = traj['json'][align_key][0]
