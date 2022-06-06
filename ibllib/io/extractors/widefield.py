@@ -25,12 +25,19 @@ LIGHT_SOURCE_MAP = {
     470: 'Blue',
 }
 
+DEFAULT_WIRING_MAP = {
+    5: 470,
+    6: 405
+}
+
 
 class Widefield(BaseExtractor):
     save_names = (None, None, None, 'widefieldChannels.frameAverage.npy', 'widefieldU.images.npy', 'widefieldSVT.uncorrected.npy',
-                  None, None, 'widefieldSVT.haemoCorrected.npy', 'widefield.times', 'widefield.widefieldLightSource')
+                  None, None, 'widefieldSVT.haemoCorrected.npy', 'widefield.times.npy', 'widefield.widefieldLightSource.npy',
+                  'widefieldLightSource.properties.csv')
     raw_names = ('motioncorrect_2_540_640_uint16.bin', 'motion_correction_shifts.npy', 'motion_correction_rotation.npy',
-                 'frames_average.npy', 'U.npy', 'SVT.npy', 'rcoeffs.npy', 'T.npy', 'SVTcorr.npy', 'timestamps.npy', 'led.npy')
+                 'frames_average.npy', 'U.npy', 'SVT.npy', 'rcoeffs.npy', 'T.npy', 'SVTcorr.npy', 'timestamps.npy', 'led.npy',
+                 'led_properties.csv')
     var_names = ()
 
     def __init__(self, *args, **kwargs):
@@ -57,6 +64,15 @@ class Widefield(BaseExtractor):
         meta = pd.DataFrame(sorted(light_source_map.items()), columns=names)
         meta.index.rename('channel_id', inplace=True)
         return meta
+
+    def _channel_wiring(self):
+        try:
+            wiring = pd.read_csv(self.data_path.joinpath('widefieldChannels.wiring.csv'))
+        except FileNotFoundError:
+            _logger.warning('LED wiring map not found, using default')
+            wiring = pd.DataFrame(DEFAULT_WIRING_MAP.items(), columns=('LED', 'wavelength'))
+
+        return wiring
 
     def _extract(self, extract_timestamps=True, save=False, **kwargs):
         """
@@ -124,12 +140,13 @@ class Widefield(BaseExtractor):
             _logger.info(f'Removing {file}')
             file.unlink()
 
-    def sync_timestamps(self, bin_exists=False, save=False, save_paths=None):
+    def sync_timestamps(self, bin_exists=False, save=False, save_paths=None, **kwargs):
 
         if save and save_paths:
-            assert len(save_paths) == 2, 'Must provide save_path as list with 2 paths'
+            assert len(save_paths) == 3, 'Must provide save_path as list with 3 paths'
             Path(save_paths[0]).parent.mkdir(parents=True, exist_ok=True)
             Path(save_paths[1]).parent.mkdir(parents=True, exist_ok=True)
+            Path(save_paths[2]).parent.mkdir(parents=True, exist_ok=True)
 
         filepath = next(self.data_path.glob('*.camlog'))
         fpga_sync, chmap = get_main_probe_sync(self.session_path, bin_exists=bin_exists)
@@ -151,7 +168,6 @@ class Widefield(BaseExtractor):
         video_meta = get_video_meta(video_path)
 
         diff = len(led) - video_meta.length
-        print(diff)
         if diff < 0:
             raise ValueError('More frames than timestamps detected')
         if diff > 2:
@@ -176,16 +192,27 @@ class Widefield(BaseExtractor):
 
         assert np.all(np.diff(widefield_times) > 0)
 
-        # TODO change to the correct properties
-        widefield_leds = led.led
+        # Now extract the LED channels and meta data
+        # Load channel meta and wiring map
+        channel_meta_map = self._channel_meta(kwargs.get('light_source_map'))
+        channel_wiring = self._channel_wiring()
+        channel_id = np.empty_like(led.led.values)
+
+        for _, d in channel_wiring.iterrows():
+            mask = led.led.values == d['LED']
+            if np.sum(mask) == 0:
+                raise err.WidefieldWiringException
+            channel_id[mask] = channel_meta_map.get(channel_meta_map['wavelength'] == d['wavelength']).index[0]
 
         if save:
             save_time = save_paths[0] if save_paths else self.data_path.joinpath('timestamps.npy')
             save_led = save_paths[1] if save_paths else self.data_path.joinpath('led.npy')
-            save_paths = [save_time, save_led]
+            save_meta = save_paths[2] if save_paths else self.data_path.joinpath('led_properties.csv')
+            save_paths = [save_time, save_led, save_meta]
             np.save(save_time, widefield_times)
-            np.save(save_led, widefield_leds)
+            np.save(save_led, channel_id)
+            channel_meta_map.to_csv(save_meta)
 
             return save_paths
         else:
-            return widefield_times, widefield_leds
+            return widefield_times, channel_id, channel_meta_map

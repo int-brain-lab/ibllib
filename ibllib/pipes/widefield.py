@@ -29,9 +29,11 @@ _logger = logging.getLogger('ibllib')
 class WidefieldRegisterRaw(tasks.Task):
     signature = {
         'input_files': [('dorsal_cortex_landmarks.json', 'raw_widefield_data', False),
-                        ('*.camlog', 'raw_widefield_data', True)],
+                        ('*.camlog', 'raw_widefield_data', True),
+                        ('widefield_wiring.csv', 'raw_widefield_data', False)],
         'output_files': [('widefieldLandmarks.dorsalCortex.json', 'alf', True),
-                         ('widefieldEvents.raw.camlog', 'raw_widefield_data', True)]
+                         ('widefieldEvents.raw.camlog', 'raw_widefield_data', True),
+                         ('widefieldChannels.wiring.csv', 'raw_widefield_data', False)]
     }
     priority = 100
 
@@ -174,7 +176,8 @@ class WidefieldSync(tasks.Task):
                         ('_spikeglx_sync.polarities*.npy', 'raw_ephys_data*', True),
                         ('_spikeglx_sync.times*.npy', 'raw_ephys_data*', True)],
         'output_files': [('widefield.times.npy', 'alf', True),
-                         ('widefield.widefieldLightSource.npy', 'alf', True)]
+                         ('widefield.widefieldLightSource.npy', 'alf', True),
+                         ('widefieldLightSource.properties.csv', 'alf', True)]
     }
 
     def _run(self):
@@ -182,6 +185,7 @@ class WidefieldSync(tasks.Task):
         self.wf = WidefieldExtractor(self.session_path)
         save_paths = [self.session_path.joinpath(sig[1], sig[0]) for sig in self.signature['output_files']]
         out_files = self.wf.sync_timestamps(bin_exists=False, save=True, save_paths=save_paths)
+
         # TODO QC
 
         return out_files
