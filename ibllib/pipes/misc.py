@@ -393,7 +393,7 @@ def get_session_numbers_from_date_path(date_path: Path) -> list:
     Retrieves session numbers when given a date path
 
     Args:
-        date_path (Path): path to date, i.e. \\server\some_lab\Subjects\Date
+        date_path (Path): path to date, i.e. \\\\server\\some_lab\\Subjects\\Date"
 
     Returns:
         (list): Found sessions as a sorted list
@@ -442,7 +442,7 @@ def transfer_video_folders(local_folder=False, remote_folder=False):
 
     transfer_list = []  # list of video sessions to transfer
     skip_list = ""  # "list" of video sessions to skip and the reason for the skip
-    backup_list = []  # list of video sessions to be moved to a backup directory, required?
+    # backup_list = []  # list of video sessions to be moved to a backup directory, required?
     user_intervention_dates = []  # list of video sessions that require user intervention
 
     # Determine if there are multiple transfer_me.flag files locally for the same subject/date
