@@ -1,5 +1,5 @@
 """Functions for loading IBL ephys and trial data using the Open Neurophysiology Environment."""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import logging
 import os
 from pathlib import Path
@@ -24,6 +24,7 @@ from ibllib.pipes.ephys_alignment import EphysAlignment
 from brainbox.core import TimeSeries
 from brainbox.processing import sync
 from brainbox.metrics.single_units import quick_unit_metrics
+from brainbox.behavior.wheel import interpolate_position, velocity_smoothed
 
 _logger = logging.getLogger('ibllib')
 
@@ -1056,3 +1057,88 @@ class SpikeSortingLoader:
                 'reverse': interp1d(timestamps[:, 1], timestamps[:, 0], fill_value='extrapolate'),
             }
         return self._sync[direction](values)
+
+
+@dataclass
+class SessionLoader:
+    one: One = None
+    eid: str = ''
+    session_path: Path = ''
+    trials: pd.DataFrame = field(default_factory=pd.DataFrame, repr=False)
+    wheel: pd.DataFrame = field(default_factory=pd.DataFrame,  repr=False)
+
+    def __post_init__(self):
+        # Providing no session path, eid and one are required
+        if self.session_path is None or self.session_path == '':
+            if self.one and self.eid != '' and self.eid is not None:
+                self.session_path = self.one.eid2path(self.eid)
+            else:
+                raise ValueError("If no session path is given, one and eid are required.")
+        # Providing a session path
+        else:
+            if self.one:
+                self.eid = self.one.to_eid(self.session_path)
+            else:
+                # If no one is given, create from cache fully local
+                self.session_path = Path(self.session_path)
+                self.one = One(cache_dir=self.session_path.parents[2], mode='local')
+                df_sessions = cache._make_sessions_df(self.session_path)
+                self.one._cache['sessions'] = df_sessions.set_index('id')
+                self.one._cache['datasets'] = cache._make_datasets_df(self.session_path, hash_files=False)
+                self.eid = str(self.session_path.relative_to(self.session_path.parents[2]))
+
+    def load_session_data(self, wheel=True):
+        # TODO: Dont reload when data already loaded?
+        if wheel:
+            try:
+                self.load_wheel()
+            except BaseException as e:
+                _logger.warning("Could not load wheel data.")
+                _logger.debug(e)
+
+    def load_trials(self, align_event=None, pre_event=0.5, post_event=0.5):
+        self.trials = self.one.load_object(self.eid, 'trials').to_df()
+
+    def align_trials_to_event(self, align_event='stimOn_times', pre_event=0.5, post_event=0.5):
+        possible_events = ['stimOn_times', 'goCue_times', 'goCueTrigger_times',
+                           'response_times', 'feedback_times', 'firstMovement_times']
+        if align_event not in possible_events:
+            raise ValueError(f"Argument align_event must be on of {possible_events}")
+
+        if self.trials.shape == (0, 0):
+            self.load_trials()
+
+        align_str = f"align_{align_event.split('_')[0]}"
+        self.trials[f'{align_str}_start'] = self.trials[align_event] - pre_event
+        self.trials[f'{align_str}_end'] = self.trials[align_event] + post_event
+        diffs = self.trials[f'{align_str}_end'] - np.roll(self.trials[f'{align_str}_start'], -1)
+        if np.any(diffs[:-1] > 0):
+            _logger.warning(f'{sum(diffs[:-1] > 0)} trials overlapping, try reducing pre_event, post_event or both!')
+
+    def load_wheel(self, sampling_rate=1000, smooth_size=0.03):
+        wheel_pos_raw = self.one.load_dataset(self.eid, '_ibl_wheel.position.npy')
+        wheel_times_raw = self.one.load_dataset(self.eid, '_ibl_wheel.timestamps.npy')
+        if wheel_times_raw.shape[0] != wheel_pos_raw.shape[0]:
+            raise ValueError("Length mismatch between '_ibl_wheel.position.npy' and '_ibl_wheel.timestamps.npy")
+        # resample the wheel position and compute velocity, acceleration
+        self.wheel = pd.DataFrame(columns=['times', 'position', 'velocity', 'acceleration'])
+        self.wheel['position'], self.wheel['times'] = interpolate_position(
+            wheel_times_raw, wheel_pos_raw, freq=sampling_rate)
+        self.wheel['velocity'], self.wheel['acceleration'] = velocity_smoothed(
+            self.wheel['position'], freq=sampling_rate, smooth_size=smooth_size)
+
+    def load_pose(self):
+        pass
+
+    def load_pose_speed(self):
+        pass
+
+    def load_licks(self):
+        pass
+
+    def load_sniffs(self):
+        pass
+
+    def load_pupil_diameter(self):
+        pass
+
