@@ -314,12 +314,17 @@ def rdiff_install() -> bool:
       * copies the executable to the C:\tools folder
 
     For linux/mac:
-    * run a pip install rdiff-backup
+    * runs a pip install rdiff-backup
 
-    :return: true when install is successful, false when an error is encountered
+    Returns:
+        True when install is successful, False when an error is encountered
     """
     if os.name == "nt":
-        rdiff_cmd_loc = "C:\\tools\\rdiff-backup.exe"
+        # ensure tools folder exists
+        tools_folder = "C:\\tools\\"
+        os.mkdir(tools_folder) if not Path(tools_folder).exists() else None
+
+        rdiff_cmd_loc = tools_folder + "rdiff-backup.exe"
         if not Path(rdiff_cmd_loc).exists():
             import requests
             import zipfile
@@ -336,8 +341,8 @@ def rdiff_install() -> bool:
                 rdiff_folder_name = zipfile.namelist()[0]  # attempting a bit of future-proofing
                 # move the executable to the C:\tools folder
                 shutil.copy("C:\\Temp\\" + rdiff_folder_name + "rdiff-backup.exe", rdiff_cmd_loc)
-                shutil.rmtree("C:\\Temp\\" + rdiff_folder_name)  # cleanup
-                try:  # reattempt to call the rdiff command
+                shutil.rmtree("C:\\Temp\\" + rdiff_folder_name)  # cleanup temp folder
+                try:  # attempt to call the rdiff command
                     subprocess.run([rdiff_cmd_loc, "--version"], check=True)
                 except (FileNotFoundError, subprocess.CalledProcessError) as e:
                     log.error("rdiff-backup installation did not complete.\n", e)
@@ -346,18 +351,8 @@ def rdiff_install() -> bool:
             else:
                 log.error("Download request status code not 200, something did not go as expected.")
                 return False
-        # Automating the addition of 'C:\tools\' to Windows Path proving more difficult than assumed, may revisit in the future,
-        # call the 'C:\tools\rdiff-backup.exe' directly as a workaround
-        # os.environ['Path'] = (os.environ['Path'] + 'C:\\tools\\;')
-        # try:
-        #     subprocess.run(["rdiff-backup", "--version"])
-        # except FileNotFoundError:
-        #     log.info('rdiff-backup installation did not complete, video transfers can not '
-        #              'continue.')
-        #     return False
-        # return True
     else:  # anything not Windows
-        try:  # package should already be installed via the requirements.txt, but just in case
+        try:  # package should not be installed via the requirements.txt to accommodate windows
             subprocess.run(["pip", "install", "rdiff-backup"], check=True)
         except subprocess.CalledProcessError as e:
             log.error("rdiff-backup pip install did not complete.\n", e)

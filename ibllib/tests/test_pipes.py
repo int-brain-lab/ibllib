@@ -434,27 +434,24 @@ class TestSyncData(unittest.TestCase):
             self.assertEqual(len(transfer_data), 1)
 
     def test_rdiff_install(self):
-        # remove rdiff-backup for testing
-        if os.name == "nt" and Path("C:\\tools\\rdiff-backup.exe").exists():
-            # remove executable if on windows
-            Path("C:\\tools\\rdiff-backup.exe").unlink()
+        if os.name == "nt":  # remove executable if on windows
+            rdiff_cmd_loc = "C:\\tools\\rdiff-backup.exe"
+            Path(rdiff_cmd_loc).unlink() if Path(rdiff_cmd_loc).exists() else None
         else:  # anything not Windows, remove package with pip
-            try:
-                subprocess.run(["pip", "uninstall", "rdiff-backup", "--yes"], check=True)
-            except subprocess.CalledProcessError as e:
-                print(e)
-
-        # verify rdiff-backup command is intentionally not functioning anymore
-        try:
-            subprocess.run(["rdiff-backup", "--version"], check=True)  # should throw FileNotFound
-        except FileNotFoundError:
+            import importlib.util
+            rdiff_cmd_loc = "rdiff-backup"
+            if importlib.util.find_spec("rdiff-backup"):
+                try:
+                    subprocess.run(["pip", "uninstall", "rdiff-backup", "--yes"], check=True)
+                except subprocess.CalledProcessError as e:
+                    print(e)
+        try:  # verify rdiff-backup command is intentionally not functioning anymore
+            subprocess.run(["rdiff-backup", "--version"], shell=True, check=True)
+        except subprocess.CalledProcessError:
             # call function to have rdiff-backup reinstalled
             self.assertTrue(misc.rdiff_install())
             # assert rdiff-backup command is functioning
-            self.assertTrue(subprocess.run(
-                ["rdiff-backup", "--version"], capture_output=True).returncode == 0)
-        except subprocess.CalledProcessError as e:
-            print(e)  # something went wrong with the test
+            self.assertTrue(subprocess.run([rdiff_cmd_loc, "--version"], capture_output=True).returncode == 0)
 
     @mock.patch("ibllib.pipes.misc.check_create_raw_session_flag")
     def test_transfer_video_folders(self, chk_fcn):
