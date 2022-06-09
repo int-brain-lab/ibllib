@@ -25,6 +25,7 @@ from brainbox.core import TimeSeries
 from brainbox.processing import sync
 from brainbox.metrics.single_units import quick_unit_metrics
 from brainbox.behavior.wheel import interpolate_position, velocity_smoothed
+from brainbox.behavior.dlc import likelihood_threshold
 
 _logger = logging.getLogger('ibllib')
 
@@ -1066,6 +1067,7 @@ class SessionLoader:
     session_path: Path = ''
     trials: pd.DataFrame = field(default_factory=pd.DataFrame, repr=False)
     wheel: pd.DataFrame = field(default_factory=pd.DataFrame,  repr=False)
+    poses: dict = field(default_factory=dict, repr=False)
 
     def __post_init__(self):
         # Providing no session path, eid and one are required
@@ -1087,17 +1089,69 @@ class SessionLoader:
                 self.one._cache['datasets'] = cache._make_datasets_df(self.session_path, hash_files=False)
                 self.eid = str(self.session_path.relative_to(self.session_path.parents[2]))
 
-    def load_session_data(self, wheel=True):
+    def load_session_data(self, trials=True, wheel=True, poses=True):
         # TODO: Dont reload when data already loaded?
-        if wheel:
+        names = ['trials', 'wheel', 'poses']
+        args = [trials, wheel, poses]
+        loading_funcs = [self.load_trials, self.load_wheel, self.load_poses]
+
+        for name, arg, loading_func in zip(names, args, loading_funcs):
+            if arg is True:
+                try:
+                    loading_func()
+                except BaseException as e:
+                    _logger.warning(f"Could not load {name} data.")
+                    _logger.debug(e)
+
+    def load_trials(self):
+        self.trials = self.one.load_object(self.eid, 'trials').to_df()
+
+    def load_wheel(self, sampling_rate=1000, smooth_size=0.03):
+        wheel_raw = self.one.load_object(self.eid, 'wheel')
+        # TODO: Fix this instead of raising error?
+        if wheel_raw['position'].shape[0] != wheel_raw['timestamps'].shape[0]:
+            raise ValueError("Length mismatch between 'wheel.position' and 'wheel.timestamps")
+        # resample the wheel position and compute velocity, acceleration
+        self.wheel = pd.DataFrame(columns=['timestamps', 'position', 'velocity', 'acceleration'])
+        self.wheel['position'], self.wheel['timestamps'] = interpolate_position(
+            wheel_raw['timestamps'], wheel_raw['position'], freq=sampling_rate)
+        self.wheel['velocity'], self.wheel['acceleration'] = velocity_smoothed(
+            self.wheel['position'], freq=sampling_rate, smooth_size=smooth_size)
+
+    def load_poses(self, likelihood_thr=0.9, views=['left', 'right', 'body']):
+        for view in views:
             try:
-                self.load_wheel()
+                dlc_raw = self.one.load_object(self.eid, f'{view}Camera', attribute=['dlc', 'times'])
+                # Sometimes the camera times exist but are empty
+                if dlc_raw['times'].shape[0] == 0:
+                    _logger.error(f'Camera times empty for {view}Camera. Skipping camera.')
+                # For pre-GPIO sessions, it is possible that the camera times are longer than the actual video.
+                # This is because the first few frames are sometimes not recorded. We can remove the first few
+                # timestamps in this case
+                elif dlc_raw['times'].shape[0] > dlc_raw['dlc'].shape[0]:
+                    dlc_raw['times'][-dlc_raw['dlc'].shape[0]:]
+                elif dlc_raw['times'].shape[0] < dlc_raw['dlc'].shape[0]:
+                    _logger.error(f'Camera times are shorter than pose estimation for {view}Camera. Skipping camera.')
+                else:
+                    self.poses[view] = likelihood_threshold(dlc_raw['dlc'], likelihood_thr)
+                    self.poses[view].insert(0, 'times', dlc_raw['times'])
             except BaseException as e:
-                _logger.warning("Could not load wheel data.")
+                _logger.error(f'Could not load pose data for {view}Camera. Skipping camera.')
                 _logger.debug(e)
 
-    def load_trials(self, align_event=None, pre_event=0.5, post_event=0.5):
-        self.trials = self.one.load_object(self.eid, 'trials').to_df()
+    def load_motion_energy(self, views=['left', 'right', 'body']):
+        names = {'left': 'whisker_left',
+                 'right': 'whisker_right',
+                 'body': 'body'}
+        for view in views:
+            try:
+                me_raw = self.one.load_object(self.eid, f'{view}Camera', attribute=['ROIMotionEnergy', 'times'])
+
+    def load_licks(self):
+        pass
+
+    def load_pupil_diameter(self):
+        pass
 
     def align_trials_to_event(self, align_event='stimOn_times', pre_event=0.5, post_event=0.5):
         possible_events = ['stimOn_times', 'goCue_times', 'goCueTrigger_times',
@@ -1106,6 +1160,7 @@ class SessionLoader:
             raise ValueError(f"Argument align_event must be on of {possible_events}")
 
         if self.trials.shape == (0, 0):
+            _logger.info("No trials data loaded. Trying to load trials data.")
             self.load_trials()
 
         align_str = f"align_{align_event.split('_')[0]}"
@@ -1114,31 +1169,3 @@ class SessionLoader:
         diffs = self.trials[f'{align_str}_end'] - np.roll(self.trials[f'{align_str}_start'], -1)
         if np.any(diffs[:-1] > 0):
             _logger.warning(f'{sum(diffs[:-1] > 0)} trials overlapping, try reducing pre_event, post_event or both!')
-
-    def load_wheel(self, sampling_rate=1000, smooth_size=0.03):
-        wheel_pos_raw = self.one.load_dataset(self.eid, '_ibl_wheel.position.npy')
-        wheel_times_raw = self.one.load_dataset(self.eid, '_ibl_wheel.timestamps.npy')
-        if wheel_times_raw.shape[0] != wheel_pos_raw.shape[0]:
-            raise ValueError("Length mismatch between '_ibl_wheel.position.npy' and '_ibl_wheel.timestamps.npy")
-        # resample the wheel position and compute velocity, acceleration
-        self.wheel = pd.DataFrame(columns=['times', 'position', 'velocity', 'acceleration'])
-        self.wheel['position'], self.wheel['times'] = interpolate_position(
-            wheel_times_raw, wheel_pos_raw, freq=sampling_rate)
-        self.wheel['velocity'], self.wheel['acceleration'] = velocity_smoothed(
-            self.wheel['position'], freq=sampling_rate, smooth_size=smooth_size)
-
-    def load_pose(self):
-        pass
-
-    def load_pose_speed(self):
-        pass
-
-    def load_licks(self):
-        pass
-
-    def load_sniffs(self):
-        pass
-
-    def load_pupil_diameter(self):
-        pass
-
