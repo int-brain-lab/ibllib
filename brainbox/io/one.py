@@ -25,7 +25,7 @@ from brainbox.core import TimeSeries
 from brainbox.processing import sync
 from brainbox.metrics.single_units import quick_unit_metrics
 from brainbox.behavior.wheel import interpolate_position, velocity_smoothed
-from brainbox.behavior.dlc import likelihood_threshold
+from brainbox.behavior.dlc import likelihood_threshold, get_pupil_diameter, get_smooth_pupil_diameter
 
 _logger = logging.getLogger('ibllib')
 
@@ -1065,10 +1065,12 @@ class SessionLoader:
     one: One = None
     eid: str = ''
     session_path: Path = ''
+    data_info: pd.DataFrame = field(default_factory=pd.DataFrame, repr=False)
     trials: pd.DataFrame = field(default_factory=pd.DataFrame, repr=False)
     wheel: pd.DataFrame = field(default_factory=pd.DataFrame,  repr=False)
-    poses: dict = field(default_factory=dict, repr=False)
+    pose: dict = field(default_factory=dict, repr=False)
     motion_energy: dict = field(default_factory=dict, repr=False)
+    pupil: pd.DataFrame = field(default_factory=pd.DataFrame,  repr=False)
 
     def __post_init__(self):
         # Providing no session path, eid and one are required
@@ -1089,23 +1091,51 @@ class SessionLoader:
                 self.one._cache['sessions'] = df_sessions.set_index('id')
                 self.one._cache['datasets'] = cache._make_datasets_df(self.session_path, hash_files=False)
                 self.eid = str(self.session_path.relative_to(self.session_path.parents[2]))
+        # Information of data that is and can be loaded
+        data_names = [
+            'trials',
+            'wheel',
+            'poses',
+            'motion_energy',
+            'pupil'
+        ]
+        self.data_info = pd.DataFrame(columns=['name', 'is_loaded'], data=zip(data_names, [False]*len(data_names)))
 
-    def load_session_data(self, trials=True, wheel=True, poses=True, motion_energy=True):
-        # TODO: Dont reload when data already loaded?
-        names = ['trials', 'wheel', 'poses', 'motion_energy']
-        args = [trials, wheel, poses, motion_energy]
-        loading_funcs = [self.load_trials, self.load_wheel, self.load_poses, self.load_motion_energy]
+    def load_session_data(self, trials=True, wheel=True, poses=True, motion_energy=True, pupil=True, reload=False):
 
-        for name, arg, loading_func in zip(names, args, loading_funcs):
-            if arg is True:
+        load_df = self.data_info.copy()
+        load_df['to_load'] = [
+            trials,
+            wheel,
+            poses,
+            motion_energy,
+            pupil
+        ]
+        load_df['load_func'] = [
+            self.load_trials,
+            self.load_wheel,
+            self.load_pose,
+            self.load_motion_energy,
+            self.load_pupil
+        ]
+
+        for idx, row in load_df.iterrows():
+            if row['to_load'] is False:
+                _logger.debug(f"Not loading {row['name']} data, set to False.")
+            elif row['is_loaded'] is True and reload is False:
+                _logger.debug(f"Not loading {row['name']} data, is already loaded and reload=False.")
+            else:
                 try:
-                    loading_func()
+                    _logger.info(f"Loading {row['name']} data")
+                    row['load_func']()
+                    self.data_info.loc[idx, 'is_loaded'] = True
                 except BaseException as e:
-                    _logger.warning(f"Could not load {name} data.")
+                    _logger.warning(f"Could not load {row['name']} data.")
                     _logger.debug(e)
 
     def load_trials(self):
         self.trials = self.one.load_object(self.eid, 'trials').to_df()
+        self.data_info.loc[self.data_info['name'] == 'trials', 'is_loaded'] = True
 
     def load_wheel(self, sampling_rate=1000, smooth_size=0.03):
         wheel_raw = self.one.load_object(self.eid, 'wheel')
@@ -1118,15 +1148,17 @@ class SessionLoader:
             wheel_raw['timestamps'], wheel_raw['position'], freq=sampling_rate)
         self.wheel['velocity'], self.wheel['acceleration'] = velocity_smoothed(
             self.wheel['position'], freq=sampling_rate, smooth_size=smooth_size)
+        self.data_info.loc[self.data_info['name'] == 'wheel', 'is_loaded'] = True
 
-    def load_poses(self, likelihood_thr=0.9, views=['left', 'right', 'body']):
+    def load_pose(self, likelihood_thr=0.9, views=['left', 'right', 'body']):
         for view in views:
             try:
                 pose_raw = self.one.load_object(self.eid, f'{view}Camera', attribute=['dlc', 'times'])
                 # Double check if video timestamps are correct length or can be fixed
                 times_fixed, dlc = self._check_video_timestamps(view, pose_raw['times'], pose_raw['dlc'])
-                self.poses[f'{view}Camera'] = likelihood_threshold(dlc, likelihood_thr)
-                self.poses[f'{view}Camera'].insert(0, 'times', times_fixed)
+                self.pose[f'{view}Camera'] = likelihood_threshold(dlc, likelihood_thr)
+                self.pose[f'{view}Camera'].insert(0, 'times', times_fixed)
+                self.data_info.loc[self.data_info['name'] == 'pose', 'is_loaded'] = True
             except BaseException as e:
                 _logger.error(f'Could not load pose data for {view}Camera. Skipping camera.')
                 _logger.debug(e)
@@ -1143,6 +1175,7 @@ class SessionLoader:
                     view, me_raw['times'], me_raw['ROIMotionEnergy'])
                 self.motion_energy[f'{view}Camera'] = pd.DataFrame(columns=[names[view]], data=motion_energy)
                 self.motion_energy[f'{view}Camera'].insert(0, 'times', times_fixed)
+                self.data_info.loc[self.data_info['name'] == 'motion_energy', 'is_loaded'] = True
             except BaseException as e:
                 _logger.error(f'Could not load motion energy data for {view}Camera. Skipping camera.')
                 _logger.debug(e)
@@ -1150,8 +1183,43 @@ class SessionLoader:
     def load_licks(self):
         pass
 
-    def load_pupil_diameter(self):
-        pass
+    def load_pupil(self, snr_thresh=5):
+        # Try to load from features
+        feat_raw = self.one.load_object(self.eid, 'leftCamera', attribute=['times', 'features'])
+        if 'features' in feat_raw.keys():
+            times_fixed, feats = self._check_video_timestamps(feat_raw['times'], feat_raw['features'])
+            self.pupil = feats.copy()
+            self.pupil.insert(0, 'times', times_fixed)
+
+        # If unavailable compute on the fly
+        else:
+            _logger.info('Pupil diameter not available, trying to compute on the fly.')
+            if self.data_info[self.data_info['name'] == 'pose', 'is_loaded'] and 'leftCamera' in self.pose.keys():
+                # If pose data is already loaded, we don't know if it was threshold at 0.9, so we need a little stunt
+                copy_pose = self.pose['leftCamera'].copy()  # Save the previously loaded pose data
+                self.load_pose(views=['left'], likelihood_thr=0.9)  # Load new with threshold 0.9
+                dlc_thr = self.pose['leftCamera'].copy()  # Save the threshold pose data in new variable
+                self.pose['leftCamera'] = copy_pose.copy()  # Get previously loaded pose data back in place
+            else:
+                self.load_pose(views=['left'], likelihood_thr=0.9)
+                dlc_thr = self.pose['leftCamera'].copy()
+
+            self.pupil['pupilDiameter_raw'] = get_pupil_diameter(dlc_thr)
+            try:
+                self.pupil['pupilDiameter_smooth'] = get_smooth_pupil_diameter(self.pupil['pupilDiameter_raw'], 'left')
+            except BaseException as e:
+                _logger.error(f"Computing smooth pupil diameter failed, saving all NaNs.")
+                _logger.debug(e)
+                self.pupil['pupilDiameter_smooth'] = np.nan
+
+        if not np.all(np.isnan(self.pupil['pupilDiameter_smooth'])):
+            good_idxs = np.where(
+                ~np.isnan(self.pupil['pupilDiameter_smooth']) & ~np.isnan(self.pupil['pupilDiameter_raw']))[0]
+            snr = (np.var(self.pupil['pupilDiameter_smooth'][good_idxs]) /
+                   (np.var(self.pupil['pupilDiameter_smooth'][good_idxs] - self.pupil['pupilDiameter_raw'][good_idxs])))
+            if snr < snr_thresh:
+                self.pupil = pd.DataFrame
+                raise ValueError(f'Pupil diameter SNR ({snr:.2f}) below threshold SNR ({snr_thresh}), removing data.')
 
     def align_trials_to_event(self, align_event='stimOn_times', pre_event=0.5, post_event=0.5):
         possible_events = ['stimOn_times', 'goCue_times', 'goCueTrigger_times',
