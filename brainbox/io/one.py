@@ -1068,6 +1068,7 @@ class SessionLoader:
     trials: pd.DataFrame = field(default_factory=pd.DataFrame, repr=False)
     wheel: pd.DataFrame = field(default_factory=pd.DataFrame,  repr=False)
     poses: dict = field(default_factory=dict, repr=False)
+    motion_energy: dict = field(default_factory=dict, repr=False)
 
     def __post_init__(self):
         # Providing no session path, eid and one are required
@@ -1089,11 +1090,11 @@ class SessionLoader:
                 self.one._cache['datasets'] = cache._make_datasets_df(self.session_path, hash_files=False)
                 self.eid = str(self.session_path.relative_to(self.session_path.parents[2]))
 
-    def load_session_data(self, trials=True, wheel=True, poses=True):
+    def load_session_data(self, trials=True, wheel=True, poses=True, motion_energy=True):
         # TODO: Dont reload when data already loaded?
-        names = ['trials', 'wheel', 'poses']
-        args = [trials, wheel, poses]
-        loading_funcs = [self.load_trials, self.load_wheel, self.load_poses]
+        names = ['trials', 'wheel', 'poses', 'motion_energy']
+        args = [trials, wheel, poses, motion_energy]
+        loading_funcs = [self.load_trials, self.load_wheel, self.load_poses, self.load_motion_energy]
 
         for name, arg, loading_func in zip(names, args, loading_funcs):
             if arg is True:
@@ -1121,31 +1122,30 @@ class SessionLoader:
     def load_poses(self, likelihood_thr=0.9, views=['left', 'right', 'body']):
         for view in views:
             try:
-                dlc_raw = self.one.load_object(self.eid, f'{view}Camera', attribute=['dlc', 'times'])
-                # Sometimes the camera times exist but are empty
-                if dlc_raw['times'].shape[0] == 0:
-                    _logger.error(f'Camera times empty for {view}Camera. Skipping camera.')
-                # For pre-GPIO sessions, it is possible that the camera times are longer than the actual video.
-                # This is because the first few frames are sometimes not recorded. We can remove the first few
-                # timestamps in this case
-                elif dlc_raw['times'].shape[0] > dlc_raw['dlc'].shape[0]:
-                    dlc_raw['times'][-dlc_raw['dlc'].shape[0]:]
-                elif dlc_raw['times'].shape[0] < dlc_raw['dlc'].shape[0]:
-                    _logger.error(f'Camera times are shorter than pose estimation for {view}Camera. Skipping camera.')
-                else:
-                    self.poses[view] = likelihood_threshold(dlc_raw['dlc'], likelihood_thr)
-                    self.poses[view].insert(0, 'times', dlc_raw['times'])
+                pose_raw = self.one.load_object(self.eid, f'{view}Camera', attribute=['dlc', 'times'])
+                # Double check if video timestamps are correct length or can be fixed
+                times_fixed, dlc = self._check_video_timestamps(view, pose_raw['times'], pose_raw['dlc'])
+                self.poses[f'{view}Camera'] = likelihood_threshold(dlc, likelihood_thr)
+                self.poses[f'{view}Camera'].insert(0, 'times', times_fixed)
             except BaseException as e:
                 _logger.error(f'Could not load pose data for {view}Camera. Skipping camera.')
                 _logger.debug(e)
 
     def load_motion_energy(self, views=['left', 'right', 'body']):
-        names = {'left': 'whisker_left',
-                 'right': 'whisker_right',
-                 'body': 'body'}
+        names = {'left': 'whiskerMotionEnergy',
+                 'right': 'whiskerMotionEnergy',
+                 'body': 'bodyMotionEnergy'}
         for view in views:
             try:
                 me_raw = self.one.load_object(self.eid, f'{view}Camera', attribute=['ROIMotionEnergy', 'times'])
+                # Double check if video timestamps are correct length or can be fixed
+                times_fixed, motion_energy = self._check_video_timestamps(
+                    view, me_raw['times'], me_raw['ROIMotionEnergy'])
+                self.motion_energy[f'{view}Camera'] = pd.DataFrame(columns=[names[view]], data=motion_energy)
+                self.motion_energy[f'{view}Camera'].insert(0, 'times', times_fixed)
+            except BaseException as e:
+                _logger.error(f'Could not load motion energy data for {view}Camera. Skipping camera.')
+                _logger.debug(e)
 
     def load_licks(self):
         pass
@@ -1169,3 +1169,22 @@ class SessionLoader:
         diffs = self.trials[f'{align_str}_end'] - np.roll(self.trials[f'{align_str}_start'], -1)
         if np.any(diffs[:-1] > 0):
             _logger.warning(f'{sum(diffs[:-1] > 0)} trials overlapping, try reducing pre_event, post_event or both!')
+
+    def _check_video_timestamps(self, view, video_timestamps, video_data):
+        pose_raw = self.one.load_object(self.eid, f'{view}Camera', attribute=['dlc', 'times'])
+        # If camera times are shorter than video data, or empty, no current fix
+        if video_timestamps.shape[0] < video_data.shape[0]:
+            if video_timestamps.shape[0] == 0:
+                msg = f'Camera times empty for {view}Camera.'
+            else:
+                msg = f'Camera times are shorter than video data for {view}Camera.'
+            _logger.warning(msg)
+            raise ValueError(msg)
+        # For pre-GPIO sessions, it is possible that the camera times are longer than the actual video.
+        # This is because the first few frames are sometimes not recorded. We can remove the first few
+        # timestamps in this case
+        elif video_timestamps.shape[0] > video_data.shape[0]:
+            video_timestamps_fixed = video_timestamps[-video_data.shape[0]:]
+            return video_timestamps_fixed, video_data
+        else:
+            return video_timestamps, video_data
