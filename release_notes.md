@@ -1,5 +1,8 @@
 ## Release Notes 2.12
-## Release Noter 2.12.2 2022-05-27
+## Release Notes Dev
+- Sync method in spike sorting loader
+
+## Release Notes 2.12.2 2022-05-27
 - Fixes to plotting in training_status
 
 ## Release Notes 2.12.1 2022-05-26
