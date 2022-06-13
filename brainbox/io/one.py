@@ -1073,25 +1073,19 @@ class SessionLoader:
     pupil: pd.DataFrame = field(default_factory=pd.DataFrame,  repr=False)
 
     def __post_init__(self):
-        # Providing no session path, eid and one are required
-        if self.session_path is None or self.session_path == '':
-            if self.one and self.eid != '' and self.eid is not None:
+        if self.one is None:
+            raise ValueError("An input to one is required. If not connection to a database is desired, it can be "
+                             "a fully local instance of One.")
+        # If session path is given, takes precedence over eid
+        if self.session_path is not None and self.session_path != '':
+            self.eid = self.one.to_eid(self.session_path)
+        # Providing no session path, try to infer from eid
+        else:
+            if self.eid is not None and self.eid != '':
                 self.session_path = self.one.eid2path(self.eid)
             else:
-                raise ValueError("If no session path is given, one and eid are required.")
-        # Providing a session path
-        else:
-            if self.one:
-                self.eid = self.one.to_eid(self.session_path)
-            else:
-                # If no one is given, create from cache fully local
-                self.session_path = Path(self.session_path)
-                self.one = One(cache_dir=self.session_path.parents[2], mode='local')
-                df_sessions = cache._make_sessions_df(self.session_path)
-                self.one._cache['sessions'] = df_sessions.set_index('id')
-                self.one._cache['datasets'] = cache._make_datasets_df(self.session_path, hash_files=False)
-                self.eid = str(self.session_path.relative_to(self.session_path.parents[2]))
-        # Information of data that is and can be loaded
+                raise ValueError("If no session path is given, eid is required.")
+
         data_names = [
             'trials',
             'wheel',
@@ -1239,7 +1233,6 @@ class SessionLoader:
             _logger.warning(f'{sum(diffs[:-1] > 0)} trials overlapping, try reducing pre_event, post_event or both!')
 
     def _check_video_timestamps(self, view, video_timestamps, video_data):
-        pose_raw = self.one.load_object(self.eid, f'{view}Camera', attribute=['dlc', 'times'])
         # If camera times are shorter than video data, or empty, no current fix
         if video_timestamps.shape[0] < video_data.shape[0]:
             if video_timestamps.shape[0] == 0:
