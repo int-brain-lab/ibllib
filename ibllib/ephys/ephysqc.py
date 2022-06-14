@@ -150,8 +150,8 @@ class EphysQC(base.QC):
                 sr = self.data['ap']
                 nc = sr.nc - sr.nsync
                 # verify that the channel layout is correct according to IBL layout
-                h = neuropixel.trace_header(sr.major_version)
                 th = sr.geometry
+                h = neuropixel.trace_header(sr.major_version, nshank=np.unique(th['shank']).size)
                 if not (np.all(h['x'] == th['x']) and np.all(h['y'] == th['y'])):
                     _logger.critical("Channel geometry seems incorrect")
                     raise ValueError("Wrong Neuropixel channel mapping used - ABORT")

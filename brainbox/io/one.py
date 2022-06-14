@@ -12,7 +12,7 @@ from one.api import ONE, One
 import one.alf.io as alfio
 from one.alf.files import get_alf_path
 from one.alf import cache
-from neuropixel import SITES_COORDINATES, TIP_SIZE_UM, trace_header
+from neuropixel import TIP_SIZE_UM, trace_header
 import spikeglx
 
 from iblutil.util import Bunch
@@ -334,7 +334,6 @@ def _load_channel_locations_traj(eid, probe=None, one=None, revision=None, align
             # get the channels from histology tracing
             xyz = xyz[np.argsort(xyz[:, 2]), :]
             chans = histology.interpolate_along_track(xyz, (depths + TIP_SIZE_UM) / 1e6)
-
             channels[probe] = _channels_traj2bunch(chans, brain_atlas)
             source = 'traced'
         channels[probe]['axial_um'] = chn_coords[:, 1]
@@ -843,19 +842,19 @@ def load_channels_from_insertion(ins, depths=None, one=None, ba=None):
     idx = np.argmax(val)
     traj = traj[idx]
     if depths is None:
-        depths = SITES_COORDINATES[:, 1]
+        depths = trace_header(version=1)['y']
     if traj['provenance'] == 'Planned' or traj['provenance'] == 'Micro-manipulator':
         ins = atlas.Insertion.from_dict(traj)
         # Deepest coordinate first
         xyz = np.c_[ins.tip, ins.entry].T
-        xyz_channels = histology.interpolate_along_track(xyz, (depths +
-                                                               TIP_SIZE_UM) / 1e6)
+        xyz_channels = histology.interpolate_along_track(
+            xyz, (depths + TIP_SIZE_UM) / 1e6)
     else:
         xyz = np.array(ins['json']['xyz_picks']) / 1e6
         if traj['provenance'] == 'Histology track':
             xyz = xyz[np.argsort(xyz[:, 2]), :]
-            xyz_channels = histology.interpolate_along_track(xyz, (depths +
-                                                                   TIP_SIZE_UM) / 1e6)
+            xyz_channels = histology.interpolate_along_track(
+                xyz, (depths + TIP_SIZE_UM) / 1e6)
         else:
             align_key = ins['json']['extended_qc']['alignment_stored']
             feature = traj['json'][align_key][0]
@@ -894,6 +893,7 @@ class SpikeSortingLoader:
     collection: str = ''
     histology: str = ''  # 'alf', 'resolved', 'aligned' or 'traced'
     spike_sorting_path: Path = None
+    _sync: dict = None
 
     def __post_init__(self):
         # pid gets precedence
@@ -1039,3 +1039,20 @@ class SpikeSortingLoader:
         """Gets flatiron URL for the session"""
         webclient = getattr(self.one, '_web_client', None)
         return webclient.rel_path2url(get_alf_path(self.session_path)) if webclient else None
+
+    def samples2times(self, values, direction='forward'):
+        """
+        :param values: numpy array of times in seconds or samples to resync
+        :param direction: 'forward' (samples probe time to seconds main time) or 'reverse'
+         (seconds main time to samples probe time)
+        :return:
+        """
+        if self._sync is None:
+            timestamps = self.one.load_dataset(
+                self.eid, dataset='_spikeglx_*.timestamps.npy', collection=f'raw_ephys_data/{self.pname}')
+            self._sync = {
+                'timestamps': timestamps,
+                'forward': interp1d(timestamps[:, 0], timestamps[:, 1], fill_value='extrapolate'),
+                'reverse': interp1d(timestamps[:, 1], timestamps[:, 0], fill_value='extrapolate'),
+            }
+        return self._sync[direction](values)
