@@ -657,8 +657,14 @@ class EphysTrials(tasks.Task):
             "sessions", eid, "extended_qc", {"behavior": int(good_enough)}
         )
 
-    def _run(self, plot_qc=True):
+    def _extract_behaviour(self):
         dsets, out_files = ephys_fpga.extract_all(self.session_path, save=True)
+
+        return dsets, out_files
+
+
+    def _run(self, plot_qc=True):
+        dsets, out_files = self._extract_behaviour()
 
         if not self.one or self.one.offline:
             return out_files

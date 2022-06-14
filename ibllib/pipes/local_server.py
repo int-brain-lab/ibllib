@@ -11,7 +11,7 @@ import traceback
 from one.api import ONE
 
 from ibllib.io.extractors.base import get_pipeline, get_task_protocol, get_session_extractor_type
-from ibllib.pipes import tasks, training_preprocessing, ephys_preprocessing
+from ibllib.pipes import tasks, training_preprocessing, ephys_preprocessing, widefield
 from ibllib.time import date2isostr
 import ibllib.oneibl.registration as registration
 
@@ -25,6 +25,8 @@ def _get_pipeline_class(session_path, one):
         PipelineClass = training_preprocessing.TrainingExtractionPipeline
     elif pipeline == 'ephys':
         PipelineClass = ephys_preprocessing.EphysExtractionPipeline
+    elif pipeline == 'widefield':
+        PipelineClass = widefield.WidefieldExtractionPipeline
     else:
         # try and look if there is a custom extractor in the personal projects extraction class
         import projects.base

@@ -19,12 +19,12 @@ _logger = logging.getLogger('ibllib')
 
 
 class Task(abc.ABC):
-    log = ""  # place holder to keep the log of the task for registratoin
+    log = ""  # place holder to keep the log of the task for registration
     cpu = 1   # CPU resource
     gpu = 0   # GPU resources: as of now, either 0 or 1
     io_charge = 5  # integer percentage
     priority = 30  # integer percentage, 100 means highest priority
-    ram = 4  # RAM needed to run (Go)
+    ram = 4  # RAM needed to run (GB)
     one = None  # one instance (optional)
     level = 0  # level in the pipeline hierarchy: level 0 means there is no parent task
     outputs = None  # place holder for a list of Path containing output files
