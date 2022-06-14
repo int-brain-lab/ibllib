@@ -35,7 +35,7 @@ class Task(abc.ABC):
     force = False  # whether or not to re-download missing input files on local server if not present
 
     def __init__(self, session_path, parents=None, taskid=None, one=None,
-                 machine=None, clobber=True, location='server'):
+                 machine=None, clobber=True, location='server', runtime_args=None):
         """
         Base task class
         :param session_path: session path
@@ -47,6 +47,7 @@ class Task(abc.ABC):
         :param location: location where task is run. Options are 'server' (lab local servers'), 'remote' (remote compute node,
         data required for task downloaded via one), 'AWS' (remote compute node, data required for task downloaded via AWS),
         or 'SDSC' (SDSC flatiron compute node) # TODO 'Globus' (remote compute node, data required for task downloaded via Globus)
+        :param args: running arguments
         """
         self.taskid = taskid
         self.one = one
@@ -60,6 +61,7 @@ class Task(abc.ABC):
         self.clobber = clobber
         self.location = location
         self.plot_tasks = []  # Plotting task/ tasks to create plot outputs during the task
+        self.runtime_args = runtime_args
 
     @property
     def name(self):
