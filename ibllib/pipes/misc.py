@@ -189,7 +189,8 @@ def copy_with_check(src, dst, **kwargs):
 
 def transfer_session_folders(local_sessions: list, remote_subject_folder, subfolder_to_transfer=None):
     """
-    Used to interact with user to determine which local session folders should be transferred to which remote session folders.
+    Used to determine which local session folders should be transferred to which remote session folders, will prompt the user
+    when necessary.
 
     Parameters
     ----------
@@ -215,11 +216,12 @@ def transfer_session_folders(local_sessions: list, remote_subject_folder, subfol
         # Set expected remote_session location and perform simple error state checks
         remote_session = remote_subject_folder.joinpath(*local_session.parts[-3:])
         # Skip session if ...
-        if not local_session.joinpath(subfolder_to_transfer).exists():
-            msg = f"{local_session} - skipping session, no '{subfolder_to_transfer}' folder found locally"
-            log.warning(msg)
-            skip_list += msg + "\n"
-            continue
+        if subfolder_to_transfer:
+            if not local_session.joinpath(subfolder_to_transfer).exists():
+                msg = f"{local_session} - skipping session, no '{subfolder_to_transfer}' folder found locally"
+                log.warning(msg)
+                skip_list += msg + "\n"
+                continue
         if not remote_session.parent.exists():
             msg = f"{local_session} - no matching remote session date folder found for the given local session"
             log.info(msg)
@@ -234,7 +236,8 @@ def transfer_session_folders(local_sessions: list, remote_subject_folder, subfol
         # Determine if there are multiple session numbers from the date path
         local_sessions_for_date = get_session_numbers_from_date_path(local_session.parent)
         remote_sessions_for_date = get_session_numbers_from_date_path(remote_session.parent)
-        if len(local_sessions_for_date) >= 1 or len(remote_sessions_for_date) >= 1:
+        remote_session_pick = None
+        if len(local_sessions_for_date) > 1 or len(remote_sessions_for_date) > 1:
             # Format folder size output for end user to review
             local_session_numbers_with_size = remote_session_numbers_with_size = ""
             for lsfd in local_sessions_for_date:
@@ -247,12 +250,13 @@ def transfer_session_folders(local_sessions: list, remote_subject_folder, subfol
                      f"{''.join(local_session_numbers_with_size)}\nThe following remote session folder(s) were found on the "
                      f"server:\n\n{''.join(remote_session_numbers_with_size)}\n")
 
-            def _session_picker(sessions_for_date):
+            def _remote_session_picker(sessions_for_date):
                 resp = "s"
                 resp_invalid = True
                 while resp_invalid:  # loop until valid user input
-                    resp = input(f"\n\n--- USER INPUT NEEDED ---\nWhich session number would you like to use? Options "
-                                 f"{range_str(map(int, sessions_for_date))} or [s]kip/[h]elp/[e]xit> ").strip().lower()
+                    resp = input(f"\n\n--- USER INPUT NEEDED ---\nWhich REMOTE session number would you like to transfer your "
+                                 f"local session to? Options {range_str(map(int, sessions_for_date))} or "
+                                 f"[s]kip/[h]elp/[e]xit> ").strip().lower()
                     if resp == "h":
                         print("An example session filepath:\n")
                         describe("number")  # Explain what a session number is
@@ -265,8 +269,9 @@ def transfer_session_folders(local_sessions: list, remote_subject_folder, subfol
                         print("Invalid response. Please try again.")
                 return resp
 
-            log.info("Evaluating local session...")
-            user_response = _session_picker(local_sessions_for_date)
+            log.info(f"Evaluation for local session "
+                     f"{local_session.parts[-3]}/{local_session.parts[-2]}/{local_session.parts[-1]}...")
+            user_response = _remote_session_picker(remote_sessions_for_date)
             if user_response == "s":
                 msg = f"{local_session} - Local session skipped due to user input"
                 log.info(msg)
@@ -276,25 +281,12 @@ def transfer_session_folders(local_sessions: list, remote_subject_folder, subfol
                 log.info("Exiting, no files transferred.")
                 return
             else:
-                transfer_tuple_local = local_session.parent / user_response.zfill(3)
+                remote_session_pick = remote_session.parent / user_response.zfill(3)
 
-            log.info("Evaluating remote session...")
-            user_response = _session_picker(remote_sessions_for_date)
-            if user_response == "s":
-                msg = f"{local_session} - Local session skipped due to user input"  # messaging for local is intentional
-                log.info(msg)
-                skip_list += msg + "\n"
-                continue
-            elif user_response == "e":
-                log.info("Exiting, no files transferred.")
-                return
-            else:
-                transfer_tuple_remote = remote_session.parent / user_response.zfill(3)
-
-            # Append to the transfer_list
-            transfer_tuple = (transfer_tuple_local, transfer_tuple_remote)
-            transfer_list.append(transfer_tuple)
-            log.info(f"{transfer_tuple[0]}, {transfer_tuple[1]} - Added to the transfer list")
+        # Append to the transfer_list
+        transfer_tuple = (local_session, remote_session_pick) if remote_session_pick else (local_session, remote_session)
+        transfer_list.append(transfer_tuple)
+        log.info(f"{transfer_tuple[0]}, {transfer_tuple[1]} - Added to the transfer list")
 
     # Verify that the number of local transfer_list entries match the number of remote transfer_list entries
     local_entry = remote_entry = []
@@ -309,7 +301,10 @@ def transfer_session_folders(local_sessions: list, remote_subject_folder, subfol
     # Call rsync/rdiff function for every entry in the transfer list
     success = []
     for entry in transfer_list:
-        success.append(rsync_paths(entry[0] / subfolder_to_transfer, entry[1] / subfolder_to_transfer))
+        if subfolder_to_transfer:
+            success.append(rsync_paths(entry[0] / subfolder_to_transfer, entry[1] / subfolder_to_transfer))
+        else:
+            success.append(rsync_paths(entry[0], entry[1]))
         if not success[-1]:
             log.error("File transfer failed, check log for reason.")
 
@@ -537,15 +532,21 @@ def rsync_paths(src: Path, dst: Path) -> bool:
     This function relies on the rdiff-backup package and is run from the command line, i.e. subprocess.run(). Full documentation
     can be found here - https://rdiff-backup.net/docs/rdiff-backup.1.html
 
-    Args:
-        src (Path): source path that contains data to be transferred
-        dst (Path): destination path that will receive the transferred data
+    Parameters
+    ----------
+    src : Path
+        source path that contains data to be transferred
+    dst : Path
+        destination path that will receive the transferred data
 
-    Returns:
-       True for success, False for failure
+    Returns
+    -------
+    bool
+        True for success, False for failure
 
-    Raises:
-       FileNotFoundError, subprocess.CalledProcessError
+    Raises
+    ------
+    FileNotFoundError, subprocess.CalledProcessError
     """
     # Set rdiff_cmd_loc based on OS type (assuming C:\tools is not in Windows PATH environ)
     rdiff_cmd_loc = "C:\\tools\\rdiff-backup.exe" if os.name == "nt" else "rdiff-backup"
