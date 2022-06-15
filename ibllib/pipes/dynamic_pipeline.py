@@ -2,6 +2,9 @@ from collections import OrderedDict
 import ibllib.pipes.tasks as mtasks
 import ibllib.pipes.ephys_preprocessing as epp
 import ibllib.pipes.training_preprocessing as tpp
+import ibllib.pipes.widefield_tasks as wtasks
+import ibllib.pipes.sync_tasks as stasks
+import ibllib.pipes.behavior_tasks as btasks
 
 
 def get_acquisition_description(experiment):
@@ -29,7 +32,7 @@ def get_acquisition_description(experiment):
                 'choice_world_passive': 'raw_passive_data'
             },
             'microphone': {},
-            'sync': 'nidq'
+            'sync': {'nidq': 'raw_ephys_data'}
         }
     else:
         acquisition_description = {  # this is the current ephys pipeline description
@@ -37,10 +40,10 @@ def get_acquisition_description(experiment):
                 'raw_video_data/_iblrig_leftCamera.raw.mp4'
             ],
             'tasks': {
-                experiment: 'raw_passive_data'
+                'choice_world_training': 'raw_behavior_data'
             },
             'microphone': {},
-            'sync': 'bpod'
+            'sync': {'bpod': 'raw_behavior_data'}
         }
     return acquisition_description
 
@@ -55,17 +58,43 @@ def make_pipeline(pipeline_description, session_path=None):
     # tasks['SyncPulses'] = type('SyncPulses', (epp.EphysPulses,), {})(session_path=session_path)
     assert session_path
     tasks = OrderedDict()
-    sync = pipeline_description['sync']
-    if sync == 'nidq':
-        tasks[f'SyncPulses{sync}'] = type(f'SyncPulses{sync}', (epp.EphysPulses,), {})(session_path=session_path)
+
+    # Syncing tasks
+    (sync, sync_collection), = pipeline_description['sync'].items()
+    kwargs = {'session_path': session_path, 'runtime_args': dict(sync_collection=sync_collection)}
+    if sync == 'nidq' and sync_collection == 'raw_ephys_data':
+        tasks[f'SyncPulses{sync}'] = type(f'SyncPulses{sync}', (epp.EphysPulses,), {})(**kwargs)
+    elif sync == 'nidq':
+        tasks['SyncCompress'] = type(f'SyncCompress{sync}', (stasks.SyncPulses,), {})(**kwargs)  # this renames the files so needs to be level0
+        tasks[f'SyncPulses{sync}'] = type(f'SyncPulses{sync}', (stasks.SyncPulses,), {})\
+            (**kwargs, parents=[tasks['SyncCompress']])
     elif sync == 'bpod':
-        tasks[f'SyncPulses{sync}'] = type(f'SyncPulses{sync}', (epp.EphysPulses,), {})(session_path=session_path)
+        # at the moment we don't have anything for this
+        pass
+        # tasks[f'SyncPulses{sync}'] = type(f'SyncPulses{sync}', (epp.EphysPulses,), {})(**kwargs)
 
+    # Behavior tasks
+    for protocol, protocol_collection in pipeline_description.get('tasks', []).items():
+        kwargs = {'session_path': session_path, 'runtime_args': dict(protocol=protocol, protocol_collection=protocol_collection)}
+        if 'passive' in protocol:
+            tasks[f'RegisterRaw_{protocol}'] = type(f'RegisterRaw_{protocol}', (btasks.PassiveRegisterRaw,), {})(**kwargs)
+            tasks[f'Trials_{protocol}'] = type(f'Trials_{protocol}', (btasks.PassiveRegisterRaw,), {})\
+                (**kwargs, parents=[tasks[f'SyncPulses{sync}']])
+        else:
+            tasks[f'RegisterRaw_{protocol}'] = type(f'RegisterRaw_{protocol}', (btasks.TaskRegisterRaw,), {})(**kwargs)
+            if sync == 'bpod':
+                tasks[f'Trials_{protocol}'] = type(f'Trials_{protocol}', (btasks.TrainingTrialsBpod,), {})(**kwargs)
+            elif sync == 'nidq':
+                tasks[f'Trials_{protocol}'] = type(f'Trials_{protocol}', (btasks.TrainingTrialsFPGA,), {})\
+                    (**kwargs, parents=[tasks[f'SyncPulses{sync}']])
 
+            tasks["Training Status"] = type("Training Status", (tpp.TrainingStatus,), {})\
+                (session_path=session_path, parents=[tasks[f'Trials_{protocol}']])
 
+    # Ephys tasks
     if 'neuropixel' in pipeline_description:
         for pname, rpath in pipeline_description['neuropixel'].items():
-            kwargs = {'session_path': session_path, 'args': dict(pname=pname)}
+            kwargs = {'session_path': session_path, 'runtime_args': dict(pname=pname)}
             tasks[f'Compression_{pname}'] = type(
                 f'Compression_{pname}', (epp.EphysMtscomp,), {})(**kwargs)
 
@@ -77,107 +106,38 @@ def make_pipeline(pipeline_description, session_path=None):
                 f'CellsQC_{pname}', (epp.EphysCellsQc,), {})(
                 **kwargs, parents=[tasks[f'SpikeSorting_{pname}']])
 
-    for protocol in pipeline_description.get('tasks', []):
-        tasks[protocol] = type(protocol, (DummyTask,), {})(session_path=session_path, parents=[tasks[f'SyncPulses{sync}']])
-        if protocol in ['']:
-            tasks[protocol] = type(protocol, (DummyTask,), {})(session_path=session_path, parents=[tasks[f'SyncPulses{sync}']])
-        if protocol.startswith('choice_world') and protocol != 'choice_world_passive':
-            tasks["Training Status"] = type("Training Status", (DummyTask,), {})(session_path=session_path, parents=[tasks[protocol]])
-
+    # Video tasks
     if 'cameras' in pipeline_description:
         tasks['VideoCompress'] = type('VideoCompress', (epp.EphysVideoCompress,), {})(session_path=session_path)
-        tasks['DLC'] = type('DLC', (epp.EphysDLC,), {})(session_path=session_path, parents=[tasks['VideoCompress']])
         tasks['VideoSync'] = type('VideoSync', (epp.EphysVideoSyncQc,), {})(
             session_path=session_path, parents=[tasks['VideoCompress'], tasks[f'SyncPulses{sync}']])
+        tasks['DLC'] = type('DLC', (epp.EphysDLC,), {})(session_path=session_path, parents=[tasks['VideoCompress']])
         tasks['PostDLC'] = type('PostDLC', (epp.EphysPostDLC,), {})(
             session_path=session_path, parents=[tasks['DLC'], tasks['VideoSync']])
 
+    # Audio tasks
     if 'microphone' in pipeline_description:
-        tasks['Audio'] = type('Audio', (epp.EphysAudio,), {})(session_path=session_path)
+        (microphone, _), = pipeline_description['microphone']
+        if microphone == 'xonar':
+            tasks['Audio'] = type('Audio', (tpp.TrainingAudio,), {})(session_path=session_path)
+        else:
+            tasks['Audio'] = type('Audio', (epp.EphysAudio,), {})(session_path=session_path)
+
+    # Widefield tasks
+    if 'widefield' in pipeline_description:
+        # TODO all dependencies
+        tasks['WideFieldRegisterRaw'] = type('WidefieldRegisterRaw', (wtasks.WidefieldRegisterRaw,), {})(session_path=session_path)
+        tasks['WidefieldCompress'] = type('WidefieldCompress', (wtasks.WidefieldCompress,), {})(session_path=session_path)
+        tasks['WidefieldPreprocess'] = type('WidefieldPreprocess', (wtasks.WidefieldPreprocess,), {})(session_path=session_path)
+        tasks['WidefieldSync'] = type('WidefieldSync', (wtasks.WidefieldSync,), {})(session_path=session_path,
+                                                                                    parents=[tasks[f'SyncPulses{sync}']])
+        tasks['WidefieldFOV'] = type('WidefieldFOV', (wtasks.WidefieldFOV,), {})(session_path=session_path)
 
     p = mtasks.Pipeline(session_path=session_path)
     p.tasks = tasks
 
     return p
 
-
-session_meta = {
-    'protocols': {'biasedChoiceWorld': 'raw_behaviour_data',
-                  'passiveChoiceWorld': 'raw_passive_data'},  #TODO how do we get the collection from the rig brahhh
-    'devices': ['ephys', 'video', 'widefield'],
-    'sync': 'fpga'
-}
-
-
-def read_session_meta(session_path):
-
-    protocols = session_meta['protocols']
-    devices = session_meta['devices']
-    sync = session_meta['sync']
-
-    return protocols, devices, sync
-
-
-def build_pipeline(session_path):
-    protocols, devices, sync = read_session_meta(session_path)
-
-
-
-def get_device_pipeline(device, session_path, sync):
-    if device == 'ephys':
-        tasks = get_ephys_pipeline(session_path, sync)
-
-    elif device == 'audio':
-        tasks = get_audio_pipeline(session_path, sync) # this requires a bit of thought as it can also be per protocol
-
-    elif device == 'video':
-        tasks = get_video_pipeline(session_path, sync)
-
-    elif device == 'widefield':
-        tasks = get_widefield_pipeline(session_path, sync)
-
-    elif device == 'fibrephotometry':
-        tasks = get_fibrephotometry_pipeline(session_path, sync)
-
-    return tasks
-
-
-class DynamicPipeline(mtasks.Pipeline):
-    """
-    This is trying to replicate the current IBL
-    """
-    label = __name__
-
-    def __init__(self, session_path, **kwargs):
-        super(DynamicPipeline, self).__init__(session_path, **kwargs)
-
-        tasks = OrderedDict()
-        protocols, devices, sync = read_session_meta(session_path)
-
-        # Create job for syncing
-        sync_task = get_sync_pipeline(sync, session_path)
-        tasks.update(sync_task)
-
-        # Create task related jobs
-        for prot, coll in protocols.items():
-            tasks.update(get_protocol_pipeline(session_path, prot, coll, sync, sync_task))
-
-        # Create device related jobs
-        for device in devices:
-            tasks.update(get_device_pipeline(device))
-
-
-
-        # Loop through the protocols that were run and fill pipeline with tasks
-        # TODO how do we do this
-        for prot in protocols:
-            tasks.update(get_protocol_subpipeline(prot))
-
-        # Loop through the devices that we have and fill in the pipeline
-        for device in devices:
-            tasks.update(get_device_subpipeline(device))
-
-        # How do we do audio??
 
 
 if __name__ == '__main__':
@@ -197,3 +157,4 @@ if __name__ == '__main__':
         ad = get_acquisition_description(examples[eid])
         p = make_pipeline(ad, session_path='wpd')
         p.make_graph()
+        break

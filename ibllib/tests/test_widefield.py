@@ -7,7 +7,7 @@ from pathlib import Path
 import tempfile
 
 from ibllib.io.extractors.widefield import Widefield
-from ibllib.pipes.widefield import WidefieldRegisterRaw
+from ibllib.pipes.widefield_tasks import WidefieldRegisterRaw
 
 
 class TestWidefieldExtractor(unittest.TestCase):
