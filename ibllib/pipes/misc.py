@@ -187,7 +187,7 @@ def copy_with_check(src, dst, **kwargs):
     return shutil.copy2(src, dst, **kwargs)
 
 
-def transfer_session_folders(local_sessions: list, remote_subject_folder, subfolder_to_transfer=None):
+def transfer_session_folders(local_sessions: list, remote_subject_folder, subfolder_to_transfer):
     """
     Used to determine which local session folders should be transferred to which remote session folders, will prompt the user
     when necessary.
@@ -199,7 +199,7 @@ def transfer_session_folders(local_sessions: list, remote_subject_folder, subfol
     remote_subject_folder
         the remote location of the subject folder (typically pulled from the params)
     subfolder_to_transfer
-        which subfolders to sync, if None sync all
+        which subfolders to sync
 
     Returns
     -------
@@ -210,8 +210,7 @@ def transfer_session_folders(local_sessions: list, remote_subject_folder, subfol
     """
     transfer_list = []  # list of sessions to transfer
     skip_list = ""  # "list" of sessions to skip and the reason for the skip
-
-    # Iterate through local_session
+    # Iterate through all local sessions in the given list
     for local_session in local_sessions:
         # Set expected remote_session location and perform simple error state checks
         remote_session = remote_subject_folder.joinpath(*local_session.parts[-3:])
