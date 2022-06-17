@@ -385,6 +385,8 @@ def _register_bool(fn, file_list):
 def _read_settings_json_compatibility_enforced(json_file):
     with open(json_file) as js:
         md = json.load(js)
+    if 'IS_MOCK' not in md.keys():
+        md['IS_MOCK'] = False
     if 'IBLRIG_VERSION_TAG' not in md.keys():
         md['IBLRIG_VERSION_TAG'] = '3.2.3'
     if not md['IBLRIG_VERSION_TAG']:
