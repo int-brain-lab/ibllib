@@ -366,6 +366,52 @@ class Task(abc.ABC):
             return True
 
 
+class RegisterTask(Task):  # TODO write test
+    """
+    Base register raw task.
+    To rename files
+     1. input and output must have the same length
+     2. output files must have full filename
+    """
+
+    def rename_files(self, symlink_old=False):
+
+        # If no inputs are given, we don't do any renaming
+        if len(self.input_files) == 0:
+            return
+
+        # Otherwise we need to make sure there is one to one correspondence for renaming files
+        assert len(self.input_files) == len(self.output_files)
+
+        for before, after in zip(self.input_files, self.output_files):
+            old_file, old_collection, required = before
+            old_path = self.session_path.joinpath(old_collection).glob(old_file)
+            old_path = next(old_path, None)
+            # if the file doesn't exist and it is not required we are okay to continue
+            if not old_path and not required:
+                continue
+
+            new_file, new_collection, _ = after
+            new_path = self.session_path.joinpath(new_collection, new_file)
+            new_path.parent.mkdir(parents=True, exist_ok=True)
+            old_path.replace(new_path)
+            if symlink_old:
+                old_path.symlink_to(new_path)
+
+    def _run(self, **kwargs):
+        self.rename_files()
+        out_files = []
+        for file_sig in self.output_files:
+            file_name, collection, required = file_sig
+            file_path = self.session_path.joinpath(collection).glob(file_name)
+            file_path = next(file_path, None)
+            if not file_path and not required:
+                continue
+            out_files.append(file_path)
+
+        return out_files
+
+
 class Pipeline(abc.ABC):
     """
     Pipeline class: collection of related and potentially interdependent tasks

@@ -26,16 +26,17 @@ _logger = logging.getLogger('ibllib')
 
 
 class WidefieldRegisterRaw(tasks.Task):
+    # TODO change to use tasks.RegisterRaw base class, but then in pipeline need to register video behaviour individually
     level = 0
     signature = {
         'input_files': [('dorsal_cortex_landmarks.json', 'raw_widefield_data', False),
                         ('*.camlog', 'raw_widefield_data', True),
-                        ('widefield_wiring.csv', 'raw_widefield_data', False),
-                        ('labcams_configuration.json', 'raw_widefield_data', False)],
+                        ('widefield_wiring.csv', 'raw_widefield_data', False),],
+                        # ('labcams_configuration.json', 'raw_widefield_data', False)],
         'output_files': [('widefieldLandmarks.dorsalCortex.json', 'alf/widefield', True),
                          ('widefieldEvents.raw.camlog', 'raw_widefield_data', True),
-                         ('widefieldChannels.wiring.csv', 'raw_widefield_data', False),
-                         ('widefield.raw.wiring.json', 'raw_widefield_data', False)]
+                         ('widefieldChannels.wiring.csv', 'raw_widefield_data', False),]
+                         # ('widefield.raw.wiring.json', 'raw_widefield_data', False)] # TODO should this be in sync task
     }
     priority = 100
 

@@ -14,7 +14,7 @@ from ibllib.plots import squares, vertical_lines
 from ibllib.io.video import assert_valid_label, VideoStreamer
 from iblutil.numerical import within_ranges
 from ibllib.io.extractors.base import get_session_extractor_type
-from ibllib.io.extractors.ephys_fpga import get_sync_fronts, get_main_probe_sync
+from ibllib.io.extractors.ephys_fpga import get_sync_fronts, get_sync_and_chn_map
 import ibllib.io.raw_data_loaders as raw
 from ibllib.io.extractors.base import (
     BaseBpodTrialsExtractor,
@@ -653,17 +653,23 @@ def extract_all(session_path, session_type=None, save=True, **kwargs):
     :param kwargs: parameters to pass to the extractor
     :return: outputs, files
     """
-    if session_type is None:
+
+    sync_type = kwargs.get('sync_type', None)
+    sync_collection = kwargs.get('sync_collection', 'raw_ephys_data')
+
+    if sync_type is None and session_type is None:  # infer the session type
         session_type = get_session_extractor_type(session_path)
-    if not session_type or session_type not in _get_task_types_json_config().values():
-        raise ValueError(f"Session type {session_type} has no matching extractor")
-    elif 'ephys' in session_type:  # assume ephys == FPGA
+        if not session_type or session_type not in _get_task_types_json_config().values():
+            raise ValueError(f"Session type {session_type} has no matching extractor")
+
+        sync_type = 'nidq' if session_type == 'ephys' else 'bpod'
+
+    if sync_type == 'nidq':
         labels = assert_valid_label(kwargs.pop('labels', ('left', 'right', 'body')))
         labels = (labels,) if isinstance(labels, str) else labels  # Ensure list/tuple
         extractor = [partial(CameraTimestampsFPGA, label) for label in labels]
         if 'sync' not in kwargs:
-            kwargs['sync'], kwargs['chmap'] = \
-                get_main_probe_sync(session_path, bin_exists=kwargs.pop('bin_exists', False))
+            kwargs['sync'], kwargs['chmap'] = get_sync_and_chn_map(session_path, sync_collection)
     else:  # assume Bpod otherwise
         assert kwargs.pop('labels', 'left'), 'only left camera is currently supported'
         extractor = CameraTimestampsBpod
