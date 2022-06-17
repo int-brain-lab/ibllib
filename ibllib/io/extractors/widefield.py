@@ -9,14 +9,11 @@ import pandas as pd
 import neurodsp as dsp
 import ibllib.exceptions as err
 import ibllib.io.extractors.base as extractors_base
-from ibllib.io.extractors.ephys_fpga import get_sync_fronts, FpgaTrials, get_sync_and_chn_map
+from ibllib.io.extractors.ephys_fpga import get_sync_fronts, get_sync_and_chn_map
 from ibllib.io.video import get_video_meta
 
 import wfield.cli as wfield_cli
 from labcams.io import parse_cam_log
-import one.alf.io as alfio
-import spikeglx
-
 
 _logger = logging.getLogger('ibllib')
 
@@ -32,18 +29,6 @@ DEFAULT_WIRING_MAP = {
     6: 405
 }
 
-CHMAPS = {'nidq':
-                {'left_camera': 0,
-                 'right_camera': 1,
-                 'body_camera': 2,
-                 'frame_trigger': 3,
-                 'frame2ttl': 4,
-                 'rotary_encoder_0': 5,
-                 'rotary_encoder_1': 6,
-                 'audio': 7,
-                 'bpod': 16}
-          }
-
 
 class Widefield(extractors_base.BaseExtractor):
     save_names = (None, None, None, 'widefieldChannels.frameAverage.npy', 'widefieldU.images.npy', 'widefieldSVT.uncorrected.npy',
@@ -58,6 +43,7 @@ class Widefield(extractors_base.BaseExtractor):
         """An extractor for all widefield data"""
         super().__init__(*args, **kwargs)
         self.data_path = self.session_path.joinpath('raw_widefield_data')
+        self.default_path = 'alf/widefield'
 
     def _channel_meta(self, light_source_map=None):
         """
@@ -156,119 +142,44 @@ class Widefield(extractors_base.BaseExtractor):
 
     def sync_timestamps(self, bin_exists=False, save=False, save_paths=None, **kwargs):
 
-        # TODO move this to personal project and put in the actual sync here
         if save and save_paths:
             assert len(save_paths) == 3, 'Must provide save_path as list with 3 paths'
-            Path(save_paths[0]).parent.mkdir(parents=True, exist_ok=True)
-            Path(save_paths[1]).parent.mkdir(parents=True, exist_ok=True)
-            Path(save_paths[2]).parent.mkdir(parents=True, exist_ok=True)
+            for save_path in save_paths:
+                Path(save_path).parent.mkdir(parents=True, exist_ok=True)
 
-        filepath = next(self.data_path.glob('*.camlog'))
-
-        fpga_sync, chmap = get_sync_and_chn_map(self.session_path)
+        # Load in fpga sync
+        fpga_sync, chmap = get_sync_and_chn_map(self.session_path, 'raw_widefield_data')
         fpga_led = get_sync_fronts(fpga_sync, chmap['frame_trigger'])
-        logdata, led, sync, ncomm = parse_cam_log(filepath, readTeensy=True)
+        fpga_led_up = fpga_led['times'][fpga_led['polarities'] == 1]  # only consider up pulse times
 
-        # Should we allow this?
-        # Case where led greater than video frames
+        # Load in camlog sync
+        logdata, led, sync, ncomm = parse_cam_log(next(self.data_path.glob('*.camlog')), readTeensy=True)
         assert led.frame.is_monotonic_increasing
+
+        # Get video meta data to check number of widefield frames
         video_path = next(self.data_path.glob('widefield.raw*.mov'))
         video_meta = get_video_meta(video_path)
 
-        # 1st check for differences between video and led
+        # 1st: Check for differences between video and led
         diff = len(led) - video_meta.length
         if diff < 0:
-            raise ValueError('More frames than timestamps detected')
+            raise ValueError('More video frames than led frames detected')
         if diff > 2:
-            raise ValueError('Timestamps and frames differ by more than 2')
+            raise ValueError('Led frames and video frames differ by more than 2')
         led = led[0:video_meta.length]
+        led_times = led.timestamp.values / 1e3  # led timestamps are in ms
 
-        # 2nd check for differences between fpga detected pulses and led frames
-        n_led = len(led)
-        n_fpga = len(fpga_led['times'][fpga_led['polarities'] == 1])
-        diff = n_fpga - n_led
-        n_keep = np.min([n_fpga, n_led])
+        # 2nd: Check for differences between daq detected led pulses and led frames
+        # For now we don't tolerate but need to see how many fail this
+        if led_times.size != fpga_led_up.size:
+            _logger.warning(f'Sync mismatch by {np.abs(led_times.size - fpga_led_up.size)} '
+                            f'NIDQ sync times: {fpga_led_up.size}, LED frame times {led_times.size}')
+            raise ValueError('Sync mismatch')
 
-        # TODO need to make this legit
-        _logger.warning('Different')
-        if diff < 0:  # case where we have more leds than sync times
-            # here we need to extrapolate
-            raise ValueError('More led than fpga sync detected')
-            fcn, drift, iled, ifpga = dsp.utils.sync_timestamps(led.timestamp.values[:n_keep] / 1e3,
-                                                                fpga_led['times'][fpga_led['polarities'] == 1][:n_keep],
-                                                                return_indices=True)
-
-            # widefield_times = fcn(led.timestamp.values[:n_keep] / 1e3)
-            widefield_times = fcn(led.timestamp.values / 1e3)
-            kp = ~np.isnan(widefield_times)
-            assert np.sum(kp) == n_keep
-            # Extrapolate times that lie outside sync pulses timeframe (i.e before or after)
-            pol = np.polyfit(led_times[kp] / 1e3, widefield_times[kp], 1)
-            extrap_vals = np.polyval(pol, led.timestamp.values / 1e3)
-            widefield_times[~kp] = extrap_vals[~kp]
-
-        elif diff < 0:
-            fcn, drift, iled, ifpga = dsp.utils.sync_timestamps(led.timestamp.values[:n_keep] / 1e3,
-                                                                fpga_led['times'][fpga_led['polarities'] == 1][:n_keep],
-                                                                return_indices=True)
-
-            # widefield_times = fcn(led.timestamp.values[:n_keep] / 1e3)
-            widefield_times = fcn(led.timestamp.values[:n_keep] / 1e3)
-        else:
-            fcn, drift, iled, ifpga = dsp.utils.sync_timestamps(led.timestamp.values / 1e3,
-                                                                fpga_led['times'][fpga_led['polarities'] == 1],
-                                                                return_indices=True)
-            widefield_times = fcn(led.timestamp.values / 1e3)
-
-        assert np.all(np.diff(widefield_times) > 0)
-        # We can have more
-
-        # Check that the no. of syncs from bpod and teensy match
-        assert len(led) == len(fpga_led), 'Number of detected frames on fpga and camlog do not match'
-
-        # if they are not the same length what do we do, do we extrapolate the times that we don't have?
-
-        # convert to seconds
-        fcn, drift, iteensy, ifpga = dsp.utils.sync_timestamps(led.timestamp.values / 1e3, fpga_led['times'], return_indices=True)
-
+        # If all okay, extract timestamps
+        fcn, drift, iled, ifpga = dsp.utils.sync_timestamps(led_times, fpga_led_up, return_indices=True)
         _logger.debug(f'Widefield-FPGA clock drift: {drift} ppm')
-        assert led.frame.is_monotonic_increasing
-        video_path = next(self.data_path.glob('widefield.raw*.mov'))
-        video_meta = get_video_meta(video_path)
-
-        diff = len(led) - video_meta.length
-        if diff < 0:
-            raise ValueError('More frames than timestamps detected')
-        if diff > 2:
-            raise ValueError('Timestamps and frames differ by more than 2')
-
-        led = led[0:video_meta.length]
-
-        widefield_times = fcn(led.timestamp.values / 1e3)
-        # widefield_times = fcn(led_times / 1e3)
-        # kp = ~np.isnan(widefield_times)
-        # # Extrapolate times that lie outside sync pulses timeframe (i.e before or after)
-        # pol = np.polyfit(led_times[kp] / 1e3, widefield_times[kp], 1)
-        # extrap_vals = np.polyval(pol, led.timestamp.values / 1e3)
-        # widefield_times[~kp] = extrap_vals[~kp]
-
-
-
-        # Find led times that are outside of the sync pulses
-        # led_times = np.copy(led.timestamp.values)
-        # pre_times = led_times < np.min(sync.timestamp)
-        # post_times = led_times > np.max(sync.timestamp)
-        # led_times[pre_times] = np.nan
-        # led_times[post_times] = np.nan
-        #
-        # # Interpolate frames that lie within sync pulses timeframe
-        # widefield_times = fcn(led_times / 1e3)
-        # kp = ~np.isnan(widefield_times)
-        # # Extrapolate times that lie outside sync pulses timeframe (i.e before or after)
-        # pol = np.polyfit(led_times[kp] / 1e3, widefield_times[kp], 1)
-        # extrap_vals = np.polyval(pol, led.timestamp.values / 1e3)
-        # widefield_times[~kp] = extrap_vals[~kp]
-
+        widefield_times = fcn(led_times)
         assert np.all(np.diff(widefield_times) > 0)
 
         # Now extract the LED channels and meta data
