@@ -56,8 +56,7 @@ class DynamicTask(Task):
         return task_collection
 
     def get_protocol(self, task_collection, protocol=None):
-
-        params_protocol = sess_params.get_protocol(self.session_params, task_collection)
+        params_protocol = sess_params.get_task_protocol(self.session_params, task_collection)
         return protocol if not params_protocol else params_protocol
 
     def get_main_task_collection(self, main_task_collection=None):
