@@ -1,5 +1,5 @@
 from pathlib import Path
-from ibllib.pipes import base_tasks
+from ibllib.pipes import base_tasks, tasks
 from ibllib.io.extractors.ephys_passive import PassiveChoiceWorld
 
 

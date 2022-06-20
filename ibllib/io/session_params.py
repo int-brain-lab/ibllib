@@ -1,12 +1,22 @@
 """
 Functions to load in information from session_params.yml file
 """
+from pathlib import Path
+import yaml
 
 
 def read_params(session_path):
-    # TODO figure out how to read the file
-    params = None
+    """
+    Read the yaml parameter file.
+    :param session_path: session path (will joinpath session_params.yml) or full file path yaml
+    :return: dictionary
+    """
+    session_path = Path(session_path)
+    yaml_file = session_path.join_path('session_params.yml') if session_path.is_dir() else session_path
+    with open(yaml_file, 'r') as fid:
+        params = yaml.full_load(fid)
     return params
+
 
 def get_cameras(sess_params):
     cameras = sess_params.get('cameras', None)

@@ -7,9 +7,18 @@ import ibllib.pipes.sync_tasks as stasks
 import ibllib.pipes.behavior_tasks as btasks
 
 
+def acquisition_description_legacy_session():
+    """
+    From a legacy session create a dictionary corresponding to the acquisition description
+    :return: dict
+    """
+
+
+
+
 def get_acquisition_description(experiment):
     """"
-    This is a set of example acqusition descriptions for experiments:
+    This is a set of example acqusition descriptions for experiments
     -   choice_world_recording
     -   choice_world_biased
     -   choice_world_training
@@ -18,32 +27,40 @@ def get_acquisition_description(experiment):
     """
     if experiment == 'choice_world_recording':   # canonical ephys
         acquisition_description = {  # this is the current ephys pipeline description
-            'cameras': [
-                'raw_video_data/_iblrig_rightCamera.raw',
-                'raw_video_data/_iblrig_bodyCamera.raw.mp4',
-                'raw_video_data/_iblrig_leftCamera.raw.mp4'
-            ],
+            'cameras': {
+                'right': {'collection': 'raw_video_data', 'sync_label': 'frame2ttl'},
+                'body': {'collection': 'raw_video_data', 'sync_label': 'frame2ttl'},
+                'left': {'collection': 'raw_video_data', 'sync_label': 'frame2ttl'},
+            },
             'neuropixel': {
-                'probe00': 'raw_ephys_data/probe00',
-                'probe01': 'raw_ephys_data/probe01',
+                'probe00': {'collection': 'raw_ephys_data/probe00', 'sync_label': 'imec_sync'},
+                'probe01': {'collection': 'raw_ephys_data/probe01', 'sync_label': 'imec_sync'}
+            },
+            'microphone': {
+                'harp': {'collection': 'raw_behavior_data', 'sync_label': None}
             },
             'tasks': {
-                'choice_world_recording': 'raw_behavior_data',
-                'choice_world_passive': 'raw_passive_data'
+                'choice_world_training': {'collection': 'raw_behavior_data', 'sync_label': 'bpod', 'main': True},
+                'passive_world_training': {'collection': 'raw_passive_data', 'sync_label': 'bpod', 'main': False},
             },
-            'microphone': {},
-            'sync': {'nidq': 'raw_ephys_data'}
+            'sync': {
+                'bpod': {'collection': 'raw_behavior_data', 'extension': '.bin'}
+            }
         }
     else:
         acquisition_description = {  # this is the current ephys pipeline description
-            'cameras': [
-                'raw_video_data/_iblrig_leftCamera.raw.mp4'
-            ],
-            'tasks': {
-                'choice_world_training': 'raw_behavior_data'
+            'cameras': {
+                'left': {'collection': 'raw_video_data', 'sync_label': 'frame2ttl'},
             },
-            'microphone': {},
-            'sync': {'bpod': 'raw_behavior_data'}
+            'microphone': {
+                'harp': {'collection': 'raw_behavior_data', 'sync_label': None}
+            },
+            'tasks': {
+                experiment: {'collection': 'raw_behavior_data', 'sync_label': 'bpod', 'main': True},
+            },
+            'sync': {
+                'bpod': {'collection': 'raw_behavior_data', 'extension': '.bin'}
+            }
         }
     return acquisition_description
 
@@ -81,7 +98,7 @@ def make_pipeline(pipeline_description, session_path=None):
             tasks[f'Trials_{protocol}'] = type(f'Trials_{protocol}', (btasks.PassiveRegisterRaw,), {})\
                 (**kwargs, parents=[tasks[f'SyncPulses{sync}']])
         else:
-            tasks[f'RegisterRaw_{protocol}'] = type(f'RegisterRaw_{protocol}', (btasks.TaskRegisterRaw,), {})(**kwargs)
+            tasks[f'RegisterRaw_{protocol}'] = type(f'RegisterRaw_{protocol}', (btasks.TrialRegisterRaw,), {})(**kwargs)
             if sync == 'bpod':
                 tasks[f'Trials_{protocol}'] = type(f'Trials_{protocol}', (btasks.TrainingTrialsBpod,), {})(**kwargs)
             elif sync == 'nidq':
