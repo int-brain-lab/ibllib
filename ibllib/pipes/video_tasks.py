@@ -1,7 +1,7 @@
 import logging
 
 from ibllib.io import ffmpeg
-from ibllib.pipes import tasks
+from ibllib.pipes import base_tasks
 from ibllib.io.video import label_from_path
 from ibllib.io.extractors import camera
 from ibllib.qc.camera import run_all_qc as run_camera_qc
@@ -9,7 +9,7 @@ from ibllib.qc.camera import run_all_qc as run_camera_qc
 _logger = logging.getLogger('ibllib')
 
 
-class VideoRegisterRaw(tasks.RegisterTask):
+class VideoRegisterRaw(base_tasks.VideoTask, base_tasks.RegisterTask):
     """
     Task to register raw video data. Builds up list of files to register from list of cameras given in session params file
     """
@@ -17,50 +17,33 @@ class VideoRegisterRaw(tasks.RegisterTask):
     io_charge = 90
     level = 0
     force = False
-    signature = {
-        'input_files': [],
-        'output_files': []}
 
     def dynamic_signatures(self):
         input_signatures = []
-        output_signatures = [(f'_iblrig_{cam}Camera.timestamps*', 'raw_video_data', True) for cam in self.cameras] +\
-                            [(f'_iblrig_{cam}Camera.GPIO.bin', 'raw_video_data', True) for cam in self.cameras] +\
-                            [(f'_iblrig_{cam}Camera.frame_counter.bin', 'raw_video_data', True) for cam in self.cameras] + \
-                            [(f'_iblrig_{cam}Camera.frameData.bin', 'raw_video_data', False) for cam in self.cameras] + \
-                            [('_iblrig_videoCodeFiles.raw*', 'raw_video_data', False)]
+        output_signatures = [(f'_iblrig_{cam}Camera.timestamps*', self.device_collection, True) for cam in self.cameras] +\
+                            [(f'_iblrig_{cam}Camera.GPIO.bin', self.device_collection, True) for cam in self.cameras] +\
+                            [(f'_iblrig_{cam}Camera.frame_counter.bin', self.device_collection, True) for cam in self.cameras] + \
+                            [(f'_iblrig_{cam}Camera.frameData.bin', self.device_collection, False) for cam in self.cameras] + \
+                            [('_iblrig_videoCodeFiles.raw*', self.device_collection, False)]
 
         return input_signatures, output_signatures
 
-    def setUp(self):
-        self.signature['input_files'], self.signature['output_files'] = self.dynamic_signatures()
 
-        return super().setUp()
-
-
-class VideoCompress(tasks.Task):
+class VideoCompress(base_tasks.VideoTask):
     """
     Task to compress raw video data from .avi to .mp4 format.
     """
     priority = 90
     level = 0
     force = False
-    signature = {
-        'input_files': [],
-        'output_files': []
-    }
 
     def dynamic_signatures(self):
-        input_signatures = [(f'_iblrig_{cam}Camera.raw.*', 'raw_video_data', True) for cam in self.cameras]
-        output_signatures = [(f'_iblrig_{cam}Camera.raw.mp4', 'raw_video_data', True) for cam in self.cameras]
+        input_signatures = [(f'_iblrig_{cam}Camera.raw.*', self.device_collection, True) for cam in self.cameras]
+        output_signatures = [(f'_iblrig_{cam}Camera.raw.mp4', self.device_collection, True) for cam in self.cameras]
 
         return input_signatures, output_signatures
 
-    def setUp(self):
-        self.signature['input_files'], self.signature['output_files'] = self.dynamic_signatures()
-
-        return super().setUp()
-
-    def _run(self, **kwargs):
+    def _run(self):
         # avi to mp4 compression
         command = ('ffmpeg -i {file_in} -y -nostdin -codec:v libx264 -preset slow -crf 17 '
                    '-loglevel 0 -codec:a copy {file_out}')
@@ -73,7 +56,7 @@ class VideoCompress(tasks.Task):
         return output_files
 
 
-class VideoSyncQc(tasks.Task):
+class VideoSyncQc(base_tasks.VideoTask):
     """
     Task to sync camera timestamps to main DAQ timestamps
     N.B Signatures only reflect new daq naming convention, non compatible with ephys when not running on server
@@ -81,19 +64,15 @@ class VideoSyncQc(tasks.Task):
     priority = 40
     level = 2
     force = True
-    signature = {
-        'input_files': [],
-        'output_files': []
-    }
 
     def dynamic_signatures(self):
-        input_signatures = [(f'_iblrig_{cam}Camera.raw.mp4', 'raw_video_data', True) for cam in self.cameras] +\
-                           [(f'_iblrig_{cam}Camera.timestamps*', 'raw_video_data', False) for cam in self.cameras] +\
-                           [(f'_iblrig_{cam}Camera.GPIO.bin', 'raw_video_data', False) for cam in self.cameras] +\
-                           [(f'_iblrig_{cam}Camera.frame_counter.bin', 'raw_video_data', False) for cam in self.cameras] + \
-                           [(f'_iblrig_{cam}Camera.frameData.bin', 'raw_video_data', False) for cam in self.cameras] + \
-                           [('_iblrig_taskData.raw.*', self.task_collection, True),
-                            ('_iblrig_taskSettings.raw.*', self.task_collection, True),
+        input_signatures = [(f'_iblrig_{cam}Camera.raw.mp4', self.device_collection, True) for cam in self.cameras] +\
+                           [(f'_iblrig_{cam}Camera.timestamps*', self.device_collection, False) for cam in self.cameras] +\
+                           [(f'_iblrig_{cam}Camera.GPIO.bin', self.device_collection, False) for cam in self.cameras] +\
+                           [(f'_iblrig_{cam}Camera.frame_counter.bin', self.device_collection, False) for cam in self.cameras] + \
+                           [(f'_iblrig_{cam}Camera.frameData.bin', self.device_collection, False) for cam in self.cameras] + \
+                           [('_iblrig_taskData.raw.*', self.main_task_collection, True),
+                            ('_iblrig_taskSettings.raw.*', self.main_task_collection, True),
                             ('*wheel.position.npy', 'alf', False),
                             ('*wheel.timestamps.npy', 'alf', False)]
 
@@ -109,7 +88,7 @@ class VideoSyncQc(tasks.Task):
 
     def _run(self, **kwargs):
 
-        mp4_files = self.session_path.joinpath('raw_video_data').rglob('*.mp4')
+        mp4_files = self.session_path.joinpath(self.device_collection).rglob('*.mp4')
         labels = [label_from_path(x) for x in mp4_files]
 
         # Video timestamps extraction

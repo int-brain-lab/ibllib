@@ -1,94 +1,48 @@
 from pathlib import Path
-from ibllib.pipes import tasks
+from ibllib.pipes import base_tasks
+from ibllib.io.extractors.ephys_passive import PassiveChoiceWorld
 
 
-class TaskRegisterRaw(tasks.Task):
+class TrialRegisterRaw(base_tasks.RegisterTask):
     cpu = 1
     io_charge = 90
     level = 0
     force = False
-    signature = {
-        'input_files': [],
-        'output_files': [('_iblrig_taskData.raw.*', 'raw_XX_data', True),
-                         ('_iblrig_taskSettings.raw.*', 'raw_XX_data', True),
-                         ('_iblrig_encoderEvents.raw*', 'raw_XX_data', True),
-                         ('_iblrig_encoderPositions.raw*', 'raw_XX_data', True)]}
 
-    def _run(self):
+    def dynamic_signatures(self):
+        input_signatures = []
+        output_signatures = [('_iblrig_taskData.raw.*', self.task_collection, True),
+                             ('_iblrig_taskSettings.raw.*', self.task_collection, True),
+                             ('_iblrig_encoderEvents.raw*', self.task_collection, True),
+                             ('_iblrig_encoderPositions.raw*', self.task_collection, True),
+                             ('_iblrig_encoderTrialInfo.raw*', self.task_collection, True),
+                             ('_iblrig_stimPositionScreen.raw*', self.task_collection, True),
+                             ('_iblrig_syncSquareUpdate.raw*', self.task_collection, True),
+                             ('_iblrig_ambientSensorData.raw*', self.task_collection, True)]
 
-        collection = self.runtime_args.get('protocol_collection', 'raw_behavior_data')
-        out_files = []
-        for file_sig in self.output_files:
-            file_name, _, required = file_sig
-            file_path = self.session_path.rglob(str(Path(collection).joinpath(file_name)))
-            file_path = next(file_path, None)
-            if not file_path and not required:
-                continue
-            out_files.append(file_path)
-
-        return out_files
-
-    def get_signatures(self, collection=None):
-
-        collection = self.runtime_args.get('protocol_collection', 'raw_behavior_data')
-
-        input_files = []
-        for sig in self.signature['input_files']:
-            input_files.append((sig[0], collection, sig[2]))
-        self.input_files = input_files
-
-        output_files = []
-        for sig in self.signature['output_files']:
-            output_files.append((sig[0], collection, sig[2]))
-        self.output_files = output_files
+        return input_signatures, output_signatures
 
 
-class PassiveRegisterRaw(tasks.Task):
+class PassiveRegisterRaw(base_tasks.RegisterTask):
     cpu = 1
     io_charge = 90
     level = 0
     force = False
-    signature = {
-        'input_files': [],
-        'output_files': [('_iblrig_taskData.raw.*', 'raw_XX_data', True),
-                         ('_iblrig_taskSettings.raw.*', 'raw_XX_data', True),
-                         ('_iblrig_encoderEvents.raw*', 'raw_XX_data', True),
-                         ('_iblrig_encoderPositions.raw*', 'raw_XX_data', True),
-                         ('_iblrig_RFMapStim.raw*', 'raw_XX_data', True)]}
 
-    def _run(self):
+    def dynamic_signatures(self):
+        input_signatures = []
+        output_signatures = [('_iblrig_taskSettings.raw.*', self.task_collection, True),
+                             ('_iblrig_encoderEvents.raw*', self.task_collection, True),
+                             ('_iblrig_encoderPositions.raw*', self.task_collection, True),
+                             ('_iblrig_encoderTrialInfo.raw*', self.task_collection, True),
+                             ('_iblrig_stimPositionScreen.raw*', self.task_collection, True),
+                             ('_iblrig_syncSquareUpdate.raw*', self.task_collection, True),
+                             ('_iblrig_RFMapStim.raw*', self.task_collection, True)]
 
-        collection = self.runtime_args.get('protocol_collection', 'raw_passive_data')
-
-        out_files = []
-        for file_sig in self.output_files:
-            file_name, _, required = file_sig
-            file_path = self.session_path.rglob(str(Path(collection).joinpath(file_name)))
-            file_path = next(file_path, None)
-            if not file_path and not required:
-                continue
-            out_files.append(file_path)
-
-        return out_files
-
-    def get_signatures(self, collection=None):
-
-        collection = self.runtime_args.get('protocol_collection', 'raw_passive_data')
-
-        input_files = []
-        for sig in self.signature['input_files']:
-            input_files.append((sig[0], collection, sig[2]))
-        self.input_files = input_files
-
-        output_files = []
-        for sig in self.signature['output_files']:
-            output_files.append((sig[0], collection, sig[2]))
-        self.output_files = output_files
+        return input_signatures, output_signatures
 
 
-
-# TODO make generic task
-class TrainingTrialsBpod(tasks.Task):
+class TrainingTrialsBpod(base_tasks.DynamicTask):
     priority = 90
     level = 0
     force = False
@@ -129,15 +83,6 @@ class TrainingTrialsBpod(tasks.Task):
         qc.run(update=True)
         return output_files
 
-    def get_signatures(self, **kwargs):
-        collection = self.runtime_args.get('protocol_collection', 'raw_behavior_data')
-
-        input_files = []
-        for sig in self.signature['input_files']:
-            input_files.append((sig[0], collection, sig[2]))
-        self.input_files = input_files
-
-        self.output_files = self.signature['output_files']
 
 
 class TrainingTrialsFPGA(tasks.Task):
@@ -252,50 +197,33 @@ class TrainingTrialsFPGA(tasks.Task):
         self.output_files = self.signature['output_files']
 
 
-
-class PassiveTask(tasks.Task):
+class PassiveTask(base_tasks.DynamicTask):
     cpu = 1
     io_charge = 90
     level = 1
     force = False
-    signature = {
-        'input_files': [('_iblrig_taskSettings.raw*', 'raw_behavior_data', True),
-                        ('_spikeglx_sync.channels.*', 'raw_ephys_data*', True),
-                        ('_spikeglx_sync.polarities.*', 'raw_ephys_data*', True),
-                        ('_spikeglx_sync.times.*', 'raw_ephys_data*', True),
-                        ('*.meta', 'raw_ephys_data*', True),
-                        ('*wiring.json', 'raw_ephys_data*', False),
-                        ('_iblrig_RFMapStim.raw*', 'raw_passive_data', True)],
-        'output_files': [('_ibl_passiveGabor.table.csv', 'alf', True),
-                         ('_ibl_passivePeriods.intervalsTable.csv', 'alf', True),
-                         ('_ibl_passiveRFM.times.npy', 'alf', True),
-                         ('_ibl_passiveStims.table.csv', 'alf', True)]}
+
+    def dynamic_signatures(self):
+        input_signatures = [('_iblrig_taskSettings.raw*', self.task_collection, True),
+                            ('_iblrig_RFMapStim.raw*', self.task_collection, True),
+                            ('_spikeglx_sync.channels.*', self.sync_collection, True),
+                            ('_spikeglx_sync.polarities.*', self.sync_collection, True),
+                            ('_spikeglx_sync.times.*', self.sync_collection, True),
+                            ('daq.wiring.json', self.sync_collection, False),
+                            ('*.meta', self.sync_collection, False)]
+        output_signatures = [('_ibl_passiveGabor.table.csv', 'alf', True),
+                             ('_ibl_passivePeriods.intervalsTable.csv', 'alf', True),
+                             ('_ibl_passiveRFM.times.npy', 'alf', True),
+                             ('_ibl_passiveStims.table.csv', 'alf', True)]
+
+        return input_signatures, output_signatures
 
     def _run(self):
         """returns a list of pathlib.Paths. """
-        data, paths = ephys_passive.PassiveChoiceWorld(self.session_path).extract(save=True)
+        data, paths = PassiveChoiceWorld(self.session_path).extract(
+            sync_collection=self.sync_collection, protocol_collection=self.task_collection, save=True)
+
         if any([x is None for x in paths]):
             self.status = -1
-        # Register?
+
         return paths
-
-    def get_signatures(self, **kwargs):
-        neuropixel_version = spikeglx.get_neuropixel_version_from_folder(self.session_path)
-        probes = spikeglx.get_probes_from_folder(self.session_path)
-
-        full_input_files = []
-        for sig in self.signature['input_files']:
-            if 'raw_ephys_data*' in sig[1]:
-                if neuropixel_version != '3A':
-                    full_input_files.append((sig[0], 'raw_ephys_data', sig[2]))
-                for probe in probes:
-                    full_input_files.append((sig[0], f'raw_ephys_data/{probe}', sig[2]))
-            else:
-                full_input_files.append(sig)
-
-        self.input_files = full_input_files
-
-        self.output_files = self.signature['output_files']
-
-
-

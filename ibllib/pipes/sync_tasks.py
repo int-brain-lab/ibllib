@@ -1,4 +1,4 @@
-from ibllib.pipes import tasks
+from ibllib.pipes import base_tasks
 from ibllib.io.extractors.ephys_fpga import _sync_to_alf
 import logging
 
@@ -9,7 +9,7 @@ import spikeglx
 _logger = logging.getLogger('ibllib')
 
 
-class SyncRegisterRaw(tasks.RegisterTask):
+class SyncRegisterRaw(base_tasks.RegisterTask):
     """
     Task to register raw daq data
     """
@@ -31,7 +31,7 @@ class SyncRegisterRaw(tasks.RegisterTask):
         return super().setUp()
 
 
-class SyncMtscomp(tasks.Task):
+class SyncMtscomp(base_tasks.DynamicTask):
     """
     Task to rename, compress and register raw daq data with .bin format collected using NIDAQ
     """
@@ -111,7 +111,7 @@ class SyncMtscomp(tasks.Task):
         return out_files
 
 
-class SyncPulses(tasks.Task):
+class SyncPulses(base_tasks.DynamicTask):
     """
     Extract sync pulses from NIDAQ .bin / .cbin file
     N.B Only extracts sync from sync collection (i.e not equivalent to EphysPulses that extracts sync pulses for each probe)
