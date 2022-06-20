@@ -12,7 +12,7 @@ def read_params(session_path):
     :return: dictionary
     """
     session_path = Path(session_path)
-    yaml_file = session_path.join_path('session_params.yml') if session_path.is_dir() else session_path
+    yaml_file = session_path.joinpath('session_params.yml') if session_path.is_dir() else session_path
     with open(yaml_file, 'r') as fid:
         params = yaml.full_load(fid)
     return params

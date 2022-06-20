@@ -13,9 +13,6 @@ def acquisition_description_legacy_session():
     :return: dict
     """
 
-
-
-
 def get_acquisition_description(experiment):
     """"
     This is a set of example acqusition descriptions for experiments
@@ -53,7 +50,7 @@ def get_acquisition_description(experiment):
                 'left': {'collection': 'raw_video_data', 'sync_label': 'frame2ttl'},
             },
             'microphone': {
-                'harp': {'collection': 'raw_behavior_data', 'sync_label': None}
+                'xonar': {'collection': 'raw_behavior_data', 'sync_label': None}
             },
             'tasks': {
                 experiment: {'collection': 'raw_behavior_data', 'sync_label': 'bpod', 'main': True},
@@ -70,14 +67,14 @@ class DummyTask(mtasks.Task):
         pass
 
 
-def make_pipeline(pipeline_description, session_path=None):
+def make_pipeline(acquisition_description, session_path=None):
     # NB: this pattern is a pattern for dynamic class creation
     # tasks['SyncPulses'] = type('SyncPulses', (epp.EphysPulses,), {})(session_path=session_path)
     assert session_path
     tasks = OrderedDict()
 
     # Syncing tasks
-    (sync, sync_collection), = pipeline_description['sync'].items()
+    (sync, sync_collection), = acquisition_description['sync'].items()
     kwargs = {'session_path': session_path, 'runtime_args': dict(sync_collection=sync_collection)}
     if sync == 'nidq' and sync_collection == 'raw_ephys_data':
         tasks[f'SyncPulses{sync}'] = type(f'SyncPulses{sync}', (epp.EphysPulses,), {})(**kwargs)
@@ -87,11 +84,10 @@ def make_pipeline(pipeline_description, session_path=None):
             (**kwargs, parents=[tasks['SyncCompress']])
     elif sync == 'bpod':
         # at the moment we don't have anything for this
-        pass
-        # tasks[f'SyncPulses{sync}'] = type(f'SyncPulses{sync}', (epp.EphysPulses,), {})(**kwargs)
+        tasks[f'SyncPulses{sync}'] = type(f'SyncPulses{sync}', (epp.EphysPulses,), {})(**kwargs)
 
     # Behavior tasks
-    for protocol, protocol_collection in pipeline_description.get('tasks', []).items():
+    for protocol, protocol_collection in acquisition_description.get('tasks', []).items():
         kwargs = {'session_path': session_path, 'runtime_args': dict(protocol=protocol, protocol_collection=protocol_collection)}
         if 'passive' in protocol:
             tasks[f'RegisterRaw_{protocol}'] = type(f'RegisterRaw_{protocol}', (btasks.PassiveRegisterRaw,), {})(**kwargs)
@@ -109,8 +105,8 @@ def make_pipeline(pipeline_description, session_path=None):
                 (session_path=session_path, parents=[tasks[f'Trials_{protocol}']])
 
     # Ephys tasks
-    if 'neuropixel' in pipeline_description:
-        for pname, rpath in pipeline_description['neuropixel'].items():
+    if 'neuropixel' in acquisition_description:
+        for pname, rpath in acquisition_description['neuropixel'].items():
             kwargs = {'session_path': session_path, 'runtime_args': dict(pname=pname)}
             tasks[f'Compression_{pname}'] = type(
                 f'Compression_{pname}', (epp.EphysMtscomp,), {})(**kwargs)
@@ -124,7 +120,7 @@ def make_pipeline(pipeline_description, session_path=None):
                 **kwargs, parents=[tasks[f'SpikeSorting_{pname}']])
 
     # Video tasks
-    if 'cameras' in pipeline_description:
+    if 'cameras' in acquisition_description:
         tasks['VideoCompress'] = type('VideoCompress', (epp.EphysVideoCompress,), {})(session_path=session_path)
         tasks['VideoSync'] = type('VideoSync', (epp.EphysVideoSyncQc,), {})(
             session_path=session_path, parents=[tasks['VideoCompress'], tasks[f'SyncPulses{sync}']])
@@ -133,15 +129,15 @@ def make_pipeline(pipeline_description, session_path=None):
             session_path=session_path, parents=[tasks['DLC'], tasks['VideoSync']])
 
     # Audio tasks
-    if 'microphone' in pipeline_description:
-        (microphone, _), = pipeline_description['microphone']
-        if microphone == 'xonar':
+    if 'microphone' in acquisition_description:
+        microphone_device = list(acquisition_description['microphone'].keys())[0]
+        if microphone_device == 'xonar':
             tasks['Audio'] = type('Audio', (tpp.TrainingAudio,), {})(session_path=session_path)
-        else:
+        elif microphone_device == 'harp':
             tasks['Audio'] = type('Audio', (epp.EphysAudio,), {})(session_path=session_path)
 
     # Widefield tasks
-    if 'widefield' in pipeline_description:
+    if 'widefield' in acquisition_description:
         # TODO all dependencies
         tasks['WideFieldRegisterRaw'] = type('WidefieldRegisterRaw', (wtasks.WidefieldRegisterRaw,), {})(session_path=session_path)
         tasks['WidefieldCompress'] = type('WidefieldCompress', (wtasks.WidefieldCompress,), {})(session_path=session_path)
@@ -154,24 +150,3 @@ def make_pipeline(pipeline_description, session_path=None):
     p.tasks = tasks
 
     return p
-
-
-
-if __name__ == '__main__':
-    from one.api import ONE
-    from ibllib.pipes.dynamic_pipeline import make_pipeline, get_acquisition_description
-
-    one = ONE(base_url="https://alyx.internationalbrainlab.org", cache_dir="/media/olivier/F1C9-7D73/one")
-
-    examples = {
-        "451bc9c0-113c-408e-a924-122ffe44306e": 'choice_world_habituation',
-        "cad382e5-7b1a-4e73-b892-318b5e9decc4": 'choice_world_training',
-        "47e53f41-a928-4b6d-b8cc-78fd10d03456": 'choice_world_biased',
-        "aed404ce-b3fb-454b-ac43-2f12198c9eaf": 'choice_world_recording',
-    }
-
-    for eid in examples:
-        ad = get_acquisition_description(examples[eid])
-        p = make_pipeline(ad, session_path='wpd')
-        p.make_graph()
-        break
