@@ -5,6 +5,7 @@ import ibllib.pipes.training_preprocessing as tpp
 import ibllib.pipes.widefield_tasks as wtasks
 import ibllib.pipes.sync_tasks as stasks
 import ibllib.pipes.behavior_tasks as btasks
+import ibllib.io.session_params
 
 
 def acquisition_description_legacy_session():
@@ -12,6 +13,7 @@ def acquisition_description_legacy_session():
     From a legacy session create a dictionary corresponding to the acquisition description
     :return: dict
     """
+
 
 def get_acquisition_description(experiment):
     """"
@@ -67,12 +69,18 @@ class DummyTask(mtasks.Task):
         pass
 
 
-def make_pipeline(acquisition_description, session_path=None):
+def make_pipeline(session_path=None, **pkwargs):
+    """
+    :param session_path:
+    :param one: passed to the Pipeline init: one instance to register tasks to
+    :param eid: passed to the Pipeline init
+    :return:
+    """
     # NB: this pattern is a pattern for dynamic class creation
     # tasks['SyncPulses'] = type('SyncPulses', (epp.EphysPulses,), {})(session_path=session_path)
     assert session_path
     tasks = OrderedDict()
-
+    acquisition_description = ibllib.io.session_params.read_params(session_path)
     # Syncing tasks
     (sync, sync_collection), = acquisition_description['sync'].items()
     kwargs = {'session_path': session_path, 'runtime_args': dict(sync_collection=sync_collection)}
@@ -146,7 +154,7 @@ def make_pipeline(acquisition_description, session_path=None):
                                                                                     parents=[tasks[f'SyncPulses{sync}']])
         tasks['WidefieldFOV'] = type('WidefieldFOV', (wtasks.WidefieldFOV,), {})(session_path=session_path)
 
-    p = mtasks.Pipeline(session_path=session_path)
+    p = mtasks.Pipeline(session_path=session_path, **pkwargs)
     p.tasks = tasks
 
     return p

@@ -26,7 +26,8 @@ desired_statuses = {
     'Task10': 'Complete',
     'Task11': 'Held',
     'TaskIncomplete': 'Incomplete',
-    'TaskGpuLock': 'Waiting'
+    'TaskGpuLock': 'Waiting',
+    'TaskDynamic': 'Complete',
 }
 
 desired_datasets = ['spikes.times.npy', 'spikes.amps.npy', 'spikes.clusters.npy']
@@ -41,7 +42,8 @@ desired_logs_rerun = {
     'Task10': 1,
     'Task11': 1,
     'TaskIncomplete': 1,
-    'TaskGpuLock': 2
+    'TaskGpuLock': 2,
+    'TaskDynamic': 1,
 }
 
 
@@ -133,8 +135,9 @@ class SomePipeline(ibllib.pipes.tasks.Pipeline):
         tasks['TaskIncomplete'] = TaskIncomplete(self.session_path)
         tasks['Task10'] = Task10(self.session_path, parents=[tasks['Task00']])
         # When both its parents Complete, this task should be set to Waiting and should finally complete
-        tasks['Task11'] = Task11(self.session_path, parents=[tasks['Task02_error'],
-                                                             tasks['Task00']])
+        tasks['Task11'] = Task11(self.session_path, parents=[tasks['Task02_error'], tasks['Task00']])
+        # try with a dynamic tasks
+        tasks['TaskDynamic'] = type('TaskDynamic', (Task00,), {})(self.session_path)
         self.tasks = tasks
 
 

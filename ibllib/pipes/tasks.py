@@ -386,6 +386,21 @@ class Pipeline(abc.ABC):
                 self.eid = one.path2eid(session_path, query_type='remote') if self.one else None
         self.label = self.__module__ + '.' + type(self).__name__
 
+    @staticmethod
+    def _get_exec_name(obj):
+        """
+        For a class, get the executable name as it should be stored in Alyx. When the class
+        is created dynamically using the type() built-in function, need to revert to the base
+        class to be able to re-instantiate the class from the alyx dictionary on the client side
+        :param obj:
+        :return: string containing the full module plus class name
+        """
+        if obj.__module__ == 'abc':
+            exec_name = f"{obj.__class__.__base__.__module__}.{obj.__class__.__base__.__name__}"
+        else:
+            exec_name = f"{obj.__module__}.{obj.name}"
+        return exec_name
+
     def make_graph(self, out_dir=None, show=True):
         if not out_dir:
             out_dir = self.one.alyx.cache_dir if self.one else one.params.get().CACHE_DIR
@@ -440,7 +455,7 @@ class Pipeline(abc.ABC):
                 parents_ids = [ta['id'] for ta in tasks_alyx if ta['name'] in pnames]
             else:
                 parents_ids = []
-            task_dict = {'executable': f"{t.__module__}.{t.name}", 'priority': t.priority,
+            task_dict = {'executable': self._get_exec_name(t), 'priority': t.priority,
                          'io_charge': t.io_charge, 'gpu': t.gpu, 'cpu': t.cpu,
                          'ram': t.ram, 'module': self.label, 'parents': parents_ids,
                          'level': t.level, 'time_out_sec': t.time_out_secs, 'session': self.eid,
