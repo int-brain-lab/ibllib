@@ -18,7 +18,6 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from datetime import datetime
 
-one = ONE()
 
 TRAINING_STATUS = {'not_computed': (-2, (0, 0, 0, 0)),
                    'habituation': (-1, (0, 0, 0, 0)),
