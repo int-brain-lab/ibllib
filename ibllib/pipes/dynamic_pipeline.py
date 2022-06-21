@@ -95,19 +95,20 @@ def make_pipeline(session_path=None, **pkwargs):
         tasks[f'SyncPulses{sync}'] = type(f'SyncPulses{sync}', (epp.EphysPulses,), {})(**kwargs)
 
     # Behavior tasks
-    for protocol, protocol_collection in acquisition_description.get('tasks', []).items():
-        kwargs = {'session_path': session_path, 'runtime_args': dict(protocol=protocol, protocol_collection=protocol_collection)}
+    for protocol, task_info in acquisition_description.get('tasks', []).items():
+        kwargs = {'session_path': session_path, 'runtime_args': dict(protocol=protocol, task_collection=task_info['collection'])}
         if 'passive' in protocol:
             tasks[f'RegisterRaw_{protocol}'] = type(f'RegisterRaw_{protocol}', (btasks.PassiveRegisterRaw,), {})(**kwargs)
             tasks[f'Trials_{protocol}'] = type(f'Trials_{protocol}', (btasks.PassiveRegisterRaw,), {})\
-                (**kwargs, parents=[tasks[f'SyncPulses{sync}']])
+                (**kwargs, parents=[tasks[f'SyncPulses{sync}'], tasks[f'RegisterRaw_{protocol}']])
         else:
             tasks[f'RegisterRaw_{protocol}'] = type(f'RegisterRaw_{protocol}', (btasks.TrialRegisterRaw,), {})(**kwargs)
             if sync == 'bpod':
-                tasks[f'Trials_{protocol}'] = type(f'Trials_{protocol}', (btasks.TrainingTrialsBpod,), {})(**kwargs)
+                tasks[f'Trials_{protocol}'] = type(f'Trials_{protocol}', (btasks.TrainingTrialsBpod,), {}) \
+                    (**kwargs, parents=[tasks[f'RegisterRaw_{protocol}']])
             elif sync == 'nidq':
                 tasks[f'Trials_{protocol}'] = type(f'Trials_{protocol}', (btasks.TrainingTrialsFPGA,), {})\
-                    (**kwargs, parents=[tasks[f'SyncPulses{sync}']])
+                    (**kwargs, parents=[tasks[f'SyncPulses{sync}'], tasks[f'RegisterRaw_{protocol}']])
 
             tasks["Training Status"] = type("Training Status", (tpp.TrainingStatus,), {})\
                 (session_path=session_path, parents=[tasks[f'Trials_{protocol}']])

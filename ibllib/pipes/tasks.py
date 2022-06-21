@@ -459,7 +459,8 @@ class Pipeline(abc.ABC):
                          'io_charge': t.io_charge, 'gpu': t.gpu, 'cpu': t.cpu,
                          'ram': t.ram, 'module': self.label, 'parents': parents_ids,
                          'level': t.level, 'time_out_sec': t.time_out_secs, 'session': self.eid,
-                         'status': 'Waiting', 'log': None, 'name': t.name, 'graph': self.name}
+                         'status': 'Waiting', 'log': None, 'name': t.name, 'graph': self.name,
+                         'arguments': t.runtime_args}
             # if the task already exists, patch it otherwise, create it
             talyx = next(filter(lambda x: x["name"] == t.name, tasks_alyx_pre), [])
             if len(talyx) == 0:

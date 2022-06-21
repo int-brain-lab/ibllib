@@ -3,7 +3,7 @@ from ibllib.pipes import base_tasks, tasks
 from ibllib.io.extractors.ephys_passive import PassiveChoiceWorld
 
 
-class TrialRegisterRaw(base_tasks.RegisterTask):
+class TrialRegisterRaw(base_tasks.RegisterTaskData):
     cpu = 1
     io_charge = 90
     level = 0
@@ -23,7 +23,7 @@ class TrialRegisterRaw(base_tasks.RegisterTask):
         return input_signatures, output_signatures
 
 
-class PassiveRegisterRaw(base_tasks.RegisterTask):
+class PassiveRegisterRaw(base_tasks.RegisterTaskData):
     cpu = 1
     io_charge = 90
     level = 0

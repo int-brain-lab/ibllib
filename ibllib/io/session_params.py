@@ -31,7 +31,7 @@ def get_sync(sess_params):
     if not sync:
         return None
     else:
-        (sync, _),  = sync.items()
+        (sync, _) = sync.items()
     return sync
 
 
@@ -40,7 +40,7 @@ def get_sync_collection(sess_params):
     if not sync:
         return None
     else:
-        (_, sync_details),  = sync.items()
+        (_, sync_details), = sync.items()
     return sync_details.get('collection', None)
 
 

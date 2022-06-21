@@ -1,4 +1,4 @@
-from ibllib.pipes.dynamic_pipeline import make_pipeline, get_acquisition_description
+from ibllib.pipes.dynamic_pipeline import get_acquisition_description
 from ibllib.io import session_params
 import tempfile
 import yaml
