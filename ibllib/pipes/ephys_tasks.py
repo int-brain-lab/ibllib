@@ -1,47 +1,60 @@
-# These all need to take in a probe argument apart from the Ephys register raw
 import logging
+import traceback
 from pathlib import Path
 import subprocess
 import re
 import packaging
 import shutil
 import numpy as np
+import pandas as pd
 
 import spikeglx
 import neuropixel
+from neurodsp.utils import rms
+
+import one.alf.io as alfio
 
 from ibllib.misc import check_nvidia_driver
 from ibllib.pipes import base_tasks
 from ibllib.ephys import ephysqc, spikes
-
+from ibllib.qc.alignment_qc import get_aligned_channels
 from ibllib.plots.figures import LfpPlots, ApPlots, BadChannelsAp
 from ibllib.plots.figures import SpikeSorting as SpikeSortingPlots
 
 
-import traceback
-
 _logger = logging.getLogger("ibllib")
-# EphysPulses
 
-class EphysRegisterRaw(base_tasks.EphysTask):
+
+class EphysRegisterRaw(base_tasks.DynamicTask):
     """
-    Task to register probe desription file and also make the alyx probe insertions
+    Creates the probe insertions and uploads the probe descriptions file
     """
-    probe_files = spikes.probes_description(self.session_path, one=self.one)
+
+    signature = {'input_signatures': [],
+                 'output_signatures': ['probes.description', 'alf', True]}
+
+    def _run(self):
+
+        out_files = spikes.probes_description(self.session_path, self.one)
+
+        return out_files
+
 
 class EphysCompressNP1(base_tasks.EphysTask):
     def dynamic_signatures(self):
         input_signatures = [('*ap.meta', f'{self.device_collection}/{self.pname}', True),
                             ('*ap.*bin', f'{self.device_collection}/{self.pname}', True),
                             ('*lf.meta', f'{self.device_collection}/{self.pname}', True),
-                            ('*lf.*bin', f'{self.device_collection}/{self.pname}', True)]
+                            ('*lf.*bin', f'{self.device_collection}/{self.pname}', True),
+                            ('*wiring.json', f'{self.device_collection}/{self.pname}', False)]
 
         output_signatures = [('*ap.meta', f'{self.device_collection}/{self.pname}', True),
                              ('*ap.cbin', f'{self.device_collection}/{self.pname}', True),
                              ('*ap.ch', f'{self.device_collection}/{self.pname}', True),
                              ('*lf.meta', f'{self.device_collection}/{self.pname}', True),
                              ('*lf.cbin', f'{self.device_collection}/{self.pname}', True),
-                             ('*lf.ch', f'{self.device_collection}/{self.pname}', True)]
+                             ('*lf.ch', f'{self.device_collection}/{self.pname}', True),
+                             ('*wiring.json', f'{self.device_collection}/{self.pname}', False)]
 
         return input_signatures, output_signatures
 
@@ -69,6 +82,11 @@ class EphysCompressNP1(base_tasks.EphysTask):
             out_files.append(bin_file.with_suffix('.ch'))
             out_files.append(bin_file.with_suffix('.meta'))
 
+        # Also detect and upload the wiring file
+        wiring_file = next(self.session_path.joinpath(self.device_collection, self.pname).glob('*wiring.json'), None)
+        if wiring_file is not None:
+            out_files.append(wiring_file)
+
         return out_files
 
 
@@ -77,14 +95,16 @@ class EphysCompressNP21(base_tasks.EphysTask):
         input_signatures = [('*ap.meta', f'{self.device_collection}/{self.pname}', True),
                             ('*ap.*bin', f'{self.device_collection}/{self.pname}', True),
                             ('*lf.meta', f'{self.device_collection}/{self.pname}', True),
-                            ('*lf.*bin', f'{self.device_collection}/{self.pname}', True)]
+                            ('*lf.*bin', f'{self.device_collection}/{self.pname}', True),
+                            ('*wiring.json', f'{self.device_collection}/{self.pname}', False)]
 
         output_signatures = [('*ap.meta', f'{self.device_collection}/{self.pname}', True),
                              ('*ap.cbin', f'{self.device_collection}/{self.pname}', True),
                              ('*ap.ch', f'{self.device_collection}/{self.pname}', True),
                              ('*lf.meta', f'{self.device_collection}/{self.pname}', True),
                              ('*lf.cbin', f'{self.device_collection}/{self.pname}', True),
-                             ('*lf.ch', f'{self.device_collection}/{self.pname}', True)]
+                             ('*lf.ch', f'{self.device_collection}/{self.pname}', True),
+                             ('*wiring.json', f'{self.device_collection}/{self.pname}', False)]
 
         return input_signatures, output_signatures
 
@@ -99,25 +119,33 @@ class EphysCompressNP21(base_tasks.EphysTask):
         out_files = np_conv.get_processed_files()
 
         if np_conv_status == 1:
+            # Add the wiring file to the output if it exists
+            wiring_file = next(self.session_path.joinpath(self.device_collection, self.pname).glob('*wiring.json'), None)
+            if wiring_file is not None:
+                out_files.append(wiring_file)
+
             return out_files
         else:
             return
 
 
 class EphysCompressNP24(base_tasks.EphysTask):
+
     def dynamic_signatures(self):
         input_signatures = [('*ap.meta', f'{self.device_collection}/{self.pname}', True),
                             ('*ap.*bin', f'{self.device_collection}/{self.pname}', True),
                             ('*lf.meta', f'{self.device_collection}/{self.pname}', True),
-                            ('*lf.*bin', f'{self.device_collection}/{self.pname}', True)]
+                            ('*lf.*bin', f'{self.device_collection}/{self.pname}', True),
+                            ('*wiring.json', f'{self.device_collection}/{self.pname}', False)]
 
         pextra = ['a', 'b', 'c', 'd']
-        output_signatures = [('*ap.meta', f'{self.device_collection}/{self.pname}_{pext}', True) for pext in pextra] + \
-                            [('*ap.cbin', f'{self.device_collection}/{self.pname}_{pext}', True) for pext in pextra] + \
-                            [('*ap.ch', f'{self.device_collection}/{self.pname}_{pext}', True) for pext in pextra] + \
-                            [('*lf.meta', f'{self.device_collection}/{self.pname}_{pext}', True) for pext in pextra] + \
-                            [('*lf.cbin', f'{self.device_collection}/{self.pname}_{pext}', True) for pext in pextra] + \
-                            [('*lf.ch', f'{self.device_collection}/{self.pname}_{pext}', True) for pext in pextra]
+        output_signatures = [('*ap.meta', f'{self.device_collection}/{self.pname}{pext}', True) for pext in pextra] + \
+                            [('*ap.cbin', f'{self.device_collection}/{self.pname}{pext}', True) for pext in pextra] + \
+                            [('*ap.ch', f'{self.device_collection}/{self.pname}{pext}', True) for pext in pextra] + \
+                            [('*lf.meta', f'{self.device_collection}/{self.pname}{pext}', True) for pext in pextra] + \
+                            [('*lf.cbin', f'{self.device_collection}/{self.pname}{pext}', True) for pext in pextra] + \
+                            [('*lf.ch', f'{self.device_collection}/{self.pname}{pext}', True) for pext in pextra] + \
+                            [('*wiring.json', f'{self.device_collection}/{self.pname}{pext}', False) for pext in pextra]
 
         return input_signatures, output_signatures
 
@@ -127,23 +155,31 @@ class EphysCompressNP24(base_tasks.EphysTask):
         assert len(files) == 1  # This will fail if the session is split
         bin_file = files[0].get('ap', None)
 
-        np_conv = neuropixel.NP2Converter(bin_file, post_check=True, compress=True, delete_original=False) # TODO once we happy change this to True
-        # TODO delete original deletes the whole folder of bin_file (I don't think we want to do that)
+        np_conv = neuropixel.NP2Converter(bin_file, post_check=True, compress=True, delete_original=False)
+        # TODO once we happy change this to True
         np_conv_status = np_conv.process()
         out_files = np_conv.get_processed_files()
 
         if np_conv_status == 1:
+            wiring_file = next(self.session_path.joinpath(self.device_collection, self.pname).glob('*wiring.json'), None)
+            if wiring_file is not None:
+                # copy wiring file to each sub probe directory and add to output files
+                for pext in ['a', 'b', 'c', 'd']:
+                    new_wiring_file = self.session_path.joinpath(self.device_collection, f'{self.pname}{pext}', wiring_file.name)
+                    shutil.copyfile(wiring_file, new_wiring_file )
+                    out_files.append(new_wiring_file)
             return out_files
         else:
             return
 
 
 class EphysPulses(base_tasks.EphysTask):
+    # For now this can just be the original one
     # For now just have this as the same task as before
     # TODO Need to register the wiring file for each probe
 
     # TODO needs some love
-
+    pass
 
 class RawEphysQC(base_tasks.EphysTask):
 
@@ -154,10 +190,10 @@ class RawEphysQC(base_tasks.EphysTask):
     force = False
     def dynamic_signatures(self):
 
-        input_signatures =  [('*ap.meta', f'{self.device_collection}/{self.pname}', True),
-                             ('*lf.meta', f'{self.device_collection}/{self.pname}', True),
-                             ('*lf.ch', f'{self.device_collection}/{self.pname}', False),
-                             ('*lf.*bin', f'{self.device_collection}/{self.pname}', False)]
+        input_signatures = [('*ap.meta', f'{self.device_collection}/{self.pname}', True),
+                            ('*lf.meta', f'{self.device_collection}/{self.pname}', True),
+                            ('*lf.ch', f'{self.device_collection}/{self.pname}', False),
+                            ('*lf.*bin', f'{self.device_collection}/{self.pname}', False)]
 
         output_signatures = [('_iblqc_ephysChannels.apRMS.npy', f'{self.device_collection}/{self.pname}', True),
                              ('_iblqc_ephysChannels.rawSpikeRates.npy', f'{self.device_collection}/{self.pname}', True),
@@ -178,7 +214,7 @@ class RawEphysQC(base_tasks.EphysTask):
 
         # We expect there to only be one probe
         if len(probe) != 1:
-            _logger.warning(f"{self.pname} for {eid} not found")
+            _logger.warning(f"{self.pname} for {eid} not found") # Should we create it?
             self.status = -1
             return
 
@@ -423,38 +459,96 @@ class SpikeSorting(base_tasks.EphysTask):
         return out_files
 
 
+class EphysCellsQc(base_tasks.EphysTask):
+    priority = 90
+    level = 3
+    force = False
+
+    def dynamic_signatures(self):
+        input_signatures =  [('spikes.times.npy', f'alf/{self.pname}*', True),
+                             ('spikes.clusters.npy', f'alf/{self.pname}*', True),
+                             ('spikes.amps.npy', f'alf/{self.pname}*', True),
+                             ('spikes.depths.npy', f'alf/{self.pname}*', True),
+                             ('clusters.channels.npy', f'alf/{self.pname}*', True)]
+
+        output_signatures = [('clusters.metrics.pqt', f'alf/{self.pname}*', True)]
+
+        return input_signatures, output_signatures
 
 
+    def _compute_cell_qc(self, folder_probe):
+        """
+        Computes the cell QC given an extracted probe alf path
+        :param folder_probe: folder
+        :return:
+        """
+        # compute the straight qc
+        _logger.info(f"Computing cluster qc for {folder_probe}")
+        spikes = alfio.load_object(folder_probe, 'spikes')
+        clusters = alfio.load_object(folder_probe, 'clusters')
+        df_units, drift = ephysqc.spike_sorting_metrics(
+            spikes.times, spikes.clusters, spikes.amps, spikes.depths,
+            cluster_ids=np.arange(clusters.channels.size))
+        # if the ks2 labels file exist, load them and add the column
+        file_labels = folder_probe.joinpath('cluster_KSLabel.tsv')
+        if file_labels.exists():
+            ks2_labels = pd.read_csv(file_labels, sep='\t')
+            ks2_labels.rename(columns={'KSLabel': 'ks2_label'}, inplace=True)
+            df_units = pd.concat(
+                [df_units, ks2_labels['ks2_label'].reindex(df_units.index)], axis=1)
+        # save as parquet file
+        df_units.to_parquet(folder_probe.joinpath("clusters.metrics.pqt"))
+        return folder_probe.joinpath("clusters.metrics.pqt"), df_units, drift
 
+    def _label_probe_qc(self, folder_probe, df_units, drift):
+        """
+        Labels the json field of the alyx corresponding probe insertion
+        :param folder_probe:
+        :param df_units:
+        :param drift:
+        :return:
+        """
+        eid = self.one.path2eid(self.session_path, query_type='remote')
+        pdict = self.one.alyx.rest('insertions', 'list', session=eid, name=self.pname, no_cache=True)
+        if len(pdict) != 1:
+            _logger.warning(f'No probe found for probe name: {self.pname}')
+            return
+        isok = df_units['label'] == 1
+        qcdict = {'n_units': int(df_units.shape[0]),
+                  'n_units_qc_pass': int(np.sum(isok)),
+                  'firing_rate_max': np.max(df_units['firing_rate'][isok]),
+                  'firing_rate_median': np.median(df_units['firing_rate'][isok]),
+                  'amplitude_max_uV': np.max(df_units['amp_max'][isok]) * 1e6,
+                  'amplitude_median_uV': np.max(df_units['amp_median'][isok]) * 1e6,
+                  'drift_rms_um': rms(drift['drift_um']),
+                  }
+        file_wm = folder_probe.joinpath('_kilosort_whitening.matrix.npy')
+        if file_wm.exists():
+            wm = np.load(file_wm)
+            qcdict['whitening_matrix_conditioning'] = np.linalg.cond(wm)
+        # groom qc dict (this function will eventually go directly into the json field update)
+        for k in qcdict:
+            if isinstance(qcdict[k], np.int64):
+                qcdict[k] = int(qcdict[k])
+            elif isinstance(qcdict[k], float):
+                qcdict[k] = np.round(qcdict[k], 2)
+        self.one.alyx.json_field_update("insertions", pdict[0]["id"], "json", qcdict)
 
-
-# SpikeSorting # per probe # chronic and split
-
-# ChronicSpikeSorting
-
-# EphysPulses
-
-
-# EphysSync
-
-# EphysCellQC
-def detect_probes(session_path, register=False):
-    # detect from the raw_ephys_data and register the probes to alyx
-    # if np2 we need 4 probes
-    # otherwise we need just one
-    # try except so this doesn't stop the pipeline from being generated only if register flag is True
-
-
-def get_ephys_pipeline(session_path, sync_task):
-
-    tasks = OrderedDict()
-    tasks['EphysMtscomp'] = EphysMtscomp(session_path)
-    probes = detect_probes(session_path, register=True)
-
-    for probe in probes:
-        tasks[f'RawEphysQC_{probe}'] = RawEphysQC(session_path, probe)
-        tasks[f'SpikeSorting_{probe}'] = RawEphysQC(session_path, probe)
-        tasks[f'EphysCellQc_{probe}'] = RawEphysQC(session_path, probe)
-
-
-
+    def _run(self):
+        """
+        Post spike-sorting quality control at the cluster level.
+        Outputs a QC table in the clusters ALF object and labels corresponding probes in Alyx
+        """
+        files_spikes = Path(self.session_path).joinpath(self.pname).rglob('spikes.times.npy')
+        folder_probes = [f.parent for f in files_spikes]
+        out_files = []
+        for folder_probe in folder_probes:
+            try:
+                qc_file, df_units, drift = self._compute_cell_qc(folder_probe)
+                out_files.append(qc_file)
+                self._label_probe_qc(folder_probe, df_units, drift)
+            except Exception:
+                _logger.error(traceback.format_exc())
+                self.status = -1
+                continue
+        return out_files

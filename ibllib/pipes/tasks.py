@@ -35,7 +35,7 @@ class Task(abc.ABC):
     force = False  # whether or not to re-download missing input files on local server if not present
 
     def __init__(self, session_path, parents=None, taskid=None, one=None,
-                 machine=None, clobber=True, location='server', runtime_args=None):
+                 machine=None, clobber=True, location='server', runtime_args=None, **kwargs):
         """
         Base task class
         :param session_path: session path

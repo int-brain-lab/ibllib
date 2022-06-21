@@ -80,6 +80,9 @@ class DynamicTask(Task):
     def read_params_file(self):
         params = sess_params.read_params(self.session_path)
 
+        if params is None:
+            return {}
+
         # TODO figure out the best way
         # if params is None and self.one:
         #     # Try to read params from alyx or try to download params file
@@ -167,7 +170,7 @@ class RegisterTaskData(DynamicTask):  # TODO write test
                 old_path.symlink_to(new_path)
 
     def _run(self, **kwargs):
-        self.rename_files()
+        self.rename_files(**kwargs)
         out_files = []
         for file_sig in self.output_files:
             file_name, collection, required = file_sig

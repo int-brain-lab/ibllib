@@ -13,6 +13,9 @@ def read_params(session_path):
     """
     session_path = Path(session_path)
     yaml_file = session_path.joinpath('session_params.yml') if session_path.is_dir() else session_path
+    if not yaml_file.exists():
+        return
+
     with open(yaml_file, 'r') as fid:
         params = yaml.full_load(fid)
     return params
@@ -51,21 +54,29 @@ def get_sync_extension(sess_params):
 
 
 def get_task_protocol(sess_params, task_collection):
-    protocol = None
-    for prot, details in sess_params.get('tasks').items():
-        if details.get('collection') == task_collection:
-            protocol = prot
+    protocols = sess_params.get('tasks', None)
+    if not protocols:
+        return None
+    else:
+        protocol = None
+        for prot, details in sess_params.get('tasks').items():
+            if details.get('collection') == task_collection:
+                protocol = prot
 
-    return protocol
+        return protocol
 
 
 def get_main_task_collection(sess_params):
-    main_task_collection = None
-    for prot, details in sess_params.get('tasks').items():
-        if details.get('main'):
-            details.get('collection', None)
+    protocols = sess_params.get('tasks', None)
+    if not protocols:
+        return None
+    else:
+        main_task_collection = None
+        for prot, details in sess_params.get('tasks').items():
+            if details.get('main'):
+                details.get('collection', None)
 
-    return main_task_collection
+        return main_task_collection
 
 
 def get_device_collection(sess_params, device):
