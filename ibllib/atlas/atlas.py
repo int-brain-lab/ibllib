@@ -110,22 +110,48 @@ class BrainCoordinates:
         else:
             return i
 
-    def x2i(self, x, round=True):
-        return self._round((x - self.x0) / self.dx, round=round)
+    def x2i(self, x, round=True, mode='raise'):
+        i = np.asarray(self._round((x - self.x0) / self.dx, round=round))
+        if mode == 'clip':
+            i[i < 0] = 0
+            i[i >= self.nx] = self.nx - 1
+        elif mode == 'raise':
+            if np.any(i < 0) or np.any(i >= self.nx):
+                raise ValueError("At least one x value lies outside of the atlas volume.")
+        return i
 
-    def y2i(self, y, round=True):
-        return self._round((y - self.y0) / self.dy, round=round)
+    def y2i(self, y, round=True, mode='raise'):
+        i = np.asarray(self._round((y - self.y0) / self.dy, round=round))
+        if mode == 'clip':
+            i[i < 0] = 0
+            i[i >= self.ny] = self.ny - 1
+        elif mode == 'raise':
+            if np.any(i < 0) or np.any(i >= self.ny):
+                raise ValueError("At least one y value lies outside of the atlas volume.")
+        return i
 
-    def z2i(self, z, round=True):
-        return self._round((z - self.z0) / self.dz, round=round)
+    def z2i(self, z, round=True, mode='raise'):
+        i = np.asarray(self._round((z - self.z0) / self.dz, round=round))
+        if mode == 'clip':
+            i[i < 0] = 0
+            i[i >= self.nz] = self.nz - 1
+        elif mode == 'raise':
+            if np.any(i < 0) or np.any(i >= self.nz):
+                raise ValueError("At least one z value lies outside of the atlas volume.")
+        return i
 
-    def xyz2i(self, xyz, round=True):
+    def xyz2i(self, xyz, round=True, mode='raise'):
+        """
+        :param mode: {‘raise’} determines what to do when determined index lies outside the atlas volume
+                     'raise' will raise a ValueError
+                     'clip' will replace the index with the closest index inside the volume
+        """
         xyz = np.array(xyz)
         dt = int if round else float
         out = np.zeros_like(xyz, dtype=dt)
-        out[..., 0] = self.x2i(xyz[..., 0], round=round)
-        out[..., 1] = self.y2i(xyz[..., 1], round=round)
-        out[..., 2] = self.z2i(xyz[..., 2], round=round)
+        out[..., 0] = self.x2i(xyz[..., 0], round=round, mode=mode)
+        out[..., 1] = self.y2i(xyz[..., 1], round=round, mode=mode)
+        out[..., 2] = self.z2i(xyz[..., 2], round=round, mode=mode)
         return out
 
     """Methods indices to distance"""
