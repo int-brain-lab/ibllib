@@ -1,4 +1,15 @@
 import pkg_resources
+import traceback
+import warnings
+
+for line in traceback.format_stack():
+    print(line.strip())
+
+warnings.warn(
+    'ibllib.version is deprecated and functionality will be removed! '
+    'use pkg_resources.parse_version and ibllib.__version__ instead.  See stack above.',
+    DeprecationWarning
+)
 
 
 def _compare_version_tag(v1, v2, fcn):
