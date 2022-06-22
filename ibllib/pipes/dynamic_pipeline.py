@@ -82,17 +82,21 @@ def make_pipeline(session_path=None, **pkwargs):
     tasks = OrderedDict()
     acquisition_description = ibllib.io.session_params.read_params(session_path)
     # Syncing tasks
-    (sync, sync_collection), = acquisition_description['sync'].items()
-    kwargs = {'session_path': session_path, 'runtime_args': dict(sync_collection=sync_collection)}
-    if sync == 'nidq' and sync_collection == 'raw_ephys_data':
+    (sync, sync_args), = acquisition_description['sync'].items()
+    sync_args['task_collection'] = sync_args.pop('collection')  # rename the key so it matches task run arguments
+    kwargs = {'session_path': session_path, 'runtime_args': sync_args}
+    sync_tasks = []
+    if sync == 'nidq' and sync_args['task_collection'] == 'raw_ephys_data':
         tasks[f'SyncPulses{sync}'] = type(f'SyncPulses{sync}', (epp.EphysPulses,), {})(**kwargs)
     elif sync == 'nidq':
-        tasks['SyncCompress'] = type(f'SyncCompress{sync}', (stasks.SyncPulses,), {})(**kwargs)  # this renames the files so needs to be level0
+        # this renames the files so needs to be level 0
+        tasks['SyncCompress'] = type(f'SyncCompress{sync}', (stasks.SyncPulses,), {})(**kwargs)
         tasks[f'SyncPulses{sync}'] = type(f'SyncPulses{sync}', (stasks.SyncPulses,), {})\
             (**kwargs, parents=[tasks['SyncCompress']])
+        sync_tasks = [tasks[f'SyncPulses{sync}']]
     elif sync == 'bpod':
-        # at the moment we don't have anything for this
-        tasks[f'SyncPulses{sync}'] = type(f'SyncPulses{sync}', (epp.EphysPulses,), {})(**kwargs)
+        pass
+        # ATM we don't have anything for this not sure it will be needed in the future
 
     # Behavior tasks
     for protocol, task_info in acquisition_description.get('tasks', []).items():
@@ -100,16 +104,14 @@ def make_pipeline(session_path=None, **pkwargs):
         if 'passive' in protocol:
             tasks[f'RegisterRaw_{protocol}'] = type(f'RegisterRaw_{protocol}', (btasks.PassiveRegisterRaw,), {})(**kwargs)
             tasks[f'Trials_{protocol}'] = type(f'Trials_{protocol}', (btasks.PassiveRegisterRaw,), {})\
-                (**kwargs, parents=[tasks[f'SyncPulses{sync}'], tasks[f'RegisterRaw_{protocol}']])
+                (**kwargs, parents=[tasks[f'RegisterRaw_{protocol}']] + sync_tasks)
         else:
             tasks[f'RegisterRaw_{protocol}'] = type(f'RegisterRaw_{protocol}', (btasks.TrialRegisterRaw,), {})(**kwargs)
             if sync == 'bpod':
-                tasks[f'Trials_{protocol}'] = type(f'Trials_{protocol}', (btasks.TrainingTrialsBpod,), {}) \
-                    (**kwargs, parents=[tasks[f'RegisterRaw_{protocol}']])
+                tasks[f'Trials_{protocol}'] = type(f'Trials_{protocol}', (btasks.TrainingTrialsBpod,), {})(**kwargs)
             elif sync == 'nidq':
                 tasks[f'Trials_{protocol}'] = type(f'Trials_{protocol}', (btasks.TrainingTrialsFPGA,), {})\
                     (**kwargs, parents=[tasks[f'SyncPulses{sync}'], tasks[f'RegisterRaw_{protocol}']])
-
             tasks["Training Status"] = type("Training Status", (tpp.TrainingStatus,), {})\
                 (session_path=session_path, parents=[tasks[f'Trials_{protocol}']])
 
@@ -122,7 +124,7 @@ def make_pipeline(session_path=None, **pkwargs):
 
             tasks[f'SpikeSorting_{pname}'] = type(
                 f'SpikeSorting_{pname}', (epp.SpikeSorting,), {})(
-                **kwargs, parents=[tasks[f'Compression_{pname}'], tasks[f'SyncPulses{sync}']])
+                **kwargs, parents=[tasks[f'Compression_{pname}']] + sync_tasks)
 
             tasks[f'CellsQC_{pname}'] = type(
                 f'CellsQC_{pname}', (epp.EphysCellsQc,), {})(
@@ -132,7 +134,7 @@ def make_pipeline(session_path=None, **pkwargs):
     if 'cameras' in acquisition_description:
         tasks['VideoCompress'] = type('VideoCompress', (epp.EphysVideoCompress,), {})(session_path=session_path)
         tasks['VideoSync'] = type('VideoSync', (epp.EphysVideoSyncQc,), {})(
-            session_path=session_path, parents=[tasks['VideoCompress'], tasks[f'SyncPulses{sync}']])
+            session_path=session_path, parents=[tasks['VideoCompress']] + sync_tasks)
         tasks['DLC'] = type('DLC', (epp.EphysDLC,), {})(session_path=session_path, parents=[tasks['VideoCompress']])
         tasks['PostDLC'] = type('PostDLC', (epp.EphysPostDLC,), {})(
             session_path=session_path, parents=[tasks['DLC'], tasks['VideoSync']])
@@ -152,7 +154,7 @@ def make_pipeline(session_path=None, **pkwargs):
         tasks['WidefieldCompress'] = type('WidefieldCompress', (wtasks.WidefieldCompress,), {})(session_path=session_path)
         tasks['WidefieldPreprocess'] = type('WidefieldPreprocess', (wtasks.WidefieldPreprocess,), {})(session_path=session_path)
         tasks['WidefieldSync'] = type('WidefieldSync', (wtasks.WidefieldSync,), {})(session_path=session_path,
-                                                                                    parents=[tasks[f'SyncPulses{sync}']])
+                                                                                    parents=sync_tasks)
         tasks['WidefieldFOV'] = type('WidefieldFOV', (wtasks.WidefieldFOV,), {})(session_path=session_path)
 
     p = mtasks.Pipeline(session_path=session_path, **pkwargs)

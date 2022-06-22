@@ -553,7 +553,7 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
     strmodule, strclass = exec_name.rsplit('.', 1)
     classe = getattr(importlib.import_module(strmodule), strclass)
     task = classe(session_path, one=one, taskid=tdict['id'], machine=machine, clobber=clobber,
-                  location=location)
+                  location=location, **tdict.get('arguments', {}))
     # sets the status flag to started before running
     one.alyx.rest('tasks', 'partial_update', id=tdict['id'], data={'status': 'Started'})
     status = task.run()

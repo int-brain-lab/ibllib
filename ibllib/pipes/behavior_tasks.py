@@ -1,6 +1,7 @@
 from pathlib import Path
 from ibllib.pipes import base_tasks, tasks
 from ibllib.io.extractors.ephys_passive import PassiveChoiceWorld
+import ibllib.io.extractors.bpod_trials as bpod_trials
 
 
 class TrialRegisterRaw(base_tasks.RegisterTaskData):
