@@ -22,6 +22,7 @@ from ibllib.io.video import label_from_path, assert_valid_label
 from ibllib.io.extractors import ephys_fpga, ephys_passive, camera
 from ibllib.pipes import tasks
 from ibllib.pipes.training_preprocessing import TrainingRegisterRaw as EphysRegisterRaw
+from ibllib.pipes.training_preprocessing import TrainingStatus as EphysTrainingStatus
 from ibllib.pipes.misc import create_alyx_probe_insertions
 from ibllib.qc.alignment_qc import get_aligned_channels
 from ibllib.qc.task_extractors import TaskQCExtractor
@@ -1287,6 +1288,7 @@ class EphysExtractionPipeline(tasks.Pipeline):
             self.session_path, parents=[tasks["EphysVideoCompress"], tasks["EphysPulses"], tasks["EphysTrials"]])
         tasks["EphysCellsQc"] = EphysCellsQc(self.session_path, parents=[tasks["SpikeSorting"]])
         tasks["EphysDLC"] = EphysDLC(self.session_path, parents=[tasks["EphysVideoCompress"]])
+        tasks['EphysTrainingStatus'] = EphysTrainingStatus(self.session_path, parents=[tasks["EphysTrials"]])
         # level 3
         tasks["EphysPostDLC"] = EphysPostDLC(self.session_path, parents=[tasks["EphysDLC"], tasks["EphysTrials"],
                                                                          tasks["EphysVideoSyncQc"]])

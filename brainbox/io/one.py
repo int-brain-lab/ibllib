@@ -999,7 +999,7 @@ class SpikeSortingLoader:
         spikes = alfio.load_object(self.files['spikes'], wildcards=self.one.wildcards)
         if 'brainLocationIds_ccf_2017' not in channels:
             _channels, self.histology = _load_channel_locations_traj(
-                self.eid, probe=self.pname, one=self.one, brain_atlas=self.atlas, return_source=True)
+                self.eid, probe=self.pname, one=self.one, brain_atlas=self.atlas, return_source=True, aligned=True)
             if _channels:
                 channels = _channels[self.pname]
         else:
