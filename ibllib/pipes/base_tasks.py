@@ -17,9 +17,9 @@ class DynamicTask(Task):
         # Sync extension
         self.sync_ext = self.get_sync_extension(kwargs.get('sync_ext', None))
         # Task collection (this needs to be specified in runtime_args)
-        self.task_collection = self.get_task_collection(kwargs.get('task_collection', None))
+        self.collection = self.get_task_collection(kwargs.get('collection', None))
         # Task type (protocol)
-        self.protocol = self.get_protocol(self.task_collection, kwargs.get('task_collection', None))
+        self.protocol = self.get_protocol(self.collection, kwargs.get('protocol', None))
         # Main task collection (for when task protocols are chained together)
         self.main_task_collection = self.get_main_task_collection(kwargs.get('main_collection', None))
 
@@ -94,26 +94,9 @@ class DynamicTask(Task):
 
 class VideoTask(DynamicTask):
 
-    def __init__(self, session_path, **kwargs):
-
+    def __init__(self, session_path, camera, **kwargs):
         super().__init__(session_path, **kwargs)
-
-        # Cameras
-        self.cameras = self.get_cameras(kwargs.get('cameras', None))
-        self.device_collection = self.get_device_collection('camera', kwargs.get('device_collection', 'raw_video_data'))
-
-    def get_cameras(self, cameras=None):
-
-        params_cameras = sess_params.get_cameras(self.session_params)
-        return cameras if not params_cameras else params_cameras
-
-
-class AudioTask(DynamicTask):
-
-    def __init__(self, session_path, **kwargs):
-        super().__init__(session_path, **kwargs)
-
-        self.device_collection = self.get_device_collection('microphone', kwargs.get('device_collection', 'raw_behavior_data'))
+        self.camera = camera
 
 
 class EphysTask(DynamicTask):
@@ -144,6 +127,10 @@ class RegisterTaskData(DynamicTask):  # TODO write test
      1. input and output must have the same length
      2. output files must have full filename
     """
+    cpu = 1
+    io_charge = 90
+    level = 0
+    force = False
 
     def rename_files(self, symlink_old=False):
 

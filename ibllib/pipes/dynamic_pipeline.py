@@ -5,6 +5,7 @@ import ibllib.pipes.training_preprocessing as tpp
 import ibllib.pipes.widefield_tasks as wtasks
 import ibllib.pipes.sync_tasks as stasks
 import ibllib.pipes.behavior_tasks as btasks
+import ibllib.pipes.video_tasks as vtasks
 import ibllib.io.session_params
 
 
@@ -15,16 +16,17 @@ def acquisition_description_legacy_session():
     """
 
 
-def get_acquisition_description(experiment):
+def get_acquisition_description(protocol):
     """"
     This is a set of example acqusition descriptions for experiments
     -   choice_world_recording
     -   choice_world_biased
     -   choice_world_training
     -   choice_world_habituation
+    -   choice_world_passive
     That are part of the IBL pipeline
     """
-    if experiment == 'choice_world_recording':   # canonical ephys
+    if protocol == 'choice_world_recording':   # canonical ephys
         acquisition_description = {  # this is the current ephys pipeline description
             'cameras': {
                 'right': {'collection': 'raw_video_data', 'sync_label': 'frame2ttl'},
@@ -40,7 +42,7 @@ def get_acquisition_description(experiment):
             },
             'tasks': {
                 'choice_world_training': {'collection': 'raw_behavior_data', 'sync_label': 'bpod', 'main': True},
-                'passive_world_training': {'collection': 'raw_passive_data', 'sync_label': 'bpod', 'main': False},
+                'choice_world_passive': {'collection': 'raw_passive_data', 'sync_label': 'bpod', 'main': False},
             },
             'sync': {
                 'bpod': {'collection': 'raw_behavior_data', 'extension': '.bin'}
@@ -55,7 +57,7 @@ def get_acquisition_description(experiment):
                 'xonar': {'collection': 'raw_behavior_data', 'sync_label': None}
             },
             'tasks': {
-                experiment: {'collection': 'raw_behavior_data', 'sync_label': 'bpod', 'main': True},
+                protocol: {'collection': 'raw_behavior_data', 'sync_label': 'bpod', 'main': True},
             },
             'sync': {
                 'bpod': {'collection': 'raw_behavior_data', 'extension': '.bin'}
@@ -100,18 +102,26 @@ def make_pipeline(session_path=None, **pkwargs):
 
     # Behavior tasks
     for protocol, task_info in acquisition_description.get('tasks', []).items():
-        kwargs = {'session_path': session_path, 'runtime_args': dict(protocol=protocol, task_collection=task_info['collection'])}
-        if 'passive' in protocol:
-            tasks[f'RegisterRaw_{protocol}'] = type(f'RegisterRaw_{protocol}', (btasks.PassiveRegisterRaw,), {})(**kwargs)
-            tasks[f'Trials_{protocol}'] = type(f'Trials_{protocol}', (btasks.PassiveRegisterRaw,), {})\
-                (**kwargs, parents=[tasks[f'RegisterRaw_{protocol}']] + sync_tasks)
+        kwargs = {'session_path': session_path, 'runtime_args': dict(protocol=protocol, collection=task_info['collection'])}
+        # -   choice_world_recording
+        # -   choice_world_biased
+        # -   choice_world_training
+        # -   choice_world_habituation
+        if protocol == 'choice_world_habituation':
+            registration_class = btasks.HabituationRegisterRaw
+            behaviour_class = btasks.HabituationTrialsBpod
+            compute_status = False
+        elif protocol == 'choice_world_passive':
+            registration_class = btasks.PassiveRegisterRaw
+            behaviour_class = btasks.PassiveRegisterRaw
+            compute_status = False
         else:
-            tasks[f'RegisterRaw_{protocol}'] = type(f'RegisterRaw_{protocol}', (btasks.TrialRegisterRaw,), {})(**kwargs)
-            if sync == 'bpod':
-                tasks[f'Trials_{protocol}'] = type(f'Trials_{protocol}', (btasks.TrainingTrialsBpod,), {})(**kwargs)
-            elif sync == 'nidq':
-                tasks[f'Trials_{protocol}'] = type(f'Trials_{protocol}', (btasks.TrainingTrialsFPGA,), {})\
-                    (**kwargs, parents=[tasks[f'SyncPulses{sync}'], tasks[f'RegisterRaw_{protocol}']])
+            raise NotImplementedError
+        tasks[f'RegisterRaw_{protocol}'] = type(f'RegisterRaw_{protocol}', (registration_class,), {})(**kwargs)
+        parents = [tasks[f'RegisterRaw_{protocol}']] + sync_tasks
+        tasks[f'Trials_{protocol}'] = type(
+            f'Trials_{protocol}', (behaviour_class,), {})(**kwargs, parents=parents)
+        if compute_status:
             tasks["Training Status"] = type("Training Status", (tpp.TrainingStatus,), {})\
                 (session_path=session_path, parents=[tasks[f'Trials_{protocol}']])
 
@@ -132,12 +142,18 @@ def make_pipeline(session_path=None, **pkwargs):
 
     # Video tasks
     if 'cameras' in acquisition_description:
-        tasks['VideoCompress'] = type('VideoCompress', (epp.EphysVideoCompress,), {})(session_path=session_path)
-        tasks['VideoSync'] = type('VideoSync', (epp.EphysVideoSyncQc,), {})(
-            session_path=session_path, parents=[tasks['VideoCompress']] + sync_tasks)
-        tasks['DLC'] = type('DLC', (epp.EphysDLC,), {})(session_path=session_path, parents=[tasks['VideoCompress']])
+        for cam_name, cam_args in acquisition_description['cameras'].items():
+            kwargs = {'session_path': session_path, 'camera': cam_name, 'runtime_args': cam_args}
+            tasks[tn] = type((tn := f'VideoRegisterRaw_{cam_name}'), (vtasks.VideoRegisterRaw,), {})(**kwargs)
+            tasks[tn] = type((tn := f'VideoCompress_{cam_name}'), (vtasks.VideoCompress,), {})(
+                **kwargs, parents=[tasks[f'VideoRegisterRaw_{cam_name}']] + sync_tasks)
+            tasks[tn] = type((tn := f'VideoSync_{cam_name}'), (vtasks.VideoSyncQc,), {})(
+                **kwargs, parents=[tasks[f'VideoCompress_{cam_name}']] + sync_tasks)
+
+        tasks[tn] = type((tn := 'DLC'), (epp.EphysDLC,), {})(
+            session_path=session_path, parents=[tasks[k] for k in tasks if k.startswith('VideoCompress')])
         tasks['PostDLC'] = type('PostDLC', (epp.EphysPostDLC,), {})(
-            session_path=session_path, parents=[tasks['DLC'], tasks['VideoSync']])
+            session_path=session_path, parents=[tasks['DLC']] + [tasks[k] for k in tasks if k.startswith('VideoSync')])
 
     # Audio tasks
     if 'microphone' in acquisition_description:

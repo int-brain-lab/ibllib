@@ -9,7 +9,7 @@ from ibllib.qc.camera import run_all_qc as run_camera_qc
 _logger = logging.getLogger('ibllib')
 
 
-class VideoRegisterRaw(base_tasks.VideoTask, base_tasks.RegisterTask):
+class VideoRegisterRaw(base_tasks.VideoTask, base_tasks.RegisterTaskData):
     """
     Task to register raw video data. Builds up list of files to register from list of cameras given in session params file
     """
@@ -38,7 +38,7 @@ class VideoCompress(base_tasks.VideoTask):
     force = False
 
     def dynamic_signatures(self):
-        input_signatures = [(f'_iblrig_{cam}Camera.raw.*', self.device_collection, True) for cam in self.cameras]
+        input_signatures = (f'_iblrig_{self.camera}Camera.raw.*', self.task_collection, True),
         output_signatures = [(f'_iblrig_{cam}Camera.raw.mp4', self.device_collection, True) for cam in self.cameras]
 
         return input_signatures, output_signatures

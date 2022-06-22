@@ -2,45 +2,96 @@ from pathlib import Path
 from ibllib.pipes import base_tasks, tasks
 from ibllib.io.extractors.ephys_passive import PassiveChoiceWorld
 import ibllib.io.extractors.bpod_trials as bpod_trials
+from ibllib.qc.task_extractors import TaskQCExtractor
+from ibllib.qc.task_metrics import HabituationQC
 
 
-class TrialRegisterRaw(base_tasks.RegisterTaskData):
-    cpu = 1
-    io_charge = 90
-    level = 0
-    force = False
+class HabituationRegisterRaw(base_tasks.RegisterTaskData):
 
     def dynamic_signatures(self):
         input_signatures = []
-        output_signatures = [('_iblrig_taskData.raw.*', self.task_collection, True),
-                             ('_iblrig_taskSettings.raw.*', self.task_collection, True),
-                             ('_iblrig_encoderEvents.raw*', self.task_collection, True),
-                             ('_iblrig_encoderPositions.raw*', self.task_collection, True),
-                             ('_iblrig_encoderTrialInfo.raw*', self.task_collection, True),
-                             ('_iblrig_stimPositionScreen.raw*', self.task_collection, True),
-                             ('_iblrig_syncSquareUpdate.raw*', self.task_collection, True),
-                             ('_iblrig_ambientSensorData.raw*', self.task_collection, True)]
+        output_signatures = [
+            ('_iblrig_taskData.raw.*', self.collection, True),
+            ('_iblrig_taskSettings.raw.*', self.collection, True),
+            ('_iblrig_encoderEvents.raw*', self.collection, True),
+        ]
+        return input_signatures, output_signatures
+
+
+class TrialRegisterRaw(base_tasks.RegisterTaskData):
+
+    def dynamic_signatures(self):
+        input_signatures = []
+        output_signatures = [('_iblrig_taskData.raw.*', self.collection, True),
+                             ('_iblrig_taskSettings.raw.*', self.collection, True),
+                             ('_iblrig_encoderEvents.raw*', self.collection, True),
+                             ('_iblrig_encoderPositions.raw*', self.collection, True),
+                             ('_iblrig_encoderTrialInfo.raw*', self.collection, True),
+                             ('_iblrig_stimPositionScreen.raw*', self.collection, True),
+                             ('_iblrig_syncSquareUpdate.raw*', self.collection, True),
+                             ('_iblrig_ambientSensorData.raw*', self.collection, True)]
 
         return input_signatures, output_signatures
 
 
 class PassiveRegisterRaw(base_tasks.RegisterTaskData):
-    cpu = 1
-    io_charge = 90
-    level = 0
-    force = False
 
     def dynamic_signatures(self):
         input_signatures = []
-        output_signatures = [('_iblrig_taskSettings.raw.*', self.task_collection, True),
-                             ('_iblrig_encoderEvents.raw*', self.task_collection, True),
-                             ('_iblrig_encoderPositions.raw*', self.task_collection, True),
-                             ('_iblrig_encoderTrialInfo.raw*', self.task_collection, True),
-                             ('_iblrig_stimPositionScreen.raw*', self.task_collection, True),
-                             ('_iblrig_syncSquareUpdate.raw*', self.task_collection, True),
-                             ('_iblrig_RFMapStim.raw*', self.task_collection, True)]
+        output_signatures = [('_iblrig_taskSettings.raw.*', self.collection, True),
+                             ('_iblrig_encoderEvents.raw*', self.collection, True),
+                             ('_iblrig_encoderPositions.raw*', self.collection, True),
+                             ('_iblrig_encoderTrialInfo.raw*', self.collection, True),
+                             ('_iblrig_stimPositionScreen.raw*', self.collection, True),
+                             ('_iblrig_syncSquareUpdate.raw*', self.collection, True),
+                             ('_iblrig_RFMapStim.raw*', self.collection, True)]
 
         return input_signatures, output_signatures
+
+
+class HabituationTrialsBpod(base_tasks.DynamicTask):
+    priority = 90
+    level = 0
+    force = False
+
+    @property
+    def signature(self):
+        signature = {
+            'input_files': [
+                ('_iblrig_taskData.raw.*', self.collection, True),
+                ('_iblrig_taskSettings.raw.*', self.collection, True),
+            ],
+            'output_files': [
+                ('*trials.contrastLeft.npy', 'alf', True),
+                ('*trials.contrastRight.npy', 'alf', True),
+                ('*trials.feedback_times.npy', 'alf', True),
+                ('*trials.feedbackType.npy', 'alf', True),
+                ('*trials.goCue_times.npy', 'alf', True),
+                ('*trials.goCueTrigger_times.npy', 'alf', True),
+                ('*trials.intervals.npy', 'alf', True),
+                ('*trials.rewardVolume.npy', 'alf', True),
+                ('*trials.stimOff_times.npy', 'alf', True),
+                ('*trials.stimOn_times.npy', 'alf', True),
+                ('*trials.stimOnTrigger_times.npy', 'alf', True),
+            ]
+        }
+        return signature
+
+    def _run(self):
+        """
+        Extracts an iblrig training session
+        """
+        trials, wheel, output_files = bpod_trials.extract_all(self.session_path, save=True)
+        if trials is None:
+            return None
+        if self.one is None or self.one.offline:
+            return output_files
+        # Run the task QC
+        # Compile task data for QC
+        qc = HabituationQC(self.session_path, one=self.one)
+        qc.extractor = TaskQCExtractor(self.session_path, one=self.one)
+        qc.run(update=True)
+        return output_files
 
 
 class TrainingTrialsBpod(base_tasks.DynamicTask):

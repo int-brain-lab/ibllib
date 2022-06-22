@@ -55,6 +55,7 @@ class Task(abc.ABC):
         self.register_kwargs = {}
         if parents:
             self.parents = parents
+            self.level = max([p.level for p in self.parents]) + 1
         else:
             self.parents = []
         self.machine = machine
