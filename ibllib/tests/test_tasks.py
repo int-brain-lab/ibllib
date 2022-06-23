@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 from collections import OrderedDict
 
-from ibllib.misc import version
+from ibllib import __version__ as ibllib_version
 import ibllib.pipes.tasks
 from one.api import ONE
 from ibllib.tests import TEST_DB
@@ -31,8 +31,8 @@ desired_statuses = {
 
 desired_datasets = ['spikes.times.npy', 'spikes.amps.npy', 'spikes.clusters.npy']
 desired_versions = {'spikes.times.npy': 'custom_job00',
-                    'spikes.amps.npy': version.ibllib(),
-                    'spikes.clusters.npy': version.ibllib()}
+                    'spikes.amps.npy': ibllib_version,
+                    'spikes.clusters.npy': ibllib_version}
 desired_logs = 'Running on machine: testmachine'
 desired_logs_rerun = {
     'Task00': 1,
@@ -190,14 +190,16 @@ class TestPipelineAlyx(unittest.TestCase):
 
         # also checks that the datasets have been labeled with the proper version
         dsets = one.alyx.rest('datasets', 'list', session=eid, no_cache=True)
-        check_versions = [desired_versions[d['name']] == d['version'] for d in dsets]
-        self.assertTrue(all(check_versions))
+        for d in dsets:
+            with self.subTest(d['name']):
+                self.assertEqual(desired_versions[d['name']], d['version'])
 
         # make sure that re-running the make job by default doesn't change complete jobs
         pipeline.create_alyx_tasks()
         task_deck = one.alyx.rest('tasks', 'list', session=eid, no_cache=True)
-        check_statuses = [desired_statuses[t['name']] == t['status'] for t in task_deck]
-        self.assertTrue(all(check_statuses))
+        for t in task_deck:
+            with self.subTest(t['name']):
+                self.assertEqual(desired_statuses[t['name']], t['status'])
 
         # test the rerun option
         task_deck, dsets = pipeline.rerun_failed(machine='testmachine')
