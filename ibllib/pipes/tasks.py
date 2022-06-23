@@ -35,7 +35,7 @@ class Task(abc.ABC):
     force = False  # whether or not to re-download missing input files on local server if not present
 
     def __init__(self, session_path, parents=None, taskid=None, one=None,
-                 machine=None, clobber=True, location='server', runtime_args=None, **kwargs):
+                 machine=None, clobber=True, location='server', **kwargs):
         """
         Base task class
         :param session_path: session path
@@ -62,7 +62,7 @@ class Task(abc.ABC):
         self.clobber = clobber
         self.location = location
         self.plot_tasks = []  # Plotting task/ tasks to create plot outputs during the task
-        self.runtime_args = runtime_args or {}
+        self.kwargs = kwargs
 
     @property
     def name(self):
@@ -461,7 +461,7 @@ class Pipeline(abc.ABC):
                          'ram': t.ram, 'module': self.label, 'parents': parents_ids,
                          'level': t.level, 'time_out_sec': t.time_out_secs, 'session': self.eid,
                          'status': 'Waiting', 'log': None, 'name': t.name, 'graph': self.name,
-                         'arguments': t.runtime_args}
+                         'arguments': t.kwargs}
             # if the task already exists, patch it otherwise, create it
             talyx = next(filter(lambda x: x["name"] == t.name, tasks_alyx_pre), [])
             if len(talyx) == 0:

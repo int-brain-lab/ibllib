@@ -20,8 +20,8 @@ class VideoRegisterRaw(base_tasks.VideoTask, base_tasks.RegisterRawDataTask):
 
     def dynamic_signatures(self):
         input_signatures = []
-        output_signatures = [(f'_iblrig_{cam}Camera.timestamps*', self.device_collection, True) for cam in self.cameras] +\
-                            [(f'_iblrig_{cam}Camera.GPIO.bin', self.device_collection, True) for cam in self.cameras] +\
+        output_signatures = [(f'_iblrig_{cam}Camera.timestamps*', self.collection, True) for cam in self.cameras] +\
+                            [(f'_iblrig_{cam}Camera.GPIO.bin', self.collection, True) for cam in self.cameras] +\
                             [(f'_iblrig_{cam}Camera.frame_counter.bin', self.device_collection, True) for cam in self.cameras] + \
                             [(f'_iblrig_{cam}Camera.frameData.bin', self.device_collection, False) for cam in self.cameras] + \
                             [('_iblrig_videoCodeFiles.raw*', self.device_collection, False)]

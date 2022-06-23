@@ -18,41 +18,7 @@ class HabituationRegisterRaw(base_tasks.RegisterTaskData):
         return input_signatures, output_signatures
 
 
-class TrialRegisterRaw(base_tasks.RegisterTaskData):
-
-    def dynamic_signatures(self):
-        input_signatures = []
-        output_signatures = [('_iblrig_taskData.raw.*', self.collection, True),
-                             ('_iblrig_taskSettings.raw.*', self.collection, True),
-                             ('_iblrig_encoderEvents.raw*', self.collection, True),
-                             ('_iblrig_encoderPositions.raw*', self.collection, True),
-                             ('_iblrig_encoderTrialInfo.raw*', self.collection, True),
-                             ('_iblrig_stimPositionScreen.raw*', self.collection, True),
-                             ('_iblrig_syncSquareUpdate.raw*', self.collection, True),
-                             ('_iblrig_ambientSensorData.raw*', self.collection, True)]
-
-        return input_signatures, output_signatures
-
-
-class PassiveRegisterRaw(base_tasks.RegisterTaskData):
-
-    def dynamic_signatures(self):
-        input_signatures = []
-        output_signatures = [('_iblrig_taskSettings.raw.*', self.collection, True),
-                             ('_iblrig_encoderEvents.raw*', self.collection, True),
-                             ('_iblrig_encoderPositions.raw*', self.collection, True),
-                             ('_iblrig_encoderTrialInfo.raw*', self.collection, True),
-                             ('_iblrig_stimPositionScreen.raw*', self.collection, True),
-                             ('_iblrig_syncSquareUpdate.raw*', self.collection, True),
-                             ('_iblrig_RFMapStim.raw*', self.collection, True)]
-
-        return input_signatures, output_signatures
-
-
 class HabituationTrialsBpod(base_tasks.DynamicTask):
-    priority = 90
-    level = 0
-    force = False
 
     @property
     def signature(self):
@@ -92,6 +58,37 @@ class HabituationTrialsBpod(base_tasks.DynamicTask):
         qc.extractor = TaskQCExtractor(self.session_path, one=self.one)
         qc.run(update=True)
         return output_files
+
+
+class TrialRegisterRaw(base_tasks.RegisterTaskData):
+
+    def dynamic_signatures(self):
+        input_signatures = []
+        output_signatures = [('_iblrig_taskData.raw.*', self.collection, True),
+                             ('_iblrig_taskSettings.raw.*', self.collection, True),
+                             ('_iblrig_encoderEvents.raw*', self.collection, True),
+                             ('_iblrig_encoderPositions.raw*', self.collection, True),
+                             ('_iblrig_encoderTrialInfo.raw*', self.collection, True),
+                             ('_iblrig_stimPositionScreen.raw*', self.collection, True),
+                             ('_iblrig_syncSquareUpdate.raw*', self.collection, True),
+                             ('_iblrig_ambientSensorData.raw*', self.collection, True)]
+
+        return input_signatures, output_signatures
+
+
+class PassiveRegisterRaw(base_tasks.RegisterTaskData):
+
+    def dynamic_signatures(self):
+        input_signatures = []
+        output_signatures = [('_iblrig_taskSettings.raw.*', self.collection, True),
+                             ('_iblrig_encoderEvents.raw*', self.collection, True),
+                             ('_iblrig_encoderPositions.raw*', self.collection, True),
+                             ('_iblrig_encoderTrialInfo.raw*', self.collection, True),
+                             ('_iblrig_stimPositionScreen.raw*', self.collection, True),
+                             ('_iblrig_syncSquareUpdate.raw*', self.collection, True),
+                             ('_iblrig_RFMapStim.raw*', self.collection, True)]
+
+        return input_signatures, output_signatures
 
 
 class TrainingTrialsBpod(base_tasks.DynamicTask):
@@ -192,8 +189,8 @@ class TrainingTrialsFPGA(tasks.Task):
         )
 
     def _extract_behaviour(self):
-        sync_collection = self.runtime_args.get('sync_collection', 'raw_ephys_data')
-        protocol_collection = self.runtime_args.get('protocol_collection', 'raw_behavior_data')
+        sync_collection = self.kwargs.get('sync_collection', 'raw_ephys_data')
+        protocol_collection = self.kwargs.get('protocol_collection', 'raw_behavior_data')
         dsets, out_files = ephys_fpga.extract_all(self.session_path, sync_collection, save=True)
 
         return dsets, out_files

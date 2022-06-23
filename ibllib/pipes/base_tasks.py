@@ -16,7 +16,7 @@ class DynamicTask(Task):
         self.sync = self.get_sync(kwargs.get('sync', None))
         # Sync extension
         self.sync_ext = self.get_sync_extension(kwargs.get('sync_ext', None))
-        # Task collection (this needs to be specified in runtime_args)
+        # Task collection (this needs to be specified in the task kwargs)
         self.collection = self.get_task_collection(kwargs.get('collection', None))
         # Task type (protocol)
         self.protocol = self.get_protocol(self.collection, kwargs.get('protocol', None))
@@ -48,7 +48,7 @@ class DynamicTask(Task):
         :return:
         """
         # Attempt to get from runtime_args embedded in task architecture
-        task_collection = self.runtime_args.get('task_collection', task_collection)
+        task_collection = self.kwargs.get('task_collection', task_collection)
 
         if not task_collection:
             task_collection = sess_params.get_main_task_collection(self.session_params)
@@ -94,9 +94,10 @@ class DynamicTask(Task):
 
 class VideoTask(DynamicTask):
 
-    def __init__(self, session_path, camera, **kwargs):
+    def __init__(self, session_path, **kwargs):
         super().__init__(session_path, **kwargs)
-        self.camera = camera
+        assert 'cameras' in kwargs
+        self.cameras = kwargs['cameras']
 
 
 class EphysTask(DynamicTask):
@@ -108,7 +109,7 @@ class EphysTask(DynamicTask):
         self.device_collection = self.get_device_collection('neuropixel', kwargs.get('device_collection', 'raw_ephys_data'))
 
     def get_pname(self, pname):
-        pname = self.runtime_args.get('pname', pname)
+        pname = self.kwargs.get('pname', pname)
 
         return pname
 

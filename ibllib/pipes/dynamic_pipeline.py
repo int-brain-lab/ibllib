@@ -86,7 +86,7 @@ def make_pipeline(session_path=None, **pkwargs):
     # Syncing tasks
     (sync, sync_args), = acquisition_description['sync'].items()
     sync_args['task_collection'] = sync_args.pop('collection')  # rename the key so it matches task run arguments
-    kwargs = {'session_path': session_path, 'runtime_args': sync_args}
+    kwargs = {'session_path': session_path, **sync_args}
     sync_tasks = []
     if sync == 'nidq' and sync_args['task_collection'] == 'raw_ephys_data':
         tasks[f'SyncPulses{sync}'] = type(f'SyncPulses{sync}', (epp.EphysPulses,), {})(**kwargs)
@@ -102,7 +102,7 @@ def make_pipeline(session_path=None, **pkwargs):
 
     # Behavior tasks
     for protocol, task_info in acquisition_description.get('tasks', []).items():
-        kwargs = {'session_path': session_path, 'runtime_args': dict(protocol=protocol, collection=task_info['collection'])}
+        kwargs = {'session_path': session_path, 'protocol': protocol, 'collection':task_info['collection']}
         # -   choice_world_recording
         # -   choice_world_biased
         # -   choice_world_training
@@ -128,7 +128,7 @@ def make_pipeline(session_path=None, **pkwargs):
     # Ephys tasks
     if 'neuropixel' in acquisition_description:
         for pname, rpath in acquisition_description['neuropixel'].items():
-            kwargs = {'session_path': session_path, 'runtime_args': dict(pname=pname)}
+            kwargs = {'session_path': session_path, 'pname': pname}
             tasks[f'Compression_{pname}'] = type(
                 f'Compression_{pname}', (epp.EphysMtscomp,), {})(**kwargs)
 
@@ -143,7 +143,7 @@ def make_pipeline(session_path=None, **pkwargs):
     # Video tasks
     if 'cameras' in acquisition_description:
         for cam_name, cam_args in acquisition_description['cameras'].items():
-            kwargs = {'session_path': session_path, 'camera': cam_name, 'runtime_args': cam_args}
+            kwargs = {'session_path': session_path, 'camera': cam_name, **cam_args}
             tasks[tn] = type((tn := f'VideoRegisterRaw_{cam_name}'), (vtasks.VideoRegisterRaw,), {})(**kwargs)
             tasks[tn] = type((tn := f'VideoCompress_{cam_name}'), (vtasks.VideoCompress,), {})(
                 **kwargs, parents=[tasks[f'VideoRegisterRaw_{cam_name}']] + sync_tasks)
