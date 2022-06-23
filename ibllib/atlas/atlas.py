@@ -112,31 +112,31 @@ class BrainCoordinates:
 
     def x2i(self, x, round=True, mode='raise'):
         i = np.asarray(self._round((x - self.x0) / self.dx, round=round))
-        if mode == 'clip':
-            i[i < 0] = 0
-            i[i >= self.nx] = self.nx - 1
-        elif mode == 'raise':
-            if np.any(i < 0) or np.any(i >= self.nx):
+        if np.any(i < 0) or np.any(i >= self.nx):
+            if mode == 'clip':
+                i[i < 0] = 0
+                i[i >= self.nx] = self.nx - 1
+            elif mode == 'raise':
                 raise ValueError("At least one x value lies outside of the atlas volume.")
         return i
 
     def y2i(self, y, round=True, mode='raise'):
         i = np.asarray(self._round((y - self.y0) / self.dy, round=round))
-        if mode == 'clip':
-            i[i < 0] = 0
-            i[i >= self.ny] = self.ny - 1
-        elif mode == 'raise':
-            if np.any(i < 0) or np.any(i >= self.ny):
+        if np.any(i < 0) or np.any(i >= self.ny):
+            if mode == 'clip':
+                i[i < 0] = 0
+                i[i >= self.ny] = self.ny - 1
+            elif mode == 'raise':
                 raise ValueError("At least one y value lies outside of the atlas volume.")
         return i
 
     def z2i(self, z, round=True, mode='raise'):
         i = np.asarray(self._round((z - self.z0) / self.dz, round=round))
-        if mode == 'clip':
-            i[i < 0] = 0
-            i[i >= self.nz] = self.nz - 1
-        elif mode == 'raise':
-            if np.any(i < 0) or np.any(i >= self.nz):
+        if np.any(i < 0) or np.any(i >= self.nz):
+            if mode == 'clip':
+                i[i < 0] = 0
+                i[i >= self.nz] = self.nz - 1
+            elif mode == 'raise':
                 raise ValueError("At least one z value lies outside of the atlas volume.")
         return i
 
@@ -465,7 +465,12 @@ class BrainAtlas:
         :param mapping: mapping to use. Options can be found using ba.regions.mappings.keys()
         :return: 2d array or 3d RGB numpy int8 array
         """
-        index = self.bc.xyz2i(np.array([coordinate] * 3))[axis]
+        if axis == 0:
+            index = self.bc.x2i(np.array(coordinate), mode=mode)
+        elif axis == 1:
+            index = self.bc.y2i(np.array(coordinate), mode=mode)
+        elif axis == 2:
+            index = self.bc.z2i(np.array(coordinate), mode=mode)
 
         # np.take is 50 thousand times slower than straight slicing !
         def _take(vol, ind, axis):
