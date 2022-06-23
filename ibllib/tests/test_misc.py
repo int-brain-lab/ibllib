@@ -1,17 +1,7 @@
 import unittest
 import logging
-import time
 
-from ibllib.misc import (version, print_progress)
-
-
-class TestPrintProgress(unittest.TestCase):
-
-    def test_simple_print(self):
-        print('waitbar')
-        for p in range(10):
-            time.sleep(0.05)
-            print_progress(p, 9)
+from ibllib.misc import version
 
 
 class TestVersionTags(unittest.TestCase):

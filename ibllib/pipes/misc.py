@@ -932,8 +932,7 @@ def get_new_filename(filename: str) -> str:
     if len(parts) < 3:
         raise ValueError(fr'unrecognized filename "{filename}"')
     pattern = r'.*(?P<gt>_g\d+_t\d+)'
-    match = re.match(pattern, parts[0])
-    if not match:  # py 3.8
+    if not (match := re.match(pattern, parts[0])):
         raise ValueError(fr'unrecognized filename "{filename}"')
     return '.'.join([root + match.group(1), *parts[1:]])
 
