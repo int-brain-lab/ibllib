@@ -120,7 +120,7 @@ class WidefieldTask(DynamicTask):
         self.device_collection = self.get_device_collection('widefield', kwargs.get('device_collection', 'raw_widefield_data'))
 
 
-class RegisterTaskData(DynamicTask):  # TODO write test
+class RegisterRawDataTask(DynamicTask):  # TODO write test
     """
     Base register raw task.
     To rename files

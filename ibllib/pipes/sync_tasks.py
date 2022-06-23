@@ -9,7 +9,7 @@ import spikeglx
 _logger = logging.getLogger('ibllib')
 
 
-class SyncRegisterRaw(base_tasks.RegisterTaskData):
+class SyncRegisterRaw(base_tasks.RegisterRawDataTask):
     """
     Task to register raw daq data
     """
@@ -41,15 +41,39 @@ class SyncMtscomp(base_tasks.DynamicTask):
     def _run(self):
 
         out_files = []
-        # search for .bin files in the sync_collection folder
+
+        # Detect the wiring file and rename (if it hasn't already been renamed)
+        wiring_file = next(self.session_path.joinpath(self.sync_collection).glob('*.wiring.json'), None)
+        if wiring_file is not None:
+            if 'daq.raw' not in wiring_file.stem:
+                new_wiring_file = wiring_file.parent.joinpath(f'daq.raw.{self.sync}.wiring.json')
+                wiring_file.replace(new_wiring_file)
+            else:
+                new_wiring_file = wiring_file
+
+            out_files.append(new_wiring_file)
+
+        # Search for .bin files in the sync_collection folder
         files = spikeglx.glob_ephys_files(self.session_path.joinpath(self.sync_collection))
         assert len(files) == 1
         bin_file = files[0].get('nidq', None)
 
+        # If we don't have a .bin/ .cbin file anymore see if we can still find the .ch and .meta files
         if bin_file is None:
-            return
+            for ext in ['ch', 'meta']:
+                files = spikeglx.glob_ephys_files(self.session_path.joinpath(self.sync_collection), ext=ext)
+                ext_file = files[0].get('nidq', None)
+                if ext_file is not None:
+                    if 'daq.raw' not in ext_file.stem:
+                        new_ext_file = ext_file.parent.joinpath(f'daq.raw.{self.sync}{ext_file.suffix}')
+                        ext_file.replace(new_ext_file)
+                    else:
+                        new_ext_file = ext_file
+                    out_files.append(new_ext_file)
 
-        # Compress files (only if they haven't already been compressed)
+            return out_files if len(out_files) > 0 else None
+
+        # If we do find the .bin file, compress files (only if they haven't already been compressed)
         sr = spikeglx.Reader(bin_file)
         if sr.is_mtscomp:
             sr.close()
@@ -62,7 +86,7 @@ class SyncMtscomp(base_tasks.DynamicTask):
 
         # Rename files (only if they haven't already been renamed)
         if 'daq.raw' not in cbin_file.stem:
-            new_bin_file = cbin_file.parent.joinpath(f'daq.raw.{self.sync}' + cbin_file.suffix)
+            new_bin_file = cbin_file.parent.joinpath(f'daq.raw.{self.sync}{cbin_file.suffix}')
             cbin_file.replace(new_bin_file)
 
             meta_file = cbin_file.with_suffix('.meta')
@@ -80,17 +104,6 @@ class SyncMtscomp(base_tasks.DynamicTask):
         out_files.append(new_bin_file)
         out_files.append(new_ch_file)
         out_files.append(new_meta_file)
-
-        # Rename the wiring file (if it hasn't already been renamed)
-        wiring_file = next(self.session_path.joinpath(self.sync_collection).glob('*.wiring.json'), None)
-        if wiring_file is not None:
-            if 'daq.raw' not in wiring_file.stem:
-                new_wiring_file = wiring_file.parent.joinpath(f'daq.raw.{self.sync}.wiring.json')
-                wiring_file.replace(new_wiring_file)
-            else:
-                new_wiring_file = wiring_file
-
-            out_files.append(new_wiring_file)
 
         return out_files
 

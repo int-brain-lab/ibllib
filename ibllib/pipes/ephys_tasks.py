@@ -26,8 +26,9 @@ _logger = logging.getLogger("ibllib")
 
 
 class EphysRegisterRaw(base_tasks.DynamicTask):
+    # TODO test
     """
-    Creates the probe insertions and uploads the probe descriptions file
+    Creates the probe insertions and uploads the probe descriptions file, also compresses the nidq files and uploads
     """
 
     signature = {'input_signatures': [],
@@ -40,7 +41,69 @@ class EphysRegisterRaw(base_tasks.DynamicTask):
         return out_files
 
 
+class EphysSyncRegisterRaw(base_tasks.DynamicTask):
+    """
+    Task to rename, compress and register raw daq data with .bin format collected using NIDAQ
+    """
+
+    def dynamic_signatures(self):
+        input_signature = [('*.*bin', self.sync_collection, True),
+                           ('*.meta', self.sync_collection, True),
+                           ('*.wiring.json', self.sync_collection, True)]
+        output_signature = [(f'*nidq.cbin', self.sync_collection, True),
+                            (f'*nidq.ch', self.sync_collection, True),
+                            (f'*nidq.meta', self.sync_collection, True),
+                            (f'*nidq.wiring.json', self.sync_collection, True)]
+
+        return input_signature, output_signature
+
+    def _run(self):
+
+        out_files = []
+
+        # Detect the wiring file
+        wiring_file = next(self.session_path.joinpath(self.sync_collection).glob('*.wiring.json'), None)
+        if wiring_file is not None:
+            out_files.append(wiring_file)
+
+        # Search for .bin files in the sync_collection folder
+        files = spikeglx.glob_ephys_files(self.session_path.joinpath(self.sync_collection))
+        assert len(files) == 1
+        bin_file = files[0].get('nidq', None)
+
+        # If we don't have a .bin/ .cbin file anymore see if we can still find the .ch and .meta files
+        if bin_file is None:
+            for ext in ['ch', 'meta']:
+                files = spikeglx.glob_ephys_files(self.session_path.joinpath(self.sync_collection), ext=ext)
+                ext_file = files[0].get('nidq', None)
+                if ext_file is not None:
+                    out_files.append(ext_file)
+
+            return out_files if len(out_files) > 0 else None
+
+        # If we do find the .bin file, compress files (only if they haven't already been compressed)
+        sr = spikeglx.Reader(bin_file)
+        if sr.is_mtscomp:
+            sr.close()
+            cbin_file = bin_file
+            assert cbin_file.suffix == '.cbin'
+        else:
+            cbin_file = sr.compress_file()
+            sr.close()
+            bin_file.unlink()
+
+        meta_file = cbin_file.with_suffix('.meta')
+        ch_file = cbin_file.with_suffix('.ch')
+
+        out_files.append(cbin_file)
+        out_files.append(ch_file)
+        out_files.append(meta_file)
+
+        return out_files
+
+
 class EphysCompressNP1(base_tasks.EphysTask):
+
     def dynamic_signatures(self):
         input_signatures = [('*ap.meta', f'{self.device_collection}/{self.pname}', True),
                             ('*ap.*bin', f'{self.device_collection}/{self.pname}', True),
@@ -60,9 +123,16 @@ class EphysCompressNP1(base_tasks.EphysTask):
 
     def _run(self):
 
-        # TODO test
         out_files = []
+
+        # Detect and upload the wiring file
+        wiring_file = next(self.session_path.joinpath(self.device_collection, self.pname).glob('*wiring.json'), None)
+        if wiring_file is not None:
+            out_files.append(wiring_file)
+
         ephys_files = spikeglx.glob_ephys_files(self.session_path.joinpath(self.device_collection, self.pname))
+        ephys_files += spikeglx.glob_ephys_files(self.session_path.joinpath(self.device_collection, self.pname), ext="ch")
+        ephys_files += spikeglx.glob_ephys_files(self.session_path.joinpath(self.device_collection, self.pname), ext="meta")
 
         for ef in ephys_files:
             for typ in ["ap", "lf"]:
@@ -70,32 +140,27 @@ class EphysCompressNP1(base_tasks.EphysTask):
                 if not bin_file:
                     continue
                 if bin_file.suffix.find("bin") == 1:
-                    sr = spikeglx.Reader(bin_file)
-                    if sr.is_mtscomp:
-                        out_files.append(bin_file)
-                    else:
-                        _logger.info(f"Compressing binary file {bin_file}")
-                        out_files.append(sr.compress_file(keep_original=False))
+                    with spikeglx.Reader(bin_file) as sr:
+                        if sr.is_mtscomp:
+                            out_files.append(bin_file)
+                        else:
+                            _logger.info(f"Compressing binary file {bin_file}")
+                            cbin_file = sr.compress_file()
+                            sr.close()
+                            bin_file.unlink()
+                            out_files.append(cbin_file)
+                            out_files.append(cbin_file.with_suffix('.ch'))
                 else:
                     out_files.append(bin_file)
-
-            out_files.append(bin_file.with_suffix('.ch'))
-            out_files.append(bin_file.with_suffix('.meta'))
-
-        # Also detect and upload the wiring file
-        wiring_file = next(self.session_path.joinpath(self.device_collection, self.pname).glob('*wiring.json'), None)
-        if wiring_file is not None:
-            out_files.append(wiring_file)
 
         return out_files
 
 
 class EphysCompressNP21(base_tasks.EphysTask):
+
     def dynamic_signatures(self):
         input_signatures = [('*ap.meta', f'{self.device_collection}/{self.pname}', True),
                             ('*ap.*bin', f'{self.device_collection}/{self.pname}', True),
-                            ('*lf.meta', f'{self.device_collection}/{self.pname}', True),
-                            ('*lf.*bin', f'{self.device_collection}/{self.pname}', True),
                             ('*wiring.json', f'{self.device_collection}/{self.pname}', False)]
 
         output_signatures = [('*ap.meta', f'{self.device_collection}/{self.pname}', True),
@@ -110,32 +175,59 @@ class EphysCompressNP21(base_tasks.EphysTask):
 
     def _run(self):
 
-        files = spikeglx.glob_ephys_files(self.session_path.joinpath(self.device_collection, self.pname))
-        assert len(files) == 1  # This will fail if the session is split
-        bin_file = files[0].get('ap', None)
+        out_files = []
+        # Detect wiring files
+        wiring_file = next(self.session_path.joinpath(self.device_collection, self.pname).glob('*wiring.json'), None)
+        if wiring_file is not None:
+            out_files.append(wiring_file)
 
-        np_conv = neuropixel.NP2Converter(bin_file, compress=True)
-        np_conv_status = np_conv.process()
-        out_files = np_conv.get_processed_files()
+        ephys_files = spikeglx.glob_ephys_files(self.session_path.joinpath(self.device_collection, self.pname))
+        if len(ephys_files) > 0:
+            bin_file = ephys_files[0].get('ap', None)
 
-        if np_conv_status == 1:
-            # Add the wiring file to the output if it exists
-            wiring_file = next(self.session_path.joinpath(self.device_collection, self.pname).glob('*wiring.json'), None)
-            if wiring_file is not None:
-                out_files.append(wiring_file)
+        # This is the case where no ap.bin/.cbin file exists
+        if len(ephys_files) == 0 or not bin_file:
+            ephys_files += spikeglx.glob_ephys_files(self.session_path.joinpath(self.device_collection, self.pname), ext="ch")
+            ephys_files += spikeglx.glob_ephys_files(self.session_path.joinpath(self.device_collection, self.pname), ext="meta")
+            for ef in ephys_files:
+                for typ in ["ap", "lf"]:
+                    bin_file = ef.get(typ)
+                    if bin_file:
+                        out_files.append(bin_file)
 
             return out_files
+
+        # If the ap.bin / .cbin file does exists instantiate the NP2converter
+        np_conv = neuropixel.NP2Converter(bin_file, compress=True)
+        np_conv_status = np_conv.process()
+        np_conv_files = np_conv.get_processed_files_NP21()
+        np_conv.sr.close()
+
+        # Status = 1 - successfully complete
+        if np_conv_status == 1:  # This is the status that it has completed successfully
+            out_files.append(np_conv_files)
+            return out_files
+        # Status = 0 - Already processed
+        elif np_conv_status == 0:
+            ephys_files = spikeglx.glob_ephys_files(self.session_path.joinpath(self.device_collection, self.pname))
+            ephys_files += spikeglx.glob_ephys_files(self.session_path.joinpath(self.device_collection, self.pname), ext="ch")
+            ephys_files += spikeglx.glob_ephys_files(self.session_path.joinpath(self.device_collection, self.pname), ext="meta")
+            for ef in ephys_files:
+                for typ in ["ap", "lf"]:
+                    bin_file = ef.get(typ)
+                    if bin_file and bin_file.suffix != '.bin':
+                        out_files.append(bin_file)
+
+            return out_files
+
         else:
             return
 
 
 class EphysCompressNP24(base_tasks.EphysTask):
-
     def dynamic_signatures(self):
         input_signatures = [('*ap.meta', f'{self.device_collection}/{self.pname}', True),
                             ('*ap.*bin', f'{self.device_collection}/{self.pname}', True),
-                            ('*lf.meta', f'{self.device_collection}/{self.pname}', True),
-                            ('*lf.*bin', f'{self.device_collection}/{self.pname}', True),
                             ('*wiring.json', f'{self.device_collection}/{self.pname}', False)]
 
         pextra = ['a', 'b', 'c', 'd']
@@ -151,14 +243,16 @@ class EphysCompressNP24(base_tasks.EphysTask):
 
     def _run(self):
 
+        # Do we need the ability to register the files once it already been processed and original file deleted?
+
         files = spikeglx.glob_ephys_files(self.session_path.joinpath(self.device_collection, self.pname))
-        assert len(files) == 1  # This will fail if the session is split
+        assert len(files) == 1
         bin_file = files[0].get('ap', None)
 
         np_conv = neuropixel.NP2Converter(bin_file, post_check=True, compress=True, delete_original=False)
-        # TODO once we happy change this to True
+        # TODO once we happy change delete_original=True
         np_conv_status = np_conv.process()
-        out_files = np_conv.get_processed_files()
+        out_files = np_conv.get_processed_files_NP24()
 
         if np_conv_status == 1:
             wiring_file = next(self.session_path.joinpath(self.device_collection, self.pname).glob('*wiring.json'), None)
@@ -166,8 +260,37 @@ class EphysCompressNP24(base_tasks.EphysTask):
                 # copy wiring file to each sub probe directory and add to output files
                 for pext in ['a', 'b', 'c', 'd']:
                     new_wiring_file = self.session_path.joinpath(self.device_collection, f'{self.pname}{pext}', wiring_file.name)
-                    shutil.copyfile(wiring_file, new_wiring_file )
+                    shutil.copyfile(wiring_file, new_wiring_file)
                     out_files.append(new_wiring_file)
+            return out_files
+        elif np_conv_status == 0:
+            for pext in ['a', 'b', 'c', 'd']:
+                ephys_files = spikeglx.glob_ephys_files(self.session_path.joinpath(self.device_collection, f'{self.pname}{pext}'))
+                ephys_files += spikeglx.glob_ephys_files(self.session_path.joinpath(self.device_collection,
+                                                                                    f'{self.pname}{pext}'), ext="ch")
+                ephys_files += spikeglx.glob_ephys_files(self.session_path.joinpath(self.device_collection,
+                                                                                    f'{self.pname}{pext}'), ext="meta")
+                for ef in ephys_files:
+                    for typ in ["ap", "lf"]:
+                        bin_file = ef.get(typ)
+                        if bin_file and bin_file.suffix != '.bin':
+                            out_files.append(bin_file)
+
+                wiring_file = next(self.session_path.joinpath(self.device_collection,
+                                                              f'{self.pname}{pext}').glob('*wiring.json'), None)
+                if wiring_file is None:
+                    # See if we have the original wiring file
+                    orig_wiring_file = next(self.session_path.joinpath(self.device_collection,
+                                                                       self.pname).glob('*wiring.json'), None)
+                    if orig_wiring_file is not None:
+                        # copy wiring file to sub probe directory and add to output files
+                        new_wiring_file = self.session_path.joinpath(self.device_collection, f'{self.pname}{pext}',
+                                                                     orig_wiring_file.name)
+                        shutil.copyfile(orig_wiring_file, new_wiring_file)
+                        out_files.append(new_wiring_file)
+                else:
+                    out_files.append(wiring_file)
+
             return out_files
         else:
             return

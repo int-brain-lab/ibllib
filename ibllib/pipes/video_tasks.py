@@ -9,7 +9,7 @@ from ibllib.qc.camera import run_all_qc as run_camera_qc
 _logger = logging.getLogger('ibllib')
 
 
-class VideoRegisterRaw(base_tasks.VideoTask, base_tasks.RegisterTaskData):
+class VideoRegisterRaw(base_tasks.VideoTask, base_tasks.RegisterRawDataTask):
     """
     Task to register raw video data. Builds up list of files to register from list of cameras given in session params file
     """
