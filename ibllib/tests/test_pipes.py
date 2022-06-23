@@ -277,11 +277,16 @@ class TestPipesMisc(unittest.TestCase):
     def test_create_alyx_probe_insertions(self):
         # Connect to test DB
         one = ONE(**TEST_DB)
-        # Use existing session on test database
-        eid = "b1c968ad-4874-468d-b2e4-5ffa9b9964e9"
+        # Create new session on database
+        from one.registration import RegistrationClient
+        _, eid = RegistrationClient(one).create_new_session('ZM_1150')
+        # Currently the task protocol of a session must contain 'ephys' in order to create an insertion!
+        one.alyx.rest('sessions', 'partial_update', id=eid, data={'task_protocol': 'ephys'})
+        self.addCleanup(one.alyx.rest, 'sessions', 'delete', id=eid)  # Delete after test
+
         # Force probe insertion 3A
         misc.create_alyx_probe_insertions(
-            eid, one=one, model="3A", labels=["probe00", "probe01"], force=True
+            str(eid), one=one, model="3A", labels=["probe00", "probe01"], force=True
         )
         # Verify it's been inserted
         alyx_insertion = one.alyx.rest("insertions", "list", session=eid, no_cache=True)
@@ -294,9 +299,9 @@ class TestPipesMisc(unittest.TestCase):
         one.alyx.rest("insertions", "delete", id=alyx_insertion[0]["id"])
         one.alyx.rest("insertions", "delete", id=alyx_insertion[1]["id"])
         # Force probe insertion 3B
-        misc.create_alyx_probe_insertions(eid, one=one, model="3B2", labels=["probe00", "probe01"])
+        misc.create_alyx_probe_insertions(str(eid), one=one, model="3B2", labels=["probe00", "probe01"])
         # Verify it's been inserted
-        alyx_insertion = one.alyx.rest("insertions", "list", session=eid, no_cache=True)
+        alyx_insertion = one.alyx.rest("insertions", "list", session=str(eid), no_cache=True)
         self.assertTrue(alyx_insertion[0]["model"] == "3B2")
         self.assertTrue(alyx_insertion[0]["name"] in ["probe00", "probe01"])
         self.assertTrue(alyx_insertion[1]["model"] == "3B2")
