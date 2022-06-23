@@ -1,5 +1,10 @@
+## Release Notes 2.13
+## Release Notes 2.13.0 PRERELEASE
+- Deprecated ibllib.version
+- Fix Globus patcher
+
 ## Release Notes 2.12
-## Release Noter 2.12.2 2022-05-27
+## Release Notes 2.12.2 2022-05-27
 - Fixes to plotting in training_status
 
 ## Release Notes 2.12.1 2022-05-26
