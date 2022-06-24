@@ -662,7 +662,6 @@ class EphysTrials(tasks.Task):
 
         return dsets, out_files
 
-
     def _run(self, plot_qc=True):
         dsets, out_files = self._extract_behaviour()
 

@@ -31,7 +31,7 @@ _logger = logging.getLogger('ibllib')
 
 
 class WidefieldRegisterRaw(tasks.Task):
-    level=0
+    level = 0
     signature = {
         'input_files': [('dorsal_cortex_landmarks.json', 'raw_widefield_data', False),
                         ('*.camlog', 'raw_widefield_data', True),
@@ -120,7 +120,7 @@ class WidefieldRegisterRaw(tasks.Task):
 class WidefieldMtscomp(tasks.Task):
     signature = {
         'input_files': [('*nidq.bin', 'raw_widefield_data', True),
-                        ('*nidq.meta', 'raw_widefield_data', True),],
+                        ('*nidq.meta', 'raw_widefield_data', True), ],
         'output_files': [('widefield.raw.nidq.cbin', 'raw_widefield_data', True),
                          ('widefield.raw.nidq.ch', 'raw_widefield_data', True),
                          ('widefield.raw.nidq.meta', 'raw_widefield_data', True)]

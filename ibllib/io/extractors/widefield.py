@@ -32,17 +32,17 @@ DEFAULT_WIRING_MAP = {
     6: 405
 }
 
-CHMAPS = {'nidq':
-                {'left_camera': 0,
-                 'right_camera': 1,
-                 'body_camera': 2,
-                 'frame_trigger': 3,
-                 'frame2ttl': 4,
-                 'rotary_encoder_0': 5,
-                 'rotary_encoder_1': 6,
-                 'audio': 7,
-                 'bpod': 16}
-          }
+CHMAPS = {'nidq': {
+    'left_camera': 0,
+    'right_camera': 1,
+    'body_camera': 2,
+    'frame_trigger': 3,
+    'frame2ttl': 4,
+    'rotary_encoder_0': 5,
+    'rotary_encoder_1': 6,
+    'audio': 7,
+    'bpod': 16}
+}
 
 
 def load_channel_map(session_path):
@@ -229,7 +229,6 @@ class Widefield(extractors_base.BaseExtractor):
         # Should we allow this?
         # Case where led greater than video frames
 
-
         # We can have more
 
         # Check that the no. of syncs from bpod and teensy match
@@ -254,7 +253,6 @@ class Widefield(extractors_base.BaseExtractor):
         led = led[0:video_meta.length]
 
         widefield_times = fcn(led.timestamp.values / 1e3)
-
 
         # Find led times that are outside of the sync pulses
         # led_times = np.copy(led.timestamp.values)
