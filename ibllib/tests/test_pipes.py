@@ -7,8 +7,10 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
+from functools import partial
 
 from one.api import ONE
+import iblutil.io.params as iopar
 
 import ibllib.io.extractors.base
 import ibllib.pipes.scan_fix_passive_files as fix
@@ -351,6 +353,35 @@ class TestPipesMisc(unittest.TestCase):
         else:
             self.assertTrue('002' in prompt)
             return self._inputs[2]
+
+    def test_create_basic_transfer_params(self):
+        """Tests for the ibllib.pipes.misc.create_basic_transfer_params function"""
+        PARAM_STR = '___test_pars'
+        self.addCleanup(Path(iopar.getfile(PARAM_STR)).unlink)  # Remove after test
+        params = misc.create_basic_transfer_params(PARAM_STR, '~/local_data', '~/remote_data', par1='val')
+        expected = {
+            'DATA_FOLDER_PATH': '~/local_data',
+            'REMOTE_DATA_FOLDER_PATH': '~/remote_data',
+            'PAR1': 'val'
+        }
+        self.assertCountEqual(params, expected)
+
+        # Test prompts
+        with mock.patch('builtins.input', side_effect=['~/local_data', '~/remote_data', 'foo', 'bar']) as in_mock:
+            params = misc.create_basic_transfer_params(PARAM_STR, par2=None)
+            self.assertEqual(4, in_mock.call_count)
+        expected.update({'PAR1': 'foo', 'PAR2': 'bar'})
+        self.assertCountEqual(expected, params)
+
+        # Test custom function and extra par delete
+        with mock.patch('builtins.input', return_value='baz') as in_mock:
+            params = misc.create_basic_transfer_params(
+                PARAM_STR, '~/local_data', '~/remote_data',
+                remove_unpassed=True, par2=partial(misc.cli_ask_default, 'hello')
+            )
+            self.assertIn('hello', in_mock.call_args.args[0])
+        self.assertEqual(params['PAR2'], 'baz')
+        self.assertNotIn('PAR1', params)
 
     def tearDown(self):
         self.root_test_folder.cleanup()

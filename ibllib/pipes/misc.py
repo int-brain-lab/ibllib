@@ -11,6 +11,7 @@ import sys
 import time
 from pathlib import Path
 from typing import Union, List
+from inspect import signature
 
 import spikeglx
 from iblutil.io import hashfile, params
@@ -195,18 +196,18 @@ def transfer_session_folders(local_sessions: list, remote_subject_folder, subfol
     Parameters
     ----------
     local_sessions : list
-        required list of local session folder paths to sync to local server
-    remote_subject_folder
-        the remote location of the subject folder (typically pulled from the params)
-    subfolder_to_transfer
-        which subfolders to sync
+        Required list of local session folder paths to sync to local server.
+    remote_subject_folder : str, pathlib.Path
+        The remote location of the subject folder (typically pulled from the params).
+    subfolder_to_transfer : str
+        Which subfolder to sync
 
     Returns
     -------
-    list of Pathlib.Path
+    list of tuples
+        For each session, a tuple of (source, destination) of attempted file transfers.
     list of bool
-        two lists get returned from the function, the first list is a tuple of (source, destination) of attempted file transfers,
-        the second list is a boolean True/False for success/failure of the transfer
+        A boolean True/False for success/failure of the transfer.
     """
     transfer_list = []  # list of sessions to transfer
     skip_list = ""  # "list" of sessions to skip and the reason for the skip
@@ -288,22 +289,19 @@ def transfer_session_folders(local_sessions: list, remote_subject_folder, subfol
         log.info(f"{transfer_tuple[0]}, {transfer_tuple[1]} - Added to the transfer list")
 
     # Verify that the number of local transfer_list entries match the number of remote transfer_list entries
-    local_entry = remote_entry = []
-    for entry in transfer_list:
-        local_entry.append(entry[0])
-        remote_entry.append(entry[1])
-    if len(set(local_entry)) != len(set(remote_entry)):
-        log.error("An invalid combination of sessions were picked; the most likely cause of this error is multiple local "
-                  "sessions being selected for a single remote session. Please rerun the script.")
-        return
+    if len(transfer_list) != len(set(dst for _, dst in transfer_list)):
+        raise RuntimeError(
+            "An invalid combination of sessions were picked; the most likely cause of this error is multiple local "
+            "sessions being selected for a single remote session. Please rerun the script."
+        )
 
     # Call rsync/rdiff function for every entry in the transfer list
     success = []
-    for entry in transfer_list:
+    for src, dst in transfer_list:
         if subfolder_to_transfer:
-            success.append(rsync_paths(entry[0] / subfolder_to_transfer, entry[1] / subfolder_to_transfer))
+            success.append(rsync_paths(src / subfolder_to_transfer, dst / subfolder_to_transfer))
         else:
-            success.append(rsync_paths(entry[0], entry[1]))
+            success.append(rsync_paths(src, dst))
         if not success[-1]:
             log.error("File transfer failed, check log for reason.")
 
@@ -359,6 +357,91 @@ def load_ephyspc_params():
     if not load_params_dict("ephyspc_params"):
         create_ephyspc_params()
     return load_params_dict("ephyspc_params")
+
+
+def create_basic_transfer_params(param_str='transfer_params', local_data_path=None,
+                                 remote_data_path=None, remove_unpassed=False, **kwargs):
+    """Create some basic parameters common to all acquisition rigs.
+
+    Namely prompt user for the local root data path and the remote (lab server) data path.
+    NB: All params stored in uppercase by convention.
+
+    Parameters
+    ----------
+    param_str : str
+        The name of the parameters to load/save.
+    local_data_path : str, pathlib.Path
+        The local root data path, stored with the DATA_FOLDER_PATH key.  If None, user is prompted.
+    remote_data_path : str, pathlib.Path
+        The local root data path, stored with the REMOTE_DATA_FOLDER_PATH key.  If None, user is prompted.
+    remove_unpassed : bool
+        If True, any parameters in existing parameter file not found as keyword args will be removed,
+        otherwise the user is prompted for these also.
+
+    **kwargs
+        Extra parameters to set. If value is None, the user is prompted.
+
+    Returns
+    -------
+    dict
+        The parameters written to disc.
+
+    Examples
+    --------
+    Set up basic transfer parameters for modality acquisition PC
+
+    >>> par = create_basic_transfer_params()
+
+    Set up basic transfer paramers without prompting the user
+
+    >>> par = create_basic_transfer_params(
+    ...     local_data_path='D:\iblrig_data\Subjects',
+    ...     remote_data_path=r'\\iblserver.champalimaud.pt\ibldata\Subjects')
+
+    Prompt user for extra parameter using custom prompt (will call function with current default)
+
+    >>> from functools import partial
+    >>> par = create_basic_transfer_params(
+    ...     custom_arg=partial(cli_ask_default, 'Please enter custom arg value'))
+
+    """
+    parameters = params.as_dict(params.read(param_str, {})) or {}
+    if local_data_path is None:
+        local_data_path = cli_ask_default(
+            "Where's your LOCAL 'Subjects' data folder?", parameters.get('DATA_FOLDER_PATH')
+        )
+    parameters['DATA_FOLDER_PATH'] = local_data_path
+
+    if remote_data_path is None:
+        remote_data_path = cli_ask_default(
+            "Where's your REMOTE 'Subjects' data folder?", parameters.get('REMOTE_DATA_FOLDER_PATH')
+        )
+    parameters['REMOTE_DATA_FOLDER_PATH'] = remote_data_path
+
+    # Deal with extraneous parameters
+    for k, v in kwargs.items():
+        if callable(v):  # expect function handle with default value as input
+            n_pars = len(signature(v).parameters)
+            parameters[k.upper()] = v(parameters.get(k.upper())) if n_pars > 0 else v()
+        elif v is None:  # generic prompt for key
+            parameters[k.upper()] = cli_ask_default(
+                f'Enter a value for parameter {k.upper()}', parameters.get(k.upper())
+            )
+        else:  # assign value to parameter
+            parameters[k.upper()] = str(v)
+
+    defined = list(map(str.upper, ('DATA_FOLDER_PATH', 'REMOTE_DATA_FOLDER_PATH', *kwargs.keys())))
+    if remove_unpassed:
+        # Delete any parameters in parameter dict that were not passed as keyword args into function
+        parameters = {k: v for k, v in parameters.items() if k in defined}
+    else:
+        # Prompt for any other parameters that weren't passed into function
+        for k in filter(lambda x: x not in defined, map(str.upper, parameters.keys())):
+            parameters[k] = cli_ask_default(f'Enter a value for parameter {k}', parameters.get(k))
+
+    # Write parameters
+    params.write(param_str, parameters)
+    return parameters
 
 
 def create_videopc_params(force=False, silent=False):

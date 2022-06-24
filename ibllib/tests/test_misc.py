@@ -1,7 +1,8 @@
 import unittest
 import logging
+from pathlib import Path
 
-from ibllib.misc import version
+from ibllib.misc import version, log_to_file
 
 
 class TestVersionTags(unittest.TestCase):
@@ -37,6 +38,7 @@ class TestVersionTags(unittest.TestCase):
 
 
 class TestLoggingSystem(unittest.TestCase):
+    log_name = '_foobar'
 
     def test_levels(self):
         # logger = logger_config('ibllib')
@@ -52,6 +54,27 @@ class TestLoggingSystem(unittest.TestCase):
         logger.warning('ROOT This is a warning message')
         logger.info('ROOT This is an info message')
         logger.debug('ROOT This is a debug message')
+
+    def test_file_handler(self):
+        """Test for ibllib.misc.log_to_file"""
+        log_path = Path.home().joinpath('.ibl_logs', self.log_name)
+        log_path.unlink(missing_ok=True)
+        test_log = log_to_file(self.log_name, log=self.log_name)
+        test_log.info('foobar')
+
+        # Should have created a log file and written to it
+        self.assertTrue(log_path.exists())
+        with open(log_path, 'r') as f:
+            logged = f.read()
+        self.assertIn('foobar', logged)
+
+    def tearDown(self) -> None:
+        # Before we can delete the test log file we must close the file handler
+        test_log = logging.getLogger(self.log_name)
+        for handler in test_log.handlers:
+            handler.close()
+            test_log.removeHandler(handler)
+        Path.home().joinpath('.ibl_logs', self.log_name).unlink(missing_ok=True)
 
 
 if __name__ == "__main__":
