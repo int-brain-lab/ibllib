@@ -6,7 +6,7 @@ from ibllib.qc.task_extractors import TaskQCExtractor
 from ibllib.qc.task_metrics import HabituationQC
 
 
-class HabituationRegisterRaw(base_tasks.RegisterTaskData):
+class HabituationRegisterRaw(base_tasks.RegisterRawDataTask):
 
     def dynamic_signatures(self):
         input_signatures = []
@@ -60,7 +60,7 @@ class HabituationTrialsBpod(base_tasks.DynamicTask):
         return output_files
 
 
-class TrialRegisterRaw(base_tasks.RegisterTaskData):
+class TrialRegisterRaw(base_tasks.RegisterRawDataTask):
 
     def dynamic_signatures(self):
         input_signatures = []
@@ -76,7 +76,7 @@ class TrialRegisterRaw(base_tasks.RegisterTaskData):
         return input_signatures, output_signatures
 
 
-class PassiveRegisterRaw(base_tasks.RegisterTaskData):
+class PassiveRegisterRaw(base_tasks.RegisterRawDataTask):
 
     def dynamic_signatures(self):
         input_signatures = []

@@ -142,14 +142,14 @@ def make_pipeline(session_path=None, **pkwargs):
 
     # Video tasks
     if 'cameras' in acquisition_description:
+        kwargs = dict(session_path=session_path, cameras=list(acquisition_description['cameras'].keys()))
+        tasks[tn] = type((tn := 'VideoRegisterRaw'), (vtasks.VideoRegisterRaw,), {})(**kwargs)
         for cam_name, cam_args in acquisition_description['cameras'].items():
-            kwargs = {'session_path': session_path, 'camera': cam_name, **cam_args}
-            tasks[tn] = type((tn := f'VideoRegisterRaw_{cam_name}'), (vtasks.VideoRegisterRaw,), {})(**kwargs)
+            kwargs = {'session_path': session_path, 'cameras': [cam_name], **cam_args}
             tasks[tn] = type((tn := f'VideoCompress_{cam_name}'), (vtasks.VideoCompress,), {})(
-                **kwargs, parents=[tasks[f'VideoRegisterRaw_{cam_name}']] + sync_tasks)
+                **kwargs, parents=[tasks['VideoRegisterRaw']] + sync_tasks)
             tasks[tn] = type((tn := f'VideoSync_{cam_name}'), (vtasks.VideoSyncQc,), {})(
                 **kwargs, parents=[tasks[f'VideoCompress_{cam_name}']] + sync_tasks)
-
         tasks[tn] = type((tn := 'DLC'), (epp.EphysDLC,), {})(
             session_path=session_path, parents=[tasks[k] for k in tasks if k.startswith('VideoCompress')])
         tasks['PostDLC'] = type('PostDLC', (epp.EphysPostDLC,), {})(

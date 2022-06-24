@@ -22,9 +22,9 @@ class VideoRegisterRaw(base_tasks.VideoTask, base_tasks.RegisterRawDataTask):
         input_signatures = []
         output_signatures = [(f'_iblrig_{cam}Camera.timestamps*', self.collection, True) for cam in self.cameras] +\
                             [(f'_iblrig_{cam}Camera.GPIO.bin', self.collection, True) for cam in self.cameras] +\
-                            [(f'_iblrig_{cam}Camera.frame_counter.bin', self.device_collection, True) for cam in self.cameras] + \
-                            [(f'_iblrig_{cam}Camera.frameData.bin', self.device_collection, False) for cam in self.cameras] + \
-                            [('_iblrig_videoCodeFiles.raw*', self.device_collection, False)]
+                            [(f'_iblrig_{cam}Camera.frame_counter.bin', self.collection, True) for cam in self.cameras] + \
+                            [(f'_iblrig_{cam}Camera.frameData.bin', self.collection, False) for cam in self.cameras] + \
+                            [('_iblrig_videoCodeFiles.raw*', self.collection, False)]
 
         return input_signatures, output_signatures
 
@@ -38,8 +38,8 @@ class VideoCompress(base_tasks.VideoTask):
     force = False
 
     def dynamic_signatures(self):
-        input_signatures = (f'_iblrig_{self.camera}Camera.raw.*', self.task_collection, True),
-        output_signatures = [(f'_iblrig_{cam}Camera.raw.mp4', self.device_collection, True) for cam in self.cameras]
+        input_signatures = (f'_iblrig_{self.camera}Camera.raw.*', self.collection, True),
+        output_signatures = [(f'_iblrig_{cam}Camera.raw.mp4', self.collection, True) for cam in self.cameras]
 
         return input_signatures, output_signatures
 
