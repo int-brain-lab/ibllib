@@ -1,22 +1,24 @@
-import datetime
-import sys
-import os
 import ctypes
+import datetime
+import hashlib
 import json
 import logging
-import shutil
-import hashlib
-import warnings
-from pathlib import Path
+import os
 import re
+import shutil
+import subprocess
+import sys
+import time
+from pathlib import Path
 from typing import Union, List
+from inspect import signature
 
+import spikeglx
 from iblutil.io import hashfile, params
 from iblutil.util import range_str
-from one.alf.spec import is_uuid_string, is_session_path, describe
 from one.alf.files import get_session_path
+from one.alf.spec import is_uuid_string, is_session_path, describe
 from one.api import ONE
-import spikeglx
 
 import ibllib.io.flags as flags
 import ibllib.io.raw_data_loaders as raw
@@ -80,10 +82,12 @@ def behavior_exists(session_path: str) -> bool:
 
 def check_transfer(src_session_path, dst_session_path):
     """
-    Check all the files in the source directory match those in the destination directory.
+    Check all the files in the source directory match those in the destination directory. Function
+    will throw assertion errors/exceptions if number of files do not match, file names do not
+    match, or if file sizes do not match.
+
     :param src_session_path: The source directory that was copied
     :param dst_session_path: The copy target directory
-    :return:
     """
     src_files = sorted([x for x in Path(src_session_path).rglob('*') if x.is_file()])
     dst_files = sorted([x for x in Path(dst_session_path).rglob('*') if x.is_file()])
@@ -128,11 +132,14 @@ def rename_session(session_path: str, new_subject=None, new_date=None, new_numbe
 
     if new_session_path.exists():
         ans = input(f'Warning: session path {new_session_path} already exists.\nWould you like to '
-                    f'move {new_session_path} to a backup directory? [y/N]')
+                    f'move {new_session_path} to a backup directory? [y/N] ')
         if (ans or 'n').lower() in ['n', 'no']:
+            print(f'Manual intervention required, data exists in the following directory: '
+                  f'{session_path}')
             return
-        backup_session(new_session_path)
-        shutil.rmtree(str(new_session_path), ignore_errors=True)
+        if backup_session(new_session_path):
+            print(f'Backup was successful, removing directory {new_session_path}...')
+            shutil.rmtree(str(new_session_path), ignore_errors=True)
     shutil.move(str(session_path), str(new_session_path))
     print(session_path, "--> renamed to:")
     print(new_session_path)
@@ -145,19 +152,31 @@ def backup_session(session_path):
     removed.
 
     :param session_path: A session path to be backed up
+    :return: True if directory was backed up or exits if something went wrong
+    :rtype: Bool
     """
-    bk_session_path = ''
-    try:
-        bk_session_path = Path(*session_path.parts[:-4]).joinpath(
-            "Subjects_backup_renamed_sessions", Path(*session_path.parts[-3:]))
-        Path(bk_session_path.parent).mkdir(parents=True, exist_ok=True)
-        shutil.copytree(session_path, bk_session_path)
-        log.debug(f'copied {session_path} to {bk_session_path}')
-    except Exception as e:
-        log.error(f"A backup of this session already exist: {bk_session_path}, manual intervention"
-                  f" is necessary.")
-        log.exception(e)
-        exit(1)
+    bk_session_path = Path()
+    if Path(session_path).exists():
+        try:
+            bk_session_path = Path(*session_path.parts[:-4]).joinpath(
+                "Subjects_backup_renamed_sessions", Path(*session_path.parts[-3:]))
+            Path(bk_session_path.parent).mkdir(parents=True)
+            print(f"Created path: {bk_session_path.parent}")
+            # shutil.copytree(session_path, bk_session_path, dirs_exist_ok=True)
+            shutil.copytree(session_path, bk_session_path)  # python 3.7 compatibility
+            print(f"Copied contents from {session_path} to {bk_session_path}")
+            return True
+        except FileExistsError:
+            log.error(f"A backup session for the given path already exists: {bk_session_path}, "
+                      f"manual intervention is necessary.")
+            raise
+        except shutil.Error:
+            log.error(f'Some kind of copy error occurred when moving files from {session_path} to '
+                      f'{bk_session_path}')
+            log.error(shutil.Error)
+    else:
+        log.error(f"The given session path does not exist: {session_path}")
+        return False
 
 
 def copy_with_check(src, dst, **kwargs):
@@ -169,7 +188,130 @@ def copy_with_check(src, dst, **kwargs):
     return shutil.copy2(src, dst, **kwargs)
 
 
+def transfer_session_folders(local_sessions: list, remote_subject_folder, subfolder_to_transfer):
+    """
+    Used to determine which local session folders should be transferred to which remote session folders, will prompt the user
+    when necessary.
+
+    Parameters
+    ----------
+    local_sessions : list
+        Required list of local session folder paths to sync to local server.
+    remote_subject_folder : str, pathlib.Path
+        The remote location of the subject folder (typically pulled from the params).
+    subfolder_to_transfer : str
+        Which subfolder to sync
+
+    Returns
+    -------
+    list of tuples
+        For each session, a tuple of (source, destination) of attempted file transfers.
+    list of bool
+        A boolean True/False for success/failure of the transfer.
+    """
+    transfer_list = []  # list of sessions to transfer
+    skip_list = ""  # "list" of sessions to skip and the reason for the skip
+    # Iterate through all local sessions in the given list
+    for local_session in local_sessions:
+        # Set expected remote_session location and perform simple error state checks
+        remote_session = remote_subject_folder.joinpath(*local_session.parts[-3:])
+        # Skip session if ...
+        if subfolder_to_transfer:
+            if not local_session.joinpath(subfolder_to_transfer).exists():
+                msg = f"{local_session} - skipping session, no '{subfolder_to_transfer}' folder found locally"
+                log.warning(msg)
+                skip_list += msg + "\n"
+                continue
+        if not remote_session.parent.exists():
+            msg = f"{local_session} - no matching remote session date folder found for the given local session"
+            log.info(msg)
+            skip_list += msg + "\n"
+            continue
+        if not (remote_session / "raw_behavior_data").exists():
+            msg = f"{local_session} - skipping session, no behavior data found in remote folder {remote_session}"
+            log.warning(msg)
+            skip_list += msg + "\n"
+            continue
+
+        # Determine if there are multiple session numbers from the date path
+        local_sessions_for_date = get_session_numbers_from_date_path(local_session.parent)
+        remote_sessions_for_date = get_session_numbers_from_date_path(remote_session.parent)
+        remote_session_pick = None
+        if len(local_sessions_for_date) > 1 or len(remote_sessions_for_date) > 1:
+            # Format folder size output for end user to review
+            local_session_numbers_with_size = remote_session_numbers_with_size = ""
+            for lsfd in local_sessions_for_date:
+                size_in_gb = round(get_directory_size(local_session.parent / lsfd, in_gb=True), 2)
+                local_session_numbers_with_size += lsfd + " (" + str(size_in_gb) + " GB)\n"
+            for rsfd in remote_sessions_for_date:
+                size_in_gb = round(get_directory_size(remote_session.parent / rsfd, in_gb=True), 2)
+                remote_session_numbers_with_size += rsfd + " (" + str(size_in_gb) + " GB)\n"
+            log.info(f"\n\nThe following local session folder(s) were found on this acquisition PC:\n\n"
+                     f"{''.join(local_session_numbers_with_size)}\nThe following remote session folder(s) were found on the "
+                     f"server:\n\n{''.join(remote_session_numbers_with_size)}\n")
+
+            def _remote_session_picker(sessions_for_date):
+                resp = "s"
+                resp_invalid = True
+                while resp_invalid:  # loop until valid user input
+                    resp = input(f"\n\n--- USER INPUT NEEDED ---\nWhich REMOTE session number would you like to transfer your "
+                                 f"local session to? Options {range_str(map(int, sessions_for_date))} or "
+                                 f"[s]kip/[h]elp/[e]xit> ").strip().lower()
+                    if resp == "h":
+                        print("An example session filepath:\n")
+                        describe("number")  # Explain what a session number is
+                        input("Press enter to continue")
+                    elif resp == "s" or resp == "e":  # exit loop
+                        resp_invalid = False
+                    elif len(resp) <= 3:
+                        resp_invalid = False if [i for i in sessions_for_date if int(resp) == int(i)] else None
+                    else:
+                        print("Invalid response. Please try again.")
+                return resp
+
+            log.info(f"Evaluation for local session "
+                     f"{local_session.parts[-3]}/{local_session.parts[-2]}/{local_session.parts[-1]}...")
+            user_response = _remote_session_picker(remote_sessions_for_date)
+            if user_response == "s":
+                msg = f"{local_session} - Local session skipped due to user input"
+                log.info(msg)
+                skip_list += msg + "\n"
+                continue
+            elif user_response == "e":
+                log.info("Exiting, no files transferred.")
+                return
+            else:
+                remote_session_pick = remote_session.parent / user_response.zfill(3)
+
+        # Append to the transfer_list
+        transfer_tuple = (local_session, remote_session_pick) if remote_session_pick else (local_session, remote_session)
+        transfer_list.append(transfer_tuple)
+        log.info(f"{transfer_tuple[0]}, {transfer_tuple[1]} - Added to the transfer list")
+
+    # Verify that the number of local transfer_list entries match the number of remote transfer_list entries
+    if len(transfer_list) != len(set(dst for _, dst in transfer_list)):
+        raise RuntimeError(
+            "An invalid combination of sessions were picked; the most likely cause of this error is multiple local "
+            "sessions being selected for a single remote session. Please rerun the script."
+        )
+
+    # Call rsync/rdiff function for every entry in the transfer list
+    success = []
+    for src, dst in transfer_list:
+        if subfolder_to_transfer:
+            success.append(rsync_paths(src / subfolder_to_transfer, dst / subfolder_to_transfer))
+        else:
+            success.append(rsync_paths(src, dst))
+        if not success[-1]:
+            log.error("File transfer failed, check log for reason.")
+
+    # Notification to user for any transfers were skipped
+    log.warning(f"Video transfers that were not completed:\n\n{skip_list}") if skip_list else log.info("No transfers skipped.")
+    return transfer_list, success
+
+
 def transfer_folder(src: Path, dst: Path, force: bool = False) -> None:
+    """functionality has been replaced by transfer_session_folders function"""
     print(f"Attempting to copy:\n{src}\n--> {dst}")
     if force:
         print(f"Removing {dst}")
@@ -182,6 +324,7 @@ def transfer_folder(src: Path, dst: Path, force: bool = False) -> None:
         except AssertionError:
             pass
     print(f"Copying all files:\n{src}\n--> {dst}")
+    # rsync_folder(src, dst, '**transfer_me.flag')
     if sys.version_info.minor < 8:
         # dirs_exist_ok kwarg not supported in < 3.8
         shutil.rmtree(dst, ignore_errors=True)
@@ -191,9 +334,11 @@ def transfer_folder(src: Path, dst: Path, force: bool = False) -> None:
     # If folder was created delete the src_flag_file
     if check_transfer(src, dst) is None:
         print("All files copied")
+    # rdiff-backup --compare /tmp/tmpw9o1zgn0 /tmp/tmp82gg36rm
+    # No changes found.  Directory matches archive data.
 
 
-def load_params_dict(params_fname: str) -> None:
+def load_params_dict(params_fname: str) -> dict:
     params_fpath = Path(params.getfile(params_fname))
     if not params_fpath.exists():
         return None
@@ -212,6 +357,91 @@ def load_ephyspc_params():
     if not load_params_dict("ephyspc_params"):
         create_ephyspc_params()
     return load_params_dict("ephyspc_params")
+
+
+def create_basic_transfer_params(param_str='transfer_params', local_data_path=None,
+                                 remote_data_path=None, clobber=False, **kwargs):
+    """Create some basic parameters common to all acquisition rigs.
+
+    Namely prompt user for the local root data path and the remote (lab server) data path.
+    NB: All params stored in uppercase by convention.
+
+    Parameters
+    ----------
+    param_str : str
+        The name of the parameters to load/save.
+    local_data_path : str, pathlib.Path
+        The local root data path, stored with the DATA_FOLDER_PATH key.  If None, user is prompted.
+    remote_data_path : str, pathlib.Path
+        The local root data path, stored with the REMOTE_DATA_FOLDER_PATH key.  If None, user is prompted.
+    clobber : bool
+        If True, any parameters in existing parameter file not found as keyword args will be removed,
+        otherwise the user is prompted for these also.
+
+    **kwargs
+        Extra parameters to set. If value is None, the user is prompted.
+
+    Returns
+    -------
+    dict
+        The parameters written to disc.
+
+    Examples
+    --------
+    Set up basic transfer parameters for modality acquisition PC
+
+    >>> par = create_basic_transfer_params()
+
+    Set up basic transfer paramers without prompting the user
+
+    >>> par = create_basic_transfer_params(
+    ...     local_data_path='D:\iblrig_data\Subjects',
+    ...     remote_data_path=r'\\iblserver.champalimaud.pt\ibldata\Subjects')
+
+    Prompt user for extra parameter using custom prompt (will call function with current default)
+
+    >>> from functools import partial
+    >>> par = create_basic_transfer_params(
+    ...     custom_arg=partial(cli_ask_default, 'Please enter custom arg value'))
+
+    """
+    parameters = params.as_dict(params.read(param_str, {})) or {}
+    if local_data_path is None and (clobber or not parameters.get('DATA_FOLDER_PATH')):
+        local_data_path = parameters.get('DATA_FOLDER_PATH')
+        if not local_data_path or clobber:
+            local_data_path = cli_ask_default("Where's your LOCAL 'Subjects' data folder?", local_data_path)
+    parameters['DATA_FOLDER_PATH'] = local_data_path
+
+    if remote_data_path is None:
+        remote_data_path = parameters.get('REMOTE_DATA_FOLDER_PATH')
+        if not remote_data_path or clobber:
+            remote_data_path = cli_ask_default("Where's your REMOTE 'Subjects' data folder?", remote_data_path)
+    parameters['REMOTE_DATA_FOLDER_PATH'] = remote_data_path
+
+    # Deal with extraneous parameters
+    for k, v in kwargs.items():
+        if callable(v):  # expect function handle with default value as input
+            n_pars = len(signature(v).parameters)
+            parameters[k.upper()] = v(parameters.get(k.upper())) if n_pars > 0 else v()
+        elif v is None:  # generic prompt for key
+            parameters[k.upper()] = cli_ask_default(
+                f'Enter a value for parameter {k.upper()}', parameters.get(k.upper())
+            )
+        else:  # assign value to parameter
+            parameters[k.upper()] = str(v)
+
+    defined = list(map(str.upper, ('DATA_FOLDER_PATH', 'REMOTE_DATA_FOLDER_PATH', *kwargs.keys())))
+    if clobber:
+        # Delete any parameters in parameter dict that were not passed as keyword args into function
+        parameters = {k: v for k, v in parameters.items() if k in defined}
+    else:
+        # Prompt for any other parameters that weren't passed into function
+        for k in filter(lambda x: x not in defined, map(str.upper, parameters.keys())):
+            parameters[k] = cli_ask_default(f'Enter a value for parameter {k}', parameters.get(k))
+
+    # Write parameters
+    params.write(param_str, parameters)
+    return parameters
 
 
 def create_videopc_params(force=False, silent=False):
@@ -284,114 +514,154 @@ def create_ephyspc_params(force=False, silent=False):
     return param_dict
 
 
-def confirm_video_remote_folder(local_folder=False, remote_folder=False, force=False, n_days=None):
-    pars = None
+def rdiff_install() -> bool:
+    """
+    For windows:
+    * if the rdiff-backup executable does not already exist on the system
+      * downloads rdiff-backup zip file
+      * copies the executable to the C:\tools folder
 
-    if not local_folder:
-        pars = pars or load_ephyspc_params()
-        local_folder = pars['DATA_FOLDER_PATH']
-    if not remote_folder:
-        pars = pars or load_ephyspc_params()
-        remote_folder = pars['REMOTE_DATA_FOLDER_PATH']
-    local_folder = Path(local_folder)
-    remote_folder = Path(remote_folder)
+    For linux/mac:
+    * runs a pip install rdiff-backup
 
-    # Check for Subjects folder
-    local_folder = subjects_data_folder(local_folder, rglob=True)
-    remote_folder = subjects_data_folder(remote_folder, rglob=True)
+    Returns:
+        True when install is successful, False when an error is encountered
+    """
+    if os.name == "nt":
+        # ensure tools folder exists
+        tools_folder = "C:\\tools\\"
+        os.mkdir(tools_folder) if not Path(tools_folder).exists() else None
 
-    print('LOCAL:', local_folder)
-    print('REMOTE:', remote_folder)
-    src_session_paths = (x.parent for x in local_folder.rglob('transfer_me.flag'))
+        rdiff_cmd_loc = tools_folder + "rdiff-backup.exe"
+        if not Path(rdiff_cmd_loc).exists():
+            import requests
+            import zipfile
+            from io import BytesIO
 
-    if n_days is not None:
-        src_session_paths = filter(lambda x: _is_recent(x, n_days), src_session_paths)
+            url = "https://github.com/rdiff-backup/rdiff-backup/releases/download/v2.0.5/rdiff-backup-2.0.5.win32exe.zip"
+            log.info("Downloading zip file for rdiff-backup.")
+            # Download the file by sending the request to the URL, ensure success by status code
+            if requests.get(url).status_code == 200:
+                log.info("Download complete for rdiff-backup zip file.")
+                # extracting the zip file contents
+                zipfile = zipfile.ZipFile(BytesIO(requests.get(url).content))
+                zipfile.extractall("C:\\Temp")
+                rdiff_folder_name = zipfile.namelist()[0]  # attempting a bit of future-proofing
+                # move the executable to the C:\tools folder
+                shutil.copy("C:\\Temp\\" + rdiff_folder_name + "rdiff-backup.exe", rdiff_cmd_loc)
+                shutil.rmtree("C:\\Temp\\" + rdiff_folder_name)  # cleanup temp folder
+                try:  # attempt to call the rdiff command
+                    subprocess.run([rdiff_cmd_loc, "--version"], check=True)
+                except (FileNotFoundError, subprocess.CalledProcessError) as e:
+                    log.error("rdiff-backup installation did not complete.\n", e)
+                    return False
+                return True
+            else:
+                log.error("Download request status code not 200, something did not go as expected.")
+                return False
+    else:  # anything not Windows
+        try:  # package should not be installed via the requirements.txt to accommodate windows
+            subprocess.run(["pip", "install", "rdiff-backup"], check=True)
+        except subprocess.CalledProcessError as e:
+            log.error("rdiff-backup pip install did not complete.\n", e)
+            return False
+        return True
 
-    # Load incomplete transfer list
-    transfer_records = params.getfile('ibl_local_transfers')
-    if Path(transfer_records).exists():
-        with open(transfer_records, 'r') as fp:
-            transfers = json.load(fp)
-        # if transfers:  # TODO prompt for action here
-        #     answer = input('Previous incomplete transfers found, add them to queue?')
-    else:
-        transfers = []
 
-    src_session_paths = list(src_session_paths)
-    if not src_session_paths and not transfers:
-        print('Nothing to transfer, exiting...')
-        return
+def get_directory_size(dir_path: Path, in_gb=False) -> float:
+    """
+    Used to determine total size of all files in a given session_path, including all child directories
 
-    for session_path in src_session_paths:
-        if session_path in (x[0] for x in transfers):
-            log.info(f'{session_path} already in transfers list')
-            continue  # Already on pile
+    Args:
+        dir_path (Path): path we want to get the total size of
+        in_gb (bool): set to True for returned value to be in gigabytes
 
-        remote_session_path = remote_folder.joinpath(*session_path.parts[-3:])
+    Returns:
+        float: sum of all files in the given directory path (in bytes by default, in GB if specified)
+    """
+    total = 0
+    with iter(os.scandir(dir_path)) as it:
+        for entry in it:
+            if entry.is_file():
+                total += entry.stat().st_size
+            elif entry.is_dir():
+                total += get_directory_size(entry.path)
+    if in_gb:
+        return total / 1024 / 1024 / 1024  # in GB
+    return total  # in bytes
 
-        # Check remote and local session number folders are the same
-        remote_numbers = _get_session_numbers(remote_session_path)
-        if not remote_numbers:
-            print(f'No behavior folder found in {remote_session_path}: skipping session...')
-            continue
 
-        if not session_path.joinpath('raw_video_data').exists():
-            warnings.warn(f'No raw_video_data folder for session {session_path}')
-            continue
+def get_session_numbers_from_date_path(date_path: Path) -> list:
+    """
+    Retrieves session numbers when given a date path
 
-        print(f"\nFound session: {session_path}")
-        if _get_session_numbers(session_path) != remote_numbers:
-            not_valid = True
-            resp = 's'
-            remote_numbers = list(map(int, remote_numbers))
-            while not_valid:
-                resp = input(f'Which session number to use? Options: '
-                             f'{range_str(remote_numbers)} or [s]kip/[h]elp/[e]xit> ').strip()
-                if resp == 'h':
-                    print('An example session filepath:\n')
-                    describe('number')  # Explain what a session number is
-                    input('Press enter to continue')
-                not_valid = resp != 's' and resp != 'e'
-                not_valid = not_valid and (not re.match(r'^\d+$', resp) or int(resp) not in remote_numbers)
-            if resp == 's':
-                log.info('Skipping session...')
-                continue
-            if resp == 'e':
-                print('Exiting.  No files transferred.')
-                return
-            session_path = rename_session(session_path, new_number=resp)
-            if session_path is None:
-                log.info('Skipping session...')
-                continue
-            remote_session_path = remote_folder / Path(*session_path.parts[-3:])
-        transfers.append((session_path.as_posix(), remote_session_path.as_posix()))
-        log.debug('Added to transfers list:\n' + str(transfers[-1]))
-        with open(transfer_records, 'w') as fp:
-            json.dump(transfers, fp)
+    Args:
+        date_path (Path): path to date, i.e. \\\\server\\some_lab\\Subjects\\Date"
 
-    # Start transfers
-    if os.name == 'nt':
-        WindowsInhibitor().inhibit()
-    for i, (session_path, remote_session_path) in enumerate(transfers):
-        if not behavior_exists(remote_session_path):
-            print(f'No behavior folder found in {remote_session_path}: skipping session...')
-            continue
-        try:
-            transfer_folder(Path(session_path) / 'raw_video_data', Path(remote_session_path) / 'raw_video_data', force=force)
-        except AssertionError as ex:
-            log.error(f'Video transfer failed: {ex}')
-            continue
-        flag_file = Path(session_path) / 'transfer_me.flag'
-        log.debug('Removing ' + str(flag_file))
-        flag_file.unlink()
-        create_video_transfer_done_flag(remote_session_path)
-        check_create_raw_session_flag(remote_session_path)
-        # Done. Remove from list
-        transfers.pop(i)
-        with open(transfer_records, 'w') as fp:
-            json.dump(transfers, fp)
-    if os.name == 'nt':
-        WindowsInhibitor().uninhibit()
+    Returns:
+        (list): Found sessions as a sorted list
+    """
+    contents = Path(date_path).glob('*')
+    folders = filter(lambda x: x.is_dir() and re.match(r'^\d{3}$', x.name), contents)
+    sessions_as_set = set(map(lambda x: x.name, folders))
+    sessions_as_sorted_list = sorted(sessions_as_set)
+    return sessions_as_sorted_list
+
+
+def rsync_paths(src: Path, dst: Path) -> bool:
+    """
+    Used to run the rsync algorithm via a rdiff-backup command on the paths contained on the provided source and destination.
+    This function relies on the rdiff-backup package and is run from the command line, i.e. subprocess.run(). Full documentation
+    can be found here - https://rdiff-backup.net/docs/rdiff-backup.1.html
+
+    Parameters
+    ----------
+    src : Path
+        source path that contains data to be transferred
+    dst : Path
+        destination path that will receive the transferred data
+
+    Returns
+    -------
+    bool
+        True for success, False for failure
+
+    Raises
+    ------
+    FileNotFoundError, subprocess.CalledProcessError
+    """
+    # Set rdiff_cmd_loc based on OS type (assuming C:\tools is not in Windows PATH environ)
+    rdiff_cmd_loc = "C:\\tools\\rdiff-backup.exe" if os.name == "nt" else "rdiff-backup"
+    try:  # Check if rdiff-backup command is available
+        subprocess.run([rdiff_cmd_loc, "--version"], check=True)
+    except (FileNotFoundError, subprocess.CalledProcessError) as e:
+        if not rdiff_install():  # Attempt to install rdiff
+            log.error("rdiff-backup command is unavailable, transfers can not continue.\n", e)
+            raise
+
+    log.info("Attempting to transfer data: " + str(src) + " -> " + str(dst))
+    WindowsInhibitor().inhibit() if os.name == "nt" else None  # prevent Windows from going to sleep
+    try:
+        rsync_command = [rdiff_cmd_loc, "--verbosity", str(0),
+                         "--create-full-path", "--backup-mode", "--no-acls", "--no-eas",
+                         "--no-file-statistics", "--exclude", "**transfer_me.flag",
+                         str(src), str(dst)]
+        subprocess.run(rsync_command, check=True)
+        time.sleep(1)  # give rdiff-backup a second to complete all logging operations
+    except (FileNotFoundError, subprocess.CalledProcessError) as e:
+        log.error("Transfer failed.\n", e)
+        return False
+    log.info("Validating transfer completed...")
+    try:  # Validate the transfers succeeded
+        rsync_validate = [rdiff_cmd_loc, "--verify", str(dst)]
+        subprocess.run(rsync_validate, check=True)
+    except (FileNotFoundError, subprocess.CalledProcessError) as e:
+        log.error(f"Validation for destination {dst} failed.\n", e)
+        return False
+    log.info("Cleaning up rdiff files...")
+    shutil.rmtree(dst / "rdiff-backup-data")
+    WindowsInhibitor().uninhibit() if os.name == 'nt' else None  # allow Windows to go to sleep
+    return True
 
 
 def confirm_ephys_remote_folder(
@@ -449,6 +719,8 @@ def confirm_ephys_remote_folder(
             pass
         elif resp == "r" or resp == "rename":
             session_path = rename_session(session_path)
+            if not session_path:
+                continue
         elif resp == "s" or resp == "skip":
             continue
         elif resp == "e" or resp == "exit":
@@ -471,206 +743,6 @@ def confirm_ephys_remote_folder(
         # Create remote flags
         create_ephys_transfer_done_flag(remote_session_path)
         check_create_raw_session_flag(remote_session_path)
-
-
-def _is_recent(session_path, n_days_cutoff) -> bool:
-    """
-    Determine whether session occurred within a given number of days.
-
-    Parameters
-    ----------
-    session_path : pathlib.Path, pathlib.PurePath
-        The session path for which to check the date.
-    n_days_cutoff : int
-        The maximum number of days between the session path date and today in order to return True.
-
-    Returns
-    -------
-    bool
-        True if session path date occurred less than n_days ago
-    """
-    try:
-        return (datetime.date.today() - datetime.date.fromisoformat(session_path.parts[-2])).days <= n_days_cutoff
-    except ValueError:  # ignore none date formatted folders
-        return False
-
-
-def _get_session_numbers(session_path):
-    contents = session_path.parent.glob('*')
-    folders = filter(lambda x: x.is_dir() and re.match(r'^\d{3}$', x.name), contents)
-    return set(map(lambda x: x.name, folders))
-
-
-def confirm_widefield_remote_folder(local_folder=False, remote_folder=False, force=False, n_days=None):
-    """
-    Copy local widefield data to the local server.
-
-    Parameters
-    ----------
-    local_folder : pathlib.Path, str
-        Optional path to the local data directory.  Must contain a 'Subjects' folder.
-    remote_folder : pathlib.Path, str
-        Optional path to the remote data directory (i.e. on the local lab server).
-    force : bool
-        If True, any existing remote data are overwritten.
-    n_days : int
-        The number of days back to check.
-
-    """
-    pars = None
-
-    if not local_folder:
-        pars = pars or load_ephyspc_params()
-        local_folder = pars['DATA_FOLDER_PATH']
-    if not remote_folder:
-        pars = pars or load_ephyspc_params()
-        remote_folder = pars['REMOTE_DATA_FOLDER_PATH']
-    local_folder = Path(local_folder)
-    remote_folder = Path(remote_folder)
-
-    # Check for Subjects folder
-    local_folder = subjects_data_folder(local_folder, rglob=True)
-    remote_folder = subjects_data_folder(remote_folder, rglob=True)
-
-    print('LOCAL:', local_folder)
-    print('REMOTE:', remote_folder)
-    src_session_paths = (x.parent for x in local_folder.rglob('raw_widefield_data'))
-
-    src_session_paths = filter(lambda x: _is_recent(x, n_days), src_session_paths)
-
-    # Load incomplete transfer list
-    transfer_records = params.getfile('ibl_local_transfers')
-    if Path(transfer_records).exists():
-        with open(transfer_records, 'r') as fp:
-            transfers = json.load(fp)
-        # if transfers:  # TODO prompt for action here
-        #     answer = input('Previous incomplete transfers found, add them to queue?')
-    else:
-        transfers = []
-
-    src_session_paths = list(src_session_paths)
-    if not src_session_paths and not transfers:
-        print('Nothing to transfer, exiting...')
-        return
-
-    for session_path in src_session_paths:
-        if session_path in (x[0] for x in transfers):
-            log.info(f'{session_path} already in transfers list')
-            continue  # Already on pile
-
-        remote_session_path = remote_folder.joinpath(*session_path.parts[-3:])
-
-        # Check remote and local session number folders are the same
-        remote_numbers = _get_session_numbers(remote_session_path)
-        if not remote_numbers:
-            print(f'No behavior folder found in {remote_session_path}: skipping session...')
-            continue
-
-        # Check if multiple runs are found
-        imaging_files = list(session_path.joinpath('raw_widefield_data').glob('*.dat'))
-        if len(imaging_files) == 0:
-            log.warning('No widefield DAT file found')
-        elif len(imaging_files) > 1:
-            sizes = [x.stat().st_size / 1024 ** 3 for x in imaging_files]
-            print('Multiple DAT files found:',
-                  *(f'{i}: {x} ({sz:.2f} GB)' for i, (x, sz) in enumerate(zip(imaging_files, sizes))), sep='\n')
-            while True:
-                # Select an action
-                ans = input('[D]elete or [m]ove the extra files? (you will be prompted which to keep next)> ')
-                if len(ans) == 0 or ans.lower()[0] not in 'dm':
-                    print('Invalid response...')
-                    continue
-                action = 'delete' if ans.lower()[0] == 'd' else 'move'
-                # Select a file to perform action on
-                ans = input(f'Which file to keep, i.e. NOT {action} [{range_str(range(len(imaging_files)))}]?> ')
-                if ans not in map(str, range(len(imaging_files))):
-                    print('Invalid response...')
-                    continue
-
-                to_change = [x for i, x in enumerate(imaging_files) if i != int(ans)]
-                if action == 'delete':
-                    print('The following file(s) will be deleted: ', *to_change, sep='\n')
-                    ans = input(f'Type "delete" to confirm> ')
-                    if ans.lower() != 'delete':
-                        print('Invalid response...')
-                        continue
-                    for to_delete in to_change:
-                        to_delete.unlink()
-                        assert not to_delete.exists()
-                    break
-                else:
-                    suggested = Path.home().joinpath('widefield', *session_path.parts[-3:])
-                    ans = input(f'Press enter to move to "{suggested}" or type an alternative path> ')
-                    try:
-                        new_location = Path(ans or suggested).resolve()
-                        assert new_location != session_path.joinpath('raw_widefield_data'), \
-                            'New location can not be the same as the current one'
-                        if not new_location.exists():
-                            new_location.mkdir()
-                        for to_move in to_change:
-                            destination = new_location.joinpath(to_move.name)
-                            print(f'Moving {to_move} --> {destination}')
-                            shutil.move(to_move, destination)
-                        break
-                    except Exception as ex:
-                        log.error('Failed to move file:')
-                        log.exception(ex)
-                        print(flush=True)
-
-        # TODO Move to separate function
-        print(f"\nFound session: {session_path}")
-        if _get_session_numbers(session_path) != remote_numbers:
-            not_valid = True
-            resp = 's'
-            remote_numbers = list(map(int, remote_numbers))
-            while not_valid:
-                resp = input(f'Which session number to use? Options: '
-                             f'{range_str(remote_numbers)} or [s]kip/[h]elp/[e]xit> ').strip()
-                if resp == 'h':
-                    print('An example session filepath:\n')
-                    describe('number')  # Explain what a session number is
-                    input('Press enter to continue')
-                not_valid = resp != 's' and resp != 'e'
-                not_valid = not_valid and (not re.match(r'^\d+$', resp) or int(resp) not in remote_numbers)
-            if resp == 's':
-                log.info('Skipping session...')
-                continue
-            if resp == 'e':
-                print('Exiting.  No files transferred.')
-                return
-            session_path = rename_session(session_path, new_number=resp)
-            if session_path is None:
-                log.info('Skipping session...')
-                continue
-            remote_session_path = remote_folder / Path(*session_path.parts[-3:])
-        transfers.append((session_path.as_posix(), remote_session_path.as_posix()))
-        log.debug('Added to transfers list:\n' + str(transfers[-1]))
-        with open(transfer_records, 'w') as fp:
-            json.dump(transfers, fp)
-
-    # Start transfers
-    if os.name == 'nt':
-        WindowsInhibitor().inhibit()
-    for i, (session_path, remote_session_path) in enumerate(transfers):
-        if not behavior_exists(remote_session_path):
-            print(f'No behavior folder found in {remote_session_path}: skipping session...')
-            continue
-        try:
-            transfer_folder(
-                Path(session_path) / 'raw_widefield_data',
-                Path(remote_session_path) / 'raw_widefield_data', force=force
-            )
-        except AssertionError as ex:
-            log.error(f'Widefield transfer failed: {ex}')
-            continue
-        check_create_raw_session_flag(remote_session_path)
-        flags.write_flag_file(Path(remote_session_path) / 'widefield_data_transferred.flag')
-        # Done. Remove from list
-        transfers.pop(i)
-        with open(transfer_records, 'w') as fp:
-            json.dump(transfers, fp)
-    if os.name == 'nt':
-        WindowsInhibitor().uninhibit()
 
 
 def probe_labels_from_session_path(session_path: Union[str, Path]) -> List[str]:
@@ -819,8 +891,7 @@ def get_new_filename(filename: str) -> str:
     if len(parts) < 3:
         raise ValueError(fr'unrecognized filename "{filename}"')
     pattern = r'.*(?P<gt>_g\d+_t\d+)'
-    match = re.match(pattern, parts[0])
-    if not match:  # py 3.8
+    if not (match := re.match(pattern, parts[0])):
         raise ValueError(fr'unrecognized filename "{filename}"')
     return '.'.join([root + match.group(1), *parts[1:]])
 
@@ -984,8 +1055,7 @@ class WindowsInhibitor:
 
     def inhibit(self):
         print("Preventing Windows from going to sleep")
-        ctypes.windll.kernel32.SetThreadExecutionState(
-            WindowsInhibitor.ES_CONTINUOUS | WindowsInhibitor.ES_SYSTEM_REQUIRED)
+        ctypes.windll.kernel32.SetThreadExecutionState(WindowsInhibitor.ES_CONTINUOUS | WindowsInhibitor.ES_SYSTEM_REQUIRED)
 
     def uninhibit(self):
         print("Allowing Windows to go to sleep")

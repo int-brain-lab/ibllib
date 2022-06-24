@@ -420,7 +420,7 @@ def plot_performance_easy_median_reaction_time(df, subject):
 
     y2 = {'column': 'combined_reaction_time',
           'title': 'Median reaction time (s)',
-          'lim': [0.1, np.max([10, np.max(df.combined_reaction_time.values)])],
+          'lim': [0.1, np.nanmax([10, np.nanmax(df.combined_reaction_time.values)])],
           'log': True}
     ax = plot_over_days(df, y1, y2, subject)
 
@@ -547,6 +547,9 @@ def make_plots(session_path, one, df=None, save=False, upload=False):
     df = load_existing_dataframe(subj_path) if df is None else df
 
     df = df[df['task_protocol'] != 'habituation']
+
+    if len(df) == 0:
+        return
 
     ax1 = plot_trial_count_and_session_duration(df, subject)
     ax2 = plot_performance_easy_median_reaction_time(df, subject)

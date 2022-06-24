@@ -1,4 +1,11 @@
+## Release Notes 2.13
+## Release Notes 2.13.0 PRERELEASE
+- Deprecated ibllib.version
+- Fix Globus patcher
+
 ## Release Notes 2.12
+## Release Notes 2.12.2 2022-05-27
+- Fixes to plotting in training_status
 
 ## Release Notes 2.12.1 2022-05-26
 - ibllib.pipes.training_status: pipeline to compute training status of mice on local servers, new TrainingStatus task (Mayo)

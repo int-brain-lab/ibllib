@@ -12,7 +12,6 @@ from ibllib.io.extractors.training_trials import (
     StimOnTimes_deprecated, StimOnTriggerTimes, StimOnOffFreezeTimes, ItiInTimes,
     StimOffTriggerTimes, StimFreezeTriggerTimes, ErrorCueTriggerTimes, PhasePosQuiescence)
 from ibllib.io.extractors.training_wheel import Wheel
-from ibllib.misc import version
 
 
 class ContrastLR(BaseBpodTrialsExtractor):
@@ -163,7 +162,7 @@ def extract_all(session_path, save=False, bpod_trials=False, settings=False, ext
 
     base = [GoCueTriggerTimes]
     # Version check
-    if version.ge(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
+    if parse_version(settings['IBLRIG_VERSION_TAG']) >= parse_version('5.0.0'):
         # We now extract a single trials table
         base.extend([
             StimOnTriggerTimes, ItiInTimes, StimOffTriggerTimes, StimFreezeTriggerTimes, ErrorCueTriggerTimes,

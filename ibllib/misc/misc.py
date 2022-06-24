@@ -1,10 +1,15 @@
 # library of small functions
 import logging
 import subprocess
+from pathlib import Path
+
 import numpy as np
+
 from ibllib.exceptions import NvidiaDriverNotReady
 
 _logger = logging.getLogger('ibllib')
+LOG_FORMAT_STR = '%(asctime)s.%(msecs)d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s'
+LOG_DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
 
 
 def _parametrized(dec):
@@ -33,19 +38,46 @@ def logger_config(name=None):
     else:
         log = logging.getLogger(name)
     log.setLevel(logging.INFO)
-    format_str = '%(asctime)s.%(msecs)d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s'
-    date_format = '%Y-%m-%d %H:%M:%S'
-    cformat = '%(log_color)s' + format_str
+    cformat = '%(log_color)s' + LOG_FORMAT_STR
     colors = {'DEBUG': 'green',
               'INFO': 'cyan',
               'WARNING': 'bold_yellow',
               'ERROR': 'bold_red',
               'CRITICAL': 'bold_purple'}
-    formatter = colorlog.ColoredFormatter(cformat, date_format,
+    formatter = colorlog.ColoredFormatter(cformat, LOG_DATE_FORMAT,
                                           log_colors=colors)
     stream_handler = logging.StreamHandler()
     stream_handler.setFormatter(formatter)
     log.addHandler(stream_handler)
+    return log
+
+
+def log_to_file(filename, log='ibllib'):
+    """
+    Save log information to a given filename in '.ibl_logs' folder (in home directory).
+
+    Parameters
+    ----------
+    filename : str
+        The name of the log file to save to.
+    log : str, logging.Logger
+        The log (name or object) to add file handler to.
+
+    Returns
+    -------
+    logging.Logger
+        The log with the file handler attached.
+    """
+    ibllib_log_dir = Path.home() / '.ibl_logs'
+    ibllib_log_dir.mkdir() if ibllib_log_dir.exists() is False else None
+    if isinstance(log, str):
+        log = logging.getLogger(log)
+    log.setLevel(logging.INFO)
+    file_handler = logging.FileHandler(ibllib_log_dir / filename)
+    file_format = logging.Formatter(LOG_FORMAT_STR, LOG_DATE_FORMAT)
+    file_handler.setFormatter(file_format)
+    log.addHandler(file_handler)
+    log.info('File log initiated')
     return log
 
 
@@ -62,6 +94,13 @@ def print_progress(iteration, total, prefix='', suffix='', decimals=1, length=10
     :param fill: Optional: bar fill character (Str)
     :return: None
     """
+    import traceback
+    import warnings
+    for line in traceback.format_stack():
+        print(line.strip())
+
+    warnings.warn('ibllib.misc.print_progress has been deprecated in favour of tqdm. '
+                  'See stack above', DeprecationWarning)
     iteration += 1
     percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
     filledLength = int(length * iteration // total)

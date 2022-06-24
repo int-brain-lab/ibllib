@@ -9,9 +9,9 @@ import numpy as np
 from one.api import ONE
 import iblutil.io.params as iopar
 
+from ibllib import __version__ as ibllib_version
 from ibllib.oneibl import patcher, registration
 import ibllib.io.extractors.base
-from ibllib.misc import version
 from ibllib.tests import TEST_DB
 
 
@@ -105,7 +105,7 @@ r = {'created_by': 'olivier',
      'filenames': ["raw_behavior_data/_iblrig_encoderTrialInfo.raw.ssv"],
      'hashes': [md5_0],
      'filesizes': [1234],
-     'versions': [version.ibllib()]}
+     'versions': [ibllib_version]}
 
 MOCK_SESSION_SETTINGS = {
     'SESSION_DATE': '2018-04-01',
@@ -254,7 +254,7 @@ class TestRegistration(unittest.TestCase):
         for ds in datasets:
             self.assertTrue(ds['hash'] is not None)
             self.assertTrue(ds['file_size'] is not None)
-            self.assertTrue(ds['version'] == version.ibllib())
+            self.assertTrue(ds['version'] == ibllib_version)
         # checks the procedure of the session
         ses_info = self.one.alyx.rest('sessions', 'read', id=eid)
         self.assertTrue(ses_info['procedures'] == ['Ephys recording with acute probe(s)'])
