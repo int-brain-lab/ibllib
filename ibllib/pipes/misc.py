@@ -1,5 +1,4 @@
 import ctypes
-import datetime
 import hashlib
 import json
 import logging
@@ -395,8 +394,8 @@ def create_basic_transfer_params(param_str='transfer_params', local_data_path=No
     Set up basic transfer paramers without prompting the user
 
     >>> par = create_basic_transfer_params(
-    ...     local_data_path='D:\iblrig_data\Subjects',
-    ...     remote_data_path=r'\\iblserver.champalimaud.pt\ibldata\Subjects')
+    ...     local_data_path='/iblrig_data/Subjects',
+    ...     remote_data_path='/mnt/iblserver.champalimaud.pt/ibldata/Subjects')
 
     Prompt user for extra parameter using custom prompt (will call function with current default)
 
