@@ -46,7 +46,9 @@ def get_acquisition_description(protocol):
             },
             'sync': {
                 'bpod': {'collection': 'raw_behavior_data', 'extension': '.bin'}
-            }
+            },
+            'procedures': ['Ephys recording with acute probe(s)'],
+            'projects': ['ibl_neuropixel_brainwide_01']
         }
     else:
         acquisition_description = {  # this is the current ephys pipeline description
@@ -61,7 +63,9 @@ def get_acquisition_description(protocol):
             },
             'sync': {
                 'bpod': {'collection': 'raw_behavior_data', 'extension': '.bin'}
-            }
+            },
+            'procedures': ['Behavior training/tasks'],
+            'projects': ['ibl_neuropixel_brainwide_01']
         }
     return acquisition_description
 
@@ -102,7 +106,7 @@ def make_pipeline(session_path=None, **pkwargs):
 
     # Behavior tasks
     for protocol, task_info in acquisition_description.get('tasks', []).items():
-        kwargs = {'session_path': session_path, 'protocol': protocol, 'collection':task_info['collection']}
+        kwargs = {'session_path': session_path, 'protocol': protocol, 'collection': task_info['collection']}
         # -   choice_world_recording
         # -   choice_world_biased
         # -   choice_world_training

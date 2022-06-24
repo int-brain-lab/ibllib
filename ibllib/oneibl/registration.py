@@ -178,11 +178,11 @@ class RegistrationClient:
 
         return [ff.parent for ff in flag_files]
 
-    def create_session(self, session_path):
+    def create_session(self, session_path, **kwargs):
         """
         create_session(session_path)
         """
-        return self.register_session(session_path, file_list=False)
+        return self.register_session(session_path, file_list=False, **kwargs)
 
     def register_sync(self, root_data_folder, dry=False):
         """
@@ -206,12 +206,18 @@ class RegistrationClient:
                 flag_file.parent.joinpath('create_me.flag').unlink()
             _logger.info('registered' + '\n')
 
-    def register_session(self, ses_path, file_list=True):
+    def register_session(self, ses_path, file_list=True, projects=None, procedures=None):
         """
         Register session in Alyx
 
         :param ses_path: path to the session
         :param file_list: bool. Set to False will only create the session and skip registration
+        :param projects: list of strings corresponding to project names in the database. If set to
+         None, defaults to the subject projects. Here is how to get a list of current projects
+            >>> sorted([proj['name'] for proj in one.alyx.rest('projects', 'list')])
+        :param procedures: (None) list of session procedure to label the session with. They should
+        correspond to procedures in the database.
+            >>> sorted([proc['name'] for proc in one.alyx.rest('procedures', 'list')])
         :return: Status string on error
         """
         if isinstance(ses_path, str):
@@ -230,8 +236,8 @@ class RegistrationClient:
         md = _read_settings_json_compatibility_enforced(settings_json_file)
         # query alyx endpoints for subject, error if not found
         try:
-            subject = self.one.alyx.rest('subjects?nickname=' + md['SUBJECT_NAME'], 'list',
-                                         no_cache=True)[0]
+            subject = self.one.alyx.rest(
+                'subjects', 'list', nickname=md['SUBJECT_NAME'], no_cache=True)[0]
         except IndexError:
             _logger.error(f"Subject: {md['SUBJECT_NAME']} doesn't exist in Alyx. ABORT.")
             raise alferr.AlyxSubjectNotFound(md['SUBJECT_NAME'])
@@ -258,16 +264,22 @@ class RegistrationClient:
         gen_rel_path = Path(subject['nickname'], md['SESSION_DATE'],
                             '{0:03d}'.format(int(md['SESSION_NUMBER'])))
 
-        # if nothing found create a new session in Alyx
         task_protocol = md['PYBPOD_PROTOCOL'] + md['IBLRIG_VERSION_TAG']
-        alyx_procedure = _alyx_procedure_from_task(task_protocol)
+        # unless specified label the session projects with subject projects
+        projects = subject['projects'] if projects is None else projects
+        # makes sure projects is a list
+        projects = [projects] if isinstance(projects, str) else projects
+
+        # unless specified label the session procedures with task protocol lookup
+        procedures = procedures if procedures else _alyx_procedure_from_task(task_protocol)
+
         if not session:
             ses_ = {'subject': subject['nickname'],
                     'users': [username],
                     'location': md['PYBPOD_BOARD'],
-                    'procedures': [] if alyx_procedure is None else [alyx_procedure],
+                    'procedures': procedures,
                     'lab': subject['lab'],
-                    # 'project': project['name'],
+                    'projects': projects,
                     'type': 'Experiment',
                     'task_protocol': task_protocol,
                     'number': md['SESSION_NUMBER'],
@@ -348,7 +360,8 @@ class RegistrationClient:
 
 def _alyx_procedure_from_task(task_protocol):
     task_type = ibllib.io.extractors.base.get_task_extractor_type(task_protocol)
-    return _alyx_procedure_from_task_type(task_type)
+    procedure = _alyx_procedure_from_task_type(task_type)
+    return procedure or []
 
 
 def _alyx_procedure_from_task_type(task_type):
