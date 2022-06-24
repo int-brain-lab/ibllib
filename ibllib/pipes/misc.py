@@ -360,7 +360,7 @@ def load_ephyspc_params():
 
 
 def create_basic_transfer_params(param_str='transfer_params', local_data_path=None,
-                                 remote_data_path=None, remove_unpassed=False, **kwargs):
+                                 remote_data_path=None, clobber=False, **kwargs):
     """Create some basic parameters common to all acquisition rigs.
 
     Namely prompt user for the local root data path and the remote (lab server) data path.
@@ -374,7 +374,7 @@ def create_basic_transfer_params(param_str='transfer_params', local_data_path=No
         The local root data path, stored with the DATA_FOLDER_PATH key.  If None, user is prompted.
     remote_data_path : str, pathlib.Path
         The local root data path, stored with the REMOTE_DATA_FOLDER_PATH key.  If None, user is prompted.
-    remove_unpassed : bool
+    clobber : bool
         If True, any parameters in existing parameter file not found as keyword args will be removed,
         otherwise the user is prompted for these also.
 
@@ -406,16 +406,16 @@ def create_basic_transfer_params(param_str='transfer_params', local_data_path=No
 
     """
     parameters = params.as_dict(params.read(param_str, {})) or {}
-    if local_data_path is None:
-        local_data_path = cli_ask_default(
-            "Where's your LOCAL 'Subjects' data folder?", parameters.get('DATA_FOLDER_PATH')
-        )
+    if local_data_path is None and (clobber or not parameters.get('DATA_FOLDER_PATH')):
+        local_data_path = parameters.get('DATA_FOLDER_PATH')
+        if not local_data_path or clobber:
+            local_data_path = cli_ask_default("Where's your LOCAL 'Subjects' data folder?", local_data_path)
     parameters['DATA_FOLDER_PATH'] = local_data_path
 
     if remote_data_path is None:
-        remote_data_path = cli_ask_default(
-            "Where's your REMOTE 'Subjects' data folder?", parameters.get('REMOTE_DATA_FOLDER_PATH')
-        )
+        remote_data_path = parameters.get('REMOTE_DATA_FOLDER_PATH')
+        if not remote_data_path or clobber:
+            remote_data_path = cli_ask_default("Where's your REMOTE 'Subjects' data folder?", remote_data_path)
     parameters['REMOTE_DATA_FOLDER_PATH'] = remote_data_path
 
     # Deal with extraneous parameters
@@ -431,7 +431,7 @@ def create_basic_transfer_params(param_str='transfer_params', local_data_path=No
             parameters[k.upper()] = str(v)
 
     defined = list(map(str.upper, ('DATA_FOLDER_PATH', 'REMOTE_DATA_FOLDER_PATH', *kwargs.keys())))
-    if remove_unpassed:
+    if clobber:
         # Delete any parameters in parameter dict that were not passed as keyword args into function
         parameters = {k: v for k, v in parameters.items() if k in defined}
     else:

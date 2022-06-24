@@ -367,19 +367,19 @@ class TestPipesMisc(unittest.TestCase):
         self.assertCountEqual(params, expected)
 
         # Test prompts
-        with mock.patch('builtins.input', side_effect=['~/local_data', '~/remote_data', 'foo', 'bar']) as in_mock:
+        with mock.patch('builtins.input', side_effect=['foo', 'bar']) as in_mock:
             params = misc.create_basic_transfer_params(PARAM_STR, par2=None)
-            self.assertEqual(4, in_mock.call_count)
+            self.assertEqual(2, in_mock.call_count)
         expected.update({'PAR1': 'foo', 'PAR2': 'bar'})
         self.assertCountEqual(expected, params)
 
         # Test custom function and extra par delete
         with mock.patch('builtins.input', return_value='baz') as in_mock:
             params = misc.create_basic_transfer_params(
-                PARAM_STR, '~/local_data', '~/remote_data',
-                remove_unpassed=True, par2=partial(misc.cli_ask_default, 'hello')
+                PARAM_STR, clobber=True, par2=partial(misc.cli_ask_default, 'hello')
             )
-            self.assertIn('hello', in_mock.call_args.args[0])
+            self.assertIn('hello', in_mock.call_args.args[-1])
+        self.assertEqual(params['DATA_FOLDER_PATH'], 'baz')
         self.assertEqual(params['PAR2'], 'baz')
         self.assertNotIn('PAR1', params)
 
@@ -421,53 +421,6 @@ class TestSyncData(unittest.TestCase):
             p.touch()
         # Create video data too
         fu.create_fake_raw_video_data_folder(self.session_path)
-
-    @mock.patch('ibllib.pipes.misc.check_create_raw_session_flag')
-    def test_confirm_widefield_remote_folder(self, chk_fcn):
-        # NB Mock check_create_raw_session_flag which requires a valid task settings file
-        # With no data in the remote repo, no data should be transferred
-        with mock.patch('builtins.input', new=self.assertFalse):
-            misc.confirm_widefield_remote_folder(self.local_repo, self.remote_repo)
-        self.assertFalse(list(filter(lambda x: x.is_file(), self.remote_repo.rglob('*'))))
-
-        # Create a remote session with behaviour data
-        remote_session = fu.create_fake_session_folder(self.remote_repo)
-        fu.create_fake_raw_behavior_data_folder(remote_session)
-        with mock.patch('builtins.input', new=self.assertFalse):
-            misc.confirm_widefield_remote_folder(self.local_repo, self.remote_repo)
-            chk_fcn.assert_called()
-
-        # Check files were copied
-        n_copied = sum(map(lambda x: x.is_file(), remote_session.joinpath('raw_widefield_data').rglob('*')))
-        self.assertEqual(n_copied, 4)
-        local_transfers_file = Path(self.root_test_folder.name).joinpath('.ibl_local_transfers')
-        self.assertTrue(local_transfers_file.exists())
-        # Transfers file should be empty as all files transferred successfully
-        with open(local_transfers_file) as fp:
-            self.assertCountEqual(json.load(fp), [])
-
-        # Delete transferred widefield folder and test user prompt
-        shutil.rmtree(remote_session.joinpath('raw_widefield_data'))
-        # New session for same date and subject
-        new_remote_session = fu.create_fake_session_folder(self.remote_repo)
-        fu.create_fake_raw_behavior_data_folder(new_remote_session)
-        with mock.patch('builtins.input', return_value='002'):
-            misc.confirm_widefield_remote_folder(self.local_repo, self.remote_repo)
-        # Data should have been copied into session #2
-        n_copied = sum(map(lambda x: x.is_file(), new_remote_session.joinpath('raw_widefield_data').rglob('*')))
-        self.assertEqual(n_copied, 4)
-        # Local data should have been renamed
-        expected = 'fakemouse/1900-01-01/002/raw_widefield_data'
-        self.assertTrue(expected in next(self.local_repo.rglob('raw_widefield_data')).as_posix())
-
-        # Test behaviour when a transfer fails
-        shutil.rmtree(remote_session)
-        with unittest.mock.patch('ibllib.pipes.misc.check_transfer', side_effect=AssertionError), \
-                self.assertLogs(logging.getLogger('ibllib'), logging.ERROR):
-            misc.confirm_widefield_remote_folder(self.local_repo, self.remote_repo)
-        with open(local_transfers_file) as fp:
-            transfer_data = json.load(fp)
-            self.assertEqual(len(transfer_data), 1)
 
     def test_rdiff_install(self):
         if os.name == "nt":  # remove executable if on windows
