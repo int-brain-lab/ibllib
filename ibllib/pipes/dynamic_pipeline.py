@@ -119,6 +119,10 @@ def make_pipeline(session_path=None, **pkwargs):
             registration_class = btasks.PassiveRegisterRaw
             behaviour_class = btasks.PassiveRegisterRaw
             compute_status = False
+        elif protocol in ['choice_world_training', 'choice_world_biased']:
+            registration_class = btasks.TrialRegisterRaw
+            behaviour_class = btasks.ChoiceWorldTrialsBpod
+            compute_status = False
         else:
             raise NotImplementedError
         tasks[f'RegisterRaw_{protocol}'] = type(f'RegisterRaw_{protocol}', (registration_class,), {})(**kwargs)

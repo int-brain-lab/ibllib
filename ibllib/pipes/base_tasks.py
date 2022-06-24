@@ -68,15 +68,6 @@ class DynamicTask(Task):
         params_device_collection = sess_params.get_device_collection(self.session_params, device)
         return device_collection if not params_device_collection else params_device_collection
 
-    def setUp(self):
-
-        self.signature['input_files'], self.signature['output_files'] = self.dynamic_signatures()
-        return super().setUp()
-
-    def dynamic_signatures(self):
-
-        return self.signature['input_files'], self.signature['output_files']
-
     def read_params_file(self):
         params = sess_params.read_params(self.session_path)
 

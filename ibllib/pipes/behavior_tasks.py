@@ -1,21 +1,24 @@
-from pathlib import Path
 from ibllib.pipes import base_tasks, tasks
 from ibllib.io.extractors.ephys_passive import PassiveChoiceWorld
-import ibllib.io.extractors.bpod_trials as bpod_trials
+from ibllib.io.extractors import bpod_trials
 from ibllib.qc.task_extractors import TaskQCExtractor
-from ibllib.qc.task_metrics import HabituationQC
+from ibllib.qc.task_metrics import HabituationQC, TaskQC
+from ibllib.io.extractors.base import get_session_extractor_type
 
 
-class HabituationRegisterRaw(base_tasks.RegisterRawDataTask):
+class HabituationRegisterRaw(base_tasks.RegisterRawDataTask):\
 
-    def dynamic_signatures(self):
-        input_signatures = []
-        output_signatures = [
-            ('_iblrig_taskData.raw.*', self.collection, True),
-            ('_iblrig_taskSettings.raw.*', self.collection, True),
-            ('_iblrig_encoderEvents.raw*', self.collection, True),
-        ]
-        return input_signatures, output_signatures
+    @property
+    def signature(self):
+        signature = {
+            'input_files': [],
+            'output_files': [
+                ('_iblrig_taskData.raw.*', self.collection, True),
+                ('_iblrig_taskSettings.raw.*', self.collection, True),
+                ('_iblrig_encoderEvents.raw*', self.collection, True),
+            ]
+        }
+        return signature
 
 
 class HabituationTrialsBpod(base_tasks.DynamicTask):
@@ -62,23 +65,28 @@ class HabituationTrialsBpod(base_tasks.DynamicTask):
 
 class TrialRegisterRaw(base_tasks.RegisterRawDataTask):
 
-    def dynamic_signatures(self):
-        input_signatures = []
-        output_signatures = [('_iblrig_taskData.raw.*', self.collection, True),
-                             ('_iblrig_taskSettings.raw.*', self.collection, True),
-                             ('_iblrig_encoderEvents.raw*', self.collection, True),
-                             ('_iblrig_encoderPositions.raw*', self.collection, True),
-                             ('_iblrig_encoderTrialInfo.raw*', self.collection, True),
-                             ('_iblrig_stimPositionScreen.raw*', self.collection, True),
-                             ('_iblrig_syncSquareUpdate.raw*', self.collection, True),
-                             ('_iblrig_ambientSensorData.raw*', self.collection, True)]
-
-        return input_signatures, output_signatures
+    @property
+    def signature(self):
+        signature = {
+            'input_files': [],
+            'output_files': [
+                ('_iblrig_taskData.raw.*', self.collection, True),
+                ('_iblrig_taskSettings.raw.*', self.collection, True),
+                ('_iblrig_encoderEvents.raw*', self.collection, True),
+                ('_iblrig_encoderPositions.raw*', self.collection, True),
+                ('_iblrig_encoderTrialInfo.raw*', self.collection, True),
+                ('_iblrig_stimPositionScreen.raw*', self.collection, True),
+                ('_iblrig_syncSquareUpdate.raw*', self.collection, True),
+                ('_iblrig_ambientSensorData.raw*', self.collection, True)
+            ]
+        }
+        return signature
 
 
 class PassiveRegisterRaw(base_tasks.RegisterRawDataTask):
 
-    def dynamic_signatures(self):
+    @property
+    def signature(self):
         input_signatures = []
         output_signatures = [('_iblrig_taskSettings.raw.*', self.collection, True),
                              ('_iblrig_encoderEvents.raw*', self.collection, True),
@@ -91,23 +99,64 @@ class PassiveRegisterRaw(base_tasks.RegisterRawDataTask):
         return input_signatures, output_signatures
 
 
-class TrainingTrialsBpod(base_tasks.DynamicTask):
+
+class PassiveTask(base_tasks.DynamicTask):
+    cpu = 1
+    io_charge = 90
+    level = 1
+    force = False
+
+    @property
+    def signature(self):
+        input_signatures = [('_iblrig_taskSettings.raw*', self.task_collection, True),
+                            ('_iblrig_RFMapStim.raw*', self.task_collection, True),
+                            ('_spikeglx_sync.channels.*', self.sync_collection, True),
+                            ('_spikeglx_sync.polarities.*', self.sync_collection, True),
+                            ('_spikeglx_sync.times.*', self.sync_collection, True),
+                            ('daq.wiring.json', self.sync_collection, False),
+                            ('*.meta', self.sync_collection, False)]
+        output_signatures = [('_ibl_passiveGabor.table.csv', 'alf', True),
+                             ('_ibl_passivePeriods.intervalsTable.csv', 'alf', True),
+                             ('_ibl_passiveRFM.times.npy', 'alf', True),
+                             ('_ibl_passiveStims.table.csv', 'alf', True)]
+
+        return input_signatures, output_signatures
+
+    def _run(self):
+        """returns a list of pathlib.Paths. """
+        data, paths = PassiveChoiceWorld(self.session_path).extract(
+            sync_collection=self.sync_collection, protocol_collection=self.task_collection, save=True)
+
+        if any([x is None for x in paths]):
+            self.status = -1
+
+        return paths
+
+
+class ChoiceWorldTrialsBpod(base_tasks.DynamicTask):
     priority = 90
     level = 0
     force = False
-    signature = {
-        'input_files': [('_iblrig_taskData.raw.*', 'raw_XX_data', True),
-                        ('_iblrig_taskSettings.raw.*', 'raw_XX_data', True),
-                        ('_iblrig_encoderEvents.raw*', 'raw_XX_data', True),
-                        ('_iblrig_encoderPositions.raw*', 'raw_XX_data', True)],
-        'output_files': [('*trials.goCueTrigger_times.npy', 'alf', True),
-                         ('*trials.itiDuration.npy', 'alf', False),
-                         ('*trials.table.pqt', 'alf', True),
-                         ('*wheel.position.npy', 'alf', True),
-                         ('*wheel.timestamps.npy', 'alf', True),
-                         ('*wheelMoves.intervals.npy', 'alf', True),
-                         ('*wheelMoves.peakAmplitude.npy', 'alf', True)]
-    }
+
+    @property
+    def signature(self):
+        signature = {
+            'input_files': [
+                ('_iblrig_taskData.raw.*', self.collection, True),
+                ('_iblrig_taskSettings.raw.*', self.collection, True),
+                ('_iblrig_encoderEvents.raw*', self.collection, True),
+                ('_iblrig_encoderPositions.raw*', self.collection, True)],
+            'output_files': [
+                ('*trials.goCueTrigger_times.npy', 'alf', True),
+                ('*trials.itiDuration.npy', 'alf', False),
+                ('*trials.table.pqt', 'alf', True),
+                ('*wheel.position.npy', 'alf', True),
+                ('*wheel.timestamps.npy', 'alf', True),
+                ('*wheelMoves.intervals.npy', 'alf', True),
+                ('*wheelMoves.peakAmplitude.npy', 'alf', True)
+            ]
+        }
+        return signature
 
     def _run(self):
         """
@@ -131,7 +180,6 @@ class TrainingTrialsBpod(base_tasks.DynamicTask):
         # Aggregate and update Alyx QC fields
         qc.run(update=True)
         return output_files
-
 
 
 class TrainingTrialsFPGA(tasks.Task):
@@ -244,35 +292,3 @@ class TrainingTrialsFPGA(tasks.Task):
         self.input_files = full_input_files
 
         self.output_files = self.signature['output_files']
-
-
-class PassiveTask(base_tasks.DynamicTask):
-    cpu = 1
-    io_charge = 90
-    level = 1
-    force = False
-
-    def dynamic_signatures(self):
-        input_signatures = [('_iblrig_taskSettings.raw*', self.task_collection, True),
-                            ('_iblrig_RFMapStim.raw*', self.task_collection, True),
-                            ('_spikeglx_sync.channels.*', self.sync_collection, True),
-                            ('_spikeglx_sync.polarities.*', self.sync_collection, True),
-                            ('_spikeglx_sync.times.*', self.sync_collection, True),
-                            ('daq.wiring.json', self.sync_collection, False),
-                            ('*.meta', self.sync_collection, False)]
-        output_signatures = [('_ibl_passiveGabor.table.csv', 'alf', True),
-                             ('_ibl_passivePeriods.intervalsTable.csv', 'alf', True),
-                             ('_ibl_passiveRFM.times.npy', 'alf', True),
-                             ('_ibl_passiveStims.table.csv', 'alf', True)]
-
-        return input_signatures, output_signatures
-
-    def _run(self):
-        """returns a list of pathlib.Paths. """
-        data, paths = PassiveChoiceWorld(self.session_path).extract(
-            sync_collection=self.sync_collection, protocol_collection=self.task_collection, save=True)
-
-        if any([x is None for x in paths]):
-            self.status = -1
-
-        return paths
