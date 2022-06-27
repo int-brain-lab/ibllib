@@ -15,7 +15,7 @@ from ibllib.oneibl import data_handlers
 import one.params
 from one.api import ONE
 
-_logger = logging.getLogger('ibllib')
+_logger = logging.getLogger(__name__)
 
 
 class Task(abc.ABC):
