@@ -1,3 +1,5 @@
+from abc import ABC
+
 from ibllib.pipes.tasks import Task
 import ibllib.io.session_params as sess_params
 
@@ -21,7 +23,7 @@ class DynamicTask(Task):
         # Task type (protocol)
         self.protocol = self.get_protocol(self.collection, kwargs.get('protocol', None))
         # Main task collection (for when task protocols are chained together)
-        self.main_task_collection = self.get_main_task_collection(kwargs.get('main_collection', None)) # TODO improve name
+        self.main_task_collection = self.get_main_task_collection(kwargs.get('main_collection', None))  # TODO improve name
 
     def get_sync_collection(self, sync_collection=None):
 
@@ -88,6 +90,7 @@ class VideoTask(DynamicTask):
     def __init__(self, session_path, cameras, **kwargs):
         super().__init__(session_path, cameras=cameras, **kwargs)
         self.cameras = cameras
+        self.device_collection = self.get_device_collection('cameras', kwargs.get('device_collection', 'raw_video_data'))
 
 
 class AudioTask(DynamicTask):

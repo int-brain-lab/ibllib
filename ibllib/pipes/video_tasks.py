@@ -18,15 +18,17 @@ class VideoRegisterRaw(base_tasks.VideoTask, base_tasks.RegisterRawDataTask):
     level = 0
     force = False
 
-    def dynamic_signatures(self):
-        input_signatures = []
-        output_signatures = [(f'_iblrig_{cam}Camera.timestamps*', self.device_collection, True) for cam in self.cameras] +\
-                            [(f'_iblrig_{cam}Camera.GPIO.bin', self.device_collection, True) for cam in self.cameras] +\
-                            [(f'_iblrig_{cam}Camera.frame_counter.bin', self.device_collection, True) for cam in self.cameras] + \
+    @property
+    def signature(self):
+        signature = {
+            'input_files': [],
+            'output_files': [(f'_iblrig_{cam}Camera.timestamps*', self.device_collection, True) for cam in self.cameras] +\
+                            [(f'_iblrig_{cam}Camera.GPIO.bin', self.device_collection, False) for cam in self.cameras] +\
+                            [(f'_iblrig_{cam}Camera.frame_counter.bin', self.device_collection, False) for cam in self.cameras] + \
                             [(f'_iblrig_{cam}Camera.frameData.bin', self.device_collection, False) for cam in self.cameras] + \
                             [('_iblrig_videoCodeFiles.raw*', self.device_collection, False)]
-
-        return input_signatures, output_signatures
+        }
+        return signature
 
 
 class VideoCompress(base_tasks.VideoTask):
@@ -37,11 +39,13 @@ class VideoCompress(base_tasks.VideoTask):
     level = 0
     force = False
 
-    def dynamic_signatures(self):
-        input_signatures = [(f'_iblrig_{cam}Camera.raw.*', self.device_collection, True) for cam in self.cameras]
-        output_signatures = [(f'_iblrig_{cam}Camera.raw.mp4', self.device_collection, True) for cam in self.cameras]
-
-        return input_signatures, output_signatures
+    @property
+    def signature(self):
+        signature = {
+            'input_files': [(f'_iblrig_{cam}Camera.raw.*', self.device_collection, True) for cam in self.cameras],
+            'output_files': [(f'_iblrig_{cam}Camera.raw.mp4', self.device_collection, True) for cam in self.cameras]
+        }
+        return signature
 
     def _run(self):
         # avi to mp4 compression
@@ -65,8 +69,10 @@ class VideoSyncQc(base_tasks.VideoTask):
     level = 2
     force = False
 
-    def dynamic_signatures(self):
-        input_signatures = [(f'_iblrig_{cam}Camera.raw.mp4', self.device_collection, True) for cam in self.cameras] +\
+    @property
+    def signature(self):
+        signature = {
+            'input_files': [(f'_iblrig_{cam}Camera.raw.mp4', self.device_collection, True) for cam in self.cameras] +\
                            [(f'_iblrig_{cam}Camera.timestamps*', self.device_collection, False) for cam in self.cameras] +\
                            [(f'_iblrig_{cam}Camera.GPIO.bin', self.device_collection, False) for cam in self.cameras] +\
                            [(f'_iblrig_{cam}Camera.frame_counter.bin', self.device_collection, False) for cam in self.cameras] + \
@@ -74,17 +80,18 @@ class VideoSyncQc(base_tasks.VideoTask):
                            [('_iblrig_taskData.raw.*', self.main_task_collection, True),
                             ('_iblrig_taskSettings.raw.*', self.main_task_collection, True),
                             ('*wheel.position.npy', 'alf', False),
-                            ('*wheel.timestamps.npy', 'alf', False)]
+                            ('*wheel.timestamps.npy', 'alf', False)],
+            'output_files': [(f'_ibl_{cam}Camera.times.npy', 'alf', True) for cam in self.cameras]
+        }
 
         if self.sync == 'nidq':
-            input_signatures += [('_spikeglx_sync.channels.npy', self.sync_collection, True),
-                                 ('_spikeglx_sync.polarities.npy', self.sync_collection, True),
-                                 ('_spikeglx_sync.times.npy', self.sync_collection, True),
-                                 ('daq.wiring.json', self.sync_collection, True)]
+            signature['input_files'] += [('_spikeglx_sync.channels.npy', self.sync_collection, True),
+                                         ('_spikeglx_sync.polarities.npy', self.sync_collection, True),
+                                         ('_spikeglx_sync.times.npy', self.sync_collection, True),
+                                         ('daq.wiring.json', self.sync_collection, True)]
 
-        output_signatures = [(f'_ibl_{cam}Camera.times.npy', 'alf', True) for cam in self.cameras]
 
-        return input_signatures, output_signatures
+        return signature
 
     def _run(self, **kwargs):
 

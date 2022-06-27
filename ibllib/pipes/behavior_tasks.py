@@ -6,7 +6,7 @@ from ibllib.qc.task_metrics import HabituationQC, TaskQC
 from ibllib.io.extractors.base import get_session_extractor_type
 
 
-class HabituationRegisterRaw(base_tasks.RegisterRawDataTask):\
+class HabituationRegisterRaw(base_tasks.RegisterRawDataTask):
 
     @property
     def signature(self):
@@ -87,17 +87,17 @@ class PassiveRegisterRaw(base_tasks.RegisterRawDataTask):
 
     @property
     def signature(self):
-        input_signatures = []
-        output_signatures = [('_iblrig_taskSettings.raw.*', self.collection, True),
+        signature = {
+            'input_files': [],
+            'output_files': [('_iblrig_taskSettings.raw.*', self.collection, True),
                              ('_iblrig_encoderEvents.raw*', self.collection, True),
                              ('_iblrig_encoderPositions.raw*', self.collection, True),
                              ('_iblrig_encoderTrialInfo.raw*', self.collection, True),
                              ('_iblrig_stimPositionScreen.raw*', self.collection, True),
                              ('_iblrig_syncSquareUpdate.raw*', self.collection, True),
                              ('_iblrig_RFMapStim.raw*', self.collection, True)]
-
-        return input_signatures, output_signatures
-
+        }
+        return signature
 
 
 class PassiveTask(base_tasks.DynamicTask):
@@ -108,19 +108,20 @@ class PassiveTask(base_tasks.DynamicTask):
 
     @property
     def signature(self):
-        input_signatures = [('_iblrig_taskSettings.raw*', self.task_collection, True),
-                            ('_iblrig_RFMapStim.raw*', self.task_collection, True),
+        signature = {
+            'input_files': [('_iblrig_taskSettings.raw*', self.collection, True),
+                            ('_iblrig_RFMapStim.raw*', self.collection, True),
                             ('_spikeglx_sync.channels.*', self.sync_collection, True),
                             ('_spikeglx_sync.polarities.*', self.sync_collection, True),
                             ('_spikeglx_sync.times.*', self.sync_collection, True),
                             ('daq.wiring.json', self.sync_collection, False),
-                            ('*.meta', self.sync_collection, False)]
-        output_signatures = [('_ibl_passiveGabor.table.csv', 'alf', True),
+                            ('*.meta', self.sync_collection, False)],
+            'output_files': [('_ibl_passiveGabor.table.csv', 'alf', True),
                              ('_ibl_passivePeriods.intervalsTable.csv', 'alf', True),
                              ('_ibl_passiveRFM.times.npy', 'alf', True),
                              ('_ibl_passiveStims.table.csv', 'alf', True)]
-
-        return input_signatures, output_signatures
+        }
+        return signature
 
     def _run(self):
         """returns a list of pathlib.Paths. """

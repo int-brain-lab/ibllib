@@ -14,12 +14,14 @@ class SyncRegisterRaw(base_tasks.RegisterRawDataTask):
     Task to register raw daq data
     """
 
-    def dynamic_signatures(self):
-        input_signature = []
-        output_signature = [(f'daq.raw.{self.sync}.{self.sync_ext}', self.sync_collection, True),
-                            (f'daq.raw.{self.sync}.wiring.json', self.sync_collection, True)]
-
-        return input_signature, output_signature
+    @property
+    def signature(self):
+        signature = {
+            'input_files': [],
+            'output_files': [(f'daq.raw.{self.sync}.{self.sync_ext}', self.sync_collection, True),
+                             (f'daq.raw.{self.sync}.wiring.json', self.sync_collection, True)]
+        }
+        return signature
 
 
 class SyncMtscomp(base_tasks.DynamicTask):
@@ -27,16 +29,18 @@ class SyncMtscomp(base_tasks.DynamicTask):
     Task to rename, compress and register raw daq data with .bin format collected using NIDAQ
     """
 
-    def dynamic_signatures(self):
-        input_signature = [('*.*bin', self.sync_collection, True),
-                           ('*.meta', self.sync_collection, True),
-                           ('*.wiring.json', self.sync_collection, True)]
-        output_signature = [(f'daq.raw.{self.sync}.cbin', self.sync_collection, True),
-                            (f'daq.raw.{self.sync}.ch', self.sync_collection, True),
-                            (f'daq.raw.{self.sync}.meta', self.sync_collection, True),
-                            (f'daq.raw.{self.sync}.wiring.json', self.sync_collection, True)]
-
-        return input_signature, output_signature
+    @property
+    def signature(self):
+        signature = {
+            'input_files': [('*.*bin', self.sync_collection, True),
+                            ('*.meta', self.sync_collection, True),
+                            ('*.wiring.json', self.sync_collection, True)],
+            'output_files': [(f'daq.raw.{self.sync}.cbin', self.sync_collection, True),
+                             (f'daq.raw.{self.sync}.ch', self.sync_collection, True),
+                             (f'daq.raw.{self.sync}.meta', self.sync_collection, True),
+                             (f'daq.raw.{self.sync}.wiring.json', self.sync_collection, True)]
+        }
+        return signature
 
     def _run(self):
 
@@ -116,17 +120,18 @@ class SyncPulses(base_tasks.DynamicTask):
     # TODO generalise to other daq and file formats, generalise to 3A probes
     """
 
-    def dynamic_signatures(self):
-        input_signature = [(f'daq.raw.{self.sync}.*bin', self.sync_collection, True),
-                           (f'daq.raw.{self.sync}.ch', self.sync_collection, False),  # not mandatory if we have .bin file
-                           (f'daq.raw.{self.sync}.meta', self.sync_collection, True),
-                           (f'daq.raw.{self.sync}.wiring.json', self.sync_collection, True)]
-
-        output_signature = [('_spikeglx_sync.times.npy', self.sync_collection, True),
-                            ('_spikeglx_sync.polarities.npy', self.sync_collection, True),
-                            ('_spikeglx_sync.channels.npy', self.sync_collection, True)]
-
-        return input_signature, output_signature
+    @property
+    def signature(self):
+        signature = {
+            'input_files': [(f'daq.raw.{self.sync}.*bin', self.sync_collection, True),
+                            (f'daq.raw.{self.sync}.ch', self.sync_collection, False),  # not mandatory if we have .bin file
+                            (f'daq.raw.{self.sync}.meta', self.sync_collection, True),
+                            (f'daq.raw.{self.sync}.wiring.json', self.sync_collection, True)],
+            'output_files': [('_spikeglx_sync.times.npy', self.sync_collection, True),
+                             ('_spikeglx_sync.polarities.npy', self.sync_collection, True),
+                             ('_spikeglx_sync.channels.npy', self.sync_collection, True)]
+        }
+        return signature
 
     def _run(self, overwrite=False):
 

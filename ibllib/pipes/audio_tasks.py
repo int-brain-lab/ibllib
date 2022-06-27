@@ -8,11 +8,15 @@ _logger = logging.getLogger('ibllib')
 
 
 class AudioCompress(base_tasks.AudioTask):
-    def dynamic_signatures(self):
-        input_signatures = [('_iblrig_micData.raw.wav', self.device_collection, True)]
-        output_signatures = [('_iblrig_micData.raw.flac', self.device_collection, True)]
 
-        return input_signatures, output_signatures
+    @property
+    def signature(self):
+        signature = {
+            'input_files': [('_iblrig_micData.raw.wav', self.device_collection, True)],
+            'output_files': [('_iblrig_micData.raw.flac', self.device_collection, True)]
+        }
+        return signature
+
 
     def _run(self, overwrite=False):
 
@@ -30,14 +34,16 @@ class AudioSync(base_tasks.AudioTask):
     Extracts audio events and sync. N.B currently only supports bpod with xonar sound system
     """
 
-    def dynamic_signatures(self):
-        input_signatures = [('_iblrig_micData.raw.wav', self.device_collection, True)]
-        output_signatures = [('_iblmic_audioOnsetGoCue.times_mic.npy', self.device_collection, True),
+    @property
+    def signature(self):
+        signature = {
+            'input_files': [('_iblrig_micData.raw.wav', self.device_collection, True)],
+            'output_files': [('_iblmic_audioOnsetGoCue.times_mic.npy', self.device_collection, True),
                              ('_iblmic_audioSpectrogram.frequencies.npy', self.device_collection, True),
                              ('_iblmic_audioSpectrogram.power.npy', self.device_collection, True),
                              ('_iblmic_audioSpectrogram.times_mic.npy', self.device_collection, True)]
-
-        return input_signatures, output_signatures
+        }
+        return signature
 
     def _run(self):
 
