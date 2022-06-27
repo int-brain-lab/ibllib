@@ -118,6 +118,8 @@ class BrainCoordinates:
                 i[i >= self.nx] = self.nx - 1
             elif mode == 'raise':
                 raise ValueError("At least one x value lies outside of the atlas volume.")
+            elif mode == 'wrap':
+                pass
         return i
 
     def y2i(self, y, round=True, mode='raise'):
@@ -128,6 +130,8 @@ class BrainCoordinates:
                 i[i >= self.ny] = self.ny - 1
             elif mode == 'raise':
                 raise ValueError("At least one y value lies outside of the atlas volume.")
+            elif mode == 'wrap':
+                pass
         return i
 
     def z2i(self, z, round=True, mode='raise'):
@@ -138,13 +142,16 @@ class BrainCoordinates:
                 i[i >= self.nz] = self.nz - 1
             elif mode == 'raise':
                 raise ValueError("At least one z value lies outside of the atlas volume.")
+            elif mode == 'wrap':
+                pass
         return i
 
     def xyz2i(self, xyz, round=True, mode='raise'):
         """
-        :param mode: {‘raise’} determines what to do when determined index lies outside the atlas volume
+        :param mode: {‘raise’, 'clip', 'wrap'} determines what to do when determined index lies outside the atlas volume
                      'raise' will raise a ValueError
                      'clip' will replace the index with the closest index inside the volume
+                     'wrap' will wrap around to the other side of the volume. This is only here for legacy reasons
         """
         xyz = np.array(xyz)
         dt = int if round else float
