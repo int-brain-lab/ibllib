@@ -58,8 +58,10 @@ def get_acquisition_description(protocol):
                 'choice_world_passive': {'collection': 'raw_passive_data', 'sync_label': 'bpod', 'main': False},
             },
             'sync': {
-                'bpod': {'collection': 'raw_ephys_data', 'extension': '.bin'}
-            }
+                'bpod': {'collection': 'raw_behavior_data', 'extension': '.bin'}
+            },
+            'procedures': ['Ephys recording with acute probe(s)'],
+            'projects': ['ibl_neuropixel_brainwide_01']
         }
     else:
         acquisition_description = {  # this is the current ephys pipeline description
@@ -74,7 +76,9 @@ def get_acquisition_description(protocol):
             },
             'sync': {
                 'bpod': {'collection': 'raw_behavior_data', 'extension': '.bin'}
-            }
+            },
+            'procedures': ['Behavior training/tasks'],
+            'projects': ['ibl_neuropixel_brainwide_01']
         }
     return acquisition_description
 
@@ -129,7 +133,7 @@ def make_pipeline(session_path=None, **pkwargs):
 
     # Behavior tasks
     for protocol, task_info in acquisition_description.get('tasks', []).items():
-        kwargs = {'session_path': session_path, 'protocol': protocol, 'collection':task_info['collection']}
+        kwargs = {'session_path': session_path, 'protocol': protocol, 'collection': task_info['collection']}
         # -   choice_world_recording
         # -   choice_world_biased
         # -   choice_world_training
@@ -141,6 +145,10 @@ def make_pipeline(session_path=None, **pkwargs):
         elif protocol == 'choice_world_passive':
             registration_class = btasks.PassiveRegisterRaw
             behaviour_class = btasks.PassiveRegisterRaw
+            compute_status = False
+        elif protocol in ['choice_world_training', 'choice_world_biased']:
+            registration_class = btasks.TrialRegisterRaw
+            behaviour_class = btasks.ChoiceWorldTrialsBpod
             compute_status = False
         else:
             raise NotImplementedError

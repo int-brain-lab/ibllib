@@ -68,15 +68,6 @@ class DynamicTask(Task):
         params_device_collection = sess_params.get_device_collection(self.session_params, device)
         return device_collection if not params_device_collection else params_device_collection
 
-    def setUp(self):
-
-        self.signature['input_files'], self.signature['output_files'] = self.dynamic_signatures()
-        return super().setUp()
-
-    def dynamic_signatures(self):
-
-        return self.signature['input_files'], self.signature['output_files']
-
     def read_params_file(self):
         params = sess_params.read_params(self.session_path)
 
@@ -94,11 +85,9 @@ class DynamicTask(Task):
 
 class VideoTask(DynamicTask):
 
-    def __init__(self, session_path, **kwargs):
-        super().__init__(session_path, **kwargs)
-        assert 'cameras' in kwargs
-        self.cameras = kwargs['cameras']
-        self.device_collection = self.get_device_collection('video', kwargs.get('device_collection', 'raw_video_data'))
+    def __init__(self, session_path, cameras, **kwargs):
+        super().__init__(session_path, cameras=cameras, **kwargs)
+        self.cameras = cameras
 
 
 class AudioTask(DynamicTask):
