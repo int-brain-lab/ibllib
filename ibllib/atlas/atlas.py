@@ -253,7 +253,10 @@ class BrainAtlas:
     def compute_surface(self):
         """
         Get the volume top, bottom, left and right surfaces, and from these the outer surface of
-        the image volume. This is needed to compute probe insertions intersections
+        the image volume. This is needed to compute probe insertions intersections.
+
+        NOTE: In places where the top or bottom surface touch the top or bottom of the atlas volume, the surface
+        will be set to np.nan. If you encounter issues working with these surfaces check if this might be the cause.
         """
         if self.surface is None:  # only compute if it hasn't already been computed
             axz = self.xyz2dims[2]  # this is the dv axis
