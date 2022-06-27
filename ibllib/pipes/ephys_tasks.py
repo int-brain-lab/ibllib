@@ -16,10 +16,13 @@ import one.alf.io as alfio
 
 from ibllib.misc import check_nvidia_driver
 from ibllib.pipes import base_tasks
+from ibllib.pipes.sync_tasks import SyncPulses
 from ibllib.ephys import ephysqc, spikes
 from ibllib.qc.alignment_qc import get_aligned_channels
 from ibllib.plots.figures import LfpPlots, ApPlots, BadChannelsAp
 from ibllib.plots.figures import SpikeSorting as SpikeSortingPlots
+from ibllib.io.extractors.ephys_fpga import extract_sync
+from ibllib.ephys.spikes import sync_probes
 
 
 _logger = logging.getLogger("ibllib")
@@ -41,7 +44,7 @@ class EphysRegisterRaw(base_tasks.DynamicTask):
 
     def _run(self):
 
-        out_files = spikes.probes_description(self.session_path, self.one) # TODO make adaptive based on number of shanks
+        out_files = spikes.probes_description(self.session_path, self.one)
 
         return out_files
 
@@ -58,10 +61,10 @@ class EphysSyncRegisterRaw(base_tasks.DynamicTask):
             'input_files': [('*.*bin', self.sync_collection, True),
                             ('*.meta', self.sync_collection, True),
                             ('*.wiring.json', self.sync_collection, True)],
-            'output_files': [(f'*nidq.cbin', self.sync_collection, True),
-                             (f'*nidq.ch', self.sync_collection, True),
-                             (f'*nidq.meta', self.sync_collection, True),
-                             (f'*nidq.wiring.json', self.sync_collection, True)]
+            'output_files': [('*nidq.cbin', self.sync_collection, True),
+                             ('*nidq.ch', self.sync_collection, True),
+                             ('*nidq.meta', self.sync_collection, True),
+                             ('*nidq.wiring.json', self.sync_collection, True)]
         }
         return signature
 
@@ -216,7 +219,7 @@ class EphysCompressNP21(base_tasks.EphysTask):
 
         # Status = 1 - successfully complete
         if np_conv_status == 1:  # This is the status that it has completed successfully
-            out_files.append(np_conv_files)
+            out_files += np_conv_files
             return out_files
         # Status = 0 - Already processed
         elif np_conv_status == 0:
@@ -239,18 +242,18 @@ class EphysCompressNP24(base_tasks.EphysTask):
 
     @property
     def signature(self):
-        pextra = ['a', 'b', 'c', 'd']
+
         signature = {
             'input_files': [('*ap.meta', f'{self.device_collection}/{self.pname}', True),
                             ('*ap.*bin', f'{self.device_collection}/{self.pname}', True),
                             ('*wiring.json', f'{self.device_collection}/{self.pname}', False)],
-            'output_files': [('*ap.meta', f'{self.device_collection}/{self.pname}{pext}', True) for pext in pextra] + \
-                            [('*ap.cbin', f'{self.device_collection}/{self.pname}{pext}', True) for pext in pextra] + \
-                            [('*ap.ch', f'{self.device_collection}/{self.pname}{pext}', True) for pext in pextra] + \
-                            [('*lf.meta', f'{self.device_collection}/{self.pname}{pext}', True) for pext in pextra] + \
-                            [('*lf.cbin', f'{self.device_collection}/{self.pname}{pext}', True) for pext in pextra] + \
-                            [('*lf.ch', f'{self.device_collection}/{self.pname}{pext}', True) for pext in pextra] + \
-                            [('*wiring.json', f'{self.device_collection}/{self.pname}{pext}', False) for pext in pextra]
+            'output_files': [('*ap.meta', f'{self.device_collection}/{self.pname}{pext}', True) for pext in self.pextra] +
+                            [('*ap.cbin', f'{self.device_collection}/{self.pname}{pext}', True) for pext in self.pextra] +
+                            [('*ap.ch', f'{self.device_collection}/{self.pname}{pext}', True) for pext in self.pextra] +
+                            [('*lf.meta', f'{self.device_collection}/{self.pname}{pext}', True) for pext in self.pextra] +
+                            [('*lf.cbin', f'{self.device_collection}/{self.pname}{pext}', True) for pext in self.pextra] +
+                            [('*lf.ch', f'{self.device_collection}/{self.pname}{pext}', True) for pext in self.pextra] +
+                            [('*wiring.json', f'{self.device_collection}/{self.pname}{pext}', False) for pext in self.pextra]
         }
         return signature
 
@@ -266,18 +269,19 @@ class EphysCompressNP24(base_tasks.EphysTask):
         # TODO once we happy change delete_original=True
         np_conv_status = np_conv.process()
         out_files = np_conv.get_processed_files_NP24()
+        np_conv.sr.close()
 
         if np_conv_status == 1:
             wiring_file = next(self.session_path.joinpath(self.device_collection, self.pname).glob('*wiring.json'), None)
             if wiring_file is not None:
                 # copy wiring file to each sub probe directory and add to output files
-                for pext in ['a', 'b', 'c', 'd']:
+                for pext in self.pextra:
                     new_wiring_file = self.session_path.joinpath(self.device_collection, f'{self.pname}{pext}', wiring_file.name)
                     shutil.copyfile(wiring_file, new_wiring_file)
                     out_files.append(new_wiring_file)
             return out_files
         elif np_conv_status == 0:
-            for pext in ['a', 'b', 'c', 'd']:
+            for pext in self.pextra:
                 ephys_files = spikeglx.glob_ephys_files(self.session_path.joinpath(self.device_collection, f'{self.pname}{pext}'))
                 ephys_files += spikeglx.glob_ephys_files(self.session_path.joinpath(self.device_collection,
                                                                                     f'{self.pname}{pext}'), ext="ch")
@@ -309,14 +313,69 @@ class EphysCompressNP24(base_tasks.EphysTask):
             return
 
 
-class EphysPulses(base_tasks.EphysTask):
-    level = 1 # relies on probe files being split
-    # For now this can just be the original one
-    # For now just have this as the same task as before
-    # TODO Need to register the wiring file for each probe
+class EphysSyncPulses(SyncPulses):
+    @property
+    def signature(self):
+        signature = {
+            'input_files': [('*nidq.cbin', self.sync_collection, True),
+                            ('*nidq.ch', self.sync_collection, False),
+                            ('*nidq.meta', self.sync_collection, True),
+                            ('*nidq.wiring.json', self.sync_collection, True)],
+            'output_files': [('_spikeglx_sync.times.npy', self.sync_collection, True),
+                             ('_spikeglx_sync.polarities.npy', self.sync_collection, True),
+                             ('_spikeglx_sync.channels.npy', self.sync_collection, True)]
+        }
 
-    # TODO needs some love
-    pass
+        return signature
+
+
+class EphysPulses(base_tasks.EphysTask):
+    """
+    Extract Pulses from raw electrophysiology data into numpy arrays
+    Perform the probes synchronisation with nidq (3B) or main probe (3A)
+    """
+
+    @property
+    def signature(self):
+        assert type(self.pname) == list
+        signature = {
+            'input_files': [('*ap.meta', f'{self.device_collection}/{pname}', True) for pname in self.pname] +
+                           [('*ap.cbin', f'{self.device_collection}/{pname}', True) for pname in self.pname] +
+                           [('*ap.ch', f'{self.device_collection}/{pname}', True) for pname in self.pname] +
+                           [('*ap.wiring.json', f'{self.device_collection}/{pname}', False) for pname in self.pname] +
+                           [('_spikeglx_sync.times.npy', self.sync_collection, True),
+                            ('_spikeglx_sync.polarities.npy', self.sync_collection, True),
+                            ('_spikeglx_sync.channels.npy', self.sync_collection, True)],
+            'output_files': [(f'_spikeglx_sync.times.{pname}.npy', f'{self.device_collection}/{pname}', True)
+                             for pname in self.pname] +
+                            [(f'_spikeglx_sync.polarities.{pname}.npy', f'{self.device_collection}/{pname}', True)
+                             for pname in self.pname] +
+                            [(f'_spikeglx_sync.channels.{pname}.npy', f'{self.device_collection}/{pname}', True)
+                             for pname in self.pname] +
+                            [('*sync.npy', f'{self.device_collection}/{pname}', True) for pname in
+                             self.pname] +
+                            [('*timestamps.npy', f'{self.device_collection}/{pname}', True) for pname in
+                             self.pname]
+        }
+
+        return signature
+
+    def _run(self, overwrite=False):
+
+        out_files = []
+        for probe in self.pname:
+            files = spikeglx.glob_ephys_files(self.session_path.joinpath(self.device_collection, probe))
+            assert len(files) == 1  # will error if the session is split
+            bin_file = files[0].get('ap', None)
+            if not bin_file:
+                return []
+            _, out = extract_sync(self.session_path, ephys_files=files, overwrite=overwrite)
+            out_files += out
+
+        status, sync_files = sync_probes.sync(self.session_path)
+
+        return out_files + sync_files
+
 
 class RawEphysQC(base_tasks.EphysTask):
     level = 1
@@ -353,7 +412,7 @@ class RawEphysQC(base_tasks.EphysTask):
 
         # We expect there to only be one probe
         if len(probe) != 1:
-            _logger.warning(f"{self.pname} for {eid} not found") # Should we create it?
+            _logger.warning(f"{self.pname} for {eid} not found")  # Should we create it?
             self.status = -1
             return
 
@@ -401,8 +460,8 @@ class SpikeSorting(base_tasks.EphysTask):
                             ('*ap.ch', f'{self.device_collection}/{self.pname}', True),
                             ('*sync.npy', f'{self.device_collection}/{self.pname}', True)],
             'output_files': [('spike_sorting_pykilosort.log', f'spike_sorters/pykilosort/{self.pname}', True),
-                            ('_iblqc_ephysTimeRmsAP.rms.npy', f'{self.device_collection}/{self.pname}', True),
-                            ('_iblqc_ephysTimeRmsAP.timestamps.npy', f'{self.device_collection}/{self.pname}', True)]
+                             ('_iblqc_ephysTimeRmsAP.rms.npy', f'{self.device_collection}/{self.pname}', True),
+                             ('_iblqc_ephysTimeRmsAP.timestamps.npy', f'{self.device_collection}/{self.pname}', True)]
         }
         return signature
 
@@ -516,11 +575,12 @@ class SpikeSorting(base_tasks.EphysTask):
             raise RuntimeError(f"{self.SPIKE_SORTER_NAME} {info_str}, {error_str}")
 
         shutil.copytree(temp_dir.joinpath('output'), sorter_dir, dirs_exist_ok=True)
-        shutil.rmtree(temp_dir, ignore_errors=True)
 
         # TODO need to figure this out
         for qcfile in temp_dir.glob('_iblqc_*AP*'):
             shutil.move(qcfile, ap_file.parent.joinpath(qcfile.name))
+
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
         return sorter_dir
 

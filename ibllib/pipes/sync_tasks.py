@@ -1,8 +1,7 @@
-from ibllib.pipes import base_tasks
-from ibllib.io.extractors.ephys_fpga import _sync_to_alf
 import logging
 
-import one.alf.io as alfio
+from ibllib.pipes import base_tasks
+from ibllib.io.extractors.ephys_fpga import extract_sync
 
 import spikeglx
 
@@ -135,32 +134,14 @@ class SyncPulses(base_tasks.DynamicTask):
 
     def _run(self, overwrite=False):
 
-        # TODO this is replicating a lot of ephys_fpga.extract_sync refactor to make generalisable along with Dynamic pipeline
-        # Need to make this daq agnostic
-        syncs = []
-        outputs = []
-
         files = spikeglx.glob_ephys_files(self.session_path.joinpath(self.sync_collection))
         assert len(files) == 1
         bin_file = files[0].get('nidq', None)
+        print(bin_file)
         if not bin_file:
             return []
+        files[0]['label'] = ''
 
-        alfname = dict(object='sync', namespace='spikeglx')
-        file_exists = alfio.exists(bin_file.parent, **alfname)
-
-        if not overwrite and file_exists:
-            _logger.warning(f'Skipping raw sync: SGLX sync found for folder {files[0].label}!')
-            sync = alfio.load_object(bin_file.parent, **alfname)
-            out_files, _ = alfio._ls(bin_file.parent, **alfname)
-        else:
-            sr = spikeglx.Reader(bin_file)
-            sync, out_files = _sync_to_alf(sr, bin_file.parent, save=True)
-            sr.close()
-            for out_file in out_files:
-                _logger.info(f"extracted pulses for {out_file}")
-
-        outputs.extend(out_files)
-        syncs.extend([sync])
+        _, outputs = extract_sync(self.session_path, ephys_files=files, overwrite=overwrite)
 
         return outputs

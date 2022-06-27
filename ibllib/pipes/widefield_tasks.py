@@ -10,75 +10,35 @@ Pipeline:
     4. Preprocessing run to produce
 """
 import logging
-from collections import OrderedDict
 from pathlib import Path
 
 from ibllib.io.extractors.widefield import Widefield as WidefieldExtractor
-from ibllib.pipes import tasks
-from ibllib.pipes.ephys_preprocessing import (
-    EphysPulses, EphysMtscomp, EphysAudio, EphysVideoCompress, EphysVideoSyncQc, EphysTrials, EphysPassive, EphysDLC,
-    EphysPostDLC)
-from ibllib.oneibl.registration import register_session_raw_data
+from ibllib.pipes import base_tasks
 from ibllib.io.video import get_video_meta
 import labcams.io
 
 _logger = logging.getLogger('ibllib')
 
 
-class WidefieldRegisterRaw(tasks.Task):
-    # TODO change to use tasks.RegisterRaw base class, but then in pipeline need to register video behaviour individually
+class WidefieldRegisterRaw(base_tasks.WidefieldTask, base_tasks.RegisterRawDataTask):
     level = 0
-    signature = {
-        'input_files': [('dorsal_cortex_landmarks.json', 'raw_widefield_data', False),
-                        ('*.camlog', 'raw_widefield_data', True),
-                        ('widefield_wiring.csv', 'raw_widefield_data', False),],
-                        # ('labcams_configuration.json', 'raw_widefield_data', False)],
-        'output_files': [('widefieldLandmarks.dorsalCortex.json', 'alf/widefield', True),
-                         ('widefieldEvents.raw.camlog', 'raw_widefield_data', True),
-                         ('widefieldChannels.wiring.csv', 'raw_widefield_data', False),]
-                         # ('widefield.raw.wiring.json', 'raw_widefield_data', False)] # TODO should this be in sync task
-    }
     priority = 100
 
-    def _run(self, overwrite=False):
-        out_files, _ = register_session_raw_data(self.session_path, one=self.one, dry=True)
-        widefield_out_files = self.rename_files(symlink_old=True)
-        if len(widefield_out_files) > 0:
-            out_files = out_files + widefield_out_files
+    @property
+    def signature(self):
+        signature = {
+            'input_files': [('dorsal_cortex_landmarks.json', self.device_collection, False),
+                            ('*.camlog', self.device_collection, True),
+                            ('widefield_wiring.csv', self.device_collection, False)],
+            'output_files': [('widefieldLandmarks.dorsalCortex.json', 'alf/widefield', True),
+                             ('widefieldEvents.raw.camlog', self.device_collection, True),
+                             ('widefieldChannels.wiring.csv', self.device_collection, False)]
+        }
+        return signature
+
+    def _run(self, symlink_old=True):
+        out_files = super()._run(symlink_old=True)
         self.register_snapshots()
-        return out_files
-
-    def rename_files(self, symlink_old=True):
-        """
-        Rename the raw widefield data for a given session so that the data can be registered to Alyx.
-        Keeping the old file names as symlinks is useful for preprocessing with the `wfield` module.
-
-        Parameters
-        ----------
-        symlink_old : bool
-            If True, create symlinks with the old filenames.
-
-        """
-        session_path = Path(self.session_path).joinpath('raw_widefield_data')
-        if not session_path.exists():
-            _logger.warning(f'Path does not exist: {session_path}')
-            return []
-        out_files = []
-        for before, after in zip(self.input_files, self.output_files):
-            old_file, old_collection, required = before
-            old_path = self.session_path.rglob(str(Path(old_collection).joinpath(old_file)))
-            old_path = next(old_path, None)
-            if not old_path and not required:
-                continue
-
-            new_file, new_collection, _ = after
-            new_path = self.session_path.joinpath(new_collection, new_file)
-            new_path.parent.mkdir(parents=True, exist_ok=True)
-            old_path.replace(new_path)
-            if symlink_old:
-                old_path.symlink_to(new_path)
-            out_files.append(new_path)
-
         return out_files
 
     def register_snapshots(self, unlink=False):
@@ -111,14 +71,18 @@ class WidefieldRegisterRaw(tasks.Task):
             snapshots_path.rmdir()
 
 
-class WidefieldCompress(tasks.Task):
+class WidefieldCompress(base_tasks.WidefieldTask):
     priority = 40
     level = 0
     force = False
-    signature = {
-        'input_files': [('*.dat', 'raw_widefield_data', True)],
-        'output_files': [('widefield.raw.mov', 'raw_widefield_data', True)]
-    }
+
+    @property
+    def signature(self):
+        signature = {
+            'input_files': [('*.dat', self.device_collection, True)],
+            'output_files': [('widefield.raw.mov', self.device_collection, True)]
+        }
+        return signature
 
     def _run(self, remove_uncompressed=False, verify_output=True, **kwargs):
         # Find raw data dat file
@@ -145,18 +109,22 @@ class WidefieldCompress(tasks.Task):
 
 
 #  level 1
-class WidefieldPreprocess(tasks.Task):
+class WidefieldPreprocess(base_tasks.WidefieldTask):
     priority = 60
     level = 1
     force = False
-    signature = {
-        'input_files': [('widefield.raw.*', 'raw_widefield_data', True),
-                        ('widefieldEvents.raw.*', 'raw_widefield_data', True)],
-        'output_files': [('widefieldChannels.frameAverage.npy', 'alf/widefield', True),
-                         ('widefieldU.images.npy', 'alf/widefield', True),
-                         ('widefieldSVT.uncorrected.npy', 'alf/widefield', True),
-                         ('widefieldSVT.haemoCorrected.npy', 'alf/widefield', True)]
-    }
+
+    @property
+    def signature(self):
+        signature = {
+            'input_files': [('widefield.raw.*', self.device_collection, True),
+                            ('widefieldEvents.raw.*', self.device_collection, True)],
+            'output_files': [('widefieldChannels.frameAverage.npy', 'alf/widefield', True),
+                             ('widefieldU.images.npy', 'alf/widefield', True),
+                             ('widefieldSVT.uncorrected.npy', 'alf/widefield', True),
+                             ('widefieldSVT.haemoCorrected.npy', 'alf/widefield', True)]
+        }
+        return signature
 
     def _run(self, **kwargs):
         self.wf = WidefieldExtractor(self.session_path)
@@ -168,20 +136,24 @@ class WidefieldPreprocess(tasks.Task):
         self.wf.remove_files()
 
 
-class WidefieldSync(tasks.Task):
+class WidefieldSync(base_tasks.WidefieldTask):
     priority = 60
     level = 1
     force = False
-    signature = {
-        'input_files': [('widefield.raw.mov', 'raw_widefield_data', True),
-                        ('widefieldEvents.raw.camlog', 'raw_widefield_data', True),
-                        ('_spikeglx_sync.channels.npy', 'raw_widefield_data', True),
-                        ('_spikeglx_sync.polarities.npy', 'raw_widefield_data', True),
-                        ('_spikeglx_sync.times.npy', 'raw_widefield_data', True)],
-        'output_files': [('widefield.times.npy', 'alf/widefield', True),
-                         ('widefield.widefieldLightSource.npy', 'alf/widefield', True),
-                         ('widefieldLightSource.properties.csv', 'alf/widefield', True)]
-    }
+
+    @property
+    def signature(self):
+        signature = {
+            'input_files': [('widefield.raw.mov', self.device_collection, True),
+                            ('widefieldEvents.raw.camlog', self.device_collection, True),
+                            ('_spikeglx_sync.channels.npy', self.sync_collection, True),
+                            ('_spikeglx_sync.polarities.npy', self.sync_collection, True),
+                            ('_spikeglx_sync.times.npy', self.sync_collection, True)],
+            'output_files': [('widefield.times.npy', 'alf/widefield', True),
+                             ('widefield.widefieldLightSource.npy', 'alf/widefield', True),
+                             ('widefieldLightSource.properties.csv', 'alf/widefield', True)]
+        }
+        return signature
 
     def _run(self):
 
@@ -194,7 +166,7 @@ class WidefieldSync(tasks.Task):
         return out_files
 
 
-class WidefieldFOV(tasks.Task):
+class WidefieldFOV(base_tasks.WidefieldTask):
     priority = 60
     level = 2
     force = False
@@ -209,31 +181,3 @@ class WidefieldFOV(tasks.Task):
         # TODO make task that computes location
 
         return []
-
-
-# pipeline
-class WidefieldExtractionPipeline(tasks.Pipeline):
-    label = __name__
-
-    def __init__(self, session_path=None, **kwargs):
-        super(WidefieldExtractionPipeline, self).__init__(session_path, **kwargs)
-        tasks = OrderedDict()
-        self.session_path = session_path
-        # level 0
-        for Task in (WidefieldRegisterRaw, WidefieldCompress, EphysMtscomp, EphysPulses, EphysAudio,
-                     EphysVideoCompress):
-            task = Task(session_path)
-            tasks[task.name] = task
-        # level 1
-        tasks["EphysTrials"] = EphysTrials(self.session_path, parents=[tasks["EphysPulses"]])
-        tasks["EphysPassive"] = EphysPassive(self.session_path, parents=[tasks["EphysPulses"]])
-        tasks["WidefieldSync"] = WidefieldSync(self.session_path, parents=[tasks["EphysPulses"]])
-        tasks["WidefieldPreprocess"] = WidefieldPreprocess(self.session_path, parents=[tasks["EphysPulses"]])
-        # level 2
-        tasks["EphysVideoSyncQc"] = EphysVideoSyncQc(
-            self.session_path, parents=[tasks["EphysVideoCompress"], tasks["EphysPulses"], tasks["EphysTrials"]])
-        tasks["EphysDLC"] = EphysDLC(self.session_path, parents=[tasks["EphysVideoCompress"]])
-        tasks['WidefieldFOV'] = WidefieldFOV(self.session_path, parents=[tasks["WidefieldPreprocess"]])
-        # level 3
-        tasks["EphysPostDLC"] = EphysPostDLC(self.session_path, parents=[tasks["EphysDLC"]])
-        self.tasks = tasks

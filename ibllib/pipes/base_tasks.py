@@ -106,12 +106,28 @@ class EphysTask(DynamicTask):
         super().__init__(session_path, **kwargs)
 
         self.pname = self.get_pname(kwargs.get('pname', None))
+        self.nshanks, self.pextra = self.get_nshanks(kwargs.get('nshanks', None))
         self.device_collection = self.get_device_collection('neuropixel', kwargs.get('device_collection', 'raw_ephys_data'))
 
     def get_pname(self, pname):
+        # pname can be a list or a string
         pname = self.kwargs.get('pname', pname)
 
         return pname
+
+    def get_nshanks(self, nshanks=None):
+        nshanks = self.kwargs.get('nshanks', nshanks)
+        if nshanks is not None:
+            pextra = [chr(97 + int(shank)) for shank in range(nshanks)]
+        else:
+            pextra = []
+
+        return nshanks, pextra
+
+
+
+
+
 
 
 class WidefieldTask(DynamicTask):
@@ -133,7 +149,7 @@ class RegisterRawDataTask(DynamicTask):  # TODO write test
     level = 0
     force = False
 
-    def rename_files(self, symlink_old=False):
+    def rename_files(self, symlink_old=False, **kwargs):
 
         # If no inputs are given, we don't do any renaming
         if len(self.input_files) == 0:

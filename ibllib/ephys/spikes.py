@@ -13,7 +13,6 @@ import phylib.io.alf
 from ibllib.ephys.sync_probes import apply_sync
 import ibllib.ephys.ephysqc as ephysqc
 from ibllib.ephys import sync_probes
-from ibllib.io import raw_data_loaders
 
 _logger = logging.getLogger('ibllib')
 
@@ -61,14 +60,17 @@ def probes_description(ses_path, one):
     alyx_insertions = []
     for label, ef in zip(labels, efiles_sorted):
         md = spikeglx.read_meta_data(ef.ap.with_suffix('.meta'))
-
         if md.neuropixelVersion == 'NP2.4':
-            if md.get('NP2.4_shank', None) is not None:
-                for pext in ['a', 'b', 'c', 'd']:
-                    label_ext = f'{label}{pext}'
+            # NP2.4 meta that hasn't been split
+            if md.get('NP2.4_shank', None) is None:
+                geometry = spikeglx.read_geometry(ef.ap.with_suffix('.meta'))
+                nshanks = np.unique(geometry['shank'])
+                for shank in nshanks:
+                    label_ext = f'{label}{chr(97 + int(shank))}'
                     description, insertion = _create_insertion(md, label_ext, eid)
                     probe_description.append(description)
                     alyx_insertions.append(insertion)
+            # NP2.4 meta that has already been split
             else:
                 description, insertion = _create_insertion(md, label, eid)
                 probe_description.append(description)

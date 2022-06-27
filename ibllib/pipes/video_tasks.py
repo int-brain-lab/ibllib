@@ -90,7 +90,6 @@ class VideoSyncQc(base_tasks.VideoTask):
                                          ('_spikeglx_sync.times.npy', self.sync_collection, True),
                                          ('daq.wiring.json', self.sync_collection, True)]
 
-
         return signature
 
     def _run(self, **kwargs):

@@ -523,12 +523,13 @@ def extract_sync(session_path, overwrite=False, ephys_files=None):
             alfname['extra'] = efi.label
         file_exists = alfio.exists(bin_file.parent, **alfname)
         if not overwrite and file_exists:
-            _logger.warning(f'Skipping raw sync: SGLX sync found for probe {efi.label}!')
+            _logger.warning(f'Skipping raw sync: SGLX sync found for {efi.label}!')
             sync = alfio.load_object(bin_file.parent, **alfname)
             out_files, _ = alfio._ls(bin_file.parent, **alfname)
         else:
             sr = spikeglx.Reader(bin_file)
             sync, out_files = _sync_to_alf(sr, bin_file.parent, save=True, parts=efi.label)
+            sr.close()
         outputs.extend(out_files)
         syncs.extend([sync])
 
