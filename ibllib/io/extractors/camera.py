@@ -159,7 +159,7 @@ class CameraTimestampsBpod(BaseBpodTrialsExtractor):
     def __del__(self):
         _logger.setLevel(self._log_level)
 
-    def _extract(self, video_path=None, display=False, extrapolate_missing=True):
+    def _extract(self, video_path=None, display=False, extrapolate_missing=True, **kwargs):
         """
         The raw timestamps are taken from the Bpod. These are the times of the camera's frame TTLs.
         If the pin state file exists, these timestamps are aligned to the video frames using the

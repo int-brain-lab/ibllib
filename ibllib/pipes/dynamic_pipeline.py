@@ -1,12 +1,25 @@
 from collections import OrderedDict
-import ibllib.pipes.tasks as mtasks
+import ibllib.io.session_params as sess_params
+
 import ibllib.pipes.ephys_preprocessing as epp
 import ibllib.pipes.training_preprocessing as tpp
 import ibllib.pipes.widefield_tasks as wtasks
 import ibllib.pipes.sync_tasks as stasks
 import ibllib.pipes.behavior_tasks as btasks
 import ibllib.pipes.video_tasks as vtasks
+import ibllib.pipes.ephys_tasks as etasks
 import ibllib.io.session_params
+
+
+## collection - collection with task data
+## protocol - protocol of task
+## sync_collection - collection with main sync data
+## device collection - collection with raw device files
+## sync - type of sync
+## sync_ext - extension of sync
+## pname - probe name
+## nshanks - number of shanks on probe
+
 
 
 def acquisition_description_legacy_session():
@@ -45,7 +58,7 @@ def get_acquisition_description(protocol):
                 'choice_world_passive': {'collection': 'raw_passive_data', 'sync_label': 'bpod', 'main': False},
             },
             'sync': {
-                'bpod': {'collection': 'raw_behavior_data', 'extension': '.bin'}
+                'bpod': {'collection': 'raw_ephys_data', 'extension': '.bin'}
             }
         }
     else:
@@ -82,7 +95,21 @@ def make_pipeline(session_path=None, **pkwargs):
     # tasks['SyncPulses'] = type('SyncPulses', (epp.EphysPulses,), {})(session_path=session_path)
     assert session_path
     tasks = OrderedDict()
-    acquisition_description = ibllib.io.session_params.read_params(session_path)
+    acquisition_description = sess_params.read_params(session_path)
+
+    if 'neuropixel' in acquisition_description:
+        probes = sess_params.get_probes(acquisition_description)
+        tasks['EphysRegisterRaw'] = type(f'EphysRegisterRaw', (etasks.EphysRegisterRaw,), {})(session_path=session_path)
+        for probe in probes:
+            
+
+
+
+
+
+
+
+
     # Syncing tasks
     (sync, sync_args), = acquisition_description['sync'].items()
     sync_args['task_collection'] = sync_args.pop('collection')  # rename the key so it matches task run arguments
@@ -177,3 +204,8 @@ def make_pipeline(session_path=None, **pkwargs):
     p.tasks = tasks
 
     return p
+
+
+#
+if 'ephys' in
+def get_

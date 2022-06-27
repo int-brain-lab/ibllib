@@ -21,7 +21,7 @@ class DynamicTask(Task):
         # Task type (protocol)
         self.protocol = self.get_protocol(self.collection, kwargs.get('protocol', None))
         # Main task collection (for when task protocols are chained together)
-        self.main_task_collection = self.get_main_task_collection(kwargs.get('main_collection', None))
+        self.main_task_collection = self.get_main_task_collection(kwargs.get('main_collection', None)) # TODO improve name
 
     def get_sync_collection(self, sync_collection=None):
 
@@ -98,6 +98,14 @@ class VideoTask(DynamicTask):
         super().__init__(session_path, **kwargs)
         assert 'cameras' in kwargs
         self.cameras = kwargs['cameras']
+        self.device_collection = self.get_device_collection('video', kwargs.get('device_collection', 'raw_video_data'))
+
+
+class AudioTask(DynamicTask):
+
+    def __init__(self, session_path, **kwargs):
+        super().__init__(session_path, **kwargs)
+        self.device_collection = self.get_device_collection('microphone', kwargs.get('device_collection', 'raw_behavior_data'))
 
 
 class EphysTask(DynamicTask):

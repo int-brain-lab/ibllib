@@ -26,7 +26,7 @@ _logger = logging.getLogger("ibllib")
 
 
 class EphysRegisterRaw(base_tasks.DynamicTask):
-    # TODO test
+    level = 0
     """
     Creates the probe insertions and uploads the probe descriptions file, also compresses the nidq files and uploads
     """
@@ -36,12 +36,13 @@ class EphysRegisterRaw(base_tasks.DynamicTask):
 
     def _run(self):
 
-        out_files = spikes.probes_description(self.session_path, self.one)
+        out_files = spikes.probes_description(self.session_path, self.one) # TODO make adaptive based on number of shanks
 
         return out_files
 
 
 class EphysSyncRegisterRaw(base_tasks.DynamicTask):
+    level = 0
     """
     Task to rename, compress and register raw daq data with .bin format collected using NIDAQ
     """
@@ -103,6 +104,7 @@ class EphysSyncRegisterRaw(base_tasks.DynamicTask):
 
 
 class EphysCompressNP1(base_tasks.EphysTask):
+    level = 0
 
     def dynamic_signatures(self):
         input_signatures = [('*ap.meta', f'{self.device_collection}/{self.pname}', True),
@@ -157,6 +159,7 @@ class EphysCompressNP1(base_tasks.EphysTask):
 
 
 class EphysCompressNP21(base_tasks.EphysTask):
+    level = 0
 
     def dynamic_signatures(self):
         input_signatures = [('*ap.meta', f'{self.device_collection}/{self.pname}', True),
@@ -225,12 +228,13 @@ class EphysCompressNP21(base_tasks.EphysTask):
 
 
 class EphysCompressNP24(base_tasks.EphysTask):
+    level = 0
     def dynamic_signatures(self):
         input_signatures = [('*ap.meta', f'{self.device_collection}/{self.pname}', True),
                             ('*ap.*bin', f'{self.device_collection}/{self.pname}', True),
                             ('*wiring.json', f'{self.device_collection}/{self.pname}', False)]
 
-        pextra = ['a', 'b', 'c', 'd']
+        pextra = ['a', 'b', 'c', 'd'] # TODO THIS NEEDS TO BE DYNAMIC as not always 4 shanks used
         output_signatures = [('*ap.meta', f'{self.device_collection}/{self.pname}{pext}', True) for pext in pextra] + \
                             [('*ap.cbin', f'{self.device_collection}/{self.pname}{pext}', True) for pext in pextra] + \
                             [('*ap.ch', f'{self.device_collection}/{self.pname}{pext}', True) for pext in pextra] + \
@@ -297,6 +301,7 @@ class EphysCompressNP24(base_tasks.EphysTask):
 
 
 class EphysPulses(base_tasks.EphysTask):
+    level = 1 # relies on probe files being split
     # For now this can just be the original one
     # For now just have this as the same task as before
     # TODO Need to register the wiring file for each probe
@@ -305,7 +310,7 @@ class EphysPulses(base_tasks.EphysTask):
     pass
 
 class RawEphysQC(base_tasks.EphysTask):
-
+    level = 1
     cpu = 2
     io_charge = 30  # this jobs reads raw ap files
     priority = 10  # a lot of jobs depend on this one
@@ -361,6 +366,7 @@ class RawEphysQC(base_tasks.EphysTask):
 
         return qc_files
 
+
 class SpikeSorting(base_tasks.EphysTask):
     """
     Pykilosort 2.5 pipeline
@@ -368,7 +374,7 @@ class SpikeSorting(base_tasks.EphysTask):
     gpu = 1
     io_charge = 70  # this jobs reads raw ap files
     priority = 60
-    level = 1  # this job doesn't depend on anything
+    level = 2  # this job doesn't depend on anything
     force = True
     SHELL_SCRIPT = Path.home().joinpath(
         "Documents/PYTHON/iblscripts/deploy/serverpc/kilosort2/run_pykilosort.sh"
@@ -378,10 +384,10 @@ class SpikeSorting(base_tasks.EphysTask):
 
     def dynamic_signatures(self):
 
-        input_signatures =  [('*ap.meta', f'{self.device_collection}/{self.pname}', True),
-                             ('*ap.cbin', f'{self.device_collection}/{self.pname}', True),
-                             ('*ap.ch', f'{self.device_collection}/{self.pname}', True),
-                             ('*sync.npy', f'{self.device_collection}/{self.pname}', True )]
+        input_signatures = [('*ap.meta', f'{self.device_collection}/{self.pname}', True),
+                            ('*ap.cbin', f'{self.device_collection}/{self.pname}', True),
+                            ('*ap.ch', f'{self.device_collection}/{self.pname}', True),
+                            ('*sync.npy', f'{self.device_collection}/{self.pname}', True)]
 
         output_signatures = [('spike_sorting_pykilosort.log', f'spike_sorters/pykilosort/{self.pname}', True),
                             ('_iblqc_ephysTimeRmsAP.rms.npy', f'{self.device_collection}/{self.pname}', True),
@@ -588,11 +594,11 @@ class EphysCellsQc(base_tasks.EphysTask):
     force = False
 
     def dynamic_signatures(self):
-        input_signatures =  [('spikes.times.npy', f'alf/{self.pname}*', True),
-                             ('spikes.clusters.npy', f'alf/{self.pname}*', True),
-                             ('spikes.amps.npy', f'alf/{self.pname}*', True),
-                             ('spikes.depths.npy', f'alf/{self.pname}*', True),
-                             ('clusters.channels.npy', f'alf/{self.pname}*', True)]
+        input_signatures = [('spikes.times.npy', f'alf/{self.pname}*', True),
+                            ('spikes.clusters.npy', f'alf/{self.pname}*', True),
+                            ('spikes.amps.npy', f'alf/{self.pname}*', True),
+                            ('spikes.depths.npy', f'alf/{self.pname}*', True),
+                            ('clusters.channels.npy', f'alf/{self.pname}*', True)]
 
         output_signatures = [('clusters.metrics.pqt', f'alf/{self.pname}*', True)]
 

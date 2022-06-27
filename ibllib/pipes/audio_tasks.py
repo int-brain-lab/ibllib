@@ -9,7 +9,7 @@ _logger = logging.getLogger('ibllib')
 
 class AudioCompress(base_tasks.AudioTask):
     def dynamic_signatures(self):
-        input_signatures = [('_iblrig_micData.raw.wav', self.device_collection, True)],
+        input_signatures = [('_iblrig_micData.raw.wav', self.device_collection, True)]
         output_signatures = [('_iblrig_micData.raw.flac', self.device_collection, True)]
 
         return input_signatures, output_signatures
@@ -31,7 +31,7 @@ class AudioSync(base_tasks.AudioTask):
     """
 
     def dynamic_signatures(self):
-        input_signatures = [('_iblrig_micData.raw.wav', self.device_collection, True)],
+        input_signatures = [('_iblrig_micData.raw.wav', self.device_collection, True)]
         output_signatures = [('_iblmic_audioOnsetGoCue.times_mic.npy', self.device_collection, True),
                              ('_iblmic_audioSpectrogram.frequencies.npy', self.device_collection, True),
                              ('_iblmic_audioSpectrogram.power.npy', self.device_collection, True),
@@ -42,7 +42,7 @@ class AudioSync(base_tasks.AudioTask):
     def _run(self):
 
         if self.sync == 'bpod':
-            return training_audio.extract_sound(self.session_path, task_collection=self.task_collection,
+            return training_audio.extract_sound(self.session_path, task_collection=self.collection,
                                                 device_collection=self.device_collection, save=True, delete=True)
         else:
             _logger.warning('Audio Syncing not yet implemented for FPGA')

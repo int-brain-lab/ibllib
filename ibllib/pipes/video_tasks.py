@@ -20,11 +20,11 @@ class VideoRegisterRaw(base_tasks.VideoTask, base_tasks.RegisterRawDataTask):
 
     def dynamic_signatures(self):
         input_signatures = []
-        output_signatures = [(f'_iblrig_{cam}Camera.timestamps*', self.collection, True) for cam in self.cameras] +\
-                            [(f'_iblrig_{cam}Camera.GPIO.bin', self.collection, True) for cam in self.cameras] +\
-                            [(f'_iblrig_{cam}Camera.frame_counter.bin', self.collection, True) for cam in self.cameras] + \
-                            [(f'_iblrig_{cam}Camera.frameData.bin', self.collection, False) for cam in self.cameras] + \
-                            [('_iblrig_videoCodeFiles.raw*', self.collection, False)]
+        output_signatures = [(f'_iblrig_{cam}Camera.timestamps*', self.device_collection, True) for cam in self.cameras] +\
+                            [(f'_iblrig_{cam}Camera.GPIO.bin', self.device_collection, True) for cam in self.cameras] +\
+                            [(f'_iblrig_{cam}Camera.frame_counter.bin', self.device_collection, True) for cam in self.cameras] + \
+                            [(f'_iblrig_{cam}Camera.frameData.bin', self.device_collection, False) for cam in self.cameras] + \
+                            [('_iblrig_videoCodeFiles.raw*', self.device_collection, False)]
 
         return input_signatures, output_signatures
 
@@ -38,8 +38,8 @@ class VideoCompress(base_tasks.VideoTask):
     force = False
 
     def dynamic_signatures(self):
-        input_signatures = (f'_iblrig_{self.camera}Camera.raw.*', self.collection, True),
-        output_signatures = [(f'_iblrig_{cam}Camera.raw.mp4', self.collection, True) for cam in self.cameras]
+        input_signatures = [(f'_iblrig_{cam}Camera.raw.*', self.device_collection, True) for cam in self.cameras]
+        output_signatures = [(f'_iblrig_{cam}Camera.raw.mp4', self.device_collection, True) for cam in self.cameras]
 
         return input_signatures, output_signatures
 
@@ -63,7 +63,7 @@ class VideoSyncQc(base_tasks.VideoTask):
     """
     priority = 40
     level = 2
-    force = True
+    force = False
 
     def dynamic_signatures(self):
         input_signatures = [(f'_iblrig_{cam}Camera.raw.mp4', self.device_collection, True) for cam in self.cameras] +\
@@ -82,7 +82,7 @@ class VideoSyncQc(base_tasks.VideoTask):
                                  ('_spikeglx_sync.times.npy', self.sync_collection, True),
                                  ('daq.wiring.json', self.sync_collection, True)]
 
-        output_signatures = [(f'_iblrig_{cam}Camera.times.npy', 'alf', True) for cam in self.cameras]
+        output_signatures = [(f'_ibl_{cam}Camera.times.npy', 'alf', True) for cam in self.cameras]
 
         return input_signatures, output_signatures
 
