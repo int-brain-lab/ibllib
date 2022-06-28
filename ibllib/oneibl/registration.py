@@ -272,6 +272,7 @@ class RegistrationClient:
 
         # unless specified label the session procedures with task protocol lookup
         procedures = procedures if procedures else _alyx_procedure_from_task(task_protocol)
+        procedures = [procedures] if isinstance(procedures, str) else procedures
 
         if not session:
             ses_ = {'subject': subject['nickname'],
