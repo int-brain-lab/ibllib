@@ -715,7 +715,7 @@ def sync_trials_robust(t0, t1, diff_threshold=0.001, drift_threshold_ppm=200, ma
         return t0[ind0], t1[ind1]
 
 
-def load_bpod_fronts(session_path: str, task_collection: str = 'raw_behavior_data', data: list = False) -> list:
+def load_bpod_fronts(session_path: str, data: list = False, task_collection: str = 'raw_behavior_data') -> list:
     """load_bpod_fronts
     Loads BNC1 and BNC2 bpod channels times and polarities from session_path
 

@@ -189,7 +189,7 @@ class CameraTimestampsBpod(BaseBpodTrialsExtractor):
         if gpio is not None and gpio['indices'].size > 1:
             _logger.info('Aligning to audio TTLs')
             # Extract audio TTLs
-            _, audio = raw.load_bpod_fronts(self.session_path, self.bpod_trials)
+            _, audio = raw.load_bpod_fronts(self.session_path, data=self.bpod_trials)
             _, ts = raw.load_camera_ssv_times(self.session_path, 'left')
             """
             There are many audio TTLs that are for some reason missed by the GPIO.  Conversely
