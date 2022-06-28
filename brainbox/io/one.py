@@ -334,7 +334,6 @@ def _load_channel_locations_traj(eid, probe=None, one=None, revision=None, align
             # get the channels from histology tracing
             xyz = xyz[np.argsort(xyz[:, 2]), :]
             chans = histology.interpolate_along_track(xyz, (depths + TIP_SIZE_UM) / 1e6)
-
             channels[probe] = _channels_traj2bunch(chans, brain_atlas)
             source = 'traced'
         channels[probe]['axial_um'] = chn_coords[:, 1]
@@ -894,6 +893,7 @@ class SpikeSortingLoader:
     collection: str = ''
     histology: str = ''  # 'alf', 'resolved', 'aligned' or 'traced'
     spike_sorting_path: Path = None
+    _sync: dict = None
 
     def __post_init__(self):
         # pid gets precedence
@@ -1039,3 +1039,20 @@ class SpikeSortingLoader:
         """Gets flatiron URL for the session"""
         webclient = getattr(self.one, '_web_client', None)
         return webclient.rel_path2url(get_alf_path(self.session_path)) if webclient else None
+
+    def samples2times(self, values, direction='forward'):
+        """
+        :param values: numpy array of times in seconds or samples to resync
+        :param direction: 'forward' (samples probe time to seconds main time) or 'reverse'
+         (seconds main time to samples probe time)
+        :return:
+        """
+        if self._sync is None:
+            timestamps = self.one.load_dataset(
+                self.eid, dataset='_spikeglx_*.timestamps.npy', collection=f'raw_ephys_data/{self.pname}')
+            self._sync = {
+                'timestamps': timestamps,
+                'forward': interp1d(timestamps[:, 0], timestamps[:, 1], fill_value='extrapolate'),
+                'reverse': interp1d(timestamps[:, 1], timestamps[:, 0], fill_value='extrapolate'),
+            }
+        return self._sync[direction](values)
