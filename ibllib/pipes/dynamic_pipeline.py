@@ -164,15 +164,15 @@ def make_pipeline(session_path=None, **pkwargs):
         for pname, probe_info in acquisition_description['neuropixel'].items():
             meta_file = spikeglx.glob_ephys_files(Path(session_path).joinpath(probe_info['collection']), ext='.meta')
             meta_file = meta_file[0].get('ap')
-            type = spikeglx._get_neuropixel_version_from_meta(spikeglx.read_meta_data(meta_file))
+            nptype = spikeglx._get_neuropixel_version_from_meta(spikeglx.read_meta_data(meta_file))
             nshanks = spikeglx._get_nshanks_from_meta(spikeglx.read_meta_data(meta_file))
 
-            if type == 'NP2.1':
+            if nptype == 'NP2.1':
                 tasks[f'EphyCompressNP21_{pname}'] = type(f'EphyCompressNP21_{pname}', (etasks.EphysCompressNP21,), {})\
                     (**kwargs, **ephys_kwargs, pname=pname)
                 all_probes.append(pname)
                 register_tasks.append(tasks[f'EphyCompressNP21_{pname}'])
-            elif type == 'NP2.4':
+            elif nptype == 'NP2.4':
                 tasks[f'EphyCompressNP24_{pname}'] = type(f'EphyCompressNP24_{pname}', (etasks.EphysCompressNP24,), {})(
                     **kwargs, **ephys_kwargs, pname=pname, nshanks=nshanks)
                 register_tasks.append(tasks[f'EphyCompressNP24_{pname}'])
@@ -213,7 +213,7 @@ def make_pipeline(session_path=None, **pkwargs):
 
     # Audio tasks
     if 'microphone' in acquisition_description:
-        (microphone, micro_kwargs), = acquisition_description['sync'].items()
+        (microphone, micro_kwargs), = acquisition_description['microphone'].items()
         micro_kwargs['device_collection'] = micro_kwargs.pop('collection')
         micro_kwargs['main_task_collection'] = sess_params.get_main_task_collection(acquisition_description)
         if microphone == 'xonar':
