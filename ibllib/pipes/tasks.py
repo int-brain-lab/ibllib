@@ -10,12 +10,12 @@ import json
 
 from graphviz import Digraph
 
-from ibllib.misc import version
+import ibllib
 from ibllib.oneibl import data_handlers
 import one.params
 from one.api import ONE
 
-_logger = logging.getLogger('ibllib')
+_logger = logging.getLogger(__name__)
 
 
 class Task(abc.ABC):
@@ -30,7 +30,7 @@ class Task(abc.ABC):
     outputs = None  # place holder for a list of Path containing output files
     time_elapsed_secs = None
     time_out_secs = 3600 * 2  # time-out after which a task is considered dead
-    version = version.ibllib()
+    version = ibllib.__version__
     signature = {'input_files': [], 'output_files': []}  # list of tuples (filename, collection, required_flag)
     force = False  # whether or not to re-download missing input files on local server if not present
 
@@ -100,7 +100,7 @@ class Task(abc.ABC):
         _logger.info(f"Starting job {self.__class__}")
         if self.machine:
             _logger.info(f"Running on machine: {self.machine}")
-        _logger.info(f"running ibllib version {version.ibllib()}")
+        _logger.info(f"running ibllib version {ibllib.__version__}")
         # setup
         start_time = time.time()
         try:
@@ -193,7 +193,7 @@ class Task(abc.ABC):
         :param overwrite: (bool) if the output already exists,
         :return: out_files: files to be registered. Could be a list of files (pathlib.Path),
         a single file (pathlib.Path) an empty list [] or None.
-        Whithin the pipeline, there is a distinction between a job that returns an empty list
+        Within the pipeline, there is a distinction between a job that returns an empty list
          and a job that returns None. If the function returns None, the job will be labeled as
           "empty" status in the database, otherwise, the job has an expected behaviour of not
           returning any dataset.

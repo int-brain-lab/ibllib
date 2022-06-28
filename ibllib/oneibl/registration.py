@@ -4,14 +4,15 @@ import datetime
 import logging
 import re
 
+from pkg_resources import parse_version
 from dateutil import parser as dateparser
 from iblutil.io import hashfile
 from one.alf.files import get_session_path
 import one.alf.exceptions as alferr
 from one.api import ONE
 
+import ibllib
 import ibllib.io.extractors.base
-from ibllib.misc import version
 import ibllib.time
 import ibllib.io.raw_data_loaders as raw
 from ibllib.io import flags
@@ -69,7 +70,7 @@ def register_dataset(file_list, one=None, created_by=None, repository=None, serv
     assert len(set([get_session_path(f) for f in file_list])) == 1
     assert all([Path(f).exists() for f in file_list])
     if versions is None:
-        versions = version.ibllib()
+        versions = ibllib.__version__
     if isinstance(versions, str):
         versions = [versions for _ in file_list]
     assert isinstance(versions, list) and len(versions) == len(file_list)
@@ -341,7 +342,7 @@ class RegistrationClient:
               'filenames': F,
               'hashes': md5s,
               'filesizes': file_sizes,
-              'versions': [version.ibllib() for _ in F]
+              'versions': [ibllib.__version__ for _ in F]
               }
         self.one.alyx.post('/register-file', data=r_)
         return session
@@ -387,13 +388,15 @@ def _register_bool(fn, file_list):
 def _read_settings_json_compatibility_enforced(json_file):
     with open(json_file) as js:
         md = json.load(js)
+    if 'IS_MOCK' not in md.keys():
+        md['IS_MOCK'] = False
     if 'IBLRIG_VERSION_TAG' not in md.keys():
         md['IBLRIG_VERSION_TAG'] = '3.2.3'
     if not md['IBLRIG_VERSION_TAG']:
         _logger.warning("You appear to be on an untagged version...")
         return md
     # 2018-12-05 Version 3.2.3 fixes (permanent fixes in IBL_RIG from 3.2.4 on)
-    if version.le(md['IBLRIG_VERSION_TAG'], '3.2.3'):
+    if parse_version(md['IBLRIG_VERSION_TAG']) <= parse_version('3.2.3'):
         if 'LAST_TRIAL_DATA' in md.keys():
             md.pop('LAST_TRIAL_DATA')
         if 'weighings' in md['PYBPOD_SUBJECT_EXTRA'].keys():
@@ -414,7 +417,7 @@ def _read_settings_json_compatibility_enforced(json_file):
 def rename_files_compatibility(ses_path, version_tag):
     if not version_tag:
         return
-    if version.le(version_tag, '3.2.3'):
+    if parse_version(version_tag) <= parse_version('3.2.3'):
         task_code = ses_path.glob('**/_ibl_trials.iti_duration.npy')
         for fn in task_code:
             fn.replace(fn.parent.joinpath('_ibl_trials.itiDuration.npy'))
