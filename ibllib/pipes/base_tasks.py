@@ -126,10 +126,6 @@ class EphysTask(DynamicTask):
 
 
 
-
-
-
-
 class WidefieldTask(DynamicTask):
     def __init__(self, session_path, **kwargs):
         super().__init__(session_path, **kwargs)
