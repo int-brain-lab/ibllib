@@ -110,22 +110,55 @@ class BrainCoordinates:
         else:
             return i
 
-    def x2i(self, x, round=True):
-        return self._round((x - self.x0) / self.dx, round=round)
+    def x2i(self, x, round=True, mode='raise'):
+        i = np.asarray(self._round((x - self.x0) / self.dx, round=round))
+        if np.any(i < 0) or np.any(i >= self.nx):
+            if mode == 'clip':
+                i[i < 0] = 0
+                i[i >= self.nx] = self.nx - 1
+            elif mode == 'raise':
+                raise ValueError("At least one x value lies outside of the atlas volume.")
+            elif mode == 'wrap':
+                pass
+        return i
 
-    def y2i(self, y, round=True):
-        return self._round((y - self.y0) / self.dy, round=round)
+    def y2i(self, y, round=True, mode='raise'):
+        i = np.asarray(self._round((y - self.y0) / self.dy, round=round))
+        if np.any(i < 0) or np.any(i >= self.ny):
+            if mode == 'clip':
+                i[i < 0] = 0
+                i[i >= self.ny] = self.ny - 1
+            elif mode == 'raise':
+                raise ValueError("At least one y value lies outside of the atlas volume.")
+            elif mode == 'wrap':
+                pass
+        return i
 
-    def z2i(self, z, round=True):
-        return self._round((z - self.z0) / self.dz, round=round)
+    def z2i(self, z, round=True, mode='raise'):
+        i = np.asarray(self._round((z - self.z0) / self.dz, round=round))
+        if np.any(i < 0) or np.any(i >= self.nz):
+            if mode == 'clip':
+                i[i < 0] = 0
+                i[i >= self.nz] = self.nz - 1
+            elif mode == 'raise':
+                raise ValueError("At least one z value lies outside of the atlas volume.")
+            elif mode == 'wrap':
+                pass
+        return i
 
-    def xyz2i(self, xyz, round=True):
+    def xyz2i(self, xyz, round=True, mode='raise'):
+        """
+        :param mode: {‘raise’, 'clip', 'wrap'} determines what to do when determined index lies outside the atlas volume
+                     'raise' will raise a ValueError
+                     'clip' will replace the index with the closest index inside the volume
+                     'wrap' will wrap around to the other side of the volume. This is only here for legacy reasons
+        """
         xyz = np.array(xyz)
         dt = int if round else float
         out = np.zeros_like(xyz, dtype=dt)
-        out[..., 0] = self.x2i(xyz[..., 0], round=round)
-        out[..., 1] = self.y2i(xyz[..., 1], round=round)
-        out[..., 2] = self.z2i(xyz[..., 2], round=round)
+        out[..., 0] = self.x2i(xyz[..., 0], round=round, mode=mode)
+        out[..., 1] = self.y2i(xyz[..., 1], round=round, mode=mode)
+        out[..., 2] = self.z2i(xyz[..., 2], round=round, mode=mode)
         return out
 
     """Methods indices to distance"""
@@ -227,7 +260,10 @@ class BrainAtlas:
     def compute_surface(self):
         """
         Get the volume top, bottom, left and right surfaces, and from these the outer surface of
-        the image volume. This is needed to compute probe insertions intersections
+        the image volume. This is needed to compute probe insertions intersections.
+
+        NOTE: In places where the top or bottom surface touch the top or bottom of the atlas volume, the surface
+        will be set to np.nan. If you encounter issues working with these surfaces check if this might be the cause.
         """
         if self.surface is None:  # only compute if it hasn't already been computed
             axz = self.xyz2dims[2]  # this is the dv axis
@@ -439,7 +475,12 @@ class BrainAtlas:
         :param mapping: mapping to use. Options can be found using ba.regions.mappings.keys()
         :return: 2d array or 3d RGB numpy int8 array
         """
-        index = self.bc.xyz2i(np.array([coordinate] * 3))[axis]
+        if axis == 0:
+            index = self.bc.x2i(np.array(coordinate), mode=mode)
+        elif axis == 1:
+            index = self.bc.y2i(np.array(coordinate), mode=mode)
+        elif axis == 2:
+            index = self.bc.z2i(np.array(coordinate), mode=mode)
 
         # np.take is 50 thousand times slower than straight slicing !
         def _take(vol, ind, axis):
@@ -765,7 +806,10 @@ class Insertion:
         if brain_atlas:
             iy = brain_atlas.bc.y2i(d['y'] / 1e6)
             ix = brain_atlas.bc.x2i(d['x'] / 1e6)
-            z = brain_atlas.top[iy, ix]
+            # Only use the brain surface value as z if it isn't NaN (this happens when the surface touches the edges
+            # of the atlas volume
+            if not np.isnan(brain_atlas.top[iy, ix]):
+                z = brain_atlas.top[iy, ix]
         return Insertion(x=d['x'] / 1e6, y=d['y'] / 1e6, z=z,
                          phi=d['phi'], theta=d['theta'], depth=d['depth'] / 1e6,
                          beta=d.get('beta', 0), label=d.get('label', ''))
