@@ -12,6 +12,7 @@ class DynamicTask(Task):
 
         self.session_params = self.read_params_file()
 
+        # TODO Which should be default?
         # Sync collection
         self.sync_collection = self.get_sync_collection(kwargs.get('sync_collection', None))
         # Sync type

@@ -1,5 +1,6 @@
 from collections import OrderedDict
 from pathlib import Path
+import yaml
 import ibllib.io.session_params as sess_params
 
 import ibllib.pipes.ephys_preprocessing as epp
@@ -107,6 +108,7 @@ def make_pipeline(session_path=None, **pkwargs):
     # Syncing tasks
     (sync, sync_args), = acquisition_description['sync'].items()
     sync_args['sync_collection'] = sync_args.pop('collection')  # rename the key so it matches task run arguments
+    sync_args['sync_ext'] = sync_args.pop('extension')
     sync_kwargs = {'sync': sync, **sync_args}
     sync_tasks = []
     if sync == 'nidq' and sync_args['sync_collection'] == 'raw_ephys_data':
@@ -162,7 +164,7 @@ def make_pipeline(session_path=None, **pkwargs):
         all_probes = []
         register_tasks = []
         for pname, probe_info in acquisition_description['neuropixel'].items():
-            meta_file = spikeglx.glob_ephys_files(Path(session_path).joinpath(probe_info['collection']), ext='.meta')
+            meta_file = spikeglx.glob_ephys_files(Path(session_path).joinpath(probe_info['collection']), ext='meta')
             meta_file = meta_file[0].get('ap')
             nptype = spikeglx._get_neuropixel_version_from_meta(spikeglx.read_meta_data(meta_file))
             nshanks = spikeglx._get_nshanks_from_meta(spikeglx.read_meta_data(meta_file))
@@ -180,17 +182,24 @@ def make_pipeline(session_path=None, **pkwargs):
             else:
                 tasks[f'EphysCompressNP1_{pname}'] = type(f'EphyCompressNP1_{pname}', (etasks.EphysCompressNP1,), {})\
                     (**kwargs, **ephys_kwargs, pname=pname)
-                register_tasks.append(tasks[f'EphyCompressNP21_{pname}'])
+                register_tasks.append(tasks[f'EphysCompressNP1_{pname}'])
                 all_probes.append(pname)
 
-        tasks['EphysPulses'] = type(f'EphysPulses', (etasks.EphysPulses,), {})\
-            (**kwargs, **ephys_kwargs, **sync_kwargs, pname=all_probes, parents=register_tasks + sync_tasks)
+        if nptype == '3A':
+            tasks[f'EphysPulses'] = type(f'EphysPulses', (etasks.EphysPulses,), {}) \
+                (**kwargs, **ephys_kwargs, **sync_kwargs, pname=all_probes, parents=register_tasks + sync_tasks)
 
         for pname in all_probes:
+            register_task = [reg_task for reg_task in register_tasks if pname in reg_task.name]
+
+            if nptype != '3A':
+                tasks[f'EphysPulses_{pname}'] = type(f'EphysPulses_{pname}', (etasks.EphysPulses,), {})\
+                    (**kwargs, **ephys_kwargs, **sync_kwargs, pname=[pname], parents=register_task + sync_tasks)
+
             tasks[f'RawEphysQC_{pname}'] = type(f'RawEphysQC_{pname}', (etasks.RawEphysQC,), {})\
-                (**kwargs, **ephys_kwargs, pname=pname, parents=register_tasks)
-            tasks[f'Spikesorting_{pname}'] = type(f'RawEphysQC_{pname}', (etasks.SpikeSorting,), {})\
-                (**kwargs, **ephys_kwargs, pname=pname, parents=register_tasks + [tasks['EphysPulses']])
+                (**kwargs, **ephys_kwargs, pname=pname, parents=register_task)
+            tasks[f'Spikesorting_{pname}'] = type(f'Spikesorting_{pname}', (etasks.SpikeSorting,), {})\
+                (**kwargs, **ephys_kwargs, pname=pname, parents=[tasks[f'EphysPulses_{pname}']])
             tasks[f'EphysCellQC_{pname}'] = type(f'EphysCellQC_{pname}', (etasks.EphysCellsQc,), {})\
                 (**kwargs, **ephys_kwargs, pname=pname, parents=[tasks[f'Spikesorting_{pname}']])
 
@@ -205,7 +214,7 @@ def make_pipeline(session_path=None, **pkwargs):
         tasks[tn] = type((tn := f'VideoCompress'), (vtasks.VideoCompress,), {})(
             **kwargs, **video_kwargs, parents=[tasks['VideoRegisterRaw']])
         tasks[tn] = type((tn := f'VideoSyncQC'), (vtasks.VideoSyncQc,), {})(
-            **kwargs, **video_kwargs, parents=[tasks[f'VideoCompress']] + sync_tasks)
+            **kwargs, **video_kwargs, **sync_kwargs, parents=[tasks[f'VideoCompress']] + sync_tasks)
         tasks[tn] = type((tn := 'DLC'), (epp.EphysDLC,), {})(
             **kwargs, parents=[tasks['VideoCompress']])
         tasks['PostDLC'] = type('PostDLC', (epp.EphysPostDLC,), {})(
@@ -242,6 +251,23 @@ def make_pipeline(session_path=None, **pkwargs):
     p.tasks = tasks
 
     return p
+
+
+def make_pipeline_dict(pipeline, save=True):
+    task_dicts = pipeline.create_tasks_list_from_pipeline()
+    # TODO better name
+    if save:
+        with open(Path(pipeline.session_path).joinpath('pipeline_tasks.yaml'), 'w') as file:
+            _ = yaml.dump(task_dicts, file)
+
+    return task_dicts
+
+
+def load_pipeline_dict(path):
+    with open(Path(path).joinpath('pipeline_tasks.yaml'), 'r') as file:
+        task_list = yaml.full_load(file)
+
+    return task_list
 
 
 

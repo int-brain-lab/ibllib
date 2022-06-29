@@ -114,7 +114,7 @@ class PassiveTask(base_tasks.DynamicTask):
                             ('_spikeglx_sync.channels.*', self.sync_collection, True),
                             ('_spikeglx_sync.polarities.*', self.sync_collection, True),
                             ('_spikeglx_sync.times.*', self.sync_collection, True),
-                            ('daq.wiring.json', self.sync_collection, False),
+                            ('*.wiring.json', self.sync_collection, False),
                             ('*.meta', self.sync_collection, False)],
             'output_files': [('_ibl_passiveGabor.table.csv', 'alf', True),
                              ('_ibl_passivePeriods.intervalsTable.csv', 'alf', True),
@@ -126,7 +126,7 @@ class PassiveTask(base_tasks.DynamicTask):
     def _run(self):
         """returns a list of pathlib.Paths. """
         data, paths = PassiveChoiceWorld(self.session_path).extract(
-            sync_collection=self.sync_collection, protocol_collection=self.task_collection, save=True)
+            sync_collection=self.sync_collection, task_collection=self.collection, save=True)
 
         if any([x is None for x in paths]):
             self.status = -1

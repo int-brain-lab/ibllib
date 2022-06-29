@@ -12,6 +12,7 @@ from graphviz import Digraph
 
 from ibllib.misc import version
 from ibllib.oneibl import data_handlers
+from iblutil.util import Bunch
 import one.params
 from one.api import ONE
 
@@ -427,7 +428,7 @@ class Pipeline(abc.ABC):
             m.view()
         return m
 
-    def create_alyx_tasks(self, rerun__status__in=None):
+    def create_alyx_tasks(self, rerun__status__in=None, tasks_list=None):
         """
         Instantiate the pipeline and create the tasks in Alyx, then create the jobs for the session
         If the jobs already exist, they are left untouched. The re-run parameter will re-init the
@@ -445,23 +446,38 @@ class Pipeline(abc.ABC):
         if self.one is None:
             _logger.warning("No ONE instance found for Alyx connection, set the one property")
             return
-        tasks_alyx_pre = self.one.alyx.rest('tasks', 'list',
-                                            session=self.eid, graph=self.name, no_cache=True)
+        tasks_alyx_pre = self.one.alyx.rest('tasks', 'list', session=self.eid, graph=self.name, no_cache=True)
         tasks_alyx = []
         # creates all the tasks by iterating through the ordered dict
-        for k, t in self.tasks.items():
+
+        if tasks_list is not None:
+            task_items = tasks_list
+            # need to add in the session eid and the parents
+        else:
+            task_items = [t for _, t in self.tasks.items()]
+
+        for t in task_items:
             # get the parents' alyx ids to reference in the database
+            if type(t) == dict:
+                t = Bunch(t)
+                executable = t.executable
+                arguments = t.arguments
+            else:
+                executable = self._get_exec_name(t)
+                arguments = t.kwargs
+
             if len(t.parents):
                 pnames = [p.name for p in t.parents]
                 parents_ids = [ta['id'] for ta in tasks_alyx if ta['name'] in pnames]
             else:
                 parents_ids = []
-            task_dict = {'executable': self._get_exec_name(t), 'priority': t.priority,
+
+            task_dict = {'executable': executable, 'priority': t.priority,
                          'io_charge': t.io_charge, 'gpu': t.gpu, 'cpu': t.cpu,
                          'ram': t.ram, 'module': self.label, 'parents': parents_ids,
                          'level': t.level, 'time_out_sec': t.time_out_secs, 'session': self.eid,
                          'status': 'Waiting', 'log': None, 'name': t.name, 'graph': self.name,
-                         'arguments': t.kwargs}
+                         'arguments': arguments}
             # if the task already exists, patch it otherwise, create it
             talyx = next(filter(lambda x: x["name"] == t.name, tasks_alyx_pre), [])
             if len(talyx) == 0:
@@ -471,6 +487,33 @@ class Pipeline(abc.ABC):
                     'tasks', 'partial_update', id=talyx['id'], data=task_dict)
             tasks_alyx.append(talyx)
         return tasks_alyx
+
+    def create_tasks_list_from_pipeline(self):
+        # TODO remove repition
+        """
+        From a pipeline with tasks, creates a list of dictionaries containing task description that can be used to upload to
+        create alyx tasks
+        :return:
+        """
+        tasks_list = []
+        for k, t in self.tasks.items():
+            # get the parents' alyx ids to reference in the database
+            if len(t.parents):
+                parent_names = [p.name for p in t.parents]
+            else:
+                parent_names = []
+
+            task_dict = {'executable': self._get_exec_name(t), 'priority': t.priority,
+                         'io_charge': t.io_charge, 'gpu': t.gpu, 'cpu': t.cpu,
+                         'ram': t.ram, 'module': self.label, 'parents': parent_names,
+                         'level': t.level, 'time_out_sec': t.time_out_secs, 'session': self.eid,
+                         'status': 'Waiting', 'log': None, 'name': t.name, 'graph': self.name,
+                         'arguments': t.kwargs}
+
+            tasks_list.append(task_dict)
+
+        return tasks_list
+
 
     def run(self, status__in=['Waiting'], machine=None, clobber=True, **kwargs):
         """

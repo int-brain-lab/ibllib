@@ -12,7 +12,7 @@ def read_params(session_path):
     :return: dictionary
     """
     session_path = Path(session_path)
-    yaml_file = session_path.joinpath('session_params.yml') if session_path.is_dir() else session_path
+    yaml_file = session_path.joinpath('session_params.yaml') if session_path.is_dir() else session_path
     if not yaml_file.exists():
         return
 
