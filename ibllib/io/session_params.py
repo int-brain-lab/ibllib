@@ -74,7 +74,7 @@ def get_main_task_collection(sess_params):
         main_task_collection = None
         for prot, details in sess_params.get('tasks').items():
             if details.get('main'):
-                details.get('collection', None)
+                main_task_collection = details.get('collection', None)
 
         return main_task_collection
 
