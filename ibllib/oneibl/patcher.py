@@ -12,8 +12,8 @@ from one.alf.files import get_session_path, add_uuid_string
 from one.alf.spec import is_uuid_string
 from one import params
 from one.converters import path_from_dataset
+from one.remote import globus
 
-from ibllib.io import globus
 from ibllib.oneibl.registration import register_dataset
 
 _logger = logging.getLogger('ibllib')
@@ -97,7 +97,7 @@ class Patcher(abc.ABC):
             full_remote_path = PurePosixPath(FLATIRON_MOUNT, remote_path)
         if isinstance(path, WindowsPath) and not ftp:
             # On Windows replace drive map with Globus uri, e.g. C:/ -> /~/C/
-            path = '/~/' + path.as_posix().replace(':', '')
+            path = globus.as_globus_path(path)
         status = self._scp(path, full_remote_path, dry=dry)[0]
         return status
 
@@ -140,8 +140,8 @@ class Patcher(abc.ABC):
         Rules for creation/patching are the same that apply for registration via Alyx
         as this uses the registration endpoint to get the dataset.
         An existing file (same session and path relative to session) will be patched.
-        :param path: full file path. Must be whithin an ALF session folder (subject/date/number)
-        can also be a list of full file pathes belonging to the same session.
+        :param path: full file path. Must be within an ALF session folder (subject/date/number)
+        can also be a list of full file paths belonging to the same session.
         :param server_repository: Alyx server repository name
         :param created_by: alyx username for the dataset (optional, defaults to root)
         :param ftp: flag for case when using ftppatcher. Don't adjust windows path in
@@ -197,13 +197,12 @@ class GlobusPatcher(Patcher):
 
     """
 
-    def __init__(self, one=None, globus_client_id=None, local_endpoint=None, label='ibllib patch'):
-        assert globus_client_id
+    def __init__(self, client_name='default', one=None, label='ibllib patch'):
         assert one
-        self.local_endpoint = local_endpoint or globus.get_local_endpoint()
+        self.local_endpoint = getattr(globus.load_client_params(f'globus.{client_name}'),
+                                      'local_endpoint', globus.get_local_endpoint_id())
+        self.transfer_client = globus.create_globus_client(client_name)
         self.label = label
-        self.transfer_client = globus.login_auto(
-            globus_client_id=globus_client_id, str_app='globus/admin')
         # transfers/delete from the current computer to the flatiron: mandatory and executed first
         self.globus_transfer = globus_sdk.TransferData(
             self.transfer_client, self.local_endpoint, FLAT_IRON_GLOBUS_ID, verify_checksum=True,
@@ -296,11 +295,11 @@ class GlobusPatcher(Patcher):
             # on an errored task
             # Out[10]: TransferResponse({'bytes_checksummed': 0, 'bytes_transferred': 0, 'canceled_by_admin': None, 'canceled_by_admin_message': None, 'command': 'API 0.10', 'completion_time': '2021-01-03T17:39:00+00:00', 'deadline': '2021-01-04T17:37:34+00:00', 'delete_destination_extra': False, 'destination_endpoint': 'simonsfoundation#ibl', 'destination_endpoint_display_name': 'IBL Flatiron SDSC Data', 'destination_endpoint_id': 'ab2d064c-413d-11eb-b188-0ee0d5d9299f', 'directories': 0, 'effective_bytes_per_second': 0, 'encrypt_data': False, 'fatal_error': {'code': 'CANCELED', 'description': 'canceled'}, 'faults': 2, 'files': 6, 'files_skipped': 0, 'files_transferred': 0, 'history_deleted': False, 'is_ok': None, 'is_paused': False, 'key': 'complete,2021-01-03T17:38:59.697413', 'label': 'test 3B analog sync patch', 'nice_status': None, 'nice_status_details': None, 'nice_status_expires_in': None, 'nice_status_short_description': None, 'owner_id': 'e633663a-8561-4a5d-ac92-f198d43b14dc', 'preserve_timestamp': False, 'recursive_symlinks': 'ignore', 'request_time': '2021-01-03T17:37:34+00:00', 'source_endpoint': 'internationalbrainlab#916c2766-bd2a-11ea-8f22-0a21f750d19b', 'source_endpoint_display_name': 'olivier_laptop', 'source_endpoint_id': '916c2766-bd2a-11ea-8f22-0a21f750d19b', 'status': 'FAILED', 'subtasks_canceled': 6, 'subtasks_expired': 0, 'subtasks_failed': 0, 'subtasks_pending': 0, 'subtasks_retrying': 0, 'subtasks_succeeded': 6, 'subtasks_total': 12, 'symlinks': 0, 'sync_level': 3, 'task_id': '5706dd2c-4dea-11eb-8ffb-0a34088e79f9', 'type': 'TRANSFER', 'username': 'internationalbrainlab', 'verify_checksum': True})  # noqa
             while True:
-                tinfo = gtc.get_task(task_id=resp['task_id'])['completion_time']
-                if tinfo['completion_time'] is not None:
+                tinfo = gtc.get_task(task_id=resp['task_id'])
+                if tinfo and tinfo['completion_time'] is not None:
                     break
                 _ = gtc.task_wait(task_id=resp['task_id'], timeout=30)
-            if tinfo['fatal_error'] is not None:
+            if tinfo and tinfo['fatal_error'] is not None:
                 raise ConnectionError(f"Globus transfer failed \n {tinfo}")
 
         # handles the transfers first

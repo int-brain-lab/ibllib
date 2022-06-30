@@ -147,7 +147,7 @@ def task_queue(mode='all', lab=None, one=None):
     if one is None:
         one = ONE(cache_rest=None)
     if lab is None:
-        _logger.info("Trying to infer lab from globus installation")
+        _logger.debug("Trying to infer lab from globus installation")
         lab = _get_lab(one)
     if lab is None:
         _logger.error("No lab provided or found")

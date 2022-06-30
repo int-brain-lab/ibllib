@@ -15,12 +15,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Union
 
+from pkg_resources import parse_version
 import numpy as np
 import pandas as pd
 
 from iblutil.io import jsonable
 from ibllib.io.video import assert_valid_label
-from ibllib.misc import version
 from ibllib.time import uncycle_pgts, convert_pgts
 
 _logger = logging.getLogger('ibllib')
@@ -374,7 +374,7 @@ def load_encoder_events(session_path, settings=False):
             settings = {'IBLRIG_VERSION_TAG': '0.0.0'}
     if not path:
         return None
-    if version.ge(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
+    if parse_version(settings['IBLRIG_VERSION_TAG']) >= parse_version('5.0.0'):
         return _load_encoder_events_file_ge5(path)
     else:
         return _load_encoder_events_file_lt5(path)
@@ -479,7 +479,7 @@ def load_encoder_positions(session_path, settings=False):
     if not path:
         _logger.warning("No data loaded: could not find raw encoderPositions file")
         return None
-    if version.ge(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
+    if parse_version(settings['IBLRIG_VERSION_TAG']) >= parse_version('5.0.0'):
         return _load_encoder_positions_file_ge5(path)
     else:
         return _load_encoder_positions_file_lt5(path)

@@ -312,11 +312,11 @@ class TestAtlasPlots(unittest.TestCase):
         ax.clear()
 
     def test_horizontal_slice(self):
-        ax = self.ba.plot_hslice(dv_coordinate=0.002)
+        ax = self.ba.plot_hslice(dv_coordinate=-0.002)
         im = ax.get_images()[0]
         assert im.get_array().shape == (self.ba.bc.ny, self.ba.bc.nx)
         ax.clear()
-        ax = self.ba.plot_hslice(dv_coordinate=0.002, volume='annotation')
+        ax = self.ba.plot_hslice(dv_coordinate=-0.002, volume='annotation')
         im = ax.get_images()[0]
         assert im.get_array().shape == (self.ba.bc.ny, self.ba.bc.nx, 3)
         ax.clear()
@@ -353,9 +353,9 @@ class TestAtlasSlicesConversion(unittest.TestCase):
         # tests output shapes
         self.assertTrue(ba.slice(axis=0, coordinate=0).shape == (ny, nz))  # sagittal
         self.assertTrue(ba.slice(axis=1, coordinate=0).shape == (nx, nz))  # coronal
-        self.assertTrue(ba.slice(axis=2, coordinate=.002).shape == (ny, nx))  # horizontal
+        self.assertTrue(ba.slice(axis=2, coordinate=-.002).shape == (ny, nx))  # horizontal
         # tests out of bound
-        with self.assertRaises(IndexError):
+        with self.assertRaises(ValueError):
             ba.slice(axis=1, coordinate=123)
         self.assertTrue(ba.slice(axis=1, coordinate=21, mode='clip').shape == (nx, nz))
         """
@@ -553,9 +553,9 @@ class TestsCoordinatesSimples(unittest.TestCase):
         self.assertTrue(bc.ny == 7)
         self.assertTrue(bc.nz == 8)
         # test array functions
-        in_out = [([6, 7, 8], np.array([6, 7, 8])),
-                  (np.array([6, 7, 8]), np.array([6, 7, 8])),
-                  (np.array([[6, 7, 8], [6, 7, 8]]), np.array([[6, 7, 8], [6, 7, 8]])),
+        in_out = [([3, 4, 5], np.array([3, 4, 5])),
+                  (np.array([3, 4, 5]), np.array([3, 4, 5])),
+                  (np.array([[3, 4, 5], [3, 4, 5]]), np.array([[3, 4, 5], [3, 4, 5]])),
                   ]
         for io in in_out:
             self.assertTrue(np.all(bc.xyz2i(io[0]) == io[1]))
