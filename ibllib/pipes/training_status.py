@@ -1,4 +1,3 @@
-from one.api import ONE
 import one.alf.io as alfio
 from one.alf.spec import is_session_path
 from one.alf.exceptions import ALFObjectNotFound

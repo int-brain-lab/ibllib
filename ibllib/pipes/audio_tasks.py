@@ -17,7 +17,6 @@ class AudioCompress(base_tasks.AudioTask):
         }
         return signature
 
-
     def _run(self, overwrite=False):
 
         command = "ffmpeg -i {file_in} -y -nostdin -c:a flac -nostats {file_out}"

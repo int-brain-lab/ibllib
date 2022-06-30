@@ -514,7 +514,6 @@ class Pipeline(abc.ABC):
 
         return tasks_list
 
-
     def run(self, status__in=['Waiting'], machine=None, clobber=True, **kwargs):
         """
         Get all the session related jobs from alyx and run them

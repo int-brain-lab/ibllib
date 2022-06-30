@@ -1,5 +1,3 @@
-from abc import ABC
-
 from ibllib.pipes.tasks import Task
 import ibllib.io.session_params as sess_params
 
@@ -124,7 +122,6 @@ class EphysTask(DynamicTask):
             pextra = []
 
         return nshanks, pextra
-
 
 
 class WidefieldTask(DynamicTask):

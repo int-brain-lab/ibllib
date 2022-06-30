@@ -220,7 +220,6 @@ class TrainingTrialsFPGA(tasks.Task):
     }
 
 
-
     def _behaviour_criterion(self):
         """
         Computes and update the behaviour criterion on Alyx

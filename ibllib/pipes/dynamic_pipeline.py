@@ -14,15 +14,6 @@ import ibllib.pipes.ephys_tasks as etasks
 import ibllib.pipes.audio_tasks as atasks
 
 import spikeglx
-## collection - collection with task data
-## protocol - protocol of task
-## sync_collection - collection with main sync data
-## device collection - collection with raw device files
-## sync - type of sync
-## sync_ext - extension of sync
-## pname - probe name
-## nshanks - number of shanks on probe
-
 
 
 def acquisition_description_legacy_session():
@@ -114,8 +105,8 @@ def make_pipeline(session_path=None, **pkwargs):
     sync_tasks = []
     if sync == 'nidq' and sync_args['sync_collection'] == 'raw_ephys_data':
         tasks['SyncRegisterRaw'] = type('SyncRegisterRaw', (etasks.EphysSyncRegisterRaw,), {})(**kwargs, **sync_kwargs)
-        tasks[f'SyncPulses_{sync}'] = type(f'SyncPulses_{sync}', (etasks.EphysSyncPulses,), {})(**kwargs, **sync_kwargs,
-                                                                                                parents=[tasks['SyncRegisterRaw']])
+        tasks[f'SyncPulses_{sync}'] = type(f'SyncPulses_{sync}', (etasks.EphysSyncPulses,), {})\
+            (**kwargs, **sync_kwargs, parents=[tasks['SyncRegisterRaw']])
         sync_tasks = [tasks[f'SyncPulses_{sync}']]
     elif sync == 'nidq':
         tasks['SyncRegisterRaw'] = type('SyncRegisterRaw', (stasks.SyncMtscomp,), {})(**kwargs, **sync_kwargs)
@@ -161,7 +152,7 @@ def make_pipeline(session_path=None, **pkwargs):
     # Ephys tasks
     if 'neuropixel' in acquisition_description:
         ephys_kwargs = {'device_collection': 'raw_ephys_data'}
-        tasks['EphysRegisterRaw'] = type(f'EphysRegisterRaw', (etasks.EphysRegisterRaw,), {})(**kwargs, **ephys_kwargs)
+        tasks['EphysRegisterRaw'] = type('EphysRegisterRaw', (etasks.EphysRegisterRaw,), {})(**kwargs, **ephys_kwargs)
 
         all_probes = []
         register_tasks = []
@@ -188,7 +179,7 @@ def make_pipeline(session_path=None, **pkwargs):
                 all_probes.append(pname)
 
         if nptype == '3A':
-            tasks[f'EphysPulses'] = type(f'EphysPulses', (etasks.EphysPulses,), {}) \
+            tasks['EphysPulses'] = type('EphysPulses', (etasks.EphysPulses,), {})\
                 (**kwargs, **ephys_kwargs, **sync_kwargs, pname=all_probes, parents=register_tasks + sync_tasks)
 
         for pname in all_probes:
@@ -201,13 +192,12 @@ def make_pipeline(session_path=None, **pkwargs):
                     (**kwargs, **ephys_kwargs, pname=pname, parents=[tasks[f'EphysPulses_{pname}']])
             else:
                 tasks[f'Spikesorting_{pname}'] = type(f'Spikesorting_{pname}', (etasks.SpikeSorting,), {}) \
-                    (**kwargs, **ephys_kwargs, pname=pname, parents=[tasks[f'EphysPulses']])
+                    (**kwargs, **ephys_kwargs, pname=pname, parents=[tasks['EphysPulses']])
 
             tasks[f'RawEphysQC_{pname}'] = type(f'RawEphysQC_{pname}', (etasks.RawEphysQC,), {})\
                 (**kwargs, **ephys_kwargs, pname=pname, parents=register_task)
             tasks[f'EphysCellQC_{pname}'] = type(f'EphysCellQC_{pname}', (etasks.EphysCellsQc,), {})\
                 (**kwargs, **ephys_kwargs, pname=pname, parents=[tasks[f'Spikesorting_{pname}']])
-
 
     # Video tasks
     if 'cameras' in acquisition_description:
@@ -216,10 +206,10 @@ def make_pipeline(session_path=None, **pkwargs):
                         'main_task_collection': sess_params.get_main_task_collection(acquisition_description)}
 
         tasks[tn] = type((tn := 'VideoRegisterRaw'), (vtasks.VideoRegisterRaw,), {})(**kwargs, **video_kwargs)
-        tasks[tn] = type((tn := f'VideoCompress'), (vtasks.VideoCompress,), {})(
+        tasks[tn] = type((tn := 'VideoCompress'), (vtasks.VideoCompress,), {})(
             **kwargs, **video_kwargs, parents=[tasks['VideoRegisterRaw']])
-        tasks[tn] = type((tn := f'VideoSyncQC'), (vtasks.VideoSyncQc,), {})(
-            **kwargs, **video_kwargs, **sync_kwargs, parents=[tasks[f'VideoCompress']] + sync_tasks)
+        tasks[tn] = type((tn := 'VideoSyncQC'), (vtasks.VideoSyncQc,), {})(
+            **kwargs, **video_kwargs, **sync_kwargs, parents=[tasks['VideoCompress']] + sync_tasks)
 
         if len(video_kwargs['cameras']) == 3:
             tasks[tn] = type((tn := 'DLC'), (epp.EphysDLC,), {})(
@@ -275,27 +265,3 @@ def load_pipeline_dict(path):
         task_list = yaml.full_load(file)
 
     return task_list
-
-
-acquisition_description = {  # this is the current ephys pipeline description
-    'cameras': {
-        'right': {'collection': 'raw_video_data', 'sync_label': 'frame2ttl'},
-        'body': {'collection': 'raw_video_data', 'sync_label': 'frame2ttl'},
-        'left': {'collection': 'raw_video_data', 'sync_label': 'frame2ttl'},
-    },
-    'widefield': {
-        'widefield': {'collection': 'raw_widefield_data', 'sync_label': 'frame_trigger'},
-    },
-    'microphone': {
-        'harp': {'collection': 'raw_behavior_data', 'sync_label': None}
-    },
-    'tasks': {
-        'choice_world_training': {'collection': 'raw_behavior_data', 'sync_label': 'bpod', 'main': True},
-        'choice_world_passive': {'collection': 'raw_passive_data', 'sync_label': 'bpod', 'main': False},
-    },
-    'sync': {
-        'nidq': {'collection': 'raw_widefield_data', 'extension': '.bin'}
-    },
-    'procedures': ['Widefield recording'],
-    'projects': ['ibl_neuropixel_brainwide_01']
-}

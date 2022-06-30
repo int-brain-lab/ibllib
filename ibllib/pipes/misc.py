@@ -590,7 +590,7 @@ def confirm_widefield_remote_folder(local_folder=False, remote_folder=False, for
                 to_change = [x for i, x in enumerate(imaging_files) if i != int(ans)]
                 if action == 'delete':
                     print('The following file(s) will be deleted: ', *to_change, sep='\n')
-                    ans = input(f'Type "delete" to confirm> ')
+                    ans = input('Type "delete" to confirm> ')
                     if ans.lower() != 'delete':
                         print('Invalid response...')
                         continue
