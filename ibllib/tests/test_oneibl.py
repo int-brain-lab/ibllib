@@ -254,7 +254,7 @@ class TestRegistration(unittest.TestCase):
         for ds in datasets:
             self.assertTrue(ds['hash'] is not None)
             self.assertTrue(ds['file_size'] is not None)
-            self.assertTrue(ds['version'] == version.ibllib())
+            self.assertTrue(ds['version'] == ibllib.__version__)
         # checks the procedure of the session
         ses_info = self.one.alyx.rest('sessions', 'read', id=eid)
         self.assertTrue(ses_info['procedures'] == ['Ephys recording with acute probe(s)'])
