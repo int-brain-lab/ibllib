@@ -496,3 +496,30 @@ def plot_cdf(spike_amps, spike_depths, spike_times, n_amp_bins=10, d_bin=40, amp
         return data.convert2dict(), fig, ax
 
     return data
+
+
+def image_raw_data(raw, fs, chn_coords=None, cmap='bone', title=None, display=False, gain=-90, **kwargs):
+
+    def gain2level(gain):
+        return 10 ** (gain / 20) * 4 * np.array([-1, 1])
+
+    ylabel = 'Channel index' if chn_coords is None else 'Distance from probe tip (um)'
+    title = title or 'Raw data'
+
+    y = np.arange(raw.shape[1]) if chn_coords is None else chn_coords[:, 1]
+
+    x = np.array([0, raw.shape[0] - 1]) / fs * 1e3
+
+    data = ImagePlot(raw, y=y, cmap=cmap)
+    data.set_labels(title=title, xlabel='Time (ms)',
+                    ylabel=ylabel, clabel='Power (uV)')
+    clim = gain2level(gain)
+    data.set_clim(clim=clim)
+    data.set_xlim(xlim=x)
+    data.set_ylim()
+
+    if display:
+        ax, fig = plot_image(data.convert2dict(), **kwargs)
+        return data.convert2dict(), fig, ax
+
+    return data

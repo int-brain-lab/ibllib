@@ -6,12 +6,12 @@ import numpy as np
 from one.api import ONE
 import one.alf.io as alfio
 
-from ibllib.ephys.neuropixel import SITES_COORDINATES
+from neuropixel import SITES_COORDINATES, TIP_SIZE_UM, trace_header
 import ibllib.atlas as atlas
 from ibllib.ephys.spikes import probes_description as extract_probes
-from ibllib.dsp.utils import fcn_cosine
-from ibllib.ephys.neuropixel import TIP_SIZE_UM, trace_header
 from ibllib.qc import base
+
+from neurodsp.utils import fcn_cosine
 
 
 _logger = logging.getLogger('ibllib')

@@ -7,11 +7,11 @@ import numpy as np
 
 from one.api import ONE
 from ibllib.pipes import tasks
-from ibllib.misc import version
 from one.alf.exceptions import ALFObjectNotFound
+from neuropixel import trace_header, TIP_SIZE_UM
 
+from ibllib import __version__ as ibllib_version
 from ibllib.pipes.ephys_alignment import EphysAlignment
-from ibllib.ephys.neuropixel import trace_header, TIP_SIZE_UM
 from ibllib.pipes.histology import interpolate_along_track
 from ibllib.atlas import AllenAtlas
 
@@ -36,7 +36,7 @@ class ReportSnapshot(tasks.Task):
         jsons = []
         texts = []
         for f in self.outputs:
-            json_dict = dict(tag=report_tag, version=version.ibllib(),
+            json_dict = dict(tag=report_tag, version=ibllib_version,
                              function=(function or str(self.__class__).split("'")[1]), name=f.stem)
             if extra_dict is not None:
                 assert isinstance(extra_dict, dict)
@@ -215,6 +215,8 @@ class Snapshot:
         :returns: dict, note as registered in database
         """
         # the protocol is not compatible with byte streaming and json, so serialize the json object here
+        # Make sure that user is logged in, if not, try to log in
+        assert self.one.alyx.is_logged_in, "No Alyx user is logged in, try running one.alyx.authenticate() first"
         note = {
             'user': self.one.alyx.user, 'content_type': self.content_type, 'object_id': self.object_id,
             'text': text, 'width': width, 'json': json.dumps(json_field)}

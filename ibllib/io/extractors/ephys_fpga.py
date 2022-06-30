@@ -3,19 +3,21 @@ Complete FPGA data extraction depends on Bpod extraction
 """
 from collections import OrderedDict
 import logging
-from pathlib import Path, PureWindowsPath
+from pathlib import Path
 import uuid
 
 import matplotlib.pyplot as plt
 import numpy as np
-from pkg_resources import parse_version
 
+import spikeglx
+import neurodsp.utils
 import one.alf.io as alfio
 from iblutil.util import Bunch
-import ibllib.dsp as dsp
+
 import ibllib.exceptions as err
-from ibllib.io import raw_data_loaders, spikeglx
-from ibllib.io.extractors import biased_trials, training_trials
+from ibllib.io import raw_data_loaders
+from ibllib.io.extractors.bpod_trials import extract_all as bpod_extract_all
+from ibllib.io.extractors.opto_trials import LaserBool
 import ibllib.io.extractors.base as extractors_base
 from ibllib.io.extractors.training_wheel import extract_wheel_moves
 import ibllib.plots as plots
@@ -118,16 +120,14 @@ def _sync_to_alf(raw_ephys_apfile, output_path=None, save=False, parts=''):
     file_ftcp = Path(output_path).joinpath(f'fronts_times_channel_polarity{str(uuid.uuid4())}.bin')
 
     # loop over chunks of the raw ephys file
-    wg = dsp.WindowGenerator(sr.ns, int(SYNC_BATCH_SIZE_SECS * sr.fs), overlap=1)
+    wg = neurodsp.utils.WindowGenerator(sr.ns, int(SYNC_BATCH_SIZE_SECS * sr.fs), overlap=1)
     fid_ftcp = open(file_ftcp, 'wb')
     for sl in wg.slice:
         ss = sr.read_sync(sl)
-        ind, fronts = dsp.fronts(ss, axis=0)
+        ind, fronts = neurodsp.utils.fronts(ss, axis=0)
         # a = sr.read_sync_analog(sl)
         sav = np.c_[(ind[0, :] + sl.start) / sr.fs, ind[1, :], fronts.astype(np.double)]
         sav.tofile(fid_ftcp)
-        # print progress
-        wg.print_progress()
     # close temp file, read from it and delete
     fid_ftcp.close()
     tim_chan_pol = np.fromfile(str(file_ftcp))
@@ -156,7 +156,8 @@ def _assign_events_bpod(bpod_t, bpod_polarities, ignore_first_valve=True):
     :param ignore_first_valve (True): removes detected valve events at indices le 2
     :return: numpy arrays of times t_trial_start, t_valve_open and t_iti_in
     """
-    TRIAL_START_TTL_LEN = 2.33e-4
+    TRIAL_START_TTL_LEN = 2.33e-4  # the TTL length is 0.1ms but this has proven to drift on
+    # some bpods and this is the highest possible value that discriminates trial start from valve
     ITI_TTL_LEN = 0.4
     # make sure that there are no 2 consecutive fall or consecutive rise events
     assert(np.all(np.abs(np.diff(bpod_polarities)) == 2))
@@ -190,12 +191,12 @@ def _assign_events_bpod(bpod_t, bpod_polarities, ignore_first_valve=True):
     # t_abnormal = events['t'][bpod_polarities != -1][i_abnormal]
     # assert(np.all(events != 0))
     # plt.figure()
-    # plots.squares(bpod_t, bpod_polarities)
-    # plots.vertical_lines(t_trial_start, ymin=-0.2, ymax=1.1, linewidth=0.5)
-    # plots.vertical_lines(t_valve_open, ymin=-0.2, ymax=1.1, linewidth=0.5)
-    # plots.vertical_lines(t_iti_in, ymin=-0.2, ymax=1.1, linewidth=0.5)
+    # plots.squares(bpod_t, bpod_polarities, label='raw fronts')
+    # plots.vertical_lines(t_trial_start, ymin=-0.2, ymax=1.1, linewidth=0.5, label='trial start')
+    # plots.vertical_lines(t_valve_open, ymin=-0.2, ymax=1.1, linewidth=0.5, label='valve open')
+    # plots.vertical_lines(t_iti_in, ymin=-0.2, ymax=1.1, linewidth=0.5, label='iti_in')
     # plt.plot(t_abnormal, t_abnormal * 0 + .5, 'k*')
-    # plt.legend(['raw fronts', 'trial start', 'valve open', 'iti_in'])
+    # plt.legend()
 
     return t_trial_start, t_valve_open, t_iti_in
 
@@ -430,7 +431,7 @@ def extract_behaviour_sync(sync, chmap=None, display=False, bpod_trials=None):
     # perform the sync bpod/FPGA, and add the start that have not been detected
     if bpod_trials:
         bpod_start = bpod_trials['intervals_bpod'][:, 0]
-        fcn, drift, ibpod, ifpga = dsp.utils.sync_timestamps(
+        fcn, drift, ibpod, ifpga = neurodsp.utils.sync_timestamps(
             bpod_start, t_trial_start, return_indices=True)
         # if it's drifting too much
         if drift > 200 and bpod_start.size != t_trial_start.size:
@@ -580,81 +581,29 @@ def get_main_probe_sync(session_path, bin_exists=False):
     return sync, sync_chmap
 
 
-class ProbaContrasts(extractors_base.BaseBpodTrialsExtractor):
-    """
-    Bpod pre-generated values for probabilityLeft, contrastLR, phase, quiescence
-    """
-    save_names = ('_ibl_trials.contrastLeft.npy', '_ibl_trials.contrastRight.npy', None, None,
-                  '_ibl_trials.probabilityLeft.npy', None)
-    var_names = ('contrastLeft', 'contrastRight', 'phase',
-                 'position', 'probabilityLeft', 'quiescence')
-
-    def _extract(self, **kwargs):
-        """Extracts positions, contrasts, quiescent delay, stimulus phase and probability left
-        from pregenerated session files.
-        Optional: saves alf contrastLR and probabilityLeft npy files"""
-        pe = self.get_pregenerated_events(self.bpod_trials, self.settings)
-        return [pe[k] for k in sorted(pe.keys())]
-
-    @staticmethod
-    def get_pregenerated_events(bpod_trials, settings):
-        num = settings.get("PRELOADED_SESSION_NUM", None)
-        if num is None:
-            num = settings.get("PREGENERATED_SESSION_NUM", None)
-        if num is None:
-            fn = settings.get('SESSION_LOADED_FILE_PATH', '')
-            fn = PureWindowsPath(fn).name
-            num = ''.join([d for d in fn if d.isdigit()])
-            if num == '':
-                raise ValueError("Can't extract left probability behaviour.")
-        # Load the pregenerated file
-        ntrials = len(bpod_trials)
-        sessions_folder = Path(raw_data_loaders.__file__).parent.joinpath(
-            "extractors", "ephys_sessions")
-        fname = f"session_{num}_ephys_pcqs.npy"
-        pcqsp = np.load(sessions_folder.joinpath(fname))
-        pos = pcqsp[:, 0]
-        con = pcqsp[:, 1]
-        pos = pos[: ntrials]
-        con = con[: ntrials]
-        contrastRight = con.copy()
-        contrastLeft = con.copy()
-        contrastRight[pos < 0] = np.nan
-        contrastLeft[pos > 0] = np.nan
-        qui = pcqsp[:, 2]
-        qui = qui[: ntrials]
-        phase = pcqsp[:, 3]
-        phase = phase[: ntrials]
-        pLeft = pcqsp[:, 4]
-        pLeft = pLeft[: ntrials]
-
-        phase_path = sessions_folder.joinpath(f"session_{num}_stim_phase.npy")
-        is_patched_version = parse_version(
-            settings.get('IBLRIG_VERSION_TAG', 0)) > parse_version('6.4.0')
-        if phase_path.exists() and is_patched_version:
-            phase = np.load(phase_path)[:ntrials]
-
-        return {'position': pos, 'quiescence': qui, 'phase': phase, 'probabilityLeft': pLeft,
-                'contrastRight': contrastRight, 'contrastLeft': contrastLeft}
-
-
 class FpgaTrials(extractors_base.BaseExtractor):
-    save_names = ('_ibl_trials.feedbackType.npy', '_ibl_trials.choice.npy',
-                  '_ibl_trials.rewardVolume.npy', '_ibl_trials.intervals_bpod.npy',
-                  '_ibl_trials.intervals.npy', '_ibl_trials.response_times.npy',
-                  '_ibl_trials.goCueTrigger_times.npy', None, None, None, None, None,
-                  '_ibl_trials.feedback_times.npy', '_ibl_trials.goCue_times.npy', None, None,
-                  '_ibl_trials.stimOff_times.npy', '_ibl_trials.stimOn_times.npy', None,
-                  '_ibl_trials.firstMovement_times.npy', '_ibl_wheel.timestamps.npy',
+    save_names = ('_ibl_trials.intervals_bpod.npy',
+                  '_ibl_trials.goCueTrigger_times.npy', None, None, None, None, None, None, None,
+                  '_ibl_trials.stimOff_times.npy', None, None, None, None,
+                  '_ibl_trials.table.pqt', '_ibl_wheel.timestamps.npy',
                   '_ibl_wheel.position.npy', '_ibl_wheelMoves.intervals.npy',
                   '_ibl_wheelMoves.peakAmplitude.npy')
-    var_names = ('feedbackType', 'choice', 'rewardVolume', 'intervals_bpod', 'intervals',
-                 'response_times', 'goCueTrigger_times', 'stimOnTrigger_times',
+    var_names = ('intervals_bpod',
+                 'goCueTrigger_times', 'stimOnTrigger_times',
                  'stimOffTrigger_times', 'stimFreezeTrigger_times', 'errorCueTrigger_times',
-                 'errorCue_times', 'feedback_times', 'goCue_times', 'itiIn_times',
-                 'stimFreeze_times', 'stimOff_times', 'stimOn_times', 'valveOpen_times',
-                 'firstMovement_times', 'wheel_timestamps', 'wheel_position',
+                 'errorCue_times', 'itiIn_times', 'stimFreeze_times', 'stimOff_times',
+                 'valveOpen_times', 'phase', 'position', 'quiescence', 'table',
+                 'wheel_timestamps', 'wheel_position',
                  'wheelMoves_intervals', 'wheelMoves_peakAmplitude')
+
+    # Fields from bpod extractor that we want to resync to FPGA
+    bpod_rsync_fields = ('intervals', 'response_times', 'goCueTrigger_times',
+                         'stimOnTrigger_times', 'stimOffTrigger_times',
+                         'stimFreezeTrigger_times', 'errorCueTrigger_times')
+
+    # Fields from bpod extractor that we want to save
+    bpod_fields = ('feedbackType', 'choice', 'rewardVolume', 'contrastLeft', 'contrastRight', 'probabilityLeft',
+                   'intervals_bpod', 'phase', 'position', 'quiescence')
 
     def __init__(self, *args, **kwargs):
         """An extractor for all ephys trial data, in FPGA time"""
@@ -671,12 +620,17 @@ class FpgaTrials(extractors_base.BaseExtractor):
         # load the bpod data and performs a biased choice world training extraction
         bpod_raw = raw_data_loaders.load_data(self.session_path)
         assert bpod_raw is not None, "No task trials data in raw_behavior_data - Exit"
-        bpod_trials, _ = biased_trials.extract_all(
-            session_path=self.session_path, save=False, bpod_trials=bpod_raw)
+
+        bpod_trials = self._extract_bpod(bpod_raw, save=False)
+        # Explode trials table df
+        trials_table = alfio.AlfBunch.from_df(bpod_trials.pop('table'))
+        table_columns = trials_table.keys()
+        bpod_trials.update(trials_table)
+        # synchronize
         bpod_trials['intervals_bpod'] = np.copy(bpod_trials['intervals'])
         fpga_trials = extract_behaviour_sync(sync=sync, chmap=chmap, bpod_trials=bpod_trials)
         # checks consistency and compute dt with bpod
-        self.bpod2fpga, drift_ppm, ibpod, ifpga = dsp.utils.sync_timestamps(
+        self.bpod2fpga, drift_ppm, ibpod, ifpga = neurodsp.utils.sync_timestamps(
             bpod_trials['intervals_bpod'][:, 0], fpga_trials.pop('intervals')[:, 0],
             return_indices=True)
         nbpod = bpod_trials['intervals_bpod'].shape[0]
@@ -686,15 +640,9 @@ class FpgaTrials(extractors_base.BaseExtractor):
         if drift_ppm > BPOD_FPGA_DRIFT_THRESHOLD_PPM:
             _logger.warning('BPOD/FPGA synchronization shows values greater than %i ppm',
                             BPOD_FPGA_DRIFT_THRESHOLD_PPM)
-        # those fields get directly in the output
-        bpod_fields = ['feedbackType', 'choice', 'rewardVolume', 'intervals_bpod']
-        # those fields have to be resynced
-        bpod_rsync_fields = ['intervals', 'response_times', 'goCueTrigger_times',
-                             'stimOnTrigger_times', 'stimOffTrigger_times',
-                             'stimFreezeTrigger_times', 'errorCueTrigger_times']
         out = OrderedDict()
-        out.update({k: bpod_trials[k][ibpod] for k in bpod_fields})
-        out.update({k: self.bpod2fpga(bpod_trials[k][ibpod]) for k in bpod_rsync_fields})
+        out.update({k: bpod_trials[k][ibpod] for k in self.bpod_fields})
+        out.update({k: self.bpod2fpga(bpod_trials[k][ibpod]) for k in self.bpod_rsync_fields})
         out.update({k: fpga_trials[k][ifpga] for k in sorted(fpga_trials.keys())})
         # extract the wheel data
         wheel, moves = get_wheel_positions(sync=sync, chmap=chmap)
@@ -703,10 +651,20 @@ class FpgaTrials(extractors_base.BaseExtractor):
         min_qt = settings.get('QUIESCENT_PERIOD', None)
         first_move_onsets, *_ = extract_first_movement_times(moves, out, min_qt=min_qt)
         out.update({'firstMovement_times': first_move_onsets})
+        # Re-create trials table
+        trials_table = alfio.AlfBunch({x: out.pop(x) for x in table_columns})
+        out['table'] = trials_table.to_df()
 
+        out = {k: out[k] for k in self.var_names if k in out}  # Reorder output
         assert tuple(filter(lambda x: 'wheel' not in x, self.var_names)) == tuple(out.keys())
         return [out[k] for k in out] + [wheel['timestamps'], wheel['position'],
                                         moves['intervals'], moves['peakAmplitude']]
+
+    def _extract_bpod(self, bpod_trials, save=False):
+        bpod_trials, *_ = bpod_extract_all(
+            session_path=self.session_path, save=save, bpod_trials=bpod_trials)
+
+        return bpod_trials
 
 
 def extract_all(session_path, save=True, bin_exists=False):
@@ -722,18 +680,10 @@ def extract_all(session_path, save=True, bin_exists=False):
     """
     extractor_type = extractors_base.get_session_extractor_type(session_path)
     _logger.info(f"Extracting {session_path} as {extractor_type}")
-    basecls = [FpgaTrials]
-    if extractor_type in ['ephys', 'mock_ephys', 'sync_ephys']:
-        basecls.extend([ProbaContrasts])
-    elif extractor_type in ['ephys_biased']:
-        basecls.extend([biased_trials.ProbabilityLeft, biased_trials.ContrastLR])
-    elif extractor_type in ['ephys_training']:
-        basecls.extend([training_trials.ProbabilityLeft, training_trials.ContrastLR])
-    elif extractor_type in ['ephys_biased_opto']:
-        from ibllib.io.extractors import opto_trials
-        basecls.extend([biased_trials.ProbabilityLeft, biased_trials.ContrastLR,
-                        opto_trials.LaserBool])
     sync, chmap = get_main_probe_sync(session_path, bin_exists=bin_exists)
+    base = [FpgaTrials]
+    if extractor_type == 'ephys_biased_opto':
+        base.append(LaserBool)
     outputs, files = extractors_base.run_extractor_classes(
-        basecls, session_path=session_path, save=save, sync=sync, chmap=chmap)
+        base, session_path=session_path, save=save, sync=sync, chmap=chmap)
     return outputs, files

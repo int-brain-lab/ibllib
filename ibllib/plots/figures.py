@@ -2,6 +2,7 @@
 Module that produces figures, usually for the extraction pipeline
 """
 import logging
+import time
 from pathlib import Path
 import traceback
 from string import ascii_uppercase
@@ -11,7 +12,7 @@ import pandas as pd
 import scipy.signal
 import matplotlib.pyplot as plt
 
-from ibllib.dsp import voltage
+from neurodsp import voltage
 from ibllib.plots.snapshot import ReportSnapshotProbe, ReportSnapshot
 from one.api import ONE
 import one.alf.io as alfio
@@ -86,10 +87,10 @@ class BehaviourPlots(ReportSnapshot):
                  }
 
     def __init__(self, eid, session_path=None, one=None, **kwargs):
-        self.one = one or ONE()
+        self.one = one
         self.eid = eid
         self.session_path = session_path or self.one.eid2path(self.eid)
-        super(BehaviourPlots, self).__init__(self.session_path, self.eid,
+        super(BehaviourPlots, self).__init__(self.session_path, self.eid, one=self.one,
                                              **kwargs)
         self.output_directory = self.session_path.joinpath('snapshot', 'behaviour')
         self.output_directory.mkdir(exist_ok=True, parents=True)
@@ -477,16 +478,16 @@ def ephys_bad_channels(raw, fs, channel_labels, channel_features, channels=None,
     if plot_backend == 'matplotlib':
         _, axs = plt.subplots(1, 2, gridspec_kw={'width_ratios': [.95, .05]}, figsize=(16, 9))
         eqcs.append(Density(butt, fs=fs, taxis=1, ax=axs[0], title='highpass', vmin=eqc_levels[0], vmax=eqc_levels[1],
-                            cmap='Greys'))
+                            cmap='Greys-r'))
 
         if destripe:
             dest = voltage.destripe(raw, fs=fs, channel_labels=channel_labels)
             _, axs = plt.subplots(1, 2, gridspec_kw={'width_ratios': [.95, .05]}, figsize=(16, 9))
             eqcs.append(Density(dest, fs=fs, taxis=1, ax=axs[0], title='destripe', vmin=eqc_levels[0], vmax=eqc_levels[1],
-                                cmap='Greys'))
+                                cmap='Greys-r'))
             _, axs = plt.subplots(1, 2, gridspec_kw={'width_ratios': [.95, .05]}, figsize=(16, 9))
             eqcs.append(Density((butt - dest), fs=fs, taxis=1, ax=axs[0], title='difference', vmin=eqc_levels[0],
-                                vmax=eqc_levels[1], cmap='Greys'))
+                                vmax=eqc_levels[1], cmap='Greys-r'))
 
         for eqc in eqcs:
             y, x = np.meshgrid(ioutside, np.linspace(0, rl * 1e3, 500))
@@ -598,7 +599,7 @@ def raw_destripe(raw, fs, t0, i_plt, n_plt,
     '''
 
     # Import
-    from ibllib.dsp import voltage
+    from neurodsp import voltage
     from ibllib.plots import Density
 
     # Init fig
@@ -617,7 +618,7 @@ def raw_destripe(raw, fs, t0, i_plt, n_plt,
         Tplot = Xs.shape[1] / fs
 
         # PLOT RAW DATA
-        d = Density(-Xs, fs=fs, taxis=1, ax=axs[i_plt], vmin=MIN_X, vmax=MAX_X, cmap='Greys') # noqa
+        d = Density(-Xs, fs=fs, taxis=1, ax=axs[i_plt], vmin=MIN_X, vmax=MAX_X, cmap='Greys-r') # noqa
         axs[i_plt].set_ylabel('')
         axs[i_plt].set_xlim((0, Tplot * 1e3))
         axs[i_plt].set_ylim((0, nc))
@@ -653,7 +654,7 @@ def raw_destripe(raw, fs, t0, i_plt, n_plt,
     return fig, axs
 
 
-def dlc_qc_plot(eid, one=None):
+def dlc_qc_plot(session_path, one=None):
     """
     Creates DLC QC plot.
     Data is searched first locally, then on Alyx. Panels that lack required data are skipped.
@@ -669,6 +670,7 @@ def dlc_qc_plot(eid, one=None):
      'alf/_ibl_leftCamera.times.npy',
      'alf/_ibl_rightCamera.times.npy',
      'alf/_ibl_leftCamera.features.pqt',
+     'alf/_ibl_rightCamera.features.pqt',
      'alf/rightROIMotionEnergy.position.npy',
      'alf/leftROIMotionEnergy.position.npy',
      'alf/bodyROIMotionEnergy.position.npy',
@@ -680,66 +682,84 @@ def dlc_qc_plot(eid, one=None):
      'alf/_ibl_wheel.timestamps.npy',
      'alf/licks.times.npy',
 
-    :params eid: Session ID
+    :params session_path: Path to session data on disk
     :params one: ONE instance, if None is given, default ONE is instantiated
     :returns: Matplotlib figure
     """
 
     one = one or ONE()
+    # hack for running on cortexlab local server
+    if one.alyx.base_url == 'https://alyx.cortexlab.net':
+        one = ONE(base_url='https://alyx.internationalbrainlab.org')
     data = {}
-    # Camera data
-    for cam in ['left', 'right', 'body']:
-        # Load a single frame for each video, first check if data is local, otherwise stream
-        video_path = one.eid2path(eid).joinpath('raw_video_data', f'_iblrig_{cam}Camera.raw.mp4')
-        if not video_path.exists():
-            try:
-                video_path = url_from_eid(eid, one=one)[cam]
-            except KeyError:
-                logger.warning(f"No raw video data found for {cam} camera, some DLC QC plots have to be skipped.")
-                data[f'{cam}_frame'] = None
-        try:
+    cams = ['left', 'right', 'body']
+    session_path = Path(session_path)
+
+    # Load data for each camera
+    for cam in cams:
+        # Load a single frame for each video
+        # Check if video data is available locally,if yes, load a single frame
+        video_path = session_path.joinpath('raw_video_data', f'_iblrig_{cam}Camera.raw.mp4')
+        if video_path.exists():
             data[f'{cam}_frame'] = get_video_frame(video_path, frame_number=5 * 60 * SAMPLING[cam])[:, :, 0]
-        except TypeError:
-            logger.warning(f"Could not load video frame for {cam} camera, some DLC QC plots have to be skipped.")
-            data[f'{cam}_frame'] = None
-        # Load other video associated data
+        # If not, try to stream a frame (try three times)
+        else:
+            try:
+                video_url = url_from_eid(one.path2eid(session_path), one=one)[cam]
+                for tries in range(3):
+                    try:
+                        data[f'{cam}_frame'] = get_video_frame(video_url, frame_number=5 * 60 * SAMPLING[cam])[:, :, 0]
+                        break
+                    except BaseException:
+                        if tries < 2:
+                            tries += 1
+                            logger.info(f"Streaming {cam} video failed, retrying x{tries}")
+                            time.sleep(30)
+                        else:
+                            logger.warning(f"Could not load video frame for {cam} cam. Skipping trace on frame.")
+                            data[f'{cam}_frame'] = None
+            except KeyError:
+                logger.warning(f"Could not load video frame for {cam} cam. Skipping trace on frame.")
+                data[f'{cam}_frame'] = None
+        # Other camera associated data
         for feat in ['dlc', 'times', 'features', 'ROIMotionEnergy']:
             # Check locally first, then try to load from alyx, if nothing works, set to None
-            local_file = list(one.eid2path(eid).joinpath('alf').glob(f'*{cam}Camera.{feat}*'))
-            alyx_file = [ds for ds in one.list_datasets(eid) if f'{cam}Camera.{feat}' in ds]
-            if feat == 'features' and cam in ['body', 'right']:
+            if feat == 'features' and cam == 'body':  # this doesn't exist for body cam
                 continue
-            elif len(local_file) > 0:
+            local_file = list(session_path.joinpath('alf').glob(f'*{cam}Camera.{feat}*'))
+            if len(local_file) > 0:
                 data[f'{cam}_{feat}'] = alfio.load_file_content(local_file[0])
-            elif len(alyx_file) > 0:
-                data[f'{cam}_{feat}'] = one.load_dataset(eid, alyx_file[0])
             else:
-                logger.warning(f"Could not load _ibl_{cam}Camera.{feat} some DLC QC plots have to be skipped.")
-                data[f'{cam}_{feat}'] = None
-            # Sometimes there is a file but the object is empty
+                alyx_ds = [ds for ds in one.list_datasets(one.path2eid(session_path)) if f'{cam}Camera.{feat}' in ds]
+                if len(alyx_ds) > 0:
+                    data[f'{cam}_{feat}'] = one.load_dataset(one.path2eid(session_path), alyx_ds[0])
+                else:
+                    logger.warning(f"Could not load _ibl_{cam}Camera.{feat} some plots have to be skipped.")
+                    data[f'{cam}_{feat}'] = None
+            # Sometimes there is a file but the object is empty, set to None
             if data[f'{cam}_{feat}'] is not None and len(data[f'{cam}_{feat}']) == 0:
                 logger.warning(f"Object loaded from _ibl_{cam}Camera.{feat} is empty, some plots have to be skipped.")
                 data[f'{cam}_{feat}'] = None
 
-    # Session data
+    # If we have no frame and/or no DLC and/or no times for all cams, raise an error, something is really wrong
+    assert any([data[f'{cam}_frame'] is not None for cam in cams]), "No camera data could be loaded, aborting."
+    assert any([data[f'{cam}_dlc'] is not None for cam in cams]), "No DLC data could be loaded, aborting."
+    assert any([data[f'{cam}_times'] is not None for cam in cams]), "No camera times data could be loaded, aborting."
+
+    # Load session level data
     for alf_object in ['trials', 'wheel', 'licks']:
         try:
-            data[f'{alf_object}'] = alfio.load_object(one.eid2path(eid).joinpath('alf'), alf_object)
+            data[f'{alf_object}'] = alfio.load_object(session_path.joinpath('alf'), alf_object)  # load locally
             continue
         except ALFObjectNotFound:
             pass
         try:
-            data[f'{alf_object}'] = one.load_object(eid, alf_object)
+            data[f'{alf_object}'] = one.load_object(one.path2eid(session_path), alf_object)  # then try from alyx
         except ALFObjectNotFound:
-            logger.warning(f"Could not load {alf_object} object for session {eid}, some plots have to be skipped.")
+            logger.warning(f"Could not load {alf_object} object, some plots have to be skipped.")
             data[f'{alf_object}'] = None
-    # Simplify to what we actually need
-    data['licks'] = data['licks'].times if data['licks'] and data['licks'].times.shape[0] > 0 else None
-    data['left_pupil'] = data['left_features'].pupilDiameter_smooth if (
-        data['left_features'] is not None and not np.all(np.isnan(data['left_features'].pupilDiameter_smooth))
-    ) else None
-    data['wheel_time'] = data['wheel'].timestamps if data['wheel'] is not None else None
-    data['wheel_position'] = data['wheel'].position if data['wheel'] is not None else None
+
+    # Simplify and clean up trials data
     if data['trials']:
         data['trials'] = pd.DataFrame(
             {k: data['trials'][k] for k in ['stimOn_times', 'feedback_times', 'choice', 'feedbackType']})
@@ -747,33 +767,81 @@ def dlc_qc_plot(eid, one=None):
         data['trials'] = data['trials'].dropna()
         data['trials'] = data['trials'].drop(
             data['trials'][(data['trials']['feedback_times'] - data['trials']['stimOn_times']) > 10].index)
-    # List panels: axis functions and inputs
-    panels = [(plot_trace_on_frame, {'frame': data['left_frame'], 'dlc_df': data['left_dlc'], 'cam': 'left'}),
-              (plot_trace_on_frame, {'frame': data['right_frame'], 'dlc_df': data['right_dlc'], 'cam': 'right'}),
-              (plot_trace_on_frame, {'frame': data['body_frame'], 'dlc_df': data['body_dlc'], 'cam': 'body'}),
-              (plot_wheel_position,
-               {'wheel_position': data['wheel_position'], 'wheel_time': data['wheel_time'], 'trials_df': data['trials']}),
-              (plot_motion_energy_hist,
-               {'camera_dict': {'left': {'motion_energy': data['left_ROIMotionEnergy'], 'times': data['left_times']},
-                                'right': {'motion_energy': data['right_ROIMotionEnergy'], 'times': data['right_times']},
-                                'body': {'motion_energy': data['body_ROIMotionEnergy'], 'times': data['body_times']}},
-                'trials_df': data['trials']}),
-              (plot_speed_hist,
-               {'dlc_df': data['left_dlc'], 'cam_times': data['left_times'], 'trials_df': data['trials']}),
-              (plot_speed_hist,
-               {'dlc_df': data['left_dlc'], 'cam_times': data['left_times'], 'trials_df': data['trials'],
-                'feature': 'nose_tip', 'legend': False}),
-              (plot_lick_hist, {'lick_times': data['licks'], 'trials_df': data['trials']}),
-              (plot_lick_raster, {'lick_times': data['licks'], 'trials_df': data['trials']}),
-              (plot_pupil_diameter_hist,
-               {'pupil_diameter': data['left_pupil'], 'cam_times': data['left_times'], 'trials_df': data['trials']})
-              ]
 
-    # If camera times is shorter than dlc traces, many plots will fail. Don't even try those and give informative error
-    if data['left_dlc'] is not None and data['left_times'] is not None:
-        if len(data['left_times']) < len(data['left_dlc']):
-            for p in range(5, 10):
-                panels[p] = (panels[p][0], 'cam_times')
+    # Make a list of panels, if inputs are missing, instead input a text to display
+    panels = []
+    # Panel A, B, C: Trace on frame
+    for cam in cams:
+        if data[f'{cam}_frame'] is not None and data[f'{cam}_dlc'] is not None:
+            panels.append((plot_trace_on_frame,
+                           {'frame': data[f'{cam}_frame'], 'dlc_df': data[f'{cam}_dlc'], 'cam': cam}))
+        else:
+            panels.append((None, f'Data missing\n{cam.capitalize()} cam trace on frame'))
+
+    # If trials data is not there, we cannot plot any of the trial average plots, skip all remaining panels
+    if data['trials'] is None:
+        panels.extend([(None, 'No trial data,\ncannot compute trial avgs') for i in range(7)])
+    else:
+        # Panel D: Motion energy
+        camera_dict = {'left': {'motion_energy': data['left_ROIMotionEnergy'], 'times': data['left_times']},
+                       'right': {'motion_energy': data['right_ROIMotionEnergy'], 'times': data['right_times']},
+                       'body': {'motion_energy': data['body_ROIMotionEnergy'], 'times': data['body_times']}}
+        for cam in ['left', 'right', 'body']:  # Remove cameras where we don't have motion energy AND camera times
+            if camera_dict[cam]['motion_energy'] is None or camera_dict[cam]['times'] is None:
+                _ = camera_dict.pop(cam)
+        if len(camera_dict) > 0:
+            panels.append((plot_motion_energy_hist, {'camera_dict': camera_dict, 'trials_df': data['trials']}))
+        else:
+            panels.append((None, 'Data missing\nMotion energy'))
+
+        # Panel E: Wheel position
+        if data['wheel']:
+            panels.append((plot_wheel_position, {'wheel_position': data['wheel'].position,
+                                                 'wheel_time': data['wheel'].timestamps,
+                                                 'trials_df': data['trials']}))
+        else:
+            panels.append((None, 'Data missing\nWheel position'))
+
+        # Panel F, G: Paw speed and nose speed
+        # Try if all data is there for left cam first, otherwise right
+        for cam in ['left', 'right']:
+            fail = False
+            if (data[f'{cam}_dlc'] is not None and data[f'{cam}_times'] is not None
+                    and len(data[f'{cam}_times']) >= len(data[f'{cam}_dlc'])):
+                break
+            fail = True
+        if not fail:
+            paw = 'r' if cam == 'left' else 'l'
+            panels.append((plot_speed_hist, {'dlc_df': data[f'{cam}_dlc'], 'cam_times': data[f'{cam}_times'],
+                                             'trials_df': data['trials'], 'feature': f'paw_{paw}', 'cam': cam}))
+            panels.append((plot_speed_hist, {'dlc_df': data[f'{cam}_dlc'], 'cam_times': data[f'{cam}_times'],
+                                             'trials_df': data['trials'], 'feature': 'nose_tip', 'legend': False,
+                                             'cam': cam}))
+        else:
+            panels.extend([(None, 'Data missing or corrupt\nSpeed histograms') for i in range(2)])
+
+        # Panel H and I: Lick plots
+        if data['licks'] and data['licks'].times.shape[0] > 0:
+            panels.append((plot_lick_hist, {'lick_times': data['licks'].times, 'trials_df': data['trials']}))
+            panels.append((plot_lick_raster, {'lick_times': data['licks'].times, 'trials_df': data['trials']}))
+        else:
+            panels.extend([(None, 'Data missing\nLicks plots') for i in range(2)])
+
+        # Panel J: pupil plot
+        # Try if all data is there for left cam first, otherwise right
+        for cam in ['left', 'right']:
+            fail = False
+            if (data[f'{cam}_times'] is not None and data[f'{cam}_features'] is not None
+                    and len(data[f'{cam}_times']) >= len(data[f'{cam}_features'])
+                    and not np.all(np.isnan(data[f'{cam}_features'].pupilDiameter_smooth))):
+                break
+            fail = True
+        if not fail:
+            panels.append((plot_pupil_diameter_hist,
+                           {'pupil_diameter': data[f'{cam}_features'].pupilDiameter_smooth,
+                            'cam_times': data[f'{cam}_times'], 'trials_df': data['trials'], 'cam': cam}))
+        else:
+            panels.append((None, 'Data missing or corrupt\nPupil diameter'))
 
     # Plotting
     plt.rcParams.update({'font.size': 10})
@@ -781,24 +849,17 @@ def dlc_qc_plot(eid, one=None):
     for i, panel in enumerate(panels):
         ax = plt.subplot(2, 5, i + 1)
         ax.text(-0.1, 1.15, ascii_uppercase[i], transform=ax.transAxes, fontsize=16, fontweight='bold')
-        # Check if we have the cam times issue:
-        if panel[1] == 'cam_times':
-            ax.text(.5, .5, "Issue with camera.times\nsee task logs", color='r', fontweight='bold',
-                    fontsize=12, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
-            plt.axis('off')
-
-        # Check if any of the inputs is None
-        elif any([v is None for v in panel[1].values()]) or any([v.values() is None for v in panel[1].values()
-                                                                 if isinstance(v, dict)]):
-            ax.text(.5, .5, f"Data incomplete\n{panel[0].__name__}", color='r', fontweight='bold',
-                    fontsize=12, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
+        # Check if there was in issue with inputs, if yes, print the respective text
+        if panel[0] is None:
+            ax.text(.5, .5, panel[1], color='r', fontweight='bold', fontsize=12, horizontalalignment='center',
+                    verticalalignment='center', transform=ax.transAxes)
             plt.axis('off')
         else:
             try:
                 panel[0](**panel[1])
             except BaseException:
                 logger.error(f'Error in {panel[0].__name__}\n' + traceback.format_exc())
-                ax.text(.5, .5, f'Error in \n{panel[0].__name__}', color='r', fontweight='bold',
+                ax.text(.5, .5, f'Error while plotting\n{panel[0].__name__}', color='r', fontweight='bold',
                         fontsize=12, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
                 plt.axis('off')
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])

@@ -3,6 +3,7 @@ import logging
 import shutil
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 import numpy as np
@@ -462,8 +463,13 @@ class TestExtractTrialData(unittest.TestCase):
         out, files = training_trials.extract_all(
             self.training_ge5['path'], save=True)
         # BIASED SESSIONS
-        out, files = biased_trials.extract_all(
-            self.biased_lt5['path'], settings={'IBLRIG_VERSION_TAG': '4.9.9'}, save=True)
+        # The new trials extractor additionally extracts the wheel data and this fails for the < 5.0
+        # test data so we will stub the wheel extractor
+        with unittest.mock.patch('ibllib.io.extractors.biased_trials.Wheel') as Wheel:
+            Wheel.var_names = tuple()
+            Wheel().extract.return_value = ({}, [])
+            out, files = biased_trials.extract_all(
+                self.biased_lt5['path'], settings={'IBLRIG_VERSION_TAG': '4.9.9'}, save=True)
         # -- version >= 5.0.0
         out, files = biased_trials.extract_all(
             self.biased_ge5['path'], save=True)

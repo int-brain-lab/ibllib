@@ -1,32 +1,95 @@
-## Release Note 2.10
+## Release Notes 2.13
+## Release Notes 2.13.0 2022-06-30
+- Deprecated ibllib.version
+- Fix Globus patcher
+- Add SpikeSorting Loader samples2times function
+- Fix atlas.BrainCoordinate.xyz2i functions to not quietly wrap indices out of volume bounds.
+- Set jobs to Held if parent jobs are Started or Abandoned as well
+- Reverse matplotlib colorbars in density displays
 
-## Release Note 2.10.0 2022-02-11
+## Release Notes 2.12
+## Release Notes 2.12.2 2022-05-27
+- Fixes to plotting in training_status
+
+## Release Notes 2.12.1 2022-05-26
+- ibllib.pipes.training_status: pipeline to compute training status of mice on local servers, new TrainingStatus task (Mayo)
+- Fix swanson regions (Olivier)
+- Swanson to Beryl mapping
+
+### Release Notes 2.12.0 2022-05-10
+- ibllib.atlas: add the Swanson flatmap backend (Olivier)
+- ibllib.io.extractors: output of task extractions are trial tables, not individual datasets (Miles)
+- Documentation: data release examples (Mayo)
+- ibl-neuropixel new repository contains `ibllib.dsp`, `illlib.ephys.neuropixel` and `ibllib.io.spikeglx` modules (Olivier)
+- brainbox.task.closed loop get impostor targets to evaluate null distribution  (Brandon)
+- minimum supported version of Python is 3.8 (Michele)
+
+## Release Notes 2.11
+
+### Release Notes 2.11.1 2022-04-12
+- Set video compression jobs to priority 90
+- Set jobs to Held if parents are Waiting
+
+### Release Notes 2.11.0 2022-04-08
+- brainbox.io.one.SpikeSortingLoader: option to load using `collection` argument
+- Restructuring of how jobs are run on local servers, run large jobs as service
+
+## Release Notes 2.10
+
+### Release Notes 2.10.6 2022-03-15
+- Allow parent tasks to be 'Incomplete' to run task on local server
+- Change one base_rul for dlc_qc_plot on cortexlab 
+
+### Release Notes 2.10.5 2022-03-11
+- Fix moot release accident
+
+### Release Notes 2.10.4 2022-03-11
+- Data handler connects to correct alyx database on cortexlab
+
+### Release Note 2.10.3 2022-03-09
+- Fixes to EphysPostDLC
+- Small change to storing in dsp.voltage.decompress_destripe_cbin function
+
+### Release Notes 2.10.2 2022-02-28
+- Small fixes to local server task queues
+
+### Release Notes 2.10.1 2022-02-22
+- Authenticate alyx user in Task class
+- Some fixes to make dlc_qc_plot in EphysPostDLC more reliable
+- SpikeGlx:
+  - supports reading of flat binary files without meta data
+- atlas.Regions:
+  - add support for region ordering in BrainRegions object
+  - bugfix in transposing of RGB image data for coronal slice plots
+- voltage: decompress cbin
+  - add support for custom spikeglx.Reader
+
+### Release Notes 2.10.0 2022-02-11
 - Fix in EphysDLC task to not return multiple copies of outputs
 - Loading examples for different IBL data types
 - Fix for probe syncing when Nidq and probe pulses don't match
 - Account for new ONE tables in ond datahandler
 - Add bad channels plots into RawEphysQc task
 
-## Release Note 2.9
+## Release Notes 2.9
 
 ### Release Notes 2.9.1 2022-01-24
 - deprecation warnings and documentation for spike sorting loading method
 - bugfix: remove lru_cache on AllenAtlas class for iblviewer
 
-### Release Note 2.9.0 2022-01-24
+### Release Notes 2.9.0 2022-01-24
 - Adding EphysDLC task in ephys_preprocessing pipeline
 - NOTE: requires DLC environment to be set up on local servers! 
 - Fixes to EphysPostDLC dlc_qc_plot
 
-## Release Note 2.8
- 
+## Release Notes 2.8
 
 ### Release Notes 2.8.0 2022-01-19
 - Add lfp, aprms, spike raster and behaviour report plots to task infastructure
 - Computation of apRMS in decompress_destripe_cbin before conversion to normalised units
 - Add SpikeSortingLoader class in brainbox.io.one
 
-## Release Note 2.7
+## Release Notes 2.7
 
 ### Release Notes 2.7.1 2022-01-05
 

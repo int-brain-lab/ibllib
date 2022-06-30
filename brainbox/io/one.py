@@ -8,14 +8,15 @@ import numpy as np
 import pandas as pd
 from scipy.interpolate import interp1d
 
-from one.api import ONE
+from one.api import ONE, One
 import one.alf.io as alfio
+from one.alf.files import get_alf_path
+from one.alf import cache
+from neuropixel import SITES_COORDINATES, TIP_SIZE_UM, trace_header
+import spikeglx
 
 from iblutil.util import Bunch
-
-from ibllib.io import spikeglx
 from ibllib.io.extractors.training_wheel import extract_wheel_moves, extract_first_movement_times
-from ibllib.ephys.neuropixel import SITES_COORDINATES, TIP_SIZE_UM, trace_header
 from ibllib.atlas import atlas, AllenAtlas
 from ibllib.pipes import histology
 from ibllib.pipes.ephys_alignment import EphysAlignment
@@ -123,7 +124,7 @@ def _channels_alf2bunch(channels, brain_regions=None):
 
 
 def _load_spike_sorting(eid, one=None, collection=None, revision=None, return_channels=True, dataset_types=None,
-                        brain_regions=None, return_collection=False):
+                        brain_regions=None):
     """
     Generic function to load spike sorting according data using ONE.
 
@@ -168,7 +169,7 @@ def _load_spike_sorting(eid, one=None, collection=None, revision=None, return_ch
     collections = one.list_collections(eid, filename='spikes*', collection=collection, revision=revision)
     if len(collections) == 0:
         _logger.warning(f"eid {eid}: no collection found with collection filter: {collection}, revision: {revision}")
-    pnames = list(set([c.split('/')[1] for c in collections]))
+    pnames = list(set(c.split('/')[1] for c in collections))
     spikes, clusters, channels = ({} for _ in range(3))
 
     spike_attributes, cluster_attributes = _get_attributes(dataset_types)
@@ -246,7 +247,7 @@ def channel_locations_interpolation(channels_aligned, channels=None, brain_regio
     if channels is None:
         channels = {'localCoordinates': np.c_[h['x'], h['y']]}
     nch = channels['localCoordinates'].shape[0]
-    if set(['x', 'y', 'z']).issubset(set(channels_aligned.keys())):
+    if {'x', 'y', 'z'}.issubset(set(channels_aligned.keys())):
         channels_aligned = _channels_bunch2alf(channels_aligned)
     if 'localCoordinates' in channels_aligned.keys():
         aligned_depths = channels_aligned['localCoordinates'][:, 1]
@@ -333,7 +334,6 @@ def _load_channel_locations_traj(eid, probe=None, one=None, revision=None, align
             # get the channels from histology tracing
             xyz = xyz[np.argsort(xyz[:, 2]), :]
             chans = histology.interpolate_along_track(xyz, (depths + TIP_SIZE_UM) / 1e6)
-
             channels[probe] = _channels_traj2bunch(chans, brain_atlas)
             source = 'traced'
         channels[probe]['axial_um'] = chn_coords[:, 1]
@@ -350,7 +350,7 @@ def _load_channel_locations_traj(eid, probe=None, one=None, revision=None, align
         return channels
 
 
-def load_channel_locations(eid, probe=None, one=None, aligned=False, brain_atlas=None, return_source=False):
+def load_channel_locations(eid, probe=None, one=None, aligned=False, brain_atlas=None):
     """
     Load the brain locations of each channel for a given session/probe
 
@@ -367,8 +367,6 @@ def load_channel_locations(eid, probe=None, one=None, aligned=False, brain_atlas
         Whether to get the latest user aligned channel when not resolved or use histology track
     brain_atlas : ibllib.atlas.BrainAtlas
         Brain atlas object (default: Allen atlas)
-    return_source: bool
-        if True returns the source of the channel lcoations (default False)
     Returns
     -------
     dict of one.alf.io.AlfBunch
@@ -412,7 +410,6 @@ def load_spike_sorting_fast(eid, one=None, probe=None, dataset_types=None, spike
     :param dataset_types: additional spikes/clusters objects to add to the standard default list
     :param spike_sorter: name of the spike sorting you want to load (None for default)
     :param collection: name of the spike sorting collection to load - exclusive with spike sorter name ex: "alf/probe00"
-    :param return_channels: (bool) defaults to False otherwise tries and load channels from disk
     :param brain_regions: ibllib.atlas.regions.BrainRegions object - will label acronyms if provided
     :param nested: if a single probe is required, do not output a dictionary with the probe name as key
     :param return_collection: (False) if True, will return the collection used to load
@@ -454,7 +451,6 @@ def load_spike_sorting(eid, one=None, probe=None, dataset_types=None, spike_sort
     :param probe: name of probe to load in, if not given all probes for session will be loaded
     :param dataset_types: additional spikes/clusters objects to add to the standard default list
     :param spike_sorter: name of the spike sorting you want to load (None for default)
-    :param return_channels: (bool) defaults to False otherwise tries and load channels from disk
     :param brain_regions: ibllib.atlas.regions.BrainRegions object - will label acronyms if provided
     :param return_collection:(bool - False) if True, returns the collection for loading the data
     :return: spikes, clusters (dict of bunch, 1 bunch per probe)
@@ -677,7 +673,7 @@ def load_wheel_reaction_times(eid, one=None):
     eid : [str, UUID, Path, dict]
         Experiment session identifier; may be a UUID, URL, experiment reference string
         details dict or Path
-    one : oneibl.one.OneAlyx, optional
+    one : one.api.OneAlyx, optional
         one object to use for loading. Will generate internal one if not used, by default None
 
     Returns
@@ -703,8 +699,9 @@ def load_wheel_reaction_times(eid, one=None):
     return firstMove_times - trials['goCue_times']
 
 
-def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_wheel=False,
-                   ret_abswheel=False, wheel_binsize=0.02, addtl_types=[]):
+def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0.2, ret_wheel=False,
+                   ret_abswheel=False, wheel_binsize=0.02, addtl_types=[],
+                   align_event='stimOn_times', keeptrials=None):
     """
     Generate a pandas dataframe of per-trial timing information about a given session.
     Each row in the frame will correspond to a single trial, with timing values indicating timing
@@ -720,7 +717,7 @@ def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_whee
     eid : [str, UUID, Path, dict]
         Experiment session identifier; may be a UUID, URL, experiment reference string
         details dict or Path
-    one : oneibl.one.OneAlyx, optional
+    one : one.api.OneAlyx, optional
         one object to use for loading. Will generate internal one if not used, by default None
     maxlen : float, optional
         Maximum trial length for inclusion in df. Trials where feedback - response is longer
@@ -779,18 +776,19 @@ def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0., ret_whee
     endtimes = trials.feedback_times
     tmp = {key: value for key, value in trials.items() if key in trialstypes}
 
-    if maxlen is not None:
-        with np.errstate(invalid='ignore'):
-            keeptrials = (endtimes - starttimes) <= maxlen
-    else:
-        keeptrials = range(len(starttimes))
+    if keeptrials is None:
+        if maxlen is not None:
+            with np.errstate(invalid='ignore'):
+                keeptrials = (endtimes - starttimes) <= maxlen
+        else:
+            keeptrials = range(len(starttimes))
     trialdata = {x: tmp[x][keeptrials] for x in trialstypes}
     trialdata['probabilityLeft'] = remap_trialp(trialdata['probabilityLeft'])
     trialsdf = pd.DataFrame(trialdata)
     if maxlen is not None:
         trialsdf.set_index(np.nonzero(keeptrials)[0], inplace=True)
-    trialsdf['trial_start'] = trialsdf['stimOn_times'] - t_before
-    trialsdf['trial_end'] = trialsdf['feedback_times'] + t_after
+    trialsdf['trial_start'] = trialsdf[align_event] - t_before
+    trialsdf['trial_end'] = trialsdf[align_event] + t_after
     tdiffs = trialsdf['trial_end'] - np.roll(trialsdf['trial_start'], -1)
     if np.any(tdiffs[:-1] > 0):
         logging.warning(f'{sum(tdiffs[:-1] > 0)} trials overlapping due to t_before and t_after '
@@ -872,33 +870,55 @@ def load_channels_from_insertion(ins, depths=None, one=None, ba=None):
 class SpikeSortingLoader:
     """
     Object that will load spike sorting data for a given probe insertion.
-
-
+    This class can be instantiated in several manners
+    - With Alyx database probe id:
+            SpikeSortingLoader(pid=pid, one=one)
+    - With Alyx database eic and probe name:
+            SpikeSortingLoader(eid=eid, pname='probe00', one=one)
+    - From a local session and probe name:
+            SpikeSortingLoader(session_path=session_path, pname='probe00')
+    NB: When no ONE instance is passed, any datasets that are loaded will not be recorded.
     """
-    one: ONE
+    one: One = None
     atlas: None = None
     pid: str = None
     eid: str = ''
     pname: str = ''
-    # the following properties are the outcome of the post init funciton
     session_path: Path = ''
+    # the following properties are the outcome of the post init function
     collections: list = None
-    datasets: list = None   # list of all datasets belonging to the sesion
+    datasets: list = None   # list of all datasets belonging to the session
     # the following properties are the outcome of a reading function
     files: dict = None
     collection: str = ''
     histology: str = ''  # 'alf', 'resolved', 'aligned' or 'traced'
     spike_sorting_path: Path = None
+    _sync: dict = None
 
     def __post_init__(self):
+        # pid gets precedence
         if self.pid is not None:
             self.eid, self.pname = self.one.pid2eid(self.pid)
-        if self.atlas is None:
-            self.atlas = AllenAtlas()
-        self.session_path = self.one.eid2path(self.eid)
+            self.session_path = self.one.eid2path(self.eid)
+        # then eid / pname combination
+        elif self.session_path is None or self.session_path == '':
+            self.session_path = self.one.eid2path(self.eid)
+        # fully local providing a session path
+        else:
+            if self.one:
+                self.eid = self.one.to_eid(self.session_path)
+            else:
+                self.one = One(cache_dir=self.session_path.parents[2], mode='local')
+                df_sessions = cache._make_sessions_df(self.session_path)
+                self.one._cache['sessions'] = df_sessions.set_index('id')
+                self.one._cache['datasets'] = cache._make_datasets_df(self.session_path, hash_files=False)
+                self.eid = str(self.session_path.relative_to(self.session_path.parents[2]))
+        # populates default properties
         self.collections = self.one.list_collections(
             self.eid, filename='spikes*', collection=f"alf/{self.pname}*")
         self.datasets = self.one.list_datasets(self.eid)
+        if self.atlas is None:
+            self.atlas = AllenAtlas()
         self.files = {}
 
     @staticmethod
@@ -913,7 +933,7 @@ class SpikeSortingLoader:
             cluster_attributes = list(set(CLUSTERS_ATTRIBUTES + cluster_attributes))
             return spike_attributes, cluster_attributes
 
-    def _get_spike_sorting_collection(self, spike_sorter='pykilosort', revision=None):
+    def _get_spike_sorting_collection(self, spike_sorter='pykilosort'):
         """
         Filters a list or array of collections to get the relevant spike sorting dataset
         if there is a pykilosort, load it
@@ -924,20 +944,22 @@ class SpikeSortingLoader:
         _logger.debug(f"selecting: {collection} to load amongst candidates: {self.collections}")
         return collection
 
-    def _download_spike_sorting_object(self, obj, spike_sorter='pykilosort', dataset_types=None):
+    def download_spike_sorting_object(self, obj, spike_sorter='pykilosort', dataset_types=None, collection=None):
         """
         Downloads an ALF object
         :param obj: object name, str between 'spikes', 'clusters' or 'channels'
         :param spike_sorter: (defaults to 'pykilosort')
-        :param dataset_types: list of extra dataset types
+        :param dataset_types: list of extra dataset types, for example ['spikes.samples']
+        :param collection: string specifiying the collection, for example 'alf/probe01/pykilosort'
         :return:
         """
         if len(self.collections) == 0:
             return {}, {}, {}
-        self.collection = self._get_spike_sorting_collection(spike_sorter=spike_sorter)
+        self.collection = collection or self._get_spike_sorting_collection(spike_sorter=spike_sorter)
         _logger.debug(f"loading spike sorting from {self.collection}")
         spike_attributes, cluster_attributes = self._get_attributes(dataset_types)
-        attributes = {'spikes': spike_attributes, 'clusters': cluster_attributes, 'channels': None}
+        attributes = {'spikes': spike_attributes, 'clusters': cluster_attributes, 'channels': None,
+                      'templates': None, 'spikes_subset': None}
         self.files[obj] = self.one.load_object(self.eid, obj=obj, attribute=attributes[obj],
                                                collection=self.collection, download_only=True)
 
@@ -949,7 +971,7 @@ class SpikeSortingLoader:
         :return:
         """
         for obj in ['spikes', 'clusters', 'channels']:
-            self._download_spike_sorting_object(obj=obj, **kwargs)
+            self.download_spike_sorting_object(obj=obj, **kwargs)
         self.spike_sorting_path = self.files['spikes'][0].parent
 
     def load_spike_sorting(self, **kwargs):
@@ -963,7 +985,7 @@ class SpikeSortingLoader:
         -   alf: the final version of channel locations, same as resolved with the difference that data is on file
         -   resolved: channel locations alignments have been agreed upon
         -   aligned: channel locations have been aligned, but review or other alignments are pending, potentially not accurate
-        -   traced: the histology track has been recovered from microscopy, however the depths may not match, inacurate data
+        -   traced: the histology track has been recovered from microscopy, however the depths may not match, inaccurate data
 
         :param spike_sorter: (defaults to 'pykilosort')
         :param dataset_types: list of extra dataset types
@@ -977,7 +999,7 @@ class SpikeSortingLoader:
         spikes = alfio.load_object(self.files['spikes'], wildcards=self.one.wildcards)
         if 'brainLocationIds_ccf_2017' not in channels:
             _channels, self.histology = _load_channel_locations_traj(
-                self.eid, probe=self.pname, one=self.one, brain_atlas=self.atlas, return_source=True)
+                self.eid, probe=self.pname, one=self.one, brain_atlas=self.atlas, return_source=True, aligned=True)
             if _channels:
                 channels = _channels[self.pname]
         else:
@@ -1015,4 +1037,22 @@ class SpikeSortingLoader:
     @property
     def url(self):
         """Gets flatiron URL for the session"""
-        return str(self.session_path).replace(str(self.one.alyx.cache_dir), 'https://ibl.flatironinstitute.org')
+        webclient = getattr(self.one, '_web_client', None)
+        return webclient.rel_path2url(get_alf_path(self.session_path)) if webclient else None
+
+    def samples2times(self, values, direction='forward'):
+        """
+        :param values: numpy array of times in seconds or samples to resync
+        :param direction: 'forward' (samples probe time to seconds main time) or 'reverse'
+         (seconds main time to samples probe time)
+        :return:
+        """
+        if self._sync is None:
+            timestamps = self.one.load_dataset(
+                self.eid, dataset='_spikeglx_*.timestamps.npy', collection=f'raw_ephys_data/{self.pname}')
+            self._sync = {
+                'timestamps': timestamps,
+                'forward': interp1d(timestamps[:, 0], timestamps[:, 1], fill_value='extrapolate'),
+                'reverse': interp1d(timestamps[:, 1], timestamps[:, 0], fill_value='extrapolate'),
+            }
+        return self._sync[direction](values)

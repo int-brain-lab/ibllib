@@ -6,11 +6,11 @@ import logging
 
 import numpy as np
 
-import ibllib.io.spikeglx as spikeglx
 from ibllib.io.extractors.training_wheel import extract_first_movement_times, infer_wheel_units
 from ibllib.io.extractors import ephys_fpga
 from ibllib.io.extractors.training_wheel import extract_wheel_moves
 import brainbox.behavior.wheel as wh
+import spikeglx
 
 
 class TestsFolderStructure(unittest.TestCase):
@@ -45,7 +45,7 @@ class TestsFolderStructure(unittest.TestCase):
 class TestSyncExtraction(unittest.TestCase):
 
     def setUp(self):
-        self.workdir = Path(__file__).parents[1] / 'fixtures' / 'io' / 'spikeglx'
+        self.workdir = Path(__file__).parents[1] / 'fixtures' / 'sync_ephys_fpga'
         self.meta_files = list(Path.glob(self.workdir, '*.meta'))
 
     def test_sync_nidq(self):

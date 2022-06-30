@@ -10,11 +10,11 @@ import iblutil.io.params as params
 from one.alf.spec import is_uuid_string, is_session_path
 from one.alf.files import get_session_path
 from one.api import ONE
+import spikeglx
 
 from iblutil.io import hashfile
 import ibllib.io.flags as flags
 import ibllib.io.raw_data_loaders as raw
-import ibllib.io.spikeglx as spikeglx
 from ibllib.io.misc import delete_empty_folders
 
 log = logging.getLogger("ibllib")

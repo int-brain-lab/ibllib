@@ -1,6 +1,7 @@
 include ibllib/atlas/allen_structure_tree.csv
 include ibllib/atlas/beryl.npy
 include ibllib/atlas/cosmos.npy
+include ibllib/atlas/swanson.npy
 include ibllib/atlas/mappings.pqt
 include ibllib/io/extractors/extractor_types.json
 include brainbox/tests/wheel_test.p

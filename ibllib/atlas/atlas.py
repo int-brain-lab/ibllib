@@ -5,13 +5,32 @@ from pathlib import Path, PurePosixPath
 import numpy as np
 import nrrd
 
-from iblutil.numerical import ismember
-from ibllib.atlas.regions import BrainRegions
+import boto3
+from botocore.config import Config
+from botocore import UNSIGNED
+
 from one.webclient import http_download_file
 import one.params
 
+from iblutil.numerical import ismember
+from ibllib.atlas.regions import BrainRegions
+
+
 _logger = logging.getLogger('ibllib')
 ALLEN_CCF_LANDMARKS_MLAPDV_UM = {'bregma': np.array([5739, 5400, 332])}
+S3_BUCKET_IBL = 'ibl-brain-wide-map-public'
+
+
+def s3_download_public(bucket, object, destination):
+    """
+    downloads file from public bucket
+    :param bucket:
+    :param object:
+    :param destination:
+    :return:
+    """
+    boto3.client('s3', config=Config(signature_version=UNSIGNED)).download_file(
+        S3_BUCKET_IBL, object, str(destination))
 
 
 def cart2sph(x, y, z):
@@ -91,22 +110,55 @@ class BrainCoordinates:
         else:
             return i
 
-    def x2i(self, x, round=True):
-        return self._round((x - self.x0) / self.dx, round=round)
+    def x2i(self, x, round=True, mode='raise'):
+        i = np.asarray(self._round((x - self.x0) / self.dx, round=round))
+        if np.any(i < 0) or np.any(i >= self.nx):
+            if mode == 'clip':
+                i[i < 0] = 0
+                i[i >= self.nx] = self.nx - 1
+            elif mode == 'raise':
+                raise ValueError("At least one x value lies outside of the atlas volume.")
+            elif mode == 'wrap':
+                pass
+        return i
 
-    def y2i(self, y, round=True):
-        return self._round((y - self.y0) / self.dy, round=round)
+    def y2i(self, y, round=True, mode='raise'):
+        i = np.asarray(self._round((y - self.y0) / self.dy, round=round))
+        if np.any(i < 0) or np.any(i >= self.ny):
+            if mode == 'clip':
+                i[i < 0] = 0
+                i[i >= self.ny] = self.ny - 1
+            elif mode == 'raise':
+                raise ValueError("At least one y value lies outside of the atlas volume.")
+            elif mode == 'wrap':
+                pass
+        return i
 
-    def z2i(self, z, round=True):
-        return self._round((z - self.z0) / self.dz, round=round)
+    def z2i(self, z, round=True, mode='raise'):
+        i = np.asarray(self._round((z - self.z0) / self.dz, round=round))
+        if np.any(i < 0) or np.any(i >= self.nz):
+            if mode == 'clip':
+                i[i < 0] = 0
+                i[i >= self.nz] = self.nz - 1
+            elif mode == 'raise':
+                raise ValueError("At least one z value lies outside of the atlas volume.")
+            elif mode == 'wrap':
+                pass
+        return i
 
-    def xyz2i(self, xyz, round=True):
+    def xyz2i(self, xyz, round=True, mode='raise'):
+        """
+        :param mode: {‘raise’, 'clip', 'wrap'} determines what to do when determined index lies outside the atlas volume
+                     'raise' will raise a ValueError
+                     'clip' will replace the index with the closest index inside the volume
+                     'wrap' will wrap around to the other side of the volume. This is only here for legacy reasons
+        """
         xyz = np.array(xyz)
         dt = int if round else float
         out = np.zeros_like(xyz, dtype=dt)
-        out[..., 0] = self.x2i(xyz[..., 0], round=round)
-        out[..., 1] = self.y2i(xyz[..., 1], round=round)
-        out[..., 2] = self.z2i(xyz[..., 2], round=round)
+        out[..., 0] = self.x2i(xyz[..., 0], round=round, mode=mode)
+        out[..., 1] = self.y2i(xyz[..., 1], round=round, mode=mode)
+        out[..., 2] = self.z2i(xyz[..., 2], round=round, mode=mode)
         return out
 
     """Methods indices to distance"""
@@ -199,10 +251,19 @@ class BrainAtlas:
         self.surface = None
         self.boundary = None
 
+    @staticmethod
+    def _get_cache_dir():
+        par = one.params.get(silent=True)
+        path_atlas = Path(par.CACHE_DIR).joinpath(PurePosixPath('histology', 'ATLAS', 'Needles', 'Allen', 'flatmaps'))
+        return path_atlas
+
     def compute_surface(self):
         """
         Get the volume top, bottom, left and right surfaces, and from these the outer surface of
-        the image volume. This is needed to compute probe insertions intersections
+        the image volume. This is needed to compute probe insertions intersections.
+
+        NOTE: In places where the top or bottom surface touch the top or bottom of the atlas volume, the surface
+        will be set to np.nan. If you encounter issues working with these surfaces check if this might be the cause.
         """
         if self.surface is None:  # only compute if it hasn't already been computed
             axz = self.xyz2dims[2]  # this is the dv axis
@@ -219,27 +280,6 @@ class BrainAtlas:
             self.surface[idx_srf] = 1
             self.srf_xyz = self.bc.i2xyz(np.c_[idx_srf[self.xyz2dims[0]], idx_srf[self.xyz2dims[1]],
                                                idx_srf[self.xyz2dims[2]]].astype(float))
-
-    def compute_boundaries(self):
-        """
-        Compute the boundaries between regions
-        """
-        if self.boundary is None:  # only compute if it hasn't already been computed
-            self.boundary = np.diff(self.label, axis=0, append=0)
-            self.boundary = self.boundary + np.diff(self.label, axis=1, append=0)
-            self.boundary = self.boundary + np.diff(self.label, axis=2, append=0)
-            self.boundary[self.boundary != 0] = 1
-
-            # Compute boundary on top view
-            self.compute_surface()
-            ix, iy = np.meshgrid(np.arange(self.bc.nx), np.arange(self.bc.ny))
-            iz = self.bc.z2i(self.top)
-            inds = self._lookup_inds(np.stack((ix, iy, iz), axis=-1))
-            vals = np.random.random(self.regions.acronym.shape[0])
-            _top_boundary = vals[self.label.flat[inds]]
-            self.top_boundary = np.diff(_top_boundary, axis=0, append=0)
-            self.top_boundary = self.top_boundary + np.diff(_top_boundary, axis=1, append=0)
-            self.top_boundary[self.top_boundary != 0] = 1
 
     def _lookup_inds(self, ixyz):
         """
@@ -435,7 +475,12 @@ class BrainAtlas:
         :param mapping: mapping to use. Options can be found using ba.regions.mappings.keys()
         :return: 2d array or 3d RGB numpy int8 array
         """
-        index = self.bc.xyz2i(np.array([coordinate] * 3))[axis]
+        if axis == 0:
+            index = self.bc.x2i(np.array(coordinate), mode=mode)
+        elif axis == 1:
+            index = self.bc.y2i(np.array(coordinate), mode=mode)
+        elif axis == 2:
+            index = self.bc.z2i(np.array(coordinate), mode=mode)
 
         # np.take is 50 thousand times slower than straight slicing !
         def _take(vol, ind, axis):
@@ -467,12 +512,24 @@ class BrainAtlas:
             self.compute_surface()
             return _take(self.surface, index, axis=self.xyz2dims[axis])
         elif volume == 'boundary':
-            self.compute_boundaries()
-            return _take(self.boundary, index, axis=self.xyz2dims[axis])
+            iregion = _take_remap(self.label, index, self.xyz2dims[axis], mapping)
+            return self.compute_boundaries(iregion)
+
         elif volume == 'volume':
             if bc is not None:
                 index = bc.xyz2i(np.array([coordinate] * 3))[axis]
             return _take(region_values, index, axis=self.xyz2dims[axis])
+
+    def compute_boundaries(self, values):
+        """
+        Compute the boundaries between regions on slice
+        :param values:
+        :return:
+        """
+        boundary = np.diff(values, axis=0, append=0)
+        boundary = boundary + np.diff(values, axis=1, append=0)
+        boundary[boundary != 0] = 1
+        return boundary
 
     def plot_cslice(self, ap_coordinate, volume='image', mapping='Allen', region_values=None, **kwargs):
         """
@@ -496,7 +553,7 @@ class BrainAtlas:
         """
 
         cslice = self.slice(ap_coordinate, axis=1, volume=volume, mapping=mapping, region_values=region_values)
-        return self._plot_slice(cslice.T, extent=self.extent(axis=1), **kwargs)
+        return self._plot_slice(np.moveaxis(cslice, 0, 1), extent=self.extent(axis=1), **kwargs)
 
     def plot_hslice(self, dv_coordinate, volume='image', mapping='Allen', region_values=None, **kwargs):
         """
@@ -582,8 +639,7 @@ class BrainAtlas:
                 for y in range(im.shape[1]):
                     im[x, y] = region_values[x, y, iz[x, y]]
         elif volume == 'boundary':
-            self.compute_boundaries()
-            im = self.top_boundary
+            im = self.compute_boundaries(regions)
 
         return self._plot_slice(im, self.extent(axis=2), ax=ax, **kwargs)
 
@@ -750,7 +806,10 @@ class Insertion:
         if brain_atlas:
             iy = brain_atlas.bc.y2i(d['y'] / 1e6)
             ix = brain_atlas.bc.x2i(d['x'] / 1e6)
-            z = brain_atlas.top[iy, ix]
+            # Only use the brain surface value as z if it isn't NaN (this happens when the surface touches the edges
+            # of the atlas volume
+            if not np.isnan(brain_atlas.top[iy, ix]):
+                z = brain_atlas.top[iy, ix]
         return Insertion(x=d['x'] / 1e6, y=d['y'] / 1e6, z=z,
                          phi=d['phi'], theta=d['theta'], depth=d['depth'] / 1e6,
                          beta=d.get('beta', 0), label=d.get('label', ''))
@@ -865,18 +924,32 @@ class AllenAtlas(BrainAtlas):
                 _download_atlas_allen(file_label, FLAT_IRON_ATLAS_REL_PATH, par)
             file_label_remap = path_atlas.joinpath(f'annotation_{res_um}_lut_{LUT_VERSION}.npz')
             if not file_label_remap.exists():
-                label = self._read_volume(file_label)
+                label = self._read_volume(file_label).astype(dtype=np.int32)
                 _logger.info("computing brain atlas annotations lookup table")
                 # lateralize atlas: for this the regions of the left hemisphere have primary
                 # keys opposite to to the normal ones
                 lateral = np.zeros(label.shape[xyz2dims[0]])
                 lateral[int(np.floor(ibregma[0]))] = 1
                 lateral = np.sign(np.cumsum(lateral)[np.newaxis, :, np.newaxis] - 0.5)
-                label = label * lateral
-                _, im = ismember(label, regions.id)
-                label = np.reshape(im.astype(np.uint16), label.shape)
-                _logger.info(f"saving {file_label_remap} ...")
+                label = label * lateral.astype(np.int32)
+                # the 10 um atlas is too big to fit in memory so work by chunks instead
+                if res_um == 10:
+                    first, ncols = (0, 10)
+                    while True:
+                        last = np.minimum(first + ncols, label.shape[-1])
+                        _logger.info(f"Computing... {last} on {label.shape[-1]}")
+                        _, im = ismember(label[:, :, first:last], regions.id)
+                        label[:, :, first:last] = np.reshape(im, label[:, :, first:last].shape)
+                        if last == label.shape[-1]:
+                            break
+                        first += ncols
+                    label = label.astype(dtype=np.uint16)
+                    _logger.info("Saving npz, this can take a long time")
+                else:
+                    _, im = ismember(label, regions.id)
+                    label = np.reshape(im.astype(np.uint16), label.shape)
                 np.savez_compressed(file_label_remap, label)
+                _logger.info(f"Cached remapping file {file_label_remap} ...")
             # loads the files
             label = self._read_volume(file_label_remap)
             image = self._read_volume(file_image)
@@ -983,3 +1056,69 @@ def _download_atlas_allen(file_image, FLAT_IRON_ATLAS_REL_PATH, par):
 
     cache_dir = Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH)
     return http_download_file(url, target_dir=cache_dir)
+
+
+class FlatMap(AllenAtlas):
+
+    def __init__(self, flatmap='dorsal_cortex', res_um=25):
+        """
+        Avaiable flatmaps are currently 'dorsal_cortex', 'circles' and 'pyramid'
+        :param flatmap:
+        :param res_um:
+        """
+        super().__init__(res_um=res_um)
+        self.name = flatmap
+        if flatmap == 'dorsal_cortex':
+            self._get_flatmap_from_file()
+        elif flatmap == 'circles':
+            from ibllib.atlas.flatmaps import circles
+            if res_um != 25:
+                raise NotImplementedError('Pyramid circles not implemented for resolution other than 25um')
+            self.flatmap, self.ml_scale, self.ap_scale = circles(N=5, atlas=self, display='flat')
+        elif flatmap == 'pyramid':
+            from ibllib.atlas.flatmaps import circles
+            if res_um != 25:
+                raise NotImplementedError('Pyramid circles not implemented for resolution other than 25um')
+            self.flatmap, self.ml_scale, self.ap_scale = circles(N=5, atlas=self, display='pyramid')
+
+    def _get_flatmap_from_file(self):
+        # gets the file in the ONE cache for the flatmap name in the property, downloads it if needed
+        file_flatmap = self._get_cache_dir().joinpath(f'{self.name}_{self.res_um}.nrrd')
+        if not file_flatmap.exists():
+            file_flatmap.parent.mkdir(exist_ok=True, parents=True)
+            s3_download_public(S3_BUCKET_IBL, f'atlas/{file_flatmap.name}', str(file_flatmap))
+        self.flatmap, _ = nrrd.read(file_flatmap)
+
+    def plot_flatmap(self, depth=0, volume='annotation', mapping='Allen', region_values=None, ax=None, **kwargs):
+        """
+        Displays the 2D image corresponding to the flatmap. If there are several depths, by default it
+        will display the first one
+        :param depth: index of the depth to display in the flatmap volume (the last dimension)
+        :param volume:
+        :param mapping:
+        :param region_values:
+        :param ax:
+        :param kwargs:
+        :return:
+        """
+        if self.flatmap.ndim == 3:
+            inds = np.int32(self.flatmap[:, :, depth])
+        else:
+            inds = np.int32(self.flatmap[:, :])
+        regions = self._get_mapping(mapping=mapping)[self.label.flat[inds]]
+        if volume == 'annotation':
+            im = self._label2rgb(regions)
+        elif volume == 'value':
+            im = region_values[regions]
+        elif volume == 'boundary':
+            im = self.compute_boundaries(regions)
+        elif volume == 'image':
+            im = self.image.flat[inds]
+        if not ax:
+            ax = plt.gca()
+
+        return self._plot_slice(im, self.extent_flmap(), ax=ax, **kwargs)
+
+    def extent_flmap(self):
+        extent = np.r_[0, self.flatmap.shape[1], 0, self.flatmap.shape[0]]
+        return extent

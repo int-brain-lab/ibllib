@@ -9,33 +9,18 @@ import random
 import string
 
 from one.api import ONE
+from neuropixel import SITES_COORDINATES
+
 from ibllib.tests import TEST_DB
 from ibllib.atlas import AllenAtlas
 from ibllib.pipes.misc import create_alyx_probe_insertions
 from ibllib.qc.alignment_qc import AlignmentQC
 from ibllib.pipes.histology import register_track
-from ibllib.ephys.neuropixel import SITES_COORDINATES
 
 
 EPHYS_SESSION = 'b1c968ad-4874-468d-b2e4-5ffa9b9964e9'
 one = ONE(**TEST_DB)
 brain_atlas = AllenAtlas(25)
-
-
-class TestProbeInsertion(unittest.TestCase):
-
-    def test_creation(self):
-        probe = [''.join(random.choices(string.ascii_letters, k=5)),
-                 ''.join(random.choices(string.ascii_letters, k=5))]
-        create_alyx_probe_insertions(session_path=EPHYS_SESSION, model='3B2', labels=probe,
-                                     one=one, force=True)
-        insertion = one.alyx.get(f'/insertions?&session={EPHYS_SESSION}', clobber=True)
-        assert(len(insertion) == 2)
-        assert (insertion[0]['json']['qc'] == 'NOT_SET')
-        assert (len(insertion[0]['json']['extended_qc']) == 0)
-
-        one.alyx.rest('insertions', 'delete', id=insertion[0]['id'])
-        one.alyx.rest('insertions', 'delete', id=insertion[1]['id'])
 
 
 class TestTracingQc(unittest.TestCase):
