@@ -1,7 +1,11 @@
 ## Release Notes 2.13
-## Release Notes 2.13.0 PRERELEASE
+## Release Notes 2.13.0 2022-06-30
 - Deprecated ibllib.version
 - Fix Globus patcher
+- Add SpikeSorting Loader samples2times function
+- Fix atlas.BrainCoordinate.xyz2i functions to not quietly wrap indices out of volume bounds.
+- Set jobs to Held if parent jobs are Started or Abandoned as well
+- Reverse matplotlib colorbars in density displays
 
 ## Release Notes 2.12
 ## Release Notes 2.12.2 2022-05-27
