@@ -146,6 +146,8 @@ class ServerGlobusDataHandler(DataHandler):
         else:
             self.globus.add_endpoint(f'flatiron_{self.lab}', alyx=self.one.alyx)
 
+        self.local_paths = []
+
     def setUp(self):
         """
         Function to download necessary data to run tasks using globus-sdk
@@ -174,7 +176,6 @@ class ServerGlobusDataHandler(DataHandler):
 
         target_paths = []
         source_paths = []
-        self.local_paths = []
         for i, d in df.iterrows():
             sess_path = Path(rel_sess_path).joinpath(d['rel_path'])
             full_local_path = Path(self.globus.endpoints['local']['root_path']).joinpath(sess_path)
@@ -267,6 +268,8 @@ class RemoteAwsDataHandler(DataHandler):
             self.globus.add_endpoint(f'flatiron_{self.lab}', alyx=ONE(base_url='https://alyx.internationalbrainlab.org').alyx)
         else:
             self.globus.add_endpoint(f'flatiron_{self.lab}', alyx=self.one.alyx)
+
+        self.local_paths = []
 
     def setUp(self):
         """
