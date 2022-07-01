@@ -6,7 +6,7 @@ import numpy as np
 from one.api import ONE
 import one.alf.io as alfio
 
-from neuropixel import SITES_COORDINATES, TIP_SIZE_UM, trace_header
+from neuropixel import TIP_SIZE_UM, trace_header
 import ibllib.atlas as atlas
 from ibllib.ephys.spikes import probes_description as extract_probes
 from ibllib.qc import base
@@ -93,7 +93,8 @@ def get_micro_manipulator_data(subject, one=None, force_extract=False):
             else:
                 _logger.warning(f"no channel.localCoordinates found for {ses['local_path']}."
                                 f"Assumes checkerboard pattern")
-                probe['sites_coordinates'].append(SITES_COORDINATES)
+                th = trace_header(version=1)
+                probe['sites_coordinates'].append(np.c_[th['x'], th['y']])
         # put the session information in there
         probe['session'] = [ses] * len(probe.description)
         probes = probes.append(probe)
