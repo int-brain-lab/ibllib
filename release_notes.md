@@ -1,4 +1,7 @@
 ## Release Notes 2.13
+## Release Notes 2.13.1 2022-07-01
+- Hotfix: globus imports were mixed one.globus and one.remote
+
 ## Release Notes 2.13.0 2022-06-30
 - Deprecated ibllib.version
 - Fix Globus patcher
