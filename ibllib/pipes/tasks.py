@@ -12,6 +12,7 @@ from graphviz import Digraph
 
 import ibllib
 from ibllib.oneibl import data_handlers
+from iblutil.util import Bunch
 import one.params
 from one.api import ONE
 
@@ -35,7 +36,7 @@ class Task(abc.ABC):
     force = False  # whether or not to re-download missing input files on local server if not present
 
     def __init__(self, session_path, parents=None, taskid=None, one=None,
-                 machine=None, clobber=True, location='server'):
+                 machine=None, clobber=True, location='server', **kwargs):
         """
         Base task class
         :param session_path: session path
@@ -47,6 +48,7 @@ class Task(abc.ABC):
         :param location: location where task is run. Options are 'server' (lab local servers'), 'remote' (remote compute node,
         data required for task downloaded via one), 'AWS' (remote compute node, data required for task downloaded via AWS),
         or 'SDSC' (SDSC flatiron compute node) # TODO 'Globus' (remote compute node, data required for task downloaded via Globus)
+        :param args: running arguments
         """
         self.taskid = taskid
         self.one = one
@@ -54,12 +56,14 @@ class Task(abc.ABC):
         self.register_kwargs = {}
         if parents:
             self.parents = parents
+            self.level = max([p.level for p in self.parents]) + 1
         else:
             self.parents = []
         self.machine = machine
         self.clobber = clobber
         self.location = location
         self.plot_tasks = []  # Plotting task/ tasks to create plot outputs during the task
+        self.kwargs = kwargs
 
     @property
     def name(self):
@@ -384,6 +388,21 @@ class Pipeline(abc.ABC):
                 self.eid = one.path2eid(session_path, query_type='remote') if self.one else None
         self.label = self.__module__ + '.' + type(self).__name__
 
+    @staticmethod
+    def _get_exec_name(obj):
+        """
+        For a class, get the executable name as it should be stored in Alyx. When the class
+        is created dynamically using the type() built-in function, need to revert to the base
+        class to be able to re-instantiate the class from the alyx dictionary on the client side
+        :param obj:
+        :return: string containing the full module plus class name
+        """
+        if obj.__module__ == 'abc':
+            exec_name = f"{obj.__class__.__base__.__module__}.{obj.__class__.__base__.__name__}"
+        else:
+            exec_name = f"{obj.__module__}.{obj.name}"
+        return exec_name
+
     def make_graph(self, out_dir=None, show=True):
         if not out_dir:
             out_dir = self.one.alyx.cache_dir if self.one else one.params.get().CACHE_DIR
@@ -409,7 +428,7 @@ class Pipeline(abc.ABC):
             m.view()
         return m
 
-    def create_alyx_tasks(self, rerun__status__in=None):
+    def create_alyx_tasks(self, rerun__status__in=None, tasks_list=None):
         """
         Instantiate the pipeline and create the tasks in Alyx, then create the jobs for the session
         If the jobs already exist, they are left untouched. The re-run parameter will re-init the
@@ -427,22 +446,38 @@ class Pipeline(abc.ABC):
         if self.one is None:
             _logger.warning("No ONE instance found for Alyx connection, set the one property")
             return
-        tasks_alyx_pre = self.one.alyx.rest('tasks', 'list',
-                                            session=self.eid, graph=self.name, no_cache=True)
+        tasks_alyx_pre = self.one.alyx.rest('tasks', 'list', session=self.eid, graph=self.name, no_cache=True)
         tasks_alyx = []
         # creates all the tasks by iterating through the ordered dict
-        for k, t in self.tasks.items():
+
+        if tasks_list is not None:
+            task_items = tasks_list
+            # need to add in the session eid and the parents
+        else:
+            task_items = [t for _, t in self.tasks.items()]
+
+        for t in task_items:
             # get the parents' alyx ids to reference in the database
+            if type(t) == dict:
+                t = Bunch(t)
+                executable = t.executable
+                arguments = t.arguments
+            else:
+                executable = self._get_exec_name(t)
+                arguments = t.kwargs
+
             if len(t.parents):
                 pnames = [p.name for p in t.parents]
                 parents_ids = [ta['id'] for ta in tasks_alyx if ta['name'] in pnames]
             else:
                 parents_ids = []
-            task_dict = {'executable': f"{t.__module__}.{t.name}", 'priority': t.priority,
+
+            task_dict = {'executable': executable, 'priority': t.priority,
                          'io_charge': t.io_charge, 'gpu': t.gpu, 'cpu': t.cpu,
                          'ram': t.ram, 'module': self.label, 'parents': parents_ids,
                          'level': t.level, 'time_out_sec': t.time_out_secs, 'session': self.eid,
-                         'status': 'Waiting', 'log': None, 'name': t.name, 'graph': self.name}
+                         'status': 'Waiting', 'log': None, 'name': t.name, 'graph': self.name,
+                         'arguments': arguments}
             # if the task already exists, patch it otherwise, create it
             talyx = next(filter(lambda x: x["name"] == t.name, tasks_alyx_pre), [])
             if len(talyx) == 0:
@@ -452,6 +487,32 @@ class Pipeline(abc.ABC):
                     'tasks', 'partial_update', id=talyx['id'], data=task_dict)
             tasks_alyx.append(talyx)
         return tasks_alyx
+
+    def create_tasks_list_from_pipeline(self):
+        # TODO remove repition
+        """
+        From a pipeline with tasks, creates a list of dictionaries containing task description that can be used to upload to
+        create alyx tasks
+        :return:
+        """
+        tasks_list = []
+        for k, t in self.tasks.items():
+            # get the parents' alyx ids to reference in the database
+            if len(t.parents):
+                parent_names = [p.name for p in t.parents]
+            else:
+                parent_names = []
+
+            task_dict = {'executable': self._get_exec_name(t), 'priority': t.priority,
+                         'io_charge': t.io_charge, 'gpu': t.gpu, 'cpu': t.cpu,
+                         'ram': t.ram, 'module': self.label, 'parents': parent_names,
+                         'level': t.level, 'time_out_sec': t.time_out_secs, 'session': self.eid,
+                         'status': 'Waiting', 'log': None, 'name': t.name, 'graph': self.name,
+                         'arguments': t.kwargs}
+
+            tasks_list.append(task_dict)
+
+        return tasks_list
 
     def run(self, status__in=['Waiting'], machine=None, clobber=True, **kwargs):
         """
@@ -535,7 +596,7 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
     strmodule, strclass = exec_name.rsplit('.', 1)
     classe = getattr(importlib.import_module(strmodule), strclass)
     task = classe(session_path, one=one, taskid=tdict['id'], machine=machine, clobber=clobber,
-                  location=location)
+                  location=location, **tdict.get('arguments', {}))
     # sets the status flag to started before running
     one.alyx.rest('tasks', 'partial_update', id=tdict['id'], data={'status': 'Started'})
     status = task.run()

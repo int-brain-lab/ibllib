@@ -199,7 +199,7 @@ class CameraQC(base.QC):
             self.data['fpga_times'] = cam_ts[self.label]
         else:
             bpod_data = raw.load_data(self.session_path)
-            _, audio_ttls = raw.load_bpod_fronts(self.session_path, bpod_data)
+            _, audio_ttls = raw.load_bpod_fronts(self.session_path, data=bpod_data)
             self.data['audio'] = audio_ttls['times']
 
         # Load extracted frame times

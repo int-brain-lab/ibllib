@@ -107,7 +107,7 @@ class EphysQC(base.QC):
         :param h: dictionary containing sensor coordinates, see neuropixel.trace_header
         :return: 3 numpy vectors nchannels length
         """
-        destripe = voltage.destripe(raw, fs=fs, neuropixel_version=1)
+        destripe = voltage.destripe(raw, fs=fs, h=h)
         rms_raw = utils.rms(raw)
         rms_pre_proc = utils.rms(destripe)
         detections = spikes.detection(data=destripe.T, fs=fs, h=h, detect_threshold=SPIKE_THRESHOLD_UV * 1e-6)
@@ -149,9 +149,16 @@ class EphysQC(base.QC):
             else:
                 sr = self.data['ap']
                 nc = sr.nc - sr.nsync
+
+                # Need to read in the lfp data
                 # verify that the channel layout is correct according to IBL layout
-                h = neuropixel.trace_header(sr.major_version)
                 th = sr.geometry
+                if sr.meta.get('NP2.4_shank', None) is not None:
+                    h = neuropixel.trace_header(sr.major_version, nshank=4)
+                    h = neuropixel.split_trace_header(h, shank=int(sr.meta.get('NP2.4_shank')))
+                else:
+                    h = neuropixel.trace_header(sr.major_version, nshank=np.unique(th['shank']).size)
+
                 if not (np.all(h['x'] == th['x']) and np.all(h['y'] == th['y'])):
                     _logger.critical("Channel geometry seems incorrect")
                     raise ValueError("Wrong Neuropixel channel mapping used - ABORT")

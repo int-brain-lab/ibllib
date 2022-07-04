@@ -11,9 +11,11 @@ import traceback
 from one.api import ONE
 
 from ibllib.io.extractors.base import get_pipeline, get_task_protocol, get_session_extractor_type
-from ibllib.pipes import tasks, training_preprocessing, ephys_preprocessing, widefield
+from ibllib.pipes import tasks, training_preprocessing, ephys_preprocessing
 from ibllib.time import date2isostr
 import ibllib.oneibl.registration as registration
+from ibllib.io.session_params import read_params
+from ibllib.pipes.dynamic_pipeline import make_pipeline
 
 _logger = logging.getLogger('ibllib')
 LARGE_TASKS = ['EphysVideoCompress', 'TrainingVideoCompress', 'SpikeSorting', 'EphysDLC']
@@ -25,8 +27,6 @@ def _get_pipeline_class(session_path, one):
         PipelineClass = training_preprocessing.TrainingExtractionPipeline
     elif pipeline == 'ephys':
         PipelineClass = ephys_preprocessing.EphysExtractionPipeline
-    elif pipeline == 'widefield':
-        PipelineClass = widefield.WidefieldExtractionPipeline
     else:
         # try and look if there is a custom extractor in the personal projects extraction class
         import projects.base
@@ -115,14 +115,20 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
                 raise ValueError(f'Session ALF path mismatch: {ses["url"][-36:]} \n '
                                  f'{one.eid2path(eid, query_type="remote")} in params \n'
                                  f'{session_path} on disk \n')
-            files, dsets = registration.register_session_raw_data(
-                session_path, one=one, max_md5_size=max_md5_size)
-            if dsets is not None:
-                all_datasets.extend(dsets)
-            pipe = _get_pipeline_class(session_path, one)
-            if pipe is None:
-                task_protocol = get_task_protocol(session_path)
-                _logger.info(f'Session task protocol {task_protocol} has no matching pipeline pattern {session_path}')
+
+            # See if we need to create a dynamic pipeline
+            experiment_description_file = read_params(session_path)
+            if experiment_description_file is not None:
+                pipe = make_pipeline(session_path, one=one)
+            else:
+                files, dsets = registration.register_session_raw_data(
+                    session_path, one=one, max_md5_size=max_md5_size)
+                if dsets is not None:
+                    all_datasets.extend(dsets)
+                pipe = _get_pipeline_class(session_path, one)
+                if pipe is None:
+                    task_protocol = get_task_protocol(session_path)
+                    _logger.info(f'Session task protocol {task_protocol} has no matching pipeline pattern {session_path}')
             if rerun:
                 rerun__status__in = '__all__'
             else:

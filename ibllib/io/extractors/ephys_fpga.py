@@ -21,6 +21,7 @@ from ibllib.io.extractors.opto_trials import LaserBool
 import ibllib.io.extractors.base as extractors_base
 from ibllib.io.extractors.training_wheel import extract_wheel_moves
 import ibllib.plots as plots
+from ibllib.io.extractors.default_channel_maps import DEFAULT_MAPS
 
 _logger = logging.getLogger('ibllib')
 
@@ -522,12 +523,13 @@ def extract_sync(session_path, overwrite=False, ephys_files=None):
             alfname['extra'] = efi.label
         file_exists = alfio.exists(bin_file.parent, **alfname)
         if not overwrite and file_exists:
-            _logger.warning(f'Skipping raw sync: SGLX sync found for probe {efi.label}!')
+            _logger.warning(f'Skipping raw sync: SGLX sync found for {efi.label}!')
             sync = alfio.load_object(bin_file.parent, **alfname)
             out_files, _ = alfio._ls(bin_file.parent, **alfname)
         else:
             sr = spikeglx.Reader(bin_file)
             sync, out_files = _sync_to_alf(sr, bin_file.parent, save=True, parts=efi.label)
+            sr.close()
         outputs.extend(out_files)
         syncs.extend([sync])
 
@@ -610,14 +612,15 @@ class FpgaTrials(extractors_base.BaseExtractor):
         super().__init__(*args, **kwargs)
         self.bpod2fpga = None
 
-    def _extract(self, sync=None, chmap=None, **kwargs):
+    def _extract(self, sync=None, chmap=None, sync_collection='raw_ephys_data', prot_collection='raw_behavior_data', **kwargs):
         """Extracts ephys trials by combining Bpod and FPGA sync pulses"""
         # extract the behaviour data from bpod
         if sync is None or chmap is None:
-            _sync, _chmap = get_main_probe_sync(self.session_path, bin_exists=False)
+            _sync, _chmap = get_sync_and_chn_map(self.session_path, sync_collection)
             sync = sync or _sync
             chmap = chmap or _chmap
         # load the bpod data and performs a biased choice world training extraction
+        # TODO these all need to pass in the collection so we can load for different protocols in different folders
         bpod_raw = raw_data_loaders.load_data(self.session_path)
         assert bpod_raw is not None, "No task trials data in raw_behavior_data - Exit"
 
@@ -667,7 +670,7 @@ class FpgaTrials(extractors_base.BaseExtractor):
         return bpod_trials
 
 
-def extract_all(session_path, save=True, bin_exists=False):
+def extract_all(session_path, sync_collection='raw_ephys_data', save=True):
     """
     For the IBL ephys task, reads ephys binary file and extract:
         -   sync
@@ -680,10 +683,67 @@ def extract_all(session_path, save=True, bin_exists=False):
     """
     extractor_type = extractors_base.get_session_extractor_type(session_path)
     _logger.info(f"Extracting {session_path} as {extractor_type}")
-    sync, chmap = get_main_probe_sync(session_path, bin_exists=bin_exists)
+    sync, chmap = get_sync_and_chn_map(session_path, sync_collection)
+    # sync, chmap = get_main_probe_sync(session_path, bin_exists=bin_exists)
     base = [FpgaTrials]
     if extractor_type == 'ephys_biased_opto':
         base.append(LaserBool)
     outputs, files = extractors_base.run_extractor_classes(
         base, session_path=session_path, save=save, sync=sync, chmap=chmap)
     return outputs, files
+
+
+def get_sync_and_chn_map(session_path, sync_collection):
+    """
+    Return sync and channel map for session based on collection where main sync is stored
+    :param session_path:
+    :param collection:
+    :return:
+    """
+    if sync_collection == 'raw_ephys_data':
+        sync, chmap = get_main_probe_sync(session_path)
+    else:
+        sync = load_sync(session_path, sync_collection)
+        chmap = load_channel_map(session_path, sync_collection)
+
+    return sync, chmap
+
+
+def load_channel_map(session_path, sync_collection):
+    """
+    Load syncing channel map for session path and collection
+    :param session_path:
+    :param collection:
+    :return:
+    """
+
+    device = sync_collection.split('_')[1]
+    default_chmap = DEFAULT_MAPS[device]['nidq']
+
+    # Try to load channel map from file
+    chmap = spikeglx.get_sync_map(session_path.joinpath(sync_collection))
+    # If chmap provided but not with all keys, fill up with default values
+    if not chmap:
+        return default_chmap
+    else:
+        if data_for_keys(default_chmap.keys(), chmap):
+            return chmap
+        else:
+            _logger.warning("Keys missing from provided channel map, "
+                            "setting missing keys from default channel map")
+            return {**default_chmap, **chmap}
+
+
+def load_sync(session_path, sync_collection):
+    """
+    Load sync files from session path and collection
+    :param session_path:
+    :param collection:
+    :return:
+    """
+    sync = alfio.load_object(session_path.joinpath(sync_collection), 'sync', namespace='spikeglx', short_keys=True)
+
+    return sync
+
+
+

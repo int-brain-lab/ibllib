@@ -1,4 +1,3 @@
-from one.api import ONE
 import one.alf.io as alfio
 from one.alf.spec import is_session_path
 from one.alf.exceptions import ALFObjectNotFound
@@ -18,7 +17,6 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from datetime import datetime
 
-one = ONE()
 
 TRAINING_STATUS = {'not_computed': (-2, (0, 0, 0, 0)),
                    'habituation': (-1, (0, 0, 0, 0)),

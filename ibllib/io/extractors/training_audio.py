@@ -96,7 +96,8 @@ def welchogram(fs, wav, nswin=NS_WIN, overlap=OVERLAP, nperseg=NS_WELCH):
     return tscale, fscale, W, detect
 
 
-def extract_sound(ses_path, save=True, force=False, delete=False):
+def extract_sound(ses_path, task_collection='raw_behavior_data', device_collection='raw_behavior_data', save=True, force=False,
+                  delete=False):
     """
     Simple audio features extraction for ambient sound characterization.
     From a wav file, generates several ALF files to be registered on Alyx
@@ -106,12 +107,12 @@ def extract_sound(ses_path, save=True, force=False, delete=False):
     :return: list of output files
     """
     ses_path = Path(ses_path)
-    wav_file = ses_path / 'raw_behavior_data' / '_iblrig_micData.raw.wav'
-    out_folder = ses_path / 'raw_behavior_data'
-    files_out = {'power': out_folder / '_iblmic_audioSpectrogram.power.npy',
-                 'frequencies': out_folder / '_iblmic_audioSpectrogram.frequencies.npy',
-                 'onset_times': out_folder / '_iblmic_audioOnsetGoCue.times_mic.npy',
-                 'times_microphone': out_folder / '_iblmic_audioSpectrogram.times_mic.npy',
+    wav_file = ses_path.joinpath(device_collection, '_iblrig_micData.raw.wav')
+    out_folder = ses_path.joinpath(device_collection)
+    files_out = {'power': out_folder.joinpath('_iblmic_audioSpectrogram.power.npy'),
+                 'frequencies': out_folder.joinpath('_iblmic_audioSpectrogram.frequencies.npy'),
+                 'onset_times': out_folder.joinpath('_iblmic_audioOnsetGoCue.times_mic.npy'),
+                 'times_microphone': out_folder.joinpath('_iblmic_audioSpectrogram.times_mic.npy'),
                  }
     if not wav_file.exists():
         logger_.warning(f"Wav file doesn't exist: {wav_file}")
@@ -134,12 +135,12 @@ def extract_sound(ses_path, save=True, force=False, delete=False):
         np.save(file=files_out['onset_times'], arr=detect)
         np.save(file=files_out['times_microphone'], arr=tscale[:, None].astype(np.single))
     # for the time scale, attempt to synchronize using onset sound detection and task data
-    data = ioraw.load_data(ses_path)
+    data = ioraw.load_data(ses_path, task_collection=task_collection)
     if data is None:  # if no session data, we're done
         if delete:
             wav_file.unlink()
         return
-    tgocue, _ = GoCueTimes(ses_path).extract(save=False, bpod_trials=data)
+    tgocue, _ = GoCueTimes(ses_path).extract(task_collection=task_collection, save=False, bpod_trials=data)
     ilast = min(len(tgocue), len(detect))
     dt = tgocue[:ilast] - detect[: ilast]
     # only save if dt is consistent for the whole session
