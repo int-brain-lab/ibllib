@@ -4,7 +4,6 @@ import yaml
 import ibllib.io.session_params as sess_params
 
 import ibllib.pipes.ephys_preprocessing as epp
-import ibllib.pipes.training_preprocessing as tpp
 import ibllib.pipes.tasks as mtasks
 import ibllib.pipes.widefield_tasks as wtasks
 import ibllib.pipes.sync_tasks as stasks
@@ -101,6 +100,7 @@ def make_pipeline(session_path=None, **pkwargs):
     (sync, sync_args), = acquisition_description['sync'].items()
     sync_args['sync_collection'] = sync_args.pop('collection')  # rename the key so it matches task run arguments
     sync_args['sync_ext'] = sync_args.pop('extension')
+    sync_args['sync_namespace'] = sync_args.pop('acquisition_software', None)
     sync_kwargs = {'sync': sync, **sync_args}
     sync_tasks = []
     if sync == 'nidq' and sync_args['sync_collection'] == 'raw_ephys_data':
@@ -140,7 +140,7 @@ def make_pipeline(session_path=None, **pkwargs):
             compute_status = True
         elif sync_kwargs['sync'] == 'nidq':
             registration_class = btasks.TrialRegisterRaw
-            behaviour_class = btasks.ChoiceWorldTrialsFPGA
+            behaviour_class = btasks.ChoiceWorldTrialsNidq
             compute_status = True
         else:
             raise NotImplementedError
@@ -150,7 +150,7 @@ def make_pipeline(session_path=None, **pkwargs):
             (**kwargs, **sync_kwargs, **task_kwargs, parents=parents)
         if compute_status:
             tasks[f"TrainingStatus_{protocol}"] = type(f"TrainingStatus_{protocol}", (btasks.TrainingStatus,), {})\
-                (**kwargs, parents=[tasks[f'Trials_{protocol}']])
+                (**kwargs, **task_kwargs, parents=[tasks[f'Trials_{protocol}']])
 
     # Ephys tasks
     if 'neuropixel' in acquisition_description:
@@ -186,7 +186,7 @@ def make_pipeline(session_path=None, **pkwargs):
                 (**kwargs, **ephys_kwargs, **sync_kwargs, pname=all_probes, parents=register_tasks + sync_tasks)
 
         for pname in all_probes:
-            register_task = [reg_task for reg_task in register_tasks if pname in reg_task.name]
+            register_task = [reg_task for reg_task in register_tasks if pname[:7] in reg_task.name]
 
             if nptype != '3A':
                 tasks[f'EphysPulses_{pname}'] = type(f'EphysPulses_{pname}', (etasks.EphysPulses,), {})\
@@ -209,8 +209,7 @@ def make_pipeline(session_path=None, **pkwargs):
                         'main_task_collection': sess_params.get_main_task_collection(acquisition_description)}
 
         tasks[tn] = type((tn := 'VideoRegisterRaw'), (vtasks.VideoRegisterRaw,), {})(**kwargs, **video_kwargs)
-        tasks[tn] = type((tn := 'VideoCompress'), (vtasks.VideoCompress,), {})(
-            **kwargs, **video_kwargs, parents=[tasks['VideoRegisterRaw']])
+        tasks[tn] = type((tn := 'VideoCompress'), (vtasks.VideoCompress,), {})(**kwargs, **video_kwargs)
         tasks[tn] = type((tn := 'VideoSyncQC'), (vtasks.VideoSyncQc,), {})(
             **kwargs, **video_kwargs, **sync_kwargs, parents=[tasks['VideoCompress']] + sync_tasks)
 
@@ -226,7 +225,7 @@ def make_pipeline(session_path=None, **pkwargs):
         micro_kwargs['device_collection'] = micro_kwargs.pop('collection')
         micro_kwargs['main_task_collection'] = sess_params.get_main_task_collection(acquisition_description)
         if sync_kwargs['sync'] == 'bpod':
-            tasks['AudioRegisterRaw'] = type('AudioRegisterRaw', (atasks.AudioSync,), {})(**kwargs, **micro_kwargs)
+            tasks['AudioRegisterRaw'] = type('AudioRegisterRaw', (atasks.AudioSync,), {})(**kwargs, **sync_kwargs, **micro_kwargs)
         elif sync_kwargs['sync'] == 'nidq':
             tasks['AudioRegisterRaw'] = type('AudioRegisterRaw', (atasks.AudioCompress,), {})(**kwargs, **micro_kwargs)
 

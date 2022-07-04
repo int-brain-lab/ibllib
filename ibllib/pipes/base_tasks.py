@@ -1,5 +1,7 @@
 from ibllib.pipes.tasks import Task
 import ibllib.io.session_params as sess_params
+import logging
+_logger = logging.getLogger('ibllib')
 
 
 class DynamicTask(Task):
@@ -176,12 +178,20 @@ class RegisterRawDataTask(DynamicTask):  # TODO write test
     def _run(self, **kwargs):
         self.rename_files(**kwargs)
         out_files = []
+        n_required = 0
         for file_sig in self.output_files:
             file_name, collection, required = file_sig
+            n_required += required
             file_path = self.session_path.joinpath(collection).glob(file_name)
             file_path = next(file_path, None)
             if not file_path and not required:
                 continue
-            out_files.append(file_path)
+            elif not file_path and required:
+                _logger.error(f'expected {file_sig} missing')
+            else:
+                out_files.append(file_path)
+
+        if len(out_files) != n_required:
+            self.status = -1
 
         return out_files

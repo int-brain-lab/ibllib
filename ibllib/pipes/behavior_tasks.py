@@ -23,7 +23,12 @@ class HabituationRegisterRaw(base_tasks.RegisterRawDataTask):
             'output_files': [
                 ('_iblrig_taskData.raw.*', self.collection, True),
                 ('_iblrig_taskSettings.raw.*', self.collection, True),
-                ('_iblrig_encoderEvents.raw*', self.collection, True),
+                ('_iblrig_encoderEvents.raw*', self.collection, False),
+                ('_iblrig_encoderPositions.raw*', self.collection, False),
+                ('_iblrig_encoderTrialInfo.raw*', self.collection, False),
+                ('_iblrig_stimPositionScreen.raw*', self.collection, False),
+                ('_iblrig_syncSquareUpdate.raw*', self.collection, False),
+                ('_iblrig_ambientSensorData.raw*', self.collection, False)
             ]
         }
         return signature
@@ -81,12 +86,12 @@ class TrialRegisterRaw(base_tasks.RegisterRawDataTask):
             'output_files': [
                 ('_iblrig_taskData.raw.*', self.collection, True),
                 ('_iblrig_taskSettings.raw.*', self.collection, True),
-                ('_iblrig_encoderEvents.raw*', self.collection, True),
-                ('_iblrig_encoderPositions.raw*', self.collection, True),
-                ('_iblrig_encoderTrialInfo.raw*', self.collection, True),
-                ('_iblrig_stimPositionScreen.raw*', self.collection, True),
-                ('_iblrig_syncSquareUpdate.raw*', self.collection, True),
-                ('_iblrig_ambientSensorData.raw*', self.collection, True)
+                ('_iblrig_encoderEvents.raw*', self.collection, False),
+                ('_iblrig_encoderPositions.raw*', self.collection, False),
+                ('_iblrig_encoderTrialInfo.raw*', self.collection, False),
+                ('_iblrig_stimPositionScreen.raw*', self.collection, False),
+                ('_iblrig_syncSquareUpdate.raw*', self.collection, False),
+                ('_iblrig_ambientSensorData.raw*', self.collection, False)
             ]
         }
         return signature
@@ -120,9 +125,9 @@ class PassiveTask(base_tasks.DynamicTask):
         signature = {
             'input_files': [('_iblrig_taskSettings.raw*', self.collection, True),
                             ('_iblrig_RFMapStim.raw*', self.collection, True),
-                            ('_spikeglx_sync.channels.*', self.sync_collection, True),
-                            ('_spikeglx_sync.polarities.*', self.sync_collection, True),
-                            ('_spikeglx_sync.times.*', self.sync_collection, True),
+                            (f'_{self.sync_namespace}_sync.channels.*', self.sync_collection, True),
+                            (f'_{self.sync_namespace}_sync.polarities.*', self.sync_collection, True),
+                            (f'_{self.sync_namespace}_sync.times.*', self.sync_collection, True),
                             ('*.wiring.json', self.sync_collection, False),
                             ('*.meta', self.sync_collection, False)],
             'output_files': [('_ibl_passiveGabor.table.csv', 'alf', True),
@@ -193,7 +198,7 @@ class ChoiceWorldTrialsBpod(base_tasks.DynamicTask):
         return output_files
 
 
-class ChoiceWorldTrialsFPGA(base_tasks.DynamicTask):
+class ChoiceWorldTrialsNidq(base_tasks.DynamicTask):
     priority = 90
     level = 1
     force = False
@@ -207,9 +212,9 @@ class ChoiceWorldTrialsFPGA(base_tasks.DynamicTask):
                 ('_iblrig_taskSettings.raw.*', self.collection, True),
                 ('_iblrig_encoderEvents.raw*', self.collection, True),
                 ('_iblrig_encoderPositions.raw*', self.collection, True),
-                ('_spikeglx_sync.channels.npy', self.sync_collection, True),
-                ('_spikeglx_sync.polarities.npy', self.sync_collection, True),
-                ('_spikeglx_sync.times.npy', self.sync_collection, True),
+                (f'_{self.sync_namespace}_sync.channels.npy', self.sync_collection, True),
+                (f'_{self.sync_namespace}sync.polarities.npy', self.sync_collection, True),
+                (f'_{self.sync_namespace}_sync.times.npy', self.sync_collection, True),
                 ('*wiring.json', self.sync_collection, False),
                 ('*.meta', self.sync_collection, True)],
             'output_files': [
@@ -283,12 +288,17 @@ class TrainingStatus(base_tasks.DynamicTask):
     priority = 90
     level = 1
     force = False
-    signature = {
-        'input_files': [('_iblrig_taskData.raw.*', self.collection, True),
-                        ('_iblrig_taskSettings.raw.*', self.collection, True),
-                        ('*trials.table.pqt', 'alf', True)],
-        'output_files': []
-    }
+
+    @property
+    def signature(self):
+        signature = {
+            'input_files': [
+                ('_iblrig_taskData.raw.*', self.collection, True),
+                ('_iblrig_taskSettings.raw.*', self.collection, True),
+                ('*trials.table.pqt', 'alf', True)],
+            'output_files': []
+        }
+        return signature
 
     def _run(self, upload=True):
         """
