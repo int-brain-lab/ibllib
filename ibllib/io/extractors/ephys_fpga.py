@@ -500,7 +500,7 @@ def extract_behaviour_sync(sync, chmap=None, display=False, bpod_trials=None):
     return trials
 
 
-def extract_sync(session_path, overwrite=False, ephys_files=None):
+def extract_sync(session_path, overwrite=False, ephys_files=None, namespace='spikeglx'):
     """
     Reads ephys binary file (s) and extract sync within the binary file folder
     Assumes ephys data is within a `raw_ephys_data` folder
@@ -518,7 +518,7 @@ def extract_sync(session_path, overwrite=False, ephys_files=None):
         bin_file = efi.get('ap', efi.get('nidq', None))
         if not bin_file:
             continue
-        alfname = dict(object='sync', namespace='spikeglx')
+        alfname = dict(object='sync', namespace=namespace)
         if efi.label:
             alfname['extra'] = efi.label
         file_exists = alfio.exists(bin_file.parent, **alfname)

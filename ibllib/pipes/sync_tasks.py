@@ -2,6 +2,7 @@ import logging
 
 from ibllib.pipes import base_tasks
 from ibllib.io.extractors.ephys_fpga import extract_sync
+from iblutil.util import Bunch
 
 import spikeglx
 
@@ -17,8 +18,8 @@ class SyncRegisterRaw(base_tasks.RegisterRawDataTask):
     def signature(self):
         signature = {
             'input_files': [],
-            'output_files': [(f'daq.raw.{self.sync}.{self.sync_ext}', self.sync_collection, True),
-                             (f'daq.raw.{self.sync}.wiring.json', self.sync_collection, True)]
+            'output_files': [(f'*DAQdata.raw.{self.sync_ext}', self.sync_collection, True),
+                             ('*DAQdata.wiring.json', self.sync_collection, True)]
         }
         return signature
 
@@ -34,10 +35,10 @@ class SyncMtscomp(base_tasks.DynamicTask):
             'input_files': [('*.*bin', self.sync_collection, True),
                             ('*.meta', self.sync_collection, True),
                             ('*.wiring.json', self.sync_collection, True)],
-            'output_files': [(f'daq.raw.{self.sync}.cbin', self.sync_collection, True),
-                             (f'daq.raw.{self.sync}.ch', self.sync_collection, True),
-                             (f'daq.raw.{self.sync}.meta', self.sync_collection, True),
-                             (f'daq.raw.{self.sync}.wiring.json', self.sync_collection, True)]
+            'output_files': [(f'_{self.sync_namespace}_DAQdata.raw.cbin', self.sync_collection, True),
+                             (f'_{self.sync_namespace}_DAQdata.raw.ch', self.sync_collection, True),
+                             (f'_{self.sync_namespace}_DAQdata.raw.meta', self.sync_collection, True),
+                             (f'_{self.sync_namespace}_DAQdata.wiring.json', self.sync_collection, True)]
         }
         return signature
 
@@ -48,8 +49,8 @@ class SyncMtscomp(base_tasks.DynamicTask):
         # Detect the wiring file and rename (if it hasn't already been renamed)
         wiring_file = next(self.session_path.joinpath(self.sync_collection).glob('*.wiring.json'), None)
         if wiring_file is not None:
-            if 'daq.raw' not in wiring_file.stem:
-                new_wiring_file = wiring_file.parent.joinpath(f'daq.raw.{self.sync}.wiring.json')
+            if 'DAQdata.wiring' not in wiring_file.stem:
+                new_wiring_file = wiring_file.parent.joinpath(f'_{self.sync_namespace}_DAQdata.wiring.json')
                 wiring_file.replace(new_wiring_file)
             else:
                 new_wiring_file = wiring_file
@@ -57,18 +58,15 @@ class SyncMtscomp(base_tasks.DynamicTask):
             out_files.append(new_wiring_file)
 
         # Search for .bin files in the sync_collection folder
-        files = spikeglx.glob_ephys_files(self.session_path.joinpath(self.sync_collection))
-        assert len(files) == 1
-        bin_file = files[0].get('nidq', None)
+        bin_file = next(self.session_path.joinpath(self.sync_collection).glob('*.*bin'), None)
 
         # If we don't have a .bin/ .cbin file anymore see if we can still find the .ch and .meta files
         if bin_file is None:
             for ext in ['ch', 'meta']:
-                files = spikeglx.glob_ephys_files(self.session_path.joinpath(self.sync_collection), ext=ext)
-                ext_file = files[0].get('nidq', None)
+                ext_file = next(self.session_path.joinpath(self.sync_collection).glob(f'*.{ext}'), None)
                 if ext_file is not None:
-                    if 'daq.raw' not in ext_file.stem:
-                        new_ext_file = ext_file.parent.joinpath(f'daq.raw.{self.sync}{ext_file.suffix}')
+                    if 'DAQdata.raw' not in ext_file.stem:
+                        new_ext_file = ext_file.parent.joinpath(f'_{self.sync_namespace}_DAQdata.raw{ext_file.suffix}')
                         ext_file.replace(new_ext_file)
                     else:
                         new_ext_file = ext_file
@@ -88,8 +86,8 @@ class SyncMtscomp(base_tasks.DynamicTask):
             bin_file.unlink()
 
         # Rename files (only if they haven't already been renamed)
-        if 'daq.raw' not in cbin_file.stem:
-            new_bin_file = cbin_file.parent.joinpath(f'daq.raw.{self.sync}{cbin_file.suffix}')
+        if 'DAQdata.raw' not in cbin_file.stem:
+            new_bin_file = cbin_file.parent.joinpath(f'_{self.sync_namespace}_DAQdata.raw{cbin_file.suffix}')
             cbin_file.replace(new_bin_file)
 
             meta_file = cbin_file.with_suffix('.meta')
@@ -122,26 +120,25 @@ class SyncPulses(base_tasks.DynamicTask):
     @property
     def signature(self):
         signature = {
-            'input_files': [(f'daq.raw.{self.sync}.*bin', self.sync_collection, True),
-                            (f'daq.raw.{self.sync}.ch', self.sync_collection, False),  # not mandatory if we have .bin file
-                            (f'daq.raw.{self.sync}.meta', self.sync_collection, True),
-                            (f'daq.raw.{self.sync}.wiring.json', self.sync_collection, True)],
-            'output_files': [('_spikeglx_sync.times.npy', self.sync_collection, True),
-                             ('_spikeglx_sync.polarities.npy', self.sync_collection, True),
-                             ('_spikeglx_sync.channels.npy', self.sync_collection, True)]
+            'input_files': [(f'_{self.sync_namespace}_DAQdata.raw.*bin', self.sync_collection, True),
+                            (f'_{self.sync_namespace}_DAQdata.raw.ch', self.sync_collection, True),
+                            (f'_{self.sync_namespace}_DAQdata.raw.meta', self.sync_collection, True),
+                            (f'_{self.sync_namespace}_DAQdata.wiring.json', self.sync_collection, True)],
+            'output_files': [(f'_{self.sync_namespace}_sync.times.npy', self.sync_collection, True),
+                             (f'_{self.sync_namespace}_sync.polarities.npy', self.sync_collection, True),
+                             (f'_{self.sync_namespace}_sync.channels.npy', self.sync_collection, True)]
         }
         return signature
 
     def _run(self, overwrite=False):
-
-        files = spikeglx.glob_ephys_files(self.session_path.joinpath(self.sync_collection))
-        assert len(files) == 1
-        bin_file = files[0].get('nidq', None)
-        print(bin_file)
+        bin_file = next(self.session_path.joinpath(self.sync_collection).glob('*.*bin'), None)
         if not bin_file:
             return []
-        files[0]['label'] = ''
 
-        _, outputs = extract_sync(self.session_path, ephys_files=files, overwrite=overwrite)
+        # TODO this is a hack, once we refactor the sync tasks should make generic extract_sync that doesn't rely on
+        # output of glob_ephys_files
+        files = [Bunch({'nidq': bin_file, 'label': ''})]
+
+        _, outputs = extract_sync(self.session_path, ephys_files=files, overwrite=overwrite, namespace=self.sync_namespace)
 
         return outputs

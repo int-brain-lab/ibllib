@@ -52,7 +52,7 @@ def get_acquisition_description(protocol):
                 'passiveChoiceWorld': {'collection': 'raw_passive_data', 'sync_label': 'bpod', 'main': False},
             },
             'sync': {
-                'nidq': {'collection': 'raw_ephys_data', 'extension': '.bin', 'software': 'spikeglx'}
+                'nidq': {'collection': 'raw_ephys_data', 'extension': 'bin', 'acquisition_software': 'spikeglx'}
             },
             'procedures': ['Ephys recording with acute probe(s)'],
             'projects': ['ibl_neuropixel_brainwide_01']
@@ -69,7 +69,7 @@ def get_acquisition_description(protocol):
                 'trainingChoiceWorld': {'collection': 'raw_behavior_data', 'sync_label': 'bpod', 'main': True}
             },
             'sync': {
-                'bpod': {'collection': 'raw_behavior_data', 'extension': '.bin'}
+                'bpod': {'collection': 'raw_behavior_data', 'extension': 'bin'}
             },
             'procedures': ['Behavior training/tasks'],
             'projects': ['ibl_neuropixel_brainwide_01']
