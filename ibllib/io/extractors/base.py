@@ -49,7 +49,6 @@ class BaseExtractor(abc.ABC):
         # Chack if self.save_namesis of the same length of out
         if not path_out:
             path_out = self.session_path.joinpath(self.default_path)
-        path_out.mkdir(exist_ok=True, parents=True)
 
         def _write_to_disk(file_path, data):
             """Implements different save calls depending on file extension"""
@@ -59,6 +58,7 @@ class BaseExtractor(abc.ABC):
                 ".tsv": "\t",
             }
             file_path = Path(file_path)
+            file_path.parent.mkdir(exist_ok=True, parents=True)
             if file_path.suffix == ".npy":
                 np.save(file_path, data)
             elif file_path.suffix in [".parquet", ".pqt"]:
