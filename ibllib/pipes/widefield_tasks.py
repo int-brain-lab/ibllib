@@ -80,7 +80,7 @@ class WidefieldCompress(base_tasks.WidefieldTask):
     def signature(self):
         signature = {
             'input_files': [('*.dat', self.device_collection, True)],
-            'output_files': [('widefield.raw.mov', self.device_collection, True)]
+            'output_files': [('imaging.frames.mov', self.device_collection, True)]
         }
         return signature
 
@@ -117,7 +117,7 @@ class WidefieldPreprocess(base_tasks.WidefieldTask):
     @property
     def signature(self):
         signature = {
-            'input_files': [('widefield.raw.*', self.device_collection, True),
+            'input_files': [('imaging.frames.*', self.device_collection, True),
                             ('widefieldEvents.raw.*', self.device_collection, True)],
             'output_files': [('widefieldChannels.frameAverage.npy', 'alf/widefield', True),
                              ('widefieldU.images.npy', 'alf/widefield', True),
@@ -144,14 +144,14 @@ class WidefieldSync(base_tasks.WidefieldTask):
     @property
     def signature(self):
         signature = {
-            'input_files': [('widefield.raw.mov', self.device_collection, True),
+            'input_files': [('imaging.raw.mov', self.device_collection, True),
                             ('widefieldEvents.raw.camlog', self.device_collection, True),
-                            ('_spikeglx_sync.channels.npy', self.sync_collection, True),
-                            ('_spikeglx_sync.polarities.npy', self.sync_collection, True),
-                            ('_spikeglx_sync.times.npy', self.sync_collection, True)],
-            'output_files': [('widefield.times.npy', 'alf/widefield', True),
-                             ('widefield.widefieldLightSource.npy', 'alf/widefield', True),
-                             ('widefieldLightSource.properties.csv', 'alf/widefield', True)]
+                            (f'_{self.sync_namespace}_sync.channels.npy', self.sync_collection, True),
+                            (f'_{self.sync_namespace}_sync.polarities.npy', self.sync_collection, True),
+                            (f'_{self.sync_namespace}_sync.times.npy', self.sync_collection, True)],
+            'output_files': [('imaging.times.npy', 'alf/widefield', True),
+                             ('imaging.imagingLightSource.npy', 'alf/widefield', True),
+                             ('imagingLightSource.properties.csv', 'alf/widefield', True)]
         }
         return signature
 

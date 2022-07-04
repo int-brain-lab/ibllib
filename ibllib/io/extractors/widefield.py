@@ -32,8 +32,8 @@ DEFAULT_WIRING_MAP = {
 
 class Widefield(extractors_base.BaseExtractor):
     save_names = (None, None, None, 'widefieldChannels.frameAverage.npy', 'widefieldU.images.npy', 'widefieldSVT.uncorrected.npy',
-                  None, None, 'widefieldSVT.haemoCorrected.npy', 'widefield.times.npy', 'widefield.widefieldLightSource.npy',
-                  'widefieldLightSource.properties.csv')
+                  None, None, 'widefieldSVT.haemoCorrected.npy', 'imaging.times.npy', 'imaging.imagingLightSource.npy',
+                  'imagingLightSource.properties.csv')
     raw_names = ('motioncorrect_2_540_640_uint16.bin', 'motion_correction_shifts.npy', 'motion_correction_rotation.npy',
                  'frames_average.npy', 'U.npy', 'SVT.npy', 'rcoeffs.npy', 'T.npy', 'SVTcorr.npy', 'timestamps.npy', 'led.npy',
                  'led_properties.csv')
@@ -157,7 +157,7 @@ class Widefield(extractors_base.BaseExtractor):
         assert led.frame.is_monotonic_increasing
 
         # Get video meta data to check number of widefield frames
-        video_path = next(self.data_path.glob('widefield.raw*.mov'))
+        video_path = next(self.data_path.glob('imaging.frames.mov'))
         video_meta = get_video_meta(video_path)
 
         # 1st: Check for differences between video and led

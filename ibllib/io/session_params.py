@@ -53,6 +53,16 @@ def get_sync_extension(sess_params):
     return sync_details.get('extension', None)
 
 
+def get_sync_namespace(sess_params):
+    sync = sess_params.get('sync', None)
+    if not sync:
+        return None
+    else:
+        (_, sync_details),  = sync.items()
+    return sync_details.get('acquisition_software', None)
+
+
+
 def get_task_protocol(sess_params, task_collection):
     protocols = sess_params.get('tasks', None)
     if not protocols:

@@ -17,6 +17,8 @@ class DynamicTask(Task):
         self.sync = self.get_sync(kwargs.get('sync', None))
         # Sync extension
         self.sync_ext = self.get_sync_extension(kwargs.get('sync_ext', None))
+        # Sync namespace
+        self.sync_namespace = self.get_sync_namespace(kwargs.get('sync_namespace', None))
         # Task collection (this needs to be specified in the task kwargs)
         self.collection = self.get_task_collection(kwargs.get('collection', None))
         # Task type (protocol)
@@ -38,6 +40,10 @@ class DynamicTask(Task):
 
         params_sync_ext = sess_params.get_sync_extension(self.session_params)
         return sync_ext if not params_sync_ext else params_sync_ext
+
+    def get_sync_namespace(self, sync_namespace=None):
+        params_sync_namespace = sess_params.get_sync_namespace(self.session_params)
+        return sync_namespace if not params_sync_namespace else params_sync_namespace
 
     def get_task_collection(self, task_collection=None):
         """
