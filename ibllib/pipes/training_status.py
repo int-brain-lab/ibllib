@@ -29,6 +29,7 @@ TRAINING_STATUS = {'not_computed': (-2, (0, 0, 0, 0)),
 
 
 def get_trials_task(session_path, one):
+    # TODO this eventually needs to be updated for dynamic pipeline tasks
     pipeline = get_pipeline(session_path)
     if pipeline == 'training':
         from ibllib.pipes.training_preprocessing import TrainingTrials

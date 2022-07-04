@@ -45,14 +45,14 @@ def get_acquisition_description(protocol):
                 'probe01': {'collection': 'raw_ephys_data/probe01', 'sync_label': 'imec_sync'}
             },
             'microphone': {
-                'harp': {'collection': 'raw_behavior_data', 'sync_label': None}
+                'microphone': {'collection': 'raw_behavior_data', 'sync_label': None}
             },
             'tasks': {
-                'choice_world_training': {'collection': 'raw_behavior_data', 'sync_label': 'bpod', 'main': True},
-                'choice_world_passive': {'collection': 'raw_passive_data', 'sync_label': 'bpod', 'main': False},
+                'ephysChoiceWorld': {'collection': 'raw_behavior_data', 'sync_label': 'bpod', 'main': True},
+                'passiveChoiceWorld': {'collection': 'raw_passive_data', 'sync_label': 'bpod', 'main': False},
             },
             'sync': {
-                'nidq': {'collection': 'raw_ephys_data', 'extension': '.bin'}
+                'nidq': {'collection': 'raw_ephys_data', 'extension': '.bin', 'software': 'spikeglx'}
             },
             'procedures': ['Ephys recording with acute probe(s)'],
             'projects': ['ibl_neuropixel_brainwide_01']
@@ -66,7 +66,7 @@ def get_acquisition_description(protocol):
                 'xonar': {'collection': 'raw_behavior_data', 'sync_label': None}
             },
             'tasks': {
-                'choice_world_training': {'collection': 'raw_behavior_data', 'sync_label': 'bpod', 'main': True}
+                'trainingChoiceWorld': {'collection': 'raw_behavior_data', 'sync_label': 'bpod', 'main': True}
             },
             'sync': {
                 'bpod': {'collection': 'raw_behavior_data', 'extension': '.bin'}
@@ -126,18 +126,22 @@ def make_pipeline(session_path=None, **pkwargs):
         # -   choice_world_biased
         # -   choice_world_training
         # -   choice_world_habituation
-        if protocol == 'choice_world_habituation':
+        if 'habituation' in protocol:
             registration_class = btasks.HabituationRegisterRaw
             behaviour_class = btasks.HabituationTrialsBpod
             compute_status = False
-        elif protocol == 'choice_world_passive':
+        elif 'passiveChoiceWorld' in protocol:
             registration_class = btasks.PassiveRegisterRaw
             behaviour_class = btasks.PassiveTask
             compute_status = False
-        elif protocol in ['choice_world_training', 'choice_world_biased']:
+        elif sync_kwargs['sync'] == 'bpod':
             registration_class = btasks.TrialRegisterRaw
             behaviour_class = btasks.ChoiceWorldTrialsBpod
-            compute_status = False
+            compute_status = True
+        elif sync_kwargs['sync'] == 'nidq':
+            registration_class = btasks.TrialRegisterRaw
+            behaviour_class = btasks.ChoiceWorldTrialsFPGA
+            compute_status = True
         else:
             raise NotImplementedError
         tasks[f'RegisterRaw_{protocol}'] = type(f'RegisterRaw_{protocol}', (registration_class,), {})(**kwargs, **task_kwargs)
@@ -145,8 +149,7 @@ def make_pipeline(session_path=None, **pkwargs):
         tasks[f'Trials_{protocol}'] = type(f'Trials_{protocol}', (behaviour_class,), {})\
             (**kwargs, **sync_kwargs, **task_kwargs, parents=parents)
         if compute_status:
-            # TODO move this
-            tasks["Training Status"] = type("Training Status", (tpp.TrainingStatus,), {})\
+            tasks[f"TrainingStatus_{protocol}"] = type(f"TrainingStatus_{protocol}", (btasks.TrainingStatus,), {})\
                 (**kwargs, parents=[tasks[f'Trials_{protocol}']])
 
     # Ephys tasks
@@ -222,9 +225,9 @@ def make_pipeline(session_path=None, **pkwargs):
         (microphone, micro_kwargs), = acquisition_description['microphone'].items()
         micro_kwargs['device_collection'] = micro_kwargs.pop('collection')
         micro_kwargs['main_task_collection'] = sess_params.get_main_task_collection(acquisition_description)
-        if microphone == 'xonar':
+        if sync_kwargs['sync'] == 'bpod':
             tasks['AudioRegisterRaw'] = type('AudioRegisterRaw', (atasks.AudioSync,), {})(**kwargs, **micro_kwargs)
-        elif microphone == 'harp':
+        elif sync_kwargs['sync'] == 'nidq':
             tasks['AudioRegisterRaw'] = type('AudioRegisterRaw', (atasks.AudioCompress,), {})(**kwargs, **micro_kwargs)
 
     # Widefield tasks

@@ -88,7 +88,7 @@ class VideoSyncQc(base_tasks.VideoTask):
             signature['input_files'] += [('_spikeglx_sync.channels.npy', self.sync_collection, True),
                                          ('_spikeglx_sync.polarities.npy', self.sync_collection, True),
                                          ('_spikeglx_sync.times.npy', self.sync_collection, True),
-                                         ('daq.wiring.json', self.sync_collection, True)]
+                                         ('*.wiring.json', self.sync_collection, True)]
 
         return signature
 

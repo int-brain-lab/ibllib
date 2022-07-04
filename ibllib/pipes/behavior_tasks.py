@@ -4,7 +4,15 @@ from ibllib.io.extractors import bpod_trials
 from ibllib.qc.task_extractors import TaskQCExtractor
 from ibllib.qc.task_metrics import HabituationQC, TaskQC
 from ibllib.io.extractors.base import get_session_extractor_type
+from ibllib.io.extractors.ephys_fpga import extract_all
+from ibllib.pipes import training_status
 
+import one.alf.io as alfio
+from ibllib.plots.figures import BehaviourPlots
+import logging
+import traceback
+
+_logger = logging.getLogger('ibllib')
 
 class HabituationRegisterRaw(base_tasks.RegisterRawDataTask):
 
@@ -50,6 +58,7 @@ class HabituationTrialsBpod(base_tasks.DynamicTask):
         """
         Extracts an iblrig training session
         """
+        # TODO this doesn't use the self.collection in any way, always assumes data in raw_behavior_data, needs to be changed
         trials, wheel, output_files = bpod_trials.extract_all(self.session_path, save=True)
         if trials is None:
             return None
@@ -149,7 +158,7 @@ class ChoiceWorldTrialsBpod(base_tasks.DynamicTask):
                 ('_iblrig_encoderPositions.raw*', self.collection, True)],
             'output_files': [
                 ('*trials.goCueTrigger_times.npy', 'alf', True),
-                ('*trials.itiDuration.npy', 'alf', False),
+                ('*trials.stimOnTrigger_times.npy', 'alf', False),
                 ('*trials.table.pqt', 'alf', True),
                 ('*wheel.position.npy', 'alf', True),
                 ('*wheel.timestamps.npy', 'alf', True),
@@ -163,6 +172,7 @@ class ChoiceWorldTrialsBpod(base_tasks.DynamicTask):
         """
         Extracts an iblrig training session
         """
+        # TODO this doesn't use the self.collection in any way, always assumes data in raw_behavior_data, needs to be changed
         trials, wheel, output_files = bpod_trials.extract_all(self.session_path, save=True)
         if trials is None:
             return None
@@ -183,42 +193,37 @@ class ChoiceWorldTrialsBpod(base_tasks.DynamicTask):
         return output_files
 
 
-class TrainingTrialsFPGA(tasks.Task):
+class ChoiceWorldTrialsFPGA(base_tasks.DynamicTask):
     priority = 90
     level = 1
     force = False
-    signature = {
-        'input_files': [('_iblrig_taskData.raw.*', 'raw_behavior_data', True),
-                        ('_iblrig_taskSettings.raw.*', 'raw_behavior_data', True),
-                        ('_spikeglx_sync.channels.*', 'raw_ephys_data*', True),
-                        ('_spikeglx_sync.polarities.*', 'raw_ephys_data*', True),
-                        ('_spikeglx_sync.times.*', 'raw_ephys_data*', True),
-                        ('_iblrig_encoderEvents.raw*', 'raw_behavior_data', True),
-                        ('_iblrig_encoderPositions.raw*', 'raw_behavior_data', True),
-                        ('*wiring.json', 'raw_ephys_data*', False),
-                        ('*.meta', 'raw_ephys_data*', True)],
-        'output_files': [('*trials.choice.npy', 'alf', True),
-                         ('*trials.contrastLeft.npy', 'alf', True),
-                         ('*trials.contrastRight.npy', 'alf', True),
-                         ('*trials.feedbackType.npy', 'alf', True),
-                         ('*trials.feedback_times.npy', 'alf', True),
-                         ('*trials.firstMovement_times.npy', 'alf', True),
-                         ('*trials.goCueTrigger_times.npy', 'alf', True),
-                         ('*trials.goCue_times.npy', 'alf', True),
-                         ('*trials.intervals.npy', 'alf', True),
-                         ('*trials.intervals_bpod.npy', 'alf', True),
-                         ('*trials.itiDuration.npy', 'alf', False),
-                         ('*trials.probabilityLeft.npy', 'alf', True),
-                         ('*trials.response_times.npy', 'alf', True),
-                         ('*trials.rewardVolume.npy', 'alf', True),
-                         ('*trials.stimOff_times.npy', 'alf', True),
-                         ('*trials.stimOn_times.npy', 'alf', True),
-                         ('*wheel.position.npy', 'alf', True),
-                         ('*wheel.timestamps.npy', 'alf', True),
-                         ('*wheelMoves.intervals.npy', 'alf', True),
-                         ('*wheelMoves.peakAmplitude.npy', 'alf', True)]
-    }
 
+
+    @property
+    def signature(self):
+        signature = {
+            'input_files': [
+                ('_iblrig_taskData.raw.*', self.collection, True),
+                ('_iblrig_taskSettings.raw.*', self.collection, True),
+                ('_iblrig_encoderEvents.raw*', self.collection, True),
+                ('_iblrig_encoderPositions.raw*', self.collection, True),
+                ('_spikeglx_sync.channels.npy', self.sync_collection, True),
+                ('_spikeglx_sync.polarities.npy', self.sync_collection, True),
+                ('_spikeglx_sync.times.npy', self.sync_collection, True),
+                ('*wiring.json', self.sync_collection, False),
+                ('*.meta', self.sync_collection, True)],
+            'output_files': [
+                ('*trials.goCueTrigger_times.npy', 'alf', True),
+                ('*trials.intervals_bpod.npy', 'alf', False),
+                ('*trials.stimOff_times.npy', 'alf', False),
+                ('*trials.table.pqt', 'alf', True),
+                ('*wheel.position.npy', 'alf', True),
+                ('*wheel.timestamps.npy', 'alf', True),
+                ('*wheelMoves.intervals.npy', 'alf', True),
+                ('*wheelMoves.peakAmplitude.npy', 'alf', True)
+            ]
+        }
+        return signature
 
     def _behaviour_criterion(self):
         """
@@ -237,12 +242,9 @@ class TrainingTrialsFPGA(tasks.Task):
         )
 
     def _extract_behaviour(self):
-        sync_collection = self.kwargs.get('sync_collection', 'raw_ephys_data')
-        protocol_collection = self.kwargs.get('protocol_collection', 'raw_behavior_data')
-        dsets, out_files = ephys_fpga.extract_all(self.session_path, sync_collection, save=True)
+        dsets, out_files = extract_all(self.session_path, self.sync_collection, save=True)
 
         return dsets, out_files
-
 
     def _run(self, plot_qc=True):
         dsets, out_files = self._extract_behaviour()
@@ -252,6 +254,7 @@ class TrainingTrialsFPGA(tasks.Task):
 
         self._behaviour_criterion()
         # Run the task QC
+        # TODO this doesn't use the self.collection in any way, always assumes data in raw_behavior_data, needs to be changed
         qc = TaskQC(self.session_path, one=self.one, log=_logger)
         qc.extractor = TaskQCExtractor(self.session_path, lazy=True, one=qc.one)
         # Extract extra datasets required for QC
@@ -268,27 +271,30 @@ class TrainingTrialsFPGA(tasks.Task):
                 _ = plot_task.run()
                 self.plot_tasks.append(plot_task)
 
-            except BaseException:
+            except Exception:
                 _logger.error('Could not create Trials QC Plot')
                 _logger.error(traceback.format_exc())
                 self.status = -1
 
         return out_files
 
-    def get_signatures(self, **kwargs):
-        neuropixel_version = spikeglx.get_neuropixel_version_from_folder(self.session_path)
-        probes = spikeglx.get_probes_from_folder(self.session_path)
 
-        full_input_files = []
-        for sig in self.signature['input_files']:
-            if 'raw_ephys_data*' in sig[1]:
-                if neuropixel_version != '3A':
-                    full_input_files.append((sig[0], 'raw_ephys_data', sig[2]))
-                for probe in probes:
-                    full_input_files.append((sig[0], f'raw_ephys_data/{probe}', sig[2]))
-            else:
-                full_input_files.append(sig)
+class TrainingStatus(base_tasks.DynamicTask):
+    priority = 90
+    level = 1
+    force = False
+    signature = {
+        'input_files': [('_iblrig_taskData.raw.*', self.collection, True),
+                        ('_iblrig_taskSettings.raw.*', self.collection, True),
+                        ('*trials.table.pqt', 'alf', True)],
+        'output_files': []
+    }
 
-        self.input_files = full_input_files
-
-        self.output_files = self.signature['output_files']
+    def _run(self, upload=True):
+        """
+        Extracts training status for subject
+        """
+        df = training_status.get_latest_training_information(self.session_path, self.one)
+        training_status.make_plots(self.session_path, self.one, df=df, save=True, upload=upload)
+        output_files = []
+        return output_files
