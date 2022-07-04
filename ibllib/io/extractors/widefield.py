@@ -6,7 +6,7 @@ import shutil
 from pathlib import Path
 import pandas as pd
 
-import neurodsp as dsp
+from neurodsp.utils import sync_timestamps
 import ibllib.exceptions as err
 import ibllib.io.extractors.base as extractors_base
 from ibllib.io.extractors.ephys_fpga import get_sync_fronts, get_sync_and_chn_map
@@ -157,7 +157,7 @@ class Widefield(extractors_base.BaseExtractor):
         assert led.frame.is_monotonic_increasing
 
         # Get video meta data to check number of widefield frames
-        video_path = next(self.data_path.glob('imaging.frames.mov'))
+        video_path = next(self.data_path.glob('imaging.frames*.mov'))
         video_meta = get_video_meta(video_path)
 
         # 1st: Check for differences between video and led
@@ -177,7 +177,7 @@ class Widefield(extractors_base.BaseExtractor):
             raise ValueError('Sync mismatch')
 
         # If all okay, extract timestamps
-        fcn, drift, iled, ifpga = dsp.utils.sync_timestamps(led_times, fpga_led_up, return_indices=True)
+        fcn, drift, iled, ifpga = sync_timestamps(led_times, fpga_led_up, return_indices=True)
         _logger.debug(f'Widefield-FPGA clock drift: {drift} ppm')
         widefield_times = fcn(led_times)
         assert np.all(np.diff(widefield_times) > 0)
