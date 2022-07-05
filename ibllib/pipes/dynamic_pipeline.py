@@ -5,6 +5,7 @@ import ibllib.io.session_params as sess_params
 
 import ibllib.pipes.ephys_preprocessing as epp
 import ibllib.pipes.tasks as mtasks
+import ibllib.pipes.base_tasks as bstasks
 import ibllib.pipes.widefield_tasks as wtasks
 import ibllib.pipes.sync_tasks as stasks
 import ibllib.pipes.behavior_tasks as btasks
@@ -96,6 +97,10 @@ def make_pipeline(session_path=None, **pkwargs):
     acquisition_description = sess_params.read_params(session_path)
 
     kwargs = {'session_path': session_path}
+
+    # Registers the experiment description file
+    tasks['ExperimentDescriptionRegisterRaw'] = type('ExperimentDescriptionRegisterRaw',
+                                                     (bstasks.ExperimentDescriptionRegisterRaw,), {})(**kwargs)
 
     # Syncing tasks
     (sync, sync_args), = acquisition_description['sync'].items()

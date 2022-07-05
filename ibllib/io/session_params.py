@@ -1,5 +1,5 @@
 """
-Functions to load in information from session_params.yml file
+Functions to load in information from experiment.description.yaml file
 """
 from pathlib import Path
 import yaml
@@ -12,7 +12,7 @@ def read_params(session_path):
     :return: dictionary
     """
     session_path = Path(session_path)
-    yaml_file = session_path.joinpath('experiment_description.yaml') if session_path.is_dir() else session_path
+    yaml_file = session_path.joinpath('experiment.description.yaml') if session_path.is_dir() else session_path
     if not yaml_file.exists():
         return
 
@@ -20,7 +20,7 @@ def read_params(session_path):
         params = yaml.full_load(fid)
     return params
 
-# TODO test for this
+
 def get_cameras(sess_params):
     cameras = sess_params.get('cameras', None)
     return None if not cameras else list(cameras.keys())
@@ -87,7 +87,7 @@ def get_task_collection(sess_params):
 
 
 def get_device_collection(sess_params, device):
-    #TODO
+    # TODO
     return None
 
 

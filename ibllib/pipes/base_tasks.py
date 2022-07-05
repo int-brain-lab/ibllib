@@ -180,3 +180,13 @@ class RegisterRawDataTask(DynamicTask):  # TODO write test
             self.status = -1
 
         return out_files
+
+
+class ExperimentDescriptionRegisterRaw(RegisterRawDataTask):
+    @property
+    def signature(self):
+        signature = {
+            'input_files': [],
+            'output_files': [('experiment.description.yaml', '', True)]
+        }
+        return signature
