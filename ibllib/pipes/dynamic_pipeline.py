@@ -35,9 +35,9 @@ def get_acquisition_description(protocol):
     if protocol == 'choice_world_recording':   # canonical ephys
         acquisition_description = {  # this is the current ephys pipeline description
             'cameras': {
-                'right': {'collection': 'raw_video_data', 'sync_label': 'frame2ttl'},
-                'body': {'collection': 'raw_video_data', 'sync_label': 'frame2ttl'},
-                'left': {'collection': 'raw_video_data', 'sync_label': 'frame2ttl'},
+                'right': {'collection': 'raw_video_data', 'sync_label': 'audio'},
+                'body': {'collection': 'raw_video_data', 'sync_label': 'audio'},
+                'left': {'collection': 'raw_video_data', 'sync_label': 'audio'},
             },
             'neuropixel': {
                 'probe00': {'collection': 'raw_ephys_data/probe00', 'sync_label': 'imec_sync'},
@@ -47,8 +47,8 @@ def get_acquisition_description(protocol):
                 'microphone': {'collection': 'raw_behavior_data', 'sync_label': None}
             },
             'tasks': {
-                'ephysChoiceWorld': {'collection': 'raw_behavior_data', 'sync_label': 'bpod', 'main': True},
-                'passiveChoiceWorld': {'collection': 'raw_passive_data', 'sync_label': 'bpod', 'main': False},
+                'ephysChoiceWorld': {'collection': 'raw_behavior_data', 'sync_label': 'bpod'},
+                'passiveChoiceWorld': {'collection': 'raw_passive_data', 'sync_label': 'bpod'},
             },
             'sync': {
                 'nidq': {'collection': 'raw_ephys_data', 'extension': 'bin', 'acquisition_software': 'spikeglx'}
@@ -57,12 +57,13 @@ def get_acquisition_description(protocol):
             'projects': ['ibl_neuropixel_brainwide_01']
         }
     else:
+        # TODO make ordered dict
         acquisition_description = {  # this is the current ephys pipeline description
             'cameras': {
                 'left': {'collection': 'raw_video_data', 'sync_label': 'frame2ttl'},
             },
             'microphone': {
-                'xonar': {'collection': 'raw_behavior_data', 'sync_label': None}
+                'microphone': {'collection': 'raw_behavior_data', 'sync_label': None}
             },
             'tasks': {
                 'trainingChoiceWorld': {'collection': 'raw_behavior_data', 'sync_label': 'bpod', 'main': True}
@@ -120,6 +121,8 @@ def make_pipeline(session_path=None, **pkwargs):
         # ATM we don't have anything for this not sure it will be needed in the future
 
     # Behavior tasks
+    # TODO this is not doing at all what we were envisaging and going back to the old way of protocol linked to hardware
+    # TODO change at next iteration of dynamic pipeline, once we have the basic workflow working
     for protocol, task_info in acquisition_description.get('tasks', []).items():
         task_kwargs = {'protocol': protocol, 'collection': task_info['collection']}
         # -   choice_world_recording
@@ -205,13 +208,17 @@ def make_pipeline(session_path=None, **pkwargs):
     # Video tasks
     if 'cameras' in acquisition_description:
         video_kwargs = {'device_collection': 'raw_video_data',
-                        'cameras': list(acquisition_description['cameras'].keys()),
-                        'main_task_collection': sess_params.get_main_task_collection(acquisition_description)}
-
+                        'cameras': list(acquisition_description['cameras'].keys())}
         tasks[tn] = type((tn := 'VideoRegisterRaw'), (vtasks.VideoRegisterRaw,), {})(**kwargs, **video_kwargs)
         tasks[tn] = type((tn := 'VideoCompress'), (vtasks.VideoCompress,), {})(**kwargs, **video_kwargs)
-        tasks[tn] = type((tn := 'VideoSyncQC'), (vtasks.VideoSyncQc,), {})(
-            **kwargs, **video_kwargs, **sync_kwargs, parents=[tasks['VideoCompress']] + sync_tasks)
+
+        if sync == 'bpod':
+            collection = sess_params.get_task_collection(acquisition_description)
+            tasks[tn] = type((tn := 'VideoSyncQCBpod'), (vtasks.VideoSyncQcBpod,), {})(
+                **kwargs, **video_kwargs,**sync_kwargs, collection=collection, parents=[tasks['VideoCompress']])
+        elif sync == 'nidq':
+            tasks[tn] = type((tn := 'VideoSyncQCNidq'), (vtasks.VideoSyncQcNidq,), {})(
+                **kwargs, **video_kwargs, **sync_kwargs, parents=[tasks['VideoCompress']] + sync_tasks)
 
         if len(video_kwargs['cameras']) == 3:
             tasks[tn] = type((tn := 'DLC'), (epp.EphysDLC,), {})(
@@ -223,9 +230,9 @@ def make_pipeline(session_path=None, **pkwargs):
     if 'microphone' in acquisition_description:
         (microphone, micro_kwargs), = acquisition_description['microphone'].items()
         micro_kwargs['device_collection'] = micro_kwargs.pop('collection')
-        micro_kwargs['main_task_collection'] = sess_params.get_main_task_collection(acquisition_description)
         if sync_kwargs['sync'] == 'bpod':
-            tasks['AudioRegisterRaw'] = type('AudioRegisterRaw', (atasks.AudioSync,), {})(**kwargs, **sync_kwargs, **micro_kwargs)
+            tasks['AudioRegisterRaw'] = type('AudioRegisterRaw', (atasks.AudioSync,), {})\
+                (**kwargs, **sync_kwargs, **micro_kwargs, collection=collection)
         elif sync_kwargs['sync'] == 'nidq':
             tasks['AudioRegisterRaw'] = type('AudioRegisterRaw', (atasks.AudioCompress,), {})(**kwargs, **micro_kwargs)
 

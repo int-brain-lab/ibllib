@@ -24,58 +24,42 @@ class DynamicTask(Task):
         # Task collection (this needs to be specified in the task kwargs)
         self.collection = self.get_task_collection(kwargs.get('collection', None))
         # Task type (protocol)
-        self.protocol = self.get_protocol(self.collection, kwargs.get('protocol', None))
-        # Main task collection (for when task protocols are chained together)
-        self.main_task_collection = self.get_main_task_collection(kwargs.get('main_collection', None))  # TODO improve name
+        self.protocol = self.get_protocol(kwargs.get('protocol', None), task_collection=self.collection)
 
     def get_sync_collection(self, sync_collection=None):
 
-        params_sync_collection = sess_params.get_sync_collection(self.session_params)
-        return sync_collection if not params_sync_collection else params_sync_collection
+        return sync_collection if sync_collection else sess_params.get_sync_collection(self.session_params)
 
     def get_sync(self, sync=None):
 
-        params_sync = sess_params.get_sync_collection(self.session_params)
-        return sync if not params_sync else params_sync
+        return sync if sync else sess_params.get_sync(self.session_params)
+        # params_sync = sess_params.get_sync_collection(self.session_params)
+        # return sync if not params_sync else params_sync
 
     def get_sync_extension(self, sync_ext=None):
-
-        params_sync_ext = sess_params.get_sync_extension(self.session_params)
-        return sync_ext if not params_sync_ext else params_sync_ext
+        return sync_ext if sync_ext else sess_params.get_sync_extension(self.session_params)
+        # params_sync_ext = sess_params.get_sync_extension(self.session_params)
+        # return sync_ext if not params_sync_ext else params_sync_ext
 
     def get_sync_namespace(self, sync_namespace=None):
-        params_sync_namespace = sess_params.get_sync_namespace(self.session_params)
-        return sync_namespace if not params_sync_namespace else params_sync_namespace
+        return sync_namespace if sync_namespace else sess_params.get_sync_namespace(self.session_params)
+        # params_sync_namespace = sess_params.get_sync_namespace(self.session_params)
+        # return sync_namespace if not params_sync_namespace else params_sync_namespace
 
-    def get_task_collection(self, task_collection=None):
-        """
-        Finds the collection of
-        task_collection is a parameter that cannot be automatically inferred from the session_params file, e.g if two different
-        protocols are run in one session, we would need two BehaviorTrials task, one for each task protocol.
+    def get_protocol(self, protocol=None, task_collection=None):
+        return protocol if protocol else sess_params.get_task_protocol(self.session_params, task_collection)
+        # params_protocol = sess_params.get_task_protocol(self.session_params, task_collection)
+        # return protocol if not params_protocol else params_protocol
 
-        :param task_collection:
-        :return:
-        """
-        # Attempt to get from runtime_args embedded in task architecture
-        task_collection = self.kwargs.get('task_collection', task_collection)
-
-        if not task_collection:
-            task_collection = sess_params.get_main_task_collection(self.session_params)
-
-        return task_collection
-
-    def get_protocol(self, task_collection, protocol=None):
-        params_protocol = sess_params.get_task_protocol(self.session_params, task_collection)
-        return protocol if not params_protocol else params_protocol
-
-    def get_main_task_collection(self, main_task_collection=None):
-
-        params_main_task_collection = sess_params.get_main_task_collection(self.session_params)
-        return main_task_collection if not params_main_task_collection else params_main_task_collection
+    def get_task_collection(self, collection=None):
+        return collection if collection else sess_params.get_task_collection(self.session_params)
+        # params_task_collection = sess_params.get_task_collection(self.session_params)
+        # return collection if not params_task_collection else params_task_collection
 
     def get_device_collection(self, device, device_collection=None):
-        params_device_collection = sess_params.get_device_collection(self.session_params, device)
-        return device_collection if not params_device_collection else params_device_collection
+        return device_collection if device_collection else sess_params.get_device_collection(self.session_params, device)
+        # params_device_collection = sess_params.get_device_collection(self.session_params, device)
+        # return device_collection if not params_device_collection else params_device_collection
 
     def read_params_file(self):
         params = sess_params.read_params(self.session_path)
@@ -105,6 +89,7 @@ class AudioTask(DynamicTask):
     def __init__(self, session_path, **kwargs):
         super().__init__(session_path, **kwargs)
         self.device_collection = self.get_device_collection('microphone', kwargs.get('device_collection', 'raw_behavior_data'))
+
 
 
 class EphysTask(DynamicTask):
@@ -191,7 +176,7 @@ class RegisterRawDataTask(DynamicTask):  # TODO write test
             else:
                 out_files.append(file_path)
 
-        if len(out_files) != n_required:
+        if len(out_files) < n_required:
             self.status = -1
 
         return out_files

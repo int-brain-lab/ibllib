@@ -20,7 +20,7 @@ def read_params(session_path):
         params = yaml.full_load(fid)
     return params
 
-
+# TODO test for this
 def get_cameras(sess_params):
     cameras = sess_params.get('cameras', None)
     return None if not cameras else list(cameras.keys())
@@ -62,7 +62,6 @@ def get_sync_namespace(sess_params):
     return sync_details.get('acquisition_software', None)
 
 
-
 def get_task_protocol(sess_params, task_collection):
     protocols = sess_params.get('tasks', None)
     if not protocols:
@@ -76,17 +75,15 @@ def get_task_protocol(sess_params, task_collection):
         return protocol
 
 
-def get_main_task_collection(sess_params):
+def get_task_collection(sess_params):
     protocols = sess_params.get('tasks', None)
     if not protocols:
         return None
+    elif len(protocols) > 1:
+        return 'raw_behavior_data'
     else:
-        main_task_collection = None
-        for prot, details in sess_params.get('tasks').items():
-            if details.get('main'):
-                main_task_collection = details.get('collection', None)
-
-        return main_task_collection
+        (prot, details), = sess_params.get('tasks')
+        return details['collection']
 
 
 def get_device_collection(sess_params, device):
