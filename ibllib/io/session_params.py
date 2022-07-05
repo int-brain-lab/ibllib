@@ -31,7 +31,7 @@ def get_sync(sess_params):
     if not sync:
         return None
     else:
-        (sync, _) = sync.items()
+        (sync, _), = sync.items()
     return sync
 
 
@@ -82,8 +82,8 @@ def get_task_collection(sess_params):
     elif len(protocols) > 1:
         return 'raw_behavior_data'
     else:
-        (prot, details), = sess_params.get('tasks')
-        return details['collection']
+        for prot, details in protocols.items():
+            return details['collection']
 
 
 def get_device_collection(sess_params, device):

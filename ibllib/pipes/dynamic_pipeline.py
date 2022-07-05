@@ -214,17 +214,17 @@ def make_pipeline(session_path=None, **pkwargs):
 
         if sync == 'bpod':
             collection = sess_params.get_task_collection(acquisition_description)
-            tasks[tn] = type((tn := 'VideoSyncQCBpod'), (vtasks.VideoSyncQcBpod,), {})(
-                **kwargs, **video_kwargs,**sync_kwargs, collection=collection, parents=[tasks['VideoCompress']])
+            tasks[tn] = type((tn := f'VideoSyncQC_{sync}'), (vtasks.VideoSyncQcBpod,), {})(
+                **kwargs, **video_kwargs, **sync_kwargs, collection=collection, parents=[tasks['VideoCompress']])
         elif sync == 'nidq':
-            tasks[tn] = type((tn := 'VideoSyncQCNidq'), (vtasks.VideoSyncQcNidq,), {})(
+            tasks[tn] = type((tn := f'VideoSyncQC_{sync}'), (vtasks.VideoSyncQcNidq,), {})(
                 **kwargs, **video_kwargs, **sync_kwargs, parents=[tasks['VideoCompress']] + sync_tasks)
 
         if len(video_kwargs['cameras']) == 3:
             tasks[tn] = type((tn := 'DLC'), (epp.EphysDLC,), {})(
                 **kwargs, parents=[tasks['VideoCompress']])
             tasks['PostDLC'] = type('PostDLC', (epp.EphysPostDLC,), {})(
-                **kwargs, parents=[tasks['DLC'], tasks['VideoSyncQC']])
+                **kwargs, parents=[tasks['DLC'], tasks[f'VideoSyncQC_{sync}']])
 
     # Audio tasks
     if 'microphone' in acquisition_description:
