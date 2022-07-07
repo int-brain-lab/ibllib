@@ -72,7 +72,7 @@ def wiggle(w, fs=1, gain=0.71, color='k', ax=None, fill=True, linewidth=0.5, t0=
 
 
 class Density:
-    def __init__(self, w, fs=1, cmap='bone', ax=None, taxis=0, title=None, **kwargs):
+    def __init__(self, w, fs=1, cmap='Greys_r', ax=None, taxis=0, title=None, **kwargs):
         """
         Matplotlib display of traces as a density display
 

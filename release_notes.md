@@ -1,4 +1,7 @@
 ## Release Notes 2.13
+## Release Notes 2.13.4 2022-07-07
+- Hotfix: Density displays had unexisting colormaps in snapshots QC tasks
+
 ## Release Notes 2.13.3 2022-07-01
 - Hotfix: fix previous hotfix with incorrect package version number
 
