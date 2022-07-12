@@ -744,6 +744,3 @@ def load_sync(session_path, sync_collection):
     sync = alfio.load_object(session_path.joinpath(sync_collection), 'sync', namespace='spikeglx', short_keys=True)
 
     return sync
-
-
-

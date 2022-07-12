@@ -22,7 +22,8 @@ def read_params(session_path):
 
 
 def get_cameras(sess_params):
-    cameras = sess_params.get('cameras', None)
+    devices = sess_params.get('devices', {})
+    cameras = devices.get('cameras', None)
     return None if not cameras else list(cameras.keys())
 
 
@@ -49,7 +50,7 @@ def get_sync_extension(sess_params):
     if not sync:
         return None
     else:
-        (_, sync_details),  = sync.items()
+        (_, sync_details), = sync.items()
     return sync_details.get('extension', None)
 
 
@@ -58,7 +59,7 @@ def get_sync_namespace(sess_params):
     if not sync:
         return None
     else:
-        (_, sync_details),  = sync.items()
+        (_, sync_details), = sync.items()
     return sync_details.get('acquisition_software', None)
 
 
@@ -89,5 +90,3 @@ def get_task_collection(sess_params):
 def get_device_collection(sess_params, device):
     # TODO
     return None
-
-

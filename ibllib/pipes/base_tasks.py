@@ -91,7 +91,6 @@ class AudioTask(DynamicTask):
         self.device_collection = self.get_device_collection('microphone', kwargs.get('device_collection', 'raw_behavior_data'))
 
 
-
 class EphysTask(DynamicTask):
 
     def __init__(self, session_path, **kwargs):

@@ -17,7 +17,6 @@ import ibllib.tests.fixtures.utils as fu
 from ibllib.pipes import misc
 from ibllib.tests import TEST_DB
 import ibllib.pipes.scan_fix_passive_files as fix
-from ibllib.pipes import widefield_tasks
 
 
 class TestExtractors2Tasks(unittest.TestCase):

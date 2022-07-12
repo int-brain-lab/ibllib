@@ -1,4 +1,4 @@
-from ibllib.pipes import base_tasks, tasks
+from ibllib.pipes import base_tasks
 from ibllib.io.extractors.ephys_passive import PassiveChoiceWorld
 from ibllib.io.extractors import bpod_trials
 from ibllib.qc.task_extractors import TaskQCExtractor
@@ -13,6 +13,7 @@ import logging
 import traceback
 
 _logger = logging.getLogger('ibllib')
+
 
 class HabituationRegisterRaw(base_tasks.RegisterRawDataTask):
 
@@ -202,7 +203,6 @@ class ChoiceWorldTrialsNidq(base_tasks.DynamicTask):
     priority = 90
     level = 1
     force = False
-
 
     @property
     def signature(self):
