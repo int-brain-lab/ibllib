@@ -34,12 +34,12 @@ class WidefieldRegisterRaw(tasks.Task):
     signature = {
         'input_files': [('dorsal_cortex_landmarks.json', 'raw_widefield_data', False),
                         ('*.camlog', 'raw_widefield_data', True),
-                        ('widefield_wiring.csv', 'raw_widefield_data', False),
+                        ('widefield_wiring.htsv', 'raw_widefield_data', False),
                         ('*.meta', 'raw_widefield_data', False),
                         ('labcams_configuration.json', 'raw_widefield_data', False)],
         'output_files': [('widefieldLandmarks.dorsalCortex.json', 'alf/widefield', True),
                          ('widefieldEvents.raw.camlog', 'raw_widefield_data', True),
-                         ('widefieldChannels.wiring.csv', 'raw_widefield_data', False),
+                         ('widefieldChannels.wiring.htsv', 'raw_widefield_data', False),
                          ('widefield.raw.nidq.meta', 'raw_widefield_data', False),
                          ('widefield.raw.nidq.wiring.json', 'raw_widefield_data', False)]
     }
@@ -310,7 +310,7 @@ class WidefieldSync(tasks.Task):
                         ('_spikeglx_sync.times*.npy', 'raw_ephys_data*', True)],
         'output_files': [('imaging.times.npy', 'alf/widefield', True),
                          ('widefield.widefieldLightSource.npy', 'alf', True),
-                         ('widefieldLightSource.properties.csv', 'alf', True)]
+                         ('widefieldLightSource.properties.htsv', 'alf', True)]
     }
 
     def _run(self):
