@@ -1,3 +1,6 @@
+## Release Notes 2.14
+- session registration procedures and projects, only add a couple of field in the json by default
+
 ## Release Notes 2.13
 ## Release Notes 2.13.0 PRERELEASE
 - Deprecated ibllib.version

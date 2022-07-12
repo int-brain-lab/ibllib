@@ -30,7 +30,7 @@ class WidefieldRegisterRaw(base_tasks.WidefieldTask, base_tasks.RegisterRawDataT
             'input_files': [('dorsal_cortex_landmarks.json', self.device_collection, False),
                             ('*.camlog', self.device_collection, True),
                             ('widefield_wiring.htsv', self.device_collection, False)],
-            'output_files': [('widefieldLandmarks.dorsalCortex.json', 'alf/widefield', True),
+            'output_files': [('widefieldLandmarks.dorsalCortex.json', 'alf/widefield', False),
                              ('widefieldEvents.raw.camlog', self.device_collection, True),
                              ('widefieldChannels.wiring.htsv', self.device_collection, False)]
         }

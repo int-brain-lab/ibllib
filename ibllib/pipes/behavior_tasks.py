@@ -1,4 +1,4 @@
-from ibllib.pipes import base_tasks, tasks
+from ibllib.pipes import base_tasks
 from ibllib.io.extractors.ephys_passive import PassiveChoiceWorld
 from ibllib.io.extractors import bpod_trials
 from ibllib.qc.task_extractors import TaskQCExtractor
@@ -14,6 +14,7 @@ import traceback
 
 _logger = logging.getLogger('ibllib')
 
+
 class HabituationRegisterRaw(base_tasks.RegisterRawDataTask):
 
     @property
@@ -23,7 +24,12 @@ class HabituationRegisterRaw(base_tasks.RegisterRawDataTask):
             'output_files': [
                 ('_iblrig_taskData.raw.*', self.collection, True),
                 ('_iblrig_taskSettings.raw.*', self.collection, True),
-                ('_iblrig_encoderEvents.raw*', self.collection, True),
+                ('_iblrig_encoderEvents.raw*', self.collection, False),
+                ('_iblrig_encoderPositions.raw*', self.collection, False),
+                ('_iblrig_encoderTrialInfo.raw*', self.collection, False),
+                ('_iblrig_stimPositionScreen.raw*', self.collection, False),
+                ('_iblrig_syncSquareUpdate.raw*', self.collection, False),
+                ('_iblrig_ambientSensorData.raw*', self.collection, False)
             ]
         }
         return signature
@@ -54,7 +60,7 @@ class HabituationTrialsBpod(base_tasks.DynamicTask):
         }
         return signature
 
-    def _run(self):
+    def _run(self, update=True):
         """
         Extracts an iblrig training session
         """
@@ -68,7 +74,7 @@ class HabituationTrialsBpod(base_tasks.DynamicTask):
         # Compile task data for QC
         qc = HabituationQC(self.session_path, one=self.one)
         qc.extractor = TaskQCExtractor(self.session_path, one=self.one)
-        qc.run(update=True)
+        qc.run(update=update)
         return output_files
 
 
@@ -81,12 +87,12 @@ class TrialRegisterRaw(base_tasks.RegisterRawDataTask):
             'output_files': [
                 ('_iblrig_taskData.raw.*', self.collection, True),
                 ('_iblrig_taskSettings.raw.*', self.collection, True),
-                ('_iblrig_encoderEvents.raw*', self.collection, True),
-                ('_iblrig_encoderPositions.raw*', self.collection, True),
-                ('_iblrig_encoderTrialInfo.raw*', self.collection, True),
-                ('_iblrig_stimPositionScreen.raw*', self.collection, True),
-                ('_iblrig_syncSquareUpdate.raw*', self.collection, True),
-                ('_iblrig_ambientSensorData.raw*', self.collection, True)
+                ('_iblrig_encoderEvents.raw*', self.collection, False),
+                ('_iblrig_encoderPositions.raw*', self.collection, False),
+                ('_iblrig_encoderTrialInfo.raw*', self.collection, False),
+                ('_iblrig_stimPositionScreen.raw*', self.collection, False),
+                ('_iblrig_syncSquareUpdate.raw*', self.collection, False),
+                ('_iblrig_ambientSensorData.raw*', self.collection, False)
             ]
         }
         return signature
@@ -120,9 +126,9 @@ class PassiveTask(base_tasks.DynamicTask):
         signature = {
             'input_files': [('_iblrig_taskSettings.raw*', self.collection, True),
                             ('_iblrig_RFMapStim.raw*', self.collection, True),
-                            ('_spikeglx_sync.channels.*', self.sync_collection, True),
-                            ('_spikeglx_sync.polarities.*', self.sync_collection, True),
-                            ('_spikeglx_sync.times.*', self.sync_collection, True),
+                            (f'_{self.sync_namespace}_sync.channels.*', self.sync_collection, True),
+                            (f'_{self.sync_namespace}_sync.polarities.*', self.sync_collection, True),
+                            (f'_{self.sync_namespace}_sync.times.*', self.sync_collection, True),
                             ('*.wiring.json', self.sync_collection, False),
                             ('*.meta', self.sync_collection, False)],
             'output_files': [('_ibl_passiveGabor.table.csv', 'alf', True),
@@ -168,7 +174,7 @@ class ChoiceWorldTrialsBpod(base_tasks.DynamicTask):
         }
         return signature
 
-    def _run(self):
+    def _run(self, update=True):
         """
         Extracts an iblrig training session
         """
@@ -189,15 +195,14 @@ class ChoiceWorldTrialsBpod(base_tasks.DynamicTask):
             qc.extractor = TaskQCExtractor(self.session_path, one=self.one)
             qc.extractor.wheel_encoding = 'X1'
         # Aggregate and update Alyx QC fields
-        qc.run(update=True)
+        qc.run(update=update)
         return output_files
 
 
-class ChoiceWorldTrialsFPGA(base_tasks.DynamicTask):
+class ChoiceWorldTrialsNidq(base_tasks.DynamicTask):
     priority = 90
     level = 1
     force = False
-
 
     @property
     def signature(self):
@@ -207,9 +212,9 @@ class ChoiceWorldTrialsFPGA(base_tasks.DynamicTask):
                 ('_iblrig_taskSettings.raw.*', self.collection, True),
                 ('_iblrig_encoderEvents.raw*', self.collection, True),
                 ('_iblrig_encoderPositions.raw*', self.collection, True),
-                ('_spikeglx_sync.channels.npy', self.sync_collection, True),
-                ('_spikeglx_sync.polarities.npy', self.sync_collection, True),
-                ('_spikeglx_sync.times.npy', self.sync_collection, True),
+                (f'_{self.sync_namespace}_sync.channels.npy', self.sync_collection, True),
+                (f'_{self.sync_namespace}_sync.polarities.npy', self.sync_collection, True),
+                (f'_{self.sync_namespace}_sync.times.npy', self.sync_collection, True),
                 ('*wiring.json', self.sync_collection, False),
                 ('*.meta', self.sync_collection, True)],
             'output_files': [
@@ -225,7 +230,7 @@ class ChoiceWorldTrialsFPGA(base_tasks.DynamicTask):
         }
         return signature
 
-    def _behaviour_criterion(self):
+    def _behaviour_criterion(self, update=True):
         """
         Computes and update the behaviour criterion on Alyx
         """
@@ -236,23 +241,24 @@ class ChoiceWorldTrialsFPGA(base_tasks.DynamicTask):
             n_trials=trials["intervals"].shape[0],
             perf_easy=training.compute_performance_easy(trials),
         )
-        eid = self.one.path2eid(self.session_path, query_type='remote')
-        self.one.alyx.json_field_update(
-            "sessions", eid, "extended_qc", {"behavior": int(good_enough)}
-        )
+        if update:
+            eid = self.one.path2eid(self.session_path, query_type='remote')
+            self.one.alyx.json_field_update(
+                "sessions", eid, "extended_qc", {"behavior": int(good_enough)}
+            )
 
     def _extract_behaviour(self):
         dsets, out_files = extract_all(self.session_path, self.sync_collection, save=True)
 
         return dsets, out_files
 
-    def _run(self, plot_qc=True):
+    def _run(self, update=True, plot_qc=True):
         dsets, out_files = self._extract_behaviour()
 
         if not self.one or self.one.offline:
             return out_files
 
-        self._behaviour_criterion()
+        self._behaviour_criterion(update=update)
         # Run the task QC
         # TODO this doesn't use the self.collection in any way, always assumes data in raw_behavior_data, needs to be changed
         qc = TaskQC(self.session_path, one=self.one, log=_logger)
@@ -261,7 +267,7 @@ class ChoiceWorldTrialsFPGA(base_tasks.DynamicTask):
         qc.extractor.data = dsets
         qc.extractor.extract_data()
         # Aggregate and update Alyx QC fields
-        qc.run(update=True)
+        qc.run(update=update)
 
         if plot_qc:
             _logger.info("Creating Trials QC plots")
@@ -283,12 +289,17 @@ class TrainingStatus(base_tasks.DynamicTask):
     priority = 90
     level = 1
     force = False
-    signature = {
-        'input_files': [('_iblrig_taskData.raw.*', self.collection, True),
-                        ('_iblrig_taskSettings.raw.*', self.collection, True),
-                        ('*trials.table.pqt', 'alf', True)],
-        'output_files': []
-    }
+
+    @property
+    def signature(self):
+        signature = {
+            'input_files': [
+                ('_iblrig_taskData.raw.*', self.collection, True),
+                ('_iblrig_taskSettings.raw.*', self.collection, True),
+                ('*trials.table.pqt', 'alf', True)],
+            'output_files': []
+        }
+        return signature
 
     def _run(self, upload=True):
         """

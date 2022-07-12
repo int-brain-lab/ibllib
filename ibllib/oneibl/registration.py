@@ -274,7 +274,8 @@ class RegistrationClient:
         # unless specified label the session procedures with task protocol lookup
         procedures = procedures if procedures else _alyx_procedure_from_task(task_protocol)
         procedures = [procedures] if isinstance(procedures, str) else procedures
-
+        json_fields_names = ['IS_MOCK', 'POOP_COUNT', 'IBLRIG_VERSION']
+        json_field = {f: md[f] for f in json_fields_names if f in md}
         if not session:
             ses_ = {'subject': subject['nickname'],
                     'users': [username],
@@ -289,7 +290,7 @@ class RegistrationClient:
                     'end_time': ibllib.time.date2isostr(end_time) if end_time else None,
                     'n_correct_trials': n_correct_trials,
                     'n_trials': n_trials,
-                    'json': md,
+                    'json': json_field,
                     }
             session = self.one.alyx.rest('sessions', 'create', data=ses_)
             if md['SUBJECT_WEIGHT']:

@@ -22,11 +22,12 @@ class VideoRegisterRaw(base_tasks.VideoTask, base_tasks.RegisterRawDataTask):
     def signature(self):
         signature = {
             'input_files': [],
-            'output_files': [(f'_iblrig_{cam}Camera.timestamps*', self.device_collection, True) for cam in self.cameras] +
-                            [(f'_iblrig_{cam}Camera.GPIO.bin', self.device_collection, False) for cam in self.cameras] +
-                            [(f'_iblrig_{cam}Camera.frame_counter.bin', self.device_collection, False) for cam in self.cameras] +
-                            [(f'_iblrig_{cam}Camera.frameData.bin', self.device_collection, False) for cam in self.cameras] +
-                            [('_iblrig_videoCodeFiles.raw*', self.device_collection, False)]
+            'output_files':
+                [(f'_iblrig_{cam}Camera.timestamps*', self.device_collection, True) for cam in self.cameras] +
+                [(f'_iblrig_{cam}Camera.GPIO.bin', self.device_collection, False) for cam in self.cameras] +
+                [(f'_iblrig_{cam}Camera.frame_counter.bin', self.device_collection, False) for cam in self.cameras] +
+                [(f'_iblrig_{cam}Camera.frameData.bin', self.device_collection, False) for cam in self.cameras] +
+                [('_iblrig_videoCodeFiles.raw*', self.device_collection, False)]
         }
         return signature
 
@@ -60,7 +61,7 @@ class VideoCompress(base_tasks.VideoTask):
         return output_files
 
 
-class VideoSyncQc(base_tasks.VideoTask):
+class VideoSyncQcBpod(base_tasks.VideoTask):
     """
     Task to sync camera timestamps to main DAQ timestamps
     N.B Signatures only reflect new daq naming convention, non compatible with ephys when not running on server
@@ -77,18 +78,57 @@ class VideoSyncQc(base_tasks.VideoTask):
                            [(f'_iblrig_{cam}Camera.GPIO.bin', self.device_collection, False) for cam in self.cameras] +
                            [(f'_iblrig_{cam}Camera.frame_counter.bin', self.device_collection, False) for cam in self.cameras] +
                            [(f'_iblrig_{cam}Camera.frameData.bin', self.device_collection, False) for cam in self.cameras] +
-                           [('_iblrig_taskData.raw.*', self.main_task_collection, True),
-                            ('_iblrig_taskSettings.raw.*', self.main_task_collection, True),
+                           [('_iblrig_taskData.raw.*', self.collection, True),
+                            ('_iblrig_taskSettings.raw.*', self.collection, True),
                             ('*wheel.position.npy', 'alf', False),
                             ('*wheel.timestamps.npy', 'alf', False)],
             'output_files': [(f'_ibl_{cam}Camera.times.npy', 'alf', True) for cam in self.cameras]
         }
 
-        if self.sync == 'nidq':
-            signature['input_files'] += [('_spikeglx_sync.channels.npy', self.sync_collection, True),
-                                         ('_spikeglx_sync.polarities.npy', self.sync_collection, True),
-                                         ('_spikeglx_sync.times.npy', self.sync_collection, True),
-                                         ('*.wiring.json', self.sync_collection, True)]
+        return signature
+
+    def _run(self, **kwargs):
+
+        mp4_files = self.session_path.joinpath(self.device_collection).rglob('*.mp4')
+        labels = [label_from_path(x) for x in mp4_files]
+
+        # Video timestamps extraction
+        output_files = []
+        data, files = camera.extract_all(self.session_path, sync_type=self.sync, sync_collection=self.sync_collection,
+                                         save=True, labels=labels)
+        output_files.extend(files)
+
+        # Video QC
+        run_camera_qc(self.session_path, update=True, one=self.one, cameras=labels)
+
+        return output_files
+
+
+class VideoSyncQcNidq(base_tasks.VideoTask):
+    """
+    Task to sync camera timestamps to main DAQ timestamps
+    N.B Signatures only reflect new daq naming convention, non compatible with ephys when not running on server
+    """
+    priority = 40
+    level = 2
+    force = False
+
+    @property
+    def signature(self):
+        signature = {
+            'input_files': [(f'_iblrig_{cam}Camera.raw.mp4', self.device_collection, True) for cam in self.cameras] +
+                           [(f'_iblrig_{cam}Camera.timestamps*', self.device_collection, False) for cam in self.cameras] +
+                           [(f'_iblrig_{cam}Camera.GPIO.bin', self.device_collection, False) for cam in self.cameras] +
+                           [(f'_iblrig_{cam}Camera.frame_counter.bin', self.device_collection, False) for cam in self.cameras] +
+                           [(f'_iblrig_{cam}Camera.frameData.bin', self.device_collection, False) for cam in self.cameras] +
+                           [(f'_{self.sync_namespace}_sync.channels.npy', self.sync_collection, True),
+                            (f'_{self.sync_namespace}_sync.polarities.npy', self.sync_collection, True),
+                            (f'_{self.sync_namespace}_sync.times.npy', self.sync_collection, True),
+                            ('*.wiring.json', self.sync_collection, True),
+                            ('*wheel.position.npy', 'alf', False),
+                            ('*wheel.timestamps.npy', 'alf', False)],
+            'output_files': [(f'_ibl_{cam}Camera.times.npy', 'alf', True) for cam in self.cameras]
+        }
 
         return signature
 

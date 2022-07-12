@@ -71,7 +71,7 @@ class CameraTimestampsFPGA(BaseExtractor):
         _logger.setLevel(self._log_level)
 
     def _extract(self, sync=None, chmap=None, video_path=None,
-                 display=False, extrapolate_missing=True):
+                 display=False, extrapolate_missing=True, **kwargs):
         """
         The raw timestamps are taken from the FPGA. These are the times of the camera's frame TTLs.
         If the pin state file exists, these timestamps are aligned to the video frames using the

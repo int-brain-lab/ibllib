@@ -17,7 +17,6 @@ import ibllib.tests.fixtures.utils as fu
 from ibllib.pipes import misc
 from ibllib.tests import TEST_DB
 import ibllib.pipes.scan_fix_passive_files as fix
-from ibllib.pipes import widefield_tasks
 
 
 class TestExtractors2Tasks(unittest.TestCase):
@@ -617,34 +616,6 @@ class TestMultiPartsRecordings(unittest.TestCase):
                     assert len(d['files']) == 4
         assert len(recordings['probe00']) == 4
         assert len(recordings['probe01']) == 4
-
-
-class TestWidefieldPipeline(unittest.TestCase):
-    raw_files = [
-        'dorsal_cortex_landmarks.json',
-        'fakemouse_SpatialSparrow_19000101_182010.camlog',
-        'fakemouse_SpatialSparrow_19000101_182010_2_540_640_uint16-002.dat'
-    ]
-
-    def setUp(self):
-        self.tmp_dir = tempfile.TemporaryDirectory()
-        self.addCleanup(self.tmp_dir.cleanup)
-        self.session_path = fu.create_fake_session_folder(
-            self.tmp_dir.name, lab='fakelab', mouse='fakemouse', date='1900-01-01', num='001')
-        self.widefield_path = self.session_path.joinpath('raw_widefield_data')
-        self.widefield_path.mkdir()
-        for file in self.raw_files:
-            self.widefield_path.joinpath(file).touch()
-        # one = ONE(**TEST_DB)
-
-    def test_rename_files(self):
-        success = widefield_tasks.rename_files(self.session_path)
-        self.assertTrue(success)
-        # Check symlinks created
-        for x in self.raw_files:
-            file = self.widefield_path.joinpath(x)
-            self.assertTrue(file.exists() and file.is_symlink())
-        self.assertEqual(len(list(self.widefield_path.glob('*.*.*'))), 3)
 
 
 if __name__ == "__main__":

@@ -33,7 +33,7 @@ class TestWidefieldExtractor(unittest.TestCase):
 
         for fname in self.wf.save_names:
             if fname:
-                assert self.session_path.joinpath('alf', fname).exists()
+                assert self.session_path.joinpath('alf/widefield', fname).exists()
 
     def test_remove_files(self):
         """

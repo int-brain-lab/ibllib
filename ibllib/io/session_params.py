@@ -1,5 +1,5 @@
 """
-Functions to load in information from session_params.yml file
+Functions to load in information from experiment.description.yaml file
 """
 from pathlib import Path
 import yaml
@@ -12,7 +12,7 @@ def read_params(session_path):
     :return: dictionary
     """
     session_path = Path(session_path)
-    yaml_file = session_path.joinpath('experiment_description.yaml') if session_path.is_dir() else session_path
+    yaml_file = session_path.joinpath('experiment.description.yaml') if session_path.is_dir() else session_path
     if not yaml_file.exists():
         return
 
@@ -22,7 +22,8 @@ def read_params(session_path):
 
 
 def get_cameras(sess_params):
-    cameras = sess_params.get('cameras', None)
+    devices = sess_params.get('devices', {})
+    cameras = devices.get('cameras', None)
     return None if not cameras else list(cameras.keys())
 
 
@@ -31,7 +32,7 @@ def get_sync(sess_params):
     if not sync:
         return None
     else:
-        (sync, _) = sync.items()
+        (sync, _), = sync.items()
     return sync
 
 
@@ -49,7 +50,7 @@ def get_sync_extension(sess_params):
     if not sync:
         return None
     else:
-        (_, sync_details),  = sync.items()
+        (_, sync_details), = sync.items()
     return sync_details.get('extension', None)
 
 
@@ -58,9 +59,8 @@ def get_sync_namespace(sess_params):
     if not sync:
         return None
     else:
-        (_, sync_details),  = sync.items()
+        (_, sync_details), = sync.items()
     return sync_details.get('acquisition_software', None)
-
 
 
 def get_task_protocol(sess_params, task_collection):
@@ -76,21 +76,17 @@ def get_task_protocol(sess_params, task_collection):
         return protocol
 
 
-def get_main_task_collection(sess_params):
+def get_task_collection(sess_params):
     protocols = sess_params.get('tasks', None)
     if not protocols:
         return None
+    elif len(protocols) > 1:
+        return 'raw_behavior_data'
     else:
-        main_task_collection = None
-        for prot, details in sess_params.get('tasks').items():
-            if details.get('main'):
-                main_task_collection = details.get('collection', None)
-
-        return main_task_collection
+        for prot, details in protocols.items():
+            return details['collection']
 
 
 def get_device_collection(sess_params, device):
-    #TODO
+    # TODO
     return None
-
-
