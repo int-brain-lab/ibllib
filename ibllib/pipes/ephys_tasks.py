@@ -575,11 +575,6 @@ class SpikeSorting(base_tasks.EphysTask):
             raise RuntimeError(f"{self.SPIKE_SORTER_NAME} {info_str}, {error_str}")
 
         shutil.copytree(temp_dir.joinpath('output'), sorter_dir, dirs_exist_ok=True)
-
-        # TODO need to figure this out
-        for qcfile in temp_dir.glob('_iblqc_*AP*'):
-            shutil.move(qcfile, ap_file.parent.joinpath(qcfile.name))
-
         shutil.rmtree(temp_dir, ignore_errors=True)
 
         return sorter_dir
