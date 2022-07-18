@@ -383,7 +383,7 @@ def filter_units(units_b, t, **kwargs):
             filt_units = filt_units[filt_idxs]
     return filt_units.astype(int)
 
-
+# ----------- Start of trial event averaging functions -----------
 def event_timing_by_trial_type(eid):
   """
   Returns trial timing dataframes for all, left correct, left incorrect,
@@ -456,7 +456,8 @@ def append_session_wheel_movements(wheel_times, pos, trdf,
     >>> import brainbox.behavior.wheel as wh
     >>> eid = "0802ced5-33a3-405e-8336-b65ebc5cb07c"
     >>> freq = 1000
-    >>> wheel = one.load_object(eid, 'wheel', collection='alf', attribute=['position', 'timestamps'])
+    >>> wheel = one.load_object(eid, 'wheel', collection='alf',
+    >>>                                       attribute=['position', 'timestamps'])
     >>> pos, times = wh.interpolate_position(wheel.timestamps, wheel.position, freq=freq)
     >>> all_trials_df = bbone.load_trials_df(eid, maxlen=2.0, t_before=0.6, t_after=0.6,
     >>>                                       wheel_binsize=0.02, ret_abswheel=False,
@@ -575,7 +576,8 @@ def avg_event_timings(eids, data_path, event_names, one, show_errors=True):
                                            wheel_binsize=0.02, ret_abswheel=False,
                                            ret_wheel=True)
       if "first_wheel_move" in event_names:
-        wheel = one.load_object(eid, 'wheel', collection='alf', attribute=['position', 'timestamps'])
+        wheel = one.load_object(eid, 'wheel', collection='alf',
+                                              attribute=['position', 'timestamps'])
         pos, t = wh.interpolate_position(wheel.timestamps, wheel.position, freq=1000)
         all_trials_df = append_session_wheel_movements(t, pos, all_trials_df)
       _, normalized_time = avg_session_event_timings(all_trials_df, event_names)
@@ -622,7 +624,8 @@ def causal_gaussian_smoothing(data, num_pts_from_center=21, sigma=1.5):
     >>> spike_binsize = 0.01
     >>> st = spikes["times"]
     >>> clu = spikes["clusters"]
-    >>> rates, times, clusters = bincount2D(st, clu, spike_binsize) # rates in spikes per 0.01 second
+    # rates in spikes per 0.01 second
+    >>> rates, times, clusters = bincount2D(st, clu, spike_binsize)
     >>> smoothed_rates = np.zeros(rates.shape)
     >>> for clu_num in len(range(rates)):
     >>>  smoothed_rates[clu_num] = causal_gaussian_smoothing(rates[clu_num])
@@ -667,7 +670,8 @@ def avg_trial_firing_rates_in_window(rates, times, window_start_times, window_en
     >>>  spike_binsize = 0.01
     >>> st = spikes["times"]
     >>> clu = spikes["clusters"]
-    >>> rates, times, clusters = bincount2D(st, clu, spike_binsize) # rates in spikes per 0.01 second
+    # rates in spikes per 0.01 second
+    >>> rates, times, clusters = bincount2D(st, clu, spike_binsize)
     >>> baseline_window_size = 0.4 # seconds
     >>> baseline_end_times = np.array(trdf["stimOn_times"])
     >>> baseline_start_times = baseline_end_times - baseline_window_size
@@ -685,7 +689,7 @@ def avg_trial_firing_rates_in_window(rates, times, window_start_times, window_en
     window_len = window_end_times[trial_num] - window_start_times[trial_num]
     trial_window_firing_rates = rates[: , window_start_idx:window_end_idx]
     for clu_num in range(num_clusters):
-      # average pikes per sec
+      # average spikes per sec
       trial_avg_rates[clu_num][trial_num] = np.sum(trial_window_firing_rates[clu_num]) / window_len
   return trial_avg_rates
 
@@ -748,7 +752,8 @@ def get_trial_baselined_firing_rates(trdf, rates, times, baseline_window_size=0.
     trial_end_idx = np.argmax(times >= trial_end_times[trial_num])
 
     for clu_num in range(len(rates)):
-      clu_trial_baseline_firing_rate = baseline_avg_rates[clu_num][trial_num] # average pikes per sec
+      # average spikes per sec
+      clu_trial_baseline_firing_rate = baseline_avg_rates[clu_num][trial_num]
       base_sum = \
           ((rates[clu_num][trial_start_idx:trial_end_idx]) - clu_trial_baseline_firing_rate)
       baselined_rates[clu_num][trial_start_idx:trial_end_idx] = \
@@ -758,8 +763,8 @@ def get_trial_baselined_firing_rates(trdf, rates, times, baseline_window_size=0.
 
 ############################### Resampling Functions ###############################
 
-# Create a re-sampled set of trial timings for a dataframe based on some set of allowed lengths for each
-# trial event
+# Create a re-sampled set of trial timings for a dataframe based on some set of allowed lengths
+# for each trial event
 def resample_trial_timing_linear(trdf, avg_event_idxs, event_names, scaled_len=250):
   """
   description description
@@ -1009,25 +1014,26 @@ def normalize_session_firing_rates(pid, trial_timing_dfs, event_names, avg_event
   rates = (rates / spike_binsize) # rates in spikes per second at each 0.01s bin
   sess_avg_rates = np.mean(rates, axis=1)
   filtered_idxs = np.argwhere(sess_avg_rates > fr_cutoff).flatten()
-  filtered_clusters = clusters[filtered_idxs] # All clusters that have a session avg firing rate of > 0.1 Hz
+  # All clusters with a session avg firing rate of > 0.1 Hz
+  filtered_clusters = clusters[filtered_idxs]
   num_filtered_clusters = len(filtered_clusters)
   filtered_rates = rates[filtered_clusters]
   smoothed_rates = np.zeros((num_trial_types, num_filtered_clusters, len(filtered_rates[0])))
 
   # Initialize dictionary mapping event avgs to num_trial_types x scaled_len matrices
-  # (dan) note: this needs to be replaced when we know the firing rate distribution across all sessions
-  # note also, you can't go faster than the Unity frame rate, so no point going over about 200 spikes/s
   clu_event_avgs = np.zeros((num_trial_types, num_filtered_clusters, scaled_len))
 
   for i in range(num_trial_types):
     for j in range(num_filtered_clusters):
       smoothed_rates[i][j] = causal_gaussian_smoothing(filtered_rates[j]) # UNITS: spikes per second
     if norm_method == "baseline":
-      smoothed_rates[i] = get_trial_baselined_firing_rates(trial_timing_dfs[i], smoothed_rates[i], times)
+      smoothed_rates[i] = get_trial_baselined_firing_rates(trial_timing_dfs[i], smoothed_rates[i],
+                                                           times)
     else:
       raise NotImplementedError("Normalization method " + norm_method + " not yet implemented")
 
-    clu_event_avgs[i] = average_cluster_data_around_events(trial_timing_dfs[i], avg_event_idxs, event_names, times, smoothed_rates[i])
+    clu_event_avgs[i] = average_cluster_data_around_events(trial_timing_dfs[i], avg_event_idxs,
+                                                           event_names, times, smoothed_rates[i])
 
   return {"avgs" : clu_event_avgs, "clusters" : filtered_clusters}
 
