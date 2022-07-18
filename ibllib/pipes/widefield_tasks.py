@@ -29,10 +29,10 @@ class WidefieldRegisterRaw(base_tasks.WidefieldTask, base_tasks.RegisterRawDataT
         signature = {
             'input_files': [('dorsal_cortex_landmarks.json', self.device_collection, False),
                             ('*.camlog', self.device_collection, True),
-                            ('widefield_wiring.csv', self.device_collection, False)],
+                            ('widefield_wiring.htsv', self.device_collection, False)],
             'output_files': [('widefieldLandmarks.dorsalCortex.json', 'alf/widefield', False),
                              ('widefieldEvents.raw.camlog', self.device_collection, True),
-                             ('widefieldChannels.wiring.csv', self.device_collection, False)]
+                             ('widefieldChannels.wiring.htsv', self.device_collection, False)]
         }
         return signature
 
@@ -151,7 +151,7 @@ class WidefieldSync(base_tasks.WidefieldTask):
                             (f'_{self.sync_namespace}_sync.times.npy', self.sync_collection, True)],
             'output_files': [('imaging.times.npy', 'alf/widefield', True),
                              ('imaging.imagingLightSource.npy', 'alf/widefield', True),
-                             ('imagingLightSource.properties.csv', 'alf/widefield', True)]
+                             ('imagingLightSource.properties.htsv', 'alf/widefield', True)]
         }
         return signature
 

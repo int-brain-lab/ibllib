@@ -33,10 +33,10 @@ DEFAULT_WIRING_MAP = {
 class Widefield(extractors_base.BaseExtractor):
     save_names = (None, None, None, 'widefieldChannels.frameAverage.npy', 'widefieldU.images.npy', 'widefieldSVT.uncorrected.npy',
                   None, None, 'widefieldSVT.haemoCorrected.npy', 'imaging.times.npy', 'imaging.imagingLightSource.npy',
-                  'imagingLightSource.properties.csv')
+                  'imagingLightSource.properties.htsv')
     raw_names = ('motioncorrect_2_540_640_uint16.bin', 'motion_correction_shifts.npy', 'motion_correction_rotation.npy',
                  'frames_average.npy', 'U.npy', 'SVT.npy', 'rcoeffs.npy', 'T.npy', 'SVTcorr.npy', 'timestamps.npy', 'led.npy',
-                 'led_properties.csv')
+                 'led_properties.htsv')
     var_names = ()
 
     def __init__(self, *args, **kwargs):
@@ -67,7 +67,7 @@ class Widefield(extractors_base.BaseExtractor):
 
     def _channel_wiring(self):
         try:
-            wiring = pd.read_csv(self.data_path.joinpath('widefieldChannels.wiring.csv'))
+            wiring = pd.read_csv(self.data_path.joinpath('widefieldChannels.wiring.htsv'), sep='\t')
         except FileNotFoundError:
             _logger.warning('LED wiring map not found, using default')
             wiring = pd.DataFrame(DEFAULT_WIRING_MAP.items(), columns=('LED', 'wavelength'))
@@ -197,11 +197,11 @@ class Widefield(extractors_base.BaseExtractor):
         if save:
             save_time = save_paths[0] if save_paths else self.data_path.joinpath('timestamps.npy')
             save_led = save_paths[1] if save_paths else self.data_path.joinpath('led.npy')
-            save_meta = save_paths[2] if save_paths else self.data_path.joinpath('led_properties.csv')
+            save_meta = save_paths[2] if save_paths else self.data_path.joinpath('led_properties.htsv')
             save_paths = [save_time, save_led, save_meta]
             np.save(save_time, widefield_times)
             np.save(save_led, channel_id)
-            channel_meta_map.to_csv(save_meta)
+            channel_meta_map.to_csv(save_meta, sep='\t')
 
             return save_paths
         else:
