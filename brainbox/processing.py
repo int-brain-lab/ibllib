@@ -1150,6 +1150,9 @@ def event_average_all_session_firing_rates(outpath, pids, sess_trial_timing_dfs,
   >>> event_average_all_session_firing_rates(outpath, pids, sess_trial_timing_dfs, event_names, \
                                          avg_event_idxs, scaled_len=250)
   """
+  if not os.path.isdir(outpath):
+    os.makedirs(outpath)
+
   for idx, pid in tqdm(enumerate(pids)):
     fname = outpath + "event_avgs_" + pid + ".npy"
     if use_existing and os.path.isfile(fname):
