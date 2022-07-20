@@ -15,6 +15,7 @@ from brainbox import core
 from iblutil.util import Bunch
 import brainbox.io.one as bbone
 import brainbox.behavior.wheel as wh
+from brainbox.metrics.single_units import firing_rate_fano_factor
 
 
 def sync(dt, times=None, values=None, timeseries=None, offsets=None, interp='zero',
@@ -822,14 +823,6 @@ def get_trial_baselined_firing_rates(trdf, rates, times, baseline_window_size=0.
 
   return baselined_rates
 
-def get_clu_fano_factors(clu_spike_times, hist_win=0.01, fr_win=0.5, n_bins=10):
-  clu_fano_factors = np.empty((len(clu_spike_times), n_bins))
-  for idx, st in enumerate(clu_spike_times):
-    ff, ffs, fr = bb.metrics.firing_rate_fano_factor(st, hist_win=hist_win, fr_win=fr_win,
-                                                         n_bins=n_bins)
-    clu_fano_factors[idx] = ffs
-  return clu_fano_factors
-
 ############################### Resampling Functions ###############################
 
 # Create a re-sampled set of trial timings for a dataframe based on some set of allowed lengths
@@ -1095,9 +1088,26 @@ def event_average_session_firing_rates(pid, trial_timing_dfs, event_names, avg_e
   # Initialize dictionary mapping event avgs to num_trial_types x scaled_len matrices
   clu_event_avgs = np.zeros((num_trial_types, num_filtered_clusters, scaled_len))
 
+  print(filtered_rates.shape)
+  print(times.shape, times)
+  print(st.shape, clu.shape)
+
+  if norm_method == "fano_factor":
+    # Build ragged array of spike times for each cluster
+    clu_fano_factors = np.zeros((num_filtered_clusters, len(filtered_rates[0])))
+    for idx, clu_num in enumerate(filtered_clusters):
+      clu_spike_idxs = np.where(clu == clu_num)[0]
+      clu_spikes = st[clu_spike_idxs]
+      ff, ffs, fr = firing_rate_fano_factor(clu_spikes, hist_win=0.01, fr_win=0.5,
+                                                        n_bins=len(clu_spikes))
+
+      # Convert from spike times to indices in the times array (which increments by spike_binsize)
+      spike_time_idxs = np.floor(clu_spikes / spike_binsize).astype(int)
+      clu_fano_factors[idx][spike_time_idxs] = ffs
+
   for i in range(num_trial_types):
     if norm_method == "fano_factor":
-      smoothed_rates[i] = get_clu_fano_factors(st[filtered_idxs], n_bins=len(filtered_rates[0]))
+      smoothed_rates[i] = clu_fano_factors
     else:
       # Smooth firing rates
       for j in range(num_filtered_clusters):
