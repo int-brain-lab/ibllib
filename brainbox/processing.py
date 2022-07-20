@@ -499,36 +499,44 @@ def all_session_event_timings_by_type(eids, include_wheel=True):
 
   Returns
   -------
-  (# eids x [trdf, left_corr, left_inc, right_corr, right_inc]) : List of Dataframe
+  (# eids that worked x [trdf, left_corr, left_inc, right_corr, right_inc]) : List of Dataframe
     Five dataframes containing the event timing for all, left correct,
-    left incorrect, right correct, and right incorrect trials respectively for each given session.
+    left incorrect, right correct, and right incorrect trials respectively for each given
+    session that had a valid timing dataframe.
+  eid_idxs : List of int
+    indices of the eids in the returned list of dataframes. Eids that fail to load their timing
+    dataframe will not be included.
 
   Examples
   --------
   1) Get a 2d array of [all_trials, left_corr, left_incorr, right_corr,
      right_incorr] for each session
-  >>> trial_timing_dfs = all_session_event_timings_by_type(eids, include_wheel=True)
+  >>> trial_timing_dfs, eid_idxs = all_session_event_timings_by_type(eids, include_wheel=True)
   >>> trial_timing_dfs = trial_timing_dfs[:, 1:] # exclude df for all trials together
   """
+  eid_idxs = []
   all_trial_timing_dfs = []
   tqdm.write("Building list of trial timings...")
-  for eid in tqdm(eids):
-    all_trials, left_corr, left_inc, right_corr, right_inc = event_timing_by_trial_type(eid)
+  for idx, eid in tqdm(enumerate(eids)):
+    try:
+      all_trials, left_corr, left_inc, right_corr, right_inc = event_timing_by_trial_type(eid)
+      if include_wheel:
+        # Since one of our events is first_wheel_move, append the correponding times to the
+        # trial timing dataframes
+        wheel = one.load_object(eid, 'wheel', collection='alf', attribute=['position', 'timestamps'])
+        pos, t = wh.interpolate_position(wheel.timestamps, wheel.position, freq=1000)
+        all_trials = append_session_wheel_movements(t, pos, all_trials)
+        left_corr = append_session_wheel_movements(t, pos, left_corr)
+        left_inc = append_session_wheel_movements(t, pos, left_inc)
+        right_corr = append_session_wheel_movements(t, pos, right_corr)
+        right_inc = append_session_wheel_movements(t, pos, right_inc)
 
-    if include_wheel:
-      # Since one of our events is first_wheel_move, append the correponding times to the
-      # trial timing dataframes
-      wheel = one.load_object(eid, 'wheel', collection='alf', attribute=['position', 'timestamps'])
-      pos, t = wh.interpolate_position(wheel.timestamps, wheel.position, freq=1000)
-      all_trials = append_session_wheel_movements(t, pos, all_trials)
-      left_corr = append_session_wheel_movements(t, pos, left_corr)
-      left_inc = append_session_wheel_movements(t, pos, left_inc)
-      right_corr = append_session_wheel_movements(t, pos, right_corr)
-      right_inc = append_session_wheel_movements(t, pos, right_inc)
-
-    sess_trial_timing_dfs = [all_trials, left_corr, left_inc, right_corr, right_inc]
-    all_trial_timing_dfs.append(sess_trial_timing_dfs)
-  return all_trial_timing_dfs
+      sess_trial_timing_dfs = [all_trials, left_corr, left_inc, right_corr, right_inc]
+      all_trial_timing_dfs.append(sess_trial_timing_dfs)
+      eid_idxs.append(idx)
+    except Exception:
+      print("Exception occurred while loading trial timings for eid: " + eid)
+  return all_trial_timing_dfs, eid_idxs
 
 def avg_session_event_timings(trdf, event_names):
   """
