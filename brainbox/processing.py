@@ -480,6 +480,53 @@ def append_session_wheel_movements(wheel_times, pos, trdf,
   trdf['first_wheel_move'] = np.array(wheel_move_times)
   return trdf
 
+
+def all_session_event_timings_by_type(eids, include_wheel=True):
+  """
+  Returns trial timing dataframes for all, left correct, left incorrect,
+  right correct, and right incorrect trials respectively for each given eid.
+  Appends first trial wheel moves to each dataframe iff include_wheel
+
+  Parameters
+  ----------
+  eids : string
+    The eids we're returning trial timings by type for
+  include_wheel : bool
+    True iff we append "first_wheel_move" fields for each trial in the returned dataframes
+
+  Returns
+  -------
+  (# eids x [trdf, left_corr, left_inc, right_corr, right_inc]) : List of Dataframe
+    Five dataframes containing the event timing for all, left correct,
+    left incorrect, right correct, and right incorrect trials respectively for each given session.
+
+  Examples
+  --------
+  1) Get a 2d array of [all_trials, left_corr, left_incorr, right_corr,
+     right_incorr] for each session
+  >>> trial_timing_dfs = all_session_event_timings_by_type(eids, include_wheel=True)
+  >>> trial_timing_dfs = trial_timing_dfs[:, 1:] # exclude df for all trials together
+  """
+  all_trial_timing_dfs = []
+  tqdm.write("Building list of trial timings...")
+  for eid in tqdm(eids):
+    all_trials, left_corr, left_inc, right_corr, right_inc = event_timing_by_trial_type(eid)
+
+    if include_wheel:
+      # Since one of our events is first_wheel_move, append the correponding times to the
+      # trial timing dataframes
+      wheel = one.load_object(eid, 'wheel', collection='alf', attribute=['position', 'timestamps'])
+      pos, t = wh.interpolate_position(wheel.timestamps, wheel.position, freq=1000)
+      all_trials = append_session_wheel_movements(t, pos, all_trials)
+      left_corr = append_session_wheel_movements(t, pos, left_corr)
+      left_inc = append_session_wheel_movements(t, pos, left_inc)
+      right_corr = append_session_wheel_movements(t, pos, right_corr)
+      right_inc = append_session_wheel_movements(t, pos, right_inc)
+
+    sess_trial_timing_dfs = [all_trials, left_corr, left_inc, right_corr, right_inc]
+    all_trial_timing_dfs.append(sess_trial_timing_dfs)
+  return all_trial_timing_dfs
+
 def avg_session_event_timings(trdf, event_names):
   """
   Returns cumulative and average times for each given event in the given trial timing dataframe.
@@ -598,8 +645,6 @@ def avg_event_timings(eids, data_path, event_names, one, show_errors=True):
   print("Num eids averaged: " + str(count))
   return mean_times
 
-############################### Baselining Helper Functions ###############################
-
 def causal_gaussian_smoothing(data, num_pts_from_center=21, sigma=1.5):
   """
   Smooths the given data with a causal gaussian filter of the given parameters.
@@ -695,8 +740,8 @@ def avg_trial_firing_rates_in_window(rates, times, window_start_times, window_en
 
 # Default values from baseline procedure in Steinmetz, Nicholas A., et al.
 # "Distributed coding of choice, action and engagement across the mouse brain."
-def get_trial_baselined_firing_rates(trdf, rates, times, baseline_window_size=0.4,
-                               baseline_norm_constant=0.5):
+def get_trial_baselined_firing_rates(trdf, rates, times, baseline_window_size=0.4, normalize=True,
+                                     baseline_norm_constant=0.5):
   """
   Returns a (# clusters, # times) array containing the given firing rates for each cluster
   divided by its average firing rate during the baseline period
@@ -713,6 +758,9 @@ def get_trial_baselined_firing_rates(trdf, rates, times, baseline_window_size=0.
     the recorded times for each cluster firing rate
   baseline_window_size : float
     the time in seconds before stim on to use for the baseline window
+  normalize : bool
+    True iff we divide each baselined firing rate by the trial baseline average +
+    baseline_norm_constant
   baseline_norm_constant : float
     a constant added to the denominator in baselining so data for clusters with near-zero
     firing rates during the baseline period doesn't blow up
@@ -756,10 +804,20 @@ def get_trial_baselined_firing_rates(trdf, rates, times, baseline_window_size=0.
       clu_trial_baseline_firing_rate = baseline_avg_rates[clu_num][trial_num]
       base_sum = \
           ((rates[clu_num][trial_start_idx:trial_end_idx]) - clu_trial_baseline_firing_rate)
-      baselined_rates[clu_num][trial_start_idx:trial_end_idx] = \
-          base_sum / (clu_trial_baseline_firing_rate + baseline_norm_constant)
+      baselined_rates[clu_num][trial_start_idx:trial_end_idx] = base_sum
+      if normalize:
+        baselined_rates[clu_num][trial_start_idx:trial_end_idx] /= \
+         (clu_trial_baseline_firing_rate + baseline_norm_constant)
 
   return baselined_rates
+
+def get_clu_fano_factors(clu_spike_times, hist_win=0.01, fr_win=0.5, n_bins=10):
+  clu_fano_factors = np.empty((len(clu_spike_times), n_bins))
+  for idx, st in enumerate(clu_spike_times):
+    ff, ffs, fr = bb.metrics.firing_rate_fano_factor(st, hist_win=hist_win, fr_win=fr_win,
+                                                         n_bins=n_bins)
+    clu_fano_factors[idx] = ffs
+  return clu_fano_factors
 
 ############################### Resampling Functions ###############################
 
@@ -933,9 +991,9 @@ def average_cluster_data_around_events(trial_event_timings, avg_event_idxs, even
   print(clu_2_event_avgs.shape)
   return clu_2_event_avgs
 
-def normalize_session_firing_rates(pid, trial_timing_dfs, event_names, avg_event_idxs, one,
+def event_average_session_firing_rates(pid, trial_timing_dfs, event_names, avg_event_idxs, one,
                                    spike_binsize=0.01, scaled_len=250, norm_method="baseline",
-                                   fr_cutoff=0.1):
+                                   normalize=True, fr_cutoff=0.1):
   """
   Interpolates and normalizes all clusters' firing rates in the given insertion around
   given events into resampled arrays of length scaled_len.
@@ -955,7 +1013,11 @@ def normalize_session_firing_rates(pid, trial_timing_dfs, event_names, avg_event
   spike_binsize : float
     Time in seconds between to use for each spike bin. Defaults to 0.01.
   norm_method : string
-    The method to use when normalize firing rates.
+    The method to use when normalize firing rates. Currently options are "baseline",
+    "fano_factor", or None
+  normalize : bool
+    True iff we divide baselined firing rates by the trial baseline average +
+    baseline_norm_constant.
   fr_cutoff : float
     All clusters with a session averaged firing rate of less than fr_cutoff will be removed
     from the output.
@@ -996,7 +1058,7 @@ def normalize_session_firing_rates(pid, trial_timing_dfs, event_names, avg_event
   >>> trial_timing_dfs = [all_trials, left_corr, left_inc]
 
   # Toy example with a single session
-  >>> baselined_event_avgs = normalize_session_firing_rates(pid, trial_timing_dfs,
+  >>> baselined_event_avgs = event_average_session_firing_rates(pid, trial_timing_dfs,
   >>>                                event_names, avg_event_idxs, \
   >>>                                scaled_len=SCALED_LEN, norm_method="baseline", \
   >>>                                use_existing=False)
@@ -1024,13 +1086,18 @@ def normalize_session_firing_rates(pid, trial_timing_dfs, event_names, avg_event
   clu_event_avgs = np.zeros((num_trial_types, num_filtered_clusters, scaled_len))
 
   for i in range(num_trial_types):
-    for j in range(num_filtered_clusters):
-      smoothed_rates[i][j] = causal_gaussian_smoothing(filtered_rates[j]) # UNITS: spikes per second
-    if norm_method == "baseline":
-      smoothed_rates[i] = get_trial_baselined_firing_rates(trial_timing_dfs[i], smoothed_rates[i],
-                                                           times)
+    if norm_method == "fano_factor":
+      smoothed_rates[i] = get_clu_fano_factors(st[filtered_idxs], n_bins=len(filtered_rates[0]))
     else:
-      raise NotImplementedError("Normalization method " + norm_method + " not yet implemented")
+      # Smooth firing rates
+      for j in range(num_filtered_clusters):
+        smoothed_rates[i][j] = causal_gaussian_smoothing(filtered_rates[j]) # UNITS: spikes per second
+
+      if norm_method == "baseline":
+        smoothed_rates[i] = get_trial_baselined_firing_rates(trial_timing_dfs[i], smoothed_rates[i],
+                                                            times, normalize=normalize)
+      elif norm_method != None:
+        raise NotImplementedError("Normalization method " + norm_method + " not yet implemented")
 
     clu_event_avgs[i] = average_cluster_data_around_events(trial_timing_dfs[i], avg_event_idxs,
                                                            event_names, times, smoothed_rates[i])
@@ -1038,8 +1105,8 @@ def normalize_session_firing_rates(pid, trial_timing_dfs, event_names, avg_event
   return {"avgs" : clu_event_avgs, "clusters" : filtered_clusters}
 
 
-def normalize_all_session_firing_rates(outpath, pids, trial_timing_dfs, event_names, avg_event_idxs,
-                                       spike_binsize=0.01, scaled_len=250, norm_method="baseline",
+def event_average_all_session_firing_rates(outpath, pids, trial_timing_dfs, event_names, avg_event_idxs,
+                                       spike_binsize=0.01, scaled_len=250, norm_method="baseline", normalize=True,
                                        fr_cutoff=0.1, use_existing=True, show_errors=True):
   """
   Interpolates and normalizes all clusters' firing rates in the given insertions around
@@ -1062,7 +1129,11 @@ def normalize_all_session_firing_rates(outpath, pids, trial_timing_dfs, event_na
   spike_binsize : float
     Time in seconds between to use for each spike bin. Defaults to 0.01.
   norm_method : string
-    The method to use when normalize firing rates.
+    The method to use when normalize firing rates. Currently options are "baseline",
+    "fano_factor", or None
+  normalize : bool
+    True iff we divide baselined firing rates by the trial baseline average +
+    baseline_norm_constant.
   fr_cutoff : float
     All clusters with a session averaged firing rate of less than fr_cutoff will be removed
     from the output.
@@ -1074,8 +1145,8 @@ def normalize_all_session_firing_rates(outpath, pids, trial_timing_dfs, event_na
   Examples
   --------
   1)
-  # See normalize_session_firing_rates
-  >>> normalize_all_session_firing_rates(outpath, pids, trial_timing_dfs, event_names, \
+  # See event_average_session_firing_rates
+  >>> event_average_all_session_firing_rates(outpath, pids, trial_timing_dfs, event_names, \
                                          avg_event_idxs, scaled_len=250)
   """
   for pid in tqdm(pids):
@@ -1084,9 +1155,9 @@ def normalize_all_session_firing_rates(outpath, pids, trial_timing_dfs, event_na
       tqdm.write("Avgs file for pid: " + pid + " already exists!")
     else:
       try:
-        clu_event_avgs = normalize_session_firing_rates(pid, trial_timing_dfs, \
+        clu_event_avgs = event_average_session_firing_rates(pid, trial_timing_dfs, \
                             event_names, avg_event_idxs, spike_binsize, scaled_len,
-                            norm_method, fr_cutoff)
+                            norm_method, normalize, fr_cutoff)
         np.save(fname, clu_event_avgs)
       except Exception:
         if show_errors:
