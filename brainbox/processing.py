@@ -383,7 +383,10 @@ def filter_units(units_b, t, **kwargs):
             filt_units = filt_units[filt_idxs]
     return filt_units.astype(int)
 
+
+
 # ----------- Start of trial event averaging functions -----------
+
 def event_timing_by_trial_type(eid):
   """
   Returns trial timing dataframes for all, left correct, left incorrect,
@@ -988,7 +991,6 @@ def average_cluster_data_around_events(trial_event_timings, avg_event_idxs, even
     np.mean(trial_rates, axis=0)
     clu_2_event_avgs[clu_num] = np.mean(trial_rates, axis=0)
 
-  print(clu_2_event_avgs.shape)
   return clu_2_event_avgs
 
 def event_average_session_firing_rates(pid, trial_timing_dfs, event_names, avg_event_idxs, one,
@@ -1060,8 +1062,7 @@ def event_average_session_firing_rates(pid, trial_timing_dfs, event_names, avg_e
   # Toy example with a single session
   >>> baselined_event_avgs = event_average_session_firing_rates(pid, trial_timing_dfs,
   >>>                                event_names, avg_event_idxs, \
-  >>>                                scaled_len=SCALED_LEN, norm_method="baseline", \
-  >>>                                use_existing=False)
+  >>>                                scaled_len=SCALED_LEN, norm_method="baseline")
   """
   # Load all spiking data
   ssl = bbone.SpikeSortingLoader(pid=pid, one=one)
@@ -1105,7 +1106,7 @@ def event_average_session_firing_rates(pid, trial_timing_dfs, event_names, avg_e
   return {"avgs" : clu_event_avgs, "clusters" : filtered_clusters}
 
 
-def event_average_all_session_firing_rates(outpath, pids, trial_timing_dfs, event_names, avg_event_idxs,
+def event_average_all_session_firing_rates(outpath, pids, sess_trial_timing_dfs, event_names, avg_event_idxs,
                                        spike_binsize=0.01, scaled_len=250, norm_method="baseline", normalize=True,
                                        fr_cutoff=0.1, use_existing=True, show_errors=True):
   """
@@ -1118,8 +1119,8 @@ def event_average_all_session_firing_rates(outpath, pids, trial_timing_dfs, even
     The path to save all outputs to
   pids : list of strings
     The given probe insertion IDs
-  trial_timing_dfs : list of Dataframe
-    a list of dataframes containing the event timings for each trial type to evaluate
+  sess_trial_timing_dfs : list of Dataframe
+    a list of dataframes containing the event timings for each trial type to evaluate for each pid
   event_names : list of string
     A list of the names of given events
   avg_event_idxs : list of int
@@ -1146,16 +1147,16 @@ def event_average_all_session_firing_rates(outpath, pids, trial_timing_dfs, even
   --------
   1)
   # See event_average_session_firing_rates
-  >>> event_average_all_session_firing_rates(outpath, pids, trial_timing_dfs, event_names, \
+  >>> event_average_all_session_firing_rates(outpath, pids, sess_trial_timing_dfs, event_names, \
                                          avg_event_idxs, scaled_len=250)
   """
-  for pid in tqdm(pids):
+  for idx, pid in tqdm(enumerate(pids)):
     fname = outpath + "event_avgs_" + pid + ".npy"
     if use_existing and os.path.isfile(fname):
       tqdm.write("Avgs file for pid: " + pid + " already exists!")
     else:
       try:
-        clu_event_avgs = event_average_session_firing_rates(pid, trial_timing_dfs, \
+        clu_event_avgs = event_average_session_firing_rates(pid, sess_trial_timing_dfs[idx], \
                             event_names, avg_event_idxs, spike_binsize, scaled_len,
                             norm_method, normalize, fr_cutoff)
         np.save(fname, clu_event_avgs)
