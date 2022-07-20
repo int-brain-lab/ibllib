@@ -512,7 +512,7 @@ def all_session_event_timings_by_type(eids, include_wheel=True):
   1) Get a 2d array of [all_trials, left_corr, left_incorr, right_corr,
      right_incorr] for each session
   >>> trial_timing_dfs, eid_idxs = all_session_event_timings_by_type(eids, include_wheel=True)
-  >>> trial_timing_dfs = trial_timing_dfs[:, 1:] # exclude df for all trials together
+  >>> trial_timing_dfs = np.array(trial_timing_dfs, dtype=object)[:, 1:] # exclude df for all trials together
   """
   eid_idxs = []
   all_trial_timing_dfs = []
@@ -1018,6 +1018,7 @@ def event_average_session_firing_rates(pid, trial_timing_dfs, event_names, avg_e
     A list of the names of given events
   avg_event_idxs : list of int
     The average indices of each given event normalized from 0 to scaled_len
+  one
   scaled_len : int
     The length of the array to resample real time data into
   spike_binsize : float
@@ -1069,7 +1070,7 @@ def event_average_session_firing_rates(pid, trial_timing_dfs, event_names, avg_e
 
   # Toy example with a single session
   >>> baselined_event_avgs = event_average_session_firing_rates(pid, trial_timing_dfs,
-  >>>                                event_names, avg_event_idxs, \
+  >>>                                event_names, avg_event_idxs, one, \
   >>>                                scaled_len=SCALED_LEN, norm_method="baseline")
   """
   # Load all spiking data
@@ -1114,7 +1115,7 @@ def event_average_session_firing_rates(pid, trial_timing_dfs, event_names, avg_e
   return {"avgs" : clu_event_avgs, "clusters" : filtered_clusters}
 
 
-def event_average_all_session_firing_rates(outpath, pids, sess_trial_timing_dfs, event_names, avg_event_idxs,
+def event_average_all_session_firing_rates(outpath, pids, sess_trial_timing_dfs, event_names, avg_event_idxs, one,
                                        spike_binsize=0.01, scaled_len=250, norm_method="baseline", normalize=True,
                                        fr_cutoff=0.1, use_existing=True, show_errors=True):
   """
@@ -1133,6 +1134,7 @@ def event_average_all_session_firing_rates(outpath, pids, sess_trial_timing_dfs,
     A list of the names of given events
   avg_event_idxs : list of int
     The average indices of each given event normalized from 0 to scaled_len
+  one
   scaled_len : int
     The length of the array to resample real time data into
   spike_binsize : float
@@ -1156,7 +1158,7 @@ def event_average_all_session_firing_rates(outpath, pids, sess_trial_timing_dfs,
   1)
   # See event_average_session_firing_rates
   >>> event_average_all_session_firing_rates(outpath, pids, sess_trial_timing_dfs, event_names, \
-                                         avg_event_idxs, scaled_len=250)
+                                         avg_event_idxs, one, scaled_len=250)
   """
   if not os.path.isdir(outpath):
     os.makedirs(outpath)
@@ -1168,7 +1170,7 @@ def event_average_all_session_firing_rates(outpath, pids, sess_trial_timing_dfs,
     else:
       try:
         clu_event_avgs = event_average_session_firing_rates(pid, sess_trial_timing_dfs[idx], \
-                            event_names, avg_event_idxs, spike_binsize, scaled_len,
+                            event_names, avg_event_idxs, one, spike_binsize, scaled_len,
                             norm_method, normalize, fr_cutoff)
         np.save(fname, clu_event_avgs)
       except Exception:
