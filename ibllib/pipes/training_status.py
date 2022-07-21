@@ -1,4 +1,3 @@
-from one.api import ONE
 import one.alf.io as alfio
 from one.alf.spec import is_session_path
 from one.alf.exceptions import ALFObjectNotFound
@@ -20,7 +19,6 @@ from matplotlib.lines import Line2D
 from datetime import datetime
 import seaborn as sns
 
-one = ONE()
 
 TRAINING_STATUS = {'not_computed': (-2, (0, 0, 0, 0)),
                    'habituation': (-1, (0, 0, 0, 0)),
@@ -303,6 +301,12 @@ def get_training_info_for_session(session_paths, one):
             sess_dict['n_delay'] = np.nan
             sess_dict['location'] = np.nan
             sess_dict['training_status'] = 'habituation'
+            sess_dict['bias_50'], sess_dict['thres_50'], sess_dict['lapsehigh_50'], sess_dict['lapselow_50'] = \
+                (np.nan, np.nan, np.nan, np.nan)
+            sess_dict['bias_20'], sess_dict['thres_20'], sess_dict['lapsehigh_20'], sess_dict['lapselow_20'] = \
+                (np.nan, np.nan, np.nan, np.nan)
+            sess_dict['bias_80'], sess_dict['thres_80'], sess_dict['lapsehigh_80'], sess_dict['lapselow_80'] = \
+                (np.nan, np.nan, np.nan, np.nan)
 
         else:
             # if we can't compute trials then we need to pass
@@ -390,7 +394,7 @@ def get_training_info_for_session(session_paths, one):
             sess_dict['combined_sess_duration'] = sess_dict['sess_duration']
             sess_dict['combined_n_delay'] = sess_dict['n_delay']
 
-            for bias in [50, 20, 80]:  # TODO check with someone if this is the way to do it
+            for bias in [50, 20, 80]:
                 sess_dict[f'combined_bias_{bias}'] = sess_dict[f'bias_{bias}']
                 sess_dict[f'combined_thres_{bias}'] = sess_dict[f'thres_{bias}']
                 sess_dict[f'combined_lapsehigh_{bias}'] = sess_dict[f'lapsehigh_{bias}']
