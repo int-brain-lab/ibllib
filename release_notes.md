@@ -1,4 +1,8 @@
 ## Release Notes 2.13
+## Release Notes 2.13.4 2022-07-22
+- Hotfix: Density displays had unexisting colormaps in snapshots QC tasks
+- Generate extra training plots based on psychometric curves
+
 ## Release Notes 2.13.3 2022-07-01
 - Hotfix: fix previous hotfix with incorrect package version number
 
