@@ -187,10 +187,10 @@ class TestPipelineAlyx(unittest.TestCase):
         all_tasks = task_queue(mode='all', lab=[self.lab], one=one)
         self.assertTrue(len(all_tasks) == NTASKS)
         small_tasks = task_queue(mode='small', lab=[self.lab], one=one)
-        self.assertTrue(len(all_tasks) == NTASKS - 1)
+        self.assertTrue(len(small_tasks) == NTASKS - 1)
         self.assertTrue('TaskGpuLock' not in [t['name'] for t in small_tasks])
         large_tasks = task_queue(mode='large', lab=[self.lab], one=one)
-        self.assertTrue(len(all_tasks) == 1)
+        self.assertTrue(len(large_tasks) == 1)
         self.assertTrue('TaskGpuLock' == large_tasks[0]['name'])
 
         # run them and make sure their statuses got updated appropriately
