@@ -220,6 +220,8 @@ class SpikeSorting(tasks.Task):
     priority = 60
     level = 1  # this job doesn't depend on anything
     force = True
+    job_size = 'large'
+
     SHELL_SCRIPT = Path.home().joinpath(
         "Documents/PYTHON/iblscripts/deploy/serverpc/kilosort2/run_pykilosort.sh"
     )
@@ -492,6 +494,8 @@ class EphysVideoCompress(tasks.Task):
     priority = 90
     level = 0
     force = False
+    job_size = 'large'
+
     signature = {
         'input_files': [('_iblrig_*Camera.raw.*', 'raw_video_data', True)],
         'output_files': [('_iblrig_*Camera.raw.mp4', 'raw_video_data', True)]
@@ -918,6 +922,7 @@ class EphysDLC(tasks.Task):
     io_charge = 90
     level = 2
     force = True
+    job_size = 'large'
 
     dlcenv = Path.home().joinpath('Documents', 'PYTHON', 'envs', 'dlcenv', 'bin', 'activate')
     scripts = Path.home().joinpath('Documents', 'PYTHON', 'iblscripts', 'deploy', 'serverpc', 'dlc')

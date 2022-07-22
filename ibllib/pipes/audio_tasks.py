@@ -9,6 +9,10 @@ _logger = logging.getLogger('ibllib')
 
 class AudioCompress(base_tasks.AudioTask):
 
+    cpu = 2
+    priority = 10
+    job_size = 'small'
+
     @property
     def signature(self):
         signature = {
@@ -32,6 +36,10 @@ class AudioSync(base_tasks.AudioTask):
     """
     Extracts audio events and sync. N.B currently only supports bpod with xonar sound system
     """
+
+    cpu = 2
+    priority = 10
+    job_size = 'small'
 
     @property
     def signature(self):

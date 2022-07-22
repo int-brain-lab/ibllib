@@ -34,6 +34,7 @@ class Task(abc.ABC):
     version = ibllib.__version__
     signature = {'input_files': [], 'output_files': []}  # list of tuples (filename, collection, required_flag)
     force = False  # whether or not to re-download missing input files on local server if not present
+    job_size = 'small'  # either 'small' or 'large', defines whether task should be run as part of the large or small job services
 
     def __init__(self, session_path, parents=None, taskid=None, one=None,
                  machine=None, clobber=True, location='server', **kwargs):
