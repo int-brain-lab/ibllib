@@ -305,7 +305,7 @@ def transfer_session_folders(local_sessions: list, remote_subject_folder, subfol
             log.error("File transfer failed, check log for reason.")
 
     # Notification to user for any transfers were skipped
-    log.warning(f"Video transfers that were not completed:\n\n{skip_list}") if skip_list else log.info("No transfers skipped.")
+    log.warning(f"Transfers that were not completed:\n\n{skip_list}") if skip_list else log.info("No transfers skipped.")
     return transfer_list, success
 
 
