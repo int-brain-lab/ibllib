@@ -463,12 +463,16 @@ class Pipeline(abc.ABC):
                 t = Bunch(t)
                 executable = t.executable
                 arguments = t.arguments
+                t['time_out_secs'] = t['time_out_sec']
+                if len(t.parents):
+                    pnames = [p for p in t.parents]
             else:
                 executable = self._get_exec_name(t)
                 arguments = t.kwargs
+                if len(t.parents):
+                    pnames = [p.name for p in t.parents]
 
             if len(t.parents):
-                pnames = [p.name for p in t.parents]
                 parents_ids = [ta['id'] for ta in tasks_alyx if ta['name'] in pnames]
             else:
                 parents_ids = []
