@@ -185,6 +185,6 @@ class ExperimentDescriptionRegisterRaw(RegisterRawDataTask):
     def signature(self):
         signature = {
             'input_files': [],
-            'output_files': [('experiment.description.yaml', '', True)]
+            'output_files': [('*experiment.description.yaml', '', True)]
         }
         return signature
