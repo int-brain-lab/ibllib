@@ -105,8 +105,19 @@ class TestTask(unittest.TestCase):
 
     def test_generate_pseudo_session(self):
         test_trials = self.test_trials
-        pseudo_trials = task.generate_pseudo_session(test_trials)
-        self.assertTrue(pseudo_trials.shape[0] == test_trials.shape[0])
+        c = np.zeros(9)
+        np.random.seed(456)
+        for m in np.arange(10):
+            pseudo_trials = task.generate_pseudo_session(test_trials, generate_choices=False, contrast_distribution='biased')
+            c += pseudo_trials.groupby("signed_contrast")['signed_contrast'].count().values / pseudo_trials.shape[0]
+        self.assertTrue(np.all(np.round(c * 2) / 2 == 1))
+        c = np.zeros(9)
+        np.random.seed(456)
+        for m in np.arange(10):
+            pseudo_trials = task.generate_pseudo_session(test_trials, generate_choices=False,
+                                                         contrast_distribution='uniform')
+            c += pseudo_trials.groupby("signed_contrast")['signed_contrast'].count().values / pseudo_trials.shape[0]
+        self.assertTrue(np.all(np.round(c * 2) / 2 == np.array([1., 1., 1., 1., 2., 1., 1., 1., 1.])))
 
     def test_get_impostor_target(self):
         # labels between 3 and 14
