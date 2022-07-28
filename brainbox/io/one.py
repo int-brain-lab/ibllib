@@ -701,7 +701,8 @@ def load_wheel_reaction_times(eid, one=None):
 
 def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0.2, ret_wheel=False,
                    ret_abswheel=False, wheel_binsize=0.02, addtl_types=[],
-                   align_event='stimOn_times', keeptrials=None):
+                   align_event_start='stimOn_times', align_event_end="feedback_times",
+                   keeptrials=None):
     """
     Generate a pandas dataframe of per-trial timing information about a given session.
     Each row in the frame will correspond to a single trial, with timing values indicating timing
@@ -723,11 +724,13 @@ def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0.2, ret_whe
         Maximum trial length for inclusion in df. Trials where feedback - response is longer
         than this value will not be included in the dataframe, by default None
     t_before : float, optional
-        Time before stimulus onset to include for a given trial, as defined by the trial_start
-        column of the dataframe. If zero, trial_start will be identical to stimOn, by default 0.
+        Time before start event to include for a given trial, as defined by the trial_start
+        column of the dataframe. If zero, trial_start will be identical to the start event,
+        by default 0.
     t_after : float, optional
-        Time after feedback to include in the trail, as defined by the trial_end
-        column of the dataframe. If zero, trial_end will be identical to feedback, by default 0.
+        Time after end event to include in the trial, as defined by the trial_end
+        column of the dataframe. If zero, trial_end will be identical to the end event,
+        by default 0.
     ret_wheel : bool, optional
         Whether to return the time-resampled wheel velocity trace, by default False
     ret_abswheel : bool, optional
@@ -737,6 +740,11 @@ def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0.2, ret_whe
     addtl_types : list, optional
         List of additional types from an ONE trials object to include in the dataframe. Must be
         valid keys to the dict produced by one.load_object(eid, 'trials'), by default empty.
+    align_event_start : str, optional
+        The event to align with t_before to trial_start. Defaults to "stimOn_times"
+        (stimulus onset)
+    align_event_end : str, optional
+        The event to align with t_after to trial_end. Defaults to "feedback times" (feedback)
 
     Returns
     -------
@@ -787,8 +795,8 @@ def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0.2, ret_whe
     trialsdf = pd.DataFrame(trialdata)
     if maxlen is not None:
         trialsdf.set_index(np.nonzero(keeptrials)[0], inplace=True)
-    trialsdf['trial_start'] = trialsdf[align_event] - t_before
-    trialsdf['trial_end'] = trialsdf[align_event] + t_after
+    trialsdf['trial_start'] = trialsdf[align_event_start] - t_before
+    trialsdf['trial_end'] = trialsdf[align_event_end] + t_after
     tdiffs = trialsdf['trial_end'] - np.roll(trialsdf['trial_start'], -1)
     if np.any(tdiffs[:-1] > 0):
         logging.warning(f'{sum(tdiffs[:-1] > 0)} trials overlapping due to t_before and t_after '
