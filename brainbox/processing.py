@@ -388,6 +388,11 @@ def filter_units(units_b, t, **kwargs):
 
 # ----------- Start of trial event averaging functions -----------
 
+############################### Timing Helper Functions ###############################
+
+# Load the trial dataframe for a session, return the event timing for each of the trials as
+# dataframes. We'll split the data into trials with left/right stimulus and correct/incorrect
+# at this step
 def event_timing_by_trial_type(eid):
   """
   Returns trial timing dataframes for all, left correct, left incorrect,
@@ -410,9 +415,14 @@ def event_timing_by_trial_type(eid):
     >>> eid = "0802ced5-33a3-405e-8336-b65ebc5cb07c"
     >>> trdf, left_corr, left_inc, right_corr, right_inc = event_timing_by_trial_type(eid)
   """
-  trdf = bbone.load_trials_df(eid, maxlen=2., t_before=0.6, t_after=0.6,
-                                      wheel_binsize=0.02, ret_abswheel=False,
-                                      ret_wheel=True)
+  #trdf = load_trials_df(eid, maxlen=4.0, t_before=0.6, t_after=0.6,
+  #                                 wheel_binsize=0.02, ret_abswheel=False,
+  #                                 ret_wheel=True, align_event_start="stimOn_times",
+  #                                 align_event_end="feedback_times")
+  # load_trials_df's t_before and t_after are currently broken
+  trdf = bbone.load_trials_df(eid, maxlen=4.0, t_before=0.6, t_after=0.6,
+                                           wheel_binsize=0.02, ret_abswheel=False,
+                                           ret_wheel=True)
   left_corr = trdf.loc[(trdf['contrastLeft'] > 0) & (trdf['feedbackType'] == 1)]
   left_inc = trdf.loc[(trdf['contrastLeft'] > 0) & (trdf['feedbackType'] == -1)]
   right_corr = trdf.loc[(trdf['contrastRight'] > 0) & (trdf['feedbackType'] == 1)]
@@ -513,18 +523,19 @@ def all_session_event_timings_by_type(eids, include_wheel=True):
   1) Get a 2d array of [all_trials, left_corr, left_incorr, right_corr,
      right_incorr] for each session
   >>> trial_timing_dfs, eid_idxs = all_session_event_timings_by_type(eids, include_wheel=True)
-  >>> trial_timing_dfs = np.array(trial_timing_dfs, dtype=object)[:, 1:] # exclude df for all trials together
+  >>> trial_timing_dfs = np.array(trial_timing_dfs, dtype=object)[:, 1:] # exclude df for all trials
   """
   eid_idxs = []
   all_trial_timing_dfs = []
   tqdm.write("Building list of trial timings...")
-  for idx, eid in tqdm(enumerate(eids)):
+  for idx, eid in enumerate(tqdm(eids)):
     try:
       all_trials, left_corr, left_inc, right_corr, right_inc = event_timing_by_trial_type(eid)
       if include_wheel:
         # Since one of our events is first_wheel_move, append the correponding times to the
         # trial timing dataframes
-        wheel = one.load_object(eid, 'wheel', collection='alf', attribute=['position', 'timestamps'])
+        wheel = one.load_object(eid, 'wheel', collection='alf',
+                                              attribute=['position', 'timestamps'])
         pos, t = wh.interpolate_position(wheel.timestamps, wheel.position, freq=1000)
         all_trials = append_session_wheel_movements(t, pos, all_trials)
         left_corr = append_session_wheel_movements(t, pos, left_corr)
@@ -535,8 +546,10 @@ def all_session_event_timings_by_type(eids, include_wheel=True):
       sess_trial_timing_dfs = [all_trials, left_corr, left_inc, right_corr, right_inc]
       all_trial_timing_dfs.append(sess_trial_timing_dfs)
       eid_idxs.append(idx)
+
     except Exception:
       print("Exception occurred while loading trial timings for eid: " + eid)
+
   return all_trial_timing_dfs, eid_idxs
 
 def avg_session_event_timings(trdf, event_names):
@@ -583,79 +596,54 @@ def avg_session_event_timings(trdf, event_names):
   normalized_timestamps = np.divide(cumulative_timestamps, cumulative_timestamps[:, [num_events]])
   return np.mean(cumulative_timestamps, axis=0), np.mean(normalized_timestamps, axis=0)
 
-
-def avg_event_timings(eids, data_path, event_names, one, show_errors=True):
+def avg_event_timings_by_type(trial_timing_dfs_by_type, event_names):
   """
-  Returns and saves the average timings for the given events accross all trials in the given eids
-  to the given path
+  Returns the average timings for the given events accross all given trial timing dataframes
 
   Parameters
   ----------
-  eids : list of strings
-    list of all the sessions to calculate average event timings from
-  data_path : string
-    the output path average event timings will be saved to
+  trial_timing_dfs_by_type : list of list of trial timing dataframes
+    shape: (# trial types, # sessions, dataframe size)
   event_names : list of strings
-    a list of the events to average accross sessions
-  show_errors : bool
-    Whether to print errors that occur while calculating average timings
+    a list of the events to average accross sessions and trial types
 
   Returns
   -------
-  mean_times : np.ndarray of floats
-    shape: (# given events)
-    the time to each event since trial_start averaged accross all trials in the given eids
-    normalized between 0.0 and 1.0
+  sess_event_avg_timings : np.ndarray of floats
+    shape: (# trial types, # events)
+    the average time of each event since trial start in each trial type normalized between
+    0.0 (trial start) and 1.0 (trial end)
 
   Examples
   --------
   1) Compute average and normalized event timings for an example list of eids.
-    # To compute avg number of values for stim on to wheel move, wheel move to feedback, etc...
-    >>> data_path = "./data/event_avgs/testing"
-    >>> event_names = ["stimOn_times", "feedback_times"]
-    # takes ~15 mins for all eids in the BWM depending on download speed
-    >>> avg_times = avg_event_timings(eids, data_path, event_names, show_errors=False)
-    # convert from 0.0 to 1.0 scale to 0 to SCALED_LEN
-    >>> avg_event_lengths = np.array(avg_times * SCALED_LEN, dtype="int")
-    # convert to the number of values from each event to the next event
-    # (instead of normalized time since trial_start)
-    >>> for i in range(len(avg_event_lengths) - 1, 0, -1):
-    >>>   avg_event_lengths[i] -= avg_event_lengths[i - 1]
-    >>> start_to_stimon_len = avg_event_lengths[0]
-    >>> stimon_to_feedback_len = avg_event_lengths[1]
+  # Get a 2d array of [all_trials, left_corr, left_incorr, right_corr, right_incorr] trial timing
+  # dataframes for each session
+  >>> trial_timing_dfs, eid_idxs = all_session_event_timings_by_type(eids, include_wheel=True)
+  >>> trial_timing_dfs = np.array(trial_timing_dfs, dtype=object)[:, 1:] # exclude df for all trials
+  >>> eids = eids[eid_idxs]
+  >>> pids = pids[pid_idxs]
+  >>> print("Num insertions collected: " + str(len(pids)))
+  >>> normed_avg_event_timings_by_type = avg_event_timings_by_type(trial_timing_dfs, EVENT_NAMES)
+  >>> avg_event_idxs_by_type = (normed_avg_event_timings_by_type * SCALED_LEN).astype(int)
+  >>> print(avg_event_idxs_by_type)
+
   """
-  # Compute the average trial lengths for all experiment ids, saving the data along the way
-  all_normalized_times = []
+  # (# sessions, # trial types, # events) array
+  sess_event_avg_timings = np.empty((len(trial_timing_dfs_by_type),
+                                     len(trial_timing_dfs_by_type[0]), len(event_names)))
+  for i, sess_timings in enumerate(tqdm(trial_timing_dfs_by_type)):
+    for j, trial_type_df in enumerate(sess_timings):
+      trial_start_times = trial_type_df["trial_start"]
+      trial_lens = trial_type_df["trial_end"] - trial_type_df["trial_start"]
+      for k, event_name in enumerate(event_names):
+        normalized_event_timings_since_ts = trial_type_df[event_name] - trial_start_times
+        normalized_event_timings_since_ts /= trial_lens
+        sess_event_avg_timings[i][j][k] = np.nanmean(normalized_event_timings_since_ts)
 
-  count = 0
-  for eid in eids:
-    tqdm.write("Averaging trials from eid: " + eid)
-    try:
-      all_trials_df = bbone.load_trials_df(eid, maxlen=2.0, t_before=0.6, t_after=0.6,
-                                           wheel_binsize=0.02, ret_abswheel=False,
-                                           ret_wheel=True)
-      if "first_wheel_move" in event_names:
-        wheel = one.load_object(eid, 'wheel', collection='alf',
-                                              attribute=['position', 'timestamps'])
-        pos, t = wh.interpolate_position(wheel.timestamps, wheel.position, freq=1000)
-        all_trials_df = append_session_wheel_movements(t, pos, all_trials_df)
-      _, normalized_time = avg_session_event_timings(all_trials_df, event_names)
-    except Exception:
-      if show_errors:
-        print("Failed to average timings")
-        print(traceback.format_exc())
-      continue
+  sess_event_avg_timings = np.nanmean(sess_event_avg_timings, axis=0)
+  return sess_event_avg_timings
 
-    tqdm.write("Normalized times: " + str(np.round(normalized_time * 100) / 100))
-    all_normalized_times.append(normalized_time)
-    count += 1
-
-  all_normalized_times = np.array(all_normalized_times)
-  np.save(data_path + 'normalized_trial_lengths.npy', all_normalized_times)
-  mean_times = np.mean(all_normalized_times, axis=0)
-  print("Average timing for events: " + str(mean_times))
-  print("Num eids averaged: " + str(count))
-  return mean_times
 
 def causal_gaussian_smoothing(data, num_pts_from_center=21, sigma=1.5):
   """
@@ -836,7 +824,7 @@ def resample_trial_timing_linear(trdf, avg_event_idxs, event_names, scaled_len=2
   trdf : Dataframe
     dataframe of trial event timings. Must contain at least trial_start and trial_end times
     for each trial.
-  avg_event_idxs : list of int
+  avg_event_idxs : np.ndarray of int
     The average indices of each given event normalized from 0 to scaled_len
   event_names : list of string
     A list of the names of given events
@@ -863,9 +851,8 @@ def resample_trial_timing_linear(trdf, avg_event_idxs, event_names, scaled_len=2
   >>>                                                      event_names, scaled_len)
   """
   resampled_times = np.empty((len(trdf), scaled_len))
-  avg_event_idxs_copy = avg_event_idxs.copy()
-  avg_event_idxs_copy.insert(0, 0)
-  avg_event_idxs_copy.append(scaled_len)
+  avg_event_idxs_copy = np.insert(avg_event_idxs, 0, 0)
+  avg_event_idxs_copy = np.append(avg_event_idxs_copy, scaled_len)
   event_names_copy = event_names.copy()
   event_names_copy.insert(0, "trial_start")
   event_names_copy.append("trial_end")
@@ -943,7 +930,8 @@ def average_cluster_data_around_events(trial_event_timings, avg_event_idxs, even
     shape: (# clusters, data length)
     An array of arbitrary time series data for some clusters
   interp_method : string
-    The interpolation method to use. Defaults to "linear".
+    The interpolation method to use. Defaults to "linear". If None, then trims or pads cluster
+    time series data with 0s until it is scaled_len.
 
   Returns
   --------
@@ -970,33 +958,37 @@ def average_cluster_data_around_events(trial_event_timings, avg_event_idxs, even
   >>> event_names = ["stimOn_times", "feedback"]
   >>> scaled_len = 250
   >>> clu_event_avg = average_cluster_data_around_events(trdf, avg_event_idxs, event_names, times,
-  >>>                                                    rates[clu_num], scaled_len)
+  >>>                                                    rates[clu_num], scaled_len,
+  >>>                                                    interp_method="linear")
   """
-  # for each set of trials, make a matrix with the times for each trial and event window
-  # we'll pre-interpolate these. Note that pre-computing this saves a *ton* of time, since
-  # doing this for each cluster individually would be just repeating. Also by having it all
-  # in one matrix we can average in one step.
-  if interp_method == "linear":
-    resampled_trial_timing = resample_trial_timing_linear(trial_event_timings, avg_event_idxs, \
-                                                          event_names)
-  else:
-    raise NotImplementedError("Interpolation method " + interp_method + " not yet implemented")
-
   # Initialize dictionary mapping event avgs to num_trial_types x scaled_len matrices
   num_clusters = len(clu_2_time_series_data)
   clu_2_event_avgs = np.zeros((num_clusters, scaled_len))
 
-  for clu_num in range(num_clusters):
-    trial_rates = interp_time_data_around_resampled_events(resampled_trial_timing, \
-      times, clu_2_time_series_data[clu_num])
-    np.mean(trial_rates, axis=0)
-    clu_2_event_avgs[clu_num] = np.mean(trial_rates, axis=0)
+  # For each set of trials, make a matrix with the times for each trial and event window.
+  # Pre-computing this saves a *ton* of time, since having it all in one matrix means we can
+  # average in a single step.
+  if interp_method == "linear":
+    resampled_trial_timing = resample_trial_timing_linear(trial_event_timings, avg_event_idxs, \
+                                                          event_names)
+    for clu_num in range(num_clusters):
+      clu_rates = interp_time_data_around_resampled_events(resampled_trial_timing, \
+        times, clu_2_time_series_data[clu_num])
+      clu_2_event_avgs[clu_num] = np.mean(clu_rates, axis=0)
+
+  elif interp_method == None:
+    for clu_num in range(num_clusters):
+      clu_rates = np.resize(clu_2_time_series_data[clu_num], scaled_len)
+      clu_2_event_avgs[clu_num] = np.mean(clu_rates, axis=0)
+
+  else:
+    raise NotImplementedError("Interpolation method " + interp_method + " not yet implemented")
 
   return clu_2_event_avgs
 
 def event_average_session_firing_rates(pid, trial_timing_dfs, event_names, avg_event_idxs, one,
                                    spike_binsize=0.01, scaled_len=250, norm_method="baseline",
-                                   normalize=True, fr_cutoff=0.1):
+                                   normalize=True, interp_method="linear", fr_cutoff=0.1):
   """
   Interpolates and normalizes all clusters' firing rates in the given insertion around
   given events into resampled arrays of length scaled_len.
@@ -1009,8 +1001,8 @@ def event_average_session_firing_rates(pid, trial_timing_dfs, event_names, avg_e
     a list of dataframes containing the event timings for each trial type to evaluate
   event_names : list of string
     A list of the names of given events
-  avg_event_idxs : list of int
-    The average indices of each given event normalized from 0 to scaled_len
+  avg_event_idxs : list of list of int
+    The average indices of each given event normalized from 0 to scaled_len for each trial type
   one
   scaled_len : int
     The length of the array to resample real time data into
@@ -1022,6 +1014,9 @@ def event_average_session_firing_rates(pid, trial_timing_dfs, event_names, avg_e
   normalize : bool
     True iff we divide baselined firing rates by the trial baseline average +
     baseline_norm_constant.
+  interp_method : string
+    The interpolation method to use. Defaults to "linear". If None, then trims or pads cluster
+    time series data with 0s until it is scaled_len.
   fr_cutoff : float
     All clusters with a session averaged firing rate of less than fr_cutoff will be removed
     from the output.
@@ -1046,8 +1041,10 @@ def event_average_session_firing_rates(pid, trial_timing_dfs, event_names, avg_e
 
   # Precomputed avg value indices for stimon, first wheel move, and feedback when SCALED_LEN = 250
   # If computing from scratch use avg_session_event_timings.
-  >>> avg_event_lengths = [37, 51, 62]  # UNITS: values
-  >>> avg_event_idxs = list(np.cumsum(avg_event_lengths)) # [37, 88, 150]
+  >>> avg_event_idxs_by_type = [[92, 130, 157], # left correct
+  >>>                           [83, 131, 166], # left incorrect
+  >>>                           [91, 131, 158], # right correct
+  >>>                           [84, 131, 165]] # right incorrect
   >>> event_names = ["stimOn_times", "first_wheel_move", "feedback_times"]
 
   # Since one of our events is first_wheel_move, append the correponding times to the
@@ -1063,8 +1060,9 @@ def event_average_session_firing_rates(pid, trial_timing_dfs, event_names, avg_e
 
   # Toy example with a single session
   >>> baselined_event_avgs = event_average_session_firing_rates(pid, trial_timing_dfs,
-  >>>                                event_names, avg_event_idxs, one, \
-  >>>                                scaled_len=SCALED_LEN, norm_method="baseline")
+  >>>                                event_names, avg_event_idxs_by_type, one, \
+  >>>                                scaled_len=SCALED_LEN, norm_method="baseline",
+  >>>                                interp_method="linear")
   """
   # Load all spiking data
   ssl = bbone.SpikeSortingLoader(pid=pid, one=one)
@@ -1088,21 +1086,21 @@ def event_average_session_firing_rates(pid, trial_timing_dfs, event_names, avg_e
   # Initialize dictionary mapping event avgs to num_trial_types x scaled_len matrices
   clu_event_avgs = np.zeros((num_trial_types, num_filtered_clusters, scaled_len))
 
-  print(filtered_rates.shape)
-  print(times.shape, times)
-  print(st.shape, clu.shape)
-
   if norm_method == "fano_factor":
-    # Build ragged array of spike times for each cluster
     clu_fano_factors = np.zeros((num_filtered_clusters, len(filtered_rates[0])))
     for idx, clu_num in enumerate(filtered_clusters):
       clu_spike_idxs = np.where(clu == clu_num)[0]
       clu_spikes = st[clu_spike_idxs]
-      ff, ffs, fr = firing_rate_fano_factor(clu_spikes, hist_win=0.01, fr_win=0.5,
+      ff, ffs, fr = firing_rate_fano_factor(clu_spikes, hist_win=spike_binsize, fr_win=0.5,
                                                         n_bins=len(clu_spikes))
+      ffs[np.isnan(ffs)] = 0 # nan's can happen if neuron doesn't spike in a bin
 
       # Convert from spike times to indices in the times array (which increments by spike_binsize)
-      spike_time_idxs = np.floor(clu_spikes / spike_binsize).astype(int)
+      # and make sure it doesn't exceed the end of the session
+      spike_time_idxs = (np.floor(clu_spikes) /  spike_binsize).astype(int) - 1
+      valid_st_idxs = np.where(spike_time_idxs < len(filtered_rates[0]))[0]
+      spike_time_idxs = spike_time_idxs[valid_st_idxs]
+      ffs = spike_time_idxs[valid_st_idxs]
       clu_fano_factors[idx][spike_time_idxs] = ffs
 
   for i in range(num_trial_types):
@@ -1111,7 +1109,8 @@ def event_average_session_firing_rates(pid, trial_timing_dfs, event_names, avg_e
     else:
       # Smooth firing rates
       for j in range(num_filtered_clusters):
-        smoothed_rates[i][j] = causal_gaussian_smoothing(filtered_rates[j]) # UNITS: spikes per second
+        # UNITS: spikes per second
+        smoothed_rates[i][j] = causal_gaussian_smoothing(filtered_rates[j])
 
       if norm_method == "baseline":
         smoothed_rates[i] = get_trial_baselined_firing_rates(trial_timing_dfs[i], smoothed_rates[i],
@@ -1119,15 +1118,17 @@ def event_average_session_firing_rates(pid, trial_timing_dfs, event_names, avg_e
       elif norm_method != None:
         raise NotImplementedError("Normalization method " + norm_method + " not yet implemented")
 
-    clu_event_avgs[i] = average_cluster_data_around_events(trial_timing_dfs[i], avg_event_idxs,
-                                                           event_names, times, smoothed_rates[i])
+    clu_event_avgs[i] = average_cluster_data_around_events(trial_timing_dfs[i], avg_event_idxs[i],
+                                                           event_names, times, smoothed_rates[i],
+                                                           interp_method=interp_method,
+                                                           scaled_len=scaled_len)
 
   return {"avgs" : clu_event_avgs, "clusters" : filtered_clusters}
 
 
-def event_average_all_session_firing_rates(outpath, pids, sess_trial_timing_dfs, event_names, avg_event_idxs, one,
-                                       spike_binsize=0.01, scaled_len=250, norm_method="baseline", normalize=True,
-                                       fr_cutoff=0.1, use_existing=True, show_errors=True):
+def event_average_all_session_firing_rates(outpath, pids, sess_trial_timing_dfs, event_names,
+    avg_event_idxs, one, spike_binsize=0.01, scaled_len=250, norm_method="baseline",
+    normalize=True, interp_method="linear", fr_cutoff=0.1, use_existing=True, show_errors=True):
   """
   Interpolates and normalizes all clusters' firing rates in the given insertions around
   given events into resampled arrays of length scaled_len. Saves output to the given path.
@@ -1142,8 +1143,8 @@ def event_average_all_session_firing_rates(outpath, pids, sess_trial_timing_dfs,
     a list of dataframes containing the event timings for each trial type to evaluate for each pid
   event_names : list of string
     A list of the names of given events
-  avg_event_idxs : list of int
-    The average indices of each given event normalized from 0 to scaled_len
+  avg_event_idxs : list of list of int
+    The average indices of each given event normalized from 0 to scaled_len for each trial type
   one
   scaled_len : int
     The length of the array to resample real time data into
@@ -1155,6 +1156,9 @@ def event_average_all_session_firing_rates(outpath, pids, sess_trial_timing_dfs,
   normalize : bool
     True iff we divide baselined firing rates by the trial baseline average +
     baseline_norm_constant.
+  interp_method : string
+    The interpolation method to use. Defaults to "linear". If None, then trims or pads cluster
+    time series data with 0s until it is scaled_len.
   fr_cutoff : float
     All clusters with a session averaged firing rate of less than fr_cutoff will be removed
     from the output.
@@ -1167,8 +1171,11 @@ def event_average_all_session_firing_rates(outpath, pids, sess_trial_timing_dfs,
   --------
   1)
   # See event_average_session_firing_rates
-  >>> event_average_all_session_firing_rates(outpath, pids, sess_trial_timing_dfs, event_names, \
-                                         avg_event_idxs, one, scaled_len=250)
+  # Event avgs for baselined normalized spk/s
+  >>> outpath = "./data/event_avgs/baselined_normalized/"
+  >>> event_average_all_session_firing_rates(outpath, pids, trial_timing_dfs, EVENT_NAMES,
+                                       avg_event_idxs, one, norm_method="baseline", normalize=True,
+                                       scaled_len=SCALED_LEN)
   """
   if not os.path.isdir(outpath):
     os.makedirs(outpath)
@@ -1179,9 +1186,12 @@ def event_average_all_session_firing_rates(outpath, pids, sess_trial_timing_dfs,
       tqdm.write("Avgs file for pid: " + pid + " already exists!")
     else:
       try:
-        clu_event_avgs = event_average_session_firing_rates(pid, sess_trial_timing_dfs[idx], \
-                            event_names, avg_event_idxs, one, spike_binsize, scaled_len,
-                            norm_method, normalize, fr_cutoff)
+        clu_event_avgs = event_average_session_firing_rates(pid=pid,
+                            trial_timing_dfs=sess_trial_timing_dfs[idx],
+                            event_names=event_names, avg_event_idxs=avg_event_idxs, one=one,
+                            spike_binsize=spike_binsize, scaled_len=scaled_len,
+                            norm_method=norm_method, normalize=normalize,
+                            interp_method=interp_method, fr_cutoff=fr_cutoff)
         np.save(fname, clu_event_avgs)
       except Exception:
         if show_errors:
