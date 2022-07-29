@@ -55,7 +55,7 @@ class BaseExtractor(abc.ABC):
             csv_separators = {
                 ".csv": ",",
                 ".ssv": " ",
-                ".tsv": "\t",
+                ".tsv": "\t"
             }
             file_path = Path(file_path)
             file_path.parent.mkdir(exist_ok=True, parents=True)
@@ -66,7 +66,7 @@ class BaseExtractor(abc.ABC):
                     _logger.error("Data is not a panda's DataFrame object")
                     raise TypeError("Data is not a panda's DataFrame object")
                 data.to_parquet(file_path)
-            elif file_path.suffix in [".csv", ".ssv", ".tsv"]:
+            elif file_path.suffix in csv_separators:
                 sep = csv_separators[file_path.suffix]
                 data.to_csv(file_path, sep=sep)
                 # np.savetxt(file_path, data, delimiter=sep)
