@@ -347,6 +347,14 @@ class TestAtlasSlicesConversion(unittest.TestCase):
         assert self.ba.get_labels([0, 0, self.ba.bc.i2z(103)], mapping='Cosmos') == 997
         assert self.ba.get_labels([0, 0, 0], mapping='Cosmos') == 0
 
+    def test_lookups_probabilistic(self):
+        xyz = np.array([0, -.0058, -.0038])
+        aid = self.ba.get_labels(xyz, mapping='Beryl')
+        aids, proportions = self.ba.get_labels(xyz, mapping='Beryl', radius_um=250)
+        self.assertEqual(aid, 0)
+        assert (np.all(aids == np.array([0])))
+        assert (np.isclose(proportions, np.array([1.])))
+
     def test_slice(self):
         ba = self.ba
         nx, ny, nz = ba.bc.nxyz
