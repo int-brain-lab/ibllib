@@ -393,8 +393,8 @@ def spike_sorting_metrics_ks2(ks2_path=None, m=None, save=True, save_path=None):
     save_path = save_path or ks2_path
 
     # ensure that either a ks2_path or a phylib `TemplateModel` object with unit info is given
-    assert not(ks2_path is None and m is None), 'Must either specify a path to a ks2 output ' \
-                                                'directory, or a phylib `TemplateModel` object'
+    assert not (ks2_path is None and m is None), 'Must either specify a path to a ks2 output ' \
+                                                 'directory, or a phylib `TemplateModel` object'
     # create phylib `TemplateModel` if not given
     m = phy_model_from_ks2_path(ks2_path) if None else m
     c, drift = spike_sorting_metrics(m.spike_times, m.spike_clusters, m.amplitudes, m.depths)
