@@ -13,10 +13,9 @@ class VideoRegisterRaw(base_tasks.VideoTask, base_tasks.RegisterRawDataTask):
     """
     Task to register raw video data. Builds up list of files to register from list of cameras given in session params file
     """
-    cpu = 1
-    io_charge = 90
-    level = 0
-    force = False
+
+    priority = 100
+    job_size = 'small'
 
     @property
     def signature(self):
@@ -37,8 +36,7 @@ class VideoCompress(base_tasks.VideoTask):
     Task to compress raw video data from .avi to .mp4 format.
     """
     priority = 90
-    level = 0
-    force = False
+    job_size = 'large'
 
     @property
     def signature(self):
@@ -67,8 +65,7 @@ class VideoSyncQcBpod(base_tasks.VideoTask):
     N.B Signatures only reflect new daq naming convention, non compatible with ephys when not running on server
     """
     priority = 40
-    level = 2
-    force = False
+    job_size = 'small'
 
     @property
     def signature(self):
@@ -110,8 +107,7 @@ class VideoSyncQcNidq(base_tasks.VideoTask):
     N.B Signatures only reflect new daq naming convention, non compatible with ephys when not running on server
     """
     priority = 40
-    level = 2
-    force = False
+    job_size = 'small'
 
     @property
     def signature(self):

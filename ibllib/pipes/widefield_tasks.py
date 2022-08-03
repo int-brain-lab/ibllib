@@ -21,8 +21,9 @@ _logger = logging.getLogger('ibllib')
 
 
 class WidefieldRegisterRaw(base_tasks.WidefieldTask, base_tasks.RegisterRawDataTask):
-    level = 0
+
     priority = 100
+    job_size = 'small'
 
     @property
     def signature(self):
@@ -72,9 +73,9 @@ class WidefieldRegisterRaw(base_tasks.WidefieldTask, base_tasks.RegisterRawDataT
 
 
 class WidefieldCompress(base_tasks.WidefieldTask):
-    priority = 40
-    level = 0
-    force = False
+
+    priority = 90
+    job_size = 'large'
 
     @property
     def signature(self):
@@ -110,9 +111,9 @@ class WidefieldCompress(base_tasks.WidefieldTask):
 
 #  level 1
 class WidefieldPreprocess(base_tasks.WidefieldTask):
-    priority = 60
-    level = 1
-    force = False
+
+    priority = 80
+    job_size = 'large'
 
     @property
     def signature(self):
@@ -137,9 +138,9 @@ class WidefieldPreprocess(base_tasks.WidefieldTask):
 
 
 class WidefieldSync(base_tasks.WidefieldTask):
-    priority = 60
-    level = 1
-    force = False
+
+    priority = 40
+    job_size = 'small'
 
     @property
     def signature(self):
@@ -167,9 +168,10 @@ class WidefieldSync(base_tasks.WidefieldTask):
 
 
 class WidefieldFOV(base_tasks.WidefieldTask):
-    priority = 60
-    level = 2
-    force = False
+
+    priority = 40
+    job_size = 'small'
+
     signature = {
         'input_files': [('widefieldLandmarks.dorsalCortex.json', 'alf', True),
                         ('widefieldSVT.uncorrected.npy', 'alf', True),

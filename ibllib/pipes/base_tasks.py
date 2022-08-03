@@ -130,10 +130,9 @@ class RegisterRawDataTask(DynamicTask):  # TODO write test
      1. input and output must have the same length
      2. output files must have full filename
     """
-    cpu = 1
-    io_charge = 90
-    level = 0
-    force = False
+
+    priority = 100
+    job_size = 'small'
 
     def rename_files(self, symlink_old=False, **kwargs):
 
@@ -186,6 +185,6 @@ class ExperimentDescriptionRegisterRaw(RegisterRawDataTask):
     def signature(self):
         signature = {
             'input_files': [],
-            'output_files': [('experiment.description.yaml', '', True)]
+            'output_files': [('*experiment.description.yaml', '', True)]
         }
         return signature

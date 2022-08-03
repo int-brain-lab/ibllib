@@ -5,6 +5,7 @@ from collections import OrderedDict
 
 from ibllib import __version__ as ibllib_version
 import ibllib.pipes.tasks
+from ibllib.pipes.local_server import task_queue
 from one.api import ONE
 from ibllib.tests import TEST_DB
 
@@ -103,6 +104,7 @@ class Task11(ibllib.pipes.tasks.Task):
 #  Job that encounters a GPU lock and is set to Waiting
 class TaskGpuLock(ibllib.pipes.tasks.Task):
     gpu = 1
+    job_size = 'large'
 
     # Overwrite setUp to create a lock file before running the task and remove it after
     def setUp(self):
@@ -157,6 +159,7 @@ class TestPipelineAlyx(unittest.TestCase):
         session_path.joinpath('alf').mkdir(exist_ok=True, parents=True)
         self.session_path = session_path
         self.eid = ses['url'][-36:]
+        self.lab = ses['lab']
 
     def tearDown(self) -> None:
         self.td.cleanup()
@@ -179,6 +182,16 @@ class TestPipelineAlyx(unittest.TestCase):
         # get the pending jobs from alyx
         tasks = one.alyx.rest('tasks', 'list', session=eid, status='Waiting', no_cache=True)
         self.assertTrue(len(tasks) == NTASKS)
+
+        # check that they go into the correct task queue
+        all_tasks = task_queue(mode='all', lab=[self.lab], one=one)
+        self.assertTrue(len(all_tasks) == NTASKS)
+        small_tasks = task_queue(mode='small', lab=[self.lab], one=one)
+        self.assertTrue(len(small_tasks) == NTASKS - 1)
+        self.assertTrue('TaskGpuLock' not in [t['name'] for t in small_tasks])
+        large_tasks = task_queue(mode='large', lab=[self.lab], one=one)
+        self.assertTrue(len(large_tasks) == 1)
+        self.assertTrue('TaskGpuLock' == large_tasks[0]['name'])
 
         # run them and make sure their statuses got updated appropriately
         task_deck, datasets = pipeline.run(machine='testmachine')

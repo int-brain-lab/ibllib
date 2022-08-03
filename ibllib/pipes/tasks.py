@@ -34,6 +34,7 @@ class Task(abc.ABC):
     version = ibllib.__version__
     signature = {'input_files': [], 'output_files': []}  # list of tuples (filename, collection, required_flag)
     force = False  # whether or not to re-download missing input files on local server if not present
+    job_size = 'small'  # either 'small' or 'large', defines whether task should be run as part of the large or small job services
 
     def __init__(self, session_path, parents=None, taskid=None, one=None,
                  machine=None, clobber=True, location='server', **kwargs):
@@ -462,12 +463,16 @@ class Pipeline(abc.ABC):
                 t = Bunch(t)
                 executable = t.executable
                 arguments = t.arguments
+                t['time_out_secs'] = t['time_out_sec']
+                if len(t.parents):
+                    pnames = [p for p in t.parents]
             else:
                 executable = self._get_exec_name(t)
                 arguments = t.kwargs
+                if len(t.parents):
+                    pnames = [p.name for p in t.parents]
 
             if len(t.parents):
-                pnames = [p.name for p in t.parents]
                 parents_ids = [ta['id'] for ta in tasks_alyx if ta['name'] in pnames]
             else:
                 parents_ids = []

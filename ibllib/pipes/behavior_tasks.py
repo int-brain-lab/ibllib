@@ -16,6 +16,8 @@ _logger = logging.getLogger('ibllib')
 
 
 class HabituationRegisterRaw(base_tasks.RegisterRawDataTask):
+    priority = 100
+    job_size = 'small'
 
     @property
     def signature(self):
@@ -36,6 +38,8 @@ class HabituationRegisterRaw(base_tasks.RegisterRawDataTask):
 
 
 class HabituationTrialsBpod(base_tasks.DynamicTask):
+    priority = 90
+    job_size = 'small'
 
     @property
     def signature(self):
@@ -79,6 +83,8 @@ class HabituationTrialsBpod(base_tasks.DynamicTask):
 
 
 class TrialRegisterRaw(base_tasks.RegisterRawDataTask):
+    priority = 100
+    job_size = 'small'
 
     @property
     def signature(self):
@@ -99,6 +105,8 @@ class TrialRegisterRaw(base_tasks.RegisterRawDataTask):
 
 
 class PassiveRegisterRaw(base_tasks.RegisterRawDataTask):
+    priority = 100
+    job_size = 'small'
 
     @property
     def signature(self):
@@ -116,10 +124,8 @@ class PassiveRegisterRaw(base_tasks.RegisterRawDataTask):
 
 
 class PassiveTask(base_tasks.DynamicTask):
-    cpu = 1
-    io_charge = 90
-    level = 1
-    force = False
+    priority = 90
+    job_size = 'small'
 
     @property
     def signature(self):
@@ -151,8 +157,7 @@ class PassiveTask(base_tasks.DynamicTask):
 
 class ChoiceWorldTrialsBpod(base_tasks.DynamicTask):
     priority = 90
-    level = 0
-    force = False
+    job_size = 'small'
 
     @property
     def signature(self):
@@ -201,8 +206,7 @@ class ChoiceWorldTrialsBpod(base_tasks.DynamicTask):
 
 class ChoiceWorldTrialsNidq(base_tasks.DynamicTask):
     priority = 90
-    level = 1
-    force = False
+    job_size = 'small'
 
     @property
     def signature(self):
@@ -287,8 +291,7 @@ class ChoiceWorldTrialsNidq(base_tasks.DynamicTask):
 
 class TrainingStatus(base_tasks.DynamicTask):
     priority = 90
-    level = 1
-    force = False
+    job_size = 'small'
 
     @property
     def signature(self):

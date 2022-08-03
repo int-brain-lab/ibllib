@@ -67,6 +67,7 @@ class TrainingTrials(tasks.Task):
 class TrainingVideoCompress(tasks.Task):
 
     priority = 90
+    job_size = 'large'
 
     def _run(self):
         # avi to mp4 compression

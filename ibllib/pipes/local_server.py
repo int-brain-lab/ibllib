@@ -7,6 +7,7 @@ import re
 import subprocess
 import sys
 import traceback
+import importlib
 
 from one.api import ONE
 
@@ -161,16 +162,24 @@ def task_queue(mode='all', lab=None, one=None):
         _logger.error("No lab provided or found")
         return  # if the lab is none, this will return empty tasks each time
     # Filter for tasks
+    tasks_all = one.alyx.rest('tasks', 'list', status='Waiting', django=f'session__lab__name__in,{lab}', no_cache=True)
     if mode == 'all':
-        waiting_tasks = one.alyx.rest('tasks', 'list', status='Waiting',
-                                      django=f'session__lab__name__in,{lab}', no_cache=True)
-    elif mode == 'small':
-        tasks_all = one.alyx.rest('tasks', 'list', status='Waiting',
-                                  django=f'session__lab__name__in,{lab}', no_cache=True)
-        waiting_tasks = [t for t in tasks_all if t['name'] not in LARGE_TASKS]
+        waiting_tasks = tasks_all
+    else:
+        small_jobs = []
+        large_jobs = []
+        for t in tasks_all:
+            strmodule, strclass = t['executable'].rsplit('.', 1)
+            classe = getattr(importlib.import_module(strmodule), strclass)
+            job_size = classe.job_size
+            if job_size == 'small':
+                small_jobs.append(t)
+            else:
+                large_jobs.append(t)
+    if mode == 'small':
+        waiting_tasks = small_jobs
     elif mode == 'large':
-        waiting_tasks = one.alyx.rest('tasks', 'list', status='Waiting',
-                                      django=f'session__lab__name__in,{lab},name__in,{LARGE_TASKS}', no_cache=True)
+        waiting_tasks = large_jobs
 
     # Order tasks by priority
     sorted_tasks = sorted(waiting_tasks, key=lambda d: d['priority'], reverse=True)

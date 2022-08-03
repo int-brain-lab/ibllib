@@ -29,10 +29,12 @@ _logger = logging.getLogger("ibllib")
 
 
 class EphysRegisterRaw(base_tasks.DynamicTask):
-    level = 0
     """
     Creates the probe insertions and uploads the probe descriptions file, also compresses the nidq files and uploads
     """
+
+    priority = 100
+    job_size = 'small'
 
     @property
     def signature(self):
@@ -50,10 +52,14 @@ class EphysRegisterRaw(base_tasks.DynamicTask):
 
 
 class EphysSyncRegisterRaw(base_tasks.DynamicTask):
-    level = 0
     """
     Task to rename, compress and register raw daq data with .bin format collected using NIDAQ
     """
+
+    priority = 90
+    cpu = 2
+    io_charge = 30  # this jobs reads raw ap files
+    job_size = 'small'
 
     @property
     def signature(self):
@@ -114,6 +120,10 @@ class EphysSyncRegisterRaw(base_tasks.DynamicTask):
 
 
 class EphysCompressNP1(base_tasks.EphysTask):
+    priority = 90
+    cpu = 2
+    io_charge = 30  # this jobs reads raw ap files
+    job_size = 'small'
 
     @property
     def signature(self):
@@ -169,7 +179,10 @@ class EphysCompressNP1(base_tasks.EphysTask):
 
 
 class EphysCompressNP21(base_tasks.EphysTask):
-    level = 0
+    priority = 90
+    cpu = 2
+    io_charge = 30  # this jobs reads raw ap files
+    job_size = 'large'
 
     @property
     def signature(self):
@@ -239,6 +252,10 @@ class EphysCompressNP21(base_tasks.EphysTask):
 
 
 class EphysCompressNP24(base_tasks.EphysTask):
+    priority = 90
+    cpu = 2
+    io_charge = 30  # this jobs reads raw ap files
+    job_size = 'large'
 
     @property
     def signature(self):
@@ -314,6 +331,12 @@ class EphysCompressNP24(base_tasks.EphysTask):
 
 
 class EphysSyncPulses(SyncPulses):
+
+    priority = 90
+    cpu = 2
+    io_charge = 30  # this jobs reads raw ap files
+    job_size = 'small'
+
     @property
     def signature(self):
         signature = {
@@ -334,6 +357,11 @@ class EphysPulses(base_tasks.EphysTask):
     Extract Pulses from raw electrophysiology data into numpy arrays
     Perform the probes synchronisation with nidq (3B) or main probe (3A)
     """
+
+    priority = 90
+    cpu = 2
+    io_charge = 30  # this jobs reads raw ap files
+    job_size = 'small'
 
     @property
     def signature(self):
@@ -378,12 +406,11 @@ class EphysPulses(base_tasks.EphysTask):
 
 
 class RawEphysQC(base_tasks.EphysTask):
-    level = 1
+
     cpu = 2
     io_charge = 30  # this jobs reads raw ap files
     priority = 10  # a lot of jobs depend on this one
-    level = 0  # this job doesn't depend on anything
-    force = False
+    job_size = 'small'
 
     @property
     def signature(self):
@@ -444,8 +471,9 @@ class SpikeSorting(base_tasks.EphysTask):
     gpu = 1
     io_charge = 70  # this jobs reads raw ap files
     priority = 60
-    level = 2  # this job doesn't depend on anything
+    job_size = 'large'
     force = True
+
     SHELL_SCRIPT = Path.home().joinpath(
         "Documents/PYTHON/iblscripts/deploy/serverpc/kilosort2/run_pykilosort.sh"
     )
@@ -575,11 +603,6 @@ class SpikeSorting(base_tasks.EphysTask):
             raise RuntimeError(f"{self.SPIKE_SORTER_NAME} {info_str}, {error_str}")
 
         shutil.copytree(temp_dir.joinpath('output'), sorter_dir, dirs_exist_ok=True)
-
-        # TODO need to figure this out
-        for qcfile in temp_dir.glob('_iblqc_*AP*'):
-            shutil.move(qcfile, ap_file.parent.joinpath(qcfile.name))
-
         shutil.rmtree(temp_dir, ignore_errors=True)
 
         return sorter_dir
@@ -661,8 +684,7 @@ class SpikeSorting(base_tasks.EphysTask):
 
 class EphysCellsQc(base_tasks.EphysTask):
     priority = 90
-    level = 3
-    force = False
+    job_size = 'small'
 
     @property
     def signature(self):

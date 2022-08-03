@@ -13,6 +13,8 @@ class SyncRegisterRaw(base_tasks.RegisterRawDataTask):
     """
     Task to register raw daq data
     """
+    priority = 100
+    job_size = 'small'
 
     @property
     def signature(self):
@@ -28,6 +30,11 @@ class SyncMtscomp(base_tasks.DynamicTask):
     """
     Task to rename, compress and register raw daq data with .bin format collected using NIDAQ
     """
+
+    priority = 90
+    cpu = 2
+    io_charge = 30  # this jobs reads raw ap files
+    job_size = 'small'
 
     @property
     def signature(self):
@@ -116,6 +123,11 @@ class SyncPulses(base_tasks.DynamicTask):
 
     # TODO generalise to other daq and file formats, generalise to 3A probes
     """
+
+    priority = 90
+    cpu = 2
+    io_charge = 30  # this jobs reads raw ap files
+    job_size = 'small'
 
     @property
     def signature(self):
