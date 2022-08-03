@@ -113,7 +113,7 @@ class EphysQC(base.QC):
         detections = spikes.detection(data=destripe.T, fs=fs, h=h, detect_threshold=SPIKE_THRESHOLD_UV * 1e-6)
         spike_rate = np.bincount(detections.trace, minlength=raw.shape[0]).astype(np.float32)
         channel_labels, _ = voltage.detect_bad_channels(raw, fs=fs)
-        _, psd = signal.welch(destripe, fs=fs, window='hanning', nperseg=WELCH_WIN_LENGTH_SAMPLES,
+        _, psd = signal.welch(destripe, fs=fs, window='hann', nperseg=WELCH_WIN_LENGTH_SAMPLES,
                               detrend='constant', return_onesided=True, scaling='density', axis=-1)
         return rms_raw, rms_pre_proc, spike_rate, channel_labels, psd
 
@@ -220,7 +220,7 @@ def rmsmap(sglx):
         if last - first < WELCH_WIN_LENGTH_SAMPLES:
             continue
         # compute a smoothed spectrum using welch method
-        _, w = signal.welch(D, fs=sglx.fs, window='hanning', nperseg=WELCH_WIN_LENGTH_SAMPLES,
+        _, w = signal.welch(D, fs=sglx.fs, window='hann', nperseg=WELCH_WIN_LENGTH_SAMPLES,
                             detrend='constant', return_onesided=True, scaling='density', axis=-1)
         win['spectral_density'] += w.T
         # print at least every 20 windows

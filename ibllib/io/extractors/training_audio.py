@@ -86,7 +86,7 @@ def welchogram(fs, wav, nswin=NS_WIN, overlap=OVERLAP, nperseg=NS_WELCH):
             continue
         # compute PSD estimate for the current window
         iw = window_generator.iw
-        _, W[iw, :] = signal.welch(w, fs=fs, window='hanning', nperseg=nperseg, axis=-1,
+        _, W[iw, :] = signal.welch(w, fs=fs, window='hann', nperseg=nperseg, axis=-1,
                                    detrend='constant', return_onesided=True, scaling='density')
     # the onset detection may have duplicates with sliding window, average them and remove
     detect = np.sort(np.array(detect)) / fs
