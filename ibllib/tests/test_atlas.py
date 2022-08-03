@@ -56,7 +56,7 @@ class TestBrainRegions(unittest.TestCase):
         assert np.all(ancs.id == tpath)
         # check descendants with indices
         desdc, inds = br.descendants(12993, return_indices=True)
-        assert(inds == np.where(br.id == 12993))
+        self.assertEqual(inds, np.where(br.id == 12993))
         # check full subtree
         chemin = br.subtree(453)
         assert np.all(np.sort(chemin.id) == np.unique(np.r_[br.descendants(453).id, br.ancestors(453).id]))

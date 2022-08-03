@@ -63,7 +63,7 @@ def trial_times_to_times(raw_trial):
     raw_trial['behavior_data']['Bpod start timestamp'] -= shift
     raw_trial['behavior_data']['Trial start timestamp'] -= shift
     raw_trial['behavior_data']['Trial end timestamp'] -= shift
-    assert(raw_trial['behavior_data']['Bpod start timestamp'] == 0)
+    assert raw_trial['behavior_data']['Bpod start timestamp'] == 0
     return raw_trial
 
 

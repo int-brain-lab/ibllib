@@ -192,8 +192,8 @@ class BrainAtlas:
         self.regions = regions
         self.dims2xyz = dims2xyz
         self.xyz2dims = xyz2dims
-        assert(np.all(self.dims2xyz[self.xyz2dims] == np.array([0, 1, 2])))
-        assert(np.all(self.xyz2dims[self.dims2xyz] == np.array([0, 1, 2])))
+        assert np.all(self.dims2xyz[self.xyz2dims] == np.array([0, 1, 2]))
+        assert np.all(self.xyz2dims[self.dims2xyz] == np.array([0, 1, 2]))
         # create the coordinate transform object that maps volume indices to real world coordinates
         nxyz = np.array(self.image.shape)[self.dims2xyz]
         bc = BrainCoordinates(nxyz=nxyz, xyz0=(0, 0, 0), dxyz=dxyz)

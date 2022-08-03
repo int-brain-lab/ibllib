@@ -173,7 +173,7 @@ def get_event_aligned_raster(times, events, tbin=0.02, values=None, epoch=[-0.4,
     if np.sum(out_intervals) > 0:
         event_raster = np.r_[event_raster, np.full((np.sum(out_intervals),
                                                     event_raster.shape[1]), np.nan)]
-        assert(event_raster.shape[0] == intervals.shape[0])
+        assert event_raster.shape[0] == intervals.shape[0]
 
     # Reindex if we have removed any nan values
     all_event_raster = np.full((events.shape[0], event_raster.shape[1]), np.nan)

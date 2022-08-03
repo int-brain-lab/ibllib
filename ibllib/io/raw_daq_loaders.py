@@ -103,7 +103,7 @@ def load_sync_tdms(path, sync_map, fs=None, threshold=2.5, floor_percentile=10):
         times = times[tuple(ind)]
     except KeyError:
         assert fs
-        times = ind[1].astype(float) * 1/fs
+        times = ind[1].astype(float) * 1/fs  # noqa
 
     # Sort by times
     ind_sorted = np.argsort(times)
