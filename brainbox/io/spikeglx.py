@@ -168,9 +168,10 @@ class Streamer(spikeglx.Reader):
         """
         overload the read function by downloading the necessary chunks
         """
-        first_chunk = np.maximum(0, np.searchsorted(self.chunks['chunk_bounds'], nsel.start + 0.01 * self.fs) - 1)
-        last_chunk = np.maximum(0, np.searchsorted(self.chunks['chunk_bounds'], nsel.stop + 0.01 * self.fs) - 2)
+        first_chunk = np.maximum(0, np.searchsorted(self.chunks['chunk_bounds'], nsel.start) - 1)
+        last_chunk = np.maximum(0, np.searchsorted(self.chunks['chunk_bounds'], nsel.stop) - 1)
         n0 = self.chunks['chunk_bounds'][first_chunk]
+        _logger.debug(f'Streamer: caching sample {n0}, (t={n0 / self.fs})')
         self.cache_folder.mkdir(exist_ok=True, parents=True)
         sr = self._download_raw_partial(first_chunk=first_chunk, last_chunk=last_chunk)
         data = sr[nsel.start - n0: nsel.stop - n0, csel]

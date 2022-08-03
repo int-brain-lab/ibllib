@@ -388,7 +388,7 @@ def generate_pseudo_stimuli(n_trials, contrast_set=[0, 0.06, 0.12, 0.25, 1], fir
     return p_left, contrast_left, contrast_right
 
 
-def generate_pseudo_session(trials, generate_choices=True):
+def generate_pseudo_session(trials, generate_choices=True, contrast_distribution='biased'):
     """
     Generate a complete pseudo session with biased blocks, all stimulus contrasts, choices and
     rewards and omissions. Biased blocks and stimulus contrasts are generated using the same
@@ -426,7 +426,7 @@ def generate_pseudo_session(trials, generate_choices=True):
 
         # Draw position and contrast for this trial
         position = _draw_position([-1, 1], pseudo_trials['probabilityLeft'][i])
-        contrast = _draw_contrast(contrast_set, 'uniform')
+        contrast = _draw_contrast(contrast_set, prob_type=contrast_distribution, idx=np.where(contrast_set == 0)[0][0])
         signed_stim = contrast * np.sign(position)
 
         if generate_choices:

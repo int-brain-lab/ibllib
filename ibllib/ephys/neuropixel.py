@@ -9,3 +9,4 @@ warnings.warn('ibllib.ephys.neuropixel has moved and functionality will be remov
               ', change your imports to neuropixel !', DeprecationWarning)
 
 from neuropixel import *  # noqa
+from neuropixel import SITES_COORDINATES  # noqa

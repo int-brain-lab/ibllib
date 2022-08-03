@@ -3,7 +3,6 @@ import unittest
 from pathlib import Path
 from collections import OrderedDict
 
-from ibllib import __version__ as ibllib_version
 import ibllib.pipes.tasks
 from ibllib.pipes.local_server import task_queue
 from one.api import ONE
@@ -33,8 +32,8 @@ desired_statuses = {
 
 desired_datasets = ['spikes.times.npy', 'spikes.amps.npy', 'spikes.clusters.npy']
 desired_versions = {'spikes.times.npy': 'custom_job00',
-                    'spikes.amps.npy': ibllib_version,
-                    'spikes.clusters.npy': ibllib_version}
+                    'spikes.amps.npy': ibllib.__version__,
+                    'spikes.clusters.npy': ibllib.__version__}
 desired_logs = 'Running on machine: testmachine'
 desired_logs_rerun = {
     'Task00': 1,

@@ -2,9 +2,30 @@
 - session registration procedures and projects, only add a couple of field in the json by default
 
 ## Release Notes 2.13
-## Release Notes 2.13.0 PRERELEASE
+## Release Notes 2.13.4 2022-07-27
+- Hotfix: pseudo session biased generation contrast distribution
+
+## Release Notes 2.13.4 2022-07-22
+- Hotfix: Density displays had unexisting colormaps in snapshots QC tasks
+- Generate extra training plots based on psychometric curves
+
+## Release Notes 2.13.3 2022-07-01
+- Hotfix: fix previous hotfix with incorrect package version number
+
+## Release Notes 2.13.2 2022-07-01
+- Hotfix: datahandler sets local paths in init
+
+## Release Notes 2.13.1 2022-07-01
+- Hotfix: globus imports were mixed one.globus and one.remote
+
+
+## Release Notes 2.13.0 2022-06-30
 - Deprecated ibllib.version
 - Fix Globus patcher
+- Add SpikeSorting Loader samples2times function
+- Fix atlas.BrainCoordinate.xyz2i functions to not quietly wrap indices out of volume bounds.
+- Set jobs to Held if parent jobs are Started or Abandoned as well
+- Reverse matplotlib colorbars in density displays
 
 ## Release Notes 2.12
 ## Release Notes 2.12.2 2022-05-27
