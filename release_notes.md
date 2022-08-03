@@ -1,5 +1,8 @@
 ## Release Notes 2.13
-## Release Notes 2.13.4 2022-07-27
+## Release Notes 2.13.6 2022-08-02
+- Hotfix: don't overwrite full settings if iblrig on untagged version
+
+## Release Notes 2.13.5 2022-07-27
 - Hotfix: pseudo session biased generation contrast distribution
 
 ## Release Notes 2.13.4 2022-07-22

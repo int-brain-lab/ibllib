@@ -109,7 +109,7 @@ class DefaultPlot(object):
         :return:
         """
         if lim is not None:
-            assert(len(lim) == 2)
+            assert len(lim) == 2
         else:
             lim = (np.nanmin(self.data[axis]), np.nanmax(self.data[axis]))
         return lim
@@ -175,7 +175,7 @@ class ImagePlot(DefaultPlot):
         """
         # For pyqtgraph implementation
         if scale is not None:
-            assert(len(scale) == 2)
+            assert len(scale) == 2
         self.scale = self._set_default(scale, (self._get_scale('x'), self._get_scale('y')))
 
     def _get_scale(self, axis):
@@ -203,7 +203,7 @@ class ImagePlot(DefaultPlot):
         """
         # For pyqtgraph implementation
         if offset is not None:
-            assert(len(offset) == 2)
+            assert len(offset) == 2
         self.offset = self._set_default(offset, (self._get_offset('x'), self._get_offset('y')))
 
     def _get_offset(self, axis):
@@ -229,9 +229,9 @@ class ProbePlot(DefaultPlot):
         """
 
         # Make sure we have inputs as lists, can get input from arrange_channels2banks
-        assert(type(img) == list)
-        assert(type(x) == list)
-        assert(type(y) == list)
+        assert type(img) == list
+        assert type(x) == list
+        assert type(y) == list
 
         data = Bunch({'x': x, 'y': y, 'c': img})
         super().__init__('probe', data)
@@ -257,7 +257,7 @@ class ProbePlot(DefaultPlot):
 
     def _set_lim_list(self, axis, idx, lim=None):
         if lim is not None:
-            assert(len(lim) == 2)
+            assert len(lim) == 2
         else:
             lim = (np.nanmin(self.data[axis][idx]), np.nanmax(self.data[axis][idx]))
         return lim
