@@ -27,20 +27,24 @@ class TestPassive(unittest.TestCase):
 
         rf_map_times, rf_map_pos, rf_stim_frames = passive.get_on_off_times_and_positions(rf_map)
 
-        assert(all(rf_map_times == test_times))
-        assert(rf_map_pos.shape == (15 * 15, 2))
-        assert(len(rf_stim_frames['on']) == 15 * 15)
-        assert(len(rf_stim_frames['off']) == 15 * 15)
+        self.assertTrue(np.all(rf_map_times == test_times))
+        self.assertEqual(rf_map_pos.shape, (15 * 15, 2))
+        self.assertEqual(len(rf_stim_frames['on']), 15 * 15)
+        self.assertEqual(len(rf_stim_frames['off']), 15 * 15)
 
         # Off is for the 0 ones
-        assert(all(rf_stim_frames['off'][ismember2d(rf_map_pos, np.array([[8, 8]]))[0]][0][0]
-                   == [10, 50]))
-        assert(rf_stim_frames['off'][ismember2d(rf_map_pos, np.array([[4, 9]]))[0]][0][0] == 40)
-        assert(rf_stim_frames['off'][ismember2d(rf_map_pos, np.array([[11, 4]]))[0]][0][0] == 42)
+        idx = ismember2d(rf_map_pos, np.array([[8, 8]]))[0]
+        self.assertTrue(np.all(rf_stim_frames['off'][idx][0][0] == [10, 50]))
+        idx = ismember2d(rf_map_pos, np.array([[4, 9]]))[0]
+        self.assertEqual(rf_stim_frames['off'][idx][0][0], 40)
+        idx = ismember2d(rf_map_pos, np.array([[11, 4]]))[0]
+        self.assertEqual(rf_stim_frames['off'][idx][0][0], 42)
 
         # On is for the 255 ones
-        assert(rf_stim_frames['on'][ismember2d(rf_map_pos, np.array([[10, 13]]))[0]][0][0] == 25)
-        assert(rf_stim_frames['on'][ismember2d(rf_map_pos, np.array([[6, 10]]))[0]][0][0] == 42)
+        idx = ismember2d(rf_map_pos, np.array([[10, 13]]))[0]
+        self.assertEqual(rf_stim_frames['on'][idx][0][0], 25)
+        idx = ismember2d(rf_map_pos, np.array([[6, 10]]))[0]
+        self.assertEqual(rf_stim_frames['on'][idx][0][0], 42)
 
         # Next test that the firing rate function works
         # Basically just make one square responsive
@@ -51,19 +55,19 @@ class TestPassive(unittest.TestCase):
                                                            rf_stim_frames, spike_times,
                                                            spike_depths, x_lim=[0, 60])
         non_zero = np.where(rf_map_avg['on'] != 0)
-        assert(np.argmin(np.abs(depths - 500)) == non_zero[0][0])
-        assert(all(non_zero[1] == 10))
-        assert (all(non_zero[2] == 13))
+        self.assertEqual(np.argmin(np.abs(depths - 500)), non_zero[0][0])
+        self.assertTrue(np.all(non_zero[1] == 10))
+        self.assertTrue(np.all(non_zero[2] == 13))
 
-        assert(np.all(rf_map_avg['off'] == 0))
+        self.assertTrue(np.all(rf_map_avg['off'] == 0))
 
         rf_svd = passive.get_svd_map(rf_map_avg)
         # Make sure that the one responsive element is non-zero
-        assert(rf_svd['on'][non_zero[0][0]][non_zero[1][0], non_zero[2][0]] != 0)
+        self.assertTrue(rf_svd['on'][non_zero[0][0]][non_zero[1][0], non_zero[2][0]] != 0)
         # But that all the rest are zero
         rf_svd['on'][non_zero[0][0]][non_zero[1][0], non_zero[2][0]] = 0
-        assert(np.all(np.isclose(np.vstack(rf_svd['on']), 0)))
-        assert(np.all(np.vstack(rf_svd['off']) == 0))
+        self.assertTrue(np.all(np.isclose(np.vstack(rf_svd['on']), 0)))
+        self.assertTrue(np.all(np.vstack(rf_svd['off']) == 0))
 
     def test_stim_aligned(self):
 
@@ -78,8 +82,8 @@ class TestPassive(unittest.TestCase):
         stim_activity = passive.get_stim_aligned_activity(aud_stim, spike_times, spike_depths,
                                                           z_score_flag=False, x_lim=[0, 40])
 
-        assert(list(stim_activity.keys()) == ['valveOn'])
+        self.assertCountEqual(stim_activity.keys(), ['valveOn'])
         # The first may be a bit different due to overlap with noise floor
-        assert(all(stim_activity['valveOn'][0][1:] == 5))
+        self.assertTrue(np.all(stim_activity['valveOn'][0][1:] == 5))
         # make sure the rest of the depths are all zero
-        assert(np.all(stim_activity['valveOn'][1:] == 0))
+        self.assertTrue(np.all(stim_activity['valveOn'][1:] == 0))

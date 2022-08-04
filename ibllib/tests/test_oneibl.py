@@ -216,7 +216,7 @@ class TestRegistration(unittest.TestCase):
         np.save(self.alf_path.joinpath('spikes.times.npy'), np.random.random(500))
         np.save(self.alf_path.joinpath('spikes.amps.npy'), np.random.random(500))
         r = registration.register_dataset(file_list=flist, one=self.one)
-        self.assertTrue(all(all(not(fr['exists']) for fr in rr['file_records']) for rr in r))
+        self.assertTrue(all(all(not fr['exists'] for fr in rr['file_records']) for rr in r))
 
         # Test registering with a revision
         flist = list(self.rev_path.glob('*.npy'))

@@ -80,7 +80,7 @@ def test_drift_estimate():
     t, a, c = multiple_spike_trains(firing_rates=frs, rec_len_secs=200)
     # test negative times, no drift
     drift, ts = electrode_drift.estimate_drift(t - 2, a, cells_depth[c])
-    assert(np.all(np.abs(drift) < 0.01))
+    assert np.all(np.abs(drift) < 0.01)
     # test drift recovery - sinusoid 40 um peak amplitude
     dcor = np.sin(2 * np.pi * t / np.max(t) * 2) * 50
     drift, ts = electrode_drift.estimate_drift(t, a, cells_depth[c] + dcor, display=False)

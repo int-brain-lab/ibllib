@@ -164,7 +164,7 @@ class TestPipelineAlyx(unittest.TestCase):
 
         # prepare by deleting all jobs/tasks related
         tasks = one.alyx.rest('tasks', 'list', session=eid, no_cache=True)
-        assert(len(tasks) == 0)
+        self.assertEqual(len(tasks), 0)
 
         # create tasks and jobs from scratch
         NTASKS = len(pipeline.tasks)

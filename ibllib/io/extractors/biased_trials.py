@@ -157,8 +157,11 @@ def extract_all(session_path, save=False, bpod_trials=False, settings=False, ext
         bpod_trials = raw.load_data(session_path)
     if not settings:
         settings = raw.load_settings(session_path)
-    if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
+    if settings is None:
         settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
+
+    if settings['IBLRIG_VERSION_TAG'] == '':
+        settings['IBLRIG_VERSION_TAG'] = '100.0.0'
 
     base = [GoCueTriggerTimes]
     # Version check
