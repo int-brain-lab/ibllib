@@ -62,7 +62,7 @@ def _get_conversion_factor(unit=UNIT, ready_tone_spl=READY_TONE_SPL):
     return fac
 
 
-def welchogram(fs, wav, nswin=NS_WIN, overlap=OVERLAP, nperseg=NS_WELCH):
+def welchogram(fs, wav, nswin=NS_WIN, overlap=OVERLAP, nperseg=NS_WELCH, detect_kwargs=None):
     """
     Computes a spectrogram on a very large audio file.
 
@@ -71,6 +71,7 @@ def welchogram(fs, wav, nswin=NS_WIN, overlap=OVERLAP, nperseg=NS_WELCH):
     :param nswin: n samples of the sliding window
     :param overlap: n samples of the overlap between windows
     :param nperseg: n samples for the computation of the spectrogram
+    :param detect_kwargs: specified paramaters for detection
     :return: tscale, fscale, downsampled_spectrogram
     """
     ns = wav.shape[0]
@@ -84,7 +85,8 @@ def welchogram(fs, wav, nswin=NS_WIN, overlap=OVERLAP, nperseg=NS_WELCH):
         # load the current window into memory
         w = np.float64(wav[first:last]) * _get_conversion_factor()
         # detection of ready tones
-        a = [d + first for d in detect_ready_tone(w, fs)]
+        detect_kwargs = detect_kwargs or {}
+        a = [d + first for d in detect_ready_tone(w, fs, **detect_kwargs)]
         if len(a):
             detect += a
         # the last window may not allow a pwelch
