@@ -4,13 +4,16 @@ from pathlib import Path
 import logging
 
 import numpy as np
-from scipy import signal
+import scipy.signal
+import scipy.ndimage
 from scipy.io import wavfile
+
 
 from neurodsp.utils import WindowGenerator
 from neurodsp import fourier
 import ibllib.io.raw_data_loaders as ioraw
 from ibllib.io.extractors.training_trials import GoCueTimes
+
 
 logger_ = logging.getLogger('ibllib')
 
@@ -22,16 +25,19 @@ UNIT = 'dBFS'  # dBFS or dbSPL
 READY_TONE_SPL = 85
 
 
-def _running_mean(x, N):
-    cumsum = np.cumsum(np.insert(x, 0, 0))
-    return (cumsum[N:] - cumsum[:-N]) / N
-
-
-def _detect_ready_tone(w, fs):
+def detect_ready_tone(w, fs, ftone=FTONE, threshold=0.8):
+    """
+    Detects a transient sinusoid signal in a time-serie
+    :param w: audio time seried
+    :param fs: sampling frequency (Hz)
+    :param ftone: frequency of the tone to detect
+    :param threshold: ratio of the Hilbert to the signal, between 0 and 1 (set to 0.8)
+    :return:
+    """
     # get envelope of DC free signal and envelope of BP signal around freq of interest
-    h = np.abs(signal.hilbert(w - np.median(w)))
-    fh = np.abs(signal.hilbert(fourier.bp(w, si=1 / fs, b=FTONE * np.array([0.9, 0.95, 1.15, 1.1]))))
-    dtect = _running_mean(fh / (h + 1e-3), int(fs * 0.1)) > 0.8
+    h = np.abs(scipy.signal.hilbert(w - np.median(w)))
+    fh = np.abs(scipy.signal.hilbert(fourier.bp(w, si=1 / fs, b=ftone * np.array([0.9, 0.95, 1.15, 1.1]))))
+    dtect = scipy.ndimage.uniform_filter1d(fh / (h + 1e-3), int(fs * 0.1)) > threshold
     return np.where(np.diff(dtect.astype(int)) == 1)[0]
     # tone = np.sin(2 * np.pi * FTONE * np.arange(0, fs * 0.1) / fs)
     # tone = tone / np.sum(tone ** 2)
@@ -56,7 +62,7 @@ def _get_conversion_factor(unit=UNIT, ready_tone_spl=READY_TONE_SPL):
     return fac
 
 
-def welchogram(fs, wav, nswin=NS_WIN, overlap=OVERLAP, nperseg=NS_WELCH):
+def welchogram(fs, wav, nswin=NS_WIN, overlap=OVERLAP, nperseg=NS_WELCH, detect_kwargs=None):
     """
     Computes a spectrogram on a very large audio file.
 
@@ -65,6 +71,7 @@ def welchogram(fs, wav, nswin=NS_WIN, overlap=OVERLAP, nperseg=NS_WELCH):
     :param nswin: n samples of the sliding window
     :param overlap: n samples of the overlap between windows
     :param nperseg: n samples for the computation of the spectrogram
+    :param detect_kwargs: specified paramaters for detection
     :return: tscale, fscale, downsampled_spectrogram
     """
     ns = wav.shape[0]
@@ -78,7 +85,8 @@ def welchogram(fs, wav, nswin=NS_WIN, overlap=OVERLAP, nperseg=NS_WELCH):
         # load the current window into memory
         w = np.float64(wav[first:last]) * _get_conversion_factor()
         # detection of ready tones
-        a = [d + first for d in _detect_ready_tone(w, fs)]
+        detect_kwargs = detect_kwargs or {}
+        a = [d + first for d in detect_ready_tone(w, fs, **detect_kwargs)]
         if len(a):
             detect += a
         # the last window may not allow a pwelch
@@ -86,8 +94,8 @@ def welchogram(fs, wav, nswin=NS_WIN, overlap=OVERLAP, nperseg=NS_WELCH):
             continue
         # compute PSD estimate for the current window
         iw = window_generator.iw
-        _, W[iw, :] = signal.welch(w, fs=fs, window='hann', nperseg=nperseg, axis=-1,
-                                   detrend='constant', return_onesided=True, scaling='density')
+        _, W[iw, :] = scipy.signal.welch(w, fs=fs, window='hann', nperseg=nperseg, axis=-1,
+                                         detrend='constant', return_onesided=True, scaling='density')
     # the onset detection may have duplicates with sliding window, average them and remove
     detect = np.sort(np.array(detect)) / fs
     ind = np.where(np.diff(detect) < 0.1)[0]
