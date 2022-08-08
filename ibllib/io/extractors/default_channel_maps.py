@@ -40,5 +40,17 @@ DEFAULT_MAPS = {
                   'rotary_encoder_1': 6,
                   'audio': 7,
                   'bpod': 16}
+         },
+
+    'sync':
+        {'nidq': {'left_camera': 0,
+                  'right_camera': 1,
+                  'body_camera': 2,
+                  'frame_trigger': 3,
+                  'frame2ttl': 4,
+                  'rotary_encoder_0': 5,
+                  'rotary_encoder_1': 6,
+                  'audio': 7,
+                  'bpod': 16}
          }
 }
