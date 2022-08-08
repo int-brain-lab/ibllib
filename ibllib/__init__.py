@@ -1,3 +1,4 @@
+"""Library implementing the International Brain Laboratory data pipeline."""
 __version__ = "2.13.6"
 import warnings
 
