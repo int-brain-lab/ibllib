@@ -29,7 +29,7 @@ def _run_command(cmd):
 
 def job_transfer_ks2(probe_path):
 
-    assert(isinstance(probe_path, str))
+    assert isinstance(probe_path, str)
 
     def _get_volume_usage_percentage(vol):
         cmd = f'df {vol}'

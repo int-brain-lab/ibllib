@@ -181,7 +181,7 @@ class TestTraining(unittest.TestCase):
         assert (np.all(np.array(task_protocol) == 'training'))
         status, info = train.get_training_status(trials, task_protocol, ephys_sess_dates=[],
                                                  n_delay=0)
-        assert(status == 'trained 1b')
+        self.assertEqual(status, 'trained 1b')
 
     def test_training_to_bias(self):
         trials, task_protocol = self._get_trials(

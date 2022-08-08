@@ -1,4 +1,5 @@
-__version__ = "2.12.2"
+"""Library implementing the International Brain Laboratory data pipeline."""
+__version__ = "2.13.6"
 import warnings
 
 from ibllib.misc import logger_config

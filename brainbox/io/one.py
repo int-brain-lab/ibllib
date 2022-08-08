@@ -842,19 +842,19 @@ def load_channels_from_insertion(ins, depths=None, one=None, ba=None):
     idx = np.argmax(val)
     traj = traj[idx]
     if depths is None:
-        depths = trace_header(version=1)['y']
+        depths = trace_header(version=1)[:, 1]
     if traj['provenance'] == 'Planned' or traj['provenance'] == 'Micro-manipulator':
         ins = atlas.Insertion.from_dict(traj)
         # Deepest coordinate first
         xyz = np.c_[ins.tip, ins.entry].T
-        xyz_channels = histology.interpolate_along_track(
-            xyz, (depths + TIP_SIZE_UM) / 1e6)
+        xyz_channels = histology.interpolate_along_track(xyz, (depths +
+                                                               TIP_SIZE_UM) / 1e6)
     else:
         xyz = np.array(ins['json']['xyz_picks']) / 1e6
         if traj['provenance'] == 'Histology track':
             xyz = xyz[np.argsort(xyz[:, 2]), :]
-            xyz_channels = histology.interpolate_along_track(
-                xyz, (depths + TIP_SIZE_UM) / 1e6)
+            xyz_channels = histology.interpolate_along_track(xyz, (depths +
+                                                                   TIP_SIZE_UM) / 1e6)
         else:
             align_key = ins['json']['extended_qc']['alignment_stored']
             feature = traj['json'][align_key][0]

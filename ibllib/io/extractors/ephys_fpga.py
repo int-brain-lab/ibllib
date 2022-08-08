@@ -161,7 +161,7 @@ def _assign_events_bpod(bpod_t, bpod_polarities, ignore_first_valve=True):
     # some bpods and this is the highest possible value that discriminates trial start from valve
     ITI_TTL_LEN = 0.4
     # make sure that there are no 2 consecutive fall or consecutive rise events
-    assert(np.all(np.abs(np.diff(bpod_polarities)) == 2))
+    assert np.all(np.abs(np.diff(bpod_polarities)) == 2)
     if bpod_polarities[0] == -1:
         bpod_t = np.delete(bpod_t, 0)
     # take only even time differences: ie. from rising to falling fronts
@@ -190,7 +190,7 @@ def _assign_events_bpod(bpod_t, bpod_polarities, ignore_first_valve=True):
     # events['id'][i_iti_in] = 3
     # i_abnormal = np.where(np.diff(events['id'][bpod_polarities != -1]) == 0)
     # t_abnormal = events['t'][bpod_polarities != -1][i_abnormal]
-    # assert(np.all(events != 0))
+    # assert np.all(events != 0)
     # plt.figure()
     # plots.squares(bpod_t, bpod_polarities, label='raw fronts')
     # plots.vertical_lines(t_trial_start, ymin=-0.2, ymax=1.1, linewidth=0.5, label='trial start')
@@ -260,7 +260,7 @@ def _assign_events_audio(audio_t, audio_polarities, return_indices=False, displa
     :return: numpy arrays ind_ready_tone_in, ind_error_tone_in if return_indices=True
     """
     # make sure that there are no 2 consecutive fall or consecutive rise events
-    assert(np.all(np.abs(np.diff(audio_polarities)) == 2))
+    assert np.all(np.abs(np.diff(audio_polarities)) == 2)
     # take only even time differences: ie. from rising to falling fronts
     dt = np.diff(audio_t)
     # detect ready tone by length below 110 ms
@@ -295,11 +295,11 @@ def _assign_events_to_trial(t_trial_start, t_event, take='last'):
     """
     # make sure the events are sorted
     try:
-        assert(np.all(np.diff(t_trial_start) >= 0))
+        assert np.all(np.diff(t_trial_start) >= 0)
     except AssertionError:
         raise ValueError('Trial starts vector not sorted')
     try:
-        assert(np.all(np.diff(t_event) >= 0))
+        assert np.all(np.diff(t_event) >= 0)
     except AssertionError:
         raise ValueError('Events vector is not sorted')
     # remove events that happened before the first trial start

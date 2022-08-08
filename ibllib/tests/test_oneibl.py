@@ -9,9 +9,9 @@ import numpy as np
 from one.api import ONE
 import iblutil.io.params as iopar
 
-from ibllib import __version__ as ibllib_version
 from ibllib.oneibl import patcher, registration
 import ibllib.io.extractors.base
+from ibllib.misc import version
 from ibllib.tests import TEST_DB
 
 
@@ -105,7 +105,7 @@ r = {'created_by': 'olivier',
      'filenames': ["raw_behavior_data/_iblrig_encoderTrialInfo.raw.ssv"],
      'hashes': [md5_0],
      'filesizes': [1234],
-     'versions': [ibllib_version]}
+     'versions': [version.ibllib()]}
 
 MOCK_SESSION_SETTINGS = {
     'SESSION_DATE': '2018-04-01',
@@ -140,11 +140,11 @@ class TestRegistrationEndpoint(unittest.TestCase):
             ('_iblrig_tasks_biasedScanningChoiceWorld5.2.3', 'Behavior training/tasks'),
             ('_iblrig_tasks_trainingChoiceWorld3.6.0', 'Behavior training/tasks'),
             ('_iblrig_tasks_ephysChoiceWorld5.1.3', 'Ephys recording with acute probe(s)'),
-            ('_iblrig_calibration_frame2TTL4.1.3', []),
+            ('_iblrig_calibration_frame2TTL4.1.3', None),
             ('_iblrig_tasks_habituationChoiceWorld3.6.0', 'Behavior training/tasks'),
-            ('_iblrig_tasks_scanningOptoChoiceWorld5.0.0', []),
-            ('_iblrig_tasks_RewardChoiceWorld4.1.3', []),
-            ('_iblrig_calibration_screen4.1.3', []),
+            ('_iblrig_tasks_scanningOptoChoiceWorld5.0.0', None),
+            ('_iblrig_tasks_RewardChoiceWorld4.1.3', None),
+            ('_iblrig_calibration_screen4.1.3', None),
             ('_iblrig_tasks_ephys_certification4.1.3', 'Ephys recording with acute probe(s)'),
         ]
         for to in task_out:
@@ -216,7 +216,7 @@ class TestRegistration(unittest.TestCase):
         np.save(self.alf_path.joinpath('spikes.times.npy'), np.random.random(500))
         np.save(self.alf_path.joinpath('spikes.amps.npy'), np.random.random(500))
         r = registration.register_dataset(file_list=flist, one=self.one)
-        self.assertTrue(all(all(not(fr['exists']) for fr in rr['file_records']) for rr in r))
+        self.assertTrue(all(all(not fr['exists'] for fr in rr['file_records']) for rr in r))
 
         # Test registering with a revision
         flist = list(self.rev_path.glob('*.npy'))
@@ -254,7 +254,7 @@ class TestRegistration(unittest.TestCase):
         for ds in datasets:
             self.assertTrue(ds['hash'] is not None)
             self.assertTrue(ds['file_size'] is not None)
-            self.assertTrue(ds['version'] == ibllib_version)
+            self.assertTrue(ds['version'] == ibllib.__version__)
         # checks the procedure of the session
         ses_info = self.one.alyx.rest('sessions', 'read', id=eid)
         self.assertTrue(ses_info['procedures'] == ['Ephys recording with acute probe(s)'])

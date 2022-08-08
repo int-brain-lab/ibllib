@@ -63,7 +63,7 @@ def trial_times_to_times(raw_trial):
     raw_trial['behavior_data']['Bpod start timestamp'] -= shift
     raw_trial['behavior_data']['Trial start timestamp'] -= shift
     raw_trial['behavior_data']['Trial end timestamp'] -= shift
-    assert(raw_trial['behavior_data']['Bpod start timestamp'] == 0)
+    assert raw_trial['behavior_data']['Bpod start timestamp'] == 0
     return raw_trial
 
 
@@ -331,7 +331,7 @@ def load_stim_position_screen(session_path, task_collection='raw_behavior_data')
     path = Path(session_path).joinpath(task_collection)
     path = next(path.glob("_iblrig_stimPositionScreen.raw*.csv"), None)
 
-    data = pd.read_csv(path, sep=',', header=None, error_bad_lines=False)
+    data = pd.read_csv(path, sep=',', header=None, on_bad_lines='skip')
     data.columns = ['contrast', 'position', 'bns_ts']
     data['bns_ts'] = pd.to_datetime(data['bns_ts'])
     return data
@@ -386,7 +386,7 @@ def _load_encoder_ssv_file(file_path, **kwargs):
     if file_path.stat().st_size == 0:
         _logger.error(f"{file_path.name} is an empty file. ")
         raise ValueError(f"{file_path.name} is an empty file. ABORT EXTRACTION. ")
-    return pd.read_csv(file_path, sep=' ', header=None, error_bad_lines=False, **kwargs)
+    return pd.read_csv(file_path, sep=' ', header=None, on_bad_lines='skip', **kwargs)
 
 
 def _load_encoder_positions_file_lt5(file_path):

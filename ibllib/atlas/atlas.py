@@ -94,22 +94,55 @@ class BrainCoordinates:
         else:
             return i
 
-    def x2i(self, x, round=True):
-        return self._round((x - self.x0) / self.dx, round=round)
+    def x2i(self, x, round=True, mode='raise'):
+        i = np.asarray(self._round((x - self.x0) / self.dx, round=round))
+        if np.any(i < 0) or np.any(i >= self.nx):
+            if mode == 'clip':
+                i[i < 0] = 0
+                i[i >= self.nx] = self.nx - 1
+            elif mode == 'raise':
+                raise ValueError("At least one x value lies outside of the atlas volume.")
+            elif mode == 'wrap':
+                pass
+        return i
 
-    def y2i(self, y, round=True):
-        return self._round((y - self.y0) / self.dy, round=round)
+    def y2i(self, y, round=True, mode='raise'):
+        i = np.asarray(self._round((y - self.y0) / self.dy, round=round))
+        if np.any(i < 0) or np.any(i >= self.ny):
+            if mode == 'clip':
+                i[i < 0] = 0
+                i[i >= self.ny] = self.ny - 1
+            elif mode == 'raise':
+                raise ValueError("At least one y value lies outside of the atlas volume.")
+            elif mode == 'wrap':
+                pass
+        return i
 
-    def z2i(self, z, round=True):
-        return self._round((z - self.z0) / self.dz, round=round)
+    def z2i(self, z, round=True, mode='raise'):
+        i = np.asarray(self._round((z - self.z0) / self.dz, round=round))
+        if np.any(i < 0) or np.any(i >= self.nz):
+            if mode == 'clip':
+                i[i < 0] = 0
+                i[i >= self.nz] = self.nz - 1
+            elif mode == 'raise':
+                raise ValueError("At least one z value lies outside of the atlas volume.")
+            elif mode == 'wrap':
+                pass
+        return i
 
-    def xyz2i(self, xyz, round=True):
+    def xyz2i(self, xyz, round=True, mode='raise'):
+        """
+        :param mode: {‘raise’, 'clip', 'wrap'} determines what to do when determined index lies outside the atlas volume
+                     'raise' will raise a ValueError
+                     'clip' will replace the index with the closest index inside the volume
+                     'wrap' will wrap around to the other side of the volume. This is only here for legacy reasons
+        """
         xyz = np.array(xyz)
         dt = int if round else float
         out = np.zeros_like(xyz, dtype=dt)
-        out[..., 0] = self.x2i(xyz[..., 0], round=round)
-        out[..., 1] = self.y2i(xyz[..., 1], round=round)
-        out[..., 2] = self.z2i(xyz[..., 2], round=round)
+        out[..., 0] = self.x2i(xyz[..., 0], round=round, mode=mode)
+        out[..., 1] = self.y2i(xyz[..., 1], round=round, mode=mode)
+        out[..., 2] = self.z2i(xyz[..., 2], round=round, mode=mode)
         return out
 
     """Methods indices to distance"""
@@ -192,8 +225,8 @@ class BrainAtlas:
         self.regions = regions
         self.dims2xyz = dims2xyz
         self.xyz2dims = xyz2dims
-        assert(np.all(self.dims2xyz[self.xyz2dims] == np.array([0, 1, 2])))
-        assert(np.all(self.xyz2dims[self.dims2xyz] == np.array([0, 1, 2])))
+        assert np.all(self.dims2xyz[self.xyz2dims] == np.array([0, 1, 2]))
+        assert np.all(self.xyz2dims[self.dims2xyz] == np.array([0, 1, 2]))
         # create the coordinate transform object that maps volume indices to real world coordinates
         nxyz = np.array(self.image.shape)[self.dims2xyz]
         bc = BrainCoordinates(nxyz=nxyz, xyz0=(0, 0, 0), dxyz=dxyz)
@@ -211,7 +244,10 @@ class BrainAtlas:
     def compute_surface(self):
         """
         Get the volume top, bottom, left and right surfaces, and from these the outer surface of
-        the image volume. This is needed to compute probe insertions intersections
+        the image volume. This is needed to compute probe insertions intersections.
+
+        NOTE: In places where the top or bottom surface touch the top or bottom of the atlas volume, the surface
+        will be set to np.nan. If you encounter issues working with these surfaces check if this might be the cause.
         """
         if self.surface is None:  # only compute if it hasn't already been computed
             axz = self.xyz2dims[2]  # this is the dv axis
@@ -248,16 +284,34 @@ class BrainAtlas:
         """
         return self._lookup_inds(self.bc.xyz2i(xyz))
 
-    def get_labels(self, xyz, mapping='Allen'):
+    def get_labels(self, xyz, mapping='Allen', radius_um=None):
         """
         Performs a 3D lookup from real world coordinates to the volume labels
         and return the regions ids according to the mapping
         :param xyz: [n, 3] array of coordinates
         :param mapping: brain region mapping (defaults to original Allen mapping)
+        :param radius_um: if not null, returns a regions ids array and an array of proportion
+         of regions in a sphere of size radius around the coordinates.
         :return: n array of region ids
         """
-        regions_indices = self._get_mapping(mapping=mapping)[self.label.flat[self._lookup(xyz)]]
-        return self.regions.id[regions_indices]
+        if radius_um:
+            nrx = int(np.ceil(radius_um / abs(self.bc.dx) / 1e6))
+            nry = int(np.ceil(radius_um / abs(self.bc.dy) / 1e6))
+            nrz = int(np.ceil(radius_um / abs(self.bc.dz) / 1e6))
+            nr = [nrx, nry, nrz]
+            iii = self.bc.xyz2i(xyz)
+            # computing the cube radius and indices is more complicated as volume indices are not
+            # necessariy in ml, ap, dv order so the indices order is dynamic
+            rcube = np.meshgrid(*tuple((np.arange(
+                -nr[i], nr[i] + 1) * self.bc.dxyz[i]) ** 2 for i in self.xyz2dims))
+            rcube = np.sqrt(rcube[0] + rcube[1], rcube[2]) * 1e6
+            icube = tuple(slice(-nr[i] + iii[i], nr[i] + iii[i] + 1) for i in self.xyz2dims)
+            cube = self.regions.mappings[mapping][self.label[icube]]
+            ilabs, counts = np.unique(cube[rcube <= radius_um], return_counts=True)
+            return self.regions.id[ilabs], counts / np.sum(counts)
+        else:
+            regions_indices = self._get_mapping(mapping=mapping)[self.label.flat[self._lookup(xyz)]]
+            return self.regions.id[regions_indices]
 
     def _get_mapping(self, mapping='Allen'):
         """
@@ -423,7 +477,12 @@ class BrainAtlas:
         :param mapping: mapping to use. Options can be found using ba.regions.mappings.keys()
         :return: 2d array or 3d RGB numpy int8 array
         """
-        index = self.bc.xyz2i(np.array([coordinate] * 3))[axis]
+        if axis == 0:
+            index = self.bc.x2i(np.array(coordinate), mode=mode)
+        elif axis == 1:
+            index = self.bc.y2i(np.array(coordinate), mode=mode)
+        elif axis == 2:
+            index = self.bc.z2i(np.array(coordinate), mode=mode)
 
         # np.take is 50 thousand times slower than straight slicing !
         def _take(vol, ind, axis):
@@ -749,7 +808,10 @@ class Insertion:
         if brain_atlas:
             iy = brain_atlas.bc.y2i(d['y'] / 1e6)
             ix = brain_atlas.bc.x2i(d['x'] / 1e6)
-            z = brain_atlas.top[iy, ix]
+            # Only use the brain surface value as z if it isn't NaN (this happens when the surface touches the edges
+            # of the atlas volume
+            if not np.isnan(brain_atlas.top[iy, ix]):
+                z = brain_atlas.top[iy, ix]
         return Insertion(x=d['x'] / 1e6, y=d['y'] / 1e6, z=z,
                          phi=d['phi'], theta=d['theta'], depth=d['depth'] / 1e6,
                          beta=d.get('beta', 0), label=d.get('label', ''))

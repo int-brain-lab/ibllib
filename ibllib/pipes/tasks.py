@@ -592,7 +592,8 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
             _logger.warning(f"{tdict['name']} has unmet dependencies")
             # if parents are waiting or failed, set the current task status to Held
             # once the parents ran, the descendent tasks will be set from Held to Waiting (see below)
-            if any(map(lambda s: s in ['Errored', 'Held', 'Empty', 'Waiting'], parent_statuses)):
+            if any(map(lambda s: s in ['Errored', 'Held', 'Empty', 'Waiting', 'Started', 'Abandoned'],
+                       parent_statuses)):
                 tdict = one.alyx.rest('tasks', 'partial_update', id=tdict['id'],
                                       data={'status': 'Held'})
             return tdict, registered_dsets

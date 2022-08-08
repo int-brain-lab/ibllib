@@ -3,9 +3,7 @@ import unittest
 from pathlib import Path
 from collections import OrderedDict
 
-from ibllib import __version__ as ibllib_version
 import ibllib.pipes.tasks
-from ibllib.pipes.local_server import task_queue
 from one.api import ONE
 from ibllib.tests import TEST_DB
 
@@ -27,14 +25,13 @@ desired_statuses = {
     'Task10': 'Complete',
     'Task11': 'Held',
     'TaskIncomplete': 'Incomplete',
-    'TaskGpuLock': 'Waiting',
-    'TaskDynamic': 'Complete',
+    'TaskGpuLock': 'Waiting'
 }
 
 desired_datasets = ['spikes.times.npy', 'spikes.amps.npy', 'spikes.clusters.npy']
 desired_versions = {'spikes.times.npy': 'custom_job00',
-                    'spikes.amps.npy': ibllib_version,
-                    'spikes.clusters.npy': ibllib_version}
+                    'spikes.amps.npy': ibllib.__version__,
+                    'spikes.clusters.npy': ibllib.__version__}
 desired_logs = 'Running on machine: testmachine'
 desired_logs_rerun = {
     'Task00': 1,
@@ -43,8 +40,7 @@ desired_logs_rerun = {
     'Task10': 1,
     'Task11': 1,
     'TaskIncomplete': 1,
-    'TaskGpuLock': 2,
-    'TaskDynamic': 1,
+    'TaskGpuLock': 2
 }
 
 
@@ -104,7 +100,6 @@ class Task11(ibllib.pipes.tasks.Task):
 #  Job that encounters a GPU lock and is set to Waiting
 class TaskGpuLock(ibllib.pipes.tasks.Task):
     gpu = 1
-    job_size = 'large'
 
     # Overwrite setUp to create a lock file before running the task and remove it after
     def setUp(self):
@@ -137,9 +132,8 @@ class SomePipeline(ibllib.pipes.tasks.Pipeline):
         tasks['TaskIncomplete'] = TaskIncomplete(self.session_path)
         tasks['Task10'] = Task10(self.session_path, parents=[tasks['Task00']])
         # When both its parents Complete, this task should be set to Waiting and should finally complete
-        tasks['Task11'] = Task11(self.session_path, parents=[tasks['Task02_error'], tasks['Task00']])
-        # try with a dynamic tasks
-        tasks['TaskDynamic'] = type('TaskDynamic', (Task00,), {})(self.session_path)
+        tasks['Task11'] = Task11(self.session_path, parents=[tasks['Task02_error'],
+                                                             tasks['Task00']])
         self.tasks = tasks
 
 
@@ -159,7 +153,6 @@ class TestPipelineAlyx(unittest.TestCase):
         session_path.joinpath('alf').mkdir(exist_ok=True, parents=True)
         self.session_path = session_path
         self.eid = ses['url'][-36:]
-        self.lab = ses['lab']
 
     def tearDown(self) -> None:
         self.td.cleanup()
@@ -171,7 +164,7 @@ class TestPipelineAlyx(unittest.TestCase):
 
         # prepare by deleting all jobs/tasks related
         tasks = one.alyx.rest('tasks', 'list', session=eid, no_cache=True)
-        assert(len(tasks) == 0)
+        self.assertEqual(len(tasks), 0)
 
         # create tasks and jobs from scratch
         NTASKS = len(pipeline.tasks)
@@ -182,16 +175,6 @@ class TestPipelineAlyx(unittest.TestCase):
         # get the pending jobs from alyx
         tasks = one.alyx.rest('tasks', 'list', session=eid, status='Waiting', no_cache=True)
         self.assertTrue(len(tasks) == NTASKS)
-
-        # check that they go into the correct task queue
-        all_tasks = task_queue(mode='all', lab=[self.lab], one=one)
-        self.assertTrue(len(all_tasks) == NTASKS)
-        small_tasks = task_queue(mode='small', lab=[self.lab], one=one)
-        self.assertTrue(len(small_tasks) == NTASKS - 1)
-        self.assertTrue('TaskGpuLock' not in [t['name'] for t in small_tasks])
-        large_tasks = task_queue(mode='large', lab=[self.lab], one=one)
-        self.assertTrue(len(large_tasks) == 1)
-        self.assertTrue('TaskGpuLock' == large_tasks[0]['name'])
 
         # run them and make sure their statuses got updated appropriately
         task_deck, datasets = pipeline.run(machine='testmachine')
@@ -206,16 +189,14 @@ class TestPipelineAlyx(unittest.TestCase):
 
         # also checks that the datasets have been labeled with the proper version
         dsets = one.alyx.rest('datasets', 'list', session=eid, no_cache=True)
-        for d in dsets:
-            with self.subTest(d['name']):
-                self.assertEqual(desired_versions[d['name']], d['version'])
+        check_versions = [desired_versions[d['name']] == d['version'] for d in dsets]
+        self.assertTrue(all(check_versions))
 
         # make sure that re-running the make job by default doesn't change complete jobs
         pipeline.create_alyx_tasks()
         task_deck = one.alyx.rest('tasks', 'list', session=eid, no_cache=True)
-        for t in task_deck:
-            with self.subTest(t['name']):
-                self.assertEqual(desired_statuses[t['name']], t['status'])
+        check_statuses = [desired_statuses[t['name']] == t['status'] for t in task_deck]
+        self.assertTrue(all(check_statuses))
 
         # test the rerun option
         task_deck, dsets = pipeline.rerun_failed(machine='testmachine')

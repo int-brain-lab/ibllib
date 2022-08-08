@@ -141,7 +141,7 @@ class TestAlignmentQcExisting(unittest.TestCase):
         trajectory = copy.deepcopy(self.trajectory)
         trajectory.update({'json': alignments})
         traj = one.alyx.rest('trajectories', 'update', id=self.prev_traj_id, data=trajectory)
-        assert(self.prev_traj_id == traj['id'])
+        self.assertEqual(self.prev_traj_id, traj['id'])
         align_qc = AlignmentQC(self.probe_id, one=one, brain_atlas=brain_atlas, channels=False)
         align_qc.load_data(cluster_chns=self.cluster_chns, depths=SITES_COORDINATES[:, 1],
                            chn_coords=SITES_COORDINATES)
@@ -340,16 +340,16 @@ class TestUploadToFlatIron(unittest.TestCase):
     def test_data_content(self):
         alf_path = one.path_from_eid(EPHYS_SESSION).joinpath('alf', self.probe_name)
         channels_mlapdv = np.load(alf_path.joinpath('channels.mlapdv.npy'))
-        assert(np.all(np.abs(channels_mlapdv) > 0))
+        self.assertTrue(np.all(np.abs(channels_mlapdv) > 0))
         channels_id = np.load(alf_path.joinpath('channels.brainLocationIds_ccf_2017.npy'))
-        assert(channels_mlapdv.shape[0] == channels_id.shape[0])
+        self.assertEqual(channels_mlapdv.shape[0], channels_id.shape[0])
 
     def test_upload_to_flatiron(self):
         for file in self.file_paths:
             file_registered = one.alyx.get(f'/datasets?&session={EPHYS_SESSION}'
                                            f'&dataset_type={file.stem}')
             data_id = file_registered[0]['url'][-36:]
-            assert(len(file_registered) == 1)
+            self.assertEqual(len(file_registered), 1)
             one.alyx.rest('datasets', 'delete', id=data_id)
 
     @classmethod

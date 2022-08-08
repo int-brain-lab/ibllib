@@ -477,17 +477,16 @@ def ephys_bad_channels(raw, fs, channel_labels, channel_features, channels=None,
 
     if plot_backend == 'matplotlib':
         _, axs = plt.subplots(1, 2, gridspec_kw={'width_ratios': [.95, .05]}, figsize=(16, 9))
-        eqcs.append(Density(butt, fs=fs, taxis=1, ax=axs[0], title='highpass', vmin=eqc_levels[0], vmax=eqc_levels[1],
-                            cmap='Greys'))
+        eqcs.append(Density(butt, fs=fs, taxis=1, ax=axs[0], title='highpass', vmin=eqc_levels[0], vmax=eqc_levels[1]))
 
         if destripe:
             dest = voltage.destripe(raw, fs=fs, channel_labels=channel_labels)
             _, axs = plt.subplots(1, 2, gridspec_kw={'width_ratios': [.95, .05]}, figsize=(16, 9))
-            eqcs.append(Density(dest, fs=fs, taxis=1, ax=axs[0], title='destripe', vmin=eqc_levels[0], vmax=eqc_levels[1],
-                                cmap='Greys'))
+            eqcs.append(Density(
+                dest, fs=fs, taxis=1, ax=axs[0], title='destripe', vmin=eqc_levels[0], vmax=eqc_levels[1]))
             _, axs = plt.subplots(1, 2, gridspec_kw={'width_ratios': [.95, .05]}, figsize=(16, 9))
             eqcs.append(Density((butt - dest), fs=fs, taxis=1, ax=axs[0], title='difference', vmin=eqc_levels[0],
-                                vmax=eqc_levels[1], cmap='Greys'))
+                                vmax=eqc_levels[1]))
 
         for eqc in eqcs:
             y, x = np.meshgrid(ioutside, np.linspace(0, rl * 1e3, 500))
@@ -618,7 +617,7 @@ def raw_destripe(raw, fs, t0, i_plt, n_plt,
         Tplot = Xs.shape[1] / fs
 
         # PLOT RAW DATA
-        d = Density(-Xs, fs=fs, taxis=1, ax=axs[i_plt], vmin=MIN_X, vmax=MAX_X, cmap='Greys') # noqa
+        d = Density(-Xs, fs=fs, taxis=1, ax=axs[i_plt], vmin=MIN_X, vmax=MAX_X) # noqa
         axs[i_plt].set_ylabel('')
         axs[i_plt].set_xlim((0, Tplot * 1e3))
         axs[i_plt].set_ylim((0, nc))

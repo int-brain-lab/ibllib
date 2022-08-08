@@ -227,7 +227,7 @@ def get_training_status(trials, task_protocol, ephys_sess_dates, n_delay):
          info.rt) = compute_bias_info(trials, trials_all)
         # We are still on training rig and so all sessions should be biased
         if len(ephys_sess_dates) == 0:
-            assert(np.all(np.array(task_protocol) == 'biased'))
+            assert np.all(np.array(task_protocol) == 'biased')
             if criterion_ephys(info.psych_20, info.psych_80, info.n_trials, info.perf_easy,
                                info.rt):
                 status = 'ready4ephysrig'

@@ -13,13 +13,13 @@ from iblutil.util import Bunch
 import spikeglx
 import neuropixel
 from neurodsp import fourier, utils, voltage
-from tqdm import tqdm
 
 from brainbox.io.spikeglx import Streamer
 from brainbox.metrics.single_units import spike_sorting_metrics
 from ibllib.ephys import sync_probes, spikes
 from ibllib.qc import base
 from ibllib.io.extractors import ephys_fpga, training_wheel
+from ibllib.misc import print_progress
 from phylib.io import model
 
 
@@ -107,13 +107,13 @@ class EphysQC(base.QC):
         :param h: dictionary containing sensor coordinates, see neuropixel.trace_header
         :return: 3 numpy vectors nchannels length
         """
-        destripe = voltage.destripe(raw, fs=fs, h=h)
+        destripe = voltage.destripe(raw, fs=fs, neuropixel_version=1)
         rms_raw = utils.rms(raw)
         rms_pre_proc = utils.rms(destripe)
         detections = spikes.detection(data=destripe.T, fs=fs, h=h, detect_threshold=SPIKE_THRESHOLD_UV * 1e-6)
         spike_rate = np.bincount(detections.trace, minlength=raw.shape[0]).astype(np.float32)
         channel_labels, _ = voltage.detect_bad_channels(raw, fs=fs)
-        _, psd = signal.welch(destripe, fs=fs, window='hanning', nperseg=WELCH_WIN_LENGTH_SAMPLES,
+        _, psd = signal.welch(destripe, fs=fs, window='hann', nperseg=WELCH_WIN_LENGTH_SAMPLES,
                               detrend='constant', return_onesided=True, scaling='density', axis=-1)
         return rms_raw, rms_pre_proc, spike_rate, channel_labels, psd
 
@@ -149,16 +149,9 @@ class EphysQC(base.QC):
             else:
                 sr = self.data['ap']
                 nc = sr.nc - sr.nsync
-
-                # Need to read in the lfp data
                 # verify that the channel layout is correct according to IBL layout
+                h = neuropixel.trace_header(sr.major_version)
                 th = sr.geometry
-                if sr.meta.get('NP2.4_shank', None) is not None:
-                    h = neuropixel.trace_header(sr.major_version, nshank=4)
-                    h = neuropixel.split_trace_header(h, shank=int(sr.meta.get('NP2.4_shank')))
-                else:
-                    h = neuropixel.trace_header(sr.major_version, nshank=np.unique(th['shank']).size)
-
                 if not (np.all(h['x'] == th['x']) and np.all(h['y'] == th['y'])):
                     _logger.critical("Channel geometry seems incorrect")
                     raise ValueError("Wrong Neuropixel channel mapping used - ABORT")
@@ -216,26 +209,23 @@ def rmsmap(sglx):
            'tscale': wingen.tscale(fs=sglx.fs)}
     win['spectral_density'] = np.zeros((len(win['fscale']), sglx.nc))
     # loop through the whole session
-    with tqdm(total=wingen.firstlast) as pbar:
-        for first, last in wingen.firstlast:
-            D = sglx.read_samples(first_sample=first, last_sample=last)[0].transpose()
-            # remove low frequency noise below 1 Hz
-            D = fourier.hp(D, 1 / sglx.fs, [0, 1])
-            iw = wingen.iw
-            win['TRMS'][iw, :] = utils.rms(D)
-            win['nsamples'][iw] = D.shape[1]
-            # the last window may be smaller than what is needed for welch
-            if last - first < WELCH_WIN_LENGTH_SAMPLES:
-                continue
-            # compute a smoothed spectrum using welch method
-            _, w = signal.welch(
-                D, fs=sglx.fs, window='hanning', nperseg=WELCH_WIN_LENGTH_SAMPLES,
-                detrend='constant', return_onesided=True, scaling='density', axis=-1
-            )
-            win['spectral_density'] += w.T
-            # print at least every 20 windows
-            if (iw % min(20, max(int(np.floor(wingen.nwin / 75)), 1))) == 0:
-                pbar.update(iw)
+    for first, last in wingen.firstlast:
+        D = sglx.read_samples(first_sample=first, last_sample=last)[0].transpose()
+        # remove low frequency noise below 1 Hz
+        D = fourier.hp(D, 1 / sglx.fs, [0, 1])
+        iw = wingen.iw
+        win['TRMS'][iw, :] = utils.rms(D)
+        win['nsamples'][iw] = D.shape[1]
+        # the last window may be smaller than what is needed for welch
+        if last - first < WELCH_WIN_LENGTH_SAMPLES:
+            continue
+        # compute a smoothed spectrum using welch method
+        _, w = signal.welch(D, fs=sglx.fs, window='hann', nperseg=WELCH_WIN_LENGTH_SAMPLES,
+                            detrend='constant', return_onesided=True, scaling='density', axis=-1)
+        win['spectral_density'] += w.T
+        # print at least every 20 windows
+        if (iw % min(20, max(int(np.floor(wingen.nwin / 75)), 1))) == 0:
+            print_progress(iw, wingen.nwin)
     sglx.close()
     return win
 
@@ -403,8 +393,8 @@ def spike_sorting_metrics_ks2(ks2_path=None, m=None, save=True, save_path=None):
     save_path = save_path or ks2_path
 
     # ensure that either a ks2_path or a phylib `TemplateModel` object with unit info is given
-    assert not(ks2_path is None and m is None), 'Must either specify a path to a ks2 output ' \
-                                                'directory, or a phylib `TemplateModel` object'
+    assert not (ks2_path is None and m is None), 'Must either specify a path to a ks2 output ' \
+                                                 'directory, or a phylib `TemplateModel` object'
     # create phylib `TemplateModel` if not given
     m = phy_model_from_ks2_path(ks2_path) if None else m
     c, drift = spike_sorting_metrics(m.spike_times, m.spike_clusters, m.amplitudes, m.depths)
