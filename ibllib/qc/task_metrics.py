@@ -61,12 +61,8 @@ _log = logging.getLogger('ibllib')
 
 class TaskQC(base.QC):
     """A class for computing task QC metrics"""
-    criteria = {"PASS": 0.99, "WARNING": 0.95, "FAIL": 0}
+    criteria = {"PASS": 0.99, "WARNING": 0.90, "FAIL": 0}  # Note: WARNING was 0.95
     fcns_value2status = {'default': lambda x: TaskQC._thresholding(x),
-                         # '_task_stimFreeze_delays': lambda x: - 1,
-                         # '_task_response_stimFreeze_delays': lambda x: -1,
-                         # '_task_passed_trial_checks': lambda x: -1,
-                         # '_task_iti_delays': lambda x: -1,
                          '_task_stimOff_itiIn_delays': lambda x:
                          TaskQC._thresholding(x, thresholds={"PASS": 0.99, "WARNING": 0}),
                          '_task_positive_feedback_stimOff_delays': lambda x:
