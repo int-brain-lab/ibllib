@@ -63,10 +63,40 @@ class TaskQC(base.QC):
     """A class for computing task QC metrics"""
     criteria = {"PASS": 0.99, "WARNING": 0.95, "FAIL": 0}
     fcns_value2status = {'default': lambda x: TaskQC._thresholding(x),
-                         '_task_stimFreeze_delays': lambda x: - 1,
-                         '_task_response_stimFreeze_delays': lambda x: -1,
-                         '_task_passed_trial_checks': lambda x: -1,
-                         '_task_iti_delays': lambda x: -1}
+                         # '_task_stimFreeze_delays': lambda x: - 1,
+                         # '_task_response_stimFreeze_delays': lambda x: -1,
+                         # '_task_passed_trial_checks': lambda x: -1,
+                         # '_task_iti_delays': lambda x: -1,
+                         '_task_stimOff_itiIn_delays': lambda x:
+                         TaskQC._thresholding(x, thresholds={"PASS": 0.99, "WARNING": 0}),
+                         '_task_positive_feedback_stimOff_delays': lambda x:
+                         TaskQC._thresholding(x, thresholds={"PASS": 0.99, "WARNING": 0}),
+                         '_task_negative_feedback_stimOff_delays': lambda x:
+                         TaskQC._thresholding(x, thresholds={"PASS": 0.99, "WARNING": 0}),
+                         '_task_wheel_move_during_closed_loop': lambda x:
+                         TaskQC._thresholding(x, thresholds={"PASS": 0.99, "WARNING": 0}),
+                         '_task_response_stimFreeze_delays': lambda x:
+                         TaskQC._thresholding(x, thresholds={"PASS": 0.99, "WARNING": 0}),
+                         '_task_detected_wheel_moves': lambda x:
+                         TaskQC._thresholding(x, thresholds={"PASS": 0.99, "WARNING": 0}),
+                         '_task_trial_length': lambda x:
+                         TaskQC._thresholding(x, thresholds={"PASS": 0.99, "WARNING": 0}),
+                         '_task_goCue_delays': lambda x:
+                         TaskQC._thresholding(x, thresholds={"PASS": 0.99, "WARNING": 0}),
+                         '_task_errorCue_delays': lambda x:
+                         TaskQC._thresholding(x, thresholds={"PASS": 0.99, "WARNING": 0}),
+                         '_task_stimOn_delays': lambda x:
+                         TaskQC._thresholding(x, thresholds={"PASS": 0.99, "WARNING": 0}),
+                         '_task_stimOff_delays': lambda x:
+                         TaskQC._thresholding(x, thresholds={"PASS": 0.99, "WARNING": 0}),
+                         '_task_iti_delays': lambda x:
+                         TaskQC._thresholding(x, thresholds={"PASS": 0.99, "WARNING": 0}),
+                         '_task_stimFreeze_delays': lambda x:
+                         TaskQC._thresholding(x, thresholds={"PASS": 0.99, "WARNING": 0}),
+                         '_task_wheel_integrity': lambda x:
+                         TaskQC._thresholding(x, thresholds={"PASS": 0.99, "WARNING": 0}),
+                         '_task_passed_trial_checks': lambda x: -1  # thresholds={"PASS": 0.90, "WARNING": 0}
+                         }
 
     @staticmethod
     def _thresholding(qc_value, thresholds=None):
