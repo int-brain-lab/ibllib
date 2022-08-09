@@ -95,7 +95,8 @@ class TaskQC(base.QC):
                          TaskQC._thresholding(x, thresholds={"PASS": 0.99, "WARNING": 0}),
                          '_task_wheel_integrity': lambda x:
                          TaskQC._thresholding(x, thresholds={"PASS": 0.99, "WARNING": 0}),
-                         '_task_passed_trial_checks': lambda x: -1  # thresholds={"PASS": 0.90, "WARNING": 0}
+                         '_task_passed_trial_checks': lambda x: -1  # TODO figure why always = 0 ;
+                                                                    # thresholds={"PASS": 0.90, "WARNING": 0}
                          }
 
     @staticmethod
