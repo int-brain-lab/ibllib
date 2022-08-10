@@ -22,6 +22,6 @@ scipy>=1.3.0
 seaborn>=0.9.0
 tqdm>=4.32.1
 # ibl libraries
-iblutil
+iblutil>=1.2.0
 ibl-neuropixel>=0.0.1
 ONE-api>=1.8.1
