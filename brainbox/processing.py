@@ -3,19 +3,11 @@ Processes data from one form into another, e.g. taking spike times and binning t
 non-overlapping bins and convolving spike times with a gaussian kernel.
 '''
 
-import os
-import math
-import traceback
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
-from scipy import interpolate, sparse, signal
-from scipy.interpolate import interp1d
+from scipy import interpolate, sparse
 from brainbox import core
 from iblutil.util import Bunch
-import brainbox.io.one as bbone
-import brainbox.behavior.wheel as wh
-from brainbox.metrics.single_units import firing_rate_fano_factor
 
 
 def sync(dt, times=None, values=None, timeseries=None, offsets=None, interp='zero',
