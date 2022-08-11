@@ -61,7 +61,27 @@ _log = logging.getLogger('ibllib')
 
 class TaskQC(base.QC):
     """A class for computing task QC metrics"""
-    criteria = {"PASS": 0.99, "WARNING": 0.90, "FAIL": 0}  # Note: WARNING was 0.95 prior to Aug 2022
+    # criteria = {"PASS": 0.99, "WARNING": 0.90, "FAIL": 0}  # Note: WARNING was 0.95 prior to Aug 2022
+
+    criteria = dict()
+    criteria['default'] = {"PASS": 0.99, "WARNING": 0.90, "FAIL": 0}  # Note: WARNING was 0.95 prior to Aug 2022
+    criteria['_task_stimOff_itiIn_delays'] = {"PASS": 0.99, "WARNING": 0}
+    criteria['_task_positive_feedback_stimOff_delays'] = {"PASS": 0.99, "WARNING": 0}
+    criteria['_task_negative_feedback_stimOff_delays'] = {"PASS": 0.99, "WARNING": 0}
+    criteria['_task_wheel_move_during_closed_loop'] = {"PASS": 0.99, "WARNING": 0}
+    criteria['_task_response_stimFreeze_delays'] = {"PASS": 0.99, "WARNING": 0}
+    criteria['_task_detected_wheel_moves'] = {"PASS": 0.99, "WARNING": 0}
+    criteria['_task_trial_length'] = {"PASS": 0.99, "WARNING": 0}
+    criteria['_task_goCue_delays'] = {"PASS": 0.99, "WARNING": 0}
+    criteria['_task_errorCue_delays'] = {"PASS": 0.99, "WARNING": 0}
+    criteria['_task_stimOn_delays'] = {"PASS": 0.99, "WARNING": 0}
+    criteria['_task_stimOff_delays'] = {"PASS": 0.99, "WARNING": 0}
+    criteria['_task_stimFreeze_delays'] = {"PASS": 0.99, "WARNING": 0}
+    criteria['_task_iti_delays'] = {"NOT_SET": 0}
+    criteria['_task_passed_trial_checks'] = {"NOT_SET": 0}
+
+    # fcns_value2status = {k: lambda x: TaskQC._thresholding(x, thresholds=v) for k, v in criteria.items()}
+
     fcns_value2status = {'default': lambda x: TaskQC._thresholding(x),
                          '_task_stimOff_itiIn_delays': lambda x:
                          TaskQC._thresholding(x, thresholds={"PASS": 0.99, "WARNING": 0}),
@@ -106,7 +126,7 @@ class TaskQC(base.QC):
         """
         MAX_BOUND, MIN_BOUND = (1, 0)
         if not thresholds:
-            thresholds = TaskQC.criteria.copy()
+            thresholds = TaskQC.criteria['default'].copy()
         if qc_value is None or np.isnan(qc_value):
             return int(-1)
         elif (qc_value > MAX_BOUND) or (qc_value < MIN_BOUND):
@@ -199,7 +219,7 @@ class TaskQC(base.QC):
                 indices[i] = v2status_fcns['default'](results[k])
 
         def key_map(x):
-            return 'NOT_SET' if x < 0 else list(TaskQC.criteria.keys())[x]
+            return 'NOT_SET' if x < 0 else list(TaskQC.criteria['default'].keys())[x]
         # Criteria map is in order of severity so the max index is our overall QC outcome
         session_outcome = key_map(max(indices))
         outcomes = dict(zip(results.keys(), map(key_map, indices)))
