@@ -80,41 +80,6 @@ class TaskQC(base.QC):
     criteria['_task_iti_delays'] = {"NOT_SET": 0}
     criteria['_task_passed_trial_checks'] = {"NOT_SET": 0}
 
-    # fcns_value2status = {k: lambda x: TaskQC._thresholding(x, thresholds=v) for k, v in criteria.items()}
-
-    fcns_value2status = {'default': lambda x: TaskQC._thresholding(x),
-                         '_task_stimOff_itiIn_delays': lambda x:
-                         TaskQC._thresholding(x, thresholds={"PASS": 0.99, "WARNING": 0}),
-                         '_task_positive_feedback_stimOff_delays': lambda x:
-                         TaskQC._thresholding(x, thresholds={"PASS": 0.99, "WARNING": 0}),
-                         '_task_negative_feedback_stimOff_delays': lambda x:
-                         TaskQC._thresholding(x, thresholds={"PASS": 0.99, "WARNING": 0}),
-                         '_task_wheel_move_during_closed_loop': lambda x:
-                         TaskQC._thresholding(x, thresholds={"PASS": 0.99, "WARNING": 0}),
-                         '_task_response_stimFreeze_delays': lambda x:
-                         TaskQC._thresholding(x, thresholds={"PASS": 0.99, "WARNING": 0}),
-                         '_task_detected_wheel_moves': lambda x:
-                         TaskQC._thresholding(x, thresholds={"PASS": 0.99, "WARNING": 0}),
-                         '_task_trial_length': lambda x:
-                         TaskQC._thresholding(x, thresholds={"PASS": 0.99, "WARNING": 0}),
-                         '_task_goCue_delays': lambda x:
-                         TaskQC._thresholding(x, thresholds={"PASS": 0.99, "WARNING": 0}),
-                         '_task_errorCue_delays': lambda x:
-                         TaskQC._thresholding(x, thresholds={"PASS": 0.99, "WARNING": 0}),
-                         '_task_stimOn_delays': lambda x:
-                         TaskQC._thresholding(x, thresholds={"PASS": 0.99, "WARNING": 0}),
-                         '_task_stimOff_delays': lambda x:
-                         TaskQC._thresholding(x, thresholds={"PASS": 0.99, "WARNING": 0}),
-                         '_task_iti_delays': lambda x: -1,  # TODO figure why nearly always = 0 ;
-                         # thresholds={"NOT_SET": 0}
-                         '_task_stimFreeze_delays': lambda x:
-                         TaskQC._thresholding(x, thresholds={"PASS": 0.99, "WARNING": 0}),
-                         '_task_wheel_integrity': lambda x:
-                         TaskQC._thresholding(x, thresholds={"PASS": 0.99, "WARNING": 0}),
-                         '_task_passed_trial_checks': lambda x: -1  # TODO figure why always = 0 ;
-                                                                    # thresholds={"PASS": 0.90, "WARNING": 0}
-                         }
-
     @staticmethod
     def _thresholding(qc_value, thresholds=None):
         """
@@ -210,13 +175,12 @@ class TaskQC(base.QC):
         :return: Overall session QC outcome as a string
         :return: A dict of QC tests and their outcomes
         """
-        v2status_fcns = TaskQC.fcns_value2status  # the need to have this as a parameter may arise
         indices = np.zeros(len(results), dtype=int)
         for i, k in enumerate(results):
-            if k in v2status_fcns:
-                indices[i] = v2status_fcns[k](results[k])
+            if k in TaskQC.criteria.keys():
+                indices[i] = TaskQC._thresholding(results[k], thresholds=TaskQC.criteria[k])
             else:
-                indices[i] = v2status_fcns['default'](results[k])
+                indices[i] = TaskQC._thresholding(results[k], thresholds=TaskQC.criteria['default'])
 
         def key_map(x):
             return 'NOT_SET' if x < 0 else list(TaskQC.criteria['default'].keys())[x]
