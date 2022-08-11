@@ -86,6 +86,7 @@ class TaskQC(base.QC):
                          '_task_stimOff_delays': lambda x:
                          TaskQC._thresholding(x, thresholds={"PASS": 0.99, "WARNING": 0}),
                          '_task_iti_delays': lambda x: -1,  # TODO figure why nearly always = 0 ;
+                         # thresholds={"NOT_SET": 0}
                          '_task_stimFreeze_delays': lambda x:
                          TaskQC._thresholding(x, thresholds={"PASS": 0.99, "WARNING": 0}),
                          '_task_wheel_integrity': lambda x:
