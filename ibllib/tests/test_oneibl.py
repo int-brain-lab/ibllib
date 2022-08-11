@@ -11,7 +11,7 @@ import iblutil.io.params as iopar
 
 from ibllib.oneibl import patcher, registration
 import ibllib.io.extractors.base
-from ibllib.misc import version
+from ibllib import __version__
 from ibllib.tests import TEST_DB
 
 
@@ -105,7 +105,7 @@ r = {'created_by': 'olivier',
      'filenames': ["raw_behavior_data/_iblrig_encoderTrialInfo.raw.ssv"],
      'hashes': [md5_0],
      'filesizes': [1234],
-     'versions': [version.ibllib()]}
+     'versions': [__version__]}
 
 MOCK_SESSION_SETTINGS = {
     'SESSION_DATE': '2018-04-01',
