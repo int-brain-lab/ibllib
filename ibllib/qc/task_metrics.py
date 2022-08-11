@@ -61,7 +61,6 @@ _log = logging.getLogger('ibllib')
 
 class TaskQC(base.QC):
     """A class for computing task QC metrics"""
-    # criteria = {"PASS": 0.99, "WARNING": 0.90, "FAIL": 0}  # Note: WARNING was 0.95 prior to Aug 2022
 
     criteria = dict()
     criteria['default'] = {"PASS": 0.99, "WARNING": 0.90, "FAIL": 0}  # Note: WARNING was 0.95 prior to Aug 2022
