@@ -95,8 +95,8 @@ class Task(abc.ABC):
         ch = logging.StreamHandler(log_capture_string)
         str_format = '%(asctime)s,%(msecs)d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s'
         ch.setFormatter(logging.Formatter(str_format))
-        _logger.addHandler(ch)
-        _logger.setLevel(logging.INFO)
+        _logger.parent.addHandler(ch)
+        _logger.parent.setLevel(logging.INFO)
         _logger.info(f"Starting job {self.__class__}")
         if self.machine:
             _logger.info(f"Running on machine: {self.machine}")
