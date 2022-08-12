@@ -52,35 +52,6 @@ def logger_config(name=None):
     return log
 
 
-def log_to_file(filename, log='ibllib'):
-    """
-    Save log information to a given filename in '.ibl_logs' folder (in home directory).
-
-    Parameters
-    ----------
-    filename : str
-        The name of the log file to save to.
-    log : str, logging.Logger
-        The log (name or object) to add file handler to.
-
-    Returns
-    -------
-    logging.Logger
-        The log with the file handler attached.
-    """
-    ibllib_log_dir = Path.home() / '.ibl_logs'
-    ibllib_log_dir.mkdir() if ibllib_log_dir.exists() is False else None
-    if isinstance(log, str):
-        log = logging.getLogger(log)
-    log.setLevel(logging.INFO)
-    file_handler = logging.FileHandler(ibllib_log_dir / filename)
-    file_format = logging.Formatter(LOG_FORMAT_STR, LOG_DATE_FORMAT)
-    file_handler.setFormatter(file_format)
-    log.addHandler(file_handler)
-    log.info('File log initiated')
-    return log
-
-
 def print_progress(iteration, total, prefix='', suffix='', decimals=1, length=100, fill='█'):
     """
     Call in a loop to create terminal progress bar
