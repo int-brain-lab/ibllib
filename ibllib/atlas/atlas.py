@@ -16,7 +16,7 @@ from iblutil.numerical import ismember
 from ibllib.atlas.regions import BrainRegions
 
 
-_logger = logging.getLogger('ibllib')
+_logger = logging.getLogger(__name__)
 ALLEN_CCF_LANDMARKS_MLAPDV_UM = {'bregma': np.array([5739, 5400, 332])}
 S3_BUCKET_IBL = 'ibl-brain-wide-map-public'
 

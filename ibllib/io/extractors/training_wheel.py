@@ -11,7 +11,7 @@ from ibllib.misc import structarr
 import ibllib.exceptions as err
 import brainbox.behavior.wheel as wh
 
-_logger = logging.getLogger('ibllib')
+_logger = logging.getLogger(__name__)
 WHEEL_RADIUS_CM = 1  # we want the output in radians
 THRESHOLD_RAD_PER_SEC = 10
 THRESHOLD_CONSECUTIVE_SAMPLES = 0

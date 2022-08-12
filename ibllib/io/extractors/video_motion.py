@@ -35,7 +35,7 @@ class MotionAlignment:
         'body': ((402, 481), (31, 103))
     }
 
-    def __init__(self, eid=None, one=None, log=logging.getLogger('ibllib'), **kwargs):
+    def __init__(self, eid=None, one=None, log=logging.getLogger(__name__), **kwargs):
         self.one = one or ONE()
         self.eid = eid
         self.session_path = kwargs.pop('session_path', None) or self.one.eid2path(eid)

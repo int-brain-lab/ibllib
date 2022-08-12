@@ -8,7 +8,7 @@ from ibllib.io.extractors.training_trials import (
     FeedbackTimes, StimOnTriggerTimes, Intervals, GoCueTimes
 )
 
-_logger = logging.getLogger('ibllib')
+_logger = logging.getLogger(__name__)
 
 
 class HabituationTrials(BaseBpodTrialsExtractor):

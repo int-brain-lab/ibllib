@@ -1,7 +1,7 @@
 from pathlib import Path
 import logging
 
-log = logging.getLogger('ibllib')
+log = logging.getLogger(__name__)
 
 
 # Remove empty folders

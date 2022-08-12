@@ -30,7 +30,7 @@ from iblutil.numerical import ismember
 from ibllib.plots.misc import Density
 
 
-logger = logging.getLogger('ibllib')
+logger = logging.getLogger(__name__)
 
 
 def set_axis_label_size(ax, labels=14, ticklabels=12, title=14, cmap=False):

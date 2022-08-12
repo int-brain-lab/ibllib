@@ -19,7 +19,7 @@ from one.alf.exceptions import ALFObjectNotFound
 from one.alf.spec import is_session_path
 from iblutil.util import Bunch
 
-_log = logging.getLogger('ibllib')
+_log = logging.getLogger(__name__)
 
 
 class DlcQC(base.QC):

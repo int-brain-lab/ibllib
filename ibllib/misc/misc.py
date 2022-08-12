@@ -4,7 +4,7 @@ import subprocess
 import numpy as np
 from ibllib.exceptions import NvidiaDriverNotReady
 
-_logger = logging.getLogger('ibllib')
+_logger = logging.getLogger(__name__)
 
 
 def _parametrized(dec):

@@ -23,7 +23,7 @@ from iblutil.io import jsonable
 from ibllib.io.video import assert_valid_label
 from ibllib.time import uncycle_pgts, convert_pgts
 
-_logger = logging.getLogger('ibllib')
+_logger = logging.getLogger(__name__)
 
 
 def trial_times_to_times(raw_trial):

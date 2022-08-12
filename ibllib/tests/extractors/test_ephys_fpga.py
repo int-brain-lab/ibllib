@@ -195,10 +195,10 @@ class TestWheelMovesExtraction(unittest.TestCase):
         re_ts = test_data[0][0]
         re_pos = test_data[0][1]
 
-        logger = logging.getLogger('ibllib')
+        logger = logging.getLogger(logname := 'ibllib.io.extractors.training_wheel')
         with self.assertLogs(logger, level='INFO') as cm:
             wheel_moves = extract_wheel_moves(re_ts, re_pos)
-            self.assertEqual(['INFO:ibllib:Wheel in cm units using X2 encoding'], cm.output)
+            self.assertEqual([f'INFO:{logname}:Wheel in cm units using X2 encoding'], cm.output)
 
         n = 56  # expected number of movements
         self.assertTupleEqual(wheel_moves['intervals'].shape, (n, 2),
@@ -228,7 +228,7 @@ class TestWheelMovesExtraction(unittest.TestCase):
         re_pos = wh.cm_to_rad(re_pos)
         with self.assertLogs(logger, level='INFO') as cm:
             wheel_moves = ephys_fpga.extract_wheel_moves(re_ts, re_pos)
-            self.assertEqual(['INFO:ibllib:Wheel in rad units using X2 encoding'], cm.output)
+            self.assertEqual([f'INFO:{logname}:Wheel in rad units using X2 encoding'], cm.output)
 
         # Check the first 3 intervals.  As position thresholds are adjusted by units and
         # encoding, we should expect the intervals to be identical to above
@@ -244,7 +244,7 @@ class TestWheelMovesExtraction(unittest.TestCase):
         pa = np.array([1, -1, 1, -1, 1, -1, 1, -1])
         tb = np.array([3, 5, 7, 9, 11, 13, 15, 17])
         pb = np.array([1, -1, 1, -1, 1, -1, 1, -1])
-        logger = logging.getLogger('ibllib')
+        logger = logging.getLogger(logname := 'ibllib.io.extractors.training_wheel')
 
         for unit in ['cm', 'rad']:
             for i in (1, 2, 4):
@@ -253,7 +253,7 @@ class TestWheelMovesExtraction(unittest.TestCase):
                 # print(encoding, unit)
                 t, p = ephys_fpga._rotary_encoder_positions_from_fronts(
                     ta, pa, tb, pb, ticks=1024, coding=encoding.lower(), radius=r)
-                expected = 'INFO:ibllib:Wheel in {} units using {} encoding'.format(unit, encoding)
+                expected = f'INFO:{logname}:Wheel in {unit} units using {encoding} encoding'
                 with self.assertLogs(logger, level='INFO') as cm:
                     ephys_fpga.extract_wheel_moves(t, p)
                     self.assertEqual([expected], cm.output)

@@ -27,7 +27,7 @@ class QC:
         :param endpoint: The endpoint name to apply qc to. Default is 'sessions'
         """
         self.one = one or ONE()
-        self.log = log or logging.getLogger('ibllib')
+        self.log = log or logging.getLogger(__name__)
         if endpoint == 'sessions':
             self.endpoint = endpoint
             self._set_eid_or_path(endpoint_id)

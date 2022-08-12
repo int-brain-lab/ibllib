@@ -23,7 +23,7 @@ from ibllib.misc import print_progress
 from phylib.io import model
 
 
-_logger = logging.getLogger('ibllib')
+_logger = logging.getLogger(__name__)
 
 RMS_WIN_LENGTH_SECS = 3
 WELCH_WIN_LENGTH_SAMPLES = 1024
