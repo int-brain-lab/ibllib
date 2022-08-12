@@ -1,5 +1,4 @@
 import functools
-import logging
 import shutil
 import tempfile
 import unittest
