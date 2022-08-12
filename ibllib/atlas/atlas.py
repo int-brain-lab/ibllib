@@ -549,6 +549,25 @@ class BrainAtlas:
         boundary[boundary != 0] = 1
         return boundary
 
+    def plot_slices(self, xyz, *args, **kwargs):
+        """
+        From a single coordinate, plots the 3 slices that intersect at this point in a single
+        matplotlib figure
+        :param xyz: mlapdv coordinate in m
+        :param args: arguments to be forwarded to plot slices
+        :param kwargs: keyword arguments to be forwarded to plot slices
+        :return: 2 by 2 array of axes
+        """
+        fig, axs = plt.subplots(2, 2)
+        self.plot_cslice(xyz[1], volume='annotation', ax=axs[0, 0])
+        self.plot_sslice(xyz[0], volume='annotation', ax=axs[0, 1])
+        self.plot_hslice(xyz[2], volume='annotation', ax=axs[1, 0])
+        xyz_um = xyz * 1e6
+        axs[0, 0].plot(xyz_um[0], xyz_um[2], 'g*')
+        axs[0, 1].plot(xyz_um[1], xyz_um[2], 'g*')
+        axs[1, 0].plot(xyz_um[0], xyz_um[1], 'g*')
+        return axs
+
     def plot_cslice(self, ap_coordinate, volume='image', mapping='Allen', region_values=None, **kwargs):
         """
         Plot coronal slice through atlas at given ap_coordinate
