@@ -559,9 +559,9 @@ class BrainAtlas:
         :return: 2 by 2 array of axes
         """
         fig, axs = plt.subplots(2, 2)
-        self.plot_cslice(xyz[1], volume='annotation', ax=axs[0, 0])
-        self.plot_sslice(xyz[0], volume='annotation', ax=axs[0, 1])
-        self.plot_hslice(xyz[2], volume='annotation', ax=axs[1, 0])
+        self.plot_cslice(xyz[1], *args, ax=axs[0, 0], **kwargs)
+        self.plot_sslice(xyz[0], *args, ax=axs[0, 1], **kwargs)
+        self.plot_hslice(xyz[2], *args, ax=axs[1, 0], **kwargs)
         xyz_um = xyz * 1e6
         axs[0, 0].plot(xyz_um[0], xyz_um[2], 'g*')
         axs[0, 1].plot(xyz_um[1], xyz_um[2], 'g*')

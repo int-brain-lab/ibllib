@@ -355,8 +355,8 @@ class TestAtlasSlicesConversion(unittest.TestCase):
         assert (np.all(aids == np.array([0])))
         assert (np.isclose(proportions, np.array([1.])))
 
-    def plot_slices(self):
-        axs = self.plot_slices(np.array([0, -.0024, -.0038]))
+    def test_plot_slices(self):
+        axs = self.ba.plot_slices(np.array([0, -.0024, -.0038]))
         assert axs.shape == (2, 2)
 
     def test_slice(self):
