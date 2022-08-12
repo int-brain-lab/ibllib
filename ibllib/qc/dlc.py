@@ -144,9 +144,7 @@ class DlcQC(base.QC):
 
         ignore_metrics = [f'_{namespace}_' + i[6:] for i in self.ignore_checks]
         metrics_to_aggregate = {k: v for k, v in self.metrics.items() if k not in ignore_metrics}
-        values = [x if isinstance(x, str) else x[0] for x in metrics_to_aggregate.values()]
-        code = max(base.CRITERIA[x] for x in values)
-        outcome = next(k for k, v in base.CRITERIA.items() if v == code)
+        outcome = self.overall_outcome(metrics_to_aggregate.values())
 
         if update:
             extended = {
