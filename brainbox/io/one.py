@@ -1062,9 +1062,64 @@ class SpikeSortingLoader:
 
 @dataclass
 class SessionLoader:
+    """
+    Object to load session data for a give session in the recommended way.
+
+    Parameters
+    ----------
+    one: one.api.ONE instance
+        Can be in remote or local mode (required)
+    session_path: string or pathlib.Path
+        The absolute path to the session (one of session_path or eid is required)
+    eid: string
+        database UUID of the session (one of session_path or eid is required)
+
+    If both are provided, session_path takes precedence over eid.
+
+    Examples
+    --------
+    1) Load all available session data for one session:
+        >>> from one.api import ONE
+        >>> from brainbox.io.one import SessionLoader
+        >>> one = ONE()
+        >>> sess_loader = SessionLoader(one=one, session_path='/mnt/s0/Data/Subjects/cortexlab/KS022/2019-12-10/001/')
+        # Object is initiated, but no data is loaded as you can see in the data_info attribute
+        >>> sess_loader.data_info
+                    name  is_loaded
+        0         trials      False
+        1          wheel      False
+        2          poses      False
+        3  motion_energy      False
+        4          pupil      False
+
+        # Loading all available session data, the data_info attribute now shows which data has been loaded
+        >>> sess_loader.load_session_data()
+        >>> sess_loader.data_info
+                    name  is_loaded
+        0         trials       True
+        1          wheel       True
+        2          poses       True
+        3  motion_energy       True
+        4          pupil      False
+
+        # You can access the data via the respective attributes, e.g.
+        >>> sess_loader.trials.shape
+        (626, 18)
+        # Each data comes with its own timestamps in a column called 'times'
+        >>> sess_loader.pose['bodyCamera']['times']
+        0           6.201239
+        1           6.234569
+        2           6.267899
+        3           6.301229
+        4           6.334592
+                    ...
+        # In order to control the loading of specific data by e.g. specifying parameters, use the individual loading
+        functions:
+        >>> sess_loader.load_wheel(sampling_rate=100)
+    """
     one: One = None
-    eid: str = ''
     session_path: Path = ''
+    eid: str = ''
     data_info: pd.DataFrame = field(default_factory=pd.DataFrame, repr=False)
     trials: pd.DataFrame = field(default_factory=pd.DataFrame, repr=False)
     wheel: pd.DataFrame = field(default_factory=pd.DataFrame,  repr=False)
@@ -1073,12 +1128,17 @@ class SessionLoader:
     pupil: pd.DataFrame = field(default_factory=pd.DataFrame,  repr=False)
 
     def __post_init__(self):
+        """
+        Function that runs automatically after initiation of the dataclass attributes.
+        Checks for required inputs, sets session_path and eid, creates data_info table.
+        """
         if self.one is None:
             raise ValueError("An input to one is required. If not connection to a database is desired, it can be "
                              "a fully local instance of One.")
         # If session path is given, takes precedence over eid
         if self.session_path is not None and self.session_path != '':
             self.eid = self.one.to_eid(self.session_path)
+            self.session_path = Path(self.session_path)
         # Providing no session path, try to infer from eid
         else:
             if self.eid is not None and self.eid != '':
@@ -1096,7 +1156,30 @@ class SessionLoader:
         self.data_info = pd.DataFrame(columns=['name', 'is_loaded'], data=zip(data_names, [False]*len(data_names)))
 
     def load_session_data(self, trials=True, wheel=True, poses=True, motion_energy=True, pupil=True, reload=False):
+        """
+        Function to load available session data into the SessionLoader object. Input parameters allow to control which
+        data is loaded. Data is loaded into an attribute of the SessionLoader object with the same name as the input
+        parameter (e.g. SessionLoader.trials, SessionLoader.pose). Information about which data is loaded is stored
+        in SessionLoader.data_info
 
+        Parameters
+        ----------
+        trials: boolean
+            Whether to load all trials data into SessionLoader.trials, default is True
+        wheel: boolean
+            Whether to load wheel data (position, velocity, acceleration) into SessionLoader.wheel, default is True
+        poses: boolean
+            Whether to load pose tracking results (DLC) for each available camera into SessionLoader.poses,
+            default is True
+        motion_energy: boolean
+            Whether to load motion energy data (whisker pad for left/right camera, body for body camera)
+            into SessionLoader.motion_energy, default is True
+        pupil: boolean
+            Whether to load pupil diameter (raw and smooth) for the left/right camera into SessionLoader.pupil,
+            default is True
+        reload: boolean
+            Whether to reload data that has already been loaded into this SessionLoader object, default is False
+        """
         load_df = self.data_info.copy()
         load_df['to_load'] = [
             trials,
@@ -1128,10 +1211,25 @@ class SessionLoader:
                     _logger.debug(e)
 
     def load_trials(self):
+        """
+        Function to load trials data into SessionLoader.trials
+        """
         self.trials = self.one.load_object(self.eid, 'trials').to_df()
         self.data_info.loc[self.data_info['name'] == 'trials', 'is_loaded'] = True
 
     def load_wheel(self, sampling_rate=1000, smooth_size=0.03):
+        """
+        Function to load wheel data (position, velocity, acceleration) into SessionLoader.wheel. The wheel position
+        is first interpolated to a uniform sampling rate. Then velocity and acceleration are computed, during which
+        smoothing is applied.
+
+        Parameters
+        ----------
+        sampling_rate: float
+            Rate at which to sample the wheel position
+        smooth_size: float
+            Kernel for smoothing the wheel data to compute velocity and acceleration
+        """
         wheel_raw = self.one.load_object(self.eid, 'wheel')
         # TODO: Fix this instead of raising error?
         if wheel_raw['position'].shape[0] != wheel_raw['timestamps'].shape[0]:
@@ -1145,6 +1243,17 @@ class SessionLoader:
         self.data_info.loc[self.data_info['name'] == 'wheel', 'is_loaded'] = True
 
     def load_pose(self, likelihood_thr=0.9, views=['left', 'right', 'body']):
+        """
+        Function to load the pose estimation results (DLC) into SessionLoader.poses
+        Parameters
+        ----------
+        likelihood_thr
+        views
+
+        Returns
+        -------
+
+        """
         for view in views:
             try:
                 pose_raw = self.one.load_object(self.eid, f'{view}Camera', attribute=['dlc', 'times'])
@@ -1214,23 +1323,6 @@ class SessionLoader:
             if snr < snr_thresh:
                 self.pupil = pd.DataFrame
                 raise ValueError(f'Pupil diameter SNR ({snr:.2f}) below threshold SNR ({snr_thresh}), removing data.')
-
-    def align_trials_to_event(self, align_event='stimOn_times', pre_event=0.5, post_event=0.5):
-        possible_events = ['stimOn_times', 'goCue_times', 'goCueTrigger_times',
-                           'response_times', 'feedback_times', 'firstMovement_times']
-        if align_event not in possible_events:
-            raise ValueError(f"Argument align_event must be on of {possible_events}")
-
-        if self.trials.shape == (0, 0):
-            _logger.info("No trials data loaded. Trying to load trials data.")
-            self.load_trials()
-
-        align_str = f"align_{align_event.split('_')[0]}"
-        self.trials[f'{align_str}_start'] = self.trials[align_event] - pre_event
-        self.trials[f'{align_str}_end'] = self.trials[align_event] + post_event
-        diffs = self.trials[f'{align_str}_end'] - np.roll(self.trials[f'{align_str}_start'], -1)
-        if np.any(diffs[:-1] > 0):
-            _logger.warning(f'{sum(diffs[:-1] > 0)} trials overlapping, try reducing pre_event, post_event or both!')
 
     def _check_video_timestamps(self, view, video_timestamps, video_data):
         # If camera times are shorter than video data, or empty, no current fix
