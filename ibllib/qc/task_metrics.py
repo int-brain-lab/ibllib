@@ -86,7 +86,7 @@ class TaskQC(base.QC):
         :param qc_value: proportion of passing qcs, between 0 and 1
         :param thresholds: dictionary with keys 'PASS', 'WARNING', 'FAIL'
          (cf. TaskQC.criteria attribute)
-        :return: int where -1: NOT_SET, 0: FAIL, 1: WARNING, 2: PASS
+        :return: int where -1: NOT_SET, 0: PASS, 1: WARNING, 2: FAIL
         """
         MAX_BOUND, MIN_BOUND = (1, 0)
         if not thresholds:
@@ -95,15 +95,16 @@ class TaskQC(base.QC):
             return int(-1)
         elif (qc_value > MAX_BOUND) or (qc_value < MIN_BOUND):
             raise ValueError("Values out of bound")
-        else:
-            if 'PASS' in thresholds and qc_value >= thresholds['PASS']:
-                return 0
-            elif 'WARNING' in thresholds and qc_value >= thresholds['WARNING']:
-                return 1
-            elif 'FAIL' in thresholds and qc_value >= thresholds['FAIL']:
-                return 2
-            else:
-                return -1
+        if 'PASS' in thresholds.keys() and qc_value >= thresholds['PASS']:
+            return 0
+        if 'WARNING' in thresholds.keys() and qc_value >= thresholds['WARNING']:
+            return 1
+        if 'FAIL' in thresholds and qc_value >= thresholds['FAIL']:
+            return 2
+        if 'NOT_SET' in thresholds and qc_value >= thresholds['NOT_SET']:
+            return -1
+        # if None of this applies, return 'NOT_SET'
+        return -1
 
     def __init__(self, session_path_or_eid, **kwargs):
         """
