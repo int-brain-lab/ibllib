@@ -96,8 +96,14 @@ class TaskQC(base.QC):
         elif (qc_value > MAX_BOUND) or (qc_value < MIN_BOUND):
             raise ValueError("Values out of bound")
         else:
-            passed = qc_value >= np.fromiter(thresholds.values(), dtype=float)
-            return int(np.argmax(passed))
+            if 'PASS' in thresholds and qc_value >= thresholds['PASS']:
+                return 0
+            elif 'WARNING' in thresholds and qc_value >= thresholds['WARNING']:
+                return 1
+            elif 'FAIL' in thresholds and qc_value >= thresholds['FAIL']:
+                return 2
+            else:
+                return -1
 
     def __init__(self, session_path_or_eid, **kwargs):
         """
