@@ -1088,7 +1088,7 @@ class SessionLoader:
                     name  is_loaded
         0         trials      False
         1          wheel      False
-        2          poses      False
+        2           pose      False
         3  motion_energy      False
         4          pupil      False
 
@@ -1098,7 +1098,7 @@ class SessionLoader:
                     name  is_loaded
         0         trials       True
         1          wheel       True
-        2          poses       True
+        2           pose       True
         3  motion_energy       True
         4          pupil      False
 
@@ -1149,13 +1149,13 @@ class SessionLoader:
         data_names = [
             'trials',
             'wheel',
-            'poses',
+            'pose',
             'motion_energy',
             'pupil'
         ]
         self.data_info = pd.DataFrame(columns=['name', 'is_loaded'], data=zip(data_names, [False]*len(data_names)))
 
-    def load_session_data(self, trials=True, wheel=True, poses=True, motion_energy=True, pupil=True, reload=False):
+    def load_session_data(self, trials=True, wheel=True, pose=True, motion_energy=True, pupil=True, reload=False):
         """
         Function to load available session data into the SessionLoader object. Input parameters allow to control which
         data is loaded. Data is loaded into an attribute of the SessionLoader object with the same name as the input
@@ -1168,8 +1168,8 @@ class SessionLoader:
             Whether to load all trials data into SessionLoader.trials, default is True
         wheel: boolean
             Whether to load wheel data (position, velocity, acceleration) into SessionLoader.wheel, default is True
-        poses: boolean
-            Whether to load pose tracking results (DLC) for each available camera into SessionLoader.poses,
+        pose: boolean
+            Whether to load pose tracking results (DLC) for each available camera into SessionLoader.pose,
             default is True
         motion_energy: boolean
             Whether to load motion energy data (whisker pad for left/right camera, body for body camera)
@@ -1184,7 +1184,7 @@ class SessionLoader:
         load_df['to_load'] = [
             trials,
             wheel,
-            poses,
+            pose,
             motion_energy,
             pupil
         ]
@@ -1221,14 +1221,14 @@ class SessionLoader:
         """
         Function to load wheel data (position, velocity, acceleration) into SessionLoader.wheel. The wheel position
         is first interpolated to a uniform sampling rate. Then velocity and acceleration are computed, during which
-        smoothing is applied.
+        Gaussian smoothing is applied.
 
         Parameters
         ----------
         sampling_rate: float
-            Rate at which to sample the wheel position
+            Rate at which to sample the wheel position, default is 1000 Hz
         smooth_size: float
-            Kernel for smoothing the wheel data to compute velocity and acceleration
+            Size of Gaussian smoothing window in seconds, default is 0.03
         """
         wheel_raw = self.one.load_object(self.eid, 'wheel')
         # TODO: Fix this instead of raising error?
@@ -1245,15 +1245,18 @@ class SessionLoader:
 
     def load_pose(self, likelihood_thr=0.9, views=['left', 'right', 'body']):
         """
-        Function to load the pose estimation results (DLC) into SessionLoader.poses
+        Function to load the pose estimation results (DLC) into SessionLoader.pose. SessionLoader.pose is a
+        dictionary where keys are the names of the cameras for which pose data is loaded, and values are pandas
+        Dataframes with the timestamps and pose data, one row for each body part tracked for that camera.
+
         Parameters
         ----------
-        likelihood_thr
-        views
-
-        Returns
-        -------
-
+        likelihood_thr: float
+            The position of each tracked body part come with a likelihood of that estimate for each time point.
+            Estimates for time points with likelihood < likelihhood_thr are set to NaN. To skip thresholding set
+            likelihood_thr=1. Default is 0.9
+        views: list
+            List of camera views for which to try and load data. Possible options are {'left', 'right', 'body'}
         """
         for view in views:
             try:
@@ -1268,6 +1271,19 @@ class SessionLoader:
                 _logger.debug(e)
 
     def load_motion_energy(self, views=['left', 'right', 'body']):
+        """
+        Function to load the motion energy data into SessionLoader.motion_energy. SessionLoader.motion_energy is a
+        dictionary where keys are the names of the cameras for which motion energy data is loaded, and values are
+        pandas Dataframes with the timestamps and motion energy data.
+        The motion energy for the left and right camera is calculated for a square roughly covering the whisker pad
+        (whiskerMotionEnergy). The motion energy for the body camera is calculated for a square covering much of the
+        body (bodyMotionEnergy).
+
+        Parameters
+        ----------
+        views: list
+            List of camera views for which to try and load data. Possible options are {'left', 'right', 'body'}
+        """
         names = {'left': 'whiskerMotionEnergy',
                  'right': 'whiskerMotionEnergy',
                  'body': 'bodyMotionEnergy'}
@@ -1285,9 +1301,21 @@ class SessionLoader:
                 _logger.debug(e)
 
     def load_licks(self):
+        """
+        Not yet implemented
+        """
         pass
 
-    def load_pupil(self, snr_thresh=5):
+    def load_pupil(self, snr_thresh=5.):
+        """
+        Function to load raw and smoothed pupil diameter data from the left camera into SessionLoader.pupil.
+
+        Parameters
+        ----------
+        snr_thresh: float
+            An SNR is calculated from the raw and smoothed pupil diameter. If this snr < snr_thresh the data
+            will be considered unusable and will be discarded.
+        """
         # Try to load from features
         feat_raw = self.one.load_object(self.eid, 'leftCamera', attribute=['times', 'features'])
         if 'features' in feat_raw.keys():
@@ -1298,7 +1326,8 @@ class SessionLoader:
         # If unavailable compute on the fly
         else:
             _logger.info('Pupil diameter not available, trying to compute on the fly.')
-            if self.data_info[self.data_info['name'] == 'pose', 'is_loaded'] and 'leftCamera' in self.pose.keys():
+            if (self.data_info[self.data_info['name'] == 'pose']['is_loaded'].values[0]
+                    and 'leftCamera' in self.pose.keys()):
                 # If pose data is already loaded, we don't know if it was threshold at 0.9, so we need a little stunt
                 copy_pose = self.pose['leftCamera'].copy()  # Save the previously loaded pose data
                 self.load_pose(views=['left'], likelihood_thr=0.9)  # Load new with threshold 0.9
@@ -1326,6 +1355,10 @@ class SessionLoader:
                 raise ValueError(f'Pupil diameter SNR ({snr:.2f}) below threshold SNR ({snr_thresh}), removing data.')
 
     def _check_video_timestamps(self, view, video_timestamps, video_data):
+        """
+        Helper function to check for the length of the video frames vs video timestamps and fix in case
+        timestamps are longer than video frames.
+        """
         # If camera times are shorter than video data, or empty, no current fix
         if video_timestamps.shape[0] < video_data.shape[0]:
             if video_timestamps.shape[0] == 0:
