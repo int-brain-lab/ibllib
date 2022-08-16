@@ -1102,17 +1102,27 @@ class SessionLoader:
         3  motion_energy       True
         4          pupil      False
 
-        # You can access the data via the respective attributes, e.g.
+        # The data is loaded in pandas dataframes that you can access via the respective attributes, e.g.
+        >>> type(sess_loader.trials)
+        pandas.core.frame.DataFrame
         >>> sess_loader.trials.shape
         (626, 18)
         # Each data comes with its own timestamps in a column called 'times'
-        >>> sess_loader.pose['bodyCamera']['times']
-        0           6.201239
-        1           6.234569
-        2           6.267899
-        3           6.301229
-        4           6.334592
-                    ...
+        >>> sess_loader.wheel['times']
+        0             0.134286
+        1             0.135286
+        2             0.136286
+        3             0.137286
+        4             0.138286
+              ...
+        # For camera data (pose, motionEnergy) the respective functions load the data into one dataframe per camera.
+        # The dataframes of all cameras are collected in a dictionary
+        >>> type(sess_loader.pose)
+        dict
+        >>> sess_loader.pose.keys()
+        dict_keys(['leftCamera', 'rightCamera', 'bodyCamera'])
+        >>> sess_loader.pose['bodyCamera'].columns
+        Index(['times', 'tail_start_x', 'tail_start_y', 'tail_start_likelihood'], dtype='object')
         # In order to control the loading of specific data by e.g. specifying parameters, use the individual loading
         functions:
         >>> sess_loader.load_wheel(sampling_rate=100)
@@ -1214,7 +1224,7 @@ class SessionLoader:
         """
         Function to load trials data into SessionLoader.trials
         """
-        self.trials = self.one.load_object(self.eid, 'trials').to_df()
+        self.trials = self.one.load_object(self.eid, 'trials', collection='alf').to_df()
         self.data_info.loc[self.data_info['name'] == 'trials', 'is_loaded'] = True
 
     def load_wheel(self, sampling_rate=1000, smooth_size=0.03):
@@ -1235,8 +1245,8 @@ class SessionLoader:
         if wheel_raw['position'].shape[0] != wheel_raw['timestamps'].shape[0]:
             raise ValueError("Length mismatch between 'wheel.position' and 'wheel.timestamps")
         # resample the wheel position and compute velocity, acceleration
-        self.wheel = pd.DataFrame(columns=['timestamps', 'position', 'velocity', 'acceleration'])
-        self.wheel['position'], self.wheel['timestamps'] = interpolate_position(
+        self.wheel = pd.DataFrame(columns=['times', 'position', 'velocity', 'acceleration'])
+        self.wheel['position'], self.wheel['times'] = interpolate_position(
             wheel_raw['timestamps'], wheel_raw['position'], freq=sampling_rate)
         self.wheel['velocity'], self.wheel['acceleration'] = velocity_smoothed(
             self.wheel['position'], freq=sampling_rate, smooth_size=smooth_size)
@@ -1253,11 +1263,13 @@ class SessionLoader:
         ----------
         likelihood_thr: float
             The position of each tracked body part come with a likelihood of that estimate for each time point.
-            Estimates for time points with likelihood < likelihhood_thr are set to NaN. To skip thresholding set
+            Estimates for time points with likelihood < likelihood_thr are set to NaN. To skip thresholding set
             likelihood_thr=1. Default is 0.9
         views: list
             List of camera views for which to try and load data. Possible options are {'left', 'right', 'body'}
         """
+        # empty the dictionary so that if one loads only one view, after having loaded several, the others don't linger
+        self.pose = {}
         for view in views:
             try:
                 pose_raw = self.one.load_object(self.eid, f'{view}Camera', attribute=['dlc', 'times'])
@@ -1267,7 +1279,7 @@ class SessionLoader:
                 self.pose[f'{view}Camera'].insert(0, 'times', times_fixed)
                 self.data_info.loc[self.data_info['name'] == 'pose', 'is_loaded'] = True
             except BaseException as e:
-                _logger.error(f'Could not load pose data for {view}Camera. Skipping camera.')
+                _logger.warning(f'Could not load pose data for {view}Camera. Skipping camera.')
                 _logger.debug(e)
 
     def load_motion_energy(self, views=['left', 'right', 'body']):
@@ -1287,6 +1299,8 @@ class SessionLoader:
         names = {'left': 'whiskerMotionEnergy',
                  'right': 'whiskerMotionEnergy',
                  'body': 'bodyMotionEnergy'}
+        # empty the dictionary so that if one loads only one view, after having loaded several, the others don't linger
+        self.motion_energy = {}
         for view in views:
             try:
                 me_raw = self.one.load_object(self.eid, f'{view}Camera', attribute=['ROIMotionEnergy', 'times'])
@@ -1297,7 +1311,7 @@ class SessionLoader:
                 self.motion_energy[f'{view}Camera'].insert(0, 'times', times_fixed)
                 self.data_info.loc[self.data_info['name'] == 'motion_energy', 'is_loaded'] = True
             except BaseException as e:
-                _logger.error(f'Could not load motion energy data for {view}Camera. Skipping camera.')
+                _logger.warning(f'Could not load motion energy data for {view}Camera. Skipping camera.')
                 _logger.debug(e)
 
     def load_licks(self):
@@ -1351,8 +1365,8 @@ class SessionLoader:
             snr = (np.var(self.pupil['pupilDiameter_smooth'][good_idxs]) /
                    (np.var(self.pupil['pupilDiameter_smooth'][good_idxs] - self.pupil['pupilDiameter_raw'][good_idxs])))
             if snr < snr_thresh:
-                self.pupil = pd.DataFrame
-                raise ValueError(f'Pupil diameter SNR ({snr:.2f}) below threshold SNR ({snr_thresh}), removing data.')
+                self.pupil = pd.DataFrame()
+                _logger.error(f'Pupil diameter SNR ({snr:.2f}) below threshold SNR ({snr_thresh}), removing data.')
 
     def _check_video_timestamps(self, view, video_timestamps, video_data):
         """
