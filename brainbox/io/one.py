@@ -1132,10 +1132,10 @@ class SessionLoader:
     eid: str = ''
     data_info: pd.DataFrame = field(default_factory=pd.DataFrame, repr=False)
     trials: pd.DataFrame = field(default_factory=pd.DataFrame, repr=False)
-    wheel: pd.DataFrame = field(default_factory=pd.DataFrame,  repr=False)
+    wheel: pd.DataFrame = field(default_factory=pd.DataFrame, repr=False)
     pose: dict = field(default_factory=dict, repr=False)
     motion_energy: dict = field(default_factory=dict, repr=False)
-    pupil: pd.DataFrame = field(default_factory=pd.DataFrame,  repr=False)
+    pupil: pd.DataFrame = field(default_factory=pd.DataFrame, repr=False)
 
     def __post_init__(self):
         """
@@ -1163,7 +1163,7 @@ class SessionLoader:
             'motion_energy',
             'pupil'
         ]
-        self.data_info = pd.DataFrame(columns=['name', 'is_loaded'], data=zip(data_names, [False]*len(data_names)))
+        self.data_info = pd.DataFrame(columns=['name', 'is_loaded'], data=zip(data_names, [False] * len(data_names)))
 
     def load_session_data(self, trials=True, wheel=True, pose=True, motion_energy=True, pupil=True, reload=False):
         """
@@ -1355,7 +1355,7 @@ class SessionLoader:
             try:
                 self.pupil['pupilDiameter_smooth'] = get_smooth_pupil_diameter(self.pupil['pupilDiameter_raw'], 'left')
             except BaseException as e:
-                _logger.error(f"Computing smooth pupil diameter failed, saving all NaNs.")
+                _logger.error("Computing smooth pupil diameter failed, saving all NaNs.")
                 _logger.debug(e)
                 self.pupil['pupilDiameter_smooth'] = np.nan
 
