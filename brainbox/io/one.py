@@ -1240,6 +1240,7 @@ class SessionLoader:
             wheel_raw['timestamps'], wheel_raw['position'], freq=sampling_rate)
         self.wheel['velocity'], self.wheel['acceleration'] = velocity_smoothed(
             self.wheel['position'], freq=sampling_rate, smooth_size=smooth_size)
+        self.wheel = self.wheel.apply(np.float32)
         self.data_info.loc[self.data_info['name'] == 'wheel', 'is_loaded'] = True
 
     def load_pose(self, likelihood_thr=0.9, views=['left', 'right', 'body']):
