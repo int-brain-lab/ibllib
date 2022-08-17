@@ -300,16 +300,34 @@ class BrainAtlas:
         """
         return self._lookup_inds(self.bc.xyz2i(xyz))
 
-    def get_labels(self, xyz, mapping='Allen'):
+    def get_labels(self, xyz, mapping='Allen', radius_um=None):
         """
         Performs a 3D lookup from real world coordinates to the volume labels
         and return the regions ids according to the mapping
         :param xyz: [n, 3] array of coordinates
         :param mapping: brain region mapping (defaults to original Allen mapping)
+        :param radius_um: if not null, returns a regions ids array and an array of proportion
+         of regions in a sphere of size radius around the coordinates.
         :return: n array of region ids
         """
-        regions_indices = self._get_mapping(mapping=mapping)[self.label.flat[self._lookup(xyz)]]
-        return self.regions.id[regions_indices]
+        if radius_um:
+            nrx = int(np.ceil(radius_um / abs(self.bc.dx) / 1e6))
+            nry = int(np.ceil(radius_um / abs(self.bc.dy) / 1e6))
+            nrz = int(np.ceil(radius_um / abs(self.bc.dz) / 1e6))
+            nr = [nrx, nry, nrz]
+            iii = self.bc.xyz2i(xyz)
+            # computing the cube radius and indices is more complicated as volume indices are not
+            # necessariy in ml, ap, dv order so the indices order is dynamic
+            rcube = np.meshgrid(*tuple((np.arange(
+                -nr[i], nr[i] + 1) * self.bc.dxyz[i]) ** 2 for i in self.xyz2dims))
+            rcube = np.sqrt(rcube[0] + rcube[1], rcube[2]) * 1e6
+            icube = tuple(slice(-nr[i] + iii[i], nr[i] + iii[i] + 1) for i in self.xyz2dims)
+            cube = self.regions.mappings[mapping][self.label[icube]]
+            ilabs, counts = np.unique(cube[rcube <= radius_um], return_counts=True)
+            return self.regions.id[ilabs], counts / np.sum(counts)
+        else:
+            regions_indices = self._get_mapping(mapping=mapping)[self.label.flat[self._lookup(xyz)]]
+            return self.regions.id[regions_indices]
 
     def _get_mapping(self, mapping='Allen'):
         """

@@ -1,28 +1,36 @@
-"""Camera QC
+"""Video quality control.
+
 This module runs a list of quality control metrics on the camera and extracted video data.
 
-Example - Run right camera QC, downloading all but video file
-    qc = CameraQC(eid, 'right', download_data=True, stream=True)
-    qc.run()
+Examples
+--------
+Run right camera QC, downloading all but video file
 
-Example - Run left camera QC with session path, update QC field in Alyx
-    qc = CameraQC(session_path, 'left')
-    outcome, extended = qc.run(update=True)  # Returns outcome of videoQC only
-    print(f'video QC = {outcome}; overall session QC = {qc.outcome}')  # NB difference outcomes
+>>> qc = CameraQC(eid, 'right', download_data=True, stream=True)
+>>> qc.run()
 
-Example - Run only video QC (no timestamp/alignment checks) on 20 frames for the body camera
-    qc = CameraQC(eid, 'body', n_samples=20)
-    qc.load_video_data()  # Quicker than loading all data
-    qc.run()
+Run left camera QC with session path, update QC field in Alyx
 
-Example - Run specific video QC check and display the plots
-    qc = CameraQC(eid, 'left;)
-    qc.load_data(download_data=True)
-    qc.check_position(display=True)  # NB: Not all checks make plots
+>>> qc = CameraQC(session_path, 'left')
+>>> outcome, extended = qc.run(update=True)  # Returns outcome of videoQC only
+>>> print(f'video QC = {outcome}; overall session QC = {qc.outcome}')  # NB difference outcomes
 
-Example - Run the QC for all cameras
-    qcs = run_all_qc(eid)
-    qcs['left'].metrics  # Dict of checks and outcomes for left camera
+Run only video QC (no timestamp/alignment checks) on 20 frames for the body camera
+
+>>> qc = CameraQC(eid, 'body', n_samples=20)
+>>> qc.load_video_data()  # Quicker than loading all data
+>>> qc.run()
+
+Run specific video QC check and display the plots
+
+>>> qc = CameraQC(eid, 'left')
+>>> qc.load_data(download_data=True)
+>>> qc.check_position(display=True)  # NB: Not all checks make plots
+
+Run the QC for all cameras
+
+>>> qcs = run_all_qc(eid)
+>>> qcs['left'].metrics  # Dict of checks and outcomes for left camera
 """
 import logging
 from inspect import getmembers, isfunction
@@ -586,7 +594,7 @@ class CameraQC(base.QC):
 
         # Determine the outcome.  If there are two values for the tolerance, one is taken to be
         # a warning threshold, the other a failure threshold.
-        out_map = {0: 'FAIL', 1: 'WARNING', 2: 'PASS'}
+        out_map = {0: 'WARNING', 1: 'WARNING', 2: 'PASS'}  # 0: FAIL -> WARNING Aug 2022
         passed = np.abs(offset) <= np.sort(np.array(tolerance))
         return out_map[sum(passed)], int(offset)
 

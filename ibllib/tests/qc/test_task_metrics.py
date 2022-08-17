@@ -13,12 +13,37 @@ from brainbox.behavior.wheel import cm_to_rad
 
 
 class TestAggregateOutcome(unittest.TestCase):
-    def test_outcome_from_dict(self):
+    def test_outcome_from_dict_default(self):
+        # For a task that has no costume thresholds, default is 0.99 PASS and 0.9 WARNING and 0 FAIL,
+        # np.nan and None return not set
+        qc_dict = {'gnap': .99, 'gnop': np.nan, 'gnip': None, 'gnep': 0.9, 'gnup': 0.89}
+        expect = {'gnap': 'PASS', 'gnop': 'NOT_SET', 'gnip': 'NOT_SET', 'gnep': 'WARNING', 'gnup': 'FAIL'}
+        outcome, outcome_dict = qcmetrics.TaskQC.compute_session_status_from_dict(qc_dict)
+        self.assertEqual(outcome, 'FAIL')
+        self.assertEqual(expect, outcome_dict)
+
+    def test_outcome_from_dict_stimFreeze_delays(self):
+        # For '_task_stimFreeze_delays' the threshold are 0.99 PASS and 0 WARNING
         qc_dict = {'gnap': .99, 'gnop': np.nan, '_task_stimFreeze_delays': .1}
-        expect = {'gnap': 'PASS', 'gnop': 'NOT_SET', '_task_stimFreeze_delays': 'NOT_SET'}
+        expect = {'gnap': 'PASS', 'gnop': 'NOT_SET', '_task_stimFreeze_delays': 'WARNING'}
+        outcome, outcome_dict = qcmetrics.TaskQC.compute_session_status_from_dict(qc_dict)
+        self.assertEqual(outcome, 'WARNING')
+        self.assertEqual(expect, outcome_dict)
+
+    def test_outcome_from_dict_iti_delays(self):
+        # For '_task_iti_delays' the threshold is 0 NOT_SET
+        qc_dict = {'gnap': .99, 'gnop': np.nan, '_task_iti_delays': .1}
+        expect = {'gnap': 'PASS', 'gnop': 'NOT_SET', '_task_iti_delays': 'NOT_SET'}
         outcome, outcome_dict = qcmetrics.TaskQC.compute_session_status_from_dict(qc_dict)
         self.assertEqual(outcome, 'PASS')
         self.assertEqual(expect, outcome_dict)
+
+    def test_out_of_bounds(self):
+        # When qc values are below 0 or above 1, give error
+        qc_dict = {'gnap': 1.01, 'gnop': 0, 'gnip': 0.99}
+        with self.assertRaises(ValueError) as e:
+            outcome, outcome_dict = qcmetrics.TaskQC.compute_session_status_from_dict(qc_dict)
+        self.assertTrue(e.exception.args[0] == 'Values out of bound')
 
 
 class TestTaskMetrics(unittest.TestCase):
