@@ -46,10 +46,11 @@ class DlcQC(base.QC):
         'body': ['_ibl_bodyCamera.dlc.*', '_ibl_bodyCamera.times.*'],
     }
 
-    def __init__(self, session_path_or_eid, side, **kwargs):
+    def __init__(self, session_path_or_eid, side, ignore_checks=['check_pupil_diameter_snr'], **kwargs):
         """
         :param session_path_or_eid: A session eid or path
         :param side: The camera to run QC on
+        :param ignore_checks: Checks that won't count towards aggregate QC, but will be run and added to extended QC
         :param log: A logging.Logger instance, if None the 'ibllib' logger is used
         :param one: An ONE instance for fetching and setting the QC on Alyx
         """
@@ -61,6 +62,8 @@ class DlcQC(base.QC):
         super().__init__(session_path_or_eid, **kwargs)
         self.data = Bunch()
 
+        # checks to be added to extended QC but not taken into account for aggregate QC
+        self.ignore_checks = ignore_checks
         # QC outcomes map
         self.metrics = None
 
@@ -139,9 +142,9 @@ class DlcQC(base.QC):
         checks = getmembers(DlcQC, is_metric)
         self.metrics = {f'_{namespace}_' + k[6:]: fn(self) for k, fn in checks}
 
-        values = [x if isinstance(x, str) else x[0] for x in self.metrics.values()]
-        code = max(base.CRITERIA[x] for x in values)
-        outcome = next(k for k, v in base.CRITERIA.items() if v == code)
+        ignore_metrics = [f'_{namespace}_' + i[6:] for i in self.ignore_checks]
+        metrics_to_aggregate = {k: v for k, v in self.metrics.items() if k not in ignore_metrics}
+        outcome = self.overall_outcome(metrics_to_aggregate.values())
 
         if update:
             extended = {
