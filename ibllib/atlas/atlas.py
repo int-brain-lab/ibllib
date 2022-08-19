@@ -281,26 +281,26 @@ class BrainAtlas:
             self.srf_xyz = self.bc.i2xyz(np.c_[idx_srf[self.xyz2dims[0]], idx_srf[self.xyz2dims[1]],
                                                idx_srf[self.xyz2dims[2]]].astype(float))
 
-    def _lookup_inds(self, ixyz):
+    def _lookup_inds(self, ixyz, mode='raise'):
         """
         Performs a 3D lookup from volume indices ixyz to the image volume
         :param ixyz: [n, 3] array of indices in the mlapdv order
         :return: n array of flat indices
         """
         idims = np.split(ixyz[..., self.xyz2dims], [1, 2], axis=-1)
-        inds = np.ravel_multi_index(idims, self.bc.nxyz[self.xyz2dims])
+        inds = np.ravel_multi_index(idims, self.bc.nxyz[self.xyz2dims], mode=mode)
         return inds.squeeze()
 
-    def _lookup(self, xyz):
+    def _lookup(self, xyz, mode='raise'):
         """
         Performs a 3D lookup from real world coordinates to the flat indices in the volume
         defined in the BrainCoordinates object
         :param xyz: [n, 3] array of coordinates
         :return: n array of flat indices
         """
-        return self._lookup_inds(self.bc.xyz2i(xyz))
+        return self._lookup_inds(self.bc.xyz2i(xyz, mode=mode), mode=mode)
 
-    def get_labels(self, xyz, mapping='Allen', radius_um=None):
+    def get_labels(self, xyz, mapping='Allen', radius_um=None, mode='raise'):
         """
         Performs a 3D lookup from real world coordinates to the volume labels
         and return the regions ids according to the mapping
@@ -326,7 +326,7 @@ class BrainAtlas:
             ilabs, counts = np.unique(cube[rcube <= radius_um], return_counts=True)
             return self.regions.id[ilabs], counts / np.sum(counts)
         else:
-            regions_indices = self._get_mapping(mapping=mapping)[self.label.flat[self._lookup(xyz)]]
+            regions_indices = self._get_mapping(mapping=mapping)[self.label.flat[self._lookup(xyz, mode=mode)]]
             return self.regions.id[regions_indices]
 
     def _get_mapping(self, mapping='Allen'):
