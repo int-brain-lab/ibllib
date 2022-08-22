@@ -143,8 +143,8 @@ class Task(abc.ABC):
         # after the run, capture the log output, amend to any existing logs if not overwrite
         new_log = log_capture_string.getvalue()
         self.log = new_log if self.clobber else self.log + new_log
-        log_capture_string.close()
         _logger.removeHandler(ch)
+        ch.close()
         _logger.setLevel(logger_level)
         # tear down
         self.tearDown()
