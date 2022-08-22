@@ -119,8 +119,8 @@ class Task(abc.ABC):
                         _logger.info(f"Job {self.__class__} exited as a lock was found")
                         new_log = log_capture_string.getvalue()
                         self.log = new_log if self.clobber else self.log + new_log
-                        log_capture_string.close()
                         _logger.removeHandler(ch)
+                        ch.close()
                         return self.status
                 self.outputs = self._run(**kwargs)
                 _logger.info(f"Job {self.__class__} complete")
