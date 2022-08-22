@@ -22,7 +22,7 @@ import ibllib.io.extractors.base as extractors_base
 from ibllib.io.extractors.training_wheel import extract_wheel_moves
 import ibllib.plots as plots
 
-_logger = logging.getLogger('ibllib')
+_logger = logging.getLogger(__name__)
 
 SYNC_BATCH_SIZE_SECS = 100  # number of samples to read at once in bin file for sync
 WHEEL_RADIUS_CM = 1  # stay in radians

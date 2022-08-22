@@ -15,7 +15,7 @@ from ibllib.pipes.ephys_alignment import EphysAlignment
 from ibllib.pipes.histology import interpolate_along_track
 from ibllib.atlas import AllenAtlas
 
-_logger = logging.getLogger('ibllib')
+_logger = logging.getLogger(__name__)
 
 
 class ReportSnapshot(tasks.Task):

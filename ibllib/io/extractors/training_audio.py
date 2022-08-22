@@ -15,7 +15,7 @@ import ibllib.io.raw_data_loaders as ioraw
 from ibllib.io.extractors.training_trials import GoCueTimes
 
 
-logger_ = logging.getLogger('ibllib')
+logger_ = logging.getLogger(__name__)
 
 NS_WIN = 2 ** 18  # 2 ** np.ceil(np.log2(1 * fs))
 OVERLAP = NS_WIN / 2

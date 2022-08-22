@@ -14,7 +14,7 @@ from ibllib.qc import base
 from neurodsp.utils import fcn_cosine
 
 
-_logger = logging.getLogger('ibllib')
+_logger = logging.getLogger(__name__)
 
 
 def load_track_csv(file_track, brain_atlas=None):

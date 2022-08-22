@@ -15,7 +15,7 @@ from ibllib.oneibl import data_handlers
 import one.params
 from one.api import ONE
 
-_logger = logging.getLogger('ibllib')
+_logger = logging.getLogger(__name__)
 
 
 class Task(abc.ABC):
@@ -95,8 +95,8 @@ class Task(abc.ABC):
         ch = logging.StreamHandler(log_capture_string)
         str_format = '%(asctime)s,%(msecs)d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s'
         ch.setFormatter(logging.Formatter(str_format))
-        _logger.addHandler(ch)
-        _logger.setLevel(logging.INFO)
+        _logger.parent.addHandler(ch)
+        _logger.parent.setLevel(logging.INFO)
         _logger.info(f"Starting job {self.__class__}")
         if self.machine:
             _logger.info(f"Running on machine: {self.machine}")
@@ -119,8 +119,8 @@ class Task(abc.ABC):
                         _logger.info(f"Job {self.__class__} exited as a lock was found")
                         new_log = log_capture_string.getvalue()
                         self.log = new_log if self.clobber else self.log + new_log
-                        log_capture_string.close()
                         _logger.removeHandler(ch)
+                        ch.close()
                         return self.status
                 self.outputs = self._run(**kwargs)
                 _logger.info(f"Job {self.__class__} complete")
@@ -143,8 +143,8 @@ class Task(abc.ABC):
         # after the run, capture the log output, amend to any existing logs if not overwrite
         new_log = log_capture_string.getvalue()
         self.log = new_log if self.clobber else self.log + new_log
-        log_capture_string.close()
         _logger.removeHandler(ch)
+        ch.close()
         _logger.setLevel(logger_level)
         # tear down
         self.tearDown()

@@ -17,7 +17,7 @@ import ibllib.time
 import ibllib.io.raw_data_loaders as raw
 from ibllib.io import flags
 
-_logger = logging.getLogger('ibllib')
+_logger = logging.getLogger(__name__)
 EXCLUDED_EXTENSIONS = ['.flag', '.error', '.avi']
 REGISTRATION_GLOB_PATTERNS = ['alf/**/*.*',
                               'raw_behavior_data/**/_iblrig_*.*',

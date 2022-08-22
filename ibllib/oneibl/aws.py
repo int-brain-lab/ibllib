@@ -10,7 +10,7 @@ from one.alf.files import add_uuid_string
 from iblutil.io.parquet import np2str
 
 
-_logger = logging.getLogger('ibllib')
+_logger = logging.getLogger(__name__)
 
 AWS_ROOT_PATH = Path('data')
 BUCKET_NAME = 'ibl-brain-wide-map-private'
