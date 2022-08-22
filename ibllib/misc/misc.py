@@ -1,7 +1,6 @@
 # library of small functions
 import logging
 import subprocess
-from pathlib import Path
 
 import numpy as np
 

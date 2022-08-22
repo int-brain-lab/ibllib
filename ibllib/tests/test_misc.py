@@ -1,6 +1,4 @@
 import unittest
-import logging
-from pathlib import Path
 
 from ibllib.misc import version
 
