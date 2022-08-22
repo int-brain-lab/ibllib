@@ -1,28 +1,36 @@
+## Release Notes 2.15
+- session registration procedures and projects, only add a couple of fields in the json by default
+
 ## Release Notes 2.14
-- session registration procedures and projects, only add a couple of field in the json by default
+### Release Notes 2.14.0 2022-08-17
+- Adding brainbox.io.one.SessionLoader for standardized loading of session data
+- Changes to TaskQC, VideoQC and DLCQC thresholds and aggregation
+- Unfreezing numpy version
+- Adding probabilistic brain regions lookup in ibllib.atlas.atlas.BrainAtlas.get_labels
+- Removing two voxelless areas from beryl atlas
+- Minor updates to audio events detection and audio welchogram
 
 ## Release Notes 2.13
-## Release Notes 2.13.6 2022-08-02
+### Release Notes 2.13.6 2022-08-02
 - Hotfix: don't overwrite full settings if iblrig on untagged version
 
-## Release Notes 2.13.5 2022-07-27
+### Release Notes 2.13.5 2022-07-27
 - Hotfix: pseudo session biased generation contrast distribution
 
-## Release Notes 2.13.4 2022-07-22
-- Hotfix: Density displays had unexisting colormaps in snapshots QC tasks
+### Release Notes 2.13.4 2022-07-22
+- Hotfix: Density displays had non-existing colormaps in snapshots QC tasks
 - Generate extra training plots based on psychometric curves
 
-## Release Notes 2.13.3 2022-07-01
+### Release Notes 2.13.3 2022-07-01
 - Hotfix: fix previous hotfix with incorrect package version number
 
-## Release Notes 2.13.2 2022-07-01
+### Release Notes 2.13.2 2022-07-01
 - Hotfix: datahandler sets local paths in init
 
-## Release Notes 2.13.1 2022-07-01
+### Release Notes 2.13.1 2022-07-01
 - Hotfix: globus imports were mixed one.globus and one.remote
 
-
-## Release Notes 2.13.0 2022-06-30
+### Release Notes 2.13.0 2022-06-30
 - Deprecated ibllib.version
 - Fix Globus patcher
 - Add SpikeSorting Loader samples2times function
@@ -31,7 +39,7 @@
 - Reverse matplotlib colorbars in density displays
 
 ## Release Notes 2.12
-## Release Notes 2.12.2 2022-05-27
+### Release Notes 2.12.2 2022-05-27
 - Fixes to plotting in training_status
 
 ## Release Notes 2.12.1 2022-05-26

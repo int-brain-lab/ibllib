@@ -594,7 +594,7 @@ class CameraQC(base.QC):
 
         # Determine the outcome.  If there are two values for the tolerance, one is taken to be
         # a warning threshold, the other a failure threshold.
-        out_map = {0: 'FAIL', 1: 'WARNING', 2: 'PASS'}
+        out_map = {0: 'WARNING', 1: 'WARNING', 2: 'PASS'}  # 0: FAIL -> WARNING Aug 2022
         passed = np.abs(offset) <= np.sort(np.array(tolerance))
         return out_map[sum(passed)], int(offset)
 
