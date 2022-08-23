@@ -13,7 +13,7 @@ from ibllib.qc import base
 from ibllib.oneibl.patcher import FTPPatcher
 from ibllib.qc.base import CRITERIA as CRITERIA_BASE
 
-_log = logging.getLogger('ibllib')
+_log = logging.getLogger(__name__)
 CRITERIA = {"PASS": 0.8}
 
 

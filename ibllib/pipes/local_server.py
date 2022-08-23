@@ -18,7 +18,7 @@ import ibllib.oneibl.registration as registration
 from ibllib.io.session_params import read_params
 from ibllib.pipes.dynamic_pipeline import make_pipeline
 
-_logger = logging.getLogger('ibllib')
+_logger = logging.getLogger(__name__)
 LARGE_TASKS = ['EphysVideoCompress', 'TrainingVideoCompress', 'SpikeSorting', 'EphysDLC']
 
 

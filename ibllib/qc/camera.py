@@ -57,7 +57,7 @@ import brainbox.behavior.wheel as wh
 from ibllib.io.video import get_video_meta, get_video_frames_preload, assert_valid_label
 from . import base
 
-_log = logging.getLogger('ibllib')
+_log = logging.getLogger(__name__)
 
 
 class CameraQC(base.QC):

@@ -23,7 +23,7 @@ import scipy.ndimage.filters as filters
 import scipy.stats as stats
 import pandas as pd
 
-from ibllib.io import spikeglx
+import spikeglx
 from phylib.stats import correlograms
 from iblutil.util import Bunch
 from iblutil.numerical import ismember, between_sorted

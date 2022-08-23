@@ -14,7 +14,7 @@ from ibllib.ephys.sync_probes import apply_sync
 import ibllib.ephys.ephysqc as ephysqc
 from ibllib.ephys import sync_probes
 
-_logger = logging.getLogger('ibllib')
+_logger = logging.getLogger(__name__)
 
 
 def probes_description(ses_path, one):

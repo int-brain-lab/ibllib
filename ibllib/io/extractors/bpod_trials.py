@@ -10,7 +10,7 @@ from ibllib.io.extractors import habituation_trials, training_trials, biased_tri
 import ibllib.io.extractors.base
 import ibllib.io.raw_data_loaders as rawio
 
-_logger = logging.getLogger('ibllib')
+_logger = logging.getLogger(__name__)
 
 
 def extract_all(session_path, save=True, bpod_trials=None, settings=None):

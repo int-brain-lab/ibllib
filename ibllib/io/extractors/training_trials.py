@@ -8,7 +8,7 @@ from ibllib.io.extractors.base import BaseBpodTrialsExtractor, run_extractor_cla
 from ibllib.io.extractors.training_wheel import Wheel
 
 
-_logger = logging.getLogger('ibllib')
+_logger = logging.getLogger(__name__)
 
 
 class FeedbackType(BaseBpodTrialsExtractor):

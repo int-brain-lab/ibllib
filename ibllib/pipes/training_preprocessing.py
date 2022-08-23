@@ -10,7 +10,7 @@ from ibllib.qc.task_metrics import TaskQC, HabituationQC
 from ibllib.qc.task_extractors import TaskQCExtractor
 from ibllib.oneibl.registration import register_session_raw_data
 
-_logger = logging.getLogger('ibllib')
+_logger = logging.getLogger(__name__)
 
 
 #  level 0

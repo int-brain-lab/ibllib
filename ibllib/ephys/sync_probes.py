@@ -11,7 +11,7 @@ import spikeglx
 from ibllib.exceptions import Neuropixel3BSyncFrontsNonMatching
 from ibllib.io.extractors.ephys_fpga import get_sync_fronts, get_ibl_sync_map
 
-_logger = logging.getLogger('ibllib')
+_logger = logging.getLogger(__name__)
 
 
 def apply_sync(sync_file, times, forward=True):

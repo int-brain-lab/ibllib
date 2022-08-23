@@ -2,7 +2,7 @@ from pathlib import Path
 
 import numpy as np
 
-from brainbox.core import Bunch
+from iblutil.util import Bunch
 from ibllib.io.raw_data_loaders import load_data, load_settings
 
 """

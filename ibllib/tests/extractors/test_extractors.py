@@ -1,5 +1,4 @@
 import functools
-import logging
 import shutil
 import tempfile
 import unittest
@@ -55,7 +54,6 @@ class TestExtractTrialData(unittest.TestCase):
         # turn off logging for unit testing as we will purposedly go into warning/error cases
         self.wheel_ge5_path = self.main_path / 'data' / 'wheel_ge5'
         self.wheel_lt5_path = self.main_path / 'data' / 'wheel_lt5'
-        self.logger = logging.getLogger('ibllib')
         # Save some dummy wheel moves data for trial firstMovement_times extraction
 
     def test_get_feedbackType(self):

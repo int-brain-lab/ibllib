@@ -4,7 +4,7 @@ import logging
 
 from ibllib.io.video import get_video_meta
 
-_logger = logging.getLogger('ibllib')
+_logger = logging.getLogger(__name__)
 
 
 def compress(file_in, file_out, command, remove_original=True):

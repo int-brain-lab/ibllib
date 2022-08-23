@@ -16,7 +16,7 @@ from one.remote import globus
 
 from ibllib.oneibl.registration import register_dataset
 
-_logger = logging.getLogger('ibllib')
+_logger = logging.getLogger(__name__)
 
 FLAT_IRON_GLOBUS_ID = 'ab2d064c-413d-11eb-b188-0ee0d5d9299f'
 FLATIRON_HOST = 'ibl.flatironinstitute.org'

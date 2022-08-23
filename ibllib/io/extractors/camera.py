@@ -23,7 +23,7 @@ from ibllib.io.extractors.base import (
     _get_task_types_json_config
 )
 
-_logger = logging.getLogger('ibllib')
+_logger = logging.getLogger(__name__)
 
 
 def extract_camera_sync(sync, chmap=None):

@@ -56,7 +56,7 @@ from ibllib.io.extractors import ephys_fpga
 from one.alf.spec import is_session_path
 from . import base
 
-_log = logging.getLogger('ibllib')
+_log = logging.getLogger(__name__)
 
 
 class TaskQC(base.QC):
