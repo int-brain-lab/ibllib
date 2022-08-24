@@ -216,7 +216,7 @@ class SpikeSorting(tasks.Task):
     Pykilosort 2.5 pipeline
     """
     gpu = 1
-    io_charge = 70  # this jobs reads raw ap files
+    io_charge = 100  # this jobs reads raw ap files
     priority = 60
     level = 1  # this job doesn't depend on anything
     force = True
@@ -495,6 +495,7 @@ class EphysVideoCompress(tasks.Task):
     level = 0
     force = False
     job_size = 'large'
+    io_charge = 100
 
     signature = {
         'input_files': [('_iblrig_*Camera.raw.*', 'raw_video_data', True)],
@@ -919,7 +920,7 @@ class EphysDLC(tasks.Task):
     """
     gpu = 1
     cpu = 4
-    io_charge = 90
+    io_charge = 100
     level = 2
     force = True
     job_size = 'large'

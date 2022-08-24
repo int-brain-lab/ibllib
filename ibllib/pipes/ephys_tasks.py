@@ -122,7 +122,7 @@ class EphysSyncRegisterRaw(base_tasks.DynamicTask):
 class EphysCompressNP1(base_tasks.EphysTask):
     priority = 90
     cpu = 2
-    io_charge = 30  # this jobs reads raw ap files
+    io_charge = 100  # this jobs reads raw ap files
     job_size = 'small'
 
     @property
@@ -181,7 +181,7 @@ class EphysCompressNP1(base_tasks.EphysTask):
 class EphysCompressNP21(base_tasks.EphysTask):
     priority = 90
     cpu = 2
-    io_charge = 30  # this jobs reads raw ap files
+    io_charge = 100  # this jobs reads raw ap files
     job_size = 'large'
 
     @property
@@ -254,7 +254,7 @@ class EphysCompressNP21(base_tasks.EphysTask):
 class EphysCompressNP24(base_tasks.EphysTask):
     priority = 90
     cpu = 2
-    io_charge = 30  # this jobs reads raw ap files
+    io_charge = 100  # this jobs reads raw ap files
     job_size = 'large'
 
     @property
@@ -469,7 +469,7 @@ class SpikeSorting(base_tasks.EphysTask):
     Pykilosort 2.5 pipeline
     """
     gpu = 1
-    io_charge = 70  # this jobs reads raw ap files
+    io_charge = 100  # this jobs reads raw ap files
     priority = 60
     job_size = 'large'
     force = True
