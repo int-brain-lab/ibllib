@@ -18,6 +18,9 @@ def read_params(session_path):
 
     with open(yaml_file, 'r') as fid:
         params = yaml.full_load(fid)
+
+    if 'version' not in params:
+        params['version'] = '1.0.0'
     return params
 
 
