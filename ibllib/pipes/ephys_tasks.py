@@ -252,10 +252,26 @@ class EphysCompressNP21(base_tasks.EphysTask):
 
 
 class EphysCompressNP24(base_tasks.EphysTask):
+    """
+    Compresses NP2.4 data by splitting into N binary files, corresponding to N shanks
+    :param pname: a probe name string
+    :param device_collection: the collection containing the probes (usually 'raw_ephys_data')
+    :param nshanks: number of shanks used (usually 4 but it may be less depending on electrode map), optional
+    """
+
     priority = 90
     cpu = 2
     io_charge = 100  # this jobs reads raw ap files
     job_size = 'large'
+
+    def __init__(self, session_path, *args, pname=None, device_collection=None, nshanks=None, **kwargs):
+        assert pname, "pname is a required argument"
+        assert device_collection, "device_collection is a required argument"
+        if nshanks is None:
+            meta_file = next(session_path.joinpath(device_collection, pname).glob('*ap.meta'))
+            nshanks = spikeglx._get_nshanks_from_meta(spikeglx.read_meta_data(meta_file))
+        super(EphysCompressNP24, self).__init__(
+            session_path, *args, pname=pname, device_collection=device_collection, nshanks=nshanks, **kwargs)
 
     @property
     def signature(self):
@@ -356,16 +372,27 @@ class EphysPulses(base_tasks.EphysTask):
     """
     Extract Pulses from raw electrophysiology data into numpy arrays
     Perform the probes synchronisation with nidq (3B) or main probe (3A)
-    """
+    First the job extract the sync pulses from the synchronisation task in all probes, and then perform the
+     synchronisation with the nidq
 
+    :param pname: a list of probes names or a single probe name string
+    :param device_collection: the collection containing the probes (usually 'raw_ephys_data')
+    :param sync_collection: the collection containing the synchronisation device - nidq (usually 'raw_ephys_data')
+    """
     priority = 90
     cpu = 2
     io_charge = 30  # this jobs reads raw ap files
     job_size = 'small'
 
+    def __init__(self, *args, **kwargs):
+        super(EphysPulses, self).__init__(*args, **kwargs)
+        assert self.device_collection, "device_collection is a required argument"
+        assert self.sync_collection, "sync_collection is a required argument"
+        self.pname = [self.pname] if isinstance(self.pname, str) else self.pname
+        assert type(self.pname) == list, 'pname task argument should be a list or a string'
+
     @property
     def signature(self):
-        assert type(self.pname) == list
         signature = {
             'input_files': [('*ap.meta', f'{self.device_collection}/{pname}', True) for pname in self.pname] +
                            [('*ap.cbin', f'{self.device_collection}/{pname}', True) for pname in self.pname] +
@@ -400,7 +427,7 @@ class EphysPulses(base_tasks.EphysTask):
             _, out = extract_sync(self.session_path, ephys_files=files, overwrite=overwrite)
             out_files += out
 
-        status, sync_files = sync_probes.sync(self.session_path)
+        status, sync_files = sync_probes.sync(self.session_path, probe_names=self.pname)
 
         return out_files + sync_files
 
