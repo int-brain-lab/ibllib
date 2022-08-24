@@ -264,9 +264,8 @@ class EphysCompressNP24(base_tasks.EphysTask):
     io_charge = 100  # this jobs reads raw ap files
     job_size = 'large'
 
-    def __init__(self, session_path, *args, pname=None, device_collection=None, nshanks=None, **kwargs):
+    def __init__(self, session_path, *args, pname=None, device_collection='raw_ephys_data', nshanks=None, **kwargs):
         assert pname, "pname is a required argument"
-        assert device_collection, "device_collection is a required argument"
         if nshanks is None:
             meta_file = next(session_path.joinpath(device_collection, pname).glob('*ap.meta'))
             nshanks = spikeglx._get_nshanks_from_meta(spikeglx.read_meta_data(meta_file))
