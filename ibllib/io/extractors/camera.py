@@ -662,7 +662,7 @@ def extract_all(session_path, session_type=None, save=True, **kwargs):
         if not session_type or session_type not in _get_task_types_json_config().values():
             raise ValueError(f"Session type {session_type} has no matching extractor")
 
-        sync_type = 'nidq' if session_type == 'ephys' else 'bpod'
+    sync_type = 'nidq' if session_type == 'ephys' else 'bpod'
 
     if sync_type == 'nidq':
         labels = assert_valid_label(kwargs.pop('labels', ('left', 'right', 'body')))
