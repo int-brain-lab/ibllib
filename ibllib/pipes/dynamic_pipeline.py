@@ -2,7 +2,7 @@ from collections import OrderedDict
 from pathlib import Path
 import yaml
 import ibllib.io.session_params as sess_params
-
+import ibllib.io.extractors.base
 import ibllib.pipes.ephys_preprocessing as epp
 import ibllib.pipes.tasks as mtasks
 import ibllib.pipes.base_tasks as bstasks
@@ -15,12 +15,18 @@ import ibllib.pipes.audio_tasks as atasks
 
 import spikeglx
 
+ACQUISITION_DESCRIPTION_VERSION = '1.0.0'
 
-def acquisition_description_legacy_session():
+
+def acquisition_description_legacy_session(session_path):
     """
     From a legacy session create a dictionary corresponding to the acquisition description
     :return: dict
     """
+    extractor_type = ibllib.io.extractors.base.get_session_extractor_type(session_path=session_path)
+    etype2protocol = dict(biased='choice_world_biased', habituation='choice_world_habituation',
+                          training='choice_world_training', ephys='choice_world_recording')
+    return get_acquisition_description(etype2protocol[extractor_type])
 
 
 def get_acquisition_description(protocol):
@@ -71,21 +77,21 @@ def get_acquisition_description(protocol):
         }
         acquisition_description = {  # this is the current ephys pipeline description
             'devices': devices,
-            'tasks': {
-                'trainingChoiceWorld': {'collection': 'raw_behavior_data', 'sync_label': 'bpod', 'main': True}
-            },
             'sync': {
                 'bpod': {'collection': 'raw_behavior_data', 'extension': 'bin'}
             },
             'procedures': ['Behavior training/tasks'],
             'projects': ['ibl_neuropixel_brainwide_01']
         }
+        if protocol == 'choice_world_biased':
+            key = 'biasedChoiceWorld'
+        elif protocol == 'choice_world_training':
+            key = 'trainingChoiceWorld'
+        elif protocol == 'choice_world_habituation':
+            key = 'habituationChoiceWorld'
+        acquisition_description['tasks'] = {key: {'collection': 'raw_behavior_data', 'sync_label': 'bpod', 'main': True}}
+    acquisition_description['version'] = ACQUISITION_DESCRIPTION_VERSION
     return acquisition_description
-
-
-class DummyTask(mtasks.Task):
-    def _run(self):
-        pass
 
 
 def make_pipeline(session_path=None, **pkwargs):
