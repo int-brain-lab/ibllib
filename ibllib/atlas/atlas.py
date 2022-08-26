@@ -1004,18 +1004,22 @@ class AllenAtlas(BrainAtlas):
             volume = np.load(file_volume)['arr_0']
         return volume
 
-    def xyz2ccf(self, xyz, ccf_order='mlapdv'):
+    def xyz2ccf(self, xyz, ccf_order='mlapdv', mode='raise'):
         """
         Converts coordinates to the CCF coordinates, which is assumed to be the cube indices
         times the spacing.
         :param xyz: mlapdv coordinates in meters, origin Bregma
         :param ccf_order: order that you want values returned 'mlapdv' (ibl) or 'apdvml'
         (Allen mcc vertices)
+        :param mode: {‘raise’, 'clip', 'wrap'} determines what to do when determined index lies outside the atlas volume
+                     'raise' will raise a ValueError
+                     'clip' will replace the index with the closest index inside the volume
+                     'wrap' will wrap around to the other side of the volume. This is only here for legacy reasons
         :return: coordinates in CCF space um, origin is the front left top corner of the data
         volume, order determined by ccf_order
         """
         ordre = self._ccf_order(ccf_order)
-        ccf = self.bc.xyz2i(xyz, round=False) * float(self.res_um)
+        ccf = self.bc.xyz2i(xyz, round=False, mode=mode) * float(self.res_um)
         return ccf[..., ordre]
 
     def ccf2xyz(self, ccf, ccf_order='mlapdv'):
