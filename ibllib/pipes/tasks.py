@@ -572,7 +572,7 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
         assert d['id'] != t['id'], 'task its own parent'
         # if all their parent tasks now complete, set to waiting
         parent_status = [next(x['status'] for x in job_deck if x['id'] == y) for y in d['parents']]
-        if all(x == 'Complete' for x in parent_status):
+        if all(x in ['Complete', 'Incomplete'] for x in parent_status):
             one.alyx.rest('tasks', 'partial_update', id=d['id'], data={'status': 'Waiting'})
     task.cleanUp()
     return t, registered_dsets
