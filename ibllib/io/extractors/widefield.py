@@ -119,17 +119,17 @@ class Widefield(extractors_base.BaseExtractor):
 
         return new_files
 
-    def preprocess(self, fs=30, functional_channel=0, nbaseline_frames=30, k=200):
+    def preprocess(self, fs=30, functional_channel=0, nbaseline_frames=30, k=200, nchannels=2):
 
         # MOTION CORRECTION
-        wfield_cli._motion(str(self.data_path))
+        wfield_cli._motion(str(self.data_path), nchannels=nchannels)
         # COMPUTE AVERAGE FOR BASELINE
-        wfield_cli._baseline(str(self.data_path), nbaseline_frames)
+        wfield_cli._baseline(str(self.data_path), nbaseline_frames, nchannels=nchannels)
         # DATA REDUCTION
-        wfield_cli._decompose(str(self.data_path), k=k)
+        wfield_cli._decompose(str(self.data_path), k=k, nchannels=nchannels)
         # HAEMODYNAMIC CORRECTION
         # check if it is 2 channel
-        dat = wfield_cli.load_stack(str(self.data_path))
+        dat = wfield_cli.load_stack(str(self.data_path), nchannels=nchannels)
         if dat.shape[1] == 2:
             del dat
             wfield_cli._hemocorrect(str(self.data_path), fs=fs, functional_channel=functional_channel)
@@ -176,6 +176,8 @@ class Widefield(extractors_base.BaseExtractor):
                             f'NIDQ sync times: {fpga_led_up.size}, LED frame times {led_times.size}')
             raise ValueError('Sync mismatch')
 
+
+        # TODO change this to just save the fpga timestamps
         # If all okay, extract timestamps
         fcn, drift, iled, ifpga = sync_timestamps(led_times, fpga_led_up, return_indices=True)
         _logger.debug(f'Widefield-FPGA clock drift: {drift} ppm')
@@ -206,3 +208,23 @@ class Widefield(extractors_base.BaseExtractor):
             return save_paths
         else:
             return widefield_times, channel_id, channel_meta_map
+
+
+
+
+
+
+import matplotlib.pyplot as plt
+
+fig, ax = plt.subplots(2, 3)
+ax = ax.ravel()
+frame = 100
+ax[0].imshow(dat[frame,0], vmin=0, vmax=vmax)
+ax[1].imshow(dat_mot[frame,0], vmin=0, vmax=vmax)
+ax[2].imshow(dat[frame,0] - dat_mot[frame,0])
+
+ax[3].imshow(dat[frame,1], vmin=0, vmax=vmax)
+ax[4].imshow(dat_mot[frame,1], vmin=0, vmax=vmax)
+ax[5].imshow(dat[frame,1] - dat_mot[frame,1])
+
+fig.savefig(f'frame_{frame}.png')

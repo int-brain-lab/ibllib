@@ -141,6 +141,30 @@ class CameraTimestampsFPGA(BaseExtractor):
         return raw_ts
 
 
+class CameraTimestampsCamlog(BaseExtractor):
+    def __init__(self, label, session_path=None):
+        super().__init__(session_path)
+        self.label = assert_valid_label(label)
+        self.save_names = f'_ibl_{label}Camera.times.npy'
+        self.var_names = f'{label}_camera_timestamps'
+        self._log_level = _logger.level
+        _logger.setLevel(logging.DEBUG)
+
+    def __del__(self):
+        _logger.setLevel(self._log_level)
+
+    def _extract(self, sync=None, chmap=None, video_path=None,
+                 display=False, extrapolate_missing=True, **kwargs):
+
+        fpga_times = extract_camera_sync(sync=sync, chmap=chmap)
+        video_frames = get_video_length(self.session_path.joinpath('raw_video_data', f'_iblrig_{self.label}Camera.raw.mp4'))
+        raw_ts = fpga_times[self.label]
+
+        assert video_frames == raw_ts.size, 'dimension mismatch between video frames and TTL pulses'
+
+        return raw_ts
+
+
 class CameraTimestampsBpod(BaseBpodTrialsExtractor):
     """
     Get the camera timestamps from the Bpod
@@ -654,20 +678,20 @@ def extract_all(session_path, session_type=None, save=True, **kwargs):
     :return: outputs, files
     """
 
-    sync_type = kwargs.get('sync_type', None)
     sync_collection = kwargs.get('sync_collection', 'raw_ephys_data')
+    camlog = kwargs.get('camlog', False)
 
-    if sync_type is None and session_type is None:  # infer the session type
+    if session_type is None:  # infer the session type
         session_type = get_session_extractor_type(session_path)
         if not session_type or session_type not in _get_task_types_json_config().values():
             raise ValueError(f"Session type {session_type} has no matching extractor")
-
-    sync_type = 'nidq' if session_type == 'ephys' else 'bpod'
+    sync_type = kwargs.get('sync_type', 'nidq' if session_type == 'ephys' else 'bpod')
 
     if sync_type == 'nidq':
         labels = assert_valid_label(kwargs.pop('labels', ('left', 'right', 'body')))
         labels = (labels,) if isinstance(labels, str) else labels  # Ensure list/tuple
-        extractor = [partial(CameraTimestampsFPGA, label) for label in labels]
+        CamExtractor = CameraTimestampsCamlog if camlog else CameraTimestampsFPGA
+        extractor = [partial(CamExtractor, label) for label in labels]
         if 'sync' not in kwargs:
             kwargs['sync'], kwargs['chmap'] = get_sync_and_chn_map(session_path, sync_collection)
     else:  # assume Bpod otherwise
