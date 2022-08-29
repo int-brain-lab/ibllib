@@ -225,20 +225,29 @@ def make_pipeline(session_path=None, **pkwargs):
     if 'cameras' in devices:
         video_kwargs = {'device_collection': 'raw_video_data',
                         'cameras': list(devices['cameras'].keys())}
-        tasks[tn] = type((tn := 'VideoRegisterRaw'), (vtasks.VideoRegisterRaw,), {})(**kwargs, **video_kwargs)
-        tasks[tn] = type((tn := 'VideoCompress'), (vtasks.VideoCompress,), {})(**kwargs, **video_kwargs)
-
-        if sync == 'bpod':
-            collection = sess_params.get_task_collection(acquisition_description)
-            tasks[tn] = type((tn := f'VideoSyncQC_{sync}'), (vtasks.VideoSyncQcBpod,), {})(
-                **kwargs, **video_kwargs, **sync_kwargs, collection=collection, parents=[tasks['VideoCompress']])
-        elif sync == 'nidq':
-            tasks[tn] = type((tn := f'VideoSyncQC_{sync}'), (vtasks.VideoSyncQcNidq,), {})(
-                **kwargs, **video_kwargs, **sync_kwargs, parents=[tasks['VideoCompress']] + sync_tasks)
+        video_compressed = sess_params.get_video_compressed(acquisition_description)
+    
+        if video_compressed:
+            # This is for widefield case where the video is already compressed
+            tasks[tn] = type((tn := 'VideoConvert'), (vtasks.VideoConvert,), {})(**kwargs, **video_kwargs)
+            dlc_parent_task = tasks['VideoConvert']
+            tasks[tn] = type((tn := f'VideoSyncQC_{sync}'), (vtasks.VideoSyncQcCamlog,), {})(**kwargs, **video_kwargs,
+                                                                                             **sync_kwargs)
+        else:
+            tasks[tn] = type((tn := 'VideoRegisterRaw'), (vtasks.VideoRegisterRaw,), {})(**kwargs, **video_kwargs)
+            tasks[tn] = type((tn := 'VideoCompress'), (vtasks.VideoCompress,), {})(**kwargs, **video_kwargs, **sync_kwargs)
+            dlc_parent_task = tasks['VideoCompress']
+            if sync == 'bpod':
+                collection = sess_params.get_task_collection(acquisition_description)
+                tasks[tn] = type((tn := f'VideoSyncQC_{sync}'), (vtasks.VideoSyncQcBpod,), {})(
+                    **kwargs, **video_kwargs, **sync_kwargs, collection=collection, parents=[tasks['VideoCompress']])
+            elif sync == 'nidq':
+                tasks[tn] = type((tn := f'VideoSyncQC_{sync}'), (vtasks.VideoSyncQcNidq,), {})(
+                    **kwargs, **video_kwargs, **sync_kwargs, parents=[tasks['VideoCompress']] + sync_tasks)
 
         if len(video_kwargs['cameras']) == 3:
             tasks[tn] = type((tn := 'DLC'), (epp.EphysDLC,), {})(
-                **kwargs, parents=[tasks['VideoCompress']])
+                **kwargs, parents=[dlc_parent_task])
             tasks['PostDLC'] = type('PostDLC', (epp.EphysPostDLC,), {})(
                 **kwargs, parents=[tasks['DLC'], tasks[f'VideoSyncQC_{sync}']])
 
