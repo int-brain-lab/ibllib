@@ -50,8 +50,13 @@ class VideoCompress(base_tasks.VideoTask):
     def _run(self):
         # TODO different compression parameters based on whether it is training or not based on number of camers?
         # avi to mp4 compression
-        command = ('ffmpeg -i {file_in} -y -nostdin -codec:v libx264 -preset slow -crf 17 '
-                   '-loglevel 0 -codec:a copy {file_out}')
+        if self.sync == 'bpod':
+            command = ('ffmpeg -i {file_in} -y -nostdin -codec:v libx264 -preset slow -crf 29 '
+                       '-nostats -codec:a copy {file_out}')
+        else:
+            command = ('ffmpeg -i {file_in} -y -nostdin -codec:v libx264 -preset slow -crf 17 '
+                       '-loglevel 0 -codec:a copy {file_out}')
+
         output_files = ffmpeg.iblrig_video_compression(self.session_path, command)
 
         if len(output_files) == 0:
@@ -121,8 +126,7 @@ class VideoConvert(base_tasks.VideoTask):
 
 class VideoSyncQcCamlog(base_tasks.VideoTask):
     """
-    Task to sync camera timestamps to main DAQ timestamps
-    N.B Signatures only reflect new daq naming convention, non compatible with ephys when not running on server
+    Task to sync camera timestamps to main DAQ timestamps when camlog files are used. Specific to UCLA widefield implementation
     """
     priority = 40
     job_size = 'small'
