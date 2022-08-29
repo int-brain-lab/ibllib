@@ -259,8 +259,9 @@ def get_device_collection(sess_params, device):
     # TODO
     return None
 
+
 def get_video_compressed(sess_params):
-    videos = sess_params.get('videos', None)
+    videos = sess_params.get('devices', {}).get('cameras', None)
     if not videos:
         return None
 
@@ -269,8 +270,6 @@ def get_video_compressed(sess_params):
         compressed = vals.get('compressed', False)
 
     return compressed
-
-
 
 
 def prepare_experiment(session_path, acquisition_description=None, local=None, remote=None):

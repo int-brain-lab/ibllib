@@ -67,7 +67,6 @@ class VideoCompress(base_tasks.VideoTask):
 
 
 class VideoConvert(base_tasks.VideoTask):
-    # TODO write a test
     """
     Task that converts compressed avi to mp4 format and renames video and camlog files. Specific to UCLA widefield implementation
     """
@@ -147,7 +146,7 @@ class VideoSyncQcCamlog(base_tasks.VideoTask):
 
         return signature
 
-    def _run(self, **kwargs):
+    def _run(self, qc=True, **kwargs):
 
         mp4_files = self.session_path.joinpath(self.device_collection).rglob('*.mp4')
         labels = [label_from_path(x) for x in mp4_files]
@@ -159,7 +158,8 @@ class VideoSyncQcCamlog(base_tasks.VideoTask):
         output_files.extend(files)
 
         # Video QC
-        run_camera_qc(self.session_path, update=True, one=self.one, cameras=labels, camlog=True)
+        if qc:
+            run_camera_qc(self.session_path, update=True, one=self.one, cameras=labels, camlog=True)
 
         return output_files
 

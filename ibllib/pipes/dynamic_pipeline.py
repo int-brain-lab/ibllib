@@ -226,7 +226,7 @@ def make_pipeline(session_path=None, **pkwargs):
         video_kwargs = {'device_collection': 'raw_video_data',
                         'cameras': list(devices['cameras'].keys())}
         video_compressed = sess_params.get_video_compressed(acquisition_description)
-    
+
         if video_compressed:
             # This is for widefield case where the video is already compressed
             tasks[tn] = type((tn := 'VideoConvert'), (vtasks.VideoConvert,), {})(**kwargs, **video_kwargs)
