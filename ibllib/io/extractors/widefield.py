@@ -6,7 +6,6 @@ import shutil
 from pathlib import Path
 import pandas as pd
 
-from neurodsp.utils import sync_timestamps
 import ibllib.exceptions as err
 import ibllib.io.extractors.base as extractors_base
 from ibllib.io.extractors.ephys_fpga import get_sync_fronts, get_sync_and_chn_map
@@ -119,17 +118,17 @@ class Widefield(extractors_base.BaseExtractor):
 
         return new_files
 
-    def preprocess(self, fs=30, functional_channel=0, nbaseline_frames=30, k=200):
+    def preprocess(self, fs=30, functional_channel=0, nbaseline_frames=30, k=200, nchannels=2):
 
         # MOTION CORRECTION
-        wfield_cli._motion(str(self.data_path))
+        wfield_cli._motion(str(self.data_path), nchannels=nchannels)
         # COMPUTE AVERAGE FOR BASELINE
-        wfield_cli._baseline(str(self.data_path), nbaseline_frames)
+        wfield_cli._baseline(str(self.data_path), nbaseline_frames, nchannels=nchannels)
         # DATA REDUCTION
-        wfield_cli._decompose(str(self.data_path), k=k)
+        wfield_cli._decompose(str(self.data_path), k=k, nchannels=nchannels)
         # HAEMODYNAMIC CORRECTION
         # check if it is 2 channel
-        dat = wfield_cli.load_stack(str(self.data_path))
+        dat = wfield_cli.load_stack(str(self.data_path), nchannels=nchannels)
         if dat.shape[1] == 2:
             del dat
             wfield_cli._hemocorrect(str(self.data_path), fs=fs, functional_channel=functional_channel)
@@ -156,31 +155,24 @@ class Widefield(extractors_base.BaseExtractor):
         logdata, led, sync, ncomm = parse_cam_log(next(self.data_path.glob('*.camlog')), readTeensy=True)
         assert led.frame.is_monotonic_increasing
 
+        if led.frame.size != fpga_led_up.size:
+            _logger.warning(f'Sync mismatch by {np.abs(led.frame.size - fpga_led_up.size)} '
+                            f'NIDQ sync times: {fpga_led_up.size}, LED frame times {led.frame.size}')
+            raise ValueError('Sync mismatch')
+
         # Get video meta data to check number of widefield frames
         video_path = next(self.data_path.glob('imaging.frames*.mov'))
         video_meta = get_video_meta(video_path)
 
-        # 1st: Check for differences between video and led
+        # Check for differences between video and ttl (in some cases we expect there to be extra ttl than frame, this is okay)
         diff = len(led) - video_meta.length
         if diff < 0:
             raise ValueError('More video frames than led frames detected')
         if diff > 2:
             raise ValueError('Led frames and video frames differ by more than 2')
-        led = led[0:video_meta.length]
-        led_times = led.timestamp.values / 1e3  # led timestamps are in ms
 
-        # 2nd: Check for differences between daq detected led pulses and led frames
-        # For now we don't tolerate but need to see how many fail this
-        if led_times.size != fpga_led_up.size:
-            _logger.warning(f'Sync mismatch by {np.abs(led_times.size - fpga_led_up.size)} '
-                            f'NIDQ sync times: {fpga_led_up.size}, LED frame times {led_times.size}')
-            raise ValueError('Sync mismatch')
-
-        # If all okay, extract timestamps
-        fcn, drift, iled, ifpga = sync_timestamps(led_times, fpga_led_up, return_indices=True)
-        _logger.debug(f'Widefield-FPGA clock drift: {drift} ppm')
-        widefield_times = fcn(led_times)
-        assert np.all(np.diff(widefield_times) > 0)
+        # take the timestamps as those recorded on fpga, no need to do any sycning
+        widefield_times = fpga_led_up[0:video_meta.length]
 
         # Now extract the LED channels and meta data
         # Load channel meta and wiring map
