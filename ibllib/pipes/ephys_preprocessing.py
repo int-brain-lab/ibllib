@@ -624,22 +624,11 @@ class EphysTrials(tasks.Task):
                         ('_iblrig_encoderPositions.raw*', 'raw_behavior_data', True),
                         ('*wiring.json', 'raw_ephys_data*', False),
                         ('*.meta', 'raw_ephys_data*', True)],
-        'output_files': [('*trials.choice.npy', 'alf', True),
-                         ('*trials.contrastLeft.npy', 'alf', True),
-                         ('*trials.contrastRight.npy', 'alf', True),
-                         ('*trials.feedbackType.npy', 'alf', True),
-                         ('*trials.feedback_times.npy', 'alf', True),
-                         ('*trials.firstMovement_times.npy', 'alf', True),
+        'output_files': [('*trials.table.pqt', 'alf', True),
                          ('*trials.goCueTrigger_times.npy', 'alf', True),
-                         ('*trials.goCue_times.npy', 'alf', True),
-                         ('*trials.intervals.npy', 'alf', True),
                          ('*trials.intervals_bpod.npy', 'alf', True),
                          ('*trials.itiDuration.npy', 'alf', False),
-                         ('*trials.probabilityLeft.npy', 'alf', True),
-                         ('*trials.response_times.npy', 'alf', True),
-                         ('*trials.rewardVolume.npy', 'alf', True),
                          ('*trials.stimOff_times.npy', 'alf', True),
-                         ('*trials.stimOn_times.npy', 'alf', True),
                          ('*wheel.position.npy', 'alf', True),
                          ('*wheel.timestamps.npy', 'alf', True),
                          ('*wheelMoves.intervals.npy', 'alf', True),
@@ -690,8 +679,7 @@ class EphysTrials(tasks.Task):
                 plot_task = BehaviourPlots(session_id, self.session_path, one=self.one)
                 _ = plot_task.run()
                 self.plot_tasks.append(plot_task)
-
-            except BaseException:
+            except Exception:
                 _logger.error('Could not create Trials QC Plot')
                 _logger.error(traceback.format_exc())
                 self.status = -1
