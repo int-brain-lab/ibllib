@@ -24,9 +24,10 @@ def acquisition_description_legacy_session(session_path, save=False):
     extractor_type = ibllib.io.extractors.base.get_session_extractor_type(session_path=session_path)
     etype2protocol = dict(biased='choice_world_biased', habituation='choice_world_habituation',
                           training='choice_world_training', ephys='choice_world_recording')
+    dict_ad = get_acquisition_description(etype2protocol[extractor_type])
     if save:
-        Path(session_path).joinpath()
-    return get_acquisition_description(etype2protocol[extractor_type])
+        sess_params.write_params(session_path=session_path, data=dict_ad)
+    return dict_ad
 
 
 def get_acquisition_description(protocol):
@@ -184,12 +185,12 @@ def make_pipeline(session_path=None, **pkwargs):
             nptype = spikeglx._get_neuropixel_version_from_meta(spikeglx.read_meta_data(meta_file))
             nshanks = spikeglx._get_nshanks_from_meta(spikeglx.read_meta_data(meta_file))
 
-            if nptype == 'NP2.1':
+            if (nptype == 'NP2.1') or (nptype == 'NP2.4' and nshanks == 1):
                 tasks[f'EphyCompressNP21_{pname}'] = type(f'EphyCompressNP21_{pname}', (etasks.EphysCompressNP21,), {})(
                     **kwargs, **ephys_kwargs, pname=pname)
                 all_probes.append(pname)
                 register_tasks.append(tasks[f'EphyCompressNP21_{pname}'])
-            elif nptype == 'NP2.4':
+            elif nptype == 'NP2.4' and nshanks > 1:
                 tasks[f'EphyCompressNP24_{pname}'] = type(f'EphyCompressNP24_{pname}', (etasks.EphysCompressNP24,), {})(
                     **kwargs, **ephys_kwargs, pname=pname, nshanks=nshanks)
                 register_tasks.append(tasks[f'EphyCompressNP24_{pname}'])
