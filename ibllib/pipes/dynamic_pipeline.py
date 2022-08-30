@@ -15,10 +15,8 @@ import ibllib.pipes.audio_tasks as atasks
 
 import spikeglx
 
-ACQUISITION_DESCRIPTION_VERSION = '1.0.0'
 
-
-def acquisition_description_legacy_session(session_path):
+def acquisition_description_legacy_session(session_path, save=False):
     """
     From a legacy session create a dictionary corresponding to the acquisition description
     :return: dict
@@ -26,6 +24,8 @@ def acquisition_description_legacy_session(session_path):
     extractor_type = ibllib.io.extractors.base.get_session_extractor_type(session_path=session_path)
     etype2protocol = dict(biased='choice_world_biased', habituation='choice_world_habituation',
                           training='choice_world_training', ephys='choice_world_recording')
+    if save:
+        Path(session_path).joinpath()
     return get_acquisition_description(etype2protocol[extractor_type])
 
 
@@ -90,7 +90,7 @@ def get_acquisition_description(protocol):
         elif protocol == 'choice_world_habituation':
             key = 'habituationChoiceWorld'
         acquisition_description['tasks'] = {key: {'collection': 'raw_behavior_data', 'sync_label': 'bpod', 'main': True}}
-    acquisition_description['version'] = ACQUISITION_DESCRIPTION_VERSION
+    acquisition_description['version'] = sess_params.SPEC_VERSION
     return acquisition_description
 
 

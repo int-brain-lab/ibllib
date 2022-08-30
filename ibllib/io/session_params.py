@@ -76,6 +76,17 @@ def _patch_file(data: dict) -> dict:
     return data
 
 
+def write_params(session_path, data) -> Path:
+    """
+    :param session_path : pathlib.Path, str
+    :param ad:
+    :return: pathlib.Path: yaml full file path
+    """
+    yaml_file = Path(session_path).joinpath('_ibl_experiment.description.yaml')
+    write_yaml(yaml_file, data)
+    return yaml_file
+
+
 def read_params(path) -> dict:
     """
     Load an experiment description file.

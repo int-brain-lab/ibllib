@@ -269,6 +269,7 @@ class EphysCompressNP24(base_tasks.EphysTask):
         if nshanks is None:
             meta_file = next(session_path.joinpath(device_collection, pname).glob('*ap.meta'))
             nshanks = spikeglx._get_nshanks_from_meta(spikeglx.read_meta_data(meta_file))
+        assert nshanks > 1
         super(EphysCompressNP24, self).__init__(
             session_path, *args, pname=pname, device_collection=device_collection, nshanks=nshanks, **kwargs)
 

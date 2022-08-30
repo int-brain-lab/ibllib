@@ -1,5 +1,4 @@
 import tempfile
-import yaml
 from pathlib import Path
 import unittest
 
@@ -10,9 +9,10 @@ from ibllib.io import session_params
 
 def test_read_write_params_yaml():
     ad = dynamic_pipeline.get_acquisition_description('choice_world_recording')
-    with tempfile.NamedTemporaryFile(mode='w+') as fid:
-        yaml.dump(data=ad, stream=fid)
-        add = session_params.read_params(fid.name)
+    with tempfile.TemporaryDirectory() as td:
+        session_path = Path(td)
+        session_params.write_params(session_path, ad)
+        add = session_params.read_params(session_path)
     assert ad == add
 
 
