@@ -76,12 +76,13 @@ def _patch_file(data: dict) -> dict:
     return data
 
 
-def read_params(path) -> dict:
+def read_params(path):
     """
     Load an experiment description file.
 
     In addition to reading the yaml data, this functions ensures that the specification is the most
-    recent one.  Also, a dict is returned, even if the file is missing or empty.
+    recent one.  If the file is missing None is returned.  If the file cannot be parsed an empty
+    dict is returned.
 
     Parameters
     ----------
@@ -90,8 +91,8 @@ def read_params(path) -> dict:
 
     Returns
     -------
-    dict
-        The parsed yaml data.
+    dict, None
+        The parsed yaml data, or None if the file was not found.
 
     Examples
     --------
@@ -110,7 +111,7 @@ def read_params(path) -> dict:
         yaml_file = path if path.exists() else None
     if not yaml_file:
         _logger.debug('Experiment description not found: %s', path)
-        return {}
+        return
 
     with open(yaml_file, 'r') as fp:
         data = _patch_file(yaml.safe_load(fp) or {})
