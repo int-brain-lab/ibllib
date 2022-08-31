@@ -590,8 +590,6 @@ class SpikeSorting(base_tasks.EphysTask):
                     return sorter_dir
                 else:
                     self.FORCE_RERUN = True
-
-        print(sorter_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log"))
         # get the scratch drive from the shell script
         with open(self.SHELL_SCRIPT) as fid:
             lines = fid.readlines()
@@ -599,7 +597,6 @@ class SpikeSorting(base_tasks.EphysTask):
         m = re.search(r"\=(.*?)(\#|\n)", line)[0]
         scratch_drive = Path(m[1:-1].strip())
         assert scratch_drive.exists()
-
         # clean up and create directory, this also checks write permissions
         # temp_dir has the following shape: pykilosort/ZM_3003_2020-07-29_001_probe00
         # first makes sure the tmp dir is clean
@@ -610,8 +607,9 @@ class SpikeSorting(base_tasks.EphysTask):
         if temp_dir.exists():  # hmmm this has to be decided, we may want to restart ?
             # But failed sessions may then clog the scratch dir and have users run out of space
             shutil.rmtree(temp_dir, ignore_errors=True)
+        log_file = temp_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log")
+        _logger.info(f"job progress command: tail -f {temp_dir} *.log")
         temp_dir.mkdir(parents=True, exist_ok=True)
-
         check_nvidia_driver()
         command2run = f"{self.SHELL_SCRIPT} {ap_file} {temp_dir}"
         _logger.info(command2run)
@@ -653,7 +651,6 @@ class SpikeSorting(base_tasks.EphysTask):
         ap_files = [(ef.get("ap"), ef.get("label")) for ef in efiles if "ap" in ef.keys()]
         out_files = []
         for ap_file, label in ap_files:
-
             try:
                 # if the file is part of  a sequence, handles the run accordingly
                 sequence_file = ap_file.parent.joinpath(ap_file.stem.replace('ap', 'sequence.json'))
@@ -673,8 +670,7 @@ class SpikeSorting(base_tasks.EphysTask):
                 )
                 logfile = ks2_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log")
                 if logfile.exists():
-                    shutil.copyfile(logfile, probe_out_path.joinpath(
-                        f"_ibl_log.info_{self.SPIKE_SORTER_NAME}.log"))
+                    shutil.copyfile(logfile, probe_out_path.joinpath(f"_ibl_log.info_{self.SPIKE_SORTER_NAME}.log"))
                 # For now leave the syncing here
                 out, _ = spikes.sync_spike_sorting(ap_file=ap_file, out_path=probe_out_path)
                 out_files.extend(out)
