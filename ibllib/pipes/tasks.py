@@ -562,7 +562,7 @@ class Pipeline(abc.ABC):
 
 
 def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
-                  max_md5_size=None, machine=None, clobber=True, location='server'):
+                  max_md5_size=None, machine=None, clobber=True, location='server', mode='log'):
     """
     Runs a single Alyx job and registers output datasets
     :param tdict:
@@ -577,6 +577,8 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
     :param clobber: bool, if True any existing logs are overwritten, default is True
     :param location: where you are running the task, 'server' - local lab server, 'remote' - any
     compute node/ computer, 'SDSC' - flatiron compute node, 'AWS' - using data from aws s3
+    :param mode: str ('log' or 'raise') behaviour to adopt if an error occured. If 'raise', it
+    will Raise the error at the very end of this function (ie. after having labeled the tasks)
     :return:
     """
     registered_dsets = []
@@ -641,4 +643,6 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
         if all(x == 'Complete' for x in parent_status):
             one.alyx.rest('tasks', 'partial_update', id=d['id'], data={'status': 'Waiting'})
     task.cleanUp()
+    if mode == 'raise' and status != 0:
+        raise ValueError(task.log)
     return t, registered_dsets
