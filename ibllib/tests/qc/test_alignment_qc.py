@@ -9,7 +9,7 @@ import random
 import string
 
 from one.api import ONE
-from neuropixel import SITES_COORDINATES
+from neuropixel import trace_header
 
 from ibllib.tests import TEST_DB
 from ibllib.atlas import AllenAtlas
@@ -21,6 +21,10 @@ from ibllib.pipes.histology import register_track
 EPHYS_SESSION = 'b1c968ad-4874-468d-b2e4-5ffa9b9964e9'
 one = ONE(**TEST_DB)
 brain_atlas = AllenAtlas(25)
+
+refch_3a = np.array([36, 75, 112, 151, 188, 227, 264, 303, 340, 379])
+th = trace_header(version=1)
+SITES_COORDINATES = np.delete(np.c_[th['x'], th['y']], refch_3a, axis=0)
 
 
 class TestTracingQc(unittest.TestCase):
