@@ -25,7 +25,6 @@ def probes_description(ses_path, one):
         raw_ephys_data/probeXX/
     Output:
         alf/probes.description.npy
-        alf/probes.trajectory.npy
     """
 
     eid = one.path2eid(ses_path, query_type='remote')
