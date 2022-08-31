@@ -187,7 +187,7 @@ def task_queue(mode='all', lab=None, one=None):
     return sorted_tasks
 
 
-def tasks_runner(subjects_path, tasks_dict, one=None, dry=False, count=5, time_out=None, **kwargs):
+def tasks_runner(subjects_path, tasks_dict, one=None, dry=False, count=5, time_out=None, assert_status=False, **kwargs):
     """
     Function to run a list of tasks (task dictionary from Alyx query) on a local server
     :param subjects_path:
@@ -221,6 +221,8 @@ def tasks_runner(subjects_path, tasks_dict, one=None, dry=False, count=5, time_o
         else:
             task, dsets = tasks.run_alyx_task(tdict=tdict, session_path=session_path,
                                               one=one, **kwargs)
+            if assert_status:
+                assert task.status == 0
             if dsets:
                 all_datasets.extend(dsets)
                 c += 1
