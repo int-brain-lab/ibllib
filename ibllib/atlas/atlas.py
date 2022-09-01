@@ -1004,18 +1004,22 @@ class AllenAtlas(BrainAtlas):
             volume = np.load(file_volume)['arr_0']
         return volume
 
-    def xyz2ccf(self, xyz, ccf_order='mlapdv'):
+    def xyz2ccf(self, xyz, ccf_order='mlapdv', mode='raise'):
         """
         Converts coordinates to the CCF coordinates, which is assumed to be the cube indices
         times the spacing.
         :param xyz: mlapdv coordinates in meters, origin Bregma
         :param ccf_order: order that you want values returned 'mlapdv' (ibl) or 'apdvml'
         (Allen mcc vertices)
+        :param mode: {‘raise’, 'clip', 'wrap'} determines what to do when determined index lies outside the atlas volume
+              'raise' will raise a ValueError
+              'clip' will replace the index with the closest index inside the volume
+              'wrap' will wrap around to the other side of the volume. This is only here for legacy reasons
         :return: coordinates in CCF space um, origin is the front left top corner of the data
         volume, order determined by ccf_order
         """
         ordre = self._ccf_order(ccf_order)
-        ccf = self.bc.xyz2i(xyz, round=False) * float(self.res_um)
+        ccf = self.bc.xyz2i(xyz, round=False, mode=mode) * float(self.res_um)
         return ccf[..., ordre]
 
     def ccf2xyz(self, ccf, ccf_order='mlapdv'):
@@ -1065,6 +1069,20 @@ def NeedlesAtlas(*args, **kwargs):
     kwargs['scaling'] = np.array([1, AP_SCALE, DV_SCALE])
     return AllenAtlas(*args, **kwargs)
 
+def MRITorontoAtlas(*args, **kwargs):
+    """
+    Instantiates an atlas.BrainAtlas corresponding to the Allen CCF at the given resolution
+    using the IBL Bregma and coordinate system. The MRI Toronto atlas defines a stretch along AP
+    a squeeze along DV *and* a squeeze along ML. These are based on 12 p65 mice MRIs averaged.
+    See: https://www.nature.com/articles/s41467-018-04921-2 DB has access to the dataset.
+    :param res_um: 10, 25 or 50 um
+    :return: atlas.BrainAtlas
+    """
+    ML_SCALE = 0.952
+    DV_SCALE = 0.885  # multiplicative factor on DV dimension, determined from MRI->CCF transform
+    AP_SCALE = 1.031  # multiplicative factor on AP dimension
+    kwargs['scaling'] = np.array([ML_SCALE, AP_SCALE, DV_SCALE])
+    return AllenAtlas(*args, **kwargs)
 
 def _download_atlas_allen(file_image, FLAT_IRON_ATLAS_REL_PATH, par):
     """
