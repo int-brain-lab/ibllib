@@ -1059,6 +1059,20 @@ def NeedlesAtlas(*args, **kwargs):
     kwargs['scaling'] = np.array([1, AP_SCALE, DV_SCALE])
     return AllenAtlas(*args, **kwargs)
 
+def MRITorontoAtlas(*args, **kwargs):
+    """
+    Instantiates an atlas.BrainAtlas corresponding to the Allen CCF at the given resolution
+    using the IBL Bregma and coordinate system. The MRI Toronto atlas defines a stretch along AP
+    a squeeze along DV *and* a squeeze along ML. These are based on 12 p65 mice MRIs averaged.
+    See: https://www.nature.com/articles/s41467-018-04921-2 DB has access to the dataset.
+    :param res_um: 10, 25 or 50 um
+    :return: atlas.BrainAtlas
+    """
+    ML_SCALE = 0.952
+    DV_SCALE = 0.885  # multiplicative factor on DV dimension, determined from MRI->CCF transform
+    AP_SCALE = 1.031  # multiplicative factor on AP dimension
+    kwargs['scaling'] = np.array([ML_SCALE, AP_SCALE, DV_SCALE])
+    return AllenAtlas(*args, **kwargs)
 
 def _download_atlas_allen(file_image, FLAT_IRON_ATLAS_REL_PATH, par):
     """
