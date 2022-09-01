@@ -313,20 +313,27 @@ class TestPipesMisc(unittest.TestCase):
         one.alyx.rest("insertions", "delete", id=alyx_insertion[1]["id"])
 
     def test_probe_names_from_session_path(self):
-        pnames = ['probe01', 'probe03', 'just_a_probe']
-
+        expected_pnames = ['probe00', 'probe01', 'probe03', 'probe02a', 'probe02b', 'probe02c', 'probe02d', 'probe04']
+        nidq_file = Path(__file__).parent.joinpath("fixtures/pipes", "sample3B_g0_t0.nidq.meta")
+        meta_files = {
+            "probe00": Path(__file__).parent.joinpath("fixtures/pipes", "sample3A_g0_t0.imec.ap.meta"),
+            "probe01": Path(__file__).parent.joinpath("fixtures/pipes", "sample3B_g0_t0.imec1.ap.meta"),
+            "probe04": Path(__file__).parent.joinpath("fixtures/pipes", "sampleNP2.1_g0_t0.imec.ap.meta"),
+            "probe03": Path(__file__).parent.joinpath("fixtures/pipes", "sampleNP2.4_1shank_g0_t0.imec.ap.meta"),
+            "probe02": Path(__file__).parent.joinpath("fixtures/pipes", "sampleNP2.4_4shanks_g0_t0.imec.ap.meta"),
+        }
         with tempfile.TemporaryDirectory() as tdir:
             session_path = Path(tdir).joinpath('Algernon', '2021-02-12', '001')
             raw_ephys_path = session_path.joinpath('raw_ephys_data')
             raw_ephys_path.mkdir(parents=True, exist_ok=True)
-            raw_ephys_path.joinpath("_spikeglx_ephysData_g0_t0.nidq.meta").touch()
-            for pname in pnames:
+            shutil.copy(nidq_file, raw_ephys_path.joinpath("_spikeglx_ephysData_g0_t0.nidq.meta"))
+            for pname, meta_file in meta_files.items():
                 probe_path = raw_ephys_path.joinpath(pname)
                 probe_path.mkdir()
-                probe_path.joinpath('_spikeglx_ephysData_g0_t0.imec0.ap.meta').touch()
+                shutil.copy(meta_file, probe_path.joinpath('_spikeglx_ephysData_g0_t0.imec0.ap.meta'))
                 probe_path.joinpath('nested_folder').mkdir()
                 probe_path.joinpath('nested_folder', 'toto.ap.meta').touch()
-            assert set(misc.probe_labels_from_session_path(session_path)) == set(pnames)
+            self.assertEqual(set(misc.probe_labels_from_session_path(session_path)), set(expected_pnames))
 
     def test_rename_session(self):
         self._inputs = ('foo', '2020-02-02', '002')

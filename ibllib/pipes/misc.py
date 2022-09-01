@@ -1,7 +1,6 @@
 import ctypes
 import hashlib
 import json
-import logging
 import os
 import re
 import shutil
@@ -19,11 +18,12 @@ from one.alf.files import get_session_path
 from one.alf.spec import is_uuid_string, is_session_path, describe
 from one.api import ONE
 
+from iblutil.util import get_logger
 import ibllib.io.flags as flags
 import ibllib.io.raw_data_loaders as raw
 from ibllib.io.misc import delete_empty_folders
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 def subjects_data_folder(folder: Path, rglob: bool = False) -> Path:
@@ -748,6 +748,7 @@ def probe_labels_from_session_path(session_path: Union[str, Path]) -> List[str]:
     """
     Finds ephys probes according to the metadata spikeglx files. Only returns first subfolder
     name under raw_ephys_data folder, ie. raw_ephys_data/probe00/copy_of_probe00 won't be returned
+    If there is a NP2.4 probe with several shanks, create several probes
     :param session_path:
     :return: list of strings
     """
@@ -756,7 +757,13 @@ def probe_labels_from_session_path(session_path: Union[str, Path]) -> List[str]:
     for meta_file in raw_ephys_folder.rglob('*.ap.meta'):
         if meta_file.parents[1] != raw_ephys_folder:
             continue
-        plabels.append(meta_file.parts[-2])
+        meta = spikeglx.read_meta_data(meta_file)
+        nshanks = spikeglx._get_nshanks_from_meta(meta)
+        if nshanks > 1:
+            for i in range(nshanks):
+                plabels.append(meta_file.parts[-2] + 'abcdefghij'[i])
+        else:
+            plabels.append(meta_file.parts[-2])
     plabels.sort()
     return plabels
 
@@ -772,7 +779,7 @@ def create_alyx_probe_insertions(
         one = ONE(cache_rest=None)
     eid = session_path if is_uuid_string(session_path) else one.path2eid(session_path)
     if eid is None:
-        print("Session not found on Alyx: please create session before creating insertions")
+        log.warning("Session not found on Alyx: please create session before creating insertions")
     if model is None:
         probe_model = spikeglx.get_neuropixel_version_from_folder(session_path)
         pmodel = "3B2" if probe_model == "3B" else probe_model
