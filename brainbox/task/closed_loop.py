@@ -10,8 +10,8 @@ import pandas as pd
 from brainbox.population.decode import get_spike_counts_in_bins
 
 
-def responsive_units(spike_times, spike_clusters, event_times,
-                     pre_time=[0.5, 0], post_time=[0, 0.5], alpha=0.05, use_fr=False):
+def responsive_units(spike_times, spike_clusters, event_times, pre_time=[0.5, 0],
+                     post_time=[0, 0.5], alpha=0.05, fdr_corr=False, use_fr=False):
     """
     Determine responsive neurons by doing a Wilcoxon Signed-Rank test between a baseline period
     before a certain task event (e.g. stimulus onset) and a period after the task event.
@@ -31,6 +31,8 @@ def responsive_units(spike_times, spike_clusters, event_times,
         time (in seconds) to follow the event times
     alpha : float
         alpha to use for statistical significance
+    fdr_corr : boolean
+        whether to use an FDR correction (Benjamin-Hochmann) to correct for multiple testing
     use_fr : bool
         whether to use the firing rate instead of total spike count
 
@@ -65,7 +67,7 @@ def responsive_units(spike_times, spike_clusters, event_times,
 
 
 def differentiate_units(spike_times, spike_clusters, event_times, event_groups,
-                        pre_time=0, post_time=0.5, test='ranksums', alpha=0.05):
+                        pre_time=0, post_time=0.5, test='ranksums', alpha=0.05, fdr_corr=False):
     """
     Determine units which significantly differentiate between two task events
     (e.g. stimulus left/right) by performing a statistical test between the spike rates
@@ -93,6 +95,8 @@ def differentiate_units(spike_times, spike_clusters, event_times, event_groups,
             'paired_ttest'  paired t-test
     alpha : float
         alpha to use for statistical significance
+    fdr_corr : boolean
+        whether to use an FDR correction (Benjamin-Hochmann) to correct for multiple testing
 
     Returns
     -------
@@ -127,7 +131,7 @@ def differentiate_units(spike_times, spike_clusters, event_times, event_groups,
     return significant_units, stats, p_values, cluster_ids
 
 
-def compute_comparison_statistics(value1, value2, test='ranksums', alpha=0.05):
+def compute_comparison_statistics(value1, value2, test='ranksums', alpha=0.05, fdr_corr=False):
     """
     Compute statistical test between two arrays
 
@@ -145,6 +149,8 @@ def compute_comparison_statistics(value1, value2, test='ranksums', alpha=0.05):
             'paired_ttest'  paired t-test
     alpha : float
         alpha to use for statistical significance
+    fdr_corr : boolean
+        whether to use an FDR correction (Benjamin-Hochmann) to correct for multiple testing
 
     Returns
     -------
@@ -177,8 +183,11 @@ def compute_comparison_statistics(value1, value2, test='ranksums', alpha=0.05):
                 elif test == 'paired_ttest':
                     stats[i], p_values[i] = ttest_rel(value1[i, :], value2[i, :])
 
-    # Perform FDR correction for multiple testing
-    sig_units, p_values, _, _ = multipletests(p_values, alpha, method='fdr_bh')
+    # Perform Benjamin-Hochmann FDR correction for multiple testing
+    if fdr_corr:
+        sig_units, p_values, _, _ = multipletests(p_values, alpha, method='fdr_bh')
+    else:
+        sig_units = p_values < alpha
 
     return sig_units, stats, p_values
 
