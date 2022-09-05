@@ -286,7 +286,7 @@ def _get_biased_probs(n: int, idx: int = -1, prob: float = 0.5) -> list:
 def _draw_contrast(
     contrast_set: list, prob_type: str = "biased", idx: int = -1, idx_prob: float = 0.5
 ) -> float:
-    if prob_type == "biased":
+    if prob_type in ["non-uniform", "biased"]:
         p = _get_biased_probs(len(contrast_set), idx=idx, prob=idx_prob)
         return np.random.choice(contrast_set, p=p)
     elif prob_type == "uniform":
@@ -388,7 +388,7 @@ def generate_pseudo_stimuli(n_trials, contrast_set=[0, 0.06, 0.12, 0.25, 1], fir
     return p_left, contrast_left, contrast_right
 
 
-def generate_pseudo_session(trials, generate_choices=True, contrast_distribution='biased'):
+def generate_pseudo_session(trials, generate_choices=True, contrast_distribution='non-uniform'):
     """
     Generate a complete pseudo session with biased blocks, all stimulus contrasts, choices and
     rewards and omissions. Biased blocks and stimulus contrasts are generated using the same
@@ -404,13 +404,17 @@ def generate_pseudo_session(trials, generate_choices=True, contrast_distribution
         Pandas dataframe with columns as trial vectors loaded using ONE
     generate_choices : bool
         whether to generate the choices (runs faster without)
+    contrast_distribution: str ['uniform', 'non-uniform']
+        the absolute contrast distribution.
+        If uniform, the zero contrast is as likely as other contrasts: BiasedChoiceWorld task
+        If 'non-uniform', the zero contrast is half as likely to occur: EphysChoiceWorld task
+        ('biased' is kept for compatibility, but is deprecated as it is confusing)
 
     Returns
     -------
     pseudo_trials : DataFrame
         a trials dataframe with synthetically generated trials
     """
-
     # Get contrast set presented to the animal
     contrast_set = np.unique(trials['contrastLeft'][~np.isnan(trials['contrastLeft'])])
     signed_contrast = trials['contrastRight'].copy()
