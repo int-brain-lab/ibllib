@@ -139,6 +139,8 @@ def get_latest_training_information(sess_path, one):
 
     subj_path = sess_path.parent.parent
     df = load_existing_dataframe(subj_path)
+    if df is None:
+        return
     # Find the dates and associated session paths where we don't have data stored in our dataframe
     missing_dates = check_up_to_date(subj_path, df)
 

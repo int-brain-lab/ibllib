@@ -309,6 +309,7 @@ class TrainingStatus(base_tasks.DynamicTask):
         Extracts training status for subject
         """
         df = training_status.get_latest_training_information(self.session_path, self.one)
-        training_status.make_plots(self.session_path, self.one, df=df, save=True, upload=upload)
+        if df is not None:
+            training_status.make_plots(self.session_path, self.one, df=df, save=True, upload=upload)
         output_files = []
         return output_files
