@@ -35,7 +35,7 @@ def load_raw_daq_tdms(path) -> 'nptdms.tdms.TdmsFile':
     return TdmsFile.read(file_path)
 
 
-def load_channels_tdms(path, chmap=None):
+def load_channels_tdms(path, chmap=None, return_fs=False):
     """
 
     Note: This currently cannot deal with arbitrary groups.
@@ -43,7 +43,8 @@ def load_channels_tdms(path, chmap=None):
     Parameters
     ----------
     path
-    chmap
+    chmap: dictionary mapping devices names to channel codes: example {"photometry": 'AI0', 'bpod': 'AI1'}
+     if None, will read all of available channel from the DAQ
 
     Returns
     -------
@@ -55,13 +56,18 @@ def load_channels_tdms(path, chmap=None):
         for name, ch in chmap.items():
             if ch.lower()[0] == 'a':
                 data[name] = data_file['Analog'][ch.upper()].data
+                fs = data_file['Analog'].properties['ScanRate']
             else:
                 raise NotImplementedError(f'Extraction of channel "{ch}" not implemented')
     else:
         for group in (x.name for x in data_file.groups()):
             for ch in (x.name for x in data_file[group].channels()):
                 data[ch] = data_file[group][ch.upper()].data
-    return data
+            fs = data_file[group].properties['ScanRate']  # from daqami it's unclear that fs could be set per channel
+    if return_fs:
+        return data, fs
+    else:
+        return data
 
 
 def load_sync_tdms(path, sync_map, fs=None, threshold=2.5, floor_percentile=10):
