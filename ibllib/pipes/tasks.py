@@ -617,10 +617,11 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
     else:
         try:
             registered_dsets = task.register_datasets(one=one, max_md5_size=max_md5_size)
+            patch_data['status'] = 'Complete'
         except Exception:
             _logger.error(traceback.format_exc())
-            patch_data['status'] = 'Errored'
-        patch_data['status'] = 'Complete'
+            status = -1
+
     # overwrite status to errored
     if status == -1:
         patch_data['status'] = 'Errored'
