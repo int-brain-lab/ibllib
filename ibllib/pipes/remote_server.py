@@ -9,7 +9,7 @@ from ibllib.pipes import ephys_preprocessing as ephys
 from ibllib.oneibl.patcher import FTPPatcher
 from one.api import ONE
 
-_logger = logging.getLogger('ibllib')
+_logger = logging.getLogger(__name__)
 
 FLATIRON_HOST = 'ibl.flatironinstitute.org'
 FLATIRON_PORT = 61022
@@ -29,7 +29,7 @@ def _run_command(cmd):
 
 def job_transfer_ks2(probe_path):
 
-    assert(isinstance(probe_path, str))
+    assert isinstance(probe_path, str)
 
     def _get_volume_usage_percentage(vol):
         cmd = f'df {vol}'

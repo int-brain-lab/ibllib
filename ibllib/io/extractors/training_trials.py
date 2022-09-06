@@ -6,10 +6,9 @@ from one.alf.io import AlfBunch
 import ibllib.io.raw_data_loaders as raw
 from ibllib.io.extractors.base import BaseBpodTrialsExtractor, run_extractor_classes
 from ibllib.io.extractors.training_wheel import Wheel
-from ibllib.misc import version
 
 
-_logger = logging.getLogger('ibllib')
+_logger = logging.getLogger(__name__)
 
 
 class FeedbackType(BaseBpodTrialsExtractor):
@@ -211,7 +210,7 @@ class FeedbackTimes(BaseBpodTrialsExtractor):
 
     def _extract(self):
         # Version check
-        if version.ge(self.settings['IBLRIG_VERSION_TAG'], '5.0.0'):
+        if parse_version(self.settings['IBLRIG_VERSION_TAG']) >= parse_version('5.0.0'):
             merge = self.get_feedback_times_ge5(self.session_path, data=self.bpod_trials)
         else:
             merge = self.get_feedback_times_lt5(self.session_path, data=self.bpod_trials)
@@ -282,7 +281,7 @@ class GoCueTriggerTimes(BaseBpodTrialsExtractor):
     var_names = 'goCueTrigger_times'
 
     def _extract(self):
-        if version.ge(self.settings['IBLRIG_VERSION_TAG'], '5.0.0'):
+        if parse_version(self.settings['IBLRIG_VERSION_TAG']) >= parse_version('5.0.0'):
             goCue = np.array([tr['behavior_data']['States timestamps']
                               ['play_tone'][0][0] for tr in self.bpod_trials])
         else:
@@ -356,7 +355,7 @@ class IncludedTrials(BaseBpodTrialsExtractor):
     var_names = 'included'
 
     def _extract(self):
-        if version.ge(self.settings['IBLRIG_VERSION_TAG'], '5.0.0'):
+        if parse_version(self.settings['IBLRIG_VERSION_TAG']) >= parse_version('5.0.0'):
             trials_included = self.get_included_trials_ge5(
                 data=self.bpod_trials, settings=self.settings)
         else:
@@ -513,7 +512,7 @@ class StimOnTimes_deprecated(BaseBpodTrialsExtractor):
         # Version check
         _logger.warning("Deprecation Warning: this is an old version of stimOn extraction."
                         "From version 5., use StimOnOffFreezeTimes")
-        if version.ge(self.settings['IBLRIG_VERSION_TAG'], '5.0.0'):
+        if parse_version(self.settings['IBLRIG_VERSION_TAG']) >= parse_version('5.0.0'):
             stimOn_times = self.get_stimOn_times_ge5(self.session_path, data=self.bpod_trials)
         else:
             stimOn_times = self.get_stimOn_times_lt5(self.session_path, data=self.bpod_trials)
@@ -719,7 +718,7 @@ def extract_all(session_path, save=False, bpod_trials=None, settings=None):
 
     base = [RepNum, GoCueTriggerTimes]
     # Version check
-    if version.ge(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
+    if parse_version(settings['IBLRIG_VERSION_TAG']) >= parse_version('5.0.0'):
         # We now extract a single trials table
         base.extend([
             StimOnTriggerTimes, ItiInTimes, StimOffTriggerTimes, StimFreezeTriggerTimes,

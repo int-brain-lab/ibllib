@@ -2,7 +2,7 @@ from pathlib import Path
 import subprocess
 import logging
 
-_logger = logging.getLogger('ibllib')
+_logger = logging.getLogger(__name__)
 
 
 def compress(file_in, file_out, command, remove_original=True):

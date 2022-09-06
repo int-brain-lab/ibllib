@@ -107,7 +107,7 @@ if __name__ == '__main__':
     else:
         outpath = Path(sys.argv[1])  # grab from command line input
         fbin = glob.glob(os.path.join(outpath, '*.lf.bin'))
-        assert(len(fbin) > 0)
+        assert len(fbin) > 0
         print('fbin: %s' % fbin)
         # make sure you send a path for the time being and not a string
         ephysqc.extract_rmsmap(Path(fbin[0]))

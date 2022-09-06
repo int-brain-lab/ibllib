@@ -7,7 +7,7 @@ import pandas as pd
 from iblutil.util import Bunch
 from iblutil.numerical import ismember
 
-_logger = logging.getLogger('ibllib')
+_logger = logging.getLogger(__name__)
 # 'Beryl' is the name given to an atlas containing a subset of the most relevant allen annotations
 FILE_MAPPINGS = str(Path(__file__).parent.joinpath('mappings.pqt'))
 ALLEN_FILE_REGIONS = str(Path(__file__).parent.joinpath('allen_structure_tree.csv'))
@@ -300,6 +300,160 @@ class _BrainRegions:
         _, inds = ismember(np.array(values), all_values)
 
         return inds
+
+    def parse_acronyms_argument(self, acronyms, mode='raise'):
+        """
+        Parse an input acronym arguments: returns a numpy array of allen regions ids
+        regardless of the input: list of acronyms, np.array of acronyms strings or np aray of allen ids
+        To be used into functions to provide flexible input type
+        :param acronyms: List, np.array of acronym strings or np.array of allen ids
+        :return: np.array of int ids
+        """
+        # first get the allen region ids regardless of the input type
+        acronyms = np.array(acronyms)
+        # if the user provides acronyms they're not signed by definition
+        if not np.issubdtype(acronyms.dtype, np.number):
+            user_aids = self.acronym2id(acronyms)
+            if mode == 'raise':
+                assert user_aids.size == acronyms.size, "All acronyms should exist in Allen ontology"
+        else:
+            user_aids = acronyms
+        return user_aids
+
+
+class FranklinPaxinosRegions(_BrainRegions):
+    def __init__(self):
+        df_regions = pd.read_csv(FRANKLIN_FILE_REGIONS)
+        # get rid of nan values, there are rows that are in Allen but are not in the Franklin Paxinos atlas
+        df_regions = df_regions[~df_regions['Structural ID'].isna()]
+        # add in root
+        root = [{'Structural ID': int(997), 'Franklin-Paxinos Full name': 'root', 'Franklin-Paxinos abbreviation': 'root',
+                 'structure Order': 50, 'red': 255, 'green': 255, 'blue': 255, 'Allen Full name': 'root',
+                 'Allen abbreviation': 'root'}]
+        df_regions = pd.concat([pd.DataFrame(root), df_regions], ignore_index=True)
+
+        allen_regions = pd.read_csv(ALLEN_FILE_REGIONS)
+
+        # Find the level of ones that are the same as
+        a, b = ismember(df_regions['Allen abbreviation'].values, allen_regions['acronym'].values)
+        level = allen_regions['depth'].values[b]
+        df_regions['level'] = np.full(len(df_regions), np.nan)
+        df_regions['allen level'] = np.full(len(df_regions), np.nan)
+        df_regions.loc[a, 'level'] = level
+        df_regions.loc[a, 'allen level'] = level
+
+        # Now fill in the nan values with one level up from their parents we need to this multiple times
+        while np.sum(np.isnan(df_regions['level'].values)) > 0:
+            nan_loc = np.isnan(df_regions['level'].values)
+            parent_level = df_regions['Parent ID'][nan_loc].values
+            a, b = ismember(parent_level, df_regions['Structural ID'].values)
+            assert len(a) == len(b) == np.sum(nan_loc)
+            level = df_regions['level'].values[b] + 1
+            df_regions.loc[nan_loc, 'level'] = level
+
+        # lateralize
+        df_regions_left = df_regions.iloc[np.array(df_regions['Structural ID'] > 0), :].copy()
+        df_regions_left['Structural ID'] = - df_regions_left['Structural ID']
+        df_regions_left['Parent ID'] = - df_regions_left['Parent ID']
+        df_regions_left['Franklin-Paxinos Full name'] = \
+            df_regions_left['Franklin-Paxinos Full name'].apply(lambda x: x + ' (left)')
+        df_regions = pd.concat((df_regions, df_regions_left), axis=0)
+
+        # insert void
+        void = [{'Structural ID': int(0), 'Franklin-Paxinos Full Name': 'void', 'Franklin-Paxinos abbreviation': 'void',
+                'Parent ID': int(0), 'structure Order': 0, 'red': 0, 'green': 0, 'blue': 0}]
+        df_regions = pd.concat([pd.DataFrame(void), df_regions], ignore_index=True)
+
+        # converts colors to RGB uint8 array
+        c = np.c_[df_regions['red'], df_regions['green'], df_regions['blue']].astype(np.uint32)
+
+        # c[0, :] = 0  # set the void region to black
+        # creates the BrainRegion instance
+        super().__init__(id=df_regions['Structural ID'].to_numpy().astype(np.int64),
+                         name=df_regions['Franklin-Paxinos Full name'].to_numpy(),
+                         acronym=df_regions['Franklin-Paxinos abbreviation'].to_numpy(),
+                         rgb=c,
+                         level=df_regions['level'].to_numpy().astype(np.uint16),  # for now figure out later
+                         parent=df_regions['Parent ID'].to_numpy(),
+                         order=df_regions['structure Order'].to_numpy().astype(np.uint16))
+
+        self.n_lr = int((len(self.id) - 1) / 2)
+        self._compute_mappings()
+        self.default_mapping = 'FranklinPaxinos'
+
+    def _compute_mappings(self):
+        self.mappings = {
+            'FranklinPaxinos': self._mapping_from_regions_list(np.unique(np.abs(self.id)), lateralize=False),
+            'FranklinPaxinos-lr': np.arange(self.id.size),
+        }
+
+
+class BrainRegions(_BrainRegions):
+    """
+    ibllib.atlas.regions.BrainRegions(brainmap='Allen')
+    The Allen atlas ids are kept intact but lateralized as follows: labels are duplicated
+     and ids multiplied by -1, with the understanding that left hemisphere regions have negative
+     ids.
+    """
+    def __init__(self):
+        df_regions = pd.read_csv(ALLEN_FILE_REGIONS)
+        # lateralize
+        df_regions_left = df_regions.iloc[np.array(df_regions.id > 0), :].copy()
+        df_regions_left['id'] = - df_regions_left['id']
+        df_regions_left['parent_structure_id'] = - df_regions_left['parent_structure_id']
+        df_regions_left['name'] = df_regions_left['name'].apply(lambda x: x + ' (left)')
+        df_regions = pd.concat((df_regions, df_regions_left), axis=0)
+        # converts colors to RGB uint8 array
+        c = np.uint32(df_regions.color_hex_triplet.map(
+            lambda x: int(x, 16) if isinstance(x, str) else 256 ** 3 - 1))
+        c = np.flip(np.reshape(c.view(np.uint8), (df_regions.id.size, 4))[:, :3], 1)
+        c[0, :] = 0  # set the void region to black
+        # creates the BrainRegion instance
+        super().__init__(id=df_regions.id.to_numpy(),
+                         name=df_regions.name.to_numpy(),
+                         acronym=df_regions.acronym.to_numpy(),
+                         rgb=c,
+                         level=df_regions.depth.to_numpy().astype(np.uint16),
+                         parent=df_regions.parent_structure_id.to_numpy(),
+                         order=df_regions.graph_order.to_numpy().astype(np.uint16))
+        # mappings are indices not ids: they range from 0 to n regions -1
+        mappings = pd.read_parquet(FILE_MAPPINGS)
+        self.mappings = {k: mappings[k].to_numpy() for k in mappings}
+        self.n_lr = int((len(self.id) - 1) / 2)
+        self.default_mapping = 'Allen'
+
+    def _compute_mappings(self):
+        """
+        Recomputes the mapping indices for all mappings
+        This is left mainly as a reference for adding future mappings as this take a few seconds
+        to execute. In production,we use the MAPPING_FILES pqt to avoid recompuing at each \
+        instantiation
+        """
+        beryl = np.load(Path(__file__).parent.joinpath('beryl.npy'))
+        cosmos = np.load(Path(__file__).parent.joinpath('cosmos.npy'))
+        swanson = np.load(Path(__file__).parent.joinpath('swanson_regions.npy'))
+        self.mappings = {
+            'Allen': self._mapping_from_regions_list(np.unique(np.abs(self.id)), lateralize=False),
+            'Allen-lr': np.arange(self.id.size),
+            'Beryl': self._mapping_from_regions_list(beryl, lateralize=False),
+            'Beryl-lr': self._mapping_from_regions_list(beryl, lateralize=True),
+            'Cosmos': self._mapping_from_regions_list(cosmos, lateralize=False),
+            'Cosmos-lr': self._mapping_from_regions_list(cosmos, lateralize=True),
+            'Swanson': self._mapping_from_regions_list(swanson, lateralize=False),
+            'Swanson-lr': self._mapping_from_regions_list(swanson, lateralize=True),
+        }
+        pd.DataFrame(self.mappings).to_parquet(FILE_MAPPINGS)
+
+    def remap(self, region_ids, source_map='Allen', target_map='Beryl'):
+        """
+        Remap atlas regions ids from source map to target map
+        :param region_ids: atlas ids to map
+        :param source_map: map name which original region_ids are in
+        :param target_map: map name onto which to map
+        :return:
+        """
+        _, inds = ismember(region_ids, self.id[self.mappings[source_map]])
+        return self.id[self.mappings[target_map][inds]]
 
 
 class FranklinPaxinosRegions(_BrainRegions):

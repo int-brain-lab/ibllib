@@ -1,4 +1,48 @@
+## Release Notes 2.14
+### Release Notes 2.14.0 2022-08-17
+- Adding brainbox.io.one.SessionLoader for standardized loading of session data
+- Changes to TaskQC, VideoQC and DLCQC thresholds and aggregation
+- Unfreezing numpy version
+- Adding probabilistic brain regions lookup in ibllib.atlas.atlas.BrainAtlas.get_labels
+- Removing two voxelless areas from beryl atlas
+- Minor updates to audio events detection and audio welchogram
+
+## Release Notes 2.13
+### Release Notes 2.13.6 2022-08-02
+- Hotfix: don't overwrite full settings if iblrig on untagged version
+
+### Release Notes 2.13.5 2022-07-27
+- Hotfix: pseudo session biased generation contrast distribution
+
+### Release Notes 2.13.4 2022-07-22
+- Hotfix: Density displays had unexisting colormaps in snapshots QC tasks
+- Generate extra training plots based on psychometric curves
+
+### Release Notes 2.13.3 2022-07-01
+- Hotfix: fix previous hotfix with incorrect package version number
+
+### Release Notes 2.13.2 2022-07-01
+- Hotfix: datahandler sets local paths in init
+
+### Release Notes 2.13.1 2022-07-01
+- Hotfix: globus imports were mixed one.globus and one.remote
+
+### Release Notes 2.13.0 2022-06-30
+- Deprecated ibllib.version
+- Fix Globus patcher
+- Add SpikeSorting Loader samples2times function
+- Fix atlas.BrainCoordinate.xyz2i functions to not quietly wrap indices out of volume bounds.
+- Set jobs to Held if parent jobs are Started or Abandoned as well
+- Reverse matplotlib colorbars in density displays
+
 ## Release Notes 2.12
+### Release Notes 2.12.2 2022-05-27
+- Fixes to plotting in training_status
+
+## Release Notes 2.12.1 2022-05-26
+- ibllib.pipes.training_status: pipeline to compute training status of mice on local servers, new TrainingStatus task (Mayo)
+- Fix swanson regions (Olivier)
+- Swanson to Beryl mapping
 
 ### Release Notes 2.12.0 2022-05-10
 - ibllib.atlas: add the Swanson flatmap backend (Olivier)

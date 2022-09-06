@@ -10,7 +10,7 @@ from one.alf.files import add_uuid_string
 from iblutil.io.parquet import np2str
 
 
-_logger = logging.getLogger('ibllib')
+_logger = logging.getLogger(__name__)
 
 AWS_ROOT_PATH = Path('data')
 BUCKET_NAME = 'ibl-brain-wide-map-private'
@@ -65,3 +65,22 @@ class AWS:
                 _logger.warning(f'{aws_path} not found on s3 bucket: {self.bucket.name}')
 
         return files
+
+
+def download_folder_aws(folder_path, one, save_path=None):
+    save_path = save_path or one.cache_dir.joinpath(folder_path)
+
+    repo_json = one.alyx.rest('data-repository', 'read', id='aws_cortexlab')['json']
+    bucket_name = repo_json['bucket_name']
+    session_keys = {
+        'aws_access_key_id': repo_json.get('Access key ID', None),
+        'aws_secret_access_key': repo_json.get('Secret access key', None)
+    }
+    session = boto3.Session(**session_keys)
+    s3 = session.resource('s3')
+    bucket = s3.Bucket(bucket_name)
+
+    for i, obj in enumerate(bucket.objects.filter(Prefix=f'{folder_path}')):
+        download_path = save_path.joinpath(Path(obj.key).relative_to(folder_path))
+        download_path.parent.mkdir(exist_ok=True, parents=True)
+        bucket.download_file(obj.key, str(download_path))

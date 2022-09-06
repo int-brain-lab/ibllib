@@ -10,12 +10,12 @@ import json
 
 from graphviz import Digraph
 
-from ibllib.misc import version
+import ibllib
 from ibllib.oneibl import data_handlers
 import one.params
 from one.api import ONE
 
-_logger = logging.getLogger('ibllib')
+_logger = logging.getLogger(__name__)
 
 
 class Task(abc.ABC):
@@ -30,7 +30,7 @@ class Task(abc.ABC):
     outputs = None  # place holder for a list of Path containing output files
     time_elapsed_secs = None
     time_out_secs = 3600 * 2  # time-out after which a task is considered dead
-    version = version.ibllib()
+    version = ibllib.__version__
     signature = {'input_files': [], 'output_files': []}  # list of tuples (filename, collection, required_flag)
     force = False  # whether or not to re-download missing input files on local server if not present
 
@@ -95,12 +95,12 @@ class Task(abc.ABC):
         ch = logging.StreamHandler(log_capture_string)
         str_format = '%(asctime)s,%(msecs)d %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s'
         ch.setFormatter(logging.Formatter(str_format))
-        _logger.addHandler(ch)
-        _logger.setLevel(logging.INFO)
+        _logger.parent.addHandler(ch)
+        _logger.parent.setLevel(logging.INFO)
         _logger.info(f"Starting job {self.__class__}")
         if self.machine:
             _logger.info(f"Running on machine: {self.machine}")
-        _logger.info(f"running ibllib version {version.ibllib()}")
+        _logger.info(f"running ibllib version {ibllib.__version__}")
         # setup
         start_time = time.time()
         try:
@@ -119,8 +119,8 @@ class Task(abc.ABC):
                         _logger.info(f"Job {self.__class__} exited as a lock was found")
                         new_log = log_capture_string.getvalue()
                         self.log = new_log if self.clobber else self.log + new_log
-                        log_capture_string.close()
                         _logger.removeHandler(ch)
+                        ch.close()
                         return self.status
                 self.outputs = self._run(**kwargs)
                 _logger.info(f"Job {self.__class__} complete")
@@ -143,8 +143,8 @@ class Task(abc.ABC):
         # after the run, capture the log output, amend to any existing logs if not overwrite
         new_log = log_capture_string.getvalue()
         self.log = new_log if self.clobber else self.log + new_log
-        log_capture_string.close()
         _logger.removeHandler(ch)
+        ch.close()
         _logger.setLevel(logger_level)
         # tear down
         self.tearDown()
@@ -193,7 +193,7 @@ class Task(abc.ABC):
         :param overwrite: (bool) if the output already exists,
         :return: out_files: files to be registered. Could be a list of files (pathlib.Path),
         a single file (pathlib.Path) an empty list [] or None.
-        Whithin the pipeline, there is a distinction between a job that returns an empty list
+        Within the pipeline, there is a distinction between a job that returns an empty list
          and a job that returns None. If the function returns None, the job will be labeled as
           "empty" status in the database, otherwise, the job has an expected behaviour of not
           returning any dataset.
@@ -526,7 +526,8 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
             _logger.warning(f"{tdict['name']} has unmet dependencies")
             # if parents are waiting or failed, set the current task status to Held
             # once the parents ran, the descendent tasks will be set from Held to Waiting (see below)
-            if any(map(lambda s: s in ['Errored', 'Held', 'Empty', 'Waiting'], parent_statuses)):
+            if any(map(lambda s: s in ['Errored', 'Held', 'Empty', 'Waiting', 'Started', 'Abandoned'],
+                       parent_statuses)):
                 tdict = one.alyx.rest('tasks', 'partial_update', id=tdict['id'],
                                       data={'status': 'Held'})
             return tdict, registered_dsets

@@ -11,7 +11,7 @@ import iblutil.io.params as iopar
 
 from ibllib.oneibl import patcher, registration
 import ibllib.io.extractors.base
-from ibllib.misc import version
+from ibllib import __version__
 from ibllib.tests import TEST_DB
 
 
@@ -105,7 +105,7 @@ r = {'created_by': 'olivier',
      'filenames': ["raw_behavior_data/_iblrig_encoderTrialInfo.raw.ssv"],
      'hashes': [md5_0],
      'filesizes': [1234],
-     'versions': [version.ibllib()]}
+     'versions': [__version__]}
 
 MOCK_SESSION_SETTINGS = {
     'SESSION_DATE': '2018-04-01',
@@ -216,7 +216,7 @@ class TestRegistration(unittest.TestCase):
         np.save(self.alf_path.joinpath('spikes.times.npy'), np.random.random(500))
         np.save(self.alf_path.joinpath('spikes.amps.npy'), np.random.random(500))
         r = registration.register_dataset(file_list=flist, one=self.one)
-        self.assertTrue(all(all(not(fr['exists']) for fr in rr['file_records']) for rr in r))
+        self.assertTrue(all(all(not fr['exists'] for fr in rr['file_records']) for rr in r))
 
         # Test registering with a revision
         flist = list(self.rev_path.glob('*.npy'))
@@ -254,7 +254,7 @@ class TestRegistration(unittest.TestCase):
         for ds in datasets:
             self.assertTrue(ds['hash'] is not None)
             self.assertTrue(ds['file_size'] is not None)
-            self.assertTrue(ds['version'] == version.ibllib())
+            self.assertTrue(ds['version'] == ibllib.__version__)
         # checks the procedure of the session
         ses_info = self.one.alyx.rest('sessions', 'read', id=eid)
         self.assertTrue(ses_info['procedures'] == ['Ephys recording with acute probe(s)'])

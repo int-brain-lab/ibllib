@@ -111,14 +111,14 @@ def get_sessions(subj, date=None, one=None):
         latest_sess = date
 
     sessions = one.alyx.rest('sessions', 'list', subject=subj, date_range=[latest_minus_week,
-                             latest_sess], dataset_types='trials.intervals')
+                             latest_sess], dataset_types='trials.goCueTrigger_times')
 
     # If not enough sessions in the last week, then just fetch them all
     if len(sessions) < 3:
         specified_date_plus = (specified_date + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
         django_query = 'start_time__lte,' + specified_date_plus
         sessions = one.alyx.rest('sessions', 'list', subject=subj,
-                                 dataset_types='trials.intervals', django=django_query)
+                                 dataset_types='trials.goCueTrigger_times', django=django_query)
 
         # If still 0 sessions then return with warning
         if len(sessions) == 0:
@@ -227,7 +227,7 @@ def get_training_status(trials, task_protocol, ephys_sess_dates, n_delay):
          info.rt) = compute_bias_info(trials, trials_all)
         # We are still on training rig and so all sessions should be biased
         if len(ephys_sess_dates) == 0:
-            assert(np.all(np.array(task_protocol) == 'biased'))
+            assert np.all(np.array(task_protocol) == 'biased')
             if criterion_ephys(info.psych_20, info.psych_80, info.n_trials, info.perf_easy,
                                info.rt):
                 status = 'ready4ephysrig'
@@ -349,7 +349,7 @@ def compute_training_info(trials, trials_all):
     perf_easy = np.array([compute_performance_easy(trials[k]) for k in trials.keys()])
     n_trials = np.array([compute_n_trials(trials[k]) for k in trials.keys()])
     psych = compute_psychometric(trials_all, signed_contrast=signed_contrast)
-    rt = compute_median_reaction_time(trials_all, signed_contrast=signed_contrast)
+    rt = compute_median_reaction_time(trials_all, contrast=0, signed_contrast=signed_contrast)
 
     return perf_easy, n_trials, psych, rt
 
@@ -376,7 +376,7 @@ def compute_bias_info(trials, trials_all):
     n_trials = np.array([compute_n_trials(trials[k]) for k in trials.keys()])
     psych_20 = compute_psychometric(trials_all, signed_contrast=signed_contrast, block=0.2)
     psych_80 = compute_psychometric(trials_all, signed_contrast=signed_contrast, block=0.8)
-    rt = compute_median_reaction_time(trials_all, signed_contrast=signed_contrast)
+    rt = compute_median_reaction_time(trials_all, contrast=0, signed_contrast=signed_contrast)
 
     return perf_easy, n_trials, psych_20, psych_80, rt
 
@@ -452,7 +452,7 @@ def compute_n_trials(trials):
     return trials['choice'].shape[0]
 
 
-def compute_psychometric(trials, signed_contrast=None, block=None):
+def compute_psychometric(trials, signed_contrast=None, block=None, plotting=False):
     """
     Compute psychometric fit parameters for trials object
 
@@ -479,17 +479,27 @@ def compute_psychometric(trials, signed_contrast=None, block=None):
     prob_choose_right, contrasts, n_contrasts = compute_performance(trials, signed_contrast=signed_contrast, block=block,
                                                                     prob_right=True)
 
-    psych, _ = psy.mle_fit_psycho(
-        np.vstack([contrasts, n_contrasts, prob_choose_right]),
-        P_model='erf_psycho_2gammas',
-        parstart=np.array([np.mean(contrasts), 20., 0.05, 0.05]),
-        parmin=np.array([np.min(contrasts), 0., 0., 0.]),
-        parmax=np.array([np.max(contrasts), 100., 1, 1]))
+    if plotting:
+        psych, _ = psy.mle_fit_psycho(
+            np.vstack([contrasts, n_contrasts, prob_choose_right]),
+            P_model='erf_psycho_2gammas',
+            parstart=np.array([0., 40., 0.1, 0.1]),
+            parmin=np.array([-50., 10., 0., 0.]),
+            parmax=np.array([50., 50., 0.2, 0.2]),
+            nfits=10)
+    else:
+
+        psych, _ = psy.mle_fit_psycho(
+            np.vstack([contrasts, n_contrasts, prob_choose_right]),
+            P_model='erf_psycho_2gammas',
+            parstart=np.array([np.mean(contrasts), 20., 0.05, 0.05]),
+            parmin=np.array([np.min(contrasts), 0., 0., 0.]),
+            parmax=np.array([np.max(contrasts), 100., 1, 1]))
 
     return psych
 
 
-def compute_median_reaction_time(trials, stim_on_type='stimOn_times', signed_contrast=None):
+def compute_median_reaction_time(trials, stim_on_type='stimOn_times', contrast=None, signed_contrast=None):
     """
     Compute median reaction time on zero contrast trials from trials object
 
@@ -505,10 +515,15 @@ def compute_median_reaction_time(trials, stim_on_type='stimOn_times', signed_con
     """
     if signed_contrast is None:
         signed_contrast = get_signed_contrast(trials)
-    zero_trials = (trials.response_times - trials[stim_on_type])[signed_contrast == 0]
-    if np.any(zero_trials):
+
+    if contrast is None:
+        contrast_idx = np.full(trials.probabilityLeft.shape, True, dtype=bool)
+    else:
+        contrast_idx = signed_contrast == contrast
+
+    if np.any(contrast_idx):
         reaction_time = np.nanmedian((trials.response_times - trials[stim_on_type])
-                                     [signed_contrast == 0])
+                                     [contrast_idx])
     else:
         reaction_time = np.nan
 
@@ -590,15 +605,15 @@ def plot_psychometric(trials, ax=None, title=None, **kwargs):
     contrasts_fit = np.arange(-100, 100)
 
     prob_right_50, contrasts_50, _ = compute_performance(trials, signed_contrast=signed_contrast, block=0.5, prob_right=True)
-    pars_50 = compute_psychometric(trials, signed_contrast=signed_contrast, block=0.5)
+    pars_50 = compute_psychometric(trials, signed_contrast=signed_contrast, block=0.5, plotting=True)
     prob_right_fit_50 = psy.erf_psycho_2gammas(pars_50, contrasts_fit)
 
     prob_right_20, contrasts_20, _ = compute_performance(trials, signed_contrast=signed_contrast, block=0.2, prob_right=True)
-    pars_20 = compute_psychometric(trials, signed_contrast=signed_contrast, block=0.2)
+    pars_20 = compute_psychometric(trials, signed_contrast=signed_contrast, block=0.2, plotting=True)
     prob_right_fit_20 = psy.erf_psycho_2gammas(pars_20, contrasts_fit)
 
     prob_right_80, contrasts_80, _ = compute_performance(trials, signed_contrast=signed_contrast, block=0.8, prob_right=True)
-    pars_80 = compute_psychometric(trials, signed_contrast=signed_contrast, block=0.8)
+    pars_80 = compute_psychometric(trials, signed_contrast=signed_contrast, block=0.8, plotting=True)
     prob_right_fit_80 = psy.erf_psycho_2gammas(pars_80, contrasts_fit)
 
     cmap = sns.diverging_palette(20, 220, n=3, center="dark")

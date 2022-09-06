@@ -15,7 +15,7 @@ from ibllib.oneibl.registration import register_dataset
 from ibllib.oneibl.patcher import FTPPatcher, SDSCPatcher, SDSC_ROOT_PATH, SDSC_PATCH_PATH
 from ibllib.oneibl.aws import AWS
 
-_logger = logging.getLogger('ibllib')
+_logger = logging.getLogger(__name__)
 
 
 class DataHandler(abc.ABC):
@@ -123,7 +123,7 @@ class ServerGlobusDataHandler(DataHandler):
         :param signature: input and output file signatures
         :param one: ONE instance
         """
-        from one.globus import Globus, get_lab_from_endpoint_id  # noqa
+        from one.remote.globus import Globus, get_lab_from_endpoint_id  # noqa
         super().__init__(session_path, signatures, one=one)
         self.globus = Globus(client_name='server')
 
@@ -131,7 +131,7 @@ class ServerGlobusDataHandler(DataHandler):
         self.globus.endpoints['local']['root_path'] = '/mnt/s0/Data/Subjects'
 
         # Find the lab
-        labs = get_lab_from_endpoint_id(one=self.one)
+        labs = get_lab_from_endpoint_id(alyx=self.one.alyx)
 
         if len(labs) == 2:
             # for flofer lab
@@ -142,9 +142,11 @@ class ServerGlobusDataHandler(DataHandler):
 
         # For cortex lab we need to get the endpoint from the ibl alyx
         if self.lab == 'cortexlab':
-            self.globus.add_endpoint(f'flatiron_{self.lab}', one=ONE(base_url='https://alyx.internationalbrainlab.org'))
+            self.globus.add_endpoint(f'flatiron_{self.lab}', alyx=ONE(base_url='https://alyx.internationalbrainlab.org').alyx)
         else:
-            self.globus.add_endpoint(f'flatiron_{self.lab}')
+            self.globus.add_endpoint(f'flatiron_{self.lab}', alyx=self.one.alyx)
+
+        self.local_paths = []
 
     def setUp(self):
         """
@@ -174,7 +176,6 @@ class ServerGlobusDataHandler(DataHandler):
 
         target_paths = []
         source_paths = []
-        self.local_paths = []
         for i, d in df.iterrows():
             sess_path = Path(rel_sess_path).joinpath(d['rel_path'])
             full_local_path = Path(self.globus.endpoints['local']['root_path']).joinpath(sess_path)
@@ -257,13 +258,18 @@ class RemoteAwsDataHandler(DataHandler):
         :param signature: input and output file signatures
         :param one: ONE instance
         """
-        from one.globus import Globus # noqa
+        from one.remote.globus import Globus # noqa
         super().__init__(session_path, signature, one=one)
         self.task = task
         self.aws = AWS(one=self.one)
         self.globus = Globus(client_name='server')
         self.lab = session_path_parts(self.session_path, as_dict=True)['lab']
-        self.globus.add_endpoint(f'flatiron_{self.lab}')
+        if self.lab == 'cortexlab':
+            self.globus.add_endpoint(f'flatiron_{self.lab}', alyx=ONE(base_url='https://alyx.internationalbrainlab.org').alyx)
+        else:
+            self.globus.add_endpoint(f'flatiron_{self.lab}', alyx=self.one.alyx)
+
+        self.local_paths = []
 
     def setUp(self):
         """

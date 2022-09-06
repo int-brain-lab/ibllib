@@ -3,7 +3,6 @@ import unittest
 from pathlib import Path
 from collections import OrderedDict
 
-from ibllib.misc import version
 import ibllib.pipes.tasks
 from one.api import ONE
 from ibllib.tests import TEST_DB
@@ -31,8 +30,8 @@ desired_statuses = {
 
 desired_datasets = ['spikes.times.npy', 'spikes.amps.npy', 'spikes.clusters.npy']
 desired_versions = {'spikes.times.npy': 'custom_job00',
-                    'spikes.amps.npy': version.ibllib(),
-                    'spikes.clusters.npy': version.ibllib()}
+                    'spikes.amps.npy': ibllib.__version__,
+                    'spikes.clusters.npy': ibllib.__version__}
 desired_logs = 'Running on machine: testmachine'
 desired_logs_rerun = {
     'Task00': 1,
@@ -165,7 +164,7 @@ class TestPipelineAlyx(unittest.TestCase):
 
         # prepare by deleting all jobs/tasks related
         tasks = one.alyx.rest('tasks', 'list', session=eid, no_cache=True)
-        assert(len(tasks) == 0)
+        self.assertEqual(len(tasks), 0)
 
         # create tasks and jobs from scratch
         NTASKS = len(pipeline.tasks)

@@ -12,7 +12,7 @@ import ibllib.io.extractors.base
 import ibllib.io.flags as flags
 import ibllib.io.raw_data_loaders as raw
 
-log = logging.getLogger('ibllib')
+log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
 
 

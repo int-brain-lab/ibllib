@@ -5,12 +5,12 @@ i.e. habituation, training or biased.
 import logging
 from collections import OrderedDict
 
+from pkg_resources import parse_version
 from ibllib.io.extractors import habituation_trials, training_trials, biased_trials, opto_trials
 import ibllib.io.extractors.base
 import ibllib.io.raw_data_loaders as rawio
-from ibllib.misc import version
 
-_logger = logging.getLogger('ibllib')
+_logger = logging.getLogger(__name__)
 
 
 def extract_all(session_path, save=True, bpod_trials=None, settings=None):
@@ -54,7 +54,8 @@ def extract_all(session_path, save=True, bpod_trials=None, settings=None):
         files_wheel = []
         wheel = OrderedDict({k: trials.pop(k) for k in tuple(trials.keys()) if 'wheel' in k})
     elif extractor_type == 'habituation':
-        if settings['IBLRIG_VERSION_TAG'] and version.le(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
+        if settings['IBLRIG_VERSION_TAG'] and \
+                parse_version(settings['IBLRIG_VERSION_TAG']) <= parse_version('5.0.0'):
             _logger.warning("No extraction of legacy habituation sessions")
             return None, None, None
         trials, files_trials = habituation_trials.extract_all(

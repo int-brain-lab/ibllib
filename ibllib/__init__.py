@@ -1,7 +1,8 @@
-__version__ = "2.12.0"
+"""Library implementing the International Brain Laboratory data pipeline."""
+__version__ = "2.14.0"
 import warnings
 
-from ibllib.misc import logger_config
+from iblutil.util import get_logger
 
 warnings.filterwarnings("always", category=DeprecationWarning, module="ibllib")
 
@@ -15,7 +16,7 @@ import logging
 USE_LOGGING = True
 #%(asctime)s,%(msecs)d
 if USE_LOGGING:
-    logger_config(name="ibllib")
+    get_logger(name='ibllib')
 else:
     # deactivate all log calls for use as a library
     logging.getLogger("ibllib").addHandler(logging.NullHandler())

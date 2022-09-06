@@ -15,15 +15,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import Union
 
+from pkg_resources import parse_version
 import numpy as np
 import pandas as pd
 
 from iblutil.io import jsonable
 from ibllib.io.video import assert_valid_label
-from ibllib.misc import version
 from ibllib.time import uncycle_pgts, convert_pgts
 
-_logger = logging.getLogger('ibllib')
+_logger = logging.getLogger(__name__)
 
 
 def trial_times_to_times(raw_trial):
@@ -63,7 +63,7 @@ def trial_times_to_times(raw_trial):
     raw_trial['behavior_data']['Bpod start timestamp'] -= shift
     raw_trial['behavior_data']['Trial start timestamp'] -= shift
     raw_trial['behavior_data']['Trial end timestamp'] -= shift
-    assert(raw_trial['behavior_data']['Bpod start timestamp'] == 0)
+    assert raw_trial['behavior_data']['Bpod start timestamp'] == 0
     return raw_trial
 
 
@@ -330,7 +330,7 @@ def load_stim_position_screen(session_path):
     path = Path(session_path).joinpath("raw_behavior_data")
     path = next(path.glob("_iblrig_stimPositionScreen.raw*.csv"), None)
 
-    data = pd.read_csv(path, sep=',', header=None, error_bad_lines=False)
+    data = pd.read_csv(path, sep=',', header=None, on_bad_lines='skip')
     data.columns = ['contrast', 'position', 'bns_ts']
     data['bns_ts'] = pd.to_datetime(data['bns_ts'])
     return data
@@ -374,7 +374,7 @@ def load_encoder_events(session_path, settings=False):
             settings = {'IBLRIG_VERSION_TAG': '0.0.0'}
     if not path:
         return None
-    if version.ge(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
+    if parse_version(settings['IBLRIG_VERSION_TAG']) >= parse_version('5.0.0'):
         return _load_encoder_events_file_ge5(path)
     else:
         return _load_encoder_events_file_lt5(path)
@@ -385,7 +385,7 @@ def _load_encoder_ssv_file(file_path, **kwargs):
     if file_path.stat().st_size == 0:
         _logger.error(f"{file_path.name} is an empty file. ")
         raise ValueError(f"{file_path.name} is an empty file. ABORT EXTRACTION. ")
-    return pd.read_csv(file_path, sep=' ', header=None, error_bad_lines=False, **kwargs)
+    return pd.read_csv(file_path, sep=' ', header=None, on_bad_lines='skip', **kwargs)
 
 
 def _load_encoder_positions_file_lt5(file_path):
@@ -479,7 +479,7 @@ def load_encoder_positions(session_path, settings=False):
     if not path:
         _logger.warning("No data loaded: could not find raw encoderPositions file")
         return None
-    if version.ge(settings['IBLRIG_VERSION_TAG'], '5.0.0'):
+    if parse_version(settings['IBLRIG_VERSION_TAG']) >= parse_version('5.0.0'):
         return _load_encoder_positions_file_ge5(path)
     else:
         return _load_encoder_positions_file_lt5(path)

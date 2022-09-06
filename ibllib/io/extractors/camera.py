@@ -23,7 +23,7 @@ from ibllib.io.extractors.base import (
     _get_task_types_json_config
 )
 
-_logger = logging.getLogger('ibllib')
+_logger = logging.getLogger(__name__)
 
 
 def extract_camera_sync(sync, chmap=None):
@@ -34,7 +34,7 @@ def extract_camera_sync(sync, chmap=None):
     :param chmap: dictionary containing channel indices. Default to constant.
     :return: dictionary containing camera timestamps
     """
-    assert(chmap)
+    assert chmap
     sr = get_sync_fronts(sync, chmap['right_camera'])
     sl = get_sync_fronts(sync, chmap['left_camera'])
     sb = get_sync_fronts(sync, chmap['body_camera'])

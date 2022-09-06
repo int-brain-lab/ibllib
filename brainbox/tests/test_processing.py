@@ -15,7 +15,7 @@ class TestProcessing(unittest.TestCase):
         cubes = core.TimeSeries(times=times, values=samples, columns=('cubic',))
         resamp = processing.sync(0.1, timeseries=cubes, interp='cubic', fillval='extrapolate')
         # Check that the sync function is returning a new time series object
-        self.assertTrue(isinstance(resamp, core.TimeSeries))
+        self.assertIsInstance(resamp, core.TimeSeries)
         # Test that all returned sample times are uniformly spaced
         # We need to use np.isclose because of floating point arithematic problems instead of ==0.1
         # Since the actual diff returns 0.09999999999999964
@@ -117,17 +117,17 @@ class TestProcessing(unittest.TestCase):
         spike_clust = spike_clust[ind]
         spike_val = spike_val[ind]
         # Make sure the data you have created is correct dimension
-        assert(len(spike_clust) == len(spike_val))
+        self.assertEqual(len(spike_clust), len(spike_val))
 
         # Compute the average value across clusters
         clust, avg_val, count = processing.compute_cluster_average(spike_clust, spike_val)
 
         # Check output is as expected
-        assert(np.all(clust == (1, 2, 100)))
-        assert(avg_val[0] == 200)
-        assert(avg_val[1] == 400)
-        assert (avg_val[2] == 0.75)
-        assert(np.all(count == (40, 40, 50)))
+        self.assertTrue(np.all(clust == (1, 2, 100)))
+        self.assertEqual(avg_val[0], 200)
+        self.assertEqual(avg_val[1], 400)
+        self.assertEqual(avg_val[2], 0.75)
+        self.assertTrue(np.all(count == (40, 40, 50)))
 
 
 def test_get_unit_bunches():

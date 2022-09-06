@@ -15,7 +15,7 @@ from ibllib.pipes import tasks, training_preprocessing, ephys_preprocessing
 from ibllib.time import date2isostr
 import ibllib.oneibl.registration as registration
 
-_logger = logging.getLogger('ibllib')
+_logger = logging.getLogger(__name__)
 LARGE_TASKS = ['EphysVideoCompress', 'TrainingVideoCompress', 'SpikeSorting', 'EphysDLC']
 
 
@@ -147,7 +147,7 @@ def task_queue(mode='all', lab=None, one=None):
     if one is None:
         one = ONE(cache_rest=None)
     if lab is None:
-        _logger.info("Trying to infer lab from globus installation")
+        _logger.debug("Trying to infer lab from globus installation")
         lab = _get_lab(one)
     if lab is None:
         _logger.error("No lab provided or found")

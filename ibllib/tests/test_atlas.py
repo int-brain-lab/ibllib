@@ -56,7 +56,7 @@ class TestBrainRegions(unittest.TestCase):
         assert np.all(ancs.id == tpath)
         # check descendants with indices
         desdc, inds = br.descendants(12993, return_indices=True)
-        assert(inds == np.where(br.id == 12993))
+        self.assertEqual(inds, np.where(br.id == 12993))
         # check full subtree
         chemin = br.subtree(453)
         assert np.all(np.sort(chemin.id) == np.unique(np.r_[br.descendants(453).id, br.ancestors(453).id]))
@@ -272,6 +272,18 @@ class TestBrainRegions(unittest.TestCase):
         assert np.array_equal(acronnyms_ordered, expected_acronyms)
         assert np.array_equal(values_ordered, expected_values)
 
+    def test_argument_parser(self):
+        acronyms = ['AUDp1', 'AUDpo1', 'AUDv1', 'SSp-m1', 'SSp-n1']
+        ids = self.brs.acronym2id(acronyms)
+        assert np.all(self.brs.parse_acronyms_argument(acronyms) == ids)
+        assert np.all(self.brs.parse_acronyms_argument(np.array(acronyms)) == ids)
+        assert np.all(self.brs.parse_acronyms_argument(ids) == ids)
+        assert np.all(self.brs.parse_acronyms_argument(list(ids)) == ids)
+        # makes sure it handles exception
+        with self.assertRaises(AssertionError):
+            self.brs.parse_acronyms_argument(acronyms + ['toto'])
+        assert np.all(self.brs.parse_acronyms_argument(acronyms + ['toto'], mode='clip') == ids)
+
 
 class TestAtlasPlots(unittest.TestCase):
 
@@ -300,11 +312,11 @@ class TestAtlasPlots(unittest.TestCase):
         ax.clear()
 
     def test_horizontal_slice(self):
-        ax = self.ba.plot_hslice(dv_coordinate=0.002)
+        ax = self.ba.plot_hslice(dv_coordinate=-0.002)
         im = ax.get_images()[0]
         assert im.get_array().shape == (self.ba.bc.ny, self.ba.bc.nx)
         ax.clear()
-        ax = self.ba.plot_hslice(dv_coordinate=0.002, volume='annotation')
+        ax = self.ba.plot_hslice(dv_coordinate=-0.002, volume='annotation')
         im = ax.get_images()[0]
         assert im.get_array().shape == (self.ba.bc.ny, self.ba.bc.nx, 3)
         ax.clear()
@@ -335,15 +347,27 @@ class TestAtlasSlicesConversion(unittest.TestCase):
         assert self.ba.get_labels([0, 0, self.ba.bc.i2z(103)], mapping='Cosmos') == 997
         assert self.ba.get_labels([0, 0, 0], mapping='Cosmos') == 0
 
+    def test_lookups_probabilistic(self):
+        xyz = np.array([0, -.0058, -.0038])
+        aid = self.ba.get_labels(xyz, mapping='Beryl')
+        aids, proportions = self.ba.get_labels(xyz, mapping='Beryl', radius_um=250)
+        self.assertEqual(aid, 0)
+        assert (np.all(aids == np.array([0])))
+        assert (np.isclose(proportions, np.array([1.])))
+
+    def test_plot_slices(self):
+        axs = self.ba.plot_slices(np.array([0, -.0024, -.0038]))
+        assert axs.shape == (2, 2)
+
     def test_slice(self):
         ba = self.ba
         nx, ny, nz = ba.bc.nxyz
         # tests output shapes
         self.assertTrue(ba.slice(axis=0, coordinate=0).shape == (ny, nz))  # sagittal
         self.assertTrue(ba.slice(axis=1, coordinate=0).shape == (nx, nz))  # coronal
-        self.assertTrue(ba.slice(axis=2, coordinate=.002).shape == (ny, nx))  # horizontal
+        self.assertTrue(ba.slice(axis=2, coordinate=-.002).shape == (ny, nx))  # horizontal
         # tests out of bound
-        with self.assertRaises(IndexError):
+        with self.assertRaises(ValueError):
             ba.slice(axis=1, coordinate=123)
         self.assertTrue(ba.slice(axis=1, coordinate=21, mode='clip').shape == (nx, nz))
         """
@@ -541,9 +565,9 @@ class TestsCoordinatesSimples(unittest.TestCase):
         self.assertTrue(bc.ny == 7)
         self.assertTrue(bc.nz == 8)
         # test array functions
-        in_out = [([6, 7, 8], np.array([6, 7, 8])),
-                  (np.array([6, 7, 8]), np.array([6, 7, 8])),
-                  (np.array([[6, 7, 8], [6, 7, 8]]), np.array([[6, 7, 8], [6, 7, 8]])),
+        in_out = [([3, 4, 5], np.array([3, 4, 5])),
+                  (np.array([3, 4, 5]), np.array([3, 4, 5])),
+                  (np.array([[3, 4, 5], [3, 4, 5]]), np.array([[3, 4, 5], [3, 4, 5]])),
                   ]
         for io in in_out:
             self.assertTrue(np.all(bc.xyz2i(io[0]) == io[1]))

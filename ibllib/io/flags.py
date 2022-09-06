@@ -5,7 +5,7 @@
 from pathlib import Path
 import logging
 
-logger_ = logging.getLogger('ibllib')
+logger_ = logging.getLogger(__name__)
 
 FLAG_FILE_NAMES = [
     'transfer_me.flag', 'extract_me.flag', 'register_me.flag', 'flatiron.flag',

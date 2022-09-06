@@ -11,7 +11,7 @@ import spikeglx
 from ibllib.exceptions import Neuropixel3BSyncFrontsNonMatching
 from ibllib.io.extractors.ephys_fpga import get_sync_fronts, get_ibl_sync_map
 
-_logger = logging.getLogger('ibllib')
+_logger = logging.getLogger(__name__)
 
 
 def apply_sync(sync_file, times, forward=True):
@@ -87,7 +87,7 @@ def version3A(ses_path, display=True, type='smooth', tol=2.1):
         _logger.warning('Ephys sync: frame2ttl not detected on both probes, using camera sync')
         d = get_sync_fronts('right_camera')
         if not min([t[0] for t in d['times']]) > 0.2:
-            raise(ValueError('Cameras started before ephys, no sync possible'))
+            raise ValueError('Cameras started before ephys, no sync possible')
     # chop off to the lowest number of sync points
     nsyncs = [t.size for t in d['times']]
     if len(set(nsyncs)) > 1:
@@ -130,7 +130,7 @@ def version3B(ses_path, display=True, type=None, tol=2.5):
     nidq_file = [ef for ef in ephys_files if ef.get('nidq')]
     ephys_files = [ef for ef in ephys_files if not ef.get('nidq')]
     # should have at least 2 probes and only one nidq
-    assert(len(nidq_file) == 1)
+    assert len(nidq_file) == 1
     nidq_file = nidq_file[0]
     sync_nidq = get_sync_fronts(nidq_file.sync, nidq_file.sync_map['imec_sync'])
 
@@ -141,7 +141,7 @@ def version3B(ses_path, display=True, type=None, tol=2.5):
         sr = _get_sr(ef)
         try:
             # we say that the number of pulses should be within 10 %
-            assert(np.isclose(sync_nidq.times.size, sync_probe.times.size, rtol=0.1))
+            assert np.isclose(sync_nidq.times.size, sync_probe.times.size, rtol=0.1)
         except AssertionError:
             raise Neuropixel3BSyncFrontsNonMatching(f"{ses_path}")
 

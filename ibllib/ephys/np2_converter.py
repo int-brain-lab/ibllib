@@ -6,7 +6,7 @@ from pathlib import Path
 import copy
 import shutil
 import logging
-_logger = logging.getLogger('ibllib')
+_logger = logging.getLogger(__name__)
 
 
 class NP2Converter:
