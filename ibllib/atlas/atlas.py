@@ -571,7 +571,7 @@ class BrainAtlas:
         axs[1, 0].plot(xyz_um[0], xyz_um[1], 'g*')
         return axs
 
-    def plot_cslice(self, ap_coordinate, volume='image', mapping='Allen', region_values=None, **kwargs):
+    def plot_cslice(self, ap_coordinate, volume='image', mapping=None, region_values=None, **kwargs):
         """
         Plot coronal slice through atlas at given ap_coordinate
 

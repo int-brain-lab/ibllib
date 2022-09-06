@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 from ibllib.atlas import (BrainCoordinates, cart2sph, sph2cart, Trajectory,
                           Insertion, ALLEN_CCF_LANDMARKS_MLAPDV_UM, AllenAtlas)
-from ibllib.atlas.regions import BrainRegions
+from ibllib.atlas.regions import BrainRegions, FranklinPaxinosRegions
 from ibllib.atlas.plots import prepare_lr_data, reorder_data
 from iblutil.numerical import ismember
 
@@ -599,6 +599,43 @@ class TestsCoordinatesSimples(unittest.TestCase):
         assert np.all(np.isclose(ml, x_))
         assert np.all(np.isclose(ap, y_))
         assert np.all(np.isclose(dv, z_))
+
+
+class TestFranklinPaxinos(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(self):
+        self.frs = FranklinPaxinosRegions()
+        self.brs = BrainRegions()
+
+    def test_level(self):
+
+        # This is a region that is only in FranklinPaxinos Atlas
+        info_fr5 = self.frs.get(2325)
+        # This is a region that is in both Allen and Franklin that should share parent with above region
+        info_fr23 = self.frs.get(667)
+        np.testing.assert_equal(info_fr5['level'], info_fr23['level'])
+
+        # These are the levels in the franklin paxinos
+        info_V1M6b = self.frs.get(2433)  # only in franklin
+        info_V1M = self.frs.get(2098)  # only in franklin
+        info_V1 = self.frs.get(385)  # in frankin and in Allen
+
+        # equivalent of V1 in Allen
+        info_VISp = self.brs.get(self.brs.acronym2id('VISp'))
+
+        np.testing.assert_equal(info_V1['level'], info_VISp['level'])
+        np.testing.assert_equal(info_V1M['level'], info_V1['level'] + 1)
+        np.testing.assert_equal(info_V1M6b['level'], info_V1['level'] + 2)
+
+    def test_conversions(self):
+
+        np.testing.assert_equal(self.frs.acronym2id('FrA-5'), 2325)
+        np.testing.assert_equal(self.frs.acronym2index('FrA-5')[1][0][0], 10)
+        np.testing.assert_equal(self.frs.acronym2index('FrA-5')[1][0][1], 1440)
+        np.testing.assert_equal(self.frs.acronym2id('V1M-6b'), 2433)
+        np.testing.assert_equal(self.frs.acronym2index('V1M-6b')[1][0][0], 209)
+        np.testing.assert_equal(self.frs.acronym2index('V1M-6b')[1][0][1], 1639)
 
 
 if __name__ == "__main__":
