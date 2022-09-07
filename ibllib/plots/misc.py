@@ -14,7 +14,7 @@ def wiggle(w, fs=1, gain=0.71, color='k', ax=None, fill=True, linewidth=0.5, t0=
 
     :param w: 2D array (numpy array dimension nsamples, ntraces)
     :param fs: sampling frequency
-    :param gain: display gain
+    :param gain: display gain ; Note that if sf is given, gain is not used
     :param color: ('k') color of traces
     :param ax: (None) matplotlib axes object
     :param fill: (True) fill variable area above 0
