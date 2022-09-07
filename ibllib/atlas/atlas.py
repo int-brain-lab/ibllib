@@ -302,7 +302,7 @@ class BrainAtlas:
         """
         return self._lookup_inds(self.bc.xyz2i(xyz, mode=mode), mode=mode)
 
-    def get_labels(self, xyz, mapping='Allen', radius_um=None, mode='raise'):
+    def get_labels(self, xyz, mapping=None, radius_um=None, mode='raise'):
         """
         Performs a 3D lookup from real world coordinates to the volume labels
         and return the regions ids according to the mapping
@@ -312,6 +312,8 @@ class BrainAtlas:
          of regions in a sphere of size radius around the coordinates.
         :return: n array of region ids
         """
+        mapping = mapping or self.regions.default_mapping
+
         if radius_um:
             nrx = int(np.ceil(radius_um / abs(self.bc.dx) / 1e6))
             nry = int(np.ceil(radius_um / abs(self.bc.dy) / 1e6))
@@ -884,7 +886,7 @@ class Insertion:
         # In some cases the nearest two intersection points are not the top and bottom of brain
         # So we find all intersection points that fall within one voxel and take the one with
         # highest dV to be entry and lowest dV to be exit
-        idx_lim = np.sum(distance[dist_sort] * 1e6 < brain_atlas.res_um)
+        idx_lim = np.sum(distance[dist_sort] * 1e6 < np.max(brain_atlas.res_um))
         dist_lim = dist_sort[0:idx_lim]
         z_val = brain_atlas.srf_xyz[dist_lim, 2]
         if surface == 'top':

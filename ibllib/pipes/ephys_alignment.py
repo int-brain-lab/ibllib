@@ -186,7 +186,7 @@ class EphysAlignment:
         track[-1] = extend_track[-1]
         return feature, track
 
-    def scale_histology_regions(self, feature, track):
+    def scale_histology_regions(self, feature, track, region=None, region_label=None):
         """
         Recompute locations of brain region boundaries using interpolated fit based on reference
         lines
@@ -200,14 +200,15 @@ class EphysAlignment:
                               interpolation
         :type region_label: np.array((n_bound)) of tuples (coordinate - float, label - str)
         """
-        region_label = np.copy(self.region_label)
-        region = self.track2feature(self.region, feature, track) * 1e6
+        region = np.copy(region) if region is not None else np.copy(self.region)
+        region_label = np.copy(region_label) if region_label is not None else np.copy(self.region_label)
+        region = self.track2feature(region, feature, track) * 1e6
         region_label[:, 0] = (self.track2feature(np.float64(region_label[:, 0]), feature,
                               track) * 1e6)
         return region, region_label
 
     @staticmethod
-    def get_histology_regions(xyz_coords, depth_coords, brain_atlas=None, mapping='Allen'):
+    def get_histology_regions(xyz_coords, depth_coords, brain_atlas=None, mapping=None):
         """
         Find all brain regions and their boundaries along the depth of probe or track
         :param xyz_coords: 3D coordinates of points along probe or track
@@ -384,7 +385,7 @@ class EphysAlignment:
 
         return all_x, all_y, all_colour
 
-    def get_scale_factor(self, region):
+    def get_scale_factor(self, region, region_orig=None):
         """
         Find how much each brain region has been scaled following interpolation
         :param region: scaled histology boundaries
@@ -394,8 +395,10 @@ class EphysAlignment:
         :return scale_factor: scale factor applied to each scaled region
         :type scale_factor: np.array((n_scale))
         """
+
+        region_orig = region_orig if region_orig is not None else self.region
         scale = []
-        for iR, (reg, reg_orig) in enumerate(zip(region, self.region * 1e6)):
+        for iR, (reg, reg_orig) in enumerate(zip(region, region_orig * 1e6)):
             scale = np.r_[scale, (reg[1] - reg[0]) / (reg_orig[1] - reg_orig[0])]
         boundaries = np.where(np.diff(np.around(scale, 3)))[0]
         if boundaries.size == 0:
