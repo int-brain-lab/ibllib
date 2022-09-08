@@ -5,13 +5,15 @@ import uuid
 import tempfile
 from pathlib import Path
 import sys
+import logging
 
 import numpy as np
 from one.api import ONE
 from iblutil.io import params
+import yaml
 
 from ibllib.tests import TEST_DB
-from ibllib.io import flags, misc, globus, video
+from ibllib.io import flags, misc, globus, video, session_params
 import ibllib.io.raw_data_loaders as raw
 
 
@@ -457,6 +459,99 @@ class TestVideo(unittest.TestCase):
         self.assertEqual(labels, ('right', 'body'))
         with self.assertRaises(TypeError):
             video.assert_valid_label(None)
+
+
+class TestSessionParams(unittest.TestCase):
+    """Tests for ibllib.io.session_params module"""
+
+    def setUp(self) -> None:
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmpdir.cleanup)
+        # load yaml fixture
+        self.fixture_path = Path(__file__).parent.joinpath('fixtures', 'io', '_ibl_experiment.description.yaml')
+        with open(self.fixture_path, 'r') as fp:
+            self.fixture = yaml.safe_load(fp)
+
+        # save as individual files
+        self.devices_path = Path(self.tmpdir.name).joinpath('_devices')
+
+        computers_descriptions = {
+            'widefield': dict(devices={'widefield': self.fixture['devices']['widefield']}),
+            'video': '',
+            'ephys': dict(devices={'neuropixel': self.fixture['devices']['neuropixel']}),
+            'behaviour': dict(devices={'microphone': self.fixture['devices']['microphone']})
+        }
+
+        # the behaviour computer contains the task, project and procedure keys
+        for k in filter(lambda x: x != 'devices', self.fixture):
+            computers_descriptions['behaviour'][k] = self.fixture[k]
+        # the ephys computer contains another sync key!
+        computers_descriptions['ephys']['sync'] = self.fixture['sync']
+
+        for label, data in computers_descriptions.items():
+            file_device = self.devices_path.joinpath(f'{label}.yaml')
+            session_params.write_yaml(file_device, data)
+
+    @patch(session_params.__name__ + '.time.sleep')
+    def test_aggregate(self, sleep_mock):
+        fullfile = self.devices_path.parent.joinpath('_ibl_experiment.description.yaml')
+        file_lock = fullfile.with_suffix('.lock')
+
+        # Test deals with file lock
+        file_lock.touch()
+
+        device = 'widefield'
+        file_device = self.devices_path.joinpath(f'{device}.yaml')
+        session_params.aggregate_device(file_device, fullfile)
+        self.assertFalse(file_lock.exists(), 'failed to delete lock file')
+        self.assertTrue(fullfile.exists(), 'failed to create aggregate file')
+        sleep_mock.assert_called()
+
+        with open(fullfile, 'r') as fp:
+            data = yaml.safe_load(fp)
+        self.assertCountEqual(('devices',), data.keys())
+        self.assertCountEqual((device,), data['devices'].keys())
+        self.assertEqual(data['devices'][device], self.fixture['devices'][device])
+
+        # A device with extra keys
+        device = 'behaviour'
+        file_device = self.devices_path.joinpath(f'{device}.yaml')
+        session_params.aggregate_device(file_device, fullfile, unlink=True)
+        self.assertFalse(file_lock.exists(), 'failed to delete lock file')
+        self.assertFalse(file_device.exists(), 'failed to delete device file')
+
+        with open(fullfile, 'r') as fp:
+            data = yaml.safe_load(fp)
+        expected_keys = ('devices', 'procedures', 'projects', 'sync', 'tasks', 'version')
+        self.assertCountEqual(data.keys(), expected_keys)
+        self.assertTrue(len(data['devices'].keys()) > 1)
+
+        # A device with another sync key
+        file_device = self.devices_path.joinpath('ephys.yaml')
+        with self.assertRaises(AssertionError):
+            session_params.aggregate_device(file_device, fullfile, unlink=True)
+
+        # An empty device
+        file_device = self.devices_path.joinpath('video.yaml')
+        with self.assertLogs(session_params.__name__, logging.WARNING):
+            session_params.aggregate_device(file_device, fullfile, unlink=True)
+
+    @patch(session_params.__name__ + '.SPEC_VERSION', '999')
+    def test_read_yaml(self):
+        label = 'widefield'
+        data = session_params.read_params(self.devices_path.joinpath(f'{label}.yaml'))
+        self.assertEqual('999', data.pop('version'), 'failed to patch file')
+        self.assertEqual(data['devices'][label], self.fixture['devices'][label])
+
+        # Check loads from directory path
+        data_keys = session_params.read_params(self.fixture_path.parent).keys()
+        self.assertCountEqual(self.fixture.keys(), data_keys)
+
+    def test_patch_data(self):
+        with patch(session_params.__name__ + '.SPEC_VERSION', '1.0.0'),\
+                self.assertLogs(session_params.__name__, logging.WARNING):
+            data = session_params._patch_file({'version': '1.1.0'})
+        self.assertEqual(data, {'version': '1.0.0'})
 
 
 if __name__ == "__main__":

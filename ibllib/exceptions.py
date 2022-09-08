@@ -28,3 +28,7 @@ class Neuropixel3BSyncFrontsNonMatching(IblError):
 class NvidiaDriverNotReady(IblError):
     explanation = ('Nvidia driver does not respond. This usually means the GPU is inaccessible '
                    'and needs to be recovered through a system reboot.')
+
+
+class WidefieldWiringException(IblError):
+    explanation = ("LED wiring in data is not found in the wiring map. Check that correct wiring map is being used.")

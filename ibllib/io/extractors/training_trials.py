@@ -223,7 +223,7 @@ class Intervals(BaseBpodTrialsExtractor):
     (depending on the feedback) and 0.5 seconds of iti.
     **Optional:** saves _ibl_trials.intervals.npy
 
-    Uses the corrected Trial start and Trial end timpestamp values form PyBpod.
+    Uses the corrected Trial start and Trial end timestamp values form PyBpod.
     """
     save_names = '_ibl_trials.intervals.npy'
     var_names = 'intervals'
