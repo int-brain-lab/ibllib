@@ -104,10 +104,13 @@ def load_trials(sess_path, one):
         except Exception:
             try:
                 task = get_trials_task(sess_path, one=one)
-                task.run()
-                trials = alfio.load_object(sess_path.joinpath('alf'), 'trials')
-                if 'probabilityLeft' not in trials.keys():
-                    raise ALFObjectNotFound
+                if task is not None:
+                    task.run()
+                    trials = alfio.load_object(sess_path.joinpath('alf'), 'trials')
+                    if 'probabilityLeft' not in trials.keys():
+                        raise ALFObjectNotFound
+                else:
+                    trials = None
             except Exception:  # TODO how can i make this more specific
                 trials = None
     return trials
@@ -139,8 +142,7 @@ def get_latest_training_information(sess_path, one):
 
     subj_path = sess_path.parent.parent
     df = load_existing_dataframe(subj_path)
-    if df is None:
-        return
+
     # Find the dates and associated session paths where we don't have data stored in our dataframe
     missing_dates = check_up_to_date(subj_path, df)
 
@@ -159,7 +161,7 @@ def get_latest_training_information(sess_path, one):
     # Sort values by date and reset the index
     df = df.sort_values('date')
     df = df.reset_index(drop=True)
-    # Save our datagrame
+    # Save our dataframe
     save_dataframe(df, subj_path)
 
     # Now go through the backlog and compute the training status for sessions. If for example one was missing as it is cumulative
