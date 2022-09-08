@@ -61,6 +61,11 @@ def register_dataset(file_list, one=None, created_by=None, repository=None, serv
     defaults to None
     :return:
     """
+    # If the repository is specified then for the registration client we want server_only=True to make sure we don't make
+    # any other repositories for the lab
+    if repository and not server_only:
+        server_only = True
+
     if created_by is None:
         created_by = one.alyx.user
     if file_list is None or file_list == '' or file_list == []:

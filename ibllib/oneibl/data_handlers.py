@@ -14,6 +14,7 @@ from iblutil.io.parquet import np2str
 from ibllib.oneibl.registration import register_dataset
 from ibllib.oneibl.patcher import FTPPatcher, SDSCPatcher, SDSC_ROOT_PATH, SDSC_PATCH_PATH
 from ibllib.oneibl.aws import AWS
+from ibllib.pipes.tasks import _get_local_data_repository
 
 _logger = logging.getLogger(__name__)
 
@@ -110,8 +111,8 @@ class ServerDataHandler(DataHandler):
         :return: output info of registered datasets
         """
         versions = super().uploadData(outputs, version)
-
-        return register_dataset(outputs, one=self.one, versions=versions, **kwargs)
+        data_repo = _get_local_data_repository(self.one)
+        return register_dataset(outputs, one=self.one, versions=versions, repository=data_repo, **kwargs)
 
 
 class ServerGlobusDataHandler(DataHandler):
@@ -205,8 +206,8 @@ class ServerGlobusDataHandler(DataHandler):
         :return: output info of registered datasets
         """
         versions = super().uploadData(outputs, version)
-
-        return register_dataset(outputs, one=self.one, versions=versions, **kwargs)
+        data_repo = _get_local_data_repository(self.one)
+        return register_dataset(outputs, one=self.one, versions=versions, repository=data_repo, **kwargs)
 
     def cleanUp(self):
         """

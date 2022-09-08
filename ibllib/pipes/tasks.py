@@ -382,6 +382,7 @@ class Pipeline(abc.ABC):
         if one and one.alyx.cache_mode and one.alyx.default_expiry.seconds > 1:
             _logger.warning('Alyx client REST cache active; this may cause issues with jobs')
         self.eid = eid
+        self.data_repo = _get_local_data_repository(self.one)
         if session_path:
             self.session_path = session_path
             if not self.eid:
@@ -483,6 +484,8 @@ class Pipeline(abc.ABC):
                          'level': t.level, 'time_out_sec': t.time_out_secs, 'session': self.eid,
                          'status': 'Waiting', 'log': None, 'name': t.name, 'graph': self.name,
                          'arguments': arguments}
+            if self.data_repo:
+                task_dict.update({'data_repository': self.data_repo})
             # if the task already exists, patch it otherwise, create it
             talyx = next(filter(lambda x: x["name"] == t.name, tasks_alyx_pre), [])
             if len(talyx) == 0:
@@ -494,7 +497,6 @@ class Pipeline(abc.ABC):
         return tasks_alyx
 
     def create_tasks_list_from_pipeline(self):
-        # TODO remove repition
         """
         From a pipeline with tasks, creates a list of dictionaries containing task description that can be used to upload to
         create alyx tasks
@@ -514,6 +516,8 @@ class Pipeline(abc.ABC):
                          'level': t.level, 'time_out_sec': t.time_out_secs, 'session': self.eid,
                          'status': 'Waiting', 'log': None, 'name': t.name, 'graph': self.name,
                          'arguments': t.kwargs}
+            if self.data_repo:
+                task_dict.update({'data_repository': self.data_repo})
 
             tasks_list.append(task_dict)
 
@@ -559,6 +563,18 @@ class Pipeline(abc.ABC):
     @property
     def name(self):
         return self.__class__.__name__
+
+
+def _get_local_data_repository(one):
+    if not Path.home().joinpath(".globusonline/lta/client-id.txt").exists():
+        return
+
+    with open(Path.home().joinpath(".globusonline/lta/client-id.txt"), 'r') as fid:
+        globus_id = fid.read()
+
+    data_repo = one.alyx.rest('data-repository', 'list', globus_endpoint_id=globus_id)
+    if len(data_repo):
+        return [da['name'] for da in data_repo][0]
 
 
 def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,

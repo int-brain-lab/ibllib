@@ -161,8 +161,10 @@ def task_queue(mode='all', lab=None, one=None):
     if lab is None:
         _logger.error("No lab provided or found")
         return  # if the lab is none, this will return empty tasks each time
+    data_repo = tasks._get_local_data_repository(one)
     # Filter for tasks
-    tasks_all = one.alyx.rest('tasks', 'list', status='Waiting', django=f'session__lab__name__in,{lab}', no_cache=True)
+    tasks_all = one.alyx.rest('tasks', 'list', status='Waiting',
+                              django=f'session__lab__name__in,{lab},data_repository__name,{data_repo}', no_cache=True)
     if mode == 'all':
         waiting_tasks = tasks_all
     else:
