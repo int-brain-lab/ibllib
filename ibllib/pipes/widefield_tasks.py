@@ -15,6 +15,7 @@ from pathlib import Path
 from ibllib.io.extractors.widefield import Widefield as WidefieldExtractor
 from ibllib.pipes import base_tasks
 from ibllib.io.video import get_video_meta
+from ibllib.plots.snapshot import ReportSnapshot
 import labcams.io
 
 _logger = logging.getLogger('ibllib')
@@ -127,9 +128,23 @@ class WidefieldPreprocess(base_tasks.WidefieldTask):
         }
         return signature
 
-    def _run(self, **kwargs):
+    def _run(self, upload_plots=True, **kwargs):
         self.wf = WidefieldExtractor(self.session_path)
         _, out_files = self.wf.extract(save=True, extract_timestamps=False)
+
+        if upload_plots:
+            output_plots = []
+            if self.wf.data_path.joinpath('hemodynamic_correction.pdf').exists():
+                output_plots.append(self.wf.data_path.joinpath('hemodynamic_correction.pdf'))
+            if self.wf.data_path.joinpath('motion_correction.pdf').exists():
+                output_plots.append(self.wf.data_path.joinpath('motion_correction.pdf'))
+
+            if len(output_plots) > 0:
+                eid = self.one.path2eid(self.session_path)
+                snp = ReportSnapshot(self.session_path, eid, one=self.one)
+                snp.outputs = output_plots
+                snp.register_images(widths=['orig'], function='wfield')
+
         return out_files
 
     def tearDown(self):
@@ -145,7 +160,7 @@ class WidefieldSync(base_tasks.WidefieldTask):
     @property
     def signature(self):
         signature = {
-            'input_files': [('imaging.raw.mov', self.device_collection, True),
+            'input_files': [('imaging.frames.mov', self.device_collection, True),
                             ('widefieldEvents.raw.camlog', self.device_collection, True),
                             (f'_{self.sync_namespace}_sync.channels.npy', self.sync_collection, True),
                             (f'_{self.sync_namespace}_sync.polarities.npy', self.sync_collection, True),
@@ -160,7 +175,8 @@ class WidefieldSync(base_tasks.WidefieldTask):
 
         self.wf = WidefieldExtractor(self.session_path)
         save_paths = [self.session_path.joinpath(sig[1], sig[0]) for sig in self.signature['output_files']]
-        out_files = self.wf.sync_timestamps(bin_exists=False, save=True, save_paths=save_paths)
+        out_files = self.wf.sync_timestamps(bin_exists=False, save=True, save_paths=save_paths,
+                                            sync_collection=self.sync_collection)
 
         # TODO QC
 
