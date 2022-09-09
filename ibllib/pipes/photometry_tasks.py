@@ -3,12 +3,27 @@
 import logging
 from collections import OrderedDict
 
-from ibllib.pipes import tasks
+from ibllib.pipes import tasks, base_tasks
 from ibllib.pipes.training_preprocessing import (
     TrainingRegisterRaw, TrainingAudio, TrainingTrials, TrainingDLC, TrainingStatus, TrainingVideoCompress)
 from ibllib.io.extractors.fibrephotometry import FibrePhotometry
 
 _logger = logging.getLogger('ibllib')
+
+
+class FibrePhotometryRegisterRaw(base_tasks.RegisterRawDataTask):
+
+    priority = 100
+    job_size = 'small'
+
+    @property
+    def signature(self):
+        signature = {
+            'input_files': [],
+            'output_files': [('_mcc_DAQdata.raw.tdms', self.collection, True),
+                             ('_neurophotometrics_fpData.raw.pqt', self.collection, True)]
+        }
+        return signature
 
 
 class FibrePhotometryPreprocess(tasks.Task):

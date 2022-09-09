@@ -12,7 +12,7 @@ import ibllib.pipes.behavior_tasks as btasks
 import ibllib.pipes.video_tasks as vtasks
 import ibllib.pipes.ephys_tasks as etasks
 import ibllib.pipes.audio_tasks as atasks
-
+from ibllib.pipes.photometry_tasks import FibrePhotometryPreprocess, FibrePhotometryRegisterRaw
 import spikeglx
 
 
@@ -258,7 +258,7 @@ def make_pipeline(session_path=None, **pkwargs):
         micro_kwargs['device_collection'] = micro_kwargs.pop('collection')
         if sync_kwargs['sync'] == 'bpod':
             tasks['AudioRegisterRaw'] = type('AudioRegisterRaw', (atasks.AudioSync,), {})(
-                **kwargs, **sync_kwargs, **micro_kwargs, collection=collection)
+                **kwargs, **sync_kwargs, **micro_kwargs, collection=micro_kwargs['device_collection'])
         elif sync_kwargs['sync'] == 'nidq':
             tasks['AudioRegisterRaw'] = type('AudioRegisterRaw', (atasks.AudioCompress,), {})(**kwargs, **micro_kwargs)
 
@@ -279,9 +279,16 @@ def make_pipeline(session_path=None, **pkwargs):
         tasks['WidefieldFOV'] = type('WidefieldFOV', (wtasks.WidefieldFOV,), {})(
             **kwargs, **wfield_kwargs, parents=[tasks['WidefieldPreprocess']])
 
+    if 'photometry' in devices:
+        (_, photometry_kwargs), = devices['photometry'].items()
+        tasks['FibrePhotometryRegisterRaw'] = type('FibrePhotometryRegisterRaw', (FibrePhotometryRegisterRaw,), {})(
+            **kwargs, **photometry_kwargs)
+        tasks['FibrePhotometryPreprocess'] = type('FibrePhotometryPreprocess', (FibrePhotometryPreprocess,), {})(
+            **kwargs, **photometry_kwargs, **sync_kwargs,
+            parents=[tasks['FibrePhotometryRegisterRaw']] + sync_tasks)
+
     p = mtasks.Pipeline(session_path=session_path, **pkwargs)
     p.tasks = tasks
-
     return p
 
 
