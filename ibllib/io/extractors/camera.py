@@ -160,6 +160,10 @@ class CameraTimestampsCamlog(BaseExtractor):
         video_frames = get_video_length(self.session_path.joinpath('raw_video_data', f'_iblrig_{self.label}Camera.raw.mp4'))
         raw_ts = fpga_times[self.label]
 
+        # For left camera sometimes we have one extra pulse than video frame
+        if (self.label == 'left') and ((raw_ts.size - video_frames) == 1):
+            raw_ts = raw_ts[:-1]
+
         assert video_frames == raw_ts.size, f'dimension mismatch between video frames and TTL pulses for {self.label} camera' \
                                             f'by {np.abs(video_frames - raw_ts.size)} frames'
 

@@ -134,10 +134,10 @@ class WidefieldPreprocess(base_tasks.WidefieldTask):
 
         if upload_plots:
             output_plots = []
-            if self.wf.data_path.joinpath('hemodynamic_correction.pdf').exists():
-                output_plots.append(self.wf.data_path.joinpath('hemodynamic_correction.pdf'))
-            if self.wf.data_path.joinpath('motion_correction.pdf').exists():
-                output_plots.append(self.wf.data_path.joinpath('motion_correction.pdf'))
+            if self.wf.data_path.joinpath('hemodynamic_correction.png').exists():
+                output_plots.append(self.wf.data_path.joinpath('hemodynamic_correction.png'))
+            if self.wf.data_path.joinpath('motion_correction.png').exists():
+                output_plots.append(self.wf.data_path.joinpath('motion_correction.png'))
 
             if len(output_plots) > 0:
                 eid = self.one.path2eid(self.session_path)
