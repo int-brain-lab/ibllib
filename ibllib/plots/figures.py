@@ -74,17 +74,16 @@ class BehaviourPlots(ReportSnapshot):
     Behavioural plots
     """
 
-    signature = {'input_files': [('*trials.contrastLeft.npy', 'alf', True),
-                                 ('*trials.contrastRight.npy', 'alf', True),
-                                 ('*trials.feedbackType.npy', 'alf', True),
-                                 ('*trials.probabilityLeft.npy', 'alf', True),
-                                 ('*trials.choice.npy', 'alf', True),
-                                 ('*trials.response_times.npy', 'alf', True),
-                                 ('*trials.stimOn_times.npy', 'alf', True)],
-                 'output_files': [('psychometric_curve.png', 'snapshot/behaviour', True),
-                                  ('chronometric_curve.png', 'snapshot/behaviour', True),
-                                  ('reaction_time_with_trials.png', 'snapshot/behaviour', True)]
-                 }
+    signature = {
+        'input_files': [
+            ('*trials.table.pqt', 'alf', True),
+        ],
+        'output_files': [
+            ('psychometric_curve.png', 'snapshot/behaviour', True),
+            ('chronometric_curve.png', 'snapshot/behaviour', True),
+            ('reaction_time_with_trials.png', 'snapshot/behaviour', True)
+        ]
+    }
 
     def __init__(self, eid, session_path=None, one=None, **kwargs):
         self.one = one

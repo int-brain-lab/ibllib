@@ -49,16 +49,16 @@ class BaseExtractor(abc.ABC):
         # Chack if self.save_namesis of the same length of out
         if not path_out:
             path_out = self.session_path.joinpath(self.default_path)
-        path_out.mkdir(exist_ok=True, parents=True)
 
         def _write_to_disk(file_path, data):
             """Implements different save calls depending on file extension"""
             csv_separators = {
                 ".csv": ",",
                 ".ssv": " ",
-                ".tsv": "\t",
+                ".tsv": "\t"
             }
             file_path = Path(file_path)
+            file_path.parent.mkdir(exist_ok=True, parents=True)
             if file_path.suffix == ".npy":
                 np.save(file_path, data)
             elif file_path.suffix in [".parquet", ".pqt"]:
@@ -66,7 +66,7 @@ class BaseExtractor(abc.ABC):
                     _logger.error("Data is not a panda's DataFrame object")
                     raise TypeError("Data is not a panda's DataFrame object")
                 data.to_parquet(file_path)
-            elif file_path.suffix in [".csv", ".ssv", ".tsv"]:
+            elif file_path.suffix in csv_separators:
                 sep = csv_separators[file_path.suffix]
                 data.to_csv(file_path, sep=sep)
                 # np.savetxt(file_path, data, delimiter=sep)
@@ -107,7 +107,7 @@ class BaseBpodTrialsExtractor(BaseExtractor):
     bpod_trials = None
     settings = None
 
-    def extract(self, bpod_trials=None, settings=None, **kwargs):
+    def extract(self, task_collection='raw_behavior_data', bpod_trials=None, settings=None, **kwargs):
         """
         :param: bpod_trials (optional) bpod trials from jsonable in a dictionary
         :param: settings (optional) bpod iblrig settings json file in a dictionary
@@ -119,9 +119,9 @@ class BaseBpodTrialsExtractor(BaseExtractor):
         self.bpod_trials = bpod_trials
         self.settings = settings
         if self.bpod_trials is None:
-            self.bpod_trials = raw.load_data(self.session_path)
+            self.bpod_trials = raw.load_data(self.session_path, task_collection=task_collection)
         if not self.settings:
-            self.settings = raw.load_settings(self.session_path)
+            self.settings = raw.load_settings(self.session_path, task_collection=task_collection)
         if self.settings is None:
             self.settings = {"IBLRIG_VERSION_TAG": "100.0.0"}
         elif self.settings["IBLRIG_VERSION_TAG"] == "":
@@ -248,5 +248,7 @@ def _get_pipeline_from_task_type(stype):
         return 'ephys'
     elif stype in ['habituation', 'training', 'biased', 'biased_opto']:
         return 'training'
+    elif 'widefield' in stype:
+        return 'widefield'
     else:
         return stype

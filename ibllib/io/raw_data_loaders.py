@@ -67,17 +67,18 @@ def trial_times_to_times(raw_trial):
     return raw_trial
 
 
-def load_bpod(session_path):
+def load_bpod(session_path, task_collection='raw_behavior_data'):
     """
     Load both settings and data from bpod (.json and .jsonable)
 
     :param session_path: Absolute path of session folder
+    :param task_collection: Collection within sesison path with behavior data
     :return: dict settings and list of dicts data
     """
-    return load_settings(session_path), load_data(session_path)
+    return load_settings(session_path, task_collection), load_data(session_path, task_collection)
 
 
-def load_data(session_path: Union[str, Path], time='absolute'):
+def load_data(session_path: Union[str, Path], task_collection='raw_behavior_data', time='absolute'):
     """
     Load PyBpod data files (.jsonable).
 
@@ -92,7 +93,7 @@ def load_data(session_path: Union[str, Path], time='absolute'):
     if session_path is None:
         _logger.warning("No data loaded: session_path is None")
         return
-    path = Path(session_path).joinpath("raw_behavior_data")
+    path = Path(session_path).joinpath(task_collection)
     path = next(path.glob("_iblrig_taskData.raw*.jsonable"), None)
     if not path:
         _logger.warning("No data loaded: could not find raw data file")
@@ -300,7 +301,7 @@ def load_camera_gpio(session_path, label: str, as_dicts=False):
     return gpio
 
 
-def load_settings(session_path: Union[str, Path]):
+def load_settings(session_path: Union[str, Path], task_collection='raw_behavior_data'):
     """
     Load PyBpod Settings files (.json).
 
@@ -314,7 +315,7 @@ def load_settings(session_path: Union[str, Path]):
     if session_path is None:
         _logger.warning("No data loaded: session_path is None")
         return
-    path = Path(session_path).joinpath("raw_behavior_data")
+    path = Path(session_path).joinpath(task_collection)
     path = next(path.glob("_iblrig_taskSettings.raw*.json"), None)
     if not path:
         _logger.warning("No data loaded: could not find raw settings file")
@@ -326,8 +327,8 @@ def load_settings(session_path: Union[str, Path]):
     return settings
 
 
-def load_stim_position_screen(session_path):
-    path = Path(session_path).joinpath("raw_behavior_data")
+def load_stim_position_screen(session_path, task_collection='raw_behavior_data'):
+    path = Path(session_path).joinpath(task_collection)
     path = next(path.glob("_iblrig_stimPositionScreen.raw*.csv"), None)
 
     data = pd.read_csv(path, sep=',', header=None, on_bad_lines='skip')
@@ -336,7 +337,7 @@ def load_stim_position_screen(session_path):
     return data
 
 
-def load_encoder_events(session_path, settings=False):
+def load_encoder_events(session_path, task_collection='raw_behavior_data', settings=False):
     """
     Load Rotary Encoder (RE) events raw data file.
 
@@ -361,7 +362,7 @@ def load_encoder_events(session_path, settings=False):
     """
     if session_path is None:
         return
-    path = Path(session_path).joinpath("raw_behavior_data")
+    path = Path(session_path).joinpath(task_collection)
     path = next(path.glob("_iblrig_encoderEvents.raw*.ssv"), None)
     if not settings:
         settings = load_settings(session_path)
@@ -436,7 +437,7 @@ def _load_encoder_events_file_ge5(file_path):
     return _groom_wheel_data_ge5(data, label='_iblrig_encoderEvents.raw.ssv', path=file_path)
 
 
-def load_encoder_positions(session_path, settings=False):
+def load_encoder_positions(session_path, task_collection='raw_behavior_data', settings=False):
     """
     Load Rotary Encoder (RE) positions from raw data file within a session path.
 
@@ -465,7 +466,7 @@ def load_encoder_positions(session_path, settings=False):
     """
     if session_path is None:
         return
-    path = Path(session_path).joinpath("raw_behavior_data")
+    path = Path(session_path).joinpath(task_collection)
     path = next(path.glob("_iblrig_encoderPositions.raw*.ssv"), None)
     if not settings:
         settings = load_settings(session_path)
@@ -485,7 +486,7 @@ def load_encoder_positions(session_path, settings=False):
         return _load_encoder_positions_file_lt5(path)
 
 
-def load_encoder_trial_info(session_path):
+def load_encoder_trial_info(session_path, task_collection='raw_behavior_data'):
     """
     Load Rotary Encoder trial info from raw data file.
 
@@ -516,7 +517,7 @@ def load_encoder_trial_info(session_path):
     """
     if session_path is None:
         return
-    path = Path(session_path).joinpath("raw_behavior_data")
+    path = Path(session_path).joinpath(task_collection)
     path = next(path.glob("_iblrig_encoderTrialInfo.raw*.ssv"), None)
     if not path:
         return None
@@ -528,7 +529,7 @@ def load_encoder_trial_info(session_path):
     return data
 
 
-def load_ambient_sensor(session_path):
+def load_ambient_sensor(session_path, task_collection='raw_behavior_data'):
     """
     Load Ambient Sensor data from session.
 
@@ -546,7 +547,7 @@ def load_ambient_sensor(session_path):
     """
     if session_path is None:
         return
-    path = Path(session_path).joinpath("raw_behavior_data")
+    path = Path(session_path).joinpath(task_collection)
     path = next(path.glob("_iblrig_ambientSensorData.raw*.jsonable"), None)
     if not path:
         return None
@@ -557,7 +558,7 @@ def load_ambient_sensor(session_path):
     return data
 
 
-def load_mic(session_path):
+def load_mic(session_path, task_collection='raw_behavior_data'):
     """
     Load Microphone wav file to np.array of len nSamples
 
@@ -568,7 +569,7 @@ def load_mic(session_path):
     """
     if session_path is None:
         return
-    path = Path(session_path).joinpath("raw_behavior_data")
+    path = Path(session_path).joinpath(task_collection)
     path = next(path.glob("_iblrig_micData.raw*.wav"), None)
     if not path:
         return None
@@ -714,7 +715,7 @@ def sync_trials_robust(t0, t1, diff_threshold=0.001, drift_threshold_ppm=200, ma
         return t0[ind0], t1[ind1]
 
 
-def load_bpod_fronts(session_path: str, data: list = False) -> list:
+def load_bpod_fronts(session_path: str, data: list = False, task_collection: str = 'raw_behavior_data') -> list:
     """load_bpod_fronts
     Loads BNC1 and BNC2 bpod channels times and polarities from session_path
 
@@ -726,7 +727,7 @@ def load_bpod_fronts(session_path: str, data: list = False) -> list:
     :rtype: list
     """
     if not data:
-        data = load_data(session_path)
+        data = load_data(session_path, task_collection)
 
     BNC1_fronts = np.array([[np.nan, np.nan]])
     BNC2_fronts = np.array([[np.nan, np.nan]])
@@ -804,3 +805,31 @@ def get_port_events(trial: dict, name: str = '') -> list:
     out = sorted(out)
 
     return out
+
+
+def load_widefield_mmap(session_path, dtype=np.uint16, shape=(540, 640), n_frames=None, mode='r'):
+    """
+    TODO Document this function
+
+    Parameters
+    ----------
+    session_path
+
+    Returns
+    -------
+
+    """
+    filepath = Path(session_path).joinpath('raw_widefield_data').glob('widefield.raw.*.dat')
+    filepath = next(filepath, None)
+    if not filepath:
+        _logger.warning("No data loaded: could not find raw data file")
+        return None
+
+    if type(dtype) is str:
+        dtype = np.dtype(dtype)
+
+    if n_frames is None:
+        # Get the number of samples from the file size
+        n_frames = int(filepath.stat().st_size / (np.prod(shape) * dtype.itemsize))
+
+    return np.memmap(str(filepath), mode=mode, dtype=dtype, shape=(int(n_frames), *shape))

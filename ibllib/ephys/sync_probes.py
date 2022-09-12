@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.interpolate import interp1d
 import one.alf.io as alfio
+import one.alf.exceptions
 from iblutil.util import Bunch
 import spikeglx
 
@@ -112,7 +113,7 @@ def version3A(ses_path, display=True, type='smooth', tol=2.1):
     return qc_all, out_files
 
 
-def version3B(ses_path, display=True, type=None, tol=2.5):
+def version3B(ses_path, display=True, type=None, tol=2.5, probe_names=None):
     """
     From a session path with _spikeglx_sync arrays extraccted, locate ephys files for 3A and
      outputs one sync.timestamps.probeN.npy file per acquired probe. By convention the reference
@@ -120,13 +121,19 @@ def version3B(ses_path, display=True, type=None, tol=2.5):
      Assumes the _spikeglx_sync datasets are already extracted from binary data
     :param ses_path:
     :param type: linear, exact or smooth
+    :param probe_names: by default will rglob all probes in the directory. If specified, this will filter
+     the probes on which to perform the synchronisation, defaults to None, optional
     :return: None
     """
     DEFAULT_TYPE = 'smooth'
     ephys_files = spikeglx.glob_ephys_files(ses_path, ext='meta', bin_exists=False)
     for ef in ephys_files:
-        ef['sync'] = alfio.load_object(ef.path, 'sync', namespace='spikeglx', short_keys=True)
-        ef['sync_map'] = get_ibl_sync_map(ef, '3B')
+        try:
+            ef['sync'] = alfio.load_object(ef.path, 'sync', namespace='spikeglx', short_keys=True)
+            ef['sync_map'] = get_ibl_sync_map(ef, '3B')
+        except one.alf.exceptions.ALFObjectNotFound as e:
+            if probe_names is None or ef.path.parts[-1] in probe_names:
+                raise e
     nidq_file = [ef for ef in ephys_files if ef.get('nidq')]
     ephys_files = [ef for ef in ephys_files if not ef.get('nidq')]
     # should have at least 2 probes and only one nidq

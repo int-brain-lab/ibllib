@@ -216,10 +216,12 @@ class SpikeSorting(tasks.Task):
     Pykilosort 2.5 pipeline
     """
     gpu = 1
-    io_charge = 70  # this jobs reads raw ap files
+    io_charge = 100  # this jobs reads raw ap files
     priority = 60
     level = 1  # this job doesn't depend on anything
     force = True
+    job_size = 'large'
+
     SHELL_SCRIPT = Path.home().joinpath(
         "Documents/PYTHON/iblscripts/deploy/serverpc/kilosort2/run_pykilosort.sh"
     )
@@ -440,7 +442,7 @@ class SpikeSorting(tasks.Task):
                             out = get_aligned_channels(ins[0], chns, one=self.one, save_dir=probe_out_path)
                             out_files.extend(out)
 
-            except BaseException:
+            except Exception:
                 _logger.error(traceback.format_exc())
                 self.status = -1
                 continue
@@ -492,6 +494,9 @@ class EphysVideoCompress(tasks.Task):
     priority = 90
     level = 0
     force = False
+    job_size = 'large'
+    io_charge = 100
+
     signature = {
         'input_files': [('_iblrig_*Camera.raw.*', 'raw_video_data', True)],
         'output_files': [('_iblrig_*Camera.raw.mp4', 'raw_video_data', True)]
@@ -619,22 +624,11 @@ class EphysTrials(tasks.Task):
                         ('_iblrig_encoderPositions.raw*', 'raw_behavior_data', True),
                         ('*wiring.json', 'raw_ephys_data*', False),
                         ('*.meta', 'raw_ephys_data*', True)],
-        'output_files': [('*trials.choice.npy', 'alf', True),
-                         ('*trials.contrastLeft.npy', 'alf', True),
-                         ('*trials.contrastRight.npy', 'alf', True),
-                         ('*trials.feedbackType.npy', 'alf', True),
-                         ('*trials.feedback_times.npy', 'alf', True),
-                         ('*trials.firstMovement_times.npy', 'alf', True),
+        'output_files': [('*trials.table.pqt', 'alf', True),
                          ('*trials.goCueTrigger_times.npy', 'alf', True),
-                         ('*trials.goCue_times.npy', 'alf', True),
-                         ('*trials.intervals.npy', 'alf', True),
                          ('*trials.intervals_bpod.npy', 'alf', True),
                          ('*trials.itiDuration.npy', 'alf', False),
-                         ('*trials.probabilityLeft.npy', 'alf', True),
-                         ('*trials.response_times.npy', 'alf', True),
-                         ('*trials.rewardVolume.npy', 'alf', True),
                          ('*trials.stimOff_times.npy', 'alf', True),
-                         ('*trials.stimOn_times.npy', 'alf', True),
                          ('*wheel.position.npy', 'alf', True),
                          ('*wheel.timestamps.npy', 'alf', True),
                          ('*wheelMoves.intervals.npy', 'alf', True),
@@ -657,8 +651,13 @@ class EphysTrials(tasks.Task):
             "sessions", eid, "extended_qc", {"behavior": int(good_enough)}
         )
 
-    def _run(self, plot_qc=True):
+    def _extract_behaviour(self):
         dsets, out_files = ephys_fpga.extract_all(self.session_path, save=True)
+
+        return dsets, out_files
+
+    def _run(self, plot_qc=True):
+        dsets, out_files = self._extract_behaviour()
 
         if not self.one or self.one.offline:
             return out_files
@@ -680,8 +679,7 @@ class EphysTrials(tasks.Task):
                 plot_task = BehaviourPlots(session_id, self.session_path, one=self.one)
                 _ = plot_task.run()
                 self.plot_tasks.append(plot_task)
-
-            except BaseException:
+            except Exception:
                 _logger.error('Could not create Trials QC Plot')
                 _logger.error(traceback.format_exc())
                 self.status = -1
@@ -910,9 +908,10 @@ class EphysDLC(tasks.Task):
     """
     gpu = 1
     cpu = 4
-    io_charge = 90
+    io_charge = 100
     level = 2
     force = True
+    job_size = 'large'
 
     dlcenv = Path.home().joinpath('Documents', 'PYTHON', 'envs', 'dlcenv', 'bin', 'activate')
     scripts = Path.home().joinpath('Documents', 'PYTHON', 'iblscripts', 'deploy', 'serverpc', 'dlc')

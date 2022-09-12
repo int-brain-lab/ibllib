@@ -7,23 +7,25 @@ import scipy
 import neurodsp as dsp
 
 
-def wiggle(w, fs=1, gain=0.71, color='k', ax=None, fill=True, linewidth=0.5, t0=0, clip=2,
+def wiggle(w, fs=1, gain=0.71, color='k', ax=None, fill=True, linewidth=0.5, t0=0, clip=2, sf=None,
            **kwargs):
     """
     Matplotlib display of wiggle traces
 
     :param w: 2D array (numpy array dimension nsamples, ntraces)
     :param fs: sampling frequency
-    :param gain: display gain
+    :param gain: display gain ; Note that if sf is given, gain is not used
     :param color: ('k') color of traces
     :param ax: (None) matplotlib axes object
     :param fill: (True) fill variable area above 0
     :param t0: (0) timestamp of the first sample
+    :param sf: scaling factor ; if None, uses the gain / SQRT of waveform RMS
     :return: None
     """
     nech, ntr = w.shape
     tscale = np.arange(nech) / fs
-    sf = gain / np.sqrt(dsp.utils.rms(w.flatten()))
+    if sf is None:
+        sf = gain / np.sqrt(dsp.utils.rms(w.flatten()))
 
     def insert_zeros(trace):
         # Insert zero locations in data trace and tt vector based on linear fit

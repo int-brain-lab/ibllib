@@ -12,7 +12,10 @@ import matplotlib.pyplot as plt
 from iblutil.numerical import ismember
 from iblutil.util import Bunch
 from iblutil.io.hashfile import md5
-from ibllib.atlas.atlas import AllenAtlas, S3_BUCKET_IBL, BrainRegions, s3_download_public
+import one.remote.aws as aws
+
+from ibllib.atlas.atlas import AllenAtlas, BrainRegions
+
 
 _logger = logging.getLogger(__file__)
 
@@ -123,8 +126,8 @@ def swanson(filename="swanson2allen.npz"):
     npz_file = AllenAtlas._get_cache_dir().joinpath(filename)
     if not npz_file.exists() or md5(npz_file) in OLD_MD5:
         npz_file.parent.mkdir(exist_ok=True, parents=True)
-        _logger.info(f'downloading swanson image from {S3_BUCKET_IBL} s3 bucket...')
-        s3_download_public(S3_BUCKET_IBL, f'atlas/{npz_file.name}', str(npz_file))
+        _logger.info(f'downloading swanson image from {aws.S3_BUCKET_IBL} s3 bucket...')
+        aws.s3_download_file(f'atlas/{npz_file.name}', npz_file)
     s2a = np.load(npz_file)['swanson2allen']  # inds contains regions ids
     return s2a
 
