@@ -31,24 +31,40 @@ _logger = logging.getLogger(__name__)
 DAQ_CHMAP = {"photometry": 'AI0', 'bpod': 'AI1'}
 V_THRESHOLD = 3
 
-"""Available LEDs on the Neurophotometrics FP3002"""
+"""
+Neurophotometrics FP3002 specific information.
+The light source map refers to the available LEDs on the system.
+The flags refers to the byte encoding of led states in the system.
+"""
 LIGHT_SOURCE_MAP = {
-    0: 'None',
-    415: 'Violet',
-    470: 'Blue',
-    560: 'Green'
+    'color': ['None', 'Violet', 'Blue', 'Green'],
+    'wavelength': [0, 415, 470, 560],
+    'name': ['None', 'Isosbestic', 'GCaMP', 'RCaMP'],
+}
+
+NEUROPHOTOMETRICS_LED_STATES = {
+    'Condition': {
+        0: 'No additional signal',
+        1: 'Output 0 signal HIGH + Stimulation',
+        2: 'Output 0 signal HIGH + Input 0 signal HIGH',
+        3: 'Input 0 signal HIGH + Stimulation',
+        4: 'Output 0 HIGH + Input 0 HIGH + Stimulation'
+    },
+    'No LED ON': {0: 0, 1: 48, 2: 528, 3: 544, 4: 560},
+    'L415': {0: 1, 1: 49, 2: 529, 3: 545, 4: 561},
+    'L470': {0: 2, 1: 50, 2: 530, 3: 546, 4: 562},
+    'L560': {0: 4, 1: 52, 2: 532, 3: 548, 4: 564}
 }
 
 
-def sync_photometry_to_daq(daq_file, photometry_file, chmap=DAQ_CHMAP, v_threshold=V_THRESHOLD):
+def sync_photometry_to_daq(daq_file, df_photometry, chmap=DAQ_CHMAP, v_threshold=V_THRESHOLD):
     """
     :param daq_file: tdms file
-    :param photometry_file:
+    :param df_photometry:
     :param chmap:
     :param v_threshold:
     :return:
     """
-    df_photometry = pd.read_csv(photometry_file)
     daq_frames, tag_daq_frames, fs, vdaq = read_daq_timestamps(daq_file, chmap=chmap, v_threshold=v_threshold)
     nf = np.minimum(tag_daq_frames.size, df_photometry['Input0'].size)
     ipeak = np.argmax(np.correlate(tag_daq_frames[:nf].astype(np.int8), df_photometry['Input0'].values[:nf], mode='full'))
@@ -56,7 +72,7 @@ def sync_photometry_to_daq(daq_file, photometry_file, chmap=DAQ_CHMAP, v_thresho
     frame_shift = ipeak - nf + 1
 
     df = np.median(np.diff(df_photometry['Timestamp']))
-    interp = scipy.interpolate.interp1d(daq_frames[:nf] / fs, df_photometry['Timestamp'][:nf])
+    fcn_fp2daq = scipy.interpolate.interp1d(df_photometry['Timestamp'][:nf], daq_frames[:nf] / fs)
     drift_ppm = (np.polyfit(daq_frames[:nf] / fs, df_photometry['Timestamp'][:nf], 1)[0] - 1) * 1e6
     _logger.info(f"drift PPM: {drift_ppm}")
 
@@ -65,7 +81,10 @@ def sync_photometry_to_daq(daq_file, photometry_file, chmap=DAQ_CHMAP, v_thresho
     assert np.unique(np.diff(df_photometry['FrameCounter'])).size == 1  # checks that there are no missed frames on photo
     assert frame_shift == 0  # it's always the end frames that are missing
     assert drift_ppm < 20
-    return interp, drift_ppm
+
+    ts_daq = fcn_fp2daq(df_photometry['Timestamp'].values)  # those are the timestamps in daq time
+
+    return ts_daq, fcn_fp2daq, drift_ppm
 
 
 def read_daq_timestamps(daq_file, chmap=DAQ_CHMAP, v_threshold=V_THRESHOLD):
@@ -103,12 +122,15 @@ def check_timestamps(daq_file, photometry_file, tolerance=20, chmap=DAQ_CHMAP, v
 
 
 class FibrePhotometry(BaseExtractor):
-    save_names = ('photometry.signal.npy', 'photometry.photometryLightSource.npy',
-                  'photometryLightSource.properties.tsv', 'photometry.times.npy')
-    var_names = ('signal', 'lightSource', 'lightSource_properties', 'timestamps')
+    """
+        FibrePhotometry(self.session_path, collection=self.collection)
+    """
+    save_names = ('photometry.signal.pqt')
+    var_names = ('df_out')
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, collection='raw_photometry_data', **kwargs):
         """An extractor for all Neurophotometrics fibrephotometry data"""
+        self.collection = collection
         super().__init__(*args, **kwargs)
 
     @staticmethod
@@ -127,18 +149,22 @@ class FibrePhotometry(BaseExtractor):
             A sorted table of wavelength and colour name.
         """
         light_source_map = light_source_map or LIGHT_SOURCE_MAP
-        names = ('wavelength', 'color')
-        meta = pd.DataFrame(sorted(light_source_map.items()), columns=names)
+        meta = pd.DataFrame.from_dict(light_source_map)
         meta.index.rename('channel_id', inplace=True)
         return meta
 
-    def _extract(self, light_source_map=None, **kwargs):
+    def _extract(self, light_source_map=None, collection=None, regions=None, **kwargs):
         """
 
         Parameters
         ----------
+        regions: list of str
+            The list of regions to extract. If None extracts all columns containing "Region". Defaults to None.
         light_source_map : dict
             An optional map of light source wavelengths (nm) used and their corresponding colour name.
+        collection: str / pathlib.Path
+            An optional relative path from the session root folder to find the raw photometry data.
+            Defaults to `raw_photometry_data`
 
         Returns
         -------
@@ -147,31 +173,38 @@ class FibrePhotometry(BaseExtractor):
         numpy.ndarray
             A 1D array of ints corresponding to the active light source during a given frame.
         pandas.DataFrame
-            A table of light source IDs, their wavelength in nm and corresponding colour name.
+            A table of intensity for each region, with associated times, wavelengths, names and colors
         """
-        fp_data = alfio.load_object(self.session_path / 'raw_photometry_data', 'fpData')
-        ts = self.extract_timestamps(fp_data, **kwargs)
+        collection = collection or self.collection
+        fp_data = alfio.load_object(self.session_path / collection, 'fpData')
+        ts = self.extract_timestamps(fp_data['raw'], **kwargs)
 
         # Load channels and
         channel_meta_map = self._channel_meta(kwargs.get('light_source_map'))
-        channel_map = fp_data['channels'].set_index('Condition')
+        led_states = fp_data.get('channels', pd.DataFrame(NEUROPHOTOMETRICS_LED_STATES))
+        led_states = led_states.set_index('Condition')
         # Extract signal columns into 2D array
-        signal = fp_data['raw'].filter(like='Region', axis=1).sort_index(axis=1).values
+        fp_data['raw'].keys()
+        regions = regions or [k for k in fp_data['raw'].keys() if 'Region' in k]
+        out_df = fp_data['raw'].filter(items=regions, axis=1).sort_index(axis=1)
+        out_df['times'] = ts
+        out_df['wavelength'] = np.NaN
+        out_df['name'] = ''
+        out_df['color'] = ''
         # Extract channel index
-        state = fp_data['raw'].get('LedState', fp_data['raw'].get('Flags', None))
-        channel_id = np.empty_like(state)
-        for (label, ch), (id, wavelength) in zip(channel_map.items(), channel_meta_map['wavelength'].items()):
-            mask = state.isin(ch)
-            channel_id[mask] = id
-            if wavelength != 0:
-                assert str(wavelength) in label
-
-        return signal, channel_id, channel_meta_map, ts
+        states = fp_data['raw'].get('LedState', fp_data['raw'].get('Flags', None))
+        for state in states.unique():
+            ir, ic = np.where(led_states == state)
+            if ic.size == 0:
+                continue
+            for cn in ['name', 'color', 'wavelength']:
+                out_df.loc[states == state, cn] = channel_meta_map.iloc[ic[0]][cn]
+        return out_df
 
     def extract_timestamps(self, fp_data, **kwargs):
         """Extract the photometry.timestamps array.
 
-        This is dependant on the DAQ and task synchronization protocol.
+        This depends on the DAQ and task synchronization protocol.
 
         Parameters
         ----------
@@ -183,4 +216,6 @@ class FibrePhotometry(BaseExtractor):
         numpy.ndarray
             An array of timestamps, one per frame.
         """
-        raise NotImplementedError  # To subclass
+        daq_file = next(self.session_path.joinpath(self.collection).glob('*.tdms'))
+        ts, fcn_daq2_, drift_ppm = sync_photometry_to_daq(daq_file, fp_data, chmap=DAQ_CHMAP, v_threshold=V_THRESHOLD)
+        return ts

@@ -11,7 +11,7 @@ from ibllib.io.extractors.fibrephotometry import FibrePhotometry
 _logger = logging.getLogger('ibllib')
 
 
-class FibrePhotometryRegisterRaw(base_tasks.RegisterRawDataTask):
+class TaskFibrePhotometryRegisterRaw(base_tasks.RegisterRawDataTask):
 
     priority = 100
     job_size = 'small'
@@ -26,24 +26,29 @@ class FibrePhotometryRegisterRaw(base_tasks.RegisterRawDataTask):
         return signature
 
 
-class FibrePhotometryPreprocess(tasks.Task):
+class TaskFibrePhotometryPreprocess(base_tasks.DynamicTask):
     signature = {
         'input_files': [('*fpData.raw*', 'raw_photometry_data', True), ],
-        'output_files': [('photometry.signal.npy', 'alf', True),
-                         ('photometry.photometryLightSource.npy', 'alf', True),
-                         ('photometryLightSource.properties.tsv', 'alf', True),
-                         ('photometry.times.npy', 'alf', True), ]
+        'output_files': [('photometry.signal.pqt]', 'alf', True), ]
     }
     priority = 90
     level = 1
 
+    def __init__(self, session_path, regions=None, **kwargs):
+        super().__init__(session_path, **kwargs)
+        self.regions = regions
+
     def _run(self, **kwargs):
-        _, out_files = FibrePhotometry(self.session_path).extract(save=True)
+        _, out_files = FibrePhotometry(self.session_path, collection=self.collection).extract(
+            regions=self.regions, save=True)
         return out_files
 
 
 # pipeline
 class FibrePhotometryExtractionPipeline(tasks.Pipeline):
+    """
+    This is a legacy pipeline not using the acquisition description file to acquire previous sessions at Princeton
+    """
     label = __name__
 
     def __init__(self, session_path=None, **kwargs):
@@ -57,7 +62,7 @@ class FibrePhotometryExtractionPipeline(tasks.Pipeline):
         tasks['TrainingVideoCompress'] = TrainingVideoCompress(self.session_path)
         tasks['TrainingAudio'] = TrainingAudio(self.session_path)
         # level 1
-        tasks['BiasedFibrePhotometry'] = FibrePhotometryPreprocess(self.session_path, parents=[tasks['TrainingTrials']])
+        tasks['BiasedFibrePhotometry'] = TaskFibrePhotometryPreprocess(self.session_path, parents=[tasks['TrainingTrials']])
         tasks['TrainingStatus'] = TrainingStatus(self.session_path, parents=[tasks['TrainingTrials']])
         tasks['TrainingDLC'] = TrainingDLC(
             self.session_path, parents=[tasks['TrainingVideoCompress']])
