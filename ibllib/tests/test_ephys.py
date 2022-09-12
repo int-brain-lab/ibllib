@@ -125,6 +125,8 @@ class TestFpgaTask(unittest.TestCase):
 
 
 class TestEphysQC(unittest.TestCase):
+    tempdir = None
+
     @classmethod
     def setUpClass(cls) -> None:
         cls.tempdir = TemporaryDirectory()
@@ -134,7 +136,8 @@ class TestEphysQC(unittest.TestCase):
     def tearDownClass(cls) -> None:
         # Clear overwritten methods by destroying cached instance
         ONE.cache_clear()
-        cls.tempdir.cleanup()
+        if cls.tempdir:
+            cls.tempdir.cleanup()
 
     def setUp(self) -> None:
 

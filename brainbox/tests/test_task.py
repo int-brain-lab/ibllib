@@ -108,7 +108,7 @@ class TestTask(unittest.TestCase):
         c = np.zeros(9)
         np.random.seed(456)
         for m in np.arange(10):
-            pseudo_trials = task.generate_pseudo_session(test_trials, generate_choices=False, contrast_distribution='biased')
+            pseudo_trials = task.generate_pseudo_session(test_trials, generate_choices=False, contrast_distribution='non-uniform')
             c += pseudo_trials.groupby("signed_contrast")['signed_contrast'].count().values / pseudo_trials.shape[0]
         self.assertTrue(np.all(np.round(c * 2) / 2 == 1))
         c = np.zeros(9)

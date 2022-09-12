@@ -1,3 +1,6 @@
+## Release Notes 2.15
+- session registration procedures and projects, only add a couple of fields in the json by default
+
 ## Release Notes 2.14
 ### Release Notes 2.14.0 2022-08-17
 - Adding brainbox.io.one.SessionLoader for standardized loading of session data
@@ -15,7 +18,7 @@
 - Hotfix: pseudo session biased generation contrast distribution
 
 ### Release Notes 2.13.4 2022-07-22
-- Hotfix: Density displays had unexisting colormaps in snapshots QC tasks
+- Hotfix: Density displays had non-existing colormaps in snapshots QC tasks
 - Generate extra training plots based on psychometric curves
 
 ### Release Notes 2.13.3 2022-07-01

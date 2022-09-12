@@ -748,6 +748,7 @@ def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0.2, ret_whe
         have a monotonic index. Has special columns trial_start and trial_end which define start
         and end times via t_before and t_after
     """
+    _logger.warning('brainbox.one.load_trials_df is deprecated, use one.load_object([...]).to_df() instead')
     if not one:
         one = ONE()
 

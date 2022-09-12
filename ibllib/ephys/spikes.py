@@ -13,12 +13,11 @@ import phylib.io.alf
 from ibllib.ephys.sync_probes import apply_sync
 import ibllib.ephys.ephysqc as ephysqc
 from ibllib.ephys import sync_probes
-from ibllib.io import raw_data_loaders
 
 _logger = logging.getLogger(__name__)
 
 
-def probes_description(ses_path, one=None, bin_exists=True):
+def probes_description(ses_path, one):
     """
     Aggregate probes information into ALF files
     Register alyx probe insertions and Micro-manipulator trajectories
@@ -26,36 +25,59 @@ def probes_description(ses_path, one=None, bin_exists=True):
         raw_ephys_data/probeXX/
     Output:
         alf/probes.description.npy
-        alf/probes.trajectory.npy
     """
 
     eid = one.path2eid(ses_path, query_type='remote')
     ses_path = Path(ses_path)
-    ephys_files = spikeglx.glob_ephys_files(ses_path, ext='meta')
-    subdirs, labels, efiles_sorted = zip(
-        *sorted([(ep.ap.parent, ep.label, ep) for ep in ephys_files if ep.get('ap')]))
+    meta_files = spikeglx.glob_ephys_files(ses_path, ext='meta')
+    ap_meta_files = [(ep.ap.parent, ep.label, ep) for ep in meta_files if ep.get('ap')]
+    # If we don't detect any meta files exit function
+    if len(ap_meta_files) == 0:
+        return
+
+    subdirs, labels, efiles_sorted = zip(*sorted(ap_meta_files))
+
+    def _create_insertion(md, label, eid):
+
+        # create json description
+        description = {'label': label, 'model': md.neuropixelVersion, 'serial': int(md.serial), 'raw_file_name': md.fileName}
+
+        # create or update probe insertion on alyx
+        alyx_insertion = {'session': eid, 'model': md.neuropixelVersion, 'serial': md.serial, 'name': label}
+        pi = one.alyx.rest('insertions', 'list', session=eid, name=label)
+        if len(pi) == 0:
+            qc_dict = {'qc': 'NOT_SET', 'extended_qc': {}}
+            alyx_insertion.update({'json': qc_dict})
+            insertion = one.alyx.rest('insertions', 'create', data=alyx_insertion)
+        else:
+            insertion = one.alyx.rest('insertions', 'partial_update', data=alyx_insertion, id=pi[0]['id'])
+
+        return description, insertion
 
     # Ouputs the probes description file
     probe_description = []
     alyx_insertions = []
     for label, ef in zip(labels, efiles_sorted):
         md = spikeglx.read_meta_data(ef.ap.with_suffix('.meta'))
-        probe_description.append({'label': label,
-                                  'model': md.neuropixelVersion,
-                                  'serial': int(md.serial),
-                                  'raw_file_name': md.fileName,
-                                  })
-        # create or update alyx probe insertions
-        alyx_insertion = {'session': eid, 'model': md.neuropixelVersion,
-                          'serial': md.serial, 'name': label}
-        pi = one.alyx.rest('insertions', 'list', session=eid, name=label)
-        if len(pi) == 0:
-            qc_dict = {'qc': 'NOT_SET', 'extended_qc': {}}
-            alyx_insertion.update({'json': qc_dict})
-            alyx_insertions.append(one.alyx.rest('insertions', 'create', data=alyx_insertion))
+        if md.neuropixelVersion == 'NP2.4':
+            # NP2.4 meta that hasn't been split
+            if md.get('NP2.4_shank', None) is None:
+                geometry = spikeglx.read_geometry(ef.ap.with_suffix('.meta'))
+                nshanks = np.unique(geometry['shank'])
+                for shank in nshanks:
+                    label_ext = f'{label}{chr(97 + int(shank))}'
+                    description, insertion = _create_insertion(md, label_ext, eid)
+                    probe_description.append(description)
+                    alyx_insertions.append(insertion)
+            # NP2.4 meta that has already been split
+            else:
+                description, insertion = _create_insertion(md, label, eid)
+                probe_description.append(description)
+                alyx_insertions.append(insertion)
         else:
-            alyx_insertions.append(
-                one.alyx.rest('insertions', 'partial_update', data=alyx_insertion, id=pi[0]['id']))
+            description, insertion = _create_insertion(md, label, eid)
+            probe_description.append(description)
+            alyx_insertions.append(insertion)
 
     alf_path = ses_path.joinpath('alf')
     alf_path.mkdir(exist_ok=True, parents=True)
@@ -63,46 +85,7 @@ def probes_description(ses_path, one=None, bin_exists=True):
     with open(probe_description_file, 'w+') as fid:
         fid.write(json.dumps(probe_description))
 
-    # Ouputs the probes trajectory file
-    bpod_meta = raw_data_loaders.load_settings(ses_path)
-    if not bpod_meta.get('PROBE_DATA'):
-        _logger.error('No probe information in settings JSON. Skipping probes.trajectory')
-        return []
-
-    def prb2alf(prb, label):
-        return {'label': label, 'x': prb['X'], 'y': prb['Y'], 'z': prb['Z'], 'phi': prb['A'],
-                'theta': prb['P'], 'depth': prb['D'], 'beta': prb['T']}
-
-    def prb2alyx(prb, probe_insertion):
-        return {'probe_insertion': probe_insertion, 'x': prb['X'], 'y': prb['Y'], 'z': prb['Z'],
-                'phi': prb['A'], 'theta': prb['P'], 'depth': prb['D'], 'roll': prb['T'],
-                'provenance': 'Micro-manipulator', 'coordinate_system': 'Needles-Allen'}
-
-    # the labels may not match, in which case throw a warning and work in alphabetical order
-    if labels != ('probe00', 'probe01'):
-        _logger.warning("Probe names do not match the json settings files. Will match coordinates"
-                        " per alphabetical order !")
-        _ = [_logger.warning(f"  probe0{i} ----------  {lab} ") for i, lab in enumerate(labels)]
-    trajs = []
-    keys = sorted(bpod_meta['PROBE_DATA'].keys())
-    for i, k in enumerate(keys):
-        if i >= len(labels):
-            break
-        pdict = bpod_meta['PROBE_DATA'][f'probe0{i}']
-        trajs.append(prb2alf(pdict, labels[i]))
-        pid = next((ai['id'] for ai in alyx_insertions if ai['name'] == k), None)
-        if pid:
-            # here we don't update the micro-manipulator coordinates if the trajectory already
-            # exists as it may have been entered manually through admin interface
-            trj = one.alyx.rest('trajectories', 'list', probe_insertion=pid,
-                                provenance='Micro-manipulator')
-            if len(trj) == 0:
-                one.alyx.rest('trajectories', 'create', data=prb2alyx(pdict, pid))
-
-    probe_trajectory_file = alf_path.joinpath('probes.trajectory.json')
-    with open(probe_trajectory_file, 'w+') as fid:
-        fid.write(json.dumps(trajs))
-    return [probe_trajectory_file, probe_description_file]
+    return [probe_description_file]
 
 
 def sync_spike_sorting(ap_file, out_path):

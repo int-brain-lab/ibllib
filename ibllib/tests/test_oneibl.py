@@ -140,11 +140,11 @@ class TestRegistrationEndpoint(unittest.TestCase):
             ('_iblrig_tasks_biasedScanningChoiceWorld5.2.3', 'Behavior training/tasks'),
             ('_iblrig_tasks_trainingChoiceWorld3.6.0', 'Behavior training/tasks'),
             ('_iblrig_tasks_ephysChoiceWorld5.1.3', 'Ephys recording with acute probe(s)'),
-            ('_iblrig_calibration_frame2TTL4.1.3', None),
+            ('_iblrig_calibration_frame2TTL4.1.3', []),
             ('_iblrig_tasks_habituationChoiceWorld3.6.0', 'Behavior training/tasks'),
-            ('_iblrig_tasks_scanningOptoChoiceWorld5.0.0', None),
-            ('_iblrig_tasks_RewardChoiceWorld4.1.3', None),
-            ('_iblrig_calibration_screen4.1.3', None),
+            ('_iblrig_tasks_scanningOptoChoiceWorld5.0.0', []),
+            ('_iblrig_tasks_RewardChoiceWorld4.1.3', []),
+            ('_iblrig_calibration_screen4.1.3', []),
             ('_iblrig_tasks_ephys_certification4.1.3', 'Ephys recording with acute probe(s)'),
         ]
         for to in task_out:

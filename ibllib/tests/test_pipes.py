@@ -1,11 +1,16 @@
+import json
+import logging
+import os
 import shutil
+import subprocess
 import tempfile
 import unittest
-from unittest import mock
 from pathlib import Path
-import json
+from unittest import mock
+from functools import partial
 
 from one.api import ONE
+import iblutil.io.params as iopar
 
 import ibllib.io.extractors.base
 import ibllib.tests.fixtures.utils as fu
@@ -274,11 +279,16 @@ class TestPipesMisc(unittest.TestCase):
     def test_create_alyx_probe_insertions(self):
         # Connect to test DB
         one = ONE(**TEST_DB)
-        # Use existing session on test database
-        eid = "b1c968ad-4874-468d-b2e4-5ffa9b9964e9"
+        # Create new session on database
+        from one.registration import RegistrationClient
+        _, eid = RegistrationClient(one).create_new_session('ZM_1150')
+        # Currently the task protocol of a session must contain 'ephys' in order to create an insertion!
+        one.alyx.rest('sessions', 'partial_update', id=eid, data={'task_protocol': 'ephys'})
+        self.addCleanup(one.alyx.rest, 'sessions', 'delete', id=eid)  # Delete after test
+
         # Force probe insertion 3A
         misc.create_alyx_probe_insertions(
-            eid, one=one, model="3A", labels=["probe00", "probe01"], force=True
+            str(eid), one=one, model="3A", labels=["probe00", "probe01"], force=True
         )
         # Verify it's been inserted
         alyx_insertion = one.alyx.rest("insertions", "list", session=eid, no_cache=True)
@@ -291,9 +301,9 @@ class TestPipesMisc(unittest.TestCase):
         one.alyx.rest("insertions", "delete", id=alyx_insertion[0]["id"])
         one.alyx.rest("insertions", "delete", id=alyx_insertion[1]["id"])
         # Force probe insertion 3B
-        misc.create_alyx_probe_insertions(eid, one=one, model="3B2", labels=["probe00", "probe01"])
+        misc.create_alyx_probe_insertions(str(eid), one=one, model="3B2", labels=["probe00", "probe01"])
         # Verify it's been inserted
-        alyx_insertion = one.alyx.rest("insertions", "list", session=eid, no_cache=True)
+        alyx_insertion = one.alyx.rest("insertions", "list", session=str(eid), no_cache=True)
         self.assertTrue(alyx_insertion[0]["model"] == "3B2")
         self.assertTrue(alyx_insertion[0]["name"] in ["probe00", "probe01"])
         self.assertTrue(alyx_insertion[1]["model"] == "3B2")
@@ -303,32 +313,39 @@ class TestPipesMisc(unittest.TestCase):
         one.alyx.rest("insertions", "delete", id=alyx_insertion[1]["id"])
 
     def test_probe_names_from_session_path(self):
-        pnames = ['probe01', 'probe03', 'just_a_probe']
-
+        expected_pnames = ['probe00', 'probe01', 'probe03', 'probe02a', 'probe02b', 'probe02c', 'probe02d', 'probe04']
+        nidq_file = Path(__file__).parent.joinpath("fixtures/pipes", "sample3B_g0_t0.nidq.meta")
+        meta_files = {
+            "probe00": Path(__file__).parent.joinpath("fixtures/pipes", "sample3A_g0_t0.imec.ap.meta"),
+            "probe01": Path(__file__).parent.joinpath("fixtures/pipes", "sample3B_g0_t0.imec1.ap.meta"),
+            "probe04": Path(__file__).parent.joinpath("fixtures/pipes", "sampleNP2.1_g0_t0.imec.ap.meta"),
+            "probe03": Path(__file__).parent.joinpath("fixtures/pipes", "sampleNP2.4_1shank_g0_t0.imec.ap.meta"),
+            "probe02": Path(__file__).parent.joinpath("fixtures/pipes", "sampleNP2.4_4shanks_g0_t0.imec.ap.meta"),
+        }
         with tempfile.TemporaryDirectory() as tdir:
             session_path = Path(tdir).joinpath('Algernon', '2021-02-12', '001')
             raw_ephys_path = session_path.joinpath('raw_ephys_data')
             raw_ephys_path.mkdir(parents=True, exist_ok=True)
-            raw_ephys_path.joinpath("_spikeglx_ephysData_g0_t0.nidq.meta").touch()
-            for pname in pnames:
+            shutil.copy(nidq_file, raw_ephys_path.joinpath("_spikeglx_ephysData_g0_t0.nidq.meta"))
+            for pname, meta_file in meta_files.items():
                 probe_path = raw_ephys_path.joinpath(pname)
                 probe_path.mkdir()
-                probe_path.joinpath('_spikeglx_ephysData_g0_t0.imec0.ap.meta').touch()
+                shutil.copy(meta_file, probe_path.joinpath('_spikeglx_ephysData_g0_t0.imec0.ap.meta'))
                 probe_path.joinpath('nested_folder').mkdir()
                 probe_path.joinpath('nested_folder', 'toto.ap.meta').touch()
-            assert set(misc.probe_labels_from_session_path(session_path)) == set(pnames)
+            self.assertEqual(set(misc.probe_labels_from_session_path(session_path)), set(expected_pnames))
 
     def test_rename_session(self):
         self._inputs = ('foo', '2020-02-02', '002')
         with mock.patch('builtins.input', self._input_side_effect):
-            new_path = misc.rename_session(self.session_path_3B)
+            new_path = misc.rename_session(self.session_path_3B, ask=True)
         self.assertEqual(self.session_path_3B.parents[2].joinpath(*self._inputs), new_path)
         self.assertTrue(new_path.exists())
         # Test assertions
         self._inputs = ('foo', 'May-21', '000')
         with mock.patch('builtins.input', self._input_side_effect):
             with self.assertRaises(AssertionError):
-                misc.rename_session(self.session_path_3B)
+                misc.rename_session(self.session_path_3B, ask=True)
         with self.assertRaises(ValueError):
             misc.rename_session(self.root_test_folder.name)  # Not a valid session path
 
@@ -344,8 +361,185 @@ class TestPipesMisc(unittest.TestCase):
             self.assertTrue('002' in prompt)
             return self._inputs[2]
 
+    def test_create_basic_transfer_params(self):
+        """Tests for the ibllib.pipes.misc.create_basic_transfer_params function"""
+        PARAM_STR = '___test_pars'
+        self.addCleanup(Path(iopar.getfile(PARAM_STR)).unlink)  # Remove after test
+        params = misc.create_basic_transfer_params(PARAM_STR, '~/local_data', '~/remote_data', par1='val')
+        expected = {
+            'DATA_FOLDER_PATH': '~/local_data',
+            'REMOTE_DATA_FOLDER_PATH': '~/remote_data',
+            'PAR1': 'val'
+        }
+        self.assertCountEqual(params, expected)
+
+        # Test prompts
+        with mock.patch('builtins.input', side_effect=['foo', 'bar']) as in_mock:
+            params = misc.create_basic_transfer_params(PARAM_STR, par2=None)
+            self.assertEqual(2, in_mock.call_count)
+        expected.update({'PAR1': 'foo', 'PAR2': 'bar'})
+        self.assertCountEqual(expected, params)
+
+        # Test custom function and extra par delete
+        with mock.patch('builtins.input', return_value='baz') as in_mock:
+            params = misc.create_basic_transfer_params(
+                PARAM_STR, clobber=True, par2=partial(misc.cli_ask_default, 'hello')
+            )
+            self.assertIn('hello', in_mock.call_args.args[-1])
+        self.assertEqual(params['DATA_FOLDER_PATH'], 'baz')
+        self.assertEqual(params['PAR2'], 'baz')
+        self.assertNotIn('PAR1', params)
+
     def tearDown(self):
         self.root_test_folder.cleanup()
+
+
+class TestSyncData(unittest.TestCase):
+    """Tests for the ibllib.pipes.misc.confirm_widefield_remote_folder"""
+    raw_widefield = [
+        'dorsal_cortex_landmarks.json',
+        'fakemouse_SpatialSparrow_19000101_182010.camlog',
+        'fakemouse_SpatialSparrow_19000101_182010_2_540_640_uint16-002.dat',
+        'snapshots/19000101_190154_1photon.tif'
+    ]
+
+    def setUp(self):
+        # Data emulating local rig data
+        self.root_test_folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.root_test_folder.cleanup)
+
+        # Change location of transfer list
+        par_file = Path(self.root_test_folder.name).joinpath('.ibl_local_transfers').as_posix()
+        self.patch = unittest.mock.patch('iblutil.io.params.getfile', return_value=par_file)
+        self.patch.start()
+        self.addCleanup(self.patch.stop)
+
+        self.remote_repo = Path(self.root_test_folder.name).joinpath('remote_repo')
+        self.remote_repo.joinpath('fakelab/Subjects').mkdir(parents=True)
+
+        self.local_repo = Path(self.root_test_folder.name).joinpath('local_repo')
+        self.local_repo.mkdir()
+
+        self.session_path = fu.create_fake_session_folder(self.local_repo)
+        widefield_path = self.session_path.joinpath('raw_widefield_data')
+        for file in self.raw_widefield:
+            p = widefield_path.joinpath(file)
+            p.parent.mkdir(exist_ok=True)
+            p.touch()
+        # Create video data too
+        fu.create_fake_raw_video_data_folder(self.session_path)
+
+    def test_rdiff_install(self):
+        if os.name == "nt":  # remove executable if on windows
+            rdiff_cmd_loc = "C:\\tools\\rdiff-backup.exe"
+            Path(rdiff_cmd_loc).unlink() if Path(rdiff_cmd_loc).exists() else None
+        else:  # anything not Windows, remove package with pip
+            import importlib.util
+            rdiff_cmd_loc = "rdiff-backup"
+            if importlib.util.find_spec("rdiff-backup"):
+                try:
+                    subprocess.run(["pip", "uninstall", "rdiff-backup", "--yes"], check=True)
+                except subprocess.CalledProcessError as e:
+                    print(e)
+        try:  # verify rdiff-backup command is intentionally not functioning anymore
+            subprocess.run(["rdiff-backup", "--version"], shell=True, check=True)
+        except subprocess.CalledProcessError:
+            # call function to have rdiff-backup reinstalled
+            self.assertTrue(misc.rdiff_install())
+            # assert rdiff-backup command is functioning
+            self.assertTrue(subprocess.run([rdiff_cmd_loc, "--version"], capture_output=True).returncode == 0)
+
+    def test_transfer_session_folders(self):
+        # --- Test - 1 local session 1900-01-01, 1 remote session w/ raw_behavior_data 1900-01-01, specify subfolder to transfer
+        remote_session = fu.create_fake_session_folder(self.remote_repo)
+        fu.create_fake_raw_behavior_data_folder(remote_session)
+        misc.transfer_session_folders([self.session_path], self.remote_repo / "fakelab" / "Subjects", "raw_video_data")
+        # --- Test clean up
+        shutil.rmtree(self.remote_repo)
+
+        # --- Test - 1 local session 1900-01-01, 1 remote session w/ raw_behavior_data 1900-01-01, specify subfolder to transfer
+        remote_session = fu.create_fake_session_folder(self.remote_repo)
+        fu.create_fake_raw_behavior_data_folder(remote_session)
+        misc.transfer_session_folders([self.session_path], self.remote_repo / "fakelab" / "Subjects", "raw_video_data")
+        # --- Test clean up
+        shutil.rmtree(self.remote_repo)
+
+        # --- Test - 1 local session 1900-01-01, 1 remote session w/o behavior folder
+        remote_session = fu.create_fake_session_folder(self.remote_repo)
+        fu.create_fake_raw_behavior_data_folder(remote_session)
+        shutil.rmtree(self.remote_repo / "fakelab" / "Subjects" / "fakemouse" / "1900-01-01" / "001" / "raw_behavior_data")
+        with self.assertLogs(logging.getLogger('ibllib'), logging.WARNING):
+            misc.transfer_session_folders([self.session_path], self.remote_repo / "fakelab" / "Subjects", "raw_video_data")
+        # --- Test clean up
+        shutil.rmtree(self.remote_repo)
+
+        # --- Test - 1 local session 1900-01-01, 1 remote session w/o date folder
+        remote_session = fu.create_fake_session_folder(self.remote_repo)
+        fu.create_fake_raw_behavior_data_folder(remote_session)
+        shutil.rmtree(self.remote_repo / "fakelab" / "Subjects" / "fakemouse")
+        misc.transfer_session_folders([self.session_path], self.remote_repo / "fakelab" / "Subjects", "raw_video_data")
+        # --- Test clean up
+        shutil.rmtree(self.remote_repo)
+
+        # --- Test - 1 local sessions 1900-01-01, 2 remote sessions w/ raw_behavior_data 1900-01-01
+        remote_session = fu.create_fake_session_folder(self.remote_repo)
+        fu.create_fake_raw_behavior_data_folder(remote_session)
+        remote_session002 = fu.create_fake_session_folder(self.remote_repo, date="1900-01-01")
+        fu.create_fake_raw_behavior_data_folder(remote_session002)
+        with mock.patch("builtins.input", side_effect=["002"]):
+            misc.transfer_session_folders([self.session_path], self.remote_repo / "fakelab" / "Subjects", "raw_video_data")
+        # --- Test clean up
+        shutil.rmtree(self.remote_repo)
+
+        # Test - 2 local sessions 1900-01-01, 2 remote sessions w/ raw_behavior_data 1900-01-01
+        local_session002 = fu.create_fake_session_folder(self.local_repo, date="1900-01-01")
+        fu.create_fake_raw_video_data_folder(local_session002)
+        remote_session = fu.create_fake_session_folder(self.remote_repo)
+        fu.create_fake_raw_behavior_data_folder(remote_session)
+        remote_session002 = fu.create_fake_session_folder(self.remote_repo, date="1900-01-01")
+        fu.create_fake_raw_behavior_data_folder(remote_session002)
+        with mock.patch("builtins.input", side_effect=["001", "002"]):
+            misc.transfer_session_folders(
+                [self.session_path], self.remote_repo / "fakelab" / "Subjects", "raw_video_data")
+        # --- Test clean up
+        shutil.rmtree(local_session002)
+        shutil.rmtree(self.remote_repo)
+
+        # Test - 2 local sessions 1900-01-01, 1 remote sessions w/ raw_behavior_data 1900-01-01
+        local_session002 = fu.create_fake_session_folder(self.local_repo, date="1900-01-01")
+        fu.create_fake_raw_video_data_folder(local_session002)
+        remote_session = fu.create_fake_session_folder(self.remote_repo)
+        fu.create_fake_raw_behavior_data_folder(remote_session)
+        with mock.patch("builtins.input", side_effect=["002"]):
+            misc.transfer_session_folders([self.session_path], self.remote_repo / "fakelab" / "Subjects", "raw_video_data")
+        # --- Test clean up
+        shutil.rmtree(local_session002)
+        shutil.rmtree(self.remote_repo)
+
+    def test_rsync_paths(self):
+        remote_session = fu.create_fake_session_folder(self.remote_repo)
+        fu.create_fake_raw_behavior_data_folder(remote_session)
+        src = self.local_repo / "fakelab/Subjects/fakemouse/1900-01-01/001/raw_video_data"
+        dst = self.remote_repo / "fakelab/Subjects/fakemouse/1900-01-01/001/raw_video_data"
+        self.assertTrue(misc.rsync_paths(src, dst))
+        n_copied = sum(1 for _ in self.remote_repo.rglob("raw_video_data/*"))  # Check files were copied
+        self.assertEqual(n_copied, 13)
+
+    def test_backup_session(self):
+        # Test when backup path does NOT already exist
+        self.assertTrue(misc.backup_session(self.session_path))
+
+        # Test when backup path does exist
+        bk_session_path = Path(*self.session_path.parts[:-4]).joinpath(
+            "Subjects_backup_renamed_sessions", Path(*self.session_path.parts[-3:]))
+        Path(bk_session_path.parent).mkdir(parents=True, exist_ok=True)
+        with self.assertRaises(FileExistsError):
+            misc.backup_session(self.session_path)
+        print(">>> Error messages regarding a 'backup session already exists' or a 'given session "
+              "path does not exist' is expected in this test. <<< ")
+
+        # Test when a bad session path is given
+        self.assertFalse(misc.backup_session("a session path that does NOT exist"))
 
 
 class TestScanFixPassiveFiles(unittest.TestCase):
