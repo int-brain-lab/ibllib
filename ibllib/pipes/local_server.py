@@ -15,6 +15,7 @@ from ibllib.io.extractors.base import get_pipeline, get_task_protocol, get_sessi
 from ibllib.pipes import tasks, training_preprocessing, ephys_preprocessing
 from ibllib.time import date2isostr
 import ibllib.oneibl.registration as registration
+from ibllib.oneibl.data_handlers import get_local_data_repository
 from ibllib.io.session_params import read_params
 from ibllib.pipes.dynamic_pipeline import make_pipeline
 
@@ -161,7 +162,7 @@ def task_queue(mode='all', lab=None, one=None):
     if lab is None:
         _logger.error("No lab provided or found")
         return  # if the lab is none, this will return empty tasks each time
-    data_repo = tasks._get_local_data_repository(one)
+    data_repo = get_local_data_repository(one)
     # Filter for tasks
     tasks_all = one.alyx.rest('tasks', 'list', status='Waiting',
                               django=f'session__lab__name__in,{lab},data_repository__name,{data_repo}', no_cache=True)

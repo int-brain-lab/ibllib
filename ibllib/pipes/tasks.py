@@ -12,6 +12,7 @@ from graphviz import Digraph
 
 import ibllib
 from ibllib.oneibl import data_handlers
+from ibllib.oneibl.data_handlers import get_local_data_repository
 from iblutil.util import Bunch
 import one.params
 from one.api import ONE
@@ -382,7 +383,7 @@ class Pipeline(abc.ABC):
         if one and one.alyx.cache_mode and one.alyx.default_expiry.seconds > 1:
             _logger.warning('Alyx client REST cache active; this may cause issues with jobs')
         self.eid = eid
-        self.data_repo = _get_local_data_repository(self.one)
+        self.data_repo = get_local_data_repository(self.one)
         if session_path:
             self.session_path = session_path
             if not self.eid:
@@ -563,18 +564,6 @@ class Pipeline(abc.ABC):
     @property
     def name(self):
         return self.__class__.__name__
-
-
-def _get_local_data_repository(one):
-    if not Path.home().joinpath(".globusonline/lta/client-id.txt").exists():
-        return
-
-    with open(Path.home().joinpath(".globusonline/lta/client-id.txt"), 'r') as fid:
-        globus_id = fid.read()
-
-    data_repo = one.alyx.rest('data-repository', 'list', globus_endpoint_id=globus_id)
-    if len(data_repo):
-        return [da['name'] for da in data_repo][0]
 
 
 def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
