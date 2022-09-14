@@ -630,12 +630,18 @@ class TestFranklinPaxinos(unittest.TestCase):
 
     def test_conversions(self):
 
+        # These are regions just in FP atlas
         np.testing.assert_equal(self.frs.acronym2id('FrA-5'), 2325)
         np.testing.assert_equal(self.frs.acronym2index('FrA-5')[1][0][0], 10)
         np.testing.assert_equal(self.frs.acronym2index('FrA-5')[1][0][1], 1440)
         np.testing.assert_equal(self.frs.acronym2id('V1M-6b'), 2433)
         np.testing.assert_equal(self.frs.acronym2index('V1M-6b')[1][0][0], 209)
         np.testing.assert_equal(self.frs.acronym2index('V1M-6b')[1][0][1], 1639)
+
+        # These are regions in both and so have taken on Allen acronyms
+        np.testing.assert_equal(self.frs.acronym2id('ORBl2/3'), 412)
+        np.testing.assert_equal(self.brs.acronym2id('ORBl2/3'), 412)
+        np.testing.assert_equal(self.frs.acronym2id('LO-2/3'), np.array([]))
 
 
 if __name__ == "__main__":

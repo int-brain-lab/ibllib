@@ -342,6 +342,10 @@ class FranklinPaxinosRegions(_BrainRegions):
         df_regions.loc[a, 'level'] = level
         df_regions.loc[a, 'allen level'] = level
 
+        nan_idx = np.where(df_regions['Allen abbreviation'].isna())[0]
+        df_regions.loc[nan_idx, 'Allen abbreviation'] = df_regions['Franklin-Paxinos abbreviation'].values[nan_idx]
+        df_regions.loc[nan_idx, 'Allen Full name'] = df_regions['Franklin-Paxinos Full name'].values[nan_idx]
+
         # Now fill in the nan values with one level up from their parents we need to this multiple times
         while np.sum(np.isnan(df_regions['level'].values)) > 0:
             nan_loc = np.isnan(df_regions['level'].values)
@@ -355,23 +359,22 @@ class FranklinPaxinosRegions(_BrainRegions):
         df_regions_left = df_regions.iloc[np.array(df_regions['Structural ID'] > 0), :].copy()
         df_regions_left['Structural ID'] = - df_regions_left['Structural ID']
         df_regions_left['Parent ID'] = - df_regions_left['Parent ID']
-        df_regions_left['Franklin-Paxinos Full name'] = \
-            df_regions_left['Franklin-Paxinos Full name'].apply(lambda x: x + ' (left)')
+        df_regions_left['Allen Full name'] = \
+            df_regions_left['Allen Full name'].apply(lambda x: x + ' (left)')
         df_regions = pd.concat((df_regions, df_regions_left), axis=0)
 
         # insert void
         void = [{'Structural ID': int(0), 'Franklin-Paxinos Full Name': 'void', 'Franklin-Paxinos abbreviation': 'void',
-                'Parent ID': int(0), 'structure Order': 0, 'red': 0, 'green': 0, 'blue': 0}]
+                'Parent ID': int(0), 'structure Order': 0, 'red': 0, 'green': 0, 'blue': 0, 'Allen Full name': 'void',
+                 'Allen abbreviation': 'void'}]
         df_regions = pd.concat([pd.DataFrame(void), df_regions], ignore_index=True)
 
         # converts colors to RGB uint8 array
         c = np.c_[df_regions['red'], df_regions['green'], df_regions['blue']].astype(np.uint32)
 
-        # c[0, :] = 0  # set the void region to black
-        # creates the BrainRegion instance
         super().__init__(id=df_regions['Structural ID'].to_numpy().astype(np.int64),
-                         name=df_regions['Franklin-Paxinos Full name'].to_numpy(),
-                         acronym=df_regions['Franklin-Paxinos abbreviation'].to_numpy(),
+                         name=df_regions['Allen Full name'].to_numpy(),
+                         acronym=df_regions['Allen abbreviation'].to_numpy(),
                          rgb=c,
                          level=df_regions['level'].to_numpy().astype(np.uint16),
                          parent=df_regions['Parent ID'].to_numpy(),
