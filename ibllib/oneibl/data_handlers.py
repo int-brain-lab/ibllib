@@ -20,6 +20,9 @@ _logger = logging.getLogger(__name__)
 
 
 def get_local_data_repository(one):
+    if one is None:
+        return
+
     if not Path.home().joinpath(".globusonline/lta/client-id.txt").exists():
         return
 
