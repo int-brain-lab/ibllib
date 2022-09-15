@@ -1192,7 +1192,7 @@ class FranklinPaxinosAtlas(BrainAtlas):
                 aws.s3_download_file(f'atlas/FranklinPaxinos/{file_image.name}', str(file_image))
             # # get the remapped label volume
             file_label = path_atlas.joinpath(f'annotation_{res_um[0]}_{res_um[1]}_{res_um[2]}.npz')
-            if not file_image.exists():
+            if not file_label.exists():
                 path_atlas.mkdir(exist_ok=True, parents=True)
                 aws.s3_download_file(f'atlas/FranklinPaxinos/{file_label.name}', str(file_label))
 
