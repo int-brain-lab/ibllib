@@ -1224,7 +1224,13 @@ class SessionLoader:
         """
         Function to load trials data into SessionLoader.trials
         """
-        self.trials = self.one.load_object(self.eid, 'trials', collection='alf').to_df()
+        trials_object = self.one.load_object(self.eid, 'trials', collection='alf')
+        # itiDuration frequently has a mismatched dimension and is not crucial, skip in that case
+        try:
+            self.trials = trials_object.to_df()
+        except ValueError:
+            _ = trials_object.pop('itiDuration')
+            self.trials = trials_object.to_df()
         self.data_info.loc[self.data_info['name'] == 'trials', 'is_loaded'] = True
 
     def load_wheel(self, sampling_rate=1000, smooth_size=0.03):
