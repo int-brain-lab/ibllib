@@ -24,7 +24,8 @@ import scipy.interpolate
 import one.alf.io as alfio
 from ibllib.io.extractors.base import BaseExtractor
 from ibllib.io.raw_daq_loaders import load_channels_tdms, load_raw_daq_tdms
-from neurodsp.utils import rises
+from ibllib.io.extractors.training_trials import GoCueTimes
+from neurodsp.utils import rises, sync_timestamps
 
 _logger = logging.getLogger(__name__)
 
@@ -57,15 +58,16 @@ NEUROPHOTOMETRICS_LED_STATES = {
 }
 
 
-def sync_photometry_to_daq(daq_file, df_photometry, chmap=DAQ_CHMAP, v_threshold=V_THRESHOLD):
+def sync_photometry_to_daq(vdaq, fs, df_photometry, chmap=DAQ_CHMAP, v_threshold=V_THRESHOLD):
     """
-    :param daq_file: tdms file
+    :param vdaq: dictionary of daq traces.
+    :param fs: sampling frequency
     :param df_photometry:
     :param chmap:
     :param v_threshold:
     :return:
     """
-    daq_frames, tag_daq_frames, fs, vdaq = read_daq_timestamps(daq_file, chmap=chmap, v_threshold=v_threshold)
+    daq_frames, tag_daq_frames = read_daq_timestamps(vdaq=vdaq, fs=fs, v_threshold=v_threshold)
     nf = np.minimum(tag_daq_frames.size, df_photometry['Input0'].size)
     ipeak = np.argmax(np.correlate(tag_daq_frames[:nf].astype(np.int8), df_photometry['Input0'].values[:nf], mode='full'))
     # if the frame shift is negative, it means that the photometry frames are early
@@ -87,20 +89,24 @@ def sync_photometry_to_daq(daq_file, df_photometry, chmap=DAQ_CHMAP, v_threshold
     return ts_daq, fcn_fp2daq, drift_ppm
 
 
-def read_daq_timestamps(daq_file, chmap=DAQ_CHMAP, v_threshold=V_THRESHOLD):
-    """
-    From a tdms daq file, extracts the photometry frames and their tagging.
-    :param daq_file:
-    :param chmap:
-    :param v_threshold:
-    :return:
-    """
+def read_daq_voltage(daq_file, chmap=DAQ_CHMAP):
     channel_names = [c.name for c in load_raw_daq_tdms(daq_file)['Analog'].channels()]
     assert all([v in channel_names for v in chmap.values()]), "Missing channel"
     vdaq, fs = load_channels_tdms(daq_file, chmap=chmap, return_fs=True)
+    return vdaq, fs
+
+
+def read_daq_timestamps(vdaq, v_threshold=V_THRESHOLD):
+    """
+    From a tdms daq file, extracts the photometry frames and their tagging.
+    :param vsaq: dictionary of the voltage traces from the DAQ. Each item has a key describing
+    the channel as per the channel map, and contains a single voltage trace.
+    :param v_threshold:
+    :return:
+    """
     daq_frames = rises(vdaq['photometry'], step=v_threshold, analog=True)
     tagged_frames = vdaq['bpod'][daq_frames] > v_threshold
-    return daq_frames, tagged_frames, fs, vdaq
+    return daq_frames, tagged_frames
 
 
 def check_timestamps(daq_file, photometry_file, tolerance=20, chmap=DAQ_CHMAP, v_threshold=V_THRESHOLD):
@@ -114,7 +120,8 @@ def check_timestamps(daq_file, photometry_file, tolerance=20, chmap=DAQ_CHMAP, v
     :return: None
     """
     df_photometry = pd.read_csv(photometry_file)
-    daq_frames = read_daq_timestamps(daq_file, chmap=chmap, v_threshold=v_threshold)[0]
+    v, fs = read_daq_voltage(daq_file=daq_file, chmap=chmap)
+    daq_frames, _ = read_daq_timestamps(vdaq=v, fs=fs, v_threshold=v_threshold)
     assert (daq_frames.shape[0] - df_photometry.shape[0]) < tolerance
     _logger.info(f"{daq_frames.shape[0] - df_photometry.shape[0]} frames difference, "
                  f"{'/'.join(daq_file.parts[-2:])}: {daq_frames.shape[0]} frames, "
@@ -217,5 +224,16 @@ class FibrePhotometry(BaseExtractor):
             An array of timestamps, one per frame.
         """
         daq_file = next(self.session_path.joinpath(self.collection).glob('*.tdms'))
-        ts, fcn_daq2_, drift_ppm = sync_photometry_to_daq(daq_file, fp_data, chmap=DAQ_CHMAP, v_threshold=V_THRESHOLD)
+        vdaq, fs = read_daq_voltage(daq_file, chmap=DAQ_CHMAP)
+        ts, fcn_daq2_, drift_ppm = sync_photometry_to_daq(
+            vdaq=vdaq, fs=fs, df_photometry=fp_data, v_threshold=V_THRESHOLD)
+        gc_bpod, _ = GoCueTimes(session_path=self.session_path).extract(task_collection='raw_behavior_data', save=False)
+        gc_daq = rises(vdaq['bpod'])
+
+        fcn_daq2_bpod, drift_ppm, idaq, ibp = sync_timestamps(
+            rises(vdaq['bpod']) / fs, gc_bpod, return_indices=True)
+        assert drift_ppm < 100, f"Drift between bpod and daq is above 100 ppm: {drift_ppm}"
+        assert (gc_daq.size - idaq.size) < 5, "Bpod and daq synchronisation failed as too few" \
+                                              "events could be matched"
+        ts = fcn_daq2_bpod(ts)
         return ts
