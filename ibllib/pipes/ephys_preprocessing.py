@@ -269,10 +269,16 @@ class SpikeSorting(tasks.Task):
 
     @staticmethod
     def _fetch_pykilosort_run_version(log_file):
+        """
+        Parse the following line (2 formats depending on version) from the log files to get the version
+        '\x1b[0m15:39:37.919 [I] ibl:90               Starting Pykilosort version ibl_1.2.1, output in gnagga^[[0m\n'
+        '\x1b[0m15:39:37.919 [I] ibl:90               Starting Pykilosort version ibl_1.3.0^[[0m\n'
+        """
         with open(log_file) as fid:
             line = fid.readline()
-        version = re.search('version (.*), output', line).group(1)
-
+        version = re.search('version (.*), output', line)
+        version = version or re.search('version (.*)', line)  # old versions have output, new have a version line
+        version = re.sub('\\^[[0-9]+m', '', version.group(1))  # removes the coloring tags
         return f"pykilosort_{version}"
 
     @staticmethod
