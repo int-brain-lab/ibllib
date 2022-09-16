@@ -1,4 +1,7 @@
 ## Release Notes 2.14
+### Release Notes 2.14.0 2022-09-16
+- Spike sorting task: parse new pykilosort log format
+
 ### Release Notes 2.14.0 2022-08-17
 - Adding brainbox.io.one.SessionLoader for standardized loading of session data
 - Changes to TaskQC, VideoQC and DLCQC thresholds and aggregation
