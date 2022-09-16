@@ -627,7 +627,6 @@ class EphysTrials(tasks.Task):
         'output_files': [('*trials.table.pqt', 'alf', True),
                          ('*trials.goCueTrigger_times.npy', 'alf', True),
                          ('*trials.intervals_bpod.npy', 'alf', True),
-                         ('*trials.itiDuration.npy', 'alf', False),
                          ('*trials.stimOff_times.npy', 'alf', True),
                          ('*wheel.position.npy', 'alf', True),
                          ('*wheel.timestamps.npy', 'alf', True),
