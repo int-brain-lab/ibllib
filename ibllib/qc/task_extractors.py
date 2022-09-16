@@ -89,7 +89,7 @@ class TaskQCExtractor(object):
                             'ephysData.raw.wiring'])
 
         dataset = self.one.type2datasets(eid, dstypes, details=True)
-        files = self.one._download_datasets(dataset)
+        files = self.one._check_filesystem(dataset)
 
         missing = [True] * len(dstypes) if not files else [x is None for x in files]
         if self.session_path is None or all(missing):

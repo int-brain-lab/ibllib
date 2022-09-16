@@ -442,7 +442,7 @@ class SpikeSorting(tasks.Task):
                             out = get_aligned_channels(ins[0], chns, one=self.one, save_dir=probe_out_path)
                             out_files.extend(out)
 
-            except BaseException:
+            except Exception:
                 _logger.error(traceback.format_exc())
                 self.status = -1
                 continue

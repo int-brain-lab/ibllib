@@ -15,7 +15,23 @@ from ibllib.oneibl.registration import register_dataset
 from ibllib.oneibl.patcher import FTPPatcher, SDSCPatcher, SDSC_ROOT_PATH, SDSC_PATCH_PATH
 from ibllib.oneibl.aws import AWS
 
+
 _logger = logging.getLogger(__name__)
+
+
+def get_local_data_repository(one):
+    if one is None:
+        return
+
+    if not Path.home().joinpath(".globusonline/lta/client-id.txt").exists():
+        return
+
+    with open(Path.home().joinpath(".globusonline/lta/client-id.txt"), 'r') as fid:
+        globus_id = fid.read()
+
+    data_repo = one.alyx.rest('data-repository', 'list', globus_endpoint_id=globus_id)
+    if len(data_repo):
+        return [da['name'] for da in data_repo][0]
 
 
 class DataHandler(abc.ABC):
@@ -110,8 +126,8 @@ class ServerDataHandler(DataHandler):
         :return: output info of registered datasets
         """
         versions = super().uploadData(outputs, version)
-
-        return register_dataset(outputs, one=self.one, versions=versions, **kwargs)
+        data_repo = get_local_data_repository(self.one)
+        return register_dataset(outputs, one=self.one, versions=versions, repository=data_repo, **kwargs)
 
 
 class ServerGlobusDataHandler(DataHandler):
@@ -205,8 +221,8 @@ class ServerGlobusDataHandler(DataHandler):
         :return: output info of registered datasets
         """
         versions = super().uploadData(outputs, version)
-
-        return register_dataset(outputs, one=self.one, versions=versions, **kwargs)
+        data_repo = get_local_data_repository(self.one)
+        return register_dataset(outputs, one=self.one, versions=versions, repository=data_repo, **kwargs)
 
     def cleanUp(self):
         """
