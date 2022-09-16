@@ -24,7 +24,7 @@ import scipy.interpolate
 import one.alf.io as alfio
 from ibllib.io.extractors.base import BaseExtractor
 from ibllib.io.raw_daq_loaders import load_channels_tdms, load_raw_daq_tdms
-from ibllib.io.extractors.training_trials import GoCueTimes
+from ibllib.io.extractors.training_trials import GoCueTriggerTimes
 from neurodsp.utils import rises, sync_timestamps
 
 _logger = logging.getLogger(__name__)
@@ -67,7 +67,7 @@ def sync_photometry_to_daq(vdaq, fs, df_photometry, chmap=DAQ_CHMAP, v_threshold
     :param v_threshold:
     :return:
     """
-    daq_frames, tag_daq_frames = read_daq_timestamps(vdaq=vdaq, fs=fs, v_threshold=v_threshold)
+    daq_frames, tag_daq_frames = read_daq_timestamps(vdaq=vdaq, v_threshold=v_threshold)
     nf = np.minimum(tag_daq_frames.size, df_photometry['Input0'].size)
     ipeak = np.argmax(np.correlate(tag_daq_frames[:nf].astype(np.int8), df_photometry['Input0'].values[:nf], mode='full'))
     # if the frame shift is negative, it means that the photometry frames are early
@@ -76,7 +76,7 @@ def sync_photometry_to_daq(vdaq, fs, df_photometry, chmap=DAQ_CHMAP, v_threshold
     df = np.median(np.diff(df_photometry['Timestamp']))
     fcn_fp2daq = scipy.interpolate.interp1d(df_photometry['Timestamp'][:nf], daq_frames[:nf] / fs)
     drift_ppm = (np.polyfit(daq_frames[:nf] / fs, df_photometry['Timestamp'][:nf], 1)[0] - 1) * 1e6
-    _logger.info(f"drift PPM: {drift_ppm}")
+    _logger.info(f"drift photometry to DAQ PPM: {drift_ppm}")
 
     # here is a bunch of safeguards
     assert np.all(np.abs(np.diff(daq_frames) - df * fs) < 1)  # check that there are no missed frames on daq
@@ -121,7 +121,7 @@ def check_timestamps(daq_file, photometry_file, tolerance=20, chmap=DAQ_CHMAP, v
     """
     df_photometry = pd.read_csv(photometry_file)
     v, fs = read_daq_voltage(daq_file=daq_file, chmap=chmap)
-    daq_frames, _ = read_daq_timestamps(vdaq=v, fs=fs, v_threshold=v_threshold)
+    daq_frames, _ = read_daq_timestamps(vdaq=v, v_threshold=v_threshold)
     assert (daq_frames.shape[0] - df_photometry.shape[0]) < tolerance
     _logger.info(f"{daq_frames.shape[0] - df_photometry.shape[0]} frames difference, "
                  f"{'/'.join(daq_file.parts[-2:])}: {daq_frames.shape[0]} frames, "
@@ -191,7 +191,6 @@ class FibrePhotometry(BaseExtractor):
         led_states = fp_data.get('channels', pd.DataFrame(NEUROPHOTOMETRICS_LED_STATES))
         led_states = led_states.set_index('Condition')
         # Extract signal columns into 2D array
-        fp_data['raw'].keys()
         regions = regions or [k for k in fp_data['raw'].keys() if 'Region' in k]
         out_df = fp_data['raw'].filter(items=regions, axis=1).sort_index(axis=1)
         out_df['times'] = ts
@@ -227,7 +226,7 @@ class FibrePhotometry(BaseExtractor):
         vdaq, fs = read_daq_voltage(daq_file, chmap=DAQ_CHMAP)
         ts, fcn_daq2_, drift_ppm = sync_photometry_to_daq(
             vdaq=vdaq, fs=fs, df_photometry=fp_data, v_threshold=V_THRESHOLD)
-        gc_bpod, _ = GoCueTimes(session_path=self.session_path).extract(task_collection='raw_behavior_data', save=False)
+        gc_bpod, _ = GoCueTriggerTimes(session_path=self.session_path).extract(task_collection='raw_behavior_data', save=False)
         gc_daq = rises(vdaq['bpod'])
 
         fcn_daq2_bpod, drift_ppm, idaq, ibp = sync_timestamps(
