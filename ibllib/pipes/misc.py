@@ -226,6 +226,14 @@ def transfer_session_folders(local_sessions: list, remote_subject_folder, subfol
             log.info(msg)
             skip_list += msg + "\n"
             continue
+        found_remote_sessions = os.listdir(remote_session.parent)
+        found_remote_sessions.sort()  # to make the string output easier to read
+        if remote_session.parts[-1] not in found_remote_sessions:
+            msg = f"{local_session} - skipping session, could not find matching session number in remote folder " \
+                  f"{remote_session.parent} - session numbers that were found: {found_remote_sessions}"
+            log.warning(msg)
+            skip_list += msg + "\n"
+            continue
         if not (remote_session / "raw_behavior_data").exists():
             msg = f"{local_session} - skipping session, no behavior data found in remote folder {remote_session}"
             log.warning(msg)

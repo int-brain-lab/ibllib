@@ -464,6 +464,24 @@ class TestSyncData(unittest.TestCase):
         # --- Test clean up
         shutil.rmtree(self.remote_repo)
 
+        # --- Test - 1 local session number 001, 1 remote session number 002, specify subfolder to transfer
+        remote_session = fu.create_fake_session_folder(self.remote_repo, num="002")
+        fu.create_fake_raw_behavior_data_folder(remote_session)
+        with self.assertLogs(logging.getLogger("ibllib"), logging.WARNING):
+            misc.transfer_session_folders([self.session_path], self.remote_repo / "fakelab" / "Subjects", "raw_video_data")
+        # --- Test clean up
+        shutil.rmtree(self.remote_repo)
+
+        # --- Test - 1 local session number 001, 2 remote session numbers 002 and 003, specify subfolder to transfer
+        remote_session = fu.create_fake_session_folder(self.remote_repo, num="002")
+        fu.create_fake_raw_behavior_data_folder(remote_session)
+        remote_session = fu.create_fake_session_folder(self.remote_repo, num="003")
+        fu.create_fake_raw_behavior_data_folder(remote_session)
+        with self.assertLogs(logging.getLogger("ibllib"), logging.WARNING):
+            misc.transfer_session_folders([self.session_path], self.remote_repo / "fakelab" / "Subjects", "raw_video_data")
+        # --- Test clean up
+        shutil.rmtree(self.remote_repo)
+
         # --- Test - 1 local session 1900-01-01, 1 remote session w/o behavior folder
         remote_session = fu.create_fake_session_folder(self.remote_repo)
         fu.create_fake_raw_behavior_data_folder(remote_session)
