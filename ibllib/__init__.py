@@ -1,5 +1,5 @@
 """Library implementing the International Brain Laboratory data pipeline."""
-__version__ = "2.14.0"
+__version__ = "2.14.1"
 import warnings
 
 from iblutil.util import get_logger
