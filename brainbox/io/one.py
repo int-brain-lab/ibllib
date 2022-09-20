@@ -903,7 +903,7 @@ class SpikeSortingLoader:
         if self.pid is not None:
             try:
                 self.eid, self.pname = self.one.pid2eid(self.pid)
-            except NotImplementedError as err:
+            except NotImplementedError:
                 if self.eid == '' or self.pname == '':
                     raise IOError("Cannot infer session id and probe name from pid. "
                                   "You need to pass eid and pname explicitly when instantiating SpikeSortingLoader.")
