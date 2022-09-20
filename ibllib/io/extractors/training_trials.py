@@ -726,7 +726,7 @@ def extract_all(session_path, save=False, bpod_trials=None, settings=None):
         ])
     else:
         base.extend([
-            Intervals, Wheel, FeedbackType, ContrastLR, ProbabilityLeft, Choice, IncludedTrials, ItiDuration,
+            Intervals, Wheel, FeedbackType, ContrastLR, ProbabilityLeft, Choice, IncludedTrials,
             StimOnTimes_deprecated, RewardVolume, FeedbackTimes, ResponseTimes, GoCueTimes, PhasePosQuiescence
         ])
 

@@ -32,7 +32,6 @@ class TrainingTrials(tasks.Task):
                         ('_iblrig_encoderEvents.raw*', 'raw_behavior_data', True),
                         ('_iblrig_encoderPositions.raw*', 'raw_behavior_data', True)],
         'output_files': [('*trials.goCueTrigger_times.npy', 'alf', True),
-                         ('*trials.itiDuration.npy', 'alf', False),
                          ('*trials.table.pqt', 'alf', True),
                          ('*wheel.position.npy', 'alf', True),
                          ('*wheel.timestamps.npy', 'alf', True),
