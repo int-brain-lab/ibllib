@@ -901,7 +901,12 @@ class SpikeSortingLoader:
     def __post_init__(self):
         # pid gets precedence
         if self.pid is not None:
-            self.eid, self.pname = self.one.pid2eid(self.pid)
+            try:
+                self.eid, self.pname = self.one.pid2eid(self.pid)
+            except NotImplementedError as err:
+                if self.eid == '' or self.pname == '':
+                    raise IOError("Cannot infer session id and probe name from pid. "
+                                  "You need to pass eid and pname explicitly when instantiating SpikeSortingLoader.")
             self.session_path = self.one.eid2path(self.eid)
         # then eid / pname combination
         elif self.session_path is None or self.session_path == '':
