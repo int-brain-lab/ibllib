@@ -1059,6 +1059,7 @@ def NeedlesAtlas(*args, **kwargs):
     kwargs['scaling'] = np.array([1, AP_SCALE, DV_SCALE])
     return AllenAtlas(*args, **kwargs)
 
+
 def MRITorontoAtlas(*args, **kwargs):
     """
     Instantiates an atlas.BrainAtlas corresponding to the Allen CCF at the given resolution
@@ -1073,6 +1074,7 @@ def MRITorontoAtlas(*args, **kwargs):
     AP_SCALE = 1.031  # multiplicative factor on AP dimension
     kwargs['scaling'] = np.array([ML_SCALE, AP_SCALE, DV_SCALE])
     return AllenAtlas(*args, **kwargs)
+
 
 def _download_atlas_allen(file_image, FLAT_IRON_ATLAS_REL_PATH, par):
     """
