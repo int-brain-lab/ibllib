@@ -284,6 +284,11 @@ class TestBrainRegions(unittest.TestCase):
             self.brs.parse_acronyms_argument(acronyms + ['toto'])
         assert np.all(self.brs.parse_acronyms_argument(acronyms + ['toto'], mode='clip') == ids)
 
+    def test_compute_hierarchy(self):
+        self.brs.compute_hierarchy()
+        np.testing.assert_equal(
+            self.brs.hierarchy[:, 349], np.array([2, 3, 4, 5, 6, 340, 347, 349, 349, 349]))
+
 
 class TestAtlasPlots(unittest.TestCase):
 

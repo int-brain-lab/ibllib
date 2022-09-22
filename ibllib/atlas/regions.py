@@ -429,7 +429,7 @@ class BrainRegions(_BrainRegions):
         """
         Recomputes the mapping indices for all mappings
         This is left mainly as a reference for adding future mappings as this take a few seconds
-        to execute. In production,we use the MAPPING_FILES pqt to avoid recompuing at each \
+        to execute. In production,we use the MAPPING_FILES pqt to avoid recomputing at each \
         instantiation
         """
         beryl = np.load(Path(__file__).parent.joinpath('beryl.npy'))
@@ -446,6 +446,31 @@ class BrainRegions(_BrainRegions):
             'Swanson-lr': self._mapping_from_regions_list(swanson, lateralize=True),
         }
         pd.DataFrame(self.mappings).to_parquet(FILE_MAPPINGS)
+
+    def compute_hierarchy(self):
+        """
+        Creates a self.hierarchy attributes that is a n_levels by n_region array
+        of indices. This is useful to perform fast vectorized computations of
+        ancestors and descendants.
+        :return:
+        """
+        n_levels = np.max(self.level)
+        n_regions = self.id.size
+        # creates the parent index. Void and root are omitted from intersection
+        # as they figure as NaN
+        pmask, i_p = ismember(self.parent, self.id)
+        self.iparent = np.arange(n_regions)
+        self.iparent[pmask] = i_p
+        # the last level of the hierarchy is the actual mapping, then going up level per level
+        # we assign the parend index
+        self.hierarchy = np.tile(np.arange(n_regions), (n_levels, 1))
+        _mask = np.zeros(n_regions, bool)
+        for lev in np.flipud(np.arange(n_levels)):
+            if lev < (n_levels - 1):
+                self.hierarchy[lev, _mask] = self.iparent[self.hierarchy[lev + 1, _mask]]
+            sel = self.level == (lev + 1)
+            self.hierarchy[lev, sel] = np.where(sel)[0]
+            _mask[sel] = True
 
     def remap(self, region_ids, source_map='Allen', target_map='Beryl'):
         """
