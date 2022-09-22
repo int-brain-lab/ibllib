@@ -188,7 +188,7 @@ class ServerGlobusDataHandler(DataHandler):
             return
 
         rel_sess_path = '/'.join(df.iloc[0]['session_path'].split('/')[-3:])
-        assert (rel_sess_path.split('/')[0] == self.one.path2ref(self.session_path)['subject'])
+        assert rel_sess_path.split('/')[0] == self.one.path2ref(self.session_path)['subject']
 
         target_paths = []
         source_paths = []
@@ -274,16 +274,8 @@ class RemoteAwsDataHandler(DataHandler):
         :param signature: input and output file signatures
         :param one: ONE instance
         """
-        from one.remote.globus import Globus # noqa
         super().__init__(session_path, signature, one=one)
         self.task = task
-        self.aws = AWS(one=self.one)
-        self.globus = Globus(client_name='server')
-        self.lab = session_path_parts(self.session_path, as_dict=True)['lab']
-        if self.lab == 'cortexlab':
-            self.globus.add_endpoint(f'flatiron_{self.lab}', alyx=ONE(base_url='https://alyx.internationalbrainlab.org').alyx)
-        else:
-            self.globus.add_endpoint(f'flatiron_{self.lab}', alyx=self.one.alyx)
 
         self.local_paths = []
 
@@ -293,7 +285,7 @@ class RemoteAwsDataHandler(DataHandler):
         :return:
         """
         df = super().getData()
-        self.local_paths = self.aws._download_datasets(df)
+        self.local_paths = self.one._download_aws(map(lambda x: x[1], df.iterrows()))
 
     def uploadData(self, outputs, version, **kwargs):
         """
@@ -302,6 +294,14 @@ class RemoteAwsDataHandler(DataHandler):
         :param version: ibllib version
         :return: output info of registered datasets
         """
+        # Set up Globus
+        from one.remote.globus import Globus # noqa
+        self.globus = Globus(client_name='server')
+        self.lab = session_path_parts(self.session_path, as_dict=True)['lab']
+        if self.lab == 'cortexlab':
+            self.globus.add_endpoint(f'flatiron_{self.lab}', alyx=ONE(base_url='https://alyx.internationalbrainlab.org').alyx)
+        else:
+            self.globus.add_endpoint(f'flatiron_{self.lab}', alyx=self.one.alyx)
 
         # register datasets
         versions = super().uploadData(outputs, version)
@@ -313,7 +313,7 @@ class RemoteAwsDataHandler(DataHandler):
         collections = {}
 
         for dset, out in zip(response, outputs):
-            assert (Path(out).name == dset['name'])
+            assert Path(out).name == dset['name']
             # set flag to false
             fr = next(fr for fr in dset['file_records'] if 'flatiron' in fr['data_repository'])
             collection = '/'.join(fr['relative_path'].split('/')[:-1])

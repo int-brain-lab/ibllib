@@ -6,6 +6,7 @@ from collections import OrderedDict
 import nptdms
 import numpy as np
 import neurodsp.utils
+import one.alf.io as alfio
 
 logger = logging.getLogger(__name__)
 
@@ -122,3 +123,66 @@ def load_sync_tdms(path, sync_map, fs=None, threshold=2.5, floor_percentile=10):
     sync_map = {v.lower(): k for k, v in sync_map.items()}  # turn inside-out
     chmap = {sync_map[k]: v for k, v in channel_ids.items()}
     return sync, chmap
+
+
+def load_sync_timeline(path, sync_map, threshold=2.5, floor_percentile=10):
+    """
+    Load sync channels from a timeline object.
+
+    Parameters
+    ----------
+    path : str, pathlib.Path
+        The file or folder path of the _timeline_DAQdata file.
+    sync_map : dict
+        A map of channel names and channel IDs.
+    threshold : float
+        The threshold for applying to analogue channels
+    floor_percentile : float
+        10% removes the percentile value of the analog trace before thresholding. This is to avoid
+        DC offset drift.
+
+    Returns
+    -------
+    one.alf.io.AlfBunch
+        The sync bunch with keys ('times', 'polarities', 'channels')
+    """
+    timeline = alfio.load_object(path, 'DAQdata', namespace='timeline')
+    assert timeline.keys() >= {'timestamps', 'raw', 'meta'}, 'Timeline object missing attributes'
+
+    # Initialize sync object
+    sync = alfio.AlfBunch((k, np.array([], dtype=d)) for k, d in
+                          (('times', 'f'), ('channels', 'u1'), ('polarities', 'i1')))
+    for label, i in sync_map.items():
+        info = next((x for x in timeline['meta']['inputs'] if x['name'].lower() == label), None)
+        if not info:
+            logger.warning('sync channel "%s" not found', label)
+            continue
+        raw = timeline['raw'][:, info['arrayColumn'] - 1]  # -1 because MATLAB indexes from 1
+        if info['measurement'] == 'Voltage':
+            # Get TLLs by applying a threshold to the diff of voltage samples
+            offset = np.percentile(raw, floor_percentile, axis=0)
+            logger.debug(f'estimated analogue channel DC Offset approx. {np.mean(offset):.2f}')
+            ind, val = neurodsp.utils.fronts(raw - offset, step=threshold)
+            sync.polarities = np.concatenate((sync.polarities, np.sign(val).astype('i1')))
+        elif info['measurement'] == 'EdgeCount':
+            # Monotonically increasing values; extract indices where delta == 1
+            ind, = np.where(np.diff(raw))
+            sync.polarities = np.concatenate((sync.polarities, np.ones_like(ind, dtype='i1')))
+        elif info['measurement'] == 'Position':
+            # Bidirectional; extract indices where delta != 0
+            d = np.diff(raw)
+            ind, = np.where(d)
+            sync.polarities = np.concatenate((sync.polarities, np.sign(d[ind]).astype('i1')))
+        else:
+            raise NotImplementedError(f'{info["measurement"]} sync extraction')
+        # Append timestamps of indices and channel index to sync arrays
+        sync.times = np.concatenate((sync.times, timeline['timestamps'][ind]))
+        sync.channels = np.concatenate((sync.channels, np.full(ind.shape, i, dtype='u1')))
+
+    # Sort arrays by time
+    assert sync.check_dimensions == 0
+    t_ind = np.argsort(sync.times)
+    for k in sync:
+        sync[k] = sync[k][t_ind]
+
+    return sync
