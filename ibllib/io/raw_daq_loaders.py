@@ -153,8 +153,9 @@ def load_sync_timeline(path, sync_map, threshold=2.5, floor_percentile=10):
     sync = alfio.AlfBunch((k, np.array([], dtype=d)) for k, d in
                           (('times', 'f'), ('channels', 'u1'), ('polarities', 'i1')))
     for label, i in sync_map.items():
-        info = next((x for x in timeline['meta']['inputs'] if x['name'].lower() == label), None)
-        if not info:
+        try:
+            info = next(x for x in timeline['meta']['inputs'] if x['name'].lower() == label.lower())
+        except StopIteration:
             logger.warning('sync channel "%s" not found', label)
             continue
         raw = timeline['raw'][:, info['arrayColumn'] - 1]  # -1 because MATLAB indexes from 1

@@ -6,15 +6,18 @@ import tempfile
 from pathlib import Path
 import sys
 import logging
+import json
 
 import numpy as np
 from one.api import ONE
+import one.alf.io as alfio
 from iblutil.io import params
 import yaml
 
 from ibllib.tests import TEST_DB
 from ibllib.io import flags, misc, globus, video, session_params
 import ibllib.io.raw_data_loaders as raw
+import ibllib.io.raw_daq_loaders as raw_daq
 
 
 class TestsParams(unittest.TestCase):
@@ -552,6 +555,67 @@ class TestSessionParams(unittest.TestCase):
                 self.assertLogs(session_params.__name__, logging.WARNING):
             data = session_params._patch_file({'version': '1.1.0'})
         self.assertEqual(data, {'version': '1.0.0'})
+
+
+class TestRawDaqLoaders(unittest.TestCase):
+    """Tests for raw_daq_loaders module"""
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmpdir.cleanup)
+        # Create some toy DAQ data
+        N = 3000
+        Fs = 1
+        a0_clean = np.zeros(N)
+        self.n_ttl = 6
+        pulse_width = int(np.floor(50 * Fs))
+        for i in np.arange(1, N, int(np.floor(N/self.n_ttl))):
+            a0_clean[i:i + pulse_width] = 1
+        a0 = (a0_clean * np.full(N, 5)) + np.random.rand(N) + 1  # 0 -> 5V w/ noise and 1V DC offset
+        ctr0 = np.cumsum(a0_clean)  # Counter channel, e.g. [0, 0, 0, 1, 1, 2, 3, 3, 3, 3, [...] n]
+        ctr1 = np.cumsum(a0_clean * np.random.choice([1, -1], N))  # Position channel e.g. [0, 1, 2, 1, ...]
+
+        self.timeline = {'timestamps': np.arange(0, N, Fs), 'raw': np.vstack([a0, ctr0, ctr1]).T}
+        meta = {'daqSampleRate': Fs, 'inputs': [
+            {'name': 'bpod', 'arrayColumn': 1, 'measurement': 'Voltage'},
+            {'name': 'neuralFrames', 'arrayColumn': 2, 'measurement': 'EdgeCount'},
+            {'name': 'rotaryEncoder', 'arrayColumn': 3, 'measurement': 'Position'}
+        ]}
+        alfio.save_object_npy(self.tmpdir.name, self.timeline, 'DAQdata', namespace='timeline')
+        with open(self.tmpdir.name + '/_timeline_DAQdata.meta.json', 'w') as fp:
+            json.dump(meta, fp)
+
+    def test_load_sync_timeline(self):
+        chmap = {'bpod': 0, 'neuralFrames': 1, 'rotaryEncoder': 3}
+        sync = raw_daq.load_sync_timeline(self.tmpdir.name, chmap)
+        self.assertCountEqual(('times', 'channels', 'polarities'), sync.keys())
+        # Should be sorted by times
+        self.assertTrue(np.all(np.diff(sync['times']) >= 0))
+        # Number of detected fronts should be correct
+        self.assertEqual(len(sync['times'][sync['channels'] == 0]), self.n_ttl * 2)
+        # Check polarities
+        fronts = sync['polarities'][sync['channels'] == 0]
+        self.assertEqual(1, fronts[0])
+        # Check polarities alternate between 1 and -1
+        self.assertTrue(
+            np.all(np.unique(np.cumsum(fronts)) == [0, 1]) and np.all(np.unique(fronts) == [-1, 1])
+        )
+        # Check edge count channel sync
+        fronts = sync['polarities'][sync['channels'] == 1]
+        # Because of the way we made the data, the number of fronts should == pulse_width * n_ttl
+        # Minus one from unique values because one of those values will be zero
+        self.assertEqual(len(np.unique(self.timeline['raw'][:, 1])) - 1, len(fronts))
+        self.assertTrue(np.all(fronts == 1))
+        # Check position channel sync
+        fronts = sync['polarities'][sync['channels'] == 3]
+        self.assertEqual(len(np.unique(self.timeline['raw'][:, 1])) - 1, len(fronts))
+        self.assertTrue(np.all(np.unique(fronts) == [-1, 1]))
+
+        # Check for missing channel warnings
+        chmap['unknown'] = 2  # Add channel that's not in meta file
+        with self.assertLogs(logging.getLogger('ibllib.io.raw_daq_loaders'), logging.WARNING) as log:
+            raw_daq.load_sync_timeline(self.tmpdir.name, chmap)
+            record, = log.records
+            self.assertIn('unknown', record.message)
 
 
 if __name__ == "__main__":
