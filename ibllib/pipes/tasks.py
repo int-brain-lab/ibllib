@@ -608,8 +608,9 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
     exec_name = tdict['executable']
     strmodule, strclass = exec_name.rsplit('.', 1)
     classe = getattr(importlib.import_module(strmodule), strclass)
+    tkwargs = tdict.get('arguments', {}) or {}  # if the db field is null it returns None
     task = classe(session_path, one=one, taskid=tdict['id'], machine=machine, clobber=clobber,
-                  location=location, **tdict.get('arguments', {}))
+                  location=location, **tkwargs)
     # sets the status flag to started before running
     one.alyx.rest('tasks', 'partial_update', id=tdict['id'], data={'status': 'Started'})
     status = task.run()
