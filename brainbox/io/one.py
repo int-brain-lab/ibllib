@@ -901,7 +901,12 @@ class SpikeSortingLoader:
     def __post_init__(self):
         # pid gets precedence
         if self.pid is not None:
-            self.eid, self.pname = self.one.pid2eid(self.pid)
+            try:
+                self.eid, self.pname = self.one.pid2eid(self.pid)
+            except NotImplementedError:
+                if self.eid == '' or self.pname == '':
+                    raise IOError("Cannot infer session id and probe name from pid. "
+                                  "You need to pass eid and pname explicitly when instantiating SpikeSortingLoader.")
             self.session_path = self.one.eid2path(self.eid)
         # then eid / pname combination
         elif self.session_path is None or self.session_path == '':
@@ -1225,7 +1230,10 @@ class SessionLoader:
         """
         Function to load trials data into SessionLoader.trials
         """
-        self.trials = self.one.load_object(self.eid, 'trials', collection='alf').to_df()
+        # itiDuration frequently has a mismatched dimension, and we don't need it, exclude using regex
+        self.one.wildcards = False
+        self.trials = self.one.load_object(self.eid, 'trials', collection='alf', attribute=r'(?!itiDuration).*').to_df()
+        self.one.wildcards = True
         self.data_info.loc[self.data_info['name'] == 'trials', 'is_loaded'] = True
 
     def load_wheel(self, sampling_rate=1000, smooth_size=0.03):

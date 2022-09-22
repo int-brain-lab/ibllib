@@ -8,7 +8,7 @@ from ibllib.io.extractors.base import BaseBpodTrialsExtractor, run_extractor_cla
 import ibllib.io.raw_data_loaders as raw
 from ibllib.io.extractors.training_trials import (
     Choice, FeedbackTimes, FeedbackType, GoCueTimes, GoCueTriggerTimes,
-    IncludedTrials, Intervals, ItiDuration, ProbabilityLeft, ResponseTimes, RewardVolume,
+    IncludedTrials, Intervals, ProbabilityLeft, ResponseTimes, RewardVolume,
     StimOnTimes_deprecated, StimOnTriggerTimes, StimOnOffFreezeTimes, ItiInTimes,
     StimOffTriggerTimes, StimFreezeTriggerTimes, ErrorCueTriggerTimes, PhasePosQuiescence)
 from ibllib.io.extractors.training_wheel import Wheel
@@ -173,7 +173,7 @@ def extract_all(session_path, save=False, bpod_trials=False, settings=False, ext
         ])
     else:
         base.extend([
-            Intervals, Wheel, FeedbackType, ContrastLR, ProbabilityLeft, Choice, ItiDuration,
+            Intervals, Wheel, FeedbackType, ContrastLR, ProbabilityLeft, Choice,
             StimOnTimes_deprecated, RewardVolume, FeedbackTimes, ResponseTimes, GoCueTimes, PhasePosQuiescence
         ])
 

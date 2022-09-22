@@ -333,19 +333,6 @@ class TestExtractTrialData(unittest.TestCase):
         self.assertTrue(isinstance(di, np.ndarray))
         self.assertFalse(np.isnan(di).all())
 
-    def test_get_iti_duration(self):
-        # TRAINING SESSIONS
-        iti = training_trials.ItiDuration(
-            self.training_lt5['path']).extract()[0]
-        self.assertTrue(isinstance(iti, np.ndarray))
-        # -- version >= 5.0.0 iti always == 0.5 sec no extract
-
-        # BIASED SESSIONS
-        iti = biased_trials.ItiDuration(
-            self.biased_lt5['path']).extract()[0]
-        self.assertTrue(isinstance(iti, np.ndarray))
-        # -- version >= 5.0.0 iti always == 0.5 sec no extract
-
     def test_get_response_times(self):
         # TRAINING SESSIONS
         rt = training_trials.ResponseTimes(
