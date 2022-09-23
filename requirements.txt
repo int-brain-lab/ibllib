@@ -23,8 +23,9 @@ scipy>=1.3.0
 seaborn>=0.9.0
 tqdm>=4.32.1
 # ibl libraries
-iblutil>=1.3.0
-wfield>0.2.2 # widefield extractor
-labcams # widefield extractor
 ibl-neuropixel>=0.3.1
+iblutil>=1.3.0
+labcams  # widefield extractor
 ONE-api>=1.8.1
+slidingRP  # steinmetz lab refractory period metrics
+wfield>0.2.2  # widefield extractor

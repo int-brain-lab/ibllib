@@ -3,7 +3,7 @@ Computes metrics for assessing quality of single units.
 
 Run the following to set-up the workspace to run the docstring examples:
 >>> import brainbox as bb
->>> import alf.io as aio
+>>> import one.alf.io as aio
 >>> import numpy as np
 >>> import matplotlib.pyplot as plt
 >>> import ibllib.ephys.spikes as e_spks
@@ -27,6 +27,8 @@ import spikeglx
 from phylib.stats import correlograms
 from iblutil.util import Bunch
 from iblutil.numerical import ismember, between_sorted
+import slidingRP
+
 from brainbox import singlecell
 from brainbox.io.spikeglx import extract_waveforms
 from brainbox.processing import bincount2D
@@ -977,6 +979,9 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
     # this is the geometric median
     r.amp_median[ir] = np.array(10 ** (camp['log_amps'].median() / 20))
     r.amp_std_dB[ir] = np.array(camp['log_amps'].std())
+    srp = slidingRP.slidingRP_all(spikeTimes=spike_times, spikeClusters=spike_clusters,
+                                  **{'sampleRate': 30000, 'binSizeCorr': 1 / 30000})
+    r.slidingRP_viol[srp['cidx']] = srp['value']
 
     # loop over each cluster to compute the rest of the metrics
     for ic in np.arange(nclust):
@@ -992,10 +997,10 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
         r.contamination_alt[ic] = contamination_alt(ts, rp=params['refractory_period'])
         r.contamination[ic], _ = contamination(
             ts, tmin, tmax, rp=params['refractory_period'], min_isi=params['min_isi'])
-        r.slidingRP_viol[ic] = slidingRP_viol(ts,
-                                              bin_size=params['bin_size'],
-                                              thresh=params['RPslide_thresh'],
-                                              acceptThresh=params['acceptable_contamination'])
+        # r.slidingRP_viol[ic] = slidingRP_viol(ts,
+        #                                       bin_size=params['bin_size'],
+        #                                       thresh=params['RPslide_thresh'],
+        #                                       acceptThresh=params['acceptable_contamination'])
         r.noise_cutoff[ic] = noise_cutoff(amps,
                                           quartile_length=params['nc_quartile_length'],
                                           n_bins=params['nc_bins'],
