@@ -170,18 +170,27 @@ def plot_swanson(acronyms=None, values=None, ax=None, hemisphere=None, br=None,
         iswan = None
     else:
         user_aids = br.parse_acronyms_argument(acronyms)
-        # if the user provided inputs are higher level than swanson propagate down
-        swaids = br.id[np.unique(s2a)]
-        maids = np.setdiff1d(user_aids, swaids)  # those are the indices not in Swanson
-        for i, maid in enumerate(maids):
-            if maid <= 1:
-                continue
-            childs_in_sw = np.intersect1d(br.descendants(maid)['id'][1:], swaids)
-            if childs_in_sw.size > 0:
-                user_aids = np.r_[user_aids, childs_in_sw]
-                values = np.r_[values, values[i] + childs_in_sw * 0]
+        """
+        In order to make sure all descendants of the indicated labels are painted we compute
+        the hierarchy for the regions. Then starting from the leaves, we go upwards and assign
+        values to regions matching the intersection of user provided ids. This algorithm ensures
+        that the most granular nodes get precedence over general ones, but also that
+        """
+        br.compute_hierarchy()
+        nl, nr = br.hierarchy.shape
+        all_values = np.zeros(nr) * np.nan
+        # all_indices = np.zeros(nr, dtype=np.int16)
+        for lev in np.flipud(np.arange(nl)):
+            mask = np.where(np.isnan(all_values))[0]
+            im, iu = ismember(br.id[br.hierarchy[lev, mask]], user_aids)
+            all_values[mask[im]] = values[iu]
+            # all_indices[mask[im]] = iu
+        # from there we apply the previous algorithms
+        sw_indices = np.unique(s2a)
+        user_indices = np.where(~np.isnan(all_values))[0]
+        indices = np.intersect1d(sw_indices, user_indices)
         # the user may have input non-unique regions
-        df = pd.DataFrame(dict(aid=user_aids, value=values)).groupby('aid').mean()
+        df = pd.DataFrame(dict(aid=br.id[indices], value=all_values[indices])).groupby('aid').mean()
         aids, vals = (df.index.values, df['value'].values)
         # apply mapping and perform another round of aggregation
         _, _, ibr = np.intersect1d(aids, br.id, return_indices=True)

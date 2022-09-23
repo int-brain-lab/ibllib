@@ -454,6 +454,8 @@ class BrainRegions(_BrainRegions):
         ancestors and descendants.
         :return:
         """
+        if hasattr(self, 'hierarchy'):
+            return
         n_levels = np.max(self.level)
         n_regions = self.id.size
         # creates the parent index. Void and root are omitted from intersection
