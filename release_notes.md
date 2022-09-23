@@ -1,8 +1,12 @@
+## Develop features
+- swanson flatmap: the algorithm to propagate down the hierarchy has been refined
+
 ## Release Notes 2.15
+
 ### Release Notes 2.15.2 - 2022-09-22
 - extraction pipeline: fix unpacking of empty arguments field from alyx dict that prevents running task 
 
-### Release Notes 2.15.1
+### Release Notes 2.15.1 - 2022-09-21
 - atlas: gene-expression backend and MRI Toronto atlas stretch and squeeze factors (Dan/Olivier)
 - FDR correction (Benjamin-Hochmann) to correct for multiple testing optional (Guido)
 - SpikeSortingLoader can be used with ONE local mode (Julia)
