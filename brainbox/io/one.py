@@ -1342,7 +1342,7 @@ class SessionLoader:
         # Try to load from features
         feat_raw = self.one.load_object(self.eid, 'leftCamera', attribute=['times', 'features'])
         if 'features' in feat_raw.keys():
-            times_fixed, feats = self._check_video_timestamps(feat_raw['times'], feat_raw['features'])
+            times_fixed, feats = self._check_video_timestamps('left', feat_raw['times'], feat_raw['features'])
             self.pupil = feats.copy()
             self.pupil.insert(0, 'times', times_fixed)
 
