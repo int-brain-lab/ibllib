@@ -1280,16 +1280,12 @@ class SessionLoader:
         # empty the dictionary so that if one loads only one view, after having loaded several, the others don't linger
         self.pose = {}
         for view in views:
-            try:
-                pose_raw = self.one.load_object(self.eid, f'{view}Camera', attribute=['dlc', 'times'])
-                # Double check if video timestamps are correct length or can be fixed
-                times_fixed, dlc = self._check_video_timestamps(view, pose_raw['times'], pose_raw['dlc'])
-                self.pose[f'{view}Camera'] = likelihood_threshold(dlc, likelihood_thr)
-                self.pose[f'{view}Camera'].insert(0, 'times', times_fixed)
-                self.data_info.loc[self.data_info['name'] == 'pose', 'is_loaded'] = True
-            except BaseException as e:
-                _logger.warning(f'Could not load pose data for {view}Camera. Skipping camera.')
-                _logger.debug(e)
+            pose_raw = self.one.load_object(self.eid, f'{view}Camera', attribute=['dlc', 'times'])
+            # Double check if video timestamps are correct length or can be fixed
+            times_fixed, dlc = self._check_video_timestamps(view, pose_raw['times'], pose_raw['dlc'])
+            self.pose[f'{view}Camera'] = likelihood_threshold(dlc, likelihood_thr)
+            self.pose[f'{view}Camera'].insert(0, 'times', times_fixed)
+            self.data_info.loc[self.data_info['name'] == 'pose', 'is_loaded'] = True
 
     def load_motion_energy(self, views=['left', 'right', 'body']):
         """
@@ -1311,17 +1307,13 @@ class SessionLoader:
         # empty the dictionary so that if one loads only one view, after having loaded several, the others don't linger
         self.motion_energy = {}
         for view in views:
-            try:
-                me_raw = self.one.load_object(self.eid, f'{view}Camera', attribute=['ROIMotionEnergy', 'times'])
-                # Double check if video timestamps are correct length or can be fixed
-                times_fixed, motion_energy = self._check_video_timestamps(
-                    view, me_raw['times'], me_raw['ROIMotionEnergy'])
-                self.motion_energy[f'{view}Camera'] = pd.DataFrame(columns=[names[view]], data=motion_energy)
-                self.motion_energy[f'{view}Camera'].insert(0, 'times', times_fixed)
-                self.data_info.loc[self.data_info['name'] == 'motion_energy', 'is_loaded'] = True
-            except BaseException as e:
-                _logger.warning(f'Could not load motion energy data for {view}Camera. Skipping camera.')
-                _logger.debug(e)
+            me_raw = self.one.load_object(self.eid, f'{view}Camera', attribute=['ROIMotionEnergy', 'times'])
+            # Double check if video timestamps are correct length or can be fixed
+            times_fixed, motion_energy = self._check_video_timestamps(
+                view, me_raw['times'], me_raw['ROIMotionEnergy'])
+            self.motion_energy[f'{view}Camera'] = pd.DataFrame(columns=[names[view]], data=motion_energy)
+            self.motion_energy[f'{view}Camera'].insert(0, 'times', times_fixed)
+            self.data_info.loc[self.data_info['name'] == 'motion_energy', 'is_loaded'] = True
 
     def load_licks(self):
         """
@@ -1364,7 +1356,8 @@ class SessionLoader:
             try:
                 self.pupil['pupilDiameter_smooth'] = get_smooth_pupil_diameter(self.pupil['pupilDiameter_raw'], 'left')
             except BaseException as e:
-                _logger.error("Computing smooth pupil diameter failed, saving all NaNs.")
+                _logger.error("Loaded raw pupil diameter but computing smooth pupil diameter failed. "
+                              "Saving all NaNs for pupilDiameter_smooth.")
                 _logger.debug(e)
                 self.pupil['pupilDiameter_smooth'] = np.nan
 
@@ -1375,7 +1368,7 @@ class SessionLoader:
                    (np.var(self.pupil['pupilDiameter_smooth'][good_idxs] - self.pupil['pupilDiameter_raw'][good_idxs])))
             if snr < snr_thresh:
                 self.pupil = pd.DataFrame()
-                _logger.error(f'Pupil diameter SNR ({snr:.2f}) below threshold SNR ({snr_thresh}), removing data.')
+                raise ValueError(f'Pupil diameter SNR ({snr:.2f}) below threshold SNR ({snr_thresh}), removing data.')
 
     def _check_video_timestamps(self, view, video_timestamps, video_data):
         """
