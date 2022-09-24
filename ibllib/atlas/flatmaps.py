@@ -193,8 +193,9 @@ def plot_swanson(acronyms=None, values=None, ax=None, hemisphere=None, br=None,
 
     # provides the mean to see the region on axis
     def format_coord(x, y):
-        acronym = br.acronym[s2a[int(y), int(x)]]
-        return f'x={x:1.4f}, y={x:1.4f}, {acronym}'
+        ind = s2a[int(y), int(x)]
+        ancestors = br.ancestors(br.id[ind])['acronym']
+        return f'x={x:1.4f}, y={x:1.4f}, {br.acronym[ind]} \n {ancestors}'
 
     ax.format_coord = format_coord
     return ax
