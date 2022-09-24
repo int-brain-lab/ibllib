@@ -289,6 +289,21 @@ class TestBrainRegions(unittest.TestCase):
         np.testing.assert_equal(
             self.brs.hierarchy[:, 349], np.array([2, 3, 4, 5, 6, 340, 347, 349, 349, 349]))
 
+    def test_propagate_down(self):
+        acronyms = ['CB', 'ANcr2']
+        ind0 = ismember(self.brs.acronym2id(acronyms), self.brs.id)[1]
+        ind1 = [7, 45, 66]
+        for ind in [ind0, ind1]:
+            with self.subTest(indices=ind):
+                acronyms = self.brs.acronym[ind]
+                values = np.arange(len(acronyms))
+                ibr, ivals = self.brs.propagate_down(acronyms, values)
+                idesc = []
+                for c, i in enumerate(ind):
+                    ii = ismember(self.brs.descendants(self.brs.id[i])['id'], self.brs.id)[1]
+                    idesc.append(ii)
+                np.testing.assert_equal(ibr, np.unique(np.concatenate(idesc)))
+
 
 class TestAtlasPlots(unittest.TestCase):
 

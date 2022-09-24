@@ -3,7 +3,6 @@ Module that hold techniques to project the brain volume onto 2D images for visua
 """
 from functools import lru_cache
 
-import pandas as pd
 import numpy as np
 from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
@@ -152,6 +151,7 @@ def plot_swanson(acronyms=None, values=None, ax=None, hemisphere=None, br=None,
     """
     mapping = 'Swanson'
     br = BrainRegions() if br is None else br
+    br.compute_hierarchy()
     s2a = swanson()
     # both hemishpere
     if hemisphere == 'both':
@@ -169,34 +169,7 @@ def plot_swanson(acronyms=None, values=None, ax=None, hemisphere=None, br=None,
         im = br.rgba[regions]
         iswan = None
     else:
-        user_aids = br.parse_acronyms_argument(acronyms)
-        """
-        In order to make sure all descendants of the indicated labels are painted we compute
-        the hierarchy for the regions. Then starting from the leaves, we go upwards and assign
-        values to regions matching the intersection of user provided ids. This algorithm ensures
-        that the most granular nodes get precedence over general ones, but also that
-        """
-        br.compute_hierarchy()
-        nl, nr = br.hierarchy.shape
-        all_values = np.zeros(nr) * np.nan
-        # all_indices = np.zeros(nr, dtype=np.int16)
-        for lev in np.flipud(np.arange(nl)):
-            mask = np.where(np.isnan(all_values))[0]
-            im, iu = ismember(br.id[br.hierarchy[lev, mask]], user_aids)
-            all_values[mask[im]] = values[iu]
-            # all_indices[mask[im]] = iu
-        # from there we apply the previous algorithms
-        sw_indices = np.unique(s2a)
-        user_indices = np.where(~np.isnan(all_values))[0]
-        indices = np.intersect1d(sw_indices, user_indices)
-        # the user may have input non-unique regions
-        df = pd.DataFrame(dict(aid=br.id[indices], value=all_values[indices])).groupby('aid').mean()
-        aids, vals = (df.index.values, df['value'].values)
-        # apply mapping and perform another round of aggregation
-        _, _, ibr = np.intersect1d(aids, br.id, return_indices=True)
-        ibr = br.mappings['Swanson-lr'][ibr]
-        df = pd.DataFrame(dict(ibr=ibr, value=vals)).groupby('ibr').mean()
-        ibr, vals = (df.index.values, df['value'].values)
+        ibr, vals = br.propagate_down(acronyms, values)
         # we now have the mapped regions and aggregated values, map values onto swanson map
         iswan, iv = ismember(s2a, ibr)
         im = np.zeros_like(s2a, dtype=np.float32)

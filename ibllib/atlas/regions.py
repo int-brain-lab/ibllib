@@ -123,6 +123,26 @@ class _BrainRegions:
         leaves = np.setxor1d(self.id, self.parent)
         return self.get(np.int64(leaves[~np.isnan(leaves)]))
 
+    def propagate_down(self, acronyms, values):
+        """
+        This function remaps a set of user specified acronyms and values to the
+        swanson map, by filling down the child nodes when higher up values are
+        provided.
+        :param acronyms: list or array of allen ids or acronyms
+        :param values: list or array of associated values
+        :return:
+        """
+        user_aids = self.parse_acronyms_argument(acronyms)
+        _, user_indices = ismember(user_aids, self.id)
+        self.compute_hierarchy()
+        ia, ib = ismember(self.hierarchy, user_indices)
+        v = np.zeros_like(ia, dtype=np.float64) * np.NaN
+        v[ia] = values[ib]
+        all_values = np.nanmedian(v, axis=0)
+        indices = np.where(np.any(ia, axis=0))[0]
+        all_values = all_values[indices]
+        return indices, all_values
+
     def _mapping_from_regions_list(self, new_map, lateralize=False):
         """
         From a vector of regions id, creates a mapping such as
