@@ -1,7 +1,31 @@
 ## Release Notes 2.15
+### Release Notes NOT YET RELEASED
+- SessionLoader error handling and bug fix
+
+### Release Notes 2.15.2 - 2022-09-22
+- extraction pipeline: fix unpacking of empty arguments field from alyx dict that prevents running task 
+
+### Release Notes 2.15.1
+- atlas: gene-expression backend and MRI Toronto atlas stretch and squeeze factors (Dan/Olivier)
+- FDR correction (Benjamin-Hochmann) to correct for multiple testing optional (Guido)
+- SpikeSortingLoader can be used with ONE local mode (Julia)
+
+
+### Release Notes 2.15.0 2022-09-20
+#### features
+- dynamic pipelines creation: if the acquisition description file exists, task sequences get created
 - session registration procedures and projects, only add a couple of fields in the json by default
+- new modalities:
+  - photometry extraction (Mainen lab)
+  - widefield extraction (Churchland lab)
+  
+#### bugfixes
+- Spike sorting task: parse new pykilosort log format
+- Session loader
+
 
 ## Release Notes 2.14
+
 ### Release Notes 2.14.0 2022-08-17
 - Adding brainbox.io.one.SessionLoader for standardized loading of session data
 - Changes to TaskQC, VideoQC and DLCQC thresholds and aggregation

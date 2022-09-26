@@ -12,7 +12,7 @@ import ibllib.pipes.behavior_tasks as btasks
 import ibllib.pipes.video_tasks as vtasks
 import ibllib.pipes.ephys_tasks as etasks
 import ibllib.pipes.audio_tasks as atasks
-
+from ibllib.pipes.photometry_tasks import TaskFibrePhotometryPreprocess, TaskFibrePhotometryRegisterRaw
 import spikeglx
 
 
@@ -258,7 +258,7 @@ def make_pipeline(session_path=None, **pkwargs):
         micro_kwargs['device_collection'] = micro_kwargs.pop('collection')
         if sync_kwargs['sync'] == 'bpod':
             tasks['AudioRegisterRaw'] = type('AudioRegisterRaw', (atasks.AudioSync,), {})(
-                **kwargs, **sync_kwargs, **micro_kwargs, collection=collection)
+                **kwargs, **sync_kwargs, **micro_kwargs, collection=micro_kwargs['device_collection'])
         elif sync_kwargs['sync'] == 'nidq':
             tasks['AudioRegisterRaw'] = type('AudioRegisterRaw', (atasks.AudioCompress,), {})(**kwargs, **micro_kwargs)
 
@@ -266,7 +266,6 @@ def make_pipeline(session_path=None, **pkwargs):
     if 'widefield' in devices:
         (_, wfield_kwargs), = devices['widefield'].items()
         wfield_kwargs['device_collection'] = wfield_kwargs.pop('collection')
-
         tasks['WideFieldRegisterRaw'] = type('WidefieldRegisterRaw', (wtasks.WidefieldRegisterRaw,), {})(
             **kwargs, **wfield_kwargs)
         tasks['WidefieldCompress'] = type('WidefieldCompress', (wtasks.WidefieldCompress,), {})(
@@ -279,9 +278,17 @@ def make_pipeline(session_path=None, **pkwargs):
         tasks['WidefieldFOV'] = type('WidefieldFOV', (wtasks.WidefieldFOV,), {})(
             **kwargs, **wfield_kwargs, parents=[tasks['WidefieldPreprocess']])
 
+    if 'photometry' in devices:
+        # {'collection': 'raw_photometry_data', 'sync_label': 'frame_trigger', 'regions': ['Region1G', 'Region3G']}
+        photometry_kwargs = devices['photometry']
+        tasks['TaskFibrePhotometryRegisterRaw'] = type('TaskFibrePhotometryRegisterRaw', (
+            TaskFibrePhotometryRegisterRaw,), {})(**kwargs, **photometry_kwargs)
+        tasks['TaskFibrePhotometryPreprocess'] = type('TaskFibrePhotometryPreprocess', (
+            TaskFibrePhotometryPreprocess,), {})(**kwargs, **photometry_kwargs, **sync_kwargs,
+                                                 parents=[tasks['TaskFibrePhotometryRegisterRaw']] + sync_tasks)
+
     p = mtasks.Pipeline(session_path=session_path, **pkwargs)
     p.tasks = tasks
-
     return p
 
 
@@ -291,7 +298,6 @@ def make_pipeline_dict(pipeline, save=True):
     if save:
         with open(Path(pipeline.session_path).joinpath('pipeline_tasks.yaml'), 'w') as file:
             _ = yaml.dump(task_dicts, file)
-
     return task_dicts
 
 

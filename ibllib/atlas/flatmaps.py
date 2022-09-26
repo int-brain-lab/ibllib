@@ -2,22 +2,22 @@
 Module that hold techniques to project the brain volume onto 2D images for visualisation purposes
 """
 from functools import lru_cache
-import logging
 
 import pandas as pd
 import numpy as np
 from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
+import matplotlib.colors
 
 from iblutil.numerical import ismember
-from iblutil.util import Bunch
+from iblutil.util import Bunch, get_logger
 from iblutil.io.hashfile import md5
 import one.remote.aws as aws
 
 from ibllib.atlas.atlas import AllenAtlas, BrainRegions
 
 
-_logger = logging.getLogger(__file__)
+_logger = get_logger(__file__)
 
 
 @lru_cache(maxsize=1, typed=False)
@@ -133,7 +133,7 @@ def swanson(filename="swanson2allen.npz"):
 
 
 def plot_swanson(acronyms=None, values=None, ax=None, hemisphere=None, br=None,
-                 orientation='landscape', annotate=False, **kwargs):
+                 orientation='landscape', annotate=False, empty_color='silver', **kwargs):
     """
     Displays the 2D image corresponding to the swanson flatmap.
     This case is different from the others in the sense that only a region maps to another regions, there
@@ -145,6 +145,8 @@ def plot_swanson(acronyms=None, values=None, ax=None, hemisphere=None, br=None,
     :param ax: matplotlib axis object to plot onto
     :param orientation: 'landscape' (default) or 'portrait'
     :param annotate: (False) if True, labels regions with acronyms
+    :param empty_color: (grey) matplotlib color code or rgb_a int8 tuple defining the filling
+     of brain regions not provided. Defaults to 'silver'
     :param kwargs: arguments for imshow
     :return:
     """
@@ -165,6 +167,7 @@ def plot_swanson(acronyms=None, values=None, ax=None, hemisphere=None, br=None,
     if acronyms is None:
         regions = br.mappings[mapping][s2a]
         im = br.rgba[regions]
+        iswan = None
     else:
         user_aids = br.parse_acronyms_argument(acronyms)
         # if the user provided inputs are higher level than swanson propagate down
@@ -196,6 +199,9 @@ def plot_swanson(acronyms=None, values=None, ax=None, hemisphere=None, br=None,
     ax.imshow(im, **kwargs)
     # overlay the boundaries if value plot
     imb = np.zeros((*s2a.shape[:2], 4), dtype=np.uint8)
+    # fill in the empty regions with the blank regions colours if necessary
+    if iswan is not None:
+        imb[~iswan] = (np.array(matplotlib.colors.to_rgba(empty_color)) * 255).astype('uint8')
     imb[s2a == 0] = 255
     # imb[s2a == 1] = np.array([167, 169, 172, 255])
     imb[s2a == 1] = np.array([0, 0, 0, 255])

@@ -901,7 +901,12 @@ class SpikeSortingLoader:
     def __post_init__(self):
         # pid gets precedence
         if self.pid is not None:
-            self.eid, self.pname = self.one.pid2eid(self.pid)
+            try:
+                self.eid, self.pname = self.one.pid2eid(self.pid)
+            except NotImplementedError:
+                if self.eid == '' or self.pname == '':
+                    raise IOError("Cannot infer session id and probe name from pid. "
+                                  "You need to pass eid and pname explicitly when instantiating SpikeSortingLoader.")
             self.session_path = self.one.eid2path(self.eid)
         # then eid / pname combination
         elif self.session_path is None or self.session_path == '':
@@ -1225,7 +1230,10 @@ class SessionLoader:
         """
         Function to load trials data into SessionLoader.trials
         """
-        self.trials = self.one.load_object(self.eid, 'trials', collection='alf').to_df()
+        # itiDuration frequently has a mismatched dimension, and we don't need it, exclude using regex
+        self.one.wildcards = False
+        self.trials = self.one.load_object(self.eid, 'trials', collection='alf', attribute=r'(?!itiDuration).*').to_df()
+        self.one.wildcards = True
         self.data_info.loc[self.data_info['name'] == 'trials', 'is_loaded'] = True
 
     def load_wheel(self, sampling_rate=1000, smooth_size=0.03):
@@ -1272,16 +1280,12 @@ class SessionLoader:
         # empty the dictionary so that if one loads only one view, after having loaded several, the others don't linger
         self.pose = {}
         for view in views:
-            try:
-                pose_raw = self.one.load_object(self.eid, f'{view}Camera', attribute=['dlc', 'times'])
-                # Double check if video timestamps are correct length or can be fixed
-                times_fixed, dlc = self._check_video_timestamps(view, pose_raw['times'], pose_raw['dlc'])
-                self.pose[f'{view}Camera'] = likelihood_threshold(dlc, likelihood_thr)
-                self.pose[f'{view}Camera'].insert(0, 'times', times_fixed)
-                self.data_info.loc[self.data_info['name'] == 'pose', 'is_loaded'] = True
-            except BaseException as e:
-                _logger.warning(f'Could not load pose data for {view}Camera. Skipping camera.')
-                _logger.debug(e)
+            pose_raw = self.one.load_object(self.eid, f'{view}Camera', attribute=['dlc', 'times'])
+            # Double check if video timestamps are correct length or can be fixed
+            times_fixed, dlc = self._check_video_timestamps(view, pose_raw['times'], pose_raw['dlc'])
+            self.pose[f'{view}Camera'] = likelihood_threshold(dlc, likelihood_thr)
+            self.pose[f'{view}Camera'].insert(0, 'times', times_fixed)
+            self.data_info.loc[self.data_info['name'] == 'pose', 'is_loaded'] = True
 
     def load_motion_energy(self, views=['left', 'right', 'body']):
         """
@@ -1303,17 +1307,13 @@ class SessionLoader:
         # empty the dictionary so that if one loads only one view, after having loaded several, the others don't linger
         self.motion_energy = {}
         for view in views:
-            try:
-                me_raw = self.one.load_object(self.eid, f'{view}Camera', attribute=['ROIMotionEnergy', 'times'])
-                # Double check if video timestamps are correct length or can be fixed
-                times_fixed, motion_energy = self._check_video_timestamps(
-                    view, me_raw['times'], me_raw['ROIMotionEnergy'])
-                self.motion_energy[f'{view}Camera'] = pd.DataFrame(columns=[names[view]], data=motion_energy)
-                self.motion_energy[f'{view}Camera'].insert(0, 'times', times_fixed)
-                self.data_info.loc[self.data_info['name'] == 'motion_energy', 'is_loaded'] = True
-            except BaseException as e:
-                _logger.warning(f'Could not load motion energy data for {view}Camera. Skipping camera.')
-                _logger.debug(e)
+            me_raw = self.one.load_object(self.eid, f'{view}Camera', attribute=['ROIMotionEnergy', 'times'])
+            # Double check if video timestamps are correct length or can be fixed
+            times_fixed, motion_energy = self._check_video_timestamps(
+                view, me_raw['times'], me_raw['ROIMotionEnergy'])
+            self.motion_energy[f'{view}Camera'] = pd.DataFrame(columns=[names[view]], data=motion_energy)
+            self.motion_energy[f'{view}Camera'].insert(0, 'times', times_fixed)
+            self.data_info.loc[self.data_info['name'] == 'motion_energy', 'is_loaded'] = True
 
     def load_licks(self):
         """
@@ -1334,7 +1334,7 @@ class SessionLoader:
         # Try to load from features
         feat_raw = self.one.load_object(self.eid, 'leftCamera', attribute=['times', 'features'])
         if 'features' in feat_raw.keys():
-            times_fixed, feats = self._check_video_timestamps(feat_raw['times'], feat_raw['features'])
+            times_fixed, feats = self._check_video_timestamps('left', feat_raw['times'], feat_raw['features'])
             self.pupil = feats.copy()
             self.pupil.insert(0, 'times', times_fixed)
 
@@ -1356,7 +1356,8 @@ class SessionLoader:
             try:
                 self.pupil['pupilDiameter_smooth'] = get_smooth_pupil_diameter(self.pupil['pupilDiameter_raw'], 'left')
             except BaseException as e:
-                _logger.error("Computing smooth pupil diameter failed, saving all NaNs.")
+                _logger.error("Loaded raw pupil diameter but computing smooth pupil diameter failed. "
+                              "Saving all NaNs for pupilDiameter_smooth.")
                 _logger.debug(e)
                 self.pupil['pupilDiameter_smooth'] = np.nan
 
@@ -1367,7 +1368,7 @@ class SessionLoader:
                    (np.var(self.pupil['pupilDiameter_smooth'][good_idxs] - self.pupil['pupilDiameter_raw'][good_idxs])))
             if snr < snr_thresh:
                 self.pupil = pd.DataFrame()
-                _logger.error(f'Pupil diameter SNR ({snr:.2f}) below threshold SNR ({snr_thresh}), removing data.')
+                raise ValueError(f'Pupil diameter SNR ({snr:.2f}) below threshold SNR ({snr_thresh}), removing data.')
 
     def _check_video_timestamps(self, view, video_timestamps, video_data):
         """
