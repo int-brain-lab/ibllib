@@ -202,8 +202,7 @@ def _assign_events_bpod(bpod_t, bpod_polarities, ignore_first_valve=True):
     return t_trial_start, t_valve_open, t_iti_in
 
 
-def _rotary_encoder_positions_from_fronts(ta, pa, tb, pb, ticks=WHEEL_TICKS, radius=1,
-                                          coding='x4'):
+def _rotary_encoder_positions_from_fronts(ta, pa, tb, pb, ticks=WHEEL_TICKS, radius=WHEEL_RADIUS_CM, coding='x4'):
     """
     Extracts the rotary encoder absolute position as function of time from fronts detected
     on the 2 channels. Outputs in units of radius parameters, by default radians
@@ -393,18 +392,18 @@ def extract_wheel_sync(sync, chmap=None):
     Extract wheel positions and times from sync fronts dictionary for all 16 chans
     Output position is in radians, mathematical convention
     :param sync: dictionary 'times', 'polarities' of fronts detected on sync trace
-    :param chmap: dictionary containing channel indices. Default to constant.
-        chmap = {'rotary_encoder_0': 13, 'rotary_encoder_1': 14}
+    :param chmap: dictionary containing channel indices.
     :return: timestamps (np.array)
     :return: positions (np.array)
     """
-    wheel = {}
+    # Assume two separate edge count channels
+    assert chmap.keys() >= {'rotary_encoder_0', 'rotary_encoder_1'}
     channela = get_sync_fronts(sync, chmap['rotary_encoder_0'])
     channelb = get_sync_fronts(sync, chmap['rotary_encoder_1'])
-    wheel['re_ts'], wheel['re_pos'] = _rotary_encoder_positions_from_fronts(
+    re_ts, re_pos = _rotary_encoder_positions_from_fronts(
         channela['times'], channela['polarities'], channelb['times'], channelb['polarities'],
-        ticks=WHEEL_TICKS, radius=1, coding='x4')
-    return wheel['re_ts'], wheel['re_pos']
+        ticks=WHEEL_TICKS, radius=WHEEL_RADIUS_CM, coding='x4')
+    return re_ts, re_pos
 
 
 def extract_behaviour_sync(sync, chmap=None, display=False, bpod_trials=None):
@@ -622,7 +621,7 @@ class FpgaTrials(extractors_base.BaseExtractor):
         # load the bpod data and performs a biased choice world training extraction
         # TODO these all need to pass in the collection so we can load for different protocols in different folders
         bpod_raw = raw_data_loaders.load_data(self.session_path)
-        assert bpod_raw is not None, "No task trials data in raw_behavior_data - Exit"
+        assert bpod_raw is not None, 'No task trials data in raw_behavior_data - Exit'
 
         bpod_trials = self._extract_bpod(bpod_raw, save=False)
         # Explode trials table df
@@ -648,7 +647,7 @@ class FpgaTrials(extractors_base.BaseExtractor):
         out.update({k: self.bpod2fpga(bpod_trials[k][ibpod]) for k in self.bpod_rsync_fields})
         out.update({k: fpga_trials[k][ifpga] for k in sorted(fpga_trials.keys())})
         # extract the wheel data
-        wheel, moves = get_wheel_positions(sync=sync, chmap=chmap)
+        wheel, moves = self.get_wheel_positions(sync=sync, chmap=chmap)
         from ibllib.io.extractors.training_wheel import extract_first_movement_times
         settings = raw_data_loaders.load_settings(session_path=self.session_path)
         min_qt = settings.get('QUIESCENT_PERIOD', None)
@@ -668,6 +667,13 @@ class FpgaTrials(extractors_base.BaseExtractor):
             session_path=self.session_path, save=save, bpod_trials=bpod_trials)
 
         return bpod_trials
+
+    def get_wheel_positions(self, *args, **kwargs):
+        """Extract wheel and wheelMoves objects.
+
+        This method is called by the main extract method and may be overloaded by subclasses.
+        """
+        return get_wheel_positions(*args, **kwargs)
 
 
 def extract_all(session_path, sync_collection='raw_ephys_data', save=True):

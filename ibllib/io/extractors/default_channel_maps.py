@@ -56,10 +56,11 @@ DEFAULT_MAPS = {
 
     'mesoscope':
         {'timeline': {'left_camera': 0,
-                  'right_camera': 1,
-                  'belly_camera': 2,
-                  'frame2ttl': 3,
-                  'audio': 4,
-                  'bpod': 5}
+                      'right_camera': 1,
+                      'belly_camera': 2,
+                      'frame2ttl': 3,
+                      'audio': 4,
+                      'bpod': 5,
+                      'rotary_encoder': 6}
          }
 }

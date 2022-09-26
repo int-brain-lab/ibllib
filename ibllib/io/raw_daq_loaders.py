@@ -129,6 +129,10 @@ def load_sync_timeline(path, sync_map, threshold=2.5, floor_percentile=10):
     """
     Load sync channels from a timeline object.
 
+    Note: Because the scan frequency is typically faster than the sample rate, the position and
+    edge count channels may detect more than one front between samples.  Therefore for these, the
+    raw data is more accurate than the extracted polarities.
+
     Parameters
     ----------
     path : str, pathlib.Path
@@ -168,12 +172,14 @@ def load_sync_timeline(path, sync_map, threshold=2.5, floor_percentile=10):
         elif info['measurement'] == 'EdgeCount':
             # Monotonically increasing values; extract indices where delta == 1
             ind, = np.where(np.diff(raw))
+            ind += 1
             sync.polarities = np.concatenate((sync.polarities, np.ones_like(ind, dtype='i1')))
         elif info['measurement'] == 'Position':
             # Bidirectional; extract indices where delta != 0
             d = np.diff(raw)
-            ind, = np.where(d)
+            ind, = np.where(d.astype(int))
             sync.polarities = np.concatenate((sync.polarities, np.sign(d[ind]).astype('i1')))
+            ind += 1
         else:
             raise NotImplementedError(f'{info["measurement"]} sync extraction')
         # Append timestamps of indices and channel index to sync arrays

@@ -9,6 +9,7 @@ import logging
 import json
 
 import numpy as np
+import numpy.testing
 from one.api import ONE
 import one.alf.io as alfio
 from iblutil.io import params
@@ -601,6 +602,9 @@ class TestRawDaqLoaders(unittest.TestCase):
         )
         # Check edge count channel sync
         fronts = sync['polarities'][sync['channels'] == 1]
+        # Check a few timestamps
+        times = sync['times'][sync['channels'] == 1]
+        np.testing.assert_array_almost_equal(times[:5], np.arange(5) + 1.)
         # Because of the way we made the data, the number of fronts should == pulse_width * n_ttl
         # Minus one from unique values because one of those values will be zero
         self.assertEqual(len(np.unique(self.timeline['raw'][:, 1])) - 1, len(fronts))
