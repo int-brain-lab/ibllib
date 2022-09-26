@@ -202,12 +202,14 @@ def get_stim_aligned_activity(stim_events, spike_times, spike_depths, z_score_fl
 
         # Get rid of any nan values
         stim_times = stim_times[~np.isnan(stim_times)]
-        stim_intervals = np.c_[stim_times - pre_stim, stim_times + post_stim]
-        base_intervals = np.c_[stim_times - base_stim, stim_times - pre_stim]
-        out_intervals = stim_intervals[:, 1] > times[-1]
+        stim_intervals = stim_times - pre_stim
+        base_intervals = stim_times - base_stim
+        out_intervals = stim_intervals > times[-1]
 
         idx_stim = np.searchsorted(times, stim_intervals, side='right')[np.invert(out_intervals)]
         idx_base = np.searchsorted(times, base_intervals, side='right')[np.invert(out_intervals)]
+        idx_stim = np.c_[idx_stim, idx_stim + n_bins]
+        idx_base = np.c_[idx_base, idx_base + n_bins_base]
 
         stim_trials = np.zeros((depths.shape[0], n_bins, idx_stim.shape[0]))
         noise_trials = np.zeros((depths.shape[0], n_bins_base, idx_stim.shape[0]))
