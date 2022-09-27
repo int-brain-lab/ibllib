@@ -1,5 +1,10 @@
-## Develop features
+## Release 2.16
+### Release Notes 2.16.0 2022-09-27
+### features
 - swanson flatmap: the algorithm to propagate down the hierarchy has been refined
+
+### bugfixes
+- set exists flag to false for all data repos when registering datasets with tasks
 
 ## Release Notes 2.15
 ### Release Notes 2.15.3 - 2022-09-26
