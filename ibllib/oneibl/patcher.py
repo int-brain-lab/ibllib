@@ -111,7 +111,7 @@ class Patcher(abc.ABC):
         :param dry: (bool) False by default
         :return:
         """
-        return register_dataset(file_list, one=self.one, server_only=True, **kwargs)
+        return register_dataset(file_list, one=self.one, server_only=True, exists=True, **kwargs)
 
     def register_datasets(self, file_list, **kwargs):
         """
