@@ -2,7 +2,7 @@
 - swanson flatmap: the algorithm to propagate down the hierarchy has been refined
 
 ## Release Notes 2.15
-### Release Notes NOT YET RELEASED
+### Release Notes 2.15.3 - 2022-09-26
 - SessionLoader error handling and bug fix
 
 ### Release Notes 2.15.2 - 2022-09-22
