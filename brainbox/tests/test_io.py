@@ -54,7 +54,7 @@ class TestIO_ALF(unittest.TestCase):
         # Add some fake records to the cache
         if not self.one.search(subject='subject', date='2019-08-12', number='001'):
             make_parquet_db(self.tmpdir)
-            self.one._load_cache(cache_dir=self.tmpdir)
+            self.one.load_cache(cache_dir=self.tmpdir)
 
     def test_load_ephys(self):
         # straight test
