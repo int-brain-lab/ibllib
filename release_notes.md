@@ -1,3 +1,8 @@
+## Release 2.16.1
+### Release Notes 2.16.1 2022-09-28
+### bugfixes
+- photometry extraction: recover from corrupt DAQ signal and reversed polarity of voltage pulses
+ 
 ## Release 2.16
 ### Release Notes 2.16.0 2022-09-27
 ### features
