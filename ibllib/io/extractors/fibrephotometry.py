@@ -67,25 +67,36 @@ def sync_photometry_to_daq(vdaq, fs, df_photometry, chmap=DAQ_CHMAP, v_threshold
     :param v_threshold:
     :return:
     """
+    # here we take the flag that is the most common
     daq_frames, tag_daq_frames = read_daq_timestamps(vdaq=vdaq, v_threshold=v_threshold)
     nf = np.minimum(tag_daq_frames.size, df_photometry['Input0'].size)
-    ipeak = np.argmax(np.correlate(tag_daq_frames[:nf].astype(np.int8), df_photometry['Input0'].values[:nf], mode='full'))
+    xcorr = np.correlate(tag_daq_frames[:nf].astype(np.int8), df_photometry['Input0'].values[:nf], mode='full')
     # if the frame shift is negative, it means that the photometry frames are early
-    frame_shift = ipeak - nf + 1
 
+    frame_shift = np.argmax(xcorr) - nf + 1
     df = np.median(np.diff(df_photometry['Timestamp']))
-    fcn_fp2daq = scipy.interpolate.interp1d(df_photometry['Timestamp'][:nf], daq_frames[:nf] / fs)
+    fc = np.cumsum(np.round(np.diff(daq_frames) / fs / df).astype(np.int32)) - 1  # this is a daq frame counter
+    fc = fc[fc < nf]
+    max_shift = 300
+    error = np.zeros(max_shift * 2 + 1)
+    for i, shift in enumerate(np.arange(-max_shift, max_shift + 1)):
+        fflag = df_photometry['Input0'].values[fc[sl]]
+        error[i] = np.sum(np.abs(tag_daq_frames[:fflag.size] - fflag))
+
+    fcn_fp2daq = scipy.interpolate.interp1d(df_photometry['Timestamp'][:nf].values, daq_frames[:nf] / fs)
     drift_ppm = (np.polyfit(daq_frames[:nf] / fs, df_photometry['Timestamp'][:nf], 1)[0] - 1) * 1e6
-    _logger.info(f"drift photometry to DAQ PPM: {drift_ppm}")
+    if drift_ppm > 120:
+        _logger.warning(f"drift photometry to DAQ PPM: {drift_ppm}")
+    else:
+        _logger.info(f"drift photometry to DAQ PPM: {drift_ppm}")
 
     # here is a bunch of safeguards
     assert np.all(np.abs(np.diff(daq_frames) - df * fs) < 1)  # check that there are no missed frames on daq
     assert np.unique(np.diff(df_photometry['FrameCounter'])).size == 1  # checks that there are no missed frames on photo
     assert frame_shift == 0  # it's always the end frames that are missing
-    assert drift_ppm < 20
+    assert np.abs(drift_ppm) < 20
 
     ts_daq = fcn_fp2daq(df_photometry['Timestamp'].values)  # those are the timestamps in daq time
-
     return ts_daq, fcn_fp2daq, drift_ppm
 
 
@@ -93,6 +104,7 @@ def read_daq_voltage(daq_file, chmap=DAQ_CHMAP):
     channel_names = [c.name for c in load_raw_daq_tdms(daq_file)['Analog'].channels()]
     assert all([v in channel_names for v in chmap.values()]), "Missing channel"
     vdaq, fs = load_channels_tdms(daq_file, chmap=chmap, return_fs=True)
+    vdaq = {k: v - np.median(v) for k, v in vdaq.items()}
     return vdaq, fs
 
 
@@ -105,6 +117,10 @@ def read_daq_timestamps(vdaq, v_threshold=V_THRESHOLD):
     :return:
     """
     daq_frames = rises(vdaq['photometry'], step=v_threshold, analog=True)
+    if daq_frames.size == 0:
+        daq_frames = rises(-vdaq['photometry'], step=v_threshold, analog=True)
+        _logger.warning(f'No photometry pulses detected, attempting to reverse voltage and detect again,'
+                        f'found {daq_frames.size} in reverse voltage. CHECK YOUR FP WIRING TO THE DAQ !!')
     tagged_frames = vdaq['bpod'][daq_frames] > v_threshold
     return daq_frames, tagged_frames
 
