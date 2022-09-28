@@ -1,11 +1,19 @@
+## Release 2.16
+### Release Notes 2.16.0 2022-09-27
+### features
+- swanson flatmap: the algorithm to propagate down the hierarchy has been refined
+
+### bugfixes
+- set exists flag to false for all data repos when registering datasets with tasks
+
 ## Release Notes 2.15
-### Release Notes NOT YET RELEASED
+### Release Notes 2.15.3 - 2022-09-26
 - SessionLoader error handling and bug fix
 
 ### Release Notes 2.15.2 - 2022-09-22
 - extraction pipeline: fix unpacking of empty arguments field from alyx dict that prevents running task 
 
-### Release Notes 2.15.1
+### Release Notes 2.15.1 - 2022-09-21
 - atlas: gene-expression backend and MRI Toronto atlas stretch and squeeze factors (Dan/Olivier)
 - FDR correction (Benjamin-Hochmann) to correct for multiple testing optional (Guido)
 - SpikeSortingLoader can be used with ONE local mode (Julia)
