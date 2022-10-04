@@ -27,7 +27,7 @@ from brainbox.metrics.single_units import quick_unit_metrics
 from brainbox.behavior.wheel import interpolate_position, velocity_smoothed
 from brainbox.behavior.dlc import likelihood_threshold, get_pupil_diameter, get_smooth_pupil_diameter
 
-_logger = logging.getLogger(__name__)
+_logger = logging.getLogger('ibllib')
 
 
 SPIKES_ATTRIBUTES = ['clusters', 'times', 'amps', 'depths']
