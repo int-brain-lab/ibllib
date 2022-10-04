@@ -1,3 +1,7 @@
+## Release 2.17.0 (unreleased)
+### features
+- units quality metrics use latest algorithms for refractory period violations and noise cut-off
+
 ## Release 2.16.1
 ### Release Notes 2.16.1 2022-09-28
 ### bugfixes

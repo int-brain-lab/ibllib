@@ -27,11 +27,11 @@ from brainbox.metrics.single_units import quick_unit_metrics
 from brainbox.behavior.wheel import interpolate_position, velocity_smoothed
 from brainbox.behavior.dlc import likelihood_threshold, get_pupil_diameter, get_smooth_pupil_diameter
 
-_logger = logging.getLogger('ibllib')
+_logger = logging.getLogger(__name__)
 
 
 SPIKES_ATTRIBUTES = ['clusters', 'times', 'amps', 'depths']
-CLUSTERS_ATTRIBUTES = ['channels', 'depths', 'metrics']
+CLUSTERS_ATTRIBUTES = ['channels', 'depths', 'metrics', 'uuids']
 
 
 def load_lfp(eid, one=None, dataset_types=None, **kwargs):
@@ -952,13 +952,14 @@ class SpikeSortingLoader:
         _logger.debug(f"selecting: {collection} to load amongst candidates: {self.collections}")
         return collection
 
-    def download_spike_sorting_object(self, obj, spike_sorter='pykilosort', dataset_types=None, collection=None):
+    def download_spike_sorting_object(self, obj, spike_sorter='pykilosort', dataset_types=None, collection=None, **kwargs):
         """
         Downloads an ALF object
         :param obj: object name, str between 'spikes', 'clusters' or 'channels'
         :param spike_sorter: (defaults to 'pykilosort')
         :param dataset_types: list of extra dataset types, for example ['spikes.samples']
         :param collection: string specifiying the collection, for example 'alf/probe01/pykilosort'
+        :param kwargs: additional arguments to be passed to one.api.One.load_object
         :return:
         """
         if len(self.collections) == 0:
@@ -969,7 +970,7 @@ class SpikeSortingLoader:
         attributes = {'spikes': spike_attributes, 'clusters': cluster_attributes, 'channels': None,
                       'templates': None, 'spikes_subset': None}
         self.files[obj] = self.one.load_object(self.eid, obj=obj, attribute=attributes[obj],
-                                               collection=self.collection, download_only=True)
+                                               collection=self.collection, download_only=True, **kwargs)
 
     def download_spike_sorting(self, **kwargs):
         """
@@ -1006,6 +1007,7 @@ class SpikeSortingLoader:
         clusters = alfio.load_object(self.files['clusters'], wildcards=self.one.wildcards)
         spikes = alfio.load_object(self.files['spikes'], wildcards=self.one.wildcards)
         if 'brainLocationIds_ccf_2017' not in channels:
+            _logger.debug(f"loading channels from alyx for {self.files['channels']}")
             _channels, self.histology = _load_channel_locations_traj(
                 self.eid, probe=self.pname, one=self.one, brain_atlas=self.atlas, return_source=True, aligned=True)
             if _channels:
@@ -1016,8 +1018,24 @@ class SpikeSortingLoader:
         return spikes, clusters, channels
 
     @staticmethod
-    def merge_clusters(spikes, clusters, channels, cache_dir=None):
-        """merge metrics and channels info - optionally saves a clusters.pqt dataframe"""
+    def compute_metrics(spikes, clusters=None):
+        nc = clusters['channels'].size if clusters else np.unique(spikes['clusters']).size
+        metrics = pd.DataFrame(quick_unit_metrics(
+            spikes['clusters'], spikes['times'], spikes['amps'], spikes['depths'], cluster_ids=np.arange(nc)))
+        return metrics
+
+    @staticmethod
+    def merge_clusters(spikes, clusters, channels, cache_dir=None, compute_metrics=False):
+        """
+        Merge the metrics and the channel information into the clusters dictionary
+        :param spikes:
+        :param clusters:
+        :param channels:
+        :param cache_dir: if specified, will look for a cached parquet file to speed up. This is to be used
+         for clusters or analysis applications (defaults to None).
+        :param compute_metrics: if True, will explicitly recompute metrics (defaults to false)
+        :return: cluster dictionary containing metrics and histology
+        """
         if spikes == {}:
             return
         nc = clusters['channels'].size
@@ -1027,18 +1045,17 @@ class SpikeSortingLoader:
             metrics = clusters.pop('metrics')
             if metrics.shape[0] != nc:
                 metrics = None
-        if metrics is None:
+        if metrics is None or compute_metrics is True:
             _logger.debug("recompute clusters metrics")
-            metrics = pd.DataFrame(quick_unit_metrics(
-                spikes['clusters'], spikes['times'], spikes['amps'], spikes['depths'], cluster_ids=np.arange(nc)))
+            metrics = SpikeSortingLoader.compute_metrics(spikes, clusters)
             if isinstance(cache_dir, Path):
                 metrics.to_parquet(Path(cache_dir).joinpath('clusters.metrics.pqt'))
         for k in metrics.keys():
             clusters[k] = metrics[k].to_numpy()
-
         for k in channels.keys():
             clusters[k] = channels[k][clusters['channels']]
         if cache_dir:
+            _logger.debug(f'caching clusters metrics in {cache_dir}')
             pd.DataFrame(clusters).to_parquet(Path(cache_dir).joinpath('clusters.pqt'))
         return clusters
 
