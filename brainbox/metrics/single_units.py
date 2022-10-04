@@ -27,7 +27,7 @@ import spikeglx
 from phylib.stats import correlograms
 from iblutil.util import Bunch
 from iblutil.numerical import ismember, between_sorted
-import slidingRP
+from slidingRP import metrics
 
 from brainbox import singlecell
 from brainbox.io.spikeglx import extract_waveforms
@@ -980,8 +980,8 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
     # this is the geometric median
     r.amp_median[ir] = np.array(10 ** (camp['log_amps'].median() / 20))
     r.amp_std_dB[ir] = np.array(camp['log_amps'].std())
-    srp = slidingRP.slidingRP_all(spikeTimes=spike_times, spikeClusters=spike_clusters,
-                                  **{'sampleRate': 30000, 'binSizeCorr': 1 / 30000})
+    srp = metrics.slidingRP_all(spikeTimes=spike_times, spikeClusters=spike_clusters,
+                                **{'sampleRate': 30000, 'binSizeCorr': 1 / 30000})
     r.slidingRP_viol[srp['cidx']] = srp['value']
 
     # loop over each cluster to compute the rest of the metrics
