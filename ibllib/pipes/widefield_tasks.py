@@ -16,6 +16,7 @@ from ibllib.io.extractors.widefield import Widefield as WidefieldExtractor
 from ibllib.pipes import base_tasks
 from ibllib.io.video import get_video_meta
 from ibllib.plots.snapshot import ReportSnapshot
+
 import labcams.io
 
 _logger = logging.getLogger(__name__)
@@ -188,14 +189,53 @@ class WidefieldFOV(base_tasks.WidefieldTask):
     priority = 40
     job_size = 'small'
 
-    signature = {
-        'input_files': [('widefieldLandmarks.dorsalCortex.json', 'alf', True),
-                        ('widefieldSVT.uncorrected.npy', 'alf', True),
-                        ('widefieldSVT.haemoCorrected.npy', 'alf', True)],
-        'output_files': []
-    }
+    @property
+    def signature(self):
+        signature = {
+            'input_files': [('widefieldLandmarks.dorsalCortex.json', 'alf/widefield', True),
+                            ('widefieldU.images.npy', 'alf/widefield', True),
+                            ('widefieldSVT.haemoCorrected.npy', 'alf/widefield', True)],
+            'output_files': [('widefieldU.images_atlasTransformed.npy', 'alf/widefield', True),
+                             ('widefieldU.brainLocationIds_ccf_2017.npy', 'alf/widefield', True)]
+        }
+
+        return signature
 
     def _run(self):
-        # TODO make task that computes location
 
-        return []
+        outfiles = []
+
+        # from wfield import load_allen_landmarks, SVDStack, atlas_from_landmarks_file
+        # from ibllib.atlas.regions import BrainRegions
+        # from iblutil.numerical import ismember
+        # import numpy as np
+        # U = np.load(self.session_path.joinpath('alf/widefield', 'widefieldU.images.npy'))
+        # SVT = np.load(self.session_path.joinpath('alf/widefield', 'widefieldSVT.haemoCorrected.npy'))
+        # lmark_file = self.session_path.joinpath('alf/widefield', 'widefieldLandmarks.dorsalCortex.json')
+        # landmarks = load_allen_landmarks(lmark_file)
+        #
+        # br = BrainRegions()
+        #
+        # stack = SVDStack(U, SVT)
+        # stack.set_warped(1, M=landmarks['transform'])
+        #
+        # atlas, area_names, mask = atlas_from_landmarks_file(lmark_file)
+        # atlas = atlas.astype(np.int32)
+        # wf_ids = np.array([n[0] for n in area_names])
+        # allen_ids = np.array([br.acronym2id(n[1].split('_')[0], mapping='Allen-lr', hemisphere=n[1].split('_')[1])[0]
+        #                      for n in area_names])
+        #
+        # atlas_allen = np.zeros_like(atlas)
+        # a, b = ismember(atlas, wf_ids)
+        # atlas_allen[a] = allen_ids[b]
+        #
+        # file_U = self.session_path.joinpath('alf/widefield', 'widefieldU.images_atlasTransformed.npy')
+        # np.save(file_U, stack.U_warped)
+        # outfiles.append(file_U)
+        #
+        # # Do we save the mask??
+        # file_atlas = self.session_path.joinpath('alf/widefield', 'widefieldU.brainLocationIds_ccf_2017.npy')
+        # np.save(file_atlas, atlas_allen)
+        # outfiles.append(file_atlas)
+
+        return outfiles
