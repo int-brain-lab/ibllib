@@ -344,12 +344,6 @@ def _plot_slice(coord, slice, region_values, vol_type, background='boundary', ma
     else:
         fig, ax = plt.subplots()
 
-    if background == 'boundary':
-        cmap_bound = matplotlib.cm.get_cmap("bone_r").copy()
-        cmap_bound.set_under([1, 1, 1], 0)
-    else:
-        cmap_bound = None
-
     if slice == 'coronal':
         if background == 'image':
             ba.plot_cslice(coord, volume='image', mapping=map, ax=ax)
@@ -358,7 +352,7 @@ def _plot_slice(coord, slice, region_values, vol_type, background='boundary', ma
         else:
             ba.plot_cslice(coord, volume=vol_type, region_values=region_values, mapping=map, cmap=cmap, vmin=clevels[0],
                            vmax=clevels[1], ax=ax)
-            ba.plot_cslice(coord, volume='boundary', mapping=map, ax=ax, cmap=cmap_bound, vmin=0.01, vmax=0.8)
+            ba.plot_cslice(coord, volume='boundary', mapping=map, ax=ax)
 
     elif slice == 'sagittal':
         if background == 'image':
@@ -368,7 +362,7 @@ def _plot_slice(coord, slice, region_values, vol_type, background='boundary', ma
         else:
             ba.plot_sslice(coord, volume=vol_type, region_values=region_values, mapping=map, cmap=cmap, vmin=clevels[0],
                            vmax=clevels[1], ax=ax)
-            ba.plot_sslice(coord, volume='boundary', mapping=map, ax=ax, cmap=cmap_bound, vmin=0.01, vmax=0.8)
+            ba.plot_sslice(coord, volume='boundary', mapping=map, ax=ax)
 
     elif slice == 'horizontal':
         if background == 'image':
@@ -378,7 +372,7 @@ def _plot_slice(coord, slice, region_values, vol_type, background='boundary', ma
         else:
             ba.plot_hslice(coord, volume=vol_type, region_values=region_values, mapping=map, cmap=cmap, vmin=clevels[0],
                            vmax=clevels[1], ax=ax)
-            ba.plot_hslice(coord, volume='boundary', mapping=map, ax=ax, cmap=cmap_bound, vmin=0.01, vmax=0.8)
+            ba.plot_hslice(coord, volume='boundary', mapping=map, ax=ax)
 
     elif slice == 'top':
         if background == 'image':
@@ -388,8 +382,7 @@ def _plot_slice(coord, slice, region_values, vol_type, background='boundary', ma
         else:
             ba.plot_top(volume=vol_type, region_values=region_values, mapping=map, cmap=cmap, vmin=clevels[0],
                         vmax=clevels[1], ax=ax)
-            ba.plot_top(volume='boundary', mapping=map, ax=ax,
-                        cmap=cmap_bound, vmin=0.01, vmax=0.8)
+            ba.plot_top(volume='boundary', mapping=map, ax=ax)
 
     if show_cbar:
         norm = matplotlib.colors.Normalize(vmin=clevels[0], vmax=clevels[1], clip=False)
