@@ -1,6 +1,10 @@
-## Release 2.17.0 (unreleased)
+## Release 2.17.0
 ### features
 - units quality metrics use latest algorithms for refractory period violations and noise cut-off
+
+### Hotfix 2.17.1
+- compute wheel velocity using a low-pass filter instead of a Gaussian window smoothing
+- adjust ONE-api requirement to redownload on AWS backend when md5sum mismatch
 
 ## Release 2.16.1
 ### Release Notes 2.16.1 2022-09-28
