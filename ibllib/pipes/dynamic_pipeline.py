@@ -268,10 +268,10 @@ def make_pipeline(session_path=None, **pkwargs):
         wfield_kwargs['device_collection'] = wfield_kwargs.pop('collection')
         tasks['WideFieldRegisterRaw'] = type('WidefieldRegisterRaw', (wtasks.WidefieldRegisterRaw,), {})(
             **kwargs, **wfield_kwargs)
-        tasks['WidefieldPreprocess'] = type('WidefieldPreprocess', (wtasks.WidefieldPreprocess,), {})(
-            **kwargs, **wfield_kwargs, parents=[tasks['WideFieldRegisterRaw']])
         tasks['WidefieldCompress'] = type('WidefieldCompress', (wtasks.WidefieldCompress,), {})(
-            **kwargs, **wfield_kwargs, parents=[tasks['WidefieldPreprocess']])
+            **kwargs, **wfield_kwargs, parents=[tasks['WideFieldRegisterRaw']])
+        tasks['WidefieldPreprocess'] = type('WidefieldPreprocess', (wtasks.WidefieldPreprocess,), {})(
+            **kwargs, **wfield_kwargs, parents=[tasks['WidefieldCompress']])
         tasks['WidefieldSync'] = type('WidefieldSync', (wtasks.WidefieldSync,), {})(
             **kwargs, **wfield_kwargs, **sync_kwargs,
             parents=[tasks['WideFieldRegisterRaw'], tasks['WidefieldCompress']] + sync_tasks)
