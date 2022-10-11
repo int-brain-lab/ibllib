@@ -21,6 +21,7 @@ from ibllib.atlas import atlas, AllenAtlas
 from ibllib.pipes import histology
 from ibllib.pipes.ephys_alignment import EphysAlignment
 
+import brainbox.plot
 from brainbox.core import TimeSeries
 from brainbox.processing import sync
 from brainbox.metrics.single_units import quick_unit_metrics
@@ -1082,8 +1083,29 @@ class SpikeSortingLoader:
             }
         return self._sync[direction](values)
 
+    @property
     def pid2ref(self):
         return f"{self.one.eid2ref(self.eid, as_dict=False)}_{self.pname}"
+
+    def raster(self, spikes, save_dir=None):
+        """
+        :param save_dir: optional if specified
+        :return:
+        """
+        import matplotlib.pyplot as plt
+        fig, ax = plt.subplots(figsize=(16, 9))
+        brainbox.plot.driftmap(spikes['times'], spikes['depths'], t_bin=0.007, d_bin=10, vmax=0.5, ax=ax)
+        title_str = f"{self.pid} \n" \
+                    f"{self.pid2ref} \n" \
+                    f"{spikes.clusters.size:_} spikes, {np.unique(spikes.clusters).size:_} clusters"
+        ax.title.set_text(title_str)
+        ax.set_ylim(0, 3800)
+        if save_dir is not None:
+            png_file = save_dir.joinpath(f"{self.pid}_{self.pid2ref}_raster.png") if Path(save_dir).is_dir() else Path(save_dir)
+            fig.savefig(png_file)
+            plt.close(fig)
+        else:
+            return fig, ax
 
 
 @dataclass
