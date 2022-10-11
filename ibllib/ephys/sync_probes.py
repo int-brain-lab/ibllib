@@ -136,6 +136,8 @@ def version3B(ses_path, display=True, type=None, tol=2.5, probe_names=None):
                 raise e
     nidq_file = [ef for ef in ephys_files if ef.get('nidq')]
     ephys_files = [ef for ef in ephys_files if not ef.get('nidq')]
+    if probe_names is not None:
+        ephys_files = [ef for ef in ephys_files if ef.path.parts[-1] in probe_names]
     # should have at least 2 probes and only one nidq
     assert len(nidq_file) == 1
     nidq_file = nidq_file[0]
