@@ -85,7 +85,7 @@ class EphysSyncRegisterRaw(base_tasks.DynamicTask):
 
         # Search for .bin files in the sync_collection folder
         files = spikeglx.glob_ephys_files(self.session_path.joinpath(self.sync_collection))
-        assert len(files) == 1
+        # assert len(files) == 1
         bin_file = files[0].get('nidq', None)
 
         # If we don't have a .bin/ .cbin file anymore see if we can still find the .ch and .meta files
