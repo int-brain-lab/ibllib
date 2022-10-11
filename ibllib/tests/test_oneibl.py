@@ -3,6 +3,7 @@ import tempfile
 from unittest import mock
 from pathlib import PurePosixPath, Path
 import json
+import datetime
 
 from requests import HTTPError
 import numpy as np
@@ -224,14 +225,24 @@ class TestRegistration(unittest.TestCase):
         self.assertTrue(all(d['revision'] == 'v1' for d in r))
         self.assertTrue(all(d['default'] for d in r))
         self.assertTrue(all(d['collection'] == 'alf' for d in r))
-        dsets = self.one.alyx.rest('datasets', 'list', session=ses['url'][-36:], revision='v1')
+        # dsets = self.one.alyx.rest('datasets', 'list', session=ses['url'][-36:], revision='v1')
 
         # Add a protected tag to a dataset
+        dsets = self.one.alyx.rest('datasets', 'list', session=ses['url'][-36:])
         for d in dsets:
             self.one.alyx.rest('datasets', 'partial_update',
                                id=d['url'][-36:], data={'tags': ['test_tag']})
-        with self.assertRaises(HTTPError):
-            registration.register_dataset(file_list=flist, one=self.one)
+        # Now it should move the file to a new location and make a revision
+        revision = datetime.datetime.today().strftime('%Y-%m-%d')
+        flist = list(self.alf_path.glob('*.npy'))
+        r = registration.register_dataset(file_list=flist, one=self.one)
+        self.assertTrue(all(d['revision'] == revision for d in r))
+        print(self.alf_path.joinpath(f'#{revision}#', 'spikes.times.npy'))
+
+        self.assertTrue(self.alf_path.joinpath(f'#{revision}#', 'spikes.times.npy').exists())
+        self.assertTrue(self.alf_path.joinpath(f'#{revision}#', 'spikes.amps.npy').exists())
+        self.assertFalse(self.alf_path.joinpath('spikes.times.npy').exists())
+        self.assertFalse(self.alf_path.joinpath('spikes.amps.npy').exists())
 
     def test_create_sessionS(self):
         flag_file = self.session_path.joinpath('create_me.flag')

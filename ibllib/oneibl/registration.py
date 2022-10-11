@@ -3,6 +3,7 @@ import json
 import datetime
 import logging
 import re
+import shutil
 
 from pkg_resources import parse_version
 from dateutil import parser as dateparser
@@ -90,6 +91,35 @@ def register_dataset(file_list, one=None, created_by=None, repository=None, serv
         hashes = [hashfile.md5(p) for p in file_list]
 
     session_path = get_session_path(file_list[0])
+
+    filenames = [p.relative_to(session_path).as_posix() for p in file_list]
+
+    # First check if any of the datasets to be registered are protected, in this case we need to
+    # move them into a revision folder
+    r_protected = {'created_by': created_by,
+                   'path': session_path.relative_to((session_path.parents[2])).as_posix(),
+                   'filenames': filenames}
+
+    response = one.alyx.rest('protected-file', 'create', data=r_protected, no_cache=True)
+
+    protected = [r['protected'] for r in response]
+
+    if any(protected):
+        new_file_list = []
+        # Revision from today's date
+        revision = '#' + datetime.datetime.today().strftime('%Y-%m-%d') + '#'
+        for fl, res in zip(file_list, response):
+            assert res['file_name'] == fl.relative_to(session_path).as_posix()
+            # if the dataset is protected move into a revision folder
+            if res['protected']:
+                revision_path = fl.parent.joinpath(revision)
+                revision_path.mkdir(exist_ok=True)
+                shutil.move(fl, revision_path.joinpath(fl.name))
+                new_file_list.append(revision_path.joinpath(fl.name))
+            else:
+                new_file_list.append(fl)
+        file_list = new_file_list
+
     # first register the file
     r = {'created_by': created_by,
          'path': session_path.relative_to((session_path.parents[2])).as_posix(),
