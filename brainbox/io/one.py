@@ -1082,6 +1082,9 @@ class SpikeSortingLoader:
             }
         return self._sync[direction](values)
 
+    def pid2ref(self):
+        return f"{self.one.eid2ref(self.eid, as_dict=False)}_{self.pname}"
+
 
 @dataclass
 class SessionLoader:
