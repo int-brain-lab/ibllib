@@ -25,7 +25,7 @@ import brainbox.plot
 from brainbox.core import TimeSeries
 from brainbox.processing import sync
 from brainbox.metrics.single_units import quick_unit_metrics
-from brainbox.behavior.wheel import interpolate_position, velocity_smoothed
+from brainbox.behavior.wheel import interpolate_position, velocity_filtered
 from brainbox.behavior.dlc import likelihood_threshold, get_pupil_diameter, get_smooth_pupil_diameter
 
 _logger = logging.getLogger('ibllib')
@@ -1278,7 +1278,7 @@ class SessionLoader:
         self.one.wildcards = True
         self.data_info.loc[self.data_info['name'] == 'trials', 'is_loaded'] = True
 
-    def load_wheel(self, sampling_rate=1000, smooth_size=0.03):
+    def load_wheel(self, fs=1000, **kwargs):
         """
         Function to load wheel data (position, velocity, acceleration) into SessionLoader.wheel. The wheel position
         is first interpolated to a uniform sampling rate. Then velocity and acceleration are computed, during which
@@ -1286,10 +1286,10 @@ class SessionLoader:
 
         Parameters
         ----------
-        sampling_rate: float
-            Rate at which to sample the wheel position, default is 1000 Hz
-        smooth_size: float
-            Size of Gaussian smoothing window in seconds, default is 0.03
+        fs: float
+            Sampling frequency for the wheel position, default is 1000 Hz
+        **kwargs: float
+            Additional arguments to pass to the wheel velocity filtering fucntion
         """
         wheel_raw = self.one.load_object(self.eid, 'wheel')
         # TODO: Fix this instead of raising error?
@@ -1298,9 +1298,9 @@ class SessionLoader:
         # resample the wheel position and compute velocity, acceleration
         self.wheel = pd.DataFrame(columns=['times', 'position', 'velocity', 'acceleration'])
         self.wheel['position'], self.wheel['times'] = interpolate_position(
-            wheel_raw['timestamps'], wheel_raw['position'], freq=sampling_rate)
-        self.wheel['velocity'], self.wheel['acceleration'] = velocity_smoothed(
-            self.wheel['position'], freq=sampling_rate, smooth_size=smooth_size)
+            wheel_raw['timestamps'], wheel_raw['position'], freq=fs)
+        self.wheel['velocity'], self.wheel['acceleration'] = velocity_filtered(
+            self.wheel['position'], fs=fs, **kwargs)
         self.wheel = self.wheel.apply(np.float32)
         self.data_info.loc[self.data_info['name'] == 'wheel', 'is_loaded'] = True
 
