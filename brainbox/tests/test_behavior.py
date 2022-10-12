@@ -102,7 +102,7 @@ class TestWheel(unittest.TestCase):
     def test_direction_changes(self):
         t, pos = self.test_data[0][0]
         on, off, *_ = self.test_data[0][1]
-        vel, _ = wheel.velocity_smoothed(pos, 1000, corner_frequency=20)
+        vel, _ = wheel.velocity_smoothed(pos, 1000)
         times, indices = wheel.direction_changes(t, vel, np.c_[on, off])
         # import matplotlib.pyplot as plt
         # plt.plot(np.diff(pos) * 1000)
