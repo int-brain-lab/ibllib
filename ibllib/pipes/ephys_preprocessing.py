@@ -546,6 +546,7 @@ class EphysVideoSyncQc(tasks.Task):
     force = True
     signature = {
         'input_files': [('_iblrig_*Camera.raw.mp4', 'raw_video_data', True),
+                        ('_iblrig_*Camera.timestamps.ssv', 'raw_video_data', False),
                         ('_iblrig_*Camera.timestamps.npy', 'raw_video_data', False),
                         ('_iblrig_*Camera.frameData.bin', 'raw_video_data', False),
                         ('_iblrig_*Camera.GPIO.bin', 'raw_video_data', False),
