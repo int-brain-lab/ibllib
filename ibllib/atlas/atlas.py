@@ -431,12 +431,18 @@ class BrainAtlas:
         return ax
 
     @staticmethod
-    def _plot_slice(im, extent, ax=None, cmap=None, **kwargs):
+    def _plot_slice(im, extent, ax=None, cmap=None, volume=None, **kwargs):
         if not ax:
             ax = plt.gca()
             ax.axis('equal')
         if not cmap:
             cmap = plt.get_cmap('bone')
+
+        if volume == 'boundary':
+            imb = np.zeros((*im.shape[:2], 4), dtype=np.uint8)
+            imb[im == 1] = np.array([0, 0, 0, 255])
+            im = imb
+
         ax.imshow(im, extent=extent, cmap=cmap, **kwargs)
         return ax
 
@@ -534,9 +540,13 @@ class BrainAtlas:
         :param values:
         :return:
         """
-        boundary = np.diff(values, axis=0, append=0)
-        boundary = boundary + np.diff(values, axis=1, append=0)
+        boundary = np.abs(np.diff(values, axis=0, prepend=0))
+        boundary = boundary + np.abs(np.diff(values, axis=1, prepend=0))
+        boundary = boundary + np.abs(np.diff(values, axis=1, append=0))
+        boundary = boundary + np.abs(np.diff(values, axis=0, append=0))
+
         boundary[boundary != 0] = 1
+
         return boundary
 
     def plot_slices(self, xyz, *args, **kwargs):
@@ -580,7 +590,7 @@ class BrainAtlas:
         """
 
         cslice = self.slice(ap_coordinate, axis=1, volume=volume, mapping=mapping, region_values=region_values)
-        return self._plot_slice(np.moveaxis(cslice, 0, 1), extent=self.extent(axis=1), **kwargs)
+        return self._plot_slice(np.moveaxis(cslice, 0, 1), extent=self.extent(axis=1), volume=volume, **kwargs)
 
     def plot_hslice(self, dv_coordinate, volume='image', mapping=None, region_values=None, **kwargs):
         """
@@ -604,7 +614,7 @@ class BrainAtlas:
         """
 
         hslice = self.slice(dv_coordinate, axis=2, volume=volume, mapping=mapping, region_values=region_values)
-        return self._plot_slice(hslice, extent=self.extent(axis=2), **kwargs)
+        return self._plot_slice(hslice, extent=self.extent(axis=2), volume=volume, **kwargs)
 
     def plot_sslice(self, ml_coordinate, volume='image', mapping=None, region_values=None, **kwargs):
         """
@@ -628,7 +638,7 @@ class BrainAtlas:
         """
 
         sslice = self.slice(ml_coordinate, axis=0, volume=volume, mapping=mapping, region_values=region_values)
-        return self._plot_slice(np.swapaxes(sslice, 0, 1), extent=self.extent(axis=0), **kwargs)
+        return self._plot_slice(np.swapaxes(sslice, 0, 1), extent=self.extent(axis=0), volume=volume, **kwargs)
 
     def plot_top(self, volume='annotation', mapping=None, region_values=None, ax=None, **kwargs):
         """
@@ -668,7 +678,7 @@ class BrainAtlas:
         elif volume == 'boundary':
             im = self.compute_boundaries(regions)
 
-        return self._plot_slice(im, self.extent(axis=2), ax=ax, **kwargs)
+        return self._plot_slice(im, self.extent(axis=2), ax=ax, volume=volume, **kwargs)
 
 
 @dataclass
@@ -1164,7 +1174,7 @@ class FlatMap(AllenAtlas):
         if not ax:
             ax = plt.gca()
 
-        return self._plot_slice(im, self.extent_flmap(), ax=ax, **kwargs)
+        return self._plot_slice(im, self.extent_flmap(), ax=ax, volume=volume, **kwargs)
 
     def extent_flmap(self):
         extent = np.r_[0, self.flatmap.shape[1], 0, self.flatmap.shape[0]]
