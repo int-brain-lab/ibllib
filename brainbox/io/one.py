@@ -1278,21 +1278,22 @@ class SessionLoader:
         self.one.wildcards = True
         self.data_info.loc[self.data_info['name'] == 'trials', 'is_loaded'] = True
 
-    def load_wheel(self, fs=1000, **kwargs):
+    def load_wheel(self, fs=1000, corner_frequency=20, order=8):
         """
         Function to load wheel data (position, velocity, acceleration) into SessionLoader.wheel. The wheel position
         is first interpolated to a uniform sampling rate. Then velocity and acceleration are computed, during which
-        Gaussian smoothing is applied.
+        a Butterworth low-pass filter is applied.
 
         Parameters
         ----------
-        fs: float
+        fs: int, float
             Sampling frequency for the wheel position, default is 1000 Hz
-        **kwargs: float
-            Additional arguments to pass to the wheel velocity filtering fucntion
+        corner_frequency: int, float
+            Corner frequency of Butterworth low-pass filter, default is 20
+        order: int, float
+            Order of Butterworth low_pass filter, default is 8
         """
         wheel_raw = self.one.load_object(self.eid, 'wheel')
-        # TODO: Fix this instead of raising error?
         if wheel_raw['position'].shape[0] != wheel_raw['timestamps'].shape[0]:
             raise ValueError("Length mismatch between 'wheel.position' and 'wheel.timestamps")
         # resample the wheel position and compute velocity, acceleration
@@ -1300,7 +1301,7 @@ class SessionLoader:
         self.wheel['position'], self.wheel['times'] = interpolate_position(
             wheel_raw['timestamps'], wheel_raw['position'], freq=fs)
         self.wheel['velocity'], self.wheel['acceleration'] = velocity_filtered(
-            self.wheel['position'], fs=fs, **kwargs)
+            self.wheel['position'], fs=fs, corner_frequency=corner_frequency, order=order)
         self.wheel = self.wheel.apply(np.float32)
         self.data_info.loc[self.data_info['name'] == 'wheel', 'is_loaded'] = True
 
