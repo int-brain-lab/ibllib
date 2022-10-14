@@ -21,10 +21,11 @@ from ibllib.atlas import atlas, AllenAtlas
 from ibllib.pipes import histology
 from ibllib.pipes.ephys_alignment import EphysAlignment
 
+import brainbox.plot
 from brainbox.core import TimeSeries
 from brainbox.processing import sync
 from brainbox.metrics.single_units import quick_unit_metrics
-from brainbox.behavior.wheel import interpolate_position, velocity_smoothed
+from brainbox.behavior.wheel import interpolate_position, velocity_filtered
 from brainbox.behavior.dlc import likelihood_threshold, get_pupil_diameter, get_smooth_pupil_diameter
 
 _logger = logging.getLogger('ibllib')
@@ -1082,6 +1083,30 @@ class SpikeSortingLoader:
             }
         return self._sync[direction](values)
 
+    @property
+    def pid2ref(self):
+        return f"{self.one.eid2ref(self.eid, as_dict=False)}_{self.pname}"
+
+    def raster(self, spikes, save_dir=None):
+        """
+        :param save_dir: optional if specified
+        :return:
+        """
+        import matplotlib.pyplot as plt
+        fig, ax = plt.subplots(figsize=(16, 9))
+        brainbox.plot.driftmap(spikes['times'], spikes['depths'], t_bin=0.007, d_bin=10, vmax=0.5, ax=ax)
+        title_str = f"{self.pid} \n" \
+                    f"{self.pid2ref} \n" \
+                    f"{spikes.clusters.size:_} spikes, {np.unique(spikes.clusters).size:_} clusters"
+        ax.title.set_text(title_str)
+        ax.set_ylim(0, 3800)
+        if save_dir is not None:
+            png_file = save_dir.joinpath(f"{self.pid}_{self.pid2ref}_raster.png") if Path(save_dir).is_dir() else Path(save_dir)
+            fig.savefig(png_file)
+            plt.close(fig)
+        else:
+            return fig, ax
+
 
 @dataclass
 class SessionLoader:
@@ -1253,29 +1278,30 @@ class SessionLoader:
         self.one.wildcards = True
         self.data_info.loc[self.data_info['name'] == 'trials', 'is_loaded'] = True
 
-    def load_wheel(self, sampling_rate=1000, smooth_size=0.03):
+    def load_wheel(self, fs=1000, corner_frequency=20, order=8):
         """
         Function to load wheel data (position, velocity, acceleration) into SessionLoader.wheel. The wheel position
         is first interpolated to a uniform sampling rate. Then velocity and acceleration are computed, during which
-        Gaussian smoothing is applied.
+        a Butterworth low-pass filter is applied.
 
         Parameters
         ----------
-        sampling_rate: float
-            Rate at which to sample the wheel position, default is 1000 Hz
-        smooth_size: float
-            Size of Gaussian smoothing window in seconds, default is 0.03
+        fs: int, float
+            Sampling frequency for the wheel position, default is 1000 Hz
+        corner_frequency: int, float
+            Corner frequency of Butterworth low-pass filter, default is 20
+        order: int, float
+            Order of Butterworth low_pass filter, default is 8
         """
         wheel_raw = self.one.load_object(self.eid, 'wheel')
-        # TODO: Fix this instead of raising error?
         if wheel_raw['position'].shape[0] != wheel_raw['timestamps'].shape[0]:
             raise ValueError("Length mismatch between 'wheel.position' and 'wheel.timestamps")
         # resample the wheel position and compute velocity, acceleration
         self.wheel = pd.DataFrame(columns=['times', 'position', 'velocity', 'acceleration'])
         self.wheel['position'], self.wheel['times'] = interpolate_position(
-            wheel_raw['timestamps'], wheel_raw['position'], freq=sampling_rate)
-        self.wheel['velocity'], self.wheel['acceleration'] = velocity_smoothed(
-            self.wheel['position'], freq=sampling_rate, smooth_size=smooth_size)
+            wheel_raw['timestamps'], wheel_raw['position'], freq=fs)
+        self.wheel['velocity'], self.wheel['acceleration'] = velocity_filtered(
+            self.wheel['position'], fs=fs, corner_frequency=corner_frequency, order=order)
         self.wheel = self.wheel.apply(np.float32)
         self.data_info.loc[self.data_info['name'] == 'wheel', 'is_loaded'] = True
 

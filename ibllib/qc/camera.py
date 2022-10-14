@@ -575,10 +575,28 @@ class CameraQC(base.QC):
 
         Check is skipped for body camera videos as the wheel is often obstructed
 
-        :param tolerance: maximum absolute offset in frames.  If two values, the maximum value
-        is taken as the warning threshold
-        :param display: if true, the wheel motion energy is plotted against the rotary encoder
-        :returns: outcome string, frame offset
+        Parameters
+        ----------
+        tolerance : int, (int, int)
+            Maximum absolute offset in frames.  If two values, the maximum value is taken as the
+            warning threshold.
+        display : bool
+            If true, the wheel motion energy is plotted against the rotary encoder.
+
+        Returns
+        -------
+        str
+            The outcome string, one of {'NOT_SET', 'FAIL', 'WARNING', 'PASS'}.
+        int
+            Frame offset, i.e. by how many frames the video was shifted to match the rotary encoder
+            signal.  Negative values mean the video was shifted backwards with respect to the wheel
+            timestamps.
+
+        Notes
+        -----
+        - A negative frame offset typically means that there were frame TTLs at the beginning that
+        do not correspond to any video frames (sometimes the first few frames aren't saved to
+        disk).  Since 2021-09-15 the extractor should compensate for this.
         """
         wheel_present = data_for_keys(('position', 'timestamps', 'period'), self.data['wheel'])
         if not wheel_present or self.label == 'body':

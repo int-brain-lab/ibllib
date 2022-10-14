@@ -136,6 +136,34 @@ class MotionAlignment:
             raise ValueError("'session' must be a valid session path or uuid")
 
     def align_motion(self, period=(-np.inf, np.inf), side='left', sd_thresh=10, display=False):
+        """
+        Align video to the wheel using cross-correlation of the video motion signal and the rotary
+        encoder.
+
+        Parameters
+        ----------
+        period : (float, float)
+            The time period over which to do the alignment.
+        side : {'left', 'right'}
+            With which camera to perform the alignment.
+        sd_thresh : float
+            For plotting where the motion energy goes above this standard deviation threshold.
+        display : bool
+            When true, displays the aligned wheel motion energy along with the rotary encoder
+            signal.
+
+        Returns
+        -------
+        int
+            Frame offset, i.e. by how many frames the video was shifted to match the rotary encoder
+            signal.  Negative values mean the video was shifted backwards with respect to the wheel
+            timestamps.
+        float
+            The peak cross-correlation.
+        numpy.ndarray
+            The motion energy used in the cross-correlation, i.e. the frame difference for the
+            period given.
+        """
         # Get data samples within period
         wheel = self.data['wheel']
         self.alignment.label = side
