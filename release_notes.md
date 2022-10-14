@@ -1,17 +1,24 @@
-## Release 2.17.0
-### features
-- units quality metrics use latest algorithms for refractory period violations and noise cut-off
+## Release Notes 2.17
 
-### Hotfix 2.17.1
-- compute wheel velocity using a low-pass filter instead of a Gaussian window smoothing
+### Release Notes 2.17.2 2022-10-14
+- Compute wheel velocity using a low-pass filter instead of a Gaussian window smoothing
+- Save widefield output plots in png format
+- Widefield Sync task uses sync_collection argument
+- Improve boundary display for atlas slice plots
+
+### Release Notes 2.17.1 2022-10-04
 - adjust ONE-api requirement to redownload on AWS backend when md5sum mismatch
 
-## Release 2.16.1
+### Release Notes 2.17.0 2022-10-04
+- units quality metrics use latest algorithms for refractory period violations and noise cut-off
+
+ 
+## Release Notes 2.16
+
 ### Release Notes 2.16.1 2022-09-28
 ### bugfixes
 - photometry extraction: recover from corrupt DAQ signal and reversed polarity of voltage pulses
- 
-## Release 2.16
+
 ### Release Notes 2.16.0 2022-09-27
 ### features
 - swanson flatmap: the algorithm to propagate down the hierarchy has been refined
@@ -20,6 +27,7 @@
 - set exists flag to false for all data repos when registering datasets with tasks
 
 ## Release Notes 2.15
+
 ### Release Notes 2.15.3 - 2022-09-26
 - SessionLoader error handling and bug fix
 
