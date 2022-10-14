@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from scipy.interpolate import interp1d
+import matplotlib.pyplot as plt
 
 from one.api import ONE, One
 import one.alf.io as alfio
@@ -854,6 +855,36 @@ class SpikeSortingLoader:
             self.download_spike_sorting_object(obj=obj, **kwargs)
         self.spike_sorting_path = self.files['spikes'][0].parent
 
+
+    def load_channels(self, **kwargs):
+        """
+        Loads channels
+
+        The channel locations can come from several sources, it will load the most advanced version of the histology available,
+        regardless of the spike sorting version loaded. The steps are (from most advanced to fresh out of the imaging):
+        -   alf: the final version of channel locations, same as resolved with the difference that data is on file
+        -   resolved: channel locations alignments have been agreed upon
+        -   aligned: channel locations have been aligned, but review or other alignments are pending, potentially not accurate
+        -   traced: the histology track has been recovered from microscopy, however the depths may not match, inaccurate data
+
+        :param spike_sorter: (defaults to 'pykilosort')
+        :param dataset_types: list of extra dataset types
+        :return:
+        """
+        self.download_spike_sorting_object(obj='channels', **kwargs)
+        channels = alfio.load_object(self.files['channels'], wildcards=self.one.wildcards)
+        if 'brainLocationIds_ccf_2017' not in channels:
+            _logger.debug(f"loading channels from alyx for {self.files['channels']}")
+            _channels, self.histology = _load_channel_locations_traj(
+                self.eid, probe=self.pname, one=self.one, brain_atlas=self.atlas, return_source=True, aligned=True)
+            if _channels:
+                channels = _channels[self.pname]
+        else:
+            channels = _channels_alf2bunch(channels, brain_regions=self.atlas.regions)
+            self.histology = 'alf'
+        return channels
+
+
     def load_spike_sorting(self, **kwargs):
         """
         Loads spikes, clusters and channels
@@ -874,18 +905,10 @@ class SpikeSortingLoader:
         if len(self.collections) == 0:
             return {}, {}, {}
         self.download_spike_sorting(**kwargs)
-        channels = alfio.load_object(self.files['channels'], wildcards=self.one.wildcards)
+        channels = self.load_channels(**kwargs)
         clusters = alfio.load_object(self.files['clusters'], wildcards=self.one.wildcards)
         spikes = alfio.load_object(self.files['spikes'], wildcards=self.one.wildcards)
-        if 'brainLocationIds_ccf_2017' not in channels:
-            _logger.debug(f"loading channels from alyx for {self.files['channels']}")
-            _channels, self.histology = _load_channel_locations_traj(
-                self.eid, probe=self.pname, one=self.one, brain_atlas=self.atlas, return_source=True, aligned=True)
-            if _channels:
-                channels = _channels[self.pname]
-        else:
-            channels = _channels_alf2bunch(channels, brain_regions=self.atlas.regions)
-            self.histology = 'alf'
+
         return spikes, clusters, channels
 
     @staticmethod
@@ -962,7 +985,6 @@ class SpikeSortingLoader:
         :param save_dir: optional if specified
         :return:
         """
-        import matplotlib.pyplot as plt
         fig, ax = plt.subplots(figsize=(16, 9))
         brainbox.plot.driftmap(spikes['times'], spikes['depths'], t_bin=0.007, d_bin=10, vmax=0.5, ax=ax)
         title_str = f"{self.pid} \n" \
