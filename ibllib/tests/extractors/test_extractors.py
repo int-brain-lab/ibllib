@@ -442,11 +442,15 @@ class TestExtractTrialData(unittest.TestCase):
     @wheelMoves_fixture
     def test_extract_all(self):
         # TRAINING SESSIONS
-        out, files = training_trials.extract_all(
-            self.training_lt5['path'], settings={'IBLRIG_VERSION_TAG': '4.9.9'}, save=True)
+        with self.assertRaises(ValueError) as ex:
+            training_trials.extract_all(
+                self.training_lt5['path'], settings={'IBLRIG_VERSION_TAG': '4.9.9'}, save=True)
+            self.assertIn('empty', str(ex.exception))
         # -- version >= 5.0.0
-        out, files = training_trials.extract_all(
-            self.training_ge5['path'], save=True)
+        out, files = training_trials.extract_all(self.training_ge5['path'], save=True)
+        self.assertEqual(19, len(out))
+        self.assertTrue(all(map(Path.exists, files)))
+
         # BIASED SESSIONS
         # The new trials extractor additionally extracts the wheel data and this fails for the < 5.0
         # test data so we will stub the wheel extractor
@@ -455,9 +459,12 @@ class TestExtractTrialData(unittest.TestCase):
             Wheel().extract.return_value = ({}, [])
             out, files = biased_trials.extract_all(
                 self.biased_lt5['path'], settings={'IBLRIG_VERSION_TAG': '4.9.9'}, save=True)
+            self.assertEqual(15, len(out))
+            self.assertTrue(all(map(Path.exists, files)))
         # -- version >= 5.0.0
-        out, files = biased_trials.extract_all(
-            self.biased_ge5['path'], save=True)
+        out, files = biased_trials.extract_all(self.biased_ge5['path'], save=True)
+        self.assertEqual(19, len(out))
+        self.assertTrue(all(map(Path.exists, files)))
 
     def test_encoder_positions_clock_reset(self):
         # TRAINING SESSIONS
@@ -519,9 +526,6 @@ class TestExtractTrialData(unittest.TestCase):
         from ibllib.io.extractors.bpod_trials import extract_all
         extract_all(self.training_ge5['path'])
         trials = alfio.load_object(self.training_ge5['path'] / 'alf', object='trials')
-        self.assertTrue(alfio.check_dimensions(trials) == 0)
-        extract_all(self.training_lt5['path'])
-        trials = alfio.load_object(self.training_lt5['path'] / 'alf', object='trials')
         self.assertTrue(alfio.check_dimensions(trials) == 0)
         extract_all(self.biased_ge5['path'])
         trials = alfio.load_object(self.biased_ge5['path'] / 'alf', object='trials')
@@ -618,10 +622,10 @@ class MockExtracor(BaseExtractor):
     )
 
     def _extract(self, **kwargs) -> tuple:
-        csv = pd.DataFrame([])
-        ssv = pd.DataFrame([])
-        tsv = pd.DataFrame([])
-        npy = np.array([])
+        csv = pd.DataFrame([1, 2, 3])
+        ssv = pd.DataFrame([1, 2, 3])
+        tsv = pd.DataFrame([1, 2, 3])
+        npy = np.array([1, 2, 3])
 
         return (csv, ssv, tsv, npy)
 
