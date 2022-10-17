@@ -64,6 +64,7 @@ _log = logging.getLogger(__name__)
 class CameraQC(base.QC):
     """A class for computing camera QC metrics"""
     dstypes = [
+        '_iblrig_Camera.frameData',  # Replaces the next 3 datasets
         '_iblrig_Camera.frame_counter',
         '_iblrig_Camera.GPIO',
         '_iblrig_Camera.timestamps',
@@ -333,8 +334,9 @@ class CameraQC(base.QC):
                 names = [x.split('/')[-1] for x in self.one.list_datasets(self.eid, details=False)]
                 assert f'_iblrig_{self.label}Camera.raw.mp4' in names, 'No remote video file found'
                 continue
-            optional = ('camera.times', '_iblrig_Camera.raw', 'wheel.position',
-                        'wheel.timestamps', '_iblrig_Camera.frame_counter', '_iblrig_Camera.GPIO')
+            optional = ('camera.times', '_iblrig_Camera.raw', 'wheel.position', 'wheel.timestamps',
+                        '_iblrig_Camera.timestamps', '_iblrig_Camera.frame_counter', '_iblrig_Camera.GPIO',
+                        '_iblrig_Camera.frameData')
             present = (
                 self.one._download_datasets(datasets)
                 if self.download_data
