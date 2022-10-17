@@ -442,10 +442,11 @@ class TestExtractTrialData(unittest.TestCase):
     @wheelMoves_fixture
     def test_extract_all(self):
         # TRAINING SESSIONS
+        # Expect an error raised because no wheel moves were present in test data
         with self.assertRaises(ValueError) as ex:
             training_trials.extract_all(
                 self.training_lt5['path'], settings={'IBLRIG_VERSION_TAG': '4.9.9'}, save=True)
-            self.assertIn('empty', str(ex.exception))
+            self.assertIn('_ibl_wheelMoves.intervals.npy appears to be empty', str(ex.exception))
         # -- version >= 5.0.0
         out, files = training_trials.extract_all(self.training_ge5['path'], save=True)
         self.assertEqual(19, len(out))
@@ -523,6 +524,7 @@ class TestExtractTrialData(unittest.TestCase):
 
     def test_size_outputs(self):
         # check the output dimensions
+        # VERSION >= 5.0.0
         from ibllib.io.extractors.bpod_trials import extract_all
         extract_all(self.training_ge5['path'])
         trials = alfio.load_object(self.training_ge5['path'] / 'alf', object='trials')
@@ -530,10 +532,23 @@ class TestExtractTrialData(unittest.TestCase):
         extract_all(self.biased_ge5['path'])
         trials = alfio.load_object(self.biased_ge5['path'] / 'alf', object='trials')
         self.assertTrue(alfio.check_dimensions(trials) == 0)
-        # Wheel moves extraction fails for these wheel data; skipping
-        # extract_training(self.biased_lt5['path'])
-        # trials = alf.io.load_object(self.biased_lt5['path'] / 'alf', object='_ibl_trials')
-        # self.assertTrue(alf.io.check_dimensions(trials) == 0)
+        # VERSION < 5.0.0
+        # for these test data there are no wheel moves so let's mock the output
+        mock_data = {
+            'intervals': np.array([[0, 1], ]),
+            'peakAmplitude': np.array([1, 1]),
+            'peakVelocity_times': np.array([1, 1])}
+        function_name = 'ibllib.io.extractors.training_wheel.extract_wheel_moves'
+        # Training
+        with unittest.mock.patch(function_name, return_value=mock_data):
+            extract_all(self.training_lt5['path'])
+        trials = alfio.load_object(self.training_lt5['path'] / 'alf', object='trials')
+        self.assertTrue(alfio.check_dimensions(trials) == 0)
+        # Biased
+        with unittest.mock.patch(function_name, return_value=mock_data):
+            extract_all(self.biased_lt5['path'])
+        trials = alfio.load_object(self.biased_lt5['path'] / 'alf', object='trials')
+        self.assertTrue(alfio.check_dimensions(trials) == 0)
 
     def tearDown(self):
         for f in self.main_path.rglob('_ibl_log.*.log'):
