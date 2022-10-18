@@ -541,18 +541,13 @@ class CameraQC(base.QC):
         """Check that the camera.times array is reasonable"""
         if not data_for_keys(('timestamps', 'video'), self.data):
             return 'NOT_SET'
-        # Check frame rate matches what we expect
-        expected = 1 / self.video_meta[self.type][self.label]['fps']
-        # TODO Remove dropped frames from test
-        frame_delta = np.diff(self.data['timestamps'])
-        fps_matches = np.isclose(np.median(frame_delta), expected, atol=0.01)
         # Check number of timestamps matches video
         length_matches = self.data['timestamps'].size == self.data['video'].length
         # Check times are strictly increasing
         increasing = all(np.diff(self.data['timestamps']) > 0)
         # Check times do not contain nans
         nanless = not np.isnan(self.data['timestamps']).any()
-        return 'PASS' if increasing and fps_matches and length_matches and nanless else 'FAIL'
+        return 'PASS' if increasing and length_matches and nanless else 'FAIL'
 
     def check_camera_times(self):
         """Check that the number of raw camera timestamps matches the number of video frames"""
