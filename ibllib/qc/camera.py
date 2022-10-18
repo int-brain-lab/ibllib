@@ -338,7 +338,7 @@ class CameraQC(base.QC):
                         '_iblrig_Camera.timestamps', '_iblrig_Camera.frame_counter', '_iblrig_Camera.GPIO',
                         '_iblrig_Camera.frameData')
             present = (
-                self.one._download_datasets(datasets)
+                self.one._check_filesystem(datasets)
                 if self.download_data
                 else (next(self.session_path.rglob(d), None) for d in datasets['rel_path'])
             )
@@ -1084,7 +1084,7 @@ class CameraQCCamlog(CameraQC):
                 continue
             optional = ('camera.times', '_iblrig_Camera.raw', 'wheel.position', 'wheel.timestamps')
             present = (
-                self.one._download_datasets(datasets)
+                self.one._check_filesystem(datasets)
                 if self.download_data
                 else (next(self.session_path.rglob(d), None) for d in datasets['rel_path'])
             )
