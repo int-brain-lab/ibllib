@@ -1,5 +1,6 @@
 """Functions for loading IBL ephys and trial data using the Open Neurophysiology Environment."""
 from dataclasses import dataclass, field
+import gc
 import logging
 import os
 from pathlib import Path
@@ -18,11 +19,14 @@ import spikeglx
 
 from iblutil.util import Bunch
 from ibllib.io.extractors.training_wheel import extract_wheel_moves, extract_first_movement_times
-from ibllib.atlas import atlas, AllenAtlas
+from ibllib.atlas import atlas, AllenAtlas, BrainRegions
 from ibllib.pipes import histology
 from ibllib.pipes.ephys_alignment import EphysAlignment
 
 import brainbox.plot
+from brainbox.ephys_plots import plot_brain_regions
+from brainbox.core import TimeSeries
+from brainbox.processing import sync
 from brainbox.metrics.single_units import quick_unit_metrics
 from brainbox.behavior.wheel import interpolate_position, velocity_filtered
 from brainbox.behavior.dlc import likelihood_threshold, get_pupil_diameter, get_smooth_pupil_diameter
@@ -839,9 +843,8 @@ class SpikeSortingLoader:
         self.collection = collection or self._get_spike_sorting_collection(spike_sorter=spike_sorter)
         _logger.debug(f"loading spike sorting from {self.collection}")
         spike_attributes, cluster_attributes = self._get_attributes(dataset_types)
-        attributes = {'spikes': spike_attributes, 'clusters': cluster_attributes, 'channels': None,
-                      'templates': None, 'spikes_subset': None}
-        self.files[obj] = self.one.load_object(self.eid, obj=obj, attribute=attributes[obj],
+        attributes = {'spikes': spike_attributes, 'clusters': cluster_attributes}
+        self.files[obj] = self.one.load_object(self.eid, obj=obj, attribute=attributes.get(obj, None),
                                                collection=self.collection, download_only=True, **kwargs)
 
     def download_spike_sorting(self, **kwargs):
@@ -980,24 +983,37 @@ class SpikeSortingLoader:
     def pid2ref(self):
         return f"{self.one.eid2ref(self.eid, as_dict=False)}_{self.pname}"
 
-    def raster(self, spikes, save_dir=None):
+    def raster(self, spikes, channels, save_dir=None, br=None, label='raster'):
         """
+        :param spikes: spikes dictionary
         :param save_dir: optional if specified
         :return:
         """
-        fig, ax = plt.subplots(figsize=(16, 9))
-        brainbox.plot.driftmap(spikes['times'], spikes['depths'], t_bin=0.007, d_bin=10, vmax=0.5, ax=ax)
-        title_str = f"{self.pid} \n" \
-                    f"{self.pid2ref} \n" \
-                    f"{spikes.clusters.size:_} spikes, {np.unique(spikes.clusters).size:_} clusters"
-        ax.title.set_text(title_str)
-        ax.set_ylim(0, 3800)
+        br = br or BrainRegions()
+        fig, axs = plt.subplots(2, 2, gridspec_kw={'width_ratios': [.95, .05], 'height_ratios': [.1, .9]}, figsize=(16, 9), sharex='col')
+        axs[0, 1].set_axis_off()
+        # axs[0, 0].set_xticks([])
+        brainbox.plot.driftmap(spikes['times'], spikes['depths'], t_bin=0.007, d_bin=10, vmax=0.5, ax=axs[1, 0])
+        title_str = f"{self.pid2ref}, {self.pid} \n" \
+                    f"{spikes['clusters'].size:_} spikes, {np.unique(spikes['clusters']).size:_} clusters"
+        axs[0, 0].title.set_text(title_str)
+        plot_brain_regions(channels['atlas_id'], channel_depths=channels['axial_um'],
+                           brain_regions=br, display=True, ax=axs[1, 1], title=self.histology)
+        axs[1, 0].set_ylim(0, 3800)
+        axs[1, 0].set_xlim(spikes['times'][0], spikes['times'][-1])
+        fig.tight_layout()
+
+        self.download_spike_sorting_object('drift')
+        drift = alfio.load_object(self.files['drift'], wildcards=self.one.wildcards)
+        axs[0, 0].plot(drift['times'], drift['um'], 'k', alpha=.5)
+
         if save_dir is not None:
-            png_file = save_dir.joinpath(f"{self.pid}_{self.pid2ref}_raster.png") if Path(save_dir).is_dir() else Path(save_dir)
+            png_file = save_dir.joinpath(f"{self.pid}_{self.pid2ref}_{label}.png") if Path(save_dir).is_dir() else Path(save_dir)
             fig.savefig(png_file)
             plt.close(fig)
+            gc.collect()
         else:
-            return fig, ax
+            return fig, axs
 
 
 @dataclass
