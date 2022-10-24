@@ -24,7 +24,7 @@ ENC_RES = 1024 * 4  # Rotary encoder resolution, assumes X4 encoding
 WHEEL_DIAMETER = 3.1 * 2  # Wheel diameter in cm
 
 
-def interpolate_position(re_ts, re_pos, freq=1000, kind='linear', fill_gaps=None):
+def interpolate_position(re_ts, re_pos, freq=1000, kind='previous', fill_gaps=None):
     """
     Return linearly interpolated wheel position.
 
