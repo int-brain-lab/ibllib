@@ -21,17 +21,18 @@ from ibllib.atlas import atlas, AllenAtlas
 from ibllib.pipes import histology
 from ibllib.pipes.ephys_alignment import EphysAlignment
 
+import brainbox.plot
 from brainbox.core import TimeSeries
 from brainbox.processing import sync
 from brainbox.metrics.single_units import quick_unit_metrics
-from brainbox.behavior.wheel import interpolate_position, velocity_smoothed
+from brainbox.behavior.wheel import interpolate_position, velocity_filtered
 from brainbox.behavior.dlc import likelihood_threshold, get_pupil_diameter, get_smooth_pupil_diameter
 
 _logger = logging.getLogger('ibllib')
 
 
 SPIKES_ATTRIBUTES = ['clusters', 'times', 'amps', 'depths']
-CLUSTERS_ATTRIBUTES = ['channels', 'depths', 'metrics']
+CLUSTERS_ATTRIBUTES = ['channels', 'depths', 'metrics', 'uuids']
 
 
 def load_lfp(eid, one=None, dataset_types=None, **kwargs):
@@ -952,13 +953,14 @@ class SpikeSortingLoader:
         _logger.debug(f"selecting: {collection} to load amongst candidates: {self.collections}")
         return collection
 
-    def download_spike_sorting_object(self, obj, spike_sorter='pykilosort', dataset_types=None, collection=None):
+    def download_spike_sorting_object(self, obj, spike_sorter='pykilosort', dataset_types=None, collection=None, **kwargs):
         """
         Downloads an ALF object
         :param obj: object name, str between 'spikes', 'clusters' or 'channels'
         :param spike_sorter: (defaults to 'pykilosort')
         :param dataset_types: list of extra dataset types, for example ['spikes.samples']
         :param collection: string specifiying the collection, for example 'alf/probe01/pykilosort'
+        :param kwargs: additional arguments to be passed to one.api.One.load_object
         :return:
         """
         if len(self.collections) == 0:
@@ -969,7 +971,7 @@ class SpikeSortingLoader:
         attributes = {'spikes': spike_attributes, 'clusters': cluster_attributes, 'channels': None,
                       'templates': None, 'spikes_subset': None}
         self.files[obj] = self.one.load_object(self.eid, obj=obj, attribute=attributes[obj],
-                                               collection=self.collection, download_only=True)
+                                               collection=self.collection, download_only=True, **kwargs)
 
     def download_spike_sorting(self, **kwargs):
         """
@@ -1006,6 +1008,7 @@ class SpikeSortingLoader:
         clusters = alfio.load_object(self.files['clusters'], wildcards=self.one.wildcards)
         spikes = alfio.load_object(self.files['spikes'], wildcards=self.one.wildcards)
         if 'brainLocationIds_ccf_2017' not in channels:
+            _logger.debug(f"loading channels from alyx for {self.files['channels']}")
             _channels, self.histology = _load_channel_locations_traj(
                 self.eid, probe=self.pname, one=self.one, brain_atlas=self.atlas, return_source=True, aligned=True)
             if _channels:
@@ -1016,8 +1019,24 @@ class SpikeSortingLoader:
         return spikes, clusters, channels
 
     @staticmethod
-    def merge_clusters(spikes, clusters, channels, cache_dir=None):
-        """merge metrics and channels info - optionally saves a clusters.pqt dataframe"""
+    def compute_metrics(spikes, clusters=None):
+        nc = clusters['channels'].size if clusters else np.unique(spikes['clusters']).size
+        metrics = pd.DataFrame(quick_unit_metrics(
+            spikes['clusters'], spikes['times'], spikes['amps'], spikes['depths'], cluster_ids=np.arange(nc)))
+        return metrics
+
+    @staticmethod
+    def merge_clusters(spikes, clusters, channels, cache_dir=None, compute_metrics=False):
+        """
+        Merge the metrics and the channel information into the clusters dictionary
+        :param spikes:
+        :param clusters:
+        :param channels:
+        :param cache_dir: if specified, will look for a cached parquet file to speed up. This is to be used
+         for clusters or analysis applications (defaults to None).
+        :param compute_metrics: if True, will explicitly recompute metrics (defaults to false)
+        :return: cluster dictionary containing metrics and histology
+        """
         if spikes == {}:
             return
         nc = clusters['channels'].size
@@ -1027,18 +1046,17 @@ class SpikeSortingLoader:
             metrics = clusters.pop('metrics')
             if metrics.shape[0] != nc:
                 metrics = None
-        if metrics is None:
+        if metrics is None or compute_metrics is True:
             _logger.debug("recompute clusters metrics")
-            metrics = pd.DataFrame(quick_unit_metrics(
-                spikes['clusters'], spikes['times'], spikes['amps'], spikes['depths'], cluster_ids=np.arange(nc)))
+            metrics = SpikeSortingLoader.compute_metrics(spikes, clusters)
             if isinstance(cache_dir, Path):
                 metrics.to_parquet(Path(cache_dir).joinpath('clusters.metrics.pqt'))
         for k in metrics.keys():
             clusters[k] = metrics[k].to_numpy()
-
         for k in channels.keys():
             clusters[k] = channels[k][clusters['channels']]
         if cache_dir:
+            _logger.debug(f'caching clusters metrics in {cache_dir}')
             pd.DataFrame(clusters).to_parquet(Path(cache_dir).joinpath('clusters.pqt'))
         return clusters
 
@@ -1064,6 +1082,30 @@ class SpikeSortingLoader:
                 'reverse': interp1d(timestamps[:, 1], timestamps[:, 0], fill_value='extrapolate'),
             }
         return self._sync[direction](values)
+
+    @property
+    def pid2ref(self):
+        return f"{self.one.eid2ref(self.eid, as_dict=False)}_{self.pname}"
+
+    def raster(self, spikes, save_dir=None):
+        """
+        :param save_dir: optional if specified
+        :return:
+        """
+        import matplotlib.pyplot as plt
+        fig, ax = plt.subplots(figsize=(16, 9))
+        brainbox.plot.driftmap(spikes['times'], spikes['depths'], t_bin=0.007, d_bin=10, vmax=0.5, ax=ax)
+        title_str = f"{self.pid} \n" \
+                    f"{self.pid2ref} \n" \
+                    f"{spikes.clusters.size:_} spikes, {np.unique(spikes.clusters).size:_} clusters"
+        ax.title.set_text(title_str)
+        ax.set_ylim(0, 3800)
+        if save_dir is not None:
+            png_file = save_dir.joinpath(f"{self.pid}_{self.pid2ref}_raster.png") if Path(save_dir).is_dir() else Path(save_dir)
+            fig.savefig(png_file)
+            plt.close(fig)
+        else:
+            return fig, ax
 
 
 @dataclass
@@ -1236,29 +1278,30 @@ class SessionLoader:
         self.one.wildcards = True
         self.data_info.loc[self.data_info['name'] == 'trials', 'is_loaded'] = True
 
-    def load_wheel(self, sampling_rate=1000, smooth_size=0.03):
+    def load_wheel(self, fs=1000, corner_frequency=20, order=8):
         """
         Function to load wheel data (position, velocity, acceleration) into SessionLoader.wheel. The wheel position
         is first interpolated to a uniform sampling rate. Then velocity and acceleration are computed, during which
-        Gaussian smoothing is applied.
+        a Butterworth low-pass filter is applied.
 
         Parameters
         ----------
-        sampling_rate: float
-            Rate at which to sample the wheel position, default is 1000 Hz
-        smooth_size: float
-            Size of Gaussian smoothing window in seconds, default is 0.03
+        fs: int, float
+            Sampling frequency for the wheel position, default is 1000 Hz
+        corner_frequency: int, float
+            Corner frequency of Butterworth low-pass filter, default is 20
+        order: int, float
+            Order of Butterworth low_pass filter, default is 8
         """
         wheel_raw = self.one.load_object(self.eid, 'wheel')
-        # TODO: Fix this instead of raising error?
         if wheel_raw['position'].shape[0] != wheel_raw['timestamps'].shape[0]:
             raise ValueError("Length mismatch between 'wheel.position' and 'wheel.timestamps")
         # resample the wheel position and compute velocity, acceleration
         self.wheel = pd.DataFrame(columns=['times', 'position', 'velocity', 'acceleration'])
         self.wheel['position'], self.wheel['times'] = interpolate_position(
-            wheel_raw['timestamps'], wheel_raw['position'], freq=sampling_rate)
-        self.wheel['velocity'], self.wheel['acceleration'] = velocity_smoothed(
-            self.wheel['position'], freq=sampling_rate, smooth_size=smooth_size)
+            wheel_raw['timestamps'], wheel_raw['position'], freq=fs)
+        self.wheel['velocity'], self.wheel['acceleration'] = velocity_filtered(
+            self.wheel['position'], fs=fs, corner_frequency=corner_frequency, order=order)
         self.wheel = self.wheel.apply(np.float32)
         self.data_info.loc[self.data_info['name'] == 'wheel', 'is_loaded'] = True
 
@@ -1280,16 +1323,12 @@ class SessionLoader:
         # empty the dictionary so that if one loads only one view, after having loaded several, the others don't linger
         self.pose = {}
         for view in views:
-            try:
-                pose_raw = self.one.load_object(self.eid, f'{view}Camera', attribute=['dlc', 'times'])
-                # Double check if video timestamps are correct length or can be fixed
-                times_fixed, dlc = self._check_video_timestamps(view, pose_raw['times'], pose_raw['dlc'])
-                self.pose[f'{view}Camera'] = likelihood_threshold(dlc, likelihood_thr)
-                self.pose[f'{view}Camera'].insert(0, 'times', times_fixed)
-                self.data_info.loc[self.data_info['name'] == 'pose', 'is_loaded'] = True
-            except BaseException as e:
-                _logger.warning(f'Could not load pose data for {view}Camera. Skipping camera.')
-                _logger.debug(e)
+            pose_raw = self.one.load_object(self.eid, f'{view}Camera', attribute=['dlc', 'times'])
+            # Double check if video timestamps are correct length or can be fixed
+            times_fixed, dlc = self._check_video_timestamps(view, pose_raw['times'], pose_raw['dlc'])
+            self.pose[f'{view}Camera'] = likelihood_threshold(dlc, likelihood_thr)
+            self.pose[f'{view}Camera'].insert(0, 'times', times_fixed)
+            self.data_info.loc[self.data_info['name'] == 'pose', 'is_loaded'] = True
 
     def load_motion_energy(self, views=['left', 'right', 'body']):
         """
@@ -1311,17 +1350,13 @@ class SessionLoader:
         # empty the dictionary so that if one loads only one view, after having loaded several, the others don't linger
         self.motion_energy = {}
         for view in views:
-            try:
-                me_raw = self.one.load_object(self.eid, f'{view}Camera', attribute=['ROIMotionEnergy', 'times'])
-                # Double check if video timestamps are correct length or can be fixed
-                times_fixed, motion_energy = self._check_video_timestamps(
-                    view, me_raw['times'], me_raw['ROIMotionEnergy'])
-                self.motion_energy[f'{view}Camera'] = pd.DataFrame(columns=[names[view]], data=motion_energy)
-                self.motion_energy[f'{view}Camera'].insert(0, 'times', times_fixed)
-                self.data_info.loc[self.data_info['name'] == 'motion_energy', 'is_loaded'] = True
-            except BaseException as e:
-                _logger.warning(f'Could not load motion energy data for {view}Camera. Skipping camera.')
-                _logger.debug(e)
+            me_raw = self.one.load_object(self.eid, f'{view}Camera', attribute=['ROIMotionEnergy', 'times'])
+            # Double check if video timestamps are correct length or can be fixed
+            times_fixed, motion_energy = self._check_video_timestamps(
+                view, me_raw['times'], me_raw['ROIMotionEnergy'])
+            self.motion_energy[f'{view}Camera'] = pd.DataFrame(columns=[names[view]], data=motion_energy)
+            self.motion_energy[f'{view}Camera'].insert(0, 'times', times_fixed)
+            self.data_info.loc[self.data_info['name'] == 'motion_energy', 'is_loaded'] = True
 
     def load_licks(self):
         """
@@ -1342,7 +1377,7 @@ class SessionLoader:
         # Try to load from features
         feat_raw = self.one.load_object(self.eid, 'leftCamera', attribute=['times', 'features'])
         if 'features' in feat_raw.keys():
-            times_fixed, feats = self._check_video_timestamps(feat_raw['times'], feat_raw['features'])
+            times_fixed, feats = self._check_video_timestamps('left', feat_raw['times'], feat_raw['features'])
             self.pupil = feats.copy()
             self.pupil.insert(0, 'times', times_fixed)
 
@@ -1364,7 +1399,8 @@ class SessionLoader:
             try:
                 self.pupil['pupilDiameter_smooth'] = get_smooth_pupil_diameter(self.pupil['pupilDiameter_raw'], 'left')
             except BaseException as e:
-                _logger.error("Computing smooth pupil diameter failed, saving all NaNs.")
+                _logger.error("Loaded raw pupil diameter but computing smooth pupil diameter failed. "
+                              "Saving all NaNs for pupilDiameter_smooth.")
                 _logger.debug(e)
                 self.pupil['pupilDiameter_smooth'] = np.nan
 
@@ -1375,7 +1411,7 @@ class SessionLoader:
                    (np.var(self.pupil['pupilDiameter_smooth'][good_idxs] - self.pupil['pupilDiameter_raw'][good_idxs])))
             if snr < snr_thresh:
                 self.pupil = pd.DataFrame()
-                _logger.error(f'Pupil diameter SNR ({snr:.2f}) below threshold SNR ({snr_thresh}), removing data.')
+                raise ValueError(f'Pupil diameter SNR ({snr:.2f}) below threshold SNR ({snr_thresh}), removing data.')
 
     def _check_video_timestamps(self, view, video_timestamps, video_data):
         """

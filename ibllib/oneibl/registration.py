@@ -46,7 +46,7 @@ def _check_filename_for_registration(full_file, patterns):
 
 
 def register_dataset(file_list, one=None, created_by=None, repository=None, server_only=False,
-                     versions=None, default=True, dry=False, max_md5_size=None):
+                     versions=None, default=True, dry=False, max_md5_size=None, exists=False):
     """
     Registers a set of files belonging to a session only on the server
     :param file_list: (list of pathlib.Path or pathlib.Path)
@@ -99,7 +99,8 @@ def register_dataset(file_list, one=None, created_by=None, repository=None, serv
          'hashes': hashes,
          'filesizes': [p.stat().st_size for p in file_list],
          'versions': versions,
-         'default': default}
+         'default': default,
+         'exists': exists}
     if not dry:
         if one is None:
             one = ONE(cache_rest=None)
@@ -142,7 +143,9 @@ def register_session_raw_data(session_path, one=None, overwrite=False, dry=False
     # filter 2/2 unless overwrite is True, filter out the datasets that already exist
     if not overwrite:
         files_2_register = list(filter(lambda f: f not in already_registered, files_2_register))
-    response = register_dataset(files_2_register, one=one, versions=None, dry=dry, **kwargs)
+
+    data_repo = get_local_data_repository(one)
+    response = register_dataset(files_2_register, one=one, versions=None, dry=dry, repository=data_repo, **kwargs)
     return files_2_register, response
 
 
@@ -493,3 +496,23 @@ def _glob_session(ses_path):
     for gp in REGISTRATION_GLOB_PATTERNS:
         fl.extend(list(ses_path.glob(gp)))
     return fl
+
+
+def get_local_data_repository(one):
+    """
+    Get local data repo name from globus client
+    :param one:
+    :return:
+    """
+    if one is None:
+        return
+
+    if not Path.home().joinpath(".globusonline/lta/client-id.txt").exists():
+        return
+
+    with open(Path.home().joinpath(".globusonline/lta/client-id.txt"), 'r') as fid:
+        globus_id = fid.read()
+
+    data_repo = one.alyx.rest('data-repository', 'list', globus_endpoint_id=globus_id)
+    if len(data_repo):
+        return [da['name'] for da in data_repo][0]

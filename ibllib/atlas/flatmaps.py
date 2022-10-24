@@ -3,7 +3,6 @@ Module that hold techniques to project the brain volume onto 2D images for visua
 """
 from functools import lru_cache
 
-import pandas as pd
 import numpy as np
 from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
@@ -152,6 +151,7 @@ def plot_swanson(acronyms=None, values=None, ax=None, hemisphere=None, br=None,
     """
     mapping = 'Swanson'
     br = BrainRegions() if br is None else br
+    br.compute_hierarchy()
     s2a = swanson()
     # both hemishpere
     if hemisphere == 'both':
@@ -169,25 +169,7 @@ def plot_swanson(acronyms=None, values=None, ax=None, hemisphere=None, br=None,
         im = br.rgba[regions]
         iswan = None
     else:
-        user_aids = br.parse_acronyms_argument(acronyms)
-        # if the user provided inputs are higher level than swanson propagate down
-        swaids = br.id[np.unique(s2a)]
-        maids = np.setdiff1d(user_aids, swaids)  # those are the indices not in Swanson
-        for i, maid in enumerate(maids):
-            if maid <= 1:
-                continue
-            childs_in_sw = np.intersect1d(br.descendants(maid)['id'][1:], swaids)
-            if childs_in_sw.size > 0:
-                user_aids = np.r_[user_aids, childs_in_sw]
-                values = np.r_[values, values[i] + childs_in_sw * 0]
-        # the user may have input non-unique regions
-        df = pd.DataFrame(dict(aid=user_aids, value=values)).groupby('aid').mean()
-        aids, vals = (df.index.values, df['value'].values)
-        # apply mapping and perform another round of aggregation
-        _, _, ibr = np.intersect1d(aids, br.id, return_indices=True)
-        ibr = br.mappings['Swanson-lr'][ibr]
-        df = pd.DataFrame(dict(ibr=ibr, value=vals)).groupby('ibr').mean()
-        ibr, vals = (df.index.values, df['value'].values)
+        ibr, vals = br.propagate_down(acronyms, values)
         # we now have the mapped regions and aggregated values, map values onto swanson map
         iswan, iv = ismember(s2a, ibr)
         im = np.zeros_like(s2a, dtype=np.float32)
@@ -211,8 +193,9 @@ def plot_swanson(acronyms=None, values=None, ax=None, hemisphere=None, br=None,
 
     # provides the mean to see the region on axis
     def format_coord(x, y):
-        acronym = br.acronym[s2a[int(y), int(x)]]
-        return f'x={x:1.4f}, y={x:1.4f}, {acronym}'
+        ind = s2a[int(y), int(x)]
+        ancestors = br.ancestors(br.id[ind])['acronym']
+        return f'x={x:1.4f}, y={x:1.4f}, {br.acronym[ind]} \n {ancestors}'
 
     ax.format_coord = format_coord
     return ax

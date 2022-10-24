@@ -64,6 +64,7 @@ _log = logging.getLogger(__name__)
 class CameraQC(base.QC):
     """A class for computing camera QC metrics"""
     dstypes = [
+        '_iblrig_Camera.frameData',  # Replaces the next 3 datasets
         '_iblrig_Camera.frame_counter',
         '_iblrig_Camera.GPIO',
         '_iblrig_Camera.timestamps',
@@ -333,10 +334,11 @@ class CameraQC(base.QC):
                 names = [x.split('/')[-1] for x in self.one.list_datasets(self.eid, details=False)]
                 assert f'_iblrig_{self.label}Camera.raw.mp4' in names, 'No remote video file found'
                 continue
-            optional = ('camera.times', '_iblrig_Camera.raw', 'wheel.position',
-                        'wheel.timestamps', '_iblrig_Camera.frame_counter', '_iblrig_Camera.GPIO')
+            optional = ('camera.times', '_iblrig_Camera.raw', 'wheel.position', 'wheel.timestamps',
+                        '_iblrig_Camera.timestamps', '_iblrig_Camera.frame_counter', '_iblrig_Camera.GPIO',
+                        '_iblrig_Camera.frameData')
             present = (
-                self.one._download_datasets(datasets)
+                self.one._check_filesystem(datasets)
                 if self.download_data
                 else (next(self.session_path.rglob(d), None) for d in datasets['rel_path'])
             )
@@ -539,18 +541,13 @@ class CameraQC(base.QC):
         """Check that the camera.times array is reasonable"""
         if not data_for_keys(('timestamps', 'video'), self.data):
             return 'NOT_SET'
-        # Check frame rate matches what we expect
-        expected = 1 / self.video_meta[self.type][self.label]['fps']
-        # TODO Remove dropped frames from test
-        frame_delta = np.diff(self.data['timestamps'])
-        fps_matches = np.isclose(np.median(frame_delta), expected, atol=0.01)
         # Check number of timestamps matches video
         length_matches = self.data['timestamps'].size == self.data['video'].length
         # Check times are strictly increasing
         increasing = all(np.diff(self.data['timestamps']) > 0)
         # Check times do not contain nans
         nanless = not np.isnan(self.data['timestamps']).any()
-        return 'PASS' if increasing and fps_matches and length_matches and nanless else 'FAIL'
+        return 'PASS' if increasing and length_matches and nanless else 'FAIL'
 
     def check_camera_times(self):
         """Check that the number of raw camera timestamps matches the number of video frames"""
@@ -575,10 +572,28 @@ class CameraQC(base.QC):
 
         Check is skipped for body camera videos as the wheel is often obstructed
 
-        :param tolerance: maximum absolute offset in frames.  If two values, the maximum value
-        is taken as the warning threshold
-        :param display: if true, the wheel motion energy is plotted against the rotary encoder
-        :returns: outcome string, frame offset
+        Parameters
+        ----------
+        tolerance : int, (int, int)
+            Maximum absolute offset in frames.  If two values, the maximum value is taken as the
+            warning threshold.
+        display : bool
+            If true, the wheel motion energy is plotted against the rotary encoder.
+
+        Returns
+        -------
+        str
+            The outcome string, one of {'NOT_SET', 'FAIL', 'WARNING', 'PASS'}.
+        int
+            Frame offset, i.e. by how many frames the video was shifted to match the rotary encoder
+            signal.  Negative values mean the video was shifted backwards with respect to the wheel
+            timestamps.
+
+        Notes
+        -----
+        - A negative frame offset typically means that there were frame TTLs at the beginning that
+        do not correspond to any video frames (sometimes the first few frames aren't saved to
+        disk).  Since 2021-09-15 the extractor should compensate for this.
         """
         wheel_present = data_for_keys(('position', 'timestamps', 'period'), self.data['wheel'])
         if not wheel_present or self.label == 'body':
@@ -1064,7 +1079,7 @@ class CameraQCCamlog(CameraQC):
                 continue
             optional = ('camera.times', '_iblrig_Camera.raw', 'wheel.position', 'wheel.timestamps')
             present = (
-                self.one._download_datasets(datasets)
+                self.one._check_filesystem(datasets)
                 if self.download_data
                 else (next(self.session_path.rglob(d), None) for d in datasets['rel_path'])
             )

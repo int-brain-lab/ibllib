@@ -67,25 +67,44 @@ def sync_photometry_to_daq(vdaq, fs, df_photometry, chmap=DAQ_CHMAP, v_threshold
     :param v_threshold:
     :return:
     """
+    # here we take the flag that is the most common
     daq_frames, tag_daq_frames = read_daq_timestamps(vdaq=vdaq, v_threshold=v_threshold)
     nf = np.minimum(tag_daq_frames.size, df_photometry['Input0'].size)
-    ipeak = np.argmax(np.correlate(tag_daq_frames[:nf].astype(np.int8), df_photometry['Input0'].values[:nf], mode='full'))
-    # if the frame shift is negative, it means that the photometry frames are early
-    frame_shift = ipeak - nf + 1
 
+    # we compute the framecounter for the DAQ, and match the bpod up state frame by frame for different shifts
+    # the shift that minimizes the mismatch is usually good
     df = np.median(np.diff(df_photometry['Timestamp']))
-    fcn_fp2daq = scipy.interpolate.interp1d(df_photometry['Timestamp'][:nf], daq_frames[:nf] / fs)
-    drift_ppm = (np.polyfit(daq_frames[:nf] / fs, df_photometry['Timestamp'][:nf], 1)[0] - 1) * 1e6
-    _logger.info(f"drift photometry to DAQ PPM: {drift_ppm}")
-
+    fc = np.cumsum(np.round(np.diff(daq_frames) / fs / df).astype(np.int32)) - 1  # this is a daq frame counter
+    fc = fc[fc < (nf - 1)]
+    max_shift = 300
+    error = np.zeros(max_shift * 2 + 1)
+    shifts = np.arange(-max_shift, max_shift + 1)
+    for i, shift in enumerate(shifts):
+        rolled_fp = np.roll(df_photometry['Input0'].values[fc], shift)
+        error[i] = np.sum(np.abs(rolled_fp - tag_daq_frames[:fc.size]))
+    # a negative shift means that the DAQ is ahead of the photometry and that the DAQ misses frame at the beginning
+    frame_shift = shifts[np.argmax(-error)]
+    if np.sign(frame_shift) == -1:
+        ifp = fc[np.abs(frame_shift):]
+    elif np.sign(frame_shift) == 0:
+        ifp = fc
+    elif np.sign(frame_shift) == 1:
+        ifp = fc[:-np.abs(frame_shift)]
+    t_photometry = df_photometry['Timestamp'].values[ifp]
+    t_daq = daq_frames[:ifp.size] / fs
+    # import matplotlib.pyplot as plt
+    # plt.plot(shifts, -error)
+    fcn_fp2daq = scipy.interpolate.interp1d(t_photometry, t_daq, fill_value='extrapolate')
+    drift_ppm = (np.polyfit(t_daq, t_photometry, 1)[0] - 1) * 1e6
+    if drift_ppm > 120:
+        _logger.warning(f"drift photometry to DAQ PPM: {drift_ppm}")
+    else:
+        _logger.info(f"drift photometry to DAQ PPM: {drift_ppm}")
     # here is a bunch of safeguards
-    assert np.all(np.abs(np.diff(daq_frames) - df * fs) < 1)  # check that there are no missed frames on daq
     assert np.unique(np.diff(df_photometry['FrameCounter'])).size == 1  # checks that there are no missed frames on photo
-    assert frame_shift == 0  # it's always the end frames that are missing
-    assert drift_ppm < 20
-
+    assert np.abs(frame_shift) <= 5  # it's always the end frames that are missing
+    assert np.abs(drift_ppm) < 60
     ts_daq = fcn_fp2daq(df_photometry['Timestamp'].values)  # those are the timestamps in daq time
-
     return ts_daq, fcn_fp2daq, drift_ppm
 
 
@@ -93,6 +112,7 @@ def read_daq_voltage(daq_file, chmap=DAQ_CHMAP):
     channel_names = [c.name for c in load_raw_daq_tdms(daq_file)['Analog'].channels()]
     assert all([v in channel_names for v in chmap.values()]), "Missing channel"
     vdaq, fs = load_channels_tdms(daq_file, chmap=chmap, return_fs=True)
+    vdaq = {k: v - np.median(v) for k, v in vdaq.items()}
     return vdaq, fs
 
 
@@ -105,6 +125,10 @@ def read_daq_timestamps(vdaq, v_threshold=V_THRESHOLD):
     :return:
     """
     daq_frames = rises(vdaq['photometry'], step=v_threshold, analog=True)
+    if daq_frames.size == 0:
+        daq_frames = rises(-vdaq['photometry'], step=v_threshold, analog=True)
+        _logger.warning(f'No photometry pulses detected, attempting to reverse voltage and detect again,'
+                        f'found {daq_frames.size} in reverse voltage. CHECK YOUR FP WIRING TO THE DAQ !!')
     tagged_frames = vdaq['bpod'][daq_frames] > v_threshold
     return daq_frames, tagged_frames
 
