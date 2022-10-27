@@ -2,6 +2,7 @@
 Module that hold techniques to project the brain volume onto 2D images for visualisation purposes
 """
 from functools import lru_cache
+import logging
 
 import numpy as np
 from scipy.interpolate import interp1d
@@ -9,14 +10,14 @@ import matplotlib.pyplot as plt
 import matplotlib.colors
 
 from iblutil.numerical import ismember
-from iblutil.util import Bunch, get_logger
+from iblutil.util import Bunch
 from iblutil.io.hashfile import md5
 import one.remote.aws as aws
 
 from ibllib.atlas.atlas import AllenAtlas, BrainRegions
 
 
-_logger = get_logger(__file__)
+_logger = logging.getLogger(__name__)
 
 
 @lru_cache(maxsize=1, typed=False)

@@ -1,17 +1,19 @@
-## Release 2.17.0
+## Release 2.17
+### Release Notes 2.16.0 2022-10-xx
 ### features
-- units quality metrics use latest algorithms for refractory period violations and noise cut-off
+- brainbox.modeling removed
+- brainbox.io.one.load_trials_df removed, use one.load_object(...).to_df() instead
+- AWS DataHandler refactored
+- raise error when saving an empty dataset during extraction
 
-### Hotfix 2.17.1
-- compute wheel velocity using a low-pass filter instead of a Gaussian window smoothing
-- adjust ONE-api requirement to redownload on AWS backend when md5sum mismatch
+### bugfixes
+- frameData and timestamps both optional datasets for camera QC
 
-## Release 2.16.1
+## Release 2.16
 ### Release Notes 2.16.1 2022-09-28
 ### bugfixes
 - photometry extraction: recover from corrupt DAQ signal and reversed polarity of voltage pulses
- 
-## Release 2.16
+
 ### Release Notes 2.16.0 2022-09-27
 ### features
 - swanson flatmap: the algorithm to propagate down the hierarchy has been refined
@@ -30,7 +32,6 @@
 - atlas: gene-expression backend and MRI Toronto atlas stretch and squeeze factors (Dan/Olivier)
 - FDR correction (Benjamin-Hochmann) to correct for multiple testing optional (Guido)
 - SpikeSortingLoader can be used with ONE local mode (Julia)
-
 
 ### Release Notes 2.15.0 2022-09-20
 #### features
