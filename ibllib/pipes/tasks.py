@@ -312,7 +312,7 @@ class Task(abc.ABC):
         Gets the relevant data handler based on location argument
         :return:
         """
-        location = location or self.location
+        location = str.lower(location or self.location)
         if location == 'local':
             return data_handlers.LocalDataHandler(self.session_path, self.signature, one=self.one)
         self.one = self.one or ONE()
@@ -322,10 +322,12 @@ class Task(abc.ABC):
             dhandler = data_handlers.ServerGlobusDataHandler(self.session_path, self.signature, one=self.one)
         elif location == 'remote':
             dhandler = data_handlers.RemoteHttpDataHandler(self.session_path, self.signature, one=self.one)
-        elif location == 'AWS':
+        elif location == 'aws':
             dhandler = data_handlers.RemoteAwsDataHandler(self, self.session_path, self.signature, one=self.one)
-        elif location == 'SDSC':
+        elif location == 'sdsc':
             dhandler = data_handlers.SDSCDataHandler(self, self.session_path, self.signature, one=self.one)
+        else:
+            raise ValueError(f'Unknown location "{location}"')
         return dhandler
 
     @staticmethod
