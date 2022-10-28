@@ -100,7 +100,7 @@ class DlcQC(base.QC):
         self.data['dlc_coords'] = dlc_coords
 
         # load stim on times
-        self.data['stimOn_times'] = alfio.load_object(alf_path, 'trials', namespace='ibl')['firstMovement_times']
+        self.data['stimOn_times'] = alfio.load_object(alf_path, 'trials', namespace='ibl')['stimOn_times']
 
         # load pupil diameters
         if self.side in ['left', 'right']:
