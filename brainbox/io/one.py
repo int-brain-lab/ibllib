@@ -27,8 +27,6 @@ from ibllib.pipes.ephys_alignment import EphysAlignment
 
 import brainbox.plot
 from brainbox.ephys_plots import plot_brain_regions
-from brainbox.core import TimeSeries
-from brainbox.processing import sync
 from brainbox.metrics.single_units import quick_unit_metrics
 from brainbox.behavior.wheel import interpolate_position, velocity_filtered
 from brainbox.behavior.dlc import likelihood_threshold, get_pupil_diameter, get_smooth_pupil_diameter
