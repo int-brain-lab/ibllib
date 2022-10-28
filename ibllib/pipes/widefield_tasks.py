@@ -40,38 +40,9 @@ class WidefieldRegisterRaw(base_tasks.WidefieldTask, base_tasks.RegisterRawDataT
         return signature
 
     def _run(self, symlink_old=True):
-        out_files = super()._run(symlink_old=True)
+        out_files = super()._run(symlink_old=symlink_old)
         self.register_snapshots()
         return out_files
-
-    def register_snapshots(self, unlink=False):
-        """
-        Register any photos in the snapshots folder to the session. Typically user will take photo of dorsal cortex before
-        and after session
-
-        Returns
-        -------
-
-        """
-        snapshots_path = self.session_path.joinpath('raw_widefield_data', 'snapshots')
-        if not snapshots_path.exists():
-            return
-
-        eid = self.one.path2eid(self.session_path, query_type='remote')
-        if not eid:
-            _logger.warning('Failed to upload snapshots: session not found on Alyx')
-            return
-        note = dict(user=self.one.alyx.user, content_type='session', object_id=eid, text='')
-
-        notes = []
-        for snapshot in snapshots_path.glob('*.tif'):
-            with open(snapshot, 'rb') as img_file:
-                files = {'image': img_file}
-                notes.append(self.one.alyx.rest('notes', 'create', data=note, files=files))
-            if unlink:
-                snapshot.unlink()
-        if unlink and next(snapshots_path.rglob('*'), None) is None:
-            snapshots_path.rmdir()
 
 
 class WidefieldCompress(base_tasks.WidefieldTask):

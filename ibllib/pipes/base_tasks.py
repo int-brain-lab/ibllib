@@ -1,7 +1,7 @@
 from ibllib.pipes.tasks import Task
 import ibllib.io.session_params as sess_params
 import logging
-_logger = logging.getLogger('ibllib')
+_logger = logging.getLogger(__name__)
 
 
 class DynamicTask(Task):
@@ -123,7 +123,7 @@ class WidefieldTask(DynamicTask):
         self.device_collection = self.get_device_collection('widefield', kwargs.get('device_collection', 'raw_widefield_data'))
 
 
-class RegisterRawDataTask(DynamicTask):  # TODO write test
+class RegisterRawDataTask(DynamicTask):
     """
     Base register raw task.
     To rename files
@@ -134,7 +134,7 @@ class RegisterRawDataTask(DynamicTask):  # TODO write test
     priority = 100
     job_size = 'small'
 
-    def rename_files(self, symlink_old=False, **kwargs):
+    def rename_files(self, symlink_old=False):
 
         # If no inputs are given, we don't do any renaming
         if len(self.input_files) == 0:
@@ -148,8 +148,11 @@ class RegisterRawDataTask(DynamicTask):  # TODO write test
             old_path = self.session_path.joinpath(old_collection).glob(old_file)
             old_path = next(old_path, None)
             # if the file doesn't exist and it is not required we are okay to continue
-            if not old_path and not required:
-                continue
+            if not old_path:
+                if required:
+                    raise FileNotFoundError(str(old_file))
+                else:
+                    continue
 
             new_file, new_collection, _ = after
             new_path = self.session_path.joinpath(new_collection, new_file)
@@ -157,6 +160,50 @@ class RegisterRawDataTask(DynamicTask):  # TODO write test
             old_path.replace(new_path)
             if symlink_old:
                 old_path.symlink_to(new_path)
+
+    def register_snapshots(self, unlink=False, collection=None):
+        """
+        Register any photos in the snapshots folder to the session. Typically imaging users will
+        take numerous photos for reference.  Supported extensions: .jpg, .jpeg, .png, .tif, .tiff
+
+        Parameters
+        ----------
+        unlink : bool
+            If true, files are deleted after upload.
+        collection : str, optional
+            Location of 'snapshots' folder relative to the session path. If None, uses
+            'device_collection' attribute (if exists) or root session path.
+
+        Returns
+        -------
+        list of dict
+            The newly registered Alyx notes.
+        """
+        collection = collection or getattr(self, 'device_collection', None)
+        snapshots_path = self.session_path.joinpath(*filter(None, (collection, 'snapshots')))
+        if not snapshots_path.exists():
+            return
+
+        eid = self.one.path2eid(self.session_path, query_type='remote')
+        if not eid:
+            _logger.warning('Failed to upload snapshots: session not found on Alyx')
+            return
+        note = dict(user=self.one.alyx.user, content_type='session', object_id=eid, text='')
+
+        notes = []
+        exts = ('.jpg', '.jpeg', '.png', '.tif', '.tiff')
+        for snapshot in filter(lambda x: x.suffix.lower() in exts, snapshots_path.glob('*.*')):
+            _logger.debug('Uploading "%s"...', snapshot.relative_to(self.session_path))
+            with open(snapshot, 'rb') as img_file:
+                files = {'image': img_file}
+                notes.append(self.one.alyx.rest('notes', 'create', data=note, files=files))
+            if unlink:
+                snapshot.unlink()
+        # If nothing else in the snapshots folder, delete the folder
+        if unlink and next(snapshots_path.rglob('*'), None) is None:
+            snapshots_path.rmdir()
+        _logger.info('%i snapshots uploaded to Alyx', len(notes))
+        return notes
 
     def _run(self, **kwargs):
         self.rename_files(**kwargs)

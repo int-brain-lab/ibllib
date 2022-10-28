@@ -7,6 +7,7 @@ import ibllib.pipes.ephys_preprocessing as epp
 import ibllib.pipes.tasks as mtasks
 import ibllib.pipes.base_tasks as bstasks
 import ibllib.pipes.widefield_tasks as wtasks
+import ibllib.pipes.mesoscope_tasks as mscope_tasks
 import ibllib.pipes.sync_tasks as stasks
 import ibllib.pipes.behavior_tasks as btasks
 import ibllib.pipes.video_tasks as vtasks
@@ -126,6 +127,8 @@ def make_pipeline(session_path=None, **pkwargs):
         tasks[f'SyncPulses_{sync}'] = type(f'SyncPulses_{sync}', (etasks.EphysSyncPulses,), {})(
             **kwargs, **sync_kwargs, parents=[tasks['SyncRegisterRaw']])
         sync_tasks = [tasks[f'SyncPulses_{sync}']]
+    elif sync_args['sync_namespace'] == 'timeline':
+        tasks['SyncRegisterRaw'] = type('SyncRegisterRaw', (stasks.SyncRegisterRaw,), {})(**kwargs, **sync_kwargs)
     elif sync == 'nidq':
         tasks['SyncRegisterRaw'] = type('SyncRegisterRaw', (stasks.SyncMtscomp,), {})(**kwargs, **sync_kwargs)
         tasks[f'SyncPulses_{sync}'] = type(f'SyncPulses_{sync}', (stasks.SyncPulses,), {})(
@@ -134,8 +137,7 @@ def make_pipeline(session_path=None, **pkwargs):
     elif sync == 'tdms':
         tasks['SyncRegisterRaw'] = type('SyncRegisterRaw', (stasks.SyncRegisterRaw,), {})(**kwargs, **sync_kwargs)
     elif sync == 'bpod':
-        pass
-        # ATM we don't have anything for this not sure it will be needed in the future
+        pass  # ATM we don't have anything for this not sure it will be needed in the future
 
     # Behavior tasks
     # TODO this is not doing at all what we were envisaging and going back to the old way of protocol linked to hardware
@@ -277,6 +279,22 @@ def make_pipeline(session_path=None, **pkwargs):
             parents=[tasks['WideFieldRegisterRaw'], tasks['WidefieldCompress']] + sync_tasks)
         tasks['WidefieldFOV'] = type('WidefieldFOV', (wtasks.WidefieldFOV,), {})(
             **kwargs, **wfield_kwargs, parents=[tasks['WidefieldPreprocess']])
+
+    # Mesoscope tasks
+    if 'mesoscope' in devices:
+        (_, mscope_kwargs), = devices['mesoscope'].items()
+        mscope_kwargs['device_collection'] = mscope_kwargs.pop('collection')
+        tasks['MesoscopeRegisterSnapshots'] = type('MesoscopeRegisterSnapshots', (mscope_tasks.MesoscopeRegisterSnapshots,), {})(
+            **kwargs, **mscope_kwargs)
+        tasks['MesoscopeCompress'] = type('MesoscopeCompress', (mscope_tasks.MesoscopeCompress,), {})(
+            **kwargs, **mscope_kwargs, parents=[tasks['MesoscopeRegisterRaw']])
+        tasks['MesoscopePreprocess'] = type('MesoscopePreprocess', (mscope_tasks.MesoscopePreprocess,), {})(
+            **kwargs, **mscope_kwargs, parents=[tasks['MesoscopeCompress']])
+        tasks['MesoscopeSync'] = type('MesoscopeSync', (mscope_tasks.MesoscopeSync,), {})(
+            **kwargs, **mscope_kwargs, **sync_kwargs,
+            parents=[tasks['MesoscopeRegisterRaw'], tasks['MesoscopeCompress']] + sync_tasks)
+        tasks['MesoscopeFOV'] = type('MesoscopeFOV', (mscope_tasks.MesoscopeFOV,), {})(
+            **kwargs, **mscope_kwargs, parents=[tasks['MesoscopePreprocess']])
 
     if 'photometry' in devices:
         # {'collection': 'raw_photometry_data', 'sync_label': 'frame_trigger', 'regions': ['Region1G', 'Region3G']}
