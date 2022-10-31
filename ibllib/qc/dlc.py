@@ -42,9 +42,15 @@ class DlcQC(base.QC):
     }
 
     dstypes = {
-        'left': ['_ibl_leftCamera.dlc.*', '_ibl_leftCamera.times.*', '_ibl_leftCamera.features.*', '_ibl_trials.stimOn_times.*'],
-        'right': ['_ibl_rightCamera.dlc.*', '_ibl_rightCamera.times.*', '_ibl_rightCamera.features.*', '_ibl_trials.stimOn_times.*'],
-        'body': ['_ibl_bodyCamera.dlc.*', '_ibl_bodyCamera.times.*'],
+        'left': [
+            '_ibl_leftCamera.dlc.*', '_ibl_leftCamera.times.*', '_ibl_leftCamera.features.*', '_ibl_trials.stimOn_times.*'
+        ],
+        'right': [
+            '_ibl_rightCamera.dlc.*', '_ibl_rightCamera.times.*', '_ibl_rightCamera.features.*', '_ibl_trials.stimOn_times.*'
+        ],
+        'body': [
+            '_ibl_bodyCamera.dlc.*', '_ibl_bodyCamera.times.*'
+        ],
     }
 
     def __init__(self, session_path_or_eid, side, ignore_checks=['check_pupil_diameter_snr'], **kwargs):
