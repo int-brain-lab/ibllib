@@ -497,8 +497,8 @@ class SDSCPatcher(Patcher):
 
         _logger.info(f"Copy {local_path} to {remote_path}")
         if not dry:
-            if not remote_path.parent.exists():
-                remote_path.parent.mkdir(exist_ok=True)
+            if not Path(remote_path).parent.exists():
+                Path(remote_path).parent.mkdir(exist_ok=True)
             shutil.copy(local_path, remote_path)
         return 0, ''
 
