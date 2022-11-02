@@ -43,10 +43,10 @@ class DlcQC(base.QC):
 
     dstypes = {
         'left': [
-            '_ibl_leftCamera.dlc.*', '_ibl_leftCamera.times.*', '_ibl_leftCamera.features.*', '_ibl_trials.stimOn_times.*'
+            '_ibl_leftCamera.dlc.*', '_ibl_leftCamera.times.*', '_ibl_leftCamera.features.*', '_ibl_trials.table.*'
         ],
         'right': [
-            '_ibl_rightCamera.dlc.*', '_ibl_rightCamera.times.*', '_ibl_rightCamera.features.*', '_ibl_trials.stimOn_times.*'
+            '_ibl_rightCamera.dlc.*', '_ibl_rightCamera.times.*', '_ibl_rightCamera.features.*', '_ibl_trials.table.*'
         ],
         'body': [
             '_ibl_bodyCamera.dlc.*', '_ibl_bodyCamera.times.*'
