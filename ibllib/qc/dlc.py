@@ -280,7 +280,7 @@ class DlcQC(base.QC):
             return 'FAIL', float(round(snr, 3))
         return 'PASS', float(round(snr, 3))
 
-    def check_paw_r_nan(self):
+    def check_paw_close_nan(self):
         if self.side == 'body':
             return 'NOT_SET'
         thresh_fail = 0.20  # prop of NaNs above this threshold means the check fails
@@ -294,7 +294,7 @@ class DlcQC(base.QC):
         else:
             return 'PASS'
 
-    def check_paw_l_nan(self):
+    def check_paw_far_nan(self):
         if self.side == 'body':
             return 'NOT_SET'
         thresh_fail = 0.20  # prop of NaNs above this threshold means the check fails
