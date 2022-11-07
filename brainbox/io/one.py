@@ -843,14 +843,15 @@ class SpikeSortingLoader:
         """
         if len(self.collections) == 0:
             return {}, {}, {}
-        self.collection = collection or self._get_spike_sorting_collection(spike_sorter=spike_sorter)
-        _logger.debug(f"loading spike sorting from {self.collection}")
+        self.collection = self._get_spike_sorting_collection(spike_sorter=spike_sorter)
+        collection = collection or self.collection
+        _logger.debug(f"loading spike sorting object {obj} from {collection}")
         spike_attributes, cluster_attributes = self._get_attributes(dataset_types)
         attributes = {'spikes': spike_attributes, 'clusters': cluster_attributes}
         try:
             self.files[obj] = self.one.load_object(
                 self.eid, obj=obj, attribute=attributes.get(obj, None),
-                collection=self.collection, download_only=True, **kwargs)
+                collection=collection, download_only=True, **kwargs)
         except ALFObjectNotFound as e:
             if missing == 'raise':
                 raise e
