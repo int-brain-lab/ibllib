@@ -50,25 +50,37 @@ def load_channels_tdms(path, chmap=None, return_fs=False):
     -------
 
     """
+
+    def _load_digital_channels(data_file, group='Digital', ch='AuxPort'):
+        # the digital channels are encoded on a single uint8 channel where each bit corresponds to an input channel
+        ddata = data_file[group][ch].data.astype(np.uint8)
+        nc = int(2 ** np.floor(np.log2(np.max(ddata))))
+        ddata = np.unpackbits(ddata[:, np.newaxis], axis=1, count=nc, bitorder='little')
+        data = {}
+        for i in range(ddata.shape[1]):
+            data[f'DI{i}'] = ddata[:, i]
+        return data
+
     data_file = load_raw_daq_tdms(path)
     data = {}
+    digital_channels = None
     if chmap:
         for name, ch in chmap.items():
             if ch.lower()[0] == 'a':
                 data[name] = data_file['Analog'][ch.upper()].data
                 fs = data_file['Analog'].properties['ScanRate']
+            elif ch.lower()[0] == 'd':
+                # do not attempt to load digital channels several times
+                digital_channels = digital_channels or _load_digital_channels(data_file)
+                data[name] = digital_channels[ch.upper()]
+                fs = data_file['Digital'].properties['ScanRate']
             else:
                 raise NotImplementedError(f'Extraction of channel "{ch}" not implemented')
     else:
         for group in (x.name for x in data_file.groups()):
             for ch in (x.name for x in data_file[group].channels()):
-                # the digital channels are encoded on a single uint8 channel where each bit corresponds to an input
                 if group == 'Digital' and ch == 'AuxPort':
-                    ddata = data_file[group][ch].data.astype(np.uint8)
-                    nc = int(2 ** np.floor(np.log2(np.max(ddata))))
-                    ddata = np.unpackbits(ddata[:, np.newaxis], axis=1, count=nc, bitorder='little')
-                    for i in range(nc):
-                        data[f'DI{i}'] = ddata[:, i]
+                    data = {**data, **_load_digital_channels(data_file, group, ch)}
                 else:
                     data[ch] = data_file[group][ch.upper()].data
             fs = data_file[group].properties['ScanRate']  # from daqami it's unclear that fs could be set per channel
