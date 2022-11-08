@@ -62,7 +62,15 @@ def load_channels_tdms(path, chmap=None, return_fs=False):
     else:
         for group in (x.name for x in data_file.groups()):
             for ch in (x.name for x in data_file[group].channels()):
-                data[ch] = data_file[group][ch.upper()].data
+                # the digital channels are encoded on a single uint8 channel where each bit corresponds to an input
+                if group == 'Digital' and ch == 'AuxPort':
+                    ddata = data_file[group][ch].data.astype(np.uint8)
+                    nc = int(2 ** np.floor(np.log2(np.max(ddata))))
+                    ddata = np.unpackbits(ddata[:, np.newaxis], axis=1, count=nc, bitorder='little')
+                    for i in range(nc):
+                        data[f'DI{i}'] = ddata[:, i]
+                else:
+                    data[ch] = data_file[group][ch.upper()].data
             fs = data_file[group].properties['ScanRate']  # from daqami it's unclear that fs could be set per channel
     if return_fs:
         return data, fs
