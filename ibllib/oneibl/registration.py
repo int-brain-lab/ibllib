@@ -102,23 +102,38 @@ def register_dataset(file_list, one=None, created_by=None, repository=None, serv
 
     response = one.alyx.rest('protected-file', 'create', data=r_protected, no_cache=True)
 
-    protected = [r['protected'] for r in response]
+    new_file_list = []
+    today_revision = '#' + datetime.datetime.today().strftime('%Y-%m-%d') + '#'
 
-    if any(protected):
-        new_file_list = []
-        # Revision from today's date
-        revision = '#' + datetime.datetime.today().strftime('%Y-%m-%d') + '#'
-        for fl, res in zip(file_list, response):
-            assert res['file_name'] == fl.relative_to(session_path).as_posix()
-            # if the dataset is protected move into a revision folder
-            if res['protected']:
-                revision_path = fl.parent.joinpath(revision)
-                revision_path.mkdir(exist_ok=True)
-                shutil.move(fl, revision_path.joinpath(fl.name))
-                new_file_list.append(revision_path.joinpath(fl.name))
-            else:
-                new_file_list.append(fl)
-        file_list = new_file_list
+    for fl, res in zip(file_list, response):
+        (name, prot_info), = res.items()
+        assert name == fl.relative_to(session_path).as_posix()
+        protected = next((key for pr in prot_info for key, val in pr.items() if val), None)
+        revision = next((key for pr in prot_info for key, val in pr.items() if not val), None)
+
+        # Case where the dataset is not protected at all
+        # e.g {'clusters.amp.npy': [{'': False}]}
+        if protected is None:
+            # Use original file
+            new_file_list.append(fl)
+        # Case where the original is protected but there is already an unprotected revision
+        # e.g {'clusters.amp.npy': [{'2022-10-31': False}, {'': True}]}
+        elif protected == '' and revision != '':
+            revision_path = fl.parent.joinpath(f'#{revision}#')
+            revision_path.mkdir(exist_ok=True)
+            shutil.move(fl, revision_path.joinpath(fl.name))
+            new_file_list.append(revision_path.joinpath(fl.name))
+        # Other cases
+        # 1. Case where the original is protected and there is no unprotected revision, e.g {'clusters.amp.npy': [{'': True}]}
+        # 2. Case where both original and revision are protected, e.g {'clusters.amp.npy': [{'2022-10-31': True}, {'': True}]}
+        else:
+            # Make revision with today's date
+            revision_path = fl.parent.joinpath(today_revision)
+            revision_path.mkdir(exist_ok=True)
+            shutil.move(fl, revision_path.joinpath(fl.name))
+            new_file_list.append(revision_path.joinpath(fl.name))
+
+    file_list = new_file_list
 
     # first register the file
     r = {'created_by': created_by,
