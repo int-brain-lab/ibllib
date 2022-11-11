@@ -4,11 +4,12 @@ import datetime
 import logging
 import re
 import shutil
+from requests import HTTPError
 
 from pkg_resources import parse_version
 from dateutil import parser as dateparser
 from iblutil.io import hashfile
-from one.alf.files import get_session_path
+from one.alf.files import get_session_path, folder_parts
 import one.alf.exceptions as alferr
 from one.api import ONE
 
@@ -92,49 +93,6 @@ def register_dataset(file_list, one=None, created_by=None, repository=None, serv
 
     session_path = get_session_path(file_list[0])
 
-    filenames = [p.relative_to(session_path).as_posix() for p in file_list]
-
-    # First check if any of the datasets to be registered are protected, in this case we need to
-    # move them into a revision folder
-    r_protected = {'created_by': created_by,
-                   'path': session_path.relative_to((session_path.parents[2])).as_posix(),
-                   'filenames': filenames}
-
-    response = one.alyx.rest('protected-file', 'create', data=r_protected, no_cache=True)
-
-    new_file_list = []
-    today_revision = '#' + datetime.datetime.today().strftime('%Y-%m-%d') + '#'
-
-    for fl, res in zip(file_list, response):
-        (name, prot_info), = res.items()
-        assert name == fl.relative_to(session_path).as_posix()
-        protected = next((key for pr in prot_info for key, val in pr.items() if val), None)
-        revision = next((key for pr in prot_info for key, val in pr.items() if not val), None)
-
-        # Case where the dataset is not protected at all
-        # e.g {'clusters.amp.npy': [{'': False}]}
-        if protected is None:
-            # Use original file
-            new_file_list.append(fl)
-        # Case where the original is protected but there is already an unprotected revision
-        # e.g {'clusters.amp.npy': [{'2022-10-31': False}, {'': True}]}
-        elif protected == '' and revision != '':
-            revision_path = fl.parent.joinpath(f'#{revision}#')
-            revision_path.mkdir(exist_ok=True)
-            shutil.move(fl, revision_path.joinpath(fl.name))
-            new_file_list.append(revision_path.joinpath(fl.name))
-        # Other cases
-        # 1. Case where the original is protected and there is no unprotected revision, e.g {'clusters.amp.npy': [{'': True}]}
-        # 2. Case where both original and revision are protected, e.g {'clusters.amp.npy': [{'2022-10-31': True}, {'': True}]}
-        else:
-            # Make revision with today's date
-            revision_path = fl.parent.joinpath(today_revision)
-            revision_path.mkdir(exist_ok=True)
-            shutil.move(fl, revision_path.joinpath(fl.name))
-            new_file_list.append(revision_path.joinpath(fl.name))
-
-    file_list = new_file_list
-
     # first register the file
     r = {'created_by': created_by,
          'path': session_path.relative_to((session_path.parents[2])).as_posix(),
@@ -146,13 +104,108 @@ def register_dataset(file_list, one=None, created_by=None, repository=None, serv
          'versions': versions,
          'default': default,
          'exists': exists}
+
     if not dry:
         if one is None:
             one = ONE(cache_rest=None)
-        response = one.alyx.rest('register-file', 'create', data=r, no_cache=True)
-        for p in file_list:
-            _logger.info(f"ALYX REGISTERED DATA: {p}")
-        return response
+        try:
+            response = one.alyx.rest('register-file', 'create', data=r, no_cache=True)
+            for p in file_list:
+                _logger.info(f"ALYX REGISTERED DATA: {p}")
+            return response
+        except HTTPError as err:
+            err_message = json.loads(err.response.text)
+            if err_message['status_code'] == 403 and err_message['error'] == 'One or more datasets is protected':
+
+                response = err_message['details']
+                today_revision = datetime.datetime.today().strftime('%Y-%m-%d')
+                new_file_list = []
+
+                for fl, res in zip(file_list, response):
+                    (name, prot_info), = res.items()
+
+                    # Dataset has not yet been registered
+                    if prot_info == []:
+                        new_file_list.append(fl)
+                        continue
+                    else:
+                        # Check to see if the file path already has a revision in it
+                        file_revision = folder_parts(fl, as_dict=True)['revision']
+                        if file_revision:
+                            existing_revisions = [key for pr in prot_info for key, val in pr.items() if val]
+                            # If a new revision has been explicitly defined by the user and it doesn't exist, just register as is
+                            if file_revision not in existing_revisions:
+                                new_file_list.append(fl)
+                                continue
+                            # Remove the revision from the file path to make sure we don't have nested revisions further down
+                            fl_path = fl.parent.parent
+                        else:
+                            fl_path = fl.parent
+
+                        assert name == fl_path.relative_to(session_path).as_posix()
+
+                        # Finds the latest revision that is protected
+                        protected = next((key for pr in prot_info for key, val in pr.items() if val), None)
+                        # Finds the latest revision that isn't protected
+                        revision = next((key for pr in prot_info for key, val in pr.items() if not val), None)
+
+                        # Case where the dataset is not protected at all
+                        # e.g {'clusters.amp.npy': [{'': False}]}
+                        if protected is None:
+                            # Use original file
+                            new_file_list.append(fl)
+                            continue
+
+                        # Case where there are protected datasets but there is also an unprotected revision
+                        # e.g {'clusters.amp.npy': [{'2022-10-31': False}, {'2022-05-31': True}, {'': True}]}
+                        if revision is not None:
+                            assert protected != revision
+                            revision_path = fl_path.joinpath(f'#{revision}#')
+
+                        # Case where there are no unprotected revisions and the latest protected revision has the
+                        # same date as today
+                        elif today_revision in protected:
+                            if protected == today_revision:
+                                new_revision = today_revision + 'a'
+                            else:
+                                alpha = protected[-1]
+                                new_revision = today_revision + chr(ord(alpha) + 1).lower()
+
+                            revision_path = fl_path.joinpath(f'#{new_revision}#')
+
+                        # Other cases
+                        # 1. Case where the original is protected and there is no unprotected revision,
+                        # e.g {'clusters.amp.npy': [{'': True}]}
+                        # 2. Case where both original and revision are protected,
+                        # e.g {'clusters.amp.npy': [{'2022-10-31': True}, {'': True}]}
+                        else:
+                            revision_path = fl_path.joinpath(f'#{today_revision}#')
+
+                        revision_path.mkdir(exist_ok=True)
+                        shutil.move(fl, revision_path.joinpath(fl.name))
+                        new_file_list.append(revision_path.joinpath(fl.name))
+
+                file_list = new_file_list
+
+                print(file_list)
+
+                r = {'created_by': created_by,
+                     'path': session_path.relative_to((session_path.parents[2])).as_posix(),
+                     'filenames': [p.relative_to(session_path).as_posix() for p in file_list],
+                     'name': repository,
+                     'server_only': server_only,
+                     'hashes': hashes,
+                     'filesizes': [p.stat().st_size for p in file_list],
+                     'versions': versions,
+                     'default': default,
+                     'exists': exists}
+
+                response = one.alyx.rest('register-file', 'create', data=r, no_cache=True)
+                for p in file_list:
+                    _logger.info(f"ALYX REGISTERED DATA: {p}")
+                return response
+            else:
+                raise err
 
 
 def register_session_raw_data(session_path, one=None, overwrite=False, dry=False, **kwargs):
