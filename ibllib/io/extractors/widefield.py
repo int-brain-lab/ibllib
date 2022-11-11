@@ -121,7 +121,7 @@ class Widefield(extractors_base.BaseExtractor):
     def preprocess(self, fs=30, functional_channel=0, nbaseline_frames=30, k=200, nchannels=2):
 
         # MOTION CORRECTION
-        wfield_cli._motion(str(self.data_path), nchannels=nchannels)
+        wfield_cli._motion(str(self.data_path), nchannels=nchannels, plot_ext='.png')
         # COMPUTE AVERAGE FOR BASELINE
         wfield_cli._baseline(str(self.data_path), nbaseline_frames, nchannels=nchannels)
         # DATA REDUCTION
@@ -131,7 +131,7 @@ class Widefield(extractors_base.BaseExtractor):
         dat = wfield_cli.load_stack(str(self.data_path), nchannels=nchannels)
         if dat.shape[1] == 2:
             del dat
-            wfield_cli._hemocorrect(str(self.data_path), fs=fs, functional_channel=functional_channel)
+            wfield_cli._hemocorrect(str(self.data_path), fs=fs, functional_channel=functional_channel, plot_ext='.png')
 
     def remove_files(self, file_prefix='motion'):
         motion_files = self.data_path.glob(f'{file_prefix}*')
@@ -139,7 +139,7 @@ class Widefield(extractors_base.BaseExtractor):
             _logger.info(f'Removing {file}')
             file.unlink()
 
-    def sync_timestamps(self, bin_exists=False, save=False, save_paths=None, **kwargs):
+    def sync_timestamps(self, bin_exists=False, save=False, save_paths=None, sync_collection='raw_sync_data', **kwargs):
 
         if save and save_paths:
             assert len(save_paths) == 3, 'Must provide save_path as list with 3 paths'
@@ -147,7 +147,7 @@ class Widefield(extractors_base.BaseExtractor):
                 Path(save_path).parent.mkdir(parents=True, exist_ok=True)
 
         # Load in fpga sync
-        fpga_sync, chmap = get_sync_and_chn_map(self.session_path, 'raw_widefield_data')
+        fpga_sync, chmap = get_sync_and_chn_map(self.session_path, sync_collection)
         fpga_led = get_sync_fronts(fpga_sync, chmap['frame_trigger'])
         fpga_led_up = fpga_led['times'][fpga_led['polarities'] == 1]  # only consider up pulse times
 

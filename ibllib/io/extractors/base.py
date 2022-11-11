@@ -51,12 +51,25 @@ class BaseExtractor(abc.ABC):
             path_out = self.session_path.joinpath(self.default_path)
 
         def _write_to_disk(file_path, data):
-            """Implements different save calls depending on file extension"""
+            """Implements different save calls depending on file extension.
+
+            Parameters
+            ----------
+            file_path : pathlib.Path
+                The location to save the data.
+            data : pandas.DataFrame, numpy.ndarray
+                The data to save
+
+            """
             csv_separators = {
                 ".csv": ",",
                 ".ssv": " ",
                 ".tsv": "\t"
             }
+            # Ensure empty files are not created; we expect all datasets to have a non-zero size
+            if getattr(data, 'size', len(data)) == 0:
+                filename = file_path.relative_to(self.session_path).as_posix()
+                raise ValueError(f'Data for {filename} appears to be empty')
             file_path = Path(file_path)
             file_path.parent.mkdir(exist_ok=True, parents=True)
             if file_path.suffix == ".npy":

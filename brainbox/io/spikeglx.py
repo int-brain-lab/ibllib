@@ -209,7 +209,7 @@ class Streamer(spikeglx.Reader):
             shutil.copy(self.file_chunks.with_suffix('.meta'), meta_local_path)
 
         # if the cached version happens to be the same as the one on disk, just load it
-        if ch_file_stream.exists():
+        if ch_file_stream.exists() and ch_file_stream.with_suffix('.cbin').exists():
             with open(ch_file_stream, 'r') as f:
                 cmeta_stream = json.load(f)
             if (cmeta_stream.get('chopped_first_sample', None) == i0 and
