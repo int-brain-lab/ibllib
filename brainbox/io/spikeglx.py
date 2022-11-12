@@ -259,6 +259,7 @@ class Streamer(spikeglx.Reader):
                     raise e
                 _logger.warning(f'Failed to download chunk {first_chunk} to {last_chunk}, retrying')
                 time.sleep(1)
+            break
         cbin_local_path = remove_uuid_file(cbin_local_path)
         cbin_local_path_renamed = cbin_local_path.with_suffix('.stream.cbin')
         cbin_local_path.replace(cbin_local_path_renamed)
