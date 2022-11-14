@@ -461,7 +461,7 @@ class RawEphysQC(base_tasks.EphysTask):
     def _run(self, overwrite=False):
 
         eid = self.one.path2eid(self.session_path)
-        probe = self.one.alyx.rest('insertions', 'list', session=eid, probe=self.pname)
+        probe = self.one.alyx.rest('insertions', 'list', session=eid, name=self.pname)
 
         # We expect there to only be one probe
         if len(probe) != 1:

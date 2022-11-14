@@ -316,10 +316,6 @@ class CameraQC(base.QC):
         """
         assert self.one is not None, 'ONE required to download data'
 
-        # Ensure we have the settings
-        settings, _ = self.one.load_datasets(self.eid, ["_iblrig_taskSettings.raw.json"],
-                                             collections=['raw_behavior_data'],
-                                             download_only=True, assert_present=False)
         # Get extractor type
         is_ephys = 'ephys' in (self.type or self.one.get_details(self.eid)['task_protocol'])
         self.sync_type = self.sync_type or 'nidq' if is_ephys else 'bpod'
