@@ -84,14 +84,13 @@ class EphysSyncRegisterRaw(base_tasks.DynamicTask):
             out_files.append(wiring_file)
 
         # Search for .bin files in the sync_collection folder
-        files = self.session_path.joinpath(self.sync_collection).glob('*nidq.bin')
-        assert len(files) == 1
+        files = list(self.session_path.joinpath(self.sync_collection).glob('*nidq.*bin'))
         bin_file = files[0] if len(files) == 1 else None
 
         # If we don't have a .bin/ .cbin file anymore see if we can still find the .ch and .meta files
         if bin_file is None:
             for ext in ['ch', 'meta']:
-                files = self.session_path.joinpath(self.sync_collection).glob(f'*nidq.{ext}')
+                files = list(self.session_path.joinpath(self.sync_collection).glob(f'*nidq.{ext}'))
                 ext_file = files[0] if len(files) == 1 else None
                 if ext_file is not None:
                     out_files.append(ext_file)
