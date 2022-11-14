@@ -365,7 +365,6 @@ class CameraQC(base.QC):
 
         self._type = get_session_extractor_type(self.session_path)
 
-
     def run(self, update: bool = False, **kwargs) -> (str, dict):
         """
         Run video QC checks and return outcome
