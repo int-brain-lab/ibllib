@@ -85,12 +85,7 @@ class TaskQCExtractor(object):
                                              download_only=True, assert_present=False)
 
         is_ephys = get_session_extractor_type(self.session_path) == 'ephys'
-
-        if self.sync_type is None and is_ephys:
-            self.sync_type = 'nidq'
-        elif self.sync_type is None:
-            self.sync_type = 'bpod'
-
+        self.sync_type = self.sync_type or 'nidq' if is_ephys else 'bpod'
         is_fpga = 'bpod' not in self.sync_type
 
         if settings and is_ephys:

@@ -127,6 +127,7 @@ class CameraQC(base.QC):
         self.stream = kwargs.pop('stream', None)
         self.n_samples = kwargs.pop('n_samples', 100)
         self.sync_collection = kwargs.pop('sync_collection', 'raw_ephys_data')
+        self.sync = kwargs.pop('sync_type', None)
         super().__init__(session_path_or_eid, **kwargs)
 
         # Data
@@ -147,7 +148,7 @@ class CameraQC(base.QC):
         logging.disable(logging.CRITICAL)
 
         self._type = get_session_extractor_type(self.session_path) or None
-        self.sync_type = kwargs.get('sync_type', 'nidq' if self._type == 'ephys' else None)
+        self.sync_type = self.sync or 'nidq' if self._type == 'ephys' else None
 
         logging.disable(logging.NOTSET)
         keys = ('count', 'pin_state', 'audio', 'fpga_times', 'wheel', 'video',
@@ -320,11 +321,9 @@ class CameraQC(base.QC):
                                              collections=['raw_behavior_data'],
                                              download_only=True, assert_present=False)
         # Get extractor type
-        is_ephys = 'ephys' in self.type or get_session_extractor_type(self.session_path) == 'ephys'
-        if self.sync_type is None and is_ephys:
-            self.sync_type = 'nidq'
-        else:
-            self.sync_type = 'bpod'
+        is_ephys = 'ephys' in (self.type or self.one.get_details(self.eid)['task_protocol'])
+        self.sync_type = self.sync_type or 'nidq' if is_ephys else 'bpod'
+
         is_fpga = 'bpod' not in self.sync_type
 
         # dataset collections outside this list are ignored (e.g. probe00, raw_passive_data)
