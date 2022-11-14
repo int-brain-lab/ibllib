@@ -103,7 +103,8 @@ def register_dataset(file_list, one=None, created_by=None, repository=None, serv
          'filesizes': [p.stat().st_size for p in file_list],
          'versions': versions,
          'default': default,
-         'exists': exists}
+         'exists': exists,
+         'check_protected': True}  # flag to see if any datasets are protected
 
     if not dry:
         if one is None:
@@ -142,7 +143,7 @@ def register_dataset(file_list, one=None, created_by=None, repository=None, serv
                         else:
                             fl_path = fl.parent
 
-                        assert name == fl_path.relative_to(session_path).as_posix()
+                        assert name == fl_path.relative_to(session_path).joinpath(fl.name).as_posix()
 
                         # Finds the latest revision that is protected
                         protected = next((key for pr in prot_info for key, val in pr.items() if val), None)
@@ -187,8 +188,6 @@ def register_dataset(file_list, one=None, created_by=None, repository=None, serv
 
                 file_list = new_file_list
 
-                print(file_list)
-
                 r = {'created_by': created_by,
                      'path': session_path.relative_to((session_path.parents[2])).as_posix(),
                      'filenames': [p.relative_to(session_path).as_posix() for p in file_list],
@@ -198,7 +197,8 @@ def register_dataset(file_list, one=None, created_by=None, repository=None, serv
                      'filesizes': [p.stat().st_size for p in file_list],
                      'versions': versions,
                      'default': default,
-                     'exists': exists}
+                     'exists': exists,
+                     'check_protected': False}
 
                 response = one.alyx.rest('register-file', 'create', data=r, no_cache=True)
                 for p in file_list:

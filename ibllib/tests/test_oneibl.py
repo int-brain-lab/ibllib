@@ -222,7 +222,7 @@ class TestRegistration(unittest.TestCase):
         orig_id = [rr['id'] for rr in r]
         self.assertTrue(all(all(not fr['exists'] for fr in rr['file_records']) for rr in r))
 
-        # Test registering with a revision
+        # Test registering with a revision already in the file path, should use this rather than create one with todays date
         flist = list(self.rev_path.glob('*.npy'))
         r = registration.register_dataset(file_list=flist, one=self.one)
         self.assertTrue(all(d['revision'] == 'v1' for d in r))
@@ -254,6 +254,7 @@ class TestRegistration(unittest.TestCase):
         # Need to remake the original files
         np.save(self.alf_path.joinpath('spikes.times.npy'), np.random.random(500))
         np.save(self.alf_path.joinpath('spikes.amps.npy'), np.random.random(500))
+        # When we register now we expect them to go into a revision with today's date
         flist = list(self.alf_path.glob('*.npy'))
         r = registration.register_dataset(file_list=flist, one=self.one)
         self.assertTrue(all(d['revision'] == self.today_revision for d in r))
@@ -262,6 +263,18 @@ class TestRegistration(unittest.TestCase):
         self.assertTrue(self.alf_path.joinpath(f'#{self.today_revision}#', 'spikes.amps.npy').exists())
         self.assertFalse(self.alf_path.joinpath('spikes.times.npy').exists())
         self.assertFalse(self.alf_path.joinpath('spikes.amps.npy').exists())
+
+        # Same day revision
+        dsets = self.one.alyx.rest('datasets', 'list', session=ses['url'][-36:], no_cache=True)
+        for d in dsets:
+            self.one.alyx.rest('datasets', 'partial_update',
+                               id=d['url'][-36:], data={'tags': ['test_tag']})
+        # Need to remake the original files
+        np.save(self.alf_path.joinpath('spikes.times.npy'), np.random.random(500))
+        np.save(self.alf_path.joinpath('spikes.amps.npy'), np.random.random(500))
+        flist = list(self.alf_path.glob('*.npy'))
+        r = registration.register_dataset(file_list=flist, one=self.one)
+        self.assertTrue(all(d['revision'] == self.today_revision + 'a' for d in r))
 
     def test_create_sessions(self):
         flag_file = self.session_path.joinpath('create_me.flag')
