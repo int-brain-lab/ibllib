@@ -160,7 +160,17 @@ class CameraTimestampsCamlog(BaseExtractor):
         video_frames = get_video_length(self.session_path.joinpath('raw_video_data', f'_iblrig_{self.label}Camera.raw.mp4'))
         raw_ts = fpga_times[self.label]
 
-        assert video_frames == raw_ts.size, 'dimension mismatch between video frames and TTL pulses'
+        # For left camera sometimes we have one extra pulse than video frame
+        if (raw_ts.size - video_frames) == 1:
+            _logger.warning(f'One extra sync pulse detected for {self.label} camera')
+            raw_ts = raw_ts[:-1]
+        elif (raw_ts.size - video_frames) == -1:
+            _logger.warning(f'One extra video frame detected for {self.label} camera')
+            med_time = np.median(np.diff(raw_ts))
+            raw_ts = np.r_[raw_ts, np.array([raw_ts[-1] + med_time])]
+
+        assert video_frames == raw_ts.size, f'dimension mismatch between video frames and TTL pulses for {self.label} camera' \
+                                            f'by {np.abs(video_frames - raw_ts.size)} frames'
 
         return raw_ts
 

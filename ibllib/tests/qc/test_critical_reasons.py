@@ -1,11 +1,13 @@
 import unittest
 from unittest import mock
 import json
-from one.api import ONE
-from ibllib.tests import TEST_DB
 import random
 import string
 
+import requests
+from one.api import ONE
+
+from ibllib.tests import TEST_DB
 import ibllib.qc.critical_reasons as usrpmt
 
 one = ONE(**TEST_DB)
@@ -114,7 +116,11 @@ class TestUserPmtSess(unittest.TestCase):
         assert len(notes) == 1
 
     def tearDown(self) -> None:
-        one.alyx.rest('insertions', 'delete', id=self.ins_id)
+        try:
+            one.alyx.rest('insertions', 'delete', id=self.ins_id)
+        except requests.HTTPError as ex:
+            if ex.errno != 404:
+                raise ex
 
 
 if __name__ == '__main__':
