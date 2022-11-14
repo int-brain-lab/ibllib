@@ -126,6 +126,7 @@ class CameraQC(base.QC):
         self.download_data = kwargs.pop('download_data', download_data)
         self.stream = kwargs.pop('stream', None)
         self.n_samples = kwargs.pop('n_samples', 100)
+        self.sync_collection = kwargs.pop('sync_collection', 'raw_ephys_data')
         super().__init__(session_path_or_eid, **kwargs)
 
         # Data
@@ -144,7 +145,10 @@ class CameraQC(base.QC):
                 self.video_path = None
 
         logging.disable(logging.CRITICAL)
+
         self._type = get_session_extractor_type(self.session_path) or None
+        self.sync_type = kwargs.get('sync_type', 'nidq' if self._type == 'ephys' else None)
+
         logging.disable(logging.NOTSET)
         keys = ('count', 'pin_state', 'audio', 'fpga_times', 'wheel', 'video',
                 'frame_samples', 'timestamps', 'camera_times', 'bonsai_times')
@@ -203,8 +207,8 @@ class CameraQC(base.QC):
             raw.load_embedded_frame_data(self.session_path, self.label, raw=True)
 
         # Load the audio and raw FPGA times
-        if self.type == 'ephys':
-            sync, chmap = ephys_fpga.get_main_probe_sync(self.session_path)
+        if self.sync_type != 'bpod' and self.sync_type is not None:
+            sync, chmap = ephys_fpga.get_sync_and_chn_map(self.session_path, self.sync_collection)
             audio_ttls = ephys_fpga.get_sync_fronts(sync, chmap['audio'])
             self.data['audio'] = audio_ttls['times']  # Get rises
             # Load raw FPGA times
@@ -223,9 +227,10 @@ class CameraQC(base.QC):
                 alf_path, f'{self.label}Camera', short_keys=True)['times']
         except AssertionError:  # Re-extract
             kwargs = dict(video_path=self.video_path, labels=self.label)
-            if self.type == 'ephys':
+            if self.sync_type != 'bpod' and self.sync_type is not None:
                 kwargs = {**kwargs, 'sync': sync, 'chmap': chmap}  # noqa
-            outputs, _ = extract_all(self.session_path, self.type, save=False, **kwargs)
+            outputs, _ = extract_all(self.session_path, self.type, save=False, sync_type=self.sync_type,
+                                     sync_collection=self.sync_collection, **kwargs)
             self.data['timestamps'] = outputs[f'{self.label}_camera_timestamps']
         except ALFObjectNotFound:
             _log.warning('no camera.times ALF found for session')
@@ -236,7 +241,7 @@ class CameraQC(base.QC):
             self.data['wheel'] = alfio.load_object(alf_path, 'wheel', short_keys=True)
         except ALFObjectNotFound:
             # Extract from raw data
-            if self.type == 'ephys':
+            if self.sync_type != 'bpod' and self.sync_type is not None:
                 wheel_data = ephys_fpga.extract_wheel_sync(sync, chmap)
             else:
                 wheel_data = training_wheel.get_wheel_position(self.session_path)
@@ -309,11 +314,22 @@ class CameraQC(base.QC):
         :return:
         """
         assert self.one is not None, 'ONE required to download data'
-        # dataset collections outside this list are ignored (e.g. probe00, raw_passive_data)
-        collections = ('alf', 'raw_ephys_data', 'raw_behavior_data', 'raw_video_data')
+
+        # Ensure we have the settings
+        settings, _ = self.one.load_datasets(self.eid, ["_iblrig_taskSettings.raw.json"],
+                                             collections=['raw_behavior_data'],
+                                             download_only=True, assert_present=False)
         # Get extractor type
-        is_ephys = 'ephys' in (self.type or self.one.get_details(self.eid)['task_protocol'])
-        dtypes = self.dstypes + self.dstypes_fpga if is_ephys else self.dstypes
+        is_ephys = 'ephys' in self.type or get_session_extractor_type(self.session_path) == 'ephys'
+        if self.sync_type is None and is_ephys:
+            self.sync_type = 'nidq'
+        else:
+            self.sync_type = 'bpod'
+        is_fpga = 'bpod' not in self.sync_type
+
+        # dataset collections outside this list are ignored (e.g. probe00, raw_passive_data)
+        collections = ('alf', self.sync_collection, 'raw_behavior_data', 'raw_video_data')
+        dtypes = self.dstypes + self.dstypes_fpga if is_fpga else self.dstypes
         assert_unique = True
         # Check we have raw ephys data for session
         if is_ephys and len(self.one.list_datasets(self.eid, collection='raw_ephys_data')) == 0:
@@ -346,7 +362,9 @@ class CameraQC(base.QC):
             required = (dstype not in optional)
             all_present = not datasets.empty and all(present)
             assert all_present or not required, f'Dataset {dstype} not found'
+
         self._type = get_session_extractor_type(self.session_path)
+
 
     def run(self, update: bool = False, **kwargs) -> (str, dict):
         """
@@ -959,10 +977,8 @@ class CameraQCCamlog(CameraQC):
         'DAQData.wiring'
     ]
 
-    def __init__(self, session_path_or_eid, camera, sync_collection='raw_sync_data', **kwargs):
-        self.sync_collection = sync_collection
-        super().__init__(session_path_or_eid, camera, **kwargs)
-        self._type = 'ephys'
+    def __init__(self, session_path_or_eid, camera, sync_collection='raw_sync_data', sync_type='nidq', **kwargs):
+        super().__init__(session_path_or_eid, camera, sync_collection=sync_collection, sync_type=sync_type, **kwargs)
         self.checks_to_remove = ['check_pin_state']
 
     def load_data(self, download_data: bool = None,
@@ -999,7 +1015,7 @@ class CameraQCCamlog(CameraQC):
         self.data['count'] = log.frame_id.values
 
         # Load the audio and raw FPGA times
-        if self.type == 'ephys':
+        if self.sync_type != 'bpod' and self.sync_type is not None:
             sync, chmap = ephys_fpga.get_sync_and_chn_map(self.session_path, self.sync_collection)
             audio_ttls = ephys_fpga.get_sync_fronts(sync, chmap['audio'])
             self.data['audio'] = audio_ttls['times']  # Get rises
@@ -1019,9 +1035,10 @@ class CameraQCCamlog(CameraQC):
                 alf_path, f'{self.label}Camera', short_keys=True)['times']
         except AssertionError:  # Re-extract
             kwargs = dict(video_path=self.video_path, labels=self.label)
-            if self.type == 'ephys':
+            if self.sync_type != 'bpod':
                 kwargs = {**kwargs, 'sync': sync, 'chmap': chmap}  # noqa
-            outputs, _ = extract_all(self.session_path, session_type=self.type, save=False, camlog=True, **kwargs)
+            outputs, _ = extract_all(self.session_path, session_type=self.type, save=False, camlog=True, sync_type=self.sync_type,
+                                     **kwargs)
             self.data['timestamps'] = outputs[f'{self.label}_camera_timestamps']
         except ALFObjectNotFound:
             _log.warning('no camera.times ALF found for session')
@@ -1032,7 +1049,7 @@ class CameraQCCamlog(CameraQC):
             self.data['wheel'] = alfio.load_object(alf_path, 'wheel', short_keys=True)
         except ALFObjectNotFound:
             # Extract from raw data
-            if self.type == 'ephys':
+            if self.sync_type != 'bpod':
                 wheel_data = ephys_fpga.extract_wheel_sync(sync, chmap)
             else:
                 wheel_data = training_wheel.get_wheel_position(self.session_path)
@@ -1061,7 +1078,7 @@ class CameraQCCamlog(CameraQC):
         """
         assert self.one is not None, 'ONE required to download data'
         # dataset collections outside this list are ignored (e.g. probe00, raw_passive_data)
-        collections = ('alf', 'raw_ephys_data', 'raw_behavior_data', 'raw_video_data')
+        collections = ('alf', self.sync_collection, 'raw_behavior_data', 'raw_video_data')
         # Get extractor type
         dtypes = self.dstypes + self.dstypes_fpga
         assert_unique = True
