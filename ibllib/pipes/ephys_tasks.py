@@ -790,7 +790,7 @@ class EphysCellsQc(base_tasks.EphysTask):
         Post spike-sorting quality control at the cluster level.
         Outputs a QC table in the clusters ALF object and labels corresponding probes in Alyx
         """
-        files_spikes = Path(self.session_path).joinpath(self.pname).rglob('spikes.times.npy')
+        files_spikes = Path(self.session_path).joinpath('alf', self.pname).rglob('spikes.times.npy')
         folder_probes = [f.parent for f in files_spikes]
         out_files = []
         for folder_probe in folder_probes:
