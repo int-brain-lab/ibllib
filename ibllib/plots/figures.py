@@ -431,6 +431,9 @@ class BadChannelsAp(ReportSnapshotProbe):
             ap_file = next(self.session_path.joinpath('raw_ephys_data', self.pname).glob('*ap.*bin'), None)
             if ap_file is not None:
                 sr = spikeglx.Reader(ap_file)
+                # If T0 is greater than recording length, take 500 sec before end
+                if sr.rl < T0:
+                    T0 = int(sr.rl - 500)
                 raw = sr[int((sr.fs * T0)):int((sr.fs * (T0 + 1))), :-sr.nsync].T
             else:
                 return []
