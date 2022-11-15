@@ -253,13 +253,13 @@ class Streamer(spikeglx.Reader):
                 cbin_local_path = webclient.download_file(
                     self.url_cbin, chunks=(first_byte, n_bytes),
                     target_dir=target_dir, clobber=True, return_md5=False)
+                break
             except Exception as e:
                 retries += 1
                 if retries > 5:
                     raise e
                 _logger.warning(f'Failed to download chunk {first_chunk} to {last_chunk}, retrying')
                 time.sleep(1)
-            break
         cbin_local_path = remove_uuid_file(cbin_local_path)
         cbin_local_path_renamed = cbin_local_path.with_suffix('.stream.cbin')
         cbin_local_path.replace(cbin_local_path_renamed)
