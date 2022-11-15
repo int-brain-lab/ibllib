@@ -132,58 +132,73 @@ def register_dataset(file_list, one=None, created_by=None, repository=None, serv
                     else:
                         # Check to see if the file path already has a revision in it
                         file_revision = folder_parts(fl, as_dict=True)['revision']
+
                         if file_revision:
+                            # Find existing protected revisions
                             existing_revisions = [key for pr in prot_info for key, val in pr.items() if val]
-                            # If a new revision has been explicitly defined by the user and it doesn't exist, just register as is
+                            # If the revision explicitly defined by the user doesn't exist or is not protected, register as is
                             if file_revision not in existing_revisions:
-                                new_file_list.append(fl)
-                                continue
-                            # Remove the revision from the file path to make sure we don't have nested revisions further down
-                            fl_path = fl.parent.parent
+                                revision_path = fl.parent
+                            else:
+                                i = 97  # equivalent to 'a'
+                                new_revision = file_revision + chr(i).lower()
+                                # Find the next subrevision that isn't protected
+                                while new_revision in existing_revisions:
+                                    i += 1
+                                    new_revision = file_revision + chr(i).lower()
+                                revision_path = fl.parent.parent.joinpath(f'#{new_revision}#')
+
+                            if revision_path != fl.parent:
+                                revision_path.mkdir(exist_ok=True)
+                                shutil.move(fl, revision_path.joinpath(fl.name))
+                            new_file_list.append(revision_path.joinpath(fl.name))
+                            continue
                         else:
                             fl_path = fl.parent
 
                         assert name == fl_path.relative_to(session_path).joinpath(fl.name).as_posix()
 
-                        # Finds the latest revision that is protected
-                        protected = next((key for pr in prot_info for key, val in pr.items() if val), None)
-                        # Finds the latest revision that isn't protected
-                        revision = next((key for pr in prot_info for key, val in pr.items() if not val), None)
+                        # Find info about the latest revision, N.B on django side prot_info is sorted by latest revisions first
+                        (latest_revision, protected), = prot_info[0].items()
 
-                        # Case where the dataset is not protected at all
+                        # If the latest revision is the original and it is unprotected no need for revision
                         # e.g {'clusters.amp.npy': [{'': False}]}
-                        if protected is None:
-                            # Use original file
-                            new_file_list.append(fl)
-                            continue
+                        if latest_revision == '' and not protected:
+                            # Use original path
+                            revision_path = fl_path
 
-                        # Case where there are protected datasets but there is also an unprotected revision
+                        # If there already is a revision but it is unprotected, move into this revision folder
                         # e.g {'clusters.amp.npy': [{'2022-10-31': False}, {'2022-05-31': True}, {'': True}]}
-                        if revision is not None:
-                            assert protected != revision
-                            revision_path = fl_path.joinpath(f'#{revision}#')
+                        elif not protected:
+                            # Check that the latest_revision has the date naming convention we expect 'YYYY-MM-DD'
+                            try:
+                                _ = datetime.datetime.strptime(latest_revision[:10], '%Y-%m-%d')
+                                revision_path = fl_path.joinpath(f'#{latest_revision}#')
+                            # If it doesn't it probably has been made manually so we don't want to overwrite this and instead
+                            # use today's date
+                            except ValueError:
+                                revision_path = fl_path.joinpath(f'#{today_revision}#')
 
-                        # Case where there are no unprotected revisions and the latest protected revision has the
-                        # same date as today
-                        elif today_revision in protected:
-                            if protected == today_revision:
+                        # If protected and the latest protected revision is from today we need to make a subrevision
+                        elif protected and today_revision in latest_revision:
+                            if latest_revision == today_revision:
                                 new_revision = today_revision + 'a'
                             else:
-                                alpha = protected[-1]
+                                alpha = latest_revision[-1]
                                 new_revision = today_revision + chr(ord(alpha) + 1).lower()
 
                             revision_path = fl_path.joinpath(f'#{new_revision}#')
 
-                        # Other cases
-                        # 1. Case where the original is protected and there is no unprotected revision,
+                        # Otherwise cases move into revision from today
                         # e.g {'clusters.amp.npy': [{'': True}]}
-                        # 2. Case where both original and revision are protected,
                         # e.g {'clusters.amp.npy': [{'2022-10-31': True}, {'': True}]}
                         else:
                             revision_path = fl_path.joinpath(f'#{today_revision}#')
 
-                        revision_path.mkdir(exist_ok=True)
-                        shutil.move(fl, revision_path.joinpath(fl.name))
+                        # Only move for the cases where a revision folder has been made
+                        if revision_path != fl_path:
+                            revision_path.mkdir(exist_ok=True)
+                            shutil.move(fl, revision_path.joinpath(fl.name))
                         new_file_list.append(revision_path.joinpath(fl.name))
 
                 file_list = new_file_list
