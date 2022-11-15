@@ -18,7 +18,8 @@ from one.api import ONE
 import one.alf.io as alfio
 from one.alf.exceptions import ALFObjectNotFound
 from ibllib.io.video import get_video_frame, url_from_eid
-from ibllib.io import spikeglx
+import spikeglx
+import neuropixel
 from brainbox.plot import driftmap
 from brainbox.io.spikeglx import stream
 from brainbox.behavior.dlc import SAMPLING, plot_trace_on_frame, plot_wheel_position, plot_lick_hist, \
@@ -294,11 +295,12 @@ class SpikeSorting(ReportSnapshotProbe):
     def _run(self, collection=None):
         """runs for initiated PID, streams data, destripe and check bad channels"""
 
-        def plot_driftmap(self, spikes, clusters, channels, collection, ylim=(0, 3840)):
+        def plot_driftmap(self, spikes, clusters, channels, collection):
             fig, axs = plt.subplots(1, 2, gridspec_kw={'width_ratios': [.95, .05]}, figsize=(16, 9))
             driftmap(spikes.times, spikes.depths, t_bin=0.007, d_bin=10, vmax=0.5, ax=axs[0])
             title_str = f"{self.pid_label}, {collection}, {self.pid} \n " \
                         f"{spikes.clusters.size:_} spikes, {clusters.depths.size:_} clusters"
+            ylim = (0, np.max(channels['axial_um']))
             axs[0].set(ylim=ylim, title=title_str)
             run_label = str(Path(collection).relative_to(f'alf/{self.pname}'))
             run_label = "ks2matlab" if run_label == '.' else run_label
@@ -324,6 +326,7 @@ class SpikeSorting(ReportSnapshotProbe):
             spikes = alfio.load_object(self.session_path.joinpath(collection), 'spikes')
             clusters = alfio.load_object(self.session_path.joinpath(collection), 'clusters')
             channels = alfio.load_object(self.session_path.joinpath(collection), 'channels')
+            channels['axial_um'] = channels['localCoordinates'][:, 1]
 
             out, fig, axs = plot_driftmap(self, spikes, clusters, channels, collection)
             output_files.append(out)
@@ -428,19 +431,28 @@ class BadChannelsAp(ReportSnapshotProbe):
             ap_file = next(self.session_path.joinpath('raw_ephys_data', self.pname).glob('*ap.*bin'), None)
             if ap_file is not None:
                 sr = spikeglx.Reader(ap_file)
+                # If T0 is greater than recording length, take 500 sec before end
+                if sr.rl < T0:
+                    T0 = int(sr.rl - 500)
                 raw = sr[int((sr.fs * T0)):int((sr.fs * (T0 + 1))), :-sr.nsync].T
             else:
                 return []
 
+        if sr.meta.get('NP2.4_shank', None) is not None:
+            h = neuropixel.trace_header(sr.major_version, nshank=4)
+            h = neuropixel.split_trace_header(h, shank=int(sr.meta.get('NP2.4_shank')))
+        else:
+            h = neuropixel.trace_header(sr.major_version, nshank=np.unique(sr.geometry['shank']).size)
+
         channel_labels, channel_features = voltage.detect_bad_channels(raw, sr.fs)
         _, eqcs, output_files = ephys_bad_channels(
-            raw=raw, fs=sr.fs, channel_labels=channel_labels, channel_features=channel_features, channels=electrodes,
+            raw=raw, fs=sr.fs, channel_labels=channel_labels, channel_features=channel_features, h=h, channels=electrodes,
             title=SNAPSHOT_LABEL, destripe=True, save_dir=self.output_directory, br=self.brain_regions, pid_info=self.pid_label)
         self.eqcs = eqcs
         return output_files
 
 
-def ephys_bad_channels(raw, fs, channel_labels, channel_features, channels=None, title="ephys_bad_channels",
+def ephys_bad_channels(raw, fs, channel_labels, channel_features, h=None, channels=None, title="ephys_bad_channels",
                        save_dir=None, destripe=False, eqcs=None, br=None, pid_info=None, plot_backend='matplotlib'):
     nc, ns = raw.shape
     rl = ns / fs
@@ -479,7 +491,7 @@ def ephys_bad_channels(raw, fs, channel_labels, channel_features, channels=None,
         eqcs.append(Density(butt, fs=fs, taxis=1, ax=axs[0], title='highpass', vmin=eqc_levels[0], vmax=eqc_levels[1]))
 
         if destripe:
-            dest = voltage.destripe(raw, fs=fs, channel_labels=channel_labels)
+            dest = voltage.destripe(raw, fs=fs, h=h, channel_labels=channel_labels)
             _, axs = plt.subplots(1, 2, gridspec_kw={'width_ratios': [.95, .05]}, figsize=(16, 9))
             eqcs.append(Density(
                 dest, fs=fs, taxis=1, ax=axs[0], title='destripe', vmin=eqc_levels[0], vmax=eqc_levels[1]))
@@ -514,7 +526,7 @@ def ephys_bad_channels(raw, fs, channel_labels, channel_features, channels=None,
         eqcs.append(viewephys(butt, fs=fs, channels=channels, title='highpass', br=br))
 
         if destripe:
-            dest = voltage.destripe(raw, fs=fs, channel_labels=channel_labels)
+            dest = voltage.destripe(raw, fs=fs, h=h, channel_labels=channel_labels)
             eqcs.append(viewephys(dest, fs=fs, channels=channels, title='destripe', br=br))
             eqcs.append(viewephys((butt - dest), fs=fs, channels=channels, title='difference', br=br))
 

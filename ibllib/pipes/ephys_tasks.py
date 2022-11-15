@@ -84,15 +84,14 @@ class EphysSyncRegisterRaw(base_tasks.DynamicTask):
             out_files.append(wiring_file)
 
         # Search for .bin files in the sync_collection folder
-        files = spikeglx.glob_ephys_files(self.session_path.joinpath(self.sync_collection))
-        assert len(files) == 1
-        bin_file = files[0].get('nidq', None)
+        files = list(self.session_path.joinpath(self.sync_collection).glob('*nidq.*bin'))
+        bin_file = files[0] if len(files) == 1 else None
 
         # If we don't have a .bin/ .cbin file anymore see if we can still find the .ch and .meta files
         if bin_file is None:
             for ext in ['ch', 'meta']:
-                files = spikeglx.glob_ephys_files(self.session_path.joinpath(self.sync_collection), ext=ext)
-                ext_file = files[0].get('nidq', None)
+                files = list(self.session_path.joinpath(self.sync_collection).glob(f'*nidq.{ext}'))
+                ext_file = files[0] if len(files) == 1 else None
                 if ext_file is not None:
                     out_files.append(ext_file)
 
@@ -462,7 +461,7 @@ class RawEphysQC(base_tasks.EphysTask):
     def _run(self, overwrite=False):
 
         eid = self.one.path2eid(self.session_path)
-        probe = self.one.alyx.rest('insertions', 'list', session=eid, probe=self.pname)
+        probe = self.one.alyx.rest('insertions', 'list', session=eid, name=self.pname)
 
         # We expect there to only be one probe
         if len(probe) != 1:
