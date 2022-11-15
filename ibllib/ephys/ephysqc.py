@@ -107,7 +107,7 @@ class EphysQC(base.QC):
         :param h: dictionary containing sensor coordinates, see neuropixel.trace_header
         :return: 3 numpy vectors nchannels length
         """
-        destripe = voltage.destripe(raw, fs=fs, neuropixel_version=1)
+        destripe = voltage.destripe(raw, fs=fs, h=h)
         rms_raw = utils.rms(raw)
         rms_pre_proc = utils.rms(destripe)
         detections = spikes.detection(data=destripe.T, fs=fs, h=h, detect_threshold=SPIKE_THRESHOLD_UV * 1e-6)
