@@ -209,7 +209,7 @@ class Streamer(spikeglx.Reader):
             shutil.copy(self.file_chunks.with_suffix('.meta'), meta_local_path)
 
         # if the cached version happens to be the same as the one on disk, just load it
-        if ch_file_stream.exists():
+        if ch_file_stream.exists() and ch_file_stream.with_suffix('.cbin').exists():
             with open(ch_file_stream, 'r') as f:
                 cmeta_stream = json.load(f)
             if (cmeta_stream.get('chopped_first_sample', None) == i0 and
@@ -247,9 +247,19 @@ class Streamer(spikeglx.Reader):
             json.dump(cmeta, f, indent=2, sort_keys=True)
 
         # Download the requested chunks
-        cbin_local_path = webclient.download_file(
-            self.url_cbin, chunks=(first_byte, n_bytes),
-            target_dir=target_dir, clobber=True, return_md5=False)
+        retries = 0
+        while True:
+            try:
+                cbin_local_path = webclient.download_file(
+                    self.url_cbin, chunks=(first_byte, n_bytes),
+                    target_dir=target_dir, clobber=True, return_md5=False)
+            except Exception as e:
+                retries += 1
+                if retries > 5:
+                    raise e
+                _logger.warning(f'Failed to download chunk {first_chunk} to {last_chunk}, retrying')
+                time.sleep(1)
+            break
         cbin_local_path = remove_uuid_file(cbin_local_path)
         cbin_local_path_renamed = cbin_local_path.with_suffix('.stream.cbin')
         cbin_local_path.replace(cbin_local_path_renamed)

@@ -159,7 +159,8 @@ class VideoSyncQcCamlog(base_tasks.VideoTask):
 
         # Video QC
         if qc:
-            run_camera_qc(self.session_path, update=True, one=self.one, cameras=labels, camlog=True)
+            run_camera_qc(self.session_path, update=True, one=self.one, cameras=labels, camlog=True,
+                          sync_collection=self.sync_collection, sync_type=self.sync)
 
         return output_files
 
@@ -201,7 +202,8 @@ class VideoSyncQcBpod(base_tasks.VideoTask):
         output_files.extend(files)
 
         # Video QC
-        run_camera_qc(self.session_path, update=True, one=self.one, cameras=labels)
+        run_camera_qc(self.session_path, update=True, one=self.one, cameras=labels,
+                      sync_collection=self.sync_collection, sync_type=self.sync)
 
         return output_files
 
@@ -245,6 +247,7 @@ class VideoSyncQcNidq(base_tasks.VideoTask):
         output_files.extend(files)
 
         # Video QC
-        run_camera_qc(self.session_path, update=True, one=self.one, cameras=labels)
+        run_camera_qc(self.session_path, update=True, one=self.one, cameras=labels,
+                      sync_collection=self.sync_collection, sync_type=self.sync)
 
         return output_files

@@ -1,27 +1,32 @@
 """Functions for loading IBL ephys and trial data using the Open Neurophysiology Environment."""
 from dataclasses import dataclass, field
+import gc
 import logging
 import os
 from pathlib import Path
 
+
 import numpy as np
 import pandas as pd
 from scipy.interpolate import interp1d
+import matplotlib.pyplot as plt
 
 from one.api import ONE, One
 import one.alf.io as alfio
 from one.alf.files import get_alf_path
+from one.alf.exceptions import ALFObjectNotFound
 from one.alf import cache
 from neuropixel import TIP_SIZE_UM, trace_header
 import spikeglx
 
 from iblutil.util import Bunch
 from ibllib.io.extractors.training_wheel import extract_wheel_moves, extract_first_movement_times
-from ibllib.atlas import atlas, AllenAtlas
+from ibllib.atlas import atlas, AllenAtlas, BrainRegions
 from ibllib.pipes import histology
 from ibllib.pipes.ephys_alignment import EphysAlignment
 
 import brainbox.plot
+from brainbox.ephys_plots import plot_brain_regions
 from brainbox.metrics.single_units import quick_unit_metrics
 from brainbox.behavior.wheel import interpolate_position, velocity_filtered
 from brainbox.behavior.dlc import likelihood_threshold, get_pupil_diameter, get_smooth_pupil_diameter
@@ -766,6 +771,7 @@ class SpikeSortingLoader:
     files: dict = None
     collection: str = ''
     histology: str = ''  # 'alf', 'resolved', 'aligned' or 'traced'
+    spike_sorter: str = 'pykilosort'
     spike_sorting_path: Path = None
     _sync: dict = None
 
@@ -823,7 +829,8 @@ class SpikeSortingLoader:
         _logger.debug(f"selecting: {collection} to load amongst candidates: {self.collections}")
         return collection
 
-    def download_spike_sorting_object(self, obj, spike_sorter='pykilosort', dataset_types=None, collection=None, **kwargs):
+    def download_spike_sorting_object(self, obj, spike_sorter='pykilosort', dataset_types=None, collection=None,
+                                      missing='raise', **kwargs):
         """
         Downloads an ALF object
         :param obj: object name, str between 'spikes', 'clusters' or 'channels'
@@ -831,17 +838,23 @@ class SpikeSortingLoader:
         :param dataset_types: list of extra dataset types, for example ['spikes.samples']
         :param collection: string specifiying the collection, for example 'alf/probe01/pykilosort'
         :param kwargs: additional arguments to be passed to one.api.One.load_object
+        :param missing: 'raise' (default) or 'ignore'
         :return:
         """
         if len(self.collections) == 0:
             return {}, {}, {}
-        self.collection = collection or self._get_spike_sorting_collection(spike_sorter=spike_sorter)
-        _logger.debug(f"loading spike sorting from {self.collection}")
+        self.collection = self._get_spike_sorting_collection(spike_sorter=spike_sorter)
+        collection = collection or self.collection
+        _logger.debug(f"loading spike sorting object {obj} from {collection}")
         spike_attributes, cluster_attributes = self._get_attributes(dataset_types)
-        attributes = {'spikes': spike_attributes, 'clusters': cluster_attributes, 'channels': None,
-                      'templates': None, 'spikes_subset': None}
-        self.files[obj] = self.one.load_object(self.eid, obj=obj, attribute=attributes[obj],
-                                               collection=self.collection, download_only=True, **kwargs)
+        attributes = {'spikes': spike_attributes, 'clusters': cluster_attributes}
+        try:
+            self.files[obj] = self.one.load_object(
+                self.eid, obj=obj, attribute=attributes.get(obj, None),
+                collection=collection, download_only=True, **kwargs)
+        except ALFObjectNotFound as e:
+            if missing == 'raise':
+                raise e
 
     def download_spike_sorting(self, **kwargs):
         """
@@ -854,7 +867,39 @@ class SpikeSortingLoader:
             self.download_spike_sorting_object(obj=obj, **kwargs)
         self.spike_sorting_path = self.files['spikes'][0].parent
 
-    def load_spike_sorting(self, **kwargs):
+    def load_channels(self, **kwargs):
+        """
+        Loads channels
+        The channel locations can come from several sources, it will load the most advanced version of the histology available,
+        regardless of the spike sorting version loaded. The steps are (from most advanced to fresh out of the imaging):
+        -   alf: the final version of channel locations, same as resolved with the difference that data is on file
+        -   resolved: channel locations alignments have been agreed upon
+        -   aligned: channel locations have been aligned, but review or other alignments are pending, potentially not accurate
+        -   traced: the histology track has been recovered from microscopy, however the depths may not match, inaccurate data
+
+        :param spike_sorter: (defaults to 'pykilosort')
+        :param dataset_types: list of extra dataset types
+        :return:
+        """
+        # we do not specify the spike sorter on purpose here: the electrode sites do not depend on the spike sorting
+        self.download_spike_sorting_object(obj='electrodeSites', collection=f'alf/{self.pname}', missing='ignore')
+        if 'electrodeSites' in self.files:
+            channels = alfio.load_object(self.files['electrodeSites'], wildcards=self.one.wildcards)
+        else:  # otherwise, we try to load the channel object from the spike sorting folder - this may not contain histology
+            self.download_spike_sorting_object(obj='channels', **kwargs)
+            channels = alfio.load_object(self.files['channels'], wildcards=self.one.wildcards)
+        if 'brainLocationIds_ccf_2017' not in channels:
+            _logger.debug(f"loading channels from alyx for {self.files['channels']}")
+            _channels, self.histology = _load_channel_locations_traj(
+                self.eid, probe=self.pname, one=self.one, brain_atlas=self.atlas, return_source=True, aligned=True)
+            if _channels:
+                channels = _channels[self.pname]
+        else:
+            channels = _channels_alf2bunch(channels, brain_regions=self.atlas.regions)
+            self.histology = 'alf'
+        return channels
+
+    def load_spike_sorting(self, spike_sorter='pykilosort', **kwargs):
         """
         Loads spikes, clusters and channels
 
@@ -873,19 +918,13 @@ class SpikeSortingLoader:
         """
         if len(self.collections) == 0:
             return {}, {}, {}
-        self.download_spike_sorting(**kwargs)
-        channels = alfio.load_object(self.files['channels'], wildcards=self.one.wildcards)
+        self.files = {}
+        self.spike_sorter = spike_sorter
+        self.download_spike_sorting(spike_sorter=spike_sorter, **kwargs)
+        channels = self.load_channels(spike_sorter=spike_sorter, **kwargs)
         clusters = alfio.load_object(self.files['clusters'], wildcards=self.one.wildcards)
         spikes = alfio.load_object(self.files['spikes'], wildcards=self.one.wildcards)
-        if 'brainLocationIds_ccf_2017' not in channels:
-            _logger.debug(f"loading channels from alyx for {self.files['channels']}")
-            _channels, self.histology = _load_channel_locations_traj(
-                self.eid, probe=self.pname, one=self.one, brain_atlas=self.atlas, return_source=True, aligned=True)
-            if _channels:
-                channels = _channels[self.pname]
-        else:
-            channels = _channels_alf2bunch(channels, brain_regions=self.atlas.regions)
-            self.histology = 'alf'
+
         return spikes, clusters, channels
 
     @staticmethod
@@ -925,7 +964,7 @@ class SpikeSortingLoader:
             clusters[k] = metrics[k].to_numpy()
         for k in channels.keys():
             clusters[k] = channels[k][clusters['channels']]
-        if cache_dir:
+        if cache_dir is not None:
             _logger.debug(f'caching clusters metrics in {cache_dir}')
             pd.DataFrame(clusters).to_parquet(Path(cache_dir).joinpath('clusters.pqt'))
         return clusters
@@ -957,25 +996,40 @@ class SpikeSortingLoader:
     def pid2ref(self):
         return f"{self.one.eid2ref(self.eid, as_dict=False)}_{self.pname}"
 
-    def raster(self, spikes, save_dir=None):
+    def raster(self, spikes, channels, save_dir=None, br=None, label='raster'):
         """
+        :param spikes: spikes dictionary
         :param save_dir: optional if specified
         :return:
         """
-        import matplotlib.pyplot as plt
-        fig, ax = plt.subplots(figsize=(16, 9))
-        brainbox.plot.driftmap(spikes['times'], spikes['depths'], t_bin=0.007, d_bin=10, vmax=0.5, ax=ax)
-        title_str = f"{self.pid} \n" \
-                    f"{self.pid2ref} \n" \
-                    f"{spikes.clusters.size:_} spikes, {np.unique(spikes.clusters).size:_} clusters"
-        ax.title.set_text(title_str)
-        ax.set_ylim(0, 3800)
+        br = br or BrainRegions()
+        fig, axs = plt.subplots(2, 2, gridspec_kw={
+            'width_ratios': [.95, .05], 'height_ratios': [.1, .9]}, figsize=(16, 9), sharex='col')
+        axs[0, 1].set_axis_off()
+        # axs[0, 0].set_xticks([])
+        brainbox.plot.driftmap(spikes['times'], spikes['depths'], t_bin=0.007, d_bin=10, vmax=0.5, ax=axs[1, 0])
+        title_str = f"{self.pid2ref}, {self.pid} \n" \
+                    f"{spikes['clusters'].size:_} spikes, {np.unique(spikes['clusters']).size:_} clusters"
+        axs[0, 0].title.set_text(title_str)
+        if 'atlas_id' in channels:
+            plot_brain_regions(channels['atlas_id'], channel_depths=channels['axial_um'],
+                               brain_regions=br, display=True, ax=axs[1, 1], title=self.histology)
+        axs[1, 0].set_ylim(0, 3800)
+        axs[1, 0].set_xlim(spikes['times'][0], spikes['times'][-1])
+        fig.tight_layout()
+
+        self.download_spike_sorting_object('drift', self.spike_sorter, missing='ignore')
+        if 'drift' in self.files:
+            drift = alfio.load_object(self.files['drift'], wildcards=self.one.wildcards)
+            axs[0, 0].plot(drift['times'], drift['um'], 'k', alpha=.5)
+
         if save_dir is not None:
-            png_file = save_dir.joinpath(f"{self.pid}_{self.pid2ref}_raster.png") if Path(save_dir).is_dir() else Path(save_dir)
+            png_file = save_dir.joinpath(f"{self.pid}_{self.pid2ref}_{label}.png") if Path(save_dir).is_dir() else Path(save_dir)
             fig.savefig(png_file)
             plt.close(fig)
+            gc.collect()
         else:
-            return fig, ax
+            return fig, axs
 
 
 @dataclass
