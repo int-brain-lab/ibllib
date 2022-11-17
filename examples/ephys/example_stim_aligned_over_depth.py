@@ -41,8 +41,8 @@ stim_events = {'stim_on': trials['stimOn_times'],
                'feedback': trials['feedback_times']}
 
 data = stim_aligned_activity_over_depth(stim_events, spikes['times'][good_idx], spikes['depths'][good_idx],
-                                          pre_stim=pre_stim, post_stim=post_stim, y_lim=[min_depth, max_depth],
-                                          z_score_flag=True)
+                                        pre_stim=pre_stim, post_stim=post_stim, y_lim=[min_depth, max_depth],
+                                        z_score_flag=True)
 
 # Make plot
 fig, axs = plt.subplots(1, 3, gridspec_kw={'width_ratios': [5, 5, 1], 'wspace': 0.3})
@@ -62,4 +62,3 @@ axs[1].axvline(0, *axs[1].get_ylim(), c='k', ls='--', zorder=10)
 axs[1].get_yaxis().set_visible(False)
 
 plt.show()
-

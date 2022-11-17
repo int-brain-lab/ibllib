@@ -29,7 +29,6 @@ def acorr(spike_times, bin_size=None, window_size=None):
     return xc[0, 0, :]
 
 
-
 def bin_spikes(times, align_times, pre_time=0.4, post_time=1, bin_size=0.01, weights=None):
     """
     Event aligned raster for single cluster
