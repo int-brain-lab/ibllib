@@ -1,3 +1,5 @@
+import logging
+import re
 from collections import OrderedDict
 from pathlib import Path
 import yaml
@@ -15,6 +17,7 @@ import ibllib.pipes.audio_tasks as atasks
 from ibllib.pipes.photometry_tasks import TaskFibrePhotometryPreprocess, TaskFibrePhotometryRegisterRaw
 import spikeglx
 
+_logger = logging.getLogger(__name__)
 
 def acquisition_description_legacy_session(session_path, save=False):
     """
@@ -32,7 +35,7 @@ def acquisition_description_legacy_session(session_path, save=False):
 
 def get_acquisition_description(protocol):
     """"
-    This is a set of example acqusition descriptions for experiments
+    This is a set of example acquisition descriptions for experiments
     -   choice_world_recording
     -   choice_world_biased
     -   choice_world_training
@@ -140,8 +143,13 @@ def make_pipeline(session_path=None, **pkwargs):
     # Behavior tasks
     # TODO this is not doing at all what we were envisaging and going back to the old way of protocol linked to hardware
     # TODO change at next iteration of dynamic pipeline, once we have the basic workflow working
-    for protocol, task_info in acquisition_description.get('tasks', []).items():
-        task_kwargs = {'protocol': protocol, 'collection': task_info['collection']}
+    for i, (protocol, task_info) in enumerate(acquisition_description.get('tasks', []).items()):
+        collection = task_info.get('collection', f'raw_task_data_{i:02}')
+        task_kwargs = {'protocol': protocol, 'collection': collection}
+        # For now the order of protocols in the list will take precedence. If collections are numbered,
+        # check that the numbers match the order.  This will most likely change in the future.
+        if re.match(r'^raw_task_data_\d{2}$', collection) and int(collection.split('_')[-1]) != i:
+            _logger.warning('Number in collection name does not match task order')
         # -   choice_world_recording
         # -   choice_world_biased
         # -   choice_world_training
@@ -167,7 +175,7 @@ def make_pipeline(session_path=None, **pkwargs):
         tasks[f'RegisterRaw_{protocol}'] = type(f'RegisterRaw_{protocol}', (registration_class,), {})(**kwargs, **task_kwargs)
         parents = [tasks[f'RegisterRaw_{protocol}']] + sync_tasks
         tasks[f'Trials_{protocol}'] = type(f'Trials_{protocol}', (behaviour_class,), {})(
-            **kwargs, **sync_kwargs, **task_kwargs, parents=parents)
+            **kwargs, **sync_kwargs, **task_kwargs, parents=parents, number=i)
         if compute_status:
             tasks[f"TrainingStatus_{protocol}"] = type(f"TrainingStatus_{protocol}", (btasks.TrainingStatus,), {})(
                 **kwargs, **task_kwargs, parents=[tasks[f'Trials_{protocol}']])

@@ -486,8 +486,7 @@ class CameraQC(base.QC):
         return 'PASS' if abs(Fs - fps) < threshold else 'FAIL', float(round(Fs, 3))
 
     def check_pin_state(self, display=False):
-        """Check the pin state reflects Bpod TTLs
-        """
+        """Check the pin state reflects Bpod TTLs"""
         if not data_for_keys(('video', 'pin_state', 'audio'), self.data):
             return 'NOT_SET'
         size_diff = int(self.data['pin_state'].shape[0] - self.data['video']['length'])

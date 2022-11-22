@@ -149,7 +149,7 @@ class PassiveTask(base_tasks.DynamicTask):
         data, paths = PassiveChoiceWorld(self.session_path).extract(
             sync_collection=self.sync_collection, task_collection=self.collection, save=True)
 
-        if any([x is None for x in paths]):
+        if any(x is None for x in paths):
             self.status = -1
 
         return paths
