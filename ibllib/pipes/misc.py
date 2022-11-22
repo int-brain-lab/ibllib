@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import time
+import logging
 from pathlib import Path
 from typing import Union, List
 from inspect import signature
@@ -18,12 +19,11 @@ from one.alf.files import get_session_path
 from one.alf.spec import is_uuid_string, is_session_path, describe
 from one.api import ONE
 
-from iblutil.util import get_logger
 import ibllib.io.flags as flags
 import ibllib.io.raw_data_loaders as raw
 from ibllib.io.misc import delete_empty_folders
 
-log = get_logger(__name__)
+log = logging.getLogger(__name__)
 
 
 def subjects_data_folder(folder: Path, rglob: bool = False) -> Path:
