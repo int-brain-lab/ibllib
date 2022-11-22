@@ -77,7 +77,7 @@ class HabituationTrialsBpod(base_tasks.DynamicTask):
         # Run the task QC
         # Compile task data for QC
         qc = HabituationQC(self.session_path, one=self.one)
-        qc.extractor = TaskQCExtractor(self.session_path, one=self.one)
+        qc.extractor = TaskQCExtractor(self.session_path, one=self.one, sync_collection=self.sync_collection, sync_type=self.sync)
         qc.run(update=update)
         return output_files
 
@@ -194,10 +194,12 @@ class ChoiceWorldTrialsBpod(base_tasks.DynamicTask):
         type = get_session_extractor_type(self.session_path)
         if type == 'habituation':
             qc = HabituationQC(self.session_path, one=self.one)
-            qc.extractor = TaskQCExtractor(self.session_path, one=self.one)
+            qc.extractor = TaskQCExtractor(self.session_path, one=self.one, sync_collection=self.sync_collection,
+                                           sync_type=self.sync)
         else:  # Update wheel data
             qc = TaskQC(self.session_path, one=self.one)
-            qc.extractor = TaskQCExtractor(self.session_path, one=self.one)
+            qc.extractor = TaskQCExtractor(self.session_path, one=self.one, sync_collection=self.sync_collection,
+                                           sync_type=self.sync)
             qc.extractor.wheel_encoding = 'X1'
         # Aggregate and update Alyx QC fields
         qc.run(update=update)
@@ -266,7 +268,8 @@ class ChoiceWorldTrialsNidq(base_tasks.DynamicTask):
         # Run the task QC
         # TODO this doesn't use the self.collection in any way, always assumes data in raw_behavior_data, needs to be changed
         qc = TaskQC(self.session_path, one=self.one, log=_logger)
-        qc.extractor = TaskQCExtractor(self.session_path, lazy=True, one=qc.one)
+        qc.extractor = TaskQCExtractor(self.session_path, lazy=True, one=qc.one, sync_collection=self.sync_collection,
+                                       sync_type=self.sync)
         # Extract extra datasets required for QC
         qc.extractor.data = dsets
         qc.extractor.extract_data()
