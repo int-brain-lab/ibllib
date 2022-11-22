@@ -22,6 +22,7 @@ class TestDlcQC(unittest.TestCase):
         self.alf_path = utils.create_fake_alf_folder_dlc_data(self.session_path)
         self.qc = DlcQC(self.session_path, one=self.one, side='left', download_data=False)
         self.eid = 'd3372b15-f696-4279-9be5-98f15783b5bb'
+        self.fixtures_path = Path(__file__).parent.joinpath('..', 'fixtures', 'qc').resolve()
 
     def tearDown(self) -> None:
         self.tempdir.cleanup()
@@ -121,8 +122,7 @@ class TestDlcQC(unittest.TestCase):
         self.assertEqual('PASS', outcome)
 
     def test_check_pupil_diameter_snr(self):
-        pupil_path = Path(__file__).parent.joinpath('..', 'fixtures', 'qc').resolve()
-        pupil_data = np.load(pupil_path.joinpath('pupil_diameter.npy'))
+        pupil_data = np.load(self.fixtures_path.joinpath('pupil_diameter.npy'))
         self.qc.data['pupilDiameter_raw'] = pupil_data[:, 0]
         self.qc.data['pupilDiameter_smooth'] = pupil_data[:, 1]
         self.qc.side = 'body'
@@ -134,6 +134,35 @@ class TestDlcQC(unittest.TestCase):
         self.qc.side = 'right'
         outcome = self.qc.check_pupil_diameter_snr()
         self.assertEqual(('PASS', 6.624), outcome)
+
+    def test_check_paw_nan(self):
+        rng = np.random.default_rng(2022)
+        self.qc.data['stimOn_times'] = np.load(self.fixtures_path.joinpath('stimOn_times.npy'))
+        self.qc.data['camera_times'] = np.load(self.fixtures_path.joinpath('camera_times.npy'))
+        # Check that body gets NOT_SET
+        self.qc.side = 'body'
+        outcome = self.qc.check_paw_close_nan()
+        self.assertEqual('NOT_SET', outcome)
+        outcome = self.qc.check_paw_far_nan()
+        self.assertEqual('NOT_SET', outcome)
+        # Check that left and right pass when numbers
+        self.qc.data['dlc_coords'] = {'paw_l': rng.normal(scale=100, size=(2, self.qc.data['camera_times'].shape[0])),
+                                      'paw_r': rng.normal(scale=100, size=(2, self.qc.data['camera_times'].shape[0]))}
+        for self.qc.side in ['left', 'right']:
+            outcome = self.qc.check_paw_close_nan()
+            self.assertEqual('PASS', outcome)
+            outcome = self.qc.check_paw_far_nan()
+            self.assertEqual('PASS', outcome)
+        # Check that warning when 10-20% nans but fails with more than 20%
+        for p, expected_outcome in zip([0.15, 0.25], ['WARNING', 'FAIL']):
+            n_nans = int(self.qc.data['dlc_coords']['paw_r'].shape[1] * p)
+            self.qc.data['dlc_coords']['paw_r'][:, :n_nans] = np.nan
+            self.qc.data['dlc_coords']['paw_l'][:, :n_nans] = np.nan
+            for self.qc.side in ['left', 'right']:
+                outcome = self.qc.check_paw_close_nan()
+                self.assertEqual(expected_outcome, outcome)
+                outcome = self.qc.check_paw_far_nan()
+                self.assertEqual(expected_outcome, outcome)
 
 
 if __name__ == "__main__":
