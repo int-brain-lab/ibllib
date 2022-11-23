@@ -505,7 +505,7 @@ class CameraQC(base.QC):
         low2high = np.insert(np.diff(self.data['pin_state'][:, -1].astype(int)) == 1, 0, False)
         # NB: Time between two consecutive TTLs can be sub-frame, so this will fail
         ndiff_low2high = int(self.data['audio'][::2].size - sum(low2high))
-        #state_ttl_matches = ndiff_low2high == 0
+        # state_ttl_matches = ndiff_low2high == 0
         # Check within ms of audio times
         if display:
             plt.Figure()
