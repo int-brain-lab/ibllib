@@ -2,7 +2,7 @@
 __version__ = "2.17.2"
 import warnings
 
-from iblutil.util import get_logger
+from iblutil.util import setup_logger
 
 warnings.filterwarnings("always", category=DeprecationWarning, module="ibllib")
 
@@ -16,7 +16,7 @@ import logging
 USE_LOGGING = True
 #%(asctime)s,%(msecs)d
 if USE_LOGGING:
-    get_logger(name='ibllib')
+    setup_logger(name='ibllib')
 else:
     # deactivate all log calls for use as a library
     logging.getLogger("ibllib").addHandler(logging.NullHandler())
