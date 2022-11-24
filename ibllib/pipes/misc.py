@@ -861,6 +861,9 @@ def check_create_raw_session_flag(session_folder: str) -> None:
 
     if experiment_description is not None:
 
+        if any(session_path.joinpath('_devices').glob('*')):
+            return
+
         # Find the devices in the experiment description file
         devices = list()
         for key in DEVICE_FLAG_MAP.keys():
