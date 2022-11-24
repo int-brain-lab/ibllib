@@ -394,9 +394,7 @@ class CameraQC(base.QC):
 
         if update:
             extended = {
-                k: None if v is None or v == 'NOT_SET'
-                else base.CRITERIA[v] < 3 if isinstance(v, str)
-                else (base.CRITERIA[v[0]] < 3, *v[1:])  # Convert first value to bool if array
+                k: 'NOT_SET' if v is None else v
                 for k, v in self.metrics.items()
             }
             self.update_extended_qc(extended)
@@ -507,7 +505,7 @@ class CameraQC(base.QC):
         low2high = np.insert(np.diff(self.data['pin_state'][:, -1].astype(int)) == 1, 0, False)
         # NB: Time between two consecutive TTLs can be sub-frame, so this will fail
         ndiff_low2high = int(self.data['audio'][::2].size - sum(low2high))
-        state_ttl_matches = ndiff_low2high == 0
+        # state_ttl_matches = ndiff_low2high == 0
         # Check within ms of audio times
         if display:
             plt.Figure()
@@ -522,7 +520,7 @@ class CameraQC(base.QC):
 
         outcome = self.overall_outcome(
             ('PASS' if size_diff == 0 else 'WARNING' if np.abs(size_diff) < 5 else 'FAIL',
-             'PASS' if state_ttl_matches else 'WARNING')
+             'PASS' if np.abs(ndiff_low2high) < 5 else 'WARNING')
         )
         return outcome, ndiff_low2high, size_diff
 
