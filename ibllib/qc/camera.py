@@ -971,6 +971,7 @@ class CameraQCCamlog(CameraQC):
 
     def __init__(self, session_path_or_eid, camera, sync_collection='raw_sync_data', sync_type='nidq', **kwargs):
         super().__init__(session_path_or_eid, camera, sync_collection=sync_collection, sync_type=sync_type, **kwargs)
+        self._type = 'ephys'
         self.checks_to_remove = ['check_pin_state']
 
     def load_data(self, download_data: bool = None,
