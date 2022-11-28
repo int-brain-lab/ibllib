@@ -109,38 +109,6 @@ def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, car=T
     return waveforms
 
 
-def stream(pid, t0, nsecs=1, one=None, cache_folder=None, remove_cached=False, typ='ap'):
-    """
-    NB: returned Reader object must be closed after use
-    :param pid: Probe UUID
-    :param t0: time of the first sample
-    :param nsecs: duration of the streamed data
-    :param one: An instance of ONE
-    :param cache_folder:
-    :param remove_cached:
-    :param typ: 'ap' or 'lf'
-    :return: sr, t0
-    """
-    import warnings
-    warnings.warn('brainbox.io.spikeglx.stream is deprecated in favour of brainbox.io.spikeglx.Streamer',
-                  DeprecationWarning)
-    if nsecs > 10:
-        ValueError(f'Streamer works only with 10 or less seconds, set nsecs to less than {nsecs}')
-    assert one
-    assert typ in ['lf', 'ap']
-    sr = Streamer(pid=pid, one=one, cache_folder=cache_folder, remove_cached=remove_cached, typ=typ)
-    chinfo = sr.chunks
-    tbounds = np.array(chinfo['chunk_bounds']) / chinfo['sample_rate']
-    first_chunk = np.maximum(0, np.searchsorted(tbounds, t0 + 0.01) - 1)
-    last_chunk = np.maximum(0, np.searchsorted(tbounds, t0 + + 0.01 + nsecs) - 2)
-    t0 = tbounds[first_chunk]
-    sr_small = sr._download_raw_partial(first_chunk=first_chunk, last_chunk=last_chunk)
-    if remove_cached:
-        sr_small = sr_small[:, :]
-        shutil.rmtree(sr.target_dir, ignore_errors=True)
-    return sr_small, t0
-
-
 class Streamer(spikeglx.Reader):
     """
     pid = 'e31b4e39-e350-47a9-aca4-72496d99ff2a'
