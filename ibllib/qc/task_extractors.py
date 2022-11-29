@@ -27,7 +27,8 @@ REQUIRED_FIELDS = ['choice', 'contrastLeft', 'contrastRight', 'correct',
 
 
 class TaskQCExtractor(object):
-    def __init__(self, session_path, lazy=False, one=None, download_data=False, bpod_only=False):
+    def __init__(self, session_path, lazy=False, one=None, download_data=False, bpod_only=False,
+                 sync_collection=None, sync_type=None):
         """
         A class for extracting the task data required to perform task quality control
         :param session_path: a valid session path
@@ -49,6 +50,8 @@ class TaskQCExtractor(object):
         self.type = None
         self.wheel_encoding = None
         self.bpod_only = bpod_only
+        self.sync_collection = sync_collection or 'raw_ephys_data'
+        self.sync_type = sync_type
 
         if download_data:
             self.one = one or ONE()
@@ -80,13 +83,25 @@ class TaskQCExtractor(object):
         settings, _ = self.one.load_datasets(eid, ["_iblrig_taskSettings.raw.json"],
                                              collections=['raw_behavior_data'],
                                              download_only=True, assert_present=False)
-        if settings and get_session_extractor_type(self.session_path) == 'ephys':
+
+        is_ephys = get_session_extractor_type(self.session_path) == 'ephys'
+        self.sync_type = self.sync_type or 'nidq' if is_ephys else 'bpod'
+        is_fpga = 'bpod' not in self.sync_type
+
+        if settings and is_ephys:
 
             dstypes.extend(['_spikeglx_sync.channels',
                             '_spikeglx_sync.polarities',
                             '_spikeglx_sync.times',
                             'ephysData.raw.meta',
                             'ephysData.raw.wiring'])
+        elif settings and is_fpga:
+
+            dstypes.extend(['_spikeglx_sync.channels',
+                            '_spikeglx_sync.polarities',
+                            '_spikeglx_sync.times',
+                            'DAQData.raw.meta',
+                            'DAQData.wiring'])
 
         dataset = self.one.type2datasets(eid, dstypes, details=True)
         files = self.one._check_filesystem(dataset)
@@ -107,13 +122,16 @@ class TaskQCExtractor(object):
         """
         self.log.info(f"Loading raw data from {self.session_path}")
         self.type = self.type or get_session_extractor_type(self.session_path)
+        # Finds the sync type when it isn't explicitly set, if ephys we assume nidq otherwise bpod
+        self.sync_type = self.sync_type or 'nidq' if self.type == 'ephys' else 'bpod'
+
         self.settings, self.raw_data = raw.load_bpod(self.session_path)
         # Fetch the TTLs for the photodiode and audio
-        if self.type != 'ephys' or self.bpod_only is True:  # Extract from Bpod
+        if self.sync_type == 'bpod' or self.bpod_only is True:  # Extract from Bpod
             self.frame_ttls, self.audio_ttls = raw.load_bpod_fronts(
                 self.session_path, data=self.raw_data)
         else:  # Extract from FPGA
-            sync, chmap = ephys_fpga.get_main_probe_sync(self.session_path)
+            sync, chmap = ephys_fpga.get_sync_and_chn_map(self.session_path, self.sync_collection)
 
             def channel_events(name):
                 """Fetches the polarities and times for a given channel"""
@@ -134,12 +152,15 @@ class TaskQCExtractor(object):
         """
         self.log.info(f"Extracting session: {self.session_path}")
         self.type = self.type or get_session_extractor_type(self.session_path)
-        self.wheel_encoding = 'X4' if (self.type == 'ephys' and not self.bpod_only) else 'X1'
+        # Finds the sync type when it isn't explicitly set, if ephys we assume nidq otherwise bpod
+        self.sync_type = self.sync_type or 'nidq' if self.type == 'ephys' else 'bpod'
+
+        self.wheel_encoding = 'X4' if (self.sync_type != 'bpod' and not self.bpod_only) else 'X1'
 
         if not self.raw_data:
             self.load_raw_data()
         # Run extractors
-        if self.type == 'ephys' and not self.bpod_only:
+        if self.sync_type != 'bpod' and not self.bpod_only:
             data, _ = ephys_fpga.extract_all(self.session_path)
             bpod2fpga = interp1d(data['intervals_bpod'][:, 0], data['table']['intervals_0'],
                                  fill_value='extrapolate')

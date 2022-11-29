@@ -697,11 +697,22 @@ def get_sync_and_chn_map(session_path, sync_collection):
     """
     Return sync and channel map for session based on collection where main sync is stored
     :param session_path:
-    :param collection:
+    :param sync_collection:
     :return:
     """
     if sync_collection == 'raw_ephys_data':
-        sync, chmap = get_main_probe_sync(session_path)
+        # Check to see if we have nidq files, if we do just go with this otherwise go into other function that deals with
+        # 3A probes
+        nidq_meta = next((session_path.joinpath(sync_collection).glob('*nidq.meta')), None)
+        if not nidq_meta:
+            sync, chmap = get_main_probe_sync(session_path)
+        else:
+            sync = load_sync(session_path, sync_collection)
+            ef = Bunch()
+            ef['path'] = session_path.joinpath(sync_collection)
+            ef['nidq'] = nidq_meta
+            chmap = get_ibl_sync_map(ef, '3B')
+
     else:
         sync = load_sync(session_path, sync_collection)
         chmap = load_channel_map(session_path, sync_collection)
