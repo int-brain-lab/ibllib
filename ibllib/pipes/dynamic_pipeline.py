@@ -154,31 +154,40 @@ def make_pipeline(session_path=None, **pkwargs):
         # -   choice_world_biased
         # -   choice_world_training
         # -   choice_world_habituation
-        if 'habituation' in protocol:
-            registration_class = btasks.HabituationRegisterRaw
-            behaviour_class = btasks.HabituationTrialsBpod
-            compute_status = False
-        elif 'passiveChoiceWorld' in protocol:
-            registration_class = btasks.PassiveRegisterRaw
-            behaviour_class = btasks.PassiveTask
-            compute_status = False
-        elif sync_kwargs['sync'] == 'bpod':
-            registration_class = btasks.TrialRegisterRaw
-            behaviour_class = btasks.ChoiceWorldTrialsBpod
-            compute_status = True
-        elif sync_kwargs['sync'] == 'nidq':
-            registration_class = btasks.TrialRegisterRaw
-            behaviour_class = btasks.ChoiceWorldTrialsNidq
-            compute_status = True
+        if extractors := task_info.get('extractors', False):
+            extractors = (extractors,) if isinstance(extractors, str) else extractors
+            for task in extractors:
+                try:
+                    task = getattr(btasks, task)
+                except AttributeError:
+                    ...  # TODO Attempt to import from personal project repo
+                tasks[task.__name__] = task(**kwargs, **task_kwargs)
         else:
-            raise NotImplementedError
-        tasks[f'RegisterRaw_{protocol}'] = type(f'RegisterRaw_{protocol}', (registration_class,), {})(**kwargs, **task_kwargs)
-        parents = [tasks[f'RegisterRaw_{protocol}']] + sync_tasks
-        tasks[f'Trials_{protocol}'] = type(f'Trials_{protocol}', (behaviour_class,), {})(
-            **kwargs, **sync_kwargs, **task_kwargs, parents=parents, number=i)
-        if compute_status:
-            tasks[f"TrainingStatus_{protocol}"] = type(f"TrainingStatus_{protocol}", (btasks.TrainingStatus,), {})(
-                **kwargs, **task_kwargs, parents=[tasks[f'Trials_{protocol}']])
+            if 'habituation' in protocol:
+                registration_class = btasks.HabituationRegisterRaw
+                behaviour_class = btasks.HabituationTrialsBpod
+                compute_status = False
+            elif 'passiveChoiceWorld' in protocol:
+                registration_class = btasks.PassiveRegisterRaw
+                behaviour_class = btasks.PassiveTask
+                compute_status = False
+            elif sync_kwargs['sync'] == 'bpod':
+                registration_class = btasks.TrialRegisterRaw
+                behaviour_class = btasks.ChoiceWorldTrialsBpod
+                compute_status = True
+            elif sync_kwargs['sync'] == 'nidq':
+                registration_class = btasks.TrialRegisterRaw
+                behaviour_class = btasks.ChoiceWorldTrialsNidq
+                compute_status = True
+            else:
+                raise NotImplementedError
+            tasks[f'RegisterRaw_{protocol}'] = type(f'RegisterRaw_{protocol}', (registration_class,), {})(**kwargs, **task_kwargs)
+            parents = [tasks[f'RegisterRaw_{protocol}']] + sync_tasks
+            tasks[f'Trials_{protocol}'] = type(f'Trials_{protocol}', (behaviour_class,), {})(
+                **kwargs, **sync_kwargs, **task_kwargs, parents=parents, number=i)
+            if compute_status:
+                tasks[f"TrainingStatus_{protocol}"] = type(f"TrainingStatus_{protocol}", (btasks.TrainingStatus,), {})(
+                    **kwargs, **task_kwargs, parents=[tasks[f'Trials_{protocol}']])
 
     # Ephys tasks
     if 'neuropixel' in devices:
