@@ -553,6 +553,19 @@ class TestSessionParams(unittest.TestCase):
             data = session_params._patch_file({'version': '1.1.0'})
         self.assertEqual(data, {'version': '1.0.0'})
 
+    def test_get_collections(self):
+        collections = session_params.get_collections(self.fixture)
+        expected = {
+            'widefield': 'raw_widefield_data',
+            'microphone': 'raw_behavior_data',
+            'probe00': 'raw_ephys_data/probe00',
+            'probe01': 'raw_ephys_data/probe01',
+            'nidq': 'raw_ephys_data',
+            'passiveChoiceWorld': 'raw_passive_data',
+            'ephysChoiceWorld': 'raw_behavior_data'
+        }
+        self.assertCountEqual(expected, collections)
+
 
 if __name__ == "__main__":
     unittest.main(exit=False, verbosity=2)

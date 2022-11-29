@@ -18,7 +18,7 @@ INGRESS
     - copy the device file to the local server.
 
 EGRESS
-    - got through the queue and for each item:
+    - go through the queue and for each item:
         - if the device file is not on the server create it.
         - once copy is complete aggregate the qc from file.
 """
@@ -28,6 +28,7 @@ from datetime import datetime
 import logging
 from pathlib import Path
 import warnings
+from collections.abc import Iterable
 
 from pkg_resources import parse_version
 
@@ -267,9 +268,40 @@ def get_task_collection(sess_params):
             return details['collection']
 
 
-def get_device_collection(sess_params, device):
-    # TODO
-    return None
+def get_collections(sess_params):
+    """
+    Find all collections associated with the session.
+
+    Parameters
+    ----------
+    sess_params : dict
+        The loaded experiment description map.
+
+    Returns
+    -------
+    dict[str, str]
+        A map of device/sync/task and the corresponding collection name.
+
+    Notes
+    -----
+    - Assumes only the following data types contained: list, dict, None, str.
+    """
+    collection_map = {}
+
+    def iter_dict(d):
+        for k, v in d.items():
+            if not v or isinstance(v, str):
+                continue
+            if isinstance(v, list):
+                for d in filter(lambda x: isinstance(x, dict), v):
+                    iter_dict(d)
+            elif 'collection' in v:
+                collection_map[k] = v['collection']
+            else:
+                iter_dict(v)
+
+    iter_dict(sess_params)
+    return collection_map
 
 
 def get_video_compressed(sess_params):
@@ -293,6 +325,8 @@ def prepare_experiment(session_path, acquisition_description=None, local=None, r
     session_path : str, pathlib.Path, pathlib.PurePath
         The RELATIVE session path, e.g. subject/2020-01-01/001.
     """
+    if not acquisition_description:
+        return
     # Determine if user passed in arg for local/remote subject folder locations or pull in from
     # local param file or prompt user if missing
     params = create_basic_transfer_params(transfers_path=local, remote_data_path=remote)
@@ -300,12 +334,12 @@ def prepare_experiment(session_path, acquisition_description=None, local=None, r
     # First attempt to copy to server
     remote_device_path = Path(params['REMOTE_DATA_FOLDER_PATH']).joinpath(session_path, '_devices')
     try:
-        for label, data in acquisition_description.items():
-            write_yaml(remote_device_path.joinpath(f'{label}.yaml'), data)
+        write_yaml(remote_device_path.joinpath(f'{params["TRANSFER_LABEL"]}.yaml'), acquisition_description)
     except Exception as ex:
         warnings.warn(f'Failed to write data to {remote_device_path}: {ex}')
 
     # Now copy to local directory
-    local_device_path = Path(params['TRANSFERS_PATH']).joinpath(session_path)
-    for label, data in acquisition_description.items():
-        write_yaml(local_device_path.joinpath(f'{label}.yaml'), data)
+    local = params.get('TRANSFERS_PATH', params['DATA_FOLDER_PATH'])
+    local_device_path = Path(local).joinpath(session_path)
+    filename = f'_ibl_experiment.description_{params["TRANSFER_LABEL"]}.yaml'
+    write_yaml(local_device_path.joinpath(filename), acquisition_description)

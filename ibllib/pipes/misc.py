@@ -11,6 +11,8 @@ import logging
 from pathlib import Path
 from typing import Union, List
 from inspect import signature
+import uuid
+import socket
 
 import spikeglx
 from iblutil.io import hashfile, params
@@ -376,7 +378,6 @@ def create_basic_transfer_params(param_str='transfer_params', local_data_path=No
     clobber : bool
         If True, any parameters in existing parameter file not found as keyword args will be removed,
         otherwise the user is prompted for these also.
-
     **kwargs
         Extra parameters to set. If value is None, the user is prompted.
 
@@ -402,7 +403,6 @@ def create_basic_transfer_params(param_str='transfer_params', local_data_path=No
     >>> from functools import partial
     >>> par = create_basic_transfer_params(
     ...     custom_arg=partial(cli_ask_default, 'Please enter custom arg value'))
-
     """
     parameters = params.as_dict(params.read(param_str, {})) or {}
     if local_data_path is None and (clobber or not parameters.get('DATA_FOLDER_PATH')):
@@ -437,6 +437,9 @@ def create_basic_transfer_params(param_str='transfer_params', local_data_path=No
         # Prompt for any other parameters that weren't passed into function
         for k in filter(lambda x: x not in defined, map(str.upper, parameters.keys())):
             parameters[k] = cli_ask_default(f'Enter a value for parameter {k}', parameters.get(k))
+
+    if 'TRANSFER_LABEL' not in parameters:
+        parameters['TRANSFER_LABEL'] = f'{socket.gethostname()}_{uuid.getnode()}'
 
     # Write parameters
     params.write(param_str, parameters)
