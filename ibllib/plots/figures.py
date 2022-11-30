@@ -21,7 +21,7 @@ from ibllib.io.video import get_video_frame, url_from_eid
 import spikeglx
 import neuropixel
 from brainbox.plot import driftmap
-from brainbox.io.spikeglx import stream
+from brainbox.io.spikeglx import Streamer
 from brainbox.behavior.dlc import SAMPLING, plot_trace_on_frame, plot_wheel_position, plot_lick_hist, \
     plot_lick_raster, plot_motion_energy_hist, plot_speed_hist, plot_pupil_diameter_hist
 from brainbox.ephys_plots import image_lfp_spectrum_plot, image_rms_plot, plot_brain_regions
@@ -424,8 +424,13 @@ class BadChannelsAp(ReportSnapshotProbe):
             else:
                 electrodes = None
 
-            sr, t0 = stream(self.pid, T0, nsecs=1, one=self.one)
-            raw = sr[:, :-sr.nsync].T
+            nsecs = 1
+            sr = Streamer(pid=self.pid, one=self.one, remove_cached=False, typ='ap')
+            s0 = T0 * sr.fs
+            tsel = slice(int(s0), int(s0) + int(nsecs * sr.fs))
+            # Important: remove sync channel from raw data, and transpose
+            raw = sr[tsel, :-sr.nsync].T
+
         else:
             electrodes = None
             ap_file = next(self.session_path.joinpath('raw_ephys_data', self.pname).glob('*ap.*bin'), None)

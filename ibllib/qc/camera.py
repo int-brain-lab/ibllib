@@ -149,6 +149,9 @@ class CameraQC(base.QC):
 
         self._type = get_session_extractor_type(self.session_path) or None
         self.sync_type = self.sync or 'nidq' if self._type == 'ephys' else None
+        # For now if we have nidq we assume we have 3 cameras
+        if self.sync_type == 'nidq':
+            self._type = 'ephys'
 
         logging.disable(logging.NOTSET)
         keys = ('count', 'pin_state', 'audio', 'fpga_times', 'wheel', 'video',
@@ -358,7 +361,7 @@ class CameraQC(base.QC):
             all_present = not datasets.empty and all(present)
             assert all_present or not required, f'Dataset {dstype} not found'
 
-        self._type = get_session_extractor_type(self.session_path)
+        self._type = 'ephys' if self.sync_type == 'nidq' else get_session_extractor_type(self.session_path)
 
     def run(self, update: bool = False, **kwargs) -> (str, dict):
         """
@@ -394,9 +397,7 @@ class CameraQC(base.QC):
 
         if update:
             extended = {
-                k: None if v is None or v == 'NOT_SET'
-                else base.CRITERIA[v] < 3 if isinstance(v, str)
-                else (base.CRITERIA[v[0]] < 3, *v[1:])  # Convert first value to bool if array
+                k: 'NOT_SET' if v is None else v
                 for k, v in self.metrics.items()
             }
             self.update_extended_qc(extended)
@@ -507,7 +508,7 @@ class CameraQC(base.QC):
         low2high = np.insert(np.diff(self.data['pin_state'][:, -1].astype(int)) == 1, 0, False)
         # NB: Time between two consecutive TTLs can be sub-frame, so this will fail
         ndiff_low2high = int(self.data['audio'][::2].size - sum(low2high))
-        state_ttl_matches = ndiff_low2high == 0
+        # state_ttl_matches = ndiff_low2high == 0
         # Check within ms of audio times
         if display:
             plt.Figure()
@@ -522,7 +523,7 @@ class CameraQC(base.QC):
 
         outcome = self.overall_outcome(
             ('PASS' if size_diff == 0 else 'WARNING' if np.abs(size_diff) < 5 else 'FAIL',
-             'PASS' if state_ttl_matches else 'WARNING')
+             'PASS' if np.abs(ndiff_low2high) < 5 else 'WARNING')
         )
         return outcome, ndiff_low2high, size_diff
 
@@ -973,6 +974,7 @@ class CameraQCCamlog(CameraQC):
 
     def __init__(self, session_path_or_eid, camera, sync_collection='raw_sync_data', sync_type='nidq', **kwargs):
         super().__init__(session_path_or_eid, camera, sync_collection=sync_collection, sync_type=sync_type, **kwargs)
+        self._type = 'ephys'
         self.checks_to_remove = ['check_pin_state']
 
     def load_data(self, download_data: bool = None,
