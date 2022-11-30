@@ -1,15 +1,33 @@
-## Release 2.17
-### Release Notes 2.16.0 2022-10-xx
+## Release 2.18
+### Release Notes 2.18.0 2022-11-23
 ### features
 - brainbox.modeling removed
 - brainbox.io.one.load_trials_df removed, use one.load_object(...).to_df() instead
-- AWS DataHandler refactored
+- AWS DataHandler refactored (ibllib.oneibl.aws removed)
 - raise error when saving an empty dataset during extraction
+- removed deprecated dsp packages (ibllib.dsp, ibllib.ephys.neuropixel, ibllib.io.spikeglx)
+- register datasets as a revision if protected on Alyx
 
 ### bugfixes
 - frameData and timestamps both optional datasets for camera QC
+- for 3B probes don't glob the sync files as fails for NP2 case
+- support iblutil 1.4 (iblutil.util.get_logger -> iblutil.util.setup_logger)
 
-## Release 2.16
+## Release Notes 2.17
+
+### Release Notes 2.17.2 2022-10-14
+- Compute wheel velocity using a low-pass filter instead of a Gaussian window smoothing
+- Save widefield output plots in png format
+- Widefield Sync task uses sync_collection argument
+- Improve boundary display for atlas slice plots
+
+### Release Notes 2.17.1 2022-10-04
+- adjust ONE-api requirement to redownload on AWS backend when md5sum mismatch
+
+### Release Notes 2.17.0 2022-10-04
+- units quality metrics use latest algorithms for refractory period violations and noise cut-off
+ 
+## Release Notes 2.16
 ### Release Notes 2.16.1 2022-09-28
 ### bugfixes
 - photometry extraction: recover from corrupt DAQ signal and reversed polarity of voltage pulses
@@ -22,6 +40,7 @@
 - set exists flag to false for all data repos when registering datasets with tasks
 
 ## Release Notes 2.15
+
 ### Release Notes 2.15.3 - 2022-09-26
 - SessionLoader error handling and bug fix
 
