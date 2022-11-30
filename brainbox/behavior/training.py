@@ -10,7 +10,6 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 from scipy.stats import bootstrap
-import statsmodels.stats.proportion as smp
 
 _logger = logging.getLogger('ibllib')
 
@@ -499,9 +498,10 @@ def compute_psychometric(trials, signed_contrast=None, block=None, plotting=Fals
             parmax=np.array([np.max(contrasts), 100., 1, 1]))
 
     if compute_ci:
+        import statsmodels.stats.proportion as smp # noqa
         # choice == -1 means contrast on right hand side
         n_right = np.vectorize(lambda x: np.sum(trials['choice'][(x == signed_contrast) & block_idx] == -1))(contrasts)
-        ci = smp.proportion_confint(n_right, n_contrasts, alpha=0.032, method='normal') - prob_choose_right
+        ci = smp.proportion_confint(n_right, n_contrasts, alpha=alpha / 10, method='normal') - prob_choose_right
 
         return psych, ci
     else:
