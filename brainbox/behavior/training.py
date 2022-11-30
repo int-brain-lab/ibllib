@@ -9,7 +9,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
-import scikits.bootstrap as bootstrap
+from scipy.stats import bootstrap
 import statsmodels.stats.proportion as smp
 
 _logger = logging.getLogger('ibllib')
@@ -565,8 +565,10 @@ def compute_reaction_time(trials, stim_on_type='stimOn_times', stim_off_type='re
     if compute_ci:
         ci = np.full((contrasts.size, 2), np.nan)
         for i, x in enumerate(contrasts):
-            ci[i] = bootstrap.ci((trials[stim_off_type] - trials[stim_on_type])
-                                 [(x == signed_contrast) & block_idx], np.nanmedian, alpha=alpha)
+            data = (trials[stim_off_type] - trials[stim_on_type])[(x == signed_contrast) & block_idx]
+            bt = bootstrap((data,), np.nanmedian, confidence_level=1 - alpha)
+            ci[i, 0] = bt.confidence_interval.low
+            ci[i, 1] = bt.confidence_interval.high
 
         return reaction_time, contrasts, n_contrasts, ci
     else:
@@ -659,9 +661,9 @@ def plot_psychometric(trials, ax=None, title=None, plot_ci=False, ci_aplha=0.32,
         errbar_20 = np.c_[np.abs(out_20[1][0]), np.abs(out_20[1][1])].T
         errbar_80 = np.c_[np.abs(out_80[1][0]), np.abs(out_80[1][1])].T
 
-        ax.errorbar(contrasts_50, prob_right_50, yerr=errbar_50, ecolor=cmap[1], fmt='none', capsize=5, alpha=0.3)
-        ax.errorbar(contrasts_20, prob_right_20, yerr=errbar_20, ecolor=cmap[0], fmt='none', capsize=5, alpha=0.3)
-        ax.errorbar(contrasts_80, prob_right_80, yerr=errbar_80, ecolor=cmap[2], fmt='none', capsize=5, alpha=0.3)
+        ax.errorbar(contrasts_50, prob_right_50, yerr=errbar_50, ecolor=cmap[1], fmt='none', capsize=5, alpha=0.4)
+        ax.errorbar(contrasts_20, prob_right_20, yerr=errbar_20, ecolor=cmap[0], fmt='none', capsize=5, alpha=0.4)
+        ax.errorbar(contrasts_80, prob_right_80, yerr=errbar_80, ecolor=cmap[2], fmt='none', capsize=5, alpha=0.4)
 
     ax.legend([fit_50[0], data_50, fit_20[0], data_20, fit_80[0], data_80],
               ['p_left=0.5 fit', 'p_left=0.5 data', 'p_left=0.2 fit', 'p_left=0.2 data', 'p_left=0.8 fit', 'p_left=0.8 data'],
@@ -703,9 +705,9 @@ def plot_reaction_time(trials, ax=None, title=None, plot_ci=False, ci_alpha=0.32
         errbar_20 = np.c_[out_20[0] - out_20[3][:, 0], out_20[3][:, 1] - out_20[0]].T
         errbar_80 = np.c_[out_80[0] - out_80[3][:, 0], out_80[3][:, 1] - out_80[0]].T
 
-        ax.errorbar(out_50[1], out_50[0], yerr=errbar_50, ecolor='grey', fmt='none', capsize=5, alpha=0.8)
-        ax.errorbar(out_20[1], out_20[0], yerr=errbar_20, ecolor='grey', fmt='none', capsize=5, alpha=0.8)
-        ax.errorbar(out_80[1], out_80[0], yerr=errbar_80, ecolor='grey', fmt='none', capsize=5, alpha=0.8)
+        ax.errorbar(out_50[1], out_50[0], yerr=errbar_50, ecolor=cmap[1], fmt='none', capsize=5, alpha=0.4)
+        ax.errorbar(out_20[1], out_20[0], yerr=errbar_20, ecolor=cmap[0], fmt='none', capsize=5, alpha=0.4)
+        ax.errorbar(out_80[1], out_80[0], yerr=errbar_80, ecolor=cmap[2], fmt='none', capsize=5, alpha=0.4)
 
     ax.legend([data_50[0], data_20[0], data_80[0]],
               ['p_left=0.5 data', 'p_left=0.2 data', 'p_left=0.8 data'],
