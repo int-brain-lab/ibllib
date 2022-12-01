@@ -28,8 +28,8 @@ from datetime import datetime
 import logging
 from pathlib import Path
 import warnings
-from collections.abc import Iterable
 
+from one.converters import ConversionMixin
 from pkg_resources import parse_version
 
 from ibllib.pipes.misc import create_basic_transfer_params
@@ -200,6 +200,9 @@ def aggregate_device(file_device, file_acquisition_description, unlink=False):
     # delete the original file if necessary
     if unlink:
         file_device.unlink()
+        stub_folder = file_acquisition_description.with_name('_devices')
+        if stub_folder.exists() and not any(stub_folder.glob('*.*')):
+            stub_folder.rmdir()
 
 
 def get_cameras(sess_params):
@@ -244,28 +247,55 @@ def get_sync_namespace(sess_params):
     return sync_details.get('acquisition_software', None)
 
 
-def get_task_protocol(sess_params, task_collection):
-    protocols = sess_params.get('tasks', None)
-    if not protocols:
-        return None
+def get_task_protocol(sess_params, task_collection=None):
+    """
+    Fetch the task protocol from an experiment description dict.
+
+    Parameters
+    ----------
+    sess_params : dict
+        The loaded experiment.description file.
+    task_collection : str, optional
+        Return the protocol that corresponds to this collection (returns the first matching
+        protocol in the list). If None, all protocols are returned.
+
+    Returns
+    -------
+    str, set, None
+        If task_collection is None, returns the set of task protocols, otherwise returns the first
+        protocol that corresponds to the collection, or None if collection not present.
+    """
+    collections = get_collections({'tasks': sess_params.get('tasks')})
+    if task_collection is None:
+        return set(collections.keys())  # Return all protocols
     else:
-        protocol = None
-        for prot, details in sess_params.get('tasks').items():
-            if details.get('collection') == task_collection:
-                protocol = prot
-
-        return protocol
+        return next((k for k, v in collections.items() if v == task_collection), None)
 
 
-def get_task_collection(sess_params):
-    protocols = sess_params.get('tasks', None)
-    if not protocols:
-        return None
-    elif len(protocols) > 1:
-        return 'raw_behavior_data'
-    else:
-        for prot, details in protocols.items():
-            return details['collection']
+def get_task_collection(sess_params, task_protocol=None):
+    """
+    Fetch the task collection from an experiment description dict.
+
+    Parameters
+    ----------
+    sess_params : dict
+        The loaded experiment.description file.
+    task_protocol : str, optional
+        Return the collection that corresponds to this protocol (returns the first matching
+        protocol in the list). If None, all collections are returned.
+
+    Returns
+    -------
+    str, set, None
+        If task_protocol is None, returns the set of collections, otherwise returns the first
+        collection that corresponds to the protocol, or None if protocol not present.
+    """
+    protocols = sess_params.get('tasks', [])
+    if task_protocol is not None:
+        task = next((x for x in protocols if task_protocol in x), None)
+        return (task.get(task_protocol) or {}).get('collection')
+    else:  # Return set of all task collections
+        return set(filter(None, (next(iter(x.values()), {}).get('collection') for x in protocols)))
 
 
 def get_collections(sess_params):
@@ -316,6 +346,34 @@ def get_video_compressed(sess_params):
     return compressed
 
 
+def get_remote_stub_name(session_path, device_id=None):
+    """
+    Get or create device specific file path for the remote experiment.description stub.
+
+    Parameters
+    ----------
+    session_path : pathlib.Path
+        A remote session path.
+    device_id : str, optional
+        A device name, if None the TRANSFER_LABEL parameter is used (defaults to this device's
+        hostname with a unique numeric ID)
+
+    Returns
+    -------
+    pathlib.Path
+        The full file path to the remote experiment description stub.
+
+    Example
+    -------
+    >>> get_remote_stub_name(Path.home().joinpath('subject', '2020-01-01', '001'), 'host-123')
+    Path.home() / 'subject/2020-01-01/001/_devices/2020-01-01_1_subject@host-123'
+    """
+    device_id = device_id or create_basic_transfer_params()['TRANSFER_LABEL']
+    exp_ref = '{date}_{sequence:d}_{subject:s}'.format(**ConversionMixin.path2ref(session_path))
+    remote_filename = f'{exp_ref}@{device_id}.yaml'
+    return session_path / '_devices' / remote_filename
+
+
 def prepare_experiment(session_path, acquisition_description=None, local=None, remote=None):
     """
     Copy acquisition description yaml to the server and local transfers folder.
@@ -332,9 +390,9 @@ def prepare_experiment(session_path, acquisition_description=None, local=None, r
     params = create_basic_transfer_params(transfers_path=local, remote_data_path=remote)
 
     # First attempt to copy to server
-    remote_device_path = Path(params['REMOTE_DATA_FOLDER_PATH']).joinpath(session_path, '_devices')
+    remote_device_path = get_remote_stub_name(session_path, params['TRANSFER_LABEL'])
     try:
-        write_yaml(remote_device_path.joinpath(f'{params["TRANSFER_LABEL"]}.yaml'), acquisition_description)
+        write_yaml(remote_device_path, acquisition_description)
     except Exception as ex:
         warnings.warn(f'Failed to write data to {remote_device_path}: {ex}')
 

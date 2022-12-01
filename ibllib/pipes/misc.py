@@ -651,7 +651,9 @@ def rsync_paths(src: Path, dst: Path) -> bool:
         subprocess.run(rsync_command, check=True)
         time.sleep(1)  # give rdiff-backup a second to complete all logging operations
     except (FileNotFoundError, subprocess.CalledProcessError) as e:
-        log.error("Transfer failed.\n", e)
+        log.error("Transfer failed with code %i.\n", e.returncode)
+        if e.stderr:
+            log.error(e.stderr)
         return False
     log.info("Validating transfer completed...")
     try:  # Validate the transfers succeeded
