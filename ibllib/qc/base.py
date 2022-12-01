@@ -191,7 +191,7 @@ class QC:
         for k, v in data.items():
             if v is not None and not isinstance(v, str):
                 if isinstance(v, tuple):
-                    data[k] = tuple(None if np.isnan(i) else i for i in v)
+                    data[k] = tuple(None if not isinstance(i, str) and np.isnan(i) else i for i in v)
                 else:
                     data[k] = None if np.isnan(v).all() else v
 

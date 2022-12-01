@@ -3,11 +3,13 @@ import json
 import datetime
 import logging
 import re
+import shutil
+from requests import HTTPError
 
 from pkg_resources import parse_version
 from dateutil import parser as dateparser
 from iblutil.io import hashfile
-from one.alf.files import get_session_path
+from one.alf.files import get_session_path, folder_parts
 import one.alf.exceptions as alferr
 from one.api import ONE
 
@@ -90,6 +92,7 @@ def register_dataset(file_list, one=None, created_by=None, repository=None, serv
         hashes = [hashfile.md5(p) for p in file_list]
 
     session_path = get_session_path(file_list[0])
+
     # first register the file
     r = {'created_by': created_by,
          'path': session_path.relative_to((session_path.parents[2])).as_posix(),
@@ -100,14 +103,124 @@ def register_dataset(file_list, one=None, created_by=None, repository=None, serv
          'filesizes': [p.stat().st_size for p in file_list],
          'versions': versions,
          'default': default,
-         'exists': exists}
+         'exists': exists,
+         'check_protected': True}  # flag to see if any datasets are protected
+
     if not dry:
         if one is None:
             one = ONE(cache_rest=None)
-        response = one.alyx.rest('register-file', 'create', data=r, no_cache=True)
-        for p in file_list:
-            _logger.info(f"ALYX REGISTERED DATA: {p}")
-        return response
+        try:
+            response = one.alyx.rest('register-file', 'create', data=r, no_cache=True)
+            for p in file_list:
+                _logger.info(f"ALYX REGISTERED DATA: {p}")
+            return response
+        except HTTPError as err:
+            err_message = json.loads(err.response.text)
+            if err_message['status_code'] == 403 and err_message['error'] == 'One or more datasets is protected':
+
+                response = err_message['details']
+                today_revision = datetime.datetime.today().strftime('%Y-%m-%d')
+                new_file_list = []
+
+                for fl, res in zip(file_list, response):
+                    (name, prot_info), = res.items()
+
+                    # Dataset has not yet been registered
+                    if prot_info == []:
+                        new_file_list.append(fl)
+                        continue
+                    else:
+                        # Check to see if the file path already has a revision in it
+                        file_revision = folder_parts(fl, as_dict=True)['revision']
+
+                        if file_revision:
+                            # Find existing protected revisions
+                            existing_revisions = [key for pr in prot_info for key, val in pr.items() if val]
+                            # If the revision explicitly defined by the user doesn't exist or is not protected, register as is
+                            if file_revision not in existing_revisions:
+                                revision_path = fl.parent
+                            else:
+                                i = 97  # equivalent to 'a'
+                                new_revision = file_revision + chr(i).lower()
+                                # Find the next subrevision that isn't protected
+                                while new_revision in existing_revisions:
+                                    i += 1
+                                    new_revision = file_revision + chr(i).lower()
+                                revision_path = fl.parent.parent.joinpath(f'#{new_revision}#')
+
+                            if revision_path != fl.parent:
+                                revision_path.mkdir(exist_ok=True)
+                                shutil.move(fl, revision_path.joinpath(fl.name))
+                            new_file_list.append(revision_path.joinpath(fl.name))
+                            continue
+                        else:
+                            fl_path = fl.parent
+
+                        assert name == fl_path.relative_to(session_path).joinpath(fl.name).as_posix()
+
+                        # Find info about the latest revision, N.B on django side prot_info is sorted by latest revisions first
+                        (latest_revision, protected), = prot_info[0].items()
+
+                        # If the latest revision is the original and it is unprotected no need for revision
+                        # e.g {'clusters.amp.npy': [{'': False}]}
+                        if latest_revision == '' and not protected:
+                            # Use original path
+                            revision_path = fl_path
+
+                        # If there already is a revision but it is unprotected, move into this revision folder
+                        # e.g {'clusters.amp.npy': [{'2022-10-31': False}, {'2022-05-31': True}, {'': True}]}
+                        elif not protected:
+                            # Check that the latest_revision has the date naming convention we expect 'YYYY-MM-DD'
+                            try:
+                                _ = datetime.datetime.strptime(latest_revision[:10], '%Y-%m-%d')
+                                revision_path = fl_path.joinpath(f'#{latest_revision}#')
+                            # If it doesn't it probably has been made manually so we don't want to overwrite this and instead
+                            # use today's date
+                            except ValueError:
+                                revision_path = fl_path.joinpath(f'#{today_revision}#')
+
+                        # If protected and the latest protected revision is from today we need to make a subrevision
+                        elif protected and today_revision in latest_revision:
+                            if latest_revision == today_revision:
+                                new_revision = today_revision + 'a'
+                            else:
+                                alpha = latest_revision[-1]
+                                new_revision = today_revision + chr(ord(alpha) + 1).lower()
+
+                            revision_path = fl_path.joinpath(f'#{new_revision}#')
+
+                        # Otherwise cases move into revision from today
+                        # e.g {'clusters.amp.npy': [{'': True}]}
+                        # e.g {'clusters.amp.npy': [{'2022-10-31': True}, {'': True}]}
+                        else:
+                            revision_path = fl_path.joinpath(f'#{today_revision}#')
+
+                        # Only move for the cases where a revision folder has been made
+                        if revision_path != fl_path:
+                            revision_path.mkdir(exist_ok=True)
+                            shutil.move(fl, revision_path.joinpath(fl.name))
+                        new_file_list.append(revision_path.joinpath(fl.name))
+
+                file_list = new_file_list
+
+                r = {'created_by': created_by,
+                     'path': session_path.relative_to((session_path.parents[2])).as_posix(),
+                     'filenames': [p.relative_to(session_path).as_posix() for p in file_list],
+                     'name': repository,
+                     'server_only': server_only,
+                     'hashes': hashes,
+                     'filesizes': [p.stat().st_size for p in file_list],
+                     'versions': versions,
+                     'default': default,
+                     'exists': exists,
+                     'check_protected': False}
+
+                response = one.alyx.rest('register-file', 'create', data=r, no_cache=True)
+                for p in file_list:
+                    _logger.info(f"ALYX REGISTERED DATA: {p}")
+                return response
+            else:
+                raise err
 
 
 def register_session_raw_data(session_path, one=None, overwrite=False, dry=False, **kwargs):
