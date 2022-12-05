@@ -429,7 +429,7 @@ def create_basic_transfer_params(param_str='transfer_params', local_data_path=No
         else:  # assign value to parameter
             parameters[k.upper()] = str(v)
 
-    defined = list(map(str.upper, ('DATA_FOLDER_PATH', 'REMOTE_DATA_FOLDER_PATH', *kwargs.keys())))
+    defined = list(map(str.upper, ('DATA_FOLDER_PATH', 'REMOTE_DATA_FOLDER_PATH', 'TRANSFER_LABEL', *kwargs.keys())))
     if clobber:
         # Delete any parameters in parameter dict that were not passed as keyword args into function
         parameters = {k: v for k, v in parameters.items() if k in defined}

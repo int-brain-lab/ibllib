@@ -1,6 +1,7 @@
 from ibllib.pipes.tasks import Task
 import ibllib.io.session_params as sess_params
 import logging
+
 _logger = logging.getLogger(__name__)
 
 
@@ -19,10 +20,6 @@ class DynamicTask(Task):
         self.sync_ext = self.get_sync_extension(kwargs.get('sync_ext', None))
         # Sync namespace
         self.sync_namespace = self.get_sync_namespace(kwargs.get('sync_namespace', None))
-        # Task collection (this needs to be specified in the task kwargs)
-        self.collection = self.get_task_collection(kwargs.get('collection', None))
-        # Task type (protocol)
-        self.protocol = self.get_protocol(kwargs.get('protocol', None), task_collection=self.collection)
 
     def get_sync_collection(self, sync_collection=None):
         return sync_collection if sync_collection else sess_params.get_sync_collection(self.session_params)
