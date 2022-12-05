@@ -405,7 +405,7 @@ def create_basic_transfer_params(param_str='transfer_params', local_data_path=No
     ...     custom_arg=partial(cli_ask_default, 'Please enter custom arg value'))
     """
     parameters = params.as_dict(params.read(param_str, {})) or {}
-    if local_data_path is None and (clobber or not parameters.get('DATA_FOLDER_PATH')):
+    if local_data_path is None:
         local_data_path = parameters.get('DATA_FOLDER_PATH')
         if not local_data_path or clobber:
             local_data_path = cli_ask_default("Where's your LOCAL 'Subjects' data folder?", local_data_path)

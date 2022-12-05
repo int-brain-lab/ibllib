@@ -1,6 +1,10 @@
 from collections import OrderedDict
 from pathlib import Path
+from itertools import chain
 import yaml
+
+import spikeglx
+
 import ibllib.io.session_params as sess_params
 import ibllib.io.extractors.base
 import ibllib.pipes.ephys_preprocessing as epp
@@ -13,7 +17,6 @@ import ibllib.pipes.video_tasks as vtasks
 import ibllib.pipes.ephys_tasks as etasks
 import ibllib.pipes.audio_tasks as atasks
 from ibllib.pipes.photometry_tasks import TaskFibrePhotometryPreprocess, TaskFibrePhotometryRegisterRaw
-import spikeglx
 
 
 def acquisition_description_legacy_session(session_path, save=False):
@@ -140,7 +143,8 @@ def make_pipeline(session_path=None, **pkwargs):
     # Behavior tasks
     # TODO this is not doing at all what we were envisaging and going back to the old way of protocol linked to hardware
     # TODO change at next iteration of dynamic pipeline, once we have the basic workflow working
-    for protocol, task_info in acquisition_description.get('tasks', []).items():
+    for protocol, task_info in chain(*map(dict.items, acquisition_description.get('tasks', []))):
+
         task_kwargs = {'protocol': protocol, 'collection': task_info['collection']}
         # -   choice_world_recording
         # -   choice_world_biased

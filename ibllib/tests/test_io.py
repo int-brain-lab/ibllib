@@ -26,8 +26,9 @@ class TestsParams(unittest.TestCase):
                          'num': 15,
                          'liste': [1, 'turlu'],
                          'apath': Path('/gna/gna/gna')}
-        params.write('toto', self.par_dict)
-        params.write('toto', params.from_dict(self.par_dict))
+        self.parstr = 'toto'
+        params.write(self.parstr, self.par_dict)
+        params.write(self.parstr, params.from_dict(self.par_dict))
 
     def test_params(self):
         #  first go to and from dictionary
@@ -35,13 +36,13 @@ class TestsParams(unittest.TestCase):
         par = params.from_dict(par_dict)
         self.assertEqual(params.as_dict(par), par_dict)
         # next go to and from dictionary via json
-        par2 = params.read('toto')
+        par2 = params.read(self.parstr)
         self.assertEqual(par, par2)
 
     def test_param_get_file(self):
-        home_dir = Path(params.getfile("toto")).parent
+        home_dir = Path(params.getfile(self.parstr)).parent
         # straight case the file is .{str} in the home directory
-        assert home_dir.joinpath(".toto") == Path(params.getfile("toto"))
+        assert home_dir.joinpath(".toto") == Path(params.getfile(self.parstr))
         # straight case the file is .{str} in the home directory
         assert home_dir.joinpath(".toto") == Path(params.getfile(".toto"))
         # subfolder case
@@ -63,36 +64,35 @@ class TestsParams(unittest.TestCase):
                            'apath': str(Path('/gna/gna/gna')),
                            'E': 'tete2',
                            }
-        par2 = params.read('toto', default=default)
+        par2 = params.read(self.parstr, default=default)
         self.assertCountEqual(par2.as_dict(), expected_result)
         # on the next path the parameter has been added to the param file
-        par2 = params.read('toto', default=default)
+        par2 = params.read(self.parstr, default=default)
         self.assertCountEqual(par2.as_dict(), expected_result)
         # check that it doesn't break if a named tuple is given instead of a dict
-        par3 = params.read('toto', default=par2)
+        par3 = params.read(self.parstr, default=par2)
         self.assertEqual(par2, par3)
-        # check that a non-existing parfile raises error
-        pstring = str(uuid.uuid4())
+        # check that a non-existing par file raises error
+        Path(params.getfile(self.parstr)).unlink()
         with self.assertRaises(FileNotFoundError):
-            params.read(pstring)
-        # check that a non-existing parfile with default returns default
-        par = params.read(pstring, default=default)
+            params.read(self.parstr)
+        # check that a non-existing par file with default returns default
+        par = params.read(self.parstr, default=default)
         self.assertCountEqual(par, params.from_dict(default))
         # even if this default is a Params named tuple
-        par = params.read(pstring, default=par)
+        par = params.read(self.parstr, default=par)
         self.assertEqual(par, params.from_dict(default))
         # check default empty dict
-        pstring = 'foobar'
-        filename = Path(params.getfile(pstring))
+        Path(params.getfile(self.parstr)).unlink()
+        filename = Path(params.getfile(self.parstr))
         self.assertFalse(filename.exists())
-        par = params.read(pstring, default={})
+        par = params.read(self.parstr, default={})
         self.assertIsNone(par)
         self.assertTrue(filename.exists())
 
     def tearDown(self):
         # at last delete the param file
         Path(params.getfile('toto')).unlink(missing_ok=True)
-        Path(params.getfile('foobar')).unlink(missing_ok=True)
 
 
 class TestsRawDataLoaders(unittest.TestCase):
