@@ -509,7 +509,7 @@ class TestSessionParams(unittest.TestCase):
 
         with open(fullfile, 'r') as fp:
             data = yaml.safe_load(fp)
-        self.assertCountEqual(('devices',), data.keys())
+        self.assertCountEqual(('devices', 'version'), data.keys())
         self.assertCountEqual((device,), data['devices'].keys())
         self.assertEqual(data['devices'][device], self.fixture['devices'][device])
 
