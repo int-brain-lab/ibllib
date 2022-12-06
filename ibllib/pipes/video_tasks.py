@@ -173,6 +173,13 @@ class VideoSyncQcBpod(base_tasks.VideoTask):
     priority = 40
     job_size = 'small'
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Task collection (this needs to be specified in the task kwargs)
+        self.collection = self.get_task_collection(kwargs.get('collection', None))
+        # Task type (protocol)
+        self.protocol = self.get_protocol(kwargs.get('protocol', None), task_collection=self.collection)
+
     @property
     def signature(self):
         signature = {

@@ -2,7 +2,11 @@ import logging
 import re
 from collections import OrderedDict
 from pathlib import Path
+from itertools import chain
 import yaml
+
+import spikeglx
+
 import ibllib.io.session_params as sess_params
 import ibllib.io.extractors.base
 import ibllib.pipes.ephys_preprocessing as epp
@@ -15,7 +19,6 @@ import ibllib.pipes.video_tasks as vtasks
 import ibllib.pipes.ephys_tasks as etasks
 import ibllib.pipes.audio_tasks as atasks
 from ibllib.pipes.photometry_tasks import TaskFibrePhotometryPreprocess, TaskFibrePhotometryRegisterRaw
-import spikeglx
 
 _logger = logging.getLogger(__name__)
 
@@ -143,7 +146,8 @@ def make_pipeline(session_path=None, **pkwargs):
     # Behavior tasks
     # TODO this is not doing at all what we were envisaging and going back to the old way of protocol linked to hardware
     # TODO change at next iteration of dynamic pipeline, once we have the basic workflow working
-    for i, (protocol, task_info) in enumerate(acquisition_description.get('tasks', []).items()):
+    tasks = acquisition_description.get('tasks', [])
+    for i, (protocol, task_info) in chain(*map(dict.items, tasks)):
         collection = task_info.get('collection', f'raw_task_data_{i:02}')
         task_kwargs = {'protocol': protocol, 'collection': collection}
         # For now the order of protocols in the list will take precedence. If collections are numbered,

@@ -11,6 +11,8 @@ import logging
 from pathlib import Path
 from typing import Union, List
 from inspect import signature
+import uuid
+import socket
 
 import spikeglx
 from iblutil.io import hashfile, params
@@ -382,7 +384,6 @@ def create_basic_transfer_params(param_str='transfer_params', local_data_path=No
     clobber : bool
         If True, any parameters in existing parameter file not found as keyword args will be removed,
         otherwise the user is prompted for these also.
-
     **kwargs
         Extra parameters to set. If value is None, the user is prompted.
 
@@ -408,10 +409,9 @@ def create_basic_transfer_params(param_str='transfer_params', local_data_path=No
     >>> from functools import partial
     >>> par = create_basic_transfer_params(
     ...     custom_arg=partial(cli_ask_default, 'Please enter custom arg value'))
-
     """
     parameters = params.as_dict(params.read(param_str, {})) or {}
-    if local_data_path is None and (clobber or not parameters.get('DATA_FOLDER_PATH')):
+    if local_data_path is None:
         local_data_path = parameters.get('DATA_FOLDER_PATH')
         if not local_data_path or clobber:
             local_data_path = cli_ask_default("Where's your LOCAL 'Subjects' data folder?", local_data_path)
@@ -435,7 +435,7 @@ def create_basic_transfer_params(param_str='transfer_params', local_data_path=No
         else:  # assign value to parameter
             parameters[k.upper()] = str(v)
 
-    defined = list(map(str.upper, ('DATA_FOLDER_PATH', 'REMOTE_DATA_FOLDER_PATH', *kwargs.keys())))
+    defined = list(map(str.upper, ('DATA_FOLDER_PATH', 'REMOTE_DATA_FOLDER_PATH', 'TRANSFER_LABEL', *kwargs.keys())))
     if clobber:
         # Delete any parameters in parameter dict that were not passed as keyword args into function
         parameters = {k: v for k, v in parameters.items() if k in defined}
@@ -443,6 +443,9 @@ def create_basic_transfer_params(param_str='transfer_params', local_data_path=No
         # Prompt for any other parameters that weren't passed into function
         for k in filter(lambda x: x not in defined, map(str.upper, parameters.keys())):
             parameters[k] = cli_ask_default(f'Enter a value for parameter {k}', parameters.get(k))
+
+    if 'TRANSFER_LABEL' not in parameters:
+        parameters['TRANSFER_LABEL'] = f'{socket.gethostname()}_{uuid.getnode()}'
 
     # Write parameters
     params.write(param_str, parameters)
@@ -654,7 +657,9 @@ def rsync_paths(src: Path, dst: Path) -> bool:
         subprocess.run(rsync_command, check=True)
         time.sleep(1)  # give rdiff-backup a second to complete all logging operations
     except (FileNotFoundError, subprocess.CalledProcessError) as e:
-        log.error("Transfer failed.\n", e)
+        log.error("Transfer failed with code %i.\n", e.returncode)
+        if e.stderr:
+            log.error(e.stderr)
         return False
     log.info("Validating transfer completed...")
     try:  # Validate the transfers succeeded

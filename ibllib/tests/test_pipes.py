@@ -366,6 +366,7 @@ class TestPipesMisc(unittest.TestCase):
         PARAM_STR = '___test_pars'
         self.addCleanup(Path(iopar.getfile(PARAM_STR)).unlink)  # Remove after test
         params = misc.create_basic_transfer_params(PARAM_STR, '~/local_data', '~/remote_data', par1='val')
+        self.assertTrue(transfer_label := params.pop('TRANSFER_LABEL', False))
         expected = {
             'DATA_FOLDER_PATH': '~/local_data',
             'REMOTE_DATA_FOLDER_PATH': '~/remote_data',
@@ -378,6 +379,7 @@ class TestPipesMisc(unittest.TestCase):
             params = misc.create_basic_transfer_params(PARAM_STR, par2=None)
             self.assertEqual(2, in_mock.call_count)
         expected.update({'PAR1': 'foo', 'PAR2': 'bar'})
+        self.assertEqual(transfer_label, params.pop('TRANSFER_LABEL'))
         self.assertCountEqual(expected, params)
 
         # Test custom function and extra par delete

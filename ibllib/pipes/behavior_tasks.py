@@ -19,6 +19,13 @@ class HabituationRegisterRaw(base_tasks.RegisterRawDataTask):
     priority = 100
     job_size = 'small'
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Task collection (this needs to be specified in the task kwargs)
+        self.collection = self.get_task_collection(kwargs.get('collection', None))
+        # Task type (protocol)
+        self.protocol = self.get_protocol(kwargs.get('protocol', None), task_collection=self.collection)
+
     @property
     def signature(self):
         signature = {
@@ -40,6 +47,13 @@ class HabituationRegisterRaw(base_tasks.RegisterRawDataTask):
 class HabituationTrialsBpod(base_tasks.DynamicTask):
     priority = 90
     job_size = 'small'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Task collection (this needs to be specified in the task kwargs)
+        self.collection = self.get_task_collection(kwargs.get('collection', None))
+        # Task type (protocol)
+        self.protocol = self.get_protocol(kwargs.get('protocol', None), task_collection=self.collection)
 
     @property
     def signature(self):
@@ -86,6 +100,13 @@ class TrialRegisterRaw(base_tasks.RegisterRawDataTask):
     priority = 100
     job_size = 'small'
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Task collection (this needs to be specified in the task kwargs)
+        self.collection = self.get_task_collection(kwargs.get('collection', None))
+        # Task type (protocol)
+        self.protocol = self.get_protocol(kwargs.get('protocol', None), task_collection=self.collection)
+
     @property
     def signature(self):
         signature = {
@@ -108,6 +129,13 @@ class PassiveRegisterRaw(base_tasks.RegisterRawDataTask):
     priority = 100
     job_size = 'small'
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Task collection (this needs to be specified in the task kwargs)
+        self.collection = self.get_task_collection(kwargs.get('collection', None))
+        # Task type (protocol)
+        self.protocol = self.get_protocol(kwargs.get('protocol', None), task_collection=self.collection)
+
     @property
     def signature(self):
         signature = {
@@ -126,6 +154,13 @@ class PassiveRegisterRaw(base_tasks.RegisterRawDataTask):
 class PassiveTask(base_tasks.DynamicTask):
     priority = 90
     job_size = 'small'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Task collection (this needs to be specified in the task kwargs)
+        self.collection = self.get_task_collection(kwargs.get('collection', None))
+        # Task type (protocol)
+        self.protocol = self.get_protocol(kwargs.get('protocol', None), task_collection=self.collection)
 
     @property
     def signature(self):
@@ -158,6 +193,13 @@ class PassiveTask(base_tasks.DynamicTask):
 class ChoiceWorldTrialsBpod(base_tasks.DynamicTask):
     priority = 90
     job_size = 'small'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Task collection (this needs to be specified in the task kwargs)
+        self.collection = self.get_task_collection(kwargs.get('collection', None))
+        # Task type (protocol)
+        self.protocol = self.get_protocol(kwargs.get('protocol', None), task_collection=self.collection)
 
     @property
     def signature(self):
@@ -209,6 +251,13 @@ class ChoiceWorldTrialsBpod(base_tasks.DynamicTask):
 class ChoiceWorldTrialsNidq(base_tasks.DynamicTask):
     priority = 90
     job_size = 'small'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Task collection (this needs to be specified in the task kwargs)
+        self.collection = self.get_task_collection(kwargs.get('collection', None))
+        # Task type (protocol)
+        self.protocol = self.get_protocol(kwargs.get('protocol', None), task_collection=self.collection)
 
     @property
     def signature(self):
@@ -295,6 +344,13 @@ class ChoiceWorldTrialsNidq(base_tasks.DynamicTask):
 class TrainingStatus(base_tasks.DynamicTask):
     priority = 90
     job_size = 'small'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Task collection (this needs to be specified in the task kwargs)
+        self.collection = self.get_task_collection(kwargs.get('collection', None))
+        # Task type (protocol)
+        self.protocol = self.get_protocol(kwargs.get('protocol', None), task_collection=self.collection)
 
     @property
     def signature(self):
