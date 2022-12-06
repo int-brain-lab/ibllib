@@ -471,8 +471,6 @@ def plot_image(data, ax=None, show_cbar=True, fig_kwargs=dict(), line_kwargs=dic
 
     ax = add_lines(ax, data, **line_kwargs)
 
-    plt.show()
-
     return ax, fig
 
 
@@ -540,8 +538,6 @@ def plot_scatter(data, ax=None, show_cbar=True, fig_kwargs=dict(), line_kwargs=d
     ax.set_ylabel(data['labels']['ylabel'])
     ax.set_title(data['labels']['title'])
 
-    plt.show()
-
     return ax, fig
 
 
@@ -592,8 +588,6 @@ def plot_probe(data, ax=None, show_cbar=True, make_pretty=True, fig_kwargs=dict(
 
     ax = add_lines(ax, data, **line_kwargs)
 
-    plt.show()
-
     return ax, fig
 
 
@@ -626,8 +620,6 @@ def plot_line(data, ax=None, fig_kwargs=dict(), line_kwargs=dict()):
     ax.set_xlabel(data['labels']['xlabel'])
     ax.set_ylabel(data['labels']['ylabel'])
     ax.set_title(data['labels']['title'])
-
-    plt.show()
 
     return ax, fig
 
