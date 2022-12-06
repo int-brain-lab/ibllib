@@ -1,3 +1,15 @@
+## Release 2.19
+## Release Notes 2.19.0 2022-11-30
+### features
+- camera qc allows for string values
+- deprecate brainbox.io.spikeglx.stream instead use Streamer
+- copy logics take into account presence of experiment description files
+- option for error bars in training plots
+
+### bugfixes
+- cam qc for dynamic pipeline uses sync type to determine number of cameras
+
+
 ## Release 2.18
 ### Release Notes 2.18.0 2022-11-23
 ### features

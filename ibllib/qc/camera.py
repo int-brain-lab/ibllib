@@ -149,6 +149,9 @@ class CameraQC(base.QC):
 
         self._type = get_session_extractor_type(self.session_path) or None
         self.sync_type = self.sync or 'nidq' if self._type == 'ephys' else None
+        # For now if we have nidq we assume we have 3 cameras
+        if self.sync_type == 'nidq':
+            self._type = 'ephys'
 
         logging.disable(logging.NOTSET)
         keys = ('count', 'pin_state', 'audio', 'fpga_times', 'wheel', 'video',
@@ -358,7 +361,7 @@ class CameraQC(base.QC):
             all_present = not datasets.empty and all(present)
             assert all_present or not required, f'Dataset {dstype} not found'
 
-        self._type = get_session_extractor_type(self.session_path)
+        self._type = 'ephys' if self.sync_type == 'nidq' else get_session_extractor_type(self.session_path)
 
     def run(self, update: bool = False, **kwargs) -> (str, dict):
         """
@@ -971,6 +974,7 @@ class CameraQCCamlog(CameraQC):
 
     def __init__(self, session_path_or_eid, camera, sync_collection='raw_sync_data', sync_type='nidq', **kwargs):
         super().__init__(session_path_or_eid, camera, sync_collection=sync_collection, sync_type=sync_type, **kwargs)
+        self._type = 'ephys'
         self.checks_to_remove = ['check_pin_state']
 
     def load_data(self, download_data: bool = None,
