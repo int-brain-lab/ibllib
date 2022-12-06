@@ -9,6 +9,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
+from scipy.stats import bootstrap
 
 _logger = logging.getLogger('ibllib')
 
@@ -452,7 +453,7 @@ def compute_n_trials(trials):
     return trials['choice'].shape[0]
 
 
-def compute_psychometric(trials, signed_contrast=None, block=None, plotting=False):
+def compute_psychometric(trials, signed_contrast=None, block=None, plotting=False, compute_ci=False, alpha=0.32):
     """
     Compute psychometric fit parameters for trials object
 
@@ -496,7 +497,15 @@ def compute_psychometric(trials, signed_contrast=None, block=None, plotting=Fals
             parmin=np.array([np.min(contrasts), 0., 0., 0.]),
             parmax=np.array([np.max(contrasts), 100., 1, 1]))
 
-    return psych
+    if compute_ci:
+        import statsmodels.stats.proportion as smp # noqa
+        # choice == -1 means contrast on right hand side
+        n_right = np.vectorize(lambda x: np.sum(trials['choice'][(x == signed_contrast) & block_idx] == -1))(contrasts)
+        ci = smp.proportion_confint(n_right, n_contrasts, alpha=alpha / 10, method='normal') - prob_choose_right
+
+        return psych, ci
+    else:
+        return psych
 
 
 def compute_median_reaction_time(trials, stim_on_type='stimOn_times', contrast=None, signed_contrast=None):
@@ -530,11 +539,13 @@ def compute_median_reaction_time(trials, stim_on_type='stimOn_times', contrast=N
     return reaction_time
 
 
-def compute_reaction_time(trials, stim_on_type='stimOn_times', signed_contrast=None, block=None):
+def compute_reaction_time(trials, stim_on_type='stimOn_times', stim_off_type='response_times', signed_contrast=None, block=None,
+                          compute_ci=False, alpha=0.32):
     """
     Compute median reaction time for all contrasts
     :param trials: trials object that must contain response_times and stimOn_times
     :param stim_on_type:
+    :param stim_off_type:
     :param signed_contrast:
     :param block:
     :return:
@@ -549,10 +560,19 @@ def compute_reaction_time(trials, stim_on_type='stimOn_times', signed_contrast=N
         block_idx = trials.probabilityLeft == block
 
     contrasts, n_contrasts = np.unique(signed_contrast[block_idx], return_counts=True)
-    reaction_time = np.vectorize(lambda x: np.nanmedian((trials.response_times - trials[stim_on_type])
+    reaction_time = np.vectorize(lambda x: np.nanmedian((trials[stim_off_type] - trials[stim_on_type])
                                                         [(x == signed_contrast) & block_idx]))(contrasts)
+    if compute_ci:
+        ci = np.full((contrasts.size, 2), np.nan)
+        for i, x in enumerate(contrasts):
+            data = (trials[stim_off_type] - trials[stim_on_type])[(x == signed_contrast) & block_idx]
+            bt = bootstrap((data,), np.nanmedian, confidence_level=1 - alpha)
+            ci[i, 0] = bt.confidence_interval.low
+            ci[i, 1] = bt.confidence_interval.high
 
-    return reaction_time, contrasts, n_contrasts
+        return reaction_time, contrasts, n_contrasts, ci
+    else:
+        return reaction_time, contrasts, n_contrasts,
 
 
 def criterion_1a(psych, n_trials, perf_easy):
@@ -594,7 +614,7 @@ def criterion_delay(n_trials, perf_easy):
     return criterion
 
 
-def plot_psychometric(trials, ax=None, title=None, **kwargs):
+def plot_psychometric(trials, ax=None, title=None, plot_ci=False, ci_aplha=0.32, **kwargs):
     """
     Function to plot pyschometric curve plots a la datajoint webpage
     :param trials:
@@ -605,15 +625,21 @@ def plot_psychometric(trials, ax=None, title=None, **kwargs):
     contrasts_fit = np.arange(-100, 100)
 
     prob_right_50, contrasts_50, _ = compute_performance(trials, signed_contrast=signed_contrast, block=0.5, prob_right=True)
-    pars_50 = compute_psychometric(trials, signed_contrast=signed_contrast, block=0.5, plotting=True)
+    out_50 = compute_psychometric(trials, signed_contrast=signed_contrast, block=0.5, plotting=True,
+                                  compute_ci=plot_ci, alpha=ci_aplha)
+    pars_50 = out_50[0] if plot_ci else out_50
     prob_right_fit_50 = psy.erf_psycho_2gammas(pars_50, contrasts_fit)
 
     prob_right_20, contrasts_20, _ = compute_performance(trials, signed_contrast=signed_contrast, block=0.2, prob_right=True)
-    pars_20 = compute_psychometric(trials, signed_contrast=signed_contrast, block=0.2, plotting=True)
+    out_20 = compute_psychometric(trials, signed_contrast=signed_contrast, block=0.2, plotting=True,
+                                  compute_ci=plot_ci, alpha=ci_aplha)
+    pars_20 = out_20[0] if plot_ci else out_20
     prob_right_fit_20 = psy.erf_psycho_2gammas(pars_20, contrasts_fit)
 
     prob_right_80, contrasts_80, _ = compute_performance(trials, signed_contrast=signed_contrast, block=0.8, prob_right=True)
-    pars_80 = compute_psychometric(trials, signed_contrast=signed_contrast, block=0.8, plotting=True)
+    out_80 = compute_psychometric(trials, signed_contrast=signed_contrast, block=0.8, plotting=True,
+                                  compute_ci=plot_ci, alpha=ci_aplha)
+    pars_80 = out_80[0] if plot_ci else out_80
     prob_right_fit_80 = psy.erf_psycho_2gammas(pars_80, contrasts_fit)
 
     cmap = sns.diverging_palette(20, 220, n=3, center="dark")
@@ -623,14 +649,22 @@ def plot_psychometric(trials, ax=None, title=None, **kwargs):
     else:
         fig = plt.gcf()
 
-    # TODO error bars
-
     fit_50 = ax.plot(contrasts_fit, prob_right_fit_50, color=cmap[1])
     data_50 = ax.scatter(contrasts_50, prob_right_50, color=cmap[1])
     fit_20 = ax.plot(contrasts_fit, prob_right_fit_20, color=cmap[0])
     data_20 = ax.scatter(contrasts_20, prob_right_20, color=cmap[0])
     fit_80 = ax.plot(contrasts_fit, prob_right_fit_80, color=cmap[2])
     data_80 = ax.scatter(contrasts_80, prob_right_80, color=cmap[2])
+
+    if plot_ci:
+        errbar_50 = np.c_[np.abs(out_50[1][0]), np.abs(out_50[1][1])].T
+        errbar_20 = np.c_[np.abs(out_20[1][0]), np.abs(out_20[1][1])].T
+        errbar_80 = np.c_[np.abs(out_80[1][0]), np.abs(out_80[1][1])].T
+
+        ax.errorbar(contrasts_50, prob_right_50, yerr=errbar_50, ecolor=cmap[1], fmt='none', capsize=5, alpha=0.4)
+        ax.errorbar(contrasts_20, prob_right_20, yerr=errbar_20, ecolor=cmap[0], fmt='none', capsize=5, alpha=0.4)
+        ax.errorbar(contrasts_80, prob_right_80, yerr=errbar_80, ecolor=cmap[2], fmt='none', capsize=5, alpha=0.4)
+
     ax.legend([fit_50[0], data_50, fit_20[0], data_20, fit_80[0], data_80],
               ['p_left=0.5 fit', 'p_left=0.5 data', 'p_left=0.2 fit', 'p_left=0.2 data', 'p_left=0.8 fit', 'p_left=0.8 data'],
               loc='upper left')
@@ -643,7 +677,7 @@ def plot_psychometric(trials, ax=None, title=None, **kwargs):
     return fig, ax
 
 
-def plot_reaction_time(trials, ax=None, title=None, **kwargs):
+def plot_reaction_time(trials, ax=None, title=None, plot_ci=False, ci_alpha=0.32, **kwargs):
     """
     Function to plot reaction time against contrast a la datajoint webpage (inversed for some reason??)
     :param trials:
@@ -651,9 +685,9 @@ def plot_reaction_time(trials, ax=None, title=None, **kwargs):
     """
 
     signed_contrast = get_signed_contrast(trials)
-    reaction_50, contrasts_50, _ = compute_reaction_time(trials, signed_contrast=signed_contrast, block=0.5)
-    reaction_20, contrasts_20, _ = compute_reaction_time(trials, signed_contrast=signed_contrast, block=0.2)
-    reaction_80, contrasts_80, _ = compute_reaction_time(trials, signed_contrast=signed_contrast, block=0.8)
+    out_50 = compute_reaction_time(trials, signed_contrast=signed_contrast, block=0.5, compute_ci=plot_ci, alpha=ci_alpha)
+    out_20 = compute_reaction_time(trials, signed_contrast=signed_contrast, block=0.2, compute_ci=plot_ci, alpha=ci_alpha)
+    out_80 = compute_reaction_time(trials, signed_contrast=signed_contrast, block=0.8, compute_ci=plot_ci, alpha=ci_alpha)
 
     cmap = sns.diverging_palette(20, 220, n=3, center="dark")
 
@@ -662,11 +696,18 @@ def plot_reaction_time(trials, ax=None, title=None, **kwargs):
     else:
         fig = plt.gcf()
 
-    data_50 = ax.plot(contrasts_50, reaction_50, '-o', color=cmap[1])
-    data_20 = ax.plot(contrasts_20, reaction_20, '-o', color=cmap[0])
-    data_80 = ax.plot(contrasts_80, reaction_80, '-o', color=cmap[2])
+    data_50 = ax.plot(out_50[1], out_50[0], '-o', color=cmap[1])
+    data_20 = ax.plot(out_20[1], out_20[0], '-o', color=cmap[0])
+    data_80 = ax.plot(out_80[1], out_80[0], '-o', color=cmap[2])
 
-    # TODO error bars
+    if plot_ci:
+        errbar_50 = np.c_[out_50[0] - out_50[3][:, 0], out_50[3][:, 1] - out_50[0]].T
+        errbar_20 = np.c_[out_20[0] - out_20[3][:, 0], out_20[3][:, 1] - out_20[0]].T
+        errbar_80 = np.c_[out_80[0] - out_80[3][:, 0], out_80[3][:, 1] - out_80[0]].T
+
+        ax.errorbar(out_50[1], out_50[0], yerr=errbar_50, ecolor=cmap[1], fmt='none', capsize=5, alpha=0.4)
+        ax.errorbar(out_20[1], out_20[0], yerr=errbar_20, ecolor=cmap[0], fmt='none', capsize=5, alpha=0.4)
+        ax.errorbar(out_80[1], out_80[0], yerr=errbar_80, ecolor=cmap[2], fmt='none', capsize=5, alpha=0.4)
 
     ax.legend([data_50[0], data_20[0], data_80[0]],
               ['p_left=0.5 data', 'p_left=0.2 data', 'p_left=0.8 data'],

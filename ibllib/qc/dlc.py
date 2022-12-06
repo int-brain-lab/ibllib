@@ -177,9 +177,7 @@ class DlcQC(base.QC):
 
         if update:
             extended = {
-                k: None if v is None or v == 'NOT_SET'
-                else base.CRITERIA[v] < 3 if isinstance(v, str)
-                else (base.CRITERIA[v[0]] < 3, *v[1:])  # Convert first value to bool if array
+                k: 'NOT_SET' if v is None else v
                 for k, v in self.metrics.items()
             }
             self.update_extended_qc(extended)

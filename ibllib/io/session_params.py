@@ -32,7 +32,7 @@ import warnings
 from one.converters import ConversionMixin
 from pkg_resources import parse_version
 
-from ibllib.pipes.misc import create_basic_transfer_params
+import ibllib.pipes.misc as misc
 
 
 _logger = logging.getLogger(__name__)
@@ -387,7 +387,7 @@ def prepare_experiment(session_path, acquisition_description=None, local=None, r
         return
     # Determine if user passed in arg for local/remote subject folder locations or pull in from
     # local param file or prompt user if missing
-    params = create_basic_transfer_params(transfers_path=local, remote_data_path=remote)
+    params = misc.create_basic_transfer_params(transfers_path=local, remote_data_path=remote)
 
     # First attempt to copy to server
     remote_device_path = get_remote_stub_name(session_path, params['TRANSFER_LABEL'])

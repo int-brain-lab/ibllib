@@ -24,8 +24,14 @@ from one.api import ONE
 import ibllib.io.flags as flags
 import ibllib.io.raw_data_loaders as raw
 from ibllib.io.misc import delete_empty_folders
+import ibllib.io.session_params as sess_params
 
 log = logging.getLogger(__name__)
+
+DEVICE_FLAG_MAP = {'neuropixel': 'ephys',
+                   'cameras': 'video',
+                   'widefield': 'widefield',
+                   'sync': 'sync'}
 
 
 def subjects_data_folder(folder: Path, rglob: bool = False) -> Path:
@@ -838,10 +844,63 @@ def create_video_transfer_done_flag(session_folder: str) -> None:
     flags.write_flag_file(session_path.joinpath("video_data_transferred.flag"))
 
 
+def create_transfer_done_flag(session_folder: str, flag_name: str) -> None:
+    session_path = Path(session_folder)
+    flags.write_flag_file(session_path.joinpath(f"{flag_name}_data_transferred.flag"))
+
+
 def check_create_raw_session_flag(session_folder: str) -> None:
     session_path = Path(session_folder)
+
+    # if we have an experiment description file read in whether we expect video, ephys widefield etc, don't do it just based
+    # on the task protocol
+    experiment_description = sess_params.read_params(session_path)
+
+    def check_status(expected, flag):
+        if expected is not False and flag.exists():
+            return True
+        if expected is False and not flag.exists():
+            return True
+        else:
+            return False
+
+    if experiment_description is not None:
+
+        if any(session_path.joinpath('_devices').glob('*')):
+            return
+
+        # Find the devices in the experiment description file
+        devices = list()
+        for key in DEVICE_FLAG_MAP.keys():
+            if experiment_description.get('devices', {}).get(key, None) is not None:
+                devices.append(key)
+        # In case of widefield the sync also needs to be in it's own folder
+        if 'widefield' in devices:
+            devices.append('sync')
+
+        expected_flags = [session_path.joinpath(f'{DEVICE_FLAG_MAP[dev]}_data_transferred.flag') for dev in devices]
+
+        expected = []
+        flag_files = []
+        for dev, fl in zip(devices, expected_flags):
+            status = check_status(dev, fl)
+            if status:
+                flag_files.append(fl)
+            expected.append(status)
+
+        # In this case all the copying has completed
+        if all(expected):
+            # make raw session flag
+            flags.write_flag_file(session_path.joinpath("raw_session.flag"))
+            # and unlink individual copy flags
+            for fl in flag_files:
+                fl.unlink()
+
+        return
+
     ephys = session_path.joinpath("ephys_data_transferred.flag")
     video = session_path.joinpath("video_data_transferred.flag")
+
     sett = raw.load_settings(session_path)
     if sett is None:
         log.error(f"No flag created for {session_path}")
