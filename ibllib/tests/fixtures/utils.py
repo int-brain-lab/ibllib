@@ -180,7 +180,10 @@ def create_fake_raw_video_data_folder(session_path, populate=True, write_pars_st
         else:
             name = write_pars_stub if isinstance(write_pars_stub, str) else 'video'
             d = {'collection': 'raw_video_data', 'sync_label': 'frame2ttl'}
-            data = {'devices': {'cameras': {k: d.copy() for k in ('body', 'left', 'right')}}}
+            data = {
+                'devices': {'cameras': {k: d.copy() for k in ('body', 'left', 'right')}},
+                'version': session_params.SPEC_VERSION
+            }
         file_device = session_path.joinpath(f'_ibl_experiment.description_{name}.yaml')
         file_device.parent.mkdir(exist_ok=True)
         session_params.write_yaml(file_device, data)
@@ -291,7 +294,8 @@ def create_fake_raw_behavior_data_folder(
                 'procedures': ['Behavior training/tasks'],
                 'projects': ['ibl_neuropixel_brainwide_01'],
                 'sync': sync,
-                'tasks': [{task: {'collection': folder, 'sync_label': sync_label}}]
+                'tasks': [{task: {'collection': folder, 'sync_label': sync_label}}],
+                'version': session_params.SPEC_VERSION
             }
         file_device = session_path.joinpath(f'_ibl_experiment.description_{name}.yaml')
         file_device.parent.mkdir(exist_ok=True)

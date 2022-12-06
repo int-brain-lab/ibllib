@@ -195,6 +195,8 @@ def aggregate_device(file_device, file_acquisition_description, unlink=False):
             acq_desc[k] = acq_desc.get(k, []) + data_device[k]
         elif isinstance(data_device[k], dict):
             acq_desc[k] = {**acq_desc.get(k, {}), **data_device[k]}
+        else:  # A string
+            acq_desc[k] = data_device[k]
 
     with open(file_acquisition_description, 'w') as fp:
         yaml.safe_dump(acq_desc, fp)
@@ -299,7 +301,8 @@ def get_task_collection(sess_params, task_protocol=None):
         task = next((x for x in protocols if task_protocol in x), None)
         return (task.get(task_protocol) or {}).get('collection')
     else:  # Return set of all task collections
-        return set(filter(None, (next(iter(x.values()), {}).get('collection') for x in protocols)))
+        cset = set(filter(None, (next(iter(x.values()), {}).get('collection') for x in protocols)))
+        return (next(iter(cset)) if len(cset) == 1 else cset) or None
 
 
 def get_collections(sess_params):

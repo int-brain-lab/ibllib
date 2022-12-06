@@ -144,7 +144,6 @@ def make_pipeline(session_path=None, **pkwargs):
     # TODO this is not doing at all what we were envisaging and going back to the old way of protocol linked to hardware
     # TODO change at next iteration of dynamic pipeline, once we have the basic workflow working
     for protocol, task_info in chain(*map(dict.items, acquisition_description.get('tasks', []))):
-
         task_kwargs = {'protocol': protocol, 'collection': task_info['collection']}
         # -   choice_world_recording
         # -   choice_world_biased
