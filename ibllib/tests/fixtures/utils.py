@@ -5,6 +5,8 @@
 import json
 from pathlib import Path
 
+from ibllib.io import session_params
+
 
 def create_fake_session_folder(
     root_data_path, lab="fakelab", mouse="fakemouse", date="1900-01-01", num="001", increment=True
@@ -126,7 +128,28 @@ def populate_raw_spikeglx(session_path,
                 root.joinpath(f'{label}_g0_t0.nidq.{ext}').touch()
 
 
-def create_fake_raw_video_data_folder(session_path, populate=True):
+def create_fake_raw_video_data_folder(session_path, populate=True, write_pars_stub=False):
+    """
+    Create the folder structure for a raw video session with three cameras.
+    Creates a raw_video_data folder and optionally, touches some files and writes a experiment
+    description stub to a _devices folder.
+
+    Parameters
+    ----------
+    session_path : str, pathlib.Path
+        The session path in which to create the folders.
+    populate : bool
+        If true, touch some raw video files.
+    write_pars_stub : bool, str, dict
+        If true, write an experiment description stub containing behaviour settings. If a string,
+        the stub filename will contain this.  If a dict, the key is used as the filename; the value,
+        the file contents.
+
+    Example
+    -------
+    >>> create_fake_raw_video_data_folder(session_path, populate=False, write_pars_stub=False)
+    >>> create_fake_raw_video_data_folder(session_path, write_pars_stub='hostname_19826354')
+    """
     session_path = Path(session_path)
     raw_video_data_path = session_path / "raw_video_data"
     raw_video_data_path.mkdir(exist_ok=True, parents=True)
@@ -151,6 +174,21 @@ def create_fake_raw_video_data_folder(session_path, populate=True):
             fpath.parent.mkdir(parents=True, exist_ok=True)
             fpath.touch()
 
+    if write_pars_stub:
+        if isinstance(write_pars_stub, dict):
+            (name, data), = write_pars_stub.items()
+        else:
+            name = write_pars_stub if isinstance(write_pars_stub, str) else 'video'
+            d = {'collection': 'raw_video_data', 'sync_label': 'frame2ttl'}
+            data = {
+                'devices': {'cameras': {k: d.copy() for k in ('body', 'left', 'right')}},
+                'version': session_params.SPEC_VERSION
+            }
+        file_device = session_path.joinpath(f'_ibl_experiment.description_{name}.yaml')
+        file_device.parent.mkdir(exist_ok=True)
+        session_params.write_yaml(file_device, data)
+    return raw_video_data_path
+
 
 def create_fake_alf_folder_dlc_data(session_path, populate=True):
     session_path = Path(session_path)
@@ -174,8 +212,31 @@ def create_fake_alf_folder_dlc_data(session_path, populate=True):
 
 
 def create_fake_raw_behavior_data_folder(
-    session_path, populate=True, task="ephysCW", folder="raw_behavior_data"
+    session_path, populate=True, task="ephysCW", folder="raw_behavior_data", write_pars_stub=False
 ):
+    """Create the folder structure for a raw behaviour session.
+
+    Creates a raw_behavior_data folder and optionally, touches some files and writes a experiment
+    description stub to a `_devices` folder.
+
+    Parameters
+    ----------
+    session_path : pathlib.Path
+        The session path in which to create the folders.
+    populate : bool
+        If true, touch some raw behaviour files.
+    task : str
+        The name of the task protocol, if 'ephys' or 'passive' extra files are touched.
+    write_pars_stub : bool, str, dict
+        If true, write an experiment description stub containing behaviour settings. If a string,
+        the stub will be named as such.  If a dict, the key is used as the filename; the value,
+        the file contents.
+
+    Returns
+    -------
+    pathlib.Path
+        The raw behaviour data path.
+    """
     raw_behavior_data_path = session_path / folder
     raw_behavior_data_path.mkdir(exist_ok=True, parents=True)
     ephysCW = [
@@ -217,7 +278,30 @@ def create_fake_raw_behavior_data_folder(
             fpath.parent.mkdir(parents=True, exist_ok=True)
             fpath.touch()
 
-    return session_path
+    if write_pars_stub:
+        if isinstance(write_pars_stub, dict):
+            (name, data), = write_pars_stub.items()
+        else:
+            name = write_pars_stub if isinstance(write_pars_stub, str) else 'behaviour'
+            if 'ephys' in task:
+                sync = {'nidq': {'collection': 'raw_ephys_data', 'extension': 'bin'}}
+                sync_label = 'frame2ttl'
+            else:
+                sync = {'bpod': {'collection': 'raw_behavior_data', 'extension': 'jsonable'}}
+                sync_label = 'bpod'
+            data = {
+                'devices': {'microphone': {'microphone': {'collection': folder, 'sync_label': None}}},
+                'procedures': ['Behavior training/tasks'],
+                'projects': ['ibl_neuropixel_brainwide_01'],
+                'sync': sync,
+                'tasks': [{task: {'collection': folder, 'sync_label': sync_label}}],
+                'version': session_params.SPEC_VERSION
+            }
+        file_device = session_path.joinpath(f'_ibl_experiment.description_{name}.yaml')
+        file_device.parent.mkdir(exist_ok=True)
+        session_params.write_yaml(file_device, data)
+
+    return raw_behavior_data_path
 
 
 def populate_task_settings(fpath: Path, patch: dict):

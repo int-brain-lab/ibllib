@@ -1,15 +1,14 @@
 from ibllib.pipes.tasks import Task
 import ibllib.io.session_params as sess_params
 import logging
-_logger = logging.getLogger('ibllib')
+
+_logger = logging.getLogger(__name__)
 
 
 class DynamicTask(Task):
 
     def __init__(self, session_path, **kwargs):
-
         super().__init__(session_path, **kwargs)
-
         self.session_params = self.read_params_file()
 
         # TODO Which should be default?
@@ -21,45 +20,31 @@ class DynamicTask(Task):
         self.sync_ext = self.get_sync_extension(kwargs.get('sync_ext', None))
         # Sync namespace
         self.sync_namespace = self.get_sync_namespace(kwargs.get('sync_namespace', None))
-        # Task collection (this needs to be specified in the task kwargs)
-        self.collection = self.get_task_collection(kwargs.get('collection', None))
-        # Task type (protocol)
-        self.protocol = self.get_protocol(kwargs.get('protocol', None), task_collection=self.collection)
 
     def get_sync_collection(self, sync_collection=None):
-
         return sync_collection if sync_collection else sess_params.get_sync_collection(self.session_params)
 
     def get_sync(self, sync=None):
-
         return sync if sync else sess_params.get_sync(self.session_params)
-        # params_sync = sess_params.get_sync_collection(self.session_params)
-        # return sync if not params_sync else params_sync
 
     def get_sync_extension(self, sync_ext=None):
         return sync_ext if sync_ext else sess_params.get_sync_extension(self.session_params)
-        # params_sync_ext = sess_params.get_sync_extension(self.session_params)
-        # return sync_ext if not params_sync_ext else params_sync_ext
 
     def get_sync_namespace(self, sync_namespace=None):
         return sync_namespace if sync_namespace else sess_params.get_sync_namespace(self.session_params)
-        # params_sync_namespace = sess_params.get_sync_namespace(self.session_params)
-        # return sync_namespace if not params_sync_namespace else params_sync_namespace
 
     def get_protocol(self, protocol=None, task_collection=None):
         return protocol if protocol else sess_params.get_task_protocol(self.session_params, task_collection)
-        # params_protocol = sess_params.get_task_protocol(self.session_params, task_collection)
-        # return protocol if not params_protocol else params_protocol
 
     def get_task_collection(self, collection=None):
-        return collection if collection else sess_params.get_task_collection(self.session_params)
-        # params_task_collection = sess_params.get_task_collection(self.session_params)
-        # return collection if not params_task_collection else params_task_collection
+        if not collection:
+            collection = sess_params.get_task_collection(self.session_params)
+        # If inferring the collection from the experiment description, assert only one returned
+        assert collection is None or isinstance(collection, str) or len(collection) == 1
+        return collection
 
     def get_device_collection(self, device, device_collection=None):
         return device_collection if device_collection else sess_params.get_device_collection(self.session_params, device)
-        # params_device_collection = sess_params.get_device_collection(self.session_params, device)
-        # return device_collection if not params_device_collection else params_device_collection
 
     def read_params_file(self):
         params = sess_params.read_params(self.session_path)
@@ -70,7 +55,7 @@ class DynamicTask(Task):
         # TODO figure out the best way
         # if params is None and self.one:
         #     # Try to read params from alyx or try to download params file
-        #     params = self.one.load_datasets(self.one.path2eid(self.session_path), 'params.yml')
+        #     params = self.one.load_dataset(self.one.path2eid(self.session_path), 'params.yml')
         #     params = self.one.alyx.rest()
 
         return params
