@@ -46,7 +46,7 @@ class BaseExtractor(abc.ABC):
         return out, files
 
     def _save(self, data, path_out=None):
-        # Chack if self.save_namesis of the same length of out
+        # Check if self.save_names is of the same length of out
         if not path_out:
             path_out = self.session_path.joinpath(self.default_path)
 

@@ -678,7 +678,7 @@ def extract_all(session_path, sync_collection='raw_ephys_data', save=True):
         -   behaviour
         -   video time stamps
     :param session_path: '/path/to/subject/yyyy-mm-dd/001'
-    :param save: Bool, defaults to False
+    :param save: bool, defaults to False
     :return: outputs, files
     """
     extractor_type = extractors_base.get_session_extractor_type(session_path)
