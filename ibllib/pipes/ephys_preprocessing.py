@@ -298,6 +298,35 @@ class SpikeSorting(tasks.Task):
             return ""
         return info.decode("utf-8").strip()
 
+    @staticmethod
+    def parse_version(v) -> packaging.version.Version:
+        """
+        Extracts and parses semantic version (major.minor.patch) from a version string.
+
+        Parameters
+        ----------
+        v : str
+            A version string containing a semantic version.
+
+        Returns
+        -------
+        packaging.version.Version
+            The parsed semantic version number
+
+        Examples
+        --------
+        >>> SpikeSorting.parse_version('ibl_1.2')
+        <Version('1.2')>
+        >>> SpikeSorting.parse_version('pykilosort_ibl_1.2.0-new')
+        <Version('1.2.0')>
+        >>> SpikeSorting.parse_version('ibl_0.2') < SpikeSorting.parse_version('pykilosort_v1')
+        True
+        """
+        m = re.search(r'(\d+\.?){1,3}', v)
+        if not m:
+            raise packaging.version.InvalidVersion(f'Failed to detect SemVer in "{v}"')
+        return packaging.version.parse(m.group())
+
     def setUp(self, probes=None):
         """
         Overwrite setup method to allow inputs and outputs to be only one probe
@@ -326,7 +355,7 @@ class SpikeSorting(tasks.Task):
             log_file = sorter_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log")
             if log_file.exists():
                 run_version = self._fetch_pykilosort_run_version(log_file)
-                if packaging.version.parse(run_version) > packaging.version.parse('pykilosort_ibl_1.1.0'):
+                if self.parse_version(run_version) > self.parse_version('pykilosort_ibl_1.1.0'):
                     _logger.info(f"Already ran: spike_sorting_{self.SPIKE_SORTER_NAME}.log"
                                  f" found in {sorter_dir}, skipping.")
                     return sorter_dir
