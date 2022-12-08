@@ -624,9 +624,9 @@ class TestMultiPartsRecordings(unittest.TestCase):
             for sf in root_path.rglob('*.sequence.json'):
                 with open(sf) as fid:
                     d = json.load(fid)
-                    assert len(d['files']) == 4
-        assert len(recordings['probe00']) == 4
-        assert len(recordings['probe01']) == 4
+                    self.assertEqual(4, len(d['files']))
+        self.assertEqual(4, len(recordings['probe00']))
+        self.assertEqual(4, len(recordings['probe01']))
 
 
 class TestSpikeSortingTask(unittest.TestCase):
