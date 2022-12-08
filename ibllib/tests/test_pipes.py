@@ -11,12 +11,14 @@ from functools import partial
 
 from one.api import ONE
 import iblutil.io.params as iopar
+from packaging.version import Version, InvalidVersion
 
 import ibllib.io.extractors.base
 import ibllib.tests.fixtures.utils as fu
 from ibllib.pipes import misc
 from ibllib.tests import TEST_DB
 import ibllib.pipes.scan_fix_passive_files as fix
+from ibllib.pipes.ephys_preprocessing import SpikeSorting
 
 
 class TestExtractors2Tasks(unittest.TestCase):
@@ -625,6 +627,16 @@ class TestMultiPartsRecordings(unittest.TestCase):
                     assert len(d['files']) == 4
         assert len(recordings['probe00']) == 4
         assert len(recordings['probe01']) == 4
+
+
+class TestSpikeSortingTask(unittest.TestCase):
+    def test_parse_version(self):
+        self.assertEqual(SpikeSorting.parse_version('ibl_1.2'), Version('1.2'))
+        self.assertEqual(SpikeSorting.parse_version('pykilosort_ibl_1.2.0-new'), Version('1.2.0'))
+        self.assertEqual(SpikeSorting.parse_version('pykilosort_v1'), Version('1'))
+        self.assertEqual(SpikeSorting.parse_version('0.5'), Version('0.5'))
+        with self.assertRaises(InvalidVersion):
+            SpikeSorting.parse_version('version-twelve')
 
 
 if __name__ == "__main__":
