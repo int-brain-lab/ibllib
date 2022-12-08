@@ -147,6 +147,11 @@ def aggregate_device(file_device, file_acquisition_description, unlink=False):
     unlink : bool
         If True, the device file is removed after successfully aggregation.
 
+    Returns
+    -------
+    dict
+        The aggregated experiment description data.
+
     Raises
     ------
     AssertionError
@@ -192,7 +197,10 @@ def aggregate_device(file_device, file_acquisition_description, unlink=False):
         if k == 'sync':
             assert k not in acq_desc, 'multiple sync fields defined'
         if isinstance(data_device[k], list):
-            acq_desc[k] = acq_desc.get(k, []) + data_device[k]
+            prev = acq_desc.get(k, [])
+            # For procedures and projects, remove duplicates
+            to_add = data_device[k] if k == 'tasks' else set(prev) ^ set(data_device[k])
+            acq_desc[k] = prev + list(to_add)
         elif isinstance(data_device[k], dict):
             acq_desc[k] = {**acq_desc.get(k, {}), **data_device[k]}
         else:  # A string
@@ -209,6 +217,8 @@ def aggregate_device(file_device, file_acquisition_description, unlink=False):
         stub_folder = file_acquisition_description.with_name('_devices')
         if stub_folder.exists() and not any(stub_folder.glob('*.*')):
             stub_folder.rmdir()
+
+    return acq_desc
 
 
 def get_cameras(sess_params):

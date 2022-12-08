@@ -283,20 +283,19 @@ def create_fake_raw_behavior_data_folder(
             (name, data), = write_pars_stub.items()
         else:
             name = write_pars_stub if isinstance(write_pars_stub, str) else 'behaviour'
-            if 'ephys' in task:
-                sync = {'nidq': {'collection': 'raw_ephys_data', 'extension': 'bin'}}
-                sync_label = 'frame2ttl'
-            else:
-                sync = {'bpod': {'collection': 'raw_behavior_data', 'extension': 'jsonable'}}
-                sync_label = 'bpod'
             data = {
                 'devices': {'microphone': {'microphone': {'collection': folder, 'sync_label': None}}},
                 'procedures': ['Behavior training/tasks'],
                 'projects': ['ibl_neuropixel_brainwide_01'],
-                'sync': sync,
-                'tasks': [{task: {'collection': folder, 'sync_label': sync_label}}],
+                'tasks': [{task: {'collection': folder}}],
                 'version': session_params.SPEC_VERSION
             }
+            if 'ephys' in task:
+                data['tasks'][0][task]['sync_label'] = 'frame2ttl'
+            else:
+                data['sync'] = {'bpod': {'collection': 'raw_behavior_data', 'extension': 'jsonable'}}
+                data['tasks'][0][task]['sync_label'] = 'bpod'
+
         file_device = session_path.joinpath(f'_ibl_experiment.description_{name}.yaml')
         file_device.parent.mkdir(exist_ok=True)
         session_params.write_yaml(file_device, data)
