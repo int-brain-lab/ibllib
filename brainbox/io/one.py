@@ -24,6 +24,7 @@ from ibllib.io.extractors.training_wheel import extract_wheel_moves, extract_fir
 from ibllib.atlas import atlas, AllenAtlas, BrainRegions
 from ibllib.pipes import histology
 from ibllib.pipes.ephys_alignment import EphysAlignment
+from ibllib.plots import vertical_lines
 
 import brainbox.plot
 from brainbox.ephys_plots import plot_brain_regions
@@ -996,13 +997,14 @@ class SpikeSortingLoader:
     def pid2ref(self):
         return f"{self.one.eid2ref(self.eid, as_dict=False)}_{self.pname}"
 
-    def raster(self, spikes, channels, save_dir=None, br=None, label='raster'):
+    def raster(self, spikes, channels, save_dir=None, br=None, label='raster', time_series=None):
         """
         :param spikes: spikes dictionary
         :param save_dir: optional if specified
         :return:
         """
         br = br or BrainRegions()
+        time_series = time_series or {}
         fig, axs = plt.subplots(2, 2, gridspec_kw={
             'width_ratios': [.95, .05], 'height_ratios': [.1, .9]}, figsize=(16, 9), sharex='col')
         axs[0, 1].set_axis_off()
@@ -1011,6 +1013,8 @@ class SpikeSortingLoader:
         title_str = f"{self.pid2ref}, {self.pid} \n" \
                     f"{spikes['clusters'].size:_} spikes, {np.unique(spikes['clusters']).size:_} clusters"
         axs[0, 0].title.set_text(title_str)
+        for k, ts in time_series.items():
+            vertical_lines(ts, ymin=0, ymax=3800, ax=axs[1, 0])
         if 'atlas_id' in channels:
             plot_brain_regions(channels['atlas_id'], channel_depths=channels['axial_um'],
                                brain_regions=br, display=True, ax=axs[1, 1], title=self.histology)
