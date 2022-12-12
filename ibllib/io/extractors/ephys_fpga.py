@@ -612,7 +612,7 @@ class FpgaTrials(extractors_base.BaseExtractor):
         super().__init__(*args, **kwargs)
         self.bpod2fpga = None
 
-    def _extract(self, sync=None, chmap=None, sync_collection='raw_ephys_data', prot_collection='raw_behavior_data', **kwargs):
+    def _extract(self, sync=None, chmap=None, sync_collection='raw_ephys_data', collection='raw_behavior_data', **kwargs):
         """Extracts ephys trials by combining Bpod and FPGA sync pulses"""
         # extract the behaviour data from bpod
         if sync is None or chmap is None:
@@ -621,7 +621,7 @@ class FpgaTrials(extractors_base.BaseExtractor):
             chmap = chmap or _chmap
         # load the bpod data and performs a biased choice world training extraction
         # TODO these all need to pass in the collection so we can load for different protocols in different folders
-        bpod_raw = raw_data_loaders.load_data(self.session_path)
+        bpod_raw = raw_data_loaders.load_data(self.session_path, task_collection=collection)
         assert bpod_raw is not None, "No task trials data in raw_behavior_data - Exit"
 
         bpod_trials = self._extract_bpod(bpod_raw, save=False)
@@ -631,6 +631,7 @@ class FpgaTrials(extractors_base.BaseExtractor):
         bpod_trials.update(trials_table)
         # synchronize
         bpod_trials['intervals_bpod'] = np.copy(bpod_trials['intervals'])
+        # TODO get the spacer data here
         fpga_trials = extract_behaviour_sync(sync=sync, chmap=chmap, bpod_trials=bpod_trials)
         # checks consistency and compute dt with bpod
         self.bpod2fpga, drift_ppm, ibpod, ifpga = neurodsp.utils.sync_timestamps(
@@ -670,7 +671,7 @@ class FpgaTrials(extractors_base.BaseExtractor):
         return bpod_trials
 
 
-def extract_all(session_path, sync_collection='raw_ephys_data', save=True):
+def extract_all(session_path, sync_collection='raw_ephys_data', save=True, **kwargs):
     """
     For the IBL ephys task, reads ephys binary file and extract:
         -   sync
@@ -689,7 +690,7 @@ def extract_all(session_path, sync_collection='raw_ephys_data', save=True):
     if extractor_type == 'ephys_biased_opto':
         base.append(LaserBool)
     outputs, files = extractors_base.run_extractor_classes(
-        base, session_path=session_path, save=save, sync=sync, chmap=chmap)
+        base, session_path=session_path, save=save, sync=sync, chmap=chmap, **kwargs)
     return outputs, files
 
 

@@ -146,18 +146,14 @@ def make_pipeline(session_path=None, **pkwargs):
     # Behavior tasks
     # TODO this is not doing at all what we were envisaging and going back to the old way of protocol linked to hardware
     # TODO change at next iteration of dynamic pipeline, once we have the basic workflow working
-    tasks = acquisition_description.get('tasks', [])
-    for i, (protocol, task_info) in chain(*map(dict.items, tasks)):
+    task_protocols = acquisition_description.get('tasks', [])
+    for i, (protocol, task_info) in chain(*map(dict.items, task_protocols)):
         collection = task_info.get('collection', f'raw_task_data_{i:02}')
-        task_kwargs = {'protocol': protocol, 'collection': collection}
+        task_kwargs = {'protocol': protocol, 'collection': collection, 'number': i}
         # For now the order of protocols in the list will take precedence. If collections are numbered,
         # check that the numbers match the order.  This will most likely change in the future.
         if re.match(r'^raw_task_data_\d{2}$', collection) and int(collection.split('_')[-1]) != i:
             _logger.warning('Number in collection name does not match task order')
-        # -   choice_world_recording
-        # -   choice_world_biased
-        # -   choice_world_training
-        # -   choice_world_habituation
         if extractors := task_info.get('extractors', False):
             extractors = (extractors,) if isinstance(extractors, str) else extractors
             for task in extractors:
@@ -165,8 +161,14 @@ def make_pipeline(session_path=None, **pkwargs):
                     task = getattr(btasks, task)
                 except AttributeError:
                     ...  # TODO Attempt to import from personal project repo
-                tasks[task.__name__] = task(**kwargs, **task_kwargs)
-        else:
+                # Rename the class to something more informative
+                task_name = f'{task}_{i:02}'
+                tasks[task_name] = type(task_name, (task,), {})(**kwargs, **task_kwargs)
+        else:  # Legacy block to handle sessions without defined extractors
+            # -   choice_world_recording
+            # -   choice_world_biased
+            # -   choice_world_training
+            # -   choice_world_habituation
             if 'habituation' in protocol:
                 registration_class = btasks.HabituationRegisterRaw
                 behaviour_class = btasks.HabituationTrialsBpod
@@ -190,7 +192,7 @@ def make_pipeline(session_path=None, **pkwargs):
             tasks[f'Trials_{protocol}'] = type(f'Trials_{protocol}', (behaviour_class,), {})(
                 **kwargs, **sync_kwargs, **task_kwargs, parents=parents, number=i)
             if compute_status:
-                tasks[f"TrainingStatus_{protocol}"] = type(f"TrainingStatus_{protocol}", (btasks.TrainingStatus,), {})(
+                tasks[f"TrainingStatus_{protocol}"] = type(f'TrainingStatus_{protocol}', (btasks.TrainingStatus,), {})(
                     **kwargs, **task_kwargs, parents=[tasks[f'Trials_{protocol}']])
 
     # Ephys tasks
