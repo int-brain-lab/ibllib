@@ -28,7 +28,7 @@ REQUIRED_FIELDS = ['choice', 'contrastLeft', 'contrastRight', 'correct',
 
 class TaskQCExtractor(object):
     def __init__(self, session_path, lazy=False, one=None, download_data=False, bpod_only=False,
-                 sync_collection=None, sync_type=None):
+                 sync_collection=None, sync_type=None, task_collection=None):
         """
         A class for extracting the task data required to perform task quality control
         :param session_path: a valid session path
@@ -52,6 +52,7 @@ class TaskQCExtractor(object):
         self.bpod_only = bpod_only
         self.sync_collection = sync_collection or 'raw_ephys_data'
         self.sync_type = sync_type
+        self.task_collection = task_collection or 'raw_behavior_data'
 
         if download_data:
             self.one = one or ONE()
@@ -81,10 +82,10 @@ class TaskQCExtractor(object):
         self.log.info(f"Downloading data for session {eid}")
         # Ensure we have the settings
         settings, _ = self.one.load_datasets(eid, ["_iblrig_taskSettings.raw.json"],
-                                             collections=['raw_behavior_data'],
+                                             collections=[self.task_collection],
                                              download_only=True, assert_present=False)
 
-        is_ephys = get_session_extractor_type(self.session_path) == 'ephys'
+        is_ephys = get_session_extractor_type(self.session_path, task_collection=self.task_collection) == 'ephys'
         self.sync_type = self.sync_type or 'nidq' if is_ephys else 'bpod'
         is_fpga = 'bpod' not in self.sync_type
 
@@ -121,15 +122,15 @@ class TaskQCExtractor(object):
         :return:
         """
         self.log.info(f"Loading raw data from {self.session_path}")
-        self.type = self.type or get_session_extractor_type(self.session_path)
+        self.type = self.type or get_session_extractor_type(self.session_path, task_collection=self.task_collection)
         # Finds the sync type when it isn't explicitly set, if ephys we assume nidq otherwise bpod
         self.sync_type = self.sync_type or 'nidq' if self.type == 'ephys' else 'bpod'
 
-        self.settings, self.raw_data = raw.load_bpod(self.session_path)
+        self.settings, self.raw_data = raw.load_bpod(self.session_path, task_collection=self.task_collection)
         # Fetch the TTLs for the photodiode and audio
         if self.sync_type == 'bpod' or self.bpod_only is True:  # Extract from Bpod
             self.frame_ttls, self.audio_ttls = raw.load_bpod_fronts(
-                self.session_path, data=self.raw_data)
+                self.session_path, data=self.raw_data, task_collection=self.task_collection)
         else:  # Extract from FPGA
             sync, chmap = ephys_fpga.get_sync_and_chn_map(self.session_path, self.sync_collection)
 
@@ -151,7 +152,7 @@ class TaskQCExtractor(object):
         :return:
         """
         self.log.info(f"Extracting session: {self.session_path}")
-        self.type = self.type or get_session_extractor_type(self.session_path)
+        self.type = self.type or get_session_extractor_type(self.session_path, task_collection=self.task_collection)
         # Finds the sync type when it isn't explicitly set, if ephys we assume nidq otherwise bpod
         self.sync_type = self.sync_type or 'nidq' if self.type == 'ephys' else 'bpod'
 
@@ -161,15 +162,15 @@ class TaskQCExtractor(object):
             self.load_raw_data()
         # Run extractors
         if self.sync_type != 'bpod' and not self.bpod_only:
-            data, _ = ephys_fpga.extract_all(self.session_path)
+            data, _ = ephys_fpga.extract_all(self.session_path, task_collection=self.task_collection)
             bpod2fpga = interp1d(data['intervals_bpod'][:, 0], data['table']['intervals_0'],
                                  fill_value='extrapolate')
             # Add Bpod wheel data
-            re_ts, pos = get_wheel_position(self.session_path, self.raw_data)
+            re_ts, pos = get_wheel_position(self.session_path, self.raw_data, task_collection=self.task_collection)
             data['wheel_timestamps_bpod'] = bpod2fpga(re_ts)
             data['wheel_position_bpod'] = pos
         else:
-            kwargs = dict(save=False, bpod_trials=self.raw_data, settings=self.settings)
+            kwargs = dict(save=False, bpod_trials=self.raw_data, settings=self.settings, task_colletion=self.task_collection)
             trials, wheel, _ = bpod_trials.extract_all(self.session_path, **kwargs)
             n_trials = np.unique(list(map(lambda k: trials[k].shape[0], trials)))[0]
             if self.type == 'habituation':

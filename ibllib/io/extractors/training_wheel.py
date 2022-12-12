@@ -18,9 +18,9 @@ THRESHOLD_CONSECUTIVE_SAMPLES = 0
 EPS = 7. / 3 - 4. / 3 - 1
 
 
-def get_trial_start_times(session_path, data=None):
+def get_trial_start_times(session_path, data=None, task_collection='raw_behavior_data'):
     if not data:
-        data = raw.load_data(session_path)
+        data = raw.load_data(session_path, task_collection=task_collection)
     trial_start_times = []
     for tr in data:
         trial_start_times.extend(
@@ -92,7 +92,7 @@ def sync_rotary_encoder(session_path, bpod_data=None, re_events=None):
     return interpolate.interp1d(re, bp, fill_value="extrapolate")
 
 
-def get_wheel_position(session_path, bp_data=None, display=False):
+def get_wheel_position(session_path, bp_data=None, display=False, task_collection='raw_behavior_data'):
     """
     Gets wheel timestamps and position from Bpod data. Position is in radian (constant above for
     radius is 1) mathematical convention.
@@ -104,8 +104,8 @@ def get_wheel_position(session_path, bp_data=None, display=False):
     """
     status = 0
     if not bp_data:
-        bp_data = raw.load_data(session_path)
-    df = raw.load_encoder_positions(session_path)
+        bp_data = raw.load_data(session_path, task_collection=task_collection)
+    df = raw.load_encoder_positions(session_path, task_collection=task_collection)
     if df is None:
         _logger.error('No wheel data for ' + str(session_path))
         return None, None

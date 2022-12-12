@@ -13,7 +13,7 @@ import ibllib.io.raw_data_loaders as rawio
 _logger = logging.getLogger(__name__)
 
 
-def extract_all(session_path, save=True, bpod_trials=None, settings=None):
+def extract_all(session_path, save=True, bpod_trials=None, settings=None, task_collection='raw_behavior_data', save_path=None):
     """
     Extracts a training session from its path.  NB: Wheel must be extracted first in order to
     extract trials.firstMovement_times.
@@ -25,10 +25,10 @@ def extract_all(session_path, save=True, bpod_trials=None, settings=None):
     :return: wheel: Bunch/dict of wheel positions
     :return: out_Files: list of output files
     """
-    extractor_type = ibllib.io.extractors.base.get_session_extractor_type(session_path)
+    extractor_type = ibllib.io.extractors.base.get_session_extractor_type(session_path, task_collection=task_collection)
     _logger.info(f"Extracting {session_path} as {extractor_type}")
-    bpod_trials = bpod_trials or rawio.load_data(session_path)
-    settings = settings or rawio.load_settings(session_path)
+    bpod_trials = bpod_trials or rawio.load_data(session_path, task_collection=task_collection)
+    settings = settings or rawio.load_settings(session_path, task_collection=task_collection)
     _logger.info(f'{extractor_type} session on {settings["PYBPOD_BOARD"]}')
 
     # Determine which additional extractors are required
@@ -43,14 +43,14 @@ def extract_all(session_path, save=True, bpod_trials=None, settings=None):
     # Determine base extraction
     if extractor_type in ['training', 'ephys_training']:
         trials, files_trials = training_trials.extract_all(
-            session_path, bpod_trials=bpod_trials, settings=settings, save=save)
+            session_path, bpod_trials=bpod_trials, settings=settings, save=save, task_collection=task_collection, save_path=save_path)
         # This is hacky but avoids extracting the wheel twice.
         # files_trials should contain wheel files at the end.
         files_wheel = []
         wheel = OrderedDict({k: trials.pop(k) for k in tuple(trials.keys()) if 'wheel' in k})
     elif 'biased' in extractor_type or 'ephys' in extractor_type:
-        trials, files_trials = biased_trials.extract_all(
-            session_path, bpod_trials=bpod_trials, settings=settings, save=save, extra_classes=extra)
+        trials, files_trials = biased_trials.extract_all(session_path, bpod_trials=bpod_trials, settings=settings, save=save,
+                                                         extra_classes=extra, task_collection=task_collection, save_path=save_path)
         files_wheel = []
         wheel = OrderedDict({k: trials.pop(k) for k in tuple(trials.keys()) if 'wheel' in k})
     elif extractor_type == 'habituation':
@@ -59,7 +59,7 @@ def extract_all(session_path, save=True, bpod_trials=None, settings=None):
             _logger.warning("No extraction of legacy habituation sessions")
             return None, None, None
         trials, files_trials = habituation_trials.extract_all(
-            session_path, bpod_trials=bpod_trials, settings=settings, save=save)
+            session_path, bpod_trials=bpod_trials, settings=settings, save=save, task_collection=task_collection, save_path=save_path)
         wheel = None
         files_wheel = []
     else:

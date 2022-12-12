@@ -44,16 +44,16 @@ class HabituationRegisterRaw(base_tasks.RegisterRawDataTask):
         return signature
 
 
-class HabituationTrialsBpod(base_tasks.DynamicTask):
+class HabituationTrialsBpod(base_tasks.BehaviourTask):
     priority = 90
     job_size = 'small'
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # Task collection (this needs to be specified in the task kwargs)
-        self.collection = self.get_task_collection(kwargs.get('collection', None))
-        # Task type (protocol)
-        self.protocol = self.get_protocol(kwargs.get('protocol', None), task_collection=self.collection)
+    # def __init__(self, *args, **kwargs):
+    #     super().__init__(*args, **kwargs)
+    #     # Task collection (this needs to be specified in the task kwargs)
+    #     self.collection = self.get_task_collection(kwargs.get('collection', None))
+    #     # Task type (protocol)
+    #     self.protocol = self.get_protocol(kwargs.get('protocol', None), task_collection=self.collection)
 
     @property
     def signature(self):
@@ -63,17 +63,17 @@ class HabituationTrialsBpod(base_tasks.DynamicTask):
                 ('_iblrig_taskSettings.raw.*', self.collection, True),
             ],
             'output_files': [
-                ('*trials.contrastLeft.npy', 'alf', True),
-                ('*trials.contrastRight.npy', 'alf', True),
-                ('*trials.feedback_times.npy', 'alf', True),
-                ('*trials.feedbackType.npy', 'alf', True),
-                ('*trials.goCue_times.npy', 'alf', True),
-                ('*trials.goCueTrigger_times.npy', 'alf', True),
-                ('*trials.intervals.npy', 'alf', True),
-                ('*trials.rewardVolume.npy', 'alf', True),
-                ('*trials.stimOff_times.npy', 'alf', True),
-                ('*trials.stimOn_times.npy', 'alf', True),
-                ('*trials.stimOnTrigger_times.npy', 'alf', True),
+                ('*trials.contrastLeft.npy', self.output_collection, True),
+                ('*trials.contrastRight.npy', self.output_collection, True),
+                ('*trials.feedback_times.npy', self.output_collection, True),
+                ('*trials.feedbackType.npy', self.output_collection, True),
+                ('*trials.goCue_times.npy', self.output_collection, True),
+                ('*trials.goCueTrigger_times.npy', self.output_collection, True),
+                ('*trials.intervals.npy', self.output_collection, True),
+                ('*trials.rewardVolume.npy', self.output_collection, True),
+                ('*trials.stimOff_times.npy', self.output_collection, True),
+                ('*trials.stimOn_times.npy', self.output_collection, True),
+                ('*trials.stimOnTrigger_times.npy', self.output_collection, True),
             ]
         }
         return signature
@@ -83,7 +83,8 @@ class HabituationTrialsBpod(base_tasks.DynamicTask):
         Extracts an iblrig training session
         """
         # TODO this doesn't use the self.collection in any way, always assumes data in raw_behavior_data, needs to be changed
-        trials, wheel, output_files = bpod_trials.extract_all(self.session_path, save=True)
+        trials, wheel, output_files = bpod_trials.extract_all(self.session_path, save=True, collection=self.collection,
+                                                              save_path=self.output_collection)
         if trials is None:
             return None
         if self.one is None or self.one.offline:
@@ -91,7 +92,8 @@ class HabituationTrialsBpod(base_tasks.DynamicTask):
         # Run the task QC
         # Compile task data for QC
         qc = HabituationQC(self.session_path, one=self.one)
-        qc.extractor = TaskQCExtractor(self.session_path, one=self.one, sync_collection=self.sync_collection, sync_type=self.sync)
+        qc.extractor = TaskQCExtractor(self.session_path, one=self.one, sync_collection=self.sync_collection, sync_type=self.sync,
+                                       task_collection=self.collection)
         qc.run(update=update)
         return output_files
 
@@ -194,12 +196,12 @@ class ChoiceWorldTrialsBpod(base_tasks.DynamicTask):
     priority = 90
     job_size = 'small'
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # Task collection (this needs to be specified in the task kwargs)
-        self.collection = self.get_task_collection(kwargs.get('collection', None))
-        # Task type (protocol)
-        self.protocol = self.get_protocol(kwargs.get('protocol', None), task_collection=self.collection)
+    # def __init__(self, *args, **kwargs):
+    #     super().__init__(*args, **kwargs)
+    #     # Task collection (this needs to be specified in the task kwargs)
+    #     self.collection = self.get_task_collection(kwargs.get('collection', None))
+    #     # Task type (protocol)
+    #     self.protocol = self.get_protocol(kwargs.get('protocol', None), task_collection=self.collection)
 
     @property
     def signature(self):

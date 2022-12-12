@@ -61,12 +61,52 @@ class DynamicTask(Task):
         return params
 
 
+class BehaviourTask(DynamicTask):
+
+    def __init__(self, session_path, **kwargs):
+        super().__init__(session_path, **kwargs)
+
+        self.collection = self.get_task_collection(kwargs.get('collection', None))
+        # Task type (protocol)
+        self.protocol = self.get_protocol(kwargs.get('protocol', None), task_collection=self.collection)
+
+        self.number = self.get_protocol_number(kwargs.get('protocol', None))
+
+        if self.number:
+            self.output_collection = f'alf/task_0{self.number}'
+        else:
+            self.output_collection = 'alf'
+
+    def get_protocol(self, protocol=None, task_collection=None):
+        return protocol if protocol else sess_params.get_task_protocol(self.session_params, task_collection)
+
+    def get_task_collection(self, collection=None):
+        if not collection:
+            collection = sess_params.get_task_collection(self.session_params)
+        # If inferring the collection from the experiment description, assert only one returned
+        assert collection is None or isinstance(collection, str) or len(collection) == 1
+        return collection
+
+    def get_protocol_number(self, number=None):
+        return number if number else sess_params.get_protocol_number(self.session_params)
+
+
 class VideoTask(DynamicTask):
 
     def __init__(self, session_path, cameras, **kwargs):
         super().__init__(session_path, cameras=cameras, **kwargs)
         self.cameras = cameras
         self.device_collection = self.get_device_collection('cameras', kwargs.get('device_collection', 'raw_video_data'))
+        self.collection = self.get_task_collection(kwargs.get('collection', None))
+
+    # TODO take this out of video qc so we don't need the protocol
+    def get_task_collection(self, collection=None):
+        if not collection:
+            collection = sess_params.get_task_collection(self.session_params)
+        # If inferring the collection from the experiment description, assert only one returned
+        assert collection is None or isinstance(collection, str) or len(collection) == 1
+        return collection
+
 
 
 class AudioTask(DynamicTask):

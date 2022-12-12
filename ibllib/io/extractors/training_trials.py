@@ -689,7 +689,7 @@ class TrialsTable(BaseBpodTrialsExtractor):
         return table.to_df(), *(out.pop(x) for x in self.var_names if x != 'table')
 
 
-def extract_all(session_path, save=False, bpod_trials=None, settings=None):
+def extract_all(session_path, save=False, bpod_trials=None, settings=None, task_collection='raw_behavior_data', save_path=None):
     """Extract trials and wheel data.
 
     For task versions >= 5.0.0, outputs wheel data and trials.table dataset (+ some extra datasets)
@@ -710,9 +710,9 @@ def extract_all(session_path, save=False, bpod_trials=None, settings=None):
     A list of extracted data and a list of file paths if save is True (otherwise None)
     """
     if not bpod_trials:
-        bpod_trials = raw.load_data(session_path)
+        bpod_trials = raw.load_data(session_path, task_collection=task_collection)
     if not settings:
-        settings = raw.load_settings(session_path)
+        settings = raw.load_settings(session_path, task_collection=task_collection)
     if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
         settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
 
@@ -731,5 +731,5 @@ def extract_all(session_path, save=False, bpod_trials=None, settings=None):
         ])
 
     out, fil = run_extractor_classes(
-        base, save=save, session_path=session_path, bpod_trials=bpod_trials, settings=settings)
+        base, save=save, session_path=session_path, bpod_trials=bpod_trials, settings=settings, path_out=save_path)
     return out, fil

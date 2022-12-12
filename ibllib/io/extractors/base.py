@@ -223,14 +223,14 @@ def get_task_extractor_type(task_name):
     return task_type
 
 
-def get_session_extractor_type(session_path):
+def get_session_extractor_type(session_path, task_collection='raw_behavior_data'):
     """
     From a session path, loads the settings file, finds the task and checks if extractors exist
     task names examples:
     :param session_path:
     :return: bool
     """
-    settings = load_settings(session_path)
+    settings = load_settings(session_path, task_collection=task_collection)
     if settings is None:
         _logger.error(f'ABORT: No data found in "raw_behavior_data" folder {session_path}')
         return False
