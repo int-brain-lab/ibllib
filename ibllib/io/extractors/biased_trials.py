@@ -103,9 +103,9 @@ class TrialsTableBiased(BaseBpodTrialsExtractor):
     def _extract(self, extractor_classes=None, **kwargs):
         base = [Intervals, GoCueTimes, ResponseTimes, Choice, StimOnOffFreezeTimes, ContrastLR, FeedbackTimes, FeedbackType,
                 RewardVolume, ProbabilityLeft, Wheel]
-        out, _ = run_extractor_classes(
-            base, session_path=self.session_path, bpod_trials=self.bpod_trials, settings=self.settings, save=False
-        )
+        out, _ = run_extractor_classes(base, session_path=self.session_path, bpod_trials=self.bpod_trials, settings=self.settings,
+                                       save=False, task_collection=self.task_collection)
+
         table = AlfBunch({k: out.pop(k) for k in list(out.keys()) if k not in self.var_names})
         assert len(table.keys()) == 12
 
@@ -130,16 +130,16 @@ class TrialsTableEphys(BaseBpodTrialsExtractor):
         base = [Intervals, GoCueTimes, ResponseTimes, Choice, StimOnOffFreezeTimes, ProbaContrasts,
                 FeedbackTimes, FeedbackType, RewardVolume, Wheel]
         # Exclude from trials table
-        out, _ = run_extractor_classes(
-            base, session_path=self.session_path, bpod_trials=self.bpod_trials, settings=self.settings, save=False
-        )
+        out, _ = run_extractor_classes(base, session_path=self.session_path, bpod_trials=self.bpod_trials, settings=self.settings,
+                                       save=False, task_collection=self.task_collection)
         table = AlfBunch({k: v for k, v in out.items() if k not in self.var_names})
         assert len(table.keys()) == 12
 
         return table.to_df(), *(out.pop(x) for x in self.var_names if x != 'table')
 
 
-def extract_all(session_path, save=False, bpod_trials=False, settings=False, extra_classes=None):
+def extract_all(session_path, save=False, bpod_trials=False, settings=False, extra_classes=None,
+                task_collection='raw_behavior_data', save_path=None):
     """
     Same as training_trials.extract_all except...
      - there is no RepNum
@@ -154,9 +154,9 @@ def extract_all(session_path, save=False, bpod_trials=False, settings=False, ext
     :return:
     """
     if not bpod_trials:
-        bpod_trials = raw.load_data(session_path)
+        bpod_trials = raw.load_data(session_path, task_collection=task_collection)
     if not settings:
-        settings = raw.load_settings(session_path)
+        settings = raw.load_settings(session_path, task_collection=task_collection)
     if settings is None:
         settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
 
@@ -180,6 +180,6 @@ def extract_all(session_path, save=False, bpod_trials=False, settings=False, ext
     if extra_classes:
         base.extend(extra_classes)
 
-    out, fil = run_extractor_classes(
-        base, save=save, session_path=session_path, bpod_trials=bpod_trials, settings=settings)
+    out, fil = run_extractor_classes(base, save=save, session_path=session_path, bpod_trials=bpod_trials, settings=settings,
+                                     task_collection=task_collection, path_out=save_path)
     return out, fil

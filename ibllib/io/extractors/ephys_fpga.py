@@ -612,7 +612,7 @@ class FpgaTrials(extractors_base.BaseExtractor):
         super().__init__(*args, **kwargs)
         self.bpod2fpga = None
 
-    def _extract(self, sync=None, chmap=None, sync_collection='raw_ephys_data', collection='raw_behavior_data', **kwargs):
+    def _extract(self, sync=None, chmap=None, sync_collection='raw_ephys_data', task_collection='raw_behavior_data', **kwargs):
         """Extracts ephys trials by combining Bpod and FPGA sync pulses"""
         # extract the behaviour data from bpod
         if sync is None or chmap is None:
@@ -621,10 +621,10 @@ class FpgaTrials(extractors_base.BaseExtractor):
             chmap = chmap or _chmap
         # load the bpod data and performs a biased choice world training extraction
         # TODO these all need to pass in the collection so we can load for different protocols in different folders
-        bpod_raw = raw_data_loaders.load_data(self.session_path, task_collection=collection)
+        bpod_raw = raw_data_loaders.load_data(self.session_path, task_collection=task_collection)
         assert bpod_raw is not None, "No task trials data in raw_behavior_data - Exit"
 
-        bpod_trials = self._extract_bpod(bpod_raw, save=False)
+        bpod_trials = self._extract_bpod(bpod_raw, task_collection=task_collection, save=False)
         # Explode trials table df
         trials_table = alfio.AlfBunch.from_df(bpod_trials.pop('table'))
         table_columns = trials_table.keys()
@@ -651,7 +651,7 @@ class FpgaTrials(extractors_base.BaseExtractor):
         # extract the wheel data
         wheel, moves = get_wheel_positions(sync=sync, chmap=chmap)
         from ibllib.io.extractors.training_wheel import extract_first_movement_times
-        settings = raw_data_loaders.load_settings(session_path=self.session_path)
+        settings = raw_data_loaders.load_settings(session_path=self.session_path, task_collection=task_collection)
         min_qt = settings.get('QUIESCENT_PERIOD', None)
         first_move_onsets, *_ = extract_first_movement_times(moves, out, min_qt=min_qt)
         out.update({'firstMovement_times': first_move_onsets})
@@ -664,14 +664,15 @@ class FpgaTrials(extractors_base.BaseExtractor):
         return [out[k] for k in out] + [wheel['timestamps'], wheel['position'],
                                         moves['intervals'], moves['peakAmplitude']]
 
-    def _extract_bpod(self, bpod_trials, save=False):
+    def _extract_bpod(self, bpod_trials, task_collection='raw_behavior_data', save=False):
         bpod_trials, *_ = bpod_extract_all(
-            session_path=self.session_path, save=save, bpod_trials=bpod_trials)
+            session_path=self.session_path, save=save, bpod_trials=bpod_trials, task_collection=task_collection)
 
         return bpod_trials
 
 
-def extract_all(session_path, sync_collection='raw_ephys_data', save=True, **kwargs):
+def extract_all(session_path, sync_collection='raw_ephys_data', save=True, task_collection='raw_behavior_data', save_path=None,
+                **kwargs):
     """
     For the IBL ephys task, reads ephys binary file and extract:
         -   sync
@@ -682,15 +683,15 @@ def extract_all(session_path, sync_collection='raw_ephys_data', save=True, **kwa
     :param save: bool, defaults to False
     :return: outputs, files
     """
-    extractor_type = extractors_base.get_session_extractor_type(session_path)
+    extractor_type = extractors_base.get_session_extractor_type(session_path, task_collection=task_collection)
     _logger.info(f"Extracting {session_path} as {extractor_type}")
     sync, chmap = get_sync_and_chn_map(session_path, sync_collection)
     # sync, chmap = get_main_probe_sync(session_path, bin_exists=bin_exists)
     base = [FpgaTrials]
     if extractor_type == 'ephys_biased_opto':
         base.append(LaserBool)
-    outputs, files = extractors_base.run_extractor_classes(
-        base, session_path=session_path, save=save, sync=sync, chmap=chmap, **kwargs)
+    outputs, files = extractors_base.run_extractor_classes(base, session_path=session_path, save=save, sync=sync, chmap=chmap,
+                                                           task_collection=task_collection, path_out=save_path, **kwargs)
     return outputs, files
 
 

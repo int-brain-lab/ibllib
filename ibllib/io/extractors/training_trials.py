@@ -164,9 +164,9 @@ class FeedbackTimes(BaseBpodTrialsExtractor):
     var_names = 'feedback_times'
 
     @staticmethod
-    def get_feedback_times_lt5(session_path, data=False):
+    def get_feedback_times_lt5(session_path, task_collection='raw_behavior_data', data=False):
         if not data:
-            data = raw.load_data(session_path)
+            data = raw.load_data(session_path, task_collection=task_collection)
         rw_times = [tr['behavior_data']['States timestamps']['reward'][0][0]
                     for tr in data]
         err_times = [tr['behavior_data']['States timestamps']['error'][0][0]
@@ -181,12 +181,12 @@ class FeedbackTimes(BaseBpodTrialsExtractor):
         return np.array(merge)
 
     @staticmethod
-    def get_feedback_times_ge5(session_path, data=False):
+    def get_feedback_times_ge5(session_path, task_collection='raw_behavior_data', data=False):
         # ger err and no go trig times -- look for BNC2High of trial -- verify
         # only 2 onset times go tone and noise, select 2nd/-1 OR select the one
         # that is grater than the nogo or err trial onset time
         if not data:
-            data = raw.load_data(session_path)
+            data = raw.load_data(session_path, task_collection=task_collection)
         missed_bnc2 = 0
         rw_times, err_sound_times, merge = [np.zeros([len(data), ]) for _ in range(3)]
 
@@ -211,9 +211,9 @@ class FeedbackTimes(BaseBpodTrialsExtractor):
     def _extract(self):
         # Version check
         if parse_version(self.settings['IBLRIG_VERSION_TAG']) >= parse_version('5.0.0'):
-            merge = self.get_feedback_times_ge5(self.session_path, data=self.bpod_trials)
+            merge = self.get_feedback_times_ge5(self.session_path, task_collection=self.task_collection, data=self.bpod_trials)
         else:
-            merge = self.get_feedback_times_lt5(self.session_path, data=self.bpod_trials)
+            merge = self.get_feedback_times_lt5(self.session_path, task_collection=self.task_collection, data=self.bpod_trials)
         return np.array(merge)
 
 
@@ -261,7 +261,7 @@ class ItiDuration(BaseBpodTrialsExtractor):
     var_names = 'iti_dur'
 
     def _extract(self):
-        rt, _ = ResponseTimes(self.session_path).extract(
+        rt, _ = ResponseTimes(self.session_path, task_collection=self.task_collection).extract(
             save=False, bpod_trials=self.bpod_trials, settings=self.settings)
         ends = np.array([t['behavior_data']['Trial end timestamp'] for t in self.bpod_trials])
         iti_dur = ends - rt
@@ -513,13 +513,15 @@ class StimOnTimes_deprecated(BaseBpodTrialsExtractor):
         _logger.warning("Deprecation Warning: this is an old version of stimOn extraction."
                         "From version 5., use StimOnOffFreezeTimes")
         if parse_version(self.settings['IBLRIG_VERSION_TAG']) >= parse_version('5.0.0'):
-            stimOn_times = self.get_stimOn_times_ge5(self.session_path, data=self.bpod_trials)
+            stimOn_times = self.get_stimOn_times_ge5(self.session_path, data=self.bpod_trials,
+                                                     task_collection=self.task_collection)
         else:
-            stimOn_times = self.get_stimOn_times_lt5(self.session_path, data=self.bpod_trials)
+            stimOn_times = self.get_stimOn_times_lt5(self.session_path, data=self.bpod_trials,
+                                                     task_collection=self.task_collection)
         return np.array(stimOn_times)
 
     @staticmethod
-    def get_stimOn_times_ge5(session_path, data=False):
+    def get_stimOn_times_ge5(session_path, data=False, task_collection='raw_behavior_data'):
         """
         Find first and last stim_sync pulse of the trial.
         stimOn_times should be the first after the stim_on state.
@@ -531,7 +533,7 @@ class StimOnTimes_deprecated(BaseBpodTrialsExtractor):
         return stimOn_times
         """
         if not data:
-            data = raw.load_data(session_path)
+            data = raw.load_data(session_path, task_collection=task_collection)
         # Get all stim_sync events detected
         stim_sync_all = [raw.get_port_events(tr, 'BNC1') for tr in data]
         stim_sync_all = [np.array(x) for x in stim_sync_all]
@@ -560,7 +562,7 @@ class StimOnTimes_deprecated(BaseBpodTrialsExtractor):
         return stimOn_times
 
     @staticmethod
-    def get_stimOn_times_lt5(session_path, data=False):
+    def get_stimOn_times_lt5(session_path, data=False, task_collection='raw_behavior_data'):
         """
         Find the time of the statemachine command to turn on hte stim
         (state stim_on start or rotary_encoder_event2)
@@ -569,7 +571,7 @@ class StimOnTimes_deprecated(BaseBpodTrialsExtractor):
         (Frame changes are in BNC1High and BNC1Low)
         """
         if not data:
-            data = raw.load_data(session_path)
+            data = raw.load_data(session_path, task_collection=task_collection)
         stim_on = []
         bnc_h = []
         bnc_l = []
@@ -617,7 +619,7 @@ class StimOnOffFreezeTimes(BaseBpodTrialsExtractor):
     var_names = ('stimOn_times', 'stimOff_times', 'stimFreeze_times')
 
     def _extract(self):
-        choice = Choice(self.session_path).extract(
+        choice = Choice(self.session_path, task_collection=self.task_collection).extract(
             bpod_trials=self.bpod_trials, settings=self.settings, save=False
         )[0]
         f2TTL = [raw.get_port_events(tr, name='BNC1') for tr in self.bpod_trials]
@@ -681,8 +683,8 @@ class TrialsTable(BaseBpodTrialsExtractor):
         base = [Intervals, GoCueTimes, ResponseTimes, Choice, StimOnOffFreezeTimes, ContrastLR, FeedbackTimes, FeedbackType,
                 RewardVolume, ProbabilityLeft, Wheel]
         out, _ = run_extractor_classes(
-            base, session_path=self.session_path, bpod_trials=self.bpod_trials, settings=self.settings, save=False
-        )
+            base, session_path=self.session_path, bpod_trials=self.bpod_trials, settings=self.settings, save=False,
+            task_collection=self.task_collection)
         table = AlfBunch({k: v for k, v in out.items() if k not in self.var_names})
         assert len(table.keys()) == 12
 
@@ -730,6 +732,6 @@ def extract_all(session_path, save=False, bpod_trials=None, settings=None, task_
             StimOnTimes_deprecated, RewardVolume, FeedbackTimes, ResponseTimes, GoCueTimes, PhasePosQuiescence
         ])
 
-    out, fil = run_extractor_classes(
-        base, save=save, session_path=session_path, bpod_trials=bpod_trials, settings=settings, path_out=save_path)
+    out, fil = run_extractor_classes(base, save=save, session_path=session_path, bpod_trials=bpod_trials, settings=settings,
+                                     task_collection=task_collection, path_out=save_path)
     return out, fil

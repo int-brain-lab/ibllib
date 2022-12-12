@@ -42,15 +42,17 @@ def extract_all(session_path, save=True, bpod_trials=None, settings=None, task_c
 
     # Determine base extraction
     if extractor_type in ['training', 'ephys_training']:
-        trials, files_trials = training_trials.extract_all(
-            session_path, bpod_trials=bpod_trials, settings=settings, save=save, task_collection=task_collection, save_path=save_path)
+        trials, files_trials = training_trials.extract_all(session_path, bpod_trials=bpod_trials, settings=settings, save=save,
+                                                           task_collection=task_collection, save_path=save_path)
         # This is hacky but avoids extracting the wheel twice.
         # files_trials should contain wheel files at the end.
         files_wheel = []
         wheel = OrderedDict({k: trials.pop(k) for k in tuple(trials.keys()) if 'wheel' in k})
     elif 'biased' in extractor_type or 'ephys' in extractor_type:
-        trials, files_trials = biased_trials.extract_all(session_path, bpod_trials=bpod_trials, settings=settings, save=save,
-                                                         extra_classes=extra, task_collection=task_collection, save_path=save_path)
+        trials, files_trials = biased_trials.extract_all(
+            session_path, bpod_trials=bpod_trials, settings=settings, save=save, extra_classes=extra,
+            task_collection=task_collection, save_path=save_path)
+
         files_wheel = []
         wheel = OrderedDict({k: trials.pop(k) for k in tuple(trials.keys()) if 'wheel' in k})
     elif extractor_type == 'habituation':
@@ -58,8 +60,8 @@ def extract_all(session_path, save=True, bpod_trials=None, settings=None, task_c
                 parse_version(settings['IBLRIG_VERSION_TAG']) <= parse_version('5.0.0'):
             _logger.warning("No extraction of legacy habituation sessions")
             return None, None, None
-        trials, files_trials = habituation_trials.extract_all(
-            session_path, bpod_trials=bpod_trials, settings=settings, save=save, task_collection=task_collection, save_path=save_path)
+        trials, files_trials = habituation_trials.extract_all(session_path, bpod_trials=bpod_trials, settings=settings, save=save,
+                                                              task_collection=task_collection, save_path=save_path)
         wheel = None
         files_wheel = []
     else:

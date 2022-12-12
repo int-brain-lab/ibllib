@@ -28,7 +28,7 @@ REQUIRED_FIELDS = ['choice', 'contrastLeft', 'contrastRight', 'correct',
 
 class TaskQCExtractor(object):
     def __init__(self, session_path, lazy=False, one=None, download_data=False, bpod_only=False,
-                 sync_collection=None, sync_type=None, task_collection=None):
+                 sync_collection=None, sync_type=None, task_collection=None, save_path=None):
         """
         A class for extracting the task data required to perform task quality control
         :param session_path: a valid session path
@@ -53,6 +53,7 @@ class TaskQCExtractor(object):
         self.sync_collection = sync_collection or 'raw_ephys_data'
         self.sync_type = sync_type
         self.task_collection = task_collection or 'raw_behavior_data'
+        self.save_path = save_path
 
         if download_data:
             self.one = one or ONE()
@@ -162,7 +163,7 @@ class TaskQCExtractor(object):
             self.load_raw_data()
         # Run extractors
         if self.sync_type != 'bpod' and not self.bpod_only:
-            data, _ = ephys_fpga.extract_all(self.session_path, task_collection=self.task_collection)
+            data, _ = ephys_fpga.extract_all(self.session_path, task_collection=self.task_collection, save_path=self.save_path)
             bpod2fpga = interp1d(data['intervals_bpod'][:, 0], data['table']['intervals_0'],
                                  fill_value='extrapolate')
             # Add Bpod wheel data
@@ -170,7 +171,8 @@ class TaskQCExtractor(object):
             data['wheel_timestamps_bpod'] = bpod2fpga(re_ts)
             data['wheel_position_bpod'] = pos
         else:
-            kwargs = dict(save=False, bpod_trials=self.raw_data, settings=self.settings, task_colletion=self.task_collection)
+            kwargs = dict(save=False, bpod_trials=self.raw_data, settings=self.settings, task_colletion=self.task_collection,
+                          save_path=self.save_path)
             trials, wheel, _ = bpod_trials.extract_all(self.session_path, **kwargs)
             n_trials = np.unique(list(map(lambda k: trials[k].shape[0], trials)))[0]
             if self.type == 'habituation':
