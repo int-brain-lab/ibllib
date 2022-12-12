@@ -399,6 +399,12 @@ def prepare_experiment(session_path, acquisition_description=None, local=None, r
     ----------
     session_path : str, pathlib.Path, pathlib.PurePath
         The RELATIVE session path, e.g. subject/2020-01-01/001.
+    acquisition_description : dict
+        The data to write to the experiment.description.yaml file.
+    local : str, pathlib.Path
+        The path to the local session folders.
+    remote : str, pathlib.Path
+        The path to the remote server session folders.
     """
     if not acquisition_description:
         return
