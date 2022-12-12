@@ -672,7 +672,7 @@ class FpgaTrials(extractors_base.BaseExtractor):
 
 
 def extract_all(session_path, sync_collection='raw_ephys_data', save=True, task_collection='raw_behavior_data', save_path=None,
-                **kwargs):
+                number=None, **kwargs):
     """
     For the IBL ephys task, reads ephys binary file and extract:
         -   sync

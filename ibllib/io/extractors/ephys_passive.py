@@ -494,15 +494,16 @@ def extract_task_replay(
         passivePeriods_df = extract_passive_periods(session_path, sync_collection, sync=sync, sync_map=sync_map)
         treplay = passivePeriods_df.taskReplay.values
 
-    fttl = ephys_fpga.get_sync_fronts(sync, sync_map["frame2ttl"], tmin=treplay[0])
+    # TODO need to check this is okay
+    fttl = ephys_fpga.get_sync_fronts(sync, sync_map["frame2ttl"], tmin=treplay[0], tmax=treplay[1])
     fttl = ephys_fpga._clean_frame2ttl(fttl)
     passiveGabor_df = _extract_passiveGabor_df(fttl, session_path, task_collection=task_collection)
 
-    bpod = ephys_fpga.get_sync_fronts(sync, sync_map["bpod"], tmin=treplay[0])
+    bpod = ephys_fpga.get_sync_fronts(sync, sync_map["bpod"], tmin=treplay[0], tmax=treplay[1])
     passiveValve_intervals = _extract_passiveValve_intervals(bpod)
 
     task_version = _load_task_protocol(session_path, task_collection)
-    audio = ephys_fpga.get_sync_fronts(sync, sync_map["audio"], tmin=treplay[0])
+    audio = ephys_fpga.get_sync_fronts(sync, sync_map["audio"], tmin=treplay[0], tmax=treplay[1])
     passiveTone_intervals, passiveNoise_intervals = _extract_passiveAudio_intervals(audio, task_version)
 
     passiveStims_df = np.concatenate(
@@ -588,8 +589,15 @@ class PassiveChoiceWorld(BaseExtractor):
     def _extract(self, sync_collection: str = 'raw_ephys_data', task_collection: str = 'raw_passive_data', sync: dict = None,
                  sync_map: dict = None, plot: bool = False, **kwargs) -> tuple:
 
+        number = kwargs.get('number', None)
+
         if sync is None or sync_map is None:
             sync, sync_map = ephys_fpga.get_sync_and_chn_map(self.session_path, sync_collection)
+
+        # TODO here need to load in spacers and get only relevant syncs
+        if number is not None:
+            spacers = load_spacers(self.session_path, sync_collection)
+            sync = get_sync_for_spacer(sync, spacers[number])
 
         # Passive periods
         passivePeriods_df = extract_passive_periods(self.session_path, sync_collection=sync_collection, sync=sync,

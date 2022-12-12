@@ -186,7 +186,8 @@ class PassiveTask(base_tasks.BehaviourTask):
     def _run(self):
         """returns a list of pathlib.Paths. """
         data, paths = PassiveChoiceWorld(self.session_path).extract(
-            sync_collection=self.sync_collection, task_collection=self.collection, save=True)
+            sync_collection=self.sync_collection, task_collection=self.collection, save=True,
+            path_out=self.session_path.joinpath(self.output_collection), number=self.number)
 
         if any(x is None for x in paths):
             self.status = -1
@@ -310,11 +311,14 @@ class ChoiceWorldTrialsNidq(base_tasks.BehaviourTask):
             )
 
     def _extract_behaviour(self):
-        dsets, out_files = extract_all(self.session_path, self.sync_collection, save=True)
+        dsets, out_files = extract_all(self.session_path, self.sync_collection, task_collection=self.collection,
+                                       save_path=self.session_path.joinpath(self.output_collection), number=self.number,
+                                       save=True)
 
         return dsets, out_files
 
     def _run(self, update=True, plot_qc=True):
+        # TODO pass in protocol number for fpga trials
         dsets, out_files = self._extract_behaviour()
 
         if not self.one or self.one.offline:
@@ -322,10 +326,10 @@ class ChoiceWorldTrialsNidq(base_tasks.BehaviourTask):
 
         self._behaviour_criterion(update=update)
         # Run the task QC
-        # TODO this doesn't use the self.collection in any way, always assumes data in raw_behavior_data, needs to be changed
         qc = TaskQC(self.session_path, one=self.one, log=_logger)
         qc.extractor = TaskQCExtractor(self.session_path, lazy=True, one=qc.one, sync_collection=self.sync_collection,
-                                       sync_type=self.sync)
+                                       sync_type=self.sync, task_collection=self.collection,
+                                       save_path=self.session_path.joinpath(self.output_collection))
         # Extract extra datasets required for QC
         qc.extractor.data = dsets
         qc.extractor.extract_data()
@@ -350,16 +354,16 @@ class ChoiceWorldTrialsNidq(base_tasks.BehaviourTask):
         return out_files
 
 
-class TrainingStatus(base_tasks.DynamicTask):
+class TrainingStatus(base_tasks.BehaviourTask):
     priority = 90
     job_size = 'small'
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # Task collection (this needs to be specified in the task kwargs)
-        self.collection = self.get_task_collection(kwargs.get('collection', None))
-        # Task type (protocol)
-        self.protocol = self.get_protocol(kwargs.get('protocol', None), task_collection=self.collection)
+    # def __init__(self, *args, **kwargs):
+    #     super().__init__(*args, **kwargs)
+    #     # Task collection (this needs to be specified in the task kwargs)
+    #     self.collection = self.get_task_collection(kwargs.get('collection', None))
+    #     # Task type (protocol)
+    #     self.protocol = self.get_protocol(kwargs.get('protocol', None), task_collection=self.collection)
 
     @property
     def signature(self):
@@ -367,7 +371,7 @@ class TrainingStatus(base_tasks.DynamicTask):
             'input_files': [
                 ('_iblrig_taskData.raw.*', self.collection, True),
                 ('_iblrig_taskSettings.raw.*', self.collection, True),
-                ('*trials.table.pqt', 'alf', True)],
+                ('*trials.table.pqt', self.output_collection, True)],
             'output_files': []
         }
         return signature
@@ -376,6 +380,7 @@ class TrainingStatus(base_tasks.DynamicTask):
         """
         Extracts training status for subject
         """
+        # TODO need to make compatible with chained protocol
         df = training_status.get_latest_training_information(self.session_path, self.one)
         if df is not None:
             training_status.make_plots(self.session_path, self.one, df=df, save=True, upload=upload)
