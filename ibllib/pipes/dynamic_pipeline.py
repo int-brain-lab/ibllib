@@ -147,7 +147,7 @@ def make_pipeline(session_path=None, **pkwargs):
     # TODO this is not doing at all what we were envisaging and going back to the old way of protocol linked to hardware
     # TODO change at next iteration of dynamic pipeline, once we have the basic workflow working
     task_protocols = acquisition_description.get('tasks', [])
-    for i, (protocol, task_info) in chain(*map(dict.items, task_protocols)):
+    for i, (protocol, task_info) in enumerate(chain(*map(dict.items, task_protocols))):
         collection = task_info.get('collection', f'raw_task_data_{i:02}')
         task_kwargs = {'protocol': protocol, 'collection': collection, 'number': i}
         # For now the order of protocols in the list will take precedence. If collections are numbered,
@@ -190,7 +190,7 @@ def make_pipeline(session_path=None, **pkwargs):
             tasks[f'RegisterRaw_{protocol}'] = type(f'RegisterRaw_{protocol}', (registration_class,), {})(**kwargs, **task_kwargs)
             parents = [tasks[f'RegisterRaw_{protocol}']] + sync_tasks
             tasks[f'Trials_{protocol}'] = type(f'Trials_{protocol}', (behaviour_class,), {})(
-                **kwargs, **sync_kwargs, **task_kwargs, parents=parents, number=i)
+                **kwargs, **sync_kwargs, **task_kwargs, parents=parents)
             if compute_status:
                 tasks[f"TrainingStatus_{protocol}"] = type(f'TrainingStatus_{protocol}', (btasks.TrainingStatus,), {})(
                     **kwargs, **task_kwargs, parents=[tasks[f'Trials_{protocol}']])
@@ -253,13 +253,16 @@ def make_pipeline(session_path=None, **pkwargs):
 
         if video_compressed:
             # This is for widefield case where the video is already compressed
-            tasks[tn] = type((tn := 'VideoConvert'), (vtasks.VideoConvert,), {})(**kwargs, **video_kwargs)
+            tasks[tn] = type((tn := 'VideoConvert'), (vtasks.VideoConvert,), {})(
+                **kwargs, **video_kwargs, collection=collection)
             dlc_parent_task = tasks['VideoConvert']
-            tasks[tn] = type((tn := f'VideoSyncQC_{sync}'), (vtasks.VideoSyncQcCamlog,), {})(**kwargs, **video_kwargs,
-                                                                                             **sync_kwargs)
+            tasks[tn] = type((tn := f'VideoSyncQC_{sync}'), (vtasks.VideoSyncQcCamlog,), {})(
+                **kwargs, **video_kwargs, **sync_kwargs, collection=collection)
         else:
-            tasks[tn] = type((tn := 'VideoRegisterRaw'), (vtasks.VideoRegisterRaw,), {})(**kwargs, **video_kwargs)
-            tasks[tn] = type((tn := 'VideoCompress'), (vtasks.VideoCompress,), {})(**kwargs, **video_kwargs, **sync_kwargs)
+            tasks[tn] = type((tn := 'VideoRegisterRaw'), (vtasks.VideoRegisterRaw,), {})(
+                **kwargs, **video_kwargs, collection=collection)
+            tasks[tn] = type((tn := 'VideoCompress'), (vtasks.VideoCompress,), {})(
+                **kwargs, **video_kwargs, **sync_kwargs, collection=collection)
             dlc_parent_task = tasks['VideoCompress']
             if sync == 'bpod':
                 collection = sess_params.get_task_collection(acquisition_description)
@@ -267,7 +270,7 @@ def make_pipeline(session_path=None, **pkwargs):
                     **kwargs, **video_kwargs, **sync_kwargs, collection=collection, parents=[tasks['VideoCompress']])
             elif sync == 'nidq':
                 tasks[tn] = type((tn := f'VideoSyncQC_{sync}'), (vtasks.VideoSyncQcNidq,), {})(
-                    **kwargs, **video_kwargs, **sync_kwargs, parents=[tasks['VideoCompress']] + sync_tasks)
+                    **kwargs, **video_kwargs, **sync_kwargs, collection=collection, parents=[tasks['VideoCompress']] + sync_tasks)
 
         if len(video_kwargs['cameras']) == 3:
             tasks[tn] = type((tn := 'DLC'), (epp.EphysDLC,), {})(
