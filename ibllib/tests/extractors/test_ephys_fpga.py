@@ -5,8 +5,6 @@ import pickle
 import logging
 
 import numpy as np
-from iblutil.spacer import Spacer
-import neurodsp.utils
 
 from ibllib.io.extractors.training_wheel import extract_first_movement_times, infer_wheel_units
 from ibllib.io.extractors import ephys_fpga
@@ -410,80 +408,5 @@ class TestEphysFPGA_TTLsExtraction(unittest.TestCase):
         assert all([np.all(frame2ttl_[k] == expected[k]) for k in frame2ttl_])
 
 
-class TestExtractSpacers(unittest.TestCase):
-    def setUp(self) -> None:
-        self.spacer_1 = Spacer()
-
-    def test_extract_spacers(self):
-        """Test with usual spacer"""
-        # Single spacer, nothing else
-        Fs = 1000
-        template = self.spacer_1.generate_template(fs=Fs)
-        ind, val = neurodsp.utils.fronts(template)
-        t0 = 15.  # start at 15 seconds
-        times = ind * 1 / Fs + t0
-        t = ephys_fpga.extract_spacers(times, val)
-        self.assertEqual(1, len(t))
-        np.testing.assert_allclose(t, t0, rtol=1e-3)
-
-        # Add a second spacer with unrelated pulses in between
-        signal_times, p = self._random_pulses(t0=t0 + 1 / Fs * template.size + np.random.rand())
-        times = np.concatenate([times, signal_times, ind * 1 / Fs + t0 + signal_times[-1]])
-        polarities = np.concatenate([val, p, val])
-
-        # Expect 2 spacer times
-        t = ephys_fpga.extract_spacers(times, polarities)
-        self.assertEqual(2, len(t))
-        np.testing.assert_allclose(t, [t0, signal_times[-1] + t0], rtol=1e-3)
-
-    def test_empty(self):
-        # Make some random pulses
-        times, polarities = self._random_pulses()
-        self.assertEqual([], ephys_fpga.extract_spacers(times, polarities))
-
-    def test_noise(self):
-        Fs = 1000
-        template = self.spacer_1.generate_template(fs=Fs)
-        ind, val = neurodsp.utils.fronts(template)
-        t0 = 15.  # start at 15 seconds
-        times = ind * 1 / Fs + t0
-
-        # Add some noise to the signal
-        noise_times, noise_p = self._random_pulses(t0, 4, pw=.005, t_max=times[-1] - t0)
-        times = np.sort(np.concatenate([times, noise_times]))
-        polarities = np.concatenate([val, noise_p])
-
-        t = ephys_fpga.extract_spacers(times, polarities)
-        self.assertEqual(1, len(t))
-        np.testing.assert_allclose(t, t0, rtol=1e-3)
-
-    def test_custom_spacer_extract(self):
-        """Test is different spacer parameters"""
-        pars = dict(n_pulses=12, tup=.1)
-        spacer_2 = Spacer(**pars)
-        Fs = 1200  # a non-default sampling rate
-        template = spacer_2.generate_template(fs=Fs)
-        ind, val = neurodsp.utils.fronts(template)
-        t0 = 15.  # start at 15 seconds
-        times = ind * 1 / Fs + t0
-        t = ephys_fpga.extract_spacers(times, val, **pars)
-        self.assertEqual(1, len(t))
-        np.testing.assert_allclose(t, t0, rtol=1e-3)
-
-    @staticmethod
-    def _random_pulses(t0=0., n=50, pw=None, t_max=200):
-        if not pw:
-            times = np.sort(np.random.randint(0, t_max, n) + np.random.rand(n)) + t0
-        else:
-            times = np.random.randint(0, t_max, n) + np.random.rand(n) + t0
-            times = np.sort(np.concatenate([times, times + pw]))
-        polarities = np.ones_like(times)
-        polarities[1::2] = -1.
-        return times, polarities
-
-    def assertNotEmpty(self, obj):
-        self.assertTrue(len(obj) > 0)
-
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main(exit=False, verbosity=2)

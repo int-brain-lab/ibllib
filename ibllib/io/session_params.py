@@ -343,6 +343,7 @@ def get_task_protocol_number(sess_params, task_protocol=None):
         numbers = [int(n) if isinstance(n, str) else n for n in numbers]
         return (next(iter(numbers)) if len(numbers) == 1 else numbers) or None
 
+
 def get_collections(sess_params):
     """
     Find all collections associated with the session.

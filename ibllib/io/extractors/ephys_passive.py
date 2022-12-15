@@ -588,14 +588,10 @@ class PassiveChoiceWorld(BaseExtractor):
 
     def _extract(self, sync_collection: str = 'raw_ephys_data', task_collection: str = 'raw_passive_data', sync: dict = None,
                  sync_map: dict = None, plot: bool = False, **kwargs) -> tuple:
-
-        number = kwargs.get('number', None)
-
         if sync is None or sync_map is None:
             sync, sync_map = ephys_fpga.get_sync_and_chn_map(self.session_path, sync_collection)
 
-        # TODO here need to load in spacers and get only relevant syncs
-        if number is not None:
+        if protocol_number := kwargs.get('protocol_number') is not None:  # look for spacer
             spacers = load_spacers(self.session_path, sync_collection)
             sync = get_sync_for_spacer(sync, spacers[number])
 
