@@ -312,8 +312,8 @@ class ChoiceWorldTrialsNidq(base_tasks.BehaviourTask):
 
     def _extract_behaviour(self):
         dsets, out_files = extract_all(self.session_path, self.sync_collection, task_collection=self.collection,
-                                       save_path=self.session_path.joinpath(self.output_collection), number=self.number,
-                                       save=True)
+                                       save_path=self.session_path.joinpath(self.output_collection),
+                                       protocol_number=self.protocol_number, save=True)
 
         return dsets, out_files
 
