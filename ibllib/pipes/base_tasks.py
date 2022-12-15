@@ -112,7 +112,6 @@ class VideoTask(DynamicTask):
     #     assert collection is None or isinstance(collection, str) or len(collection) == 1
     #     return collection
 
-
 class AudioTask(DynamicTask):
 
     def __init__(self, session_path, **kwargs):

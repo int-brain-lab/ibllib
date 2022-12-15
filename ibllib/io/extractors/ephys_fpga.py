@@ -13,9 +13,10 @@ import spikeglx
 import neurodsp.utils
 import one.alf.io as alfio
 from iblutil.util import Bunch
+from iblutil.spacer import Spacer
 
 import ibllib.exceptions as err
-from ibllib.io import raw_data_loaders
+from ibllib.io import raw_data_loaders, session_params
 from ibllib.io.extractors.bpod_trials import extract_all as bpod_extract_all
 from ibllib.io.extractors.opto_trials import LaserBool
 import ibllib.io.extractors.base as extractors_base
@@ -325,6 +326,25 @@ def _assign_events_to_trial(t_trial_start, t_event, take='last'):
 
 
 def get_sync_fronts(sync, channel_nb, tmin=None, tmax=None):
+    """
+    Return the sync front polarities and times for a given channel.
+
+    Parameters
+    ----------
+    sync : dict
+        'polarities' of fronts detected on sync trace for all 16 channels and their 'times'.
+    channel_nb : int
+        The integer corresponding to the desired sync channel.
+    tmin : float
+        The minimum time from which to extract the sync pulses.
+    tmax : float
+        The maximum time up to which we extract the sync pulses.
+
+    Returns
+    -------
+    Bunch
+        Channel times and polarities.
+    """
     selection = sync['channels'] == channel_nb
     selection = np.logical_and(selection, sync['times'] <= tmax) if tmax else selection
     selection = np.logical_and(selection, sync['times'] >= tmin) if tmin else selection
@@ -388,43 +408,69 @@ def _clean_frame2ttl(frame2ttl, display=False):
     return frame2ttl_
 
 
-def extract_wheel_sync(sync, chmap=None):
+def extract_wheel_sync(sync, chmap=None, tmin=None, tmax=None):
     """
-    Extract wheel positions and times from sync fronts dictionary for all 16 chans
-    Output position is in radians, mathematical convention
-    :param sync: dictionary 'times', 'polarities' of fronts detected on sync trace
-    :param chmap: dictionary containing channel indices. Default to constant.
-        chmap = {'rotary_encoder_0': 13, 'rotary_encoder_1': 14}
-    :return: timestamps (np.array)
-    :return: positions (np.array)
+    Extract wheel positions and times from sync fronts dictionary for all 16 channels.
+    Output position is in radians, mathematical convention.
+
+    Parameters
+    ----------
+    sync : dict
+        'polarities' of fronts detected on sync trace for all 16 chans and their 'times'
+    chmap : dict
+        Map of channel names and their corresponding index.  Default to constant.
+    tmin : float
+        The minimum time from which to extract the sync pulses.
+    tmax : float
+        The maximum time up to which we extract the sync pulses.
+
+    Returns
+    -------
+    np.array
+        Wheel timestamps in seconds.
+    np.array
+        Wheel positions in radians.
     """
     wheel = {}
-    channela = get_sync_fronts(sync, chmap['rotary_encoder_0'])
-    channelb = get_sync_fronts(sync, chmap['rotary_encoder_1'])
+    channela = get_sync_fronts(sync, chmap['rotary_encoder_0'], tmin=tmin, tmax=tmax)
+    channelb = get_sync_fronts(sync, chmap['rotary_encoder_1'], tmin=tmin, tmax=tmax)
     wheel['re_ts'], wheel['re_pos'] = _rotary_encoder_positions_from_fronts(
         channela['times'], channela['polarities'], channelb['times'], channelb['polarities'],
         ticks=WHEEL_TICKS, radius=1, coding='x4')
     return wheel['re_ts'], wheel['re_pos']
 
 
-def extract_behaviour_sync(sync, chmap=None, display=False, bpod_trials=None):
+def extract_behaviour_sync(sync, chmap=None, display=False, bpod_trials=None, tmin=None, tmax=None):
     """
-    Extract wheel positions and times from sync fronts dictionary
+    Extract task related event times from the sync.
 
-    :param sync: dictionary 'times', 'polarities' of fronts detected on sync trace for all 16 chans
-    :param chmap: dictionary containing channel index. Default to constant.
-        chmap = {'bpod': 7, 'frame2ttl': 12, 'audio': 15}
-    :param display: bool or matplotlib axes: show the full session sync pulses display
-    defaults to False
-    :return: trials dictionary
+    Parameters
+    ----------
+    sync : dict
+        'polarities' of fronts detected on sync trace for all 16 chans and their 'times'
+    chmap : dict
+        Map of channel names and their corresponding index.  Default to constant.
+    display : bool, matplotlib.pyplot.Axes
+        Show the full session sync pulses display
+    bpod_trials : dict
+        The same trial events as recorded through Bpod. Assumed to contain an 'intervals_bpod' key.
+    tmin : float
+        The minimum time from which to extract the sync pulses.
+    tmax : float
+        The maximum time up to which we extract the sync pulses.
+
+    Returns
+    -------
+    dict
+        A map of trial event timestamps.
     """
-    bpod = get_sync_fronts(sync, chmap['bpod'])
+    bpod = get_sync_fronts(sync, chmap['bpod'], tmin=tmin, tmax=tmax)
     if bpod.times.size == 0:
         raise err.SyncBpodFpgaException('No Bpod event found in FPGA. No behaviour extraction. '
                                         'Check channel maps.')
-    frame2ttl = get_sync_fronts(sync, chmap['frame2ttl'])
+    frame2ttl = get_sync_fronts(sync, chmap['frame2ttl'], tmin=tmin, tmax=tmax)
     frame2ttl = _clean_frame2ttl(frame2ttl)
-    audio = get_sync_fronts(sync, chmap['audio'])
+    audio = get_sync_fronts(sync, chmap['audio'], tmin=tmin, tmax=tmax)
     audio = _clean_audio(audio)
     # extract events from the fronts for each trace
     t_trial_start, t_valve_open, t_iti_in = _assign_events_bpod(bpod['times'], bpod['polarities'])
@@ -436,12 +482,12 @@ def extract_behaviour_sync(sync, chmap=None, display=False, bpod_trials=None):
             bpod_start, t_trial_start, return_indices=True)
         # if it's drifting too much
         if drift > 200 and bpod_start.size != t_trial_start.size:
-            raise err.SyncBpodFpgaException("sync cluster f*ck")
+            raise err.SyncBpodFpgaException('sync cluster f*ck')
         missing_bpod = fcn(bpod_start[np.setxor1d(ibpod, np.arange(len(bpod_start)))])
         t_trial_start = np.sort(np.r_[t_trial_start, missing_bpod])
     else:
-        _logger.warning("Deprecation Warning: calling FPGA trials extraction without a bpod trials"
-                        " dictionary will result in an error.")
+        _logger.warning('Deprecation Warning: calling FPGA trials extraction without a bpod trials'
+                        ' dictionary will result in an error.')
     t_ready_tone_in, t_error_tone_in = _assign_events_audio(
         audio['times'], audio['polarities'])
     trials = Bunch({
@@ -467,7 +513,7 @@ def extract_behaviour_sync(sync, chmap=None, display=False, bpod_trials=None):
             ax = plt.gca()
         else:
             ax = display
-        r0 = get_sync_fronts(sync, chmap['rotary_encoder_0'])
+        r0 = get_sync_fronts(sync, chmap['rotary_encoder_0'], tmin=tmin, tmax=tmax)
         plots.squares(bpod['times'], bpod['polarities'] * 0.4 + 1, ax=ax, color='k')
         plots.squares(frame2ttl['times'], frame2ttl['polarities'] * 0.4 + 2, ax=ax, color='k')
         plots.squares(audio['times'], audio['polarities'] * 0.4 + 3, ax=ax, color='k')
@@ -486,11 +532,11 @@ def extract_behaviour_sync(sync, chmap=None, display=False, bpod_trials=None):
                              ax=ax, label='stim off', color='c', linewidth=width)
         plots.vertical_lines(trials['stimOn_times'], ymin=0, ymax=ymax,
                              ax=ax, label='stimOn_times', color='tab:orange', linewidth=width)
-        c = get_sync_fronts(sync, chmap['left_camera'])
+        c = get_sync_fronts(sync, chmap['left_camera'], tmin=tmin, tmax=tmax)
         plots.squares(c['times'], c['polarities'] * 0.4 + 5, ax=ax, color='k')
-        c = get_sync_fronts(sync, chmap['right_camera'])
+        c = get_sync_fronts(sync, chmap['right_camera'], tmin=tmin, tmax=tmax)
         plots.squares(c['times'], c['polarities'] * 0.4 + 6, ax=ax, color='k')
-        c = get_sync_fronts(sync, chmap['body_camera'])
+        c = get_sync_fronts(sync, chmap['body_camera'], tmin=tmin, tmax=tmax)
         plots.squares(c['times'], c['polarities'] * 0.4 + 7, ax=ax, color='k')
         ax.legend()
         ax.set_yticklabels(['', 'bpod', 'f2ttl', 'audio', 're_0', ''])
@@ -547,17 +593,33 @@ def _get_all_probes_sync(session_path, bin_exists=True):
     return ephys_files
 
 
-def get_wheel_positions(sync, chmap):
+def get_wheel_positions(sync, chmap, tmin=None, tmax=None):
     """
     Gets the wheel position from synchronisation pulses
-    :param sync:
-    :param chmap:
-    :return:wheel: dictionary with keys 'timestamps' and 'position'
-            moves: dictionary with keys 'intervals' and 'peakAmplitude'
+
+    Parameters
+    ----------
+    sync : dict
+        A dictionary with keys ('times', 'polarities', 'channels'), containing the sync pulses and
+        the corresponding channel numbers.
+    chmap : dict[str, int]
+        A map of channel names and their corresponding indices.
+    tmin : float
+        The minimum time from which to extract the sync pulses.
+    tmax : float
+        The maximum time up to which we extract the sync pulses.
+
+    Returns
+    -------
+    Bunch
+        A dictionary with keys ('timestamps', 'position'), containing the wheel event timestamps and
+        position in radians
+    Bunch
+        A dictionary of detected movement times with keys ('intervals', 'peakAmplitude', 'peakVelocity_times').
     """
-    ts, pos = extract_wheel_sync(sync=sync, chmap=chmap)
-    moves = extract_wheel_moves(ts, pos)
-    wheel = {'timestamps': ts, 'position': pos}
+    ts, pos = extract_wheel_sync(sync=sync, chmap=chmap, tmin=tmin, tmax=tmax)
+    moves = Bunch(extract_wheel_moves(ts, pos))
+    wheel = Bunch({'timestamps': ts, 'position': pos})
     return wheel, moves
 
 
@@ -565,8 +627,21 @@ def get_main_probe_sync(session_path, bin_exists=False):
     """
     From 3A or 3B multiprobe session, returns the main probe (3A) or nidq sync pulses
     with the attached channel map (default chmap if none)
-    :param session_path:
-    :return:
+
+    Parameters
+    ----------
+    session_path : str, pathlib.Path
+        The absolute session path, i.e. '/path/to/subject/yyyy-mm-dd/nnn'.
+    bin_exists : bool
+        Whether there is a .bin file present.
+
+    Returns
+    -------
+    one.alf.io.AlfBunch
+        A dictionary with keys ('times', 'polarities', 'channels'), containing the sync pulses and
+        the corresponding channel numbers.
+    dict
+        A map of channel names and their corresponding indices.
     """
     ephys_files = _get_all_probes_sync(session_path, bin_exists=bin_exists)
     if not ephys_files:
@@ -631,8 +706,26 @@ class FpgaTrials(extractors_base.BaseExtractor):
         bpod_trials.update(trials_table)
         # synchronize
         bpod_trials['intervals_bpod'] = np.copy(bpod_trials['intervals'])
-        # TODO get the spacer data here
-        fpga_trials = extract_behaviour_sync(sync=sync, chmap=chmap, bpod_trials=bpod_trials)
+
+        # Get the spacer times for this protocol
+        if protocol_number := kwargs.get('protocol_number') is not None:  # look for spacer
+            # The spacers are TTLs generated by Bpod at the start of each protocol
+            bpod = get_sync_fronts(sync, chmap['bpod'])
+            spacer_times = Spacer().find_spacers_from_fronts(bpod)
+            # Ensure that the number of detected spacers matched the number of expected tasks
+            if acquisition_description := session_params.read_params(self.session_path):
+                n_tasks = acquisition_description.get('tasks', [])
+                assert n_tasks == len(spacer_times), f'expected {n_tasks} spacers, found {len(spacer_times)}'
+                assert n_tasks > protocol_number >= 0, f'protocol number must be between 0 and {n_tasks}'
+            else:
+                assert protocol_number < len(spacer_times)
+            tmin = spacer_times[int(protocol_number)]
+            tmax = None if len(spacer_times) == protocol_number else spacer_times[int(protocol_number + 1)]
+        else:
+            tmin = tmax = None
+
+        fpga_trials = extract_behaviour_sync(
+            sync=sync, chmap=chmap, bpod_trials=bpod_trials, tmin=tmin, tmax=tmax)
         # checks consistency and compute dt with bpod
         self.bpod2fpga, drift_ppm, ibpod, ifpga = neurodsp.utils.sync_timestamps(
             bpod_trials['intervals_bpod'][:, 0], fpga_trials.pop('intervals')[:, 0],
@@ -649,7 +742,7 @@ class FpgaTrials(extractors_base.BaseExtractor):
         out.update({k: self.bpod2fpga(bpod_trials[k][ibpod]) for k in self.bpod_rsync_fields})
         out.update({k: fpga_trials[k][ifpga] for k in sorted(fpga_trials.keys())})
         # extract the wheel data
-        wheel, moves = get_wheel_positions(sync=sync, chmap=chmap)
+        wheel, moves = get_wheel_positions(sync=sync, chmap=chmap, tmin=tmin, tmax=tmax)
         from ibllib.io.extractors.training_wheel import extract_first_movement_times
         settings = raw_data_loaders.load_settings(session_path=self.session_path, task_collection=task_collection)
         min_qt = settings.get('QUIESCENT_PERIOD', None)
@@ -672,16 +765,37 @@ class FpgaTrials(extractors_base.BaseExtractor):
 
 
 def extract_all(session_path, sync_collection='raw_ephys_data', save=True, task_collection='raw_behavior_data', save_path=None,
-                number=None, **kwargs):
+                protocol_number=None, **kwargs):
     """
     For the IBL ephys task, reads ephys binary file and extract:
         -   sync
         -   wheel
         -   behaviour
         -   video time stamps
-    :param session_path: '/path/to/subject/yyyy-mm-dd/001'
-    :param save: bool, defaults to False
-    :return: outputs, files
+
+    Parameters
+    ----------
+    session_path : str, pathlib.Path
+        The absolute session path, i.e. '/path/to/subject/yyyy-mm-dd/nnn'.
+    sync_collection : str
+        The session subdirectory where the sync data are located.
+    save : bool
+        If true, save the extracted files to save_path.
+    task_collection : str
+        The location of the behaviour protocol data.
+    save_path : str, pathlib.Path
+        The save location of the extracted files, defaults to the alf directory of the session path.
+    protocol_number : int
+        The order that the protocol was run in.
+    **kwargs
+        Optional extractor keyword arguments.
+
+    Returns
+    -------
+    list
+        The extracted data.
+    list of pathlib.Path, None
+        If save is True, a list of file paths to the extracted data.
     """
     extractor_type = extractors_base.get_session_extractor_type(session_path, task_collection=task_collection)
     _logger.info(f"Extracting {session_path} as {extractor_type}")
@@ -690,22 +804,35 @@ def extract_all(session_path, sync_collection='raw_ephys_data', save=True, task_
     base = [FpgaTrials]
     if extractor_type == 'ephys_biased_opto':
         base.append(LaserBool)
-    outputs, files = extractors_base.run_extractor_classes(base, session_path=session_path, save=save, sync=sync, chmap=chmap,
-                                                           task_collection=task_collection, path_out=save_path, **kwargs)
+    outputs, files = extractors_base.run_extractor_classes(
+        base, session_path=session_path, save=save, sync=sync, chmap=chmap, path_out=save_path,
+        task_collection=task_collection, protocol_number=protocol_number, **kwargs)
     return outputs, files
 
 
 def get_sync_and_chn_map(session_path, sync_collection):
     """
-    Return sync and channel map for session based on collection where main sync is stored
-    :param session_path:
-    :param sync_collection:
-    :return:
+    Return sync and channel map for session based on collection where main sync is stored.
+
+    Parameters
+    ----------
+    session_path : str, pathlib.Path
+        The absolute session path, i.e. '/path/to/subject/yyyy-mm-dd/nnn'.
+    sync_collection : str
+        The session subdirectory where the sync data are located.
+
+    Returns
+    -------
+    one.alf.io.AlfBunch
+        A dictionary with keys ('times', 'polarities', 'channels'), containing the sync pulses and
+        the corresponding channel numbers.
+    dict
+        A map of channel names and their corresponding indices.
     """
     if sync_collection == 'raw_ephys_data':
         # Check to see if we have nidq files, if we do just go with this otherwise go into other function that deals with
         # 3A probes
-        nidq_meta = next((session_path.joinpath(sync_collection).glob('*nidq.meta')), None)
+        nidq_meta = next(session_path.joinpath(sync_collection).glob('*nidq.meta'), None)
         if not nidq_meta:
             sync, chmap = get_main_probe_sync(session_path)
         else:
@@ -725,9 +852,18 @@ def get_sync_and_chn_map(session_path, sync_collection):
 def load_channel_map(session_path, sync_collection):
     """
     Load syncing channel map for session path and collection
-    :param session_path:
-    :param collection:
-    :return:
+
+    Parameters
+    ----------
+    session_path : str, pathlib.Path
+        The absolute session path, i.e. '/path/to/subject/yyyy-mm-dd/nnn'.
+    sync_collection : str
+        The session subdirectory where the sync data are located.
+
+    Returns
+    -------
+    dict
+        A map of channel names and their corresponding indices.
     """
 
     device = sync_collection.split('_')[1]
@@ -749,10 +885,20 @@ def load_channel_map(session_path, sync_collection):
 
 def load_sync(session_path, sync_collection):
     """
-    Load sync files from session path and collection
-    :param session_path:
-    :param sync_collection:
-    :return:
+    Load sync files from session path and collection.
+
+    Parameters
+    ----------
+    session_path : str, pathlib.Path
+        The absolute session path, i.e. '/path/to/subject/yyyy-mm-dd/nnn'.
+    sync_collection : str
+        The session subdirectory where the sync data are located.
+
+    Returns
+    -------
+    one.alf.io.AlfBunch
+        A dictionary with keys ('times', 'polarities', 'channels'), containing the sync pulses and
+        the corresponding channel numbers.
     """
     sync = alfio.load_object(session_path.joinpath(sync_collection), 'sync', namespace='spikeglx', short_keys=True)
 
