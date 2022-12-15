@@ -108,7 +108,6 @@ class VideoTask(DynamicTask):
         return collection
 
 
-
 class AudioTask(DynamicTask):
 
     def __init__(self, session_path, **kwargs):

@@ -11,8 +11,10 @@ import numpy as np
 
 import spikeglx
 import neurodsp.utils
+from scipy import interpolate
 import one.alf.io as alfio
 from iblutil.util import Bunch
+from iblutil.spacer import Spacer
 
 import ibllib.exceptions as err
 from ibllib.io import raw_data_loaders
@@ -536,6 +538,85 @@ def extract_sync(session_path, overwrite=False, ephys_files=None, namespace='spi
     return syncs, outputs
 
 
+def extract_spacers(times, polarities, Fs=1000, **kwargs):
+    """
+    Reads ephys binary file (s) and extract spacer times within the binary file folder
+
+
+    Parameters
+    ----------
+    times : numpy.array
+        Timestamps of the polarities.
+    polarities : numpy.array
+        The polarities of the fronts.
+    **kwargs
+        See iblutil.spacer.Spacer.
+
+    Returns
+    -------
+    numpy.array
+        The times of the protocol spacer signals.
+    """
+    sp = Spacer(**kwargs)
+    pw = sp.tup  # pulse width
+    n_pulses = (sp.n_pulses * 2) - 1
+    is_pulse = np.isclose(np.diff(times), pw, rtol=1e-2)
+    is_pulse = np.insert(is_pulse, 0, False)
+    ind, = np.where(is_pulse)
+
+    # Find consecutive pulses that are the correct length less than a second apart
+    consecutive = np.logical_and(np.diff(ind) == 2, np.diff(times[ind]) < 1.)
+    consecutive = np.pad(consecutive, 1, 'constant', constant_values=False)
+    edges, = np.where(~consecutive)
+    spacer_times = []
+    for i in np.arange(edges.size - 1):
+        if edges[i + 1] - edges[i] == n_pulses:
+            idx = np.arange(ind[edges[i]], ind[edges[i + 1] - 1] + 1)  # +1 to include final pulse
+            t = times[idx]
+            ts = np.arange(t[0], t[-1], 1 / Fs)  # Evenly resample at frequency
+            if ts[-1] > t[-1]:
+                ts = ts[:-1]
+            signal = interpolate.interp1d(t, polarities[idx], kind='previous')(ts)
+            try:
+                spacers_ids, = sp.find_spacers(signal, fs=Fs) * Fs
+                spacer_times.append(ts[0] + spacers_ids.astype(int) * 1 / Fs)
+            except IndexError:
+                continue
+
+    return spacer_times
+
+
+def extract_spacers_simple(times, polarities, Fs=1000, **kwargs):
+    """
+    Reads ephys binary file (s) and extract spacer times within the binary file folder
+
+
+    Parameters
+    ----------
+    times : numpy.array
+        Timestamps of the polarities.
+    polarities : numpy.array
+        The polarities of the fronts.
+    **kwargs
+        See iblutil.spacer.Spacer.
+
+    Returns
+    -------
+    numpy.array
+        The times of the protocol spacer signals.
+    """
+    sp = Spacer(**kwargs)
+    ts = np.arange(times[0], times[-1], 1 / Fs)  # Evenly resample at frequency
+    signal = interpolate.interp1d(times, polarities, kind='previous')(ts)
+    try:
+        spacers_ids = sp.find_spacers(signal, fs=Fs) * Fs
+        spacer_times = ts[0] + spacers_ids.astype(int) * 1 / Fs
+    except IndexError:
+        spacer_times = np.array([])
+
+    return spacer_times
+
+
 def _get_all_probes_sync(session_path, bin_exists=True):
     # round-up of all bin ephys files in the session, infer revision and get sync map
     ephys_files = spikeglx.glob_ephys_files(session_path, bin_exists=bin_exists)
@@ -631,7 +712,9 @@ class FpgaTrials(extractors_base.BaseExtractor):
         bpod_trials.update(trials_table)
         # synchronize
         bpod_trials['intervals_bpod'] = np.copy(bpod_trials['intervals'])
-        # TODO get the spacer data here
+
+        # Get the spacer times for this protocol
+
         fpga_trials = extract_behaviour_sync(sync=sync, chmap=chmap, bpod_trials=bpod_trials)
         # checks consistency and compute dt with bpod
         self.bpod2fpga, drift_ppm, ibpod, ifpga = neurodsp.utils.sync_timestamps(

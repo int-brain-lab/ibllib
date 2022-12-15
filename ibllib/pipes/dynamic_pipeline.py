@@ -22,6 +22,7 @@ from ibllib.pipes.photometry_tasks import TaskFibrePhotometryPreprocess, TaskFib
 
 _logger = logging.getLogger(__name__)
 
+
 def acquisition_description_legacy_session(session_path, save=False):
     """
     From a legacy session create a dictionary corresponding to the acquisition description
