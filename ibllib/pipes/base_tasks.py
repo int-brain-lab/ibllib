@@ -70,7 +70,7 @@ class BehaviourTask(DynamicTask):
         # Task type (protocol)
         self.protocol = self.get_protocol(kwargs.get('protocol', None), task_collection=self.collection)
 
-        self.number = self.get_protocol_number(kwargs.get('protocol', None))
+        self.number = self.get_protocol_number(kwargs.get('number', None), task_protocol=self.protocol)
 
         if self.number:
             self.output_collection = f'alf/task_0{self.number}'
@@ -87,8 +87,12 @@ class BehaviourTask(DynamicTask):
         assert collection is None or isinstance(collection, str) or len(collection) == 1
         return collection
 
-    def get_protocol_number(self, number=None):
-        return number if number else sess_params.get_protocol_number(self.session_params)
+    def get_protocol_number(self, number=None, task_protocol=None):
+        if not number:
+            number = sess_params.get_task_protocol_number(self.session_params, task_protocol)
+        # If inferring the number from the experiment description, assert only one returned (or something went wrong)
+        assert number is None or isinstance(number, int)
+        return number
 
 
 class VideoTask(DynamicTask):

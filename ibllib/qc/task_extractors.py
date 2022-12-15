@@ -171,8 +171,8 @@ class TaskQCExtractor(object):
             data['wheel_timestamps_bpod'] = bpod2fpga(re_ts)
             data['wheel_position_bpod'] = pos
         else:
-            kwargs = dict(save=False, bpod_trials=self.raw_data, settings=self.settings, task_colletion=self.task_collection,
-                          save_path=self.save_path)
+            kwargs = dict(save=False, bpod_trials=self.raw_data, settings=self.settings,
+                          task_collection=self.task_collection, save_path=self.save_path)
             trials, wheel, _ = bpod_trials.extract_all(self.session_path, **kwargs)
             n_trials = np.unique(list(map(lambda k: trials[k].shape[0], trials)))[0]
             if self.type == 'habituation':
