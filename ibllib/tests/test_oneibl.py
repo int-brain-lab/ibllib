@@ -4,6 +4,7 @@ from unittest import mock
 from pathlib import PurePosixPath, Path
 import json
 import datetime
+import shutil
 
 from requests import HTTPError
 import numpy as np
@@ -14,6 +15,7 @@ from ibllib.oneibl import patcher, registration
 import ibllib.io.extractors.base
 from ibllib import __version__
 from ibllib.tests import TEST_DB
+from ibllib.io.session_params import read_params
 
 
 class TestFTPPatcher(unittest.TestCase):
@@ -319,6 +321,24 @@ class TestRegistration(unittest.TestCase):
         ses_info = self.one.alyx.rest('sessions', 'read', id=eid)
         self.assertTrue(ses_info['procedures'] == [])
         self.one.alyx.rest('sessions', 'delete', id=eid)
+
+    def test_registration_with_description_file(self):
+        behavior_path = self.session_path.joinpath('raw_behavior_data')
+        behavior_path.mkdir()
+        settings_file = behavior_path.joinpath('_iblrig_taskSettings.raw.json')
+        with open(settings_file, 'w') as fid:
+            json.dump(MOCK_SESSION_SETTINGS, fid)
+
+        shutil.copy(Path('__file__').parent.joinpath('fixtures', 'io', '_ibl_experiment.description.yaml'),
+                    self.session_path.joinpath('_ibl_experiment.description.yaml'))
+
+        experiment_description = read_params(self.session_path.joinpath('_ibl_experiment.description.yaml'))
+
+        rc = registration.RegistrationClient(one=self.one)
+        session = rc.register_session(self.session_path)
+        ses_info = self.one.alyx.rest('sessions', 'read', id=session['id'])
+        self.assertCountEqual(ses_info['procedures'], experiment_description['procedures'])
+        self.assertCountEqual(ses_info['projects'], experiment_description['projects'])
 
     def tearDown(self) -> None:
         self.td.cleanup()

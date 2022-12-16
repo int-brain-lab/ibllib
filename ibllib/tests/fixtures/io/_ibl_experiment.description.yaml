@@ -15,9 +15,11 @@ devices:
       collection: raw_ephys_data/probe01
       sync_label: imec_sync
 procedures:
-- Widefield recording
+- Imaging
+- Behavior training/tasks
 projects:
 - ibl_neuropixel_brainwide_01
+- ibl_cortexlab
 sync:
   nidq:
     collection: raw_ephys_data

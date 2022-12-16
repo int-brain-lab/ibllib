@@ -17,6 +17,7 @@ import ibllib
 import ibllib.io.extractors.base
 import ibllib.time
 import ibllib.io.raw_data_loaders as raw
+from ibllib.io.session_params import read_params
 from ibllib.io import flags
 
 _logger = logging.getLogger(__name__)
@@ -346,6 +347,13 @@ class RegistrationClient:
         """
         if isinstance(ses_path, str):
             ses_path = Path(ses_path)
+
+        # Read in the experiment description file if it exists and get projects and procedures from here
+        experiment_description_file = read_params(ses_path)
+        if experiment_description_file is not None:
+            projects = experiment_description_file.get('projects', projects)
+            procedures = experiment_description_file.get('procedures', procedures)
+
         # read meta data from the rig for the session from the task settings file
         settings_json_file = list(ses_path.glob(
             '**/raw_behavior_data/_iblrig_taskSettings.raw*.json'))
