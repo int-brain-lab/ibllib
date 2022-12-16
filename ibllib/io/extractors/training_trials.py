@@ -261,8 +261,8 @@ class ItiDuration(BaseBpodTrialsExtractor):
     var_names = 'iti_dur'
 
     def _extract(self):
-        rt, _ = ResponseTimes(self.session_path, task_collection=self.task_collection).extract(
-            save=False, bpod_trials=self.bpod_trials, settings=self.settings)
+        rt, _ = ResponseTimes(self.session_path).extract(
+            save=False, task_collection=self.task_collection, bpod_trials=self.bpod_trials, settings=self.settings)
         ends = np.array([t['behavior_data']['Trial end timestamp'] for t in self.bpod_trials])
         iti_dur = ends - rt
         return iti_dur
@@ -619,8 +619,8 @@ class StimOnOffFreezeTimes(BaseBpodTrialsExtractor):
     var_names = ('stimOn_times', 'stimOff_times', 'stimFreeze_times')
 
     def _extract(self):
-        choice = Choice(self.session_path, task_collection=self.task_collection).extract(
-            bpod_trials=self.bpod_trials, settings=self.settings, save=False
+        choice = Choice(self.session_path).extract(
+            bpod_trials=self.bpod_trials, task_collection=self.task_collection, settings=self.settings, save=False
         )[0]
         f2TTL = [raw.get_port_events(tr, name='BNC1') for tr in self.bpod_trials]
 

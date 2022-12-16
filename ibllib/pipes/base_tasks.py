@@ -70,9 +70,10 @@ class BehaviourTask(DynamicTask):
         # Task type (protocol)
         self.protocol = self.get_protocol(kwargs.get('protocol', None), task_collection=self.collection)
 
-        self.number = self.get_protocol_number(kwargs.get('number', None), task_protocol=self.protocol)
+        self.number = self.get_protocol_number(kwargs.get('number'), task_protocol=self.protocol)
+        # Do not use kwargs.get('number', None) -- this will return None if number is 0
 
-        if self.number:
+        if self.number is not None:
             self.output_collection = f'alf/task_0{self.number}'
         else:
             self.output_collection = 'alf'
@@ -88,7 +89,7 @@ class BehaviourTask(DynamicTask):
         return collection
 
     def get_protocol_number(self, number=None, task_protocol=None):
-        if not number:
+        if number is None:  # Do not use "if not number" as that will return True if number is 0
             number = sess_params.get_task_protocol_number(self.session_params, task_protocol)
         # If inferring the number from the experiment description, assert only one returned (or something went wrong)
         assert number is None or isinstance(number, int)
@@ -101,16 +102,15 @@ class VideoTask(DynamicTask):
         super().__init__(session_path, cameras=cameras, **kwargs)
         self.cameras = cameras
         self.device_collection = self.get_device_collection('cameras', kwargs.get('device_collection', 'raw_video_data'))
-        self.collection = self.get_task_collection(kwargs.get('collection', None))
-
-    # TODO take this out of video qc so we don't need the protocol
-    def get_task_collection(self, collection=None):
-        if not collection:
-            collection = sess_params.get_task_collection(self.session_params)
-        # If inferring the collection from the experiment description, assert only one returned
-        assert collection is None or isinstance(collection, str) or len(collection) == 1
-        return collection
-
+    #     self.collection = self.get_task_collection(kwargs.get('collection', None))
+    #
+    # # TODO take this out of video qc so we don't need the protocol
+    # def get_task_collection(self, collection=None):
+    #     if not collection:
+    #         collection = sess_params.get_task_collection(self.session_params)
+    #     # If inferring the collection from the experiment description, assert only one returned
+    #     assert collection is None or isinstance(collection, str) or len(collection) == 1
+    #     return collection
 
 class AudioTask(DynamicTask):
 

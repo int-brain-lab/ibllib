@@ -195,13 +195,14 @@ def make_pipeline(session_path=None, **pkwargs):
                 compute_status = True
             else:
                 raise NotImplementedError
-            tasks[f'RegisterRaw_{protocol}'] = type(f'RegisterRaw_{protocol}', (registration_class,), {})(**kwargs, **task_kwargs)
-            parents = [tasks[f'RegisterRaw_{protocol}']] + sync_tasks
-            tasks[f'Trials_{protocol}'] = type(f'Trials_{protocol}', (behaviour_class,), {})(
+            tasks[f'RegisterRaw_{protocol}_{i:02}'] = type(f'RegisterRaw_{protocol}_{i:02}', (registration_class,), {})(
+                **kwargs, **task_kwargs)
+            parents = [tasks[f'RegisterRaw_{protocol}_{i:02}']] + sync_tasks
+            tasks[f'Trials_{protocol}_{i:02}'] = type(f'Trials_{protocol}_{i:02}', (behaviour_class,), {})(
                 **kwargs, **sync_kwargs, **task_kwargs, parents=parents)
             if compute_status:
-                tasks[f"TrainingStatus_{protocol}"] = type(f'TrainingStatus_{protocol}', (btasks.TrainingStatus,), {})(
-                    **kwargs, **task_kwargs, parents=[tasks[f'Trials_{protocol}']])
+                tasks[f"TrainingStatus_{protocol}_{i:02}"] = type(f'TrainingStatus_{protocol}_{i:02}', (
+                    btasks.TrainingStatus,), {})(**kwargs, **task_kwargs, parents=[tasks[f'Trials_{protocol}_{i:02}']])
 
     # Ephys tasks
     if 'neuropixel' in devices:
@@ -262,23 +263,23 @@ def make_pipeline(session_path=None, **pkwargs):
         if video_compressed:
             # This is for widefield case where the video is already compressed
             tasks[tn] = type((tn := 'VideoConvert'), (vtasks.VideoConvert,), {})(
-                **kwargs, **video_kwargs, collection=collection)
+                **kwargs, **video_kwargs)
             dlc_parent_task = tasks['VideoConvert']
             tasks[tn] = type((tn := f'VideoSyncQC_{sync}'), (vtasks.VideoSyncQcCamlog,), {})(
-                **kwargs, **video_kwargs, **sync_kwargs, collection=collection)
+                **kwargs, **video_kwargs, **sync_kwargs)
         else:
             tasks[tn] = type((tn := 'VideoRegisterRaw'), (vtasks.VideoRegisterRaw,), {})(
-                **kwargs, **video_kwargs, collection=collection)
+                **kwargs, **video_kwargs)
             tasks[tn] = type((tn := 'VideoCompress'), (vtasks.VideoCompress,), {})(
-                **kwargs, **video_kwargs, **sync_kwargs, collection=collection)
+                **kwargs, **video_kwargs, **sync_kwargs)
             dlc_parent_task = tasks['VideoCompress']
             if sync == 'bpod':
                 collection = sess_params.get_task_collection(acquisition_description)
                 tasks[tn] = type((tn := f'VideoSyncQC_{sync}'), (vtasks.VideoSyncQcBpod,), {})(
-                    **kwargs, **video_kwargs, **sync_kwargs, collection=collection, parents=[tasks['VideoCompress']])
+                    **kwargs, **video_kwargs, **sync_kwargs, parents=[tasks['VideoCompress']])
             elif sync == 'nidq':
                 tasks[tn] = type((tn := f'VideoSyncQC_{sync}'), (vtasks.VideoSyncQcNidq,), {})(
-                    **kwargs, **video_kwargs, **sync_kwargs, collection=collection, parents=[tasks['VideoCompress']] + sync_tasks)
+                    **kwargs, **video_kwargs, **sync_kwargs, parents=[tasks['VideoCompress']] + sync_tasks)
 
         if len(video_kwargs['cameras']) == 3:
             tasks[tn] = type((tn := 'DLC'), (epp.EphysDLC,), {})(
