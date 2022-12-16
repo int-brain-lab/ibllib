@@ -155,11 +155,13 @@ def make_pipeline(session_path=None, **pkwargs):
     task_protocols = acquisition_description.get('tasks', [])
     for i, (protocol, task_info) in enumerate(chain(*map(dict.items, task_protocols))):
         collection = task_info.get('collection', f'raw_task_data_{i:02}')
-        task_kwargs = {'protocol': protocol, 'collection': collection, 'protocol_number': i}
+        task_kwargs = {'protocol': protocol, 'collection': collection}
         # For now the order of protocols in the list will take precedence. If collections are numbered,
-        # check that the numbers match the order.  This will most likely change in the future.
-        if re.match(r'^raw_task_data_\d{2}$', collection) and int(collection.split('_')[-1]) != i:
-            _logger.warning('Number in collection name does not match task order')
+        # check that the numbers match the order.  This may change in the future.
+        if re.match(r'^raw_task_data_\d{2}$', collection):
+            task_kwargs['protocol_number'] = i
+            if int(collection.split('_')[-1]) != i:
+                _logger.warning('Number in collection name does not match task order')
         if extractors := task_info.get('extractors', False):
             extractors = (extractors,) if isinstance(extractors, str) else extractors
             for task in extractors:

@@ -10,9 +10,7 @@ from typing import Tuple
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from iblutil.spacer import Spacer
 
-from ibllib.io import session_params
 import ibllib.io.raw_data_loaders as rawio
 from ibllib.io.extractors import ephys_fpga
 from ibllib.io.extractors.base import BaseExtractor
