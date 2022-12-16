@@ -19,13 +19,6 @@ class HabituationRegisterRaw(base_tasks.RegisterRawDataTask, base_tasks.Behaviou
     priority = 100
     job_size = 'small'
 
-    # def __init__(self, *args, **kwargs):
-    #     super().__init__(*args, **kwargs)
-    #     # Task collection (this needs to be specified in the task kwargs)
-    #     self.collection = self.get_task_collection(kwargs.get('collection', None))
-    #     # Task type (protocol)
-    #     self.protocol = self.get_protocol(kwargs.get('protocol', None), task_collection=self.collection)
-
     @property
     def signature(self):
         signature = {
@@ -47,13 +40,6 @@ class HabituationRegisterRaw(base_tasks.RegisterRawDataTask, base_tasks.Behaviou
 class HabituationTrialsBpod(base_tasks.BehaviourTask):
     priority = 90
     job_size = 'small'
-
-    # def __init__(self, *args, **kwargs):
-    #     super().__init__(*args, **kwargs)
-    #     # Task collection (this needs to be specified in the task kwargs)
-    #     self.collection = self.get_task_collection(kwargs.get('collection', None))
-    #     # Task type (protocol)
-    #     self.protocol = self.get_protocol(kwargs.get('protocol', None), task_collection=self.collection)
 
     @property
     def signature(self):
@@ -83,8 +69,8 @@ class HabituationTrialsBpod(base_tasks.BehaviourTask):
         Extracts an iblrig training session
         """
         save_path = self.session_path.joinpath(self.output_collection)
-        trials, wheel, output_files = bpod_trials.extract_all(self.session_path, save=True, task_collection=self.collection,
-                                                              save_path=save_path)
+        trials, wheel, output_files = bpod_trials.extract_all(
+            self.session_path, save=True, task_collection=self.collection, save_path=save_path)
 
         if trials is None:
             return None
@@ -95,7 +81,7 @@ class HabituationTrialsBpod(base_tasks.BehaviourTask):
         qc = HabituationQC(self.session_path, one=self.one)
         qc.extractor = TaskQCExtractor(self.session_path, one=self.one, sync_collection=self.sync_collection, sync_type=self.sync,
                                        task_collection=self.collection, save_path=save_path)
-        namespace = 'task' if not self.number else f'task_0{self.number}'
+        namespace = 'task' if self.protocol_number is None else f'task_{self.protocol_number:02}'
         qc.run(update=update, namespace=namespace)
         return output_files
 
@@ -103,13 +89,6 @@ class HabituationTrialsBpod(base_tasks.BehaviourTask):
 class TrialRegisterRaw(base_tasks.RegisterRawDataTask, base_tasks.BehaviourTask):
     priority = 100
     job_size = 'small'
-
-    # def __init__(self, *args, **kwargs):
-    #     super().__init__(*args, **kwargs)
-    #     # Task collection (this needs to be specified in the task kwargs)
-    #     self.collection = self.get_task_collection(kwargs.get('collection', None))
-    #     # Task type (protocol)
-    #     self.protocol = self.get_protocol(kwargs.get('protocol', None), task_collection=self.collection)
 
     @property
     def signature(self):
@@ -133,13 +112,6 @@ class PassiveRegisterRaw(base_tasks.RegisterRawDataTask, base_tasks.BehaviourTas
     priority = 100
     job_size = 'small'
 
-    # def __init__(self, *args, **kwargs):
-    #     super().__init__(*args, **kwargs)
-    #     # Task collection (this needs to be specified in the task kwargs)
-    #     self.collection = self.get_task_collection(kwargs.get('collection', None))
-    #     # Task type (protocol)
-    #     self.protocol = self.get_protocol(kwargs.get('protocol', None), task_collection=self.collection)
-
     @property
     def signature(self):
         signature = {
@@ -159,13 +131,6 @@ class PassiveTask(base_tasks.BehaviourTask):
     priority = 90
     job_size = 'small'
 
-    # def __init__(self, *args, **kwargs):
-    #     super().__init__(*args, **kwargs)
-    #     # Task collection (this needs to be specified in the task kwargs)
-    #     self.collection = self.get_task_collection(kwargs.get('collection', None))
-    #     # Task type (protocol)
-    #     self.protocol = self.get_protocol(kwargs.get('protocol', None), task_collection=self.collection)
-
     @property
     def signature(self):
         signature = {
@@ -183,11 +148,11 @@ class PassiveTask(base_tasks.BehaviourTask):
         }
         return signature
 
-    def _run(self):
+    def _run(self, **kwargs):
         """returns a list of pathlib.Paths. """
         data, paths = PassiveChoiceWorld(self.session_path).extract(
             sync_collection=self.sync_collection, task_collection=self.collection, save=True,
-            path_out=self.session_path.joinpath(self.output_collection), number=self.number)
+            path_out=self.session_path.joinpath(self.output_collection), number=self.protocol_number)
 
         if any(x is None for x in paths):
             self.status = -1
@@ -198,13 +163,6 @@ class PassiveTask(base_tasks.BehaviourTask):
 class ChoiceWorldTrialsBpod(base_tasks.BehaviourTask):
     priority = 90
     job_size = 'small'
-
-    # def __init__(self, *args, **kwargs):
-    #     super().__init__(*args, **kwargs)
-    #     # Task collection (this needs to be specified in the task kwargs)
-    #     self.collection = self.get_task_collection(kwargs.get('collection', None))
-    #     # Task type (protocol)
-    #     self.protocol = self.get_protocol(kwargs.get('protocol', None), task_collection=self.collection)
 
     @property
     def signature(self):
@@ -250,7 +208,7 @@ class ChoiceWorldTrialsBpod(base_tasks.BehaviourTask):
                                            sync_type=self.sync, task_collection=self.collection, save_path=save_path)
             qc.extractor.wheel_encoding = 'X1'
         # Aggregate and update Alyx QC fields
-        namespace = 'task' if not self.number else f'task_0{self.number}'
+        namespace = 'task' if self.protocol_number is None else f'task_{self.protocol_number:02}'
         qc.run(update=update, namespace=namespace)
 
         return output_files
@@ -259,13 +217,6 @@ class ChoiceWorldTrialsBpod(base_tasks.BehaviourTask):
 class ChoiceWorldTrialsNidq(base_tasks.BehaviourTask):
     priority = 90
     job_size = 'small'
-
-    # def __init__(self, *args, **kwargs):
-    #     super().__init__(*args, **kwargs)
-    #     # Task collection (this needs to be specified in the task kwargs)
-    #     self.collection = self.get_task_collection(kwargs.get('collection', None))
-    #     # Task type (protocol)
-    #     self.protocol = self.get_protocol(kwargs.get('protocol', None), task_collection=self.collection)
 
     @property
     def signature(self):
@@ -334,7 +285,7 @@ class ChoiceWorldTrialsNidq(base_tasks.BehaviourTask):
         qc.extractor.data = dsets
         qc.extractor.extract_data()
         # Aggregate and update Alyx QC fields
-        namespace = 'task' if not self.number else f'task_0{self.number}'
+        namespace = 'task' if self.protocol_number is None else f'task_{self.protocol_number:02}'
         qc.run(update=update, namespace=namespace)
 
         if plot_qc:
@@ -357,13 +308,6 @@ class ChoiceWorldTrialsNidq(base_tasks.BehaviourTask):
 class TrainingStatus(base_tasks.BehaviourTask):
     priority = 90
     job_size = 'small'
-
-    # def __init__(self, *args, **kwargs):
-    #     super().__init__(*args, **kwargs)
-    #     # Task collection (this needs to be specified in the task kwargs)
-    #     self.collection = self.get_task_collection(kwargs.get('collection', None))
-    #     # Task type (protocol)
-    #     self.protocol = self.get_protocol(kwargs.get('protocol', None), task_collection=self.collection)
 
     @property
     def signature(self):
