@@ -152,7 +152,7 @@ class PassiveTask(base_tasks.BehaviourTask):
         """returns a list of pathlib.Paths. """
         data, paths = PassiveChoiceWorld(self.session_path).extract(
             sync_collection=self.sync_collection, task_collection=self.collection, save=True,
-            path_out=self.session_path.joinpath(self.output_collection), number=self.protocol_number)
+            path_out=self.session_path.joinpath(self.output_collection), protocol_number=self.protocol_number)
 
         if any(x is None for x in paths):
             self.status = -1

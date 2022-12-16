@@ -107,16 +107,26 @@ def get_acquisition_description(protocol):
     return acquisition_description
 
 
-def make_pipeline(session_path=None, **pkwargs):
+def make_pipeline(session_path, **pkwargs):
     """
-    :param session_path:
-    :param one: passed to the Pipeline init: one instance to register tasks to
-    :param eid: passed to the Pipeline init
-    :return:
+    Creates a pipeline of extractor tasks from a session's experiment description file.
+
+    Parameters
+    ----------
+    session_path : str, Path
+        The absolute session path, i.e. '/path/to/subject/yyyy-mm-dd/nnn'.
+    **pkwargs
+        Optional arguments passed to the ibllib.pipes.tasks.Pipeline constructor.
+
+    Returns
+    -------
+    ibllib.pipes.tasks.Pipeline
+        A task pipeline object.
     """
     # NB: this pattern is a pattern for dynamic class creation
     # tasks['SyncPulses'] = type('SyncPulses', (epp.EphysPulses,), {})(session_path=session_path)
-    assert session_path
+    if not session_path or not (session_path := Path(session_path)).exists():
+        raise ValueError('Session path does not exist')
     tasks = OrderedDict()
     acquisition_description = sess_params.read_params(session_path)
     devices = acquisition_description.get('devices', {})
@@ -274,7 +284,6 @@ def make_pipeline(session_path=None, **pkwargs):
                 **kwargs, **video_kwargs, **sync_kwargs)
             dlc_parent_task = tasks['VideoCompress']
             if sync == 'bpod':
-                collection = sess_params.get_task_collection(acquisition_description)
                 tasks[tn] = type((tn := f'VideoSyncQC_{sync}'), (vtasks.VideoSyncQcBpod,), {})(
                     **kwargs, **video_kwargs, **sync_kwargs, parents=[tasks['VideoCompress']])
             elif sync == 'nidq':
