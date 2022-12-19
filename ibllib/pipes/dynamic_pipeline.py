@@ -180,7 +180,7 @@ def make_pipeline(session_path, **pkwargs):
                 except AttributeError:
                     ...  # TODO Attempt to import from personal project repo
                 # Rename the class to something more informative
-                task_name = f'{task}_{i:02}'
+                task_name = f'{task.__name__}_{i:02}'
                 tasks[task_name] = type(task_name, (task,), {})(**kwargs, **task_kwargs)
         else:  # Legacy block to handle sessions without defined extractors
             # -   choice_world_recording

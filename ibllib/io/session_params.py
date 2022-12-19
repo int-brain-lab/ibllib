@@ -336,10 +336,10 @@ def get_task_protocol_number(sess_params, task_protocol=None):
     protocols = sess_params.get('tasks', [])
     if task_protocol is not None:
         task = next((x for x in protocols if task_protocol in x), None)
-        number = (task.get(task_protocol) or {}).get('number')
+        number = (task.get(task_protocol) or {}).get('protocol_number')
         return int(number) if isinstance(number, str) else number
     else:  # Return set of all task numbers
-        numbers = list(filter(None, (next(iter(x.values()), {}).get('number') for x in protocols)))
+        numbers = list(filter(None, (next(iter(x.values()), {}).get('protocol_number') for x in protocols)))
         numbers = [int(n) if isinstance(n, str) else n for n in numbers]
         return (next(iter(numbers)) if len(numbers) == 1 else numbers) or None
 
