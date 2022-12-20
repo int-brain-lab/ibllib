@@ -84,7 +84,7 @@ def behavior_exists(session_path: str) -> bool:
     behavior_path = session_path / "raw_behavior_data"
     if behavior_path.exists():
         return True
-    return False
+    return any(session_path.glob('raw_task_data_*'))
 
 
 def check_transfer(src_session_path, dst_session_path):
