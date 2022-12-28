@@ -1362,3 +1362,37 @@ class SessionLoader:
             return video_timestamps_fixed, video_data
         else:
             return video_timestamps, video_data
+
+
+class EphysSessionLoader(SessionLoader):
+    """
+    Spike sorting enhanced version of SessionLoader
+    Loads spike sorting data for all probes in the session, in the self.ephys dict
+    """
+    def __init__(self, *args, **kwargs):
+        """
+        Needs an active connection in order to get the list of insertions in the session
+        :param args:
+        :param kwargs:
+        """
+        super().__init__(*args, **kwargs)
+        insertions = self.one.alyx.rest('insertions', 'list', session=self.eid)
+        self.ephys = {}
+        for ins in insertions:
+            self.ephys[ins['name']] = {}
+            self.ephys[ins['name']]['ssl'] = SpikeSortingLoader(pid=ins['id'], one=self.one)
+
+    def load_session_data(self, *args, **kwargs):
+        super().load_session_data(*args, **kwargs)
+        self.load_spike_sorting()
+
+    def load_spike_sorting(self):
+        for pname in self.ephys:
+            spikes, clusters, channels = self.ephys[pname]['ssl'].load_spike_sorting()
+            self.ephys[pname]['spikes'] = spikes
+            self.ephys[pname]['clusters'] = clusters
+            self.ephys[pname]['channels'] = channels
+
+    @property
+    def probes(self):
+        return {k: self.ephys[k]['ssl'].pid for k in self.ephys}
