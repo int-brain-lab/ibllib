@@ -1386,8 +1386,9 @@ class EphysSessionLoader(SessionLoader):
         super().load_session_data(*args, **kwargs)
         self.load_spike_sorting()
 
-    def load_spike_sorting(self):
-        for pname in self.ephys:
+    def load_spike_sorting(self, pnames=None):
+        pnames = pnames or list(self.ephys.keys())
+        for pname in pnames:
             spikes, clusters, channels = self.ephys[pname]['ssl'].load_spike_sorting()
             self.ephys[pname]['spikes'] = spikes
             self.ephys[pname]['clusters'] = clusters
