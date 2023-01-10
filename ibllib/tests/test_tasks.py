@@ -1,10 +1,13 @@
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
 from collections import OrderedDict
 
 import ibllib.pipes.tasks
+from ibllib.pipes.base_tasks import ExperimentDescriptionRegisterRaw
 from one.api import ONE
+from one.webclient import no_cache
 from ibllib.tests import TEST_DB
 
 one = ONE(**TEST_DB)
@@ -181,7 +184,7 @@ class TestPipelineAlyx(unittest.TestCase):
         check_statuses = [desired_statuses[t['name']] == t['status'] for t in task_deck]
         # [(t['name'], t['status'], desired_statuses[t['name']]) for t in task_deck]
         self.assertTrue(all(check_statuses))
-        self.assertTrue(set([d['name'] for d in datasets]) == set(desired_datasets))
+        self.assertEqual(set(d['name'] for d in datasets), set(desired_datasets))
 
         # check logs
         check_logs = [desired_logs in t['log'] if t['log'] else True for t in task_deck]
@@ -261,5 +264,46 @@ class TestLocks(unittest.TestCase):
             assert task.status == 0
 
 
-if __name__ == "__main__":
+class TestExperimentDescriptionRegisterRaw(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self.tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tempdir.cleanup)
+        session_path = Path(self.tempdir.name).joinpath(
+            SUBJECT_NAME, ses_dict['start_time'][:10], str(ses_dict['number']).zfill(3))
+        session_path.mkdir(parents=True)
+        # Check for session on Alyx
+        with no_cache(one.alyx):
+            # If the session exists, ensure sign_off_checklist key not in JSON
+            if eid := one.path2eid(session_path, query_type='remote'):
+                json_field = one.get_details(eid, full=True).get('json', {})
+                if json_field.pop('sign_off_checklist', False):
+                    one.alyx.json_field_remove_key('sessions', eid, key='sign_off_checklist')
+            else:  # Create a new session and add cleanup hook
+                ses = one.alyx.rest('sessions', 'create', data=ses_dict)
+                self.addCleanup(one.alyx.rest, 'sessions', 'delete', id=eid)
+                eid = ses['id']
+        fixture = Path(__file__).parent.joinpath(
+            'fixtures', 'io', '_ibl_experiment.description.yaml')
+        shutil.copy(fixture, session_path.joinpath('_ibl_experiment.description.yaml'))
+        self.session_path, self.eid = session_path, eid
+
+    def test_experiment_description_registration(self):
+        task = ExperimentDescriptionRegisterRaw(self.session_path, one=one)
+        task.run()
+
+        # Check that description file was registered
+        ses = one.alyx.rest('sessions', 'read', id=self.eid, no_cache=True)
+
+        # Check keys added to JSON
+        expected = {'_widefield': None,
+                    '_microphone': None,
+                    '_neuropixel_probe00': None,
+                    '_neuropixel_probe01': None,
+                    '_ephysChoiceWorld_01': None,
+                    '_passiveChoiceWorld_00': None}
+        self.assertDictEqual(expected, ses['json'].get('sign_off_checklist', {}))
+
+
+if __name__ == '__main__':
     unittest.main(exit=False, verbosity=2)
