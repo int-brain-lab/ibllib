@@ -290,6 +290,8 @@ class TestExperimentDescriptionRegisterRaw(unittest.TestCase):
 
     def test_experiment_description_registration(self):
         task = ExperimentDescriptionRegisterRaw(self.session_path, one=one)
+        # Add a custom sign off key
+        task.sign_off_categories['microphone'] = ['foo', 'bar']
         task.run()
 
         # Check that description file was registered
@@ -297,13 +299,32 @@ class TestExperimentDescriptionRegisterRaw(unittest.TestCase):
 
         # Check keys added to JSON
         expected = {'_widefield': None,
-                    '_microphone': None,
+                    '_microphone_foo': None,
+                    '_microphone_bar': None,
+                    '_neuropixel_raw_probe00': None,
+                    '_neuropixel_spike_sorting_probe00': None,
+                    '_neuropixel_alignment_probe00': None,
+                    '_neuropixel_raw_probe01': None,
+                    '_neuropixel_spike_sorting_probe01': None,
+                    '_neuropixel_alignment_probe01': None,
+                    '_ephysChoiceWorld_01': None,
+                    '_passiveChoiceWorld_00': None}
+        self.assertDictEqual(expected, ses['json'].get('sign_off_checklist', {}))
+
+        # Run again without a custom sign off for neuropixels
+        one.alyx.json_field_remove_key('sessions', self.eid, key='sign_off_checklist')
+        task.sign_off_categories.pop('neuropixel')
+        task.run()
+
+        ses = one.alyx.rest('sessions', 'read', id=self.eid, no_cache=True)
+        expected = {'_widefield': None,
+                    '_microphone_foo': None,
+                    '_microphone_bar': None,
                     '_neuropixel_probe00': None,
                     '_neuropixel_probe01': None,
                     '_ephysChoiceWorld_01': None,
                     '_passiveChoiceWorld_00': None}
         self.assertDictEqual(expected, ses['json'].get('sign_off_checklist', {}))
-
 
 if __name__ == '__main__':
     unittest.main(exit=False, verbosity=2)

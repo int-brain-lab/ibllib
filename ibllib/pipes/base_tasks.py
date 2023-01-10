@@ -213,6 +213,9 @@ class RegisterRawDataTask(DynamicTask):  # TODO write test
 
 
 class ExperimentDescriptionRegisterRaw(RegisterRawDataTask):
+    """dict of list: custom sign off keys corresponding to specific devices"""
+    sign_off_categories = {'neuropixel': ['raw', 'spike_sorting', 'alignment']}
+
     @property
     def signature(self):
         signature = {
@@ -232,10 +235,18 @@ class ExperimentDescriptionRegisterRaw(RegisterRawDataTask):
             for k, v in exp_dec.get('devices', {}).items():
                 assert isinstance(v, dict) and v
                 if len(v.keys()) == 1 and next(iter(v.keys())) == k:
-                    sign_off_keys.add(k)
+                    if k in self.sign_off_categories:
+                        for subkey in self.sign_off_categories[k]:
+                            sign_off_keys.add(f'{k}_{subkey}')
+                    else:
+                        sign_off_keys.add(k)
                 else:
                     for kk in v.keys():
-                        sign_off_keys.add(f'{k}_{kk}')
+                        if k in self.sign_off_categories:
+                            for subkey in self.sign_off_categories[k]:
+                                sign_off_keys.add(f'{k}_{subkey}_{kk}')
+                        else:
+                            sign_off_keys.add(f'{k}_{kk}')
 
             # Add keys for each protocol
             for i, v in enumerate(chain(*map(dict.keys, exp_dec.get('tasks', [])))):
