@@ -39,10 +39,6 @@ class TestUserPmtSess(unittest.TestCase):
         # 3. Save ins id in global variable for test access
         self.ins_id = one.alyx.rest('insertions', 'list', session=self.sess_id, name=data['name'], no_cache=True)[0]['id']
 
-    def test_reason_addnumberstr(self):
-        outstr = usrpmt._reason_addnumberstr(reason_list=['a', 'b'])
-        self.assertEqual(outstr, ['0) a', '1) b'])
-
     def test_userinput_sess(self):
         eid = self.sess_id  # sess id
         with mock.patch('builtins.input', mock_input):
@@ -67,6 +63,20 @@ class TestUserPmtSess(unittest.TestCase):
             'reason_for_other': []}
         assert expected_dict == critical_dict
 
+    def test_note_already_existing(self):
+        eid = self.sess_id  # sess id
+        with mock.patch('builtins.input', mock_input):
+            usrpmt.main(eid=eid, one=one)
+        note = one.alyx.rest('notes', 'list', django=f'object_id,{eid}', no_cache=True)
+        original_note_id = note[0]['id']
+
+        with mock.patch('builtins.input', mock_input):
+            usrpmt.main(eid=eid, one=one)
+
+        note = one.alyx.rest('notes', 'list', django=f'object_id,{eid}', no_cache=True)
+        assert len(note) == 1
+        assert original_note_id != note[0]['id']
+
     def test_guiinput_ins(self):
         eid = self.ins_id  # probe id
         str_notes_static = '=== EXPERIMENTER REASON(S) FOR MARKING THE INSERTION AS CRITICAL ==='
@@ -76,6 +86,7 @@ class TestUserPmtSess(unittest.TestCase):
         # delete any previous notes
         for note in notes:
             one.alyx.rest('notes', 'delete', id=note['id'])
+
         # write a new note and make sure it is found
         usrpmt.main_gui(eid=eid, reasons_selected=['Drift'], one=one)
         note = one.alyx.rest('notes', 'list',
@@ -83,6 +94,7 @@ class TestUserPmtSess(unittest.TestCase):
                              no_cache=True)
         assert len(note) == 1
         critical_dict = json.loads(note[0]['text'])
+        print(critical_dict)
         expected_dict = {
             'title': '=== EXPERIMENTER REASON(S) FOR MARKING THE INSERTION AS CRITICAL ===',
             'reasons_selected': ['Drift'], 'reason_for_other': []}
