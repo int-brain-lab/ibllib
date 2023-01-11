@@ -243,7 +243,7 @@ def get_session_extractor_type(session_path):
 
 def get_pipeline(session_path):
     """
-    Get the pre-processinf pipeline name from a session path
+    Get the pre-processing pipeline name from a session path
     :param session_path:
     :return:
     """

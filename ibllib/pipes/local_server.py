@@ -17,7 +17,7 @@ from ibllib.time import date2isostr
 import ibllib.oneibl.registration as registration
 from ibllib.oneibl.data_handlers import get_local_data_repository
 from ibllib.io.session_params import read_params
-from ibllib.pipes.dynamic_pipeline import make_pipeline
+from ibllib.pipes.dynamic_pipeline import make_pipeline, acquisition_description_legacy_session
 
 _logger = logging.getLogger(__name__)
 LARGE_TASKS = ['EphysVideoCompress', 'TrainingVideoCompress', 'SpikeSorting', 'EphysDLC']
@@ -123,6 +123,8 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
             if experiment_description_file is not None:
                 pipe = make_pipeline(session_path, one=one)
             else:
+                # Create legacy experiment description file
+                acquisition_description_legacy_session(session_path, save=True)
                 files, dsets = registration.register_session_raw_data(
                     session_path, one=one, max_md5_size=max_md5_size)
                 if dsets is not None:
@@ -137,7 +139,7 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
                 rerun__status__in = ['Waiting']
             pipe.create_alyx_tasks(rerun__status__in=rerun__status__in)
             flag_file.unlink()
-        except BaseException:
+        except Exception:
             _logger.error(traceback.format_exc())
             _logger.warning(f'Creating session / registering raw datasets {session_path} errored')
             continue
