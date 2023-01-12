@@ -242,6 +242,8 @@ def scatter_amp_depth_fr_plot(spike_amps, spike_clusters, spike_depths, spike_ti
     """
 
     title = title or 'Cluster depth vs amp vs firing rate'
+
+    # TODO use pandas here instead, much quicker
     cluster, cluster_depth, n_cluster = compute_cluster_average(spike_clusters, spike_depths)
     _, cluster_amp, _ = compute_cluster_average(spike_clusters, spike_amps)
     cluster_amp = cluster_amp * 1e6
@@ -393,7 +395,7 @@ def line_amp_plot(spike_amps, spike_depths, spike_times, chn_coords, d_bin=10, d
     return data
 
 
-def plot_brain_regions(channel_ids, channel_depths=None, brain_regions=None, display=True, ax=None, title=None):
+def plot_brain_regions(channel_ids, channel_depths=None, brain_regions=None, display=True, ax=None, title=None, label='left'):
     """
     Plot brain regions along probe, if channel depths is provided will plot along depth otherwise along channel idx
     :param channel_ids: atlas ids for each channel
@@ -432,12 +434,18 @@ def plot_brain_regions(channel_ids, channel_depths=None, brain_regions=None, dis
             height = np.abs(reg[1] - reg[0])
             color = col / 255
             ax.bar(x=0.5, height=height, width=1, color=color, bottom=reg[0], edgecolor='w')
+        if label == 'right':
+            ax.yaxis.tick_right()
         ax.set_yticks(region_labels[:, 0].astype(int))
         ax.yaxis.set_tick_params(labelsize=8)
         ax.set_ylim(np.nanmin(channel_depths), np.nanmax(channel_depths))
         ax.get_xaxis().set_visible(False)
         ax.set_yticklabels(region_labels[:, 1])
-        ax.spines['right'].set_visible(False)
+        if label == 'right':
+            ax.yaxis.tick_right()
+            ax.spines['left'].set_visible(False)
+        else:
+            ax.spines['right'].set_visible(False)
         ax.spines['top'].set_visible(False)
         ax.spines['bottom'].set_visible(False)
         if title:

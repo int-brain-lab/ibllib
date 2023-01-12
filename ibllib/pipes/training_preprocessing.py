@@ -1,6 +1,7 @@
 import logging
 from collections import OrderedDict
 
+from ibllib.pipes.base_tasks import ExperimentDescriptionRegisterRaw
 from ibllib.pipes import tasks, training_status
 from ibllib.io import ffmpeg
 from ibllib.io.extractors.base import get_session_extractor_type
@@ -137,6 +138,7 @@ class TrainingExtractionPipeline(tasks.Pipeline):
         tasks = OrderedDict()
         self.session_path = session_path
         # level 0
+        tasks['ExperimentDescriptionRegisterRaw'] = ExperimentDescriptionRegisterRaw(self.session_path)
         tasks['TrainingRegisterRaw'] = TrainingRegisterRaw(self.session_path)
         tasks['TrainingTrials'] = TrainingTrials(self.session_path)
         tasks['TrainingVideoCompress'] = TrainingVideoCompress(self.session_path)
