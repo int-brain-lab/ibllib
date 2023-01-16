@@ -15,13 +15,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Union
 
+from dateutil import parser as dateparser
 from pkg_resources import parse_version
 import numpy as np
 import pandas as pd
 
 from iblutil.io import jsonable
 from ibllib.io.video import assert_valid_label
-from ibllib.time import uncycle_pgts, convert_pgts
+from ibllib.time import uncycle_pgts, convert_pgts, date2isostr
 
 _logger = logging.getLogger(__name__)
 
@@ -91,12 +92,12 @@ def load_data(session_path: Union[str, Path], task_collection='raw_behavior_data
     :rtype: list of dicts
     """
     if session_path is None:
-        _logger.warning("No data loaded: session_path is None")
+        _logger.warning('No data loaded: session_path is None')
         return
     path = Path(session_path).joinpath(task_collection)
-    path = next(path.glob("_iblrig_taskData.raw*.jsonable"), None)
+    path = next(path.glob('_iblrig_taskData.raw*.jsonable'), None)
     if not path:
-        _logger.warning("No data loaded: could not find raw data file")
+        _logger.warning('No data loaded: could not find raw data file')
         return None
     data = jsonable.read(path)
     if time == 'absolute':
@@ -301,6 +302,51 @@ def load_camera_gpio(session_path, label: str, as_dicts=False):
     return gpio
 
 
+def _read_settings_json_compatibility_enforced(settings):
+    """
+    Patch iblrig settings for compatibility across rig versions.
+
+    Parameters
+    ----------
+    settings : pathlib.Path, dict
+        Either a _iblrig_taskSettings.raw.json file path or the loaded settings.
+
+    Returns
+    -------
+    dict
+        The task settings patched for compatibility.
+    """
+    if isinstance(settings, dict):
+        md = settings.copy()
+    else:
+        with open(settings) as js:
+            md = json.load(js)
+    if 'IS_MOCK' not in md.keys():
+        md['IS_MOCK'] = False
+    if not md['IBLRIG_VERSION_TAG']:
+        _logger.warning("You appear to be on an untagged version...")
+        return md
+    if 'IBLRIG_VERSION_TAG' not in md.keys():
+        md['IBLRIG_VERSION_TAG'] = ''
+    # 2018-12-05 Version 3.2.3 fixes (permanent fixes in IBL_RIG from 3.2.4 on)
+    if parse_version(md.get('IBLRIG_VERSION_TAG') or '3.2.3') <= parse_version('3.2.3'):
+        if 'LAST_TRIAL_DATA' in md.keys():
+            md.pop('LAST_TRIAL_DATA')
+        if 'weighings' in md['PYBPOD_SUBJECT_EXTRA'].keys():
+            md['PYBPOD_SUBJECT_EXTRA'].pop('weighings')
+        if 'water_administration' in md['PYBPOD_SUBJECT_EXTRA'].keys():
+            md['PYBPOD_SUBJECT_EXTRA'].pop('water_administration')
+        if 'IBLRIG_COMMIT_HASH' not in md.keys():
+            md['IBLRIG_COMMIT_HASH'] = 'f9d8905647dbafe1f9bdf78f73b286197ae2647b'
+        #  parse the date format to Django supported ISO
+        dt = dateparser.parse(md['SESSION_DATETIME'])
+        md['SESSION_DATETIME'] = date2isostr(dt)
+        # add the weight key if it doesn't already exist
+        if 'SUBJECT_WEIGHT' not in md.keys():
+            md['SUBJECT_WEIGHT'] = None
+    return md
+
+
 def load_settings(session_path: Union[str, Path], task_collection='raw_behavior_data'):
     """
     Load PyBpod Settings files (.json).
@@ -320,10 +366,7 @@ def load_settings(session_path: Union[str, Path], task_collection='raw_behavior_
     if not path:
         _logger.warning("No data loaded: could not find raw settings file")
         return None
-    with open(path, 'r') as f:
-        settings = json.load(f)
-    if 'IBLRIG_VERSION_TAG' not in settings.keys():
-        settings['IBLRIG_VERSION_TAG'] = ''
+    settings = _read_settings_json_compatibility_enforced(path)
     return settings
 
 

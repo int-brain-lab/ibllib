@@ -189,8 +189,8 @@ class ChoiceWorldTrialsBpod(base_tasks.BehaviourTask):
         Extracts an iblrig training session
         """
         save_path = self.session_path.joinpath(self.output_collection)
-        trials, wheel, output_files = bpod_trials.extract_all(self.session_path, save=True, task_collection=self.collection,
-                                                              save_path=save_path)
+        trials, wheel, output_files = bpod_trials.extract_all(
+            self.session_path, save=True, task_collection=self.collection, save_path=save_path)
         if trials is None:
             return None
         if self.one is None or self.one.offline:

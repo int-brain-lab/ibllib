@@ -26,6 +26,6 @@ tqdm>=4.32.1
 ibl-neuropixel>=0.4.0
 iblutil>=1.4.0
 labcams  # widefield extractor
-ONE-api>=1.16.1
+ONE-api>=1.18
 slidingRP>=1.0.0  # steinmetz lab refractory period metrics
 wfield>=0.3.6  # widefield extractor

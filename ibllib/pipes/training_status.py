@@ -2,8 +2,8 @@ import one.alf.io as alfio
 from one.alf.spec import is_session_path
 from one.alf.exceptions import ALFObjectNotFound
 
-from ibllib.io.raw_data_loaders import load_data
-from ibllib.oneibl.registration import _read_settings_json_compatibility_enforced, _get_session_times
+from ibllib.io.raw_data_loaders import load_bpod
+from ibllib.oneibl.registration import _get_session_times
 from ibllib.io.extractors.base import get_pipeline, get_session_extractor_type
 
 from ibllib.plots.snapshot import ReportSnapshot
@@ -257,15 +257,27 @@ def pass_through_training_hierachy(status_new, status_old):
         return status_new
 
 
-def compute_session_duration_delay_location(sess_path):
+def compute_session_duration_delay_location(sess_path, **kwargs):
     """
     Get meta information about task. Extracts session duration, delay before session start and location of session
-    :param sess_path: session path
-    :return:
+
+    Parameters
+    ----------
+    sess_path : pathlib.Path, str
+        The session path with the pattern subject/yyyy-mm-dd/nnn.
+    task_collection : str
+        The location within the session path directory of task settings and data.
+
+    Returns
+    -------
+    int
+        The session duration in minutes, rounded to the nearest minute.
+    int
+        The delay between session start time and the first trial in seconds.
+    str {'ephys_rig', 'training_rig'}
+        The location of the session.
     """
-    settings_file = list(sess_path.glob('**/raw_behavior_data/_iblrig_taskSettings.raw*.json'))
-    md = _read_settings_json_compatibility_enforced(settings_file[0])
-    sess_data = load_data(sess_path)
+    md, sess_data = load_bpod(sess_path, **kwargs)
     start_time, end_time = _get_session_times(sess_path, md, sess_data)
     session_duration = int((end_time - start_time).total_seconds() / 60)
 

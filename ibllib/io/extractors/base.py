@@ -1,4 +1,4 @@
-"""Base Extractor classes
+"""Base Extractor classes.
 A module for the base Extractor classes.  The Extractor, given a session path, will extract the
 processed data from raw hardware files and optionally save them.
 """

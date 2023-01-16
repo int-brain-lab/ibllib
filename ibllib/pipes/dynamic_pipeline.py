@@ -160,8 +160,6 @@ def make_pipeline(session_path, **pkwargs):
         # ATM we don't have anything for this not sure it will be needed in the future
 
     # Behavior tasks
-    # TODO this is not doing at all what we were envisaging and going back to the old way of protocol linked to hardware
-    # TODO change at next iteration of dynamic pipeline, once we have the basic workflow working
     task_protocols = acquisition_description.get('tasks', [])
     for i, (protocol, task_info) in enumerate(chain(*map(dict.items, task_protocols))):
         collection = task_info.get('collection', f'raw_task_data_{i:02}')
