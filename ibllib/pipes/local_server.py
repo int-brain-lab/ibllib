@@ -111,12 +111,7 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
 
         try:
             # if the subject doesn't exist in the database, skip
-            ses = rc.create_session(session_path)
-            eid = ses['url'][-36:]
-            if one.path2eid(session_path, query_type='remote') is None:
-                raise ValueError(f'Session ALF path mismatch: {ses["url"][-36:]} \n '
-                                 f'{one.eid2path(eid, query_type="remote")} in params \n'
-                                 f'{session_path} on disk \n')
+            rc.create_session(session_path)
 
             # See if we need to create a dynamic pipeline
             experiment_description_file = read_params(session_path)

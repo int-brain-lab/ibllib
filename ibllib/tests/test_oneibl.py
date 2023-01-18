@@ -347,13 +347,16 @@ class TestRegistration(unittest.TestCase):
             json.dump(settings, fid)
 
         rc = registration.IBLRegistrationClient(one=self.one)
-        session = rc.register_session(self.session_path)
+        session, recs = rc.register_session(self.session_path)
 
         ses_info = self.one.alyx.rest('sessions', 'read', id=session['id'])
         self.assertCountEqual(experiment_description['procedures'], ses_info['procedures'])
         self.assertCountEqual(experiment_description['projects'], ses_info['projects'])
         self.assertCountEqual({'IS_MOCK': False, 'IBLRIG_VERSION': None}, ses_info['json'])
         self.assertEqual('2018-04-01T12:48:26.795526', ses_info['start_time'])
+        # Test task protocol
+        expected = '_iblrig_tasks_ephysChoiceWorld5.4.1/_iblrig_tasks_passiveChoiceWorld5.4.1'
+        self.assertEqual(expected, ses_info['task_protocol'])
         # Test weightings created on Alyx
         w = self.one.alyx.rest('subjects', 'read', id=SUBJECT)['weighings']
         self.assertEqual(2, len(w))

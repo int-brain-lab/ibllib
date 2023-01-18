@@ -876,3 +876,84 @@ def load_widefield_mmap(session_path, dtype=np.uint16, shape=(540, 640), n_frame
         n_frames = int(filepath.stat().st_size / (np.prod(shape) * dtype.itemsize))
 
     return np.memmap(str(filepath), mode=mode, dtype=dtype, shape=(int(n_frames), *shape))
+
+
+def patch_settings(session_path, collection='raw_behavior_data',
+                   new_collection=None, subject=None, number=None, date=None):
+    """Modify various details in a settings file.
+
+    This function makes it easier to change things like subject name in a settings as it will
+    modify the subject name in the myriad paths. NB: This saves the settings into the same location
+    it was loaded from.
+
+    Parameters
+    ----------
+    session_path : str, pathlib.Path
+        The session path containing the settings file.
+    collection : str
+        The subfolder containing the settings file.
+    new_collection : str
+        An optional new subfolder to change in the settings paths.
+    subject : str
+        An optional new subject name to change in the settings.
+    number : str, int
+        An optional new number to change in the settings.
+    date : str, datetime.date
+        An optional date to change in the settings.
+
+    Returns
+    -------
+    dict
+        The modified settings.
+    """
+    settings = load_settings(session_path, collection)
+    if not settings:
+        raise IOError('Settings file not found')
+
+    file_path = Path(session_path).joinpath(collection, Path(settings['SETTINGS_FILE_PATH']).name)
+
+    if subject:
+        # Patch subject name
+        old_subject = settings['SUBJECT_NAME']
+        settings['SUBJECT_NAME'] = subject
+        for k in settings.keys():
+            if isinstance(settings[k], str):
+                settings[k] = settings[k].replace(f'\\Subjects\\{old_subject}', f'\\Subjects\\{subject}')
+        settings['SESSION_NAME'] = '\\'.join([subject, *settings['SESSION_NAME'].split('\\')[1:]])
+        settings.pop('PYBPOD_SUBJECT_EXTRA')  # Get rid of Alyx subject info
+
+    if date:
+        # Patch session datetime
+        date = str(date)
+        old_date = settings['SESSION_DATE']
+        settings['SESSION_DATE'] = date
+        for k in settings.keys():
+            if isinstance(settings[k], str):
+                settings[k] = settings[k].replace(
+                    f'\\{settings["SUBJECT_NAME"]}\\{old_date}',
+                    f'\\{settings["SUBJECT_NAME"]}\\{date}'
+                )
+        settings['SESSION_DATETIME'] = date + settings['SESSION_DATETIME'][10:]
+
+    if number:
+        # Patch session number
+        old_number = settings['SESSION_NUMBER']
+        if isinstance(number, int):
+            number = f'{number:03}'
+        settings['SESSION_NUMBER'] = number
+        for k in settings.keys():
+            if isinstance(settings[k], str):
+                settings[k] = settings[k].replace(
+                    f'\\{settings["SESSION_DATE"]}\\{old_number}',
+                    f'\\{settings["SESSION_DATE"]}\\{number}'
+                )
+
+    if new_collection:
+        old_path = settings['SESSION_RAW_DATA_FOLDER']
+        new_path = Path(settings['SESSION_RAW_DATA_FOLDER']).with_name(new_collection)
+        for k in settings.keys():
+            if isinstance(settings[k], str):
+                settings[k] = settings[k].replace(old_path, str(new_path))
+    with open(file_path, 'w') as fp:
+        json.dump(settings, fp, indent=' ')
+    return settings

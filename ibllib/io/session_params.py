@@ -305,6 +305,10 @@ def get_task_collection(sess_params, task_protocol=None):
     str, set, None
         If task_protocol is None, returns the set of collections, otherwise returns the first
         collection that corresponds to the protocol, or None if protocol not present.
+
+    Notes
+    -----
+    - The order of the set may not be the same as the descriptions tasks order when iterating.
     """
     protocols = sess_params.get('tasks', [])
     if task_protocol is not None:

@@ -4,6 +4,7 @@ from one.webclient import no_cache
 
 from ibllib.pipes.tasks import Task
 import ibllib.io.session_params as sess_params
+from ibllib.qc.base import sign_off_dict
 import logging
 
 _logger = logging.getLogger(__name__)
@@ -228,32 +229,8 @@ class ExperimentDescriptionRegisterRaw(RegisterRawDataTask):
         # Register experiment description file
         out_files = super(ExperimentDescriptionRegisterRaw, self)._run(**kwargs)
         if not self.one.offline and self.status == 0:
-            exp_dec = sess_params.read_params(out_files[0])
-            # Note this assumes devices each contain a dict of dicts
-            # e.g. {'devices': {'DAQ_1': {'device_1': {}, 'device_2': {}},}
-            sign_off_keys = set()
-            for k, v in exp_dec.get('devices', {}).items():
-                assert isinstance(v, dict) and v
-                if len(v.keys()) == 1 and next(iter(v.keys())) == k:
-                    if k in self.sign_off_categories:
-                        for subkey in self.sign_off_categories[k]:
-                            sign_off_keys.add(f'{k}_{subkey}')
-                    else:
-                        sign_off_keys.add(k)
-                else:
-                    for kk in v.keys():
-                        if k in self.sign_off_categories:
-                            for subkey in self.sign_off_categories[k]:
-                                sign_off_keys.add(f'{k}_{subkey}_{kk}')
-                        else:
-                            sign_off_keys.add(f'{k}_{kk}')
-
-            # Add keys for each protocol
-            for i, v in enumerate(chain(*map(dict.keys, exp_dec.get('tasks', [])))):
-                sign_off_keys.add(f'{v}_{i:02}')
-
             with no_cache(self.one.alyx):  # Ensure we don't load the cached JSON response
                 eid = self.one.path2eid(self.session_path, query_type='remote')
-            # NB This will reset all keys in the sign_off_checklist
-            data = {'sign_off_checklist': dict.fromkeys(map(lambda x: f'_{x}', sign_off_keys))}
+            exp_dec = sess_params.read_params(out_files[0])
+            data = sign_off_dict(exp_dec, sign_off_categories=self.sign_off_categories)
             self.one.alyx.json_field_update('sessions', eid, data=data)
