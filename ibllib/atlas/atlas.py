@@ -389,7 +389,7 @@ class BrainAtlas:
         depth = np.flipud(np.sort(sub_volume[:, ddim])[np.argsort(self.bc.lim(axis=ddim))])
         return tslice, width, height, depth
 
-    def plot_tilted_slice(self, xyz, axis, volume='image', cmap=None, ax=None, **kwargs):
+    def plot_tilted_slice(self, xyz, axis, volume='image', cmap=None, ax=None, sec_ax=False, **kwargs):
         """
         From line coordinates, extracts the tilted plane containing the line from the 3D volume
         :param xyz: np.array: points defining a probe trajectory in 3D space (xyz triplets)
@@ -428,7 +428,10 @@ class BrainAtlas:
         ax.set_xlabel(axis_labels[0])
         ax.set_ylabel(axis_labels[1])
         sec_ax.set_ylabel(axis_labels[2])
-        return ax
+        if sec_ax:
+            return ax, sec_ax
+        else:
+            return ax
 
     @staticmethod
     def _plot_slice(im, extent, ax=None, cmap=None, volume=None, **kwargs):
