@@ -326,5 +326,6 @@ class TestExperimentDescriptionRegisterRaw(unittest.TestCase):
                     '_passiveChoiceWorld_00': None}
         self.assertDictEqual(expected, ses['json'].get('sign_off_checklist', {}))
 
+
 if __name__ == '__main__':
     unittest.main(exit=False, verbosity=2)

@@ -1,5 +1,3 @@
-from itertools import chain
-
 from one.webclient import no_cache
 
 from ibllib.pipes.tasks import Task

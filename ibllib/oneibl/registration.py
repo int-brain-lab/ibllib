@@ -223,8 +223,10 @@ class IBLRegistrationClient(RegistrationClient):
         procedures = [procedures] if isinstance(procedures, str) else procedures
         json_fields_names = ['IS_MOCK', 'IBLRIG_VERSION']
         json_field = {k: settings[0].get(k) for k in json_fields_names}
-        if poo_counts := list(map(lambda md: md.get('POOP_COUNT'), settings)):
-            json_field['POOP_COUNT'] = int(sum(filter(None, poo_counts)))
+        # The poo count field is only updated if the field is defined in at least one of the settings
+        poo_counts = [md.get('POOP_COUNT') for md in settings if md.get('POOP_COUNT') is not None]
+        if poo_counts:
+            json_field['POOP_COUNT'] = int(sum(poo_counts))
 
         if not session:  # Create session and weighings
             ses_ = {'subject': subject['nickname'],
@@ -376,7 +378,7 @@ def _get_session_times(fn, md, ses_data):
         start_time = isostr2date(md[0]['SESSION_DATETIME'])
         _start_time = isostr2date(md[-1]['SESSION_DATETIME'])
         assert isinstance(ses_data, (list, tuple)) and len(ses_data) == len(md)
-        assert start_time < _start_time
+        assert len(md) == 1 or start_time < _start_time
         ses_data = ses_data[-1]
     if not ses_data:
         return start_time, None

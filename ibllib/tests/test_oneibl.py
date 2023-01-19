@@ -272,19 +272,35 @@ class TestRegistration(unittest.TestCase):
         r = registration.register_dataset(file_list=flist, one=self.one)
         self.assertTrue(all(d['revision'] == self.today_revision + 'a' for d in r))
 
-    def test_create_sessions(self):
-        flag_file = self.session_path.joinpath('create_me.flag')
-        flag_file.touch()
-        rc = registration.IBLRegistrationClient(one=self.one)
-        rc.create_sessions(self.session_path, dry=True)
-        rc.create_sessions(self.session_path)
-
-    def test_registration_session(self):
+    def _write_settings_file(self):
         behavior_path = self.session_path.joinpath('raw_behavior_data')
         behavior_path.mkdir()
         settings_file = behavior_path.joinpath('_iblrig_taskSettings.raw.json')
         with open(settings_file, 'w') as fid:
             json.dump(MOCK_SESSION_SETTINGS, fid)
+        return settings_file
+
+    def test_create_sessions(self):
+        flag_file = self.session_path.joinpath('create_me.flag')
+        flag_file.touch()
+        rc = registration.IBLRegistrationClient(one=self.one)
+        # Should raise an error if settings file does not exist
+        self.assertRaises(ValueError, rc.create_sessions, self.session_path)
+        self._write_settings_file()
+        # Test dry
+        sessions, records = rc.create_sessions(self.session_path, dry=True)
+        self.assertEqual(1, len(sessions))
+        self.assertEqual(sessions[0], self.session_path)
+        self.assertIsNone(records[0])
+        self.assertTrue(flag_file.exists())
+        # Test not dry
+        sessions, records = rc.create_sessions(self.session_path, dry=False)
+        self.assertEqual(1, len(sessions))
+        self.assertEqual(sessions[0], self.session_path)
+        self.assertFalse(flag_file.exists())
+
+    def test_registration_session(self):
+        settings_file = self._write_settings_file()
         rc = registration.IBLRegistrationClient(one=self.one)
         rc.register_session(str(self.session_path))
         eid = self.one.search(subject=SUBJECT, date_range=['2018-04-01', '2018-04-01'],
@@ -340,8 +356,8 @@ class TestRegistration(unittest.TestCase):
 
         settings = MOCK_SESSION_SETTINGS.copy()
         settings['PYBPOD_PROTOCOL'] = '_iblrig_tasks_passiveChoiceWorld'
-        start_time = datetime.datetime.fromisoformat(settings['SESSION_DATETIME']) - \
-                     datetime.timedelta(hours=1, minutes=2, seconds=12)
+        start_time = (datetime.datetime.fromisoformat(settings['SESSION_DATETIME']) -
+                      datetime.timedelta(hours=1, minutes=2, seconds=12))
         settings['SESSION_DATETIME'] = start_time.isoformat()
         with open(behaviour_paths[0].joinpath('_iblrig_taskSettings.raw.json'), 'w') as fid:
             json.dump(settings, fid)
@@ -353,9 +369,9 @@ class TestRegistration(unittest.TestCase):
         self.assertCountEqual(experiment_description['procedures'], ses_info['procedures'])
         self.assertCountEqual(experiment_description['projects'], ses_info['projects'])
         self.assertCountEqual({'IS_MOCK': False, 'IBLRIG_VERSION': None}, ses_info['json'])
-        self.assertEqual('2018-04-01T12:48:26.795526', ses_info['start_time'])
+        self.assertEqual('2018-04-01T11:46:14.795526', ses_info['start_time'])
         # Test task protocol
-        expected = '_iblrig_tasks_ephysChoiceWorld5.4.1/_iblrig_tasks_passiveChoiceWorld5.4.1'
+        expected = '_iblrig_tasks_passiveChoiceWorld5.4.1/_iblrig_tasks_ephysChoiceWorld5.4.1'
         self.assertEqual(expected, ses_info['task_protocol'])
         # Test weightings created on Alyx
         w = self.one.alyx.rest('subjects', 'read', id=SUBJECT)['weighings']
