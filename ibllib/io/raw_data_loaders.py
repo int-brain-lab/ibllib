@@ -323,7 +323,7 @@ def _read_settings_json_compatibility_enforced(settings):
             md = json.load(js)
     if 'IS_MOCK' not in md.keys():
         md['IS_MOCK'] = False
-    if not md['IBLRIG_VERSION_TAG']:
+    if not md.get('IBLRIG_VERSION_TAG'):
         _logger.warning("You appear to be on an untagged version...")
         return md
     if 'IBLRIG_VERSION_TAG' not in md.keys():
