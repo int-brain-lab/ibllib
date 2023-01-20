@@ -64,10 +64,10 @@ def get_acquisition_description(protocol):
         }
         acquisition_description = {  # this is the current ephys pipeline description
             'devices': devices,
-            'tasks': {[
+            'tasks': [
                 {'ephysChoiceWorld': {'collection': 'raw_behavior_data', 'sync_label': 'bpod'}},
                 {'passiveChoiceWorld': {'collection': 'raw_passive_data', 'sync_label': 'bpod'}}
-            ]},
+            ],
             'sync': {
                 'nidq': {'collection': 'raw_ephys_data', 'extension': 'bin', 'acquisition_software': 'spikeglx'}
             },
@@ -103,7 +103,7 @@ def get_acquisition_description(protocol):
             'collection': 'raw_behavior_data',
             'sync_label': 'bpod', 'main': True
         }}]
-    acquisition_description['version'] = sess_params.SPEC_VERSION
+    acquisition_description['version'] = '1.0.0'
     return acquisition_description
 
 
