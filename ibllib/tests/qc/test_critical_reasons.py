@@ -126,7 +126,7 @@ class TestUserPmtSess(unittest.TestCase):
         for n in notes:
             one.alyx.rest('notes', 'delete', n['id'])
         text = 'USING A FAKE SINGLE STRING HERE KSROI283IF982HKJFHWRY'
-        notes = one.alyx.rest('notes', 'list', django=f'text__icontains,{text}', no_cache=True
+        notes = one.alyx.rest('notes', 'list', django=f'text__icontains,{text}', no_cache=True)
         for n in notes:
             one.alyx.rest('notes', 'delete', n['id'])
 
