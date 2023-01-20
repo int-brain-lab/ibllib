@@ -123,8 +123,10 @@ class TestUserPmtSess(unittest.TestCase):
                 raise ex
         text = '"title": "=== EXPERIMENTER REASON(S)'
         notes = one.alyx.rest('notes', 'list', django=f'text__icontains,{text}')
+        for n in notes:
+            one.alyx.rest('notes', 'delete', n['id'])
         text = 'USING A FAKE SINGLE STRING HERE KSROI283IF982HKJFHWRY'
-        notes += (one.alyx.rest('notes', 'list', django=f'text__icontains,{text}'))
+        notes = (one.alyx.rest('notes', 'list', django=f'text__icontains,{text}'))
         for n in notes:
             one.alyx.rest('notes', 'delete', n['id'])
 
