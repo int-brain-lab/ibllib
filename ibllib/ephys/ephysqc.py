@@ -407,7 +407,8 @@ def spike_sorting_metrics_ks2(ks2_path=None, m=None, save=True, save_path=None):
                                                  'directory, or a phylib `TemplateModel` object'
     # create phylib `TemplateModel` if not given
     m = phy_model_from_ks2_path(ks2_path) if None else m
-    c, drift = spike_sorting_metrics(m.spike_times, m.spike_clusters, m.amplitudes, m.depths)
+    c, drift = spike_sorting_metrics(m.spike_times, m.spike_clusters, m.amplitudes, m.depths,
+                                     cluster_ids=np.arange(m.clusters_channels.size))
     #  include the ks2 cluster contamination if `cluster_ContamPct` file exists
     file_contamination = ks2_path.joinpath('cluster_ContamPct.tsv')
     if file_contamination.exists():
