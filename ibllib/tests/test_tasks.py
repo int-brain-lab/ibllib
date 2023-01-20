@@ -276,7 +276,7 @@ class TestExperimentDescriptionRegisterRaw(unittest.TestCase):
         with no_cache(one.alyx):
             # If the session exists, ensure sign_off_checklist key not in JSON
             if eid := one.path2eid(session_path, query_type='remote'):
-                json_field = one.get_details(eid, full=True).get('json', {})
+                json_field = one.get_details(eid, full=True).get('json') or {}
                 if json_field.pop('sign_off_checklist', False):
                     one.alyx.json_field_remove_key('sessions', eid, key='sign_off_checklist')
             else:  # Create a new session and add cleanup hook
