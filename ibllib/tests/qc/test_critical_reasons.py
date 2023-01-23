@@ -134,6 +134,14 @@ class TestUserPmtSess(unittest.TestCase):
         except requests.HTTPError as ex:
             if ex.errno != 404:
                 raise ex
+        text = '"title": "=== EXPERIMENTER REASON(S)'
+        notes = one.alyx.rest('notes', 'list', django=f'text__icontains,{text}', no_cache=True)
+        for n in notes:
+            one.alyx.rest('notes', 'delete', n['id'])
+        text = 'USING A FAKE SINGLE STRING HERE KSROI283IF982HKJFHWRY'
+        notes = one.alyx.rest('notes', 'list', django=f'text__icontains,{text}', no_cache=True)
+        for n in notes:
+            one.alyx.rest('notes', 'delete', n['id'])
 
         note = one.alyx.rest('notes', 'list', django=f'object_id,{self.sess_id}', no_cache=True)
         for no in note:
