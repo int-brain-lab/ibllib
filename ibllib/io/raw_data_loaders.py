@@ -12,7 +12,7 @@ import logging
 import wave
 from collections import OrderedDict
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Union
 
 from dateutil import parser as dateparser
@@ -910,7 +910,8 @@ def patch_settings(session_path, collection='raw_behavior_data',
     if not settings:
         raise IOError('Settings file not found')
 
-    file_path = Path(session_path).joinpath(collection, Path(settings['SETTINGS_FILE_PATH']).name)
+    filename = PureWindowsPath(settings['SETTINGS_FILE_PATH']).name
+    file_path = Path(session_path).joinpath(collection, filename)
 
     if subject:
         # Patch subject name
