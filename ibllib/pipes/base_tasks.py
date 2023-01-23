@@ -232,3 +232,4 @@ class ExperimentDescriptionRegisterRaw(RegisterRawDataTask):
             exp_dec = sess_params.read_params(out_files[0])
             data = sign_off_dict(exp_dec, sign_off_categories=self.sign_off_categories)
             self.one.alyx.json_field_update('sessions', eid, data=data)
+        return out_files

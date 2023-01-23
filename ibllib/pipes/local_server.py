@@ -111,7 +111,7 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
 
         try:
             # if the subject doesn't exist in the database, skip
-            rc.create_session(session_path)
+            rc.register_session(session_path, file_list=False)
 
             # See if we need to create a dynamic pipeline
             experiment_description_file = read_params(session_path)
