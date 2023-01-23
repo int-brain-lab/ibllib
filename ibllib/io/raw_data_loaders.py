@@ -951,7 +951,7 @@ def patch_settings(session_path, collection='raw_behavior_data',
 
     if new_collection:
         old_path = settings['SESSION_RAW_DATA_FOLDER']
-        new_path = Path(settings['SESSION_RAW_DATA_FOLDER']).with_name(new_collection)
+        new_path = PureWindowsPath(settings['SESSION_RAW_DATA_FOLDER']).with_name(new_collection)
         for k in settings.keys():
             if isinstance(settings[k], str):
                 settings[k] = settings[k].replace(old_path, str(new_path))

@@ -342,8 +342,9 @@ class TestRegistration(unittest.TestCase):
             p.mkdir()
 
         # Set the collections
-        params_path = Path('__file__').parent.joinpath('fixtures', 'io', '_ibl_experiment.description.yaml')
+        params_path = Path(__file__).parent.joinpath('fixtures', 'io', '_ibl_experiment.description.yaml')
         experiment_description = session_params.read_params(params_path)
+        assert experiment_description
         collections = map(lambda x: next(iter(x.values())), experiment_description['tasks'])
         for collection, d in zip(map(lambda x: x.parts[-1], behaviour_paths), collections):
             d['collection'] = collection
