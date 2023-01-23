@@ -11,12 +11,14 @@ from functools import partial
 
 from one.api import ONE
 import iblutil.io.params as iopar
+from packaging.version import Version, InvalidVersion
 
 import ibllib.io.extractors.base
 import ibllib.tests.fixtures.utils as fu
 from ibllib.pipes import misc
 from ibllib.tests import TEST_DB
 import ibllib.pipes.scan_fix_passive_files as fix
+from ibllib.pipes.ephys_preprocessing import SpikeSorting
 
 
 class TestExtractors2Tasks(unittest.TestCase):
@@ -366,6 +368,7 @@ class TestPipesMisc(unittest.TestCase):
         PARAM_STR = '___test_pars'
         self.addCleanup(Path(iopar.getfile(PARAM_STR)).unlink)  # Remove after test
         params = misc.create_basic_transfer_params(PARAM_STR, '~/local_data', '~/remote_data', par1='val')
+        self.assertTrue(transfer_label := params.pop('TRANSFER_LABEL', False))
         expected = {
             'DATA_FOLDER_PATH': '~/local_data',
             'REMOTE_DATA_FOLDER_PATH': '~/remote_data',
@@ -378,6 +381,7 @@ class TestPipesMisc(unittest.TestCase):
             params = misc.create_basic_transfer_params(PARAM_STR, par2=None)
             self.assertEqual(2, in_mock.call_count)
         expected.update({'PAR1': 'foo', 'PAR2': 'bar'})
+        self.assertEqual(transfer_label, params.pop('TRANSFER_LABEL'))
         self.assertCountEqual(expected, params)
 
         # Test custom function and extra par delete
@@ -620,9 +624,19 @@ class TestMultiPartsRecordings(unittest.TestCase):
             for sf in root_path.rglob('*.sequence.json'):
                 with open(sf) as fid:
                     d = json.load(fid)
-                    assert len(d['files']) == 4
-        assert len(recordings['probe00']) == 4
-        assert len(recordings['probe01']) == 4
+                    self.assertEqual(4, len(d['files']))
+        self.assertEqual(4, len(recordings['probe00']))
+        self.assertEqual(4, len(recordings['probe01']))
+
+
+class TestSpikeSortingTask(unittest.TestCase):
+    def test_parse_version(self):
+        self.assertEqual(SpikeSorting.parse_version('ibl_1.2'), Version('1.2'))
+        self.assertEqual(SpikeSorting.parse_version('pykilosort_ibl_1.2.0-new'), Version('1.2.0'))
+        self.assertEqual(SpikeSorting.parse_version('pykilosort_v1'), Version('1'))
+        self.assertEqual(SpikeSorting.parse_version('0.5'), Version('0.5'))
+        with self.assertRaises(InvalidVersion):
+            SpikeSorting.parse_version('version-twelve')
 
 
 if __name__ == "__main__":
