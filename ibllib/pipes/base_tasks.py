@@ -2,7 +2,7 @@ from one.webclient import no_cache
 
 from ibllib.pipes.tasks import Task
 import ibllib.io.session_params as sess_params
-from ibllib.qc.base import sign_off_dict
+from ibllib.qc.base import sign_off_dict, SIGN_OFF_CATEGORIES
 import logging
 
 _logger = logging.getLogger(__name__)
@@ -213,7 +213,7 @@ class RegisterRawDataTask(DynamicTask):  # TODO write test
 
 class ExperimentDescriptionRegisterRaw(RegisterRawDataTask):
     """dict of list: custom sign off keys corresponding to specific devices"""
-    sign_off_categories = {'neuropixel': ['raw', 'spike_sorting', 'alignment']}
+    sign_off_categories = SIGN_OFF_CATEGORIES
 
     @property
     def signature(self):
