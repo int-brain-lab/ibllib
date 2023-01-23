@@ -1,3 +1,13 @@
+## Release 2.20
+# Release Notes 2.20.0 2023-01-23
+### features
+- ephys session loader
+- bwm release documentation
+
+### bugfixes
+- mock gpu lock in tests
+- use cluster_ids in metrics
+
 ## Release 2.19
 ## Release Notes 2.19.0 2022-11-30
 ### features
