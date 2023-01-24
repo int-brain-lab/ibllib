@@ -1,3 +1,17 @@
+## Release 2.21
+# Release Notes 2.21.0 2023-01-24
+
+### features
+- support for multiple task protocols within a session
+- extract protocol period from spacer signals
+- function for changing subject, collection, number or date in a settings file
+- function to retrieve task protocol number from experiment description
+- dataset type validation supports null filename patterns
+- oneibl.registration uses one.registration client as superclass
+- experiment description files are created and registered in legacy pipelines
+- QC sign-off keys are added to session JSON field
+- class-based note template API for attaching session notes for QC sign-offs
+
 ## Release 2.20
 # Release Notes 2.20.0 2023-01-23
 ### features
