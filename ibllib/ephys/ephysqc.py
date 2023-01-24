@@ -44,10 +44,14 @@ class EphysQC(base.QC):
     """
 
     def __init__(self, probe_id, session_path=None, **kwargs):
-        super().__init__(probe_id, endpoint='insertions', **kwargs)
+        self.use_alyx = kwargs.pop('use_alyx', True)
+        self.stream = kwargs.pop('stream', True)
+
+        if self.use_alyx:
+            super().__init__(probe_id, endpoint='insertions', **kwargs)
+
         self.pid = probe_id
         self.session_path = session_path
-        self.stream = kwargs.pop('stream', True)
         keys = ('ap', 'ap_meta', 'lf', 'lf_meta')
         self.data = Bunch.fromkeys(keys)
         self.metrics = {}
@@ -76,7 +80,7 @@ class EphysQC(base.QC):
         Load any locally available data.
         """
         # First sanity check
-        if ensure:
+        if self.use_alyx:
             self._ensure_required_data()
 
         _logger.info('Gathering data for QC')
@@ -133,7 +137,7 @@ class EphysQC(base.QC):
             self.stream = stream
 
         # Load data
-        self.load_data(ensure=kwargs.get('ensure', True))
+        self.load_data()
         self.out_path = kwargs.get('out_path', self.probe_path)
 
         qc_files = []
