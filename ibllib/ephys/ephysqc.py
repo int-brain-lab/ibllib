@@ -49,13 +49,13 @@ class EphysQC(base.QC):
 
         if self.use_alyx:
             super().__init__(probe_id, endpoint='insertions', **kwargs)
+            self.metrics = {}
+            self._outcome = 'NOT_SET'
+            self.pid = probe_id
 
-        self.pid = probe_id
         self.session_path = session_path
         keys = ('ap', 'ap_meta', 'lf', 'lf_meta')
         self.data = Bunch.fromkeys(keys)
-        self.metrics = {}
-        self.outcome = 'NOT_SET'
 
     def _ensure_required_data(self):
         """
