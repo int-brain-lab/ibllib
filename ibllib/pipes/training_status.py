@@ -1,5 +1,4 @@
 import one.alf.io as alfio
-from one.alf.spec import is_session_path
 from one.alf.exceptions import ALFObjectNotFound
 
 from ibllib.io.raw_data_loaders import load_bpod
@@ -422,21 +421,25 @@ def get_training_info_for_session(session_paths, one):
 
 def check_up_to_date(subj_path, df):
     """
-    Check which sessions on local file system are missing from the computed training table
-    :param subj_path:
-    :return:
+    Check which sessions on local file system are missing from the computed training table.
+
+    Parameters
+    ----------
+    subj_path : pathlib.Path
+        The path to the subject's dated session folders.
+    df : pandas.DataFrame
+        The computed training table.
+
+    Returns
+    -------
+    pandas.DataFrame
+        A table of dates and session paths that are missing from the computed training table.
     """
-    session_dates = subj_path.glob('*')
     df_session = pd.DataFrame()
 
-    for sess_date in session_dates:
-        sess_paths = list(sess_date.glob('00*'))
-        date = sess_date.stem
-        if len(sess_paths) > 0:
-            for sess in sess_paths:
-                if is_session_path(sess):
-                    df_session = pd.concat([df_session, pd.DataFrame({'date': date, 'session_path': str(sess)}, index=[0])],
-                                           ignore_index=True)
+    for session in alfio.iter_sessions(subj_path):
+        s_df = pd.DataFrame({'date': session.parts[-2], 'session_path': str(session)}, index=[0])
+        df_session = pd.concat([df_session, s_df], ignore_index=True)
 
     if df is None or 'combined_thres_50' not in df.columns:
         return df_session
