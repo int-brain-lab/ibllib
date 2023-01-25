@@ -14,8 +14,7 @@ from one.api import ONE
 from ibllib.io.extractors.base import get_pipeline, get_task_protocol, get_session_extractor_type
 from ibllib.pipes import tasks, training_preprocessing, ephys_preprocessing
 from ibllib.time import date2isostr
-import ibllib.oneibl.registration as registration
-from ibllib.oneibl.registration import get_lab
+from ibllib.oneibl.registration import IBLRegistrationClient, register_session_raw_data, get_lab
 from ibllib.oneibl.data_handlers import get_local_data_repository
 from ibllib.io.session_params import read_params
 from ibllib.pipes.dynamic_pipeline import make_pipeline, acquisition_description_legacy_session
@@ -93,7 +92,7 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
     """
     if not one:
         one = ONE(cache_rest=None)
-    rc = registration.RegistrationClient(one=one)
+    rc = IBLRegistrationClient(one=one)
     flag_files = list(Path(root_path).glob('**/raw_session.flag'))
     all_datasets = []
     for flag_file in flag_files:
@@ -113,8 +112,7 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
             else:
                 # Create legacy experiment description file
                 acquisition_description_legacy_session(session_path, save=True)
-                files, dsets = registration.register_session_raw_data(
-                    session_path, one=one, max_md5_size=max_md5_size)
+                files, dsets = register_session_raw_data(session_path, one=one, max_md5_size=max_md5_size)
                 if dsets is not None:
                     all_datasets.extend(dsets)
                 pipe = _get_pipeline_class(session_path, one)
