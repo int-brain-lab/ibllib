@@ -98,7 +98,7 @@ def register_session_raw_data(session_path, one=None, overwrite=False, **kwargs)
     overwrite : bool
         If set to True, will patch the datasets. It will take very long. If set to False (default)
         will skip all already registered data.
-    kwargs
+    **kwargs
         Optional keyword arguments for one.registration.RegistrationClient.register_files.
 
     Returns

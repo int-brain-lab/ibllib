@@ -112,7 +112,8 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
             else:
                 # Create legacy experiment description file
                 acquisition_description_legacy_session(session_path, save=True)
-                files, dsets = register_session_raw_data(session_path, one=one, max_md5_size=max_md5_size)
+                labs = ','.join(get_lab(one.alyx))
+                files, dsets = register_session_raw_data(session_path, one=one, max_md5_size=max_md5_size, labs=labs)
                 if dsets is not None:
                     all_datasets.extend(dsets)
                 pipe = _get_pipeline_class(session_path, one)
