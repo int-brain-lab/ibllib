@@ -11,6 +11,7 @@
 - experiment description files are created and registered in legacy pipelines
 - QC sign-off keys are added to session JSON field
 - class-based note template API for attaching session notes for QC sign-offs
+- protocol and procedures now taken from experiment description file
 
 ## Release 2.20
 # Release Notes 2.20.0 2023-01-23

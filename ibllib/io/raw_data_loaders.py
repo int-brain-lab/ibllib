@@ -605,7 +605,7 @@ def load_mic(session_path, task_collection='raw_behavior_data'):
     """
     Load Microphone wav file to np.array of len nSamples
 
-    :param session_path: Absoulte path of session folder
+    :param session_path: Absolute path of session folder
     :type session_path: str
     :return: An array of values of the sound waveform
     :rtype: numpy.array

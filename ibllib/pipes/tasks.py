@@ -13,6 +13,7 @@ from graphviz import Digraph
 import ibllib
 from ibllib.oneibl import data_handlers
 from ibllib.oneibl.data_handlers import get_local_data_repository
+from ibllib.pipes.local_server import get_lab
 from iblutil.util import Bunch
 import one.params
 from one.api import ONE
@@ -624,7 +625,11 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
     # otherwise register data and set (provisional) status to Complete
     else:
         try:
-            registered_dsets = task.register_datasets(one=one, max_md5_size=max_md5_size)
+            kwargs = dict(one=one, max_md5_size=max_md5_size)
+            if location == 'server':
+                # Explicitly pass lab as lab cannot be inferred from path
+                kwargs['labs'] = ','.join(get_lab(one))
+            registered_dsets = task.register_datasets(**kwargs)
             patch_data['status'] = 'Complete'
         except Exception:
             _logger.error(traceback.format_exc())
