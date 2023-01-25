@@ -10,12 +10,12 @@ import traceback
 import importlib
 
 from one.api import ONE
-from one.remote.globus import get_local_endpoint_id
 
 from ibllib.io.extractors.base import get_pipeline, get_task_protocol, get_session_extractor_type
 from ibllib.pipes import tasks, training_preprocessing, ephys_preprocessing
 from ibllib.time import date2isostr
 import ibllib.oneibl.registration as registration
+from ibllib.oneibl.registration import get_lab
 from ibllib.oneibl.data_handlers import get_local_data_repository
 from ibllib.io.session_params import read_params
 from ibllib.pipes.dynamic_pipeline import make_pipeline, acquisition_description_legacy_session
@@ -37,13 +37,6 @@ def _get_pipeline_class(session_path, one):
         PipelineClass = projects.base.get_pipeline(task_type)
     _logger.info(f"Using {PipelineClass} pipeline for {session_path}")
     return PipelineClass(session_path=session_path, one=one)
-
-
-def get_lab(one):
-    globus_id = get_local_endpoint_id()
-    lab = one.alyx.rest('labs', 'list', django=f'repositories__globus_endpoint_id,{globus_id}')
-    if len(lab):
-        return [la['name'] for la in lab]
 
 
 def _run_command(cmd):
@@ -80,7 +73,7 @@ def report_health(one):
     status.update(_get_volume_usage('/mnt/s0/Data', 'raid'))
     status.update(_get_volume_usage('/', 'system'))
 
-    lab_names = get_lab(one)
+    lab_names = get_lab(one.alyx)
     for ln in lab_names:
         one.alyx.json_field_update(endpoint='labs', uuid=ln, field_name='json', data=status)
 
@@ -155,7 +148,7 @@ def task_queue(mode='all', lab=None, one=None):
         one = ONE(cache_rest=None)
     if lab is None:
         _logger.debug("Trying to infer lab from globus installation")
-        lab = get_lab(one)
+        lab = get_lab(one.alyx)
     if lab is None:
         _logger.error("No lab provided or found")
         return  # if the lab is none, this will return empty tasks each time

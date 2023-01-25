@@ -126,7 +126,7 @@ class CameraQC(base.QC):
         self.download_data = kwargs.pop('download_data', download_data)
         self.stream = kwargs.pop('stream', None)
         self.n_samples = kwargs.pop('n_samples', 100)
-        self.sync_collection = kwargs.pop('sync_collection', 'raw_ephys_data')
+        self.sync_collection = kwargs.pop('sync_collection', None)
         self.sync = kwargs.pop('sync_type', None)
         super().__init__(session_path_or_eid, **kwargs)
 
@@ -219,8 +219,9 @@ class CameraQC(base.QC):
             cam_ts = extract_camera_sync(sync, chmap)
             self.data['fpga_times'] = cam_ts[self.label]
         else:
-            bpod_data = raw.load_data(self.session_path)
-            _, audio_ttls = raw.load_bpod_fronts(self.session_path, data=bpod_data)
+            bpod_data = raw.load_data(self.session_path, task_collection=self.sync_collection)
+            _, audio_ttls = raw.load_bpod_fronts(
+                self.session_path, data=bpod_data, task_collection=self.sync_collection)
             self.data['audio'] = audio_ttls['times']
 
         # Load extracted frame times

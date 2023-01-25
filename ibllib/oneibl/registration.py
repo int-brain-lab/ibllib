@@ -460,3 +460,22 @@ def get_local_data_repository(ac):
 
     data_repo = ac.rest('data-repository', 'list', globus_endpoint_id=globus_id)
     return next((da['name'] for da in data_repo), None)
+
+
+def get_lab(ac):
+    """
+    Get list of associated labs from Globus client ID.
+
+    Parameters
+    ----------
+    ac : one.webclient.AlyxClient
+        An AlyxClient instance for querying data repositories.
+
+    Returns
+    -------
+    list
+        The lab names associated with the local Globus endpoint ID.
+    """
+    globus_id = get_local_endpoint_id()
+    lab = ac.rest('labs', 'list', django=f'repositories__globus_endpoint_id,{globus_id}')
+    return [la['name'] for la in lab]
