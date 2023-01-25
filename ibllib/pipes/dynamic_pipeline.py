@@ -172,14 +172,28 @@ def make_pipeline(session_path, **pkwargs):
                 _logger.warning('Number in collection name does not match task order')
         if extractors := task_info.get('extractors', False):
             extractors = (extractors,) if isinstance(extractors, str) else extractors
-            for task in extractors:
+            for j, task in enumerate(extractors):
+                # Assume previous task in the list is parent
+                parents = [] if j == 0 else [tasks[task_name]]
+                # Make sure extractor and sync task don't collide
+                for sync_option in ['nidq', 'bpod']:
+                    if sync_option in task.lower() and not sync == sync_option:
+                        raise ValueError(f'Extractor "{task}" and sync "{sync}" do not match')
                 try:
                     task = getattr(btasks, task)
                 except AttributeError:
                     ...  # TODO Attempt to import from personal project repo
                 # Rename the class to something more informative
                 task_name = f'{task.__name__}_{i:02}'
-                tasks[task_name] = type(task_name, (task,), {})(**kwargs, **task_kwargs)
+                # For now we assume that the second task in the list is always the trials extractor, which is dependent
+                # on the sync task and sync arguments
+                if j == 1:
+                    tasks[task_name] = type(task_name, (task,), {})(
+                        **kwargs, **sync_kwargs, **task_kwargs, parents=parents + sync_tasks
+                    )
+                else:
+                    tasks[task_name] = type(task_name, (task,), {})(**kwargs, **task_kwargs, parents=parents)
+                # For the next task, we assume that the previous task is the parent
         else:  # Legacy block to handle sessions without defined extractors
             # -   choice_world_recording
             # -   choice_world_biased
