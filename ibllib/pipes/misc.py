@@ -234,7 +234,7 @@ def transfer_session_folders(local_sessions: list, remote_subject_folder, subfol
             log.info(msg)
             skip_list += msg + "\n"
             continue
-        if not (remote_session / "raw_behavior_data").exists():
+        if not behavior_exists(remote_session):
             msg = f"{local_session} - skipping session, no behavior data found in remote folder {remote_session}"
             log.warning(msg)
             skip_list += msg + "\n"
