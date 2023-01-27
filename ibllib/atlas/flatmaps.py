@@ -259,7 +259,15 @@ def plot_swanson_vector(acronyms=None, values=None, ax=None, hemisphere=None, br
         else:
             ax.set_ylim(0, 2 * sw.shape[0])
 
+    def format_coord(x, y):
+        ind = sw[int(y), int(x)]
+        ancestors = br.ancestors(br.id[ind])['acronym']
+        return f'sw-{ind}, x={x:1.4f}, y={y:1.4f}, aid={br.id[ind]}-{br.acronym[ind]} \n {ancestors}'
+
+    ax.format_coord = format_coord
+
     ax.invert_yaxis()
+    ax.set_aspect('equal')
 
 
 def plot_swanson(acronyms=None, values=None, ax=None, hemisphere=None, br=None,
@@ -326,7 +334,7 @@ def plot_swanson(acronyms=None, values=None, ax=None, hemisphere=None, br=None,
     def format_coord(x, y):
         ind = s2a[int(y), int(x)]
         ancestors = br.ancestors(br.id[ind])['acronym']
-        return f'x={x:1.4f}, y={x:1.4f}, {br.acronym[ind]} \n {ancestors}'
+        return f'sw-{ind}, x={x:1.4f}, y={y:1.4f}, aid={br.id[ind]}-{br.acronym[ind]} \n {ancestors}'
 
     ax.format_coord = format_coord
     return ax
