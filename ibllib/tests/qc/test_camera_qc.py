@@ -6,13 +6,14 @@ import logging
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
-
 from one.api import ONE
+from iblutil.util import Bunch
+
 from ibllib.tests import TEST_DB
-from ibllib.qc.camera import CameraQC
+from ibllib.qc.camera import CameraQC, get_task_collection
+from ibllib.io import session_params
 from ibllib.io.raw_data_loaders import load_camera_ssv_times
 from ibllib.tests.fixtures import utils
-from iblutil.util import Bunch
 
 
 class TestCameraQC(unittest.TestCase):
@@ -279,6 +280,16 @@ class TestCameraQC(unittest.TestCase):
         with self.assertRaises(AssertionError):
             self.qc.ensure_required_data()
 
+    def test_get_task_collection(self):
+        """Test for ibllib.qc.camera.get_task_collection"""
+        params = {'version': '1.0.0', 'tasks': [
+            {'passiveChoiceWorld': {'collection': 'raw_task_data_00'}},
+            {'ephysChoiceWorld': {'collection': 'raw_task_data_01'}}
+        ]}
+        self.assertEqual('raw_behavior_data', get_task_collection(self.session_path))
+        session_params.write_params(self.session_path, params)
+        self.assertEqual('raw_task_data_01', get_task_collection(self.session_path))
 
-if __name__ == "__main__":
+
+if __name__ == '__main__':
     unittest.main(exit=False, verbosity=2)

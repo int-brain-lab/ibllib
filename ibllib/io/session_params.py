@@ -227,40 +227,40 @@ def get_cameras(sess_params):
     return None if not cameras else list(cameras.keys())
 
 
-def get_sync(sess_params):
-    sync = sess_params.get('sync', None)
-    if not sync:
+def get_sync_label(sess_params):
+    if not sess_params:
         return None
-    else:
-        (sync, _), = sync.items()
-    return sync
+    sync_keys = list((sess_params.get('sync') or {}).keys())
+    if len(sync_keys) == 0:
+        return None
+    if len(sync_keys) > 1:
+        _logger.warning('Multiple sync keys found in experiment description: %s', sync_keys)
+    return sync_keys[0]
+
+
+def get_sync(sess_params):
+    sync_label = get_sync_label(sess_params)
+    if sync_label:
+        return sync_label, sess_params['sync'][sync_label] or {}
+    return None, {}
+
+
+def get_sync_values(sess_params):
+    key = get_sync_label(sess_params)
+    if key:
+        return sess_params['sync'][key]
 
 
 def get_sync_collection(sess_params):
-    sync = sess_params.get('sync', None)
-    if not sync:
-        return None
-    else:
-        (_, sync_details), = sync.items()
-    return sync_details.get('collection', None)
+    return (get_sync_values(sess_params) or {}).get('collection')
 
 
 def get_sync_extension(sess_params):
-    sync = sess_params.get('sync', None)
-    if not sync:
-        return None
-    else:
-        (_, sync_details), = sync.items()
-    return sync_details.get('extension', None)
+    return (get_sync_values(sess_params) or {}).get('extension')
 
 
 def get_sync_namespace(sess_params):
-    sync = sess_params.get('sync', None)
-    if not sync:
-        return None
-    else:
-        (_, sync_details), = sync.items()
-    return sync_details.get('acquisition_software', None)
+    return (get_sync_values(sess_params) or {}).get('acquisition_software')
 
 
 def get_task_protocol(sess_params, task_collection=None):

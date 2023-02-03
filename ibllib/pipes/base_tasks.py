@@ -28,7 +28,7 @@ class DynamicTask(Task):
         return sync_collection if sync_collection else sess_params.get_sync_collection(self.session_params)
 
     def get_sync(self, sync=None):
-        return sync if sync else sess_params.get_sync(self.session_params)
+        return sync if sync else sess_params.get_sync_label(self.session_params)
 
     def get_sync_extension(self, sync_ext=None):
         return sync_ext if sync_ext else sess_params.get_sync_extension(self.session_params)
@@ -47,7 +47,10 @@ class DynamicTask(Task):
         return collection
 
     def get_device_collection(self, device, device_collection=None):
-        return device_collection if device_collection else sess_params.get_device_collection(self.session_params, device)
+        if device_collection:
+            return device_collection
+        collection_map = sess_params.get_collections(self.session_params['devices'])
+        return collection_map.get(device)
 
     def read_params_file(self):
         params = sess_params.read_params(self.session_path)

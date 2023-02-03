@@ -23,13 +23,31 @@ class VideoRegisterRaw(base_tasks.VideoTask, base_tasks.RegisterRawDataTask):
         signature = {
             'input_files': [],
             'output_files':
-                [(f'_iblrig_{cam}Camera.timestamps*', self.device_collection, True) for cam in self.cameras] +
+                [(f'_iblrig_{cam}Camera.timestamps*', self.device_collection, False) for cam in self.cameras] +
                 [(f'_iblrig_{cam}Camera.GPIO.bin', self.device_collection, False) for cam in self.cameras] +
                 [(f'_iblrig_{cam}Camera.frame_counter.bin', self.device_collection, False) for cam in self.cameras] +
                 [(f'_iblrig_{cam}Camera.frameData.bin', self.device_collection, False) for cam in self.cameras] +
                 [('_iblrig_videoCodeFiles.raw*', self.device_collection, False)]
         }
         return signature
+
+    def assert_expected_outputs(self, raise_error=True):
+        """
+        frameData replaces the timestamps file. Therefore if frameData is present, timestamps is
+        optional and vice versa.
+        """
+        assert self.status == 0
+        _logger.info('Checking output files')
+        everything_is_fine, files = self.assert_expected(self.output_files)
+
+        required = any('Camera.frameData' in x or 'Camera.timestamps' in x for x in map(str, files))
+        if not (everything_is_fine and required):
+            for out in self.outputs:
+                _logger.error(f"{out}")
+            if raise_error:
+                raise FileNotFoundError("Missing outputs after task completion")
+
+        return everything_is_fine, files
 
 
 class VideoCompress(base_tasks.VideoTask):
@@ -236,7 +254,8 @@ class VideoSyncQcNidq(base_tasks.VideoTask):
                             (f'_{self.sync_namespace}_sync.times.npy', self.sync_collection, True),
                             ('*.wiring.json', self.sync_collection, True),
                             ('*wheel.position.npy', 'alf', False),
-                            ('*wheel.timestamps.npy', 'alf', False)],
+                            ('*wheel.timestamps.npy', 'alf', False),
+                            ('*experiment.description*', '', False)],
             'output_files': [(f'_ibl_{cam}Camera.times.npy', 'alf', True) for cam in self.cameras]
         }
 
@@ -244,7 +263,7 @@ class VideoSyncQcNidq(base_tasks.VideoTask):
 
     def _run(self, **kwargs):
 
-        mp4_files = self.session_path.joinpath(self.device_collection).rglob('*.mp4')
+        mp4_files = self.session_path.joinpath(self.device_collection).glob('*.mp4')
         labels = [label_from_path(x) for x in mp4_files]
 
         # Video timestamps extraction
