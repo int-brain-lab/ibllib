@@ -921,7 +921,7 @@ def patch_settings(session_path, collection='raw_behavior_data',
             if isinstance(settings[k], str):
                 settings[k] = settings[k].replace(f'\\Subjects\\{old_subject}', f'\\Subjects\\{subject}')
         settings['SESSION_NAME'] = '\\'.join([subject, *settings['SESSION_NAME'].split('\\')[1:]])
-        settings.pop('PYBPOD_SUBJECT_EXTRA')  # Get rid of Alyx subject info
+        settings.pop('PYBPOD_SUBJECT_EXTRA', None)  # Get rid of Alyx subject info
 
     if date:
         # Patch session datetime

@@ -348,8 +348,7 @@ class CameraQC(base.QC):
 
         # dataset collections outside this list are ignored (e.g. probe00, raw_passive_data)
         collections = (
-            'alf', '', self.sync_collection, get_task_collection(sess_params),
-            get_video_collection(sess_params, self.label)
+            'alf', '', get_task_collection(sess_params), get_video_collection(sess_params, self.label)
         )
         dtypes = self.dstypes + self.dstypes_fpga if is_fpga else self.dstypes
         assert_unique = True
@@ -359,10 +358,11 @@ class CameraQC(base.QC):
             det = self.one.get_details(self.eid, full=True)
             probe_model = next(x['model'] for x in det['probe_insertion'])
             assert probe_model == '3A', 'raw ephys data missing'
+            collections += (self.sync_collection or 'raw_ephys_data',)
             if sess_params:
                 probes = sess_params.get('devices', {}).get('neuropixel', {})
                 probes = set(x.get('collection') for x in chain(*map(dict.values, probes)))
-                collections += tuple(filter(None, probes))
+                collections += tuple(probes)
             else:
                 collections += ('raw_ephys_data/probe00', 'raw_ephys_data/probe01')
             assert_unique = False
@@ -419,15 +419,31 @@ class CameraQC(base.QC):
             self._type = 'ephys' if self.sync == 'nidq' else 'training'
 
     def _update_meta_from_session_params(self, sess_params):
-        if sess_params:
-            try:
-                video_pars = sess_params['devices']['cameras'][self.label]
-                self.video_meta[self.type][self.label] = {
-                    **self.video_meta.get(self.type, {}).get(self.label, {}),
-                    **{k: v for k, v in video_pars.items() if k in ('width', 'height', 'fps')}
-                }
-            except KeyError:
-                pass
+        """
+        Update the default expected video properties with those defined in the experiment
+        description file (if any).  This updates the `video_meta` property with the fps, width and
+        height for the type and camera label.
+
+        Parameters
+        ----------
+        sess_params : dict
+            The loaded experiment.description file.
+        """
+        try:
+            assert sess_params
+            video_pars = sess_params.get('devices', {}).get('cameras', {}).get(self.label)
+        except (AssertionError, KeyError):
+            return
+        PROPERTIES = ('width', 'height', 'fps')
+        video_meta = self.video_meta.copy()  # must re-assign as it's a class attribute
+        if self.type not in video_meta:
+            video_meta[self.type] = {}
+        if self.label not in video_meta[self.type]:
+            video_meta[self.type][self.label] = {}
+        video_meta[self.type][self.label].update(
+            **{k: v for k, v in video_pars.items() if k in PROPERTIES}
+        )
+        self.video_meta = video_meta
 
     def run(self, update: bool = False, **kwargs) -> (str, dict):
         """
