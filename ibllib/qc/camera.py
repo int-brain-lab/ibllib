@@ -36,6 +36,7 @@ import logging
 from inspect import getmembers, isfunction
 from pathlib import Path
 from itertools import chain
+import copy
 
 import cv2
 import numpy as np
@@ -435,7 +436,7 @@ class CameraQC(base.QC):
         except (AssertionError, KeyError):
             return
         PROPERTIES = ('width', 'height', 'fps')
-        video_meta = self.video_meta.copy()  # must re-assign as it's a class attribute
+        video_meta = copy.deepcopy(self.video_meta)  # must re-assign as it's a class attribute
         if self.type not in video_meta:
             video_meta[self.type] = {}
         if self.label not in video_meta[self.type]:
