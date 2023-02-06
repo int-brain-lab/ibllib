@@ -217,8 +217,8 @@ class CameraQC(base.QC):
 
         try:
             video_pars = sess_params['devices']['cameras'][self.label]
-            self.video_meta[self.type] = {
-                **self.video_meta.get(self.type, {}),
+            self.video_meta[self.type][self.label] = {
+                **self.video_meta.get(self.type, {}).get(self.label, {}),
                 **{k: v for k, v in video_pars.items() if k in ('width', 'height', 'fps')}
             }
         except KeyError:
@@ -250,7 +250,7 @@ class CameraQC(base.QC):
             kwargs = dict(video_path=self.video_path, labels=self.label)
             if self.sync != 'bpod' and self.sync is not None:
                 kwargs = {**kwargs, 'sync': sync, 'chmap': chmap}  # noqa
-            outputs, _ = extract_all(self.session_path, self.type, save=False,
+            outputs, _ = extract_all(self.session_path, self.sync, save=False,
                                      sync_collection=self.sync_collection, **kwargs)
             self.data['timestamps'] = outputs[f'{self.label}_camera_timestamps']
         except ALFObjectNotFound:
