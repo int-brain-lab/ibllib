@@ -172,6 +172,7 @@ def make_pipeline(session_path, **pkwargs):
                 _logger.warning('Number in collection name does not match task order')
         if extractors := task_info.get('extractors', False):
             extractors = (extractors,) if isinstance(extractors, str) else extractors
+            task_name = None  # to avoid unbound variable issue in the first round
             for j, task in enumerate(extractors):
                 # Assume previous task in the list is parent
                 parents = [] if j == 0 else [tasks[task_name]]
