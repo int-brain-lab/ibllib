@@ -130,7 +130,7 @@ class CameraQC(base.QC):
         self.download_data = kwargs.pop('download_data', download_data)
         self.stream = kwargs.pop('stream', None)
         self.n_samples = kwargs.pop('n_samples', 100)
-        self.sync_collection = kwargs.pop('sync_collection', 'raw_ephys_data')
+        self.sync_collection = kwargs.pop('sync_collection', None)
         self.sync = kwargs.pop('sync_type', None)
         super().__init__(session_path_or_eid, **kwargs)
 
@@ -161,6 +161,7 @@ class CameraQC(base.QC):
 
         # Specify any checks to remove
         self.checks_to_remove = []
+        self._type = None
 
     @property
     def type(self):
@@ -172,11 +173,6 @@ class CameraQC(base.QC):
             return
         else:
             return 'ephys' if 'ephys' in self._type else 'training'
-
-    @type.setter
-    def type(self, val):
-        if val not in self.video_meta.keys():
-            raise ValueError(f'Type must be one of {set(self.video_meta.keys())}, got {val}')
 
     def load_data(self, download_data: bool = None, extract_times: bool = False, load_video: bool = True) -> None:
         """Extract the data from raw data files
@@ -211,21 +207,26 @@ class CameraQC(base.QC):
             raw.load_embedded_frame_data(self.session_path, self.label, raw=True)
 
         # If there is an experiment description and there are video parameters
-        # FIXME Need to get type to ensure required data, but need experiment description to get collection
         sess_params = read_params(self.session_path) or {}
-        task_collection = get_task_collection(self.session_path)
-        self._type = get_session_extractor_type(self.session_path, task_collection)
-        self.sync = self.sync or ('nidq' if self._type == 'ephys' else 'bpod')
+        task_collection = get_task_collection(sess_params)
+        self._set_sync(sess_params)
+        if not self.sync:
+            if not self.type:
+                self._type = get_session_extractor_type(self.session_path, task_collection)
+            self.sync = 'nidq' if 'ephys' in self.type else 'bpod'
+
         try:
             video_pars = sess_params['devices']['cameras'][self.label]
-            self.video_meta[self.type].update(
-                {k: v for k, v in video_pars.items() if k in ('width', 'height', 'fps')}
-            )
-        except IndexError:
+            self.video_meta[self.type] = {
+                **self.video_meta.get(self.type, {}),
+                **{k: v for k, v in video_pars.items() if k in ('width', 'height', 'fps')}
+            }
+        except KeyError:
             pass
 
         # Load the audio and raw FPGA times
         if self.sync != 'bpod' and self.sync is not None:
+            self.sync_collection = self.sync_collection or 'raw_ephys_data'
             sync, chmap = ephys_fpga.get_sync_and_chn_map(self.session_path, self.sync_collection)
             audio_ttls = ephys_fpga.get_sync_fronts(sync, chmap['audio'])
             self.data['audio'] = audio_ttls['times']  # Get rises
@@ -233,9 +234,10 @@ class CameraQC(base.QC):
             cam_ts = extract_camera_sync(sync, chmap)
             self.data['fpga_times'] = cam_ts[self.label]
         else:
-            bpod_data = raw.load_data(self.session_path, self.sync_collection)
+            self.sync_collection = self.sync_collection or task_collection
+            bpod_data = raw.load_data(self.session_path, task_collection)
             _, audio_ttls = raw.load_bpod_fronts(
-                self.session_path, data=bpod_data, task_collection=self.sync_collection)
+                self.session_path, data=bpod_data, task_collection=task_collection)
             self.data['audio'] = audio_ttls['times']
 
         # Load extracted frame times
@@ -248,7 +250,7 @@ class CameraQC(base.QC):
             kwargs = dict(video_path=self.video_path, labels=self.label)
             if self.sync != 'bpod' and self.sync is not None:
                 kwargs = {**kwargs, 'sync': sync, 'chmap': chmap}  # noqa
-            outputs, _ = extract_all(self.session_path, self.type, save=False, sync_type=self.sync,
+            outputs, _ = extract_all(self.session_path, self.type, save=False,
                                      sync_collection=self.sync_collection, **kwargs)
             self.data['timestamps'] = outputs[f'{self.label}_camera_timestamps']
         except ALFObjectNotFound:
@@ -266,7 +268,7 @@ class CameraQC(base.QC):
                 wheel_data = ephys_fpga.extract_wheel_sync(sync, chmap)
             else:
                 wheel_data = training_wheel.get_wheel_position(
-                    self.session_path, task_collection=self.sync_collection)
+                    self.session_path, task_collection=task_collection)
             self.data['wheel'] = Bunch(zip(wheel_keys, wheel_data))
 
         # Find short period of wheel motion for motion correlation.
@@ -337,10 +339,14 @@ class CameraQC(base.QC):
         """
         assert self.one is not None, 'ONE required to download data'
 
-        if self.download_data and not self.sync:
+        sess_params = {}
+        if self.download_data:
             dset = self.one.list_datasets(self.session_path, '*experiment.description*', details=True)
             if self.one._check_filesystem(dset):
-                self._set_sync()
+                sess_params = read_params(self.session_path) or {}
+        else:
+            sess_params = read_params(self.session_path) or {}
+        self._set_sync(sess_params)
 
         # Get extractor type
         is_ephys = 'ephys' in (self.type or self.one.get_details(self.eid)['task_protocol'])
@@ -349,7 +355,10 @@ class CameraQC(base.QC):
         is_fpga = 'bpod' not in self.sync
 
         # dataset collections outside this list are ignored (e.g. probe00, raw_passive_data)
-        collections = ('alf', self.sync_collection, 'raw_behavior_data', 'raw_video_data', '')
+        collections = (
+            'alf', '', self.sync_collection, get_task_collection(sess_params),
+            get_video_collection(sess_params, self.label)
+        )
         dtypes = self.dstypes + self.dstypes_fpga if is_fpga else self.dstypes
         assert_unique = True
         # Check we have raw ephys data for session
@@ -358,7 +367,12 @@ class CameraQC(base.QC):
             det = self.one.get_details(self.eid, full=True)
             probe_model = next(x['model'] for x in det['probe_insertion'])
             assert probe_model == '3A', 'raw ephys data missing'
-            collections += ('raw_ephys_data/probe00', 'raw_ephys_data/probe01')
+            if sess_params:
+                probes = sess_params.get('devices', {}).get('neuropixel', {})
+                probes = set(x.get('collection') for x in chain(*map(dict.values, probes)))
+                collections += tuple(filter(None, probes))
+            else:
+                collections += ('raw_ephys_data/probe00', 'raw_ephys_data/probe01')
             assert_unique = False
         for dstype in dtypes:
             datasets = self.one.type2datasets(self.eid, dstype, details=True)
@@ -389,19 +403,28 @@ class CameraQC(base.QC):
             all_present = not datasets.empty and all(present)
             assert all_present or not required, f'Dataset {dstype} not found'
 
-        self._type = 'ephys' if self.sync == 'nidq' else get_session_extractor_type(self.session_path)
+        if not self.type and self.sync != 'nidq':
+            self._type = get_session_extractor_type(self.session_path)
 
-    def _set_sync(self):
+    def _set_sync(self, session_params=False):
         """Set the sync and sync_collection attributes if not already set.
 
         Also set the type attribute based on the sync. NB The type attribute is for legacy sessions.
+
+        Parameters
+        ----------
+        session_params : dict, bool
+            The loaded experiment description file.  If False, attempts to load it from the session_path.
         """
-        if not self.session_path:
-            raise ValueError('No session path set')
-        sync, sync_dict = get_sync(read_params(self.session_path))
+        if session_params is False:
+            if not self.session_path:
+                raise ValueError('No session path set')
+            session_params = read_params(self.session_path)
+        sync, sync_dict = get_sync(session_params)
         self.sync = self.sync or sync
         self.sync_collection = self.sync_collection or sync_dict.get('collection')
-        self._type = 'ephys' if self.sync == 'nidq' else 'training'
+        if self.sync:
+            self._type = 'ephys' if self.sync == 'nidq' else 'training'
 
     def run(self, update: bool = False, **kwargs) -> (str, dict):
         """
@@ -1045,22 +1068,23 @@ class CameraQCCamlog(CameraQC):
             self.ensure_required_data()
         _log.info('Gathering data for QC')
 
-        # Get frame count
-        log, _ = parse_cam_log(self.session_path.joinpath('raw_video_data', f'_iblrig_{self.label}Camera.raw.camlog'))
-        self.data['count'] = log.frame_id.values
-
         # If there is an experiment description and there are video parameters
         sess_params = read_params(self.session_path) or {}
-        task_collection = get_task_collection(self.session_path)
-        self._type = get_session_extractor_type(self.session_path, task_collection)
-        self.sync = self.sync or 'nidq' if self._type == 'ephys' else 'bpod'
+        video_collection = get_video_collection(sess_params, self.label)
+        task_collection = get_task_collection(sess_params)
+        self._set_sync(sess_params)
+
         try:
             video_pars = sess_params['devices']['cameras'][self.label]
             self.video_meta[self.type].update(
                 {k: v for k, v in video_pars.items() if k in ('width', 'height', 'fps')}
             )
-        except IndexError:
+        except KeyError:
             pass
+
+        # Get frame count
+        log, _ = parse_cam_log(self.session_path.joinpath(video_collection, f'_iblrig_{self.label}Camera.raw.camlog'))
+        self.data['count'] = log.frame_id.values
 
         # Load the audio and raw FPGA times
         if self.sync != 'bpod' and self.sync is not None:
@@ -1071,8 +1095,8 @@ class CameraQCCamlog(CameraQC):
             cam_ts = extract_camera_sync(sync, chmap)
             self.data['fpga_times'] = cam_ts[self.label]
         else:
-            bpod_data = raw.load_data(self.session_path, task_collection=self.sync_collection)
-            _, audio_ttls = raw.load_bpod_fronts(self.session_path, data=bpod_data, task_collection=self.sync_collection)
+            bpod_data = raw.load_data(self.session_path, task_collection=task_collection)
+            _, audio_ttls = raw.load_bpod_fronts(self.session_path, data=bpod_data, task_collection=task_collection)
             self.data['audio'] = audio_ttls['times']
 
         # Load extracted frame times
@@ -1084,7 +1108,7 @@ class CameraQCCamlog(CameraQC):
         except AssertionError:  # Re-extract
             kwargs = dict(video_path=self.video_path, labels=self.label)
             if self.sync == 'bpod':
-                kwargs = {**kwargs, 'task_collection': self.sync_collection}
+                kwargs = {**kwargs, 'task_collection': task_collection}
             else:
                 kwargs = {**kwargs, 'sync': sync, 'chmap': chmap}  # noqa
             outputs, _ = extract_all(
@@ -1104,7 +1128,7 @@ class CameraQCCamlog(CameraQC):
             if self.sync != 'bpod':
                 wheel_data = ephys_fpga.extract_wheel_sync(sync, chmap)
             else:
-                wheel_data = training_wheel.get_wheel_position(self.session_path, task_collection=self.sync_collection)
+                wheel_data = training_wheel.get_wheel_position(self.session_path, task_collection=task_collection)
             self.data['wheel'] = Bunch(zip(wheel_keys, wheel_data))
 
         # Find short period of wheel motion for motion correlation.
@@ -1129,8 +1153,21 @@ class CameraQCCamlog(CameraQC):
         :return:
         """
         assert self.one is not None, 'ONE required to download data'
+
+        sess_params = {}
+        if self.download_data:
+            dset = self.one.list_datasets(self.session_path, '*experiment.description*', details=True)
+            if self.one._check_filesystem(dset):
+                sess_params = read_params(self.session_path) or {}
+        else:
+            sess_params = read_params(self.session_path) or {}
+        self._set_sync(sess_params)
+
         # dataset collections outside this list are ignored (e.g. probe00, raw_passive_data)
-        collections = ('alf', self.sync_collection, 'raw_behavior_data', 'raw_video_data')
+        collections = (
+            'alf', '', self.sync_collection, get_task_collection(sess_params),
+            get_video_collection(sess_params, self.label))
+
         # Get extractor type
         dtypes = self.dstypes + self.dstypes_fpga
         assert_unique = True
@@ -1172,24 +1209,49 @@ def data_for_keys(keys, data):
     return data is not None and all(k in data and data.get(k, None) is not None for k in keys)
 
 
-def get_task_collection(session_path):
+def get_task_collection(sess_params):
     """
     Returns the first task collection from the experiment description whose task name does not
     contain 'passive', otherwise returns 'raw_behavior_data'.
 
     Parameters
     ----------
-    session_path : str, pathlib.Path
-        The session path containing task data.
+    sess_params : dict
+        The loaded experiment description file.
 
     Returns
     -------
     str:
         The collection presumed to contain wheel data.
     """
-    params = read_params(session_path) or {}
-    tasks = (chain(*map(dict.items, params.get('tasks', []))))
+    sess_params = sess_params or {}
+    tasks = (chain(*map(dict.items, sess_params.get('tasks', []))))
     return next((v['collection'] for k, v in tasks if 'passive' not in k), 'raw_behavior_data')
+
+
+def get_video_collection(sess_params, label):
+    """
+    Returns the collection containing the raw video data for a given camera.
+
+    Parameters
+    ----------
+    sess_params : dict
+        The loaded experiment description file.
+    label : str
+        The camera label.
+
+    Returns
+    -------
+    str:
+        The collection presumed to contain the video data.
+    """
+    DEFAULT = 'raw_video_data'
+    value = sess_params or {}
+    for key in ('devices', 'cameras', label, 'collection'):
+        value = value.get(key)
+        if not value:
+            return DEFAULT
+    return value
 
 
 def run_all_qc(session, cameras=('left', 'right', 'body'), **kwargs):

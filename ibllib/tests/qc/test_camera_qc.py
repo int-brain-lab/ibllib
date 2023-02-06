@@ -286,9 +286,8 @@ class TestCameraQC(unittest.TestCase):
             {'passiveChoiceWorld': {'collection': 'raw_task_data_00'}},
             {'ephysChoiceWorld': {'collection': 'raw_task_data_01'}}
         ]}
-        self.assertEqual('raw_behavior_data', get_task_collection(self.session_path))
-        session_params.write_params(self.session_path, params)
-        self.assertEqual('raw_task_data_01', get_task_collection(self.session_path))
+        self.assertEqual('raw_behavior_data', get_task_collection(None))
+        self.assertEqual('raw_task_data_01', get_task_collection(params))
 
 
 if __name__ == '__main__':
