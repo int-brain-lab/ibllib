@@ -11,7 +11,6 @@ from iblutil.util import Bunch
 
 from ibllib.tests import TEST_DB
 from ibllib.qc.camera import CameraQC, get_task_collection
-from ibllib.io import session_params
 from ibllib.io.raw_data_loaders import load_camera_ssv_times
 from ibllib.tests.fixtures import utils
 

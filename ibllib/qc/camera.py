@@ -214,15 +214,7 @@ class CameraQC(base.QC):
             if not self.type:
                 self._type = get_session_extractor_type(self.session_path, task_collection)
             self.sync = 'nidq' if 'ephys' in self.type else 'bpod'
-
-        try:
-            video_pars = sess_params['devices']['cameras'][self.label]
-            self.video_meta[self.type][self.label] = {
-                **self.video_meta.get(self.type, {}).get(self.label, {}),
-                **{k: v for k, v in video_pars.items() if k in ('width', 'height', 'fps')}
-            }
-        except KeyError:
-            pass
+        self._update_meta_from_session_params(sess_params)
 
         # Load the audio and raw FPGA times
         if self.sync != 'bpod' and self.sync is not None:
@@ -425,6 +417,17 @@ class CameraQC(base.QC):
         self.sync_collection = self.sync_collection or sync_dict.get('collection')
         if self.sync:
             self._type = 'ephys' if self.sync == 'nidq' else 'training'
+
+    def _update_meta_from_session_params(self, sess_params):
+        if sess_params:
+            try:
+                video_pars = sess_params['devices']['cameras'][self.label]
+                self.video_meta[self.type][self.label] = {
+                    **self.video_meta.get(self.type, {}).get(self.label, {}),
+                    **{k: v for k, v in video_pars.items() if k in ('width', 'height', 'fps')}
+                }
+            except KeyError:
+                pass
 
     def run(self, update: bool = False, **kwargs) -> (str, dict):
         """
@@ -1073,14 +1076,7 @@ class CameraQCCamlog(CameraQC):
         video_collection = get_video_collection(sess_params, self.label)
         task_collection = get_task_collection(sess_params)
         self._set_sync(sess_params)
-
-        try:
-            video_pars = sess_params['devices']['cameras'][self.label]
-            self.video_meta[self.type].update(
-                {k: v for k, v in video_pars.items() if k in ('width', 'height', 'fps')}
-            )
-        except KeyError:
-            pass
+        self._update_meta_from_session_params(sess_params)
 
         # Get frame count
         log, _ = parse_cam_log(self.session_path.joinpath(video_collection, f'_iblrig_{self.label}Camera.raw.camlog'))
@@ -1111,8 +1107,7 @@ class CameraQCCamlog(CameraQC):
                 kwargs = {**kwargs, 'task_collection': task_collection}
             else:
                 kwargs = {**kwargs, 'sync': sync, 'chmap': chmap}  # noqa
-            outputs, _ = extract_all(
-                self.session_path, session_type=self.type, save=False, camlog=True, sync_type=self.sync, **kwargs)
+            outputs, _ = extract_all(self.session_path, self.sync, save=False, camlog=True, **kwargs)
             self.data['timestamps'] = outputs[f'{self.label}_camera_timestamps']
         except ALFObjectNotFound:
             _log.warning('no camera.times ALF found for session')
@@ -1165,7 +1160,7 @@ class CameraQCCamlog(CameraQC):
 
         # dataset collections outside this list are ignored (e.g. probe00, raw_passive_data)
         collections = (
-            'alf', '', self.sync_collection, get_task_collection(sess_params),
+            'alf', self.sync_collection, get_task_collection(sess_params),
             get_video_collection(sess_params, self.label))
 
         # Get extractor type
