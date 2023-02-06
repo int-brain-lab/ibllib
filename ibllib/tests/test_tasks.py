@@ -7,6 +7,8 @@ from collections import OrderedDict
 
 import ibllib.pipes.tasks
 from ibllib.pipes.base_tasks import ExperimentDescriptionRegisterRaw
+from ibllib.pipes.video_tasks import VideoConvert
+from ibllib.io import session_params
 from one.api import ONE
 from one.webclient import no_cache
 from ibllib.tests import TEST_DB
@@ -331,6 +333,24 @@ class TestExperimentDescriptionRegisterRaw(unittest.TestCase):
                     '_ephysChoiceWorld_01': None,
                     '_passiveChoiceWorld_00': None}
         self.assertDictEqual(expected, ses['json'].get('sign_off_checklist', {}))
+
+
+class TestDynamicTask(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tempdir.cleanup)
+        self.task = VideoConvert(self.tempdir.name, ['left'])
+
+    def test_get_device_collection(self):
+        """Test for DynamicTask.get_device_collection method"""
+        device = 'probe00'
+        collection = self.task.get_device_collection(device, 'raw_ephys_data')
+        self.assertEqual('raw_ephys_data', collection)
+        fixture = Path(__file__).parent.joinpath('fixtures', 'io', '_ibl_experiment.description.yaml')
+        assert fixture.exists()
+        self.task.session_params = session_params.read_params(fixture)
+        collection = self.task.get_device_collection(device)
+        self.assertEqual('raw_ephys_data/probe00', collection)
 
 
 if __name__ == '__main__':

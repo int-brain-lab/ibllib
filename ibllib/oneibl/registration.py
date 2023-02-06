@@ -9,7 +9,7 @@ from one.alf.files import get_session_path, folder_parts, get_alf_path
 from one.registration import RegistrationClient, get_dataset_type
 from one.remote.globus import get_local_endpoint_id
 import one.alf.exceptions as alferr
-from one.util import datasets2records
+from one.util import datasets2records, ensure_list
 
 import ibllib
 import ibllib.io.extractors.base
@@ -173,7 +173,7 @@ class IBLRegistrationClient(RegistrationClient):
         else:
             projects = experiment_description_file.get('projects', projects)
             procedures = experiment_description_file.get('procedures', procedures)
-            collections = session_params.get_task_collection(experiment_description_file)
+            collections = ensure_list(session_params.get_task_collection(experiment_description_file))
 
         # read meta data from the rig for the session from the task settings file
         task_data = (raw.load_bpod(ses_path, collection) for collection in sorted(collections))

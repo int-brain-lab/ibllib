@@ -85,7 +85,7 @@ class Task(abc.ABC):
             -2: Didn't run as a lock was encountered
             -3: Incomplete
         """
-        # if taskid of one properties are not available, local run only without alyx
+        # if task id of one properties are not available, local run only without alyx
         use_alyx = self.one is not None and self.taskid is not None
         if use_alyx:
             # check that alyx user is logged in
@@ -611,7 +611,7 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
     exec_name = tdict['executable']
     strmodule, strclass = exec_name.rsplit('.', 1)
     classe = getattr(importlib.import_module(strmodule), strclass)
-    tkwargs = tdict.get('arguments', {}) or {}  # if the db field is null it returns None
+    tkwargs = tdict.get('arguments') or {}  # if the db field is null it returns None
     task = classe(session_path, one=one, taskid=tdict['id'], machine=machine, clobber=clobber,
                   location=location, **tkwargs)
     # sets the status flag to started before running

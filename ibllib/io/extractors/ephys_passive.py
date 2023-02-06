@@ -149,12 +149,12 @@ def _get_spacer_times(spacer_template, jitter, ttl_signal, t_quiet):
     spacer_around = int((np.floor(len(spacer_model) / 2)))
     idxs_spacer_middle += 2 - spacer_around
 
-    # for each spacer make sure the times are monotonically increasing before
-    # and monotonically decreasing afterwards
+    # for each spacer make sure the times are monotonically non-decreasing before
+    # and monotonically non-increasing afterwards
     is_valid = np.zeros((idxs_spacer_middle.size), dtype=bool)
     for i, t in enumerate(idxs_spacer_middle):
-        before = all(np.diff(dttl[t - spacer_around:t]) > 0)
-        after = all(np.diff(dttl[t + 1:t + 1 + spacer_around]) < 0)
+        before = all(np.diff(dttl[t - spacer_around:t]) >= 0)
+        after = all(np.diff(dttl[t + 1:t + 1 + spacer_around]) <= 0)
         is_valid[i] = np.bitwise_and(before, after)
 
     idxs_spacer_middle = idxs_spacer_middle[is_valid]
@@ -277,8 +277,8 @@ def _reshape_RF(RF_file, meta_stim):
 # 3/3 Replay of task stimuli
 def _extract_passiveGabor_df(fttl: dict, session_path: str, task_collection: str = 'raw_passive_data') -> pd.DataFrame:
     # At this stage we want to define what pulses are and not quality control them.
-    # Pulses are stricty altternating with intevals
-    # find min max lengths for both (we don'tknow which are pulses and which are intervals yet)
+    # Pulses are strictly alternating with intervals
+    # find min max lengths for both (we don't know which are pulses and which are intervals yet)
     # trim edges of pulses
     diff0 = (np.min(np.diff(fttl["times"])[2:-2:2]), np.max(np.diff(fttl["times"])[2:-1:2]))
     diff1 = (np.min(np.diff(fttl["times"])[3:-2:2]), np.max(np.diff(fttl["times"])[3:-1:2]))
@@ -288,11 +288,9 @@ def _extract_passiveGabor_df(fttl: dict, session_path: str, task_collection: str
     elif max(diff0 + diff1) in diff1:
         thresh = diff1[0]
     # Anything lower than the min length of intervals is a pulse
-    idx_start_stims = np.where((np.diff(fttl["times"]) < thresh) & (np.diff(fttl["times"]) > 0.1))[
-        0
-    ]
+    idx_start_stims = np.where((np.diff(fttl["times"]) < thresh) & (np.diff(fttl["times"]) > 0.1))[0]
     # Check if any pulse has been missed
-    # i.e. expected lenght (without first puls) and that it's alternating
+    # i.e. expected length (without first pulse) and that it's alternating
     if len(idx_start_stims) < NGABOR - 1 and np.any(np.diff(idx_start_stims) > 2):
         log.warning("Looks like one or more pulses were not detected, trying to extrapolate...")
         missing_where = np.where(np.diff(idx_start_stims) > 2)[0]
@@ -314,7 +312,7 @@ def _extract_passiveGabor_df(fttl: dict, session_path: str, task_collection: str
     # intervals dstype requires reshaping of start and end times
     passiveGabor_intervals = np.array([(x, y) for x, y in zip(start_times, end_times)])
 
-    # Check length of presentation of stim is  within 150msof expected
+    # Check length of presentation of stim is within 150ms of expected
     if not np.allclose([y - x for x, y in passiveGabor_intervals], 0.3, atol=0.15):
         log.warning("Some Gabor presentation lengths seem wrong.")
 
