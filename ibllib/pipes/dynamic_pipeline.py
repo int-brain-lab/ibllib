@@ -129,6 +129,8 @@ def make_pipeline(session_path, **pkwargs):
         raise ValueError('Session path does not exist')
     tasks = OrderedDict()
     acquisition_description = sess_params.read_params(session_path)
+    if not acquisition_description:
+        raise ValueError('Experiment description file not found or is empty')
     devices = acquisition_description.get('devices', {})
     kwargs = {'session_path': session_path}
 
