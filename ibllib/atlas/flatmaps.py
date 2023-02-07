@@ -19,6 +19,7 @@ from iblutil.io.hashfile import md5
 import one.remote.aws as aws
 
 from ibllib.atlas.atlas import AllenAtlas, BrainRegions
+from ibllib.atlas.plots import plot_polygon, plot_polygon_with_hole, coords_for_poly_hole
 
 
 _logger = logging.getLogger(__name__)
@@ -172,31 +173,6 @@ def plot_swanson_vector(acronyms=None, values=None, ax=None, hemisphere=None, br
 
     sw = swanson()
     sw_json = swanson_json()
-
-    def plot_polygon(ax, xy, color, edgecolor='k', linewidth=0.3):
-        p = Polygon(xy, facecolor=color, edgecolor=edgecolor, linewidth=linewidth)
-        ax.add_patch(p)
-
-    def plot_polygon_with_hole(ax, vertices, codes, color, edgecolor='k', linewidth=0.3):
-
-        path = mpath.Path(vertices, codes)
-        patch = PathPatch(path, facecolor=color, edgecolor=edgecolor, linewidth=linewidth)
-        ax.add_patch(patch)
-
-    def coords_for_poly_hole(coords):
-        for i, c in enumerate(coords):
-            xy = np.c_[c['x'], c['y']]
-            codes = np.ones(len(xy), dtype=mpath.Path.code_type) * mpath.Path.LINETO
-            codes[0] = mpath.Path.MOVETO
-            if i == 0:
-                all_coords = xy[::c['invert']]
-                all_codes = codes
-            else:
-                codes[-1] = mpath.Path.CLOSEPOLY
-                all_coords = np.concatenate((all_coords, xy[::c['invert']]))
-                all_codes = np.concatenate((all_codes, codes))
-
-        return all_coords, all_codes
 
     for i, reg in enumerate(sw_json):
 
