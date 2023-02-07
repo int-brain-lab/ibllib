@@ -66,7 +66,7 @@ class VideoCompress(base_tasks.VideoTask):
         return signature
 
     def _run(self):
-        # TODO different compression parameters based on whether it is training or not based on number of camers?
+        # TODO different compression parameters based on whether it is training or not based on number of cameras?
         # avi to mp4 compression
         if self.sync == 'bpod':
             command = ('ffmpeg -i {file_in} -y -nostdin -codec:v libx264 -preset slow -crf 29 '

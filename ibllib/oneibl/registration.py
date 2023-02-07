@@ -262,10 +262,10 @@ class IBLRegistrationClient(RegistrationClient):
                 _, _end_time = _get_session_times(ses_path, md, d)
                 user = md.get('PYBPOD_CREATOR')
                 user = user[0] if user[0] in users else self.one.alyx.user
-                volume = d[-1]['water_delivered'] / 1000
-                self.register_water_administration(
-                    subject['nickname'], volume, date_time=_end_time or end_time, user=user,
-                    session=session['id'], water_type=md.get('REWARD_TYPE') or 'Water')
+                if (volume := d[-1]['water_delivered'] / 1000) > 0:
+                    self.register_water_administration(
+                        subject['nickname'], volume, date_time=_end_time or end_time, user=user,
+                        session=session['id'], water_type=md.get('REWARD_TYPE') or 'Water')
         # at this point the session has been created. If create only, exit
         if not file_list:
             return session, None
