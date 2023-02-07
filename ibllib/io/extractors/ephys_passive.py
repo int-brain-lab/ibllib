@@ -200,7 +200,7 @@ def _get_passive_spacers(session_path, sync_collection='raw_ephys_data',
             f"trace ({int(np.size(spacer_times)/2)})"
         )
 
-    spacer_times = np.r_[spacer_times.flatten(), sync["times"][-1]]
+    spacer_times = np.r_[spacer_times.flatten(), tmax]
     return spacer_times[0], spacer_times[1::2], spacer_times[2::2]
 
 
