@@ -5,7 +5,6 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import logging
-from pathlib import Path
 from iblutil.io.hashfile import md5
 import one.remote.aws as aws
 
@@ -22,6 +21,7 @@ from iblutil.numerical import ismember
 from ibllib.atlas.atlas import BrainCoordinates, ALLEN_CCF_LANDMARKS_MLAPDV_UM
 
 _logger = logging.getLogger(__name__)
+
 
 def get_bc_10():
 
@@ -112,6 +112,7 @@ def reorder_data(acronyms, values, brain_regions=None):
     ordered_acronyms = br.id2acronym(ordered_ids)
 
     return ordered_acronyms, ordered_values
+
 
 def load_slice_files(slice):
 
@@ -212,7 +213,7 @@ def _plot_slice_vector(coords, slice, values, empty_color='silver', clevels=None
 
 def plot_scalar_on_slice(regions, values, coord=-1000, slice='coronal', mapping='Allen', hemisphere='left',
                          background='image', cmap='viridis', clevels=None, show_cbar=False, empty_color='silver',
-                         brain_atlas=None, ax=None, vector=True, slice_files=None, **kwargs):
+                         brain_atlas=None, ax=None, vector=False, slice_files=None, **kwargs):
     """
     Function to plot scalar value per allen region on histology slice
 

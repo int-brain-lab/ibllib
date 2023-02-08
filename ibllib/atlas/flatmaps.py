@@ -10,8 +10,6 @@ from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
 import matplotlib.colors
 from matplotlib import cm
-from matplotlib.patches import Polygon, PathPatch
-import matplotlib.path as mpath
 
 from iblutil.numerical import ismember
 from iblutil.util import Bunch
