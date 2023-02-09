@@ -107,7 +107,7 @@ class EphysQC(base.QC):
         :param h: dictionary containing sensor coordinates, see neuropixel.trace_header
         :return: 3 numpy vectors nchannels length
         """
-        destripe = voltage.destripe(raw, fs=fs, neuropixel_version=1)
+        destripe = voltage.destripe(raw, fs=fs, h=h)
         rms_raw = utils.rms(raw)
         rms_pre_proc = utils.rms(destripe)
         detections = spikes.detection(data=destripe.T, fs=fs, h=h, detect_threshold=SPIKE_THRESHOLD_UV * 1e-6)
@@ -149,12 +149,19 @@ class EphysQC(base.QC):
             else:
                 sr = self.data['ap']
                 nc = sr.nc - sr.nsync
+
                 # verify that the channel layout is correct according to IBL layout
-                h = neuropixel.trace_header(sr.major_version)
                 th = sr.geometry
+                if sr.meta.get('NP2.4_shank', None) is not None:
+                    h = neuropixel.trace_header(sr.major_version, nshank=4)
+                    h = neuropixel.split_trace_header(h, shank=int(sr.meta.get('NP2.4_shank')))
+                else:
+                    h = neuropixel.trace_header(sr.major_version, nshank=np.unique(th['shank']).size)
+
                 if not (np.all(h['x'] == th['x']) and np.all(h['y'] == th['y'])):
                     _logger.critical("Channel geometry seems incorrect")
                     raise ValueError("Wrong Neuropixel channel mapping used - ABORT")
+
                 t0s = np.arange(TMIN, sr.rl - SAMPLE_LENGTH, BATCHES_SPACING)
                 all_rms = np.zeros((2, nc, t0s.shape[0]))
                 all_srs, channel_ok = (np.zeros((nc, t0s.shape[0])) for _ in range(2))
@@ -400,7 +407,8 @@ def spike_sorting_metrics_ks2(ks2_path=None, m=None, save=True, save_path=None):
                                                  'directory, or a phylib `TemplateModel` object'
     # create phylib `TemplateModel` if not given
     m = phy_model_from_ks2_path(ks2_path) if None else m
-    c, drift = spike_sorting_metrics(m.spike_times, m.spike_clusters, m.amplitudes, m.depths)
+    c, drift = spike_sorting_metrics(m.spike_times, m.spike_clusters, m.amplitudes, m.depths,
+                                     cluster_ids=np.arange(m.clusters_channels.size))
     #  include the ks2 cluster contamination if `cluster_ContamPct` file exists
     file_contamination = ks2_path.joinpath('cluster_ContamPct.tsv')
     if file_contamination.exists():

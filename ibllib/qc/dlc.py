@@ -18,6 +18,7 @@ import one.alf.io as alfio
 from one.alf.exceptions import ALFObjectNotFound
 from one.alf.spec import is_session_path
 from iblutil.util import Bunch
+from brainbox.behavior.dlc import insert_idx, SAMPLING
 
 _log = logging.getLogger(__name__)
 
@@ -41,9 +42,15 @@ class DlcQC(base.QC):
     }
 
     dstypes = {
-        'left': ['_ibl_leftCamera.dlc.*', '_ibl_leftCamera.times.*', '_ibl_leftCamera.features.*'],
-        'right': ['_ibl_rightCamera.dlc.*', '_ibl_rightCamera.times.*', '_ibl_rightCamera.features.*'],
-        'body': ['_ibl_bodyCamera.dlc.*', '_ibl_bodyCamera.times.*'],
+        'left': [
+            '_ibl_leftCamera.dlc.*', '_ibl_leftCamera.times.*', '_ibl_leftCamera.features.*', '_ibl_trials.table.*'
+        ],
+        'right': [
+            '_ibl_rightCamera.dlc.*', '_ibl_rightCamera.times.*', '_ibl_rightCamera.features.*', '_ibl_trials.table.*'
+        ],
+        'body': [
+            '_ibl_bodyCamera.dlc.*', '_ibl_bodyCamera.times.*'
+        ],
     }
 
     def __init__(self, session_path_or_eid, side, ignore_checks=['check_pupil_diameter_snr'], **kwargs):
@@ -98,6 +105,9 @@ class DlcQC(base.QC):
             dlc_coords[t] = np.array((dlc_df[f'{t}_x'], dlc_df[f'{t}_y']))
         self.data['dlc_coords'] = dlc_coords
 
+        # load stim on times
+        self.data['stimOn_times'] = alfio.load_object(alf_path, 'trials', namespace='ibl')['stimOn_times']
+
         # load pupil diameters
         if self.side in ['left', 'right']:
             features = alfio.load_object(alf_path, f'{self.side}Camera', namespace='ibl')['features']
@@ -124,6 +134,25 @@ class DlcQC(base.QC):
                 else:
                     raise AssertionError(f'Dataset {ds} not found locally and download_data is False')
 
+    def _compute_trial_window_idxs(self):
+        """Find start and end times of a window around stimulus onsets in video indices."""
+        window_lag = -0.5
+        window_len = 2.0
+        start_window = self.data['stimOn_times'] + window_lag
+        start_idx = insert_idx(self.data['camera_times'], start_window)
+        end_idx = np.array(start_idx + int(window_len * SAMPLING[self.side]), dtype='int64')
+        return start_idx, end_idx
+
+    def _compute_proportion_nan_in_trial_window(self, body_part):
+        """Find proportion of NaN frames for a given body part in trial-based windows."""
+        # find timepoints in windows around stimulus onset
+        start_idx, end_idx = self._compute_trial_window_idxs()
+        # compute fraction of points in windows that are NaN
+        dlc_coords = np.concatenate([self.data['dlc_coords'][body_part][0, start_idx[i]:end_idx[i]]
+                                     for i in range(len(start_idx))])
+        prop_nan = np.sum(np.isnan(dlc_coords)) / dlc_coords.shape[0]
+        return prop_nan
+
     def run(self, update: bool = False, **kwargs) -> (str, dict):
         """
         Run DLC QC checks and return outcome
@@ -148,9 +177,7 @@ class DlcQC(base.QC):
 
         if update:
             extended = {
-                k: None if v is None or v == 'NOT_SET'
-                else base.CRITERIA[v] < 3 if isinstance(v, str)
-                else (base.CRITERIA[v[0]] < 3, *v[1:])  # Convert first value to bool if array
+                k: 'NOT_SET' if v is None else v
                 for k, v in self.metrics.items()
             }
             self.update_extended_qc(extended)
@@ -250,6 +277,34 @@ class DlcQC(base.QC):
         if snr < thresh:
             return 'FAIL', float(round(snr, 3))
         return 'PASS', float(round(snr, 3))
+
+    def check_paw_close_nan(self):
+        if self.side == 'body':
+            return 'NOT_SET'
+        thresh_fail = 0.20  # prop of NaNs above this threshold means the check fails
+        thresh_warning = 0.10  # prop of NaNs above this threshold means the check is a warning
+        # compute fraction of points in windows that are NaN
+        prop_nan = self._compute_proportion_nan_in_trial_window(body_part='paw_r')
+        if prop_nan > thresh_fail:
+            return 'FAIL'
+        elif prop_nan > thresh_warning:
+            return 'WARNING'
+        else:
+            return 'PASS'
+
+    def check_paw_far_nan(self):
+        if self.side == 'body':
+            return 'NOT_SET'
+        thresh_fail = 0.20  # prop of NaNs above this threshold means the check fails
+        thresh_warning = 0.10  # prop of NaNs above this threshold means the check is a warning
+        # compute fraction of points in windows that are NaN
+        prop_nan = self._compute_proportion_nan_in_trial_window(body_part='paw_l')
+        if prop_nan > thresh_fail:
+            return 'FAIL'
+        elif prop_nan > thresh_warning:
+            return 'WARNING'
+        else:
+            return 'PASS'
 
 
 def run_all_qc(session, cameras=('left', 'right', 'body'), one=None, **kwargs):

@@ -1,6 +1,7 @@
 import tempfile
 from pathlib import Path
 import unittest
+from itertools import chain
 
 import ibllib.tests
 from ibllib.pipes import dynamic_pipeline
@@ -21,18 +22,21 @@ class TestCreateLegacyAcqusitionDescriptions(unittest.TestCase):
     def test_legacy_biased(self):
         session_path = Path(ibllib.tests.__file__).parent.joinpath('extractors', 'data', 'session_biased_ge5')
         ad = dynamic_pipeline.acquisition_description_legacy_session(session_path)
-        assert set(ad['tasks'].keys()) == {'biasedChoiceWorld'}
-        assert len(ad['devices']['cameras']) == 1
+        protocols = list(chain(*map(dict.keys, ad.get('tasks', []))))
+        self.assertCountEqual(['biasedChoiceWorld'], protocols)
+        self.assertEqual(1, len(ad['devices']['cameras']))
 
     def test_legacy_ephys(self):
         session_path = Path(ibllib.tests.__file__).parent.joinpath('extractors', 'data', 'session_ephys')
         ad_ephys = dynamic_pipeline.acquisition_description_legacy_session(session_path)
-        assert len(ad_ephys['devices']['neuropixel']) == 2
-        assert len(ad_ephys['devices']['cameras']) == 3
-        assert set(ad_ephys['tasks'].keys()) == {'ephysChoiceWorld', 'passiveChoiceWorld'}
+        self.assertEqual(2, len(ad_ephys['devices']['neuropixel']))
+        self.assertEqual(3, len(ad_ephys['devices']['cameras']))
+        protocols = list(chain(*map(dict.keys, ad_ephys.get('tasks', []))))
+        self.assertEqual(protocols, ['ephysChoiceWorld', 'passiveChoiceWorld'])
 
     def test_legacy_training(self):
         session_path = Path(ibllib.tests.__file__).parent.joinpath('extractors', 'data', 'session_training_ge5')
         ad = dynamic_pipeline.acquisition_description_legacy_session(session_path)
-        assert set(ad['tasks'].keys()) == {'trainingChoiceWorld'}
-        assert len(ad['devices']['cameras']) == 1
+        protocols = list(chain(*map(dict.keys, ad.get('tasks', []))))
+        self.assertCountEqual(['trainingChoiceWorld'], protocols)
+        self.assertEqual(1, len(ad['devices']['cameras']))

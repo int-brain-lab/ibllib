@@ -8,12 +8,12 @@ import abc
 from time import time
 
 from one.api import ONE
+from one.webclient import AlyxClient
 from one.util import filter_datasets
 from one.alf.files import add_uuid_string, session_path_parts
 from iblutil.io.parquet import np2str
 from ibllib.oneibl.registration import register_dataset
 from ibllib.oneibl.patcher import FTPPatcher, SDSCPatcher, SDSC_ROOT_PATH, SDSC_PATCH_PATH
-from ibllib.oneibl.aws import AWS
 
 
 _logger = logging.getLogger(__name__)
@@ -298,10 +298,13 @@ class RemoteAwsDataHandler(DataHandler):
         from one.remote.globus import Globus # noqa
         self.globus = Globus(client_name='server')
         self.lab = session_path_parts(self.session_path, as_dict=True)['lab']
-        if self.lab == 'cortexlab':
-            self.globus.add_endpoint(f'flatiron_{self.lab}', alyx=ONE(base_url='https://alyx.internationalbrainlab.org').alyx)
+        if self.lab == 'cortexlab' and 'cortexlab' in self.one.alyx.base_url:
+            base_url = 'https://alyx.internationalbrainlab.org'
+            _logger.warning('Changing Alyx client to %s', base_url)
+            ac = AlyxClient(base_url=base_url)
         else:
-            self.globus.add_endpoint(f'flatiron_{self.lab}', alyx=self.one.alyx)
+            ac = self.one.alyx
+        self.globus.add_endpoint(f'flatiron_{self.lab}', alyx=ac)
 
         # register datasets
         versions = super().uploadData(outputs, version)

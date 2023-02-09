@@ -3,6 +3,7 @@ import tempfile
 from unittest import mock
 from pathlib import PurePosixPath, Path
 import json
+import datetime
 
 from requests import HTTPError
 import numpy as np
@@ -13,6 +14,7 @@ from ibllib.oneibl import patcher, registration
 import ibllib.io.extractors.base
 from ibllib import __version__
 from ibllib.tests import TEST_DB
+from ibllib.io import session_params
 
 
 class TestFTPPatcher(unittest.TestCase):
@@ -110,9 +112,7 @@ r = {'created_by': 'olivier',
 MOCK_SESSION_SETTINGS = {
     'SESSION_DATE': '2018-04-01',
     'SESSION_DATETIME': '2018-04-01T12:48:26.795526',
-    'PYBPOD_CREATOR': [USER,
-                       'f092c2d5-c98a-45a1-be7c-df05f129a93c',
-                       'local'],
+    'PYBPOD_CREATOR': [USER, 'f092c2d5-c98a-45a1-be7c-df05f129a93c', 'local'],
     'SESSION_NUMBER': '002',
     'SUBJECT_NAME': SUBJECT,
     'PYBPOD_BOARD': '_iblrig_mainenlab_behavior_1',
@@ -148,7 +148,7 @@ class TestRegistrationEndpoint(unittest.TestCase):
             ('_iblrig_tasks_ephys_certification4.1.3', 'Ephys recording with acute probe(s)'),
         ]
         for to in task_out:
-            out = registration._alyx_procedure_from_task(to[0])
+            out = registration.IBLRegistrationClient._alyx_procedure_from_task(to[0])
             self.assertEqual(out, to[1])
         # also makes sure that all task types have a defined procedure
         task_types = ibllib.io.extractors.base._get_task_types_json_config()
@@ -174,6 +174,8 @@ class TestRegistration(unittest.TestCase):
         self.rev_path.mkdir(parents=True)
         np.save(self.rev_path.joinpath('spikes.times.npy'), np.random.random(300))
         np.save(self.rev_path.joinpath('spikes.amps.npy'), np.random.random(300))
+
+        self.today_revision = datetime.datetime.today().strftime('%Y-%m-%d')
 
         # Create a revision if doesn't already exist
         try:
@@ -211,42 +213,95 @@ class TestRegistration(unittest.TestCase):
             self.one.alyx.rest('files', 'partial_update',
                                id=fr['url'][-36:], data={'exists': True})
         r = registration.register_dataset(file_list=flist, one=self.one)
-        self.assertTrue(all([all([fr['exists'] for fr in rr['file_records']]) for rr in r]))
+        self.assertTrue(all(all(fr['exists'] for fr in rr['file_records']) for rr in r))
         # now that files have changed, makes sure the exists flags are set to False
         np.save(self.alf_path.joinpath('spikes.times.npy'), np.random.random(500))
         np.save(self.alf_path.joinpath('spikes.amps.npy'), np.random.random(500))
         r = registration.register_dataset(file_list=flist, one=self.one)
         self.assertTrue(all(all(not fr['exists'] for fr in rr['file_records']) for rr in r))
 
-        # Test registering with a revision
+        # Add a protected tag to all the datasets
+        dsets = self.one.alyx.rest('datasets', 'list', session=ses['url'][-36:])
+        for d in dsets:
+            self.one.alyx.rest('datasets', 'partial_update',
+                               id=d['url'][-36:], data={'tags': ['test_tag']})
+
+        # Test registering with a revision already in the file path, should use this rather than create one with today's date
         flist = list(self.rev_path.glob('*.npy'))
         r = registration.register_dataset(file_list=flist, one=self.one)
         self.assertTrue(all(d['revision'] == 'v1' for d in r))
         self.assertTrue(all(d['default'] for d in r))
         self.assertTrue(all(d['collection'] == 'alf' for d in r))
-        dsets = self.one.alyx.rest('datasets', 'list', session=ses['url'][-36:], revision='v1')
 
-        # Add a protected tag to a dataset
+        # Add a protected tag to all the datasets
+        dsets = self.one.alyx.rest('datasets', 'list', session=ses['url'][-36:])
         for d in dsets:
             self.one.alyx.rest('datasets', 'partial_update',
                                id=d['url'][-36:], data={'tags': ['test_tag']})
-        with self.assertRaises(HTTPError):
-            registration.register_dataset(file_list=flist, one=self.one)
 
-    def test_create_sessionS(self):
-        flag_file = self.session_path.joinpath('create_me.flag')
-        flag_file.touch()
-        rc = registration.RegistrationClient(one=self.one)
-        rc.create_sessions(self.session_path, dry=True)
-        rc.create_sessions(self.session_path)
+        # Register again with revision in file path, it should register to v1a
+        flist = list(self.rev_path.glob('*.npy'))
 
-    def test_registration_session(self):
+        r = registration.register_dataset(file_list=flist, one=self.one)
+        self.assertTrue(all(d['revision'] == 'v1a' for d in r))
+        self.assertTrue(self.alf_path.joinpath('#v1a#', 'spikes.times.npy').exists())
+        self.assertTrue(self.alf_path.joinpath('#v1a#', 'spikes.amps.npy').exists())
+        self.assertFalse(self.alf_path.joinpath('#v1#', 'spikes.times.npy').exists())
+        self.assertFalse(self.alf_path.joinpath('#v1#', 'spikes.amps.npy').exists())
+
+        # When we re-register the original it should move them into revision with today's date
+        flist = list(self.alf_path.glob('*.npy'))
+        r = registration.register_dataset(file_list=flist, one=self.one)
+        self.assertTrue(all(d['revision'] == self.today_revision for d in r))
+        self.assertTrue(self.alf_path.joinpath(f'#{self.today_revision}#', 'spikes.times.npy').exists())
+        self.assertTrue(self.alf_path.joinpath(f'#{self.today_revision}#', 'spikes.amps.npy').exists())
+        self.assertFalse(self.alf_path.joinpath('spikes.times.npy').exists())
+        self.assertFalse(self.alf_path.joinpath('spikes.amps.npy').exists())
+
+        # Protect the latest datasets
+        dsets = self.one.alyx.rest('datasets', 'list', session=ses['url'][-36:], no_cache=True)
+        for d in dsets:
+            self.one.alyx.rest('datasets', 'partial_update',
+                               id=d['url'][-36:], data={'tags': ['test_tag']})
+
+        # Same day revision
+        # Need to remake the original files
+        np.save(self.alf_path.joinpath('spikes.times.npy'), np.random.random(500))
+        np.save(self.alf_path.joinpath('spikes.amps.npy'), np.random.random(500))
+        flist = list(self.alf_path.glob('*.npy'))
+        r = registration.register_dataset(file_list=flist, one=self.one)
+        self.assertTrue(all(d['revision'] == self.today_revision + 'a' for d in r))
+
+    def _write_settings_file(self):
         behavior_path = self.session_path.joinpath('raw_behavior_data')
         behavior_path.mkdir()
         settings_file = behavior_path.joinpath('_iblrig_taskSettings.raw.json')
         with open(settings_file, 'w') as fid:
             json.dump(MOCK_SESSION_SETTINGS, fid)
-        rc = registration.RegistrationClient(one=self.one)
+        return settings_file
+
+    def test_create_sessions(self):
+        flag_file = self.session_path.joinpath('create_me.flag')
+        flag_file.touch()
+        rc = registration.IBLRegistrationClient(one=self.one)
+        # Should raise an error if settings file does not exist
+        self.assertRaises(ValueError, rc.create_sessions, self.session_path)
+        self._write_settings_file()
+        # Test dry
+        sessions, records = rc.create_sessions(self.session_path, dry=True)
+        self.assertEqual(1, len(sessions))
+        self.assertEqual(sessions[0], self.session_path)
+        self.assertIsNone(records[0])
+        self.assertTrue(flag_file.exists())
+        # Test not dry
+        sessions, records = rc.create_sessions(self.session_path, dry=False)
+        self.assertEqual(1, len(sessions))
+        self.assertEqual(sessions[0], self.session_path)
+        self.assertFalse(flag_file.exists())
+
+    def test_registration_session(self):
+        settings_file = self._write_settings_file()
+        rc = registration.IBLRegistrationClient(one=self.one)
         rc.register_session(str(self.session_path))
         eid = self.one.search(subject=SUBJECT, date_range=['2018-04-01', '2018-04-01'],
                               query_type='remote')[0]
@@ -280,10 +335,68 @@ class TestRegistration(unittest.TestCase):
         self.assertTrue(ses_info['procedures'] == [])
         self.one.alyx.rest('sessions', 'delete', id=eid)
 
+    def test_register_chained_session(self):
+        """Tests for registering a session with chained (multiple) protocols"""
+        behaviour_paths = [self.session_path.joinpath(f'raw_task_data_{i:02}') for i in range(2)]
+        for p in behaviour_paths:
+            p.mkdir()
+
+        # Set the collections
+        params_path = Path(__file__).parent.joinpath('fixtures', 'io', '_ibl_experiment.description.yaml')
+        experiment_description = session_params.read_params(params_path)
+        assert experiment_description
+        collections = map(lambda x: next(iter(x.values())), experiment_description['tasks'])
+        for collection, d in zip(map(lambda x: x.parts[-1], behaviour_paths), collections):
+            d['collection'] = collection
+
+        # Save experiment description
+        session_params.write_params(self.session_path, experiment_description)
+
+        with open(behaviour_paths[1].joinpath('_iblrig_taskSettings.raw.json'), 'w') as fid:
+            json.dump(MOCK_SESSION_SETTINGS, fid)
+
+        settings = MOCK_SESSION_SETTINGS.copy()
+        settings['PYBPOD_PROTOCOL'] = '_iblrig_tasks_passiveChoiceWorld'
+        start_time = (datetime.datetime.fromisoformat(settings['SESSION_DATETIME']) -
+                      datetime.timedelta(hours=1, minutes=2, seconds=12))
+        settings['SESSION_DATETIME'] = start_time.isoformat()
+        with open(behaviour_paths[0].joinpath('_iblrig_taskSettings.raw.json'), 'w') as fid:
+            json.dump(settings, fid)
+
+        rc = registration.IBLRegistrationClient(one=self.one)
+        session, recs = rc.register_session(self.session_path)
+
+        ses_info = self.one.alyx.rest('sessions', 'read', id=session['id'])
+        self.assertCountEqual(experiment_description['procedures'], ses_info['procedures'])
+        self.assertCountEqual(experiment_description['projects'], ses_info['projects'])
+        self.assertCountEqual({'IS_MOCK': False, 'IBLRIG_VERSION': None}, ses_info['json'])
+        self.assertEqual('2018-04-01T11:46:14.795526', ses_info['start_time'])
+        # Test task protocol
+        expected = '_iblrig_tasks_passiveChoiceWorld5.4.1/_iblrig_tasks_ephysChoiceWorld5.4.1'
+        self.assertEqual(expected, ses_info['task_protocol'])
+        # Test weightings created on Alyx
+        w = self.one.alyx.rest('subjects', 'read', id=SUBJECT)['weighings']
+        self.assertEqual(2, len(w))
+        self.assertCountEqual({22.}, {x['weight'] for x in w})
+        weight_dates = {x['date_time'] for x in w}
+        self.assertEqual(2, len(weight_dates))
+        self.assertIn(ses_info['start_time'], weight_dates)
+
     def tearDown(self) -> None:
         self.td.cleanup()
         self.one.alyx.rest('revisions', 'delete', id=self.rev['name'])
         self.one.alyx.rest('tags', 'delete', id=self.tag['id'])
+        today_revision = self.one.alyx.rest('revisions', 'list', id=self.today_revision)
+        today_rev = [rev for rev in today_revision if self.today_revision in rev['name']]
+        for rev in today_rev:
+            self.one.alyx.rest('revisions', 'delete', id=rev['name'])
+
+        v1_rev = [rev for rev in today_revision if 'v1' in rev['name']]
+        for rev in v1_rev:
+            self.one.alyx.rest('revisions', 'delete', id=rev['name'])
+        # Delete weighings
+        for w in self.one.alyx.rest('subjects', 'read', id=SUBJECT)['weighings']:
+            self.one.alyx.rest('weighings', 'delete', id=w['url'].split('/')[-1])
 
 
 if __name__ == '__main__':

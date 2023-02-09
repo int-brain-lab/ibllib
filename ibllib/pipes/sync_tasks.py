@@ -157,8 +157,8 @@ class SyncPulses(base_tasks.DynamicTask):
         if not bin_file:
             return []
 
-        # TODO this is a hack, once we refactor the sync tasks should make generic extract_sync that doesn't rely on
-        # output of glob_ephys_files
+        # TODO this is a hack, once we refactor the sync tasks should make generic extract_sync
+        #  that doesn't rely on output of glob_ephys_files
         files = [Bunch({'nidq': bin_file, 'label': ''})]
 
         _, outputs = extract_sync(self.session_path, ephys_files=files, overwrite=overwrite, namespace=self.sync_namespace)

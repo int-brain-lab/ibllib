@@ -16,6 +16,10 @@ class TaskFibrePhotometryRegisterRaw(base_tasks.RegisterRawDataTask):
     priority = 100
     job_size = 'small'
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.collection = self.get_task_collection(kwargs.get('collection', None))
+
     @property
     def signature(self):
         signature = {
@@ -29,13 +33,15 @@ class TaskFibrePhotometryRegisterRaw(base_tasks.RegisterRawDataTask):
 class TaskFibrePhotometryPreprocess(base_tasks.DynamicTask):
     signature = {
         'input_files': [('*fpData.raw*', 'raw_photometry_data', True), ],
-        'output_files': [('photometry.signal.pqt]', 'alf', True), ]
+        'output_files': [('photometry.signal.pqt', 'alf', True), ]
     }
     priority = 90
     level = 1
 
     def __init__(self, session_path, regions=None, **kwargs):
         super().__init__(session_path, **kwargs)
+        # Task collection (this needs to be specified in the task kwargs)
+        self.collection = self.get_task_collection(kwargs.get('collection', None))
         self.regions = regions
 
     def _run(self, **kwargs):

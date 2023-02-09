@@ -15,19 +15,21 @@ devices:
       collection: raw_ephys_data/probe01
       sync_label: imec_sync
 procedures:
-- Widefield recording
+- Imaging
+- Behavior training/tasks
 projects:
 - ibl_neuropixel_brainwide_01
+- ibl_cortexlab
 sync:
   nidq:
     collection: raw_ephys_data
     extension: bin
     acquisition_software: spikeglx
 tasks:
-  passiveChoiceWorld:
+- passiveChoiceWorld:
     collection: raw_passive_data
     sync_label: bpod
-  ephysChoiceWorld:
+- ephysChoiceWorld:
     collection: raw_behavior_data
     sync_label: bpod
-version: 0.1.0
+version: 1.0.0

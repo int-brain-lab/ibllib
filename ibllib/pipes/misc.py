@@ -7,9 +7,12 @@ import shutil
 import subprocess
 import sys
 import time
+import logging
 from pathlib import Path
 from typing import Union, List
 from inspect import signature
+import uuid
+import socket
 
 import spikeglx
 from iblutil.io import hashfile, params
@@ -18,12 +21,17 @@ from one.alf.files import get_session_path
 from one.alf.spec import is_uuid_string, is_session_path, describe
 from one.api import ONE
 
-from iblutil.util import get_logger
 import ibllib.io.flags as flags
 import ibllib.io.raw_data_loaders as raw
 from ibllib.io.misc import delete_empty_folders
+import ibllib.io.session_params as sess_params
 
-log = get_logger(__name__)
+log = logging.getLogger(__name__)
+
+DEVICE_FLAG_MAP = {'neuropixel': 'ephys',
+                   'cameras': 'video',
+                   'widefield': 'widefield',
+                   'sync': 'sync'}
 
 
 def subjects_data_folder(folder: Path, rglob: bool = False) -> Path:
@@ -76,7 +84,7 @@ def behavior_exists(session_path: str) -> bool:
     behavior_path = session_path / "raw_behavior_data"
     if behavior_path.exists():
         return True
-    return False
+    return any(session_path.glob('raw_task_data_*'))
 
 
 def check_transfer(src_session_path, dst_session_path):
@@ -226,7 +234,7 @@ def transfer_session_folders(local_sessions: list, remote_subject_folder, subfol
             log.info(msg)
             skip_list += msg + "\n"
             continue
-        if not (remote_session / "raw_behavior_data").exists():
+        if not behavior_exists(remote_session):
             msg = f"{local_session} - skipping session, no behavior data found in remote folder {remote_session}"
             log.warning(msg)
             skip_list += msg + "\n"
@@ -376,7 +384,6 @@ def create_basic_transfer_params(param_str='transfer_params', local_data_path=No
     clobber : bool
         If True, any parameters in existing parameter file not found as keyword args will be removed,
         otherwise the user is prompted for these also.
-
     **kwargs
         Extra parameters to set. If value is None, the user is prompted.
 
@@ -402,10 +409,9 @@ def create_basic_transfer_params(param_str='transfer_params', local_data_path=No
     >>> from functools import partial
     >>> par = create_basic_transfer_params(
     ...     custom_arg=partial(cli_ask_default, 'Please enter custom arg value'))
-
     """
     parameters = params.as_dict(params.read(param_str, {})) or {}
-    if local_data_path is None and (clobber or not parameters.get('DATA_FOLDER_PATH')):
+    if local_data_path is None:
         local_data_path = parameters.get('DATA_FOLDER_PATH')
         if not local_data_path or clobber:
             local_data_path = cli_ask_default("Where's your LOCAL 'Subjects' data folder?", local_data_path)
@@ -429,7 +435,7 @@ def create_basic_transfer_params(param_str='transfer_params', local_data_path=No
         else:  # assign value to parameter
             parameters[k.upper()] = str(v)
 
-    defined = list(map(str.upper, ('DATA_FOLDER_PATH', 'REMOTE_DATA_FOLDER_PATH', *kwargs.keys())))
+    defined = list(map(str.upper, ('DATA_FOLDER_PATH', 'REMOTE_DATA_FOLDER_PATH', 'TRANSFER_LABEL', *kwargs.keys())))
     if clobber:
         # Delete any parameters in parameter dict that were not passed as keyword args into function
         parameters = {k: v for k, v in parameters.items() if k in defined}
@@ -437,6 +443,9 @@ def create_basic_transfer_params(param_str='transfer_params', local_data_path=No
         # Prompt for any other parameters that weren't passed into function
         for k in filter(lambda x: x not in defined, map(str.upper, parameters.keys())):
             parameters[k] = cli_ask_default(f'Enter a value for parameter {k}', parameters.get(k))
+
+    if 'TRANSFER_LABEL' not in parameters:
+        parameters['TRANSFER_LABEL'] = f'{socket.gethostname()}_{uuid.getnode()}'
 
     # Write parameters
     params.write(param_str, parameters)
@@ -648,7 +657,9 @@ def rsync_paths(src: Path, dst: Path) -> bool:
         subprocess.run(rsync_command, check=True)
         time.sleep(1)  # give rdiff-backup a second to complete all logging operations
     except (FileNotFoundError, subprocess.CalledProcessError) as e:
-        log.error("Transfer failed.\n", e)
+        log.error("Transfer failed with code %i.\n", e.returncode)
+        if e.stderr:
+            log.error(e.stderr)
         return False
     log.info("Validating transfer completed...")
     try:  # Validate the transfers succeeded
@@ -833,10 +844,63 @@ def create_video_transfer_done_flag(session_folder: str) -> None:
     flags.write_flag_file(session_path.joinpath("video_data_transferred.flag"))
 
 
+def create_transfer_done_flag(session_folder: str, flag_name: str) -> None:
+    session_path = Path(session_folder)
+    flags.write_flag_file(session_path.joinpath(f"{flag_name}_data_transferred.flag"))
+
+
 def check_create_raw_session_flag(session_folder: str) -> None:
     session_path = Path(session_folder)
+
+    # if we have an experiment description file read in whether we expect video, ephys widefield etc, don't do it just based
+    # on the task protocol
+    experiment_description = sess_params.read_params(session_path)
+
+    def check_status(expected, flag):
+        if expected is not False and flag.exists():
+            return True
+        if expected is False and not flag.exists():
+            return True
+        else:
+            return False
+
+    if experiment_description is not None:
+
+        if any(session_path.joinpath('_devices').glob('*')):
+            return
+
+        # Find the devices in the experiment description file
+        devices = list()
+        for key in DEVICE_FLAG_MAP.keys():
+            if experiment_description.get('devices', {}).get(key, None) is not None:
+                devices.append(key)
+        # In case of widefield the sync also needs to be in it's own folder
+        if 'widefield' in devices:
+            devices.append('sync')
+
+        expected_flags = [session_path.joinpath(f'{DEVICE_FLAG_MAP[dev]}_data_transferred.flag') for dev in devices]
+
+        expected = []
+        flag_files = []
+        for dev, fl in zip(devices, expected_flags):
+            status = check_status(dev, fl)
+            if status:
+                flag_files.append(fl)
+            expected.append(status)
+
+        # In this case all the copying has completed
+        if all(expected):
+            # make raw session flag
+            flags.write_flag_file(session_path.joinpath("raw_session.flag"))
+            # and unlink individual copy flags
+            for fl in flag_files:
+                fl.unlink()
+
+        return
+
     ephys = session_path.joinpath("ephys_data_transferred.flag")
     video = session_path.joinpath("video_data_transferred.flag")
+
     sett = raw.load_settings(session_path)
     if sett is None:
         log.error(f"No flag created for {session_path}")

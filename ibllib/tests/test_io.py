@@ -30,8 +30,9 @@ class TestsParams(unittest.TestCase):
                          'num': 15,
                          'liste': [1, 'turlu'],
                          'apath': Path('/gna/gna/gna')}
-        params.write('toto', self.par_dict)
-        params.write('toto', params.from_dict(self.par_dict))
+        self.parstr = 'toto'
+        params.write(self.parstr, self.par_dict)
+        params.write(self.parstr, params.from_dict(self.par_dict))
 
     def test_params(self):
         #  first go to and from dictionary
@@ -39,13 +40,13 @@ class TestsParams(unittest.TestCase):
         par = params.from_dict(par_dict)
         self.assertEqual(params.as_dict(par), par_dict)
         # next go to and from dictionary via json
-        par2 = params.read('toto')
+        par2 = params.read(self.parstr)
         self.assertEqual(par, par2)
 
     def test_param_get_file(self):
-        home_dir = Path(params.getfile("toto")).parent
+        home_dir = Path(params.getfile(self.parstr)).parent
         # straight case the file is .{str} in the home directory
-        assert home_dir.joinpath(".toto") == Path(params.getfile("toto"))
+        assert home_dir.joinpath(".toto") == Path(params.getfile(self.parstr))
         # straight case the file is .{str} in the home directory
         assert home_dir.joinpath(".toto") == Path(params.getfile(".toto"))
         # subfolder case
@@ -67,36 +68,35 @@ class TestsParams(unittest.TestCase):
                            'apath': str(Path('/gna/gna/gna')),
                            'E': 'tete2',
                            }
-        par2 = params.read('toto', default=default)
+        par2 = params.read(self.parstr, default=default)
         self.assertCountEqual(par2.as_dict(), expected_result)
         # on the next path the parameter has been added to the param file
-        par2 = params.read('toto', default=default)
+        par2 = params.read(self.parstr, default=default)
         self.assertCountEqual(par2.as_dict(), expected_result)
         # check that it doesn't break if a named tuple is given instead of a dict
-        par3 = params.read('toto', default=par2)
+        par3 = params.read(self.parstr, default=par2)
         self.assertEqual(par2, par3)
-        # check that a non-existing parfile raises error
-        pstring = str(uuid.uuid4())
+        # check that a non-existing par file raises error
+        Path(params.getfile(self.parstr)).unlink()
         with self.assertRaises(FileNotFoundError):
-            params.read(pstring)
-        # check that a non-existing parfile with default returns default
-        par = params.read(pstring, default=default)
+            params.read(self.parstr)
+        # check that a non-existing par file with default returns default
+        par = params.read(self.parstr, default=default)
         self.assertCountEqual(par, params.from_dict(default))
         # even if this default is a Params named tuple
-        par = params.read(pstring, default=par)
+        par = params.read(self.parstr, default=par)
         self.assertEqual(par, params.from_dict(default))
         # check default empty dict
-        pstring = 'foobar'
-        filename = Path(params.getfile(pstring))
+        Path(params.getfile(self.parstr)).unlink()
+        filename = Path(params.getfile(self.parstr))
         self.assertFalse(filename.exists())
-        par = params.read(pstring, default={})
+        par = params.read(self.parstr, default={})
         self.assertIsNone(par)
         self.assertTrue(filename.exists())
 
     def tearDown(self):
         # at last delete the param file
         Path(params.getfile('toto')).unlink(missing_ok=True)
-        Path(params.getfile('foobar')).unlink(missing_ok=True)
 
 
 class TestsRawDataLoaders(unittest.TestCase):
@@ -513,7 +513,7 @@ class TestSessionParams(unittest.TestCase):
 
         with open(fullfile, 'r') as fp:
             data = yaml.safe_load(fp)
-        self.assertCountEqual(('devices',), data.keys())
+        self.assertCountEqual(('devices', 'version'), data.keys())
         self.assertCountEqual((device,), data['devices'].keys())
         self.assertEqual(data['devices'][device], self.fixture['devices'][device])
 
@@ -556,6 +556,19 @@ class TestSessionParams(unittest.TestCase):
                 self.assertLogs(session_params.__name__, logging.WARNING):
             data = session_params._patch_file({'version': '1.1.0'})
         self.assertEqual(data, {'version': '1.0.0'})
+
+    def test_get_collections(self):
+        collections = session_params.get_collections(self.fixture)
+        expected = {
+            'widefield': 'raw_widefield_data',
+            'microphone': 'raw_behavior_data',
+            'probe00': 'raw_ephys_data/probe00',
+            'probe01': 'raw_ephys_data/probe01',
+            'nidq': 'raw_ephys_data',
+            'passiveChoiceWorld': 'raw_passive_data',
+            'ephysChoiceWorld': 'raw_behavior_data'
+        }
+        self.assertCountEqual(expected, collections)
 
 
 class TestRawDaqLoaders(unittest.TestCase):

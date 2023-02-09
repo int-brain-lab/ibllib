@@ -1,17 +1,74 @@
-## Release 2.17.0
-### features
-- units quality metrics use latest algorithms for refractory period violations and noise cut-off
+## Release 2.21
+# Release Notes 2.21.0 2023-01-24
 
-### Hotfix 2.17.1
-- compute wheel velocity using a low-pass filter instead of a Gaussian window smoothing
+### features
+- support for multiple task protocols within a session
+- extract protocol period from spacer signals
+- function for changing subject, collection, number or date in a settings file
+- function to retrieve task protocol number from experiment description
+- dataset type validation supports null filename patterns
+- oneibl.registration uses one.registration client as superclass
+- experiment description files are created and registered in legacy pipelines
+- QC sign-off keys are added to session JSON field
+- class-based note template API for attaching session notes for QC sign-offs
+- protocol and procedures now taken from experiment description file
+
+## Release 2.20
+# Release Notes 2.20.0 2023-01-23
+### features
+- ephys session loader
+- bwm release documentation
+
+### bugfixes
+- mock gpu lock in tests
+- use cluster_ids in metrics
+
+## Release 2.19
+## Release Notes 2.19.0 2022-11-30
+### features
+- camera qc allows for string values
+- deprecate brainbox.io.spikeglx.stream instead use Streamer
+- copy logics take into account presence of experiment description files
+- option for error bars in training plots
+
+### bugfixes
+- cam qc for dynamic pipeline uses sync type to determine number of cameras
+
+
+## Release 2.18
+### Release Notes 2.18.0 2022-11-23
+### features
+- brainbox.modeling removed
+- brainbox.io.one.load_trials_df removed, use one.load_object(...).to_df() instead
+- AWS DataHandler refactored (ibllib.oneibl.aws removed)
+- raise error when saving an empty dataset during extraction
+- removed deprecated dsp packages (ibllib.dsp, ibllib.ephys.neuropixel, ibllib.io.spikeglx)
+- register datasets as a revision if protected on Alyx
+
+### bugfixes
+- frameData and timestamps both optional datasets for camera QC
+- for 3B probes don't glob the sync files as fails for NP2 case
+- support iblutil 1.4 (iblutil.util.get_logger -> iblutil.util.setup_logger)
+
+## Release Notes 2.17
+
+### Release Notes 2.17.2 2022-10-14
+- Compute wheel velocity using a low-pass filter instead of a Gaussian window smoothing
+- Save widefield output plots in png format
+- Widefield Sync task uses sync_collection argument
+- Improve boundary display for atlas slice plots
+
+### Release Notes 2.17.1 2022-10-04
 - adjust ONE-api requirement to redownload on AWS backend when md5sum mismatch
 
-## Release 2.16.1
+### Release Notes 2.17.0 2022-10-04
+- units quality metrics use latest algorithms for refractory period violations and noise cut-off
+ 
+## Release Notes 2.16
 ### Release Notes 2.16.1 2022-09-28
 ### bugfixes
 - photometry extraction: recover from corrupt DAQ signal and reversed polarity of voltage pulses
- 
-## Release 2.16
+
 ### Release Notes 2.16.0 2022-09-27
 ### features
 - swanson flatmap: the algorithm to propagate down the hierarchy has been refined
@@ -20,6 +77,7 @@
 - set exists flag to false for all data repos when registering datasets with tasks
 
 ## Release Notes 2.15
+
 ### Release Notes 2.15.3 - 2022-09-26
 - SessionLoader error handling and bug fix
 
@@ -30,7 +88,6 @@
 - atlas: gene-expression backend and MRI Toronto atlas stretch and squeeze factors (Dan/Olivier)
 - FDR correction (Benjamin-Hochmann) to correct for multiple testing optional (Guido)
 - SpikeSortingLoader can be used with ONE local mode (Julia)
-
 
 ### Release Notes 2.15.0 2022-09-20
 #### features

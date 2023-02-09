@@ -18,9 +18,9 @@ THRESHOLD_CONSECUTIVE_SAMPLES = 0
 EPS = 7. / 3 - 4. / 3 - 1
 
 
-def get_trial_start_times(session_path, data=None):
+def get_trial_start_times(session_path, data=None, task_collection='raw_behavior_data'):
     if not data:
-        data = raw.load_data(session_path)
+        data = raw.load_data(session_path, task_collection=task_collection)
     trial_start_times = []
     for tr in data:
         trial_start_times.extend(
@@ -28,10 +28,10 @@ def get_trial_start_times(session_path, data=None):
     return np.array(trial_start_times)
 
 
-def sync_rotary_encoder(session_path, bpod_data=None, re_events=None):
+def sync_rotary_encoder(session_path, bpod_data=None, re_events=None, task_collection='raw_behavior_data'):
     if not bpod_data:
-        bpod_data = raw.load_data(session_path)
-    evt = re_events or raw.load_encoder_events(session_path)
+        bpod_data = raw.load_data(session_path, task_collection=task_collection)
+    evt = re_events or raw.load_encoder_events(session_path, task_collection=task_collection)
     # we work with stim_on (2) and closed_loop (3) states for the synchronization with bpod
     tre = evt.re_ts.values / 1e6  # convert to seconds
     # the first trial on the rotary encoder is a dud
@@ -92,7 +92,7 @@ def sync_rotary_encoder(session_path, bpod_data=None, re_events=None):
     return interpolate.interp1d(re, bp, fill_value="extrapolate")
 
 
-def get_wheel_position(session_path, bp_data=None, display=False):
+def get_wheel_position(session_path, bp_data=None, display=False, task_collection='raw_behavior_data'):
     """
     Gets wheel timestamps and position from Bpod data. Position is in radian (constant above for
     radius is 1) mathematical convention.
@@ -104,8 +104,8 @@ def get_wheel_position(session_path, bp_data=None, display=False):
     """
     status = 0
     if not bp_data:
-        bp_data = raw.load_data(session_path)
-    df = raw.load_encoder_positions(session_path)
+        bp_data = raw.load_data(session_path, task_collection=task_collection)
+    df = raw.load_encoder_positions(session_path, task_collection=task_collection)
     if df is None:
         _logger.error('No wheel data for ' + str(session_path))
         return None, None
@@ -114,13 +114,13 @@ def get_wheel_position(session_path, bp_data=None, display=False):
     data['re_ts'] = df.re_ts.values
     data['re_pos'] = df.re_pos.values * -1  # anti-clockwise is positive in our output
     data['re_pos'] = data['re_pos'] / 1024 * 2 * np.pi  # convert positions to radians
-    trial_starts = get_trial_start_times(session_path)
+    trial_starts = get_trial_start_times(session_path, task_collection=task_collection)
     # need a flag if the data resolution is 1ms due to the old version of rotary encoder firmware
     if np.all(np.mod(data['re_ts'], 1e3) == 0):
         status = 1
     data['re_ts'] = data['re_ts'] / 1e6  # convert ts to seconds
     # # get the converter function to translate re_ts into behavior times
-    re2bpod = sync_rotary_encoder(session_path)
+    re2bpod = sync_rotary_encoder(session_path, task_collection=task_collection)
     data['re_ts'] = re2bpod(data['re_ts'])
 
     def get_reset_trace_compensation_with_state_machine_times():
@@ -391,15 +391,15 @@ class Wheel(BaseBpodTrialsExtractor):
                  'is_final_movement')
 
     def _extract(self):
-        ts, pos = get_wheel_position(self.session_path, self.bpod_trials)
+        ts, pos = get_wheel_position(self.session_path, self.bpod_trials, task_collection=self.task_collection)
         moves = extract_wheel_moves(ts, pos)
 
         # need some trial based info to output the first movement times
         from ibllib.io.extractors import training_trials  # Avoids circular imports
         goCue_times, _ = training_trials.GoCueTimes(self.session_path).extract(
-            save=False, bpod_trials=self.bpod_trials, settings=self.settings)
+            save=False, bpod_trials=self.bpod_trials, settings=self.settings, task_collection=self.task_collection)
         feedback_times, _ = training_trials.FeedbackTimes(self.session_path).extract(
-            save=False, bpod_trials=self.bpod_trials, settings=self.settings)
+            save=False, bpod_trials=self.bpod_trials, settings=self.settings, task_collection=self.task_collection)
         trials = {'goCue_times': goCue_times, 'feedback_times': feedback_times}
         min_qt = self.settings.get('QUIESCENT_PERIOD', None)
 
@@ -409,7 +409,7 @@ class Wheel(BaseBpodTrialsExtractor):
         return output
 
 
-def extract_all(session_path, bpod_trials=None, settings=None, save=False):
+def extract_all(session_path, bpod_trials=None, settings=None, save=False, task_collection='raw_behavior_data', save_path=None):
     """Extract the wheel data.
 
     NB: Wheel extraction is now called through ibllib.io.training_trials.extract_all
@@ -430,4 +430,4 @@ def extract_all(session_path, bpod_trials=None, settings=None, save=False):
     A list of extracted data and a list of file paths if save is True (otherwise None)
     """
     return run_extractor_classes(Wheel, save=save, session_path=session_path,
-                                 bpod_trials=bpod_trials, settings=settings)
+                                 bpod_trials=bpod_trials, settings=settings, task_collection=task_collection, path_out=save_path)

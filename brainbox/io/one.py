@@ -1,29 +1,33 @@
 """Functions for loading IBL ephys and trial data using the Open Neurophysiology Environment."""
 from dataclasses import dataclass, field
+import gc
 import logging
 import os
 from pathlib import Path
 
+
 import numpy as np
 import pandas as pd
 from scipy.interpolate import interp1d
+import matplotlib.pyplot as plt
 
 from one.api import ONE, One
 import one.alf.io as alfio
 from one.alf.files import get_alf_path
+from one.alf.exceptions import ALFObjectNotFound
 from one.alf import cache
 from neuropixel import TIP_SIZE_UM, trace_header
 import spikeglx
 
 from iblutil.util import Bunch
 from ibllib.io.extractors.training_wheel import extract_wheel_moves, extract_first_movement_times
-from ibllib.atlas import atlas, AllenAtlas
+from ibllib.atlas import atlas, AllenAtlas, BrainRegions
 from ibllib.pipes import histology
 from ibllib.pipes.ephys_alignment import EphysAlignment
+from ibllib.plots import vertical_lines
 
 import brainbox.plot
-from brainbox.core import TimeSeries
-from brainbox.processing import sync
+from brainbox.ephys_plots import plot_brain_regions
 from brainbox.metrics.single_units import quick_unit_metrics
 from brainbox.behavior.wheel import interpolate_position, velocity_filtered
 from brainbox.behavior.dlc import likelihood_threshold, get_pupil_diameter, get_smooth_pupil_diameter
@@ -702,134 +706,6 @@ def load_wheel_reaction_times(eid, one=None):
     return firstMove_times - trials['goCue_times']
 
 
-def load_trials_df(eid, one=None, maxlen=None, t_before=0., t_after=0.2, ret_wheel=False,
-                   ret_abswheel=False, wheel_binsize=0.02, addtl_types=[],
-                   align_event='stimOn_times', keeptrials=None):
-    """
-    Generate a pandas dataframe of per-trial timing information about a given session.
-    Each row in the frame will correspond to a single trial, with timing values indicating timing
-    session-wide (i.e. time in seconds since session start). Can optionally return a resampled
-    wheel velocity trace of either the signed or absolute wheel velocity.
-
-    The resulting dataframe will have a new set of columns, trial_start and trial_end, which define
-    via t_before and t_after the span of time assigned to a given trial.
-    (useful for bb.modeling.glm)
-
-    Parameters
-    ----------
-    eid : [str, UUID, Path, dict]
-        Experiment session identifier; may be a UUID, URL, experiment reference string
-        details dict or Path
-    one : one.api.OneAlyx, optional
-        one object to use for loading. Will generate internal one if not used, by default None
-    maxlen : float, optional
-        Maximum trial length for inclusion in df. Trials where feedback - response is longer
-        than this value will not be included in the dataframe, by default None
-    t_before : float, optional
-        Time before stimulus onset to include for a given trial, as defined by the trial_start
-        column of the dataframe. If zero, trial_start will be identical to stimOn, by default 0.
-    t_after : float, optional
-        Time after feedback to include in the trail, as defined by the trial_end
-        column of the dataframe. If zero, trial_end will be identical to feedback, by default 0.
-    ret_wheel : bool, optional
-        Whether to return the time-resampled wheel velocity trace, by default False
-    ret_abswheel : bool, optional
-        Whether to return the time-resampled absolute wheel velocity trace, by default False
-    wheel_binsize : float, optional
-        Time bins to resample wheel velocity to, by default 0.02
-    addtl_types : list, optional
-        List of additional types from an ONE trials object to include in the dataframe. Must be
-        valid keys to the dict produced by one.load_object(eid, 'trials'), by default empty.
-
-    Returns
-    -------
-    pandas.DataFrame
-        Dataframe with trial-wise information. Indices are the actual trial order in the original
-        data, preserved even if some trials do not meet the maxlen criterion. As a result will not
-        have a monotonic index. Has special columns trial_start and trial_end which define start
-        and end times via t_before and t_after
-    """
-    _logger.warning('brainbox.one.load_trials_df is deprecated, use one.load_object([...]).to_df() instead')
-    if not one:
-        one = ONE()
-
-    if ret_wheel and ret_abswheel:
-        raise ValueError('ret_wheel and ret_abswheel cannot both be true.')
-
-    # Define which datatypes we want to pull out
-    trialstypes = ['choice',
-                   'probabilityLeft',
-                   'feedbackType',
-                   'feedback_times',
-                   'contrastLeft',
-                   'contrastRight',
-                   'goCue_times',
-                   'stimOn_times']
-    trialstypes.extend(addtl_types)
-
-    # A quick function to remap probabilities in those sessions where it was not computed correctly
-    def remap_trialp(probs):
-        # Block probabilities in trial data aren't accurate and need to be remapped
-        validvals = np.array([0.2, 0.5, 0.8])
-        diffs = np.abs(np.array([x - validvals for x in probs]))
-        maps = diffs.argmin(axis=1)
-        return validvals[maps]
-
-    trials = one.load_object(eid, 'trials', collection='alf')
-    starttimes = trials.stimOn_times
-    endtimes = trials.feedback_times
-    tmp = {key: value for key, value in trials.items() if key in trialstypes}
-
-    if keeptrials is None:
-        if maxlen is not None:
-            with np.errstate(invalid='ignore'):
-                keeptrials = (endtimes - starttimes) <= maxlen
-        else:
-            keeptrials = range(len(starttimes))
-    trialdata = {x: tmp[x][keeptrials] for x in trialstypes}
-    trialdata['probabilityLeft'] = remap_trialp(trialdata['probabilityLeft'])
-    trialsdf = pd.DataFrame(trialdata)
-    if maxlen is not None:
-        trialsdf.set_index(np.nonzero(keeptrials)[0], inplace=True)
-    trialsdf['trial_start'] = trialsdf[align_event] - t_before
-    trialsdf['trial_end'] = trialsdf[align_event] + t_after
-    tdiffs = trialsdf['trial_end'] - np.roll(trialsdf['trial_start'], -1)
-    if np.any(tdiffs[:-1] > 0):
-        logging.warning(f'{sum(tdiffs[:-1] > 0)} trials overlapping due to t_before and t_after '
-                        'values. Try reducing one or both!')
-    if not ret_wheel and not ret_abswheel:
-        return trialsdf
-
-    wheel = one.load_object(eid, 'wheel', collection='alf')
-    whlpos, whlt = wheel.position, wheel.timestamps
-    starttimes = trialsdf['trial_start']
-    endtimes = trialsdf['trial_end']
-    wh_endlast = 0
-    trials = []
-    for (start, end) in np.vstack((starttimes, endtimes)).T:
-        wh_startind = np.searchsorted(whlt[wh_endlast:], start) + wh_endlast
-        wh_endind = np.searchsorted(whlt[wh_endlast:], end, side='right') + wh_endlast + 4
-        wh_endlast = wh_endind
-        tr_whlpos = whlpos[wh_startind - 1:wh_endind + 1]
-        tr_whlt = whlt[wh_startind - 1:wh_endind + 1] - start
-        tr_whlt[0] = 0.  # Manual previous-value interpolation
-        whlseries = TimeSeries(tr_whlt, tr_whlpos, columns=['whlpos'])
-        whlsync = sync(wheel_binsize, timeseries=whlseries, interp='previous')
-        trialstartind = np.searchsorted(whlsync.times, 0)
-        trialendind = np.ceil((end - start) / wheel_binsize).astype(int)
-        trpos = whlsync.values[trialstartind:trialendind + trialstartind]
-        whlvel = trpos[1:] - trpos[:-1]
-        whlvel = np.insert(whlvel, 0, 0)
-        if np.abs((trialendind - len(whlvel))) > 0:
-            raise IndexError('Mismatch between expected length of wheel data and actual.')
-        if ret_wheel:
-            trials.append(whlvel)
-        elif ret_abswheel:
-            trials.append(np.abs(whlvel))
-    trialsdf['wheel_velocity'] = trials
-    return trialsdf
-
-
 def load_channels_from_insertion(ins, depths=None, one=None, ba=None):
 
     PROV_2_VAL = {
@@ -896,6 +772,7 @@ class SpikeSortingLoader:
     files: dict = None
     collection: str = ''
     histology: str = ''  # 'alf', 'resolved', 'aligned' or 'traced'
+    spike_sorter: str = 'pykilosort'
     spike_sorting_path: Path = None
     _sync: dict = None
 
@@ -953,7 +830,8 @@ class SpikeSortingLoader:
         _logger.debug(f"selecting: {collection} to load amongst candidates: {self.collections}")
         return collection
 
-    def download_spike_sorting_object(self, obj, spike_sorter='pykilosort', dataset_types=None, collection=None, **kwargs):
+    def download_spike_sorting_object(self, obj, spike_sorter='pykilosort', dataset_types=None, collection=None,
+                                      missing='raise', **kwargs):
         """
         Downloads an ALF object
         :param obj: object name, str between 'spikes', 'clusters' or 'channels'
@@ -961,17 +839,23 @@ class SpikeSortingLoader:
         :param dataset_types: list of extra dataset types, for example ['spikes.samples']
         :param collection: string specifiying the collection, for example 'alf/probe01/pykilosort'
         :param kwargs: additional arguments to be passed to one.api.One.load_object
+        :param missing: 'raise' (default) or 'ignore'
         :return:
         """
         if len(self.collections) == 0:
             return {}, {}, {}
-        self.collection = collection or self._get_spike_sorting_collection(spike_sorter=spike_sorter)
-        _logger.debug(f"loading spike sorting from {self.collection}")
+        self.collection = self._get_spike_sorting_collection(spike_sorter=spike_sorter)
+        collection = collection or self.collection
+        _logger.debug(f"loading spike sorting object {obj} from {collection}")
         spike_attributes, cluster_attributes = self._get_attributes(dataset_types)
-        attributes = {'spikes': spike_attributes, 'clusters': cluster_attributes, 'channels': None,
-                      'templates': None, 'spikes_subset': None}
-        self.files[obj] = self.one.load_object(self.eid, obj=obj, attribute=attributes[obj],
-                                               collection=self.collection, download_only=True, **kwargs)
+        attributes = {'spikes': spike_attributes, 'clusters': cluster_attributes}
+        try:
+            self.files[obj] = self.one.load_object(
+                self.eid, obj=obj, attribute=attributes.get(obj, None),
+                collection=collection, download_only=True, **kwargs)
+        except ALFObjectNotFound as e:
+            if missing == 'raise':
+                raise e
 
     def download_spike_sorting(self, **kwargs):
         """
@@ -984,7 +868,39 @@ class SpikeSortingLoader:
             self.download_spike_sorting_object(obj=obj, **kwargs)
         self.spike_sorting_path = self.files['spikes'][0].parent
 
-    def load_spike_sorting(self, **kwargs):
+    def load_channels(self, **kwargs):
+        """
+        Loads channels
+        The channel locations can come from several sources, it will load the most advanced version of the histology available,
+        regardless of the spike sorting version loaded. The steps are (from most advanced to fresh out of the imaging):
+        -   alf: the final version of channel locations, same as resolved with the difference that data is on file
+        -   resolved: channel locations alignments have been agreed upon
+        -   aligned: channel locations have been aligned, but review or other alignments are pending, potentially not accurate
+        -   traced: the histology track has been recovered from microscopy, however the depths may not match, inaccurate data
+
+        :param spike_sorter: (defaults to 'pykilosort')
+        :param dataset_types: list of extra dataset types
+        :return:
+        """
+        # we do not specify the spike sorter on purpose here: the electrode sites do not depend on the spike sorting
+        self.download_spike_sorting_object(obj='electrodeSites', collection=f'alf/{self.pname}', missing='ignore')
+        if 'electrodeSites' in self.files:
+            channels = alfio.load_object(self.files['electrodeSites'], wildcards=self.one.wildcards)
+        else:  # otherwise, we try to load the channel object from the spike sorting folder - this may not contain histology
+            self.download_spike_sorting_object(obj='channels', **kwargs)
+            channels = alfio.load_object(self.files['channels'], wildcards=self.one.wildcards)
+        if 'brainLocationIds_ccf_2017' not in channels:
+            _logger.debug(f"loading channels from alyx for {self.files['channels']}")
+            _channels, self.histology = _load_channel_locations_traj(
+                self.eid, probe=self.pname, one=self.one, brain_atlas=self.atlas, return_source=True, aligned=True)
+            if _channels:
+                channels = _channels[self.pname]
+        else:
+            channels = _channels_alf2bunch(channels, brain_regions=self.atlas.regions)
+            self.histology = 'alf'
+        return channels
+
+    def load_spike_sorting(self, spike_sorter='pykilosort', **kwargs):
         """
         Loads spikes, clusters and channels
 
@@ -1003,19 +919,13 @@ class SpikeSortingLoader:
         """
         if len(self.collections) == 0:
             return {}, {}, {}
-        self.download_spike_sorting(**kwargs)
-        channels = alfio.load_object(self.files['channels'], wildcards=self.one.wildcards)
+        self.files = {}
+        self.spike_sorter = spike_sorter
+        self.download_spike_sorting(spike_sorter=spike_sorter, **kwargs)
+        channels = self.load_channels(spike_sorter=spike_sorter, **kwargs)
         clusters = alfio.load_object(self.files['clusters'], wildcards=self.one.wildcards)
         spikes = alfio.load_object(self.files['spikes'], wildcards=self.one.wildcards)
-        if 'brainLocationIds_ccf_2017' not in channels:
-            _logger.debug(f"loading channels from alyx for {self.files['channels']}")
-            _channels, self.histology = _load_channel_locations_traj(
-                self.eid, probe=self.pname, one=self.one, brain_atlas=self.atlas, return_source=True, aligned=True)
-            if _channels:
-                channels = _channels[self.pname]
-        else:
-            channels = _channels_alf2bunch(channels, brain_regions=self.atlas.regions)
-            self.histology = 'alf'
+
         return spikes, clusters, channels
 
     @staticmethod
@@ -1055,7 +965,7 @@ class SpikeSortingLoader:
             clusters[k] = metrics[k].to_numpy()
         for k in channels.keys():
             clusters[k] = channels[k][clusters['channels']]
-        if cache_dir:
+        if cache_dir is not None:
             _logger.debug(f'caching clusters metrics in {cache_dir}')
             pd.DataFrame(clusters).to_parquet(Path(cache_dir).joinpath('clusters.pqt'))
         return clusters
@@ -1087,25 +997,43 @@ class SpikeSortingLoader:
     def pid2ref(self):
         return f"{self.one.eid2ref(self.eid, as_dict=False)}_{self.pname}"
 
-    def raster(self, spikes, save_dir=None):
+    def raster(self, spikes, channels, save_dir=None, br=None, label='raster', time_series=None):
         """
+        :param spikes: spikes dictionary
         :param save_dir: optional if specified
         :return:
         """
-        import matplotlib.pyplot as plt
-        fig, ax = plt.subplots(figsize=(16, 9))
-        brainbox.plot.driftmap(spikes['times'], spikes['depths'], t_bin=0.007, d_bin=10, vmax=0.5, ax=ax)
-        title_str = f"{self.pid} \n" \
-                    f"{self.pid2ref} \n" \
-                    f"{spikes.clusters.size:_} spikes, {np.unique(spikes.clusters).size:_} clusters"
-        ax.title.set_text(title_str)
-        ax.set_ylim(0, 3800)
+        br = br or BrainRegions()
+        time_series = time_series or {}
+        fig, axs = plt.subplots(2, 2, gridspec_kw={
+            'width_ratios': [.95, .05], 'height_ratios': [.1, .9]}, figsize=(16, 9), sharex='col')
+        axs[0, 1].set_axis_off()
+        # axs[0, 0].set_xticks([])
+        brainbox.plot.driftmap(spikes['times'], spikes['depths'], t_bin=0.007, d_bin=10, vmax=0.5, ax=axs[1, 0])
+        title_str = f"{self.pid2ref}, {self.pid} \n" \
+                    f"{spikes['clusters'].size:_} spikes, {np.unique(spikes['clusters']).size:_} clusters"
+        axs[0, 0].title.set_text(title_str)
+        for k, ts in time_series.items():
+            vertical_lines(ts, ymin=0, ymax=3800, ax=axs[1, 0])
+        if 'atlas_id' in channels:
+            plot_brain_regions(channels['atlas_id'], channel_depths=channels['axial_um'],
+                               brain_regions=br, display=True, ax=axs[1, 1], title=self.histology)
+        axs[1, 0].set_ylim(0, 3800)
+        axs[1, 0].set_xlim(spikes['times'][0], spikes['times'][-1])
+        fig.tight_layout()
+
+        self.download_spike_sorting_object('drift', self.spike_sorter, missing='ignore')
+        if 'drift' in self.files:
+            drift = alfio.load_object(self.files['drift'], wildcards=self.one.wildcards)
+            axs[0, 0].plot(drift['times'], drift['um'], 'k', alpha=.5)
+
         if save_dir is not None:
-            png_file = save_dir.joinpath(f"{self.pid}_{self.pid2ref}_raster.png") if Path(save_dir).is_dir() else Path(save_dir)
+            png_file = save_dir.joinpath(f"{self.pid}_{self.pid2ref}_{label}.png") if Path(save_dir).is_dir() else Path(save_dir)
             fig.savefig(png_file)
             plt.close(fig)
+            gc.collect()
         else:
-            return fig, ax
+            return fig, axs
 
 
 @dataclass
@@ -1434,3 +1362,38 @@ class SessionLoader:
             return video_timestamps_fixed, video_data
         else:
             return video_timestamps, video_data
+
+
+class EphysSessionLoader(SessionLoader):
+    """
+    Spike sorting enhanced version of SessionLoader
+    Loads spike sorting data for all probes in the session, in the self.ephys dict
+    """
+    def __init__(self, *args, **kwargs):
+        """
+        Needs an active connection in order to get the list of insertions in the session
+        :param args:
+        :param kwargs:
+        """
+        super().__init__(*args, **kwargs)
+        insertions = self.one.alyx.rest('insertions', 'list', session=self.eid)
+        self.ephys = {}
+        for ins in insertions:
+            self.ephys[ins['name']] = {}
+            self.ephys[ins['name']]['ssl'] = SpikeSortingLoader(pid=ins['id'], one=self.one)
+
+    def load_session_data(self, *args, **kwargs):
+        super().load_session_data(*args, **kwargs)
+        self.load_spike_sorting()
+
+    def load_spike_sorting(self, pnames=None):
+        pnames = pnames or list(self.ephys.keys())
+        for pname in pnames:
+            spikes, clusters, channels = self.ephys[pname]['ssl'].load_spike_sorting()
+            self.ephys[pname]['spikes'] = spikes
+            self.ephys[pname]['clusters'] = clusters
+            self.ephys[pname]['channels'] = channels
+
+    @property
+    def probes(self):
+        return {k: self.ephys[k]['ssl'].pid for k in self.ephys}

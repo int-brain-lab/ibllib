@@ -109,38 +109,6 @@ def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, car=T
     return waveforms
 
 
-def stream(pid, t0, nsecs=1, one=None, cache_folder=None, remove_cached=False, typ='ap'):
-    """
-    NB: returned Reader object must be closed after use
-    :param pid: Probe UUID
-    :param t0: time of the first sample
-    :param nsecs: duration of the streamed data
-    :param one: An instance of ONE
-    :param cache_folder:
-    :param remove_cached:
-    :param typ: 'ap' or 'lf'
-    :return: sr, t0
-    """
-    import warnings
-    warnings.warn('brainbox.io.spikeglx.stream is deprecated in favour of brainbox.io.spikeglx.Streamer',
-                  DeprecationWarning)
-    if nsecs > 10:
-        ValueError(f'Streamer works only with 10 or less seconds, set nsecs to less than {nsecs}')
-    assert one
-    assert typ in ['lf', 'ap']
-    sr = Streamer(pid=pid, one=one, cache_folder=cache_folder, remove_cached=remove_cached, typ=typ)
-    chinfo = sr.chunks
-    tbounds = np.array(chinfo['chunk_bounds']) / chinfo['sample_rate']
-    first_chunk = np.maximum(0, np.searchsorted(tbounds, t0 + 0.01) - 1)
-    last_chunk = np.maximum(0, np.searchsorted(tbounds, t0 + + 0.01 + nsecs) - 2)
-    t0 = tbounds[first_chunk]
-    sr_small = sr._download_raw_partial(first_chunk=first_chunk, last_chunk=last_chunk)
-    if remove_cached:
-        sr_small = sr_small[:, :]
-        shutil.rmtree(sr.target_dir, ignore_errors=True)
-    return sr_small, t0
-
-
 class Streamer(spikeglx.Reader):
     """
     pid = 'e31b4e39-e350-47a9-aca4-72496d99ff2a'
@@ -209,7 +177,7 @@ class Streamer(spikeglx.Reader):
             shutil.copy(self.file_chunks.with_suffix('.meta'), meta_local_path)
 
         # if the cached version happens to be the same as the one on disk, just load it
-        if ch_file_stream.exists():
+        if ch_file_stream.exists() and ch_file_stream.with_suffix('.cbin').exists():
             with open(ch_file_stream, 'r') as f:
                 cmeta_stream = json.load(f)
             if (cmeta_stream.get('chopped_first_sample', None) == i0 and
@@ -247,9 +215,19 @@ class Streamer(spikeglx.Reader):
             json.dump(cmeta, f, indent=2, sort_keys=True)
 
         # Download the requested chunks
-        cbin_local_path = webclient.download_file(
-            self.url_cbin, chunks=(first_byte, n_bytes),
-            target_dir=target_dir, clobber=True, return_md5=False)
+        retries = 0
+        while True:
+            try:
+                cbin_local_path = webclient.download_file(
+                    self.url_cbin, chunks=(first_byte, n_bytes),
+                    target_dir=target_dir, clobber=True, return_md5=False)
+                break
+            except Exception as e:
+                retries += 1
+                if retries > 5:
+                    raise e
+                _logger.warning(f'Failed to download chunk {first_chunk} to {last_chunk}, retrying')
+                time.sleep(1)
         cbin_local_path = remove_uuid_file(cbin_local_path)
         cbin_local_path_renamed = cbin_local_path.with_suffix('.stream.cbin')
         cbin_local_path.replace(cbin_local_path_renamed)

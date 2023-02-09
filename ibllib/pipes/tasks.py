@@ -13,6 +13,7 @@ from graphviz import Digraph
 import ibllib
 from ibllib.oneibl import data_handlers
 from ibllib.oneibl.data_handlers import get_local_data_repository
+from ibllib.oneibl.registration import get_lab
 from iblutil.util import Bunch
 import one.params
 from one.api import ONE
@@ -84,7 +85,7 @@ class Task(abc.ABC):
             -2: Didn't run as a lock was encountered
             -3: Incomplete
         """
-        # if taskid of one properties are not available, local run only without alyx
+        # if task id of one properties are not available, local run only without alyx
         use_alyx = self.one is not None and self.taskid is not None
         if use_alyx:
             # check that alyx user is logged in
@@ -312,7 +313,7 @@ class Task(abc.ABC):
         Gets the relevant data handler based on location argument
         :return:
         """
-        location = location or self.location
+        location = str.lower(location or self.location)
         if location == 'local':
             return data_handlers.LocalDataHandler(self.session_path, self.signature, one=self.one)
         self.one = self.one or ONE()
@@ -322,10 +323,12 @@ class Task(abc.ABC):
             dhandler = data_handlers.ServerGlobusDataHandler(self.session_path, self.signature, one=self.one)
         elif location == 'remote':
             dhandler = data_handlers.RemoteHttpDataHandler(self.session_path, self.signature, one=self.one)
-        elif location == 'AWS':
+        elif location == 'aws':
             dhandler = data_handlers.RemoteAwsDataHandler(self, self.session_path, self.signature, one=self.one)
-        elif location == 'SDSC':
+        elif location == 'sdsc':
             dhandler = data_handlers.SDSCDataHandler(self, self.session_path, self.signature, one=self.one)
+        else:
+            raise ValueError(f'Unknown location "{location}"')
         return dhandler
 
     @staticmethod
@@ -608,7 +611,7 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
     exec_name = tdict['executable']
     strmodule, strclass = exec_name.rsplit('.', 1)
     classe = getattr(importlib.import_module(strmodule), strclass)
-    tkwargs = tdict.get('arguments', {}) or {}  # if the db field is null it returns None
+    tkwargs = tdict.get('arguments') or {}  # if the db field is null it returns None
     task = classe(session_path, one=one, taskid=tdict['id'], machine=machine, clobber=clobber,
                   location=location, **tkwargs)
     # sets the status flag to started before running
@@ -622,7 +625,11 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
     # otherwise register data and set (provisional) status to Complete
     else:
         try:
-            registered_dsets = task.register_datasets(one=one, max_md5_size=max_md5_size)
+            kwargs = dict(one=one, max_md5_size=max_md5_size)
+            if location == 'server':
+                # Explicitly pass lab as lab cannot be inferred from path
+                kwargs['labs'] = ','.join(get_lab(one.alyx))
+            registered_dsets = task.register_datasets(**kwargs)
             patch_data['status'] = 'Complete'
         except Exception:
             _logger.error(traceback.format_exc())
