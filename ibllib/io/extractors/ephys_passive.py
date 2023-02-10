@@ -214,7 +214,7 @@ def _get_passive_spacers(session_path, sync_collection='raw_ephys_data',
             if len(indx_middle) == 1:
                 # 3. Add 1/2 spacer to middle idx to get the spacer end indx
                 spacer_around = int((np.floor(len(spacer_template) / 2)))
-                idx_end = int(indx_middle + spacer_around)
+                idx_end = int(indx_middle + spacer_around) + 1
                 spacer_times = np.insert(spacer_times, 0, np.array([fttl["times"][0], fttl["times"][idx_end]]), axis=0)
                 error_nspacer = False
 
