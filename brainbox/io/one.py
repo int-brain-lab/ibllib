@@ -706,6 +706,28 @@ def load_wheel_reaction_times(eid, one=None):
     return firstMove_times - trials['goCue_times']
 
 
+def load_iti(trials):
+    """
+    The inter-trial interval (ITI) time for each trial, defined as the period of open-loop grey
+    screen commencing at stimulus off and lasting until the quiescent period at the start of the
+    following trial.  Note that the ITI for the first trial is the time between the first trial
+    and the next, therefore the last value is NaN.
+
+    Parameters
+    ----------
+    trials : one.alf.io.AlfBunch
+        An ALF trials object containing the keys {'intervals', 'stimOff_times'}.
+
+    Returns
+    -------
+    np.array
+        An array of inter-trial intervals, the last value being NaN.
+    """
+    if not {'intervals', 'stimOff_times'} <= trials.keys():
+        raise ValueError('trials must contain keys {"intervals", "stimOff_times"}')
+    return np.r_[(np.roll(trials['intervals'][:, 0], -1) - trials['stimOff_times'])[:-1], np.nan]
+
+
 def load_channels_from_insertion(ins, depths=None, one=None, ba=None):
 
     PROV_2_VAL = {
