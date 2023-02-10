@@ -208,7 +208,7 @@ def _get_passive_spacers(session_path, sync_collection='raw_ephys_data',
             # NB: cannot re-use the same algo for spacer detection as conv peaks towards spacer end
             # 1. Find time point at which conv raises above a given threshold value
             thresh = 2.0
-            idx_nearend_spacer = np.where((conv_dttl_t[1:-2] < thresh) & (conv_dttl_t[2:-1] > thresh))[0]
+            idx_nearend_spacer = int(np.where((conv_dttl_t[1:-2] < thresh) & (conv_dttl_t[2:-1] > thresh))[0])
             ddttl = ddttl[0:idx_nearend_spacer]
             # 2. Find time point before this, for which fttl diff increase/decrease (this is the middle of spacer)
             indx_middle = np.where((ddttl[0:-1] > 0) & (ddttl[1:] < 0))[0]
