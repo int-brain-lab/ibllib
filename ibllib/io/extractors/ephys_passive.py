@@ -112,7 +112,6 @@ def _load_passive_stim_meta() -> dict:
 
     return meta
 
-
 # 1/3 Define start and end times of the 3 passive periods
 def _get_spacer_times(spacer_template, jitter, ttl_signal, t_quiet, thresh=3.0):
     """
@@ -188,7 +187,7 @@ def _get_passive_spacers(session_path, sync_collection='raw_ephys_data',
     )
     jitter = 3 / FRAME_FS  # allow for 3 screen refresh as jitter
     t_quiet = meta["VISUAL_STIM_0"]["delay_around"]
-    spacer_times, _ = _get_spacer_times(
+    spacer_times, conv_dttl = _get_spacer_times(
         spacer_template=spacer_template, jitter=jitter, ttl_signal=fttl["times"], t_quiet=t_quiet
     )
 
@@ -197,19 +196,19 @@ def _get_passive_spacers(session_path, sync_collection='raw_ephys_data',
     if n_exp_spacer != np.size(spacer_times) / 2:
         error_nspacer = True
         # sometimes the first spacer is truncated
-        # assess whether this is correct, and then launch another spacer detection on truncated fttl
+        # assess whether the first spacer is undetected, and then launch another spacer detection on truncated fttl
         # with a lower threshold value
         # Note: take *3 for some margin
-        if spacer_times[0][0] > (spacer_template[-1]+jitter)*3 and (np.size(spacer_times) / 2)==n_exp_spacer-1:
-            fttl_truncated = fttl["times"][np.where(fttl["times"] < spacer_times[0][0])]
-            spacer_times_first, _ = _get_spacer_times(
-                spacer_template=spacer_template, jitter=jitter, ttl_signal=fttl_truncated, t_quiet=t_quiet, thresh=2.0
-            )
-
-            if (np.size(spacer_times_first) / 2) == 1:
-                # add in first spacer
-                spacer_times = np.insert(spacer_times, 0, spacer_times_first, axis=0)
-                error_nspacer = False
+        if spacer_times[0][0] > (spacer_template[-1]+jitter)*3 and (np.size(spacer_times) / 2) == n_exp_spacer-1:
+            thresh = 2.1
+            # truncate conv
+            conv_dttl_t = conv_dttl[np.where(fttl["times"] < spacer_times[0][0])]
+            # find spacer location NB: cannot re-use the same algo for spacer detection as conv peaks towards spacer end
+            idx_spacer = np.where(
+                (conv_dttl_t[1:-2] < thresh) & (conv_dttl_t[2:-1] > thresh) & (conv_dttl_t[3:] < thresh)
+            )[0]
+            spacer_times = np.insert(spacer_times, 0, np.array([fttl["times"][0], fttl["times"][idx_spacer]]), axis=0)
+            error_nspacer = False
 
         if error_nspacer:
             raise ValueError(
