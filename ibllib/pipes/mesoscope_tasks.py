@@ -56,6 +56,10 @@ class MesoscopeCompress(base_tasks.DynamicTask):
         }
         return signature
 
+    def __init__(self, session_path, **kwargs):
+        super().__init__(session_path, **kwargs)
+        self.device_collection = self.get_device_collection('mesoscope', kwargs.get('device_collection', 'raw_mesoscope_data'))
+
     def _run(self, remove_uncompressed=False, verify_output=True, **kwargs):
         in_dir = self.session_path.joinpath(self.device_collection or '')
         outfile = self.session_path.joinpath(*filter(None, reversed(self.output_files[0][:2])))
@@ -113,6 +117,10 @@ class MesoscopePreprocess(base_tasks.DynamicTask):
         }
         return signature
 
+    def __init__(self, session_path, **kwargs):
+        super().__init__(session_path, **kwargs)
+        self.device_collection = self.get_device_collection('mesoscope', kwargs.get('device_collection', 'raw_mesoscope_data'))
+
     def _run(self, **kwargs):
         self.wf = base_tasks.DynamicTask(self.session_path)
         _, out_files = self.wf.extract(save=True, extract_timestamps=False)
@@ -141,6 +149,10 @@ class MesoscopeSync(base_tasks.DynamicTask):
                              ('imagingLightSource.properties.htsv', 'alf/mesoscope', True)]
         }
         return signature
+
+    def __init__(self, session_path, **kwargs):
+        super().__init__(session_path, **kwargs)
+        self.device_collection = self.get_device_collection('mesoscope', kwargs.get('device_collection', 'raw_mesoscope_data'))
 
     def _run(self):
 

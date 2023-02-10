@@ -1,16 +1,31 @@
 import numpy as np
 import one.alf.io as alfio
 
-from ibllib.io.raw_daq_loaders import load_sync_timeline
+from ibllib.io.raw_daq_loaders import load_sync_timeline, timeline_meta2chmap
 
 from ibllib.io.extractors.default_channel_maps import DEFAULT_MAPS
 from ibllib.io.extractors.ephys_fpga import FpgaTrials, WHEEL_TICKS, WHEEL_RADIUS_CM
 from ibllib.io.extractors.training_wheel import extract_wheel_moves
 
 
-def _timeline2sync(session_path, chmap=None):
-    chmap = chmap or DEFAULT_MAPS['mesoscope']['timeline']
-    sync = load_sync_timeline(session_path / 'raw_mesoscope_data', sync_map=chmap)
+def _timeline2sync(session_path, sync_collection='raw_sync_data', chmap=None):
+    """
+
+    Parameters
+    ----------
+    session_path
+    sync_collection
+    chmap
+
+    Returns
+    -------
+
+    """
+    path = session_path / sync_collection
+    if not chmap:  # attempt to extract from the meta file using expected channel names, or use expected channel numbers
+        default = DEFAULT_MAPS['mesoscope']['timeline']
+        chmap = timeline_meta2chmap(path, include_channels=default.keys()) or default
+    sync = load_sync_timeline(path, chmap=chmap)
     return sync, chmap
 
 
@@ -20,12 +35,17 @@ class TimelineTrials(FpgaTrials):
     """one.alf.io.AlfBunch: The timeline data object"""
     timeline = None
 
-    def __init__(self, *args, sync_collection='raw_mesoscope_data', **kwargs):
+    def __init__(self, *args, sync_collection='raw_sync_data', **kwargs):
         """An extractor for all ephys trial data, in Timeline time"""
         super().__init__(*args, **kwargs)
         self.timeline = alfio.load_object(self.session_path / sync_collection, 'DAQdata', namespace='timeline')
 
-    def get_wheel_positions(self, ticks=WHEEL_TICKS, radius=1, coding='x4'):
+    def _extract(self, sync=None, chmap=None, sync_collection='raw_sync_data', **kwargs):
+        if not (sync or chmap):
+            sync, chmap = _timeline2sync(self.session_path, sync_collection)
+        return super()._extract(sync, chmap, sync_collection, **kwargs)
+
+    def get_wheel_positions(self, ticks=WHEEL_TICKS, radius=WHEEL_RADIUS_CM, coding='x4'):
         """
         Gets the wheel position from Timeline counter channel.
 

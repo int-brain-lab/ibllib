@@ -1,3 +1,4 @@
+"""Abstract base classes for dynamic pipeline tasks."""
 from one.webclient import no_cache
 
 from ibllib.pipes.tasks import Task

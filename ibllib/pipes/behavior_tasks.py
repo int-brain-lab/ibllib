@@ -1,3 +1,4 @@
+"""Standard task protocol extractor dynamic pipeline tasks."""
 from ibllib.pipes import base_tasks
 from ibllib.io.extractors.ephys_passive import PassiveChoiceWorld
 from ibllib.io.extractors import bpod_trials
@@ -5,6 +6,7 @@ from ibllib.qc.task_extractors import TaskQCExtractor
 from ibllib.qc.task_metrics import HabituationQC, TaskQC
 from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.io.extractors.ephys_fpga import extract_all
+from ibllib.io.extractors.mesoscope import TimelineTrials
 from ibllib.pipes import training_status
 
 import one.alf.io as alfio
@@ -303,6 +305,32 @@ class ChoiceWorldTrialsNidq(base_tasks.BehaviourTask):
                 self.status = -1
 
         return out_files
+
+
+class ChoiceWorldTrialsTimeline(ChoiceWorldTrialsNidq):
+    """Behaviour task extractor with DAQdata.raw NPY datasets."""
+    @property
+    def signature(self):
+        signature = super().signature
+        signature['input_files'] = [
+            ('_iblrig_taskData.raw.*', self.collection, True),
+            ('_iblrig_taskSettings.raw.*', self.collection, True),
+            ('_iblrig_encoderEvents.raw*', self.collection, True),
+            ('_iblrig_encoderPositions.raw*', self.collection, True),
+            (f'_{self.sync_namespace}_DAQdata.raw.npy', self.sync_collection, True),
+            (f'_{self.sync_namespace}_DAQdata.timestamps.npy', self.sync_collection, True),
+            (f'_{self.sync_namespace}_DAQdata.meta.json', self.sync_collection, True),
+        ]
+        return signature
+
+    def _extract_behaviour(self):
+        trials = TimelineTrials(self.session_path)
+        save_path = self.session_path / self.output_collection
+        dsets, out_files = trials.extract(
+            save=True, path_out=save_path, sync_collection=self.sync_collection,
+            task_collection=self.collection, protocol_number=self.protocol_number)
+        # TODO Task QC extractor for Timeline
+        return dsets, out_files
 
 
 class TrainingStatus(base_tasks.BehaviourTask):

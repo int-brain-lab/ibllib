@@ -1,12 +1,14 @@
 """Loader functions for various DAQ data formats"""
 from pathlib import Path
 import logging
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
+import json
 
 import nptdms
 import numpy as np
 import neurodsp.utils
 import one.alf.io as alfio
+from one.alf.spec import to_alf
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +147,7 @@ def load_sync_tdms(path, sync_map, fs=None, threshold=2.5, floor_percentile=10):
     return sync, chmap
 
 
-def load_sync_timeline(path, sync_map, threshold=2.5, floor_percentile=10):
+def load_sync_timeline(path, chmap=None, threshold=2.5, floor_percentile=10):
     """
     Load sync channels from a timeline object.
 
@@ -157,7 +159,7 @@ def load_sync_timeline(path, sync_map, threshold=2.5, floor_percentile=10):
     ----------
     path : str, pathlib.Path
         The file or folder path of the _timeline_DAQdata file.
-    sync_map : dict
+    chmap : dict
         A map of channel names and channel IDs.
     threshold : float
         The threshold for applying to analogue channels
@@ -173,10 +175,13 @@ def load_sync_timeline(path, sync_map, threshold=2.5, floor_percentile=10):
     timeline = alfio.load_object(path, 'DAQdata', namespace='timeline')
     assert timeline.keys() >= {'timestamps', 'raw', 'meta'}, 'Timeline object missing attributes'
 
+    # If no channel map was passed, load it from 'wiring' file, or extract from meta file
+    chmap = chmap or timeline.get('wiring') or timeline_meta2chmap(path)
+
     # Initialize sync object
     sync = alfio.AlfBunch((k, np.array([], dtype=d)) for k, d in
                           (('times', 'f'), ('channels', 'u1'), ('polarities', 'i1')))
-    for label, i in sync_map.items():
+    for label, i in chmap.items():
         try:
             info = next(x for x in timeline['meta']['inputs'] if x['name'].lower() == label.lower())
         except StopIteration:
@@ -213,3 +218,50 @@ def load_sync_timeline(path, sync_map, threshold=2.5, floor_percentile=10):
         sync[k] = sync[k][t_ind]
 
     return sync
+
+
+def timeline_meta2wiring(path, save=False):
+    """
+    Given a timeline meta data object, return the
+    Parameters
+    ----------
+    path
+
+    Returns
+    -------
+
+    """
+    meta = alfio.load_object(path, 'DAQdata', namespace='timeline', attribute='meta').get('meta')
+    assert meta, 'No meta data in timeline object'
+    wiring = defaultdict(dict, {'SYSTEM': 'timeline'})
+    for input in meta['inputs']:
+        key = 'SYNC_WIRING_' + ('ANALOG' if input['measurement'] == 'Voltage' else 'DIGITAL')
+        wiring[key][input['daqChannelID']] = input['name']
+    if save:
+        out_path = path / to_alf('DAQ data', 'wiring', 'json', namespace='timeline')
+        with open(out_path, 'w') as fp:
+            json.dump(wiring, fp)
+    return wiring
+
+
+def timeline_meta2chmap(path, exclude_channels=None, include_channels=None):
+    """
+
+    Parameters
+    ----------
+    path : str, pathlib.Path
+    exclude_channels : list
+    include_channels : list
+
+    Returns
+    -------
+
+    """
+    meta = alfio.load_object(path, 'DAQdata', namespace='timeline', attribute='meta').get('meta')
+    chmap = {}
+    for input in meta.get('inputs', []):
+        if (include_channels is not None and input['name'] not in include_channels) or \
+                (exclude_channels and input['name'] in exclude_channels):
+            continue
+        chmap[input['name']] = input['arrayColumn']
+    return chmap

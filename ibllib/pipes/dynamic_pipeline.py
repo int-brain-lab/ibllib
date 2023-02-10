@@ -346,12 +346,12 @@ def make_pipeline(session_path, **pkwargs):
         tasks['MesoscopeRegisterSnapshots'] = type('MesoscopeRegisterSnapshots', (mscope_tasks.MesoscopeRegisterSnapshots,), {})(
             **kwargs, **mscope_kwargs)
         tasks['MesoscopeCompress'] = type('MesoscopeCompress', (mscope_tasks.MesoscopeCompress,), {})(
-            **kwargs, **mscope_kwargs, parents=[tasks['MesoscopeRegisterRaw']])
+            **kwargs, **mscope_kwargs)
         tasks['MesoscopePreprocess'] = type('MesoscopePreprocess', (mscope_tasks.MesoscopePreprocess,), {})(
             **kwargs, **mscope_kwargs, parents=[tasks['MesoscopeCompress']])
         tasks['MesoscopeSync'] = type('MesoscopeSync', (mscope_tasks.MesoscopeSync,), {})(
             **kwargs, **mscope_kwargs, **sync_kwargs,
-            parents=[tasks['MesoscopeRegisterRaw'], tasks['MesoscopeCompress']] + sync_tasks)
+            parents=[tasks['MesoscopeCompress']] + sync_tasks)
         tasks['MesoscopeFOV'] = type('MesoscopeFOV', (mscope_tasks.MesoscopeFOV,), {})(
             **kwargs, **mscope_kwargs, parents=[tasks['MesoscopePreprocess']])
 
