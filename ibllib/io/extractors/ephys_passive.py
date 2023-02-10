@@ -200,15 +200,23 @@ def _get_passive_spacers(session_path, sync_collection='raw_ephys_data',
         # with a lower threshold value
         # Note: take *3 for some margin
         if spacer_times[0][0] > (spacer_template[-1]+jitter)*3 and (np.size(spacer_times) / 2) == n_exp_spacer-1:
-            thresh = 2.1
-            # truncate conv
+            # Truncate signals
+            fttl_t = fttl["times"][np.where(fttl["times"] < spacer_times[0][0])]
             conv_dttl_t = conv_dttl[np.where(fttl["times"] < spacer_times[0][0])]
-            # find spacer location NB: cannot re-use the same algo for spacer detection as conv peaks towards spacer end
-            idx_spacer = np.where(
-                (conv_dttl_t[1:-2] < thresh) & (conv_dttl_t[2:-1] > thresh) & (conv_dttl_t[3:] < thresh)
-            )[0]
-            spacer_times = np.insert(spacer_times, 0, np.array([fttl["times"][0], fttl["times"][idx_spacer]]), axis=0)
-            error_nspacer = False
+            ddttl = np.diff(np.diff(fttl_t))
+            # Find spacer location
+            # NB: cannot re-use the same algo for spacer detection as conv peaks towards spacer end
+            # 1. Find time point at which conv raises above a given threshold value
+            thresh = 2.0
+            idx_nearend_spacer = np.where((conv_dttl_t[1:-2] < thresh) & (conv_dttl_t[2:-1] > thresh))[0]
+            # 2. Find time point before this, for which fttl diff increase/decrease (this is the middle of spacer)
+            indx_middle = np.where((ddttl[0:-1] > 0) & (ddttl[1:] < 0))[0]
+            if len(indx_middle) == 1:
+                # 3. Add 1/2 spacer to middle idx to get the spacer end indx
+                spacer_around = int((np.floor(len(spacer_template) / 2)))
+                idx_end = int(indx_middle + spacer_around)
+                spacer_times = np.insert(spacer_times, 0, np.array([fttl["times"][0], fttl["times"][idx_end]]), axis=0)
+                error_nspacer = False
 
         if error_nspacer:
             raise ValueError(
