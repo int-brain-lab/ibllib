@@ -3,6 +3,7 @@ import unittest
 from unittest import mock
 from pathlib import Path
 from collections import OrderedDict
+import numpy as np
 
 import ibllib.pipes.tasks
 from one.api import ONE
@@ -148,6 +149,8 @@ class TestPipelineAlyx(unittest.TestCase):
         #                     no_cache=True)
         # if len(ses):
         #     one.alyx.rest('sessions', 'delete', ses[0]['url'][-36:])
+        # randomise number
+        ses_dict['number'] = np.random.randint(1, 30)
         ses = one.alyx.rest('sessions', 'create', data=ses_dict)
         session_path = Path(self.td.name).joinpath(
             ses['subject'], ses['start_time'][:10], str(ses['number']).zfill(3))
