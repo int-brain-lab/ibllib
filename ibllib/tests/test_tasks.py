@@ -163,14 +163,13 @@ class TestPipelineAlyx(unittest.TestCase):
         self.session_path = session_path
         self.eid = ses['url'][-36:]
 
-        self.patch = unittest.mock.patch('ibllib.oneibl.registration.get_lab',
-                                         return_value=['cortexlab'])
-
     def tearDown(self) -> None:
         self.td.cleanup()
         one.alyx.rest('sessions', 'delete', id=self.eid)
 
-    def test_pipeline_alyx(self):
+    @mock.patch('ibllib.pipes.tasks.get_lab')
+    def test_pipeline_alyx(self, mock_ep):
+        mock_ep().get.return_value = ['cortexlab']
         eid = self.eid
         pipeline = SomePipeline(self.session_path, one=one, eid=eid)
 

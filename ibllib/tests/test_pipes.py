@@ -296,10 +296,10 @@ class TestPipesMisc(unittest.TestCase):
         # Force probe insertion 3A
         labels = [''.join(random.choices(string.ascii_letters, k=5)), ''.join(random.choices(string.ascii_letters, k=5))]
         misc.create_alyx_probe_insertions(
-            str(eid), one=one, model="3A", labels=labels, force=True
+            eid, one=one, model="3A", labels=labels, force=True
         )
         # Verify it's been inserted
-        alyx_insertion = one.alyx.rest("insertions", "list", session=str(eid), no_cache=True)
+        alyx_insertion = one.alyx.rest("insertions", "list", session=eid, no_cache=True)
         alyx_insertion = [x for x in alyx_insertion if x["model"] == "3A"]
         self.assertTrue(alyx_insertion[0]["model"] == "3A")
         self.assertTrue(alyx_insertion[0]["name"] in labels)
@@ -310,9 +310,10 @@ class TestPipesMisc(unittest.TestCase):
         one.alyx.rest("insertions", "delete", id=alyx_insertion[1]["id"])
         # Force probe insertion 3B
         labels = [''.join(random.choices(string.ascii_letters, k=5)), ''.join(random.choices(string.ascii_letters, k=5))]
-        misc.create_alyx_probe_insertions(str(eid), one=one, model="3B2", labels=labels)
+        misc.create_alyx_probe_insertions(eid, one=one, model="3B2", labels=labels)
         # Verify it's been inserted
-        alyx_insertion = one.alyx.rest("insertions", "list", session=str(eid), no_cache=True)
+        alyx_insertion = one.alyx.rest("insertions", "list", session=eid, no_cache=True)
+        print(alyx_insertion)
         self.assertTrue(alyx_insertion[0]["model"] == "3B2")
         self.assertTrue(alyx_insertion[0]["name"] in labels)
         self.assertTrue(alyx_insertion[1]["model"] == "3B2")
