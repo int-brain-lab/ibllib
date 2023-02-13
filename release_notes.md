@@ -12,6 +12,11 @@
 - QC sign-off keys are added to session JSON field
 - class-based note template API for attaching session notes for QC sign-offs
 - protocol and procedures now taken from experiment description file
+- handle truncated first spacer in passive extraction
+- fix the Perirhinal area layer color in Allen Atlas
+- fix region volume computation
+- vectorised swanson flatmap
+- brainbox trial ITI loader
 
 ## Release 2.20
 # Release Notes 2.20.0 2023-01-23

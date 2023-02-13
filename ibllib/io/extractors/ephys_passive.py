@@ -112,6 +112,7 @@ def _load_passive_stim_meta() -> dict:
 
     return meta
 
+
 # 1/3 Define start and end times of the 3 passive periods
 def _get_spacer_times(spacer_template, jitter, ttl_signal, t_quiet, thresh=3.0):
     """
@@ -192,14 +193,14 @@ def _get_passive_spacers(session_path, sync_collection='raw_ephys_data',
     )
 
     # Check correct number of spacers found
-    n_exp_spacer = np.sum(np.array(meta["STIM_ORDER"]) == 0)  # Hardcoded 0 for spacer
+    n_exp_spacer = np.sum(np.array(meta['STIM_ORDER']) == 0)  # Hardcoded 0 for spacer
     if n_exp_spacer != np.size(spacer_times) / 2:
         error_nspacer = True
         # sometimes the first spacer is truncated
         # assess whether the first spacer is undetected, and then launch another spacer detection on truncated fttl
         # with a lower threshold value
         # Note: take *3 for some margin
-        if spacer_times[0][0] > (spacer_template[-1]+jitter)*3 and (np.size(spacer_times) / 2) == n_exp_spacer-1:
+        if spacer_times[0][0] > (spacer_template[-1] + jitter) * 3 and (np.size(spacer_times) / 2) == n_exp_spacer - 1:
             # Truncate signals
             fttl_t = fttl["times"][np.where(fttl["times"] < spacer_times[0][0])]
             conv_dttl_t = conv_dttl[np.where(fttl["times"] < spacer_times[0][0])]
@@ -221,9 +222,9 @@ def _get_passive_spacers(session_path, sync_collection='raw_ephys_data',
 
         if error_nspacer:
             raise ValueError(
-                f"The number of expected spacer ({n_exp_spacer}) "
-                f"is different than the one found on the raw "
-                f"trace ({int(np.size(spacer_times)/2)})"
+                f'The number of expected spacer ({n_exp_spacer}) '
+                f'is different than the one found on the raw '
+                f'trace ({int(np.size(spacer_times) / 2)})'
             )
 
     if tmax is None:
