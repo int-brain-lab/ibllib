@@ -3,6 +3,8 @@ from unittest import mock
 import json
 import random
 import string
+import datetime
+import numpy as np
 
 import requests
 from one.api import ONE
@@ -28,7 +30,14 @@ class TestUserPmtSess(unittest.TestCase):
     def setUp(self) -> None:
         # Make sure tests use correct session ID
         one.alyx.clear_rest_cache()
-        self.sess_id = one.alyx.rest('sessions', 'list', task_protocol='ephys')[0]['url'][-36:]
+        # Create new session on database with a random date to avoid race conditions
+        date = str(datetime.date(2022, np.random.randint(1, 12), np.random.randint(1, 28)))
+        from one.registration import RegistrationClient
+        _, eid = RegistrationClient(one).create_new_session('ZM_1150', date=date)
+        eid = str(eid)
+        # Currently the task protocol of a session must contain 'ephys' in order to create an insertion!
+        one.alyx.rest('sessions', 'partial_update', id=eid, data={'task_protocol': 'ephys'})
+        self.sess_id = eid
 
         # Make new insertion with random name
         data = {'name': ''.join(random.choices(string.ascii_letters, k=5)),
