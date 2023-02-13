@@ -10,13 +10,13 @@ Pipeline:
 import logging
 import subprocess
 import json
+import shutil
 from pathlib import Path
 from itertools import chain
 import numpy as np
 
 from ibllib.io.extractors.mesoscope import TimelineTrials
 from ibllib.pipes import base_tasks
-from ibllib.misc import check_nvidia_driver
 
 _logger = logging.getLogger(__name__)
 
@@ -166,24 +166,30 @@ class MesoscopePreprocess(base_tasks.DynamicTask):
             _ = suite2p.run_s2p(ops=ops, db=self.db)
 
         # Rename the outputs, first the subdirectories
-        for plane_dir in Path(self.db['save_path0']).joinpath('suite2p').glob('*'):
-            if plane_dir.name != 'combined':
+        suite2p_dir = Path(self.db['save_path0']).joinpath('suite2p')
+        for plane_dir in suite2p_dir.iterdir():
+            if plane_dir.name == 'combined':
+                plane_dir.rename(plane_dir.parent.joinpath('fov_combined'))
+            else:
                 n = int(plane_dir.name.split('plane')[1])
                 plane_dir.rename(plane_dir.parent.joinpath(f'fov{n:02}'))
-        # Now the content of the new directories, also collect out_files
-        out_files = []
-        for fov_dir in Path(self.db['save_path0']).joinpath('suite2p').glob('*'):
-            # Todo: do we keep ops file?
-            # Todo: what about the data.bin file?
+        # Now rename the content of the new directories and move them out of suite2p
+        for fov_dir in suite2p_dir.iterdir():
             for k in self.rename.keys():
                 try:
                     fov_dir.joinpath(k).rename(fov_dir.joinpath(self.rename[k]))
                 except FileNotFoundError:
                     _logger.error(f"Output file {k} expected but not found in {fov_dir}")
                     self.status = -1
+            # extract bad frames from ops.npy file and save separately
             badframes = np.load(fov_dir.joinpath('ops.npy'), allow_pickle=True).item()['badframes']
             np.save(fov_dir.joinpath('mpci.validFrames.npy'), badframes)
-            out_files.extend(list(fov_dir.glob('*')))
+            shutil.move(fov_dir, suite2p_dir.parent.joinpath(fov_dir.name))
+        # Remove empty suite2p folder
+        suite2p_dir.rmdir()
+        # Collect output files
+        out_files = list(suite2p_dir.parent.rglob('fov*/*'))
+        # TODO: what about ops.npy, stats.npy, data.bin ?
         return out_files
 
 
