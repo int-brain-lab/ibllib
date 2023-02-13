@@ -289,6 +289,7 @@ class TestPipesMisc(unittest.TestCase):
         date = str(datetime.date(2022, np.random.randint(1, 12), np.random.randint(1, 28)))
         from one.registration import RegistrationClient
         _, eid = RegistrationClient(one).create_new_session('ZM_1150', date=date)
+        eid = str(eid)
         # Currently the task protocol of a session must contain 'ephys' in order to create an insertion!
         one.alyx.rest('sessions', 'partial_update', id=eid, data={'task_protocol': 'ephys'})
         self.addCleanup(one.alyx.rest, 'sessions', 'delete', id=eid)  # Delete after test
