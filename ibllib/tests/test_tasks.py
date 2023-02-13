@@ -163,6 +163,9 @@ class TestPipelineAlyx(unittest.TestCase):
         self.session_path = session_path
         self.eid = ses['url'][-36:]
 
+        self.patch = unittest.mock.patch('ibllib.oneibl.registration.get_lab',
+                                         return_value=['cortexlab'])
+
     def tearDown(self) -> None:
         self.td.cleanup()
         one.alyx.rest('sessions', 'delete', id=self.eid)
@@ -187,7 +190,7 @@ class TestPipelineAlyx(unittest.TestCase):
 
         # run them and make sure their statuses got updated appropriately
         with mock.patch.object(ibllib.pipes.tasks.Task, '_lock_file_path',
-                               return_value=Path(self.td.name).joinpath('.gpu_lock')):
+                               return_value=Path(self.session_path).joinpath('.gpu_lock')):
             task_deck, datasets = pipeline.run(machine='testmachine')
             check_statuses = (desired_statuses[t['name']] == t['status'] for t in task_deck)
             # [(t['name'], t['status'], desired_statuses[t['name']]) for t in task_deck]

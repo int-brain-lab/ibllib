@@ -10,6 +10,8 @@ from unittest import mock
 from functools import partial
 import numpy as np
 import datetime
+import random
+import string
 
 from one.api import ONE
 import iblutil.io.params as iopar
@@ -292,28 +294,29 @@ class TestPipesMisc(unittest.TestCase):
         self.addCleanup(one.alyx.rest, 'sessions', 'delete', id=eid)  # Delete after test
 
         # Force probe insertion 3A
-
+        labels = [''.join(random.choices(string.ascii_letters, k=5)), ''.join(random.choices(string.ascii_letters, k=5))]
         misc.create_alyx_probe_insertions(
-            str(eid), one=one, model="3A", labels=["probe00", "probe01"], force=True
+            str(eid), one=one, model="3A", labels=labels, force=True
         )
         # Verify it's been inserted
-        alyx_insertion = one.alyx.rest("insertions", "list", session=eid, no_cache=True)
+        alyx_insertion = one.alyx.rest("insertions", "list", session=str(eid), no_cache=True)
         alyx_insertion = [x for x in alyx_insertion if x["model"] == "3A"]
         self.assertTrue(alyx_insertion[0]["model"] == "3A")
-        self.assertTrue(alyx_insertion[0]["name"] in ["probe00", "probe01"])
+        self.assertTrue(alyx_insertion[0]["name"] in labels)
         self.assertTrue(alyx_insertion[1]["model"] == "3A")
-        self.assertTrue(alyx_insertion[1]["name"] in ["probe00", "probe01"])
+        self.assertTrue(alyx_insertion[1]["name"] in labels)
         # Cleanup DB
         one.alyx.rest("insertions", "delete", id=alyx_insertion[0]["id"])
         one.alyx.rest("insertions", "delete", id=alyx_insertion[1]["id"])
         # Force probe insertion 3B
-        misc.create_alyx_probe_insertions(str(eid), one=one, model="3B2", labels=["probe00", "probe01"])
+        labels = [''.join(random.choices(string.ascii_letters, k=5)), ''.join(random.choices(string.ascii_letters, k=5))]
+        misc.create_alyx_probe_insertions(str(eid), one=one, model="3B2", labels=labels)
         # Verify it's been inserted
         alyx_insertion = one.alyx.rest("insertions", "list", session=str(eid), no_cache=True)
         self.assertTrue(alyx_insertion[0]["model"] == "3B2")
-        self.assertTrue(alyx_insertion[0]["name"] in ["probe00", "probe01"])
+        self.assertTrue(alyx_insertion[0]["name"] in labels)
         self.assertTrue(alyx_insertion[1]["model"] == "3B2")
-        self.assertTrue(alyx_insertion[1]["name"] in ["probe00", "probe01"])
+        self.assertTrue(alyx_insertion[1]["name"] in labels)
         # Cleanup DB
         one.alyx.rest("insertions", "delete", id=alyx_insertion[0]["id"])
         one.alyx.rest("insertions", "delete", id=alyx_insertion[1]["id"])
