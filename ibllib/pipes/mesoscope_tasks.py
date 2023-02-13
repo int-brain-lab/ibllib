@@ -9,11 +9,14 @@ Pipeline:
 """
 import logging
 import subprocess
+import json
 from pathlib import Path
 from itertools import chain
+import numpy as np
 
 from ibllib.io.extractors.mesoscope import TimelineTrials
 from ibllib.pipes import base_tasks
+from ibllib.misc import check_nvidia_driver
 
 _logger = logging.getLogger(__name__)
 
@@ -95,32 +98,93 @@ class MesoscopeCompress(base_tasks.DynamicTask):
         return [outfile]
 
 
-#  level 1
 class MesoscopePreprocess(base_tasks.DynamicTask):
 
     priority = 80
     job_size = 'large'
 
+    def __init__(self, session_path, **kwargs):
+        super(MesoscopePreprocess, self).__init__(session_path, **kwargs)
+        self.device_collection = self.get_device_collection('mesoscope',
+                                                            kwargs.get('device_collection', 'raw_imaging_data'))
+        # dictionary to rename suite2p output files
+        self.rename = {
+            'F.npy': 'mpci.ROIActivityF.npy',
+            'Fneu.npy': 'mpci.ROIActivityFneu.npy',
+            'spks.npy': 'mpci.ROIActivityDeconvolved.npy',
+            'iscell.npy': 'mpciROIs.included.npy'
+        }
+        # TODO: make sure that we are happy with these defaults
+        # TODO: decide if we want to code them here or in the construction of the meta json
+        self.db = {
+            'data_path': [str(self.session_path.joinpath(self.device_collection))],
+            'save_path0': str(self.session_path.joinpath('alf')),  # is also used as fast_disk unless thats defined
+            'move_bin': True,
+            'keep_movie_raw': False,
+            'delete_bin': False,
+            'batch_size': 1000,
+            'combined': True,
+        }
+
     @property
     def signature(self):
         signature = {
-            'input_files': [('imaging.frames.*', self.device_collection, True),
-                            ('mesoscopeEvents.raw.*', self.device_collection, True)],
-            'output_files': [('mesoscopeChannels.frameAverage.npy', 'alf/mesoscope', True),
-                             ('mesoscopeU.images.npy', 'alf/mesoscope', True),
-                             ('mesoscopeSVT.uncorrected.npy', 'alf/mesoscope', True),
-                             ('mesoscopeSVT.haemoCorrected.npy', 'alf/mesoscope', True)]
+            'input_files': [('rawImagingData.meta.json', self.device_collection, True)],
+            'output_files': []
         }
         return signature
 
-    def _run(self, **kwargs):
-        self.wf = base_tasks.DynamicTask(self.session_path)
-        _, out_files = self.wf.extract(save=True, extract_timestamps=False)
-        return out_files
+    def _run(self, dry=False):
+        import suite2p
+        # Get default ops
+        ops = suite2p.default_ops()
 
-    def tearDown(self):
-        super(MesoscopePreprocess, self).tearDown()
-        self.wf.remove_files()
+        # Some options we get from the meta data json, we put them in db, which overwrites ops if the keys are the same
+        # TODO: get the right path here
+        with open(self.session_path.joinpath(self.device_collection, 'rawImagingData.meta.json'), 'r') as meta_file:
+            meta = json.load(meta_file)
+        # Inputs extracted from imaging data to a json
+        # TODO: check that these are the right and complete inputs from the meta file
+        # TODO: what about badframes?
+        for k in ['nrois', 'mesoscan', 'nplanes', 'nchannels', 'tau', 'fs', 'dx', 'dy', 'lines']:
+            if k in meta.keys():
+                self.db[k] = meta[k]
+            else:
+                _logger.warning(f'Setting for {k} not found in metadata file. Keeping default.')
+
+        # Anything can be overwritten by keyword arguments passed to the tasks run() method
+        for k, v in self.kwargs.items():
+            if k in ops.keys() or k in self.db.keys():
+                # db overwrites ops when passed to run_s2p, so we only need to update / add it here
+                self.db[k] = v
+
+        # Update the task kwargs attribute as it will be stored in the arguments json field in alyx
+        self.kwargs = {**self.kwargs, **self.db}
+
+        # Run suite2p
+        if not dry:
+            _ = suite2p.run_s2p(ops=ops, db=self.db)
+
+        # Rename the outputs, first the subdirectories
+        for plane_dir in Path(self.db['save_path0']).joinpath('suite2p').glob('*'):
+            if plane_dir.name != 'combined':
+                n = int(plane_dir.name.split('plane')[1])
+                plane_dir.rename(plane_dir.parent.joinpath(f'fov{n:02}'))
+        # Now the content of the new directories, also collect out_files
+        out_files = []
+        for fov_dir in Path(self.db['save_path0']).joinpath('suite2p').glob('*'):
+            # Todo: do we keep ops file?
+            # Todo: what about the data.bin file?
+            for k in self.rename.keys():
+                try:
+                    fov_dir.joinpath(k).rename(fov_dir.joinpath(self.rename[k]))
+                except FileNotFoundError:
+                    _logger.error(f"Output file {k} expected but not found in {fov_dir}")
+                    self.status = -1
+            badframes = np.load(fov_dir.joinpath('ops.npy'), allow_pickle=True).item()['badframes']
+            np.save(fov_dir.joinpath('mpci.validFrames.npy'), badframes)
+            out_files.extend(list(fov_dir.glob('*')))
+        return out_files
 
 
 class MesoscopeSync(base_tasks.DynamicTask):
