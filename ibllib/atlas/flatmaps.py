@@ -3,11 +3,13 @@ Module that hold techniques to project the brain volume onto 2D images for visua
 """
 from functools import lru_cache
 import logging
+import json
 
 import numpy as np
 from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
 import matplotlib.colors
+from matplotlib import cm
 
 from iblutil.numerical import ismember
 from iblutil.util import Bunch
@@ -15,6 +17,7 @@ from iblutil.io.hashfile import md5
 import one.remote.aws as aws
 
 from ibllib.atlas.atlas import AllenAtlas, BrainRegions
+from ibllib.atlas.plots import plot_polygon, plot_polygon_with_hole, coords_for_poly_hole
 
 
 _logger = logging.getLogger(__name__)
@@ -132,6 +135,115 @@ def swanson(filename="swanson2allen.npz"):
     return s2a
 
 
+def swanson_json(filename="swansonpaths.json"):
+
+    OLD_MD5 = ['f848783954883c606ca390ceda9e37d2']
+
+    json_file = AllenAtlas._get_cache_dir().joinpath(filename)
+    if not json_file.exists() or md5(json_file) in OLD_MD5:
+        json_file.parent.mkdir(exist_ok=True, parents=True)
+        _logger.info(f'downloading swanson paths from {aws.S3_BUCKET_IBL} s3 bucket...')
+        aws.s3_download_file(f'atlas/{json_file.name}', json_file)
+
+    with open(json_file) as f:
+        sw_json = json.load(f)
+
+    return sw_json
+
+
+def plot_swanson_vector(acronyms=None, values=None, ax=None, hemisphere=None, br=None, orientation='landscape',
+                        empty_color='silver', vmin=None, vmax=None, cmap='cividis', **kwargs):
+
+    br = BrainRegions() if br is None else br
+    br.compute_hierarchy()
+
+    if ax is None:
+        fig, ax = plt.subplots()
+        ax.set_axis_off()
+
+    if acronyms is not None:
+        ibr, vals = br.propagate_down(acronyms, values)
+        colormap = cm.get_cmap(cmap)
+        vmin = vmin or np.nanmin(vals)
+        vmax = vmax or np.nanmax(vals)
+        norm = matplotlib.colors.Normalize(vmin=vmin, vmax=vmax)
+        rgba_color = colormap(norm(vals), bytes=True)
+
+    sw = swanson()
+    sw_json = swanson_json()
+
+    for i, reg in enumerate(sw_json):
+
+        if acronyms is None:
+            color = br.rgba[br.mappings['Swanson'][reg['thisID']]] / 255
+        else:
+            idx = np.where(ibr == reg['thisID'])[0]
+            color = rgba_color[idx[0]] / 255 if len(idx) > 0 else empty_color
+
+        coords = reg['coordsReg']
+
+        if reg['hole']:
+            vertices, codes = coords_for_poly_hole(coords)
+            if orientation == 'portrait':
+                vertices[:, [0, 1]] = vertices[:, [1, 0]]
+                plot_polygon_with_hole(ax, vertices, codes, color, **kwargs)
+                if hemisphere is not None:
+                    color_inv = color if hemisphere == 'mirror' else empty_color
+                    vertices_inv = np.copy(vertices)
+                    vertices_inv[:, 0] = -1 * vertices_inv[:, 0] + (sw.shape[0] * 2)
+                    plot_polygon_with_hole(ax, vertices_inv, codes, color_inv, **kwargs)
+            else:
+                plot_polygon_with_hole(ax, vertices, codes, color, **kwargs)
+                if hemisphere is not None:
+                    color_inv = color if hemisphere == 'mirror' else empty_color
+                    vertices_inv = np.copy(vertices)
+                    vertices_inv[:, 1] = -1 * vertices_inv[:, 1] + (sw.shape[0] * 2)
+                    plot_polygon_with_hole(ax, vertices_inv, codes, color_inv, **kwargs)
+        else:
+            coords = [coords] if type(coords) == dict else coords
+            for c in coords:
+
+                if orientation == 'portrait':
+                    xy = np.c_[c['y'], c['x']]
+                    plot_polygon(ax, xy, color, **kwargs)
+                    if hemisphere is not None:
+                        color_inv = color if hemisphere == 'mirror' else empty_color
+                        xy_inv = np.copy(xy)
+                        xy_inv[:, 0] = -1 * xy_inv[:, 0] + (sw.shape[0] * 2)
+                        plot_polygon(ax, xy_inv, color_inv, **kwargs)
+                else:
+                    xy = np.c_[c['x'], c['y']]
+                    plot_polygon(ax, xy, color, **kwargs)
+                    if hemisphere is not None:
+                        color_inv = color if hemisphere == 'mirror' else empty_color
+                        xy_inv = np.copy(xy)
+                        xy_inv[:, 1] = -1 * xy_inv[:, 1] + (sw.shape[0] * 2)
+                        plot_polygon(ax, xy_inv, color_inv, **kwargs)
+
+    if orientation == 'portrait':
+        ax.set_ylim(0, sw.shape[1])
+        if hemisphere is None:
+            ax.set_xlim(0, sw.shape[0])
+        else:
+            ax.set_xlim(0, 2 * sw.shape[0])
+    else:
+        ax.set_xlim(0, sw.shape[1])
+        if hemisphere is None:
+            ax.set_ylim(0, sw.shape[0])
+        else:
+            ax.set_ylim(0, 2 * sw.shape[0])
+
+    def format_coord(x, y):
+        ind = sw[int(y), int(x)]
+        ancestors = br.ancestors(br.id[ind])['acronym']
+        return f'sw-{ind}, x={x:1.4f}, y={y:1.4f}, aid={br.id[ind]}-{br.acronym[ind]} \n {ancestors}'
+
+    ax.format_coord = format_coord
+
+    ax.invert_yaxis()
+    ax.set_aspect('equal')
+
+
 def plot_swanson(acronyms=None, values=None, ax=None, hemisphere=None, br=None,
                  orientation='landscape', annotate=False, empty_color='silver', **kwargs):
     """
@@ -196,7 +308,7 @@ def plot_swanson(acronyms=None, values=None, ax=None, hemisphere=None, br=None,
     def format_coord(x, y):
         ind = s2a[int(y), int(x)]
         ancestors = br.ancestors(br.id[ind])['acronym']
-        return f'x={x:1.4f}, y={x:1.4f}, {br.acronym[ind]} \n {ancestors}'
+        return f'sw-{ind}, x={x:1.4f}, y={y:1.4f}, aid={br.id[ind]}-{br.acronym[ind]} \n {ancestors}'
 
     ax.format_coord = format_coord
     return ax

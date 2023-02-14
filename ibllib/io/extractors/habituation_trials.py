@@ -41,7 +41,7 @@ class HabituationTrials(BaseBpodTrialsExtractor):
         # Extract datasets common to trainingChoiceWorld
         training = [ContrastLR, FeedbackTimes, Intervals, GoCueTimes, StimOnTriggerTimes]
         out, _ = run_extractor_classes(training, session_path=self.session_path, save=False,
-                                       bpod_trials=self.bpod_trials, settings=self.settings)
+                                       bpod_trials=self.bpod_trials, settings=self.settings, task_collection=self.task_collection)
 
         # GoCueTriggerTimes is the same event as StimOnTriggerTimes
         out['goCueTrigger_times'] = out['stimOnTrigger_times'].copy()
@@ -106,7 +106,7 @@ class HabituationTrials(BaseBpodTrialsExtractor):
         return [out[k][:n_trials] for k in self.var_names]
 
 
-def extract_all(session_path, save=False, bpod_trials=False, settings=False):
+def extract_all(session_path, save=False, bpod_trials=False, settings=False, task_collection='raw_behavior_data', save_path=None):
     """Extract all datasets from habituationChoiceWorld
     Note: only the datasets from the HabituationTrials extractor will be saved to disc.
 
@@ -117,11 +117,12 @@ def extract_all(session_path, save=False, bpod_trials=False, settings=False):
     :returns: a dict of datasets and a corresponding list of file names
     """
     if not bpod_trials:
-        bpod_trials = raw.load_data(session_path)
+        bpod_trials = raw.load_data(session_path, task_collection=task_collection)
     if not settings:
-        settings = raw.load_settings(session_path)
+        settings = raw.load_settings(session_path, task_collection=task_collection)
 
     # Standard datasets that may be saved as ALFs
-    params = dict(session_path=session_path, bpod_trials=bpod_trials, settings=settings)
+    params = dict(session_path=session_path, bpod_trials=bpod_trials, settings=settings, task_collection=task_collection,
+                  path_out=save_path)
     out, fil = run_extractor_classes(HabituationTrials, save=save, **params)
     return out, fil

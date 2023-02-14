@@ -8,6 +8,10 @@ import unittest
 from pathlib import Path
 from unittest import mock
 from functools import partial
+import numpy as np
+import datetime
+import random
+import string
 
 from one.api import ONE
 import iblutil.io.params as iopar
@@ -281,35 +285,39 @@ class TestPipesMisc(unittest.TestCase):
     def test_create_alyx_probe_insertions(self):
         # Connect to test DB
         one = ONE(**TEST_DB)
-        # Create new session on database
+        # Create new session on database with a random date to avoid race conditions
+        date = str(datetime.date(2022, np.random.randint(1, 12), np.random.randint(1, 28)))
         from one.registration import RegistrationClient
-        _, eid = RegistrationClient(one).create_new_session('ZM_1150')
+        _, eid = RegistrationClient(one).create_new_session('ZM_1150', date=date)
+        eid = str(eid)
         # Currently the task protocol of a session must contain 'ephys' in order to create an insertion!
         one.alyx.rest('sessions', 'partial_update', id=eid, data={'task_protocol': 'ephys'})
         self.addCleanup(one.alyx.rest, 'sessions', 'delete', id=eid)  # Delete after test
 
         # Force probe insertion 3A
+        labels = [''.join(random.choices(string.ascii_letters, k=5)), ''.join(random.choices(string.ascii_letters, k=5))]
         misc.create_alyx_probe_insertions(
-            str(eid), one=one, model="3A", labels=["probe00", "probe01"], force=True
+            eid, one=one, model="3A", labels=labels, force=True
         )
         # Verify it's been inserted
         alyx_insertion = one.alyx.rest("insertions", "list", session=eid, no_cache=True)
         alyx_insertion = [x for x in alyx_insertion if x["model"] == "3A"]
         self.assertTrue(alyx_insertion[0]["model"] == "3A")
-        self.assertTrue(alyx_insertion[0]["name"] in ["probe00", "probe01"])
+        self.assertTrue(alyx_insertion[0]["name"] in labels)
         self.assertTrue(alyx_insertion[1]["model"] == "3A")
-        self.assertTrue(alyx_insertion[1]["name"] in ["probe00", "probe01"])
+        self.assertTrue(alyx_insertion[1]["name"] in labels)
         # Cleanup DB
         one.alyx.rest("insertions", "delete", id=alyx_insertion[0]["id"])
         one.alyx.rest("insertions", "delete", id=alyx_insertion[1]["id"])
         # Force probe insertion 3B
-        misc.create_alyx_probe_insertions(str(eid), one=one, model="3B2", labels=["probe00", "probe01"])
+        labels = [''.join(random.choices(string.ascii_letters, k=5)), ''.join(random.choices(string.ascii_letters, k=5))]
+        misc.create_alyx_probe_insertions(eid, one=one, model="3B2", labels=labels)
         # Verify it's been inserted
-        alyx_insertion = one.alyx.rest("insertions", "list", session=str(eid), no_cache=True)
+        alyx_insertion = one.alyx.rest("insertions", "list", session=eid, no_cache=True)
         self.assertTrue(alyx_insertion[0]["model"] == "3B2")
-        self.assertTrue(alyx_insertion[0]["name"] in ["probe00", "probe01"])
+        self.assertTrue(alyx_insertion[0]["name"] in labels)
         self.assertTrue(alyx_insertion[1]["model"] == "3B2")
-        self.assertTrue(alyx_insertion[1]["name"] in ["probe00", "probe01"])
+        self.assertTrue(alyx_insertion[1]["name"] in labels)
         # Cleanup DB
         one.alyx.rest("insertions", "delete", id=alyx_insertion[0]["id"])
         one.alyx.rest("insertions", "delete", id=alyx_insertion[1]["id"])

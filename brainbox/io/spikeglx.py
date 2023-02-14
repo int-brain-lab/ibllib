@@ -132,7 +132,7 @@ class Streamer(spikeglx.Reader):
             self.chunks['chunk_bounds'] = np.array(self.chunks['chunk_bounds'])
         super(Streamer, self).__init__(meta_file, ignore_warnings=True)
 
-    def read(self, nsel=slice(0, 10000), csel=slice(None), sync=True):
+    def read(self, nsel=slice(0, 10000), csel=slice(None), sync=True, volts=True):
         """
         overload the read function by downloading the necessary chunks
         """
@@ -142,7 +142,11 @@ class Streamer(spikeglx.Reader):
         _logger.debug(f'Streamer: caching sample {n0}, (t={n0 / self.fs})')
         self.cache_folder.mkdir(exist_ok=True, parents=True)
         sr = self._download_raw_partial(first_chunk=first_chunk, last_chunk=last_chunk)
-        data = sr[nsel.start - n0: nsel.stop - n0, csel]
+        if not volts:
+            data = np.copy(sr._raw[nsel.start - n0:nsel.stop - n0, csel])
+        else:
+            data = sr[nsel.start - n0: nsel.stop - n0, csel]
+
         sr.close()
         if self.remove_cached:
             shutil.rmtree(self.target_dir)

@@ -222,8 +222,9 @@ class CameraTimestampsBpod(BaseBpodTrialsExtractor):
         # is empty, or contains only one value (i.e. doesn't change)
         if gpio is not None and gpio['indices'].size > 1:
             _logger.info('Aligning to audio TTLs')
+            task_collection = kwargs.get('task_collection', 'raw_behavior_data')
             # Extract audio TTLs
-            _, audio = raw.load_bpod_fronts(self.session_path, data=self.bpod_trials)
+            _, audio = raw.load_bpod_fronts(self.session_path, data=self.bpod_trials, task_collection=task_collection)
             _, ts = raw.load_camera_ssv_times(self.session_path, 'left')
             """
             There are many audio TTLs that are for some reason missed by the GPIO.  Conversely
@@ -676,26 +677,48 @@ def groom_pin_state(gpio, audio, ts, tolerance=2., display=False, take='first', 
     return gpio, audio_, fcn_a2b(ts)
 
 
-def extract_all(session_path, session_type=None, save=True, **kwargs):
+def extract_all(session_path, sync_type=None, save=True, **kwargs):
     """
     For the IBL ephys task, reads ephys binary file and extract:
         -   video time stamps
-    :param session_path: '/path/to/subject/yyyy-mm-dd/001'
     :param session_type: the session type to extract, i.e. 'ephys', 'training' or 'biased'. If
     None the session type is inferred from the settings file.
     :param save: Bool, defaults to False
     :param kwargs: parameters to pass to the extractor
     :return: outputs, files
+
+    Parameters
+    ----------
+    session_path : str, pathlib.Path
+        The session path, e.g. '/path/to/subject/yyyy-mm-dd/001'.
+    sync_type : str
+        The sync label from the experiment description file.
+    sync_collection : str
+        The subdirectory containing the sync files.
+    save : bool
+        If True, save the camera timestamp files to disk.
+    session_type : str
+        (DEPRECATED) The session type, e.g. 'ephys'.
+    **kwargs
+        Extra keyword args to pass to the camera extractor classes.
+
+    Returns
+    -------
+    list of numpy.array
+        List of extracted output data, i.e. the camera times.
+    list of pathlib.Path
+        The paths of the extracted data, if save = True
     """
 
     sync_collection = kwargs.get('sync_collection', 'raw_ephys_data')
     camlog = kwargs.get('camlog', False)
 
-    if session_type is None:  # infer the session type
-        session_type = get_session_extractor_type(session_path)
+    if not sync_type:  # infer from session type
+        session_type = kwargs.get('session_type') or get_session_extractor_type(session_path)
         if not session_type or session_type not in _get_task_types_json_config().values():
             raise ValueError(f"Session type {session_type} has no matching extractor")
-    sync_type = kwargs.get('sync_type', 'nidq' if session_type == 'ephys' else 'bpod')
+        else:
+            sync_type = 'nidq' if session_type == 'ephys' else 'bpod'
 
     if sync_type == 'nidq':
         labels = assert_valid_label(kwargs.pop('labels', ('left', 'right', 'body')))

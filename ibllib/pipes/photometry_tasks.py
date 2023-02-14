@@ -16,9 +16,9 @@ class TaskFibrePhotometryRegisterRaw(base_tasks.RegisterRawDataTask):
     priority = 100
     job_size = 'small'
 
-    def __init__(self, *args, collection=None, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.collection = collection
+        self.collection = self.get_task_collection(kwargs.get('collection', None))
 
     @property
     def signature(self):

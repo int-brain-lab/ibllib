@@ -156,7 +156,7 @@ class TaskQC(base.QC):
         )
         return
 
-    def run(self, update=False, **kwargs):
+    def run(self, update=False, namespace='task', **kwargs):
         """
         :param update: if True, updates the session QC fields on Alyx
         :param bpod_only: if True no data is extracted from the FPGA for ephys sessions
@@ -169,7 +169,7 @@ class TaskQC(base.QC):
         outcome, results, _ = self.compute_session_status()
         if update:
             self.update_extended_qc(results)
-            self.update(outcome, 'task')
+            self.update(outcome, namespace)
         return outcome, results
 
     @staticmethod
