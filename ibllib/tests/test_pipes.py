@@ -314,7 +314,6 @@ class TestPipesMisc(unittest.TestCase):
         misc.create_alyx_probe_insertions(eid, one=one, model="3B2", labels=labels)
         # Verify it's been inserted
         alyx_insertion = one.alyx.rest("insertions", "list", session=eid, no_cache=True)
-        print(alyx_insertion)
         self.assertTrue(alyx_insertion[0]["model"] == "3B2")
         self.assertTrue(alyx_insertion[0]["name"] in labels)
         self.assertTrue(alyx_insertion[1]["model"] == "3B2")
