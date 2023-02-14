@@ -14,10 +14,10 @@ from one.api import ONE
 from ibllib.io.extractors.base import get_pipeline, get_task_protocol, get_session_extractor_type
 from ibllib.pipes import tasks, training_preprocessing, ephys_preprocessing
 from ibllib.time import date2isostr
-import ibllib.oneibl.registration as registration
+from ibllib.oneibl.registration import IBLRegistrationClient, register_session_raw_data, get_lab
 from ibllib.oneibl.data_handlers import get_local_data_repository
 from ibllib.io.session_params import read_params
-from ibllib.pipes.dynamic_pipeline import make_pipeline
+from ibllib.pipes.dynamic_pipeline import make_pipeline, acquisition_description_legacy_session
 
 _logger = logging.getLogger(__name__)
 LARGE_TASKS = ['EphysVideoCompress', 'TrainingVideoCompress', 'SpikeSorting', 'EphysDLC']
@@ -36,14 +36,6 @@ def _get_pipeline_class(session_path, one):
         PipelineClass = projects.base.get_pipeline(task_type)
     _logger.info(f"Using {PipelineClass} pipeline for {session_path}")
     return PipelineClass(session_path=session_path, one=one)
-
-
-def _get_lab(one):
-    with open(Path.home().joinpath(".globusonline/lta/client-id.txt"), 'r') as fid:
-        globus_id = fid.read()
-    lab = one.alyx.rest('labs', 'list', django=f"repositories__globus_endpoint_id,{globus_id}")
-    if len(lab):
-        return [la['name'] for la in lab]
 
 
 def _run_command(cmd):
@@ -80,7 +72,7 @@ def report_health(one):
     status.update(_get_volume_usage('/mnt/s0/Data', 'raid'))
     status.update(_get_volume_usage('/', 'system'))
 
-    lab_names = _get_lab(one)
+    lab_names = get_lab(one.alyx)
     for ln in lab_names:
         one.alyx.json_field_update(endpoint='labs', uuid=ln, field_name='json', data=status)
 
@@ -100,7 +92,7 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
     """
     if not one:
         one = ONE(cache_rest=None)
-    rc = registration.RegistrationClient(one=one)
+    rc = IBLRegistrationClient(one=one)
     flag_files = list(Path(root_path).glob('**/raw_session.flag'))
     all_datasets = []
     for flag_file in flag_files:
@@ -111,20 +103,17 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
 
         try:
             # if the subject doesn't exist in the database, skip
-            ses = rc.create_session(session_path)
-            eid = ses['url'][-36:]
-            if one.path2eid(session_path, query_type='remote') is None:
-                raise ValueError(f'Session ALF path mismatch: {ses["url"][-36:]} \n '
-                                 f'{one.eid2path(eid, query_type="remote")} in params \n'
-                                 f'{session_path} on disk \n')
+            rc.register_session(session_path, file_list=False)
 
             # See if we need to create a dynamic pipeline
             experiment_description_file = read_params(session_path)
             if experiment_description_file is not None:
                 pipe = make_pipeline(session_path, one=one)
             else:
-                files, dsets = registration.register_session_raw_data(
-                    session_path, one=one, max_md5_size=max_md5_size)
+                # Create legacy experiment description file
+                acquisition_description_legacy_session(session_path, save=True)
+                labs = ','.join(get_lab(one.alyx))
+                files, dsets = register_session_raw_data(session_path, one=one, max_md5_size=max_md5_size, labs=labs)
                 if dsets is not None:
                     all_datasets.extend(dsets)
                 pipe = _get_pipeline_class(session_path, one)
@@ -137,7 +126,7 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
                 rerun__status__in = ['Waiting']
             pipe.create_alyx_tasks(rerun__status__in=rerun__status__in)
             flag_file.unlink()
-        except BaseException:
+        except Exception:
             _logger.error(traceback.format_exc())
             _logger.warning(f'Creating session / registering raw datasets {session_path} errored')
             continue
@@ -158,7 +147,7 @@ def task_queue(mode='all', lab=None, one=None):
         one = ONE(cache_rest=None)
     if lab is None:
         _logger.debug("Trying to infer lab from globus installation")
-        lab = _get_lab(one)
+        lab = get_lab(one.alyx)
     if lab is None:
         _logger.error("No lab provided or found")
         return  # if the lab is none, this will return empty tasks each time

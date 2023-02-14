@@ -1,11 +1,17 @@
+import shutil
 import tempfile
 import unittest
 from unittest import mock
 from pathlib import Path
 from collections import OrderedDict
+import numpy as np
 
 import ibllib.pipes.tasks
+from ibllib.pipes.base_tasks import ExperimentDescriptionRegisterRaw
+from ibllib.pipes.video_tasks import VideoConvert
+from ibllib.io import session_params
 from one.api import ONE
+from one.webclient import no_cache
 from ibllib.tests import TEST_DB
 
 one = ONE(**TEST_DB)
@@ -148,6 +154,8 @@ class TestPipelineAlyx(unittest.TestCase):
         #                     no_cache=True)
         # if len(ses):
         #     one.alyx.rest('sessions', 'delete', ses[0]['url'][-36:])
+        # randomise number
+        ses_dict['number'] = np.random.randint(1, 30)
         ses = one.alyx.rest('sessions', 'create', data=ses_dict)
         session_path = Path(self.td.name).joinpath(
             ses['subject'], ses['start_time'][:10], str(ses['number']).zfill(3))
@@ -159,7 +167,9 @@ class TestPipelineAlyx(unittest.TestCase):
         self.td.cleanup()
         one.alyx.rest('sessions', 'delete', id=self.eid)
 
-    def test_pipeline_alyx(self):
+    @mock.patch('ibllib.pipes.tasks.get_lab')
+    def test_pipeline_alyx(self, mock_ep):
+        mock_ep().get.return_value = ['cortexlab']
         eid = self.eid
         pipeline = SomePipeline(self.session_path, one=one, eid=eid)
 
@@ -179,26 +189,26 @@ class TestPipelineAlyx(unittest.TestCase):
 
         # run them and make sure their statuses got updated appropriately
         with mock.patch.object(ibllib.pipes.tasks.Task, '_lock_file_path',
-                               return_value=Path(self.td.name).joinpath('.gpu_lock')):
+                               return_value=Path(self.session_path).joinpath('.gpu_lock')):
             task_deck, datasets = pipeline.run(machine='testmachine')
-            check_statuses = [desired_statuses[t['name']] == t['status'] for t in task_deck]
+            check_statuses = (desired_statuses[t['name']] == t['status'] for t in task_deck)
             # [(t['name'], t['status'], desired_statuses[t['name']]) for t in task_deck]
             self.assertTrue(all(check_statuses))
-            self.assertTrue(set([d['name'] for d in datasets]) == set(desired_datasets))
+            self.assertEqual(set(d['name'] for d in datasets), set(desired_datasets))
 
         # check logs
-        check_logs = [desired_logs in t['log'] if t['log'] else True for t in task_deck]
+        check_logs = (desired_logs in t['log'] if t['log'] else True for t in task_deck)
         self.assertTrue(all(check_logs))
 
         # also checks that the datasets have been labeled with the proper version
         dsets = one.alyx.rest('datasets', 'list', session=eid, no_cache=True)
-        check_versions = [desired_versions[d['name']] == d['version'] for d in dsets]
+        check_versions = (desired_versions[d['name']] == d['version'] for d in dsets)
         self.assertTrue(all(check_versions))
 
         # make sure that re-running the make job by default doesn't change complete jobs
         pipeline.create_alyx_tasks()
         task_deck = one.alyx.rest('tasks', 'list', session=eid, no_cache=True)
-        check_statuses = [desired_statuses[t['name']] == t['status'] for t in task_deck]
+        check_statuses = (desired_statuses[t['name']] == t['status'] for t in task_deck)
         self.assertTrue(all(check_statuses))
 
         # test the rerun option
@@ -212,8 +222,8 @@ class TestPipelineAlyx(unittest.TestCase):
         self.assertEqual('Complete', dep_task['status'], 'Failed to set dependent task from "Held" to "Waiting"')
 
         # check that logs were correctly overwritten
-        check_logs = [t['log'].count(desired_logs) == 1 if t['log'] else True for t in task_deck]
-        check_rerun = ['===RERUN===' not in t['log'] if t['log'] else True for t in task_deck]
+        check_logs = (t['log'].count(desired_logs) == 1 if t['log'] else True for t in task_deck)
+        check_rerun = ('===RERUN===' not in t['log'] if t['log'] else True for t in task_deck)
         self.assertTrue(all(check_logs))
         self.assertTrue(all(check_rerun))
 
@@ -221,10 +231,10 @@ class TestPipelineAlyx(unittest.TestCase):
         with mock.patch.object(ibllib.pipes.tasks.Task, '_lock_file_path',
                                return_value=Path(self.td.name).joinpath('.gpu_lock')):
             task_deck, dsets = pipeline.rerun_failed(machine='testmachine', clobber=False)
-        check_logs = [t['log'].count(desired_logs) == desired_logs_rerun[t['name']] if t['log']
-                      else t['log'] == desired_logs_rerun[t['name']] for t in task_deck]
-        check_rerun = ['===RERUN===' in t['log'] if desired_logs_rerun[t['name']] == 2
-                       else True for t in task_deck]
+        check_logs = (t['log'].count(desired_logs) == desired_logs_rerun[t['name']] if t['log']
+                      else t['log'] == desired_logs_rerun[t['name']] for t in task_deck)
+        check_rerun = ('===RERUN===' in t['log'] if desired_logs_rerun[t['name']] == 2
+                       else True for t in task_deck)
         self.assertTrue(all(check_logs))
         self.assertTrue(all(check_rerun))
 
@@ -242,6 +252,7 @@ class TestLocks(unittest.TestCase):
 
     def test_gpu_lock_and_local_data_handler(self) -> None:
         # Remove any existing locks first
+
         with tempfile.TemporaryDirectory() as td:
             session_path = Path(td).joinpath('algernon', '2021/02/12', '001')
             session_path.joinpath('alf').mkdir(parents=True)
@@ -264,6 +275,87 @@ class TestLocks(unittest.TestCase):
                 self.assertFalse(task.is_locked())
                 task.run()
                 self.assertEqual(0, task.status)
+
+
+class TestExperimentDescriptionRegisterRaw(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self.tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tempdir.cleanup)
+        session_path = Path(self.tempdir.name).joinpath(
+            SUBJECT_NAME, ses_dict['start_time'][:10], str(ses_dict['number']).zfill(3))
+        session_path.mkdir(parents=True)
+        # Check for session on Alyx
+        with no_cache(one.alyx):
+            # If the session exists, ensure sign_off_checklist key not in JSON
+            if eid := one.path2eid(session_path, query_type='remote'):
+                json_field = one.get_details(eid, full=True).get('json') or {}
+                if json_field.pop('sign_off_checklist', False):
+                    one.alyx.json_field_remove_key('sessions', eid, key='sign_off_checklist')
+            else:  # Create a new session and add cleanup hook
+                ses = one.alyx.rest('sessions', 'create', data=ses_dict)
+                self.addCleanup(one.alyx.rest, 'sessions', 'delete', id=eid)
+                eid = ses['id']
+        fixture = Path(__file__).parent.joinpath(
+            'fixtures', 'io', '_ibl_experiment.description.yaml')
+        shutil.copy(fixture, session_path.joinpath('_ibl_experiment.description.yaml'))
+        self.session_path, self.eid = session_path, eid
+
+    def test_experiment_description_registration(self):
+        task = ExperimentDescriptionRegisterRaw(self.session_path, one=one)
+        # Add a custom sign off key
+        task.sign_off_categories['microphone'] = ['foo', 'bar']
+        task.run()
+
+        # Check that description file was registered
+        ses = one.alyx.rest('sessions', 'read', id=self.eid, no_cache=True)
+
+        # Check keys added to JSON
+        expected = {'_widefield': None,
+                    '_microphone_foo': None,
+                    '_microphone_bar': None,
+                    '_neuropixel_raw_probe00': None,
+                    '_neuropixel_spike_sorting_probe00': None,
+                    '_neuropixel_alignment_probe00': None,
+                    '_neuropixel_raw_probe01': None,
+                    '_neuropixel_spike_sorting_probe01': None,
+                    '_neuropixel_alignment_probe01': None,
+                    '_ephysChoiceWorld_01': None,
+                    '_passiveChoiceWorld_00': None}
+        self.assertDictEqual(expected, ses['json'].get('sign_off_checklist', {}))
+
+        # Run again without a custom sign off for neuropixels
+        one.alyx.json_field_remove_key('sessions', self.eid, key='sign_off_checklist')
+        task.sign_off_categories.pop('neuropixel')
+        task.run()
+
+        ses = one.alyx.rest('sessions', 'read', id=self.eid, no_cache=True)
+        expected = {'_widefield': None,
+                    '_microphone_foo': None,
+                    '_microphone_bar': None,
+                    '_neuropixel_probe00': None,
+                    '_neuropixel_probe01': None,
+                    '_ephysChoiceWorld_01': None,
+                    '_passiveChoiceWorld_00': None}
+        self.assertDictEqual(expected, ses['json'].get('sign_off_checklist', {}))
+
+
+class TestDynamicTask(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tempdir.cleanup)
+        self.task = VideoConvert(self.tempdir.name, ['left'])
+
+    def test_get_device_collection(self):
+        """Test for DynamicTask.get_device_collection method"""
+        device = 'probe00'
+        collection = self.task.get_device_collection(device, 'raw_ephys_data')
+        self.assertEqual('raw_ephys_data', collection)
+        fixture = Path(__file__).parent.joinpath('fixtures', 'io', '_ibl_experiment.description.yaml')
+        assert fixture.exists()
+        self.task.session_params = session_params.read_params(fixture)
+        collection = self.task.get_device_collection(device)
+        self.assertEqual('raw_ephys_data/probe00', collection)
 
 
 if __name__ == '__main__':

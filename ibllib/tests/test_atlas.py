@@ -305,6 +305,17 @@ class TestBrainRegions(unittest.TestCase):
                 np.testing.assert_equal(ibr, np.unique(np.concatenate(idesc)))
 
 
+class TestAtlas(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(self):
+        self.ba = _create_mock_atlas()
+
+    def test_compute_regions_volume(self):
+        self.ba.compute_regions_volume()
+        self.assertTrue(self.ba.regions.volume.shape == self.ba.regions.acronym.shape)
+
+
 class TestAtlasPlots(unittest.TestCase):
 
     @classmethod

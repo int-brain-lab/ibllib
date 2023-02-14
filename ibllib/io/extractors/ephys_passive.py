@@ -7,10 +7,11 @@ import logging
 from pathlib import Path
 from typing import Tuple
 
-import ibllib.io.raw_data_loaders as rawio
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+
+import ibllib.io.raw_data_loaders as rawio
 from ibllib.io.extractors import ephys_fpga
 from ibllib.io.extractors.base import BaseExtractor
 from ibllib.io.extractors.passive_plotting import (
@@ -113,7 +114,7 @@ def _load_passive_stim_meta() -> dict:
 
 
 # 1/3 Define start and end times of the 3 passive periods
-def _get_spacer_times(spacer_template, jitter, ttl_signal, t_quiet):
+def _get_spacer_times(spacer_template, jitter, ttl_signal, t_quiet, thresh=3.0):
     """
     Find timestamps of spacer signal.
     :param spacer_template: list of indices where ttl signal changes
@@ -124,6 +125,8 @@ def _get_spacer_times(spacer_template, jitter, ttl_signal, t_quiet):
     :type ttl_signal: array-like
     :param t_quiet: seconds between spacer and next stim
     :type t_quiet: float
+    :param thresh: threshold value for the fttl convolved signal (with spacer template) to pass over to detect a spacer
+    :type thresh: float
     :return: times of spacer onset/offset
     :rtype: n_spacer x 2 np.ndarray; first col onset times, second col offset
     """
@@ -138,7 +141,6 @@ def _get_spacer_times(spacer_template, jitter, ttl_signal, t_quiet):
     # convolve cleaned diff ttl signal w/ spacer model
     conv_dttl = np.correlate(dttl, spacer_model, mode="full")
     # find spacer location
-    thresh = 3.0
     idxs_spacer_middle = np.where(
         (conv_dttl[1:-2] < thresh) & (conv_dttl[2:-1] > thresh) & (conv_dttl[3:] < thresh)
     )[0]
@@ -148,12 +150,12 @@ def _get_spacer_times(spacer_template, jitter, ttl_signal, t_quiet):
     spacer_around = int((np.floor(len(spacer_model) / 2)))
     idxs_spacer_middle += 2 - spacer_around
 
-    # for each spacer make sure the times are monotonically increasing before
-    # and monotonically decreasing afterwards
+    # for each spacer make sure the times are monotonically non-decreasing before
+    # and monotonically non-increasing afterwards
     is_valid = np.zeros((idxs_spacer_middle.size), dtype=bool)
     for i, t in enumerate(idxs_spacer_middle):
-        before = all(np.diff(dttl[t - spacer_around:t]) > 0)
-        after = all(np.diff(dttl[t + 1:t + 1 + spacer_around]) < 0)
+        before = all(np.diff(dttl[t - spacer_around:t]) >= 0)
+        after = all(np.diff(dttl[t + 1:t + 1 + spacer_around]) <= 0)
         is_valid[i] = np.bitwise_and(before, after)
 
     idxs_spacer_middle = idxs_spacer_middle[is_valid]
@@ -169,7 +171,8 @@ def _get_spacer_times(spacer_template, jitter, ttl_signal, t_quiet):
     return spacer_times, conv_dttl
 
 
-def _get_passive_spacers(session_path, sync_collection='raw_ephys_data', sync=None, sync_map=None):
+def _get_passive_spacers(session_path, sync_collection='raw_ephys_data',
+                         sync=None, sync_map=None, tmin=None, tmax=None):
     """
     load and get spacer information, do corr to find spacer timestamps
     returns t_passive_starts, t_starts, t_ends
@@ -178,27 +181,56 @@ def _get_passive_spacers(session_path, sync_collection='raw_ephys_data', sync=No
         sync, sync_map = ephys_fpga.get_sync_and_chn_map(session_path, sync_collection=sync_collection)
     meta = _load_passive_stim_meta()
     # t_end_ephys = passive.ephysCW_end(session_path=session_path)
-    fttl = ephys_fpga.get_sync_fronts(sync, sync_map["frame2ttl"], tmin=None)
+    fttl = ephys_fpga.get_sync_fronts(sync, sync_map["frame2ttl"], tmin=tmin, tmax=tmax)
     fttl = ephys_fpga._clean_frame2ttl(fttl, display=False)
     spacer_template = (
         np.array(meta["VISUAL_STIM_0"]["ttl_frame_nums"], dtype=np.float32) / FRAME_FS
     )
     jitter = 3 / FRAME_FS  # allow for 3 screen refresh as jitter
     t_quiet = meta["VISUAL_STIM_0"]["delay_around"]
-    spacer_times, _ = _get_spacer_times(
+    spacer_times, conv_dttl = _get_spacer_times(
         spacer_template=spacer_template, jitter=jitter, ttl_signal=fttl["times"], t_quiet=t_quiet
     )
 
     # Check correct number of spacers found
-    n_exp_spacer = np.sum(np.array(meta["STIM_ORDER"]) == 0)  # Hardcoded 0 for spacer
+    n_exp_spacer = np.sum(np.array(meta['STIM_ORDER']) == 0)  # Hardcoded 0 for spacer
     if n_exp_spacer != np.size(spacer_times) / 2:
-        raise ValueError(
-            f"The number of expected spacer ({n_exp_spacer}) "
-            f"is different than the one found on the raw "
-            f"trace ({np.size(spacer_times)/2})"
-        )
+        error_nspacer = True
+        # sometimes the first spacer is truncated
+        # assess whether the first spacer is undetected, and then launch another spacer detection on truncated fttl
+        # with a lower threshold value
+        # Note: take *3 for some margin
+        if spacer_times[0][0] > (spacer_template[-1] + jitter) * 3 and (np.size(spacer_times) / 2) == n_exp_spacer - 1:
+            # Truncate signals
+            fttl_t = fttl["times"][np.where(fttl["times"] < spacer_times[0][0])]
+            conv_dttl_t = conv_dttl[np.where(fttl["times"] < spacer_times[0][0])]
+            ddttl = np.diff(np.diff(fttl_t))
+            # Find spacer location
+            # NB: cannot re-use the same algo for spacer detection as conv peaks towards spacer end
+            # 1. Find time point at which conv raises above a given threshold value
+            thresh = 2.0
+            idx_nearend_spacer = int(np.where((conv_dttl_t[1:-2] < thresh) & (conv_dttl_t[2:-1] > thresh))[0])
+            ddttl = ddttl[0:idx_nearend_spacer]
+            # 2. Find time point before this, for which fttl diff increase/decrease (this is the middle of spacer)
+            indx_middle = np.where((ddttl[0:-1] > 0) & (ddttl[1:] < 0))[0]
+            if len(indx_middle) == 1:
+                # 3. Add 1/2 spacer to middle idx to get the spacer end indx
+                spacer_around = int((np.floor(len(spacer_template) / 2)))
+                idx_end = int(indx_middle + spacer_around) + 1
+                spacer_times = np.insert(spacer_times, 0, np.array([fttl["times"][0], fttl["times"][idx_end]]), axis=0)
+                error_nspacer = False
 
-    spacer_times = np.r_[spacer_times.flatten(), sync["times"][-1]]
+        if error_nspacer:
+            raise ValueError(
+                f'The number of expected spacer ({n_exp_spacer}) '
+                f'is different than the one found on the raw '
+                f'trace ({int(np.size(spacer_times) / 2)})'
+            )
+
+    if tmax is None:
+        tmax = fttl['times'][-1]
+
+    spacer_times = np.r_[spacer_times.flatten(), tmax]
     return spacer_times[0], spacer_times[1::2], spacer_times[2::2]
 
 
@@ -275,8 +307,8 @@ def _reshape_RF(RF_file, meta_stim):
 # 3/3 Replay of task stimuli
 def _extract_passiveGabor_df(fttl: dict, session_path: str, task_collection: str = 'raw_passive_data') -> pd.DataFrame:
     # At this stage we want to define what pulses are and not quality control them.
-    # Pulses are stricty altternating with intevals
-    # find min max lengths for both (we don'tknow which are pulses and which are intervals yet)
+    # Pulses are strictly alternating with intervals
+    # find min max lengths for both (we don't know which are pulses and which are intervals yet)
     # trim edges of pulses
     diff0 = (np.min(np.diff(fttl["times"])[2:-2:2]), np.max(np.diff(fttl["times"])[2:-1:2]))
     diff1 = (np.min(np.diff(fttl["times"])[3:-2:2]), np.max(np.diff(fttl["times"])[3:-1:2]))
@@ -286,11 +318,9 @@ def _extract_passiveGabor_df(fttl: dict, session_path: str, task_collection: str
     elif max(diff0 + diff1) in diff1:
         thresh = diff1[0]
     # Anything lower than the min length of intervals is a pulse
-    idx_start_stims = np.where((np.diff(fttl["times"]) < thresh) & (np.diff(fttl["times"]) > 0.1))[
-        0
-    ]
+    idx_start_stims = np.where((np.diff(fttl["times"]) < thresh) & (np.diff(fttl["times"]) > 0.1))[0]
     # Check if any pulse has been missed
-    # i.e. expected lenght (without first puls) and that it's alternating
+    # i.e. expected length (without first pulse) and that it's alternating
     if len(idx_start_stims) < NGABOR - 1 and np.any(np.diff(idx_start_stims) > 2):
         log.warning("Looks like one or more pulses were not detected, trying to extrapolate...")
         missing_where = np.where(np.diff(idx_start_stims) > 2)[0]
@@ -312,7 +342,7 @@ def _extract_passiveGabor_df(fttl: dict, session_path: str, task_collection: str
     # intervals dstype requires reshaping of start and end times
     passiveGabor_intervals = np.array([(x, y) for x, y in zip(start_times, end_times)])
 
-    # Check length of presentation of stim is  within 150msof expected
+    # Check length of presentation of stim is within 150ms of expected
     if not np.allclose([y - x for x, y in passiveGabor_intervals], 0.3, atol=0.15):
         log.warning("Some Gabor presentation lengths seem wrong.")
 
@@ -422,14 +452,14 @@ def _extract_passiveAudio_intervals(audio: dict, rig_version: str) -> Tuple[np.a
 
 
 # ------------------------------------------------------------------
-def extract_passive_periods(session_path: str, sync_collection: str = 'raw_ephys_data',
-                            sync: dict = None, sync_map: dict = None) -> pd.DataFrame:
+def extract_passive_periods(session_path: str, sync_collection: str = 'raw_ephys_data', sync: dict = None,
+                            sync_map: dict = None, tmin=None, tmax=None) -> pd.DataFrame:
 
     if sync is None or sync_map is None:
         sync, sync_map = ephys_fpga.get_sync_and_chn_map(session_path, sync_collection)
 
     t_start_passive, t_starts, t_ends = _get_passive_spacers(
-        session_path, sync_collection, sync=sync, sync_map=sync_map
+        session_path, sync_collection, sync=sync, sync_map=sync_map, tmin=tmin, tmax=tmax
     )
     t_starts_col = np.insert(t_starts, 0, t_start_passive)
     t_ends_col = np.insert(t_ends, 0, t_ends[-1])
@@ -494,15 +524,16 @@ def extract_task_replay(
         passivePeriods_df = extract_passive_periods(session_path, sync_collection, sync=sync, sync_map=sync_map)
         treplay = passivePeriods_df.taskReplay.values
 
-    fttl = ephys_fpga.get_sync_fronts(sync, sync_map["frame2ttl"], tmin=treplay[0])
+    # TODO need to check this is okay
+    fttl = ephys_fpga.get_sync_fronts(sync, sync_map["frame2ttl"], tmin=treplay[0], tmax=treplay[1])
     fttl = ephys_fpga._clean_frame2ttl(fttl)
     passiveGabor_df = _extract_passiveGabor_df(fttl, session_path, task_collection=task_collection)
 
-    bpod = ephys_fpga.get_sync_fronts(sync, sync_map["bpod"], tmin=treplay[0])
+    bpod = ephys_fpga.get_sync_fronts(sync, sync_map["bpod"], tmin=treplay[0], tmax=treplay[1])
     passiveValve_intervals = _extract_passiveValve_intervals(bpod)
 
     task_version = _load_task_protocol(session_path, task_collection)
-    audio = ephys_fpga.get_sync_fronts(sync, sync_map["audio"], tmin=treplay[0])
+    audio = ephys_fpga.get_sync_fronts(sync, sync_map["audio"], tmin=treplay[0], tmax=treplay[1])
     passiveTone_intervals, passiveNoise_intervals = _extract_passiveAudio_intervals(audio, task_version)
 
     passiveStims_df = np.concatenate(
@@ -587,13 +618,20 @@ class PassiveChoiceWorld(BaseExtractor):
 
     def _extract(self, sync_collection: str = 'raw_ephys_data', task_collection: str = 'raw_passive_data', sync: dict = None,
                  sync_map: dict = None, plot: bool = False, **kwargs) -> tuple:
-
         if sync is None or sync_map is None:
             sync, sync_map = ephys_fpga.get_sync_and_chn_map(self.session_path, sync_collection)
 
+        # Get the start and end times of this protocol
+        if (protocol_number := kwargs.get('protocol_number')) is not None:  # look for spacer
+            # The spacers are TTLs generated by Bpod at the start of each protocol
+            bpod = ephys_fpga.get_sync_fronts(sync, sync_map['bpod'])
+            tmin, tmax = ephys_fpga.get_protocol_period(self.session_path, protocol_number, bpod)
+        else:
+            tmin = tmax = None
+
         # Passive periods
         passivePeriods_df = extract_passive_periods(self.session_path, sync_collection=sync_collection, sync=sync,
-                                                    sync_map=sync_map)
+                                                    sync_map=sync_map, tmin=tmin, tmax=tmax)
         trfm = passivePeriods_df.RFM.values
         treplay = passivePeriods_df.taskReplay.values
 

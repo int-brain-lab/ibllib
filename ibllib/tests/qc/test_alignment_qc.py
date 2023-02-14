@@ -7,6 +7,7 @@ import numpy as np
 import copy
 import random
 import string
+import datetime
 
 from one.api import ONE
 from neuropixel import trace_header
@@ -16,6 +17,7 @@ from ibllib.atlas import AllenAtlas
 from ibllib.pipes.misc import create_alyx_probe_insertions
 from ibllib.qc.alignment_qc import AlignmentQC
 from ibllib.pipes.histology import register_track
+from one.registration import RegistrationClient
 
 
 EPHYS_SESSION = 'b1c968ad-4874-468d-b2e4-5ffa9b9964e9'
@@ -82,6 +84,12 @@ class TestAlignmentQcExisting(unittest.TestCase):
         insertion = data['insertion'].tolist()
         insertion['name'] = ''.join(random.choices(string.ascii_letters, k=5))
         insertion['json'] = {'xyz_picks': cls.xyz_picks}
+        date = str(datetime.date(2019, np.random.randint(1, 12), np.random.randint(1, 28)))
+        _, eid = RegistrationClient(one).create_new_session('ZM_1150', date=date)
+        cls.eid = str(eid)
+        # Currently the task protocol of a session must contain 'ephys' in order to create an insertion!
+        one.alyx.rest('sessions', 'partial_update', id=cls.eid, data={'task_protocol': 'ephys'})
+        insertion['session'] = cls.eid
         probe_insertion = one.alyx.rest('insertions', 'create', data=insertion)
         cls.probe_id = probe_insertion['id']
         cls.trajectory = data['trajectory'].tolist()
@@ -173,6 +181,7 @@ class TestAlignmentQcExisting(unittest.TestCase):
     @classmethod
     def tearDownClass(cls) -> None:
         one.alyx.rest('insertions', 'delete', id=cls.probe_id)
+        one.alyx.rest('sessions', 'delete', id=cls.eid)
 
 
 class TestAlignmentQcManual(unittest.TestCase):
@@ -194,6 +203,11 @@ class TestAlignmentQcManual(unittest.TestCase):
         insertion = data['insertion'].tolist()
         insertion['name'] = ''.join(random.choices(string.ascii_letters, k=5))
         insertion['json'] = {'xyz_picks': cls.xyz_picks}
+
+        date = str(datetime.date(2018, np.random.randint(1, 12), np.random.randint(1, 28)))
+        _, eid = RegistrationClient(one).create_new_session('ZM_1150', date=date)
+        cls.eid = str(eid)
+        insertion['session'] = cls.eid
         probe_insertion = one.alyx.rest('insertions', 'create', data=insertion)
         cls.probe_id = probe_insertion['id']
         cls.trajectory = data['trajectory'].tolist()
@@ -265,6 +279,7 @@ class TestAlignmentQcManual(unittest.TestCase):
     @classmethod
     def tearDownClass(cls) -> None:
         one.alyx.rest('insertions', 'delete', id=cls.probe_id)
+        one.alyx.rest('sessions', 'delete', id=cls.eid)
 
 
 def _verify(tc, alignment_resolved=None, alignment_count=None,

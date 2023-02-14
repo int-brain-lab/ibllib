@@ -4,15 +4,15 @@ output of functions in the brainbox `single_units.py` module.
 
 Run the following to set-up the workspace to run the docstring examples:
 >>> from brainbox import processing
->>> import alf.io as aio
+>>> import one.alf.io as alfio
 >>> import numpy as np
 >>> import matplotlib.pyplot as plt
 >>> import ibllib.ephys.spikes as e_spks
 # (*Note, if there is no 'alf' directory, make 'alf' directory from 'ks2' output directory):
 >>> e_spks.ks2_to_alf(path_to_ks_out, path_to_alf_out)
 # Load the alf spikes bunch and clusters bunch, and get a units bunch.
->>> spks_b = aio.load_object(path_to_alf_out, 'spikes')
->>> clstrs_b = aio.load_object(path_to_alf_out, 'clusters')
+>>> spks_b = alfio.load_object(path_to_alf_out, 'spikes')
+>>> clstrs_b = alfio.load_object(path_to_alf_out, 'clusters')
 >>> units_b = processing.get_units_bunch(spks_b)  # may take a few mins to compute
 """
 
@@ -28,7 +28,7 @@ from brainbox import singlecell
 from brainbox.metrics import single_units
 from brainbox.processing import bincount2D
 from brainbox.io.spikeglx import extract_waveforms
-from ibllib.io import spikeglx
+import spikeglx
 
 
 def feat_vars(units_b, units=None, feat_name='amps', dist='norm', test='ks', cmap_name='coolwarm',

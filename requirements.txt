@@ -24,8 +24,8 @@ seaborn>=0.9.0
 tqdm>=4.32.1
 # ibl libraries
 ibl-neuropixel>=0.4.0
-iblutil>=1.4.0
+iblutil>=1.5.0
 labcams  # widefield extractor
-ONE-api>=1.16.1
+ONE-api>=1.19.1
 slidingRP>=1.0.0  # steinmetz lab refractory period metrics
 wfield>=0.3.6  # widefield extractor

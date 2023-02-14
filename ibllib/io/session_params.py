@@ -227,40 +227,40 @@ def get_cameras(sess_params):
     return None if not cameras else list(cameras.keys())
 
 
-def get_sync(sess_params):
-    sync = sess_params.get('sync', None)
-    if not sync:
+def get_sync_label(sess_params):
+    if not sess_params:
         return None
-    else:
-        (sync, _), = sync.items()
-    return sync
+    sync_keys = list((sess_params.get('sync') or {}).keys())
+    if len(sync_keys) == 0:
+        return None
+    if len(sync_keys) > 1:
+        _logger.warning('Multiple sync keys found in experiment description: %s', sync_keys)
+    return sync_keys[0]
+
+
+def get_sync(sess_params):
+    sync_label = get_sync_label(sess_params)
+    if sync_label:
+        return sync_label, sess_params['sync'][sync_label] or {}
+    return None, {}
+
+
+def get_sync_values(sess_params):
+    key = get_sync_label(sess_params)
+    if key:
+        return sess_params['sync'][key]
 
 
 def get_sync_collection(sess_params):
-    sync = sess_params.get('sync', None)
-    if not sync:
-        return None
-    else:
-        (_, sync_details), = sync.items()
-    return sync_details.get('collection', None)
+    return (get_sync_values(sess_params) or {}).get('collection')
 
 
 def get_sync_extension(sess_params):
-    sync = sess_params.get('sync', None)
-    if not sync:
-        return None
-    else:
-        (_, sync_details), = sync.items()
-    return sync_details.get('extension', None)
+    return (get_sync_values(sess_params) or {}).get('extension')
 
 
 def get_sync_namespace(sess_params):
-    sync = sess_params.get('sync', None)
-    if not sync:
-        return None
-    else:
-        (_, sync_details), = sync.items()
-    return sync_details.get('acquisition_software', None)
+    return (get_sync_values(sess_params) or {}).get('acquisition_software')
 
 
 def get_task_protocol(sess_params, task_collection=None):
@@ -305,6 +305,10 @@ def get_task_collection(sess_params, task_protocol=None):
     str, set, None
         If task_protocol is None, returns the set of collections, otherwise returns the first
         collection that corresponds to the protocol, or None if protocol not present.
+
+    Notes
+    -----
+    - The order of the set may not be the same as the descriptions tasks order when iterating.
     """
     protocols = sess_params.get('tasks', [])
     if task_protocol is not None:
@@ -313,6 +317,35 @@ def get_task_collection(sess_params, task_protocol=None):
     else:  # Return set of all task collections
         cset = set(filter(None, (next(iter(x.values()), {}).get('collection') for x in protocols)))
         return (next(iter(cset)) if len(cset) == 1 else cset) or None
+
+
+def get_task_protocol_number(sess_params, task_protocol=None):
+    """
+    Fetch the task protocol number from an experiment description dict.
+
+    Parameters
+    ----------
+    sess_params : dict
+        The loaded experiment.description file.
+    task_protocol : str, optional
+        Return the number that corresponds to this protocol (returns the first matching
+        protocol in the list). If None, all numbers are returned.
+
+    Returns
+    -------
+    str, list, None
+        If task_protocol is None, returns list of all numbers, otherwise returns the first
+        number that corresponds to the protocol, or None if protocol not present.
+    """
+    protocols = sess_params.get('tasks', [])
+    if task_protocol is not None:
+        task = next((x for x in protocols if task_protocol in x), None)
+        number = (task.get(task_protocol) or {}).get('protocol_number')
+        return int(number) if isinstance(number, str) else number
+    else:  # Return set of all task numbers
+        numbers = list(filter(None, (next(iter(x.values()), {}).get('protocol_number') for x in protocols)))
+        numbers = [int(n) if isinstance(n, str) else n for n in numbers]
+        return (next(iter(numbers)) if len(numbers) == 1 else numbers) or None
 
 
 def get_collections(sess_params):
@@ -399,6 +432,12 @@ def prepare_experiment(session_path, acquisition_description=None, local=None, r
     ----------
     session_path : str, pathlib.Path, pathlib.PurePath
         The RELATIVE session path, e.g. subject/2020-01-01/001.
+    acquisition_description : dict
+        The data to write to the experiment.description.yaml file.
+    local : str, pathlib.Path
+        The path to the local session folders.
+    remote : str, pathlib.Path
+        The path to the remote server session folders.
     """
     if not acquisition_description:
         return

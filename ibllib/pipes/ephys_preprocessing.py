@@ -20,7 +20,7 @@ from ibllib.ephys import ephysqc, spikes, sync_probes
 from ibllib.io import ffmpeg
 from ibllib.io.video import label_from_path, assert_valid_label
 from ibllib.io.extractors import ephys_fpga, ephys_passive, camera
-from ibllib.pipes import tasks
+from ibllib.pipes import tasks, base_tasks
 from ibllib.pipes.training_preprocessing import TrainingRegisterRaw as EphysRegisterRaw
 from ibllib.pipes.training_preprocessing import TrainingStatus as EphysTrainingStatus
 from ibllib.pipes.misc import create_alyx_probe_insertions
@@ -1305,6 +1305,7 @@ class EphysExtractionPipeline(tasks.Pipeline):
         tasks = OrderedDict()
         self.session_path = session_path
         # level 0
+        tasks['ExperimentDescriptionRegisterRaw'] = base_tasks.ExperimentDescriptionRegisterRaw(self.session_path)
         tasks["EphysRegisterRaw"] = EphysRegisterRaw(self.session_path)
         tasks["EphysPulses"] = EphysPulses(self.session_path)
         tasks["EphysRawQC"] = RawEphysQC(self.session_path)
