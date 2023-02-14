@@ -107,13 +107,6 @@ class MesoscopePreprocess(base_tasks.DynamicTask):
         super(MesoscopePreprocess, self).__init__(session_path, **kwargs)
         self.device_collection = self.get_device_collection('mesoscope',
                                                             kwargs.get('device_collection', 'raw_imaging_data'))
-        # dictionary to rename suite2p output files
-        self.rename = {
-            'F.npy': 'mpci.ROIActivityF.npy',
-            'Fneu.npy': 'mpci.ROIActivityFneu.npy',
-            'spks.npy': 'mpci.ROIActivityDeconvolved.npy',
-            'iscell.npy': 'mpciROIs.included.npy'
-        }
         # TODO: make sure that we are happy with these defaults
         # TODO: decide if we want to code them here or in the construction of the meta json
         self.db = {
@@ -134,11 +127,45 @@ class MesoscopePreprocess(base_tasks.DynamicTask):
         }
         return signature
 
-    def _run(self, dry=False):
+    def _rename_outputs(self, rename_dict=None):
+        if rename_dict is None:
+            rename_dict = {
+                'F.npy': 'mpci.ROIActivityF.npy',
+                'Fneu.npy': 'mpci.ROIActivityFneu.npy',
+                'spks.npy': 'mpci.ROIActivityDeconvolved.npy',
+                'iscell.npy': 'mpciROIs.included.npy'
+            }
+        # Rename the outputs, first the subdirectories
+        suite2p_dir = Path(self.db['save_path0']).joinpath('suite2p')
+        for plane_dir in suite2p_dir.iterdir():
+            if plane_dir.name == 'combined':
+                # TODO: is this renaming what we want?
+                plane_dir.rename(plane_dir.parent.joinpath('fov_combined'))
+            else:
+                n = int(plane_dir.name.split('plane')[1])
+                plane_dir.rename(plane_dir.parent.joinpath(f'fov{n:02}'))
+        # Now rename the content of the new directories and move them out of suite2p
+        for fov_dir in suite2p_dir.iterdir():
+            for k in rename_dict.keys():
+                try:
+                    fov_dir.joinpath(k).rename(fov_dir.joinpath(rename_dict[k]))
+                except FileNotFoundError:
+                    _logger.error(f"Output file {k} expected but not found in {fov_dir}")
+                    self.status = -1
+            # extract bad frames from ops.npy file and save separately
+            badframes = np.load(fov_dir.joinpath('ops.npy'), allow_pickle=True).item()['badframes']
+            np.save(fov_dir.joinpath('mpci.validFrames.npy'), badframes)
+            shutil.move(fov_dir, suite2p_dir.parent.joinpath(fov_dir.name))
+        # TODO: what about ops.npy, stats.npy, data.bin ?
+        # Remove empty suite2p folder
+        suite2p_dir.rmdir()
+        # Collect all files in those directories
+        return list(suite2p_dir.parent.rglob('fov*/*'))
+
+    def _run(self, run_suite2p=True, rename_files=True):
         import suite2p
         # Get default ops
         ops = suite2p.default_ops()
-
         # Some options we get from the meta data json, we put them in db, which overwrites ops if the keys are the same
         # TODO: get the right path here
         with open(self.session_path.joinpath(self.device_collection, 'rawImagingData.meta.json'), 'r') as meta_file:
@@ -151,45 +178,22 @@ class MesoscopePreprocess(base_tasks.DynamicTask):
                 self.db[k] = meta[k]
             else:
                 _logger.warning(f'Setting for {k} not found in metadata file. Keeping default.')
-
         # Anything can be overwritten by keyword arguments passed to the tasks run() method
         for k, v in self.kwargs.items():
             if k in ops.keys() or k in self.db.keys():
                 # db overwrites ops when passed to run_s2p, so we only need to update / add it here
                 self.db[k] = v
-
         # Update the task kwargs attribute as it will be stored in the arguments json field in alyx
         self.kwargs = {**self.kwargs, **self.db}
-
         # Run suite2p
-        if not dry:
+        if run_suite2p:
             _ = suite2p.run_s2p(ops=ops, db=self.db)
+        # Rename files and return outputs
+        if rename_files:
+            out_files = self._rename_outputs()
+        else:
+            out_files = list(Path(self.db['save_path0']).joinpath('suite2p').rglob('*'))
 
-        # Rename the outputs, first the subdirectories
-        suite2p_dir = Path(self.db['save_path0']).joinpath('suite2p')
-        for plane_dir in suite2p_dir.iterdir():
-            if plane_dir.name == 'combined':
-                plane_dir.rename(plane_dir.parent.joinpath('fov_combined'))
-            else:
-                n = int(plane_dir.name.split('plane')[1])
-                plane_dir.rename(plane_dir.parent.joinpath(f'fov{n:02}'))
-        # Now rename the content of the new directories and move them out of suite2p
-        for fov_dir in suite2p_dir.iterdir():
-            for k in self.rename.keys():
-                try:
-                    fov_dir.joinpath(k).rename(fov_dir.joinpath(self.rename[k]))
-                except FileNotFoundError:
-                    _logger.error(f"Output file {k} expected but not found in {fov_dir}")
-                    self.status = -1
-            # extract bad frames from ops.npy file and save separately
-            badframes = np.load(fov_dir.joinpath('ops.npy'), allow_pickle=True).item()['badframes']
-            np.save(fov_dir.joinpath('mpci.validFrames.npy'), badframes)
-            shutil.move(fov_dir, suite2p_dir.parent.joinpath(fov_dir.name))
-        # Remove empty suite2p folder
-        suite2p_dir.rmdir()
-        # Collect output files
-        out_files = list(suite2p_dir.parent.rglob('fov*/*'))
-        # TODO: what about ops.npy, stats.npy, data.bin ?
         return out_files
 
 
