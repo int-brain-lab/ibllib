@@ -29,6 +29,75 @@ def acorr(spike_times, bin_size=None, window_size=None):
     return xc[0, 0, :]
 
 
+def bin_spikes(times, align_times, pre_time=0.4, post_time=1, bin_size=0.01, weights=None):
+    """
+    Event aligned raster for single cluster
+    :param times:
+    :param align_times:
+    :param pre_time:
+    :param post_time:
+    :param bin_size:
+    :param weights:
+    :return:
+    """
+
+    n_bins_pre = int(np.ceil(pre_time / bin_size))
+    n_bins_post = int(np.ceil(post_time / bin_size))
+    n_bins = n_bins_pre + n_bins_post
+    tscale = np.arange(-n_bins_pre, n_bins_post + 1) * bin_size
+    ts = np.repeat(align_times[:, np.newaxis], tscale.size, axis=1) + tscale
+    epoch_idxs = np.searchsorted(times, np.c_[ts[:, 0], ts[:, -1]])
+    bins = np.zeros(shape=(align_times.shape[0], n_bins))
+
+    for i, (ep, t) in enumerate(zip(epoch_idxs, ts)):
+        xind = (np.floor((times[ep[0]:ep[1]] - t[0]) / bin_size)).astype(np.int64)
+        w = weights[ep[0]:ep[1]] if weights is not None else None
+        r = np.bincount(xind, minlength=tscale.shape[0], weights=w)
+        bins[i, :] = r[:-1]
+
+    tscale = (tscale[:-1] + tscale[1:]) / 2
+
+    return bins, tscale
+
+
+def bin_spikes2D(spike_times, spike_clusters, cluster_ids, align_times, pre_time=0.4, post_time=1, bin_size=0.01, weights=None):
+    """
+    Event aligned raster for mutliple clusters
+    :param spike_times:
+    :param spike_clusters:
+    :param cluster_ids:
+    :param align_times:
+    :param pre_time:
+    :param post_time:
+    :param bin_size:
+    :param weights:
+    :return:
+    """
+
+    n_bins_pre = int(np.ceil(pre_time / bin_size))
+    n_bins_post = int(np.ceil(post_time / bin_size))
+    n_bins = n_bins_pre + n_bins_post
+    tscale = np.arange(-n_bins_pre, n_bins_post + 1) * bin_size
+    ts = np.repeat(align_times[:, np.newaxis], tscale.size, axis=1) + tscale
+    epoch_idxs = np.searchsorted(spike_times, np.c_[ts[:, 0], ts[:, -1]])
+    bins = np.zeros(shape=(align_times.shape[0], cluster_ids.shape[0], n_bins))
+
+    for i, (ep, t) in enumerate(zip(epoch_idxs, ts)):
+        xind = (np.floor((spike_times[ep[0]:ep[1]] - t[0]) / bin_size)).astype(np.int64)
+        w = weights[ep[0]:ep[1]] if weights is not None else None
+        yscale, yind = np.unique(spike_clusters[ep[0]:ep[1]], return_inverse=True)
+        nx, ny = [tscale.size, yscale.size]
+        ind2d = np.ravel_multi_index(np.c_[yind, xind].transpose(), dims=(ny, nx))
+        r = np.bincount(ind2d, minlength=nx * ny, weights=w).reshape(ny, nx)
+
+        bs_idxs = np.isin(cluster_ids, yscale)
+        bins[i, bs_idxs, :] = r[:, :-1]
+
+    tscale = (tscale[:-1] + tscale[1:]) / 2
+
+    return bins, tscale
+
+
 def calculate_peths(
         spike_times, spike_clusters, cluster_ids, align_times, pre_time=0.2,
         post_time=0.5, bin_size=0.025, smoothing=0.025, return_fr=True):

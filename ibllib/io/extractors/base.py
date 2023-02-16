@@ -1,4 +1,4 @@
-"""Base Extractor classes
+"""Base Extractor classes.
 A module for the base Extractor classes.  The Extractor, given a session path, will extract the
 processed data from raw hardware files and optionally save them.
 """
@@ -46,7 +46,7 @@ class BaseExtractor(abc.ABC):
         return out, files
 
     def _save(self, data, path_out=None):
-        # Chack if self.save_namesis of the same length of out
+        # Check if self.save_names is of the same length of out
         if not path_out:
             path_out = self.session_path.joinpath(self.default_path)
 
@@ -119,6 +119,7 @@ class BaseBpodTrialsExtractor(BaseExtractor):
 
     bpod_trials = None
     settings = None
+    task_collection = None
 
     def extract(self, task_collection='raw_behavior_data', bpod_trials=None, settings=None, **kwargs):
         """
@@ -131,10 +132,11 @@ class BaseBpodTrialsExtractor(BaseExtractor):
         """
         self.bpod_trials = bpod_trials
         self.settings = settings
+        self.task_collection = task_collection
         if self.bpod_trials is None:
-            self.bpod_trials = raw.load_data(self.session_path, task_collection=task_collection)
+            self.bpod_trials = raw.load_data(self.session_path, task_collection=self.task_collection)
         if not self.settings:
-            self.settings = raw.load_settings(self.session_path, task_collection=task_collection)
+            self.settings = raw.load_settings(self.session_path, task_collection=self.task_collection)
         if self.settings is None:
             self.settings = {"IBLRIG_VERSION_TAG": "100.0.0"}
         elif self.settings["IBLRIG_VERSION_TAG"] == "":
@@ -223,14 +225,14 @@ def get_task_extractor_type(task_name):
     return task_type
 
 
-def get_session_extractor_type(session_path):
+def get_session_extractor_type(session_path, task_collection='raw_behavior_data'):
     """
     From a session path, loads the settings file, finds the task and checks if extractors exist
     task names examples:
     :param session_path:
     :return: bool
     """
-    settings = load_settings(session_path)
+    settings = load_settings(session_path, task_collection=task_collection)
     if settings is None:
         _logger.error(f'ABORT: No data found in "raw_behavior_data" folder {session_path}')
         return False
@@ -243,7 +245,7 @@ def get_session_extractor_type(session_path):
 
 def get_pipeline(session_path):
     """
-    Get the pre-processinf pipeline name from a session path
+    Get the pre-processing pipeline name from a session path
     :param session_path:
     :return:
     """

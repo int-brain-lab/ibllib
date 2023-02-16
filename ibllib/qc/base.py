@@ -1,13 +1,17 @@
 import logging
 from abc import abstractmethod
 from pathlib import Path
+from itertools import chain
 
 import numpy as np
 
 from one.api import ONE
 from one.alf.spec import is_session_path, is_uuid_string
 
-# Map for comparing QC outcomes
+"""dict: custom sign off categories"""
+SIGN_OFF_CATEGORIES = {'neuropixel': ['raw', 'spike_sorting', 'alignment']}
+
+"""dict: Map for comparing QC outcomes"""
 CRITERIA = {'CRITICAL': 4,
             'FAIL': 3,
             'WARNING': 2,
@@ -191,7 +195,7 @@ class QC:
         for k, v in data.items():
             if v is not None and not isinstance(v, str):
                 if isinstance(v, tuple):
-                    data[k] = tuple(None if np.isnan(i) else i for i in v)
+                    data[k] = tuple(None if not isinstance(i, str) and np.isnan(i) else i for i in v)
                 else:
                     data[k] = None if np.isnan(v).all() else v
 
@@ -219,3 +223,48 @@ class QC:
         details = self.one.alyx.get(f'/{self.endpoint}/{self.eid}', clobber=True)
         extended_qc = details['json']['extended_qc'] if self.json else details['extended_qc']
         return self.overall_outcome(v for k, v in extended_qc or {} if k[0] != '_')
+
+
+def sign_off_dict(exp_dec, sign_off_categories=None):
+    """
+    Creates a dict containing 'sign off' keys for each device and task protocol in the provided
+    experiment description.
+
+    Parameters
+    ----------
+    exp_dec : dict
+        A loaded experiment description file.
+    sign_off_categories : dict of list
+        A dictionary of custom JSON keys for a given device in the acquisition description file.
+
+    Returns
+    -------
+    dict of dict
+        The sign off dictionary with the main key 'sign_off_checklist' containing keys for each
+        device and task protocol.
+    """
+    # Note this assumes devices each contain a dict of dicts
+    # e.g. {'devices': {'DAQ_1': {'device_1': {}, 'device_2': {}},}
+    sign_off_categories = sign_off_categories or SIGN_OFF_CATEGORIES
+    sign_off_keys = set()
+    for k, v in exp_dec.get('devices', {}).items():
+        assert isinstance(v, dict) and v
+        if len(v.keys()) == 1 and next(iter(v.keys())) == k:
+            if k in sign_off_categories:
+                for subkey in sign_off_categories[k]:
+                    sign_off_keys.add(f'{k}_{subkey}')
+            else:
+                sign_off_keys.add(k)
+        else:
+            for kk in v.keys():
+                if k in sign_off_categories:
+                    for subkey in sign_off_categories[k]:
+                        sign_off_keys.add(f'{k}_{subkey}_{kk}')
+                else:
+                    sign_off_keys.add(f'{k}_{kk}')
+
+    # Add keys for each protocol
+    for i, v in enumerate(chain(*map(dict.keys, exp_dec.get('tasks', [])))):
+        sign_off_keys.add(f'{v}_{i:02}')
+
+    return {'sign_off_checklist': dict.fromkeys(map(lambda x: f'_{x}', sign_off_keys))}

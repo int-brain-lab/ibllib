@@ -24,6 +24,7 @@ from ibllib.io.extractors.training_wheel import extract_wheel_moves, extract_fir
 from ibllib.atlas import atlas, AllenAtlas, BrainRegions
 from ibllib.pipes import histology
 from ibllib.pipes.ephys_alignment import EphysAlignment
+from ibllib.plots import vertical_lines
 
 import brainbox.plot
 from brainbox.ephys_plots import plot_brain_regions
@@ -705,6 +706,28 @@ def load_wheel_reaction_times(eid, one=None):
     return firstMove_times - trials['goCue_times']
 
 
+def load_iti(trials):
+    """
+    The inter-trial interval (ITI) time for each trial, defined as the period of open-loop grey
+    screen commencing at stimulus off and lasting until the quiescent period at the start of the
+    following trial.  Note that the ITI for the first trial is the time between the first trial
+    and the next, therefore the last value is NaN.
+
+    Parameters
+    ----------
+    trials : one.alf.io.AlfBunch
+        An ALF trials object containing the keys {'intervals', 'stimOff_times'}.
+
+    Returns
+    -------
+    np.array
+        An array of inter-trial intervals, the last value being NaN.
+    """
+    if not {'intervals', 'stimOff_times'} <= trials.keys():
+        raise ValueError('trials must contain keys {"intervals", "stimOff_times"}')
+    return np.r_[(np.roll(trials['intervals'][:, 0], -1) - trials['stimOff_times'])[:-1], np.nan]
+
+
 def load_channels_from_insertion(ins, depths=None, one=None, ba=None):
 
     PROV_2_VAL = {
@@ -996,13 +1019,14 @@ class SpikeSortingLoader:
     def pid2ref(self):
         return f"{self.one.eid2ref(self.eid, as_dict=False)}_{self.pname}"
 
-    def raster(self, spikes, channels, save_dir=None, br=None, label='raster'):
+    def raster(self, spikes, channels, save_dir=None, br=None, label='raster', time_series=None):
         """
         :param spikes: spikes dictionary
         :param save_dir: optional if specified
         :return:
         """
         br = br or BrainRegions()
+        time_series = time_series or {}
         fig, axs = plt.subplots(2, 2, gridspec_kw={
             'width_ratios': [.95, .05], 'height_ratios': [.1, .9]}, figsize=(16, 9), sharex='col')
         axs[0, 1].set_axis_off()
@@ -1011,6 +1035,8 @@ class SpikeSortingLoader:
         title_str = f"{self.pid2ref}, {self.pid} \n" \
                     f"{spikes['clusters'].size:_} spikes, {np.unique(spikes['clusters']).size:_} clusters"
         axs[0, 0].title.set_text(title_str)
+        for k, ts in time_series.items():
+            vertical_lines(ts, ymin=0, ymax=3800, ax=axs[1, 0])
         if 'atlas_id' in channels:
             plot_brain_regions(channels['atlas_id'], channel_depths=channels['axial_um'],
                                brain_regions=br, display=True, ax=axs[1, 1], title=self.histology)
@@ -1358,3 +1384,38 @@ class SessionLoader:
             return video_timestamps_fixed, video_data
         else:
             return video_timestamps, video_data
+
+
+class EphysSessionLoader(SessionLoader):
+    """
+    Spike sorting enhanced version of SessionLoader
+    Loads spike sorting data for all probes in the session, in the self.ephys dict
+    """
+    def __init__(self, *args, **kwargs):
+        """
+        Needs an active connection in order to get the list of insertions in the session
+        :param args:
+        :param kwargs:
+        """
+        super().__init__(*args, **kwargs)
+        insertions = self.one.alyx.rest('insertions', 'list', session=self.eid)
+        self.ephys = {}
+        for ins in insertions:
+            self.ephys[ins['name']] = {}
+            self.ephys[ins['name']]['ssl'] = SpikeSortingLoader(pid=ins['id'], one=self.one)
+
+    def load_session_data(self, *args, **kwargs):
+        super().load_session_data(*args, **kwargs)
+        self.load_spike_sorting()
+
+    def load_spike_sorting(self, pnames=None):
+        pnames = pnames or list(self.ephys.keys())
+        for pname in pnames:
+            spikes, clusters, channels = self.ephys[pname]['ssl'].load_spike_sorting()
+            self.ephys[pname]['spikes'] = spikes
+            self.ephys[pname]['clusters'] = clusters
+            self.ephys[pname]['channels'] = channels
+
+    @property
+    def probes(self):
+        return {k: self.ephys[k]['ssl'].pid for k in self.ephys}

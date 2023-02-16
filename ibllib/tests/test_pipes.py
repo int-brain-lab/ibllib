@@ -8,15 +8,21 @@ import unittest
 from pathlib import Path
 from unittest import mock
 from functools import partial
+import numpy as np
+import datetime
+import random
+import string
 
 from one.api import ONE
 import iblutil.io.params as iopar
+from packaging.version import Version, InvalidVersion
 
 import ibllib.io.extractors.base
 import ibllib.tests.fixtures.utils as fu
 from ibllib.pipes import misc
 from ibllib.tests import TEST_DB
 import ibllib.pipes.scan_fix_passive_files as fix
+from ibllib.pipes.ephys_preprocessing import SpikeSorting
 
 
 class TestExtractors2Tasks(unittest.TestCase):
@@ -279,35 +285,39 @@ class TestPipesMisc(unittest.TestCase):
     def test_create_alyx_probe_insertions(self):
         # Connect to test DB
         one = ONE(**TEST_DB)
-        # Create new session on database
+        # Create new session on database with a random date to avoid race conditions
+        date = str(datetime.date(2022, np.random.randint(1, 12), np.random.randint(1, 28)))
         from one.registration import RegistrationClient
-        _, eid = RegistrationClient(one).create_new_session('ZM_1150')
+        _, eid = RegistrationClient(one).create_new_session('ZM_1150', date=date)
+        eid = str(eid)
         # Currently the task protocol of a session must contain 'ephys' in order to create an insertion!
         one.alyx.rest('sessions', 'partial_update', id=eid, data={'task_protocol': 'ephys'})
         self.addCleanup(one.alyx.rest, 'sessions', 'delete', id=eid)  # Delete after test
 
         # Force probe insertion 3A
+        labels = [''.join(random.choices(string.ascii_letters, k=5)), ''.join(random.choices(string.ascii_letters, k=5))]
         misc.create_alyx_probe_insertions(
-            str(eid), one=one, model="3A", labels=["probe00", "probe01"], force=True
+            eid, one=one, model="3A", labels=labels, force=True
         )
         # Verify it's been inserted
         alyx_insertion = one.alyx.rest("insertions", "list", session=eid, no_cache=True)
         alyx_insertion = [x for x in alyx_insertion if x["model"] == "3A"]
         self.assertTrue(alyx_insertion[0]["model"] == "3A")
-        self.assertTrue(alyx_insertion[0]["name"] in ["probe00", "probe01"])
+        self.assertTrue(alyx_insertion[0]["name"] in labels)
         self.assertTrue(alyx_insertion[1]["model"] == "3A")
-        self.assertTrue(alyx_insertion[1]["name"] in ["probe00", "probe01"])
+        self.assertTrue(alyx_insertion[1]["name"] in labels)
         # Cleanup DB
         one.alyx.rest("insertions", "delete", id=alyx_insertion[0]["id"])
         one.alyx.rest("insertions", "delete", id=alyx_insertion[1]["id"])
         # Force probe insertion 3B
-        misc.create_alyx_probe_insertions(str(eid), one=one, model="3B2", labels=["probe00", "probe01"])
+        labels = [''.join(random.choices(string.ascii_letters, k=5)), ''.join(random.choices(string.ascii_letters, k=5))]
+        misc.create_alyx_probe_insertions(eid, one=one, model="3B2", labels=labels)
         # Verify it's been inserted
-        alyx_insertion = one.alyx.rest("insertions", "list", session=str(eid), no_cache=True)
+        alyx_insertion = one.alyx.rest("insertions", "list", session=eid, no_cache=True)
         self.assertTrue(alyx_insertion[0]["model"] == "3B2")
-        self.assertTrue(alyx_insertion[0]["name"] in ["probe00", "probe01"])
+        self.assertTrue(alyx_insertion[0]["name"] in labels)
         self.assertTrue(alyx_insertion[1]["model"] == "3B2")
-        self.assertTrue(alyx_insertion[1]["name"] in ["probe00", "probe01"])
+        self.assertTrue(alyx_insertion[1]["name"] in labels)
         # Cleanup DB
         one.alyx.rest("insertions", "delete", id=alyx_insertion[0]["id"])
         one.alyx.rest("insertions", "delete", id=alyx_insertion[1]["id"])
@@ -366,6 +376,7 @@ class TestPipesMisc(unittest.TestCase):
         PARAM_STR = '___test_pars'
         self.addCleanup(Path(iopar.getfile(PARAM_STR)).unlink)  # Remove after test
         params = misc.create_basic_transfer_params(PARAM_STR, '~/local_data', '~/remote_data', par1='val')
+        self.assertTrue(transfer_label := params.pop('TRANSFER_LABEL', False))
         expected = {
             'DATA_FOLDER_PATH': '~/local_data',
             'REMOTE_DATA_FOLDER_PATH': '~/remote_data',
@@ -378,6 +389,7 @@ class TestPipesMisc(unittest.TestCase):
             params = misc.create_basic_transfer_params(PARAM_STR, par2=None)
             self.assertEqual(2, in_mock.call_count)
         expected.update({'PAR1': 'foo', 'PAR2': 'bar'})
+        self.assertEqual(transfer_label, params.pop('TRANSFER_LABEL'))
         self.assertCountEqual(expected, params)
 
         # Test custom function and extra par delete
@@ -620,9 +632,19 @@ class TestMultiPartsRecordings(unittest.TestCase):
             for sf in root_path.rglob('*.sequence.json'):
                 with open(sf) as fid:
                     d = json.load(fid)
-                    assert len(d['files']) == 4
-        assert len(recordings['probe00']) == 4
-        assert len(recordings['probe01']) == 4
+                    self.assertEqual(4, len(d['files']))
+        self.assertEqual(4, len(recordings['probe00']))
+        self.assertEqual(4, len(recordings['probe01']))
+
+
+class TestSpikeSortingTask(unittest.TestCase):
+    def test_parse_version(self):
+        self.assertEqual(SpikeSorting.parse_version('ibl_1.2'), Version('1.2'))
+        self.assertEqual(SpikeSorting.parse_version('pykilosort_ibl_1.2.0-new'), Version('1.2.0'))
+        self.assertEqual(SpikeSorting.parse_version('pykilosort_v1'), Version('1'))
+        self.assertEqual(SpikeSorting.parse_version('0.5'), Version('0.5'))
+        with self.assertRaises(InvalidVersion):
+            SpikeSorting.parse_version('version-twelve')
 
 
 if __name__ == "__main__":

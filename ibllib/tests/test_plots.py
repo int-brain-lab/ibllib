@@ -5,6 +5,8 @@ import uuid
 from pathlib import Path
 from PIL import Image
 from urllib.parse import urlparse
+import datetime
+import numpy as np
 
 from one.api import ONE
 from one.webclient import http_download_file
@@ -30,6 +32,12 @@ class TestSnapshot(unittest.TestCase):
         cls.one = ONE(**TEST_DB)
         # Collect all notes to delete them later
         cls.notes = []
+
+        # make a new test session
+        date = str(datetime.date(2018, np.random.randint(1, 12), np.random.randint(1, 28)))
+        from one.registration import RegistrationClient
+        _, eid = RegistrationClient(cls.one).create_new_session('ZM_1150', date=date)
+        cls.eid = str(eid)
 
     def _get_image(self, url):
         # This is a bit of a hack because when running a the server locally, the request to the media folder fail
@@ -71,7 +79,8 @@ class TestSnapshot(unittest.TestCase):
             self.assertIsNone(note)
 
     def test_image_scaling(self):
-        object_id = self.one.alyx.rest('sessions', 'list', limit=1)[0]['url'][-36:]
+        # make a new session
+        object_id = self.eid
         snp = Snapshot(object_id, content_type='session', one=self.one)
         # Image in original size
         self.notes.append(snp.register_image(self.img_file, text='original size', width='orig'))
@@ -132,6 +141,8 @@ class TestSnapshot(unittest.TestCase):
         # Delete all notes
         for note in cls.notes:
             cls.one.alyx.rest('notes', 'delete', id=note['id'])
+        # Delete the new session that was made
+        cls.one.alyx.rest('sessions', 'delete', id=cls.eid)
 
 
 class TestDlcQcPlot(unittest.TestCase):

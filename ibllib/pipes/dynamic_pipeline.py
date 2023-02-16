@@ -1,6 +1,12 @@
+import logging
+import re
 from collections import OrderedDict
 from pathlib import Path
+from itertools import chain
 import yaml
+
+import spikeglx
+
 import ibllib.io.session_params as sess_params
 import ibllib.io.extractors.base
 import ibllib.pipes.ephys_preprocessing as epp
@@ -13,7 +19,8 @@ import ibllib.pipes.video_tasks as vtasks
 import ibllib.pipes.ephys_tasks as etasks
 import ibllib.pipes.audio_tasks as atasks
 from ibllib.pipes.photometry_tasks import TaskFibrePhotometryPreprocess, TaskFibrePhotometryRegisterRaw
-import spikeglx
+
+_logger = logging.getLogger(__name__)
 
 
 def acquisition_description_legacy_session(session_path, save=False):
@@ -32,7 +39,7 @@ def acquisition_description_legacy_session(session_path, save=False):
 
 def get_acquisition_description(protocol):
     """"
-    This is a set of example acqusition descriptions for experiments
+    This is a set of example acquisition descriptions for experiments
     -   choice_world_recording
     -   choice_world_biased
     -   choice_world_training
@@ -57,10 +64,10 @@ def get_acquisition_description(protocol):
         }
         acquisition_description = {  # this is the current ephys pipeline description
             'devices': devices,
-            'tasks': {
-                'ephysChoiceWorld': {'collection': 'raw_behavior_data', 'sync_label': 'bpod'},
-                'passiveChoiceWorld': {'collection': 'raw_passive_data', 'sync_label': 'bpod'},
-            },
+            'tasks': [
+                {'ephysChoiceWorld': {'collection': 'raw_behavior_data', 'sync_label': 'bpod'}},
+                {'passiveChoiceWorld': {'collection': 'raw_passive_data', 'sync_label': 'bpod'}}
+            ],
             'sync': {
                 'nidq': {'collection': 'raw_ephys_data', 'extension': 'bin', 'acquisition_software': 'spikeglx'}
             },
@@ -90,23 +97,40 @@ def get_acquisition_description(protocol):
             key = 'trainingChoiceWorld'
         elif protocol == 'choice_world_habituation':
             key = 'habituationChoiceWorld'
-        acquisition_description['tasks'] = {key: {'collection': 'raw_behavior_data', 'sync_label': 'bpod', 'main': True}}
-    acquisition_description['version'] = sess_params.SPEC_VERSION
+        else:
+            raise ValueError(f'Unknown protocol "{protocol}"')
+        acquisition_description['tasks'] = [{key: {
+            'collection': 'raw_behavior_data',
+            'sync_label': 'bpod', 'main': True
+        }}]
+    acquisition_description['version'] = '1.0.0'
     return acquisition_description
 
 
-def make_pipeline(session_path=None, **pkwargs):
+def make_pipeline(session_path, **pkwargs):
     """
-    :param session_path:
-    :param one: passed to the Pipeline init: one instance to register tasks to
-    :param eid: passed to the Pipeline init
-    :return:
+    Creates a pipeline of extractor tasks from a session's experiment description file.
+
+    Parameters
+    ----------
+    session_path : str, Path
+        The absolute session path, i.e. '/path/to/subject/yyyy-mm-dd/nnn'.
+    **pkwargs
+        Optional arguments passed to the ibllib.pipes.tasks.Pipeline constructor.
+
+    Returns
+    -------
+    ibllib.pipes.tasks.Pipeline
+        A task pipeline object.
     """
     # NB: this pattern is a pattern for dynamic class creation
     # tasks['SyncPulses'] = type('SyncPulses', (epp.EphysPulses,), {})(session_path=session_path)
-    assert session_path
+    if not session_path or not (session_path := Path(session_path)).exists():
+        raise ValueError('Session path does not exist')
     tasks = OrderedDict()
     acquisition_description = sess_params.read_params(session_path)
+    if not acquisition_description:
+        raise ValueError('Experiment description file not found or is empty')
     devices = acquisition_description.get('devices', {})
     kwargs = {'session_path': session_path}
 
@@ -138,39 +162,72 @@ def make_pipeline(session_path=None, **pkwargs):
         # ATM we don't have anything for this not sure it will be needed in the future
 
     # Behavior tasks
-    # TODO this is not doing at all what we were envisaging and going back to the old way of protocol linked to hardware
-    # TODO change at next iteration of dynamic pipeline, once we have the basic workflow working
-    for protocol, task_info in acquisition_description.get('tasks', []).items():
-        task_kwargs = {'protocol': protocol, 'collection': task_info['collection']}
-        # -   choice_world_recording
-        # -   choice_world_biased
-        # -   choice_world_training
-        # -   choice_world_habituation
-        if 'habituation' in protocol:
-            registration_class = btasks.HabituationRegisterRaw
-            behaviour_class = btasks.HabituationTrialsBpod
-            compute_status = False
-        elif 'passiveChoiceWorld' in protocol:
-            registration_class = btasks.PassiveRegisterRaw
-            behaviour_class = btasks.PassiveTask
-            compute_status = False
-        elif sync_kwargs['sync'] == 'bpod':
-            registration_class = btasks.TrialRegisterRaw
-            behaviour_class = btasks.ChoiceWorldTrialsBpod
-            compute_status = True
-        elif sync_kwargs['sync'] == 'nidq':
-            registration_class = btasks.TrialRegisterRaw
-            behaviour_class = btasks.ChoiceWorldTrialsNidq
-            compute_status = True
-        else:
-            raise NotImplementedError
-        tasks[f'RegisterRaw_{protocol}'] = type(f'RegisterRaw_{protocol}', (registration_class,), {})(**kwargs, **task_kwargs)
-        parents = [tasks[f'RegisterRaw_{protocol}']] + sync_tasks
-        tasks[f'Trials_{protocol}'] = type(f'Trials_{protocol}', (behaviour_class,), {})(
-            **kwargs, **sync_kwargs, **task_kwargs, parents=parents)
-        if compute_status:
-            tasks[f"TrainingStatus_{protocol}"] = type(f"TrainingStatus_{protocol}", (btasks.TrainingStatus,), {})(
-                **kwargs, **task_kwargs, parents=[tasks[f'Trials_{protocol}']])
+    task_protocols = acquisition_description.get('tasks', [])
+    for i, (protocol, task_info) in enumerate(chain(*map(dict.items, task_protocols))):
+        collection = task_info.get('collection', f'raw_task_data_{i:02}')
+        task_kwargs = {'protocol': protocol, 'collection': collection}
+        # For now the order of protocols in the list will take precedence. If collections are numbered,
+        # check that the numbers match the order.  This may change in the future.
+        if re.match(r'^raw_task_data_\d{2}$', collection):
+            task_kwargs['protocol_number'] = i
+            if int(collection.split('_')[-1]) != i:
+                _logger.warning('Number in collection name does not match task order')
+        if extractors := task_info.get('extractors', False):
+            extractors = (extractors,) if isinstance(extractors, str) else extractors
+            task_name = None  # to avoid unbound variable issue in the first round
+            for j, task in enumerate(extractors):
+                # Assume previous task in the list is parent
+                parents = [] if j == 0 else [tasks[task_name]]
+                # Make sure extractor and sync task don't collide
+                for sync_option in ('nidq', 'bpod'):
+                    if sync_option in task.lower() and not sync == sync_option:
+                        raise ValueError(f'Extractor "{task}" and sync "{sync}" do not match')
+                try:
+                    task = getattr(btasks, task)
+                except AttributeError:
+                    raise NotImplementedError  # TODO Attempt to import from personal project repo
+                # Rename the class to something more informative
+                task_name = f'{task.__name__}_{i:02}'
+                # For now we assume that the second task in the list is always the trials extractor, which is dependent
+                # on the sync task and sync arguments
+                if j == 1:
+                    tasks[task_name] = type(task_name, (task,), {})(
+                        **kwargs, **sync_kwargs, **task_kwargs, parents=parents + sync_tasks
+                    )
+                else:
+                    tasks[task_name] = type(task_name, (task,), {})(**kwargs, **task_kwargs, parents=parents)
+                # For the next task, we assume that the previous task is the parent
+        else:  # Legacy block to handle sessions without defined extractors
+            # -   choice_world_recording
+            # -   choice_world_biased
+            # -   choice_world_training
+            # -   choice_world_habituation
+            if 'habituation' in protocol:
+                registration_class = btasks.HabituationRegisterRaw
+                behaviour_class = btasks.HabituationTrialsBpod
+                compute_status = False
+            elif 'passiveChoiceWorld' in protocol:
+                registration_class = btasks.PassiveRegisterRaw
+                behaviour_class = btasks.PassiveTask
+                compute_status = False
+            elif sync_kwargs['sync'] == 'bpod':
+                registration_class = btasks.TrialRegisterRaw
+                behaviour_class = btasks.ChoiceWorldTrialsBpod
+                compute_status = True
+            elif sync_kwargs['sync'] == 'nidq':
+                registration_class = btasks.TrialRegisterRaw
+                behaviour_class = btasks.ChoiceWorldTrialsNidq
+                compute_status = True
+            else:
+                raise NotImplementedError
+            tasks[f'RegisterRaw_{protocol}_{i:02}'] = type(f'RegisterRaw_{protocol}_{i:02}', (registration_class,), {})(
+                **kwargs, **task_kwargs)
+            parents = [tasks[f'RegisterRaw_{protocol}_{i:02}']] + sync_tasks
+            tasks[f'Trials_{protocol}_{i:02}'] = type(f'Trials_{protocol}_{i:02}', (behaviour_class,), {})(
+                **kwargs, **sync_kwargs, **task_kwargs, parents=parents)
+            if compute_status:
+                tasks[f"TrainingStatus_{protocol}_{i:02}"] = type(f'TrainingStatus_{protocol}_{i:02}', (
+                    btasks.TrainingStatus,), {})(**kwargs, **task_kwargs, parents=[tasks[f'Trials_{protocol}_{i:02}']])
 
     # Ephys tasks
     if 'neuropixel' in devices:
@@ -230,18 +287,20 @@ def make_pipeline(session_path=None, **pkwargs):
 
         if video_compressed:
             # This is for widefield case where the video is already compressed
-            tasks[tn] = type((tn := 'VideoConvert'), (vtasks.VideoConvert,), {})(**kwargs, **video_kwargs)
+            tasks[tn] = type((tn := 'VideoConvert'), (vtasks.VideoConvert,), {})(
+                **kwargs, **video_kwargs)
             dlc_parent_task = tasks['VideoConvert']
-            tasks[tn] = type((tn := f'VideoSyncQC_{sync}'), (vtasks.VideoSyncQcCamlog,), {})(**kwargs, **video_kwargs,
-                                                                                             **sync_kwargs)
+            tasks[tn] = type((tn := f'VideoSyncQC_{sync}'), (vtasks.VideoSyncQcCamlog,), {})(
+                **kwargs, **video_kwargs, **sync_kwargs)
         else:
-            tasks[tn] = type((tn := 'VideoRegisterRaw'), (vtasks.VideoRegisterRaw,), {})(**kwargs, **video_kwargs)
-            tasks[tn] = type((tn := 'VideoCompress'), (vtasks.VideoCompress,), {})(**kwargs, **video_kwargs, **sync_kwargs)
+            tasks[tn] = type((tn := 'VideoRegisterRaw'), (vtasks.VideoRegisterRaw,), {})(
+                **kwargs, **video_kwargs)
+            tasks[tn] = type((tn := 'VideoCompress'), (vtasks.VideoCompress,), {})(
+                **kwargs, **video_kwargs, **sync_kwargs)
             dlc_parent_task = tasks['VideoCompress']
             if sync == 'bpod':
-                collection = sess_params.get_task_collection(acquisition_description)
                 tasks[tn] = type((tn := f'VideoSyncQC_{sync}'), (vtasks.VideoSyncQcBpod,), {})(
-                    **kwargs, **video_kwargs, **sync_kwargs, collection=collection, parents=[tasks['VideoCompress']])
+                    **kwargs, **video_kwargs, **sync_kwargs, parents=[tasks['VideoCompress']])
             elif sync == 'nidq':
                 tasks[tn] = type((tn := f'VideoSyncQC_{sync}'), (vtasks.VideoSyncQcNidq,), {})(
                     **kwargs, **video_kwargs, **sync_kwargs, parents=[tasks['VideoCompress']] + sync_tasks)

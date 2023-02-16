@@ -1,16 +1,15 @@
+import logging
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-from iblutil.util import get_logger
 from iblutil.io.hashfile import md5
 import one.remote.aws as aws
 
 from ibllib.atlas.atlas import AllenAtlas
 
-
-_logger = get_logger(__file__)
+_logger = logging.getLogger(__name__)
 
 
 def allen_gene_expression(filename='gene-expression.pqt', folder_cache=None):

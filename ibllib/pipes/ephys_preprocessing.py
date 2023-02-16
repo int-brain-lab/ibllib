@@ -20,7 +20,7 @@ from ibllib.ephys import ephysqc, spikes, sync_probes
 from ibllib.io import ffmpeg
 from ibllib.io.video import label_from_path, assert_valid_label
 from ibllib.io.extractors import ephys_fpga, ephys_passive, camera
-from ibllib.pipes import tasks
+from ibllib.pipes import tasks, base_tasks
 from ibllib.pipes.training_preprocessing import TrainingRegisterRaw as EphysRegisterRaw
 from ibllib.pipes.training_preprocessing import TrainingStatus as EphysTrainingStatus
 from ibllib.pipes.misc import create_alyx_probe_insertions
@@ -298,6 +298,35 @@ class SpikeSorting(tasks.Task):
             return ""
         return info.decode("utf-8").strip()
 
+    @staticmethod
+    def parse_version(v) -> packaging.version.Version:
+        """
+        Extracts and parses semantic version (major.minor.patch) from a version string.
+
+        Parameters
+        ----------
+        v : str
+            A version string containing a semantic version.
+
+        Returns
+        -------
+        packaging.version.Version
+            The parsed semantic version number
+
+        Examples
+        --------
+        >>> SpikeSorting.parse_version('ibl_1.2')
+        <Version('1.2')>
+        >>> SpikeSorting.parse_version('pykilosort_ibl_1.2.0-new')
+        <Version('1.2.0')>
+        >>> SpikeSorting.parse_version('ibl_0.2') < SpikeSorting.parse_version('pykilosort_v1')
+        True
+        """
+        m = re.search(r'(\d+\.?){1,3}', v)
+        if not m:
+            raise packaging.version.InvalidVersion(f'Failed to detect SemVer in "{v}"')
+        return packaging.version.parse(m.group())
+
     def setUp(self, probes=None):
         """
         Overwrite setup method to allow inputs and outputs to be only one probe
@@ -326,7 +355,7 @@ class SpikeSorting(tasks.Task):
             log_file = sorter_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log")
             if log_file.exists():
                 run_version = self._fetch_pykilosort_run_version(log_file)
-                if packaging.version.parse(run_version) > packaging.version.parse('pykilosort_ibl_1.1.0'):
+                if self.parse_version(run_version) > self.parse_version('pykilosort_ibl_1.1.0'):
                     _logger.info(f"Already ran: spike_sorting_{self.SPIKE_SORTER_NAME}.log"
                                  f" found in {sorter_dir}, skipping.")
                     return sorter_dir
@@ -546,6 +575,7 @@ class EphysVideoSyncQc(tasks.Task):
     force = True
     signature = {
         'input_files': [('_iblrig_*Camera.raw.mp4', 'raw_video_data', True),
+                        ('_iblrig_*Camera.timestamps.ssv', 'raw_video_data', False),
                         ('_iblrig_*Camera.timestamps.npy', 'raw_video_data', False),
                         ('_iblrig_*Camera.frameData.bin', 'raw_video_data', False),
                         ('_iblrig_*Camera.GPIO.bin', 'raw_video_data', False),
@@ -1083,9 +1113,9 @@ class EphysPostDLC(tasks.Task):
                                  ('_iblrig_bodyCamera.raw.mp4', 'raw_video_data', True),
                                  ('_iblrig_leftCamera.raw.mp4', 'raw_video_data', True),
                                  ('_iblrig_rightCamera.raw.mp4', 'raw_video_data', True),
-                                 ('rightROIMotionEnergy.position.npy', 'alf', True),
-                                 ('leftROIMotionEnergy.position.npy', 'alf', True),
-                                 ('bodyROIMotionEnergy.position.npy', 'alf', True),
+                                 ('rightROIMotionEnergy.position.npy', 'alf', False),
+                                 ('leftROIMotionEnergy.position.npy', 'alf', False),
+                                 ('bodyROIMotionEnergy.position.npy', 'alf', False),
                                  ('_ibl_trials.table.pqt', 'alf', True),
                                  ('_ibl_wheel.position.npy', 'alf', True),
                                  ('_ibl_wheel.timestamps.npy', 'alf', True),
@@ -1275,6 +1305,7 @@ class EphysExtractionPipeline(tasks.Pipeline):
         tasks = OrderedDict()
         self.session_path = session_path
         # level 0
+        tasks['ExperimentDescriptionRegisterRaw'] = base_tasks.ExperimentDescriptionRegisterRaw(self.session_path)
         tasks["EphysRegisterRaw"] = EphysRegisterRaw(self.session_path)
         tasks["EphysPulses"] = EphysPulses(self.session_path)
         tasks["EphysRawQC"] = RawEphysQC(self.session_path)

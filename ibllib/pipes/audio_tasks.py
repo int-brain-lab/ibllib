@@ -41,6 +41,11 @@ class AudioSync(base_tasks.AudioTask):
     priority = 10
     job_size = 'small'
 
+    def __init__(self, session_path, **kwargs):
+        super().__init__(session_path, **kwargs)
+        # Task collection (this needs to be specified in the task kwargs)
+        self.collection = self.get_task_collection(kwargs.get('collection', None))
+
     @property
     def signature(self):
         signature = {
@@ -53,7 +58,6 @@ class AudioSync(base_tasks.AudioTask):
         return signature
 
     def _run(self):
-
         if self.sync == 'bpod':
             return training_audio.extract_sound(self.session_path, task_collection=self.collection,
                                                 device_collection=self.device_collection, save=True, delete=True)
