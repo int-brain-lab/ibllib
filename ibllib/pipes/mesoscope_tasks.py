@@ -14,7 +14,6 @@ import shutil
 from pathlib import Path
 from itertools import chain
 import numpy as np
-import suite2p
 
 from ibllib.pipes import base_tasks
 
@@ -165,6 +164,7 @@ class MesoscopePreprocess(base_tasks.DynamicTask):
         return list(suite2p_dir.parent.rglob('fov*/*'))
 
     def _run(self, run_suite2p=True, rename_files=True, **kwargs):
+        import suite2p
         # Get default ops
         ops = suite2p.default_ops()
         # Some options we get from the meta data json, we put them in db, which overwrites ops if the keys are the same
