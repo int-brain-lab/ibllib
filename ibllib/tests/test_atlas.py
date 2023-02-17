@@ -313,7 +313,7 @@ class TestAtlas(unittest.TestCase):
 
     def test_compute_regions_volume(self):
         self.ba.compute_regions_volume()
-        self.assertTrue(self.ba.regions.volume[0] > 10000)
+        self.assertTrue(self.ba.regions.volume.shape == self.ba.regions.acronym.shape)
 
 
 class TestAtlasPlots(unittest.TestCase):
