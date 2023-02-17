@@ -1,3 +1,6 @@
+# WIP
+- remove unused jupyter and jupyterhub requirements
+
 ## Release 2.21
 # Release Notes 2.21.0 2023-02-14
 
