@@ -1,17 +1,19 @@
+"""Mesoscope (timeline) trial extraction."""
 import numpy as np
 import one.alf.io as alfio
-
 import matplotlib.pyplot as plt
+from neurodsp.utils import falls
 
 from ibllib.plots.misc import squares
 from ibllib.io.raw_daq_loaders import load_sync_timeline, timeline_meta2chmap
 from ibllib.io.extractors.default_channel_maps import DEFAULT_MAPS
-from ibllib.io.extractors.ephys_fpga import FpgaTrials, WHEEL_TICKS
+from ibllib.io.extractors.ephys_fpga import FpgaTrials, WHEEL_TICKS, WHEEL_RADIUS_CM
 from ibllib.io.extractors.training_wheel import extract_wheel_moves
 
 
 def _timeline2sync(timeline, chmap=None):
     """
+    Extract the sync from a Timeline object.
 
     Parameters
     ----------
@@ -37,27 +39,38 @@ def _timeline2sync(timeline, chmap=None):
 
 
 def plot_timeline(timeline, channels=None, raw=True):
-    meta = {x.copy().pop('name'): x for x in timeline.meta['inputs']}
+    """
+    Plot the timeline data.
+
+    Parameters
+    ----------
+    timeline : one.alf.io.AlfBunch
+        The timeline data object.
+    channels : list of str
+        An iterable of channel names to plot.
+    raw : bool
+        If true, plot the raw DAQ samples; if false, apply TTL thresholds and plot changes.
+
+    """
+    meta = {x.copy().pop('name'): x for x in timeline['meta']['inputs']}
     channels = channels or meta.keys()
     fig, axes = plt.subplots(len(channels), 1)
-    if raw:
-        ts = timeline.timestamps
-        for i, (ax, ch) in enumerate(zip(axes, channels)):
-            # axesScale controls vertical scaling of each trace (multiplicative)
-            ax.plot(ts, timeline.raw[:, meta[ch]['arrayColumn'] - 1] * meta[ch]['axesScale'])
-            ax.spines['top'].set_visible(False), ax.spines['right'].set_visible(False)
-            ax.set_ylabel(ch, rotation=45, fontsize=8)
-    else:
+    if not raw:
         chmap = {ch: meta[ch]['arrayColumn'] for ch in channels}
         sync, chmap = _timeline2sync(timeline, chmap)
-        for i, (ax, ch) in enumerate(zip(axes, channels)):
-            idx = sync['channels'] == chmap[ch]
-            if np.any(idx):
-                squares(sync['times'][idx], sync['polarities'][idx], ax=ax)
-            ax.spines['top'].set_visible(False), ax.spines['right'].set_visible(False)
-            ax.set_ylabel(ch, rotation=45, fontsize=8)
-    axes[-1].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
-    axes[-1].spines['bottom'].set_visible(False)
+    for i, (ax, ch) in enumerate(zip(axes, channels)):
+        if raw:
+            # axesScale controls vertical scaling of each trace (multiplicative)
+            values = timeline['raw'][:, meta[ch]['arrayColumn'] - 1] * meta[ch]['axesScale']
+            ax.plot(timeline['timestamps'], values)
+        elif np.any(idx := sync['channels'] == chmap[ch]):
+            squares(sync['times'][idx], sync['polarities'][idx], ax=ax)
+        ax.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+        ax.spines['bottom'].set_visible(False), ax.spines['left'].set_visible(True)
+        ax.set_ylabel(ch, rotation=45, fontsize=8)
+    # Add back x-axis ticks to the last plot
+    axes[-1].tick_params(axis='x', which='both', bottom=True, labelbottom=True)
+    axes[-1].spines['bottom'].set_visible(True)
     plt.get_current_fig_manager().window.showMaximized()  # full screen
     fig.tight_layout(h_pad=0)
 
@@ -77,8 +90,11 @@ class TimelineTrials(FpgaTrials):
         if not (sync or chmap):
             sync, chmap = _timeline2sync(self.timeline)
         if kwargs.get('display', False):
-            plot_timeline(self.timeline, chmap.keys(), raw=True)
-        return super()._extract(sync, chmap, sync_collection, **kwargs)
+            plot_timeline(self.timeline, channels=chmap.keys(), raw=True)
+        trials = super()._extract(sync, chmap, sync_collection, **kwargs)
+        # Replace valve open times with those extracted from the DAQ
+        trials[self.var_names.index('valveOpen_times')] = self.get_valve_open_times()
+        return trials
 
     def get_wheel_positions(self, ticks=WHEEL_TICKS, radius=WHEEL_RADIUS_CM, coding='x4'):
         """
@@ -114,3 +130,34 @@ class TimelineTrials(FpgaTrials):
         wheel = {'timestamps': self.timeline['timestamps'][ind + 1], 'position': pos}
         moves = extract_wheel_moves(wheel['timestamps'], wheel['position'])
         return wheel, moves
+
+    def get_valve_open_times(self, display=False, threshold=-2.5, floor_percentile=10):
+        """
+        Get the valve open times from the raw timeline voltage trace.
+
+        Parameters
+        ----------
+        display : bool
+            Plot detected times on the raw voltage trace.
+        threshold : float
+            The threshold for applying to analogue channels.
+        floor_percentile : float
+            10% removes the percentile value of the analog trace before thresholding. This is to
+            avoid DC offset drift.
+
+        Returns
+        -------
+        numpy.array
+            The detected valve open times.
+        """
+        info = next(x for x in self.timeline['meta']['inputs'] if x['name'] == 'reward_valve')
+        values = self.timeline['raw'][:, info['arrayColumn'] - 1]  # Timeline indices start from 1
+        offset = np.percentile(values, floor_percentile, axis=0)
+        idx = falls(values - offset, step=threshold)
+        open_times = self.timeline['timestamps'][idx]
+        if display:
+            fig, ax = plt.subplots()
+            ax.plot(self.timeline['timestamps'], values - offset)
+            ax.plot(open_times, np.zeros_like(idx), 'r*')
+            ax.set_ylabel('Voltage / V'), ax.set_xlabel('Time / s')
+        return open_times

@@ -208,14 +208,10 @@ class MesoscopeSync(base_tasks.DynamicTask):
     @property
     def signature(self):
         signature = {
-            'input_files': [('imaging.raw.mov', self.device_collection, True),
-                            ('mesoscopeEvents.raw.camlog', self.device_collection, True),
-                            (f'_{self.sync_namespace}_sync.channels.npy', self.sync_collection, True),
+            'input_files': [(f'_{self.sync_namespace}_sync.channels.npy', self.sync_collection, True),
                             (f'_{self.sync_namespace}_sync.polarities.npy', self.sync_collection, True),
                             (f'_{self.sync_namespace}_sync.times.npy', self.sync_collection, True)],
-            'output_files': [('imaging.times.npy', 'alf/mesoscope', True),
-                             ('imaging.imagingLightSource.npy', 'alf/mesoscope', True),
-                             ('imagingLightSource.properties.htsv', 'alf/mesoscope', True)]
+            'output_files': [('imaging.times.npy', 'alf/mesoscope', True),]
         }
         return signature
 

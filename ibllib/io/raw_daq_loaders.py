@@ -247,7 +247,7 @@ def timeline_meta2wiring(path, save=False):
     """
     meta = alfio.load_object(path, 'DAQdata', namespace='timeline', attribute='meta').get('meta')
     assert meta, 'No meta data in timeline object'
-    wiring = defaultdict(dict, {'SYSTEM': 'timeline'})
+    wiring = defaultdict(dict, SYSTEM='timeline')
     for input in meta['inputs']:
         key = 'SYNC_WIRING_' + ('ANALOG' if input['measurement'] == 'Voltage' else 'DIGITAL')
         wiring[key][input['daqChannelID']] = input['name']
