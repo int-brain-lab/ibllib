@@ -582,7 +582,7 @@ class TestRawDaqLoaders(unittest.TestCase):
         a0_clean = np.zeros(N)
         self.n_ttl = 6
         pulse_width = int(np.floor(50 * Fs))
-        for i in np.arange(1, N, int(np.floor(N/self.n_ttl))):
+        for i in np.arange(1, N, int(np.floor(N / self.n_ttl))):
             a0_clean[i:i + pulse_width] = 1
         a0 = (a0_clean * np.full(N, 5)) + np.random.rand(N) + 1  # 0 -> 5V w/ noise and 1V DC offset
         ctr0 = np.cumsum(a0_clean)  # Counter channel, e.g. [0, 0, 0, 1, 1, 2, 3, 3, 3, 3, [...] n]

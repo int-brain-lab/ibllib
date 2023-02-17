@@ -4,7 +4,7 @@ import one.alf.io as alfio
 from ibllib.io.raw_daq_loaders import load_sync_timeline
 
 from ibllib.io.extractors.default_channel_maps import DEFAULT_MAPS
-from ibllib.io.extractors.ephys_fpga import FpgaTrials, WHEEL_TICKS, WHEEL_RADIUS_CM
+from ibllib.io.extractors.ephys_fpga import FpgaTrials, WHEEL_TICKS
 from ibllib.io.extractors.training_wheel import extract_wheel_moves
 
 

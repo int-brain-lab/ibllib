@@ -12,6 +12,7 @@ from ibllib.pipes.mesoscope_tasks import MesoscopePreprocess
 attrs = {'default_ops.return_value': {}}
 sys.modules['suite2p'] = MagicMock(**attrs)
 
+
 class TestMesoscopePreprocess(unittest.TestCase):
 
     def setUp(self) -> None:
@@ -37,7 +38,7 @@ class TestMesoscopePreprocess(unittest.TestCase):
         alf_dir = self.session_path.joinpath('alf')
         suite2p_dir = alf_dir.joinpath('suite2p')
         expected_files = ['stat.npy', 'ops.npy', 'data.bin', 'mpci.ROIActivityF.npy', 'mpci.ROIActivityFneu.npy',
-                          'mpci.ROIActivityDeconvolved.npy','mpciROIs.included.npy', 'mpci.validFrames.npy']
+                          'mpci.ROIActivityDeconvolved.npy', 'mpciROIs.included.npy', 'mpci.validFrames.npy']
         expected_outputs = [alf_dir.joinpath(s, e) for e in expected_files for s in ['fov00', 'fov01', 'fov_combined']
                             if not (s == 'fov_combined' and e == 'data.bin')]
         for subdir in ['plane00', 'plane01', 'combined']:
@@ -98,4 +99,3 @@ class TestMesoscopePreprocess(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.td.cleanup()
-
