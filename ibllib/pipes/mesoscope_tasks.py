@@ -14,8 +14,8 @@ import shutil
 from pathlib import Path
 from itertools import chain
 import numpy as np
+import suite2p
 
-from ibllib.io.extractors.mesoscope import TimelineTrials
 from ibllib.pipes import base_tasks
 
 _logger = logging.getLogger(__name__)
@@ -119,6 +119,7 @@ class MesoscopePreprocess(base_tasks.DynamicTask):
             'combined': True,
         }
 
+    # TODO: write function to get output file list (depend on field of views)
     @property
     def signature(self):
         signature = {
@@ -156,14 +157,14 @@ class MesoscopePreprocess(base_tasks.DynamicTask):
             badframes = np.load(fov_dir.joinpath('ops.npy'), allow_pickle=True).item()['badframes']
             np.save(fov_dir.joinpath('mpci.validFrames.npy'), badframes)
             shutil.move(fov_dir, suite2p_dir.parent.joinpath(fov_dir.name))
-        # TODO: what about ops.npy, stats.npy, data.bin ?
+        # TODO: what about ops.npy, stats.npy?
+        # TODO: on the long run remove data.bin
         # Remove empty suite2p folder
         suite2p_dir.rmdir()
         # Collect all files in those directories
         return list(suite2p_dir.parent.rglob('fov*/*'))
 
-    def _run(self, run_suite2p=True, rename_files=True):
-        import suite2p
+    def _run(self, run_suite2p=True, rename_files=True, **kwargs):
         # Get default ops
         ops = suite2p.default_ops()
         # Some options we get from the meta data json, we put them in db, which overwrites ops if the keys are the same
@@ -172,14 +173,13 @@ class MesoscopePreprocess(base_tasks.DynamicTask):
             meta = json.load(meta_file)
         # Inputs extracted from imaging data to a json
         # TODO: check that these are the right and complete inputs from the meta file
-        # TODO: what about badframes?
         for k in ['nrois', 'mesoscan', 'nplanes', 'nchannels', 'tau', 'fs', 'dx', 'dy', 'lines']:
             if k in meta.keys():
                 self.db[k] = meta[k]
             else:
                 _logger.warning(f'Setting for {k} not found in metadata file. Keeping default.')
         # Anything can be overwritten by keyword arguments passed to the tasks run() method
-        for k, v in self.kwargs.items():
+        for k, v in kwargs.items():
             if k in ops.keys() or k in self.db.keys():
                 # db overwrites ops when passed to run_s2p, so we only need to update / add it here
                 self.db[k] = v
