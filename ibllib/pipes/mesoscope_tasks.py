@@ -109,8 +109,7 @@ class MesoscopePreprocess(base_tasks.DynamicTask):
 
     def __init__(self, session_path, **kwargs):
         super(MesoscopePreprocess, self).__init__(session_path, **kwargs)
-        self.device_collection = self.get_device_collection('mesoscope',
-                                                            kwargs.get('device_collection', 'raw_imaging_data'))
+        self.device_collection = self.get_device_collection('mesoscope', kwargs.get('device_collection', 'raw_mesoscope_data'))
         # TODO: make sure that we are happy with these defaults
         # TODO: decide if we want to code them here or in the construction of the meta json
         self.db = {
@@ -130,10 +129,6 @@ class MesoscopePreprocess(base_tasks.DynamicTask):
             'output_files': []
         }
         return signature
-
-    def __init__(self, session_path, **kwargs):
-        super().__init__(session_path, **kwargs)
-        self.device_collection = self.get_device_collection('mesoscope', kwargs.get('device_collection', 'raw_mesoscope_data'))
 
     def _rename_outputs(self, rename_dict=None):
         if rename_dict is None:
@@ -229,14 +224,10 @@ class MesoscopeSync(base_tasks.DynamicTask):
         self.device_collection = self.get_device_collection('mesoscope', kwargs.get('device_collection', 'raw_mesoscope_data'))
 
     def _run(self):
-
-        self.wf = base_tasks.DynamicTask(self.session_path)
-        save_paths = [self.session_path.joinpath(sig[1], sig[0]) for sig in self.signature['output_files']]
-        out_files = self.wf.sync_timestamps(bin_exists=False, save=True, save_paths=save_paths)
-
+        raise NotImplementedError
         # TODO QC
 
-        return out_files
+        return #out_files
 
 
 class MesoscopeFOV(base_tasks.DynamicTask):

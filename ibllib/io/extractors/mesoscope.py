@@ -1,32 +1,65 @@
 import numpy as np
 import one.alf.io as alfio
 
-from ibllib.io.raw_daq_loaders import load_sync_timeline, timeline_meta2chmap
+import matplotlib.pyplot as plt
 
+from ibllib.plots.misc import squares
+from ibllib.io.raw_daq_loaders import load_sync_timeline, timeline_meta2chmap
 from ibllib.io.extractors.default_channel_maps import DEFAULT_MAPS
 from ibllib.io.extractors.ephys_fpga import FpgaTrials, WHEEL_TICKS, WHEEL_RADIUS_CM
 from ibllib.io.extractors.training_wheel import extract_wheel_moves
 
 
-def _timeline2sync(session_path, sync_collection='raw_sync_data', chmap=None):
+def _timeline2sync(timeline, chmap=None):
     """
 
     Parameters
     ----------
-    session_path
-    sync_collection
-    chmap
+    timeline : dict, one.alf.AlfBunch
+        A timeline object with the keys {'timestamps', 'raw', 'meta'}.
+    chmap : dict
+        An optional map of channel names and their corresponding array column index (NB: index
+        must start from 1).
 
     Returns
     -------
-
+    one.alf.io.AlfBunch
+        A dictionary with keys ('times', 'polarities', 'channels'), containing the sync pulses and
+        the corresponding channel numbers.
+    dict
+        A map of channel names and their corresponding indices.
     """
-    path = session_path / sync_collection
     if not chmap:  # attempt to extract from the meta file using expected channel names, or use expected channel numbers
         default = DEFAULT_MAPS['mesoscope']['timeline']
-        chmap = timeline_meta2chmap(path, include_channels=default.keys()) or default
-    sync = load_sync_timeline(path, chmap=chmap)
+        chmap = timeline_meta2chmap(timeline['meta'], include_channels=default.keys()) or default
+    sync = load_sync_timeline(timeline, chmap=chmap)
     return sync, chmap
+
+
+def plot_timeline(timeline, channels=None, raw=True):
+    meta = {x.copy().pop('name'): x for x in timeline.meta['inputs']}
+    channels = channels or meta.keys()
+    fig, axes = plt.subplots(len(channels), 1)
+    if raw:
+        ts = timeline.timestamps
+        for i, (ax, ch) in enumerate(zip(axes, channels)):
+            # axesScale controls vertical scaling of each trace (multiplicative)
+            ax.plot(ts, timeline.raw[:, meta[ch]['arrayColumn'] - 1] * meta[ch]['axesScale'])
+            ax.spines['top'].set_visible(False), ax.spines['right'].set_visible(False)
+            ax.set_ylabel(ch, rotation=45, fontsize=8)
+    else:
+        chmap = {ch: meta[ch]['arrayColumn'] for ch in channels}
+        sync, chmap = _timeline2sync(timeline, chmap)
+        for i, (ax, ch) in enumerate(zip(axes, channels)):
+            idx = sync['channels'] == chmap[ch]
+            if np.any(idx):
+                squares(sync['times'][idx], sync['polarities'][idx], ax=ax)
+            ax.spines['top'].set_visible(False), ax.spines['right'].set_visible(False)
+            ax.set_ylabel(ch, rotation=45, fontsize=8)
+    axes[-1].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+    axes[-1].spines['bottom'].set_visible(False)
+    plt.get_current_fig_manager().window.showMaximized()  # full screen
+    fig.tight_layout(h_pad=0)
 
 
 class TimelineTrials(FpgaTrials):
@@ -42,7 +75,9 @@ class TimelineTrials(FpgaTrials):
 
     def _extract(self, sync=None, chmap=None, sync_collection='raw_sync_data', **kwargs):
         if not (sync or chmap):
-            sync, chmap = _timeline2sync(self.session_path, sync_collection)
+            sync, chmap = _timeline2sync(self.timeline)
+        if kwargs.get('display', False):
+            plot_timeline(self.timeline, chmap.keys(), raw=True)
         return super()._extract(sync, chmap, sync_collection, **kwargs)
 
     def get_wheel_positions(self, ticks=WHEEL_TICKS, radius=WHEEL_RADIUS_CM, coding='x4'):

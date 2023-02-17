@@ -1,4 +1,4 @@
-"""Loader functions for various DAQ data formats"""
+"""Loader functions for various DAQ data formats."""
 from pathlib import Path
 import logging
 from collections import OrderedDict, defaultdict
@@ -15,16 +15,17 @@ logger = logging.getLogger(__name__)
 
 def load_raw_daq_tdms(path) -> 'nptdms.tdms.TdmsFile':
     """
-    Returns a dict of channel names and values from chmap
+    Load a raw DAQ TDMS file.
 
     Parameters
     ----------
-    path
-    chmap
+    path : str, pathlib.Path
+        The location of the .tdms file to laod.
 
     Returns
     -------
-
+    nptdms.tdms.TdmsFile
+        The loaded TDMS object.
     """
     from nptdms import TdmsFile
     # If path is a directory, glob for a tdms file
@@ -38,14 +39,15 @@ def load_raw_daq_tdms(path) -> 'nptdms.tdms.TdmsFile':
     return TdmsFile.read(file_path)
 
 
-def load_channels_tdms(path, chmap=None, return_fs=False):
+def load_channels_tdms(path, chmap=None):
     """
 
     Note: This currently cannot deal with arbitrary groups.
 
     Parameters
     ----------
-    path
+    path : str, pathlib.Path
+        The file or folder path of the raw TDMS data file.
     chmap: dictionary mapping devices names to channel codes: example {"photometry": 'AI0', 'bpod': 'AI1'}
      if None, will read all of available channel from the DAQ
 
@@ -67,6 +69,7 @@ def load_channels_tdms(path, chmap=None, return_fs=False):
     data_file = load_raw_daq_tdms(path)
     data = {}
     digital_channels = None
+    fs = np.nan
     if chmap:
         for name, ch in chmap.items():
             if ch.lower()[0] == 'a':
@@ -87,14 +90,12 @@ def load_channels_tdms(path, chmap=None, return_fs=False):
                 else:
                     data[ch] = data_file[group][ch.upper()].data
             fs = data_file[group].properties['ScanRate']  # from daqami it's unclear that fs could be set per channel
-    if return_fs:
-        return data, fs
-    else:
-        return data
+    return data, fs
 
 
 def load_sync_tdms(path, sync_map, fs=None, threshold=2.5, floor_percentile=10):
     """
+    Load a sync channels from a raw DAQ TDMS file.
 
     Parameters
     ----------
@@ -112,7 +113,11 @@ def load_sync_tdms(path, sync_map, fs=None, threshold=2.5, floor_percentile=10):
 
     Returns
     -------
-
+    one.alf.io.AlfBunch
+        A dictionary with keys ('times', 'polarities', 'channels'), containing the sync pulses and
+        the corresponding channel numbers.
+    dict
+        A map of channel names and their corresponding indices.
     """
     data_file = load_raw_daq_tdms(path)
     sync = {}
@@ -147,7 +152,7 @@ def load_sync_tdms(path, sync_map, fs=None, threshold=2.5, floor_percentile=10):
     return sync, chmap
 
 
-def load_sync_timeline(path, chmap=None, threshold=2.5, floor_percentile=10):
+def load_sync_timeline(timeline, chmap=None, threshold=2.5, floor_percentile=10):
     """
     Load sync channels from a timeline object.
 
@@ -157,8 +162,8 @@ def load_sync_timeline(path, chmap=None, threshold=2.5, floor_percentile=10):
 
     Parameters
     ----------
-    path : str, pathlib.Path
-        The file or folder path of the _timeline_DAQdata file.
+    timeline : dict, str, pathlib.Path
+        A timeline object or the file or folder path of the _timeline_DAQdata files.
     chmap : dict
         A map of channel names and channel IDs.
     threshold : float
@@ -170,13 +175,15 @@ def load_sync_timeline(path, chmap=None, threshold=2.5, floor_percentile=10):
     Returns
     -------
     one.alf.io.AlfBunch
-        The sync bunch with keys ('times', 'polarities', 'channels')
+        A dictionary with keys ('times', 'polarities', 'channels'), containing the sync pulses and
+        the corresponding channel numbers.
     """
-    timeline = alfio.load_object(path, 'DAQdata', namespace='timeline')
+    if isinstance(timeline, (str, Path)):
+        timeline = alfio.load_object(timeline, 'DAQdata', namespace='timeline')
     assert timeline.keys() >= {'timestamps', 'raw', 'meta'}, 'Timeline object missing attributes'
 
     # If no channel map was passed, load it from 'wiring' file, or extract from meta file
-    chmap = chmap or timeline.get('wiring') or timeline_meta2chmap(path)
+    chmap = chmap or timeline.get('wiring') or timeline_meta2chmap(timeline['meta'])
 
     # Initialize sync object
     sync = alfio.AlfBunch((k, np.array([], dtype=d)) for k, d in
@@ -222,14 +229,21 @@ def load_sync_timeline(path, chmap=None, threshold=2.5, floor_percentile=10):
 
 def timeline_meta2wiring(path, save=False):
     """
-    Given a timeline meta data object, return the
+    Given a timeline meta data object, return a dictionary of wiring info.
+
     Parameters
     ----------
-    path
+    path : str, pathlib.Path
+        The path of the timeline meta file, _timeline_DAQdata.meta.
+    save : bool
+        If true, save the timeline wiring file in the same location as the meta file,
+        _timeline_DAQData.wiring.json.
 
     Returns
     -------
-
+    dict
+        A dictionary with base keys {'SYSTEM', 'SYNC_WIRING_DIGITAL', 'SYNC_WIRING_ANALOG'}, the
+        latter of which contain maps of channel names and their IDs.
     """
     meta = alfio.load_object(path, 'DAQdata', namespace='timeline', attribute='meta').get('meta')
     assert meta, 'No meta data in timeline object'
@@ -244,20 +258,25 @@ def timeline_meta2wiring(path, save=False):
     return wiring
 
 
-def timeline_meta2chmap(path, exclude_channels=None, include_channels=None):
+def timeline_meta2chmap(meta, exclude_channels=None, include_channels=None):
     """
+    Convert a timeline meta object to a sync channel map.
 
     Parameters
     ----------
-    path : str, pathlib.Path
+    meta : dict
+        A loaded timeline metadata file, i.e. _timeline_DAQdata.meta.
     exclude_channels : list
+        An optional list of channels to exclude from the channel map.
     include_channels : list
+        An optional list of channels to include from the channel map, takes priority over the
+        exclude list.
 
     Returns
     -------
-
+    dict
+        A map of channel names and their corresponding indices for sync channels.
     """
-    meta = alfio.load_object(path, 'DAQdata', namespace='timeline', attribute='meta').get('meta')
     chmap = {}
     for input in meta.get('inputs', []):
         if (include_channels is not None and input['name'] not in include_channels) or \
