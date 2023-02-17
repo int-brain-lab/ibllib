@@ -4,6 +4,7 @@ import unittest
 from unittest import mock
 from pathlib import Path
 from collections import OrderedDict
+import numpy as np
 
 import ibllib.pipes.tasks
 from ibllib.pipes.base_tasks import ExperimentDescriptionRegisterRaw
@@ -153,6 +154,8 @@ class TestPipelineAlyx(unittest.TestCase):
         #                     no_cache=True)
         # if len(ses):
         #     one.alyx.rest('sessions', 'delete', ses[0]['url'][-36:])
+        # randomise number
+        ses_dict['number'] = np.random.randint(1, 30)
         ses = one.alyx.rest('sessions', 'create', data=ses_dict)
         session_path = Path(self.td.name).joinpath(
             ses['subject'], ses['start_time'][:10], str(ses['number']).zfill(3))
@@ -164,7 +167,9 @@ class TestPipelineAlyx(unittest.TestCase):
         self.td.cleanup()
         one.alyx.rest('sessions', 'delete', id=self.eid)
 
-    def test_pipeline_alyx(self):
+    @mock.patch('ibllib.pipes.tasks.get_lab')
+    def test_pipeline_alyx(self, mock_ep):
+        mock_ep().get.return_value = ['cortexlab']
         eid = self.eid
         pipeline = SomePipeline(self.session_path, one=one, eid=eid)
 
@@ -184,7 +189,7 @@ class TestPipelineAlyx(unittest.TestCase):
 
         # run them and make sure their statuses got updated appropriately
         with mock.patch.object(ibllib.pipes.tasks.Task, '_lock_file_path',
-                               return_value=Path(self.td.name).joinpath('.gpu_lock')):
+                               return_value=Path(self.session_path).joinpath('.gpu_lock')):
             task_deck, datasets = pipeline.run(machine='testmachine')
             check_statuses = (desired_statuses[t['name']] == t['status'] for t in task_deck)
             # [(t['name'], t['status'], desired_statuses[t['name']]) for t in task_deck]

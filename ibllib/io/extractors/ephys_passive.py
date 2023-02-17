@@ -114,7 +114,7 @@ def _load_passive_stim_meta() -> dict:
 
 
 # 1/3 Define start and end times of the 3 passive periods
-def _get_spacer_times(spacer_template, jitter, ttl_signal, t_quiet):
+def _get_spacer_times(spacer_template, jitter, ttl_signal, t_quiet, thresh=3.0):
     """
     Find timestamps of spacer signal.
     :param spacer_template: list of indices where ttl signal changes
@@ -125,6 +125,8 @@ def _get_spacer_times(spacer_template, jitter, ttl_signal, t_quiet):
     :type ttl_signal: array-like
     :param t_quiet: seconds between spacer and next stim
     :type t_quiet: float
+    :param thresh: threshold value for the fttl convolved signal (with spacer template) to pass over to detect a spacer
+    :type thresh: float
     :return: times of spacer onset/offset
     :rtype: n_spacer x 2 np.ndarray; first col onset times, second col offset
     """
@@ -139,7 +141,6 @@ def _get_spacer_times(spacer_template, jitter, ttl_signal, t_quiet):
     # convolve cleaned diff ttl signal w/ spacer model
     conv_dttl = np.correlate(dttl, spacer_model, mode="full")
     # find spacer location
-    thresh = 3.0
     idxs_spacer_middle = np.where(
         (conv_dttl[1:-2] < thresh) & (conv_dttl[2:-1] > thresh) & (conv_dttl[3:] < thresh)
     )[0]
@@ -187,18 +188,44 @@ def _get_passive_spacers(session_path, sync_collection='raw_ephys_data',
     )
     jitter = 3 / FRAME_FS  # allow for 3 screen refresh as jitter
     t_quiet = meta["VISUAL_STIM_0"]["delay_around"]
-    spacer_times, _ = _get_spacer_times(
+    spacer_times, conv_dttl = _get_spacer_times(
         spacer_template=spacer_template, jitter=jitter, ttl_signal=fttl["times"], t_quiet=t_quiet
     )
 
     # Check correct number of spacers found
-    n_exp_spacer = np.sum(np.array(meta["STIM_ORDER"]) == 0)  # Hardcoded 0 for spacer
+    n_exp_spacer = np.sum(np.array(meta['STIM_ORDER']) == 0)  # Hardcoded 0 for spacer
     if n_exp_spacer != np.size(spacer_times) / 2:
-        raise ValueError(
-            f"The number of expected spacer ({n_exp_spacer}) "
-            f"is different than the one found on the raw "
-            f"trace ({int(np.size(spacer_times)/2)})"
-        )
+        error_nspacer = True
+        # sometimes the first spacer is truncated
+        # assess whether the first spacer is undetected, and then launch another spacer detection on truncated fttl
+        # with a lower threshold value
+        # Note: take *3 for some margin
+        if spacer_times[0][0] > (spacer_template[-1] + jitter) * 3 and (np.size(spacer_times) / 2) == n_exp_spacer - 1:
+            # Truncate signals
+            fttl_t = fttl["times"][np.where(fttl["times"] < spacer_times[0][0])]
+            conv_dttl_t = conv_dttl[np.where(fttl["times"] < spacer_times[0][0])]
+            ddttl = np.diff(np.diff(fttl_t))
+            # Find spacer location
+            # NB: cannot re-use the same algo for spacer detection as conv peaks towards spacer end
+            # 1. Find time point at which conv raises above a given threshold value
+            thresh = 2.0
+            idx_nearend_spacer = int(np.where((conv_dttl_t[1:-2] < thresh) & (conv_dttl_t[2:-1] > thresh))[0])
+            ddttl = ddttl[0:idx_nearend_spacer]
+            # 2. Find time point before this, for which fttl diff increase/decrease (this is the middle of spacer)
+            indx_middle = np.where((ddttl[0:-1] > 0) & (ddttl[1:] < 0))[0]
+            if len(indx_middle) == 1:
+                # 3. Add 1/2 spacer to middle idx to get the spacer end indx
+                spacer_around = int((np.floor(len(spacer_template) / 2)))
+                idx_end = int(indx_middle + spacer_around) + 1
+                spacer_times = np.insert(spacer_times, 0, np.array([fttl["times"][0], fttl["times"][idx_end]]), axis=0)
+                error_nspacer = False
+
+        if error_nspacer:
+            raise ValueError(
+                f'The number of expected spacer ({n_exp_spacer}) '
+                f'is different than the one found on the raw '
+                f'trace ({int(np.size(spacer_times) / 2)})'
+            )
 
     if tmax is None:
         tmax = fttl['times'][-1]

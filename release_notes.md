@@ -1,5 +1,5 @@
 ## Release 2.21
-# Release Notes 2.21.0 2023-01-24
+# Release Notes 2.21.0 2023-02-14
 
 ### features
 - support for multiple task protocols within a session
@@ -12,6 +12,12 @@
 - QC sign-off keys are added to session JSON field
 - class-based note template API for attaching session notes for QC sign-offs
 - protocol and procedures now taken from experiment description file
+- handle truncated first spacer in passive extraction
+- fix the Perirhinal area layer color in Allen Atlas
+- fix region volume computation
+- vectorised swanson flatmap
+- brainbox trial ITI loader
+- vectorised atlas plots
 
 ## Release 2.20
 # Release Notes 2.20.0 2023-01-23

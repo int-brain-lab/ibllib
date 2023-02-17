@@ -1067,7 +1067,12 @@ class AllenAtlas(BrainAtlas):
         nr = self.regions.id.shape[0]
         count = np.bincount(self.label.flatten(), minlength=nr)
         self.regions.compute_hierarchy()
-        self.regions.volume = np.sum(count[self.regions.hierarchy], axis=0) * (self.res_um / 1e3) ** 3
+        self.regions.volume = np.zeros_like(count)
+        for i in np.arange(nr):
+            if count[i] == 0:
+                continue
+            self.regions.volume[np.unique(self.regions.hierarchy[:, i])] += count[i]
+        self.regions.volume = self.regions.volume * (self.res_um / 1e3) ** 3
 
 
 def NeedlesAtlas(*args, **kwargs):

@@ -4,6 +4,8 @@ from unittest import mock
 from pathlib import PurePosixPath, Path
 import json
 import datetime
+import random
+import string
 
 from requests import HTTPError
 import numpy as np
@@ -170,7 +172,8 @@ class TestRegistration(unittest.TestCase):
         self.alf_path.mkdir(parents=True)
         np.save(self.alf_path.joinpath('spikes.times.npy'), np.random.random(500))
         np.save(self.alf_path.joinpath('spikes.amps.npy'), np.random.random(500))
-        self.rev_path = self.alf_path.joinpath('#v1#')
+        self.revision = ''.join(random.choices(string.ascii_letters, k=3))
+        self.rev_path = self.alf_path.joinpath(f'#{self.revision}#')
         self.rev_path.mkdir(parents=True)
         np.save(self.rev_path.joinpath('spikes.times.npy'), np.random.random(300))
         np.save(self.rev_path.joinpath('spikes.amps.npy'), np.random.random(300))
@@ -179,9 +182,9 @@ class TestRegistration(unittest.TestCase):
 
         # Create a revision if doesn't already exist
         try:
-            self.rev = self.one.alyx.rest('revisions', 'read', id='v1')
+            self.rev = self.one.alyx.rest('revisions', 'read', id=self.revision)
         except HTTPError:
-            self.rev = self.one.alyx.rest('revisions', 'create', data={'name': 'v1'})
+            self.rev = self.one.alyx.rest('revisions', 'create', data={'name': self.revision})
         # Create a tag if doesn't already exist
         try:
             self.tag = next(x for x in self.one.alyx.rest('tags', 'list')
@@ -229,7 +232,7 @@ class TestRegistration(unittest.TestCase):
         # Test registering with a revision already in the file path, should use this rather than create one with today's date
         flist = list(self.rev_path.glob('*.npy'))
         r = registration.register_dataset(file_list=flist, one=self.one)
-        self.assertTrue(all(d['revision'] == 'v1' for d in r))
+        self.assertTrue(all(d['revision'] == self.revision for d in r))
         self.assertTrue(all(d['default'] for d in r))
         self.assertTrue(all(d['collection'] == 'alf' for d in r))
 
@@ -239,15 +242,15 @@ class TestRegistration(unittest.TestCase):
             self.one.alyx.rest('datasets', 'partial_update',
                                id=d['url'][-36:], data={'tags': ['test_tag']})
 
-        # Register again with revision in file path, it should register to v1a
+        # Register again with revision in file path, it should register to self.revision + a
         flist = list(self.rev_path.glob('*.npy'))
 
         r = registration.register_dataset(file_list=flist, one=self.one)
-        self.assertTrue(all(d['revision'] == 'v1a' for d in r))
-        self.assertTrue(self.alf_path.joinpath('#v1a#', 'spikes.times.npy').exists())
-        self.assertTrue(self.alf_path.joinpath('#v1a#', 'spikes.amps.npy').exists())
-        self.assertFalse(self.alf_path.joinpath('#v1#', 'spikes.times.npy').exists())
-        self.assertFalse(self.alf_path.joinpath('#v1#', 'spikes.amps.npy').exists())
+        self.assertTrue(all(d['revision'] == f'{self.revision}a' for d in r))
+        self.assertTrue(self.alf_path.joinpath(f'#{self.revision}a#', 'spikes.times.npy').exists())
+        self.assertTrue(self.alf_path.joinpath(f'#{self.revision}a#', 'spikes.amps.npy').exists())
+        self.assertFalse(self.alf_path.joinpath(f'#{self.revision}#', 'spikes.times.npy').exists())
+        self.assertFalse(self.alf_path.joinpath(f'#{self.revision}#', 'spikes.amps.npy').exists())
 
         # When we re-register the original it should move them into revision with today's date
         flist = list(self.alf_path.glob('*.npy'))
@@ -391,7 +394,7 @@ class TestRegistration(unittest.TestCase):
         for rev in today_rev:
             self.one.alyx.rest('revisions', 'delete', id=rev['name'])
 
-        v1_rev = [rev for rev in today_revision if 'v1' in rev['name']]
+        v1_rev = [rev for rev in today_revision if self.revision in rev['name']]
         for rev in v1_rev:
             self.one.alyx.rest('revisions', 'delete', id=rev['name'])
         # Delete weighings

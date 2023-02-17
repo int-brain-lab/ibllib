@@ -1,4 +1,5 @@
 from one.api import ONE
+from one.alf.exceptions import ALFObjectNotFound
 import datetime
 import re
 import numpy as np
@@ -131,7 +132,10 @@ def get_sessions(subj, date=None, one=None):
     sess_dates = []
     if len(sessions) < 3:
         for n, _ in enumerate(sessions):
-            trials_ = one.load_object(sessions[n]['url'].split('/')[-1], 'trials')
+            try:
+                trials_ = one.load_object(sessions[n]['url'].split('/')[-1], 'trials')
+            except ALFObjectNotFound:
+                trials_ = None
 
             if trials_:
                 task_protocol.append(re.search('tasks_(.*)Choice',
@@ -142,7 +146,11 @@ def get_sessions(subj, date=None, one=None):
     else:
         n = 0
         while len(trials) < 3:
-            trials_ = one.load_object(sessions[n]['url'].split('/')[-1], 'trials')
+            print(sessions[n]['url'].split('/')[-1])
+            try:
+                trials_ = one.load_object(sessions[n]['url'].split('/')[-1], 'trials')
+            except ALFObjectNotFound:
+                trials_ = None
 
             if trials_:
                 task_protocol.append(re.search('tasks_(.*)Choice',
