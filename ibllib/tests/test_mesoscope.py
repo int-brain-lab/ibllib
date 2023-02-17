@@ -1,4 +1,6 @@
+import sys
 import unittest
+from unittest.mock import MagicMock
 import tempfile
 import json
 from pathlib import Path
@@ -6,6 +8,9 @@ import numpy as np
 
 from ibllib.pipes.mesoscope_tasks import MesoscopePreprocess
 
+# Mock suit2p which is imported in MesoscopePreprocess
+attrs = {'default_ops.return_value': {}}
+sys.modules['suite2p'] = MagicMock(**attrs)
 
 class TestMesoscopePreprocess(unittest.TestCase):
 
