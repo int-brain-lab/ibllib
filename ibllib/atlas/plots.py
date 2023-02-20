@@ -114,7 +114,7 @@ def reorder_data(acronyms, values, brain_regions=None):
     return ordered_acronyms, ordered_values
 
 
-def load_slice_files(slice):
+def load_slice_files(slice, mapping):
 
     OLD_MD5 = {
         'coronal': [],
@@ -123,7 +123,7 @@ def load_slice_files(slice):
         'top': []
     }
 
-    slice_file = AllenAtlas._get_cache_dir().parent.joinpath('svg', f'{slice}_paths.npy')
+    slice_file = AllenAtlas._get_cache_dir().parent.joinpath('svg', f'{slice}_{mapping}_paths.npy')
     if not slice_file.exists() or md5(slice_file) in OLD_MD5[slice]:
         slice_file.parent.mkdir(exist_ok=True, parents=True)
         _logger.info(f'downloading swanson paths from {aws.S3_BUCKET_IBL} s3 bucket...')
@@ -134,11 +134,11 @@ def load_slice_files(slice):
     return slice_data
 
 
-def _plot_slice_vector(coords, slice, values, empty_color='silver', clevels=None, cmap='viridis', show_cbar=False, ba=None,
-                       ax=None, slice_json=None, **kwargs):
+def _plot_slice_vector(coords, slice, values, mapping, empty_color='silver', clevels=None, cmap='viridis', show_cbar=False,
+                       ba=None, ax=None, slice_json=None, **kwargs):
 
     ba = ba or AllenAtlas()
-
+    mapping = mapping.split('-')[0].lower()
     if clevels is None:
         clevels = (np.nanmin(values), np.nanmax(values))
 
@@ -160,7 +160,7 @@ def _plot_slice_vector(coords, slice, values, empty_color='silver', clevels=None
     rgba_color[~nan_vals] = colormap(norm(values[~nan_vals]), bytes=True)
 
     if slice_json is None:
-        slice_json = load_slice_files(slice)
+        slice_json = load_slice_files(slice, mapping)
 
     if slice == 'coronal':
         idx = bc10.y2i(coords)
@@ -269,7 +269,7 @@ def plot_scalar_on_slice(regions, values, coord=-1000, slice='coronal', mapping=
 
     if show_cbar:
         if vector:
-            fig, ax, cbar = _plot_slice_vector(coord / 1e6, slice, region_values, clevels=clevels, cmap=cmap, ba=ba,
+            fig, ax, cbar = _plot_slice_vector(coord / 1e6, slice, region_values, map, clevels=clevels, cmap=cmap, ba=ba,
                                                ax=ax, empty_color=empty_color, show_cbar=show_cbar, slice_json=slice_files,
                                                **kwargs)
         else:
@@ -278,7 +278,7 @@ def plot_scalar_on_slice(regions, values, coord=-1000, slice='coronal', mapping=
         return fig, ax, cbar
     else:
         if vector:
-            fig, ax = _plot_slice_vector(coord / 1e6, slice, region_values, clevels=clevels, cmap=cmap, ba=ba,
+            fig, ax = _plot_slice_vector(coord / 1e6, slice, region_values, map, clevels=clevels, cmap=cmap, ba=ba,
                                          ax=ax, empty_color=empty_color, show_cbar=show_cbar, slice_json=slice_files, **kwargs)
         else:
             fig, ax = _plot_slice(coord / 1e6, slice, region_values, 'value', background=background, map=map, clevels=clevels,
