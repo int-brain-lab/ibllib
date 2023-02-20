@@ -211,7 +211,7 @@ class MesoscopeSync(base_tasks.DynamicTask):
             'input_files': [(f'_{self.sync_namespace}_sync.channels.npy', self.sync_collection, True),
                             (f'_{self.sync_namespace}_sync.polarities.npy', self.sync_collection, True),
                             (f'_{self.sync_namespace}_sync.times.npy', self.sync_collection, True)],
-            'output_files': [('imaging.times.npy', 'alf/mesoscope', True),]
+            'output_files': [('imaging.times.npy', 'alf/mesoscope', True), ]
         }
         return signature
 
@@ -223,7 +223,7 @@ class MesoscopeSync(base_tasks.DynamicTask):
         raise NotImplementedError
         # TODO QC
 
-        return #out_files
+        return  # out_files
 
 
 class MesoscopeFOV(base_tasks.DynamicTask):

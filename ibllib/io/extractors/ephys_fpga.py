@@ -732,7 +732,8 @@ class FpgaTrials(extractors_base.BaseExtractor):
         bpod_raw = raw_data_loaders.load_data(self.session_path, task_collection=task_collection)
         assert bpod_raw is not None, 'No task trials data in raw_behavior_data - Exit'
 
-        bpod_trials = self._extract_bpod(bpod_raw, task_collection=task_collection, save=False)
+        bpod_trials = self._extract_bpod(
+            bpod_raw, task_collection=task_collection, save=False, extractor_type=kwargs.get('extractor_type'))
         # Explode trials table df
         trials_table = alfio.AlfBunch.from_df(bpod_trials.pop('table'))
         table_columns = trials_table.keys()
@@ -781,9 +782,8 @@ class FpgaTrials(extractors_base.BaseExtractor):
         return [out[k] for k in out] + [wheel['timestamps'], wheel['position'],
                                         moves['intervals'], moves['peakAmplitude']]
 
-    def _extract_bpod(self, bpod_trials, task_collection='raw_behavior_data', save=False):
-        bpod_trials, *_ = bpod_extract_all(
-            session_path=self.session_path, save=save, bpod_trials=bpod_trials, task_collection=task_collection)
+    def _extract_bpod(self, bpod_trials, **kwargs):
+        bpod_trials, *_ = bpod_extract_all(session_path=self.session_path, bpod_trials=bpod_trials, **kwargs)
 
         return bpod_trials
 

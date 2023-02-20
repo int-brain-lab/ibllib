@@ -244,6 +244,8 @@ def timeline_meta2wiring(path, save=False):
     dict
         A dictionary with base keys {'SYSTEM', 'SYNC_WIRING_DIGITAL', 'SYNC_WIRING_ANALOG'}, the
         latter of which contain maps of channel names and their IDs.
+    pathlib.Path
+        If save=True, returns the path of the wiring file.
     """
     meta = alfio.load_object(path, 'DAQdata', namespace='timeline', attribute='meta').get('meta')
     assert meta, 'No meta data in timeline object'
@@ -252,10 +254,11 @@ def timeline_meta2wiring(path, save=False):
         key = 'SYNC_WIRING_' + ('ANALOG' if input['measurement'] == 'Voltage' else 'DIGITAL')
         wiring[key][input['daqChannelID']] = input['name']
     if save:
-        out_path = path / to_alf('DAQ data', 'wiring', 'json', namespace='timeline')
+        out_path = Path(path) / to_alf('DAQ data', 'wiring', 'json', namespace='timeline')
         with open(out_path, 'w') as fp:
             json.dump(wiring, fp)
-    return wiring
+        return dict(wiring), out_path
+    return dict(wiring)
 
 
 def timeline_meta2chmap(meta, exclude_channels=None, include_channels=None):

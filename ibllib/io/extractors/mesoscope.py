@@ -91,7 +91,7 @@ class TimelineTrials(FpgaTrials):
             sync, chmap = _timeline2sync(self.timeline)
         if kwargs.get('display', False):
             plot_timeline(self.timeline, channels=chmap.keys(), raw=True)
-        trials = super()._extract(sync, chmap, sync_collection, **kwargs)
+        trials = super()._extract(sync, chmap, sync_collection, extractor_type='ephys', **kwargs)
         # Replace valve open times with those extracted from the DAQ
         trials[self.var_names.index('valveOpen_times')] = self.get_valve_open_times()
         return trials

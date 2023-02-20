@@ -589,16 +589,17 @@ class TestRawDaqLoaders(unittest.TestCase):
         ctr1 = np.cumsum(a0_clean * np.random.choice([1, -1], N))  # Position channel e.g. [0, 1, 2, 1, ...]
 
         self.timeline = {'timestamps': np.arange(0, N, Fs), 'raw': np.vstack([a0, ctr0, ctr1]).T}
-        meta = {'daqSampleRate': Fs, 'inputs': [
-            {'name': 'bpod', 'arrayColumn': 1, 'measurement': 'Voltage'},
-            {'name': 'neuralFrames', 'arrayColumn': 2, 'measurement': 'EdgeCount'},
-            {'name': 'rotaryEncoder', 'arrayColumn': 3, 'measurement': 'Position'}
+        self.meta = {'daqSampleRate': Fs, 'inputs': [
+            {'name': 'bpod', 'arrayColumn': 1, 'measurement': 'Voltage', 'daqChannelID': 'ai0'},
+            {'name': 'neuralFrames', 'arrayColumn': 2, 'measurement': 'EdgeCount', 'daqChannelID': 'ctr0'},
+            {'name': 'rotaryEncoder', 'arrayColumn': 3, 'measurement': 'Position', 'daqChannelID': 'ctr1'}
         ]}
         alfio.save_object_npy(self.tmpdir.name, self.timeline, 'DAQdata', namespace='timeline')
         with open(self.tmpdir.name + '/_timeline_DAQdata.meta.json', 'w') as fp:
-            json.dump(meta, fp)
+            json.dump(self.meta, fp)
 
     def test_load_sync_timeline(self):
+        """Test for load_sync_timeline function."""
         chmap = {'bpod': 0, 'neuralFrames': 1, 'rotaryEncoder': 3}
         sync = raw_daq.load_sync_timeline(self.tmpdir.name, chmap)
         self.assertCountEqual(('times', 'channels', 'polarities'), sync.keys())
@@ -634,6 +635,36 @@ class TestRawDaqLoaders(unittest.TestCase):
             record, = log.records
             self.assertIn('unknown', record.message)
 
+        # Check measurement type validation
+        self.meta['inputs'][0]['measurement'] = 'FooBar'
+        with open(self.tmpdir.name + '/_timeline_DAQdata.meta.json', 'w') as fp:
+            json.dump(self.meta, fp)
+        self.assertRaises(NotImplementedError, raw_daq.load_sync_timeline, self.tmpdir.name)
 
-if __name__ == "__main__":
+    def test_timeline_meta2wiring(self):
+        """Test for timeline_meta2wiring function."""
+        wiring = raw_daq.timeline_meta2wiring(self.tmpdir.name, save=False)
+        expected = {
+            'SYSTEM': 'timeline',
+            'SYNC_WIRING_ANALOG': {'ai0': 'bpod'},
+            'SYNC_WIRING_DIGITAL': {'ctr0': 'neuralFrames', 'ctr1': 'rotaryEncoder'}
+        }
+        self.assertDictEqual(expected, wiring)
+        wiring, outpath = raw_daq.timeline_meta2wiring(self.tmpdir.name, save=True)
+        expected_path = Path(self.tmpdir.name, '_timeline_DAQData.wiring.json')
+        self.assertEqual(expected_path, outpath)
+        self.assertTrue(outpath.exists())
+
+    def test_timeline_meta2chmap(self):
+        """Test for timeline_meta2chmap function."""
+        chmap = raw_daq.timeline_meta2chmap(self.meta)
+        expected = {'bpod': 1, 'neuralFrames': 2, 'rotaryEncoder': 3}
+        self.assertDictEqual(expected, chmap)
+        chmap = raw_daq.timeline_meta2chmap(self.meta, exclude_channels=('bpod', 'rotaryEncoder'))
+        self.assertDictEqual({'neuralFrames': expected.pop('neuralFrames')}, chmap)
+        chmap = raw_daq.timeline_meta2chmap(self.meta, include_channels=('bpod', 'rotaryEncoder'))
+        self.assertDictEqual(expected, chmap)
+
+
+if __name__ == '__main__':
     unittest.main(exit=False, verbosity=2)

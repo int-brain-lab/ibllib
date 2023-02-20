@@ -7,25 +7,50 @@ from collections import OrderedDict
 
 from pkg_resources import parse_version
 from ibllib.io.extractors import habituation_trials, training_trials, biased_trials, opto_trials
-import ibllib.io.extractors.base
+from ibllib.io.extractors.base import get_session_extractor_type
 import ibllib.io.raw_data_loaders as rawio
 
 _logger = logging.getLogger(__name__)
 
 
-def extract_all(session_path, save=True, bpod_trials=None, settings=None, task_collection='raw_behavior_data', save_path=None):
+def extract_all(session_path, save=True, bpod_trials=None, settings=None,
+                task_collection='raw_behavior_data', extractor_type=None, save_path=None):
     """
     Extracts a training session from its path.  NB: Wheel must be extracted first in order to
     extract trials.firstMovement_times.
-    :param session_path: the path to the session to be extracted
-    :param save: if true a subset of the extracted data are saved as ALF
-    :param bpod_trials: list of Bpod trial data
-    :param settings: the Bpod session settings
-    :return: trials: Bunch/dict of trials
-    :return: wheel: Bunch/dict of wheel positions
-    :return: out_Files: list of output files
+
+    Parameters
+    ----------
+    session_path : str, pathlib.Path
+        The path to the session to be extracted.
+    task_collection : str
+        The subfolder containing the raw Bpod data files.
+    save : bool
+        If true, save the output files to save_path.
+    bpod_trials : list of dict
+        The loaded Bpod trial data. If None, attempts to load _iblrig_taskData.raw from
+        raw_task_collection.
+    settings : dict
+        The loaded Bpod settings.  If None, attempts to load _iblrig_taskSettings.raw from
+        raw_task_collection.
+    extractor_type : str
+        The type of extraction.  Supported types are {'ephys', 'biased', 'biased_opto',
+        'ephys_biased_opto', 'training', 'ephys_training', 'habituation'}.  If None, extractor type
+        determined from settings.
+    save_path : str, pathlib.Path
+        The location of the output files if save is true.  Defaults to <session_path>/alf.
+
+    Returns
+    -------
+    dict
+        The extracted trials data.
+    dict
+        The extracted wheel data.
+    list of pathlib.Path
+        The output files if save is true.
     """
-    extractor_type = ibllib.io.extractors.base.get_session_extractor_type(session_path, task_collection=task_collection)
+    if not extractor_type:
+        extractor_type = get_session_extractor_type(session_path, task_collection=task_collection)
     _logger.info(f"Extracting {session_path} as {extractor_type}")
     bpod_trials = bpod_trials or rawio.load_data(session_path, task_collection=task_collection)
     settings = settings or rawio.load_settings(session_path, task_collection=task_collection)
