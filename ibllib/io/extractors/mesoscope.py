@@ -51,6 +51,12 @@ def plot_timeline(timeline, channels=None, raw=True):
     raw : bool
         If true, plot the raw DAQ samples; if false, apply TTL thresholds and plot changes.
 
+    Returns
+    -------
+    matplotlib.pyplot.Figure
+        The figure containing timeline subplots.
+    list of matplotlib.pyplot.Axes
+        The axes for each timeline channel plotted.
     """
     meta = {x.copy().pop('name'): x for x in timeline['meta']['inputs']}
     channels = channels or meta.keys()
@@ -73,6 +79,7 @@ def plot_timeline(timeline, channels=None, raw=True):
     axes[-1].spines['bottom'].set_visible(True)
     plt.get_current_fig_manager().window.showMaximized()  # full screen
     fig.tight_layout(h_pad=0)
+    return fig, axes
 
 
 class TimelineTrials(FpgaTrials):
