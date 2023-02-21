@@ -1,9 +1,10 @@
-# WIP
-- remove unused jupyter and jupyterhub requirements
-
 ## Release 2.21
-# Release Notes 2.21.0 2023-02-14
+# Release Nores 2.21.1 2023-02-21
+### bugfixes
+- remove unused jupyter and jupyterhub requirements
+- fix mapping for atlas svg plots
 
+# Release Notes 2.21.0 2023-02-14
 ### features
 - support for multiple task protocols within a session
 - extract protocol period from spacer signals
