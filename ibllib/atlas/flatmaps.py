@@ -152,7 +152,7 @@ def swanson_json(filename="swansonpaths.json"):
 
 
 def plot_swanson_vector(acronyms=None, values=None, ax=None, hemisphere=None, br=None, orientation='landscape',
-                        empty_color='silver', vmin=None, vmax=None, cmap='cividis', **kwargs):
+                        empty_color='silver', vmin=None, vmax=None, cmap='viridis', **kwargs):
 
     br = BrainRegions() if br is None else br
     br.compute_hierarchy()
