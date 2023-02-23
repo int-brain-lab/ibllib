@@ -30,7 +30,7 @@ class BaseExtractor(abc.ABC):
 
     session_path = None
     save_names = None
-    default_path = Path("alf")  # relative to session
+    default_path = Path('alf')  # relative to session
 
     def __init__(self, session_path=None):
         # If session_path is None Path(session_path) will fail

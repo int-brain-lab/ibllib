@@ -586,7 +586,7 @@ class CameraQC(base.QC):
         if not data_for_keys(('video', 'pin_state', 'audio'), self.data):
             return 'NOT_SET'
         size_diff = int(self.data['pin_state'].shape[0] - self.data['video']['length'])
-        # NB: The pin state to be high for 2 consecutive frames
+        # NB: The pin state can be high for 2 consecutive frames
         low2high = np.insert(np.diff(self.data['pin_state'][:, -1].astype(int)) == 1, 0, False)
         # NB: Time between two consecutive TTLs can be sub-frame, so this will fail
         ndiff_low2high = int(self.data['audio'][::2].size - sum(low2high))

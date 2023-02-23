@@ -200,6 +200,7 @@ class MesoscopePreprocess(base_tasks.DynamicTask):
 
 
 class MesoscopeSync(base_tasks.DynamicTask):
+    """Extract the frame times from the main DAQ."""
 
     priority = 40
     job_size = 'small'
@@ -209,7 +210,9 @@ class MesoscopeSync(base_tasks.DynamicTask):
         signature = {
             'input_files': [(f'_{self.sync_namespace}_sync.channels.npy', self.sync_collection, True),
                             (f'_{self.sync_namespace}_sync.polarities.npy', self.sync_collection, True),
-                            (f'_{self.sync_namespace}_sync.times.npy', self.sync_collection, True)],
+                            (f'_{self.sync_namespace}_sync.times.npy', self.sync_collection, True),
+                            ('_ibl_rawImagingData.meta.json', self.device_collection, True),
+                            ('rawImagingData.times_scanImage.npy', self.device_collection, True),],
             'output_files': [('imaging.times.npy', 'alf/mesoscope', True), ]
         }
         return signature
@@ -230,14 +233,57 @@ class MesoscopeFOV(base_tasks.DynamicTask):
     priority = 40
     job_size = 'small'
 
-    signature = {
-        'input_files': [('mesoscopeLandmarks.dorsalCortex.json', 'alf', True),
-                        ('mesoscopeSVT.uncorrected.npy', 'alf', True),
-                        ('mesoscopeSVT.haemoCorrected.npy', 'alf', True)],
-        'output_files': []
-    }
+    @property
+    def signature(self):
+        signature = {
+            'input_files': [('_ibl_rawImagingData.meta.json', self.device_collection, True)],
+            'output_files': []
+        }
+        return signature
+
+    def __init__(self, session_path, **kwargs):
+        super().__init__(session_path, **kwargs)
+        self.device_collection = self.get_device_collection('mesoscope', kwargs.get('device_collection', 'raw_mesoscope_data'))
 
     def _run(self):
-        # TODO make task that computes location
+        """
+        Returns
+        -------
+        dict
+            The newly created FOV Alyx record.
+        list
+            The newly created FOV location Alyx records.
 
-        return []
+        Notes
+        -----
+        TODO move out of run method for convenience
+        TODO Deal with already created FOVs
+
+        """
+        FACTOR = 1e3  # The meta data are in mm, while the FOV in alyx is in um
+        dry = self.one is None or self.one.offline
+        (filename, collection, _), = self.signature['input_files']
+        meta = alfio.load_file_content(self.session_path / collection / filename) or {}
+
+        alyx_FOV = {
+            'session': self.session_path if dry else self.path2eid(),
+            'type': 'mesoscope'
+        }
+        if dry:
+            print(alyx_FOV)
+        else:
+            alyx_FOV = self.one.alyx.rest('FOV', 'create', data=alyx_FOV)
+
+        locations = []
+        for fov in meta.get('FOV', []):
+            data = {'field_of_view': alyx_FOV.get('id'), 'provenance': 'Landmark'}
+            # TODO Get z values
+            x1, y1 = map(lambda x: float(x) * FACTOR, fov['topLeftMM'])
+            x2, y2 = map(lambda x: float(x) * FACTOR, fov['topLeftMM'])
+            # TODO Brain region estimate
+            if dry:
+                print(data)
+                locations.append(data)
+                continue
+            locations.append(self.one.alyx.rest('FOVLocation', 'create', data=data))
+        return alyx_FOV, locations
