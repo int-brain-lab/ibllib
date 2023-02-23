@@ -9,11 +9,12 @@ Pipeline:
 """
 import logging
 import subprocess
-import json
 import shutil
 from pathlib import Path
 from itertools import chain
+
 import numpy as np
+import one.alf.io as alfio
 
 from ibllib.pipes import base_tasks
 
@@ -125,7 +126,7 @@ class MesoscopePreprocess(base_tasks.DynamicTask):
     @property
     def signature(self):
         signature = {
-            'input_files': [('rawImagingData.meta.json', self.device_collection, True)],
+            'input_files': [('_ibl_rawImagingData.meta.json', self.device_collection, True)],
             'output_files': []
         }
         return signature
@@ -171,14 +172,12 @@ class MesoscopePreprocess(base_tasks.DynamicTask):
         # Get default ops
         ops = suite2p.default_ops()
         # Some options we get from the meta data json, we put them in db, which overwrites ops if the keys are the same
-        # TODO: get the right path here
-        with open(self.session_path.joinpath(self.device_collection, 'rawImagingData.meta.json'), 'r') as meta_file:
-            meta = json.load(meta_file)
+        rawImagingData = alfio.load_object(self.session_path / self.device_collection, 'rawImagingData')
         # Inputs extracted from imaging data to a json
         # TODO: check that these are the right and complete inputs from the meta file
         for k in ['nrois', 'mesoscan', 'nplanes', 'nchannels', 'tau', 'fs', 'dx', 'dy', 'lines']:
-            if k in meta.keys():
-                self.db[k] = meta[k]
+            if k in rawImagingData['meta'].keys():
+                self.db[k] = rawImagingData['meta'][k]
             else:
                 _logger.warning(f'Setting for {k} not found in metadata file. Keeping default.')
         # Anything can be overwritten by keyword arguments passed to the tasks run() method
