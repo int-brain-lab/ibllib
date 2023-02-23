@@ -106,12 +106,15 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
     -------
     list of ibllib.pipes.tasks.Pipeline
         The pipelines created.
+    list of dicts
+        A list of any datasets registered (only for legacy sessions)
     """
     if not one:
         one = ONE(cache_rest=None)
     rc = IBLRegistrationClient(one=one)
     flag_files = list(Path(root_path).glob('**/raw_session.flag'))
     pipes = []
+    all_datasets = []
     for flag_file in flag_files:
         session_path = flag_file.parent
         _logger.info(f'creating session for {session_path}')
@@ -129,7 +132,9 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
                 # Create legacy experiment description file
                 acquisition_description_legacy_session(session_path, save=True)
                 lab = get_lab(session_path, one.alyx)  # Can be set to None to do this Alyx-side if using ONE v1.20.1
-                register_session_raw_data(session_path, one=one, max_md5_size=max_md5_size, labs=lab)
+                _, dsets = register_session_raw_data(session_path, one=one, max_md5_size=max_md5_size, labs=lab)
+                if dsets:
+                    all_datasets.extend(dsets)
                 pipe = _get_pipeline_class(session_path, one)
                 if pipe is None:
                     task_protocol = get_task_protocol(session_path)
@@ -140,13 +145,14 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
                 rerun__status__in = ['Waiting']
             pipe.create_alyx_tasks(rerun__status__in=rerun__status__in)
             flag_file.unlink()
-            pipes.append(pipe)
+            if pipe is not None:
+                pipes.append(pipe)
         except Exception:
             _logger.error(traceback.format_exc())
             _logger.warning(f'Creating session / registering raw datasets {session_path} errored')
             continue
 
-    return pipes
+    return pipes, all_datasets
 
 
 def task_queue(mode='all', lab=None, alyx=None):
