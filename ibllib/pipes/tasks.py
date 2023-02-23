@@ -387,7 +387,11 @@ class Pipeline(abc.ABC):
         if one and one.alyx.cache_mode and one.alyx.default_expiry.seconds > 1:
             _logger.warning('Alyx client REST cache active; this may cause issues with jobs')
         self.eid = eid
-        self.data_repo = get_local_data_repository(self.one.alyx)
+        if self.one and not self.one.offline:
+            self.data_repo = get_local_data_repository(self.one.alyx)
+        else:
+            self.data_repo = None
+
         if session_path:
             self.session_path = session_path
             if not self.eid:
