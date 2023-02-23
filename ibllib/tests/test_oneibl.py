@@ -39,7 +39,8 @@ class TestUtils(unittest.TestCase):
         # Should find intersection based on labs with endpoint ID
         subjects = [{'lab': 'bar'}, {'lab': 'baz'}]
         data_repo_labs = [{'name': 'baz'}, {'name': 'foobar'}]
-        with mock.patch.object(alyx, 'rest', side_effect=[subjects, data_repo_labs]):
+        with mock.patch.object(alyx, 'rest', side_effect=[subjects, data_repo_labs]), \
+                mock.patch('one.remote.globus.get_local_endpoint_id'):
             self.assertEqual('baz', registration.get_lab(session_path, alyx))
 
 
