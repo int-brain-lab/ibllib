@@ -10,6 +10,8 @@ import string
 from requests import HTTPError
 import numpy as np
 from one.api import ONE
+from one.webclient import AlyxClient
+import one.alf.exceptions as alferr
 import iblutil.io.params as iopar
 
 from ibllib.oneibl import patcher, registration
@@ -17,6 +19,28 @@ import ibllib.io.extractors.base
 from ibllib import __version__
 from ibllib.tests import TEST_DB
 from ibllib.io import session_params
+
+
+class TestUtils(unittest.TestCase):
+    """Test helper functions in ibllib.oneibl.registration module."""
+
+    def test_get_lab(self):
+        """Test ibllib.oneibl.registration.get_lab function."""
+        alyx = AlyxClient(**TEST_DB)
+        session_path = Path.home().joinpath('foo', '2020-01-01', '001')
+        with mock.patch.object(alyx, 'rest', return_value=[{'lab': 'bar'}]):
+            self.assertEqual('bar', registration.get_lab(session_path, alyx))
+
+        # Should validate and raise error when session path invalid
+        self.assertRaises(ValueError, registration.get_lab, 'invalid/path', alyx)
+        with mock.patch.object(alyx, 'rest', return_value=[]):
+            self.assertRaises(alferr.AlyxSubjectNotFound, registration.get_lab, session_path, alyx)
+
+        # Should find intersection based on labs with endpoint ID
+        subjects = [{'lab': 'bar'}, {'lab': 'baz'}]
+        data_repo_labs = [{'name': 'baz'}, {'name': 'foobar'}]
+        with mock.patch.object(alyx, 'rest', side_effect=[subjects, data_repo_labs]):
+            self.assertEqual('baz', registration.get_lab(session_path, alyx))
 
 
 class TestFTPPatcher(unittest.TestCase):

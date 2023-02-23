@@ -7,7 +7,9 @@ import itertools
 from pkg_resources import parse_version
 from one.alf.files import get_session_path, folder_parts, get_alf_path
 from one.registration import RegistrationClient, get_dataset_type
-from one.remote.globus import get_local_endpoint_id
+from one.remote.globus import get_local_endpoint_id, get_lab_from_endpoint_id
+from one.webclient import AlyxClient
+from one.converters import ConversionMixin
 import one.alf.exceptions as alferr
 from one.util import datasets2records, ensure_list
 
@@ -462,20 +464,41 @@ def get_local_data_repository(ac):
     return next((da['name'] for da in data_repo), None)
 
 
-def get_lab(ac):
+def get_lab(session_path, alyx=None):
     """
-    Get list of associated labs from Globus client ID.
+    Get lab from a session path using the subject name.
+
+    On local lab servers, the lab name is not in the ALF path and the globus endpoint ID may be
+    associated with multiple labs, so lab name is fetched from the subjects endpoint.
 
     Parameters
     ----------
-    ac : one.webclient.AlyxClient
+    session_path : str, pathlib.Path
+        The session path from which to determine the lab name.
+    alyx : one.webclient.AlyxClient
         An AlyxClient instance for querying data repositories.
 
     Returns
     -------
-    list
-        The lab names associated with the local Globus endpoint ID.
+    str
+        The lab name associated with the session path subject.
+
+    See Also
+    --------
+    one.remote.globus.get_lab_from_endpoint_id
     """
-    globus_id = get_local_endpoint_id()
-    lab = ac.rest('labs', 'list', django=f'repositories__globus_endpoint_id,{globus_id}')
-    return [la['name'] for la in lab]
+    alyx = alyx or AlyxClient()
+    if not (ref := ConversionMixin.path2ref(session_path)):
+        raise ValueError(f'Failed to parse session path: {session_path}')
+
+    labs = [x['lab'] for x in alyx.rest('subjects', 'list', nickname=ref['subject'])]
+    if len(labs) == 0:
+        raise alferr.AlyxSubjectNotFound(ref['subject'])
+    elif len(labs) > 1:  # More than one subject with this nickname
+        # use local endpoint ID to find the correct lab
+        endpoint_labs = get_lab_from_endpoint_id(alyx=alyx)
+        lab = next(x for x in labs if x in endpoint_labs)
+    else:
+        lab, = labs
+
+    return lab

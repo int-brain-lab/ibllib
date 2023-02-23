@@ -133,10 +133,19 @@ def load_combined_trials(sess_paths, one):
 
 def get_latest_training_information(sess_path, one):
     """
-    Extracts the latest training status
-    :param sess_path:
-    :param one:
-    :return:
+    Extracts the latest training status.
+
+    Parameters
+    ----------
+    sess_path : pathlib.Path
+        The session path from which to load the data.
+    one : one.api.One
+        An ONE instance.
+
+    Returns
+    -------
+    pandas.DataFrame
+        A table of training information.
     """
 
     subj_path = sess_path.parent.parent
