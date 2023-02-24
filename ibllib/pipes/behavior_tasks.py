@@ -252,7 +252,7 @@ class ChoiceWorldTrialsNidq(base_tasks.BehaviourTask):
         """
         from brainbox.behavior import training
 
-        trials = alfio.load_object(self.session_path.joinpath(self.output_collection), "trials")
+        trials = alfio.load_object(self.session_path.joinpath(self.output_collection), 'trials')
         good_enough = training.criterion_delay(
             n_trials=trials["intervals"].shape[0],
             perf_easy=training.compute_performance_easy(trials),

@@ -829,7 +829,7 @@ def extract_all(session_path, sync_collection='raw_ephys_data', save=True, task_
         If save is True, a list of file paths to the extracted data.
     """
     extractor_type = extractors_base.get_session_extractor_type(session_path, task_collection=task_collection)
-    _logger.info(f"Extracting {session_path} as {extractor_type}")
+    _logger.info(f'Extracting {session_path} as {extractor_type}')
     sync, chmap = get_sync_and_chn_map(session_path, sync_collection)
     # sync, chmap = get_main_probe_sync(session_path, bin_exists=bin_exists)
     base = [FpgaTrials]
@@ -909,8 +909,8 @@ def load_channel_map(session_path, sync_collection):
         if data_for_keys(default_chmap.keys(), chmap):
             return chmap
         else:
-            _logger.warning("Keys missing from provided channel map, "
-                            "setting missing keys from default channel map")
+            _logger.warning('Keys missing from provided channel map, '
+                            'setting missing keys from default channel map')
             return {**default_chmap, **chmap}
 
 

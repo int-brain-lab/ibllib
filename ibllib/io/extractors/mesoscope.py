@@ -1,11 +1,12 @@
-"""Mesoscope (timeline) trial extraction."""
+"""Mesoscope (timeline) data extraction."""
 import numpy as np
 import one.alf.io as alfio
 import matplotlib.pyplot as plt
 from neurodsp.utils import falls
 
 from ibllib.plots.misc import squares
-from ibllib.io.raw_daq_loaders import load_sync_timeline, timeline_meta2chmap
+from ibllib.io.raw_daq_loaders import load_sync_timeline, timeline_meta2chmap, timeline_get_channel
+import ibllib.io.extractors.base as extractors_base
 from ibllib.io.extractors.default_channel_maps import DEFAULT_MAPS
 from ibllib.io.extractors.ephys_fpga import FpgaTrials, WHEEL_TICKS, WHEEL_RADIUS_CM
 from ibllib.io.extractors.training_wheel import extract_wheel_moves
@@ -168,3 +169,84 @@ class TimelineTrials(FpgaTrials):
             ax.plot(open_times, np.zeros_like(idx), 'r*')
             ax.set_ylabel('Voltage / V'), ax.set_xlabel('Time / s')
         return open_times
+
+
+class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
+    """Extraction of mesoscope imaging times."""
+
+    var_names = ('mpci_times', 'mpciStack_timeshift')
+    save_names = ('mpci.times.npy', 'mpciStack.timeshift.npy')
+
+    """one.alf.io.AlfBunch: The timeline data object"""
+    timeline = None  # FIXME This can be timeline independent
+    rawImagingData = None  # TODO Document
+
+    def __init__(self, n_ROIs, **kwargs):
+        super().__init__(**kwargs)  # TODO Document
+        rois = list(map(lambda n: f'ROI{n:02}', range(n_ROIs)))
+        self.var_names = [f'{x}_{y.lower()}' for x in self.var_names for y in rois]
+        self.save_names = [f'{y}/{x}' for x in self.save_names for y in rois]
+
+    def _extract(self, sync=None, chmap=None, sync_collection='raw_sync_data', device_collection='raw_mesoscope_data', **kwargs):
+        """
+        TODO Document
+        Parameters
+        ----------
+        sync
+        chmap
+        sync_collection
+        device_collection
+        kwargs
+
+        Returns
+        -------
+
+        """
+        self.rawImagingData = alfio.load_object(self.session_path / device_collection, 'rawImagingData')
+
+        # TODO Extract using chmap and sync
+        neural_frames = timeline_get_channel(self.timeline, 'neuralFrames')
+        ind, = np.where(np.diff(neural_frames))
+        neural_frames = neural_frames[ind + 1].astype(int)
+        assert neural_frames.size == self.rawImagingData.times_scanImage.size
+
+        # imaging_start_time = datetime.datetime(*map(round, self.rawImagingData.meta['acquisitionStartTime']))
+        # TODO Extract UDP messages for imaging bouts
+
+        # Calculate line shifts
+        _, fov_time_shifts, line_time_shifts = self.get_timeshifts()
+        fov_times = []
+        for fov_shift in fov_time_shifts:
+            fov_times.append(self.timeline.timestamps[ind + 1] + fov_shift)
+
+        return fov_times + line_time_shifts  # TODO c.f. Krumin's times
+
+    def get_timeshifts(self):
+        # TODO Document
+        FOVs = self.rawImagingData.meta['FOV']
+
+        # Double-check meta extracted properly
+        raw_meta = self.rawImagingData.meta['rawScanImageMeta']
+        artist = raw_meta['Artist']
+        assert len(artist['RoiGroups']['imagingRoiGroup']['rois']) == len(FOVs)
+
+        # Number of scan lines per FOV, i.e. number of Y pixels / image height
+        n_lines = np.array([x['nXnYnZ'][1] for x in FOVs])
+        n_valid_lines = np.sum(n_lines)  # Number of lines imaged excluding flybacks
+        # Number of lines during flyback
+        n_lines_per_gap = int((raw_meta['Height'] - n_valid_lines) / (len(FOVs) - 1));
+        # The start and end indices of each FOV in the raw images
+        fov_start_idx = np.insert(np.cumsum(n_lines[:-1] + n_lines_per_gap), 0, 0)
+        fov_end_idx = fov_start_idx + n_lines
+        line_period = self.rawImagingData.meta['scanImageParams']['hRoiManager']['linePeriod']
+
+        line_indices = []
+        fov_time_shifts = fov_start_idx * line_period
+        line_time_shifts = []
+
+        for ln, s, e in zip(n_lines, fov_start_idx, fov_end_idx):
+            line_indices.append(np.arange(s, e))
+            line_time_shifts.append(np.arange(0, ln) * line_period)
+
+        return line_indices, fov_time_shifts, line_time_shifts
+

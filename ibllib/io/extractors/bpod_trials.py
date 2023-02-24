@@ -51,7 +51,7 @@ def extract_all(session_path, save=True, bpod_trials=None, settings=None,
     """
     if not extractor_type:
         extractor_type = get_session_extractor_type(session_path, task_collection=task_collection)
-    _logger.info(f"Extracting {session_path} as {extractor_type}")
+    _logger.info(f'Extracting {session_path} as {extractor_type}')
     bpod_trials = bpod_trials or rawio.load_data(session_path, task_collection=task_collection)
     settings = settings or rawio.load_settings(session_path, task_collection=task_collection)
     _logger.info(f'{extractor_type} session on {settings["PYBPOD_BOARD"]}')
@@ -83,13 +83,13 @@ def extract_all(session_path, save=True, bpod_trials=None, settings=None,
     elif extractor_type == 'habituation':
         if settings['IBLRIG_VERSION_TAG'] and \
                 parse_version(settings['IBLRIG_VERSION_TAG']) <= parse_version('5.0.0'):
-            _logger.warning("No extraction of legacy habituation sessions")
+            _logger.warning('No extraction of legacy habituation sessions')
             return None, None, None
         trials, files_trials = habituation_trials.extract_all(session_path, bpod_trials=bpod_trials, settings=settings, save=save,
                                                               task_collection=task_collection, save_path=save_path)
         wheel = None
         files_wheel = []
     else:
-        raise ValueError(f"No extractor for task {extractor_type}")
+        raise ValueError(f'No extractor for task {extractor_type}')
     _logger.info('session extracted \n')  # timing info in log
     return trials, wheel, (files_trials + files_wheel) if save else None

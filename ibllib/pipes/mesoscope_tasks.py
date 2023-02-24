@@ -17,6 +17,7 @@ import numpy as np
 import one.alf.io as alfio
 
 from ibllib.pipes import base_tasks
+from ibllib.io.extractors import mesoscope
 
 _logger = logging.getLogger(__name__)
 
@@ -207,13 +208,14 @@ class MesoscopeSync(base_tasks.DynamicTask):
 
     @property
     def signature(self):
-        signature = {
-            'input_files': [(f'_{self.sync_namespace}_sync.channels.npy', self.sync_collection, True),
-                            (f'_{self.sync_namespace}_sync.polarities.npy', self.sync_collection, True),
-                            (f'_{self.sync_namespace}_sync.times.npy', self.sync_collection, True),
+        signature = {  # TODO Change sync stuff to timeline
+            'input_files': [(f'_{self.sync_namespace}_DAQData.raw.npy', self.sync_collection, True),
+                            (f'_{self.sync_namespace}_DAQData.timestamps.npy', self.sync_collection, True),
+                            (f'_{self.sync_namespace}_DAQData.meta.json', self.sync_collection, True),
                             ('_ibl_rawImagingData.meta.json', self.device_collection, True),
                             ('rawImagingData.times_scanImage.npy', self.device_collection, True),],
-            'output_files': [('imaging.times.npy', 'alf/mesoscope', True), ]
+            'output_files': [('mpci.times.npy', 'alf/mesoscope/FOV*', True),
+                             ('mpciStack.timeshift.npy', 'alf/mesoscope/FOV*', True), ]
         }
         return signature
 
@@ -222,10 +224,11 @@ class MesoscopeSync(base_tasks.DynamicTask):
         self.device_collection = self.get_device_collection('mesoscope', kwargs.get('device_collection', 'raw_mesoscope_data'))
 
     def _run(self):
-        raise NotImplementedError
-        # TODO QC
-
-        return  # out_files
+        # TODO Finish off
+        self.timeline = alfio.load_object(self.session_path / self.sync_collection, 'DAQData', namespace=self.sync_namespace)
+        self.rawImagingData = alfio.load_object(self.session_path / self.device_collection, 'rawImagingData')
+        mesosync = mesoscope.MesoscopeSyncTimeline(self.session_path)
+        mesosync.extract(save=True)  # Insert sync and chmap
 
 
 class MesoscopeFOV(base_tasks.DynamicTask):
