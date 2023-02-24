@@ -169,7 +169,7 @@ class TestPipelineAlyx(unittest.TestCase):
 
     @mock.patch('ibllib.pipes.tasks.get_lab')
     def test_pipeline_alyx(self, mock_ep):
-        mock_ep().get.return_value = ['cortexlab']
+        mock_ep.return_value = 'cortexlab'
         eid = self.eid
         pipeline = SomePipeline(self.session_path, one=one, eid=eid)
 

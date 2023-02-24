@@ -1,5 +1,10 @@
 ## Release 2.21
-# Release Nores 2.21.1 2023-02-21
+# Release Notes 2.21.2 2023-02-24
+### bugfixes
+- get_lab function now gets lab name from session path subject name
+- create_jobs now returns pipelines
+
+# Release Notes 2.21.1 2023-02-21
 ### bugfixes
 - remove unused jupyter and jupyterhub requirements
 - fix mapping for atlas svg plots
