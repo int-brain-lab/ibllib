@@ -92,13 +92,13 @@ def load_trials(sess_path, one):
     # try and load trials locally
     try:
         trials = alfio.load_object(sess_path.joinpath('alf'), 'trials')
-        if 'probabilityLeft' not in trials.keys():
+        if 'stimOnTrigger_times' not in trials.keys():
             raise ALFObjectNotFound
     except ALFObjectNotFound:
         try:
             # attempt to download trials using ONE
             trials = one.load_object(one.path2eid(sess_path), 'trials')
-            if 'probabilityLeft' not in trials.keys():
+            if 'stimOnTrigger_times' not in trials.keys():
                 raise ALFObjectNotFound
         except Exception:
             try:
@@ -106,7 +106,7 @@ def load_trials(sess_path, one):
                 if task is not None:
                     task.run()
                     trials = alfio.load_object(sess_path.joinpath('alf'), 'trials')
-                    if 'probabilityLeft' not in trials.keys():
+                    if 'stimOnTrigger_times' not in trials.keys():
                         raise ALFObjectNotFound
                 else:
                     trials = None
