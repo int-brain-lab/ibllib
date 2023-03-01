@@ -12,7 +12,7 @@ from ibllib.io.extractors.ephys_fpga import FpgaTrials, WHEEL_TICKS, WHEEL_RADIU
 from ibllib.io.extractors.training_wheel import extract_wheel_moves
 
 
-def _timeline2sync(timeline, chmap=None):
+def timeline2sync(timeline, chmap=None):
     """
     Extract the sync from a Timeline object.
 
@@ -64,7 +64,7 @@ def plot_timeline(timeline, channels=None, raw=True):
     fig, axes = plt.subplots(len(channels), 1)
     if not raw:
         chmap = {ch: meta[ch]['arrayColumn'] for ch in channels}
-        sync, chmap = _timeline2sync(timeline, chmap)
+        sync, chmap = timeline2sync(timeline, chmap)
     for i, (ax, ch) in enumerate(zip(axes, channels)):
         if raw:
             # axesScale controls vertical scaling of each trace (multiplicative)
@@ -84,7 +84,7 @@ def plot_timeline(timeline, channels=None, raw=True):
 
 
 class TimelineTrials(FpgaTrials):
-    """Similar extraction to the FPGA, however counter and position channels are treated differently"""
+    """Similar extraction to the FPGA, however counter and position channels are treated differently."""
 
     """one.alf.io.AlfBunch: The timeline data object"""
     timeline = None
@@ -92,11 +92,11 @@ class TimelineTrials(FpgaTrials):
     def __init__(self, *args, sync_collection='raw_sync_data', **kwargs):
         """An extractor for all ephys trial data, in Timeline time"""
         super().__init__(*args, **kwargs)
-        self.timeline = alfio.load_object(self.session_path / sync_collection, 'DAQdata', namespace='timeline')
+        self.timeline = alfio.load_object(self.session_path / sync_collection, 'DAQData', namespace='timeline')
 
     def _extract(self, sync=None, chmap=None, sync_collection='raw_sync_data', **kwargs):
         if not (sync or chmap):
-            sync, chmap = _timeline2sync(self.timeline)
+            sync, chmap = timeline2sync(self.timeline)
         if kwargs.get('display', False):
             plot_timeline(self.timeline, channels=chmap.keys(), raw=True)
         trials = super()._extract(sync, chmap, sync_collection, extractor_type='ephys', **kwargs)
@@ -178,48 +178,48 @@ class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
     save_names = ('mpci.times.npy', 'mpciStack.timeshift.npy')
 
     """one.alf.io.AlfBunch: The timeline data object"""
-    timeline = None  # FIXME This can be timeline independent
     rawImagingData = None  # TODO Document
 
-    def __init__(self, n_ROIs, **kwargs):
-        super().__init__(**kwargs)  # TODO Document
+    def __init__(self, session_path, n_ROIs, **kwargs):
+        super().__init__(session_path, **kwargs)  # TODO Document
         rois = list(map(lambda n: f'ROI{n:02}', range(n_ROIs)))
         self.var_names = [f'{x}_{y.lower()}' for x in self.var_names for y in rois]
         self.save_names = [f'{y}/{x}' for x in self.save_names for y in rois]
 
-    def _extract(self, sync=None, chmap=None, sync_collection='raw_sync_data', device_collection='raw_mesoscope_data', **kwargs):
+    def _extract(self, sync=None, chmap=None, device_collection='raw_mesoscope_data'):
         """
-        TODO Document
+        Extract the frame timestamps for each individual field of view (FOV) and the time offsets
+        for each line scan.
+
         Parameters
         ----------
-        sync
-        chmap
-        sync_collection
-        device_collection
-        kwargs
+        sync : one.alf.io.AlfBunch
+            A dictionary with keys ('times', 'polarities', 'channels'), containing the sync pulses
+            and the corresponding channel numbers.
+        chmap : dict
+            A map of channel names and their corresponding indices. Only the 'neural_frames'
+            channel is required.
+        device_collection : str
+            The location of the raw imaging data.
 
         Returns
         -------
-
+        list of numpy.array
+            A list of timestamps for each FOV and the time offsets for each line scan.
         """
         self.rawImagingData = alfio.load_object(self.session_path / device_collection, 'rawImagingData')
 
-        # TODO Extract using chmap and sync
-        neural_frames = timeline_get_channel(self.timeline, 'neuralFrames')
-        ind, = np.where(np.diff(neural_frames))
-        neural_frames = neural_frames[ind + 1].astype(int)
-        assert neural_frames.size == self.rawImagingData.times_scanImage.size
+        frame_times = sync['times'][sync['channels'] == chmap['neural_frames']]
+        assert frame_times.size == self.rawImagingData.times_scanImage.size
 
         # imaging_start_time = datetime.datetime(*map(round, self.rawImagingData.meta['acquisitionStartTime']))
         # TODO Extract UDP messages for imaging bouts
 
         # Calculate line shifts
         _, fov_time_shifts, line_time_shifts = self.get_timeshifts()
-        fov_times = []
-        for fov_shift in fov_time_shifts:
-            fov_times.append(self.timeline.timestamps[ind + 1] + fov_shift)
+        fov_times = [frame_times + offset for offset in fov_time_shifts]
 
-        return fov_times + line_time_shifts  # TODO c.f. Krumin's times
+        return fov_times + line_time_shifts
 
     def get_timeshifts(self):
         # TODO Document
@@ -228,6 +228,7 @@ class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
         # Double-check meta extracted properly
         raw_meta = self.rawImagingData.meta['rawScanImageMeta']
         artist = raw_meta['Artist']
+        # TODO This assertion might need to be removed if some ROIs are deactivated
         assert len(artist['RoiGroups']['imagingRoiGroup']['rois']) == len(FOVs)
 
         # Number of scan lines per FOV, i.e. number of Y pixels / image height

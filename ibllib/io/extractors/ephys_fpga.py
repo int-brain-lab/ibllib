@@ -18,7 +18,6 @@ from iblutil.spacer import Spacer
 import ibllib.exceptions as err
 from ibllib.io import raw_data_loaders, session_params
 from ibllib.io.extractors.bpod_trials import extract_all as bpod_extract_all
-from ibllib.io.extractors.opto_trials import LaserBool
 import ibllib.io.extractors.base as extractors_base
 from ibllib.io.extractors.training_wheel import extract_wheel_moves
 import ibllib.plots as plots
@@ -715,10 +714,11 @@ class FpgaTrials(extractors_base.BaseExtractor):
     bpod_fields = ('feedbackType', 'choice', 'rewardVolume', 'contrastLeft', 'contrastRight', 'probabilityLeft',
                    'intervals_bpod', 'phase', 'position', 'quiescence')
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, bpod_trials=None, **kwargs):
         """An extractor for all ephys trial data, in FPGA time"""
         super().__init__(*args, **kwargs)
         self.bpod2fpga = None
+        self.bpod_trials = bpod_trials  # TODO Update var and save names based on this dict
 
     def _extract(self, sync=None, chmap=None, sync_collection='raw_ephys_data', task_collection='raw_behavior_data', **kwargs):
         """Extracts ephys trials by combining Bpod and FPGA sync pulses"""
@@ -727,19 +727,17 @@ class FpgaTrials(extractors_base.BaseExtractor):
             _sync, _chmap = get_sync_and_chn_map(self.session_path, sync_collection)
             sync = sync or _sync
             chmap = chmap or _chmap
-        # load the bpod data and performs a biased choice world training extraction
-        # TODO these all need to pass in the collection so we can load for different protocols in different folders
-        bpod_raw = raw_data_loaders.load_data(self.session_path, task_collection=task_collection)
-        assert bpod_raw is not None, 'No task trials data in raw_behavior_data - Exit'
 
-        bpod_trials = self._extract_bpod(
-            bpod_raw, task_collection=task_collection, save=False, extractor_type=kwargs.get('extractor_type'))
+        if not self.bpod_trials:
+            self.bpod_trials, *_ = bpod_extract_all(
+                session_path=self.session_path, task_collection=task_collection, save=False,
+                extractor_type=kwargs.get('extractor_type'))
         # Explode trials table df
-        trials_table = alfio.AlfBunch.from_df(bpod_trials.pop('table'))
+        trials_table = alfio.AlfBunch.from_df(self.bpod_trials.pop('table'))
         table_columns = trials_table.keys()
-        bpod_trials.update(trials_table)
+        self.bpod_trials.update(trials_table)
         # synchronize
-        bpod_trials['intervals_bpod'] = np.copy(bpod_trials['intervals'])
+        self.bpod_trials['intervals_bpod'] = np.copy(self.bpod_trials['intervals'])
 
         # Get the spacer times for this protocol
         if (protocol_number := kwargs.get('protocol_number')) is not None:  # look for spacer
@@ -750,21 +748,21 @@ class FpgaTrials(extractors_base.BaseExtractor):
             tmin = tmax = None
 
         fpga_trials = extract_behaviour_sync(
-            sync=sync, chmap=chmap, bpod_trials=bpod_trials, tmin=tmin, tmax=tmax)
+            sync=sync, chmap=chmap, bpod_trials=self.bpod_trials, tmin=tmin, tmax=tmax)
         # checks consistency and compute dt with bpod
         self.bpod2fpga, drift_ppm, ibpod, ifpga = neurodsp.utils.sync_timestamps(
-            bpod_trials['intervals_bpod'][:, 0], fpga_trials.pop('intervals')[:, 0],
+            self.bpod_trials['intervals_bpod'][:, 0], fpga_trials.pop('intervals')[:, 0],
             return_indices=True)
-        nbpod = bpod_trials['intervals_bpod'].shape[0]
+        nbpod = self.bpod_trials['intervals_bpod'].shape[0]
         npfga = fpga_trials['feedback_times'].shape[0]
         nsync = len(ibpod)
-        _logger.info(f"N trials: {nbpod} bpod, {npfga} FPGA, {nsync} merged, sync {drift_ppm} ppm")
+        _logger.info(f'N trials: {nbpod} bpod, {npfga} FPGA, {nsync} merged, sync {drift_ppm} ppm')
         if drift_ppm > BPOD_FPGA_DRIFT_THRESHOLD_PPM:
             _logger.warning('BPOD/FPGA synchronization shows values greater than %i ppm',
                             BPOD_FPGA_DRIFT_THRESHOLD_PPM)
         out = OrderedDict()
-        out.update({k: bpod_trials[k][ibpod] for k in self.bpod_fields})
-        out.update({k: self.bpod2fpga(bpod_trials[k][ibpod]) for k in self.bpod_rsync_fields})
+        out.update({k: self.bpod_trials[k][ibpod] for k in self.bpod_fields})
+        out.update({k: self.bpod2fpga(self.bpod_trials[k][ibpod]) for k in self.bpod_rsync_fields})
         out.update({k: fpga_trials[k][ifpga] for k in sorted(fpga_trials.keys())})
         # extract the wheel data
         wheel, moves = self.get_wheel_positions(sync=sync, chmap=chmap, tmin=tmin, tmax=tmax)
@@ -782,11 +780,6 @@ class FpgaTrials(extractors_base.BaseExtractor):
         return [out[k] for k in out] + [wheel['timestamps'], wheel['position'],
                                         moves['intervals'], moves['peakAmplitude']]
 
-    def _extract_bpod(self, bpod_trials, **kwargs):
-        bpod_trials, *_ = bpod_extract_all(session_path=self.session_path, bpod_trials=bpod_trials, **kwargs)
-
-        return bpod_trials
-
     def get_wheel_positions(self, *args, **kwargs):
         """Extract wheel and wheelMoves objects.
 
@@ -795,8 +788,8 @@ class FpgaTrials(extractors_base.BaseExtractor):
         return get_wheel_positions(*args, **kwargs)
 
 
-def extract_all(session_path, sync_collection='raw_ephys_data', save=True, task_collection='raw_behavior_data', save_path=None,
-                protocol_number=None, **kwargs):
+def extract_all(session_path, sync_collection='raw_ephys_data', save=True, save_path=None,
+                task_collection='raw_behavior_data', protocol_number=None, **kwargs):
     """
     For the IBL ephys task, reads ephys binary file and extract:
         -   sync
@@ -828,16 +821,22 @@ def extract_all(session_path, sync_collection='raw_ephys_data', save=True, task_
     list of pathlib.Path, None
         If save is True, a list of file paths to the extracted data.
     """
-    extractor_type = extractors_base.get_session_extractor_type(session_path, task_collection=task_collection)
-    _logger.info(f'Extracting {session_path} as {extractor_type}')
+    # Extract Bpod trials
+    bpod_raw = raw_data_loaders.load_data(session_path, task_collection=task_collection)
+    assert bpod_raw is not None, 'No task trials data in raw_behavior_data - Exit'
+    bpod_trials, *_ = bpod_extract_all(
+        session_path=session_path, bpod_trials=bpod_raw, task_collection=task_collection,
+        save=False, extractor_type=kwargs.get('extractor_type'))
+
+    # Sync Bpod trials to FPGA
     sync, chmap = get_sync_and_chn_map(session_path, sync_collection)
     # sync, chmap = get_main_probe_sync(session_path, bin_exists=bin_exists)
-    base = [FpgaTrials]
-    if extractor_type == 'ephys_biased_opto':
-        base.append(LaserBool)
-    outputs, files = extractors_base.run_extractor_classes(
-        base, session_path=session_path, save=save, sync=sync, chmap=chmap, path_out=save_path,
+    trials = FpgaTrials(session_path, bpod_trials=bpod_trials)
+    outputs, files = trials.extract(
+        save=save, sync=sync, chmap=chmap, path_out=save_path,
         task_collection=task_collection, protocol_number=protocol_number, **kwargs)
+    if not isinstance(outputs, dict):
+        outputs = {k: v for k, v in zip(trials.var_names, outputs)}
     return outputs, files
 
 
