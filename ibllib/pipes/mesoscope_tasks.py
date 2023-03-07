@@ -104,24 +104,47 @@ class MesoscopeCompress(base_tasks.DynamicTask):
 class MesoscopePreprocess(base_tasks.DynamicTask):
 
     priority = 80
+    cpu = 4  # TODO: see if this works on the local servers or blows the RAM
     job_size = 'large'
 
     def __init__(self, session_path, **kwargs):
         super(MesoscopePreprocess, self).__init__(session_path, **kwargs)
-        self.device_collection = self.get_device_collection('mesoscope', kwargs.get('device_collection', 'raw_mesoscope_data'))
-        # TODO: make sure that we are happy with these defaults
-        # TODO: decide if we want to code them here or in the construction of the meta json
+        self.device_collection = self.get_device_collection('mesoscope', kwargs.get('device_collection', 'raw_mesoscope_data_*'))
         self.db = {
-            'data_path': [str(self.session_path.joinpath(self.device_collection))],
-            'save_path0': str(self.session_path.joinpath('alf')),  # is also used as fast_disk unless thats defined
-            'move_bin': True,
-            'keep_movie_raw': False,
+            'data_path': [str(s) for s in self.session_path.glob(f'{self.device_collection}')],
+            'save_path0': str(self.session_path.joinpath('alf')),  # is also used as fast_disk unless that's defined
+            'look_one_level_down': False,  # don't look in the children folders as that is where the reference data is
+            'num_workers': self.cpu,  # this selects number of cores to parallelize over for the registration step
+            'num_workers_roi': -1,  # for parallelization over FOVs during cell detection, for now don't
+            'keep_movie_raw': True,
             'delete_bin': False,
-            'batch_size': 1000,
+            'batch_size': 500,  # SP reduced this from 1000
+            'nimg_init': 400,
+            'tau': 1.5,  # 1.5 is recommended for GCaMP6s TODO: potential deduct the GCamp used from Alyx mouse line?
             'combined': True,
+            'nonrigid': True,
+            'maxregshift': 0.05,  # default = 1
+            'denoise': 1,  # whether or not binned movie should be denoised before cell detection
+            'block_size': [128, 128],
+            'save_mat': True,  # save the data to Fall.mat
+            'move_bin': True,  # move the binary file to save_path
+            'scalefactor': 1,  # OPTIONAL: scale manually in x to account for overlap between adjacent ribbons in UCL mesoscope
         }
+        self.from_meta = [
+            'nrois',
+            'mesoscan',
+            'nplanes',
+            'nchannels',
+            'tau',
+            'fs',
+            'dx',
+            'dy',
+            'lines'
+            'functional_chan',
+            'align_by_chan'
+        ]
 
-    # TODO: write function to get output file list (depend on field of views)
+    # TODO: write function to get in and output file list (depend on FOV numbers)
     @property
     def signature(self):
         signature = {
@@ -176,7 +199,7 @@ class MesoscopePreprocess(base_tasks.DynamicTask):
             meta = json.load(meta_file)
         # Inputs extracted from imaging data to a json
         # TODO: check that these are the right and complete inputs from the meta file
-        for k in ['nrois', 'mesoscan', 'nplanes', 'nchannels', 'tau', 'fs', 'dx', 'dy', 'lines']:
+        for k in self.from_meta:
             if k in meta.keys():
                 self.db[k] = meta[k]
             else:
