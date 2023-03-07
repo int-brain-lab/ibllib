@@ -5,6 +5,7 @@ from ibllib.io.extractors import bpod_trials
 from ibllib.qc.task_extractors import TaskQCExtractor
 from ibllib.qc.task_metrics import HabituationQC, TaskQC
 from ibllib.io.extractors.base import get_session_extractor_type
+from ibllib.io.extractors.bpod_trials import get_bpod_extractor
 from ibllib.io.extractors.ephys_fpga import extract_all
 from ibllib.io.extractors.mesoscope import TimelineTrials
 from ibllib.pipes import training_status
@@ -252,7 +253,7 @@ class ChoiceWorldTrialsNidq(base_tasks.BehaviourTask):
         """
         from brainbox.behavior import training
 
-        trials = alfio.load_object(self.session_path.joinpath(self.output_collection), "trials")
+        trials = alfio.load_object(self.session_path.joinpath(self.output_collection), 'trials')
         good_enough = training.criterion_delay(
             n_trials=trials["intervals"].shape[0],
             perf_easy=training.compute_performance_easy(trials),
@@ -324,7 +325,12 @@ class ChoiceWorldTrialsTimeline(ChoiceWorldTrialsNidq):
         return signature
 
     def _extract_behaviour(self):
-        trials = TimelineTrials(self.session_path)
+        # First determine the extractor from the task protocol
+        extractor = get_bpod_extractor(self.session_path, self.collection)
+        ret, _ = extractor.extract(save=False)
+        bpod_trials = {k: v for k, v in zip(extractor.var_names, ret)}
+
+        trials = TimelineTrials(self.session_path, bpod_trials=bpod_trials)
         save_path = self.session_path / self.output_collection
         dsets, out_files = trials.extract(
             save=True, path_out=save_path, sync_collection=self.sync_collection,

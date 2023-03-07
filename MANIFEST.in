@@ -5,6 +5,7 @@ include ibllib/atlas/cosmos.npy
 include ibllib/atlas/swanson.npy
 include ibllib/atlas/mappings.pqt
 include ibllib/io/extractors/extractor_types.json
+include ibllib/io/extractors/task_extractor_map.json
 include brainbox/tests/wheel_test.p
 recursive-include brainbox/tests/fixtures *
 recursive-include ibllib/qc/reference *

@@ -61,6 +61,7 @@ DEFAULT_MAPS = {
                       'frame2ttl': 3,
                       'audio': 4,
                       'bpod': 5,
-                      'rotary_encoder': 6}
+                      'rotary_encoder': 6,
+                      'neural_frames': 7}
          }
 }

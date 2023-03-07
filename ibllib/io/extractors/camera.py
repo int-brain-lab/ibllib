@@ -70,7 +70,7 @@ class CameraTimestampsFPGA(BaseExtractor):
     def __del__(self):
         _logger.setLevel(self._log_level)
 
-    def _extract(self, sync=None, chmap=None, video_path=None,
+    def _extract(self, sync=None, chmap=None, video_path=None, sync_label='audio',
                  display=False, extrapolate_missing=True, **kwargs):
         """
         The raw timestamps are taken from the FPGA. These are the times of the camera's frame TTLs.
@@ -100,10 +100,10 @@ class CameraTimestampsFPGA(BaseExtractor):
         length = (video_path if isinstance(video_path, int) else get_video_length(video_path))
         _logger.debug(f'Number of video frames = {length}')
 
-        if gpio is not None and gpio['indices'].size > 1:
-            _logger.info('Aligning to audio TTLs')
+        if gpio is not None and gpio['indices'].size > 1 and sync_label is not None:
+            _logger.info(f'Aligning to {sync_label} TTLs')
             # Extract audio TTLs
-            audio = get_sync_fronts(sync, chmap['audio'])
+            audio = get_sync_fronts(sync, chmap[sync_label])
             _, ts = raw.load_camera_ssv_times(self.session_path, self.label)
             try:
                 """
@@ -123,7 +123,6 @@ class CameraTimestampsFPGA(BaseExtractor):
                     count = count[:length]
                 else:
                     assert length == count.size, 'fewer counts than frames'
-                raw_ts = fpga_times[self.label]
                 assert raw_ts.shape[0] > 0, 'no timestamps found in channel indicated for ' \
                                             f'{self.label} camera'
                 return align_with_audio(raw_ts, audio, gpio, count,

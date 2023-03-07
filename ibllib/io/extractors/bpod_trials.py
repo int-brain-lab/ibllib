@@ -3,11 +3,16 @@ This module will extract the Bpod trials and wheel data based on the task protoc
 i.e. habituation, training or biased.
 """
 import logging
+import importlib
 from collections import OrderedDict
 
 from pkg_resources import parse_version
 from ibllib.io.extractors import habituation_trials, training_trials, biased_trials, opto_trials
-from ibllib.io.extractors.base import get_session_extractor_type
+from ibllib.io.extractors.base import get_bpod_extractor_class
+from ibllib.io.extractors.habituation_trials import HabituationTrials
+from ibllib.io.extractors.training_trials import TrainingTrials
+from ibllib.io.extractors.biased_trials import BiasedTrials, EphysTrials
+from ibllib.io.extractors.base import get_session_extractor_type, BaseBpodTrialsExtractor
 import ibllib.io.raw_data_loaders as rawio
 
 _logger = logging.getLogger(__name__)
@@ -51,7 +56,7 @@ def extract_all(session_path, save=True, bpod_trials=None, settings=None,
     """
     if not extractor_type:
         extractor_type = get_session_extractor_type(session_path, task_collection=task_collection)
-    _logger.info(f"Extracting {session_path} as {extractor_type}")
+    _logger.info(f'Extracting {session_path} as {extractor_type}')
     bpod_trials = bpod_trials or rawio.load_data(session_path, task_collection=task_collection)
     settings = settings or rawio.load_settings(session_path, task_collection=task_collection)
     _logger.info(f'{extractor_type} session on {settings["PYBPOD_BOARD"]}')
@@ -83,13 +88,36 @@ def extract_all(session_path, save=True, bpod_trials=None, settings=None,
     elif extractor_type == 'habituation':
         if settings['IBLRIG_VERSION_TAG'] and \
                 parse_version(settings['IBLRIG_VERSION_TAG']) <= parse_version('5.0.0'):
-            _logger.warning("No extraction of legacy habituation sessions")
+            _logger.warning('No extraction of legacy habituation sessions')
             return None, None, None
         trials, files_trials = habituation_trials.extract_all(session_path, bpod_trials=bpod_trials, settings=settings, save=save,
                                                               task_collection=task_collection, save_path=save_path)
         wheel = None
         files_wheel = []
     else:
-        raise ValueError(f"No extractor for task {extractor_type}")
+        raise ValueError(f'No extractor for task {extractor_type}')
     _logger.info('session extracted \n')  # timing info in log
     return trials, wheel, (files_trials + files_wheel) if save else None
+
+
+def get_bpod_extractor(session_path, task_collection='raw_behavior_data') -> BaseBpodTrialsExtractor:
+    builtins = {
+        'HabituationTrials': HabituationTrials,
+        'TrainingTrials': TrainingTrials,
+        'BiasedTrials': BiasedTrials,
+        'EphysTrials': EphysTrials
+    }
+    class_name = get_bpod_extractor_class(session_path, task_collection=task_collection)
+    if class_name in builtins:
+        return builtins[class_name](session_path)
+
+    # look if there are custom extractor types in the personal projects repo
+    if not class_name.startswith('projects.'):
+        class_name = 'projects.' + class_name
+    module, class_name = class_name.rsplit('.', 1)
+    mdl = importlib.import_module(module)
+    extractor_class = getattr(mdl, class_name, None)
+    if extractor_class:
+        return extractor_class(session_path)
+    else:
+        raise ValueError(f'extractor {class_name} not found')

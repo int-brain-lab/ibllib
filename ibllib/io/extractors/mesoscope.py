@@ -1,17 +1,18 @@
-"""Mesoscope (timeline) trial extraction."""
+"""Mesoscope (timeline) data extraction."""
 import numpy as np
 import one.alf.io as alfio
 import matplotlib.pyplot as plt
 from neurodsp.utils import falls
 
 from ibllib.plots.misc import squares
-from ibllib.io.raw_daq_loaders import load_sync_timeline, timeline_meta2chmap
+from ibllib.io.raw_daq_loaders import load_sync_timeline, timeline_meta2chmap, timeline_get_channel
+import ibllib.io.extractors.base as extractors_base
 from ibllib.io.extractors.default_channel_maps import DEFAULT_MAPS
 from ibllib.io.extractors.ephys_fpga import FpgaTrials, WHEEL_TICKS, WHEEL_RADIUS_CM
 from ibllib.io.extractors.training_wheel import extract_wheel_moves
 
 
-def _timeline2sync(timeline, chmap=None):
+def timeline2sync(timeline, chmap=None):
     """
     Extract the sync from a Timeline object.
 
@@ -63,7 +64,7 @@ def plot_timeline(timeline, channels=None, raw=True):
     fig, axes = plt.subplots(len(channels), 1)
     if not raw:
         chmap = {ch: meta[ch]['arrayColumn'] for ch in channels}
-        sync, chmap = _timeline2sync(timeline, chmap)
+        sync, chmap = timeline2sync(timeline, chmap)
     for i, (ax, ch) in enumerate(zip(axes, channels)):
         if raw:
             # axesScale controls vertical scaling of each trace (multiplicative)
@@ -83,7 +84,7 @@ def plot_timeline(timeline, channels=None, raw=True):
 
 
 class TimelineTrials(FpgaTrials):
-    """Similar extraction to the FPGA, however counter and position channels are treated differently"""
+    """Similar extraction to the FPGA, however counter and position channels are treated differently."""
 
     """one.alf.io.AlfBunch: The timeline data object"""
     timeline = None
@@ -91,11 +92,11 @@ class TimelineTrials(FpgaTrials):
     def __init__(self, *args, sync_collection='raw_sync_data', **kwargs):
         """An extractor for all ephys trial data, in Timeline time"""
         super().__init__(*args, **kwargs)
-        self.timeline = alfio.load_object(self.session_path / sync_collection, 'DAQdata', namespace='timeline')
+        self.timeline = alfio.load_object(self.session_path / sync_collection, 'DAQData', namespace='timeline')
 
     def _extract(self, sync=None, chmap=None, sync_collection='raw_sync_data', **kwargs):
         if not (sync or chmap):
-            sync, chmap = _timeline2sync(self.timeline)
+            sync, chmap = timeline2sync(self.timeline)
         if kwargs.get('display', False):
             plot_timeline(self.timeline, channels=chmap.keys(), raw=True)
         trials = super()._extract(sync, chmap, sync_collection, extractor_type='ephys', **kwargs)
@@ -168,3 +169,85 @@ class TimelineTrials(FpgaTrials):
             ax.plot(open_times, np.zeros_like(idx), 'r*')
             ax.set_ylabel('Voltage / V'), ax.set_xlabel('Time / s')
         return open_times
+
+
+class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
+    """Extraction of mesoscope imaging times."""
+
+    var_names = ('mpci_times', 'mpciStack_timeshift')
+    save_names = ('mpci.times.npy', 'mpciStack.timeshift.npy')
+
+    """one.alf.io.AlfBunch: The timeline data object"""
+    rawImagingData = None  # TODO Document
+
+    def __init__(self, session_path, n_ROIs, **kwargs):
+        super().__init__(session_path, **kwargs)  # TODO Document
+        rois = list(map(lambda n: f'ROI{n:02}', range(n_ROIs)))
+        self.var_names = [f'{x}_{y.lower()}' for x in self.var_names for y in rois]
+        self.save_names = [f'{y}/{x}' for x in self.save_names for y in rois]
+
+    def _extract(self, sync=None, chmap=None, device_collection='raw_mesoscope_data'):
+        """
+        Extract the frame timestamps for each individual field of view (FOV) and the time offsets
+        for each line scan.
+
+        Parameters
+        ----------
+        sync : one.alf.io.AlfBunch
+            A dictionary with keys ('times', 'polarities', 'channels'), containing the sync pulses
+            and the corresponding channel numbers.
+        chmap : dict
+            A map of channel names and their corresponding indices. Only the 'neural_frames'
+            channel is required.
+        device_collection : str
+            The location of the raw imaging data.
+
+        Returns
+        -------
+        list of numpy.array
+            A list of timestamps for each FOV and the time offsets for each line scan.
+        """
+        self.rawImagingData = alfio.load_object(self.session_path / device_collection, 'rawImagingData')
+
+        frame_times = sync['times'][sync['channels'] == chmap['neural_frames']]
+        assert frame_times.size == self.rawImagingData.times_scanImage.size
+
+        # imaging_start_time = datetime.datetime(*map(round, self.rawImagingData.meta['acquisitionStartTime']))
+        # TODO Extract UDP messages for imaging bouts
+
+        # Calculate line shifts
+        _, fov_time_shifts, line_time_shifts = self.get_timeshifts()
+        fov_times = [frame_times + offset for offset in fov_time_shifts]
+
+        return fov_times + line_time_shifts
+
+    def get_timeshifts(self):
+        # TODO Document
+        FOVs = self.rawImagingData.meta['FOV']
+
+        # Double-check meta extracted properly
+        raw_meta = self.rawImagingData.meta['rawScanImageMeta']
+        artist = raw_meta['Artist']
+        # TODO This assertion might need to be removed if some ROIs are deactivated
+        assert len(artist['RoiGroups']['imagingRoiGroup']['rois']) == len(FOVs)
+
+        # Number of scan lines per FOV, i.e. number of Y pixels / image height
+        n_lines = np.array([x['nXnYnZ'][1] for x in FOVs])
+        n_valid_lines = np.sum(n_lines)  # Number of lines imaged excluding flybacks
+        # Number of lines during flyback
+        n_lines_per_gap = int((raw_meta['Height'] - n_valid_lines) / (len(FOVs) - 1));
+        # The start and end indices of each FOV in the raw images
+        fov_start_idx = np.insert(np.cumsum(n_lines[:-1] + n_lines_per_gap), 0, 0)
+        fov_end_idx = fov_start_idx + n_lines
+        line_period = self.rawImagingData.meta['scanImageParams']['hRoiManager']['linePeriod']
+
+        line_indices = []
+        fov_time_shifts = fov_start_idx * line_period
+        line_time_shifts = []
+
+        for ln, s, e in zip(n_lines, fov_start_idx, fov_end_idx):
+            line_indices.append(np.arange(s, e))
+            line_time_shifts.append(np.arange(0, ln) * line_period)
+
+        return line_indices, fov_time_shifts, line_time_shifts
+

@@ -287,3 +287,23 @@ def timeline_meta2chmap(meta, exclude_channels=None, include_channels=None):
             continue
         chmap[input['name']] = input['arrayColumn']
     return chmap
+
+
+def timeline_get_channel(timeline, channel_name):
+    """
+    Given a timeline object, returns the vector of values recorded from a given channel name.
+
+    Parameters
+    ----------
+    timeline : one.alf.io.AlfBunch
+        A loaded timeline object.
+    channel_name : str
+        The name of a channel to extract.
+
+    Returns
+    -------
+    numpy.array
+        The channel data.
+    """
+    idx = next(ch['arrayColumn'] for ch in timeline['meta']['inputs'] if ch['name'] == channel_name)
+    return timeline['raw'][:, idx - 1]  # -1 because MATLAB indices start from 1, not 0

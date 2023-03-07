@@ -9,13 +9,16 @@ Pipeline:
 """
 import logging
 import subprocess
-import json
 import shutil
 from pathlib import Path
 from itertools import chain
+
 import numpy as np
+import one.alf.io as alfio
+import one.alf.exceptions as alferr
 
 from ibllib.pipes import base_tasks
+from ibllib.io.extractors import mesoscope
 
 _logger = logging.getLogger(__name__)
 
@@ -148,7 +151,7 @@ class MesoscopePreprocess(base_tasks.DynamicTask):
     @property
     def signature(self):
         signature = {
-            'input_files': [('rawImagingData.meta.json', self.device_collection, True)],
+            'input_files': [('_ibl_rawImagingData.meta.json', self.device_collection, True)],
             'output_files': []
         }
         return signature
@@ -194,14 +197,11 @@ class MesoscopePreprocess(base_tasks.DynamicTask):
         # Get default ops
         ops = suite2p.default_ops()
         # Some options we get from the meta data json, we put them in db, which overwrites ops if the keys are the same
-        # TODO: get the right path here
-        with open(self.session_path.joinpath(self.device_collection, 'rawImagingData.meta.json'), 'r') as meta_file:
-            meta = json.load(meta_file)
+        rawImagingData = alfio.load_object(self.session_path / self.device_collection, 'rawImagingData')
         # Inputs extracted from imaging data to a json
-        # TODO: check that these are the right and complete inputs from the meta file
         for k in self.from_meta:
-            if k in meta.keys():
-                self.db[k] = meta[k]
+            if k in rawImagingData['meta'].keys():
+                self.db[k] = rawImagingData['meta'][k]
             else:
                 _logger.warning(f'Setting for {k} not found in metadata file. Keeping default.')
         # Anything can be overwritten by keyword arguments passed to the tasks run() method
@@ -224,6 +224,7 @@ class MesoscopePreprocess(base_tasks.DynamicTask):
 
 
 class MesoscopeSync(base_tasks.DynamicTask):
+    """Extract the frame times from the main DAQ."""
 
     priority = 40
     job_size = 'small'
@@ -231,10 +232,13 @@ class MesoscopeSync(base_tasks.DynamicTask):
     @property
     def signature(self):
         signature = {
-            'input_files': [(f'_{self.sync_namespace}_sync.channels.npy', self.sync_collection, True),
-                            (f'_{self.sync_namespace}_sync.polarities.npy', self.sync_collection, True),
-                            (f'_{self.sync_namespace}_sync.times.npy', self.sync_collection, True)],
-            'output_files': [('imaging.times.npy', 'alf/mesoscope', True), ]
+            'input_files': [(f'_{self.sync_namespace}_DAQData.raw.npy', self.sync_collection, True),
+                            (f'_{self.sync_namespace}_DAQData.timestamps.npy', self.sync_collection, True),
+                            (f'_{self.sync_namespace}_DAQData.meta.json', self.sync_collection, True),
+                            ('_ibl_rawImagingData.meta.json', self.device_collection, True),
+                            ('rawImagingData.times_scanImage.npy', self.device_collection, True),],
+            'output_files': [('mpci.times.npy', 'alf/mesoscope/FOV*', True),
+                             ('mpciStack.timeshift.npy', 'alf/mesoscope/FOV*', True), ]
         }
         return signature
 
@@ -243,10 +247,39 @@ class MesoscopeSync(base_tasks.DynamicTask):
         self.device_collection = self.get_device_collection('mesoscope', kwargs.get('device_collection', 'raw_mesoscope_data'))
 
     def _run(self):
-        raise NotImplementedError
-        # TODO QC
+        self.rawImagingData = alfio.load_object(self.session_path / self.device_collection, 'rawImagingData')
+        n_ROIs = len(self.rawImagingData['meta']['FOV'])
+        mesosync = mesoscope.MesoscopeSyncTimeline(self.session_path, n_ROIs)
+        sync, chmap = self.load_sync()  # Extract sync data from raw DAQ data
+        mesosync.extract(save=True, sync=sync, chmap=chmap, device_collection=self.device_collection)
 
-        return  # out_files
+    def load_sync(self):
+        """
+        Load the sync and channel map.
+
+        This method may be expanded to support other raw DAQ data formats.
+
+        Returns
+        -------
+        one.alf.io.AlfBunch
+            A dictionary with keys ('times', 'polarities', 'channels'), containing the sync pulses and
+            the corresponding channel numbers.
+        dict
+            A map of channel names and their corresponding indices.
+        """
+        ns = self.get_sync_namespace()
+        alf_path = self.session_path / self.sync_collection
+        try:
+            sync = alfio.load_object(alf_path, 'sync', namespace=ns)
+            chmap = None
+        except alferr.ALFObjectNotFound:
+            if self.get_sync_namespace() == 'timeline':
+                # Load the sync and channel map from the raw DAQ data
+                timeline = alfio.load_object(alf_path, 'DAQData', namespace=ns)
+                sync, chmap = mesoscope.timeline2sync(timeline)
+            else:
+                raise NotImplementedError
+        return sync, chmap
 
 
 class MesoscopeFOV(base_tasks.DynamicTask):
@@ -254,14 +287,57 @@ class MesoscopeFOV(base_tasks.DynamicTask):
     priority = 40
     job_size = 'small'
 
-    signature = {
-        'input_files': [('mesoscopeLandmarks.dorsalCortex.json', 'alf', True),
-                        ('mesoscopeSVT.uncorrected.npy', 'alf', True),
-                        ('mesoscopeSVT.haemoCorrected.npy', 'alf', True)],
-        'output_files': []
-    }
+    @property
+    def signature(self):
+        signature = {
+            'input_files': [('_ibl_rawImagingData.meta.json', self.device_collection, True)],
+            'output_files': []
+        }
+        return signature
+
+    def __init__(self, session_path, **kwargs):
+        super().__init__(session_path, **kwargs)
+        self.device_collection = self.get_device_collection('mesoscope', kwargs.get('device_collection', 'raw_mesoscope_data'))
 
     def _run(self):
-        # TODO make task that computes location
+        """
+        Returns
+        -------
+        dict
+            The newly created FOV Alyx record.
+        list
+            The newly created FOV location Alyx records.
 
-        return []
+        Notes
+        -----
+        TODO move out of run method for convenience
+        TODO Deal with already created FOVs
+
+        """
+        FACTOR = 1e3  # The meta data are in mm, while the FOV in alyx is in um
+        dry = self.one is None or self.one.offline
+        (filename, collection, _), = self.signature['input_files']
+        meta = alfio.load_file_content(self.session_path / collection / filename) or {}
+
+        alyx_FOV = {
+            'session': self.session_path if dry else self.path2eid(),
+            'type': 'mesoscope'
+        }
+        if dry:
+            print(alyx_FOV)
+        else:
+            alyx_FOV = self.one.alyx.rest('FOV', 'create', data=alyx_FOV)
+
+        locations = []
+        for fov in meta.get('FOV', []):
+            data = {'field_of_view': alyx_FOV.get('id'), 'provenance': 'Landmark'}
+            # TODO Get z values
+            x1, y1 = map(lambda x: float(x) * FACTOR, fov['topLeftMM'])
+            x2, y2 = map(lambda x: float(x) * FACTOR, fov['topLeftMM'])
+            # TODO Brain region estimate
+            if dry:
+                print(data)
+                locations.append(data)
+                continue
+            locations.append(self.one.alyx.rest('FOVLocation', 'create', data=data))
+        return alyx_FOV, locations
