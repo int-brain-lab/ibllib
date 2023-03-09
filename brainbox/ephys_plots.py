@@ -395,7 +395,8 @@ def line_amp_plot(spike_amps, spike_depths, spike_times, chn_coords, d_bin=10, d
     return data
 
 
-def plot_brain_regions(channel_ids, channel_depths=None, brain_regions=None, display=True, ax=None, title=None, label='left'):
+def plot_brain_regions(channel_ids, channel_depths=None, brain_regions=None, display=True, ax=None,
+                       title=None, label='left', **kwargs):
     """
     Plot brain regions along probe, if channel depths is provided will plot along depth otherwise along channel idx
     :param channel_ids: atlas ids for each channel
@@ -404,6 +405,7 @@ def plot_brain_regions(channel_ids, channel_depths=None, brain_regions=None, dis
     :param display: whether to output plot
     :param ax: axis to plot on
     :param title: title for plot
+    :param kwargs: additional keyword arguments for bar plot
     :return:
     """
 
@@ -432,8 +434,10 @@ def plot_brain_regions(channel_ids, channel_depths=None, brain_regions=None, dis
 
         for reg, col in zip(regions, region_colours):
             height = np.abs(reg[1] - reg[0])
+            bar_kwargs = dict(edgecolor='w', width=1)
+            bar_kwargs.update(**kwargs)
             color = col / 255
-            ax.bar(x=0.5, height=height, width=1, color=color, bottom=reg[0], edgecolor='w')
+            ax.bar(x=0.5, height=height, color=color, bottom=reg[0], **kwargs)
         if label == 'right':
             ax.yaxis.tick_right()
         ax.set_yticks(region_labels[:, 0].astype(int))
