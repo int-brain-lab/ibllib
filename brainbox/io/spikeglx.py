@@ -160,6 +160,7 @@ class Streamer(spikeglx.Reader):
         :param first_chunk:
         :param last_chunk:
         :return: spikeglx.Reader of the current chunk, Pathlib.Path of the directory where it is stored
+        :return: cbin local path
         """
         assert str(self.url_cbin).endswith('.cbin')
         webclient = self.one.alyx
@@ -190,7 +191,7 @@ class Streamer(spikeglx.Reader):
                 cmeta_stream = json.load(f)
             if (cmeta_stream.get('chopped_first_sample', None) == i0 and
                     cmeta_stream.get('chopped_total_samples', None) == total_samples):
-                return spikeglx.Reader(ch_file_stream.with_suffix('.cbin'), ignore_warnings=True)
+                return spikeglx.Reader(ch_file_stream.with_suffix('.cbin'), ignore_warnings=True), ch_file_stream
 
         else:
             shutil.copy(self.file_chunks, ch_file_stream)
