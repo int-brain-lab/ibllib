@@ -11,7 +11,7 @@ import logging
 import subprocess
 import shutil
 from pathlib import Path
-from itertools import chain
+from itertools import chain, product
 
 import numpy as np
 import one.alf.io as alfio
@@ -112,7 +112,7 @@ class MesoscopePreprocess(base_tasks.DynamicTask):
 
     def __init__(self, session_path, **kwargs):
         super(MesoscopePreprocess, self).__init__(session_path, **kwargs)
-        self.device_collection = self.get_device_collection('mesoscope', kwargs.get('device_collection', 'raw_mesoscope_data_*'))
+        self.device_collection = self.get_device_collection('mesoscope', kwargs.get('device_collection', 'raw_imaging_data_*'))
         self.db = {
             'data_path': [str(s) for s in self.session_path.glob(f'{self.device_collection}')],
             'save_path0': str(self.session_path.joinpath('alf')),  # is also used as fast_disk unless that's defined
@@ -120,14 +120,15 @@ class MesoscopePreprocess(base_tasks.DynamicTask):
             'num_workers': self.cpu,  # this selects number of cores to parallelize over for the registration step
             'num_workers_roi': -1,  # for parallelization over FOVs during cell detection, for now don't
             'keep_movie_raw': True,
-            'delete_bin': False,
+            'delete_bin': False,  # TODO: delete this on the long run
             'batch_size': 500,  # SP reduced this from 1000
             'nimg_init': 400,
             'tau': 1.5,  # 1.5 is recommended for GCaMP6s TODO: potential deduct the GCamp used from Alyx mouse line?
-            'combined': True,
+            'mesoscan': True,
+            'combined': True,  # TODO: do not combine on the long run
             'nonrigid': True,
             'maxregshift': 0.05,  # default = 1
-            'denoise': 1,  # whether or not binned movie should be denoised before cell detection
+            'denoise': 1,  # whether binned movie should be denoised before cell detection
             'block_size': [128, 128],
             'save_mat': True,  # save the data to Fall.mat
             'move_bin': True,  # move the binary file to save_path
@@ -135,10 +136,8 @@ class MesoscopePreprocess(base_tasks.DynamicTask):
         }
         self.from_meta = [
             'nrois',
-            'mesoscan',
             'nplanes',
             'nchannels',
-            'tau',
             'fs',
             'dx',
             'dy',
@@ -147,50 +146,66 @@ class MesoscopePreprocess(base_tasks.DynamicTask):
             'align_by_chan'
         ]
 
-    # TODO: write function to get in and output file list (depend on FOV numbers)
     @property
     def signature(self):
+        # The number of in and outputs will be dependent on the number of input raw imaging folders and output FOVs
         signature = {
-            'input_files': [('_ibl_rawImagingData.meta.json', self.device_collection, True)],
-            'output_files': []
+            'input_files': [('_ibl_rawImagingData.meta.json', self.device_collection, True),
+                            ('*.tiff', self.device_collection, True),
+                            ('bad_frames.npy', self.device_collection, False)],
+            'output_files': [('mpci.ROIActivityF.npy', 'alf/FOV*', True),
+                             ('mpci.ROINeuropilActivityF.npy', 'alf/FOV*', True),
+                             ('mpci.ROINeuropilActivityDeconvolved.npy', 'alf/FOV*', True),
+                             ('mpci.badFrames.npy', 'alf/FOV*', True)
+                             ]
         }
         return signature
+
+    def get_signatures(self, **kwargs):
+        """Specify how many of the individual inputs to expect"""
+        input_types = [s[0] for s in self.signature['input_files'] if s[0] != 'bad_frames.npy']
+        raw_imaging_folders = [p.name for p in self.session_path.glob(self.device_collection)]
+        all_inputs = list(product(input_types, raw_imaging_folders, [True]))
+        all_inputs.append(('bad_frames.npy', raw_imaging_folders[0], False))
+        self.input_files = all_inputs
+        self.output_files = self.signature['output_files']
 
     def _rename_outputs(self, rename_dict=None):
         if rename_dict is None:
             rename_dict = {
                 'F.npy': 'mpci.ROIActivityF.npy',
-                'Fneu.npy': 'mpci.ROIActivityFneu.npy',
+                'Fneu.npy': 'mpci.ROINeuropilActivityF.npy',
                 'spks.npy': 'mpci.ROIActivityDeconvolved.npy',
-                'iscell.npy': 'mpciROIs.included.npy'
+                'iscell.npy': ''
             }
         # Rename the outputs, first the subdirectories
         suite2p_dir = Path(self.db['save_path0']).joinpath('suite2p')
         for plane_dir in suite2p_dir.iterdir():
-            if plane_dir.name == 'combined':
-                # TODO: is this renaming what we want?
-                plane_dir.rename(plane_dir.parent.joinpath('fov_combined'))
-            else:
+            # ignore the combined dir
+            if plane_dir.name != 'combined':
                 n = int(plane_dir.name.split('plane')[1])
-                plane_dir.rename(plane_dir.parent.joinpath(f'fov{n:02}'))
+                plane_dir.rename(plane_dir.parent.joinpath(f'FOV{n:02}'))
         # Now rename the content of the new directories and move them out of suite2p
         for fov_dir in suite2p_dir.iterdir():
-            for k in rename_dict.keys():
-                try:
-                    fov_dir.joinpath(k).rename(fov_dir.joinpath(rename_dict[k]))
-                except FileNotFoundError:
-                    _logger.error(f"Output file {k} expected but not found in {fov_dir}")
-                    self.status = -1
-            # extract bad frames from ops.npy file and save separately
-            badframes = np.load(fov_dir.joinpath('ops.npy'), allow_pickle=True).item()['badframes']
-            np.save(fov_dir.joinpath('mpci.validFrames.npy'), badframes)
-            shutil.move(fov_dir, suite2p_dir.parent.joinpath(fov_dir.name))
-        # TODO: what about ops.npy, stats.npy?
-        # TODO: on the long run remove data.bin
-        # Remove empty suite2p folder
-        suite2p_dir.rmdir()
+            if fov_dir != 'combined':
+                for k in rename_dict.keys():
+                    try:
+                        fov_dir.joinpath(k).rename(fov_dir.joinpath(rename_dict[k]))
+                    except FileNotFoundError:
+                        _logger.error(f"Output file {k} expected but not found in {fov_dir}")
+                        self.status = -1
+                # extract some other data from ops and stat files
+                ops = np.load(fov_dir.joinpath('ops.npy'), allow_pickle=True).item()
+                stat = np.load(fov_dir.joinpath('stat.npy'), allow_pickle=True)[0]
+                np.save(fov_dir.joinpath('mpci.badFrames.npy'), np.asarray(ops['badframes'], dtype=bool))
+                np.save(fov_dir.joinpath('mpciROIs.stackPos.npy'), np.asarray(stat['med'], dtype=int))
+
+                # move folders out of suite2p dir
+                shutil.move(fov_dir, suite2p_dir.parent.joinpath(fov_dir.name))
+        # TODO: remove suite2p folder on the long run (still contains combined)
+        # suite2p_dir.rmdir()
         # Collect all files in those directories
-        return list(suite2p_dir.parent.rglob('fov*/*'))
+        return list(suite2p_dir.parent.rglob('FOV*/*'))
 
     def _run(self, run_suite2p=True, rename_files=True, **kwargs):
         import suite2p
