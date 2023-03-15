@@ -112,47 +112,16 @@ class MesoscopePreprocess(base_tasks.DynamicTask):
 
     def __init__(self, session_path, **kwargs):
         super(MesoscopePreprocess, self).__init__(session_path, **kwargs)
-        self.device_collection = self.get_device_collection('mesoscope', kwargs.get('device_collection', 'raw_imaging_data_*'))
-        self.db = {
-            'data_path': [str(s) for s in self.session_path.glob(f'{self.device_collection}')],
-            'save_path0': str(self.session_path.joinpath('alf')),  # is also used as fast_disk unless that's defined
-            'look_one_level_down': False,  # don't look in the children folders as that is where the reference data is
-            'num_workers': self.cpu,  # this selects number of cores to parallelize over for the registration step
-            'num_workers_roi': -1,  # for parallelization over FOVs during cell detection, for now don't
-            'keep_movie_raw': True,
-            'delete_bin': False,  # TODO: delete this on the long run
-            'batch_size': 500,  # SP reduced this from 1000
-            'nimg_init': 400,
-            'tau': 1.5,  # 1.5 is recommended for GCaMP6s TODO: potential deduct the GCamp used from Alyx mouse line?
-            'mesoscan': True,
-            'combined': True,  # TODO: do not combine on the long run
-            'nonrigid': True,
-            'maxregshift': 0.05,  # default = 1
-            'denoise': 1,  # whether binned movie should be denoised before cell detection
-            'block_size': [128, 128],
-            'save_mat': True,  # save the data to Fall.mat
-            'move_bin': True,  # move the binary file to save_path
-            'scalefactor': 1,  # OPTIONAL: scale manually in x to account for overlap between adjacent ribbons in UCL mesoscope
-        }
-        self.from_meta = [
-            'nrois',
-            'nplanes',
-            'nchannels',
-            'fs',
-            'dx',
-            'dy',
-            'lines'
-            'functional_chan',
-            'align_by_chan'
-        ]
+        self.device_collection = self.get_device_collection('mesoscope',
+                                                            kwargs.get('device_collection', 'raw_imaging_data_*'))
 
     @property
     def signature(self):
         # The number of in and outputs will be dependent on the number of input raw imaging folders and output FOVs
         signature = {
             'input_files': [('_ibl_rawImagingData.meta.json', self.device_collection, True),
-                            ('*.tiff', self.device_collection, True),
-                            ('bad_frames.npy', self.device_collection, False)],
+                            ('*.tif', self.device_collection, True),
+                            ('exptQC.mat', self.device_collection, False)],
             'output_files': [('mpci.ROIActivityF.npy', 'alf/FOV*', True),
                              ('mpci.ROINeuropilActivityF.npy', 'alf/FOV*', True),
                              ('mpci.ROINeuropilActivityDeconvolved.npy', 'alf/FOV*', True),
@@ -163,6 +132,7 @@ class MesoscopePreprocess(base_tasks.DynamicTask):
 
     def get_signatures(self, **kwargs):
         """Specify how many of the individual inputs to expect"""
+        self.session_path = Path(self.session_path)
         input_types = [s[0] for s in self.signature['input_files'] if s[0] != 'bad_frames.npy']
         raw_imaging_folders = [p.name for p in self.session_path.glob(self.device_collection)]
         all_inputs = list(product(input_types, raw_imaging_folders, [True]))
@@ -176,7 +146,6 @@ class MesoscopePreprocess(base_tasks.DynamicTask):
                 'F.npy': 'mpci.ROIActivityF.npy',
                 'Fneu.npy': 'mpci.ROINeuropilActivityF.npy',
                 'spks.npy': 'mpci.ROIActivityDeconvolved.npy',
-                'iscell.npy': ''
             }
         # Rename the outputs, first the subdirectories
         suite2p_dir = Path(self.db['save_path0']).joinpath('suite2p')
@@ -207,18 +176,72 @@ class MesoscopePreprocess(base_tasks.DynamicTask):
         # Collect all files in those directories
         return list(suite2p_dir.parent.rglob('FOV*/*'))
 
+    def _check_meta_data(self, meta_data_all):
+        """Check that the meta data is consistent across all raw imaging folders"""
+        # Prepare by removing the things we don't expect to match
+        for meta_data in meta_data_all:
+            meta_data.pop('acquisitionStartTime')
+            meta_data['rawScanImageMeta'].pop('ImageDescription')
+            meta_data['rawScanImageMeta'].pop('Software')
+            for fov in meta_data['FOV']:
+                fov.pop('FPGATimestamps')
+
+        for i, meta in enumerate(meta_data_all[1:]):
+            if meta != meta_data_all[0]:
+                for k, v in meta_data_all[0].items():
+                    if not v == meta[k]:
+                        _logger.warning(f"Mismatch in meta data between raw_imaging_data folders for key {k}. "
+                                        f"Using meta_data from first folder!")
+            else:
+                _logger.info('Meta data is consistent across all raw imaging folders')
+
+        return meta_data_all[0]
+
+    def _create_ops(self, meta_data):
+        """Create the ops dictionary for suite2p"""
+        self.db = {
+            'data_path': [str(s) for s in self.session_path.glob(f'{self.device_collection}')],
+            'save_path0': str(self.session_path.joinpath('alf')),
+            'fast_dist': '',  # TODO
+            'look_one_level_down': False,  # don't look in the children folders as that is where the reference data is
+            'num_workers': self.cpu,  # this selects number of cores to parallelize over for the registration step
+            'num_workers_roi': -1,  # for parallelization over FOVs during cell detection, for now don't
+            'keep_movie_raw': True,
+            'delete_bin': False,  # TODO: delete this on the long run
+            'batch_size': 500,  # SP reduced this from 1000
+            'nimg_init': 400,
+            'combined': True,  # TODO: do not combine on the long run
+            'nonrigid': True,
+            'maxregshift': 0.05,  # default = 1
+            'denoise': 1,  # whether binned movie should be denoised before cell detection
+            'block_size': [128, 128],
+            'save_mat': True,  # save the data to Fall.mat
+            'move_bin': True,  # move the binary file to save_path
+            'scalefactor': 1,  # OPTIONAL: scale manually in x to account for overlap between adjacent ribbons in UCL mesoscope
+            'mesoscan': True,
+            'nplanes': 1,
+            'tau': 1.5,  # 1.5 is recommended for GCaMP6s TODO: potential deduct the GCamp used from Alyx mouse line?
+            'functional_chan': 1,  # for now, eventually find(ismember(meta.FOV(1).channelIdx == meta.channelID.green))
+            'align_by_chan': 1  # for now, eventually find(ismember(meta.FOV(1).channelIdx == meta.channelID.red))
+        }
+        # nrois = size of meta.FOV
+        # nchannels = size of meta.FOV.channelIdx(should be the same across all FOVs)
+        # fs = meta.scanImageParams.hRoiManager.scanVolumeRate
+        # lines = list of each meta.FOV(i).lineIdx - 1(because of 0 - indexing)
+
     def _run(self, run_suite2p=True, rename_files=True, **kwargs):
-        import suite2p
+        # import suite2p
+        # Load metadata and make sure all metadata is consistent across FOVs
+        meta_data_all = [alfio.load_object(self.session_path / f[1], 'rawImagingData')['meta']
+                         for f in self.input_files if f[0] == '_ibl_rawImagingData.meta.json']
+        if len(meta_data_all) > 1:
+            meta_data = self._check_meta_data(meta_data_all)
+        else:
+            meta_data = meta_data_all[0]
         # Get default ops
         ops = suite2p.default_ops()
-        # Some options we get from the meta data json, we put them in db, which overwrites ops if the keys are the same
-        rawImagingData = alfio.load_object(self.session_path / self.device_collection, 'rawImagingData')
-        # Inputs extracted from imaging data to a json
-        for k in self.from_meta:
-            if k in rawImagingData['meta'].keys():
-                self.db[k] = rawImagingData['meta'][k]
-            else:
-                _logger.warning(f'Setting for {k} not found in metadata file. Keeping default.')
+        # Create db which overwrites ops when passed to suite2p, with information from meta data and hardcoded
+        db = self._create_db(meta_data)
         # Anything can be overwritten by keyword arguments passed to the tasks run() method
         for k, v in kwargs.items():
             if k in ops.keys() or k in self.db.keys():
