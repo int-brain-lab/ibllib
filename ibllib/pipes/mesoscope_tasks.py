@@ -125,7 +125,17 @@ class MesoscopePreprocess(base_tasks.DynamicTask):
             'output_files': [('mpci.ROIActivityF.npy', 'alf/FOV*', True),
                              ('mpci.ROINeuropilActivityF.npy', 'alf/FOV*', True),
                              ('mpci.ROINeuropilActivityDeconvolved.npy', 'alf/FOV*', True),
-                             ('mpci.badFrames.npy', 'alf/FOV*', True)
+                             ('mpci.badFrames.npy', 'alf/FOV*', True),
+                             ('mpciMeanImage.images.npy', 'alf/FOV*', True),
+                             ('mpci.mpciFrameQC.npy', 'alf/FOV*', True),
+                             ('mpciFrameQC.names.tsv', 'alf/FOV*', True),
+                             ('mpciROIs.stackPos.npy', 'alf/FOV*', True),
+                             ('mpciROIs.mpciROITypes.npy', 'alf/FOV*', True),
+                             ('mpciROIs.cellClassifier.npy', 'alf/FOV*', True),
+                             ('mpciROITypes.names.tsv', 'alf/FOV*', True),
+                             ('mpciROIs.masks.npz', 'alf/FOV*', True),
+                             ('mpciROIs.neuropilMasks.npz', 'alf/FOV*', True),
+
                              ]
         }
         return signature
@@ -163,11 +173,17 @@ class MesoscopePreprocess(base_tasks.DynamicTask):
                     except FileNotFoundError:
                         _logger.error(f"Output file {k} expected but not found in {fov_dir}")
                         self.status = -1
-                # extract some other data from ops and stat files
+                # extract some other data from suite2p outputs
                 ops = np.load(fov_dir.joinpath('ops.npy'), allow_pickle=True).item()
                 stat = np.load(fov_dir.joinpath('stat.npy'), allow_pickle=True)[0]
+                iscell = np.load(fov_dir.joinpath('iscell.npy'))
                 np.save(fov_dir.joinpath('mpci.badFrames.npy'), np.asarray(ops['badframes'], dtype=bool))
+                np.save(fov_dir.joinpath('mpciMeanImage.images.npy'), ops['meanImg'], dtype=float)
                 np.save(fov_dir.joinpath('mpciROIs.stackPos.npy'), np.asarray(stat['med'], dtype=int))
+                # np.savez(fov_dir.joinpath('mpciROIs.masks.npz'))
+                # np.savez(fov_dir.joinpath('mpciROIs.neuropilMasks.npz'))
+                np.save(fov_dir.joinpath('mpciROIs.mpciROITypes.npy'), iscell[:, 0], dtype=int)
+                np.save(fov_dir.joinpath('mpciROIs.cellClassifier.npy'), iscell[:, 1], dtype=float)
 
                 # move folders out of suite2p dir
                 shutil.move(fov_dir, suite2p_dir.parent.joinpath(fov_dir.name))
@@ -183,8 +199,6 @@ class MesoscopePreprocess(base_tasks.DynamicTask):
             meta_data.pop('acquisitionStartTime')
             meta_data['rawScanImageMeta'].pop('ImageDescription')
             meta_data['rawScanImageMeta'].pop('Software')
-            for fov in meta_data['FOV']:
-                fov.pop('FPGATimestamps')
 
         for i, meta in enumerate(meta_data_all[1:]):
             if meta != meta_data_all[0]:
@@ -193,16 +207,39 @@ class MesoscopePreprocess(base_tasks.DynamicTask):
                         _logger.warning(f"Mismatch in meta data between raw_imaging_data folders for key {k}. "
                                         f"Using meta_data from first folder!")
             else:
-                _logger.info('Meta data is consistent across all raw imaging folders')
+                # Check that this number of channels is the same across all FOVS
+                if not len(set([fov['channelIdx'] for fov in meta['FOV']])) == 1:
+                    _logger.warning(f"Not all FOVs have the same number of channels. "
+                                    f"Using channel number from first FOV!")
+                else:
+                    _logger.info('Meta data is consistent across all raw imaging folders')
 
         return meta_data_all[0]
 
-    def _create_ops(self, meta_data):
+    def _create_db(self, meta):
         """Create the ops dictionary for suite2p"""
-        self.db = {
+
+        # Currently only supporting single plane, assert that this is the case
+        if not isinstance(meta['scanImageParams']['hStackManager']['zs'], int):
+            raise NotImplementedError('Multi-plane imaging not yet supported, data seems to be multi-plane')
+
+        # Computing dx and dy
+        cXY = np.array([fov['topLeftDeg'] for fov in meta['FOV']])
+        cXY -= np.min(cXY, axis=0)
+        nXnYnZ = np.array([fov['nXnYnZ'] for fov in meta['FOV']])
+        sW = np.sqrt(np.sum((np.array([fov['topRightDeg'] for fov in meta['FOV']]) - np.array(
+            [fov['topLeftDeg'] for fov in meta['FOV']])) ** 2, axis=1))
+        sH = np.sqrt(np.sum((np.array([fov['bottomLeftDeg'] for fov in meta['FOV']]) - np.array(
+            [fov['topLeftDeg'] for fov in meta['FOV']])) ** 2, axis=1))
+        pixSizeX = nXnYnZ[:, 0] / sW
+        pixSizeY = nXnYnZ[:, 1] / sH
+        dx = np.round(cXY[:, 0] * pixSizeX).astype(dtype=np.int32)
+        dy = np.round(cXY[:, 1] * pixSizeY).astype(dtype=np.int32)
+
+        db = {
             'data_path': [str(s) for s in self.session_path.glob(f'{self.device_collection}')],
             'save_path0': str(self.session_path.joinpath('alf')),
-            'fast_dist': '',  # TODO
+            'fast_disk': '',  # TODO
             'look_one_level_down': False,  # don't look in the children folders as that is where the reference data is
             'num_workers': self.cpu,  # this selects number of cores to parallelize over for the registration step
             'num_workers_roi': -1,  # for parallelization over FOVs during cell detection, for now don't
@@ -217,17 +254,21 @@ class MesoscopePreprocess(base_tasks.DynamicTask):
             'block_size': [128, 128],
             'save_mat': True,  # save the data to Fall.mat
             'move_bin': True,  # move the binary file to save_path
-            'scalefactor': 1,  # OPTIONAL: scale manually in x to account for overlap between adjacent ribbons in UCL mesoscope
+            'scalefactor': 1,  # scale manually in x to account for overlap between adjacent ribbons UCL mesoscope
             'mesoscan': True,
             'nplanes': 1,
+            'nrois': len(meta['FOV']),
+            'nchannels': len(meta['FOV'][0]['channelIdx']),
+            'fs': meta['scanImageParams']['hRoiManager']['scanVolumeRate'],
+            'lines': [list(np.asarray(fov['lineIdx'])-1) for fov in meta['FOV']],  # subtracting 1 to make 0-based
             'tau': 1.5,  # 1.5 is recommended for GCaMP6s TODO: potential deduct the GCamp used from Alyx mouse line?
             'functional_chan': 1,  # for now, eventually find(ismember(meta.FOV(1).channelIdx == meta.channelID.green))
-            'align_by_chan': 1  # for now, eventually find(ismember(meta.FOV(1).channelIdx == meta.channelID.red))
+            'align_by_chan': 1,  # for now, eventually find(ismember(meta.FOV(1).channelIdx == meta.channelID.red))
+            'dx': dx,
+            'dy': dy
         }
-        # nrois = size of meta.FOV
-        # nchannels = size of meta.FOV.channelIdx(should be the same across all FOVs)
-        # fs = meta.scanImageParams.hRoiManager.scanVolumeRate
-        # lines = list of each meta.FOV(i).lineIdx - 1(because of 0 - indexing)
+
+        return db
 
     def _run(self, run_suite2p=True, rename_files=True, **kwargs):
         # import suite2p
@@ -235,23 +276,23 @@ class MesoscopePreprocess(base_tasks.DynamicTask):
         meta_data_all = [alfio.load_object(self.session_path / f[1], 'rawImagingData')['meta']
                          for f in self.input_files if f[0] == '_ibl_rawImagingData.meta.json']
         if len(meta_data_all) > 1:
-            meta_data = self._check_meta_data(meta_data_all)
+            meta = self._check_meta_data(meta_data_all)
         else:
-            meta_data = meta_data_all[0]
+            meta = meta_data_all[0]
         # Get default ops
         ops = suite2p.default_ops()
         # Create db which overwrites ops when passed to suite2p, with information from meta data and hardcoded
-        db = self._create_db(meta_data)
+        db = self._create_db(meta)
         # Anything can be overwritten by keyword arguments passed to the tasks run() method
         for k, v in kwargs.items():
-            if k in ops.keys() or k in self.db.keys():
+            if k in ops.keys() or k in db.keys():
                 # db overwrites ops when passed to run_s2p, so we only need to update / add it here
-                self.db[k] = v
+                db[k] = v
         # Update the task kwargs attribute as it will be stored in the arguments json field in alyx
         self.kwargs = {**self.kwargs, **self.db}
         # Run suite2p
         if run_suite2p:
-            _ = suite2p.run_s2p(ops=ops, db=self.db)
+            _ = suite2p.run_s2p(ops=ops, db=db)
         # Rename files and return outputs
         if rename_files:
             out_files = self._rename_outputs()
