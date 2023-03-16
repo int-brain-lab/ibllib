@@ -2,7 +2,7 @@ boto3
 click>=7.0.0
 colorlog>=4.0.2
 flake8>=3.7.8
-globus-sdk==3.2.1
+globus-sdk
 graphviz
 matplotlib>=3.0.3
 mtscomp>=1.0.1
