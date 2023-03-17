@@ -11,7 +11,7 @@ from iblutil.util import Bunch
 from one.api import ONE
 from one import params
 
-VIDEO_LABELS = ('left', 'right', 'body')
+VIDEO_LABELS = ('left', 'right', 'body', 'belly')
 
 
 class VideoStreamer:
@@ -158,8 +158,8 @@ def url_from_eid(eid, label=None, one=None):
     :param one: An instance of ONE
     :return: The URL string if the label is a string, otherwise a dict of urls with labels as keys
     """
-    valid_labels = ('left', 'right', 'body')
-    if not (label is None or np.isin(label, ('left', 'right', 'body')).all()):
+    valid_labels = VIDEO_LABELS
+    if not (label is None or np.isin(label, valid_labels).all()):
         raise ValueError('labels must be one of ("%s")' % '", "'.join(valid_labels))
     one = one or ONE()
     session_path = one.eid2path(one.to_eid(eid))
@@ -187,7 +187,7 @@ def url_from_eid(eid, label=None, one=None):
 
 def label_from_path(video_name):
     """
-    Return the video label, i.e. 'left', 'right' or 'body'
+    Return the video label, e.g.. 'left', 'right' or 'body'
     :param video_name: A file path, URL or file name for the video
     :return: The string label or None if the video doesn't match
     """

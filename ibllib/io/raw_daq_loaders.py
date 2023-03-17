@@ -152,7 +152,7 @@ def load_sync_tdms(path, sync_map, fs=None, threshold=2.5, floor_percentile=10):
     return sync, chmap
 
 
-def load_sync_timeline(timeline, chmap=None, threshold=2.5, floor_percentile=10):
+def load_sync_timeline(timeline, chmap=None, floor_percentile=10, threshold=None):
     """
     Load sync channels from a timeline object.
 
@@ -166,11 +166,12 @@ def load_sync_timeline(timeline, chmap=None, threshold=2.5, floor_percentile=10)
         A timeline object or the file or folder path of the _timeline_DAQdata files.
     chmap : dict
         A map of channel names and channel IDs.
-    threshold : float
-        The threshold for applying to analogue channels
     floor_percentile : float
         10% removes the percentile value of the analog trace before thresholding. This is to avoid
         DC offset drift.
+    threshold : float, dict of str: float
+        The threshold for applying to analogue channels. If None, take mean after subtracting
+        floor percentile offset.
 
     Returns
     -------
@@ -199,8 +200,8 @@ def load_sync_timeline(timeline, chmap=None, threshold=2.5, floor_percentile=10)
             # Get TLLs by applying a threshold to the diff of voltage samples
             offset = np.percentile(raw, floor_percentile, axis=0)
             logger.debug(f'estimated analogue channel DC Offset approx. {np.mean(offset):.2f}')
-            ind, val = neurodsp.utils.fronts(raw - offset, step=threshold)
-            sync.polarities = np.concatenate((sync.polarities, np.sign(val).astype('i1')))
+
+            sync.polarities = np.concatenate((sync.polarities, pol))
         elif info['measurement'] == 'EdgeCount':
             # Monotonically increasing values; extract indices where delta == 1
             ind, = np.where(np.diff(raw))

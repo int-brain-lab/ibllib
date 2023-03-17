@@ -474,7 +474,7 @@ def attribute_times(arr, events, tol=.1, injective=True, take='first'):
     second array, the absolute difference is taken and the index of either the first sufficiently
     close value, or simply the closest one, is assigned.
 
-    If injective is True, once a value has been assigned, to a value it can't be assigned to
+    If injective is True, once a value has been assigned to an event it can't be assigned to
     another.  In other words there is a one-to-one mapping between the two arrays.
 
     Parameters
@@ -487,25 +487,25 @@ def attribute_times(arr, events, tol=.1, injective=True, take='first'):
         The max absolute difference between values in order to be considered a match.
     injective : bool
         If true, once a value has been assigned it will not be assigned again.
-    take : {'first', 'nearest'}
+    take : {'first', 'nearest', 'after'}
         If 'first' the first value within tolerance is assigned; if 'nearest' the
-        closest value is assigned.
+        closest value is assigned; if 'after' assign the first event after.
 
     Returns
     -------
     numpy.array
-        An array the same length as `values`
+        An array the same length as `events`.
     """
-    take = take.lower()
-    if take not in ('first', 'nearest'):
-        raise ValueError('Parameter `take` must be either "first" or "nearest"')
+    if take := take.lower() not in ('first', 'nearest', 'after'):
+        raise ValueError('Parameter `take` must be either "first", "nearest", or "after"')
     stack = np.ma.masked_invalid(arr, copy=False)
     stack.fill_value = np.inf
     assigned = np.full(events.shape, -1, dtype=int)  # Initialize output array
     for i, x in enumerate(events):
-        dx = np.abs(stack.filled() - x)
-        if dx.min() < tol:  # is any value within tolerance
-            idx = np.where(dx < tol)[0][0] if take == 'first' else dx.argmin()
+        dx = stack.filled() - x
+        candidates = 0 < dx < tol if take == 'after' else np.abs(dx) < tol
+        if any(candidates):  # is any value within tolerance
+            idx = np.abs(dx).argmin() if take == 'nearest' else np.where(candidates)[0][0]
             assigned[i] = idx
             stack.mask[idx] = injective  # If one-to-one, remove the assigned value
     return assigned

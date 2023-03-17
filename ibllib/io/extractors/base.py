@@ -326,6 +326,25 @@ def get_bpod_extractor_class(session_path, task_collection='raw_behavior_data'):
     protocol = settings.get('PYBPOD_PROTOCOL')
     if not protocol:
         raise ValueError(f'No task protocol found in {session_path/task_collection}')
+    return protocol2extractor(protocol)
+
+
+def protocol2extractor(protocol):
+    """
+    Get the Bpod trials extractor class associated with a given Bpod task protocol.
+
+    The Bpod task protocol can be found in the 'PYBPOD_PROTOCOL' field of _iblrig_taskSettings.raw.json.
+
+    Parameters
+    ----------
+    protocol : str
+        A Bpod task protocol name.
+
+    Returns
+    -------
+    str
+        The extractor class name.
+    """
     # Attempt to get extractor class from protocol
     extractor_map = _get_task_extractor_map()
     extractor = extractor_map.get(protocol, None)

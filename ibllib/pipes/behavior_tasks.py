@@ -7,7 +7,7 @@ from ibllib.qc.task_metrics import HabituationQC, TaskQC
 from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.io.extractors.bpod_trials import get_bpod_extractor
 from ibllib.io.extractors.ephys_fpga import extract_all
-from ibllib.io.extractors.mesoscope import TimelineTrials
+from ibllib.io.extractors.mesoscope import TimelineTrials, timeline2sync
 from ibllib.pipes import training_status
 
 import one.alf.io as alfio
@@ -271,28 +271,23 @@ class ChoiceWorldTrialsNidq(base_tasks.BehaviourTask):
 
         return dsets, out_files
 
-    def _run(self, update=True, plot_qc=True):
-        # TODO pass in protocol number for fpga trials
-        dsets, out_files = self._extract_behaviour()
 
-        if not self.one or self.one.offline:
-            return out_files
-
-        self._behaviour_criterion(update=update)
+    def _run_qc(self, trials_data, update=True, plot_qc=True):
         # Run the task QC
         qc = TaskQC(self.session_path, one=self.one, log=_logger)
         qc.extractor = TaskQCExtractor(self.session_path, lazy=True, one=qc.one, sync_collection=self.sync_collection,
                                        sync_type=self.sync, task_collection=self.collection,
                                        save_path=self.session_path.joinpath(self.output_collection))
         # Extract extra datasets required for QC
-        qc.extractor.data = dsets
+        qc.extractor.data = trials_data  # FIXME This line is pointless
         qc.extractor.extract_data()
+
         # Aggregate and update Alyx QC fields
         namespace = 'task' if self.protocol_number is None else f'task_{self.protocol_number:02}'
         qc.run(update=update, namespace=namespace)
 
         if plot_qc:
-            _logger.info("Creating Trials QC plots")
+            _logger.info('Creating Trials QC plots')
             try:
                 # TODO needs to be adapted for chained protocols
                 session_id = self.one.path2eid(self.session_path)
@@ -305,6 +300,15 @@ class ChoiceWorldTrialsNidq(base_tasks.BehaviourTask):
                 _logger.error(traceback.format_exc())
                 self.status = -1
 
+    def _run(self, update=True, plot_qc=True):
+        # TODO pass in protocol number for fpga trials
+        dsets, out_files = self._extract_behaviour()
+
+        if not self.one or self.one.offline:
+            return out_files
+
+        self._behaviour_criterion(update=update)
+        self._run_qc(dsets, update=True, plot_qc=True)
         return out_files
 
 
@@ -322,21 +326,62 @@ class ChoiceWorldTrialsTimeline(ChoiceWorldTrialsNidq):
             (f'_{self.sync_namespace}_DAQdata.timestamps.npy', self.sync_collection, True),
             (f'_{self.sync_namespace}_DAQdata.meta.json', self.sync_collection, True),
         ]
+        if self.protocol:
+            extractor = get_bpod_extractor(self.session_path, protocol=self.protocol)
+            if extractor.save_names:
+                signature['output_files'] = [(fn, self.output_collection, True)
+                                             for fn in filter(None, extractor.save_names)]
         return signature
 
     def _extract_behaviour(self):
         # First determine the extractor from the task protocol
-        extractor = get_bpod_extractor(self.session_path, self.collection)
+        extractor = get_bpod_extractor(self.session_path, self.protocol, self.collection)
         ret, _ = extractor.extract(save=False)
         bpod_trials = {k: v for k, v in zip(extractor.var_names, ret)}
 
         trials = TimelineTrials(self.session_path, bpod_trials=bpod_trials)
+        self.timeline = trials.timeline  # Store for QC later
         save_path = self.session_path / self.output_collection
         dsets, out_files = trials.extract(
             save=True, path_out=save_path, sync_collection=self.sync_collection,
             task_collection=self.collection, protocol_number=self.protocol_number)
-        # TODO Task QC extractor for Timeline
+
+        if not isinstance(dsets, dict):
+            dsets = {k: v for k, v in zip(trials.var_names, dsets)}
+
         return dsets, out_files
+
+    def _behaviour_criterion(self, *args, **kwargs):
+        pass  # TODO
+
+    def _run_qc(self, trials_data, update=True, plot_qc=True):
+        # TODO Task QC extractor for Timeline
+        update = False  # TODO remove
+        qc = TaskQC(self.session_path, one=self.one, log=_logger)
+        qc.extractor = TaskQCExtractor(self.session_path, lazy=True, one=qc.one, sync_collection=self.sync_collection,
+                                       sync_type=self.sync, task_collection=self.collection,
+                                       save_path=self.session_path.joinpath(self.output_collection))
+        # Extract extra datasets required for QC
+        qc.extractor.data = TaskQCExtractor.rename_data(trials_data.copy())
+        qc.extractor.load_raw_data()
+        if not self.timeline:
+            self.timeline = alfio.load_object(self.session_path / self.sync_collection, 'DAQData', namespace='timeline')
+        sync, chmap = timeline2sync(self.timeline)
+
+        def channel_events(name):
+            """Fetches the polarities and times for a given channel"""
+            keys = ('polarities', 'times')
+            mask = sync['channels'] == chmap[name]
+            return dict(zip(keys, (sync[k][mask] for k in keys)))
+
+        from ibllib.io.extractors import ephys_fpga
+        qc.extractor.frame_ttls = ephys_fpga._clean_frame2ttl(channel_events('frame2ttl'))
+        qc.extractor.audio_ttls = ephys_fpga._clean_audio(channel_events('audio'))
+        # qc.extractor.bpod_ttls = channel_events('bpod')
+
+        # Aggregate and update Alyx QC fields
+        namespace = 'task' if self.protocol_number is None else f'task_{self.protocol_number:02}'
+        qc.run(update=update, namespace=namespace)
 
 
 class TrainingStatus(base_tasks.BehaviourTask):
