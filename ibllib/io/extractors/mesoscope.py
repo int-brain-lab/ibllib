@@ -5,7 +5,8 @@ import matplotlib.pyplot as plt
 from neurodsp.utils import falls
 
 from ibllib.plots.misc import squares, vertical_lines
-from ibllib.io.raw_daq_loaders import load_sync_timeline, timeline_meta2chmap, timeline_get_channel
+from ibllib.io.raw_daq_loaders import (load_sync_timeline, timeline_meta2chmap, timeline_get_channel,
+                                       correct_counter_discontinuities)
 import ibllib.io.extractors.base as extractors_base
 from ibllib.io.extractors.default_channel_maps import DEFAULT_MAPS
 from ibllib.io.extractors.ephys_fpga import FpgaTrials, WHEEL_TICKS, WHEEL_RADIUS_CM, get_sync_fronts
@@ -149,6 +150,8 @@ class TimelineTrials(FpgaTrials):
             raise ValueError('Unsupported coding; must be one of x1, x2 or x4')
         info = next(x for x in self.timeline['meta']['inputs'] if x['name'].lower() == 'rotary_encoder')
         raw = self.timeline['raw'][:, info['arrayColumn'] - 1]  # -1 because MATLAB indexes from 1
+        raw = correct_counter_discontinuities(raw)
+
         # Timeline evenly samples counter so we extract only change points
         d = np.diff(raw)
         ind, = np.where(d.astype(int))
@@ -164,7 +167,9 @@ class TimelineTrials(FpgaTrials):
             bpod_ts = self.bpod_trials['wheel_timestamps']
             bpod_pos = self.bpod_trials['wheel_position']
             ax0.plot(self.bpod2fpga(bpod_ts), bpod_pos)
+            ax0.set_ylabel('Bpod wheel position / rad')
             ax1.plot(wheel['timestamps'], wheel['position'])
+            ax1.set_ylabel('DAQ wheel position / rad'), ax1.set_xlabel('Time / s')
         return wheel, moves
 
     def get_valve_open_times(self, display=False, threshold=-2.5, floor_percentile=10, driver_ttls=None):
