@@ -1,3 +1,8 @@
+# Develop
+### features
+- show atlas names in swanson plot
+- allow user to define mask regions in swanson plot
+
 ## Release 2.21
 # Release Notes 2.21.2 2023-02-24
 ### bugfixes

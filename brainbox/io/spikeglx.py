@@ -3,6 +3,8 @@ import logging
 from pathlib import Path
 import time
 import json
+import string
+import random
 
 import numpy as np
 from one.alf.io import remove_uuid_file
@@ -141,12 +143,11 @@ class Streamer(spikeglx.Reader):
         n0 = self.chunks['chunk_bounds'][first_chunk]
         _logger.debug(f'Streamer: caching sample {n0}, (t={n0 / self.fs})')
         self.cache_folder.mkdir(exist_ok=True, parents=True)
-        sr = self._download_raw_partial(first_chunk=first_chunk, last_chunk=last_chunk)
+        sr, file_cbin = self._download_raw_partial(first_chunk=first_chunk, last_chunk=last_chunk)
         if not volts:
             data = np.copy(sr._raw[nsel.start - n0:nsel.stop - n0, csel])
         else:
             data = sr[nsel.start - n0: nsel.stop - n0, csel]
-
         sr.close()
         if self.remove_cached:
             shutil.rmtree(self.target_dir)
@@ -159,16 +160,20 @@ class Streamer(spikeglx.Reader):
         :param first_chunk:
         :param last_chunk:
         :return: spikeglx.Reader of the current chunk, Pathlib.Path of the directory where it is stored
+        :return: cbin local path
         """
         assert str(self.url_cbin).endswith('.cbin')
         webclient = self.one.alyx
         relpath = Path(self.url_cbin.replace(webclient._par.HTTP_DATA_SERVER, '.')).parents[0]
         # write the temp file into a subdirectory
         tdir_chunk = f"chunk_{str(first_chunk).zfill(6)}_to_{str(last_chunk).zfill(6)}"
-        target_dir = Path(self.cache_folder, relpath, tdir_chunk)
-        self.target_dir = target_dir
-        Path(target_dir).mkdir(parents=True, exist_ok=True)
-        ch_file_stream = target_dir.joinpath(self.file_chunks.name).with_suffix('.stream.ch')
+        # for parallel processes, there is a risk of collisions if the removed cached flag is set to True
+        # if the folder is to be removed append a unique identifier to avoid having duplicate names
+        if self.remove_cached:
+            tdir_chunk += ''.join([random.choice(string.ascii_letters) for _ in np.arange(10)])
+        self.target_dir = Path(self.cache_folder, relpath, tdir_chunk)
+        Path(self.target_dir).mkdir(parents=True, exist_ok=True)
+        ch_file_stream = self.target_dir.joinpath(self.file_chunks.name).with_suffix('.stream.ch')
 
         # Get the first sample index, and the number of samples to download.
         i0 = self.chunks['chunk_bounds'][first_chunk]
@@ -186,7 +191,7 @@ class Streamer(spikeglx.Reader):
                 cmeta_stream = json.load(f)
             if (cmeta_stream.get('chopped_first_sample', None) == i0 and
                     cmeta_stream.get('chopped_total_samples', None) == total_samples):
-                return spikeglx.Reader(ch_file_stream.with_suffix('.cbin'), ignore_warnings=True)
+                return spikeglx.Reader(ch_file_stream.with_suffix('.cbin'), ignore_warnings=True), ch_file_stream
 
         else:
             shutil.copy(self.file_chunks, ch_file_stream)
@@ -224,7 +229,7 @@ class Streamer(spikeglx.Reader):
             try:
                 cbin_local_path = webclient.download_file(
                     self.url_cbin, chunks=(first_byte, n_bytes),
-                    target_dir=target_dir, clobber=True, return_md5=False)
+                    target_dir=self.target_dir, clobber=True, return_md5=False)
                 break
             except Exception as e:
                 retries += 1
@@ -238,4 +243,4 @@ class Streamer(spikeglx.Reader):
         assert cbin_local_path_renamed.exists()
 
         reader = spikeglx.Reader(cbin_local_path_renamed, ignore_warnings=True)
-        return reader
+        return reader, cbin_local_path
