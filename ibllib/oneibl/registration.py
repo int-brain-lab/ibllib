@@ -261,6 +261,8 @@ class IBLRegistrationClient(RegistrationClient):
         # create associated water administration if not found
         if not session['wateradmin_session_related'] and any(task_data):
             for md, d in zip(settings, task_data):
+                if d is None:
+                    continue
                 _, _end_time = _get_session_times(ses_path, md, d)
                 user = md.get('PYBPOD_CREATOR')
                 user = user[0] if user[0] in users else self.one.alyx.user
