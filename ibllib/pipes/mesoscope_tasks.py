@@ -135,7 +135,6 @@ class MesoscopePreprocess(base_tasks.DynamicTask):
                              ('mpciROITypes.names.tsv', 'alf/FOV*', True),
                              ('mpciROIs.masks.npz', 'alf/FOV*', True),
                              ('mpciROIs.neuropilMasks.npz', 'alf/FOV*', True),
-
                              ]
         }
         return signature
