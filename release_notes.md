@@ -1,20 +1,23 @@
-# Develop
+## Release Notes 2.21
+### Release Notes 2.21.3 2023-03-22
 ### features
 - show atlas names in swanson plot
 - allow user to define mask regions in swanson plot
 
-## Release 2.21
-# Release Notes 2.21.2 2023-02-24
+### bugfixes
+- register_session: handle lack of taskData in passive sessions
+- 
+### Release Notes 2.21.2 2023-02-24
 ### bugfixes
 - get_lab function now gets lab name from session path subject name
 - create_jobs now returns pipelines
 
-# Release Notes 2.21.1 2023-02-21
+### Release Notes 2.21.1 2023-02-21
 ### bugfixes
 - remove unused jupyter and jupyterhub requirements
 - fix mapping for atlas svg plots
 
-# Release Notes 2.21.0 2023-02-14
+### Release Notes 2.21.0 2023-02-14
 ### features
 - support for multiple task protocols within a session
 - extract protocol period from spacer signals
@@ -34,7 +37,7 @@
 - vectorised atlas plots
 
 ## Release 2.20
-# Release Notes 2.20.0 2023-01-23
+### Release Notes 2.20.0 2023-01-23
 ### features
 - ephys session loader
 - bwm release documentation
@@ -43,8 +46,8 @@
 - mock gpu lock in tests
 - use cluster_ids in metrics
 
-## Release 2.19
-## Release Notes 2.19.0 2022-11-30
+## Release Notes 2.19
+### Release Notes 2.19.0 2022-11-30
 ### features
 - camera qc allows for string values
 - deprecate brainbox.io.spikeglx.stream instead use Streamer
