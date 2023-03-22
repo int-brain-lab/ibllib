@@ -152,7 +152,31 @@ def load_sync_tdms(path, sync_map, fs=None, threshold=2.5, floor_percentile=10):
     return sync, chmap
 
 
-def load_sync_timeline(timeline, chmap=None, threshold=2.5, floor_percentile=10):
+def correct_counter_discontinuities(raw, overflow=2**32):
+    """
+    Correct over- and underflow wrap around values for DAQ counter channel.
+
+    Parameters
+    ----------
+    raw : numpy.array
+        An array of counts.
+    overflow : int
+        The maximum representable value of the data before it was cast to float64.
+
+    Returns
+    -------
+    numpy.array
+        An array of counts with the over- and underflow discontinuities removed.
+    """
+    flowmax = overflow - 1
+    d = np.diff(raw)
+    # correct for counter flow discontinuities
+    d[d >= flowmax] = d[d >= flowmax] - flowmax
+    d[d <= -flowmax] = d[d <= -flowmax] + flowmax
+    return np.cumsum(np.r_[0, d]) + raw[0]  # back to position
+
+
+def load_sync_timeline(timeline, chmap=None, floor_percentile=10, threshold=None):
     """
     Load sync channels from a timeline object.
 
@@ -166,11 +190,12 @@ def load_sync_timeline(timeline, chmap=None, threshold=2.5, floor_percentile=10)
         A timeline object or the file or folder path of the _timeline_DAQdata files.
     chmap : dict
         A map of channel names and channel IDs.
-    threshold : float
-        The threshold for applying to analogue channels
     floor_percentile : float
         10% removes the percentile value of the analog trace before thresholding. This is to avoid
         DC offset drift.
+    threshold : float, dict of str: float
+        The threshold for applying to analogue channels. If None, take mean after subtracting
+        floor percentile offset.
 
     Returns
     -------
@@ -199,15 +224,24 @@ def load_sync_timeline(timeline, chmap=None, threshold=2.5, floor_percentile=10)
             # Get TLLs by applying a threshold to the diff of voltage samples
             offset = np.percentile(raw, floor_percentile, axis=0)
             logger.debug(f'estimated analogue channel DC Offset approx. {np.mean(offset):.2f}')
-            ind, val = neurodsp.utils.fronts(raw - offset, step=threshold)
-            sync.polarities = np.concatenate((sync.polarities, np.sign(val).astype('i1')))
+            step = threshold.get(label) if isinstance(threshold, dict) else threshold
+            if step is None:
+                step = np.max(raw - offset) / 2
+            iup = neurodsp.utils.rises(raw - offset, step=step, analog=True)
+            idown = neurodsp.utils.falls(raw - offset, step=step, analog=True)
+            pol = np.r_[np.ones_like(iup), -np.ones_like(idown)].astype('i1')
+            ind = np.r_[iup, idown]
+
+            sync.polarities = np.concatenate((sync.polarities, pol))
         elif info['measurement'] == 'EdgeCount':
             # Monotonically increasing values; extract indices where delta == 1
+            raw = correct_counter_discontinuities(raw)
             ind, = np.where(np.diff(raw))
             ind += 1
             sync.polarities = np.concatenate((sync.polarities, np.ones_like(ind, dtype='i1')))
         elif info['measurement'] == 'Position':
             # Bidirectional; extract indices where delta != 0
+            raw = correct_counter_discontinuities(raw)
             d = np.diff(raw)
             ind, = np.where(d.astype(int))
             sync.polarities = np.concatenate((sync.polarities, np.sign(d[ind]).astype('i1')))

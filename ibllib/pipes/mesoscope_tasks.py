@@ -40,7 +40,7 @@ class MesoscopeRegisterSnapshots(base_tasks.RegisterRawDataTask):
 
     def __init__(self, session_path, **kwargs):
         super().__init__(session_path, **kwargs)
-        self.device_collection = self.get_device_collection('mesoscope', kwargs.get('device_collection', 'raw_mesoscope_data'))
+        self.device_collection = self.get_device_collection('mesoscope', kwargs.get('device_collection', 'raw_imaging_data'))
 
     def _run(self):
         out_files = super()._run()
@@ -63,7 +63,7 @@ class MesoscopeCompress(base_tasks.DynamicTask):
 
     def __init__(self, session_path, **kwargs):
         super().__init__(session_path, **kwargs)
-        self.device_collection = self.get_device_collection('mesoscope', kwargs.get('device_collection', 'raw_mesoscope_data'))
+        self.device_collection = self.get_device_collection('mesoscope', kwargs.get('device_collection', 'raw_imaging_data'))
 
     def _run(self, remove_uncompressed=False, verify_output=True, **kwargs):
         in_dir = self.session_path.joinpath(self.device_collection or '')
@@ -322,9 +322,10 @@ class MesoscopeSync(base_tasks.DynamicTask):
 
     def __init__(self, session_path, **kwargs):
         super().__init__(session_path, **kwargs)
-        self.device_collection = self.get_device_collection('mesoscope', kwargs.get('device_collection', 'raw_mesoscope_data'))
+        self.device_collection = self.get_device_collection('mesoscope', kwargs.get('device_collection', 'raw_imaging_data'))
 
     def _run(self):
+        # TODO Move nROIs to task creation
         self.rawImagingData = alfio.load_object(self.session_path / self.device_collection, 'rawImagingData')
         n_ROIs = len(self.rawImagingData['meta']['FOV'])
         mesosync = mesoscope.MesoscopeSyncTimeline(self.session_path, n_ROIs)
@@ -340,8 +341,8 @@ class MesoscopeSync(base_tasks.DynamicTask):
         Returns
         -------
         one.alf.io.AlfBunch
-            A dictionary with keys ('times', 'polarities', 'channels'), containing the sync pulses and
-            the corresponding channel numbers.
+            A dictionary with keys ('times', 'polarities', 'channels'), containing the sync pulses
+            and the corresponding channel numbers.
         dict
             A map of channel names and their corresponding indices.
         """
@@ -375,7 +376,7 @@ class MesoscopeFOV(base_tasks.DynamicTask):
 
     def __init__(self, session_path, **kwargs):
         super().__init__(session_path, **kwargs)
-        self.device_collection = self.get_device_collection('mesoscope', kwargs.get('device_collection', 'raw_mesoscope_data'))
+        self.device_collection = self.get_device_collection('mesoscope', kwargs.get('device_collection', 'raw_imaging_data'))
 
     def _run(self):
         """

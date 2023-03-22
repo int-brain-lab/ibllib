@@ -8,7 +8,7 @@ from collections import OrderedDict
 
 from pkg_resources import parse_version
 from ibllib.io.extractors import habituation_trials, training_trials, biased_trials, opto_trials
-from ibllib.io.extractors.base import get_bpod_extractor_class
+from ibllib.io.extractors.base import get_bpod_extractor_class, protocol2extractor
 from ibllib.io.extractors.habituation_trials import HabituationTrials
 from ibllib.io.extractors.training_trials import TrainingTrials
 from ibllib.io.extractors.biased_trials import BiasedTrials, EphysTrials
@@ -100,14 +100,17 @@ def extract_all(session_path, save=True, bpod_trials=None, settings=None,
     return trials, wheel, (files_trials + files_wheel) if save else None
 
 
-def get_bpod_extractor(session_path, task_collection='raw_behavior_data') -> BaseBpodTrialsExtractor:
+def get_bpod_extractor(session_path, protocol=None, task_collection='raw_behavior_data') -> BaseBpodTrialsExtractor:
     builtins = {
         'HabituationTrials': HabituationTrials,
         'TrainingTrials': TrainingTrials,
         'BiasedTrials': BiasedTrials,
         'EphysTrials': EphysTrials
     }
-    class_name = get_bpod_extractor_class(session_path, task_collection=task_collection)
+    if protocol:
+        class_name = protocol2extractor(protocol)
+    else:
+        class_name = get_bpod_extractor_class(session_path, task_collection=task_collection)
     if class_name in builtins:
         return builtins[class_name](session_path)
 

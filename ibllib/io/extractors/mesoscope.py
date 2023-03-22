@@ -4,12 +4,15 @@ import one.alf.io as alfio
 import matplotlib.pyplot as plt
 from neurodsp.utils import falls
 
-from ibllib.plots.misc import squares
-from ibllib.io.raw_daq_loaders import load_sync_timeline, timeline_meta2chmap, timeline_get_channel
+from ibllib.plots.misc import squares, vertical_lines
+from ibllib.io.raw_daq_loaders import (load_sync_timeline, timeline_meta2chmap, timeline_get_channel,
+                                       correct_counter_discontinuities)
 import ibllib.io.extractors.base as extractors_base
 from ibllib.io.extractors.default_channel_maps import DEFAULT_MAPS
-from ibllib.io.extractors.ephys_fpga import FpgaTrials, WHEEL_TICKS, WHEEL_RADIUS_CM
+from ibllib.io.extractors.ephys_fpga import FpgaTrials, WHEEL_TICKS, WHEEL_RADIUS_CM, get_sync_fronts
 from ibllib.io.extractors.training_wheel import extract_wheel_moves
+from ibllib.io.extractors.camera import attribute_times
+from ibllib.io.extractors.ephys_fpga import _assign_events_bpod
 
 
 def timeline2sync(timeline, chmap=None):
@@ -100,11 +103,28 @@ class TimelineTrials(FpgaTrials):
         if kwargs.get('display', False):
             plot_timeline(self.timeline, channels=chmap.keys(), raw=True)
         trials = super()._extract(sync, chmap, sync_collection, extractor_type='ephys', **kwargs)
+
         # Replace valve open times with those extracted from the DAQ
-        trials[self.var_names.index('valveOpen_times')] = self.get_valve_open_times()
+        # TODO Let's look at the expected open length based on calibration and reward volume
+        mask = sync['channels'] == chmap['bpod']
+        _, driver_out, _, = _assign_events_bpod(sync['times'][mask], sync['polarities'][mask], False)
+        # Use the driver TTLs to find the valve open times that correspond to the valve opening
+        valve_open_times = self.get_valve_open_times(driver_ttls=driver_out)
+        trials_table = trials[self.var_names.index('table')]
+        assert len(valve_open_times) == sum(trials_table.feedbackType == 1)  # TODO Relax assertion
+        correct = trials_table.feedbackType == 1
+        trials[self.var_names.index('valveOpen_times')][correct] = valve_open_times
+        trials_table.feedback_times[correct] = valve_open_times
+
+        # Replace audio events
+        go_cue, error_cue = self._assign_events_audio(sync, chmap)
+        assert go_cue.size == len(trials_table)
+        assert error_cue.size == np.sum(~correct)
+        trials_table.feedback_times[~correct] = error_cue
+        trials_table.goCue_times = go_cue
         return trials
 
-    def get_wheel_positions(self, ticks=WHEEL_TICKS, radius=WHEEL_RADIUS_CM, coding='x4'):
+    def get_wheel_positions(self, ticks=WHEEL_TICKS, radius=WHEEL_RADIUS_CM, coding='x4', display=False, **kwargs):
         """
         Gets the wheel position from Timeline counter channel.
 
@@ -123,11 +143,15 @@ class TimelineTrials(FpgaTrials):
             wheel object with keys ('timestamps', 'position')
         dict
             wheelMoves object with keys ('intervals' 'peakAmplitude')
+
+        FIXME Support spacers
         """
         if coding not in ('x1', 'x2', 'x4'):
             raise ValueError('Unsupported coding; must be one of x1, x2 or x4')
         info = next(x for x in self.timeline['meta']['inputs'] if x['name'].lower() == 'rotary_encoder')
         raw = self.timeline['raw'][:, info['arrayColumn'] - 1]  # -1 because MATLAB indexes from 1
+        raw = correct_counter_discontinuities(raw)
+
         # Timeline evenly samples counter so we extract only change points
         d = np.diff(raw)
         ind, = np.where(d.astype(int))
@@ -137,9 +161,18 @@ class TimelineTrials(FpgaTrials):
 
         wheel = {'timestamps': self.timeline['timestamps'][ind + 1], 'position': pos}
         moves = extract_wheel_moves(wheel['timestamps'], wheel['position'])
+
+        if display:
+            fig, (ax0, ax1) = plt.subplots(nrows=2, sharex=True)
+            bpod_ts = self.bpod_trials['wheel_timestamps']
+            bpod_pos = self.bpod_trials['wheel_position']
+            ax0.plot(self.bpod2fpga(bpod_ts), bpod_pos)
+            ax0.set_ylabel('Bpod wheel position / rad')
+            ax1.plot(wheel['timestamps'], wheel['position'])
+            ax1.set_ylabel('DAQ wheel position / rad'), ax1.set_xlabel('Time / s')
         return wheel, moves
 
-    def get_valve_open_times(self, display=False, threshold=-2.5, floor_percentile=10):
+    def get_valve_open_times(self, display=False, threshold=-2.5, floor_percentile=10, driver_ttls=None):
         """
         Get the valve open times from the raw timeline voltage trace.
 
@@ -152,23 +185,76 @@ class TimelineTrials(FpgaTrials):
         floor_percentile : float
             10% removes the percentile value of the analog trace before thresholding. This is to
             avoid DC offset drift.
+        driver_ttls : numpy.array
+            An optional array of driver TTLs to use for assigning with the valve times.
 
         Returns
         -------
         numpy.array
             The detected valve open times.
+
+        FIXME Support spacers
+        TODO extract close times too
         """
-        info = next(x for x in self.timeline['meta']['inputs'] if x['name'] == 'reward_valve')
-        values = self.timeline['raw'][:, info['arrayColumn'] - 1]  # Timeline indices start from 1
+        tl = self.timeline
+        info = next(x for x in tl['meta']['inputs'] if x['name'] == 'reward_valve')
+        values = tl['raw'][:, info['arrayColumn'] - 1]  # Timeline indices start from 1
         offset = np.percentile(values, floor_percentile, axis=0)
-        idx = falls(values - offset, step=threshold)
-        open_times = self.timeline['timestamps'][idx]
+        idx = falls(values - offset, step=threshold)  # Voltage falls when valve opens
+        open_times = tl['timestamps'][idx]
+        # The closing of the valve is noisy. Keep only the falls that occur immediately after a Bpod TTL
+        if driver_ttls is not None:
+            # Returns an array of open_times indices, one for each driver TTL
+            ind = attribute_times(open_times, driver_ttls, tol=.1, take='after')
+            open_times = open_times[ind[ind >= 0]]
+            # TODO Log any > 40ms? Difficult to report missing valve times because of calibration
+
         if display:
-            fig, ax = plt.subplots()
-            ax.plot(self.timeline['timestamps'], values - offset)
-            ax.plot(open_times, np.zeros_like(idx), 'r*')
-            ax.set_ylabel('Voltage / V'), ax.set_xlabel('Time / s')
+            fig, (ax0, ax1) = plt.subplots(nrows=2, sharex=True)
+            ax0.plot(tl['timestamps'], timeline_get_channel(tl, 'bpod'), 'k-o')
+            if driver_ttls is not None:
+                vertical_lines(driver_ttls, ymax=5, ax=ax0, linestyle='--', color='b')
+            ax1.plot(tl['timestamps'], values - offset, 'k-o')
+            ax1.set_ylabel('Voltage / V'), ax1.set_xlabel('Time / s')
+            ax1.plot(tl['timestamps'][idx], np.zeros_like(idx), 'r*')
+            if driver_ttls is not None:
+                ax1.plot(open_times, np.zeros_like(open_times), 'g*')
         return open_times
+
+    def _assign_events_audio(self, sync, chmap, display=False):
+        """
+        This is identical to ephys_fpga._assign_events_audio, except for the ready tone threshold.
+        TODO Make DRY!
+        Parameters
+        ----------
+        display
+
+        Returns
+        -------
+
+        """
+        audio = get_sync_fronts(sync, chmap['audio'])  # FIXME Need to support spacers
+
+        # make sure that there are no 2 consecutive fall or consecutive rise events
+        assert np.all(np.abs(np.diff(audio['polarities'])) == 2)
+        # take only even time differences: ie. from rising to falling fronts
+        dt = np.diff(audio['times'])
+
+        # error tones are events lasting from 400ms to 1200ms
+        i_error_tone_in = np.where(np.logical_and(np.logical_and(0.4 < dt, dt < 1.2), audio['polarities'][:-1] == 1))[0]
+        t_error_tone_in = audio['times'][i_error_tone_in]
+
+        # detect ready tone by length below 300 ms
+        i_ready_tone_in = np.where(np.logical_and(dt <= 0.3, audio['polarities'][:-1] == 1))[0]
+        t_ready_tone_in = audio['times'][i_ready_tone_in]
+        if display:  # pragma: no cover
+            fig, ax = plt.subplots(nrows=2, sharex=True)
+            ax[0].plot(self.timeline.timestamps, timeline_get_channel(self.timeline, 'audio'), 'k-o')
+            squares(audio['times'], audio['polarities'], yrange=[-1, 1], ax=ax[1])
+            vertical_lines(t_ready_tone_in, ymin=-.8, ymax=.8, ax=ax[1])
+            vertical_lines(t_error_tone_in, ymin=-.8, ymax=.8, ax=ax[1])
+
+        return t_ready_tone_in, t_error_tone_in
 
 
 class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
