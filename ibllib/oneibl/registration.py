@@ -426,6 +426,8 @@ def _get_session_performance(md, ses_data):
     else:
         assert isinstance(ses_data, (list, tuple)) and len(ses_data) == len(md)
 
+    # For now just remove missing session data, long run move this function into extractors
+    ses_data = [sd for sd in ses_data if sd]
     n_trials = [x[-1]['trial_num'] for x in ses_data]
     # checks that the number of actual trials and labeled number of trials check out
     assert all(len(x) == n for x, n in zip(ses_data, n_trials))
