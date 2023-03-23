@@ -23,7 +23,7 @@ from ibllib.io.extractors import mesoscope
 _logger = logging.getLogger(__name__)
 
 
-class MesoscopeRegisterSnapshots(base_tasks.RegisterRawDataTask):
+class MesoscopeRegisterSnapshots(base_tasks.MesoscopeTask, base_tasks.RegisterRawDataTask):
 
     priority = 100
     job_size = 'small'
@@ -40,7 +40,8 @@ class MesoscopeRegisterSnapshots(base_tasks.RegisterRawDataTask):
 
     def __init__(self, session_path, **kwargs):
         super().__init__(session_path, **kwargs)
-        self.device_collection = self.get_device_collection('mesoscope', kwargs.get('device_collection', 'raw_imaging_data'))
+        self.device_collection = self.get_device_collection('mesoscope',
+                                                            kwargs.get('device_collection', 'raw_imaging_data_*'))
 
     def _run(self):
         out_files = super()._run()
@@ -48,7 +49,7 @@ class MesoscopeRegisterSnapshots(base_tasks.RegisterRawDataTask):
         return out_files
 
 
-class MesoscopeCompress(base_tasks.DynamicTask):
+class MesoscopeCompress(base_tasks.MesoscopeTask):
 
     priority = 90
     job_size = 'large'
@@ -60,10 +61,6 @@ class MesoscopeCompress(base_tasks.DynamicTask):
             'output_files': [('imaging.frames.tar.bz', self.device_collection, True)]
         }
         return signature
-
-    def __init__(self, session_path, **kwargs):
-        super().__init__(session_path, **kwargs)
-        self.device_collection = self.get_device_collection('mesoscope', kwargs.get('device_collection', 'raw_imaging_data'))
 
     def _run(self, remove_uncompressed=False, verify_output=True, **kwargs):
         in_dir = self.session_path.joinpath(self.device_collection or '')
@@ -104,16 +101,11 @@ class MesoscopeCompress(base_tasks.DynamicTask):
         return [outfile]
 
 
-class MesoscopePreprocess(base_tasks.DynamicTask):
+class MesoscopePreprocess(base_tasks.MesoscopeTask):
 
     priority = 80
     cpu = 4  # TODO: see if this works on the local servers or blows the RAM
     job_size = 'large'
-
-    def __init__(self, session_path, **kwargs):
-        super(MesoscopePreprocess, self).__init__(session_path, **kwargs)
-        self.device_collection = self.get_device_collection('mesoscope',
-                                                            kwargs.get('device_collection', 'raw_imaging_data_*'))
 
     @property
     def signature(self):
@@ -135,20 +127,9 @@ class MesoscopePreprocess(base_tasks.DynamicTask):
                              ('mpciROITypes.names.tsv', 'alf/FOV*', True),
                              ('mpciROIs.masks.npz', 'alf/FOV*', True),
                              ('mpciROIs.neuropilMasks.npz', 'alf/FOV*', True),
-
                              ]
         }
         return signature
-
-    def get_signatures(self, **kwargs):
-        """Specify how many of the individual inputs to expect"""
-        self.session_path = Path(self.session_path)
-        input_types = [s[0] for s in self.signature['input_files'] if s[0] != 'bad_frames.npy']
-        raw_imaging_folders = [p.name for p in self.session_path.glob(self.device_collection)]
-        all_inputs = list(product(input_types, raw_imaging_folders, [True]))
-        all_inputs.append(('bad_frames.npy', raw_imaging_folders[0], False))
-        self.input_files = all_inputs
-        self.output_files = self.signature['output_files']
 
     def _rename_outputs(self, rename_dict=None):
         if rename_dict is None:
@@ -302,7 +283,7 @@ class MesoscopePreprocess(base_tasks.DynamicTask):
         return out_files
 
 
-class MesoscopeSync(base_tasks.DynamicTask):
+class MesoscopeSync(base_tasks.MesoscopeTask):
     """Extract the frame times from the main DAQ."""
 
     priority = 40
@@ -320,10 +301,6 @@ class MesoscopeSync(base_tasks.DynamicTask):
                              ('mpciStack.timeshift.npy', 'alf/mesoscope/FOV*', True), ]
         }
         return signature
-
-    def __init__(self, session_path, **kwargs):
-        super().__init__(session_path, **kwargs)
-        self.device_collection = self.get_device_collection('mesoscope', kwargs.get('device_collection', 'raw_imaging_data'))
 
     def _run(self):
         # TODO function to determine nROIs
@@ -362,7 +339,7 @@ class MesoscopeSync(base_tasks.DynamicTask):
         return sync, chmap
 
 
-class MesoscopeFOV(base_tasks.DynamicTask):
+class MesoscopeFOV(base_tasks.MesoscopeTask):
 
     priority = 40
     job_size = 'small'
@@ -375,9 +352,6 @@ class MesoscopeFOV(base_tasks.DynamicTask):
         }
         return signature
 
-    def __init__(self, session_path, **kwargs):
-        super().__init__(session_path, **kwargs)
-        self.device_collection = self.get_device_collection('mesoscope', kwargs.get('device_collection', 'raw_imaging_data'))
 
     def _run(self):
         """
