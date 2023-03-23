@@ -1,10 +1,12 @@
 """Abstract base classes for dynamic pipeline tasks."""
+import logging
+from pathlib import Path
+
 from one.webclient import no_cache
 
 from ibllib.pipes.tasks import Task
 import ibllib.io.session_params as sess_params
 from ibllib.qc.base import sign_off_dict, SIGN_OFF_CATEGORIES
-import logging
 
 _logger = logging.getLogger(__name__)
 
@@ -148,6 +150,26 @@ class WidefieldTask(DynamicTask):
         super().__init__(session_path, **kwargs)
 
         self.device_collection = self.get_device_collection('widefield', kwargs.get('device_collection', 'raw_widefield_data'))
+
+
+class MesoscopeTask(DynamicTask):
+    def __init__(self, session_path, **kwargs):
+        super().__init__(session_path, **kwargs)
+
+        self.device_collection = self.get_device_collection('mesoscope', kwargs.get('device_collection',
+                                                                                    'raw_imaging_data_*'))
+
+    def get_signatures(self, **kwargs):
+        """Specify the individual inputs and outputs to expect based on the available of device collection folders"""
+        self.session_path = Path(self.session_path)
+        # Glob for all device collection (raw imaging data) folders
+        raw_imaging_folders = [p.name for p in self.session_path.glob(self.device_collection)]
+        # For all inputs and outputs that are part of the device collection, expand to one file per folder
+        # All others keep unchanged
+        self.input_files = [(sig[0], folder, sig[2]) if sig[1] == self.device_collection else sig for folder in
+                            raw_imaging_folders for sig in self.signature['input_files']]
+        self.output_files = [(sig[0], folder, sig[2]) if sig[1] == self.device_collection else sig for folder in
+                             raw_imaging_folders for sig in self.signature['output_files']]
 
 
 class RegisterRawDataTask(DynamicTask):
