@@ -336,7 +336,7 @@ class ChoiceWorldTrialsTimeline(ChoiceWorldTrialsNidq):
     def _extract_behaviour(self):
         # First determine the extractor from the task protocol
         extractor = get_bpod_extractor(self.session_path, self.protocol, self.collection)
-        ret, _ = extractor.extract(save=False)
+        ret, _ = extractor.extract(save=False, task_collection=self.collection)
         bpod_trials = {k: v for k, v in zip(extractor.var_names, ret)}
 
         trials = TimelineTrials(self.session_path, bpod_trials=bpod_trials)

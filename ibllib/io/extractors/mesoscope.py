@@ -272,7 +272,7 @@ class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
         self.var_names = [f'{x}_{y.lower()}' for x in self.var_names for y in rois]
         self.save_names = [f'{y}/{x}' for x in self.save_names for y in rois]
 
-    def _extract(self, sync=None, chmap=None, device_collection='raw_mesoscope_data'):
+    def _extract(self, sync=None, chmap=None, device_collection='raw_mesoscope_data', bout=None):
         """
         Extract the frame timestamps for each individual field of view (FOV) and the time offsets
         for each line scan.
@@ -287,6 +287,8 @@ class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
             channel is required.
         device_collection : str
             The location of the raw imaging data.
+        bout : int
+            The imagining bout number, from 0-n, corresponding to raw_imaging_data folders.
 
         Returns
         -------

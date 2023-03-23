@@ -326,7 +326,7 @@ class MesoscopeSync(base_tasks.DynamicTask):
         self.device_collection = self.get_device_collection('mesoscope', kwargs.get('device_collection', 'raw_imaging_data'))
 
     def _run(self):
-        # TODO Move nROIs to task creation
+        # TODO function to determine nROIs
         self.rawImagingData = alfio.load_object(self.session_path / self.device_collection, 'rawImagingData')
         n_ROIs = len(self.rawImagingData['meta']['FOV'])
         mesosync = mesoscope.MesoscopeSyncTimeline(self.session_path, n_ROIs)
