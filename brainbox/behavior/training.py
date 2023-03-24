@@ -184,7 +184,7 @@ def get_training_status(trials, task_protocol, ephys_sess_dates, n_delay):
     """
     Compute training status of a subject from three consecutive training datasets
 
-    :param trials: dict containing trials objects from three consective training sessions
+    :param trials: dict containing trials objects from three consecutive training sessions
     :type trials: Bunch
     :param task_protocol: task protocol used for the three training session, can be 'training',
     'biased' or 'ephys'
@@ -764,3 +764,37 @@ def plot_reaction_time_over_trials(trials, stim_on_type='stimOn_times', ax=None,
         ax.set_title(title)
 
     return fig, ax
+
+
+def query_criterion(subject, status, from_status=None, one=None):
+    """
+
+    Parameters
+    ----------
+    subject : str
+        The subject name.
+    status : str
+        The training status to query for.
+    from_status : str, optional
+        Count number of sessions and days from reaching `from_status` to `status`.
+    one : one.api.OneAlyx, optional
+        An instance of ONE.
+
+    Returns
+    -------
+    str
+        The eID of the first session where this training status was reached.
+    int
+        The number of sessions it took to reach `status` (optionally from reaching `from_status`).
+    int
+        The number of days it tool to reach `status` (optionally from reaching `from_status`).
+    """
+    one = one or ONE()
+    subject_json = one.alyx.rest('subjects', 'read', id=subject)['json']
+    if not (criteria := subject_json.get('criteria')) or status not in criteria:
+        return None, None, None
+    to_date = criteria[status]
+    from_date = criteria.get(from_status)
+    eids, det = one.search(subject=subject, date_range=[from_date, to_date], details=True)
+    date_range = list(map(datetime.date.fromisoformat, (det[0], det[-1])))
+    return eids[-1], len(eids), (date_range[1] - date_range[0]).days

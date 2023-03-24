@@ -12,8 +12,10 @@ import subprocess
 import shutil
 from pathlib import Path
 from itertools import chain, product
+import re
 
 import numpy as np
+from one.alf.files import session_path_parts
 import one.alf.io as alfio
 import one.alf.exceptions as alferr
 
@@ -296,7 +298,8 @@ class MesoscopeSync(base_tasks.MesoscopeTask):
                             (f'_{self.sync_namespace}_DAQData.timestamps.npy', self.sync_collection, True),
                             (f'_{self.sync_namespace}_DAQData.meta.json', self.sync_collection, True),
                             ('_ibl_rawImagingData.meta.json', self.device_collection, True),
-                            ('rawImagingData.times_scanImage.npy', self.device_collection, True),],
+                            ('rawImagingData.times_scanImage.npy', self.device_collection, True),
+                            ('_ibl_softwareEvents.table_timeline.htsv', self.sync_collection, False),],
             'output_files': [('mpci.times.npy', 'alf/mesoscope/FOV*', True),
                              ('mpciStack.timeshift.npy', 'alf/mesoscope/FOV*', True), ]
         }
@@ -304,11 +307,30 @@ class MesoscopeSync(base_tasks.MesoscopeTask):
 
     def _run(self):
         # TODO function to determine nROIs
-        self.rawImagingData = alfio.load_object(self.session_path / self.device_collection, 'rawImagingData')
-        n_ROIs = len(self.rawImagingData['meta']['FOV'])
-        mesosync = mesoscope.MesoscopeSyncTimeline(self.session_path, n_ROIs)
-        sync, chmap = self.load_sync()  # Extract sync data from raw DAQ data
-        mesosync.extract(save=True, sync=sync, chmap=chmap, device_collection=self.device_collection)
+        try:
+            events = alfio.load_object(self.session_path / self.sync_collection, 'softwareEvents')
+            assert len(set(map(len, events.values()))) == 1
+        except alferr.ALFObjectNotFound:
+            _logger.debug('No software events found for session %s', self.session_path)
+            events = {}
+        for collection in map(lambda p: p.name, self.session_path.glob('raw_imaging_data*')):  # TODO use device collection?
+            self.rawImagingData = alfio.load_object(self.session_path / collection, 'rawImagingData')
+            if re.match(r'^raw_\w+_data_\d{2}$', collection):
+                i = int(collection.split('_')[-1])
+                if not events and i > 0:
+                    raise ValueError('No software events found')
+                _, subject, date, _ = session_path_parts(self.session_path)
+                pattern = re.compile(rf'(Exp|Block)Start\s{subject}\s{date.replace("-", "")}\s{i + 1}')
+
+                idx = list(map(bool, map(pattern.match, events['event_timeline']))).index(True)
+                tmin = events['time_timeline'][idx]
+                # tmax =
+            else:
+                ...
+                n_ROIs = len(self.rawImagingData['meta']['FOV'])
+                mesosync = mesoscope.MesoscopeSyncTimeline(self.session_path, n_ROIs)
+                sync, chmap = self.load_sync()  # Extract sync data from raw DAQ data
+                mesosync.extract(save=True, sync=sync, chmap=chmap, device_collection=self.device_collection)
 
     def load_sync(self):
         """

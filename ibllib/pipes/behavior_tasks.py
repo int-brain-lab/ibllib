@@ -271,7 +271,6 @@ class ChoiceWorldTrialsNidq(base_tasks.BehaviourTask):
 
         return dsets, out_files
 
-
     def _run_qc(self, trials_data, update=True, plot_qc=True):
         # Run the task QC
         qc = TaskQC(self.session_path, one=self.one, log=_logger)
@@ -340,8 +339,10 @@ class ChoiceWorldTrialsTimeline(ChoiceWorldTrialsNidq):
         bpod_trials = {k: v for k, v in zip(extractor.var_names, ret)}
 
         trials = TimelineTrials(self.session_path, bpod_trials=bpod_trials)
-        self.timeline = trials.timeline  # Store for QC later
         save_path = self.session_path / self.output_collection
+        if extractor.settings.get('IBLRIG_VERSION_TAG') == '100.0.0':
+            _logger.warning('Protocol spacers not supported; setting protocol_number to None')
+            self.protocol_number = None
         dsets, out_files = trials.extract(
             save=True, path_out=save_path, sync_collection=self.sync_collection,
             task_collection=self.collection, protocol_number=self.protocol_number)
@@ -349,12 +350,17 @@ class ChoiceWorldTrialsTimeline(ChoiceWorldTrialsNidq):
         if not isinstance(dsets, dict):
             dsets = {k: v for k, v in zip(trials.var_names, dsets)}
 
+        self.timeline = trials.timeline  # Store for QC later
+        self.frame2ttl = trials.frame2ttl
+        self.audio = trials.audio
+
         return dsets, out_files
 
     def _behaviour_criterion(self, *args, **kwargs):
         pass  # TODO
 
     def _run_qc(self, trials_data, update=True, plot_qc=True):
+        # TODO Document
         # TODO Task QC extractor for Timeline
         update = False  # TODO remove
         qc = TaskQC(self.session_path, one=self.one, log=_logger)
@@ -364,19 +370,9 @@ class ChoiceWorldTrialsTimeline(ChoiceWorldTrialsNidq):
         # Extract extra datasets required for QC
         qc.extractor.data = TaskQCExtractor.rename_data(trials_data.copy())
         qc.extractor.load_raw_data()
-        if not self.timeline:
-            self.timeline = alfio.load_object(self.session_path / self.sync_collection, 'DAQData', namespace='timeline')
-        sync, chmap = timeline2sync(self.timeline)
 
-        def channel_events(name):
-            """Fetches the polarities and times for a given channel"""
-            keys = ('polarities', 'times')
-            mask = sync['channels'] == chmap[name]
-            return dict(zip(keys, (sync[k][mask] for k in keys)))
-
-        from ibllib.io.extractors import ephys_fpga
-        qc.extractor.frame_ttls = ephys_fpga._clean_frame2ttl(channel_events('frame2ttl'))
-        qc.extractor.audio_ttls = ephys_fpga._clean_audio(channel_events('audio'))
+        qc.extractor.frame_ttls = self.frame2ttl
+        qc.extractor.audio_ttls = self.audio
         # qc.extractor.bpod_ttls = channel_events('bpod')
 
         # Aggregate and update Alyx QC fields

@@ -497,8 +497,7 @@ def extract_behaviour_sync(sync, chmap=None, display=False, bpod_trials=None, tm
         missing_bpod = fcn(bpod_start[np.setxor1d(ibpod, np.arange(len(bpod_start)))])
         t_trial_start = np.sort(np.r_[t_trial_start, missing_bpod])
 
-    t_ready_tone_in, t_error_tone_in = _assign_events_audio(
-        audio['times'], audio['polarities'])
+    t_ready_tone_in, t_error_tone_in = _assign_events_audio(audio['times'], audio['polarities'])
     trials = Bunch({
         'goCue_times': _assign_events_to_trial(t_trial_start, t_ready_tone_in, take='first'),
         'errorCue_times': _assign_events_to_trial(t_trial_start, t_error_tone_in),

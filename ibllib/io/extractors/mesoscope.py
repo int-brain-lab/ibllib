@@ -9,7 +9,7 @@ from ibllib.io.raw_daq_loaders import (load_sync_timeline, timeline_meta2chmap, 
                                        correct_counter_discontinuities)
 import ibllib.io.extractors.base as extractors_base
 from ibllib.io.extractors.default_channel_maps import DEFAULT_MAPS
-from ibllib.io.extractors.ephys_fpga import FpgaTrials, WHEEL_TICKS, WHEEL_RADIUS_CM, get_sync_fronts
+from ibllib.io.extractors.ephys_fpga import FpgaTrials, WHEEL_TICKS, WHEEL_RADIUS_CM, get_sync_fronts, get_protocol_period
 from ibllib.io.extractors.training_wheel import extract_wheel_moves
 from ibllib.io.extractors.camera import attribute_times
 from ibllib.io.extractors.ephys_fpga import _assign_events_bpod
@@ -100,42 +100,72 @@ class TimelineTrials(FpgaTrials):
     def _extract(self, sync=None, chmap=None, sync_collection='raw_sync_data', **kwargs):
         if not (sync or chmap):
             sync, chmap = timeline2sync(self.timeline)
+
         if kwargs.get('display', False):
             plot_timeline(self.timeline, channels=chmap.keys(), raw=True)
         trials = super()._extract(sync, chmap, sync_collection, extractor_type='ephys', **kwargs)
 
+        # If no protocol number is defined, trim timestamps based on Bpod trials intervals
+        trials_table = trials[self.var_names.index('table')]
+        bpod = get_sync_fronts(sync, chmap['bpod'])
+        if kwargs.get('protocol_number') is None:
+            tmin = trials_table.intervals_0.iloc[0]
+            tmax = trials_table.intervals_1.iloc[-1]
+            # Ensure wheel is cut off based on trials
+            wheel_ts_idx = self.var_names.index('wheel_timestamps')
+            mask = np.logical_and(tmin <= trials[wheel_ts_idx], trials[wheel_ts_idx] <= tmax)
+            trials[wheel_ts_idx] = trials[wheel_ts_idx][mask]
+            wheel_pos_idx = self.var_names.index('wheel_position')
+            trials[wheel_pos_idx] = trials[wheel_pos_idx][mask]
+            move_idx = self.var_names.index('wheelMoves_intervals')
+            mask = np.logical_and(trials[move_idx][:, 0] >= tmin, trials[move_idx][:, 0] <= tmax)
+            trials[move_idx] = trials[move_idx][mask, :]
+        else:
+            tmin, tmax = get_protocol_period(self.session_path, kwargs['protocol_number'], bpod)
+        bpod = get_sync_fronts(sync, chmap['bpod'], tmin, tmax)
+
+        self.frame2ttl = get_sync_fronts(sync, chmap['frame2ttl'], tmin, tmax)  # save for later access by QC
+
         # Replace valve open times with those extracted from the DAQ
         # TODO Let's look at the expected open length based on calibration and reward volume
-        mask = sync['channels'] == chmap['bpod']
-        _, driver_out, _, = _assign_events_bpod(sync['times'][mask], sync['polarities'][mask], False)
+        _, driver_out, _, = _assign_events_bpod(bpod['times'], bpod['polarities'], False)
         # Use the driver TTLs to find the valve open times that correspond to the valve opening
         valve_open_times = self.get_valve_open_times(driver_ttls=driver_out)
-        trials_table = trials[self.var_names.index('table')]
         assert len(valve_open_times) == sum(trials_table.feedbackType == 1)  # TODO Relax assertion
         correct = trials_table.feedbackType == 1
         trials[self.var_names.index('valveOpen_times')][correct] = valve_open_times
         trials_table.feedback_times[correct] = valve_open_times
 
         # Replace audio events
-        go_cue, error_cue = self._assign_events_audio(sync, chmap)
+        self.audio = get_sync_fronts(sync, chmap['audio'], tmin, tmax)
+        go_cue, error_cue = self._assign_events_audio(self.audio['times'], self.audio['polarities'])
         assert go_cue.size == len(trials_table)
         assert error_cue.size == np.sum(~correct)
         trials_table.feedback_times[~correct] = error_cue
         trials_table.goCue_times = go_cue
         return trials
 
-    def get_wheel_positions(self, ticks=WHEEL_TICKS, radius=WHEEL_RADIUS_CM, coding='x4', display=False, **kwargs):
+    def get_wheel_positions(self, ticks=WHEEL_TICKS, radius=WHEEL_RADIUS_CM, coding='x4',
+                            tmin=None, tmax=None, display=False, **kwargs):
         """
         Gets the wheel position from Timeline counter channel.
+
+        Called by the super class extractor (FPGATrials._extract).
 
         Parameters
         ----------
         ticks : int
-            Number of ticks corresponding to a full revolution (1024 for IBL rotary encoder)
+            Number of ticks corresponding to a full revolution (1024 for IBL rotary encoder).
         radius : float
-            Radius of the wheel. Defaults to 1 for an output in radians
+            Radius of the wheel. Defaults to 1 for an output in radians.
         coding : str {'x1', 'x2', 'x4'}
-            Rotary encoder encoding (IBL default is x4)
+            Rotary encoder encoding (IBL default is x4).
+        tmin : float
+            The minimum time from which to extract the sync pulses.
+        tmax : float
+            The maximum time up to which we extract the sync pulses.
+        display : bool
+            If true, plot the wheel positions from bpod and the DAQ.
 
         Returns
         -------
@@ -143,8 +173,6 @@ class TimelineTrials(FpgaTrials):
             wheel object with keys ('timestamps', 'position')
         dict
             wheelMoves object with keys ('intervals' 'peakAmplitude')
-
-        FIXME Support spacers
         """
         if coding not in ('x1', 'x2', 'x4'):
             raise ValueError('Unsupported coding; must be one of x1, x2 or x4')
@@ -159,7 +187,13 @@ class TimelineTrials(FpgaTrials):
         pos -= pos[0]  # Start from zero
         pos = pos / ticks * np.pi * 2 * radius / int(coding[1])  # Convert to radians
 
-        wheel = {'timestamps': self.timeline['timestamps'][ind + 1], 'position': pos}
+        # Get timestamps of changes and trim based on protocol spacers
+        ts = self.timeline['timestamps'][ind + 1]
+        tmin = ts.min() if tmin is None else tmin
+        tmax = ts.max() if tmax is None else tmax
+        mask = np.logical_and(ts >= tmin, ts <= tmax)
+
+        wheel = {'timestamps': ts[mask], 'position': pos[mask]}
         moves = extract_wheel_moves(wheel['timestamps'], wheel['position'])
 
         if display:
@@ -193,7 +227,6 @@ class TimelineTrials(FpgaTrials):
         numpy.array
             The detected valve open times.
 
-        FIXME Support spacers
         TODO extract close times too
         """
         tl = self.timeline
@@ -221,36 +254,43 @@ class TimelineTrials(FpgaTrials):
                 ax1.plot(open_times, np.zeros_like(open_times), 'g*')
         return open_times
 
-    def _assign_events_audio(self, sync, chmap, display=False):
+    def _assign_events_audio(self, audio_times, audio_polarities, display=False):
         """
         This is identical to ephys_fpga._assign_events_audio, except for the ready tone threshold.
-        TODO Make DRY!
+
         Parameters
         ----------
-        display
+        audio_times : numpy.array
+            An array of audio TTL front times.
+        audio_polarities : numpy.array
+            An array of audio TTL front polarities (1 for rises, -1 for falls).
+        display : bool
+            If true, display audio pulses and the assigned onsets.
 
         Returns
         -------
-
+        numpy.array
+            The times of the go cue onsets.
+        numpy.array
+            The times of the error tone onsets.
         """
-        audio = get_sync_fronts(sync, chmap['audio'])  # FIXME Need to support spacers
-
         # make sure that there are no 2 consecutive fall or consecutive rise events
-        assert np.all(np.abs(np.diff(audio['polarities'])) == 2)
+        assert np.all(np.abs(np.diff(audio_polarities)) == 2)
         # take only even time differences: ie. from rising to falling fronts
-        dt = np.diff(audio['times'])
+        dt = np.diff(audio_times)
+        onsets = audio_polarities[:-1] == 1
 
         # error tones are events lasting from 400ms to 1200ms
-        i_error_tone_in = np.where(np.logical_and(np.logical_and(0.4 < dt, dt < 1.2), audio['polarities'][:-1] == 1))[0]
-        t_error_tone_in = audio['times'][i_error_tone_in]
+        i_error_tone_in = np.where(np.logical_and(0.4 < dt, dt < 1.2) & onsets)[0]
+        t_error_tone_in = audio_times[i_error_tone_in]
 
         # detect ready tone by length below 300 ms
-        i_ready_tone_in = np.where(np.logical_and(dt <= 0.3, audio['polarities'][:-1] == 1))[0]
-        t_ready_tone_in = audio['times'][i_ready_tone_in]
+        i_ready_tone_in = np.where(np.logical_and(dt <= 0.3, onsets))[0]
+        t_ready_tone_in = audio_times[i_ready_tone_in]
         if display:  # pragma: no cover
             fig, ax = plt.subplots(nrows=2, sharex=True)
             ax[0].plot(self.timeline.timestamps, timeline_get_channel(self.timeline, 'audio'), 'k-o')
-            squares(audio['times'], audio['polarities'], yrange=[-1, 1], ax=ax[1])
+            squares(audio_times, audio_polarities, yrange=[-1, 1], ax=ax[1])
             vertical_lines(t_ready_tone_in, ymin=-.8, ymax=.8, ax=ax[1])
             vertical_lines(t_error_tone_in, ymin=-.8, ymax=.8, ax=ax[1])
 
