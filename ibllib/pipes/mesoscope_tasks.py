@@ -11,7 +11,7 @@ import logging
 import subprocess
 import shutil
 from pathlib import Path
-from itertools import chain, product
+from itertools import chain
 import re
 
 import numpy as np
@@ -133,7 +133,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         }
         return signature
 
-    def _rename_outputs(self, rename_dict=None):
+    def _rename_outputs(self, suite2p_dir, rename_dict=None):
         if rename_dict is None:
             rename_dict = {
                 'F.npy': 'mpci.ROIActivityF.npy',
@@ -141,7 +141,6 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                 'spks.npy': 'mpci.ROIActivityDeconvolved.npy',
             }
         # Rename the outputs, first the subdirectories
-        suite2p_dir = Path(self.db['save_path0']).joinpath('suite2p')
         for plane_dir in suite2p_dir.iterdir():
             # ignore the combined dir
             if plane_dir.name != 'combined':
@@ -191,7 +190,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                                         f"Using meta_data from first folder!")
             else:
                 # Check that this number of channels is the same across all FOVS
-                if not len(set([fov['channelIdx'] for fov in meta['FOV']])) == 1:
+                if not len(set([len(fov['channelIdx']) for fov in meta['FOV']])) == 1:
                     _logger.warning(f"Not all FOVs have the same number of channels. "
                                     f"Using channel number from first FOV!")
                 else:
@@ -254,7 +253,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         return db
 
     def _run(self, run_suite2p=True, rename_files=True, **kwargs):
-        # import suite2p
+        import suite2p
         # Load metadata and make sure all metadata is consistent across FOVs
         meta_data_all = [alfio.load_object(self.session_path / f[1], 'rawImagingData')['meta']
                          for f in self.input_files if f[0] == '_ibl_rawImagingData.meta.json']
@@ -262,6 +261,10 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
             meta = self._check_meta_data(meta_data_all)
         else:
             meta = meta_data_all[0]
+        # Read and consolidate the experimenters frame QC
+        meta_data_all = [alfio.load_object(self.session_path / f[1], 'rawImagingData')['meta']
+                         for f in self.input_files if f[0] == '_ibl_rawImagingData.meta.json']
+
         # Get default ops
         ops = suite2p.default_ops()
         # Create db which overwrites ops when passed to suite2p, with information from meta data and hardcoded
@@ -272,17 +275,18 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                 # db overwrites ops when passed to run_s2p, so we only need to update / add it here
                 db[k] = v
         # Update the task kwargs attribute as it will be stored in the arguments json field in alyx
-        self.kwargs = {**self.kwargs, **self.db}
+        self.kwargs = {**self.kwargs, **db}
         # Run suite2p
         if run_suite2p:
             _ = suite2p.run_s2p(ops=ops, db=db)
-        # Rename files and return outputs
-        if rename_files:
-            out_files = self._rename_outputs()
+            # Rename files and return outputs
+            if rename_files:
+                out_files = self._rename_outputs(Path(db['save_path0']).joinpath('suite2p'))
+            else:
+                out_files = list(Path(db['save_path0']).joinpath('suite2p').rglob('*'))
+            return out_files
         else:
-            out_files = list(Path(self.db['save_path0']).joinpath('suite2p').rglob('*'))
-
-        return out_files
+            return None
 
 
 class MesoscopeSync(base_tasks.MesoscopeTask):
