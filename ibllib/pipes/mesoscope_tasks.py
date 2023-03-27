@@ -13,8 +13,11 @@ import shutil
 from pathlib import Path
 from itertools import chain
 import re
+import csv
 
 import numpy as np
+from scipy.io import loadmat
+
 from one.alf.files import session_path_parts
 import one.alf.io as alfio
 import one.alf.exceptions as alferr
@@ -198,6 +201,31 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
 
         return meta_data_all[0]
 
+    def _consolidate_exptQC(self, exptQC):
+        """Consolidate exptQC.mat files into a single file"""
+
+        # Merge and make sure same indexes have same names across all files
+        frameQC_names_list = [e['frameQC_names'] for e in exptQC]
+        frameQC_names_list = [{f: 0} if isinstance(f, str) else {f[i]: i for i in range(len(f))}
+                              for f in frameQC_names_list]
+        frameQC_names = {k: v for d in frameQC_names_list for k, v in d.items()}
+        for d in frameQC_names_list:
+            for k, v in d.items():
+                if frameQC_names[k] != v:
+                    _logger.error(f"exptQC.mat files have different values for name '{k}'")
+                    raise IOError(f"exptQC.mat files have different values for name '{k}'")
+        frameQC_names = [(f,) for f in frameQC_names.keys()]
+
+        # Concatenate frames
+        frameQC = np.concatenate([e['frameQC_frames'] for e in exptQC], axis=0)
+
+        # Transform to bad_frames as expected by suite2p
+        bad_frames = np.where(frameQC != 0)[0]
+        if bad_frames.shape[0] == 0:
+            bad_frames = None
+
+        return frameQC, frameQC_names, bad_frames
+
     def _create_db(self, meta):
         """Create the ops dictionary for suite2p"""
 
@@ -219,7 +247,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         dy = np.round(cXY[:, 1] * pixSizeY).astype(dtype=np.int32)
 
         db = {
-            'data_path': [str(s) for s in self.session_path.glob(f'{self.device_collection}')],
+            'data_path': sorted([str(s) for s in self.session_path.glob(f'{self.device_collection}')]),
             'save_path0': str(self.session_path.joinpath('alf')),
             'fast_disk': '',  # TODO
             'look_one_level_down': False,  # don't look in the children folders as that is where the reference data is
@@ -255,16 +283,12 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
     def _run(self, run_suite2p=True, rename_files=True, **kwargs):
         import suite2p
         # Load metadata and make sure all metadata is consistent across FOVs
-        meta_data_all = [alfio.load_object(self.session_path / f[1], 'rawImagingData')['meta']
+        rawImagingData = [alfio.load_object(self.session_path.joinpath(f[1], 'rawImagingData'))['meta']
                          for f in self.input_files if f[0] == '_ibl_rawImagingData.meta.json']
-        if len(meta_data_all) > 1:
-            meta = self._check_meta_data(meta_data_all)
+        if len(rawImagingData) > 1:
+            meta = self._check_meta_data(rawImagingData)
         else:
-            meta = meta_data_all[0]
-        # Read and consolidate the experimenters frame QC
-        meta_data_all = [alfio.load_object(self.session_path / f[1], 'rawImagingData')['meta']
-                         for f in self.input_files if f[0] == '_ibl_rawImagingData.meta.json']
-
+            meta = rawImagingData[0]
         # Get default ops
         ops = suite2p.default_ops()
         # Create db which overwrites ops when passed to suite2p, with information from meta data and hardcoded
@@ -276,6 +300,21 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                 db[k] = v
         # Update the task kwargs attribute as it will be stored in the arguments json field in alyx
         self.kwargs = {**self.kwargs, **db}
+        # Read and consolidate the experimenters frame QC
+        exptQC = [loadmat(str(self.session_path.joinpath(f[1], 'exptQC.mat')),squeeze_me=True, simplify_cells=True)
+                  for f in self.input_files if f[0] == 'exptQC.mat']
+        if len(exptQC) > 0:
+            frameQC, frameQC_names, bad_frames = self._consolidate_exptQC(exptQC)
+        else:
+            frameQC, frameQC_names, bad_frames = np.empty(), [], None
+        # Save frameQC datasets,
+        np.save(self.session_path.joinpath('alf', 'mpci.mpciFrameQC.npy'), frameQC)
+        with open(self.session_path.joinpath('alf', 'mpciFrameQC.names.tsv'), 'w', newline='') as tsvfile:
+            writer = csv.writer(tsvfile, delimiter='\t', lineterminator='\n')
+            writer.writerows(frameQC_names)
+        # If applicable, save as bad_frames.npy in first raw_imaging_folder for suite2p
+        if bad_frames is not None:
+            np.save(Path(db['data_path'][0]).joinpath('bad_frames.npy'), bad_frames)
         # Run suite2p
         if run_suite2p:
             _ = suite2p.run_s2p(ops=ops, db=db)
