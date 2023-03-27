@@ -1,6 +1,9 @@
 """Mesoscope (timeline) data extraction."""
+import logging
+
 import numpy as np
 import one.alf.io as alfio
+from one.alf.files import session_path_parts
 import matplotlib.pyplot as plt
 from neurodsp.utils import falls
 
@@ -13,6 +16,8 @@ from ibllib.io.extractors.ephys_fpga import FpgaTrials, WHEEL_TICKS, WHEEL_RADIU
 from ibllib.io.extractors.training_wheel import extract_wheel_moves
 from ibllib.io.extractors.camera import attribute_times
 from ibllib.io.extractors.ephys_fpga import _assign_events_bpod
+
+_logger = logging.getLogger(__name__)
 
 
 def timeline2sync(timeline, chmap=None):
@@ -308,11 +313,12 @@ class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
 
     def __init__(self, session_path, n_ROIs, **kwargs):
         super().__init__(session_path, **kwargs)  # TODO Document
-        rois = list(map(lambda n: f'ROI{n:02}', range(n_ROIs)))
+        self.n_ROIs = n_ROIs
+        rois = list(map(lambda n: f'ROI{n:02}', range(self.n_ROIs)))
         self.var_names = [f'{x}_{y.lower()}' for x in self.var_names for y in rois]
         self.save_names = [f'{y}/{x}' for x in self.save_names for y in rois]
 
-    def _extract(self, sync=None, chmap=None, device_collection='raw_mesoscope_data', bout=None):
+    def _extract(self, sync=None, chmap=None, device_collection='raw_imaging_data', events=None):
         """
         Extract the frame timestamps for each individual field of view (FOV) and the time offsets
         for each line scan.
@@ -325,36 +331,125 @@ class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
         chmap : dict
             A map of channel names and their corresponding indices. Only the 'neural_frames'
             channel is required.
-        device_collection : str
+        device_collection : str, iterable of str
             The location of the raw imaging data.
-        bout : int
-            The imagining bout number, from 0-n, corresponding to raw_imaging_data folders.
+        events : pandas.DataFrame
+            A table of software events, with columns {'time_timeline' 'name_timeline',
+            'event_timeline'}.
 
         Returns
         -------
         list of numpy.array
             A list of timestamps for each FOV and the time offsets for each line scan.
         """
-        self.rawImagingData = alfio.load_object(self.session_path / device_collection, 'rawImagingData')
-
         frame_times = sync['times'][sync['channels'] == chmap['neural_frames']]
-        assert frame_times.size == self.rawImagingData.times_scanImage.size
 
         # imaging_start_time = datetime.datetime(*map(round, self.rawImagingData.meta['acquisitionStartTime']))
-        # TODO Extract UDP messages for imaging bouts
+        if isinstance(device_collection, str):
+            device_collection = [device_collection]
+        if events is not None:
+            events = alfio.AlfBunch(events).to_df()
+            events = events[events.name_timeline == 'mpepUDP']
+        edges = self.get_bout_edges(frame_times, device_collection, events)
+        fov_times = []
+        line_shifts = []
+        for (tmin, tmax), collection in zip(edges, sorted(device_collection)):
+            imaging_data = alfio.load_object(self.session_path / collection, 'rawImagingData')
+            # Calculate line shifts
+            _, fov_time_shifts, line_time_shifts = self.get_timeshifts(imaging_data.meta)
+            assert len(fov_time_shifts) == self.n_ROIs, f'unexpected number of ROIs for {collection}'
+            ts = frame_times[np.logical_and(frame_times >= tmin, frame_times <= tmax)]
+            assert ts.size == imaging_data['times_scanImage'].size
+            fov_times.append([ts + offset for offset in fov_time_shifts])
+            if not line_shifts:
+                line_shifts = line_time_shifts
+            else:  # The line shifts should be the same across all imaging bouts
+                [np.testing.assert_array_equal(x, y) for x, y in zip(line_time_shifts, line_shifts)]
 
-        # Calculate line shifts
-        _, fov_time_shifts, line_time_shifts = self.get_timeshifts()
-        fov_times = [frame_times + offset for offset in fov_time_shifts]
+        # Concatenate imaging timestamps across all bouts for each field of view
+        fov_times = list(map(np.concatenate, zip(*fov_times)))
+        n_fov_times, = set(map(len, fov_times))
+        if n_fov_times != frame_times.size:
+            # This may happen if an experimenter deletes a raw_imaging_data folder
+            _logger.debug('FOV timestamps length does not match neural frame count; imaging bout(s) likely missing')
+        return fov_times + line_shifts
 
-        return fov_times + line_time_shifts
+    def get_bout_edges(self, frame_times, collections=None, events=None):
+        """
+        Return an array of edge times for each imaging bout corresponding to a raw_imaging_data
+        collection.
 
-    def get_timeshifts(self):
-        # TODO Document
-        FOVs = self.rawImagingData.meta['FOV']
+        Parameters
+        ----------
+        frame_times : numpy.array
+            An array of all neural frame count times.
+        collections : iterable of str
+            A set of raw_imaging_data collections, used to extract selected imaging periods.
+        events : pandas.DataFrame
+            A table of UDP event times, corresponding to times when recordings start and end.
+
+        Returns
+        -------
+        numpy.array
+            An array of imaging bout intervals.
+        """
+        if events is None or events.empty:
+            # No UDP events to mark blocks so separate based on gaps in frame rate
+            MIN_GAP = 1.
+            idx = np.where(np.diff(frame_times) > MIN_GAP)[0]
+            starts = np.r_[frame_times[0], frame_times[idx + 1]]
+            ends = np.r_[frame_times[idx], frame_times[-1]]
+        else:
+            # Split using Exp/BlockStart and Exp/BlockEnd times
+            _, subject, date, _ = session_path_parts(self.session_path)
+            pattern = rf'(Exp|Block)%s\s{subject}\s{date.replace("-", "")}\s\d+'
+            UDP_start = events.time_timeline[events.event_timeline.str.match(pattern % 'Start')]
+            starts = frame_times[[np.where(frame_times >= t)[0][0] for t in UDP_start]]
+            UDP_end = events.time_timeline[events.event_timeline.str.match(pattern % 'End')]
+            if UDP_end.any():
+                ends = frame_times[[np.where(frame_times >= t)[0][0] for t in UDP_end]]
+            else:
+                idx = [np.where(frame_times >= t)[0][0] - 1 for t in UDP_start[1:]]
+                ends = np.r_[frame_times[idx], frame_times[-1]]
+        # Remove any missing imaging bout collections
+        edges = np.c_[starts, ends]
+        if collections:
+            if edges.shape[0] > len(collections):
+                # Remove any bouts that correspond to a skipped collection
+                # e.g. if {raw_imaging_data_00, raw_imaging_data_02}, remove middle bout
+                n = sorted(int(c.rsplit('_', 1)[-1]) for c in collections)
+                edges = edges[n, :]
+            elif edges.shape[0] < len(collections):
+                raise ValueError('More raw imaging folders than detected bouts')
+
+        return edges
+
+    @staticmethod
+    def get_timeshifts(raw_imaging_meta):
+        """
+        Calculate the time shifts for each field of view (FOV) and the relative offsets for each
+        scan line.
+
+        Parameters
+        ----------
+        raw_imaging_meta : dict
+            Extracted ScanImage meta data (_ibl_rawImagingData.meta.json).
+
+        Returns
+        -------
+        list of numpy.array
+            A list of arrays, one per FOV, containing indices of each image scan line.
+        numpy.array
+            An array of FOV time offsets (one value per FOV) relative to each frame acquisition
+            time.
+        list of numpy.array
+            A list of arrays, one per FOV, containing the time offsets for each scan line, relative
+            to each FOV offset.
+        """
+        FOVs = raw_imaging_meta['FOV']
 
         # Double-check meta extracted properly
-        raw_meta = self.rawImagingData.meta['rawScanImageMeta']
+        raw_meta = raw_imaging_meta['rawScanImageMeta']
         artist = raw_meta['Artist']
         # TODO This assertion might need to be removed if some ROIs are deactivated
         assert len(artist['RoiGroups']['imagingRoiGroup']['rois']) == len(FOVs)
@@ -363,11 +458,11 @@ class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
         n_lines = np.array([x['nXnYnZ'][1] for x in FOVs])
         n_valid_lines = np.sum(n_lines)  # Number of lines imaged excluding flybacks
         # Number of lines during flyback
-        n_lines_per_gap = int((raw_meta['Height'] - n_valid_lines) / (len(FOVs) - 1));
+        n_lines_per_gap = int((raw_meta['Height'] - n_valid_lines) / (len(FOVs) - 1))
         # The start and end indices of each FOV in the raw images
         fov_start_idx = np.insert(np.cumsum(n_lines[:-1] + n_lines_per_gap), 0, 0)
         fov_end_idx = fov_start_idx + n_lines
-        line_period = self.rawImagingData.meta['scanImageParams']['hRoiManager']['linePeriod']
+        line_period = raw_imaging_meta['scanImageParams']['hRoiManager']['linePeriod']
 
         line_indices = []
         fov_time_shifts = fov_start_idx * line_period
@@ -378,4 +473,3 @@ class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
             line_time_shifts.append(np.arange(0, ln) * line_period)
 
         return line_indices, fov_time_shifts, line_time_shifts
-

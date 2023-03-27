@@ -1,19 +1,22 @@
 """Standard task protocol extractor dynamic pipeline tasks."""
+import logging
+import traceback
+
+from pkg_resources import parse_version
+import one.alf.io as alfio
+
 from ibllib.pipes import base_tasks
-from ibllib.io.extractors.ephys_passive import PassiveChoiceWorld
-from ibllib.io.extractors import bpod_trials
+from ibllib.io.raw_data_loaders import load_settings
 from ibllib.qc.task_extractors import TaskQCExtractor
 from ibllib.qc.task_metrics import HabituationQC, TaskQC
+from ibllib.io.extractors.ephys_passive import PassiveChoiceWorld
+from ibllib.io.extractors import bpod_trials
 from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.io.extractors.bpod_trials import get_bpod_extractor
 from ibllib.io.extractors.ephys_fpga import extract_all
-from ibllib.io.extractors.mesoscope import TimelineTrials, timeline2sync
+from ibllib.io.extractors.mesoscope import TimelineTrials
 from ibllib.pipes import training_status
-
-import one.alf.io as alfio
 from ibllib.plots.figures import BehaviourPlots
-import logging
-import traceback
 
 _logger = logging.getLogger('ibllib')
 
@@ -156,6 +159,48 @@ class PassiveTask(base_tasks.BehaviourTask):
         data, paths = PassiveChoiceWorld(self.session_path).extract(
             sync_collection=self.sync_collection, task_collection=self.collection, save=True,
             path_out=self.session_path.joinpath(self.output_collection), protocol_number=self.protocol_number)
+
+        if any(x is None for x in paths):
+            self.status = -1
+
+        return paths
+
+
+class PassiveTaskTimeline(base_tasks.BehaviourTask, base_tasks.MesoscopeTask):
+    """TODO should be mesoscope invarient, using wiring file"""
+    priority = 90
+    job_size = 'small'
+
+    @property
+    def signature(self):
+        signature = {
+            'input_files': [('_iblrig_taskSettings.raw*', self.collection, True),
+                            ('_iblrig_RFMapStim.raw*', self.collection, True),
+                            (f'_{self.sync_namespace}_sync.channels.*', self.sync_collection, False),
+                            (f'_{self.sync_namespace}_sync.polarities.*', self.sync_collection, False),
+                            (f'_{self.sync_namespace}_sync.times.*', self.sync_collection, False)],
+            'output_files': [('_ibl_passiveGabor.table.csv', self.output_collection, True),
+                             ('_ibl_passivePeriods.intervalsTable.csv', self.output_collection, True),
+                             ('_ibl_passiveRFM.times.npy', self.output_collection, True),
+                             ('_ibl_passiveStims.table.csv', self.output_collection, True)]
+        }
+        return signature
+
+    def _run(self, **kwargs):
+        """returns a list of pathlib.Paths.
+        This class exists to load the sync file and set the protocol_number to None
+        """
+        settings = load_settings(self.session_path, self.collection)
+        version = settings.get('IBLRIG_VERSION_TAG', '100.0.0')
+        if version == '100.0.0' or parse_version(version) <= parse_version('7.1.0'):
+            _logger.warning('Protocol spacers not supported; setting protocol_number to None')
+            self.protocol_number = None
+
+        sync, chmap = self.load_sync()
+        data, paths = PassiveChoiceWorld(self.session_path).extract(
+            sync_collection=self.sync_collection, task_collection=self.collection, save=True,
+            path_out=self.session_path.joinpath(self.output_collection),
+            protocol_number=self.protocol_number, sync=sync, sync_map=chmap)
 
         if any(x is None for x in paths):
             self.status = -1

@@ -12,14 +12,13 @@ import subprocess
 import shutil
 from pathlib import Path
 from itertools import chain
-import re
+from fnmatch import fnmatch
 
 import numpy as np
 import pandas as pd
 from scipy.io import loadmat
 from scipy import sparse
 
-from one.alf.files import session_path_parts
 import one.alf.io as alfio
 import one.alf.exceptions as alferr
 
@@ -194,9 +193,9 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                                         f"Using meta_data from first folder!")
             else:
                 # Check that this number of channels is the same across all FOVS
-                if not len(set([len(fov['channelIdx']) for fov in meta['FOV']])) == 1:
-                    _logger.warning(f"Not all FOVs have the same number of channels. "
-                                    f"Using channel number from first FOV!")
+                if not len(set(len(fov['channelIdx']) for fov in meta['FOV'])) == 1:
+                    _logger.warning('Not all FOVs have the same number of channels. '
+                                    'Using channel number from first FOV!')
                 else:
                     _logger.info('Meta data is consistent across all raw imaging folders')
 
@@ -273,7 +272,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
             'nrois': len(meta['FOV']),
             'nchannels': len(meta['FOV'][0]['channelIdx']),
             'fs': meta['scanImageParams']['hRoiManager']['scanVolumeRate'],
-            'lines': [list(np.asarray(fov['lineIdx'])-1) for fov in meta['FOV']],  # subtracting 1 to make 0-based
+            'lines': [list(np.asarray(fov['lineIdx']) - 1) for fov in meta['FOV']],  # subtracting 1 to make 0-based
             'tau': 1.5,  # 1.5 is recommended for GCaMP6s TODO: potential deduct the GCamp used from Alyx mouse line?
             'functional_chan': 1,  # for now, eventually find(ismember(meta.FOV(1).channelIdx == meta.channelID.green))
             'align_by_chan': 1,  # for now, eventually find(ismember(meta.FOV(1).channelIdx == meta.channelID.red))
@@ -304,7 +303,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         # Update the task kwargs attribute as it will be stored in the arguments json field in alyx
         self.kwargs = {**self.kwargs, **db}
         # Read and consolidate the experimenters frame QC
-        exptQC = [loadmat(str(self.session_path.joinpath(f[1], 'exptQC.mat')),squeeze_me=True, simplify_cells=True)
+        exptQC = [loadmat(str(self.session_path.joinpath(f[1], 'exptQC.mat')), squeeze_me=True, simplify_cells=True)
                   for f in self.input_files if f[0] == 'exptQC.mat']
         if len(exptQC) > 0:
             frameQC, frameQC_names, bad_frames = self._consolidate_exptQC(exptQC)
@@ -343,7 +342,7 @@ class MesoscopeSync(base_tasks.MesoscopeTask):
                             (f'_{self.sync_namespace}_DAQData.meta.json', self.sync_collection, True),
                             ('_ibl_rawImagingData.meta.json', self.device_collection, True),
                             ('rawImagingData.times_scanImage.npy', self.device_collection, True),
-                            ('_ibl_softwareEvents.table_timeline.htsv', self.sync_collection, False),],
+                            ('_ibl_softwareEvents.table_timeline.htsv', self.sync_collection, False), ],
             'output_files': [('mpci.times.npy', 'alf/mesoscope/FOV*', True),
                              ('mpciStack.timeshift.npy', 'alf/mesoscope/FOV*', True), ]
         }
@@ -357,52 +356,15 @@ class MesoscopeSync(base_tasks.MesoscopeTask):
         except alferr.ALFObjectNotFound:
             _logger.debug('No software events found for session %s', self.session_path)
             events = {}
-        for collection in map(lambda p: p.name, self.session_path.glob('raw_imaging_data*')):  # TODO use device collection?
-            self.rawImagingData = alfio.load_object(self.session_path / collection, 'rawImagingData')
-            if re.match(r'^raw_\w+_data_\d{2}$', collection):
-                i = int(collection.split('_')[-1])
-                if not events and i > 0:
-                    raise ValueError('No software events found')
-                _, subject, date, _ = session_path_parts(self.session_path)
-                pattern = re.compile(rf'(Exp|Block)Start\s{subject}\s{date.replace("-", "")}\s{i + 1}')
-
-                idx = list(map(bool, map(pattern.match, events['event_timeline']))).index(True)
-                tmin = events['time_timeline'][idx]
-                # tmax =
-            else:
-                ...
-                n_ROIs = len(self.rawImagingData['meta']['FOV'])
-                mesosync = mesoscope.MesoscopeSyncTimeline(self.session_path, n_ROIs)
-                sync, chmap = self.load_sync()  # Extract sync data from raw DAQ data
-                mesosync.extract(save=True, sync=sync, chmap=chmap, device_collection=self.device_collection)
-
-    def load_sync(self):
-        """
-        Load the sync and channel map.
-
-        This method may be expanded to support other raw DAQ data formats.
-
-        Returns
-        -------
-        one.alf.io.AlfBunch
-            A dictionary with keys ('times', 'polarities', 'channels'), containing the sync pulses
-            and the corresponding channel numbers.
-        dict
-            A map of channel names and their corresponding indices.
-        """
-        ns = self.get_sync_namespace()
-        alf_path = self.session_path / self.sync_collection
-        try:
-            sync = alfio.load_object(alf_path, 'sync', namespace=ns)
-            chmap = None
-        except alferr.ALFObjectNotFound:
-            if self.get_sync_namespace() == 'timeline':
-                # Load the sync and channel map from the raw DAQ data
-                timeline = alfio.load_object(alf_path, 'DAQData', namespace=ns)
-                sync, chmap = mesoscope.timeline2sync(timeline)
-            else:
-                raise NotImplementedError
-        return sync, chmap
+        collections = set(collection for _, collection, _ in self.input_files
+                          if fnmatch(collection, self.device_collection))
+        # Load first meta data file to determine the number of FOVs
+        # Changing FOV between imaging bouts is not supported currently!
+        self.rawImagingData = alfio.load_object(self.session_path / next(iter(collections)), 'rawImagingData')
+        n_ROIs = len(self.rawImagingData['meta']['FOV'])
+        sync, chmap = self.load_sync()  # Extract sync data from raw DAQ data
+        mesosync = mesoscope.MesoscopeSyncTimeline(self.session_path, n_ROIs)
+        mesosync.extract(save=True, sync=sync, chmap=chmap, device_collection=collections, events=events)
 
 
 class MesoscopeFOV(base_tasks.MesoscopeTask):
@@ -417,7 +379,6 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
             'output_files': []
         }
         return signature
-
 
     def _run(self):
         """

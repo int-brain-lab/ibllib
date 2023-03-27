@@ -3,10 +3,14 @@ import logging
 from pathlib import Path
 
 from one.webclient import no_cache
+import one.alf.io as alfio
+import one.alf.exceptions as alferr
 
 from ibllib.pipes.tasks import Task
 import ibllib.io.session_params as sess_params
 from ibllib.qc.base import sign_off_dict, SIGN_OFF_CATEGORIES
+from ibllib.io.extractors import mesoscope
+
 
 _logger = logging.getLogger(__name__)
 
@@ -157,7 +161,7 @@ class MesoscopeTask(DynamicTask):
         super().__init__(session_path, **kwargs)
 
         self.device_collection = self.get_device_collection('mesoscope', kwargs.get('device_collection',
-                                                                                    'raw_imaging_data_*'))
+                                                                                    'raw_imaging_data*'))
 
     def get_signatures(self, **kwargs):
         """Specify the individual inputs and outputs to expect based on the available of device collection folders"""
@@ -170,6 +174,34 @@ class MesoscopeTask(DynamicTask):
                             raw_imaging_folders for sig in self.signature['input_files']]
         self.output_files = [(sig[0], folder, sig[2]) if sig[1] == self.device_collection else sig for folder in
                              raw_imaging_folders for sig in self.signature['output_files']]
+
+    def load_sync(self):
+        """
+        Load the sync and channel map.
+
+        This method may be expanded to support other raw DAQ data formats.
+
+        Returns
+        -------
+        one.alf.io.AlfBunch
+            A dictionary with keys ('times', 'polarities', 'channels'), containing the sync pulses
+            and the corresponding channel numbers.
+        dict
+            A map of channel names and their corresponding indices.
+        """
+        ns = self.get_sync_namespace()
+        alf_path = self.session_path / self.sync_collection
+        try:
+            sync = alfio.load_object(alf_path, 'sync', namespace=ns)
+            chmap = None
+        except alferr.ALFObjectNotFound:
+            if self.get_sync_namespace() == 'timeline':
+                # Load the sync and channel map from the raw DAQ data
+                timeline = alfio.load_object(alf_path, 'DAQData', namespace=ns)
+                sync, chmap = mesoscope.timeline2sync(timeline)
+            else:
+                raise NotImplementedError
+        return sync, chmap
 
 
 class RegisterRawDataTask(DynamicTask):
