@@ -260,11 +260,12 @@ class IBLRegistrationClient(RegistrationClient):
         _logger.info(session['url'] + ' ')
         # create associated water administration if not found
         if not session['wateradmin_session_related'] and any(task_data):
-            for md, d in zip(settings, task_data):
+            for md, d in filter(all, zip(settings, task_data)):
                 _, _end_time = _get_session_times(ses_path, md, d)
                 user = md.get('PYBPOD_CREATOR')
                 user = user[0] if user[0] in users else self.one.alyx.user
-                if (volume := d[-1]['water_delivered'] / 1000) > 0:
+                volume = d[-1].get('water_delivered', sum(x['reward_amount'] for x in d)) / 1000
+                if volume > 0:
                     self.register_water_administration(
                         subject['nickname'], volume, date_time=_end_time or end_time, user=user,
                         session=session['id'], water_type=md.get('REWARD_TYPE') or 'Water')
