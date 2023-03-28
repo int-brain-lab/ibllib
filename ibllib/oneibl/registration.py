@@ -439,7 +439,7 @@ def _get_session_performance(md, ses_data):
         if 'habituationChoiceWorld' in settings.get('PYBPOD_PROTOCOL', ''):
             n_correct.append(0)
         else:
-            n_correct.append(data[-1]['ntrials_correct'])
+            n_correct.append(data[-1].get('ntrials_correct', sum(x['trial_correct'] for x in data)))
 
     return sum(n_trials), sum(n_correct)
 
