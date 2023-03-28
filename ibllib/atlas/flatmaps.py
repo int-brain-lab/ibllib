@@ -152,7 +152,8 @@ def swanson_json(filename="swansonpaths.json"):
 
 
 def plot_swanson_vector(acronyms=None, values=None, ax=None, hemisphere=None, br=None, orientation='landscape',
-                        empty_color='silver', vmin=None, vmax=None, cmap='cividis', **kwargs):
+                        empty_color='silver', vmin=None, vmax=None, cmap='viridis', annotate=False, mask=None, mask_color='w',
+                        **kwargs):
 
     br = BrainRegions() if br is None else br
     br.compute_hierarchy()
@@ -169,6 +170,11 @@ def plot_swanson_vector(acronyms=None, values=None, ax=None, hemisphere=None, br
         norm = matplotlib.colors.Normalize(vmin=vmin, vmax=vmax)
         rgba_color = colormap(norm(vals), bytes=True)
 
+    if mask is not None:
+        imr, _ = br.propagate_down(mask, np.ones_like(mask))
+    else:
+        imr = []
+
     sw = swanson()
     sw_json = swanson_json()
 
@@ -178,7 +184,14 @@ def plot_swanson_vector(acronyms=None, values=None, ax=None, hemisphere=None, br
             color = br.rgba[br.mappings['Swanson'][reg['thisID']]] / 255
         else:
             idx = np.where(ibr == reg['thisID'])[0]
-            color = rgba_color[idx[0]] / 255 if len(idx) > 0 else empty_color
+            if len(idx) > 0:
+                color = rgba_color[idx[0]] / 255
+            else:
+                idx = np.where(imr == reg['thisID'])[0]
+                if len(idx) > 0:
+                    color = mask_color
+                else:
+                    color = empty_color
 
         coords = reg['coordsReg']
 
@@ -233,10 +246,13 @@ def plot_swanson_vector(acronyms=None, values=None, ax=None, hemisphere=None, br
         else:
             ax.set_ylim(0, 2 * sw.shape[0])
 
+    if annotate:
+        annotate_swanson(ax=ax, orientation=orientation, br=br)
+
     def format_coord(x, y):
         ind = sw[int(y), int(x)]
         ancestors = br.ancestors(br.id[ind])['acronym']
-        return f'sw-{ind}, x={x:1.4f}, y={y:1.4f}, aid={br.id[ind]}-{br.acronym[ind]} \n {ancestors}'
+        return f'sw-{ind}, {ancestors}, aid={br.id[ind]}-{br.acronym[ind]} \n {br.name[ind]}'
 
     ax.format_coord = format_coord
 
@@ -308,7 +324,7 @@ def plot_swanson(acronyms=None, values=None, ax=None, hemisphere=None, br=None,
     def format_coord(x, y):
         ind = s2a[int(y), int(x)]
         ancestors = br.ancestors(br.id[ind])['acronym']
-        return f'sw-{ind}, x={x:1.4f}, y={y:1.4f}, aid={br.id[ind]}-{br.acronym[ind]} \n {ancestors}'
+        return f'sw-{ind}, {ancestors}, aid={br.id[ind]}-{br.acronym[ind]} \n {br.name[ind]}'
 
     ax.format_coord = format_coord
     return ax

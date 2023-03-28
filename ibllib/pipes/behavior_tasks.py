@@ -407,7 +407,6 @@ class ChoiceWorldTrialsTimeline(ChoiceWorldTrialsNidq):
     def _run_qc(self, trials_data, update=True, plot_qc=True):
         # TODO Document
         # TODO Task QC extractor for Timeline
-        update = False  # TODO remove
         qc = TaskQC(self.session_path, one=self.one, log=_logger)
         qc.extractor = TaskQCExtractor(self.session_path, lazy=True, one=qc.one, sync_collection=self.sync_collection,
                                        sync_type=self.sync, task_collection=self.collection,

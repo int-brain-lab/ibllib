@@ -336,7 +336,7 @@ def _read_settings_json_compatibility_enforced(settings):
             md['PYBPOD_SUBJECT_EXTRA'].pop('weighings')
         if 'water_administration' in md['PYBPOD_SUBJECT_EXTRA'].keys():
             md['PYBPOD_SUBJECT_EXTRA'].pop('water_administration')
-        if 'IBLRIG_COMMIT_HASH' not in md:
+        if 'IBLRIG_COMMIT_HASH' not in md.keys():
             md['IBLRIG_COMMIT_HASH'] = 'f9d8905647dbafe1f9bdf78f73b286197ae2647b'
         #  parse the date format to Django supported ISO
         dt = dateparser.parse(md['SESSION_DATETIME'])
