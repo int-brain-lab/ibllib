@@ -356,7 +356,7 @@ class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
         for (tmin, tmax), collection in zip(edges, sorted(device_collection)):
             imaging_data = alfio.load_object(self.session_path / collection, 'rawImagingData')
             # Calculate line shifts
-            _, fov_time_shifts, line_time_shifts = self.get_timeshifts(imaging_data.meta)
+            _, fov_time_shifts, line_time_shifts = self.get_timeshifts(imaging_data['meta'])
             assert len(fov_time_shifts) == self.n_ROIs, f'unexpected number of ROIs for {collection}'
             ts = frame_times[np.logical_and(frame_times >= tmin, frame_times <= tmax)]
             assert ts.size == imaging_data['times_scanImage'].size

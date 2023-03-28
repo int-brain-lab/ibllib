@@ -345,15 +345,14 @@ def make_pipeline(session_path, **pkwargs):
         mscope_kwargs['device_collection'] = mscope_kwargs.pop('collection')
         tasks['MesoscopeRegisterSnapshots'] = type('MesoscopeRegisterSnapshots', (mscope_tasks.MesoscopeRegisterSnapshots,), {})(
             **kwargs, **mscope_kwargs)
-        tasks['MesoscopeCompress'] = type('MesoscopeCompress', (mscope_tasks.MesoscopeCompress,), {})(
-            **kwargs, **mscope_kwargs)
         tasks['MesoscopePreprocess'] = type('MesoscopePreprocess', (mscope_tasks.MesoscopePreprocess,), {})(
-            **kwargs, **mscope_kwargs, parents=[tasks['MesoscopeCompress']])
-        tasks['MesoscopeSync'] = type('MesoscopeSync', (mscope_tasks.MesoscopeSync,), {})(
-            **kwargs, **mscope_kwargs, **sync_kwargs,
-            parents=[tasks['MesoscopeCompress']] + sync_tasks)
+            **kwargs, **mscope_kwargs)
         tasks['MesoscopeFOV'] = type('MesoscopeFOV', (mscope_tasks.MesoscopeFOV,), {})(
             **kwargs, **mscope_kwargs, parents=[tasks['MesoscopePreprocess']])
+        tasks['MesoscopeSync'] = type('MesoscopeSync', (mscope_tasks.MesoscopeSync,), {})(
+            **kwargs, **mscope_kwargs, **sync_kwargs)
+        tasks['MesoscopeCompress'] = type('MesoscopeCompress', (mscope_tasks.MesoscopeCompress,), {})(
+            **kwargs, **mscope_kwargs, parents=[tasks['MesoscopePreprocess'], tasks['MesoscopeSync']])
 
     if 'photometry' in devices:
         # {'collection': 'raw_photometry_data', 'sync_label': 'frame_trigger', 'regions': ['Region1G', 'Region3G']}
