@@ -430,9 +430,11 @@ def _get_session_performance(md, ses_data):
     n_trials = []
     n_correct = []
     for data, settings in filter(all, zip(ses_data, md)):
-        n_trials.append(data[-1]['trial_num'])
+        # In some protocols trials start from 0, in others, from 1
+        n = data[-1]['trial_num'] + int(data[0]['trial_num'] == 0)  # +1 if starts from 0
+        n_trials.append(n)
         # checks that the number of actual trials and labeled number of trials check out
-        assert len(data) == n_trials[-1]
+        assert len(data) == n, f'{len(data)} trials in data, however last trial number was {n}'
         # task specific logic
         if 'habituationChoiceWorld' in settings.get('PYBPOD_PROTOCOL', ''):
             n_correct.append(0)
