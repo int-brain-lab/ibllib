@@ -13,10 +13,11 @@ import shutil
 from pathlib import Path
 from itertools import chain
 from fnmatch import fnmatch
-import csv
 
 import numpy as np
+import pandas as pd
 from scipy.io import loadmat
+from scipy import sparse
 
 import one.alf.io as alfio
 import one.alf.exceptions as alferr
@@ -164,11 +165,11 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                 np.save(fov_dir.joinpath('mpci.badFrames.npy'), np.asarray(ops['badframes'], dtype=bool))
                 np.save(fov_dir.joinpath('mpciMeanImage.images.npy'), ops['meanImg'], dtype=float)
                 np.save(fov_dir.joinpath('mpciROIs.stackPos.npy'), np.asarray(stat['med'], dtype=int))
-                # np.savez(fov_dir.joinpath('mpciROIs.masks.npz'))
-                # np.savez(fov_dir.joinpath('mpciROIs.neuropilMasks.npz'))
                 np.save(fov_dir.joinpath('mpciROIs.mpciROITypes.npy'), iscell[:, 0], dtype=int)
                 np.save(fov_dir.joinpath('mpciROIs.cellClassifier.npy'), iscell[:, 1], dtype=float)
-
+                # ROI and neuropil masks
+                # np.savez(fov_dir.joinpath('mpciROIs.masks.npz'))
+                # np.savez(fov_dir.joinpath('mpciROIs.neuropilMasks.npz'))
                 # move folders out of suite2p dir
                 shutil.move(fov_dir, suite2p_dir.parent.joinpath(fov_dir.name))
         # TODO: remove suite2p folder on the long run (still contains combined)
@@ -213,7 +214,9 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                 if frameQC_names[k] != v:
                     _logger.error(f"exptQC.mat files have different values for name '{k}'")
                     raise IOError(f"exptQC.mat files have different values for name '{k}'")
-        frameQC_names = [(f,) for f in frameQC_names.keys()]
+
+        frameQC_names = pd.DataFrame(sorted([(v, k) for k,v in frameQC_names.items()]),
+                                     columns=['qc_labels', 'qc_values'])
 
         # Concatenate frames
         frameQC = np.concatenate([e['frameQC_frames'] for e in exptQC], axis=0)
@@ -282,8 +285,8 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
     def _run(self, run_suite2p=True, rename_files=True, **kwargs):
         import suite2p
         # Load metadata and make sure all metadata is consistent across FOVs
-        rawImagingData = [alfio.load_file_content(self.session_path.joinpath(f[1], f[0]))
-                          for f in self.input_files if 'rawImagingData.meta' in f[0]]
+        rawImagingData = [alfio.load_object(self.session_path.joinpath(f[1]), 'rawImagingData')['meta']
+                         for f in self.input_files if f[0] == '_ibl_rawImagingData.meta.json']
         if len(rawImagingData) > 1:
             meta = self._check_meta_data(rawImagingData)
         else:
@@ -305,12 +308,10 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         if len(exptQC) > 0:
             frameQC, frameQC_names, bad_frames = self._consolidate_exptQC(exptQC)
         else:
-            frameQC, frameQC_names, bad_frames = np.empty(), [], None
+            frameQC, frameQC_names, bad_frames = pd.DataFrame(), [], None
         # Save frameQC datasets,
         np.save(self.session_path.joinpath('alf', 'mpci.mpciFrameQC.npy'), frameQC)
-        with open(self.session_path.joinpath('alf', 'mpciFrameQC.names.tsv'), 'w', newline='') as tsvfile:
-            writer = csv.writer(tsvfile, delimiter='\t', lineterminator='\n')
-            writer.writerows(frameQC_names)
+        frameQC_names.to_csv(self.session_path.joinpath('alf', 'mpciFrameQC.names.tsv'), sep='\t', index=False)
         # If applicable, save as bad_frames.npy in first raw_imaging_folder for suite2p
         if bad_frames is not None:
             np.save(Path(db['data_path'][0]).joinpath('bad_frames.npy'), bad_frames)
