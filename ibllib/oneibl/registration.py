@@ -417,6 +417,7 @@ def _get_session_performance(md, ses_data):
     int
         The total number of correct trials across protocols.
     """
+
     if not any(filter(None, ses_data or None)):
         return None, None
 
@@ -426,18 +427,19 @@ def _get_session_performance(md, ses_data):
     else:
         assert isinstance(ses_data, (list, tuple)) and len(ses_data) == len(md)
 
-    n_trials = [x[-1]['trial_num'] for x in filter(None, ses_data)]
-    # checks that the number of actual trials and labeled number of trials check out
-    assert all(len(x) == n for x, n in zip(ses_data, n_trials))
-    # task specific logic
-    n_correct_trials = []
-    for data, proc in zip(ses_data, map(lambda x: x.get('PYBPOD_PROTOCOL', ''), md)):
-        if 'habituationChoiceWorld' in proc:
-            n_correct_trials.append(0)
+    n_trials = []
+    n_correct = []
+    for data, settings in filter(all, zip(ses_data, md)):
+        n_trials.append(data[-1]['trial_num'])
+        # checks that the number of actual trials and labeled number of trials check out
+        assert len(data) == n_trials[-1]
+        # task specific logic
+        if 'habituationChoiceWorld' in settings.get('PYBPOD_PROTOCOL', ''):
+            n_correct.append(0)
         else:
-            n_correct_trials.append(data[-1]['ntrials_correct'])
+            n_correct.append(data[-1]['ntrials_correct'])
 
-    return sum(n_trials), sum(n_correct_trials)
+    return sum(n_trials), sum(n_correct)
 
 
 def get_local_data_repository(ac):
