@@ -321,28 +321,28 @@ def _read_settings_json_compatibility_enforced(settings):
     else:
         with open(settings) as js:
             md = json.load(js)
-    if 'IS_MOCK' not in md.keys():
+    if 'IS_MOCK' not in md:
         md['IS_MOCK'] = False
-    if not md.get('IBLRIG_VERSION_TAG'):
+    if 'IBLRIG_VERSION_TAG' not in md:
+        md['IBLRIG_VERSION_TAG'] = ''
+    if not md['IBLRIG_VERSION_TAG']:
         _logger.warning("You appear to be on an untagged version...")
         return md
-    if 'IBLRIG_VERSION_TAG' not in md.keys():
-        md['IBLRIG_VERSION_TAG'] = ''
     # 2018-12-05 Version 3.2.3 fixes (permanent fixes in IBL_RIG from 3.2.4 on)
     if parse_version(md.get('IBLRIG_VERSION_TAG') or '3.2.3') <= parse_version('3.2.3'):
-        if 'LAST_TRIAL_DATA' in md.keys():
+        if 'LAST_TRIAL_DATA' in md:
             md.pop('LAST_TRIAL_DATA')
         if 'weighings' in md['PYBPOD_SUBJECT_EXTRA'].keys():
             md['PYBPOD_SUBJECT_EXTRA'].pop('weighings')
         if 'water_administration' in md['PYBPOD_SUBJECT_EXTRA'].keys():
             md['PYBPOD_SUBJECT_EXTRA'].pop('water_administration')
-        if 'IBLRIG_COMMIT_HASH' not in md.keys():
+        if 'IBLRIG_COMMIT_HASH' not in md:
             md['IBLRIG_COMMIT_HASH'] = 'f9d8905647dbafe1f9bdf78f73b286197ae2647b'
         #  parse the date format to Django supported ISO
         dt = dateparser.parse(md['SESSION_DATETIME'])
         md['SESSION_DATETIME'] = date2isostr(dt)
         # add the weight key if it doesn't already exist
-        if 'SUBJECT_WEIGHT' not in md.keys():
+        if 'SUBJECT_WEIGHT' not in md:
             md['SUBJECT_WEIGHT'] = None
     return md
 
