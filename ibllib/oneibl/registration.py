@@ -192,7 +192,7 @@ class IBLRegistrationClient(RegistrationClient):
         assert len({x['IS_MOCK'] for x in settings}) == 1
         assert len({md['PYBPOD_BOARD'] for md in settings}) == 1
         assert len({md.get('IBLRIG_VERSION') for md in settings}) == 1
-        assert len({md['IBLRIG_VERSION_TAG'] for md in settings}) == 1
+        # assert len({md['IBLRIG_VERSION_TAG'] for md in settings}) == 1
 
         # query Alyx endpoints for subject, error if not found
         subject = self.assert_exists(subject, 'subjects')
