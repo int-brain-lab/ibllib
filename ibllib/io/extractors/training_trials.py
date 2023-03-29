@@ -25,6 +25,7 @@ class FeedbackType(BaseBpodTrialsExtractor):
     """
     save_names = '_ibl_trials.feedbackType.npy'
     var_names = 'feedbackType'
+
     def _extract(self):
         feedbackType = np.zeros(len(self.bpod_trials), np.int64)
         for i, t in enumerate(self.bpod_trials):
