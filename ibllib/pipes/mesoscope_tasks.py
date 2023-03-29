@@ -353,7 +353,6 @@ class MesoscopeSync(base_tasks.MesoscopeTask):
         try:
             alf_path = self.session_path / self.sync_collection
             events = alfio.load_object(alf_path, 'softwareEvents').get('log')
-            assert events is None or len(set(map(len, events.values()))) == 1
         except alferr.ALFObjectNotFound:
             events = None
         if not events:
