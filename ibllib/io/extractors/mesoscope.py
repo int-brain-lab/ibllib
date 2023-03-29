@@ -100,7 +100,7 @@ class TimelineTrials(FpgaTrials):
     def __init__(self, *args, sync_collection='raw_sync_data', **kwargs):
         """An extractor for all ephys trial data, in Timeline time"""
         super().__init__(*args, **kwargs)
-        self.timeline = alfio.load_object(self.session_path / sync_collection, 'DAQData', namespace='timeline')
+        self.timeline = alfio.load_object(self.session_path / sync_collection, 'DAQdata', namespace='timeline')
 
     def _extract(self, sync=None, chmap=None, sync_collection='raw_sync_data', **kwargs):
         if not (sync or chmap):
