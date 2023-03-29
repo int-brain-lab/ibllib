@@ -250,7 +250,10 @@ class IBLRegistrationClient(RegistrationClient):
             # Submit weights
             for md in filter(lambda md: md.get('SUBJECT_WEIGHT') is not None, settings):
                 user = md.get('PYBPOD_CREATOR')
-                user = user[0] if user[0] in users else self.one.alyx.user
+                if isinstance(user, list):
+                    user = user[0]
+                if user not in users:
+                    user = self.one.alyx.user
                 self.register_weight(subject['nickname'], md['SUBJECT_WEIGHT'],
                                      date_time=md['SESSION_DATETIME'], user=user)
         else:  # if session exists update the JSON field

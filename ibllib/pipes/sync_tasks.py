@@ -20,6 +20,7 @@ class SyncRegisterRaw(base_tasks.RegisterRawDataTask):
     - _*_DAQdata.meta.json: for timeline all acquisition meta data (e.g. sample rate, channel
     names) are stored in a separate file.
     - _*_DAQdata.wiring.json: for SpikeGLX the channel map is stored in this file.
+    _timeline_softwareEvents.log.htsv: UDP messages and other software events in DAQ time.
     """
     priority = 100
     job_size = 'small'
@@ -31,7 +32,8 @@ class SyncRegisterRaw(base_tasks.RegisterRawDataTask):
             'output_files': [(f'*DAQdata.raw.{self.sync_ext}', self.sync_collection, True),
                              ('*DAQdata.timestamps.npy', self.sync_collection, False),
                              ('*DAQdata.meta.json', self.sync_collection, False),
-                             ('*DAQdata.wiring.json', self.sync_collection, False)]
+                             ('*DAQdata.wiring.json', self.sync_collection, False),
+                             ('*softwareEvents.log.htsv', self.sync_collection, False)]
         }
         return signature
 

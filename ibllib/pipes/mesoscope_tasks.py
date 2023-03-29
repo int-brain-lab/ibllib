@@ -337,12 +337,12 @@ class MesoscopeSync(base_tasks.MesoscopeTask):
     @property
     def signature(self):
         signature = {
-            'input_files': [(f'_{self.sync_namespace}_DAQData.raw.npy', self.sync_collection, True),
-                            (f'_{self.sync_namespace}_DAQData.timestamps.npy', self.sync_collection, True),
-                            (f'_{self.sync_namespace}_DAQData.meta.json', self.sync_collection, True),
+            'input_files': [(f'_{self.sync_namespace}_DAQdata.raw.npy', self.sync_collection, True),
+                            (f'_{self.sync_namespace}_DAQdata.timestamps.npy', self.sync_collection, True),
+                            (f'_{self.sync_namespace}_DAQdata.meta.json', self.sync_collection, True),
                             ('_ibl_rawImagingData.meta.json', self.device_collection, True),
                             ('rawImagingData.times_scanImage.npy', self.device_collection, True),
-                            ('_ibl_softwareEvents.table_timeline.htsv', self.sync_collection, False), ],
+                            (f'_{self.sync_namespace}_softwareEvents.log.htsv', self.sync_collection, False), ],
             'output_files': [('mpci.times.npy', 'alf/mesoscope/FOV*', True),
                              ('mpciStack.timeshift.npy', 'alf/mesoscope/FOV*', True), ]
         }

@@ -196,7 +196,7 @@ class MesoscopeTask(DynamicTask):
         except alferr.ALFObjectNotFound:
             if self.get_sync_namespace() == 'timeline':
                 # Load the sync and channel map from the raw DAQ data
-                timeline = alfio.load_object(alf_path, 'DAQData', namespace=ns)
+                timeline = alfio.load_object(alf_path, 'DAQdata', namespace=ns)
                 sync, chmap = mesoscope.timeline2sync(timeline)
             else:
                 raise NotImplementedError
