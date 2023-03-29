@@ -192,12 +192,13 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                         _logger.warning(f"Mismatch in meta data between raw_imaging_data folders for key {k}. "
                                         f"Using meta_data from first folder!")
             else:
-                # Check that this number of channels is the same across all FOVS
-                if not len(set(len(fov['channelIdx']) for fov in meta['FOV'])) == 1:
-                    _logger.warning('Not all FOVs have the same number of channels. '
-                                    'Using channel number from first FOV!')
-                else:
-                    _logger.info('Meta data is consistent across all raw imaging folders')
+                # # Check that this number of channels is the same across all FOVS
+                # if not len(set(len(fov['channelIdx']) for fov in meta['FOV'])) == 1:
+                #     _logger.warning('Not all FOVs have the same number of channels. '
+                #                     'Using channel number from first FOV!')
+                # else:
+                #     _logger.info('Meta data is consistent across all raw imaging folders')
+                pass
 
         return meta_data_all[0]
 
