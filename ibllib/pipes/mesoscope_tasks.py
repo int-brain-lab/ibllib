@@ -351,11 +351,13 @@ class MesoscopeSync(base_tasks.MesoscopeTask):
     def _run(self):
         # TODO function to determine nROIs
         try:
-            events = alfio.load_object(self.session_path / self.sync_collection, 'softwareEvents')
-            assert len(set(map(len, events.values()))) == 1
+            alf_path = self.session_path / self.sync_collection
+            events = alfio.load_object(alf_path, 'softwareEvents').get('log')
+            assert events is None or len(set(map(len, events.values()))) == 1
         except alferr.ALFObjectNotFound:
+            events = None
+        if not events:
             _logger.debug('No software events found for session %s', self.session_path)
-            events = {}
         collections = set(collection for _, collection, _ in self.input_files
                           if fnmatch(collection, self.device_collection))
         # Load first meta data file to determine the number of FOVs

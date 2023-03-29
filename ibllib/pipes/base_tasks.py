@@ -5,6 +5,7 @@ from pathlib import Path
 import one.alf.io as alfio
 import one.alf.exceptions as alferr
 from one.webclient import no_cache
+from iblutil.util import flatten
 
 from ibllib.pipes.tasks import Task
 import ibllib.io.session_params as sess_params
@@ -216,8 +217,8 @@ class RegisterRawDataTask(DynamicTask):
 
     def rename_files(self, symlink_old=False):
 
-        # If no inputs are given, we don't do any renaming
-        if len(self.input_files) == 0:
+        # If either no inputs or no outputs are given, we don't do any renaming
+        if not all(map(len, (self.input_files, self.output_files))):
             return
 
         # Otherwise we need to make sure there is one to one correspondence for renaming files
@@ -246,6 +247,9 @@ class RegisterRawDataTask(DynamicTask):
         Register any photos in the snapshots folder to the session. Typically imaging users will
         take numerous photos for reference.  Supported extensions: .jpg, .jpeg, .png, .tif, .tiff
 
+        If a .txt file with the same name exists in the same location, the contents will be added
+        to the note text.
+
         Parameters
         ----------
         unlink : bool
@@ -260,6 +264,13 @@ class RegisterRawDataTask(DynamicTask):
             The newly registered Alyx notes.
         """
         collection = collection or getattr(self, 'device_collection', None)
+        if collection and '*' in collection:
+            collection = [p.name for p in self.session_path.glob(collection)]
+            # Check whether folders on disk contain '*'; this is to stop an infinite recursion
+            assert not any('*' in c for c in collection), 'folders containing asterisks not supported'
+        # If more that one collection exists, register snapshots in each collection
+        if collection and not isinstance(collection, str):
+            return flatten(filter(None, [self.register_snapshots(unlink, c) for c in collection]))
         snapshots_path = self.session_path.joinpath(*filter(None, (collection, 'snapshots')))
         if not snapshots_path.exists():
             return
@@ -274,6 +285,9 @@ class RegisterRawDataTask(DynamicTask):
         exts = ('.jpg', '.jpeg', '.png', '.tif', '.tiff')
         for snapshot in filter(lambda x: x.suffix.lower() in exts, snapshots_path.glob('*.*')):
             _logger.debug('Uploading "%s"...', snapshot.relative_to(self.session_path))
+            if snapshot.with_suffix('.txt').exists():
+                with open(snapshot.with_suffix('.txt'), 'r') as txt_file:
+                    note['text'] = txt_file.read().strip()
             with open(snapshot, 'rb') as img_file:
                 files = {'image': img_file}
                 notes.append(self.one.alyx.rest('notes', 'create', data=note, files=files))

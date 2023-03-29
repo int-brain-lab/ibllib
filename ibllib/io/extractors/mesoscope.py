@@ -348,8 +348,7 @@ class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
         if isinstance(device_collection, str):
             device_collection = [device_collection]
         if events is not None:
-            events = alfio.AlfBunch(events).to_df()
-            events = events[events.name_timeline == 'mpepUDP']
+            events = events[events.name == 'mpepUDP']
         edges = self.get_bout_edges(frame_times, device_collection, events)
         fov_times = []
         line_shifts = []
@@ -403,9 +402,9 @@ class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
             # Split using Exp/BlockStart and Exp/BlockEnd times
             _, subject, date, _ = session_path_parts(self.session_path)
             pattern = rf'(Exp|Block)%s\s{subject}\s{date.replace("-", "")}\s\d+'
-            UDP_start = events.time_timeline[events.event_timeline.str.match(pattern % 'Start')]
+            UDP_start = events.time[events.info.str.match(pattern % 'Start')]
             starts = frame_times[[np.where(frame_times >= t)[0][0] for t in UDP_start]]
-            UDP_end = events.time_timeline[events.event_timeline.str.match(pattern % 'End')]
+            UDP_end = events.time[events.info.str.match(pattern % 'End')]
             if UDP_end.any():
                 ends = frame_times[[np.where(frame_times >= t)[0][0] for t in UDP_end]]
             else:
