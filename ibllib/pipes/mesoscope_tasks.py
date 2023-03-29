@@ -271,7 +271,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
             'mesoscan': True,
             'nplanes': 1,
             'nrois': len(meta['FOV']),
-            'nchannels': len(meta['FOV'][0]['channelIdx']),
+            'nchannels': 1, # len(meta['FOV'][0]['channelIdx']),
             'fs': meta['scanImageParams']['hRoiManager']['scanVolumeRate'],
             'lines': [list(np.asarray(fov['lineIdx']) - 1) for fov in meta['FOV']],  # subtracting 1 to make 0-based
             'tau': 1.5,  # 1.5 is recommended for GCaMP6s TODO: potential deduct the GCamp used from Alyx mouse line?
