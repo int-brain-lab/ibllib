@@ -355,7 +355,7 @@ class MesoscopeSync(base_tasks.MesoscopeTask):
             events = alfio.load_object(alf_path, 'softwareEvents').get('log')
         except alferr.ALFObjectNotFound:
             events = None
-        if not events:
+        if events is None or events.empty:
             _logger.debug('No software events found for session %s', self.session_path)
         collections = set(collection for _, collection, _ in self.input_files
                           if fnmatch(collection, self.device_collection))
