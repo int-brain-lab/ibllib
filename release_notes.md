@@ -1,3 +1,9 @@
+## Release Notes 2.22
+### Release Notes 2.22.0 (in preparation)
+- trials extractors support omissions trials from neuromodulator tasks
+- SpikeSortingLoader and EphysSessionLoader utils functions to load related objects such as drift
+
+
 ## Release Notes 2.21
 ### Release Notes 2.21.3 2023-03-22
 ### features
