@@ -114,7 +114,7 @@ class TimelineTrials(FpgaTrials):
         trials_table = trials[self.var_names.index('table')]
         bpod = get_sync_fronts(sync, chmap['bpod'])
         if kwargs.get('protocol_number') is None:
-            tmin = trials_table.intervals_0.iloc[0]
+            tmin = trials_table.intervals_0.iloc[0] - 1
             tmax = trials_table.intervals_1.iloc[-1]
             # Ensure wheel is cut off based on trials
             wheel_ts_idx = self.var_names.index('wheel_timestamps')
@@ -143,9 +143,52 @@ class TimelineTrials(FpgaTrials):
 
         # Replace audio events
         self.audio = get_sync_fronts(sync, chmap['audio'], tmin, tmax)
+        # Attempt to assign the go cue and error tone onsets based on TTL length
         go_cue, error_cue = self._assign_events_audio(self.audio['times'], self.audio['polarities'])
-        assert go_cue.size == len(trials_table)
-        assert error_cue.size == np.sum(~correct)
+
+        assert error_cue.size == np.sum(~correct), 'N detected error tones does not match number of incorrect trials'
+        assert go_cue.size <= len(trials_table), 'More go cue tones detected than trials!'
+
+        if go_cue.size < len(trials_table):
+            _logger.warning('%i go cue tones missed', len(trials_table) - go_cue.size)
+            """
+            If the error cues are all assigned and some go cues are missed it may be that some
+            responses were so fast that the go cue and error tone merged.
+            """
+            err_trig = self.bpod2fpga(self.bpod_trials['errorCueTrigger_times'])
+            go_trig = self.bpod2fpga(self.bpod_trials['goCueTrigger_times'])
+            assert not np.any(np.isnan(go_trig))
+            assert err_trig.size == go_trig.size
+
+            def first_true(arr):
+                """Return the index of the first True value in an array."""
+                indices = np.where(arr)[0]
+                return None if len(indices) == 0 else indices[0]
+
+            # Find which trials are missing a go cue
+            _go_cue = np.full(len(trials_table), np.nan)
+            for i, intervals in enumerate(trials_table[['intervals_0', 'intervals_1']].values):
+                idx = first_true(np.logical_and(go_cue > intervals[0], go_cue < intervals[1]))
+                if idx is not None:
+                    _go_cue[i] = go_cue[idx]
+
+            # Get all the DAQ timestamps where audio channel was HIGH
+            raw = timeline_get_channel(self.timeline, 'audio')
+            raw = (raw - raw.min()) / (raw.max() - raw.min())  # min-max normalize
+            ups = self.timeline.timestamps[raw > .5]  # timestamps where input HIGH
+            for i in np.where(np.isnan(_go_cue))[0]:
+                # Get the timestamp of the first HIGH after the trigger times
+                _go_cue[i] = ups[first_true(ups > go_trig[i])]
+                idx = first_true(np.logical_and(
+                    error_cue > trials_table['intervals_0'][i],
+                    error_cue < trials_table['intervals_1'][i]))
+                if np.isnan(err_trig[i]):
+                    if idx is not None:
+                        error_cue = np.delete(error_cue, idx)  # Remove mis-assigned error tone time
+                else:
+                    error_cue[idx] = ups[first_true(ups > err_trig[i])]
+            go_cue = _go_cue
+
         trials_table.feedback_times[~correct] = error_cue
         trials_table.goCue_times = go_cue
         return trials
@@ -295,9 +338,12 @@ class TimelineTrials(FpgaTrials):
         if display:  # pragma: no cover
             fig, ax = plt.subplots(nrows=2, sharex=True)
             ax[0].plot(self.timeline.timestamps, timeline_get_channel(self.timeline, 'audio'), 'k-o')
+            ax[0].set_ylabel('Voltage / V')
             squares(audio_times, audio_polarities, yrange=[-1, 1], ax=ax[1])
-            vertical_lines(t_ready_tone_in, ymin=-.8, ymax=.8, ax=ax[1])
-            vertical_lines(t_error_tone_in, ymin=-.8, ymax=.8, ax=ax[1])
+            vertical_lines(t_ready_tone_in, ymin=-.8, ymax=.8, ax=ax[1], label='go cue')
+            vertical_lines(t_error_tone_in, ymin=-.8, ymax=.8, ax=ax[1], label='error tone')
+            ax[1].set_xlabel('Time / s')
+            ax[1].legend()
 
         return t_ready_tone_in, t_error_tone_in
 
@@ -402,9 +448,9 @@ class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
             # Split using Exp/BlockStart and Exp/BlockEnd times
             _, subject, date, _ = session_path_parts(self.session_path)
             pattern = rf'(Exp|Block)%s\s{subject}\s{date.replace("-", "")}\s\d+'
-            UDP_start = events.time[events.info.str.match(pattern % 'Start')]
+            UDP_start = events.time[events['info'].str.match(pattern % 'Start')]
             starts = frame_times[[np.where(frame_times >= t)[0][0] for t in UDP_start]]
-            UDP_end = events.time[events.info.str.match(pattern % 'End')]
+            UDP_end = events.time[events['info'].str.match(pattern % 'End')]
             if UDP_end.any():
                 ends = frame_times[[np.where(frame_times >= t)[0][0] for t in UDP_end]]
             else:

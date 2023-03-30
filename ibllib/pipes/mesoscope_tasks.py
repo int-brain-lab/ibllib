@@ -17,7 +17,7 @@ from fnmatch import fnmatch
 import numpy as np
 import pandas as pd
 from scipy.io import loadmat
-from scipy import sparse
+import scipy.sparse
 
 import one.alf.io as alfio
 import one.alf.exceptions as alferr
@@ -216,7 +216,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                     _logger.error(f"exptQC.mat files have different values for name '{k}'")
                     raise IOError(f"exptQC.mat files have different values for name '{k}'")
 
-        frameQC_names = pd.DataFrame(sorted([(v, k) for k,v in frameQC_names.items()]),
+        frameQC_names = pd.DataFrame(sorted([(v, k) for k, v in frameQC_names.items()]),
                                      columns=['qc_labels', 'qc_values'])
 
         # Concatenate frames
@@ -271,7 +271,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
             'mesoscan': True,
             'nplanes': 1,
             'nrois': len(meta['FOV']),
-            'nchannels': 1, # len(meta['FOV'][0]['channelIdx']),
+            'nchannels': 1,  # len(meta['FOV'][0]['channelIdx']),
             'fs': meta['scanImageParams']['hRoiManager']['scanVolumeRate'],
             'lines': [list(np.asarray(fov['lineIdx']) - 1) for fov in meta['FOV']],  # subtracting 1 to make 0-based
             'tau': 1.5,  # 1.5 is recommended for GCaMP6s TODO: potential deduct the GCamp used from Alyx mouse line?
@@ -287,7 +287,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         import suite2p
         # Load metadata and make sure all metadata is consistent across FOVs
         rawImagingData = [alfio.load_object(self.session_path.joinpath(f[1]), 'rawImagingData')['meta']
-                         for f in self.input_files if f[0] == '_ibl_rawImagingData.meta.json']
+                          for f in self.input_files if f[0] == '_ibl_rawImagingData.meta.json']
         if len(rawImagingData) > 1:
             meta = self._check_meta_data(rawImagingData)
         else:
