@@ -275,7 +275,7 @@ class VideoSyncQcNidq(base_tasks.VideoTask):
         # Video timestamps extraction
         output_files = []
         data, files = camera.extract_all(self.session_path, sync_type=self.sync, sync_collection=self.sync_collection,
-                                         save=True, labels=labels)
+                                         save=True, labels=labels, **kwargs)
         output_files.extend(files)
 
         # Video QC
