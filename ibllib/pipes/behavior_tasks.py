@@ -445,7 +445,7 @@ class TrainingStatus(base_tasks.BehaviourTask):
         Extracts training status for subject
         TODO need to make compatible with chained protocols
         """
-        df = training_status.get_latest_training_information(self.session_path, self.one, self.get_task_collection())
+        df = training_status.get_latest_training_information(self.session_path, self.one, self.collection)
         if df is not None:
             training_status.make_plots(self.session_path, self.one, df=df, save=True, upload=upload)
             # Update status map in JSON field of subjects endpoint
