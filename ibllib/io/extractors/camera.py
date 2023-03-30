@@ -72,7 +72,7 @@ class CameraTimestampsFPGA(BaseExtractor):
     def __del__(self):
         _logger.setLevel(self._log_level)
 
-    def _extract(self, sync=None, chmap=None, video_path=None, sync_label='ttl',
+    def _extract(self, sync=None, chmap=None, video_path=None, sync_label='audio',
                  display=False, extrapolate_missing=True, **kwargs):
         """
         The raw timestamps are taken from the DAQ. These are the times of the camera's frame TTLs.
