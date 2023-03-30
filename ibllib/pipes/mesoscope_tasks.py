@@ -192,12 +192,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                         _logger.warning(f"Mismatch in meta data between raw_imaging_data folders for key {k}. "
                                         f"Using meta_data from first folder!")
             else:
-                # # Check that this number of channels is the same across all FOVS
-                # if not len(set(len(fov['channelIdx']) for fov in meta['FOV'])) == 1:
-                #     _logger.warning('Not all FOVs have the same number of channels. '
-                #                     'Using channel number from first FOV!')
-                # else:
-                #     _logger.info('Meta data is consistent across all raw imaging folders')
+                _logger.info('Meta data is consistent across all raw imaging folders')
                 pass
 
         return meta_data_all[0]
@@ -248,6 +243,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         pixSizeY = nXnYnZ[:, 1] / sH
         dx = np.round(cXY[:, 0] * pixSizeX).astype(dtype=np.int32)
         dy = np.round(cXY[:, 1] * pixSizeY).astype(dtype=np.int32)
+        nchannels = len(meta['FOV'][0]['channelIdx']) if isinstance(meta['FOV'][0]['channelIdx'], list) else 1
 
         db = {
             'data_path': sorted([str(s) for s in self.session_path.glob(f'{self.device_collection}')]),
@@ -271,7 +267,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
             'mesoscan': True,
             'nplanes': 1,
             'nrois': len(meta['FOV']),
-            'nchannels': 1,  # len(meta['FOV'][0]['channelIdx']),
+            'nchannels': nchannels,
             'fs': meta['scanImageParams']['hRoiManager']['scanVolumeRate'],
             'lines': [list(np.asarray(fov['lineIdx']) - 1) for fov in meta['FOV']],  # subtracting 1 to make 0-based
             'tau': 1.5,  # 1.5 is recommended for GCaMP6s TODO: potential deduct the GCamp used from Alyx mouse line?
@@ -314,8 +310,8 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         np.save(self.session_path.joinpath('alf', 'mpci.mpciFrameQC.npy'), frameQC)
         frameQC_names.to_csv(self.session_path.joinpath('alf', 'mpciFrameQC.names.tsv'), sep='\t', index=False)
         # If applicable, save as bad_frames.npy in first raw_imaging_folder for suite2p
-        if bad_frames is not None:
-            np.save(Path(db['data_path'][0]).joinpath('bad_frames.npy'), bad_frames)
+        # if bad_frames is not None:
+        #     np.save(Path(db['data_path'][0]).joinpath('bad_frames.npy'), bad_frames)
         # Run suite2p
         if run_suite2p:
             _ = suite2p.run_s2p(ops=ops, db=db)
