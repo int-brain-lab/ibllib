@@ -1016,14 +1016,19 @@ class SpikeSortingLoader:
         if self._sync is None:
             timestamps = self.one.load_dataset(
                 self.eid, dataset='_spikeglx_*.timestamps.npy', collection=f'raw_ephys_data/{self.pname}')
-            ap_meta = spikeglx.read_meta_data(self.one.load_dataset(
-                self.eid, dataset='_spikeglx_*.ap.meta', collection=f'raw_ephys_data/{self.pname}'))
+            try:
+                ap_meta = spikeglx.read_meta_data(self.one.load_dataset(
+                    self.eid, dataset='_spikeglx_*.ap.meta', collection=f'raw_ephys_data/{self.pname}'))
+                fs = spikeglx._get_fs_from_meta(ap_meta)
+            except ALFObjectNotFound:
+                ap_meta = None
+                fs = 30_000
             self._sync = {
                 'timestamps': timestamps,
                 'forward': interp1d(timestamps[:, 0], timestamps[:, 1], fill_value='extrapolate'),
                 'reverse': interp1d(timestamps[:, 1], timestamps[:, 0], fill_value='extrapolate'),
                 'ap_meta': ap_meta,
-                'fs': spikeglx._get_fs_from_meta(ap_meta),
+                'fs': fs,
             }
 
     def timesprobe2times(self, values, direction='forward'):
