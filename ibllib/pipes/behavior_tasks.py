@@ -4,6 +4,7 @@ import traceback
 
 from pkg_resources import parse_version
 import one.alf.io as alfio
+from one.alf.files import session_path_parts
 
 from ibllib.pipes import base_tasks
 from ibllib.io.raw_data_loaders import load_settings
@@ -442,10 +443,18 @@ class TrainingStatus(base_tasks.BehaviourTask):
     def _run(self, upload=True):
         """
         Extracts training status for subject
+        TODO need to make compatible with chained protocols
         """
-        # TODO need to make compatible with chained protocol
-        df = training_status.get_latest_training_information(self.session_path, self.one)
+        df = training_status.get_latest_training_information(self.session_path, self.one, self.get_task_collection())
         if df is not None:
             training_status.make_plots(self.session_path, self.one, df=df, save=True, upload=upload)
+            # Update status map in JSON field of subjects endpoint
+            # TODO This requires exposing the json field of the subjects endpoint
+            # if self.one and not self.one.offline:
+            #     _logger.debug('Updating JSON field of subjects endpoint')
+            #     status = df.set_index('date')['training_status'].drop_duplicates(keep='first').to_dict()
+            #     data = {'trained_criteria': {v: k for k, v in status.items()}}
+            #     _, subject, *_ = session_path_parts(self.session_path)
+            #     self.one.alyx.json_field_update('subjects', subject, data=data)
         output_files = []
         return output_files

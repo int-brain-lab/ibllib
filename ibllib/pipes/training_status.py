@@ -81,7 +81,7 @@ def load_existing_dataframe(subj_path):
         return None
 
 
-def load_trials(sess_path, one):
+def load_trials(sess_path, one, collection='alf'):
     """
     Load trials data for session. First attempts to load from local session path, if this fails will attempt to download via ONE,
     if this also fails, will then attempt to re-extraxt locally
@@ -91,7 +91,7 @@ def load_trials(sess_path, one):
     """
     # try and load trials locally
     try:
-        trials = alfio.load_object(sess_path.joinpath('alf'), 'trials')
+        trials = alfio.load_object(sess_path.joinpath(collection), 'trials')
         if 'probabilityLeft' not in trials.keys():
             raise ALFObjectNotFound
     except ALFObjectNotFound:
@@ -105,7 +105,7 @@ def load_trials(sess_path, one):
                 task = get_trials_task(sess_path, one=one)
                 if task is not None:
                     task.run()
-                    trials = alfio.load_object(sess_path.joinpath('alf'), 'trials')
+                    trials = alfio.load_object(sess_path.joinpath(collection), 'trials')
                     if 'probabilityLeft' not in trials.keys():
                         raise ALFObjectNotFound
                 else:
@@ -131,7 +131,7 @@ def load_combined_trials(sess_paths, one):
     return training.concatenate_trials(trials_dict)
 
 
-def get_latest_training_information(sess_path, one):
+def get_latest_training_information(sess_path, one, task_collection='raw_behavior_data'):
     """
     Extracts the latest training status.
 
@@ -141,6 +141,8 @@ def get_latest_training_information(sess_path, one):
         The session path from which to load the data.
     one : one.api.One
         An ONE instance.
+    task_collection : str
+        The location of the raw task settings.
 
     Returns
     -------
@@ -156,7 +158,7 @@ def get_latest_training_information(sess_path, one):
 
     # Iterate through the dates to fill up our training dataframe
     for _, grp in missing_dates.groupby('date'):
-        sess_dicts = get_training_info_for_session(grp.session_path.values, one)
+        sess_dicts = get_training_info_for_session(grp.session_path.values, one, task_collection=task_collection)
         if len(sess_dicts) == 0:
             continue
 
@@ -299,7 +301,7 @@ def compute_session_duration_delay_location(sess_path, **kwargs):
     return session_duration, session_delay, session_location
 
 
-def get_training_info_for_session(session_paths, one):
+def get_training_info_for_session(session_paths, one, task_collection='raw_behavior_data'):
     """
     Extract the training information needed for plots for each session
     :param session_paths: list of session paths on same date
@@ -314,7 +316,7 @@ def get_training_info_for_session(session_paths, one):
         sess_dict = {}
         sess_dict['date'] = str(one.path2ref(session_path)['date'])
         sess_dict['session_path'] = str(session_path)
-        sess_dict['task_protocol'] = get_session_extractor_type(session_path)
+        sess_dict['task_protocol'] = get_session_extractor_type(session_path, task_collection=task_collection)
 
         if sess_dict['task_protocol'] == 'habituation':
             nan_array = np.array([np.nan])
@@ -359,7 +361,7 @@ def get_training_info_for_session(session_paths, one):
             sess_dict['reaction_time'] = training.compute_median_reaction_time(trials)
             sess_dict['n_trials'] = training.compute_n_trials(trials)
             sess_dict['sess_duration'], sess_dict['n_delay'], sess_dict['location'] = \
-                compute_session_duration_delay_location(session_path)
+                compute_session_duration_delay_location(session_path, task_collection=task_collection)
             sess_dict['training_status'] = 'not_computed'
 
         sess_dicts.append(sess_dict)
