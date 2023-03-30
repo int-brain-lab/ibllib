@@ -50,7 +50,7 @@ class MesoscopeRegisterSnapshots(base_tasks.MesoscopeTask, base_tasks.RegisterRa
 
     def _run(self):
         out_files = super()._run()
-        self.register_snapshots()
+        self.register_snapshots()  # TODO Return registered files too?
         return out_files
 
 
@@ -366,7 +366,9 @@ class MesoscopeSync(base_tasks.MesoscopeTask):
         n_ROIs = len(self.rawImagingData['meta']['FOV'])
         sync, chmap = self.load_sync()  # Extract sync data from raw DAQ data
         mesosync = mesoscope.MesoscopeSyncTimeline(self.session_path, n_ROIs)
-        mesosync.extract(save=True, sync=sync, chmap=chmap, device_collection=collections, events=events)
+        _, out_files = mesosync.extract(
+            save=True, sync=sync, chmap=chmap, device_collection=collections, events=events)
+        return out_files
 
 
 class MesoscopeFOV(base_tasks.MesoscopeTask):

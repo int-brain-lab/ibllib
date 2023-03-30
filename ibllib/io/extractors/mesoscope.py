@@ -333,7 +333,7 @@ class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
     def __init__(self, session_path, n_ROIs, **kwargs):
         super().__init__(session_path, **kwargs)  # TODO Document
         self.n_ROIs = n_ROIs
-        rois = list(map(lambda n: f'ROI{n:02}', range(self.n_ROIs)))
+        rois = list(map(lambda n: f'ROI_{n:02}', range(self.n_ROIs)))
         self.var_names = [f'{x}_{y.lower()}' for x in self.var_names for y in rois]
         self.save_names = [f'{y}/{x}' for x in self.save_names for y in rois]
 
