@@ -11,6 +11,7 @@ from ibllib.pipes.tasks import Task
 import ibllib.io.session_params as sess_params
 from ibllib.qc.base import sign_off_dict, SIGN_OFF_CATEGORIES
 from ibllib.io.extractors import mesoscope
+from ibllib.io.raw_daq_loaders import load_timeline_sync_and_chmap
 
 _logger = logging.getLogger(__name__)
 
@@ -189,18 +190,12 @@ class MesoscopeTask(DynamicTask):
         dict
             A map of channel names and their corresponding indices.
         """
-        ns = self.get_sync_namespace()
         alf_path = self.session_path / self.sync_collection
-        try:
-            sync = alfio.load_object(alf_path, 'sync', namespace=ns)
-            chmap = None
-        except alferr.ALFObjectNotFound:
-            if self.get_sync_namespace() == 'timeline':
-                # Load the sync and channel map from the raw DAQ data
-                timeline = alfio.load_object(alf_path, 'DAQdata', namespace=ns)
-                sync, chmap = mesoscope.timeline2sync(timeline)
-            else:
-                raise NotImplementedError
+        if self.get_sync_namespace() == 'timeline':
+            # Load the sync and channel map from the raw DAQ data
+            sync, chmap = load_timeline_sync_and_chmap(alf_path)
+        else:
+            raise NotImplementedError
         return sync, chmap
 
 

@@ -65,3 +65,23 @@ DEFAULT_MAPS = {
                       'neural_frames': 7}
          }
 }
+
+
+def all_default_labels():
+    """
+    Returns the set of channel map channel names.
+
+    Returns
+    -------
+    set of str
+        The channel names present throughout all default channel maps.
+    """
+    keys = set()
+    def _iter_map(d):
+        for k, v in d.items():
+            if isinstance(v, dict):
+                _iter_map(v)
+            else:
+                keys.add(k)
+    _iter_map(DEFAULT_MAPS)
+    return keys

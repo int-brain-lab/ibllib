@@ -598,10 +598,10 @@ class TestRawDaqLoaders(unittest.TestCase):
         with open(self.tmpdir.name + '/_timeline_DAQdata.meta.json', 'w') as fp:
             json.dump(self.meta, fp)
 
-    def test_load_sync_timeline(self):
-        """Test for load_sync_timeline function."""
+    def test_extract_sync_timeline(self):
+        """Test for extract_sync_timeline function."""
         chmap = {'bpod': 0, 'neuralFrames': 1, 'rotaryEncoder': 3}
-        sync = raw_daq.load_sync_timeline(self.tmpdir.name, chmap)
+        sync = raw_daq.extract_sync_timeline(self.tmpdir.name, chmap)
         self.assertCountEqual(('times', 'channels', 'polarities'), sync.keys())
         # Should be sorted by times
         self.assertTrue(np.all(np.diff(sync['times']) >= 0))
@@ -631,7 +631,7 @@ class TestRawDaqLoaders(unittest.TestCase):
         # Check for missing channel warnings
         chmap['unknown'] = 2  # Add channel that's not in meta file
         with self.assertLogs(logging.getLogger('ibllib.io.raw_daq_loaders'), logging.WARNING) as log:
-            raw_daq.load_sync_timeline(self.tmpdir.name, chmap)
+            raw_daq.extract_sync_timeline(self.tmpdir.name, chmap)
             record, = log.records
             self.assertIn('unknown', record.message)
 
@@ -639,7 +639,7 @@ class TestRawDaqLoaders(unittest.TestCase):
         self.meta['inputs'][0]['measurement'] = 'FooBar'
         with open(self.tmpdir.name + '/_timeline_DAQdata.meta.json', 'w') as fp:
             json.dump(self.meta, fp)
-        self.assertRaises(NotImplementedError, raw_daq.load_sync_timeline, self.tmpdir.name)
+        self.assertRaises(NotImplementedError, raw_daq.extract_sync_timeline, self.tmpdir.name)
 
     def test_timeline_meta2wiring(self):
         """Test for timeline_meta2wiring function."""

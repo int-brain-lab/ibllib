@@ -8,7 +8,10 @@ import nptdms
 import numpy as np
 import neurodsp.utils
 import one.alf.io as alfio
+import one.alf.exceptions as alferr
 from one.alf.spec import to_alf
+
+from ibllib.io.extractors.default_channel_maps import all_default_labels
 
 logger = logging.getLogger(__name__)
 
@@ -176,7 +179,49 @@ def correct_counter_discontinuities(raw, overflow=2**32):
     return np.cumsum(np.r_[0, d]) + raw[0]  # back to position
 
 
-def load_sync_timeline(timeline, chmap=None, floor_percentile=10, threshold=None):
+def load_timeline_sync_and_chmap(alf_path, chmap=None, timeline=None, save=True):
+    """Load the sync and channel map from disk.
+
+    If the sync files do not exist, they are extracted from the raw DAQ data and saved.
+
+    Parameters
+    ----------
+    alf_path : str, pathlib.Path
+        The folder containing the sync file and raw DAQ data.
+    chmap : dict
+        An optional channel map, otherwise extracted based on the union of timeline meta data and
+        default extractor channel map names.
+    timeline : dict
+        An optional timeline object, otherwise is loaded from alf_path.
+    save : bool
+        If true, save the sync files if they don't already exist.
+
+    Returns
+    -------
+    one.alf.io.AlfBunch
+        A dictionary with keys ('times', 'polarities', 'channels'), containing the sync pulses and
+        the corresponding channel numbers.
+    dict, optional
+        A map of channel names and their corresponding indices for sync channels, if chmap is None.
+    """
+    if not chmap:
+        if not timeline:
+            meta = alfio.load_object(alf_path, 'DAQdata', namespace='timeline', attribute='meta')['meta']
+        else:
+            meta = timeline['meta']
+        chmap = timeline_meta2chmap(meta, include_channels=all_default_labels())
+    try:
+        sync = alfio.load_object(alf_path, 'sync')
+    except alferr.ALFObjectNotFound:
+        if not timeline:
+            timeline = alfio.load_object(alf_path, 'DAQdata')
+        sync = extract_sync_timeline(timeline, chmap=chmap)
+        if save:
+            alfio.save_object_npy(alf_path, sync, object='sync', namespace='timeline')
+    return sync, chmap
+
+
+def extract_sync_timeline(timeline, chmap=None, floor_percentile=10, threshold=None):
     """
     Load sync channels from a timeline object.
 
@@ -202,12 +247,15 @@ def load_sync_timeline(timeline, chmap=None, floor_percentile=10, threshold=None
     one.alf.io.AlfBunch
         A dictionary with keys ('times', 'polarities', 'channels'), containing the sync pulses and
         the corresponding channel numbers.
+    dict, optional
+        A map of channel names and their corresponding indices for sync channels, if chmap is None.
     """
     if isinstance(timeline, (str, Path)):
         timeline = alfio.load_object(timeline, 'DAQdata', namespace='timeline')
     assert timeline.keys() >= {'timestamps', 'raw', 'meta'}, 'Timeline object missing attributes'
 
     # If no channel map was passed, load it from 'wiring' file, or extract from meta file
+    return_chmap = chmap is None
     chmap = chmap or timeline.get('wiring') or timeline_meta2chmap(timeline['meta'])
 
     # Initialize sync object
@@ -223,7 +271,8 @@ def load_sync_timeline(timeline, chmap=None, floor_percentile=10, threshold=None
         if info['measurement'] == 'Voltage':
             # Get TLLs by applying a threshold to the diff of voltage samples
             offset = np.percentile(raw, floor_percentile, axis=0)
-            logger.debug(f'estimated analogue channel DC Offset approx. {np.mean(offset):.2f}')
+            daqID = info['daqChannelID']
+            logger.debug(f'{label} ({daqID}): estimated analogue channel DC Offset approx. {np.mean(offset):.2f}')
             step = threshold.get(label) if isinstance(threshold, dict) else threshold
             if step is None:
                 step = np.max(raw - offset) / 2
@@ -257,8 +306,10 @@ def load_sync_timeline(timeline, chmap=None, floor_percentile=10, threshold=None
     t_ind = np.argsort(sync.times)
     for k in sync:
         sync[k] = sync[k][t_ind]
-
-    return sync
+    if return_chmap:
+        return sync, chmap
+    else:
+        return sync
 
 
 def timeline_meta2wiring(path, save=False):

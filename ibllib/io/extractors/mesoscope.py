@@ -8,43 +8,15 @@ import matplotlib.pyplot as plt
 from neurodsp.utils import falls
 
 from ibllib.plots.misc import squares, vertical_lines
-from ibllib.io.raw_daq_loaders import (load_sync_timeline, timeline_meta2chmap, timeline_get_channel,
-                                       correct_counter_discontinuities)
+from ibllib.io.raw_daq_loaders import (extract_sync_timeline, timeline_get_channel,
+                                       correct_counter_discontinuities, load_timeline_sync_and_chmap)
 import ibllib.io.extractors.base as extractors_base
-from ibllib.io.extractors.default_channel_maps import DEFAULT_MAPS
 from ibllib.io.extractors.ephys_fpga import FpgaTrials, WHEEL_TICKS, WHEEL_RADIUS_CM, get_sync_fronts, get_protocol_period
 from ibllib.io.extractors.training_wheel import extract_wheel_moves
 from ibllib.io.extractors.camera import attribute_times
 from ibllib.io.extractors.ephys_fpga import _assign_events_bpod
 
 _logger = logging.getLogger(__name__)
-
-
-def timeline2sync(timeline, chmap=None):
-    """
-    Extract the sync from a Timeline object.
-
-    Parameters
-    ----------
-    timeline : dict, one.alf.AlfBunch
-        A timeline object with the keys {'timestamps', 'raw', 'meta'}.
-    chmap : dict
-        An optional map of channel names and their corresponding array column index (NB: index
-        must start from 1).
-
-    Returns
-    -------
-    one.alf.io.AlfBunch
-        A dictionary with keys ('times', 'polarities', 'channels'), containing the sync pulses and
-        the corresponding channel numbers.
-    dict
-        A map of channel names and their corresponding indices.
-    """
-    if not chmap:  # attempt to extract from the meta file using expected channel names, or use expected channel numbers
-        default = DEFAULT_MAPS['mesoscope']['timeline']
-        chmap = timeline_meta2chmap(timeline['meta'], include_channels=default.keys()) or default
-    sync = load_sync_timeline(timeline, chmap=chmap)
-    return sync, chmap
 
 
 def plot_timeline(timeline, channels=None, raw=True):
@@ -72,7 +44,7 @@ def plot_timeline(timeline, channels=None, raw=True):
     fig, axes = plt.subplots(len(channels), 1)
     if not raw:
         chmap = {ch: meta[ch]['arrayColumn'] for ch in channels}
-        sync, chmap = timeline2sync(timeline, chmap)
+        sync = extract_sync_timeline(timeline, chmap=chmap)
     for i, (ax, ch) in enumerate(zip(axes, channels)):
         if raw:
             # axesScale controls vertical scaling of each trace (multiplicative)
@@ -104,7 +76,8 @@ class TimelineTrials(FpgaTrials):
 
     def _extract(self, sync=None, chmap=None, sync_collection='raw_sync_data', **kwargs):
         if not (sync or chmap):
-            sync, chmap = timeline2sync(self.timeline)
+            sync, chmap = load_timeline_sync_and_chmap(
+                self.session_path / sync_collection, timeline=self.timeline, chmap=chmap)
 
         if kwargs.get('display', False):
             plot_timeline(self.timeline, channels=chmap.keys(), raw=True)
@@ -496,8 +469,7 @@ class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
         # Double-check meta extracted properly
         raw_meta = raw_imaging_meta['rawScanImageMeta']
         artist = raw_meta['Artist']
-        # TODO This assertion might need to be removed if some ROIs are deactivated
-        assert len(artist['RoiGroups']['imagingRoiGroup']['rois']) == len(FOVs)
+        assert sum(x['enable'] for x in artist['RoiGroups']['imagingRoiGroup']['rois']) == len(FOVs)
 
         # Number of scan lines per FOV, i.e. number of Y pixels / image height
         n_lines = np.array([x['nXnYnZ'][1] for x in FOVs])

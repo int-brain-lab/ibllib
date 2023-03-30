@@ -1,7 +1,7 @@
 import logging
 import subprocess
 
-from ibllib.io import ffmpeg
+from ibllib.io import ffmpeg, raw_daq_loaders
 from ibllib.pipes import base_tasks
 from ibllib.io.video import label_from_path, get_video_meta
 from ibllib.io.extractors import camera
@@ -265,6 +265,12 @@ class VideoSyncQcNidq(base_tasks.VideoTask):
 
         mp4_files = self.session_path.joinpath(self.device_collection).glob('*.mp4')
         labels = [label_from_path(x) for x in mp4_files]
+
+        kwargs = {}
+        if self.sync_namespace == 'timeline':
+            # Load sync from timeline file
+            alf_path = self.session_path / self.sync_collection
+            kwargs['sync'], kwargs['chmap'] = raw_daq_loaders.load_timeline_sync_and_chmap(alf_path)
 
         # Video timestamps extraction
         output_files = []
