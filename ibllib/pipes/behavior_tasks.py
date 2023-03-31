@@ -379,6 +379,7 @@ class ChoiceWorldTrialsTimeline(ChoiceWorldTrialsNidq):
         return signature
 
     def _extract_behaviour(self):
+        """Extract the Bpod trials data and Timeline acquired signals."""
         # First determine the extractor from the task protocol
         extractor = get_bpod_extractor(self.session_path, self.protocol, self.collection)
         ret, _ = extractor.extract(save=False, task_collection=self.collection)
@@ -402,11 +403,22 @@ class ChoiceWorldTrialsTimeline(ChoiceWorldTrialsNidq):
 
         return dsets, out_files
 
-    def _behaviour_criterion(self, *args, **kwargs):
-        pass  # TODO
+    def _run_qc(self, trials_data, update=True, **kwargs):
+        """
+        Run the task QC and update Alyx with results.
 
-    def _run_qc(self, trials_data, update=True, plot_qc=True):
-        # TODO Document
+        Parameters
+        ----------
+        trials_data : dict
+            The extracted trials data.
+        update : bool
+            If true, update Alyx with the result.
+
+        Notes
+        -----
+        - Unlike the super class, currently the QC plots are not generated.
+        - Expects the frame2ttl and audio attributes to be set from running _extract_behaviour.
+        """
         # TODO Task QC extractor for Timeline
         qc = TaskQC(self.session_path, one=self.one, log=_logger)
         qc.extractor = TaskQCExtractor(self.session_path, lazy=True, one=qc.one, sync_collection=self.sync_collection,
@@ -450,11 +462,14 @@ class TrainingStatus(base_tasks.BehaviourTask):
             training_status.make_plots(self.session_path, self.one, df=df, save=True, upload=upload)
             # Update status map in JSON field of subjects endpoint
             # TODO This requires exposing the json field of the subjects endpoint
-            # if self.one and not self.one.offline:
-            #     _logger.debug('Updating JSON field of subjects endpoint')
-            #     status = df.set_index('date')['training_status'].drop_duplicates(keep='first').to_dict()
-            #     data = {'trained_criteria': {v: k for k, v in status.items()}}
-            #     _, subject, *_ = session_path_parts(self.session_path)
-            #     self.one.alyx.json_field_update('subjects', subject, data=data)
+            if self.one and not self.one.offline:
+                _logger.debug('Updating JSON field of subjects endpoint')
+                try:
+                    status = df.set_index('date')['training_status'].drop_duplicates(keep='first').to_dict()
+                    data = {'trained_criteria': {v.replace(' ', '_'): k for k, v in status.items()}}
+                    _, subject, *_ = session_path_parts(self.session_path)
+                    self.one.alyx.json_field_update('subjects', subject, data=data)
+                except KeyError:
+                    _logger.error('Failed to update subject training status on Alyx: json field not available')
         output_files = []
         return output_files
