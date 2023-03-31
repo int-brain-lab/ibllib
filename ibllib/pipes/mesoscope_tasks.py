@@ -310,8 +310,8 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         np.save(self.session_path.joinpath('alf', 'mpci.mpciFrameQC.npy'), frameQC)
         frameQC_names.to_csv(self.session_path.joinpath('alf', 'mpciFrameQC.names.tsv'), sep='\t', index=False)
         # If applicable, save as bad_frames.npy in first raw_imaging_folder for suite2p
-        # if bad_frames is not None:
-        #     np.save(Path(db['data_path'][0]).joinpath('bad_frames.npy'), bad_frames)
+        if bad_frames is not None:
+            np.save(Path(db['data_path'][0]).joinpath('bad_frames.npy'), bad_frames)
         # Run suite2p
         if run_suite2p:
             _ = suite2p.run_s2p(ops=ops, db=db)
