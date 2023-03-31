@@ -221,7 +221,12 @@ class CameraQC(base.QC):
         # Load the audio and raw FPGA times
         if self.sync != 'bpod' and self.sync is not None:
             self.sync_collection = self.sync_collection or 'raw_ephys_data'
-            sync, chmap = ephys_fpga.get_sync_and_chn_map(self.session_path, self.sync_collection)
+            if (ns := get_sync_namespace(sess_params)) == 'spikeglx':
+                sync, chmap = ephys_fpga.get_sync_and_chn_map(self.session_path, self.sync_collection)
+            elif ns == 'timeline':
+                sync, chmap = load_timeline_sync_and_chmap(self.session_path / self.sync_collection)
+            else:
+                raise NotImplementedError(f'Unknown namespace "{ns}"')
             audio_ttls = ephys_fpga.get_sync_fronts(sync, chmap['audio'])
             self.data['audio'] = audio_ttls['times']  # Get rises
             # Load raw FPGA times
@@ -1102,12 +1107,7 @@ class CameraQCCamlog(CameraQC):
 
         # Load the audio and raw FPGA times
         if self.sync != 'bpod' and self.sync is not None:
-            if (ns := get_sync_namespace(sess_params)) == 'spikeglx':
-                sync, chmap = ephys_fpga.get_sync_and_chn_map(self.session_path, self.sync_collection)
-            elif ns == 'timeline':
-                sync, chmap = load_timeline_sync_and_chmap(self.session_path / self.sync_collection)
-            else:
-                raise NotImplementedError(f'Unknown namespace "{ns}"')
+            sync, chmap = ephys_fpga.get_sync_and_chn_map(self.session_path, self.sync_collection)
             audio_ttls = ephys_fpga.get_sync_fronts(sync, chmap['audio'])
             self.data['audio'] = audio_ttls['times']  # Get rises
             # Load raw FPGA times
