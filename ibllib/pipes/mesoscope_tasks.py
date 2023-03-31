@@ -50,7 +50,8 @@ class MesoscopeRegisterSnapshots(base_tasks.MesoscopeTask, base_tasks.RegisterRa
 
     def _run(self):
         out_files = super()._run()
-        self.register_snapshots()  # TODO Return registered files too?
+        # Register snapshots in base session folder and raw_imaging_data folders
+        self.register_snapshots(collection=[self.device_collection, ''])
         return out_files
 
 

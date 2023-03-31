@@ -249,7 +249,7 @@ class RegisterRawDataTask(DynamicTask):
         ----------
         unlink : bool
             If true, files are deleted after upload.
-        collection : str, optional
+        collection : str, list, optional
             Location of 'snapshots' folder relative to the session path. If None, uses
             'device_collection' attribute (if exists) or root session path.
 
@@ -258,7 +258,9 @@ class RegisterRawDataTask(DynamicTask):
         list of dict
             The newly registered Alyx notes.
         """
-        collection = collection or getattr(self, 'device_collection', None)
+        collection = getattr(self, 'device_collection', None) if collection is None else collection
+        if collection is None:
+            return
         if collection and '*' in collection:
             collection = [p.name for p in self.session_path.glob(collection)]
             # Check whether folders on disk contain '*'; this is to stop an infinite recursion
