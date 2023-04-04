@@ -286,7 +286,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
 
         return db
 
-    def _run(self, run_suite2p=True, rename_files=True, use_badframes=True, **kwargs):
+    def _run(self, run_suite2p=True, rename_files=True, use_badframes=False, **kwargs):
         import suite2p
         # Load metadata and make sure all metadata is consistent across FOVs
         rawImagingData = [alfio.load_object(self.session_path.joinpath(f[1]), 'rawImagingData')['meta']
