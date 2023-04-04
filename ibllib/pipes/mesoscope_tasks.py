@@ -17,7 +17,7 @@ from fnmatch import fnmatch
 import numpy as np
 import pandas as pd
 from scipy.io import loadmat
-import scipy.sparse
+from scipy import sparse
 
 import one.alf.io as alfio
 import one.alf.exceptions as alferr
@@ -148,7 +148,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
             # ignore the combined dir
             if plane_dir.name != 'combined':
                 n = int(plane_dir.name.split('plane')[1])
-                plane_dir.rename(plane_dir.parent.joinpath(f'FOV{n:02}'))
+                plane_dir.rename(plane_dir.parent.joinpath(f'FOV_{n:02}'))
         # Now rename the content of the new directories and move them out of suite2p
         for fov_dir in suite2p_dir.iterdir():
             if fov_dir != 'combined':
@@ -163,17 +163,24 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                 stat = np.load(fov_dir.joinpath('stat.npy'), allow_pickle=True)[0]
                 iscell = np.load(fov_dir.joinpath('iscell.npy'))
                 np.save(fov_dir.joinpath('mpci.badFrames.npy'), np.asarray(ops['badframes'], dtype=bool))
-                np.save(fov_dir.joinpath('mpciMeanImage.images.npy'), ops['meanImg'], dtype=float)
+                np.save(fov_dir.joinpath('mpciMeanImage.images.npy'), np.asarray(ops['meanImg'], dtype=float))
                 np.save(fov_dir.joinpath('mpciROIs.stackPos.npy'), np.asarray(stat['med'], dtype=int))
-                np.save(fov_dir.joinpath('mpciROIs.mpciROITypes.npy'), iscell[:, 0], dtype=int)
-                np.save(fov_dir.joinpath('mpciROIs.cellClassifier.npy'), iscell[:, 1], dtype=float)
-                # ROI and neuropil masks
-                # np.savez(fov_dir.joinpath('mpciROIs.masks.npz'))
-                # np.savez(fov_dir.joinpath('mpciROIs.neuropilMasks.npz'))
+                np.save(fov_dir.joinpath('mpciROIs.mpciROITypes.npy'), np.asarray(iscell[:, 0], dtype=int))
+                np.save(fov_dir.joinpath('mpciROIs.cellClassifier.npy'), np.asarray(iscell[:, 1], dtype=float))
+                # ROI mask as sparse, compressed matrix
+                mask = np.zeros((ops["Ly"], ops["Lx"]))
+                mask[stat["ypix"], stat["xpix"]] = stat['lam']
+                sparse.save_npz(fov_dir.joinpath('mpciROIs.masks.npz'), sparse.csr_matrix(mask))
+                # Neuropil mask as sparse compressed matrix
+                mask = np.zeros((ops["Ly"], ops["Lx"]), dtype=bool)
+                mask[np.unravel_index(stat['neuropil_mask'], mask.shape)] = True
+                sparse.save_npz(fov_dir.joinpath('mpciROIs.neuropilMasks.npz'), sparse.csr_matrix(mask))
                 # move folders out of suite2p dir
-                shutil.move(fov_dir, suite2p_dir.parent.joinpath(fov_dir.name))
-        # TODO: remove suite2p folder on the long run (still contains combined)
-        # suite2p_dir.rmdir()
+                target = suite2p_dir.parent.joinpath(fov_dir.name)
+                target.mkdir(exist_ok=True)
+                for file in fov_dir.iterdir():
+                    shutil.move(str(file), str(target))
+        shutil.rmtree(str(suite2p_dir), ignore_errors=False, onerror=None)
         # Collect all files in those directories
         return list(suite2p_dir.parent.rglob('FOV*/*'))
 
@@ -252,11 +259,11 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
             'look_one_level_down': False,  # don't look in the children folders as that is where the reference data is
             'num_workers': self.cpu,  # this selects number of cores to parallelize over for the registration step
             'num_workers_roi': -1,  # for parallelization over FOVs during cell detection, for now don't
-            'keep_movie_raw': True,
+            'keep_movie_raw': False,
             'delete_bin': False,  # TODO: delete this on the long run
             'batch_size': 500,  # SP reduced this from 1000
             'nimg_init': 400,
-            'combined': True,  # TODO: do not combine on the long run
+            'combined': False,
             'nonrigid': True,
             'maxregshift': 0.05,  # default = 1
             'denoise': 1,  # whether binned movie should be denoised before cell detection
@@ -279,7 +286,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
 
         return db
 
-    def _run(self, run_suite2p=True, rename_files=True, **kwargs):
+    def _run(self, run_suite2p=True, rename_files=True, use_badframes=True, **kwargs):
         import suite2p
         # Load metadata and make sure all metadata is consistent across FOVs
         rawImagingData = [alfio.load_object(self.session_path.joinpath(f[1]), 'rawImagingData')['meta']
@@ -310,19 +317,20 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         np.save(self.session_path.joinpath('alf', 'mpci.mpciFrameQC.npy'), frameQC)
         frameQC_names.to_csv(self.session_path.joinpath('alf', 'mpciFrameQC.names.tsv'), sep='\t', index=False)
         # If applicable, save as bad_frames.npy in first raw_imaging_folder for suite2p
-        # if bad_frames is not None:
-        #    np.save(Path(db['data_path'][0]).joinpath('bad_frames.npy'), bad_frames)
+        if bad_frames is not None and use_badframes is True:
+           np.save(Path(db['data_path'][0]).joinpath('bad_frames.npy'), bad_frames)
         # Run suite2p
         if run_suite2p:
             _ = suite2p.run_s2p(ops=ops, db=db)
-            # Rename files and return outputs
-            if rename_files:
-                out_files = self._rename_outputs(Path(db['save_path0']).joinpath('suite2p'))
-            else:
-                out_files = list(Path(db['save_path0']).joinpath('suite2p').rglob('*'))
-            return out_files
+        # Rename files and return outputs
+        if rename_files:
+            out_files = self._rename_outputs(Path(db['save_path0']).joinpath('suite2p'))
         else:
-            return None
+            out_files = list(Path(db['save_path0']).joinpath('suite2p').rglob('*'))
+
+        # Only return output file that are in the signature (for registration)
+        out_files = [f for f in out_files if f.name in [f[0] for f in self.output_files]]
+        return out_files
 
 
 class MesoscopeSync(base_tasks.MesoscopeTask):
