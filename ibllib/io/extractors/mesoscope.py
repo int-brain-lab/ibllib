@@ -333,7 +333,7 @@ class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
     def __init__(self, session_path, n_ROIs, **kwargs):
         super().__init__(session_path, **kwargs)  # TODO Document
         self.n_ROIs = n_ROIs
-        rois = list(map(lambda n: f'ROI_{n:02}', range(self.n_ROIs)))
+        rois = list(map(lambda n: f'FOV_{n:02}', range(self.n_ROIs)))
         self.var_names = [f'{x}_{y.lower()}' for x in self.var_names for y in rois]
         self.save_names = [f'{y}/{x}' for x in self.save_names for y in rois]
 
@@ -392,7 +392,7 @@ class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
             _logger.debug('FOV timestamps length does not match neural frame count; imaging bout(s) likely missing')
         return fov_times + line_shifts
 
-    def get_bout_edges(self, frame_times, collections=None, events=None):
+    def get_bout_edges(self, frame_times, collections=None, events=None, min_gap=1.):
         """
         Return an array of edge times for each imaging bout corresponding to a raw_imaging_data
         collection.
@@ -405,6 +405,8 @@ class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
             A set of raw_imaging_data collections, used to extract selected imaging periods.
         events : pandas.DataFrame
             A table of UDP event times, corresponding to times when recordings start and end.
+        min_gap : float
+            If start or end events not present, split bouts by finding gaps larger than this value.
 
         Returns
         -------
@@ -413,8 +415,7 @@ class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
         """
         if events is None or events.empty:
             # No UDP events to mark blocks so separate based on gaps in frame rate
-            MIN_GAP = 1.
-            idx = np.where(np.diff(frame_times) > MIN_GAP)[0]
+            idx = np.where(np.diff(frame_times) > min_gap)[0]
             starts = np.r_[frame_times[0], frame_times[idx + 1]]
             ends = np.r_[frame_times[idx], frame_times[-1]]
         else:
@@ -427,8 +428,10 @@ class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
             if UDP_end.any():
                 ends = frame_times[[np.where(frame_times >= t)[0][0] for t in UDP_end]]
             else:
-                idx = [np.where(frame_times >= t)[0][0] - 1 for t in UDP_start[1:]]
-                ends = np.r_[frame_times[idx], frame_times[-1]]
+                # Get index of last frame to occur within a second of the previous frame
+                consec = np.r_[np.diff(frame_times) > min_gap, True]
+                idx = [np.where(np.logical_and(frame_times > t, consec))[0][0] for t in starts]
+                ends = frame_times[idx]
         # Remove any missing imaging bout collections
         edges = np.c_[starts, ends]
         if collections:

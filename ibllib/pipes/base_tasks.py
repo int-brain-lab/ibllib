@@ -285,6 +285,8 @@ class RegisterRawDataTask(DynamicTask):
             if snapshot.with_suffix('.txt').exists():
                 with open(snapshot.with_suffix('.txt'), 'r') as txt_file:
                     note['text'] = txt_file.read().strip()
+            else:
+                note['text'] = ''
             with open(snapshot, 'rb') as img_file:
                 files = {'image': img_file}
                 notes.append(self.one.alyx.rest('notes', 'create', data=note, files=files))
