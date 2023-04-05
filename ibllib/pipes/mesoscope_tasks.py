@@ -17,7 +17,6 @@ from fnmatch import fnmatch
 import numpy as np
 import pandas as pd
 from scipy.io import loadmat
-from scipy import sparse
 
 import one.alf.io as alfio
 import one.alf.exceptions as alferr
@@ -29,7 +28,7 @@ _logger = logging.getLogger(__name__)
 
 
 class MesoscopeRegisterSnapshots(base_tasks.MesoscopeTask, base_tasks.RegisterRawDataTask):
-
+    """Upload snapshots as Alyx notes and register the 2P reference image(s)."""
     priority = 100
     job_size = 'small'
 
@@ -141,11 +140,26 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         return signature
 
     def _rename_outputs(self, suite2p_dir, rename_dict=None):
+        """
+        Convert suite2p output files to ALF datasets.
+
+        Parameters
+        ----------
+        suite2p_dir : pathlib.Path
+        rename_dict : dict or str
+            The suite2p output filenames and the corresponding ALF name. NB: These files are saved
+            after transposition.
+
+        Returns
+        -------
+        list of pathlib.Path
+            All paths found in FOV folders.
+        """
         if rename_dict is None:
             rename_dict = {
                 'F.npy': 'mpci.ROIActivityF.npy',
-                'Fneu.npy': 'mpci.ROINeuropilActivityF.npy',
                 'spks.npy': 'mpci.ROIActivityDeconvolved.npy',
+                'Fneu.npy': 'mpci.ROINeuropilActivityF.npy'
             }
         # Rename the outputs, first the subdirectories
         for plane_dir in suite2p_dir.iterdir():
@@ -156,29 +170,29 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         # Now rename the content of the new directories and move them out of suite2p
         for fov_dir in suite2p_dir.iterdir():
             if fov_dir != 'combined':
-                for k in rename_dict.keys():
-                    try:
-                        fov_dir.joinpath(k).rename(fov_dir.joinpath(rename_dict[k]))
-                    except FileNotFoundError:
-                        _logger.error(f"Output file {k} expected but not found in {fov_dir}")
-                        self.status = -1
                 # extract some other data from suite2p outputs
                 ops = np.load(fov_dir.joinpath('ops.npy'), allow_pickle=True).item()
-                stat = np.load(fov_dir.joinpath('stat.npy'), allow_pickle=True)[0]
+                stat = np.load(fov_dir.joinpath('stat.npy'), allow_pickle=True)
                 iscell = np.load(fov_dir.joinpath('iscell.npy'))
+
+                # Save transposed (n_frames, n_ROI)
+                for k, v in rename_dict.items():
+                    np.save(fov_dir.joinpath(v), np.load(fov_dir.joinpath(k)).T)
+                    fov_dir.joinpath(k).unlink()
                 np.save(fov_dir.joinpath('mpci.badFrames.npy'), np.asarray(ops['badframes'], dtype=bool))
                 np.save(fov_dir.joinpath('mpciMeanImage.images.npy'), np.asarray(ops['meanImg'], dtype=float))
-                np.save(fov_dir.joinpath('mpciROIs.stackPos.npy'), np.asarray(stat['med'], dtype=int))
+                np.save(fov_dir.joinpath('mpciROIs.stackPos.npy'), np.asarray([(*s['med'], 0) for s in stat], dtype=int))
                 np.save(fov_dir.joinpath('mpciROIs.mpciROITypes.npy'), np.asarray(iscell[:, 0], dtype=int))
                 np.save(fov_dir.joinpath('mpciROIs.cellClassifier.npy'), np.asarray(iscell[:, 1], dtype=float))
-                # ROI mask as sparse, compressed matrix
-                mask = np.zeros((ops["Ly"], ops["Lx"]))
-                mask[stat["ypix"], stat["xpix"]] = stat['lam']
-                sparse.save_npz(fov_dir.joinpath('mpciROIs.masks.npz'), sparse.csr_matrix(mask))
-                # Neuropil mask as sparse compressed matrix
-                mask = np.zeros((ops["Ly"], ops["Lx"]), dtype=bool)
-                mask[np.unravel_index(stat['neuropil_mask'], mask.shape)] = True
-                sparse.save_npz(fov_dir.joinpath('mpciROIs.neuropilMasks.npz'), sparse.csr_matrix(mask))
+                # ROI and neuropil masks as sparse, compressed matrices
+                roi_mask = np.zeros((stat.shape[0], ops['Ly'], ops['Lx']))
+                pil_mask = np.zeros_like(roi_mask, dtype=bool)
+                npx = np.prod(roi_mask.shape[1:])  # Number of pixels per time point
+                for i, s in enumerate(stat):
+                    roi_mask[i, s['ypix'], s['xpix']] = s['lam']
+                    np.put(pil_mask, s['neuropil_mask'] + i * npx, True)
+                np.save(fov_dir.joinpath('mpciROIs.masks.npy'), roi_mask)
+                np.save(fov_dir.joinpath('mpciROIs.neuropilMasks.npy'), pil_mask)
                 # move folders out of suite2p dir
                 target = suite2p_dir.parent.joinpath(fov_dir.name)
                 target.mkdir(exist_ok=True)
