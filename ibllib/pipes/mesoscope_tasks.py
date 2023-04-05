@@ -36,10 +36,8 @@ class MesoscopeRegisterSnapshots(base_tasks.MesoscopeTask, base_tasks.RegisterRa
     @property
     def signature(self):
         signature = {
-            'input_files': [('*.tif', f'{self.device_collection}/snapshots', False),
-                            ('*.png', f'{self.device_collection}/snapshots', False),
-                            ('*.jpg', f'{self.device_collection}/snapshots', False)],
-            'output_files': []
+            'input_files': [('*.tif', f'{self.device_collection}/reference', False)],
+            'output_files': [('reference.image.tif', f'{self.device_collection}/reference', False)]
         }
         return signature
 
@@ -49,6 +47,11 @@ class MesoscopeRegisterSnapshots(base_tasks.MesoscopeTask, base_tasks.RegisterRa
                                                             kwargs.get('device_collection', 'raw_imaging_data_*'))
 
     def _run(self):
+        # Assert that only one tif file exists per collection
+        file, collection, _ = self.signature['input_files'][0]
+        reference_images = list(self.session_path.rglob(f'{collection}/{file}'))
+        assert len(set(x.parent for x in reference_images)) == len(reference_images)
+        # Rename the reference images
         out_files = super()._run()
         # Register snapshots in base session folder and raw_imaging_data folders
         self.register_snapshots(collection=[self.device_collection, ''])

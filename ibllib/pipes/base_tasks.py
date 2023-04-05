@@ -171,10 +171,10 @@ class MesoscopeTask(DynamicTask):
         raw_imaging_folders = [p.name for p in self.session_path.glob(self.device_collection)]
         # For all inputs and outputs that are part of the device collection, expand to one file per folder
         # All others keep unchanged
-        self.input_files = [(sig[0], folder, sig[2]) if sig[1] == self.device_collection else sig for folder in
-                            raw_imaging_folders for sig in self.signature['input_files']]
-        self.output_files = [(sig[0], folder, sig[2]) if sig[1] == self.device_collection else sig for folder in
-                             raw_imaging_folders for sig in self.signature['output_files']]
+        self.input_files = [(sig[0], sig[1].replace(self.device_collection, folder), sig[2])
+                            for folder in raw_imaging_folders for sig in self.signature['input_files']]
+        self.output_files = [(sig[0], sig[1].replace(self.device_collection, folder), sig[2])
+                             for folder in raw_imaging_folders for sig in self.signature['output_files']]
 
     def load_sync(self):
         """
