@@ -175,7 +175,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                 stat = np.load(fov_dir.joinpath('stat.npy'), allow_pickle=True)
                 iscell = np.load(fov_dir.joinpath('iscell.npy'))
 
-                # Save transposed (n_frames, n_ROI)
+                # Save suite2p ROI activity outputs in transposed from (n_frames, n_ROI)
                 for k, v in rename_dict.items():
                     np.save(fov_dir.joinpath(v), np.load(fov_dir.joinpath(k)).T)
                     fov_dir.joinpath(k).unlink()
@@ -196,10 +196,15 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                 # move folders out of suite2p dir
                 target = suite2p_dir.parent.joinpath(fov_dir.name)
                 target.mkdir(exist_ok=True)
+                # We overwrite existing files
                 for file in fov_dir.iterdir():
-                    shutil.move(str(file), str(target))
+                    target_file = target.joinpath(file.name)
+                    if target_file.exists():
+                        target_file.unlink()
+                    file.rename(target_file)
         shutil.rmtree(str(suite2p_dir), ignore_errors=False, onerror=None)
         # Collect all files in those directories
+        # TODO: Add masks and neuropil masks
         return list(suite2p_dir.parent.rglob('FOV*/*'))
 
     def _check_meta_data(self, meta_data_all):
@@ -306,6 +311,8 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
 
     def _run(self, run_suite2p=True, rename_files=True, use_badframes=False, **kwargs):
         import suite2p
+
+        """ Metadata and parameters """
         # Load metadata and make sure all metadata is consistent across FOVs
         rawImagingData = [alfio.load_object(self.session_path.joinpath(f[1]), 'rawImagingData')['meta']
                           for f in self.input_files if f[0] == '_ibl_rawImagingData.meta.json']
@@ -324,28 +331,36 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                 db[k] = v
         # Update the task kwargs attribute as it will be stored in the arguments json field in alyx
         self.kwargs = {**self.kwargs, **db}
+
+        """ Bad frames """
         # Read and consolidate the experimenters frame QC
-        exptQC = [loadmat(str(self.session_path.joinpath(f[1], 'exptQC.mat')), squeeze_me=True, simplify_cells=True)
-                  for f in self.input_files if f[0] == 'exptQC.mat']
+        exptQC = [self.session_path.joinpath(f[1], 'exptQC.mat') for f in self.input_files if f[0] == 'exptQC.mat']
+        exptQC = [loadmat(str(e), squeeze_me=True, simplify_cells=True) for e in exptQC if e.exists()]
         if len(exptQC) > 0:
             frameQC, frameQC_names, bad_frames = self._consolidate_exptQC(exptQC)
         else:
-            frameQC, frameQC_names, bad_frames = pd.DataFrame(), [], None
-        # Save frameQC datasets,
-        np.save(self.session_path.joinpath('alf', 'mpci.mpciFrameQC.npy'), frameQC)
-        frameQC_names.to_csv(self.session_path.joinpath('alf', 'mpciFrameQC.names.tsv'), sep='\t', index=False)
+            frameQC, frameQC_names, bad_frames = np.empty((1,)), pd.DataFrame(), None
         # If applicable, save as bad_frames.npy in first raw_imaging_folder for suite2p
         if bad_frames is not None and use_badframes is True:
-           np.save(Path(db['data_path'][0]).joinpath('bad_frames.npy'), bad_frames)
+            np.save(Path(db['data_path'][0]).joinpath('bad_frames.npy'), bad_frames)
+
+        """ Suite2p """
         # Run suite2p
         if run_suite2p:
             _ = suite2p.run_s2p(ops=ops, db=db)
-        # Rename files and return outputs
-        if rename_files:
-            out_files = self._rename_outputs(Path(db['save_path0']).joinpath('suite2p'))
-        else:
-            out_files = list(Path(db['save_path0']).joinpath('suite2p').rglob('*'))
 
+        """ Outputs """
+        # Save frameQC datasets and add them to outputs
+        self.session_path.joinpath('alf').mkdir(exist_ok=True)
+        np.save(self.session_path.joinpath('alf', 'mpci.mpciFrameQC.npy'), frameQC)
+        frameQC_names.to_csv(self.session_path.joinpath('alf', 'mpciFrameQC.names.tsv'), sep='\t', index=False)
+        out_files = [self.session_path.joinpath('alf', 'mpci.mpciFrameQC.npy'),
+                     self.session_path.joinpath('alf', 'mpciFrameQC.names.tsv')]
+        # Save and rename other outputs
+        if rename_files:
+            out_files.extend(self._rename_outputs(Path(db['save_path0']).joinpath('suite2p')))
+        else:
+            out_files.extend(list(Path(db['save_path0']).joinpath('suite2p').rglob('*')))
         # Only return output file that are in the signature (for registration)
         out_files = [f for f in out_files if f.name in [f[0] for f in self.output_files]]
         return out_files

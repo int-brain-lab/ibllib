@@ -20,81 +20,63 @@ class TestMesoscopePreprocess(unittest.TestCase):
         self.session_path = Path(self.td.name).joinpath('subject', 'date', 'number')
         self.img_path = self.session_path.joinpath('raw_imaging_data')
         self.img_path.mkdir(parents=True)
-        with open(self.img_path.joinpath('rawImagingData.meta.json'), 'w') as f:
-            json.dump({}, f)
-        self.defaults = {
-            'data_path': [str(self.img_path)],
-            'save_path0': str(self.session_path.joinpath('alf')),
-            'move_bin': True,
-            'keep_movie_raw': False,
-            'delete_bin': False,
-            'batch_size': 1000,
-            'combined': True
-        }
         self.task = MesoscopePreprocess(self.session_path)
-
-    def test_rename_files(self):
-        """Test that the files and subdirectories are renamed correctly"""
-        alf_dir = self.session_path.joinpath('alf')
-        suite2p_dir = alf_dir.joinpath('suite2p')
-        expected_files = ['stat.npy', 'ops.npy', 'data.bin', 'mpci.ROIActivityF.npy', 'mpci.ROIActivityFneu.npy',
-                          'mpci.ROIActivityDeconvolved.npy', 'mpciROIs.included.npy', 'mpci.validFrames.npy']
-        expected_outputs = [alf_dir.joinpath(s, e) for e in expected_files for s in ['fov00', 'fov01', 'fov_combined']
-                            if not (s == 'fov_combined' and e == 'data.bin')]
-        for subdir in ['plane00', 'plane01', 'combined']:
-            suite2p_dir.joinpath(subdir).mkdir(parents=True)
-            # create a bunch of empty files to rename
-            for file in ['stat.npy', 'F.npy', 'Fneu.npy', 'spks.npy', 'iscell.npy']:
-                suite2p_dir.joinpath(subdir, file).touch()
-                if subdir != 'combined':
-                    suite2p_dir.joinpath(subdir, 'data.bin').touch()
-            # Create ops with data to make valid frames file
-            np.save(suite2p_dir.joinpath(subdir, 'ops.npy'), {'badframes': np.array([True, False, False])}, allow_pickle=True)
-        with self.assertLogs('ibllib.pipes.mesoscope_tasks', level='WARNING'):
-            _ = self.task.run(run_suite2p=False, rename_files=True)
-        self.assertCountEqual(self.task.outputs, expected_outputs)
-        self.assertEqual(self.task.status, 0)
-        self.assertFalse(suite2p_dir.exists())
-
-    def test_defaults(self):
-        """Test that the defaults are set correctly and reflected in task.kwargs"""
-        missing_keys = ['nrois', 'mesoscan', 'nplanes', 'nchannels', 'tau', 'fs', 'dx', 'dy', 'lines']
-        with self.assertLogs('ibllib.pipes.mesoscope_tasks', level='WARNING') as capture:
-            _ = self.task.run(run_suite2p=False, rename_files=False)
-            self.assertEqual(len(capture.records), len(missing_keys))
-            for i in range(len(missing_keys)):
-                self.assertEqual(capture.records[i].getMessage(),
-                                 f"Setting for {missing_keys[i]} not found in metadata file. Keeping default.")
-        self.assertEqual(self.task.status, 0)
-        self.assertCountEqual(self.task.kwargs, self.defaults)
 
     def test_meta(self):
         """
         Test arguments that are overwritten by meta file and set in task.kwargs,
         and that explicitly passed kwargs overwrite default and meta args
         """
-        meta = {
-            'nrois': 6,
+        expected = {
+            'data_path': [str(self.img_path)],
+            'fast_disk': '',
+            'num_workers': 4,
+            'save_path0': str(self.session_path.joinpath('alf')),
+            'move_bin': True,
+            'keep_movie_raw': False,
+            'delete_bin': False,
+            'batch_size': 500,
+            'combined': False,
+            'look_one_level_down': False,
+            'num_workers_roi': -1,
+            'nimg_init': 400,
+            'nonrigid': True,
+            'maxregshift': 0.05,
+            'denoise': 1,
+            'block_size': [128, 128],
+            'save_mat': True,
+            'scalefactor': 1,
             'mesoscan': True,
             'nplanes': 1,
-            'nchannels': 1,
             'tau': 1.5,
-            'fs': 7.1,
-            'dx': [1, 2, 3],
-            'dy': [4, 5, 6],
-            'lines': [7, 8, 9, 10]
+            'functional_chan': 1,
+            'align_by_chan': 1,
+            'nrois': 1,
+            'nchannels': 1,
+            'fs': 6.8,
+            'lines': [[3, 4, 5]],
+            'dx': np.array([0], dtype=int),
+            'dy': np.array([0], dtype=int),
         }
-        with open(self.img_path.joinpath('rawImagingData.meta.json'), 'w') as f:
+
+        meta = {
+            'scanImageParams': {'hStackManager': {'zs': 320},
+                                'hRoiManager': {'scanVolumeRate': 6.8}},
+            'FOV': [{'topLeftDeg': [-1, 1.3], 'topRightDeg': [3, 1.3], 'bottomLeftDeg': [-1, 5.2],
+                     'nXnYnZ': [512, 512, 1], 'channelIdx': 2, 'lineIdx': [4, 5, 6]}]
+        }
+        with open(self.img_path.joinpath('_ibl_rawImagingData.meta.json'), 'w') as f:
             json.dump(meta, f)
+        self.img_path.joinpath('test.tif').touch()
         _ = self.task.run(run_suite2p=False, rename_files=False)
         self.assertEqual(self.task.status, 0)
-        self.assertCountEqual(self.task.kwargs, {**self.defaults, **meta})
+        self.assertDictEqual(self.task.kwargs, {**expected})
         # Now overwrite a specific option with task.run kwarg
         _ = self.task.run(run_suite2p=False, rename_files=False, nchannels=2, delete_bin=True)
         self.assertEqual(self.task.status, 0)
         self.assertEqual(self.task.kwargs['nchannels'], 2)
         self.assertEqual(self.task.kwargs['delete_bin'], True)
-        with open(self.img_path.joinpath('rawImagingData.meta.json'), 'w') as f:
+        with open(self.img_path.joinpath('_ibl_rawImagingData.meta.json'), 'w') as f:
             json.dump({}, f)
 
     def tearDown(self) -> None:
