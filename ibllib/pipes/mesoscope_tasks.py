@@ -227,8 +227,27 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
 
         return meta_data_all[0]
 
-    def _consolidate_exptQC(self, exptQC):
-        """Consolidate exptQC.mat files into a single file"""
+    @staticmethod
+    def _consolidate_exptQC(exptQC):
+        """Consolidate exptQC.mat files into a single file.
+
+        Parameters
+        ----------
+        exptQC : list of pandas.DataFrame
+            The loaded 'exptQC.mat' files as squeezed and simplified data frames, with columns
+            {'frameQC_frames', 'frameQC_names'}.
+
+        Returns
+        -------
+        numpy.array
+            An array of uint8 where 0 indicates good frames, and other values correspond to
+            experimenter-defined issues (in 'qc_values' column of output data frame).
+        pandas.DataFrame
+            A data frame with columns {'qc_values', 'qc_labels'}, the former an unsigned int
+            corresponding to a QC code; the latter a human-readable QC explanation.
+        numpy.array
+            An array of frame indices where QC code != 0.
+        """
 
         # Merge and make sure same indexes have same names across all files
         frameQC_names_list = [e['frameQC_names'] for e in exptQC]
@@ -238,19 +257,16 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         for d in frameQC_names_list:
             for k, v in d.items():
                 if frameQC_names[k] != v:
-                    _logger.error(f"exptQC.mat files have different values for name '{k}'")
-                    raise IOError(f"exptQC.mat files have different values for name '{k}'")
+                    raise IOError(f'exptQC.mat files have different values for name "{k}"')
 
         frameQC_names = pd.DataFrame(sorted([(v, k) for k, v in frameQC_names.items()]),
-                                     columns=['qc_labels', 'qc_values'])
+                                     columns=['qc_values', 'qc_labels'])
 
         # Concatenate frames
         frameQC = np.concatenate([e['frameQC_frames'] for e in exptQC], axis=0)
 
         # Transform to bad_frames as expected by suite2p
         bad_frames = np.where(frameQC != 0)[0]
-        if bad_frames.shape[0] == 0:
-            bad_frames = None
 
         return frameQC, frameQC_names, bad_frames
 
@@ -334,6 +350,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
 
         """ Bad frames """
         # Read and consolidate the experimenters frame QC
+<<<<<<< HEAD
         exptQC = [self.session_path.joinpath(f[1], 'exptQC.mat') for f in self.input_files if f[0] == 'exptQC.mat']
         exptQC = [loadmat(str(e), squeeze_me=True, simplify_cells=True) for e in exptQC if e.exists()]
         if len(exptQC) > 0:
@@ -343,6 +360,24 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         # If applicable, save as bad_frames.npy in first raw_imaging_folder for suite2p
         if bad_frames is not None and use_badframes is True:
             np.save(Path(db['data_path'][0]).joinpath('bad_frames.npy'), bad_frames)
+
+        """ Suite2p """
+        qc_paths = (self.session_path.joinpath(f[1], 'exptQC.mat')
+                    for f in self.input_files if f[0] == 'exptQC.mat')
+        qc_paths = map(str, filter(Path.exists, qc_paths))
+        exptQC = [loadmat(p, squeeze_me=True, simplify_cells=True) for p in qc_paths]
+        if len(exptQC) > 0:
+            frameQC, frameQC_names, bad_frames = self._consolidate_exptQC(exptQC)
+        else:
+            _logger.warning('No frame QC (exptQC.mat) files found.')
+            frameQC, bad_frames = np.array([], dtype='u1'), np.array([], dtype='i8')
+            frameQC_names = pd.DataFrame(columns=['qc_values', 'qc_labels'])
+        # Save frameQC datasets,
+        np.save(self.session_path.joinpath('alf', 'mpci.mpciFrameQC.npy'), frameQC)
+        frameQC_names.to_csv(self.session_path.joinpath('alf', 'mpciFrameQC.names.tsv'), sep='\t', index=False)
+        # If applicable, save as bad_frames.npy in first raw_imaging_folder for suite2p
+        if len(bad_frames) > 0 and use_badframes is True:
+           np.save(Path(db['data_path'][0]).joinpath('bad_frames.npy'), bad_frames)
 
         """ Suite2p """
         # Run suite2p
