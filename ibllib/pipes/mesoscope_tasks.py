@@ -350,7 +350,6 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
 
         """ Bad frames """
         # Read and consolidate the experimenters frame QC
-<<<<<<< HEAD
         exptQC = [self.session_path.joinpath(f[1], 'exptQC.mat') for f in self.input_files if f[0] == 'exptQC.mat']
         exptQC = [loadmat(str(e), squeeze_me=True, simplify_cells=True) for e in exptQC if e.exists()]
         if len(exptQC) > 0:
@@ -372,12 +371,9 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
             _logger.warning('No frame QC (exptQC.mat) files found.')
             frameQC, bad_frames = np.array([], dtype='u1'), np.array([], dtype='i8')
             frameQC_names = pd.DataFrame(columns=['qc_values', 'qc_labels'])
-        # Save frameQC datasets,
-        np.save(self.session_path.joinpath('alf', 'mpci.mpciFrameQC.npy'), frameQC)
-        frameQC_names.to_csv(self.session_path.joinpath('alf', 'mpciFrameQC.names.tsv'), sep='\t', index=False)
         # If applicable, save as bad_frames.npy in first raw_imaging_folder for suite2p
         if len(bad_frames) > 0 and use_badframes is True:
-           np.save(Path(db['data_path'][0]).joinpath('bad_frames.npy'), bad_frames)
+            np.save(Path(db['data_path'][0]).joinpath('bad_frames.npy'), bad_frames)
 
         """ Suite2p """
         # Run suite2p
