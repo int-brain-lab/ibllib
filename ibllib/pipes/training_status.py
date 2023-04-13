@@ -81,7 +81,7 @@ def load_existing_dataframe(subj_path):
         return None
 
 
-def load_trials(sess_path, one):
+def load_trials(sess_path, one, force=True):
     """
     Load trials data for session. First attempts to load from local session path, if this fails will attempt to download via ONE,
     if this also fails, will then attempt to re-extraxt locally
@@ -91,11 +91,13 @@ def load_trials(sess_path, one):
     """
     # try and load trials locally
     try:
-        trials = alfio.load_object(sess_path.joinpath('alf'), 'trials')
+        trials = alfio.load_object(sess_path.joinpath('alf'), 'trials', short_keys=True)
         if 'probabilityLeft' not in trials.keys():
             raise ALFObjectNotFound
     except ALFObjectNotFound:
         try:
+            if not force:
+                return None
             # attempt to download trials using ONE
             trials = one.load_object(one.path2eid(sess_path), 'trials')
             if 'probabilityLeft' not in trials.keys():
@@ -112,10 +114,11 @@ def load_trials(sess_path, one):
                     trials = None
             except Exception:  # TODO how can i make this more specific
                 trials = None
+
     return trials
 
 
-def load_combined_trials(sess_paths, one):
+def load_combined_trials(sess_paths, one, force=True):
     """
     Load and concatenate trials for multiple sessions. Used when we want to concatenate trials for two sessions on the same day
     :param sess_paths: list of paths to sessions
@@ -124,9 +127,9 @@ def load_combined_trials(sess_paths, one):
     """
     trials_dict = {}
     for sess_path in sess_paths:
-        trials = load_trials(Path(sess_path), one)
+        trials = load_trials(Path(sess_path), one, force=force)
         if trials is not None:
-            trials_dict[Path(sess_path).stem] = load_trials(Path(sess_path), one)
+            trials_dict[Path(sess_path).stem] = load_trials(Path(sess_path), one, force=force)
 
     return training.concatenate_trials(trials_dict)
 
@@ -199,7 +202,7 @@ def find_earliest_recompute_date(df):
     return df[first_index:].date.values
 
 
-def compute_training_status(df, compute_date, one):
+def compute_training_status(df, compute_date, one, force=True):
     """
     Compute the training status for compute date based on training from that session and two previous days
     :param df: training dataframe
@@ -234,7 +237,7 @@ def compute_training_status(df, compute_date, one):
         # If habituation skip
         if df_date.iloc[-1]['task_protocol'] == 'habituation':
             continue
-        trials[df_date.iloc[-1]['date']] = load_combined_trials(df_date.session_path.values, one)
+        trials[df_date.iloc[-1]['date']] = load_combined_trials(df_date.session_path.values, one, force=force)
         protocol.append(df_date.iloc[-1]['task_protocol'])
         status.append(df_date.iloc[-1]['training_status'])
         if df_date.iloc[-1]['combined_n_delay'] >= 900:  # delay of 15 mins
@@ -299,7 +302,7 @@ def compute_session_duration_delay_location(sess_path, **kwargs):
     return session_duration, session_delay, session_location
 
 
-def get_training_info_for_session(session_paths, one):
+def get_training_info_for_session(session_paths, one, force=True):
     """
     Extract the training information needed for plots for each session
     :param session_paths: list of session paths on same date
@@ -335,7 +338,7 @@ def get_training_info_for_session(session_paths, one):
 
         else:
             # if we can't compute trials then we need to pass
-            trials = load_trials(session_path, one)
+            trials = load_trials(session_path, one, force=force)
             if trials is None:
                 continue
 
@@ -371,7 +374,7 @@ def get_training_info_for_session(session_paths, one):
 
     if len(sess_dicts) > 1 and len(set(protocols)) == 1:  # Only if all protocols are the same
         print(f'{len(sess_dicts)} sessions being combined for date {sess_dicts[0]["date"]}')
-        combined_trials = load_combined_trials(session_paths, one)
+        combined_trials = load_combined_trials(session_paths, one, force=force)
         performance, contrasts, _ = training.compute_performance(combined_trials, prob_right=True)
         psychs = {}
         psychs['50'] = training.compute_psychometric(trials, block=0.5)
