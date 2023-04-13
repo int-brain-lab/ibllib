@@ -124,7 +124,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                             ('exptQC.mat', self.device_collection, False)],
             'output_files': [('mpci.ROIActivityF.npy', 'alf/FOV*', True),
                              ('mpci.ROINeuropilActivityF.npy', 'alf/FOV*', True),
-                             ('mpci.ROINeuropilActivityDeconvolved.npy', 'alf/FOV*', True),
+                             ('mpci.ROIActivityDeconvolved.npy', 'alf/FOV*', True),
                              ('mpci.badFrames.npy', 'alf/FOV*', True),
                              ('mpciMeanImage.images.npy', 'alf/FOV*', True),
                              ('mpciROIs.stackPos.npy', 'alf/FOV*', True),
@@ -182,8 +182,10 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                 np.save(fov_dir.joinpath('mpci.badFrames.npy'), np.asarray(ops['badframes'], dtype=bool))
                 np.save(fov_dir.joinpath('mpciMeanImage.images.npy'), np.asarray(ops['meanImg'], dtype=float))
                 np.save(fov_dir.joinpath('mpciROIs.stackPos.npy'), np.asarray([(*s['med'], 0) for s in stat], dtype=int))
-                np.save(fov_dir.joinpath('mpciROIs.mpciROITypes.npy'), np.asarray(iscell[:, 0], dtype=int))
                 np.save(fov_dir.joinpath('mpciROIs.cellClassifier.npy'), np.asarray(iscell[:, 1], dtype=float))
+                np.save(fov_dir.joinpath('mpciROIs.mpciROITypes.npy'), np.asarray(iscell[:, 0], dtype=int))
+                pd.DataFrame([(0, 'no cell'), (1, 'cell')], columns=['roi_values', 'roi_labels']
+                             ).to_csv(fov_dir.joinpath('alf', 'mpciROITypes.names.tsv'), sep='\t', index=False)
                 # ROI and neuropil masks
                 roi_mask = np.zeros((stat.shape[0], ops['Ly'], ops['Lx']))
                 pil_mask = np.zeros_like(roi_mask, dtype=bool)
