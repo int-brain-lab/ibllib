@@ -127,14 +127,14 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                              ('mpci.ROINeuropilActivityDeconvolved.npy', 'alf/FOV*', True),
                              ('mpci.badFrames.npy', 'alf/FOV*', True),
                              ('mpciMeanImage.images.npy', 'alf/FOV*', True),
-                             ('mpci.mpciFrameQC.npy', 'alf/FOV*', True),
-                             ('mpciFrameQC.names.tsv', 'alf/FOV*', True),
                              ('mpciROIs.stackPos.npy', 'alf/FOV*', True),
                              ('mpciROIs.mpciROITypes.npy', 'alf/FOV*', True),
                              ('mpciROIs.cellClassifier.npy', 'alf/FOV*', True),
                              ('mpciROITypes.names.tsv', 'alf/FOV*', True),
-                             ('mpciROIs.masks.npz', 'alf/FOV*', True),
-                             ('mpciROIs.neuropilMasks.npz', 'alf/FOV*', True),
+                             ('mpciROIs.masks.npy', 'alf/FOV*', True),
+                             ('mpciROIs.neuropilMasks.npy', 'alf/FOV*', True),
+                             ('mpci.mpciFrameQC.npy', 'alf', True),
+                             ('mpciFrameQC.names.tsv', 'alf', True),
                              ]
         }
         return signature
@@ -184,7 +184,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                 np.save(fov_dir.joinpath('mpciROIs.stackPos.npy'), np.asarray([(*s['med'], 0) for s in stat], dtype=int))
                 np.save(fov_dir.joinpath('mpciROIs.mpciROITypes.npy'), np.asarray(iscell[:, 0], dtype=int))
                 np.save(fov_dir.joinpath('mpciROIs.cellClassifier.npy'), np.asarray(iscell[:, 1], dtype=float))
-                # ROI and neuropil masks as sparse, compressed matrices
+                # ROI and neuropil masks
                 roi_mask = np.zeros((stat.shape[0], ops['Ly'], ops['Lx']))
                 pil_mask = np.zeros_like(roi_mask, dtype=bool)
                 npx = np.prod(roi_mask.shape[1:])  # Number of pixels per time point
@@ -204,7 +204,6 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                     file.rename(target_file)
         shutil.rmtree(str(suite2p_dir), ignore_errors=False, onerror=None)
         # Collect all files in those directories
-        # TODO: Add masks and neuropil masks
         return list(suite2p_dir.parent.rglob('FOV*/*'))
 
     def _check_meta_data(self, meta_data_all):
