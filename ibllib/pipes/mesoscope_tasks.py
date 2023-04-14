@@ -166,7 +166,10 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
             # ignore the combined dir
             if plane_dir.name != 'combined':
                 n = int(plane_dir.name.split('plane')[1])
-                plane_dir.rename(plane_dir.parent.joinpath(f'FOV_{n:02}'))
+                fov_dir = plane_dir.parent.joinpath(f'FOV_{n:02}')
+                if fov_dir.exists():
+                    shutil.rmtree(str(fov_dir), ignore_errors=False, onerror=None)
+                plane_dir.rename(fov_dir)
         # Now rename the content of the new directories and move them out of suite2p
         for fov_dir in suite2p_dir.iterdir():
             if fov_dir != 'combined':
@@ -185,7 +188,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                 np.save(fov_dir.joinpath('mpciROIs.cellClassifier.npy'), np.asarray(iscell[:, 1], dtype=float))
                 np.save(fov_dir.joinpath('mpciROIs.mpciROITypes.npy'), np.asarray(iscell[:, 0], dtype=int))
                 pd.DataFrame([(0, 'no cell'), (1, 'cell')], columns=['roi_values', 'roi_labels']
-                             ).to_csv(fov_dir.joinpath('alf', 'mpciROITypes.names.tsv'), sep='\t', index=False)
+                             ).to_csv(fov_dir.joinpath('mpciROITypes.names.tsv'), sep='\t', index=False)
                 # ROI and neuropil masks
                 roi_mask = np.zeros((stat.shape[0], ops['Ly'], ops['Lx']))
                 pil_mask = np.zeros_like(roi_mask, dtype=bool)
@@ -350,18 +353,6 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         self.kwargs = {**self.kwargs, **db}
 
         """ Bad frames """
-        # Read and consolidate the experimenters frame QC
-        exptQC = [self.session_path.joinpath(f[1], 'exptQC.mat') for f in self.input_files if f[0] == 'exptQC.mat']
-        exptQC = [loadmat(str(e), squeeze_me=True, simplify_cells=True) for e in exptQC if e.exists()]
-        if len(exptQC) > 0:
-            frameQC, frameQC_names, bad_frames = self._consolidate_exptQC(exptQC)
-        else:
-            frameQC, frameQC_names, bad_frames = np.empty((1,)), pd.DataFrame(), None
-        # If applicable, save as bad_frames.npy in first raw_imaging_folder for suite2p
-        if bad_frames is not None and use_badframes is True:
-            np.save(Path(db['data_path'][0]).joinpath('bad_frames.npy'), bad_frames)
-
-        """ Suite2p """
         qc_paths = (self.session_path.joinpath(f[1], 'exptQC.mat')
                     for f in self.input_files if f[0] == 'exptQC.mat')
         qc_paths = map(str, filter(Path.exists, qc_paths))
@@ -377,20 +368,25 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
             np.save(Path(db['data_path'][0]).joinpath('bad_frames.npy'), bad_frames)
 
         """ Suite2p """
+        # Create alf it is doesn't exist
+        self.session_path.joinpath('alf').mkdir(exist_ok=True)
+        # Remove existing suite2p dir if it exists
+        suite2p_dir = Path(db['save_path0']).joinpath('suite2p')
+        if suite2p_dir.exists():
+            shutil.rmtree(str(suite2p_dir), ignore_errors=True, onerror=None)
         # Run suite2p
         if run_suite2p:
             _ = suite2p.run_s2p(ops=ops, db=db)
 
         """ Outputs """
         # Save frameQC datasets and add them to outputs
-        self.session_path.joinpath('alf').mkdir(exist_ok=True)
         np.save(self.session_path.joinpath('alf', 'mpci.mpciFrameQC.npy'), frameQC)
         frameQC_names.to_csv(self.session_path.joinpath('alf', 'mpciFrameQC.names.tsv'), sep='\t', index=False)
         out_files = [self.session_path.joinpath('alf', 'mpci.mpciFrameQC.npy'),
                      self.session_path.joinpath('alf', 'mpciFrameQC.names.tsv')]
         # Save and rename other outputs
         if rename_files:
-            out_files.extend(self._rename_outputs(Path(db['save_path0']).joinpath('suite2p')))
+            out_files.extend(self._rename_outputs(suite2p_dir))
         else:
             out_files.extend(list(Path(db['save_path0']).joinpath('suite2p').rglob('*')))
         # Only return output file that are in the signature (for registration)
