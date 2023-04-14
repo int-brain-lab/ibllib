@@ -126,6 +126,8 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                              ('mpci.ROINeuropilActivityF.npy', 'alf/FOV*', True),
                              ('mpci.ROIActivityDeconvolved.npy', 'alf/FOV*', True),
                              ('mpci.badFrames.npy', 'alf/FOV*', True),
+                             ('mpci.mpciFrameQC.npy', 'alf/FOV*', True),
+                             ('mpciFrameQC.names.tsv', 'alf/FOV*', True),
                              ('mpciMeanImage.images.npy', 'alf/FOV*', True),
                              ('mpciROIs.stackPos.npy', 'alf/FOV*', True),
                              ('mpciROIs.mpciROITypes.npy', 'alf/FOV*', True),
@@ -133,13 +135,11 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                              ('mpciROITypes.names.tsv', 'alf/FOV*', True),
                              ('mpciROIs.masks.npy', 'alf/FOV*', True),
                              ('mpciROIs.neuropilMasks.npy', 'alf/FOV*', True),
-                             ('mpci.mpciFrameQC.npy', 'alf', True),
-                             ('mpciFrameQC.names.tsv', 'alf', True),
                              ]
         }
         return signature
 
-    def _rename_outputs(self, suite2p_dir, rename_dict=None):
+    def _rename_outputs(self, suite2p_dir, frameQC_names, frameQC, rename_dict=None):
         """
         Convert suite2p output files to ALF datasets.
 
@@ -173,6 +173,10 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         # Now rename the content of the new directories and move them out of suite2p
         for fov_dir in suite2p_dir.iterdir():
             if fov_dir != 'combined':
+                # save frameQC in each dir (for now, maybe there will be fov specific frame QC eventually)
+                np.save(fov_dir.joinpath('mpci.mpciFrameQC.npy'), frameQC)
+                frameQC_names.to_csv(fov_dir.joinpath('mpciFrameQC.names.tsv'), sep='\t', index=False)
+
                 # extract some other data from suite2p outputs
                 ops = np.load(fov_dir.joinpath('ops.npy'), allow_pickle=True).item()
                 stat = np.load(fov_dir.joinpath('stat.npy'), allow_pickle=True)
@@ -379,16 +383,11 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
             _ = suite2p.run_s2p(ops=ops, db=db)
 
         """ Outputs """
-        # Save frameQC datasets and add them to outputs
-        np.save(self.session_path.joinpath('alf', 'mpci.mpciFrameQC.npy'), frameQC)
-        frameQC_names.to_csv(self.session_path.joinpath('alf', 'mpciFrameQC.names.tsv'), sep='\t', index=False)
-        out_files = [self.session_path.joinpath('alf', 'mpci.mpciFrameQC.npy'),
-                     self.session_path.joinpath('alf', 'mpciFrameQC.names.tsv')]
         # Save and rename other outputs
         if rename_files:
-            out_files.extend(self._rename_outputs(suite2p_dir))
+            out_files = self._rename_outputs(suite2p_dir, frameQC_names, frameQC)
         else:
-            out_files.extend(list(Path(db['save_path0']).joinpath('suite2p').rglob('*')))
+            out_files = list(Path(db['save_path0']).joinpath('suite2p').rglob('*'))
         # Only return output file that are in the signature (for registration)
         out_files = [f for f in out_files if f.name in [f[0] for f in self.output_files]]
         return out_files
