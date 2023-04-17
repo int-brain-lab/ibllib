@@ -352,7 +352,7 @@ def _swanson_labels_positions(thres=20000):
     This functions computes label positions to overlay on the Swanson flatmap
     :return: dictionary where keys are acronyms
     """
-    NPIX_THRESH = thres # number of pixels above which region is labeled
+    NPIX_THRESH = thres  # number of pixels above which region is labeled
     s2a = swanson()
     iw, ih = np.meshgrid(np.arange(s2a.shape[1]), np.arange(s2a.shape[0]))
     # compute the center of mass of all regions (fast enough to do on the fly)
