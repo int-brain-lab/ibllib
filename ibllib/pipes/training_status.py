@@ -182,13 +182,13 @@ def get_latest_training_information(sess_path, one):
     for date in missing_status:
         df = compute_training_status(df, date, one)
 
-    df_lim = df.drop_duplicates(subset='session', keep='first')
+    df_lim = df.drop_duplicates(subset='session_path', keep='first')
     # Detect untrainable
     un_df = df_lim[df_lim['training_status'] == 'in training'].sort_values('date')
     if len(un_df) >= 40:
         print('untrainable')
         sess = un_df.iloc[39].session
-        df.loc[df['session'] == sess, 'training_status'] = 'untrainable'
+        df.loc[df['session_path'] == sess, 'training_status'] = 'untrainable'
 
     # Detect unbiasable
     un_df = df_lim[df_lim['task_protocol'] == 'biased'].sort_values('date')
@@ -197,7 +197,7 @@ def get_latest_training_information(sess_path, one):
         if 'ready4ephysrig' not in tr_st:
             print('unbiasable')
             sess = un_df.iloc[39].session
-            df.loc[df['session'] == sess, 'training_status'] = 'unbiasable'
+            df.loc[df['session_path'] == sess, 'training_status'] = 'unbiasable'
 
     save_dataframe(df, subj_path)
 

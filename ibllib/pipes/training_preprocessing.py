@@ -133,10 +133,11 @@ class TrainingStatus(tasks.Task):
             if self.one and not self.one.offline:
                 _logger.debug('Updating JSON field of subjects endpoint')
                 try:
-                    status = df.set_index('date')[['training_status', 'session']].drop_duplicates(subset='training_status',
-                                                                                                  keep='first').to_dict()
+                    status = (df.set_index('date')[['training_status', 'session_path']].drop_duplicates(
+                        subset='training_status', keep='first').to_dict())
                     date, sess = status.items()
-                    data = {'trained_criteria': {v.replace(' ', '_'): (k, sess[1][k]) for k, v in date[1].items()}}
+                    data = {'trained_criteria': {v.replace(' ', '_'): (k, self.one.path2eid(sess[1][k])) for k, v
+                                                 in date[1].items()}}
                     _, subject, *_ = session_path_parts(self.session_path)
                     self.one.alyx.json_field_update('subjects', subject, data=data)
                 except KeyError:
