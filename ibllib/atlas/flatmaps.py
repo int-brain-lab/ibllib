@@ -152,8 +152,8 @@ def swanson_json(filename="swansonpaths.json"):
 
 
 def plot_swanson_vector(acronyms=None, values=None, ax=None, hemisphere=None, br=None, orientation='landscape',
-                        empty_color='silver', vmin=None, vmax=None, cmap='viridis', annotate=False, mask=None, mask_color='w',
-                        **kwargs):
+                        empty_color='silver', vmin=None, vmax=None, cmap='viridis', annotate=False, annotate_n=10,
+                        annotate_order='top', mask=None, mask_color='w', **kwargs):
 
     br = BrainRegions() if br is None else br
     br.compute_hierarchy()
@@ -178,6 +178,8 @@ def plot_swanson_vector(acronyms=None, values=None, ax=None, hemisphere=None, br
     sw = swanson()
     sw_json = swanson_json()
 
+    plot_idx = []
+    plot_val = []
     for i, reg in enumerate(sw_json):
 
         if acronyms is None:
@@ -185,6 +187,8 @@ def plot_swanson_vector(acronyms=None, values=None, ax=None, hemisphere=None, br
         else:
             idx = np.where(ibr == reg['thisID'])[0]
             if len(idx) > 0:
+                plot_idx.append(ibr[idx[0]])
+                plot_val.append(vals[idx[0]])
                 color = rgba_color[idx[0]] / 255
             else:
                 idx = np.where(imr == reg['thisID'])[0]
@@ -247,7 +251,16 @@ def plot_swanson_vector(acronyms=None, values=None, ax=None, hemisphere=None, br
             ax.set_ylim(0, 2 * sw.shape[0])
 
     if annotate:
-        annotate_swanson(ax=ax, orientation=orientation, br=br)
+        if acronyms is not None:
+            ids = br.index2id(np.array(plot_idx))
+            _, indices, _ = np.intersect1d(br.id, br.remap(ids, 'Swanson-lr'), return_indices=True)
+            a, b = ismember(ids, br.id[indices])
+            sorted_id = ids[a]
+            vals = np.array(plot_val)[a]
+            sort_vals = np.argsort(vals) if annotate_order == 'bottom' else np.argsort(vals)[::-1]
+            annotate_swanson(ax=ax, acronyms=sorted_id[sort_vals[:annotate_n]], orientation=orientation, br=br)
+        else:
+            annotate_swanson(ax=ax, orientation=orientation, br=br)
 
     def format_coord(x, y):
         ind = sw[int(y), int(x)]
@@ -391,5 +404,5 @@ def annotate_swanson(ax, acronyms=None, orientation='landscape', br=None, **kwar
         if ilabel not in indices:
             continue
         # rotate the labels if the dislay is in portrait mode
-        xy = reversed(labels[ilabel]) if orientation == 'portrait' else labels[ilabel]
+        xy = np.flip(labels[ilabel]) if orientation == 'portrait' else labels[ilabel]
         ax.annotate(br.acronym[ilabel], xy=xy, ha='center', va='center', **kwargs)
