@@ -258,14 +258,17 @@ def plot_swanson_vector(acronyms=None, values=None, ax=None, hemisphere=None, br
             sorted_id = ids[a]
             vals = np.array(plot_val)[a]
             sort_vals = np.argsort(vals) if annotate_order == 'bottom' else np.argsort(vals)[::-1]
-            annotate_swanson(ax=ax, acronyms=sorted_id[sort_vals[:annotate_n]], orientation=orientation, br=br)
+            annotate_swanson(ax=ax, acronyms=sorted_id[sort_vals[:annotate_n]], orientation=orientation, br=br, thres=10)
         else:
             annotate_swanson(ax=ax, orientation=orientation, br=br)
 
     def format_coord(x, y):
-        ind = sw[int(y), int(x)]
-        ancestors = br.ancestors(br.id[ind])['acronym']
-        return f'sw-{ind}, {ancestors}, aid={br.id[ind]}-{br.acronym[ind]} \n {br.name[ind]}'
+        try:
+            ind = sw[int(y), int(x)]
+            ancestors = br.ancestors(br.id[ind])['acronym']
+            return f'sw-{ind}, {ancestors}, aid={br.id[ind]}-{br.acronym[ind]} \n {br.name[ind]}'
+        except IndexError:
+            return ''
 
     ax.format_coord = format_coord
 
@@ -344,12 +347,12 @@ def plot_swanson(acronyms=None, values=None, ax=None, hemisphere=None, br=None,
 
 
 @lru_cache(maxsize=None)
-def _swanson_labels_positions():
+def _swanson_labels_positions(thres=20000):
     """
     This functions computes label positions to overlay on the Swanson flatmap
     :return: dictionary where keys are acronyms
     """
-    NPIX_THRESH = 20000  # number of pixels above which region is labeled
+    NPIX_THRESH = thres # number of pixels above which region is labeled
     s2a = swanson()
     iw, ih = np.meshgrid(np.arange(s2a.shape[1]), np.arange(s2a.shape[0]))
     # compute the center of mass of all regions (fast enough to do on the fly)
@@ -382,7 +385,7 @@ def _swanson_labels_positions():
     return labels
 
 
-def annotate_swanson(ax, acronyms=None, orientation='landscape', br=None, **kwargs):
+def annotate_swanson(ax, acronyms=None, orientation='landscape', br=None, thres=20000, **kwargs):
     """
     Display annotations on the flatmap
     :param ax:
@@ -398,7 +401,7 @@ def annotate_swanson(ax, acronyms=None, orientation='landscape', br=None, **kwar
     else:  # tech debt: here in fact we should remap and compute labels for hierarchical regions
         aids = br.parse_acronyms_argument(acronyms)
         _, indices, _ = np.intersect1d(br.id, br.remap(aids, 'Swanson-lr'), return_indices=True)
-    labels = _swanson_labels_positions()
+    labels = _swanson_labels_positions(thres=thres)
     for ilabel in labels:
         # do not display uwanted labels
         if ilabel not in indices:
