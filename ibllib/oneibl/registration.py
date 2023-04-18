@@ -85,6 +85,9 @@ def register_dataset(file_list, one=None, exists=False, versions=None, **kwargs)
 
     return client.register_files(file_list, versions=versions or ibllib.__version__, exists=exists, **kwargs)
 
+                response = err_message['details']
+                today_revision = datetime.datetime.today().strftime('%Y-%m-%d')
+                new_file_list = []
 
 def register_session_raw_data(session_path, one=None, overwrite=False, **kwargs):
     """

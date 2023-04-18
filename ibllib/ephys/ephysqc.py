@@ -44,14 +44,18 @@ class EphysQC(base.QC):
     """
 
     def __init__(self, probe_id, session_path=None, **kwargs):
-        super().__init__(probe_id, endpoint='insertions', **kwargs)
-        self.pid = probe_id
-        self.session_path = session_path
+        self.use_alyx = kwargs.pop('use_alyx', True)
         self.stream = kwargs.pop('stream', True)
+
+        if self.use_alyx:
+            super().__init__(probe_id, endpoint='insertions', **kwargs)
+            self._outcome = 'NOT_SET'
+            self.pid = probe_id
+
+        self.session_path = session_path
         keys = ('ap', 'ap_meta', 'lf', 'lf_meta')
         self.data = Bunch.fromkeys(keys)
         self.metrics = {}
-        self.outcome = 'NOT_SET'
 
     def _ensure_required_data(self):
         """
@@ -71,12 +75,13 @@ class EphysQC(base.QC):
         lf_meta = [meta for meta in meta_files if 'lf.meta' in meta.name]
         assert not len(lf_meta) > 1, f'More than one lf.meta file in {self.probe_path}. Remove redundant files to run QC'
 
-    def load_data(self) -> None:
+    def load_data(self, ensure=True) -> None:
         """
         Load any locally available data.
         """
         # First sanity check
-        self._ensure_required_data()
+        if self.use_alyx:
+            self._ensure_required_data()
 
         _logger.info('Gathering data for QC')
         # Load metadata and, if locally present, bin file
@@ -130,17 +135,20 @@ class EphysQC(base.QC):
         # If stream is explicitly given in run, overwrite value from init
         if stream is not None:
             self.stream = stream
+
         # Load data
         self.load_data()
+        self.out_path = kwargs.get('out_path', self.probe_path)
+
         qc_files = []
         # If ap meta file present, calculate median RMS per channel before and after destriping
         # NB: ideally this should go a a separate function once we have a spikeglx.Streamer that behaves like the Reader
         if self.data.ap_meta:
-            files = {'rms': self.probe_path.joinpath("_iblqc_ephysChannels.apRMS.npy"),
-                     'spike_rate': self.probe_path.joinpath("_iblqc_ephysChannels.rawSpikeRates.npy"),
-                     'channel_labels': self.probe_path.joinpath("_iblqc_ephysChannels.labels.npy"),
-                     'ap_freqs': self.probe_path.joinpath("_iblqc_ephysSpectralDensityAP.freqs.npy"),
-                     'ap_power': self.probe_path.joinpath("_iblqc_ephysSpectralDensityAP.power.npy"),
+            files = {'rms': self.out_path.joinpath("_iblqc_ephysChannels.apRMS.npy"),
+                     'spike_rate': self.out_path.joinpath("_iblqc_ephysChannels.rawSpikeRates.npy"),
+                     'channel_labels': self.out_path.joinpath("_iblqc_ephysChannels.labels.npy"),
+                     'ap_freqs': self.out_path.joinpath("_iblqc_ephysSpectralDensityAP.freqs.npy"),
+                     'ap_power': self.out_path.joinpath("_iblqc_ephysSpectralDensityAP.power.npy"),
                      }
             if all([files[k].exists() for k in files]) and not overwrite:
                 _logger.warning(f'RMS map already exists for .ap data in {self.probe_path}, skipping. '
@@ -193,7 +201,7 @@ class EphysQC(base.QC):
                 self.update_extended_qc(self.metrics)
         # If lf meta and bin file present, run the old qc on LF data
         if self.data.lf_meta and self.data.lf:
-            qc_files.extend(extract_rmsmap(self.data.lf, out_folder=self.probe_path, overwrite=overwrite))
+            qc_files.extend(extract_rmsmap(self.data.lf, out_folder=self.out_path, overwrite=overwrite))
 
         return qc_files
 
