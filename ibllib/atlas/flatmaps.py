@@ -153,7 +153,7 @@ def swanson_json(filename="swansonpaths.json"):
 
 def plot_swanson_vector(acronyms=None, values=None, ax=None, hemisphere=None, br=None, orientation='landscape',
                         empty_color='silver', vmin=None, vmax=None, cmap='viridis', annotate=False, annotate_n=10,
-                        annotate_order='top', annotate_list=None, mask=None, mask_color='w', **kwargs):
+                        annotate_order='top', annotate_list=None, mask=None, mask_color='w', fontsize=10, **kwargs):
 
     br = BrainRegions() if br is None else br
     br.compute_hierarchy()
@@ -252,7 +252,7 @@ def plot_swanson_vector(acronyms=None, values=None, ax=None, hemisphere=None, br
 
     if annotate:
         if annotate_list is not None:
-            annotate_swanson(ax=ax, acronyms=annotate_list, orientation=orientation, br=br, thres=10)
+            annotate_swanson(ax=ax, acronyms=annotate_list, orientation=orientation, br=br, thres=10, fontsize=fontsize)
         elif acronyms is not None:
             ids = br.index2id(np.array(plot_idx))
             _, indices, _ = np.intersect1d(br.id, br.remap(ids, 'Swanson-lr'), return_indices=True)
@@ -260,9 +260,10 @@ def plot_swanson_vector(acronyms=None, values=None, ax=None, hemisphere=None, br
             sorted_id = ids[a]
             vals = np.array(plot_val)[a]
             sort_vals = np.argsort(vals) if annotate_order == 'bottom' else np.argsort(vals)[::-1]
-            annotate_swanson(ax=ax, acronyms=sorted_id[sort_vals[:annotate_n]], orientation=orientation, br=br, thres=10)
+            annotate_swanson(ax=ax, acronyms=sorted_id[sort_vals[:annotate_n]], orientation=orientation, br=br,
+                             thres=10, fontsize=fontsize)
         else:
-            annotate_swanson(ax=ax, orientation=orientation, br=br)
+            annotate_swanson(ax=ax, orientation=orientation, br=br, fontsize=fontsize)
 
     def format_coord(x, y):
         try:

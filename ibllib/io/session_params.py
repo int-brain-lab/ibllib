@@ -318,9 +318,6 @@ def get_task_collection(sess_params, task_protocol=None):
         cset = set(filter(None, (next(iter(x.values()), {}).get('collection') for x in protocols)))
         return (next(iter(cset)) if len(cset) == 1 else cset) or None
 
-def get_collections(sess_params):
-    """
-    Find all collections associated with the session.
 
 def get_task_protocol_number(sess_params, task_protocol=None):
     """
