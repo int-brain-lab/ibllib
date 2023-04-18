@@ -153,7 +153,7 @@ def swanson_json(filename="swansonpaths.json"):
 
 def plot_swanson_vector(acronyms=None, values=None, ax=None, hemisphere=None, br=None, orientation='landscape',
                         empty_color='silver', vmin=None, vmax=None, cmap='viridis', annotate=False, annotate_n=10,
-                        annotate_order='top', mask=None, mask_color='w', **kwargs):
+                        annotate_order='top', annotate_list=None, mask=None, mask_color='w', **kwargs):
 
     br = BrainRegions() if br is None else br
     br.compute_hierarchy()
@@ -251,7 +251,9 @@ def plot_swanson_vector(acronyms=None, values=None, ax=None, hemisphere=None, br
             ax.set_ylim(0, 2 * sw.shape[0])
 
     if annotate:
-        if acronyms is not None:
+        if annotate_list is not None:
+            annotate_swanson(ax=ax, acronyms=annotate_list, orientation=orientation, br=br, thres=10)
+        elif acronyms is not None:
             ids = br.index2id(np.array(plot_idx))
             _, indices, _ = np.intersect1d(br.id, br.remap(ids, 'Swanson-lr'), return_indices=True)
             a, b = ismember(ids, br.id[indices])
