@@ -852,6 +852,20 @@ class SpikeSortingLoader:
         _logger.debug(f"selecting: {collection} to load amongst candidates: {self.collections}")
         return collection
 
+    def load_spike_sorting_object(self, obj, *args, **kwargs):
+        """
+        Loads an ALF object
+        :param obj: object name, str between 'spikes', 'clusters' or 'channels'
+        :param spike_sorter: (defaults to 'pykilosort')
+        :param dataset_types: list of extra dataset types, for example ['spikes.samples']
+        :param collection: string specifiying the collection, for example 'alf/probe01/pykilosort'
+        :param kwargs: additional arguments to be passed to one.api.One.load_object
+        :param missing: 'raise' (default) or 'ignore'
+        :return:
+        """
+        self.download_spike_sorting_object(obj, *args, **kwargs)
+        return alfio.load_object(self.files[obj])
+
     def download_spike_sorting_object(self, obj, spike_sorter='pykilosort', dataset_types=None, collection=None,
                                       missing='raise', **kwargs):
         """
@@ -998,21 +1012,41 @@ class SpikeSortingLoader:
         webclient = getattr(self.one, '_web_client', None)
         return webclient.rel_path2url(get_alf_path(self.session_path)) if webclient else None
 
+    def _get_probe_info(self):
+        if self._sync is None:
+            timestamps = self.one.load_dataset(
+                self.eid, dataset='_spikeglx_*.timestamps.npy', collection=f'raw_ephys_data/{self.pname}')
+            try:
+                ap_meta = spikeglx.read_meta_data(self.one.load_dataset(
+                    self.eid, dataset='_spikeglx_*.ap.meta', collection=f'raw_ephys_data/{self.pname}'))
+                fs = spikeglx._get_fs_from_meta(ap_meta)
+            except ALFObjectNotFound:
+                ap_meta = None
+                fs = 30_000
+            self._sync = {
+                'timestamps': timestamps,
+                'forward': interp1d(timestamps[:, 0], timestamps[:, 1], fill_value='extrapolate'),
+                'reverse': interp1d(timestamps[:, 1], timestamps[:, 0], fill_value='extrapolate'),
+                'ap_meta': ap_meta,
+                'fs': fs,
+            }
+
+    def timesprobe2times(self, values, direction='forward'):
+        self._get_probe_info()
+        if direction == 'forward':
+            return self._sync['forward'](values * self._sync['fs'])
+        elif direction == 'reverse':
+            return self._sync['reverse'](values) / self._sync['fs']
+
     def samples2times(self, values, direction='forward'):
         """
+        Converts ephys sample values to session main clock seconds
         :param values: numpy array of times in seconds or samples to resync
         :param direction: 'forward' (samples probe time to seconds main time) or 'reverse'
          (seconds main time to samples probe time)
         :return:
         """
-        if self._sync is None:
-            timestamps = self.one.load_dataset(
-                self.eid, dataset='_spikeglx_*.timestamps.npy', collection=f'raw_ephys_data/{self.pname}')
-            self._sync = {
-                'timestamps': timestamps,
-                'forward': interp1d(timestamps[:, 0], timestamps[:, 1], fill_value='extrapolate'),
-                'reverse': interp1d(timestamps[:, 1], timestamps[:, 0], fill_value='extrapolate'),
-            }
+        self._get_probe_info()
         return self._sync[direction](values)
 
     @property
@@ -1390,15 +1424,21 @@ class EphysSessionLoader(SessionLoader):
     """
     Spike sorting enhanced version of SessionLoader
     Loads spike sorting data for all probes in the session, in the self.ephys dict
+    >>> EphysSessionLoader(eid=eid, one=one)
+    To select for a specific probe
+    >>> EphysSessionLoader(eid=eid, one=one, pid=pid)
     """
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, pname=None, pid=None, **kwargs):
         """
         Needs an active connection in order to get the list of insertions in the session
         :param args:
         :param kwargs:
         """
         super().__init__(*args, **kwargs)
-        insertions = self.one.alyx.rest('insertions', 'list', session=self.eid)
+        # if necessary, restrict the query
+        qargs = {} if pname is None else {'name': pname}
+        qargs = qargs or ({} if pid is None else {'id': pid})
+        insertions = self.one.alyx.rest('insertions', 'list', session=self.eid, **qargs)
         self.ephys = {}
         for ins in insertions:
             self.ephys[ins['name']] = {}

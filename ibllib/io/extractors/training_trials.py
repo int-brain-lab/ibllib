@@ -27,23 +27,16 @@ class FeedbackType(BaseBpodTrialsExtractor):
     var_names = 'feedbackType'
 
     def _extract(self):
-        feedbackType = np.empty(len(self.bpod_trials))
-        feedbackType.fill(np.nan)
-        reward = []
-        error = []
-        no_go = []
-        for t in self.bpod_trials:
-            reward.append(~np.isnan(t['behavior_data']['States timestamps']['reward'][0][0]))
-            error.append(~np.isnan(t['behavior_data']['States timestamps']['error'][0][0]))
-            no_go.append(~np.isnan(t['behavior_data']['States timestamps']['no_go'][0][0]))
-
-        if not all(np.sum([reward, error, no_go], axis=0) == np.ones(len(self.bpod_trials))):
-            raise ValueError
-
-        feedbackType[reward] = 1
-        feedbackType[error] = -1
-        feedbackType[no_go] = -1
-        feedbackType = feedbackType.astype('int64')
+        feedbackType = np.zeros(len(self.bpod_trials), np.int64)
+        for i, t in enumerate(self.bpod_trials):
+            state_names = ['correct', 'error', 'no_go', 'omit_correct', 'omit_error', 'omit_no_go']
+            outcome = {sn: ~np.isnan(t['behavior_data']['States timestamps'].get(sn, [[np.NaN]])[0][0]) for sn in state_names}
+            assert np.sum(list(outcome.values())) == 1
+            outcome = next(k for k in outcome if outcome[k])
+            if outcome == 'correct':
+                feedbackType[i] = 1
+            elif outcome in ['error', 'no_go']:
+                feedbackType[i] = -1
         return feedbackType
 
 

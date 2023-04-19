@@ -1,3 +1,12 @@
+## Release Notes 2.22
+### features
+- trials extractors support omissions trials from neuromodulator tasks
+- SpikeSortingLoader and EphysSessionLoader utils functions to load related objects such as drift
+- Training status tasks upload training date and session to subject json
+- Query training criterion function added to brainbox.training
+- Swanson vector - option to annotate top/bottom 5 regions based on values, or pass in a list of acronyms
+- EphysQC can run without connection to ONE
+
 ## Release Notes 2.21
 ### Release Notes 2.21.3 2023-03-22
 ### features
@@ -6,7 +15,7 @@
 
 ### bugfixes
 - register_session: handle lack of taskData in passive sessions
-- 
+
 ### Release Notes 2.21.2 2023-02-24
 ### bugfixes
 - get_lab function now gets lab name from session path subject name

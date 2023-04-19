@@ -10,7 +10,8 @@ numba>=0.56
 numpy>=1.18
 nptdms
 opencv-python-headless
-pandas>=0.24.2
+# pandas>=0.24.2
+pandas<2.0
 phylib>=2.4
 pyarrow
 pynrrd>=0.4.0
