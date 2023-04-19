@@ -8,6 +8,7 @@ from ibllib.io.extractors.ephys_fpga import extract_all
 from ibllib.pipes import training_status
 
 import one.alf.io as alfio
+from one.alf.files import session_path_parts
 from ibllib.plots.figures import BehaviourPlots
 import logging
 import traceback
@@ -328,5 +329,19 @@ class TrainingStatus(base_tasks.BehaviourTask):
         df = training_status.get_latest_training_information(self.session_path, self.one)
         if df is not None:
             training_status.make_plots(self.session_path, self.one, df=df, save=True, upload=upload)
+            # Update status map in JSON field of subjects endpoint
+            # TODO This requires exposing the json field of the subjects endpoint
+            if self.one and not self.one.offline:
+                _logger.debug('Updating JSON field of subjects endpoint')
+                try:
+                    status = (df.set_index('date')[['training_status', 'session_path']].drop_duplicates(
+                        subset='training_status', keep='first').to_dict())
+                    date, sess = status.items()
+                    data = {'trained_criteria': {v.replace(' ', '_'): (k, self.one.path2eid(sess[1][k])) for k, v
+                                                 in date[1].items()}}
+                    _, subject, *_ = session_path_parts(self.session_path)
+                    self.one.alyx.json_field_update('subjects', subject, data=data)
+                except KeyError:
+                    _logger.error('Failed to update subject training status on Alyx: json field not available')
         output_files = []
         return output_files
