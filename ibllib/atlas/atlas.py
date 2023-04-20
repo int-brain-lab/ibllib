@@ -927,20 +927,34 @@ class Insertion:
 class AllenAtlas(BrainAtlas):
     """
     Instantiates an atlas.BrainAtlas corresponding to the Allen CCF at the given resolution
-    using the IBL Bregma and coordinate system
+    using the IBL Bregma and coordinate system.
     """
 
-    def __init__(self, res_um=25, scaling=np.array([1, 1, 1]), mock=False, hist_path=None):
-        """
-        :param res_um: 10, 25 or 50 um
-        :param scaling: scale factor along ml, ap, dv for squeeze and stretch ([1, 1, 1])
-        :param mock: for testing purpose
-        :param hist_path
-        :return: atlas.BrainAtlas
-        """
+    """pathlib.PurePosixPath: The default relative path of the Allen atlas file."""
+    atlas_rel_path = PurePosixPath('histology', 'ATLAS', 'Needles', 'Allen')
 
-        par = one.params.get(silent=True)
-        FLAT_IRON_ATLAS_REL_PATH = PurePosixPath('histology', 'ATLAS', 'Needles', 'Allen')
+    def __init__(self, res_um=25, scaling=(1, 1, 1), mock=False, hist_path=None):
+        """
+        Instantiates an atlas.BrainAtlas corresponding to the Allen CCF at the given resolution
+        using the IBL Bregma and coordinate system.
+
+        Parameters
+        ----------
+        res_um : {10, 25, 50} int
+            The Atlas resolution in micometres; one of 10, 25 or 50um.
+        scaling : float, numpy.array
+            Scale factor along ml, ap, dv for squeeze and stretch (default: [1, 1, 1]).
+        mock : bool
+            For testing purposes, return atlas object with image comprising zeros.
+        hist_path : str, pathlib.Path
+            The location of the image volume. May be a full file path or a directory.
+
+        Examples
+        --------
+        Instantiate Atlas from a non-default location, in this case the cache_dir of an ONE instance.
+        >>> target_dir = one.cache_dir / AllenAtlas.atlas_rel_path
+        ... ba = AllenAtlas(hist_path=target_dir)
+        """
         LUT_VERSION = "v01"  # version 01 is the lateralized version
         regions = BrainRegions()
         xyz2dims = np.array([1, 0, 2])  # this is the c-contiguous ordering
@@ -953,19 +967,22 @@ class AllenAtlas(BrainAtlas):
             image, label = [np.zeros((528, 456, 320), dtype=np.int16) for _ in range(2)]
             label[:, :, 100:105] = 1327  # lookup index for retina, id 304325711 (no id 1327)
         else:
-            path_atlas = Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH)
-            file_image = hist_path or path_atlas.joinpath(f'average_template_{res_um}.nrrd')
+            # Hist path may be a full path to an existing image file, or a path to a directory
+            cache_dir = Path(one.params.get(silent=True).CACHE_DIR)
+            hist_path = Path(hist_path or cache_dir.joinpath(self.atlas_rel_path))
+            if not hist_path.suffix:  # check if folder
+                hist_path /= f'average_template_{res_um}.nrrd'
             # get the image volume
-            if not file_image.exists():
-                _download_atlas_allen(file_image, FLAT_IRON_ATLAS_REL_PATH, par)
+            if not hist_path.exists():
+                hist_path = _download_atlas_allen(hist_path)
             # get the remapped label volume
-            file_label = path_atlas.joinpath(f'annotation_{res_um}.nrrd')
+            file_label = hist_path.with_name(f'annotation_{res_um}.nrrd')
             if not file_label.exists():
-                _download_atlas_allen(file_label, FLAT_IRON_ATLAS_REL_PATH, par)
-            file_label_remap = path_atlas.joinpath(f'annotation_{res_um}_lut_{LUT_VERSION}.npz')
+                file_label = _download_atlas_allen(file_label)
+            file_label_remap = hist_path.with_name(f'annotation_{res_um}_lut_{LUT_VERSION}.npz')
             if not file_label_remap.exists():
                 label = self._read_volume(file_label).astype(dtype=np.int32)
-                _logger.info("computing brain atlas annotations lookup table")
+                _logger.info("Computing brain atlas annotations lookup table")
                 # lateralize atlas: for this the regions of the left hemisphere have primary
                 # keys opposite to to the normal ones
                 lateral = np.zeros(label.shape[xyz2dims[0]])
@@ -992,10 +1009,9 @@ class AllenAtlas(BrainAtlas):
                 _logger.info(f"Cached remapping file {file_label_remap} ...")
             # loads the files
             label = self._read_volume(file_label_remap)
-            image = self._read_volume(file_image)
+            image = self._read_volume(hist_path)
 
-        super().__init__(image, label, dxyz, regions, ibregma,
-                         dims2xyz=dims2xyz, xyz2dims=xyz2dims)
+        super().__init__(image, label, dxyz, regions, ibregma, dims2xyz=dims2xyz, xyz2dims=xyz2dims)
 
     @staticmethod
     def _read_volume(file_volume):
@@ -1079,9 +1095,9 @@ def NeedlesAtlas(*args, **kwargs):
     """
     Instantiates an atlas.BrainAtlas corresponding to the Allen CCF at the given resolution
     using the IBL Bregma and coordinate system. The Needles atlas defines a stretch along AP
-    axis and a sqeeze along the DV axis.
+    axis and a squeeze along the DV axis.
     :param res_um: 10, 25 or 50 um
-    :return: atlas.BrainAtlas
+    :return: atlas.AllenAtlas
     """
     DV_SCALE = 0.952  # multiplicative factor on DV dimension, determined from MRI->CCF transform
     AP_SCALE = 1.087  # multiplicative factor on AP dimension
@@ -1096,7 +1112,7 @@ def MRITorontoAtlas(*args, **kwargs):
     a squeeze along DV *and* a squeeze along ML. These are based on 12 p65 mice MRIs averaged.
     See: https://www.nature.com/articles/s41467-018-04921-2 DB has access to the dataset.
     :param res_um: 10, 25 or 50 um
-    :return: atlas.BrainAtlas
+    :return: atlas.AllenAtlas
     """
     ML_SCALE = 0.952
     DV_SCALE = 0.885  # multiplicative factor on DV dimension, determined from MRI->CCF transform
@@ -1105,33 +1121,43 @@ def MRITorontoAtlas(*args, **kwargs):
     return AllenAtlas(*args, **kwargs)
 
 
-def _download_atlas_allen(file_image, FLAT_IRON_ATLAS_REL_PATH, par):
+def _download_atlas_allen(target_file_image):
     """
-    © 2015 Allen Institute for Brain Science. Allen Mouse Brain Atlas (2015)
-    with region annotations (2017).
-    Available from: http://download.alleninstitute.org/informatics-archive/current-release/
-    mouse_ccf/annotation/
-    See Allen Mouse Common Coordinate Framework Technical White Paper for details
-    http://help.brain-map.org/download/attachments/8323525/
-    Mouse_Common_Coordinate_Framework.pdf?version=3&modificationDate=1508178848279&api=v2
+    Download the Allen Atlas from the alleninstitute.org Website.
+
+    Parameters
+    ----------
+    target_file_image : str, pathlib.Path
+        The full target file path to which to download the file. The name of the image file name
+         must be either `average_template_<res>.nrrd` or `annotation_<res>.nrrd`, where <res> is
+         one of {10, 25, 50}.
+
+    Returns
+    -------
+    pathlib.Path
+        The full path to the downloaded file.
+
+    Notes
+    -----
+    - © 2015 Allen Institute for Brain Science. Allen Mouse Brain Atlas (2015) with region annotations (2017).
+    - Available from: http://download.alleninstitute.org/informatics-archive/current-release/mouse_ccf/annotation/
+    - See Allen Mouse Common Coordinate Framework Technical White Paper for details
+     http://help.brain-map.org/download/attachments/8323525/
+     Mouse_Common_Coordinate_Framework.pdf?version=3&modificationDate=1508178848279&api=v2
+
     """
+    (target_file_image := Path(target_file_image)).parent.mkdir(exist_ok=True, parents=True)
+    ROOT_URL = 'http://download.alleninstitute.org/informatics-archive/'
 
-    file_image.parent.mkdir(exist_ok=True, parents=True)
-
-    template_url = ('http://download.alleninstitute.org/informatics-archive/'
-                    'current-release/mouse_ccf/average_template')
-    annotation_url = ('http://download.alleninstitute.org/informatics-archive/'
-                      'current-release/mouse_ccf/annotation/ccf_2017')
-
-    if file_image.name.split('_')[0] == 'average':
-        url = template_url + '/' + file_image.name
-    elif file_image.name.split('_')[0] == 'annotation':
-        url = annotation_url + '/' + file_image.name
+    if target_file_image.name.split('_')[0] == 'average':
+        url = f'{ROOT_URL}current-release/mouse_ccf/average_template/'
+    elif target_file_image.name.split('_')[0] == 'annotation':
+        url = f'{ROOT_URL}current-release/mouse_ccf/annotation/ccf_2017/'
     else:
         raise ValueError('Unrecognized file image')
+    url += target_file_image.name
 
-    cache_dir = Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH)
-    return http_download_file(url, target_dir=cache_dir)
+    return Path(http_download_file(url, target_dir=target_file_image.parent))
 
 
 class FlatMap(AllenAtlas):
@@ -1202,46 +1228,66 @@ class FlatMap(AllenAtlas):
 
 class FranklinPaxinosAtlas(BrainAtlas):
     """
-    Instantiates an atlas.BrainAtlas corresponding to the Allen CCF at the given resolution
-    using the IBL Bregma and coordinate system
+    Instantiates an atlas.BrainAtlas corresponding to the Franklin & Paxinos atlas at the given
+    resolution, using the IBL Bregma and coordinate system.
     """
 
-    def __init__(self, res_um=np.array([10, 100, 10]), scaling=np.array([1, 1, 1]), mock=False, hist_path=None):
+    """pathlib.PurePosixPath: The default relative path of the atlas file."""
+    atlas_rel_path = PurePosixPath('histology', 'ATLAS', 'Needles', 'FranklinPaxinos')
+
+    def __init__(self, res_um=(10, 100, 10), scaling=(1, 1, 1), mock=False, hist_path=None):
         """
-        :param res_um: 10, 25 or 50 um
-        :param scaling: scale factor along ml, ap, dv for squeeze and stretch ([1, 1, 1])
-        :param mock: for testing purpose
-        :param hist_path
-        :return: atlas.BrainAtlas
+        Instantiates an atlas.BrainAtlas corresponding to the Franklin & Paxinos atlas at the given
+        resolution, using the IBL Bregma and coordinate system.
+
+        Parameters
+        ----------
+        res_um : list, numpy.array
+            The Atlas resolution in micometres in each dimension.
+        scaling : float, numpy.array
+            Scale factor along ml, ap, dv for squeeze and stretch (default: [1, 1, 1]).
+        mock : bool
+            For testing purposes, return atlas object with image comprising zeros.
+        hist_path : str, pathlib.Path
+            The location of the image volume. May be a full file path or a directory.
+
+        Examples
+        --------
+        Instantiate Atlas from a non-default location, in this case the cache_dir of an ONE instance.
+        >>> target_dir = one.cache_dir / AllenAtlas.atlas_rel_path
+        ... ba = AllenAtlas(hist_path=target_dir)
+
         """
         # TODO interpolate?
-        par = one.params.get(silent=True)
-        FLAT_IRON_ATLAS_REL_PATH = PurePosixPath('histology', 'ATLAS', 'Needles', 'FranklinPaxinos')
         LUT_VERSION = "v01"  # version 01 is the lateralized version
         regions = FranklinPaxinosRegions()
         xyz2dims = np.array([1, 0, 2])  # this is the c-contiguous ordering
         dims2xyz = np.array([1, 0, 2])
         # we use Bregma as the origin
-        self.res_um = res_um
+        self.res_um = np.asarray(res_um)
         ibregma = (PAXINOS_CCF_LANDMARKS_MLAPDV_UM['bregma'] / self.res_um)
         dxyz = self.res_um * 1e-6 * np.array([1, -1, -1]) * scaling
         if mock:
             image, label = [np.zeros((528, 456, 320), dtype=np.int16) for _ in range(2)]
             label[:, :, 100:105] = 1327  # lookup index for retina, id 304325711 (no id 1327)
         else:
-            path_atlas = Path(par.CACHE_DIR).joinpath(FLAT_IRON_ATLAS_REL_PATH)
-            file_image = hist_path or path_atlas.joinpath(f'average_template_{res_um[0]}_{res_um[1]}_{res_um[2]}.npz')
-            # # get the image volume
-            if not file_image.exists():
-                path_atlas.mkdir(exist_ok=True, parents=True)
-                aws.s3_download_file(f'atlas/FranklinPaxinos/{file_image.name}', str(file_image))
-            # # get the remapped label volume
-            file_label = path_atlas.joinpath(f'annotation_{res_um[0]}_{res_um[1]}_{res_um[2]}.npz')
+            # Hist path may be a full path to an existing image file, or a path to a directory
+            cache_dir = Path(one.params.get(silent=True).CACHE_DIR)
+            hist_path = Path(hist_path or cache_dir.joinpath(self.atlas_rel_path))
+            if not hist_path.suffix:  # check if folder
+                hist_path /= f'average_template_{res_um[0]}_{res_um[1]}_{res_um[2]}.npz'
+
+            # get the image volume
+            if not hist_path.exists():
+                hist_path.parent.mkdir(exist_ok=True, parents=True)
+                aws.s3_download_file(f'atlas/FranklinPaxinos/{hist_path.name}', str(hist_path))
+            # get the remapped label volume
+            file_label = hist_path.with_name(f'annotation_{res_um[0]}_{res_um[1]}_{res_um[2]}.npz')
             if not file_label.exists():
-                path_atlas.mkdir(exist_ok=True, parents=True)
+                file_label.parent.mkdir(exist_ok=True, parents=True)
                 aws.s3_download_file(f'atlas/FranklinPaxinos/{file_label.name}', str(file_label))
 
-            file_label_remap = path_atlas.joinpath(f'annotation_{res_um[0]}_{res_um[1]}_{res_um[2]}_lut_{LUT_VERSION}.npz')
+            file_label_remap = hist_path.with_name(f'annotation_{res_um[0]}_{res_um[1]}_{res_um[2]}_lut_{LUT_VERSION}.npz')
 
             if not file_label_remap.exists():
                 label = self._read_volume(file_label).astype(dtype=np.int32)
@@ -1258,10 +1304,9 @@ class FranklinPaxinosAtlas(BrainAtlas):
                 _logger.info(f"Cached remapping file {file_label_remap} ...")
             # loads the files
             label = self._read_volume(file_label_remap)
-            image = self._read_volume(file_image)
+            image = self._read_volume(hist_path)
 
-        super().__init__(image, label, dxyz, regions, ibregma,
-                         dims2xyz=dims2xyz, xyz2dims=xyz2dims)
+        super().__init__(image, label, dxyz, regions, ibregma, dims2xyz=dims2xyz, xyz2dims=xyz2dims)
 
     @staticmethod
     def _read_volume(file_volume):
