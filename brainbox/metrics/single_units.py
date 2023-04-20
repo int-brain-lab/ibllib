@@ -19,7 +19,7 @@ import time
 import logging
 
 import numpy as np
-import scipy.ndimage.filters as filters
+from scipy.ndimage import gaussian_filter1d
 import scipy.stats as stats
 import pandas as pd
 
@@ -196,7 +196,7 @@ def missed_spikes_est(feat, spks_per_bin=20, sigma=5, min_num_bins=50):
     # compute the spike feature histogram and pdf:
     num_bins = int(feat.size / spks_per_bin)
     hist, bins = np.histogram(feat, num_bins, density=True)
-    pdf = filters.gaussian_filter1d(hist, sigma)
+    pdf = gaussian_filter1d(hist, sigma)
 
     # Find where the distribution stops being symmetric around the peak:
     peak_idx = np.argmax(pdf)

@@ -52,11 +52,9 @@ def get_spike_counts_in_bins(spike_times, spike_clusters, intervals):
     n_intervals = intervals.shape[0]
     counts = np.zeros((n_neurons, n_intervals), dtype=np.uint32)
     for j in range(n_intervals):
-        t0, t1 = intervals[j, :]
+        i0, i1 = intervals_idx[j, :]
         # Count the number of spikes in the window, for each neuron.
-        x = np.bincount(
-            spike_clusters[intervals_idx[j, 0]:intervals_idx[j, 1]],
-            minlength=cluster_ids.max() + 1)
+        x = np.bincount(spike_clusters[i0:i1], minlength=cluster_ids.max() + 1)
         counts[:, j] = x[cluster_ids]
     return counts, cluster_ids
 
