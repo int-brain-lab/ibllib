@@ -174,8 +174,9 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         for fov_dir in suite2p_dir.iterdir():
             if fov_dir != 'combined':
                 # save frameQC in each dir (for now, maybe there will be fov specific frame QC eventually)
-                np.save(fov_dir.joinpath('mpci.mpciFrameQC.npy'), frameQC)
-                frameQC_names.to_csv(fov_dir.joinpath('mpciFrameQC.names.tsv'), sep='\t', index=False)
+                if frameQC is not None and len(frameQC) > 0:
+                    np.save(fov_dir.joinpath('mpci.mpciFrameQC.npy'), frameQC)
+                    frameQC_names.to_csv(fov_dir.joinpath('mpciFrameQC.names.tsv'), sep='\t', index=False)
 
                 # extract some other data from suite2p outputs
                 ops = np.load(fov_dir.joinpath('ops.npy'), allow_pickle=True).item()
