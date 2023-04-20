@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-Created on Fri Mar 13 14:57:53 2020
-
-Functions to analyse LFP signals
+Functions to analyse LFP signals.
 
 @author: Guido Meijer
+Created on Fri Mar 13 14:57:53 2020
 """
 
 from scipy.signal import welch, csd, filtfilt, butter

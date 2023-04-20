@@ -1,3 +1,4 @@
+"""Functions to compute and query the training status during the IBL task."""
 from one.api import ONE
 from one.alf.exceptions import ALFObjectNotFound
 import datetime
