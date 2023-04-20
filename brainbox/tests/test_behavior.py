@@ -1,12 +1,17 @@
 from pathlib import Path
 import unittest
+from unittest import mock
 import numpy as np
 import pickle
 import copy
+
 from iblutil.util import Bunch
+from one.api import ONE
+
 import brainbox.behavior.wheel as wheel
 import brainbox.behavior.training as train
 import brainbox.behavior.pyschofit as psy
+from ibllib.tests import TEST_DB
 
 
 class TestWheel(unittest.TestCase):
@@ -214,6 +219,37 @@ class TestTraining(unittest.TestCase):
         status, info = train.get_training_status(trials, task_protocol,
                                                  ephys_sess_dates=sess_dates, n_delay=1)
         assert (status == 'ready4recording')
+
+    def test_query_criterion(self):
+        """Test for brainbox.behavior.training.query_criterion function."""
+        one = ONE(**TEST_DB)
+
+        subject = 'KS005'
+        status_map = {
+            'trained_1a': ['2019-04-04', 'aaf101c3-2581-450a-8abd-ddb8f557a5ad'],
+            'trained_1b': ['2019-04-05', '1883dedd-4f25-4d3d-bc9a-97f3b366a0a0'],
+            'in_training': ['2019-04-01', '01390fcc-4f86-4707-8a3b-4d9309feb0a1'],
+            'ready4delay': ['2019-04-09', 'f33f41cc-347a-458d-98c8-7e1c2c9c7600'],
+            'ready4ephysrig': ['2019-04-10', 'abf5109c-d780-44c8-9561-83e857c7bc01'],
+            'ready4recording': ['2019-04-11', '7dc3c44b-225f-4083-be3d-07b8562885f4']
+        }
+        with mock.patch.object(one.alyx, 'rest', return_value={'json': {'trained_criteria': status_map}}):
+            eid, n_sessions, n_days = train.query_criterion(subject, 'in_training', one=one)
+            self.assertEqual('01390fcc-4f86-4707-8a3b-4d9309feb0a1', eid)
+            self.assertEqual(1, n_sessions)
+            self.assertEqual(0, n_days)
+
+            eid, n_sessions, n_days = train.query_criterion(subject, 'ready4ephysrig', from_status='trained_1b', one=one)
+            self.assertEqual('abf5109c-d780-44c8-9561-83e857c7bc01', eid)
+            self.assertEqual(5, n_sessions)
+            self.assertEqual(5, n_days)
+
+            self.assertTrue(all(x is None for x in train.query_criterion(subject, 'untrainable', one=one)))
+            eid, n_sessions, n_days = train.query_criterion(subject, 'trained_1b', from_status='ready4ephysrig', one=one)
+            self.assertEqual('1883dedd-4f25-4d3d-bc9a-97f3b366a0a0', eid)
+            self.assertIsNone(n_sessions)
+            self.assertIsNone(n_days)
+            self.assertRaises(ValueError, train.query_criterion, subject, 'foobar', one=one)
 
 
 class PsychofitTest(unittest.TestCase):

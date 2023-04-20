@@ -2,27 +2,28 @@ from pathlib import Path
 import json
 import datetime
 import logging
-import re
-import shutil
-from requests import HTTPError
+import itertools
 
 from pkg_resources import parse_version
-from dateutil import parser as dateparser
-from iblutil.io import hashfile
-from one.alf.files import get_session_path, folder_parts
+from one.alf.files import get_session_path, folder_parts, get_alf_path
+from one.registration import RegistrationClient, get_dataset_type
+from one.remote.globus import get_local_endpoint_id, get_lab_from_endpoint_id
+from one.webclient import AlyxClient
+from one.converters import ConversionMixin
 import one.alf.exceptions as alferr
-from one.api import ONE
+from one.util import datasets2records, ensure_list
 
 import ibllib
 import ibllib.io.extractors.base
-import ibllib.time
+from ibllib.time import isostr2date
 import ibllib.io.raw_data_loaders as raw
-from ibllib.io import flags
+from ibllib.io import session_params
 
 _logger = logging.getLogger(__name__)
 EXCLUDED_EXTENSIONS = ['.flag', '.error', '.avi']
 REGISTRATION_GLOB_PATTERNS = ['alf/**/*.*',
                               'raw_behavior_data/**/_iblrig_*.*',
+                              'raw_task_data_*/**/_iblrig_*.*',
                               'raw_passive_data/**/_iblrig_*.*',
                               'raw_behavior_data/**/_iblmic_*.*',
                               'raw_video_data/**/_iblrig_*.*',
@@ -33,461 +34,290 @@ REGISTRATION_GLOB_PATTERNS = ['alf/**/*.*',
                               'spikesorters/**/_kilosort_*.*'
                               'spikesorters/**/_kilosort_*.*',
                               'raw_widefield_data/**/_ibl_*.*',
-                              'raw_photometry_data/**/_neurophotometrics_*.*'
+                              'raw_photometry_data/**/_neurophotometrics_*.*',
                               ]
 
 
-def _check_filename_for_registration(full_file, patterns):
-    for pat in patterns:
-        reg = pat.replace('.', r'\.').replace('_', r'\_').replace('*', r'.*')
-        if Path(full_file).suffix in EXCLUDED_EXTENSIONS:
-            return False
-        elif re.match(reg, Path(full_file).name, re.IGNORECASE):
-            return True
-    return False
-
-
-def register_dataset(file_list, one=None, created_by=None, repository=None, server_only=False,
-                     versions=None, default=True, dry=False, max_md5_size=None, exists=False):
+def register_dataset(file_list, one=None, exists=False, versions=None, **kwargs):
     """
-    Registers a set of files belonging to a session only on the server
-    :param file_list: (list of pathlib.Path or pathlib.Path)
-    :param one: optional (one.api.One), current one object, will create an instance if not provided
-    :param created_by: (string) name of user in Alyx (defaults to 'root')
-    :param repository: optional: (string) name of the repository in Alyx
-    :param server_only: optional: (bool) if True only creates on the Flatiron (defaults to False)
-    :param versions: optional (list of strings): versions tags (defaults to ibllib version)
-    :param default: optional (bool) whether to set as default dataset (defaults to True)
-    :param dry: (bool) False by default
-    :param max_md5_size: (int) maximum file in bytes to compute md5 sum (always compute if None)
-    defaults to None
-    :return:
-    """
-    # If the repository is specified then for the registration client we want server_only=True to make sure we don't make
-    # any other repositories for the lab
-    if repository and not server_only:
-        server_only = True
+    Registers a set of files belonging to a session only on the server.
 
-    if created_by is None:
-        created_by = one.alyx.user
-    if file_list is None or file_list == '' or file_list == []:
+    Parameters
+    ----------
+    file_list : list, str, pathlib.Path
+        A filepath (or list thereof) of ALF datasets to register to Alyx.
+    one : one.api.OneAlyx
+        An instance of ONE.
+    exists : bool
+        Whether files exist in the repository. May be set to False when registering files
+        before copying to the repository.
+    versions : str, list of str
+        Optional version tags, defaults to the current ibllib version.
+    kwargs
+        Optional keyword arguments for one.registration.RegistrationClient.register_files.
+
+    Returns
+    -------
+    list of dicts, dict
+        A list of newly created Alyx dataset records or the registration data if dry.
+
+    Notes
+    -----
+    - If a repository is passed, server_only will be set to True.
+
+    See Also
+    --------
+    one.registration.RegistrationClient.register_files
+    """
+    if not file_list:
         return
-    elif not isinstance(file_list, list):
-        file_list = [Path(file_list)]
+    elif isinstance(file_list, (str, Path)):
+        file_list = [file_list]
 
-    assert len(set([get_session_path(f) for f in file_list])) == 1
-    assert all([Path(f).exists() for f in file_list])
-    if versions is None:
-        versions = ibllib.__version__
-    if isinstance(versions, str):
-        versions = [versions for _ in file_list]
-    assert isinstance(versions, list) and len(versions) == len(file_list)
+    assert len(set(get_session_path(f) for f in file_list)) == 1
+    assert all(Path(f).exists() for f in file_list)
 
-    # computing the md5 can be very long, so this is an option to skip if the file is bigger
-    # than a certain threshold
-    if max_md5_size:
-        hashes = [hashfile.md5(p) if
-                  p.stat().st_size < max_md5_size else None for p in file_list]
-    else:
-        hashes = [hashfile.md5(p) for p in file_list]
+    client = IBLRegistrationClient(one)
+    # If the repository is specified then for the registration client we want server_only=True to
+    # make sure we don't make any other repositories for the lab
+    if kwargs.get('repository') and not kwargs.get('server_only', False):
+        kwargs['server_only'] = True
 
-    session_path = get_session_path(file_list[0])
-
-    # first register the file
-    r = {'created_by': created_by,
-         'path': session_path.relative_to((session_path.parents[2])).as_posix(),
-         'filenames': [p.relative_to(session_path).as_posix() for p in file_list],
-         'name': repository,
-         'server_only': server_only,
-         'hashes': hashes,
-         'filesizes': [p.stat().st_size for p in file_list],
-         'versions': versions,
-         'default': default,
-         'exists': exists,
-         'check_protected': True}  # flag to see if any datasets are protected
-
-    if not dry:
-        if one is None:
-            one = ONE(cache_rest=None)
-        try:
-            response = one.alyx.rest('register-file', 'create', data=r, no_cache=True)
-            for p in file_list:
-                _logger.info(f"ALYX REGISTERED DATA: {p}")
-            return response
-        except HTTPError as err:
-            err_message = json.loads(err.response.text)
-            if err_message['status_code'] == 403 and err_message['error'] == 'One or more datasets is protected':
-
-                response = err_message['details']
-                today_revision = datetime.datetime.today().strftime('%Y-%m-%d')
-                new_file_list = []
-
-                for fl, res in zip(file_list, response):
-                    (name, prot_info), = res.items()
-
-                    # Dataset has not yet been registered
-                    if prot_info == []:
-                        new_file_list.append(fl)
-                        continue
-                    else:
-                        # Check to see if the file path already has a revision in it
-                        file_revision = folder_parts(fl, as_dict=True)['revision']
-
-                        if file_revision:
-                            # Find existing protected revisions
-                            existing_revisions = [key for pr in prot_info for key, val in pr.items() if val]
-                            # If the revision explicitly defined by the user doesn't exist or is not protected, register as is
-                            if file_revision not in existing_revisions:
-                                revision_path = fl.parent
-                            else:
-                                i = 97  # equivalent to 'a'
-                                new_revision = file_revision + chr(i).lower()
-                                # Find the next subrevision that isn't protected
-                                while new_revision in existing_revisions:
-                                    i += 1
-                                    new_revision = file_revision + chr(i).lower()
-                                revision_path = fl.parent.parent.joinpath(f'#{new_revision}#')
-
-                            if revision_path != fl.parent:
-                                revision_path.mkdir(exist_ok=True)
-                                shutil.move(fl, revision_path.joinpath(fl.name))
-                            new_file_list.append(revision_path.joinpath(fl.name))
-                            continue
-                        else:
-                            fl_path = fl.parent
-
-                        assert name == fl_path.relative_to(session_path).joinpath(fl.name).as_posix()
-
-                        # Find info about the latest revision, N.B on django side prot_info is sorted by latest revisions first
-                        (latest_revision, protected), = prot_info[0].items()
-
-                        # If the latest revision is the original and it is unprotected no need for revision
-                        # e.g {'clusters.amp.npy': [{'': False}]}
-                        if latest_revision == '' and not protected:
-                            # Use original path
-                            revision_path = fl_path
-
-                        # If there already is a revision but it is unprotected, move into this revision folder
-                        # e.g {'clusters.amp.npy': [{'2022-10-31': False}, {'2022-05-31': True}, {'': True}]}
-                        elif not protected:
-                            # Check that the latest_revision has the date naming convention we expect 'YYYY-MM-DD'
-                            try:
-                                _ = datetime.datetime.strptime(latest_revision[:10], '%Y-%m-%d')
-                                revision_path = fl_path.joinpath(f'#{latest_revision}#')
-                            # If it doesn't it probably has been made manually so we don't want to overwrite this and instead
-                            # use today's date
-                            except ValueError:
-                                revision_path = fl_path.joinpath(f'#{today_revision}#')
-
-                        # If protected and the latest protected revision is from today we need to make a subrevision
-                        elif protected and today_revision in latest_revision:
-                            if latest_revision == today_revision:
-                                new_revision = today_revision + 'a'
-                            else:
-                                alpha = latest_revision[-1]
-                                new_revision = today_revision + chr(ord(alpha) + 1).lower()
-
-                            revision_path = fl_path.joinpath(f'#{new_revision}#')
-
-                        # Otherwise cases move into revision from today
-                        # e.g {'clusters.amp.npy': [{'': True}]}
-                        # e.g {'clusters.amp.npy': [{'2022-10-31': True}, {'': True}]}
-                        else:
-                            revision_path = fl_path.joinpath(f'#{today_revision}#')
-
-                        # Only move for the cases where a revision folder has been made
-                        if revision_path != fl_path:
-                            revision_path.mkdir(exist_ok=True)
-                            shutil.move(fl, revision_path.joinpath(fl.name))
-                        new_file_list.append(revision_path.joinpath(fl.name))
-
-                file_list = new_file_list
-
-                r = {'created_by': created_by,
-                     'path': session_path.relative_to((session_path.parents[2])).as_posix(),
-                     'filenames': [p.relative_to(session_path).as_posix() for p in file_list],
-                     'name': repository,
-                     'server_only': server_only,
-                     'hashes': hashes,
-                     'filesizes': [p.stat().st_size for p in file_list],
-                     'versions': versions,
-                     'default': default,
-                     'exists': exists,
-                     'check_protected': False}
-
-                response = one.alyx.rest('register-file', 'create', data=r, no_cache=True)
-                for p in file_list:
-                    _logger.info(f"ALYX REGISTERED DATA: {p}")
-                return response
-            else:
-                raise err
+    return client.register_files(file_list, versions=versions or ibllib.__version__, exists=exists, **kwargs)
 
 
-def register_session_raw_data(session_path, one=None, overwrite=False, dry=False, **kwargs):
+def register_session_raw_data(session_path, one=None, overwrite=False, **kwargs):
     """
     Registers all files corresponding to raw data files to Alyx. It will select files that
     match Alyx registration patterns.
-    :param session_path:
-    :param one: one instance to work with
-    :param overwrite: (False) if set to True, will patch the datasets. It will take very long.
-    If set to False (default) will skip all already registered data.
-    :param dry: do not register files, returns the list of files to be registered
-    :return: list of file to register
-    :return: Alyx response: dictionary of registered files
+
+    Parameters
+    ----------
+    session_path : str, pathlib.Path
+        The local session path.
+    one : one.api.OneAlyx
+        An instance of ONE.
+    overwrite : bool
+        If set to True, will patch the datasets. It will take very long. If set to False (default)
+        will skip all already registered data.
+    **kwargs
+        Optional keyword arguments for one.registration.RegistrationClient.register_files.
+
+    Returns
+    -------
+    list of pathlib.Path
+        A list of raw dataset paths.
+    list of dicts, dict
+        A list of newly created Alyx dataset records or the registration data if dry.
     """
+    client = IBLRegistrationClient(one)
     session_path = Path(session_path)
-    one.alyx.clear_rest_cache()  # Ensure data are from database
     eid = one.path2eid(session_path, query_type='remote')  # needs to make sure we're up to date
-    # query the database for existing datasets on the session and allowed dataset types
-    dsets = one.alyx.rest('datasets', 'list', session=eid)
-    already_registered = [
-        session_path.joinpath(Path(ds['collection'] or '').joinpath(ds['name'])) for ds in dsets]
-    dtypes = one.alyx.rest('dataset-types', 'list')
-    registration_patterns = [dt['filename_pattern'] for dt in dtypes if dt['filename_pattern']]
-    # glob all the files
-    glob_patterns = [pat for pat in REGISTRATION_GLOB_PATTERNS if pat.startswith('raw')]
-    files_2_register = []
-    for gp in glob_patterns:
-        f2r = list(session_path.glob(gp))
-        files_2_register.extend(f2r)
-    # filter 1/2 filter out datasets that do not match any dataset type
-    files_2_register = list(filter(lambda f: _check_filename_for_registration(
-        f, registration_patterns), files_2_register))
-    # filter 2/2 unless overwrite is True, filter out the datasets that already exist
+    if not eid:
+        raise alferr.ALFError(f'Session does not exist on Alyx: {get_alf_path(session_path)}')
+    # find all files that are in a raw data collection
+    file_list = [f for f in client.find_files(session_path)
+                 if f.relative_to(session_path).as_posix().startswith('raw')]
+    # unless overwrite is True, filter out the datasets that already exist
     if not overwrite:
-        files_2_register = list(filter(lambda f: f not in already_registered, files_2_register))
+        # query the database for existing datasets on the session and allowed dataset types
+        dsets = datasets2records(one.alyx.rest('datasets', 'list', session=eid))
+        already_registered = list(map(session_path.joinpath, dsets['rel_path']))
+        file_list = list(filter(lambda f: f not in already_registered, file_list))
 
-    data_repo = get_local_data_repository(one)
-    response = register_dataset(files_2_register, one=one, versions=None, dry=dry, repository=data_repo, **kwargs)
-    return files_2_register, response
+    kwargs['repository'] = get_local_data_repository(one.alyx)
+    kwargs['server_only'] = True
+
+    response = client.register_files(file_list, versions=ibllib.__version__, exists=False, **kwargs)
+    return file_list, response
 
 
-class RegistrationClient:
+class IBLRegistrationClient(RegistrationClient):
     """
     Object that keeps the ONE instance and provides method to create sessions and register data.
     """
-    def __init__(self, one=None):
-        self.one = one
-        if not one:
-            self.one = ONE(cache_rest=None)
-        self.dtypes = self.one.alyx.rest('dataset-types', 'list')
-        self.registration_patterns = [
-            dt['filename_pattern'] for dt in self.dtypes if dt['filename_pattern']]
-        self.file_extensions = [df['file_extension'] for df in
-                                self.one.alyx.rest('data-formats', 'list', no_cache=True)]
-
-    def create_sessions(self, root_data_folder, glob_pattern='**/create_me.flag', dry=False):
-        """
-        Create sessions looking recursively for flag files
-
-        :param root_data_folder: folder to look for create_me.flag
-        :param dry: bool. Dry run if True
-        :param glob_pattern: bool. Dry run if True
-        :return: None
-        """
-        flag_files = Path(root_data_folder).glob(glob_pattern)
-        for flag_file in flag_files:
-            if dry:
-                print(flag_file)
-                continue
-            try:
-                _logger.info('creating session for ' + str(flag_file.parent))
-                # providing a false flag stops the registration after session creation
-                self.create_session(flag_file.parent)
-                flag_file.unlink()
-            except BaseException as e:
-                _logger.error(f'Error creating session for {flag_file.parent}\n{e}')
-                _logger.warning(f'Skipping {flag_file.parent}')
-                continue
-
-        return [ff.parent for ff in flag_files]
-
-    def create_session(self, session_path, **kwargs):
-        """
-        create_session(session_path)
-        """
-        return self.register_session(session_path, file_list=False, **kwargs)
-
-    def register_sync(self, root_data_folder, dry=False):
-        """
-        Register sessions looking recursively for flag files
-
-        :param root_data_folder: folder to look for register_me.flag
-        :param dry: bool. Dry run if True
-        :return:
-        """
-        flag_files = Path(root_data_folder).glob('**/register_me.flag')
-        for flag_file in flag_files:
-            if dry:
-                print(flag_file)
-                continue
-            file_list = flags.read_flag_file(flag_file)
-            _logger.info('registering ' + str(flag_file.parent))
-            self.register_session(flag_file.parent, file_list=file_list)
-            flags.write_flag_file(flag_file.parent.joinpath('flatiron.flag'), file_list=file_list)
-            flag_file.unlink()
-            if flag_file.parent.joinpath('create_me.flag').exists():
-                flag_file.parent.joinpath('create_me.flag').unlink()
-            _logger.info('registered' + '\n')
 
     def register_session(self, ses_path, file_list=True, projects=None, procedures=None):
         """
-        Register session in Alyx
+        Register an IBL Bpod session in Alyx.
 
-        :param ses_path: path to the session
-        :param file_list: bool. Set to False will only create the session and skip registration
-        :param projects: list of strings corresponding to project names in the database. If set to
-         None, defaults to the subject projects. Here is how to get a list of current projects
-            >>> sorted([proj['name'] for proj in one.alyx.rest('projects', 'list')])
-        :param procedures: (None) list of session procedure to label the session with. They should
-        correspond to procedures in the database.
-            >>> sorted([proc['name'] for proc in one.alyx.rest('procedures', 'list')])
-        :return: Status string on error
+        Parameters
+        ----------
+        ses_path : str, pathlib.Path
+            The local session path.
+        file_list : bool, list
+            An optional list of file paths to register.  If True, all valid files within the
+            session folder are registered.  If False, no files are registered.
+        projects: str, list
+            The project(s) to which the experiment belongs (optional).
+        procedures : str, list
+            An optional list of procedures, e.g. 'Behavior training/tasks'.
+
+        Returns
+        -------
+        dict
+            An Alyx session record.
+
+        Notes
+        -----
+        For a list of available projects:
+        >>> sorted(proj['name'] for proj in one.alyx.rest('projects', 'list'))
+        For a list of available procedures:
+        >>> sorted(proc['name'] for proc in one.alyx.rest('procedures', 'list'))
         """
         if isinstance(ses_path, str):
             ses_path = Path(ses_path)
-        # read meta data from the rig for the session from the task settings file
-        settings_json_file = list(ses_path.glob(
-            '**/raw_behavior_data/_iblrig_taskSettings.raw*.json'))
-        if not settings_json_file:
-            settings_json_file = list(ses_path.glob('**/_iblrig_taskSettings.raw*.json'))
-            if not settings_json_file:
-                _logger.error(['could not find _iblrig_taskSettings.raw.json. Abort.'])
-                raise ValueError(f'_iblrig_taskSettings.raw.json not found in {ses_path} Abort.')
-            _logger.warning([f'Settings found in a strange place: {settings_json_file}'])
+
+        # Read in the experiment description file if it exists and get projects and procedures from here
+        experiment_description_file = session_params.read_params(ses_path)
+        if experiment_description_file is None:
+            collections = ['raw_behavior_data']
         else:
-            settings_json_file = settings_json_file[0]
-        md = _read_settings_json_compatibility_enforced(settings_json_file)
-        # query alyx endpoints for subject, error if not found
-        try:
-            subject = self.one.alyx.rest(
-                'subjects', 'list', nickname=md['SUBJECT_NAME'], no_cache=True)[0]
-        except IndexError:
-            _logger.error(f"Subject: {md['SUBJECT_NAME']} doesn't exist in Alyx. ABORT.")
-            raise alferr.AlyxSubjectNotFound(md['SUBJECT_NAME'])
+            projects = experiment_description_file.get('projects', projects)
+            procedures = experiment_description_file.get('procedures', procedures)
+            collections = ensure_list(session_params.get_task_collection(experiment_description_file))
+
+        # read meta data from the rig for the session from the task settings file
+        task_data = (raw.load_bpod(ses_path, collection) for collection in sorted(collections))
+        # Filter collections where settings file was not found
+        if not (task_data := list(zip(*filter(lambda x: x[0] is not None, task_data)))):
+            raise ValueError(f'_iblrig_taskSettings.raw.json not found in {ses_path} Abort.')
+        settings, task_data = task_data
+        if len(settings) != len(collections):
+            raise ValueError(f'_iblrig_taskSettings.raw.json not found in {ses_path} Abort.')
+
+        # Do some validation
+        _, subject, date, number, *_ = folder_parts(ses_path)
+        assert len({x['SUBJECT_NAME'] for x in settings}) == 1 and settings[0]['SUBJECT_NAME'] == subject
+        assert len({x['SESSION_DATE'] for x in settings}) == 1 and settings[0]['SESSION_DATE'] == date
+        assert len({x['SESSION_NUMBER'] for x in settings}) == 1 and settings[0]['SESSION_NUMBER'] == number
+        assert len({x['IS_MOCK'] for x in settings}) == 1
+        assert len({md['PYBPOD_BOARD'] for md in settings}) == 1
+        assert len({md.get('IBLRIG_VERSION') for md in settings}) == 1
+        assert len({md['IBLRIG_VERSION_TAG'] for md in settings}) == 1
+
+        # query Alyx endpoints for subject, error if not found
+        subject = self.assert_exists(subject, 'subjects')
 
         # look for a session from the same subject, same number on the same day
         session_id, session = self.one.search(subject=subject['nickname'],
-                                              date_range=md['SESSION_DATE'],
-                                              number=md['SESSION_NUMBER'],
+                                              date_range=date,
+                                              number=number,
                                               details=True, query_type='remote')
-        try:
-            user = self.one.alyx.rest('users', 'read', id=md["PYBPOD_CREATOR"][0], no_cache=True)
-        except Exception as e:
-            _logger.error(f"User: {md['PYBPOD_CREATOR'][0]} doesn't exist in Alyx. ABORT")
-            raise e
+        users = []
+        for user in filter(None, map(lambda x: x.get('PYBPOD_CREATOR'), settings)):
+            user = self.assert_exists(user[0], 'users')  # user is list of [username, uuid]
+            users.append(user['username'])
 
-        username = user['username'] if user else subject['responsible_user']
+        # extract information about session duration and performance
+        start_time, end_time = _get_session_times(str(ses_path), settings, task_data)
+        n_trials, n_correct_trials = _get_session_performance(settings, task_data)
 
-        # load the trials data to get information about session duration and performance
-        ses_data = raw.load_data(ses_path)
-        start_time, end_time = _get_session_times(ses_path, md, ses_data)
-        n_trials, n_correct_trials = _get_session_performance(md, ses_data)
-
-        # this is the generic relative path: subject/yyyy-mm-dd/NNN
-        gen_rel_path = Path(subject['nickname'], md['SESSION_DATE'],
-                            '{0:03d}'.format(int(md['SESSION_NUMBER'])))
-
-        task_protocol = md['PYBPOD_PROTOCOL'] + md['IBLRIG_VERSION_TAG']
+        # TODO Add task_protocols to Alyx sessions endpoint
+        task_protocols = [md['PYBPOD_PROTOCOL'] + md['IBLRIG_VERSION_TAG'] for md in settings]
         # unless specified label the session projects with subject projects
         projects = subject['projects'] if projects is None else projects
         # makes sure projects is a list
         projects = [projects] if isinstance(projects, str) else projects
 
         # unless specified label the session procedures with task protocol lookup
-        procedures = procedures if procedures else _alyx_procedure_from_task(task_protocol)
+        procedures = procedures or list(set(filter(None, map(self._alyx_procedure_from_task, task_protocols))))
         procedures = [procedures] if isinstance(procedures, str) else procedures
-        json_fields_names = ['IS_MOCK', 'POOP_COUNT', 'IBLRIG_VERSION']
-        json_field = {f: md[f] for f in json_fields_names if f in md}
-        if not session:
+        json_fields_names = ['IS_MOCK', 'IBLRIG_VERSION']
+        json_field = {k: settings[0].get(k) for k in json_fields_names}
+        # The poo count field is only updated if the field is defined in at least one of the settings
+        poo_counts = [md.get('POOP_COUNT') for md in settings if md.get('POOP_COUNT') is not None]
+        if poo_counts:
+            json_field['POOP_COUNT'] = int(sum(poo_counts))
+
+        if not session:  # Create session and weighings
             ses_ = {'subject': subject['nickname'],
-                    'users': [username],
-                    'location': md['PYBPOD_BOARD'],
+                    'users': users or [subject['responsible_user']],
+                    'location': settings[0]['PYBPOD_BOARD'],
                     'procedures': procedures,
                     'lab': subject['lab'],
                     'projects': projects,
                     'type': 'Experiment',
-                    'task_protocol': task_protocol,
-                    'number': md['SESSION_NUMBER'],
-                    'start_time': ibllib.time.date2isostr(start_time),
-                    'end_time': ibllib.time.date2isostr(end_time) if end_time else None,
+                    'task_protocol': '/'.join(task_protocols),
+                    'number': number,
+                    'start_time': self.ensure_ISO8601(start_time),
+                    'end_time': self.ensure_ISO8601(end_time) if end_time else None,
                     'n_correct_trials': n_correct_trials,
                     'n_trials': n_trials,
-                    'json': json_field,
+                    'json': json_field
                     }
             session = self.one.alyx.rest('sessions', 'create', data=ses_)
-            if md['SUBJECT_WEIGHT']:
-                wei_ = {'subject': subject['nickname'],
-                        'date_time': ibllib.time.date2isostr(start_time),
-                        'weight': md['SUBJECT_WEIGHT'],
-                        'user': username
-                        }
-                self.one.alyx.rest('weighings', 'create', data=wei_)
-        else:  # TODO: if session exists and no json partial_upgrade it
+            # Submit weights
+            for md in filter(lambda md: md.get('SUBJECT_WEIGHT') is not None, settings):
+                user = md.get('PYBPOD_CREATOR')
+                user = user[0] if user[0] in users else self.one.alyx.user
+                self.register_weight(subject['nickname'], md['SUBJECT_WEIGHT'],
+                                     date_time=md['SESSION_DATETIME'], user=user)
+        else:  # if session exists update the JSON field
             session = self.one.alyx.rest('sessions', 'read', id=session_id[0], no_cache=True)
+            self.one.alyx.json_field_update('sessions', session['id'], data=json_field)
 
         _logger.info(session['url'] + ' ')
         # create associated water administration if not found
-        if not session['wateradmin_session_related'] and ses_data:
-            wa_ = {
-                'subject': subject['nickname'],
-                'date_time': ibllib.time.date2isostr(end_time),
-                'water_administered': ses_data[-1]['water_delivered'] / 1000,
-                'water_type': md.get('REWARD_TYPE') or 'Water',
-                'user': username,
-                'session': session['url'][-36:],
-                'adlib': False}
-            self.one.alyx.rest('water-administrations', 'create', data=wa_)
+        if not session['wateradmin_session_related'] and any(task_data):
+            for md, d in zip(settings, task_data):
+                if d is None:
+                    continue
+                _, _end_time = _get_session_times(ses_path, md, d)
+                user = md.get('PYBPOD_CREATOR')
+                user = user[0] if user[0] in users else self.one.alyx.user
+                if (volume := d[-1]['water_delivered'] / 1000) > 0:
+                    self.register_water_administration(
+                        subject['nickname'], volume, date_time=_end_time or end_time, user=user,
+                        session=session['id'], water_type=md.get('REWARD_TYPE') or 'Water')
         # at this point the session has been created. If create only, exit
         if not file_list:
-            return session
-        # register all files that match the Alyx patterns, warn user when files are encountered
-        rename_files_compatibility(ses_path, md['IBLRIG_VERSION_TAG'])
-        F = []  # empty list whose keys will be relative paths and content filenames
-        md5s = []
-        file_sizes = []
-        for fn in _glob_session(ses_path):
-            if fn.suffix in EXCLUDED_EXTENSIONS:
-                _logger.debug('Excluded: ', str(fn))
-                continue
-            if not _check_filename_for_registration(fn, self.registration_patterns):
-                _logger.warning('No matching dataset type for: ' + str(fn))
-                continue
-            if fn.suffix not in self.file_extensions:
-                _logger.warning('No matching dataformat (ie. file extension) for: ' + str(fn))
-                continue
-            if not _register_bool(fn.name, file_list):
-                _logger.debug('Not in filelist: ' + str(fn))
-                continue
+            return session, None
+
+        # register all files that match the Alyx patterns and file_list
+        rename_files_compatibility(ses_path, settings[0]['IBLRIG_VERSION_TAG'])
+        F = filter(lambda x: self._register_bool(x.name, file_list), self.find_files(ses_path))
+        recs = self.register_files(F, created_by=users[0] if users else None, versions=ibllib.__version__)
+        return session, recs
+
+    @staticmethod
+    def _register_bool(fn, file_list):
+        if isinstance(file_list, bool):
+            return file_list
+        if isinstance(file_list, str):
+            file_list = [file_list]
+        return any(str(fil) in fn for fil in file_list)
+
+    @staticmethod
+    def _alyx_procedure_from_task(task_protocol):
+        task_type = ibllib.io.extractors.base.get_task_extractor_type(task_protocol)
+        procedure = _alyx_procedure_from_task_type(task_type)
+        return procedure or []
+
+    def find_files(self, session_path):
+        """Similar to base class method but further filters by name and extension.
+
+        In addition to finding files that match Excludes files
+        whose extension is in EXCLUDED_EXTENSIONS, or that don't match the patterns in
+        REGISTRATION_GLOB_PATTERNS.
+
+        Parameters
+        ----------
+        session_path : str, pathlib.Path
+            The session path to search.
+
+        Yields
+        -------
+        pathlib.Path
+            File paths that match the dataset type patterns in Alyx and registration glob patterns.
+        """
+        files = itertools.chain.from_iterable(session_path.glob(x) for x in REGISTRATION_GLOB_PATTERNS)
+        for file in filter(lambda x: x.suffix not in EXCLUDED_EXTENSIONS, files):
             try:
-                assert (str(gen_rel_path) in str(fn))
-            except AssertionError as e:
-                strerr = 'ALF folder mismatch: data is in wrong subject/date/number folder. \n'
-                strerr += ' Expected ' + str(gen_rel_path) + ' actual was ' + str(fn)
-                _logger.error(strerr)
-                raise e
-            # extract the relative path of the file
-            rel_path = Path(str(fn)[str(fn).find(str(gen_rel_path)):])
-            F.append(str(rel_path.relative_to(gen_rel_path).as_posix()))
-            file_sizes.append(fn.stat().st_size)
-            md5s.append(hashfile.md5(fn) if fn.stat().st_size < 1024 ** 3 else None)
-            _logger.info('Registering ' + str(fn))
-
-        r_ = {'created_by': username,
-              'path': str(gen_rel_path.as_posix()),
-              'filenames': F,
-              'hashes': md5s,
-              'filesizes': file_sizes,
-              'versions': [ibllib.__version__ for _ in F]
-              }
-        self.one.alyx.post('/register-file', data=r_)
-        return session
-
-
-def _alyx_procedure_from_task(task_protocol):
-    task_type = ibllib.io.extractors.base.get_task_extractor_type(task_protocol)
-    procedure = _alyx_procedure_from_task_type(task_type)
-    return procedure or []
+                get_dataset_type(file, self.dtypes)
+                yield file
+            except ValueError as ex:
+                _logger.error(ex)
 
 
 def _alyx_procedure_from_task_type(task_type):
@@ -503,7 +333,7 @@ def _alyx_procedure_from_task_type(task_type):
               'mock_ephys': 'Ephys recording with acute probe(s)',
               'sync_ephys': 'Ephys recording with acute probe(s)'}
     try:
-        # look if there are tasks in the personal projects repo with proceedures
+        # look if there are tasks in the personal projects repo with procedures
         import projects.base
         custom_tasks = Path(projects.base.__file__).parent.joinpath('task_type_procedures.json')
         with open(custom_tasks) as fp:
@@ -512,43 +342,6 @@ def _alyx_procedure_from_task_type(task_type):
         pass
     if task_type in lookup:
         return lookup[task_type]
-
-
-def _register_bool(fn, file_list):
-    if isinstance(file_list, bool):
-        return file_list
-    if isinstance(file_list, str):
-        file_list = [file_list]
-    return any([str(fil) in fn for fil in file_list])
-
-
-def _read_settings_json_compatibility_enforced(json_file):
-    with open(json_file) as js:
-        md = json.load(js)
-    if 'IS_MOCK' not in md.keys():
-        md['IS_MOCK'] = False
-    if 'IBLRIG_VERSION_TAG' not in md.keys():
-        md['IBLRIG_VERSION_TAG'] = '3.2.3'
-    if not md['IBLRIG_VERSION_TAG']:
-        _logger.warning("You appear to be on an untagged version...")
-        return md
-    # 2018-12-05 Version 3.2.3 fixes (permanent fixes in IBL_RIG from 3.2.4 on)
-    if parse_version(md['IBLRIG_VERSION_TAG']) <= parse_version('3.2.3'):
-        if 'LAST_TRIAL_DATA' in md.keys():
-            md.pop('LAST_TRIAL_DATA')
-        if 'weighings' in md['PYBPOD_SUBJECT_EXTRA'].keys():
-            md['PYBPOD_SUBJECT_EXTRA'].pop('weighings')
-        if 'water_administration' in md['PYBPOD_SUBJECT_EXTRA'].keys():
-            md['PYBPOD_SUBJECT_EXTRA'].pop('water_administration')
-        if 'IBLRIG_COMMIT_HASH' not in md.keys():
-            md['IBLRIG_COMMIT_HASH'] = 'f9d8905647dbafe1f9bdf78f73b286197ae2647b'
-        #  parse the date format to Django supported ISO
-        dt = dateparser.parse(md['SESSION_DATETIME'])
-        md['SESSION_DATETIME'] = ibllib.time.date2isostr(dt)
-        # add the weight key if it doesn't already exists
-        if 'SUBJECT_WEIGHT' not in md.keys():
-            md['SUBJECT_WEIGHT'] = None
-    return md
 
 
 def rename_files_compatibility(ses_path, version_tag):
@@ -565,12 +358,35 @@ def rename_files_compatibility(ses_path, version_tag):
 
 def _get_session_times(fn, md, ses_data):
     """
-    Get session start and end time from the Bpod data
+    Get session start and end time from the Bpod data.
+
+    Parameters
+    ----------
+    fn : str, pathlib.Path
+        Session/task identifier. Only used in warning logs.
+    md : dict, list of dict
+        A session parameters dictionary or list thereof.
+    ses_data : dict, list of dict
+        A session data dictionary or list thereof.
+
+    Returns
+    -------
+    datetime.datetime
+        The datetime of the start of the session.
+    datetime.datetime
+        The datetime of the end of the session, or None is ses_data is None.
     """
-    start_time = ibllib.time.isostr2date(md['SESSION_DATETIME'])
+    if isinstance(md, dict):
+        start_time = _start_time = isostr2date(md['SESSION_DATETIME'])
+    else:
+        start_time = isostr2date(md[0]['SESSION_DATETIME'])
+        _start_time = isostr2date(md[-1]['SESSION_DATETIME'])
+        assert isinstance(ses_data, (list, tuple)) and len(ses_data) == len(md)
+        assert len(md) == 1 or start_time < _start_time
+        ses_data = ses_data[-1]
     if not ses_data:
         return start_time, None
-    c = 0
+    c = ses_duration_secs = 0
     for sd in reversed(ses_data):
         ses_duration_secs = (sd['behavior_data']['Trial end timestamp'] -
                              sd['behavior_data']['Bpod start timestamp'])
@@ -578,54 +394,115 @@ def _get_session_times(fn, md, ses_data):
             break
         c += 1
     if c:
-        _logger.warning((f'Trial end timestamps of last {c} trials above 6 hours '
-                        f'(most likely corrupt): ') + str(fn))
-    end_time = start_time + datetime.timedelta(seconds=ses_duration_secs)
+        _logger.warning(('Trial end timestamps of last %i trials above 6 hours '
+                         '(most likely corrupt): %s'), c, str(fn))
+    end_time = _start_time + datetime.timedelta(seconds=ses_duration_secs)
     return start_time, end_time
 
 
 def _get_session_performance(md, ses_data):
-    """Get performance about the session from bpod data"""
-    if not ses_data:
+    """
+    Get performance about the session from Bpod data.
+    Note: This does not support custom protocols.
+
+    Parameters
+    ----------
+    md : dict, list of dict
+        A session parameters dictionary or list thereof.
+    ses_data : dict, list of dict
+        A session data dictionary or list thereof.
+
+    Returns
+    -------
+    int
+        The total number of trials across protocols.
+    int
+        The total number of correct trials across protocols.
+    """
+    if not any(filter(None, ses_data or None)):
         return None, None
-    n_trials = ses_data[-1]['trial_num']
-    # checks that the number of actual trials and labeled number of trials check out
-    assert (len(ses_data) == n_trials)
-    # task specific logic
-    if 'habituationChoiceWorld' in md['PYBPOD_PROTOCOL']:
-        n_correct_trials = 0
+
+    if isinstance(md, dict):
+        ses_data = [ses_data]
+        md = [md]
     else:
-        n_correct_trials = ses_data[-1]['ntrials_correct']
-    return n_trials, n_correct_trials
+        assert isinstance(ses_data, (list, tuple)) and len(ses_data) == len(md)
+
+    # For now just remove missing session data, long run move this function into extractors
+    ses_data = [sd for sd in ses_data if sd]
+    n_trials = [x[-1]['trial_num'] for x in ses_data]
+    # checks that the number of actual trials and labeled number of trials check out
+    assert all(len(x) == n for x, n in zip(ses_data, n_trials))
+    # task specific logic
+    n_correct_trials = []
+    for data, proc in zip(ses_data, map(lambda x: x.get('PYBPOD_PROTOCOL', ''), md)):
+        if 'habituationChoiceWorld' in proc:
+            n_correct_trials.append(0)
+        else:
+            n_correct_trials.append(data[-1]['ntrials_correct'])
+
+    return sum(n_trials), sum(n_correct_trials)
 
 
-def _glob_session(ses_path):
+def get_local_data_repository(ac):
     """
-    Glob for files to be registered on an IBL session
-    :param ses_path: pathlib.Path of the session
-    :return: a list of files to potentially be registered
-    """
-    fl = []
-    for gp in REGISTRATION_GLOB_PATTERNS:
-        fl.extend(list(ses_path.glob(gp)))
-    return fl
+    Get local data repo name from Globus client.
 
+    Parameters
+    ----------
+    ac : one.webclient.AlyxClient
+        An AlyxClient instance for querying data repositories.
 
-def get_local_data_repository(one):
+    Returns
+    -------
+    str
+        The (first) data repository associated with the local Globus endpoint ID.
     """
-    Get local data repo name from globus client
-    :param one:
-    :return:
-    """
-    if one is None:
+    try:
+        assert ac
+        globus_id = get_local_endpoint_id()
+    except AssertionError:
         return
 
-    if not Path.home().joinpath(".globusonline/lta/client-id.txt").exists():
-        return
+    data_repo = ac.rest('data-repository', 'list', globus_endpoint_id=globus_id)
+    return next((da['name'] for da in data_repo), None)
 
-    with open(Path.home().joinpath(".globusonline/lta/client-id.txt"), 'r') as fid:
-        globus_id = fid.read()
 
-    data_repo = one.alyx.rest('data-repository', 'list', globus_endpoint_id=globus_id)
-    if len(data_repo):
-        return [da['name'] for da in data_repo][0]
+def get_lab(session_path, alyx=None):
+    """
+    Get lab from a session path using the subject name.
+
+    On local lab servers, the lab name is not in the ALF path and the globus endpoint ID may be
+    associated with multiple labs, so lab name is fetched from the subjects endpoint.
+
+    Parameters
+    ----------
+    session_path : str, pathlib.Path
+        The session path from which to determine the lab name.
+    alyx : one.webclient.AlyxClient
+        An AlyxClient instance for querying data repositories.
+
+    Returns
+    -------
+    str
+        The lab name associated with the session path subject.
+
+    See Also
+    --------
+    one.remote.globus.get_lab_from_endpoint_id
+    """
+    alyx = alyx or AlyxClient()
+    if not (ref := ConversionMixin.path2ref(session_path)):
+        raise ValueError(f'Failed to parse session path: {session_path}')
+
+    labs = [x['lab'] for x in alyx.rest('subjects', 'list', nickname=ref['subject'])]
+    if len(labs) == 0:
+        raise alferr.AlyxSubjectNotFound(ref['subject'])
+    elif len(labs) > 1:  # More than one subject with this nickname
+        # use local endpoint ID to find the correct lab
+        endpoint_labs = get_lab_from_endpoint_id(alyx=alyx)
+        lab = next(x for x in labs if x in endpoint_labs)
+    else:
+        lab, = labs
+
+    return lab

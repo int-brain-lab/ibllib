@@ -1,9 +1,8 @@
 import one.alf.io as alfio
-from one.alf.spec import is_session_path
 from one.alf.exceptions import ALFObjectNotFound
 
-from ibllib.io.raw_data_loaders import load_data
-from ibllib.oneibl.registration import _read_settings_json_compatibility_enforced, _get_session_times
+from ibllib.io.raw_data_loaders import load_bpod
+from ibllib.oneibl.registration import _get_session_times
 from ibllib.io.extractors.base import get_pipeline, get_session_extractor_type
 
 from ibllib.plots.snapshot import ReportSnapshot
@@ -82,7 +81,7 @@ def load_existing_dataframe(subj_path):
         return None
 
 
-def load_trials(sess_path, one):
+def load_trials(sess_path, one, force=True):
     """
     Load trials data for session. First attempts to load from local session path, if this fails will attempt to download via ONE,
     if this also fails, will then attempt to re-extraxt locally
@@ -92,11 +91,13 @@ def load_trials(sess_path, one):
     """
     # try and load trials locally
     try:
-        trials = alfio.load_object(sess_path.joinpath('alf'), 'trials')
+        trials = alfio.load_object(sess_path.joinpath('alf'), 'trials', short_keys=True)
         if 'probabilityLeft' not in trials.keys():
             raise ALFObjectNotFound
     except ALFObjectNotFound:
         try:
+            if not force:
+                return None
             # attempt to download trials using ONE
             trials = one.load_object(one.path2eid(sess_path), 'trials')
             if 'probabilityLeft' not in trials.keys():
@@ -113,10 +114,11 @@ def load_trials(sess_path, one):
                     trials = None
             except Exception:  # TODO how can i make this more specific
                 trials = None
+
     return trials
 
 
-def load_combined_trials(sess_paths, one):
+def load_combined_trials(sess_paths, one, force=True):
     """
     Load and concatenate trials for multiple sessions. Used when we want to concatenate trials for two sessions on the same day
     :param sess_paths: list of paths to sessions
@@ -125,19 +127,28 @@ def load_combined_trials(sess_paths, one):
     """
     trials_dict = {}
     for sess_path in sess_paths:
-        trials = load_trials(Path(sess_path), one)
+        trials = load_trials(Path(sess_path), one, force=force)
         if trials is not None:
-            trials_dict[Path(sess_path).stem] = load_trials(Path(sess_path), one)
+            trials_dict[Path(sess_path).stem] = load_trials(Path(sess_path), one, force=force)
 
     return training.concatenate_trials(trials_dict)
 
 
 def get_latest_training_information(sess_path, one):
     """
-    Extracts the latest training status
-    :param sess_path:
-    :param one:
-    :return:
+    Extracts the latest training status.
+
+    Parameters
+    ----------
+    sess_path : pathlib.Path
+        The session path from which to load the data.
+    one : one.api.One
+        An ONE instance.
+
+    Returns
+    -------
+    pandas.DataFrame
+        A table of training information.
     """
 
     subj_path = sess_path.parent.parent
@@ -170,6 +181,24 @@ def get_latest_training_information(sess_path, one):
     missing_status = find_earliest_recompute_date(df.drop_duplicates('date').reset_index(drop=True))
     for date in missing_status:
         df = compute_training_status(df, date, one)
+
+    df_lim = df.drop_duplicates(subset='session_path', keep='first')
+    # Detect untrainable
+    un_df = df_lim[df_lim['training_status'] == 'in training'].sort_values('date')
+    if len(un_df) >= 40:
+        print('untrainable')
+        sess = un_df.iloc[39].session
+        df.loc[df['session_path'] == sess, 'training_status'] = 'untrainable'
+
+    # Detect unbiasable
+    un_df = df_lim[df_lim['task_protocol'] == 'biased'].sort_values('date')
+    if len(un_df) >= 40:
+        tr_st = un_df[0:40].training_status.unique()
+        if 'ready4ephysrig' not in tr_st:
+            print('unbiasable')
+            sess = un_df.iloc[39].session
+            df.loc[df['session_path'] == sess, 'training_status'] = 'unbiasable'
+
     save_dataframe(df, subj_path)
 
     return df
@@ -191,7 +220,7 @@ def find_earliest_recompute_date(df):
     return df[first_index:].date.values
 
 
-def compute_training_status(df, compute_date, one):
+def compute_training_status(df, compute_date, one, force=True):
     """
     Compute the training status for compute date based on training from that session and two previous days
     :param df: training dataframe
@@ -226,7 +255,7 @@ def compute_training_status(df, compute_date, one):
         # If habituation skip
         if df_date.iloc[-1]['task_protocol'] == 'habituation':
             continue
-        trials[df_date.iloc[-1]['date']] = load_combined_trials(df_date.session_path.values, one)
+        trials[df_date.iloc[-1]['date']] = load_combined_trials(df_date.session_path.values, one, force=force)
         protocol.append(df_date.iloc[-1]['task_protocol'])
         status.append(df_date.iloc[-1]['training_status'])
         if df_date.iloc[-1]['combined_n_delay'] >= 900:  # delay of 15 mins
@@ -257,15 +286,27 @@ def pass_through_training_hierachy(status_new, status_old):
         return status_new
 
 
-def compute_session_duration_delay_location(sess_path):
+def compute_session_duration_delay_location(sess_path, **kwargs):
     """
     Get meta information about task. Extracts session duration, delay before session start and location of session
-    :param sess_path: session path
-    :return:
+
+    Parameters
+    ----------
+    sess_path : pathlib.Path, str
+        The session path with the pattern subject/yyyy-mm-dd/nnn.
+    task_collection : str
+        The location within the session path directory of task settings and data.
+
+    Returns
+    -------
+    int
+        The session duration in minutes, rounded to the nearest minute.
+    int
+        The delay between session start time and the first trial in seconds.
+    str {'ephys_rig', 'training_rig'}
+        The location of the session.
     """
-    settings_file = list(sess_path.glob('**/raw_behavior_data/_iblrig_taskSettings.raw*.json'))
-    md = _read_settings_json_compatibility_enforced(settings_file[0])
-    sess_data = load_data(sess_path)
+    md, sess_data = load_bpod(sess_path, **kwargs)
     start_time, end_time = _get_session_times(sess_path, md, sess_data)
     session_duration = int((end_time - start_time).total_seconds() / 60)
 
@@ -279,7 +320,7 @@ def compute_session_duration_delay_location(sess_path):
     return session_duration, session_delay, session_location
 
 
-def get_training_info_for_session(session_paths, one):
+def get_training_info_for_session(session_paths, one, force=True):
     """
     Extract the training information needed for plots for each session
     :param session_paths: list of session paths on same date
@@ -315,7 +356,7 @@ def get_training_info_for_session(session_paths, one):
 
         else:
             # if we can't compute trials then we need to pass
-            trials = load_trials(session_path, one)
+            trials = load_trials(session_path, one, force=force)
             if trials is None:
                 continue
 
@@ -351,7 +392,7 @@ def get_training_info_for_session(session_paths, one):
 
     if len(sess_dicts) > 1 and len(set(protocols)) == 1:  # Only if all protocols are the same
         print(f'{len(sess_dicts)} sessions being combined for date {sess_dicts[0]["date"]}')
-        combined_trials = load_combined_trials(session_paths, one)
+        combined_trials = load_combined_trials(session_paths, one, force=force)
         performance, contrasts, _ = training.compute_performance(combined_trials, prob_right=True)
         psychs = {}
         psychs['50'] = training.compute_psychometric(trials, block=0.5)
@@ -410,21 +451,25 @@ def get_training_info_for_session(session_paths, one):
 
 def check_up_to_date(subj_path, df):
     """
-    Check which sessions on local file system are missing from the computed training table
-    :param subj_path:
-    :return:
+    Check which sessions on local file system are missing from the computed training table.
+
+    Parameters
+    ----------
+    subj_path : pathlib.Path
+        The path to the subject's dated session folders.
+    df : pandas.DataFrame
+        The computed training table.
+
+    Returns
+    -------
+    pandas.DataFrame
+        A table of dates and session paths that are missing from the computed training table.
     """
-    session_dates = subj_path.glob('*')
     df_session = pd.DataFrame()
 
-    for sess_date in session_dates:
-        sess_paths = list(sess_date.glob('00*'))
-        date = sess_date.stem
-        if len(sess_paths) > 0:
-            for sess in sess_paths:
-                if is_session_path(sess):
-                    df_session = pd.concat([df_session, pd.DataFrame({'date': date, 'session_path': str(sess)}, index=[0])],
-                                           ignore_index=True)
+    for session in alfio.iter_sessions(subj_path):
+        s_df = pd.DataFrame({'date': session.parts[-2], 'session_path': str(session)}, index=[0])
+        df_session = pd.concat([df_session, s_df], ignore_index=True)
 
     if df is None or 'combined_thres_50' not in df.columns:
         return df_session

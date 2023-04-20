@@ -367,12 +367,12 @@ id,atlas_id,name,acronym,st_level,ontology_id,hemisphere_id,weight,parent_struct
 289,1026,Temporal association areas layer 5,TEa5,,1,3,8690,541,7,1,364,/997/8/567/688/695/315/541/289/,15B0B3,,,f,365,475299804,734881840,Temporal association areas layer 5
 729,1081,Temporal association areas layer 6a,TEa6a,,1,3,8690,541,7,1,365,/997/8/567/688/695/315/541/729/,15B0B3,,,f,366,1289955072,734881840,Temporal association areas layer 6a
 786,1088,Temporal association areas layer 6b,TEa6b,,1,3,8690,541,7,1,366,/997/8/567/688/695/315/541/786/,15B0B3,,,f,367,3588912826,734881840,Temporal association areas layer 6b
-922,256,Perirhinal area,PERI,,1,3,8690,315,6,1,367,/997/8/567/688/695/315/922/,0,,,f,368,173995527,734881840,Perirhinal area
-540,1057,Perirhinal area layer 1,PERI1,,1,3,8690,922,7,1,368,/997/8/567/688/695/315/922/540/,0,,,f,369,161492388,734881840,Perirhinal area layer 1
-888,959,Perirhinal area layer 2/3,PERI2/3,,1,3,8690,922,7,1,369,/997/8/567/688/695/315/922/888/,0,,,f,370,1642584549,734881840,Perirhinal area layer 2/3
-692,1076,Perirhinal area layer 5,PERI5,,1,3,8690,922,7,1,370,/997/8/567/688/695/315/922/692/,0,,,f,371,248375741,734881840,Perirhinal area layer 5
-335,890,Perirhinal area layer 6a,PERI6a,,1,3,8690,922,7,1,371,/997/8/567/688/695/315/922/335/,0,,,f,372,1984229208,734881840,Perirhinal area layer 6a
-368,894,Perirhinal area layer 6b,PERI6b,,1,3,8690,922,7,1,372,/997/8/567/688/695/315/922/368/,0,,,f,373,4014849762,734881840,Perirhinal area layer 6b
+922,256,Perirhinal area,PERI,,1,3,8690,315,6,1,367,/997/8/567/688/695/315/922/,0E9684,,,f,368,173995527,734881840,Perirhinal area
+540,1057,Perirhinal area layer 1,PERI1,,1,3,8690,922,7,1,368,/997/8/567/688/695/315/922/540/,0E9684,,,f,369,161492388,734881840,Perirhinal area layer 1
+888,959,Perirhinal area layer 2/3,PERI2/3,,1,3,8690,922,7,1,369,/997/8/567/688/695/315/922/888/,0E9684,,,f,370,1642584549,734881840,Perirhinal area layer 2/3
+692,1076,Perirhinal area layer 5,PERI5,,1,3,8690,922,7,1,370,/997/8/567/688/695/315/922/692/,0E9684,,,f,371,248375741,734881840,Perirhinal area layer 5
+335,890,Perirhinal area layer 6a,PERI6a,,1,3,8690,922,7,1,371,/997/8/567/688/695/315/922/335/,0E9684,,,f,372,1984229208,734881840,Perirhinal area layer 6a
+368,894,Perirhinal area layer 6b,PERI6b,,1,3,8690,922,7,1,372,/997/8/567/688/695/315/922/368/,0E9684,,,f,373,4014849762,734881840,Perirhinal area layer 6b
 895,111,Ectorhinal area,ECT,,1,3,8690,315,6,1,373,/997/8/567/688/695/315/895/,0D9F91,,,f,374,3399607880,734881840,Ectorhinal area
 836,1094,Ectorhinal area/Layer 1,ECT1,,1,3,8690,895,7,1,374,/997/8/567/688/695/315/895/836/,0D9F91,,,f,375,2240743692,734881840,Ectorhinal area/Layer 1
 427,1043,Ectorhinal area/Layer 2/3,ECT2/3,,1,3,8690,895,7,1,375,/997/8/567/688/695/315/895/427/,0D9F91,,,f,376,993691642,734881840,Ectorhinal area/Layer 2/3

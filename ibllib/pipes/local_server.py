@@ -10,14 +10,16 @@ import traceback
 import importlib
 
 from one.api import ONE
+from one.webclient import AlyxClient
+from one.remote.globus import get_lab_from_endpoint_id
 
 from ibllib.io.extractors.base import get_pipeline, get_task_protocol, get_session_extractor_type
 from ibllib.pipes import tasks, training_preprocessing, ephys_preprocessing
 from ibllib.time import date2isostr
-import ibllib.oneibl.registration as registration
+from ibllib.oneibl.registration import IBLRegistrationClient, register_session_raw_data, get_lab
 from ibllib.oneibl.data_handlers import get_local_data_repository
 from ibllib.io.session_params import read_params
-from ibllib.pipes.dynamic_pipeline import make_pipeline
+from ibllib.pipes.dynamic_pipeline import make_pipeline, acquisition_description_legacy_session
 
 _logger = logging.getLogger(__name__)
 LARGE_TASKS = ['EphysVideoCompress', 'TrainingVideoCompress', 'SpikeSorting', 'EphysDLC']
@@ -36,14 +38,6 @@ def _get_pipeline_class(session_path, one):
         PipelineClass = projects.base.get_pipeline(task_type)
     _logger.info(f"Using {PipelineClass} pipeline for {session_path}")
     return PipelineClass(session_path=session_path, one=one)
-
-
-def _get_lab(one):
-    with open(Path.home().joinpath(".globusonline/lta/client-id.txt"), 'r') as fid:
-        globus_id = fid.read()
-    lab = one.alyx.rest('labs', 'list', django=f"repositories__globus_endpoint_id,{globus_id}")
-    if len(lab):
-        return [la['name'] for la in lab]
 
 
 def _run_command(cmd):
@@ -80,52 +74,66 @@ def report_health(one):
     status.update(_get_volume_usage('/mnt/s0/Data', 'raid'))
     status.update(_get_volume_usage('/', 'system'))
 
-    lab_names = _get_lab(one)
+    lab_names = get_lab_from_endpoint_id(alyx=one.alyx)
     for ln in lab_names:
         one.alyx.json_field_update(endpoint='labs', uuid=ln, field_name='json', data=status)
 
 
 def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
     """
-    Server function that will look for creation flags and for each:
-    1) create the sessions on Alyx
-    2) register the corresponding raw data files on Alyx
-    3) create the tasks to be run on Alyx
-    :param root_path: main path containing sessions or session path
-    :param one
-    :param dry
-    :param rerun
-    :param max_md5_size
-    :return:
+    Create new sessions and pipelines.
+
+    Server function that will look for 'raw_session.flag' files and for each:
+     1) create the session on Alyx
+     2) create the tasks to be run on Alyx
+
+    For legacy sessions the raw data are registered separately, instead of within a pipeline task.
+
+    Parameters
+    ----------
+    root_path : str, pathlib.Path
+        Main path containing sessions or a session path.
+    one : one.api.OneAlyx
+        An ONE instance for registering the session(s).
+    dry : bool
+        If true, simply log the session_path(s) found, without registering anything.
+    rerun : bool
+        If true and session pipeline tasks already exist, set them all to waiting.
+    max_md5_size : int
+        (legacy sessions) The maximum file size to calculate the MD5 hash sum for.
+
+    Returns
+    -------
+    list of ibllib.pipes.tasks.Pipeline
+        The pipelines created.
+    list of dicts
+        A list of any datasets registered (only for legacy sessions)
     """
     if not one:
         one = ONE(cache_rest=None)
-    rc = registration.RegistrationClient(one=one)
+    rc = IBLRegistrationClient(one=one)
     flag_files = list(Path(root_path).glob('**/raw_session.flag'))
+    pipes = []
     all_datasets = []
     for flag_file in flag_files:
         session_path = flag_file.parent
         _logger.info(f'creating session for {session_path}')
         if dry:
             continue
-
         try:
             # if the subject doesn't exist in the database, skip
-            ses = rc.create_session(session_path)
-            eid = ses['url'][-36:]
-            if one.path2eid(session_path, query_type='remote') is None:
-                raise ValueError(f'Session ALF path mismatch: {ses["url"][-36:]} \n '
-                                 f'{one.eid2path(eid, query_type="remote")} in params \n'
-                                 f'{session_path} on disk \n')
+            rc.register_session(session_path, file_list=False)
 
             # See if we need to create a dynamic pipeline
             experiment_description_file = read_params(session_path)
             if experiment_description_file is not None:
                 pipe = make_pipeline(session_path, one=one)
             else:
-                files, dsets = registration.register_session_raw_data(
-                    session_path, one=one, max_md5_size=max_md5_size)
-                if dsets is not None:
+                # Create legacy experiment description file
+                acquisition_description_legacy_session(session_path, save=True)
+                lab = get_lab(session_path, one.alyx)  # Can be set to None to do this Alyx-side if using ONE v1.20.1
+                _, dsets = register_session_raw_data(session_path, one=one, max_md5_size=max_md5_size, labs=lab)
+                if dsets:
                     all_datasets.extend(dsets)
                 pipe = _get_pipeline_class(session_path, one)
                 if pipe is None:
@@ -137,15 +145,17 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
                 rerun__status__in = ['Waiting']
             pipe.create_alyx_tasks(rerun__status__in=rerun__status__in)
             flag_file.unlink()
-        except BaseException:
+            if pipe is not None:
+                pipes.append(pipe)
+        except Exception:
             _logger.error(traceback.format_exc())
             _logger.warning(f'Creating session / registering raw datasets {session_path} errored')
             continue
 
-    return all_datasets
+    return pipes, all_datasets
 
 
-def task_queue(mode='all', lab=None, one=None):
+def task_queue(mode='all', lab=None, alyx=None):
     """
     Query waiting jobs from the specified Lab
     :param mode: Whether to return all waiting tasks, or only small or large (specified in LARGE_TASKS) jobs
@@ -154,18 +164,17 @@ def task_queue(mode='all', lab=None, one=None):
     -------
 
     """
-    if one is None:
-        one = ONE(cache_rest=None)
+    alyx = alyx or AlyxClient(cache_rest=None)
     if lab is None:
-        _logger.debug("Trying to infer lab from globus installation")
-        lab = _get_lab(one)
+        _logger.debug('Trying to infer lab from globus installation')
+        lab = get_lab_from_endpoint_id(alyx=alyx)
     if lab is None:
-        _logger.error("No lab provided or found")
+        _logger.error('No lab provided or found')
         return  # if the lab is none, this will return empty tasks each time
-    data_repo = get_local_data_repository(one)
+    data_repo = get_local_data_repository(alyx)
     # Filter for tasks
-    tasks_all = one.alyx.rest('tasks', 'list', status='Waiting',
-                              django=f'session__lab__name__in,{lab},data_repository__name,{data_repo}', no_cache=True)
+    tasks_all = alyx.rest('tasks', 'list', status='Waiting',
+                          django=f'session__lab__name__in,{lab},data_repository__name,{data_repo}', no_cache=True)
     if mode == 'all':
         waiting_tasks = tasks_all
     else:

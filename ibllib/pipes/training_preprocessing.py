@@ -1,6 +1,8 @@
 import logging
 from collections import OrderedDict
+from one.alf.files import session_path_parts
 
+from ibllib.pipes.base_tasks import ExperimentDescriptionRegisterRaw
 from ibllib.pipes import tasks, training_status
 from ibllib.io import ffmpeg
 from ibllib.io.extractors.base import get_session_extractor_type
@@ -124,7 +126,23 @@ class TrainingStatus(tasks.Task):
         Extracts training status for subject
         """
         df = training_status.get_latest_training_information(self.session_path, self.one)
-        training_status.make_plots(self.session_path, self.one, df=df, save=True, upload=upload)
+        if df is not None:
+            training_status.make_plots(self.session_path, self.one, df=df, save=True, upload=upload)
+            # Update status map in JSON field of subjects endpoint
+            # TODO This requires exposing the json field of the subjects endpoint
+            if self.one and not self.one.offline:
+                _logger.debug('Updating JSON field of subjects endpoint')
+                try:
+                    status = (df.set_index('date')[['training_status', 'session_path']].drop_duplicates(
+                        subset='training_status', keep='first').to_dict())
+                    date, sess = status.items()
+                    data = {'trained_criteria': {v.replace(' ', '_'): (k, self.one.path2eid(sess[1][k])) for k, v
+                                                 in date[1].items()}}
+                    _, subject, *_ = session_path_parts(self.session_path)
+                    self.one.alyx.json_field_update('subjects', subject, data=data)
+                except KeyError:
+                    _logger.error('Failed to update subject training status on Alyx: json field not available')
+
         output_files = []
         return output_files
 
@@ -137,6 +155,7 @@ class TrainingExtractionPipeline(tasks.Pipeline):
         tasks = OrderedDict()
         self.session_path = session_path
         # level 0
+        tasks['ExperimentDescriptionRegisterRaw'] = ExperimentDescriptionRegisterRaw(self.session_path)
         tasks['TrainingRegisterRaw'] = TrainingRegisterRaw(self.session_path)
         tasks['TrainingTrials'] = TrainingTrials(self.session_path)
         tasks['TrainingVideoCompress'] = TrainingVideoCompress(self.session_path)

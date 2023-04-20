@@ -12,26 +12,11 @@ from one.webclient import AlyxClient
 from one.util import filter_datasets
 from one.alf.files import add_uuid_string, session_path_parts
 from iblutil.io.parquet import np2str
-from ibllib.oneibl.registration import register_dataset
+from ibllib.oneibl.registration import register_dataset, get_lab, get_local_data_repository
 from ibllib.oneibl.patcher import FTPPatcher, SDSCPatcher, SDSC_ROOT_PATH, SDSC_PATCH_PATH
 
 
 _logger = logging.getLogger(__name__)
-
-
-def get_local_data_repository(one):
-    if one is None:
-        return
-
-    if not Path.home().joinpath(".globusonline/lta/client-id.txt").exists():
-        return
-
-    with open(Path.home().joinpath(".globusonline/lta/client-id.txt"), 'r') as fid:
-        globus_id = fid.read()
-
-    data_repo = one.alyx.rest('data-repository', 'list', globus_endpoint_id=globus_id)
-    if len(data_repo):
-        return [da['name'] for da in data_repo][0]
 
 
 class DataHandler(abc.ABC):
@@ -47,10 +32,7 @@ class DataHandler(abc.ABC):
         self.one = one
 
     def setUp(self):
-        """
-        Function to optionally overload to download required data to run task
-        :return:
-        """
+        """Function to optionally overload to download required data to run task."""
         pass
 
     def getData(self, one=None):
@@ -126,7 +108,7 @@ class ServerDataHandler(DataHandler):
         :return: output info of registered datasets
         """
         versions = super().uploadData(outputs, version)
-        data_repo = get_local_data_repository(self.one)
+        data_repo = get_local_data_repository(self.one.alyx)
         return register_dataset(outputs, one=self.one, versions=versions, repository=data_repo, **kwargs)
 
 
@@ -136,7 +118,7 @@ class ServerGlobusDataHandler(DataHandler):
         Data handler for running tasks on lab local servers. Will download missing data from SDSC using Globus
 
         :param session_path: path to session
-        :param signature: input and output file signatures
+        :param signatures: input and output file signatures
         :param one: ONE instance
         """
         from one.remote.globus import Globus, get_lab_from_endpoint_id  # noqa
@@ -147,14 +129,7 @@ class ServerGlobusDataHandler(DataHandler):
         self.globus.endpoints['local']['root_path'] = '/mnt/s0/Data/Subjects'
 
         # Find the lab
-        labs = get_lab_from_endpoint_id(alyx=self.one.alyx)
-
-        if len(labs) == 2:
-            # for flofer lab
-            subject = self.one.path2ref(self.session_path)['subject']
-            self.lab = self.one.alyx.rest('subjects', 'list', nickname=subject)[0]['lab']
-        else:
-            self.lab = labs[0]
+        self.lab = get_lab(self.session_path, self.one.alyx)
 
         # For cortex lab we need to get the endpoint from the ibl alyx
         if self.lab == 'cortexlab':
@@ -165,10 +140,7 @@ class ServerGlobusDataHandler(DataHandler):
         self.local_paths = []
 
     def setUp(self):
-        """
-        Function to download necessary data to run tasks using globus-sdk
-        :return:
-        """
+        """Function to download necessary data to run tasks using globus-sdk."""
         if self.lab == 'cortexlab':
             one = ONE(base_url='https://alyx.internationalbrainlab.org')
             df = super().getData(one=one)
@@ -221,14 +193,11 @@ class ServerGlobusDataHandler(DataHandler):
         :return: output info of registered datasets
         """
         versions = super().uploadData(outputs, version)
-        data_repo = get_local_data_repository(self.one)
+        data_repo = get_local_data_repository(self.one.alyx)
         return register_dataset(outputs, one=self.one, versions=versions, repository=data_repo, **kwargs)
 
     def cleanUp(self):
-        """
-        Clean up, remove the files that were downloaded from globus once task has completed
-        :return:
-        """
+        """Clean up, remove the files that were downloaded from globus once task has completed."""
         for file in self.local_paths:
             os.unlink(file)
 
@@ -280,10 +249,7 @@ class RemoteAwsDataHandler(DataHandler):
         self.local_paths = []
 
     def setUp(self):
-        """
-        Function to download necessary data to run tasks using AWS boto3
-        :return:
-        """
+        """Function to download necessary data to run tasks using AWS boto3."""
         df = super().getData()
         self.local_paths = self.one._download_aws(map(lambda x: x[1], df.iterrows()))
 
@@ -362,10 +328,7 @@ class RemoteAwsDataHandler(DataHandler):
         #                                   versions=versions, **kwargs)
 
     def cleanUp(self):
-        """
-        Clean up, remove the files that were downloaded from globus once task has completed
-        :return:
-        """
+        """Clean up, remove the files that were downloaded from globus once task has completed."""
         if self.task.status == 0:
             for file in self.local_paths:
                 os.unlink(file)
@@ -383,10 +346,7 @@ class RemoteGlobusDataHandler(DataHandler):
         super().__init__(session_path, signature, one=one)
 
     def setUp(self):
-        """
-        Function to download necessary data to run tasks using globus
-        :return:
-        """
+        """Function to download necessary data to run tasks using globus."""
         # TODO
         pass
 
@@ -416,10 +376,7 @@ class SDSCDataHandler(DataHandler):
         self.task = task
 
     def setUp(self):
-        """
-        Function to create symlinks to necessary data to run tasks
-        :return:
-        """
+        """Function to create symlinks to necessary data to run tasks."""
         df = super().getData()
 
         SDSC_TMP = Path(SDSC_PATCH_PATH.joinpath(self.task.__class__.__name__))
@@ -451,9 +408,6 @@ class SDSCDataHandler(DataHandler):
         return sdsc_patcher.patch_datasets(outputs, dry=False, versions=versions, **kwargs)
 
     def cleanUp(self):
-        """
-        Function to clean up symlinks created to run task
-        :return:
-        """
+        """Function to clean up symlinks created to run task."""
         assert SDSC_PATCH_PATH.parts[0:4] == self.task.session_path.parts[0:4]
         shutil.rmtree(self.task.session_path)

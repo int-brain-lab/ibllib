@@ -408,5 +408,5 @@ class TestEphysFPGA_TTLsExtraction(unittest.TestCase):
         assert all([np.all(frame2ttl_[k] == expected[k]) for k in frame2ttl_])
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main(exit=False, verbosity=2)

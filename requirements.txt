@@ -2,17 +2,16 @@ boto3
 click>=7.0.0
 colorlog>=4.0.2
 flake8>=3.7.8
-globus-sdk==3.2.1
+globus-sdk
 graphviz
-jupyter>=1.0
-jupyterlab>=1.0
 matplotlib>=3.0.3
 mtscomp>=1.0.1
 numba>=0.56
 numpy>=1.18
 nptdms
 opencv-python-headless
-pandas>=0.24.2
+# pandas>=0.24.2
+pandas<2.0
 phylib>=2.4
 pyarrow
 pynrrd>=0.4.0
@@ -24,8 +23,8 @@ seaborn>=0.9.0
 tqdm>=4.32.1
 # ibl libraries
 ibl-neuropixel>=0.4.0
-iblutil>=1.4.0
+iblutil>=1.5.0
 labcams  # widefield extractor
-ONE-api>=1.16.1
+ONE-api>=1.19.1
 slidingRP>=1.0.0  # steinmetz lab refractory period metrics
 wfield>=0.3.6  # widefield extractor

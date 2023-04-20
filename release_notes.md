@@ -1,5 +1,52 @@
+## Release Notes 2.22
+### features
+- trials extractors support omissions trials from neuromodulator tasks
+- SpikeSortingLoader and EphysSessionLoader utils functions to load related objects such as drift
+- Training status tasks upload training date and session to subject json
+- Query training criterion function added to brainbox.training
+- Swanson vector - option to annotate top/bottom 5 regions based on values, or pass in a list of acronyms
+- EphysQC can run without connection to ONE
+
+## Release Notes 2.21
+### Release Notes 2.21.3 2023-03-22
+### features
+- show atlas names in swanson plot
+- allow user to define mask regions in swanson plot
+
+### bugfixes
+- register_session: handle lack of taskData in passive sessions
+
+### Release Notes 2.21.2 2023-02-24
+### bugfixes
+- get_lab function now gets lab name from session path subject name
+- create_jobs now returns pipelines
+
+### Release Notes 2.21.1 2023-02-21
+### bugfixes
+- remove unused jupyter and jupyterhub requirements
+- fix mapping for atlas svg plots
+
+### Release Notes 2.21.0 2023-02-14
+### features
+- support for multiple task protocols within a session
+- extract protocol period from spacer signals
+- function for changing subject, collection, number or date in a settings file
+- function to retrieve task protocol number from experiment description
+- dataset type validation supports null filename patterns
+- oneibl.registration uses one.registration client as superclass
+- experiment description files are created and registered in legacy pipelines
+- QC sign-off keys are added to session JSON field
+- class-based note template API for attaching session notes for QC sign-offs
+- protocol and procedures now taken from experiment description file
+- handle truncated first spacer in passive extraction
+- fix the Perirhinal area layer color in Allen Atlas
+- fix region volume computation
+- vectorised swanson flatmap
+- brainbox trial ITI loader
+- vectorised atlas plots
+
 ## Release 2.20
-# Release Notes 2.20.0 2023-01-23
+### Release Notes 2.20.0 2023-01-23
 ### features
 - ephys session loader
 - bwm release documentation
@@ -8,8 +55,8 @@
 - mock gpu lock in tests
 - use cluster_ids in metrics
 
-## Release 2.19
-## Release Notes 2.19.0 2022-11-30
+## Release Notes 2.19
+### Release Notes 2.19.0 2022-11-30
 ### features
 - camera qc allows for string values
 - deprecate brainbox.io.spikeglx.stream instead use Streamer

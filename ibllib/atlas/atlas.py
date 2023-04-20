@@ -389,7 +389,7 @@ class BrainAtlas:
         depth = np.flipud(np.sort(sub_volume[:, ddim])[np.argsort(self.bc.lim(axis=ddim))])
         return tslice, width, height, depth
 
-    def plot_tilted_slice(self, xyz, axis, volume='image', cmap=None, ax=None, sec_ax=False, **kwargs):
+    def plot_tilted_slice(self, xyz, axis, volume='image', cmap=None, ax=None, return_sec=False, **kwargs):
         """
         From line coordinates, extracts the tilted plane containing the line from the 3D volume
         :param xyz: np.array: points defining a probe trajectory in 3D space (xyz triplets)
@@ -428,7 +428,7 @@ class BrainAtlas:
         ax.set_xlabel(axis_labels[0])
         ax.set_ylabel(axis_labels[1])
         sec_ax.set_ylabel(axis_labels[2])
-        if sec_ax:
+        if return_sec:
             return ax, sec_ax
         else:
             return ax
@@ -1057,6 +1057,22 @@ class AllenAtlas(BrainAtlas):
                 return [1, 2, 0]
         else:
             ValueError("ccf_order needs to be either 'mlapdv' or 'apdvml'")
+
+    def compute_regions_volume(self):
+        """
+        Sums the number of voxels in the labels volume for each region.
+        Then compute volumes for all of the levels of hierarchy in cubic mm.
+        :return:
+        """
+        nr = self.regions.id.shape[0]
+        count = np.bincount(self.label.flatten(), minlength=nr)
+        self.regions.compute_hierarchy()
+        self.regions.volume = np.zeros_like(count)
+        for i in np.arange(nr):
+            if count[i] == 0:
+                continue
+            self.regions.volume[np.unique(self.regions.hierarchy[:, i])] += count[i]
+        self.regions.volume = self.regions.volume * (self.res_um / 1e3) ** 3
 
 
 def NeedlesAtlas(*args, **kwargs):

@@ -12,16 +12,17 @@ import logging
 import wave
 from collections import OrderedDict
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Union
 
+from dateutil import parser as dateparser
 from pkg_resources import parse_version
 import numpy as np
 import pandas as pd
 
 from iblutil.io import jsonable
 from ibllib.io.video import assert_valid_label
-from ibllib.time import uncycle_pgts, convert_pgts
+from ibllib.time import uncycle_pgts, convert_pgts, date2isostr
 
 _logger = logging.getLogger(__name__)
 
@@ -91,12 +92,12 @@ def load_data(session_path: Union[str, Path], task_collection='raw_behavior_data
     :rtype: list of dicts
     """
     if session_path is None:
-        _logger.warning("No data loaded: session_path is None")
+        _logger.warning('No data loaded: session_path is None')
         return
     path = Path(session_path).joinpath(task_collection)
-    path = next(path.glob("_iblrig_taskData.raw*.jsonable"), None)
+    path = next(path.glob('_iblrig_taskData.raw*.jsonable'), None)
     if not path:
-        _logger.warning("No data loaded: could not find raw data file")
+        _logger.warning('No data loaded: could not find raw data file')
         return None
     data = jsonable.read(path)
     if time == 'absolute':
@@ -301,6 +302,50 @@ def load_camera_gpio(session_path, label: str, as_dicts=False):
     return gpio
 
 
+def _read_settings_json_compatibility_enforced(settings):
+    """
+    Patch iblrig settings for compatibility across rig versions.
+
+    Parameters
+    ----------
+    settings : pathlib.Path, dict
+        Either a _iblrig_taskSettings.raw.json file path or the loaded settings.
+
+    Returns
+    -------
+    dict
+        The task settings patched for compatibility.
+    """
+    if isinstance(settings, dict):
+        md = settings.copy()
+    else:
+        with open(settings) as js:
+            md = json.load(js)
+    if 'IS_MOCK' not in md.keys():
+        md['IS_MOCK'] = False
+    if 'IBLRIG_VERSION_TAG' not in md.keys():
+        md['IBLRIG_VERSION_TAG'] = md.get('IBLRIG_VERSION', '')
+    # 2018-12-05 Version 3.2.3 fixes (permanent fixes in IBL_RIG from 3.2.4 on)
+    if md['IBLRIG_VERSION_TAG'] == '':
+        pass
+    elif parse_version(md.get('IBLRIG_VERSION_TAG')) <= parse_version('3.2.3'):
+        if 'LAST_TRIAL_DATA' in md.keys():
+            md.pop('LAST_TRIAL_DATA')
+        if 'weighings' in md['PYBPOD_SUBJECT_EXTRA'].keys():
+            md['PYBPOD_SUBJECT_EXTRA'].pop('weighings')
+        if 'water_administration' in md['PYBPOD_SUBJECT_EXTRA'].keys():
+            md['PYBPOD_SUBJECT_EXTRA'].pop('water_administration')
+        if 'IBLRIG_COMMIT_HASH' not in md.keys():
+            md['IBLRIG_COMMIT_HASH'] = 'f9d8905647dbafe1f9bdf78f73b286197ae2647b'
+        #  parse the date format to Django supported ISO
+        dt = dateparser.parse(md['SESSION_DATETIME'])
+        md['SESSION_DATETIME'] = date2isostr(dt)
+        # add the weight key if it doesn't already exist
+        if 'SUBJECT_WEIGHT' not in md.keys():
+            md['SUBJECT_WEIGHT'] = None
+    return md
+
+
 def load_settings(session_path: Union[str, Path], task_collection='raw_behavior_data'):
     """
     Load PyBpod Settings files (.json).
@@ -320,10 +365,7 @@ def load_settings(session_path: Union[str, Path], task_collection='raw_behavior_
     if not path:
         _logger.warning("No data loaded: could not find raw settings file")
         return None
-    with open(path, 'r') as f:
-        settings = json.load(f)
-    if 'IBLRIG_VERSION_TAG' not in settings.keys():
-        settings['IBLRIG_VERSION_TAG'] = ''
+    settings = _read_settings_json_compatibility_enforced(path)
     return settings
 
 
@@ -365,7 +407,7 @@ def load_encoder_events(session_path, task_collection='raw_behavior_data', setti
     path = Path(session_path).joinpath(task_collection)
     path = next(path.glob("_iblrig_encoderEvents.raw*.ssv"), None)
     if not settings:
-        settings = load_settings(session_path)
+        settings = load_settings(session_path, task_collection=task_collection)
     if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
         settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
         # auto-detect old files when version is not labeled
@@ -469,7 +511,7 @@ def load_encoder_positions(session_path, task_collection='raw_behavior_data', se
     path = Path(session_path).joinpath(task_collection)
     path = next(path.glob("_iblrig_encoderPositions.raw*.ssv"), None)
     if not settings:
-        settings = load_settings(session_path)
+        settings = load_settings(session_path, task_collection=task_collection)
     if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
         settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
         # auto-detect old files when version is not labeled
@@ -562,7 +604,7 @@ def load_mic(session_path, task_collection='raw_behavior_data'):
     """
     Load Microphone wav file to np.array of len nSamples
 
-    :param session_path: Absoulte path of session folder
+    :param session_path: Absolute path of session folder
     :type session_path: str
     :return: An array of values of the sound waveform
     :rtype: numpy.array
@@ -833,3 +875,85 @@ def load_widefield_mmap(session_path, dtype=np.uint16, shape=(540, 640), n_frame
         n_frames = int(filepath.stat().st_size / (np.prod(shape) * dtype.itemsize))
 
     return np.memmap(str(filepath), mode=mode, dtype=dtype, shape=(int(n_frames), *shape))
+
+
+def patch_settings(session_path, collection='raw_behavior_data',
+                   new_collection=None, subject=None, number=None, date=None):
+    """Modify various details in a settings file.
+
+    This function makes it easier to change things like subject name in a settings as it will
+    modify the subject name in the myriad paths. NB: This saves the settings into the same location
+    it was loaded from.
+
+    Parameters
+    ----------
+    session_path : str, pathlib.Path
+        The session path containing the settings file.
+    collection : str
+        The subfolder containing the settings file.
+    new_collection : str
+        An optional new subfolder to change in the settings paths.
+    subject : str
+        An optional new subject name to change in the settings.
+    number : str, int
+        An optional new number to change in the settings.
+    date : str, datetime.date
+        An optional date to change in the settings.
+
+    Returns
+    -------
+    dict
+        The modified settings.
+    """
+    settings = load_settings(session_path, collection)
+    if not settings:
+        raise IOError('Settings file not found')
+
+    filename = PureWindowsPath(settings['SETTINGS_FILE_PATH']).name
+    file_path = Path(session_path).joinpath(collection, filename)
+
+    if subject:
+        # Patch subject name
+        old_subject = settings['SUBJECT_NAME']
+        settings['SUBJECT_NAME'] = subject
+        for k in settings.keys():
+            if isinstance(settings[k], str):
+                settings[k] = settings[k].replace(f'\\Subjects\\{old_subject}', f'\\Subjects\\{subject}')
+        settings['SESSION_NAME'] = '\\'.join([subject, *settings['SESSION_NAME'].split('\\')[1:]])
+        settings.pop('PYBPOD_SUBJECT_EXTRA', None)  # Get rid of Alyx subject info
+
+    if date:
+        # Patch session datetime
+        date = str(date)
+        old_date = settings['SESSION_DATE']
+        settings['SESSION_DATE'] = date
+        for k in settings.keys():
+            if isinstance(settings[k], str):
+                settings[k] = settings[k].replace(
+                    f'\\{settings["SUBJECT_NAME"]}\\{old_date}',
+                    f'\\{settings["SUBJECT_NAME"]}\\{date}'
+                )
+        settings['SESSION_DATETIME'] = date + settings['SESSION_DATETIME'][10:]
+
+    if number:
+        # Patch session number
+        old_number = settings['SESSION_NUMBER']
+        if isinstance(number, int):
+            number = f'{number:03}'
+        settings['SESSION_NUMBER'] = number
+        for k in settings.keys():
+            if isinstance(settings[k], str):
+                settings[k] = settings[k].replace(
+                    f'\\{settings["SESSION_DATE"]}\\{old_number}',
+                    f'\\{settings["SESSION_DATE"]}\\{number}'
+                )
+
+    if new_collection:
+        old_path = settings['SESSION_RAW_DATA_FOLDER']
+        new_path = PureWindowsPath(settings['SESSION_RAW_DATA_FOLDER']).with_name(new_collection)
+        for k in settings.keys():
+            if isinstance(settings[k], str):
+                settings[k] = settings[k].replace(old_path, str(new_path))
+    with open(file_path, 'w') as fp:
+        json.dump(settings, fp, indent=' ')
+    return settings

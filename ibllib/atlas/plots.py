@@ -4,13 +4,68 @@ Module that has convenience plotting functions for 2D atlas slices
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
+import logging
+from iblutil.io.hashfile import md5
+import one.remote.aws as aws
 
 from scipy.ndimage import gaussian_filter
 from scipy.stats import binned_statistic
+from matplotlib import cm
+from matplotlib.patches import Polygon, PathPatch
+import matplotlib.path as mpath
 
 from ibllib.atlas import AllenAtlas, FlatMap
 from ibllib.atlas.regions import BrainRegions
 from iblutil.numerical import ismember
+
+from ibllib.atlas.atlas import BrainCoordinates, ALLEN_CCF_LANDMARKS_MLAPDV_UM
+
+_logger = logging.getLogger(__name__)
+
+
+def get_bc_10():
+
+    dims2xyz = np.array([1, 0, 2])
+    res_um = 10
+    scaling = np.array([1, 1, 1])
+    image_10 = np.array([1320, 1140, 800])
+
+    iorigin = (ALLEN_CCF_LANDMARKS_MLAPDV_UM['bregma'] / res_um)
+    dxyz = res_um * 1e-6 * np.array([1, -1, -1]) * scaling
+    nxyz = np.array(image_10)[dims2xyz]
+    bc = BrainCoordinates(nxyz=nxyz, xyz0=(0, 0, 0), dxyz=dxyz)
+    bc = BrainCoordinates(nxyz=nxyz, xyz0=-bc.i2xyz(iorigin), dxyz=dxyz)
+
+    return bc
+
+
+def plot_polygon(ax, xy, color, edgecolor='k', linewidth=0.3, alpha=1):
+    p = Polygon(xy, facecolor=color, edgecolor=edgecolor, linewidth=linewidth, alpha=alpha)
+    ax.add_patch(p)
+
+
+def plot_polygon_with_hole(ax, vertices, codes, color, edgecolor='k', linewidth=0.3, alpha=1):
+    path = mpath.Path(vertices, codes)
+    patch = PathPatch(path, facecolor=color, edgecolor=edgecolor, linewidth=linewidth, alpha=alpha)
+    ax.add_patch(patch)
+
+
+def coords_for_poly_hole(coords):
+    for i, c in enumerate(coords):
+        xy = np.c_[c['x'], c['y']]
+        codes = np.ones(len(xy), dtype=mpath.Path.code_type) * mpath.Path.LINETO
+        codes[0] = mpath.Path.MOVETO
+        if i == 0:
+            val = c.get('invert', 1)
+            all_coords = xy[::val]
+            all_codes = codes
+        else:
+            codes[-1] = mpath.Path.CLOSEPOLY
+            val = c.get('invert', -1)
+            all_coords = np.concatenate((all_coords, xy[::val]))
+            all_codes = np.concatenate((all_codes, codes))
+
+    return all_coords, all_codes
 
 
 def prepare_lr_data(acronyms_lh, values_lh, acronyms_rh, values_rh):
@@ -59,8 +114,106 @@ def reorder_data(acronyms, values, brain_regions=None):
     return ordered_acronyms, ordered_values
 
 
+def load_slice_files(slice, mapping):
+
+    OLD_MD5 = {
+        'coronal': [],
+        'sagittal': [],
+        'horizontal': [],
+        'top': []
+    }
+
+    slice_file = AllenAtlas._get_cache_dir().parent.joinpath('svg', f'{slice}_{mapping}_paths.npy')
+    if not slice_file.exists() or md5(slice_file) in OLD_MD5[slice]:
+        slice_file.parent.mkdir(exist_ok=True, parents=True)
+        _logger.info(f'downloading swanson paths from {aws.S3_BUCKET_IBL} s3 bucket...')
+        aws.s3_download_file(f'atlas/{slice_file.name}', slice_file)
+
+    slice_data = np.load(slice_file, allow_pickle=True)
+
+    return slice_data
+
+
+def _plot_slice_vector(coords, slice, values, mapping, empty_color='silver', clevels=None, cmap='viridis', show_cbar=False,
+                       ba=None, ax=None, slice_json=None, **kwargs):
+
+    ba = ba or AllenAtlas()
+    mapping = mapping.split('-')[0].lower()
+    if clevels is None:
+        clevels = (np.nanmin(values), np.nanmax(values))
+
+    if ba.res_um == 10:
+        bc10 = ba.bc
+    else:
+        bc10 = get_bc_10()
+
+    if ax is None:
+        fig, ax = plt.subplots()
+        ax.set_axis_off()
+    else:
+        fig = ax.get_figure()
+
+    colormap = cm.get_cmap(cmap)
+    norm = matplotlib.colors.Normalize(vmin=clevels[0], vmax=clevels[1])
+    nan_vals = np.isnan(values)
+    rgba_color = np.full((values.size, 4), fill_value=np.nan)
+    rgba_color[~nan_vals] = colormap(norm(values[~nan_vals]), bytes=True)
+
+    if slice_json is None:
+        slice_json = load_slice_files(slice, mapping)
+
+    if slice == 'coronal':
+        idx = bc10.y2i(coords)
+        xlim = np.array([0, bc10.nx])
+        ylim = np.array([0, bc10.nz])
+    elif slice == 'sagittal':
+        idx = bc10.x2i(coords)
+        xlim = np.array([0, bc10.ny])
+        ylim = np.array([0, bc10.nz])
+    elif slice == 'horizontal':
+        idx = bc10.z2i(coords)
+        xlim = np.array([0, bc10.nx])
+        ylim = np.array([0, bc10.ny])
+    else:
+        # top case
+        xlim = np.array([0, bc10.nx])
+        ylim = np.array([0, bc10.ny])
+
+    if slice != 'top':
+        slice_json = slice_json.item().get(str(int(idx)))
+
+    for i, reg in enumerate(slice_json):
+        color = rgba_color[reg['thisID']]
+        if any(np.isnan(color)):
+            color = empty_color
+        else:
+            color = color / 255
+        coords = reg['coordsReg']
+
+        if len(coords) == 0:
+            continue
+
+        if type(coords) == list:
+            vertices, codes = coords_for_poly_hole(coords)
+            plot_polygon_with_hole(ax, vertices, codes, color, **kwargs)
+        else:
+            xy = np.c_[coords['x'], coords['y']]
+            plot_polygon(ax, xy, color, **kwargs)
+
+        ax.set_xlim(xlim)
+        ax.set_ylim(ylim)
+        ax.invert_yaxis()
+
+    if show_cbar:
+        cbar = fig.colorbar(matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax)
+        return fig, ax, cbar
+    else:
+        return fig, ax
+
+
 def plot_scalar_on_slice(regions, values, coord=-1000, slice='coronal', mapping='Allen', hemisphere='left',
-                         background='image', cmap='viridis', clevels=None, show_cbar=False, brain_atlas=None, ax=None):
+                         background='image', cmap='viridis', clevels=None, show_cbar=False, empty_color='silver',
+                         brain_atlas=None, ax=None, vector=False, slice_files=None, **kwargs):
     """
     Function to plot scalar value per allen region on histology slice
 
@@ -71,12 +224,16 @@ def plot_scalar_on_slice(regions, values, coord=-1000, slice='coronal', mapping=
     :param slice: orientation of slice, options are 'coronal', 'sagittal', 'horizontal', 'top' (top view of brain)
     :param mapping: atlas mapping to use, options are 'Allen', 'Beryl' or 'Cosmos'
     :param hemisphere: hemisphere to display, options are 'left', 'right', 'both'
-    :param background: background slice to overlay onto, options are 'image' or 'boundary'
+    :param background: background slice to overlay onto, options are 'image' or 'boundary' (only used when vector = False)
     :param cmap: colormap to use
     :param clevels: min max color levels [cmin, cmax]
     :param show_cbar: whether or not to add colorbar to axis
+    :param empty_color: color to use for regions without any values (only used when vector = True)
     :param brain_atlas: AllenAtlas object
     :param ax: optional axis object to plot on
+    :param vector: whether to show as bitmap of vector graphic
+    :param slice_files: slice files for
+    :param **kwargs: kwargs to pass to matplotlib polygon e.g linewidth=2, edgecolor='none' (only used when vector = True)
     :return:
     """
 
@@ -85,7 +242,6 @@ def plot_scalar_on_slice(regions, values, coord=-1000, slice='coronal', mapping=
 
     if clevels is None:
         clevels = (np.nanmin(values), np.nanmax(values))
-        print(clevels)
 
     # Find the mapping to use
     if '-lr' in mapping:
@@ -112,12 +268,21 @@ def plot_scalar_on_slice(regions, values, coord=-1000, slice='coronal', mapping=
                 region_values[0] = np.nan
 
     if show_cbar:
-        fig, ax, cbar = _plot_slice(coord / 1e6, slice, region_values, 'value', background=background, map=map, clevels=clevels,
-                                    cmap=cmap, ba=ba, ax=ax, show_cbar=show_cbar)
+        if vector:
+            fig, ax, cbar = _plot_slice_vector(coord / 1e6, slice, region_values, map, clevels=clevels, cmap=cmap, ba=ba,
+                                               ax=ax, empty_color=empty_color, show_cbar=show_cbar, slice_json=slice_files,
+                                               **kwargs)
+        else:
+            fig, ax, cbar = _plot_slice(coord / 1e6, slice, region_values, 'value', background=background, map=map,
+                                        clevels=clevels, cmap=cmap, ba=ba, ax=ax, show_cbar=show_cbar)
         return fig, ax, cbar
     else:
-        fig, ax = _plot_slice(coord / 1e6, slice, region_values, 'value', background=background, map=map, clevels=clevels,
-                              cmap=cmap, ba=ba, ax=ax, show_cbar=show_cbar)
+        if vector:
+            fig, ax = _plot_slice_vector(coord / 1e6, slice, region_values, map, clevels=clevels, cmap=cmap, ba=ba,
+                                         ax=ax, empty_color=empty_color, show_cbar=show_cbar, slice_json=slice_files, **kwargs)
+        else:
+            fig, ax = _plot_slice(coord / 1e6, slice, region_values, 'value', background=background, map=map, clevels=clevels,
+                                  cmap=cmap, ba=ba, ax=ax, show_cbar=show_cbar)
         return fig, ax
 
 
