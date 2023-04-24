@@ -186,7 +186,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                 # Save suite2p ROI activity outputs in transposed from (n_frames, n_ROI)
                 for k, v in rename_dict.items():
                     np.save(fov_dir.joinpath(v), np.load(fov_dir.joinpath(k)).T)
-                    fov_dir.joinpath(k).unlink()
+                    # fov_dir.joinpath(k).unlink()  # Keep original files for suite2P GUI
                 np.save(fov_dir.joinpath('mpci.badFrames.npy'), np.asarray(ops['badframes'], dtype=bool))
                 np.save(fov_dir.joinpath('mpciMeanImage.images.npy'), np.asarray(ops['meanImg'], dtype=float))
                 np.save(fov_dir.joinpath('mpciROIs.stackPos.npy'), np.asarray([(*s['med'], 0) for s in stat], dtype=int))
