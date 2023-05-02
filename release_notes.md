@@ -1,4 +1,9 @@
 ## Release Notes 2.22
+### Release Notes 2.22.1
+### bugfixes
+- use session path in training status task
+
+### Release Notes 2.22.0
 ### features
 - trials extractors support omissions trials from neuromodulator tasks
 - SpikeSortingLoader and EphysSessionLoader utils functions to load related objects such as drift
