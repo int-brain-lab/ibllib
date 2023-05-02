@@ -186,8 +186,7 @@ def get_latest_training_information(sess_path, one):
     # Detect untrainable
     un_df = df_lim[df_lim['training_status'] == 'in training'].sort_values('date')
     if len(un_df) >= 40:
-        print('untrainable')
-        sess = un_df.iloc[39].session
+        sess = un_df.iloc[39].session_path
         df.loc[df['session_path'] == sess, 'training_status'] = 'untrainable'
 
     # Detect unbiasable
@@ -195,8 +194,7 @@ def get_latest_training_information(sess_path, one):
     if len(un_df) >= 40:
         tr_st = un_df[0:40].training_status.unique()
         if 'ready4ephysrig' not in tr_st:
-            print('unbiasable')
-            sess = un_df.iloc[39].session
+            sess = un_df.iloc[39].session_path
             df.loc[df['session_path'] == sess, 'training_status'] = 'unbiasable'
 
     save_dataframe(df, subj_path)
