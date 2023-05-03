@@ -685,6 +685,10 @@ def add_training_lines(df, ax):
 
     status = df.drop_duplicates(subset='training_status', keep='first')
     for _, st in status.iterrows():
+
+        if st['training_status'] in ['untrainable', 'unbiasable']:
+            continue
+
         if TRAINING_STATUS[st['training_status']][0] <= 0:
             continue
 
