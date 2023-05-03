@@ -1,4 +1,10 @@
 ## Release Notes 2.22
+### Release Notes 2.22.2
+### bugfixes
+- training plots
+- 
+### features
+- can change download path for atlas
 ### Release Notes 2.22.1
 ### bugfixes
 - use session path in training status task
