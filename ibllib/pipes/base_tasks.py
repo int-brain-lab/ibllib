@@ -165,7 +165,12 @@ class MesoscopeTask(DynamicTask):
                                                                                     'raw_imaging_data*'))
 
     def get_signatures(self, **kwargs):
-        """Specify the individual inputs and outputs to expect based on the available of device collection folders"""
+        """
+        From the template signature of the task, create the exact list of inputs and outputs to expect based on the
+        available device collection folders
+
+        Necessary because we don't know in advance how many device collection folders ("imaging bouts") to expect
+        """
         self.session_path = Path(self.session_path)
         # Glob for all device collection (raw imaging data) folders
         raw_imaging_folders = [p.name for p in self.session_path.glob(self.device_collection)]

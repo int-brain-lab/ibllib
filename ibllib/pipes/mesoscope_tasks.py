@@ -46,6 +46,13 @@ class MesoscopeRegisterSnapshots(base_tasks.MesoscopeTask, base_tasks.RegisterRa
                                                             kwargs.get('device_collection', 'raw_imaging_data_*'))
 
     def _run(self):
+        """
+        Assert one reference image per collection and rename it. Register snapshots.
+
+        Returns
+        -------
+        list of pathlib.Path containing renamed reference image.
+        """
         # Assert that only one tif file exists per collection
         file, collection, _ = self.signature['input_files'][0]
         reference_images = list(self.session_path.rglob(f'{collection}/{file}'))
@@ -58,6 +65,7 @@ class MesoscopeRegisterSnapshots(base_tasks.MesoscopeTask, base_tasks.RegisterRa
 
 
 class MesoscopeCompress(base_tasks.MesoscopeTask):
+    """ Tar compress raw 2p tif files, optionally remove uncompressed data."""
 
     priority = 90
     job_size = 'large'
@@ -71,6 +79,21 @@ class MesoscopeCompress(base_tasks.MesoscopeTask):
         return signature
 
     def _run(self, remove_uncompressed=False, verify_output=True, **kwargs):
+        """
+        Run tar compression on all tif files in the device collection
+
+        Parameters
+        ----------
+        remove_uncompressed: bool
+            Whether to remove the original, uncompressed data. Default is False
+        verify_output: bool
+            Whether to check that the compressed tar file can be uncompressed without errors. Default is True.
+
+        Returns
+        -------
+        list of pathlib.Path
+            Path to compressed tar file
+        """
         in_dir = self.session_path.joinpath(self.device_collection or '')
         outfile = self.session_path.joinpath(*filter(None, reversed(self.output_files[0][:2])))
         infiles = list(chain(*map(lambda x: in_dir.glob(x[0]), self.input_files)))  # glob for all input patterns
@@ -110,9 +133,10 @@ class MesoscopeCompress(base_tasks.MesoscopeTask):
 
 
 class MesoscopePreprocess(base_tasks.MesoscopeTask):
+    """Run suite2p preprocessing on tif files"""
 
     priority = 80
-    cpu = 4  # TODO: see if this works on the local servers or blows the RAM
+    cpu = 4
     job_size = 'large'
 
     @property
@@ -146,9 +170,9 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         Parameters
         ----------
         suite2p_dir : pathlib.Path
-        rename_dict : dict or str
+        rename_dict : dict or None
             The suite2p output filenames and the corresponding ALF name. NB: These files are saved
-            after transposition.
+            after transposition. Default is None, i.e. using the default mapping hardcoded in the function below.
 
         Returns
         -------
@@ -216,8 +240,21 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         # Collect all files in those directories
         return list(suite2p_dir.parent.rglob('FOV*/*'))
 
+    @staticmethod
     def _check_meta_data(self, meta_data_all):
-        """Check that the meta data is consistent across all raw imaging folders"""
+        """
+        Check that the meta data is consistent across all raw imaging folders
+
+        Parameters
+        ----------
+        meta_data_all: list of dicts
+            List of metadata dictionaries to be checked for consistency
+
+        Returns
+        -------
+        dict
+            Single, consolidated dictionary containing metadata
+        """
         # Prepare by removing the things we don't expect to match
         for meta_data in meta_data_all:
             meta_data.pop('acquisitionStartTime')
@@ -238,7 +275,8 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
 
     @staticmethod
     def _consolidate_exptQC(exptQC):
-        """Consolidate exptQC.mat files into a single file.
+        """
+        Consolidate exptQC.mat files into a single file.
 
         Parameters
         ----------
@@ -280,7 +318,19 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         return frameQC, frameQC_names, bad_frames
 
     def _create_db(self, meta):
-        """Create the ops dictionary for suite2p"""
+        """
+        Create the ops dictionary for suite2p based on metadata
+
+        Parameters
+        ----------
+        meta: dict
+            Imaging metadata
+
+        Returns
+        -------
+        dict
+            Inputs to suite2p run that deviate from default parameters
+        """
 
         # Currently only supporting single plane, assert that this is the case
         if not isinstance(meta['scanImageParams']['hStackManager']['zs'], int):
@@ -335,6 +385,24 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         return db
 
     def _run(self, run_suite2p=True, rename_files=True, use_badframes=False, **kwargs):
+        """
+        Process inputs, run suite2p and make outputs alf compatible
+
+        Parameters
+        ----------
+        run_suite2p: bool
+            Whether to run suite2p, default is True.
+        rename_files: bool
+            Whether to rename and reorganize the suite2p outputs to be alf compatible. Defaults is True.
+        use_badframes: bool
+            Whether to exclude bad frames indicated by the experimenter in exptQC.mat. Default is currently False
+            due to bug in suite2p. Change this in the future
+
+        Returns
+        -------
+        list of pathlib.Path
+            All files created by the task
+        """
         import suite2p
 
         """ Metadata and parameters """
@@ -415,6 +483,15 @@ class MesoscopeSync(base_tasks.MesoscopeTask):
         return signature
 
     def _run(self):
+        """
+        Extract the imaging times for all FOVs
+
+        Returns
+        -------
+        list of pathlib.Path
+            Files containing frame timestamps for individual FOVs and time offsets for each line scan.
+
+        """
         # TODO function to determine nROIs
         try:
             alf_path = self.session_path / self.sync_collection
@@ -437,6 +514,7 @@ class MesoscopeSync(base_tasks.MesoscopeTask):
 
 
 class MesoscopeFOV(base_tasks.MesoscopeTask):
+    """Create FOV and FOV location objects in Alyx from metadata"""
 
     priority = 40
     job_size = 'small'
