@@ -694,7 +694,7 @@ def get_protocol_period(session_path, protocol_number, bpod_sync):
 class FpgaTrials(extractors_base.BaseExtractor):
     save_names = ('_ibl_trials.intervals_bpod.npy',
                   '_ibl_trials.goCueTrigger_times.npy', None, None, None, None, None, None, None,
-                  '_ibl_trials.stimOff_times.npy', None, None, None, None,
+                  '_ibl_trials.stimOff_times.npy', None, None, None, '_ibl_trials.quiescencePeriod.npy',
                   '_ibl_trials.table.pqt', '_ibl_wheel.timestamps.npy',
                   '_ibl_wheel.position.npy', '_ibl_wheelMoves.intervals.npy',
                   '_ibl_wheelMoves.peakAmplitude.npy')

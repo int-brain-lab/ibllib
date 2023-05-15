@@ -34,7 +34,7 @@ class ProbaContrasts(BaseBpodTrialsExtractor):
     Bpod pre-generated values for probabilityLeft, contrastLR, phase, quiescence
     """
     save_names = ('_ibl_trials.contrastLeft.npy', '_ibl_trials.contrastRight.npy', None, None,
-                  '_ibl_trials.probabilityLeft.npy', None)
+                  '_ibl_trials.probabilityLeft.npy', '_ibl_trials.quiescencePeriod.npy')
     var_names = ('contrastLeft', 'contrastRight', 'phase',
                  'position', 'probabilityLeft', 'quiescence')
 
