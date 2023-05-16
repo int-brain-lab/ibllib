@@ -8,7 +8,6 @@ Pipeline:
     1. Data renamed to be ALF-compliant and registered
 """
 import logging
-import tarfile
 import subprocess
 import shutil
 from pathlib import Path
@@ -20,6 +19,7 @@ import numpy as np
 import pandas as pd
 from scipy.io import loadmat
 import one.alf.io as alfio
+from one.alf.spec import is_valid
 import one.alf.exceptions as alferr
 
 from ibllib.pipes import base_tasks
@@ -75,7 +75,7 @@ class MesoscopeCompress(base_tasks.MesoscopeTask):
     def signature(self):
         signature = {
             'input_files': [('*.tif', self.device_collection, True)],
-            'output_files': [('imaging.frames.tar.bz', self.device_collection, True)]
+            'output_files': [('imaging.frames.tar.bz2', self.device_collection, True)]
         }
         return signature
 
@@ -122,8 +122,9 @@ class MesoscopeCompress(base_tasks.MesoscopeTask):
                 output=outfile.relative_to(in_dir), input='" "'.join(str(x.relative_to(in_dir)) for x in infiles))
             _logger.debug(cmd)
             process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=in_dir)
-            info, error = process.communicate()
-            assert process.returncode == 0, f'compression failed: {error}'
+            info, error = process.communicate()  # b'2023-02-17_2_test_2P_00001_00001.tif\n'
+            _logger.debug(info.decode())
+            assert process.returncode == 0, f'compression failed: {error.decode()}'
 
             # Check the output
             assert outfile.exists(), 'output file missing'
@@ -140,19 +141,31 @@ class MesoscopeCompress(base_tasks.MesoscopeTask):
                 cmd = f'bzip2 -tv {outfile.relative_to(in_dir)}'
                 process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=in_dir)
                 info, error = process.communicate()
+                _logger.debug(info.decode())
                 assert process.returncode == 0, f'bzip compression test failed: {error}'
-                # Decompress bzip
-                cmd = f'bunzip2 -k {outfile.relative_to(in_dir)}'
-                process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=in_dir)
-                info, error = process.communicate()
-                assert process.returncode == 0 and outfile.with_suffix('.tar').exists(), f'tarball decompression failed: {error}'
                 # Check tar
-                with tarfile.open(outfile.with_suffix('.tar'), 'r') as tar:
-                    assert set(tar.getnames()) == set(x.name for x in infiles)
-                cmd = f'tar -tvWf {outfile.relative_to(in_dir).with_suffix(".tar")}'
+                cmd = f'bunzip2 -dc {outfile.relative_to(in_dir)} | tar -tvf -'
                 process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=in_dir)
                 info, error = process.communicate()
-                assert process.returncode == 0, f'tarball compression test failed: {error}'
+                _logger.debug(info.decode())
+                assert process.returncode == 0, 'tarball decompression test failed'
+                compressed_files = set(x.split()[-1] for x in filter(None, info.decode().split('\n')))
+                assert compressed_files == set(x.name for x in infiles)
+
+                # # Decompress bzip (same as above but more cumbersome)
+                # cmd = f'bunzip2 -k {outfile.relative_to(in_dir)}'
+                # process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=in_dir)
+                # info, error = process.communicate()
+                # assert process.returncode == 0 and outfile.with_name(outfile.stem).exists(), f'tarball decompression failed: {error}'
+                # # Check tar
+                # with tarfile.open(outfile.with_name(outfile.stem), 'r') as tar:
+                #     assert set(tar.getnames()) == set(x.name for x in infiles)
+                # cmd = f'tar -tvf {outfile.relative_to(in_dir).with_name(outfile.stem)}'
+                # process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=in_dir)
+                # info, error = process.communicate()
+                # assert process.returncode == 0, f'tarball compression test failed: {error}'
+                # if outfile.with_name(outfile.stem).exists():
+                #     outfile.with_name(outfile.stem).unlink()
 
             if remove_uncompressed:
                 _logger.info('Removing input files')
@@ -189,7 +202,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                              ('mpciROITypes.names.tsv', 'alf/FOV*', True),
                              ('mpciROIs.masks.npy', 'alf/FOV*', True),
                              ('mpciROIs.neuropilMasks.npy', 'alf/FOV*', True),
-                             ]
+                             ('_suite2p_ROIData.raw.zip', self.device_collection, False)]
         }
         return signature
 
@@ -226,6 +239,10 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                 plane_dir.rename(fov_dir)
         # Now rename the content of the new directories and move them out of suite2p
         for fov_dir in suite2p_dir.iterdir():
+            # Compress suite2p output files
+            target = suite2p_dir.parent.joinpath(fov_dir.name)
+            target.mkdir(exist_ok=True)
+            shutil.make_archive(str(target / '_suite2p_ROIData.raw'), 'zip', fov_dir, logger=_logger)
             if fov_dir != 'combined':
                 # save frameQC in each dir (for now, maybe there will be fov specific frame QC eventually)
                 if frameQC is not None and len(frameQC) > 0:
@@ -258,10 +275,8 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                 np.save(fov_dir.joinpath('mpciROIs.masks.npy'), roi_mask)
                 np.save(fov_dir.joinpath('mpciROIs.neuropilMasks.npy'), pil_mask)
                 # move folders out of suite2p dir
-                target = suite2p_dir.parent.joinpath(fov_dir.name)
-                target.mkdir(exist_ok=True)
                 # We overwrite existing files
-                for file in fov_dir.iterdir():
+                for file in filter(lambda x: is_valid(x.name), fov_dir.iterdir()):
                     target_file = target.joinpath(file.name)
                     if target_file.exists():
                         target_file.unlink()
