@@ -8,16 +8,17 @@ Pipeline:
     1. Data renamed to be ALF-compliant and registered
 """
 import logging
+import tarfile
 import subprocess
 import shutil
 from pathlib import Path
 from itertools import chain
+from collections import defaultdict
 from fnmatch import fnmatch
 
 import numpy as np
 import pandas as pd
 from scipy.io import loadmat
-
 import one.alf.io as alfio
 import one.alf.exceptions as alferr
 
@@ -78,58 +79,87 @@ class MesoscopeCompress(base_tasks.MesoscopeTask):
         }
         return signature
 
-    def _run(self, remove_uncompressed=False, verify_output=True, **kwargs):
+    def _run(self, remove_uncompressed=False, verify_output=True, clobber=False, **kwargs):
         """
-        Run tar compression on all tif files in the device collection
+        Run tar compression on all tif files in the device collection.
 
         Parameters
         ----------
         remove_uncompressed: bool
-            Whether to remove the original, uncompressed data. Default is False
+            Whether to remove the original, uncompressed data. Default is False.
         verify_output: bool
-            Whether to check that the compressed tar file can be uncompressed without errors. Default is True.
+            Whether to check that the compressed tar file can be uncompressed without errors.
+            Default is True.
 
         Returns
         -------
         list of pathlib.Path
-            Path to compressed tar file
+            Path to compressed tar file.
         """
-        in_dir = self.session_path.joinpath(self.device_collection or '')
-        outfile = self.session_path.joinpath(*filter(None, reversed(self.output_files[0][:2])))
-        infiles = list(chain(*map(lambda x: in_dir.glob(x[0]), self.input_files)))  # glob for all input patterns
-        if not infiles:
-            _logger.info('No image files found; returning')
-            return []
+        outfiles = []  # should be one per raw_imaging_data folder
+        input_files = defaultdict(list)
+        for file, in_dir, _ in self.input_files:
+            input_files[self.session_path.joinpath(in_dir)].append(file)
 
-        uncompressed_size = sum(x.stat().st_size for x in infiles)
-        _logger.info('Compressing %i files', len(infiles))
-        cmd = 'tar -I lbzip2 -cvf "{output}" "{input}"'.format(
-            output=outfile.relative_to(in_dir), input='" "'.join(str(x.relative_to(in_dir)) for x in infiles))
-        _logger.debug(cmd)
-        process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=in_dir)
-        info, error = process.communicate()
-        assert process.returncode == 0, f'compression failed: {error}'
+        for in_dir, files in input_files.items():
+            outfile = in_dir / self.output_files[0][0]
+            if outfile.exists() and not clobber:
+                _logger.info('%s already exists; skipping...', outfile.relative_to(self.session_path))
+                continue
+            # glob for all input patterns
+            infiles = list(chain(*map(lambda x: in_dir.glob(x), files)))
+            if not infiles:
+                _logger.info('No image files found in %s', in_dir.relative_to(self.session_path))
+                continue
 
-        # Check the output
-        assert outfile.exists(), 'output file missing'
-        compressed_size = outfile.stat().st_size
-        _logger.info('Compression ratio = %.3f, saving %.2f pct (%.2f MB)',
-                     uncompressed_size / compressed_size,
-                     round((1 - (compressed_size / uncompressed_size)) * 10000) / 100,
-                     (uncompressed_size - compressed_size) / 1024 / 1024)
+            _logger.debug(
+                f'Input files:\n\t%s', '\n\t'.join(map(Path.as_posix, (x.relative_to(self.session_path) for x in infiles)))
+            )
 
-        if verify_output:
-            cmd = f'tar -tzf "{outfile.relative_to(in_dir)}"'
+            uncompressed_size = sum(x.stat().st_size for x in infiles)
+            _logger.info('Compressing %i file(s)', len(infiles))
+            cmd = 'tar -cjvf "{output}" "{input}"'.format(
+                output=outfile.relative_to(in_dir), input='" "'.join(str(x.relative_to(in_dir)) for x in infiles))
+            _logger.debug(cmd)
             process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=in_dir)
             info, error = process.communicate()
-            assert process.returncode == 0, f'failed to read compressed file: {error}'
-            # TODO Assert number of files in tar match input files
+            assert process.returncode == 0, f'compression failed: {error}'
 
-        if remove_uncompressed:
-            for file in infiles:
-                file.unlink()
+            # Check the output
+            assert outfile.exists(), 'output file missing'
+            outfiles.append(outfile)
+            compressed_size = outfile.stat().st_size
+            assert compressed_size > 1024, 'Compressed file <1KB'
+            _logger.info('Compression ratio = %.3f, saving %.2f pct (%.2f MB)',
+                         uncompressed_size / compressed_size,
+                         round((1 - (compressed_size / uncompressed_size)) * 10000) / 100,
+                         (uncompressed_size - compressed_size) / 1024 / 1024)
 
-        return [outfile]
+            if verify_output:
+                # Test bzip
+                cmd = f'bzip2 -tv {outfile.relative_to(in_dir)}'
+                process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=in_dir)
+                info, error = process.communicate()
+                assert process.returncode == 0, f'bzip compression test failed: {error}'
+                # Decompress bzip
+                cmd = f'bunzip2 -k {outfile.relative_to(in_dir)}'
+                process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=in_dir)
+                info, error = process.communicate()
+                assert process.returncode == 0 and outfile.with_suffix('.tar').exists(), f'tarball decompression failed: {error}'
+                # Check tar
+                with tarfile.open(outfile.with_suffix('.tar'), 'r') as tar:
+                    assert set(tar.getnames()) == set(x.name for x in infiles)
+                cmd = f'tar -tvWf {outfile.relative_to(in_dir).with_suffix(".tar")}'
+                process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=in_dir)
+                info, error = process.communicate()
+                assert process.returncode == 0, f'tarball compression test failed: {error}'
+
+            if remove_uncompressed:
+                _logger.info('Removing input files')
+                for file in infiles:
+                    file.unlink()
+
+        return outfiles
 
 
 class MesoscopePreprocess(base_tasks.MesoscopeTask):
@@ -241,7 +271,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         return list(suite2p_dir.parent.rglob('FOV*/*'))
 
     @staticmethod
-    def _check_meta_data(self, meta_data_all):
+    def _check_meta_data(meta_data_all):
         """
         Check that the meta data is consistent across all raw imaging folders
 
@@ -319,17 +349,17 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
 
     def _create_db(self, meta):
         """
-        Create the ops dictionary for suite2p based on metadata
+        Create the ops dictionary for suite2p based on metadata.
 
         Parameters
         ----------
         meta: dict
-            Imaging metadata
+            Imaging metadata.
 
         Returns
         -------
         dict
-            Inputs to suite2p run that deviate from default parameters
+            Inputs to suite2p run that deviate from default parameters.
         """
 
         # Currently only supporting single plane, assert that this is the case
@@ -386,7 +416,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
 
     def _run(self, run_suite2p=True, rename_files=True, use_badframes=False, **kwargs):
         """
-        Process inputs, run suite2p and make outputs alf compatible
+        Process inputs, run suite2p and make outputs alf compatible.
 
         Parameters
         ----------
@@ -401,7 +431,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         Returns
         -------
         list of pathlib.Path
-            All files created by the task
+            All files created by the task.
         """
         import suite2p
 
@@ -484,7 +514,7 @@ class MesoscopeSync(base_tasks.MesoscopeTask):
 
     def _run(self):
         """
-        Extract the imaging times for all FOVs
+        Extract the imaging times for all FOVs.
 
         Returns
         -------
