@@ -2,15 +2,12 @@
 import logging
 from pathlib import Path
 
-import one.alf.io as alfio
-import one.alf.exceptions as alferr
 from one.webclient import no_cache
 from iblutil.util import flatten
 
 from ibllib.pipes.tasks import Task
 import ibllib.io.session_params as sess_params
 from ibllib.qc.base import sign_off_dict, SIGN_OFF_CATEGORIES
-from ibllib.io.extractors import mesoscope
 from ibllib.io.raw_daq_loaders import load_timeline_sync_and_chmap
 
 _logger = logging.getLogger(__name__)

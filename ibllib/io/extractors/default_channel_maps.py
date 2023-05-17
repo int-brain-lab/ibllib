@@ -77,6 +77,7 @@ def all_default_labels():
         The channel names present throughout all default channel maps.
     """
     keys = set()
+
     def _iter_map(d):
         for k, v in d.items():
             if isinstance(v, dict):

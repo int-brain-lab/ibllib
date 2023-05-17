@@ -675,7 +675,7 @@ class TestRegisterRawDataTask(unittest.TestCase):
 
         task = RegisterRawDataTask(self.session_path, one=self.one)
         with mock.patch.object(self.one.alyx, 'rest') as rest, \
-            mock.patch.object(self.one, 'path2eid', return_value=str(uuid4())):
+                mock.patch.object(self.one, 'path2eid', return_value=str(uuid4())):
             task.register_snapshots(collection=['', f'{collection}*'])
             self.assertEqual(4, rest.call_count)
             files = []

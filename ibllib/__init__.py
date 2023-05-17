@@ -12,13 +12,8 @@ warnings.filterwarnings('always', category=DeprecationWarning, module='ibllib')
 USE_LOGGING = True
 #%(asctime)s,%(msecs)d
 if USE_LOGGING:
-    try:  # TODO Remove after release of iblutil v1.4
-        from iblutil.util import get_logger
-        get_logger(name='ibllib')
-        warnings.warn('Please run `pip install -U iblutil` to update to v1.4', category=DeprecationWarning)
-    except ImportError:
-        from iblutil.util import setup_logger
-        setup_logger(name='ibllib')
+    from iblutil.util import setup_logger
+    setup_logger(name='ibllib', level=logging.INFO)
 else:
     # deactivate all log calls for use as a library
     logging.getLogger('ibllib').addHandler(logging.NullHandler())

@@ -70,6 +70,7 @@ class MesoscopeCompress(base_tasks.MesoscopeTask):
 
     priority = 90
     job_size = 'large'
+    _log_level = None
 
     @property
     def signature(self):
@@ -79,7 +80,17 @@ class MesoscopeCompress(base_tasks.MesoscopeTask):
         }
         return signature
 
-    def _run(self, remove_uncompressed=False, verify_output=True, clobber=False, **kwargs):
+    def setUp(self, **kwargs):
+        """Run at higher log level"""
+        self._log_level = _logger.level
+        _logger.setLevel(logging.DEBUG)
+        return super().setUp(**kwargs)
+
+    def tearDown(self):
+        _logger.setLevel(self._log_level or logging.INFO)
+        return super().tearDown()
+
+    def _run(self, remove_uncompressed=True, verify_output=True, clobber=False, **kwargs):
         """
         Run tar compression on all tif files in the device collection.
 
@@ -113,7 +124,7 @@ class MesoscopeCompress(base_tasks.MesoscopeTask):
                 continue
 
             _logger.debug(
-                f'Input files:\n\t%s', '\n\t'.join(map(Path.as_posix, (x.relative_to(self.session_path) for x in infiles)))
+                'Input files:\n\t%s', '\n\t'.join(map(Path.as_posix, (x.relative_to(self.session_path) for x in infiles)))
             )
 
             uncompressed_size = sum(x.stat().st_size for x in infiles)
@@ -152,23 +163,8 @@ class MesoscopeCompress(base_tasks.MesoscopeTask):
                 compressed_files = set(x.split()[-1] for x in filter(None, info.decode().split('\n')))
                 assert compressed_files == set(x.name for x in infiles)
 
-                # # Decompress bzip (same as above but more cumbersome)
-                # cmd = f'bunzip2 -k {outfile.relative_to(in_dir)}'
-                # process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=in_dir)
-                # info, error = process.communicate()
-                # assert process.returncode == 0 and outfile.with_name(outfile.stem).exists(), f'tarball decompression failed: {error}'
-                # # Check tar
-                # with tarfile.open(outfile.with_name(outfile.stem), 'r') as tar:
-                #     assert set(tar.getnames()) == set(x.name for x in infiles)
-                # cmd = f'tar -tvf {outfile.relative_to(in_dir).with_name(outfile.stem)}'
-                # process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=in_dir)
-                # info, error = process.communicate()
-                # assert process.returncode == 0, f'tarball compression test failed: {error}'
-                # if outfile.with_name(outfile.stem).exists():
-                #     outfile.with_name(outfile.stem).unlink()
-
             if remove_uncompressed:
-                _logger.info('Removing input files')
+                _logger.info(f'Removing input files for {in_dir.relative_to(self.session_path)}')
                 for file in infiles:
                     file.unlink()
 
@@ -310,8 +306,8 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
             if meta != meta_data_all[0]:
                 for k, v in meta_data_all[0].items():
                     if not v == meta[k]:
-                        _logger.warning(f"Mismatch in meta data between raw_imaging_data folders for key {k}. "
-                                        f"Using meta_data from first folder!")
+                        _logger.warning(f'Mismatch in meta data between raw_imaging_data folders for key {k}. '
+                                        f'Using meta_data from first folder!')
             else:
                 _logger.info('Meta data is consistent across all raw imaging folders')
                 pass
