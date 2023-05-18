@@ -378,6 +378,25 @@ class ChoiceWorldTrialsTimeline(ChoiceWorldTrialsNidq):
                                              for fn in filter(None, extractor.save_names)]
         return signature
 
+    @staticmethod
+    def _spacer_support(settings):
+        """
+        Spacer support was introduced in v7.1 for iblrig v7 and v8.0.1 in v8.
+
+        Parameters
+        ----------
+        settings : dict
+            The task settings dict.
+
+        Returns
+        -------
+        bool
+            True if task spacers are to be expected.
+        """
+        v = parse_version
+        version = v(settings.get('IBLRIG_VERSION_TAG'))
+        return version not in (v('100.0.0'), v('8.0.0')) and version >= v('7.1.0')
+
     def _extract_behaviour(self):
         """Extract the Bpod trials data and Timeline acquired signals."""
         # First determine the extractor from the task protocol
@@ -387,7 +406,7 @@ class ChoiceWorldTrialsTimeline(ChoiceWorldTrialsNidq):
 
         trials = TimelineTrials(self.session_path, bpod_trials=bpod_trials)
         save_path = self.session_path / self.output_collection
-        if extractor.settings.get('IBLRIG_VERSION_TAG') == '100.0.0':
+        if not self._spacer_support(extractor.settings):
             _logger.warning('Protocol spacers not supported; setting protocol_number to None')
             self.protocol_number = None
         dsets, out_files = trials.extract(
