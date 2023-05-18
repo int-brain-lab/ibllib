@@ -168,7 +168,7 @@ class PassiveTask(base_tasks.BehaviourTask):
 
 
 class PassiveTaskTimeline(base_tasks.BehaviourTask, base_tasks.MesoscopeTask):
-    """TODO should be mesoscope invarient, using wiring file"""
+    """TODO should be mesoscope invariant, using wiring file"""
     priority = 90
     job_size = 'small'
 
@@ -480,15 +480,14 @@ class TrainingStatus(base_tasks.BehaviourTask):
         if df is not None:
             training_status.make_plots(self.session_path, self.one, df=df, save=True, upload=upload)
             # Update status map in JSON field of subjects endpoint
-            # TODO This requires exposing the json field of the subjects endpoint
             if self.one and not self.one.offline:
                 _logger.debug('Updating JSON field of subjects endpoint')
-                try:
-                    status = df.set_index('date')['training_status'].drop_duplicates(keep='first').to_dict()
-                    data = {'trained_criteria': {v.replace(' ', '_'): k for k, v in status.items()}}
-                    _, subject, *_ = session_path_parts(self.session_path)
-                    self.one.alyx.json_field_update('subjects', subject, data=data)
-                except KeyError:
-                    _logger.error('Failed to update subject training status on Alyx: json field not available')
+                status = (df.set_index('date')[['training_status', 'session_path']].drop_duplicates(
+                    subset='training_status', keep='first').to_dict())
+                date, sess = status.items()
+                data = {'trained_criteria': {v.replace(' ', '_'): (k, self.one.path2eid(sess[1][k])) for k, v
+                                             in date[1].items()}}
+                _, subject, *_ = session_path_parts(self.session_path)
+                self.one.alyx.json_field_update('subjects', subject, data=data)
         output_files = []
         return output_files

@@ -1,17 +1,19 @@
-"""Functions to compute and query the training status during the IBL task."""
-from one.api import ONE
-from one.alf.exceptions import ALFObjectNotFound
+import logging
 import datetime
 import re
+from enum import IntFlag, auto, unique
+
 import numpy as np
-from iblutil.util import Bunch
-import brainbox.behavior.pyschofit as psy
-import logging
 import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 from scipy.stats import bootstrap
+from iblutil.util import Bunch
+from one.api import ONE
+from one.alf.exceptions import ALFObjectNotFound
+
+import brainbox.behavior.pyschofit as psy
 
 _logger = logging.getLogger('ibllib')
 
@@ -22,6 +24,46 @@ TRIALS_KEYS = ['contrastLeft',
                'choice',
                'response_times',
                'stimOn_times']
+
+
+@unique
+class TrainingStatus(IntFlag):
+    """Standard IBL training criteria.
+
+    Enumeration allows for comparisons between training status.
+
+    Examples
+    --------
+    >>> status = 'ready4delay'
+    ... assert TrainingStatus[status.upper()] is TrainingStatus.READY4DELAY
+    ... assert TrainingStatus[status.upper()] not in TrainingStatus.FAILED, 'Subject failed training'
+    ... assert TrainingStatus[status.upper()] >= TrainingStatus.TRAINED, 'Subject untrained'
+    ... assert TrainingStatus[status.upper()] > TrainingStatus.IN_TRAINING, 'Subject untrained'
+    ... assert TrainingStatus[status.upper()] in ~TrainingStatus.FAILED, 'Subject untrained'
+    ... assert TrainingStatus[status.upper()] in TrainingStatus.TRAINED ^ TrainingStatus.READY
+
+    # Get the next training status
+    >>> next(member for member in sorted(TrainingStatus) if member > TrainingStatus[status.upper()])
+    <TrainingStatus.READY4RECORDING: 128>
+
+    Notes
+    -----
+    - ~TrainingStatus.TRAINED means any status but trained 1a or trained 1b.
+    - A subject may acheive both TRAINED_1A and TRAINED_1B within a single session, therefore it
+     is possible to have skipped the TRAINED_1A session status.
+    """
+    UNTRAINABLE = auto()
+    UNBIASABLE = auto()
+    IN_TRAINING = auto()
+    TRAINED_1A = auto()
+    TRAINED_1B = auto()
+    READY4EPHYSRIG = auto()
+    READY4DELAY = auto()
+    READY4RECORDING = auto()
+    # Compound training statuses for convenience
+    FAILED = UNTRAINABLE | UNBIASABLE
+    READY = READY4EPHYSRIG | READY4DELAY | READY4RECORDING
+    TRAINED = TRAINED_1A | TRAINED_1B
 
 
 def get_lab_training_status(lab, date=None, details=True, one=None):
@@ -767,8 +809,8 @@ def plot_reaction_time_over_trials(trials, stim_on_type='stimOn_times', ax=None,
     return fig, ax
 
 
-def query_criterion(subject, status, from_status=None, one=None):
-    """
+def query_criterion(subject, status, from_status=None, one=None, validate=True):
+    """Get the session for which a given training criterion was met.
 
     Parameters
     ----------
@@ -780,6 +822,9 @@ def query_criterion(subject, status, from_status=None, one=None):
         Count number of sessions and days from reaching `from_status` to `status`.
     one : one.api.OneAlyx, optional
         An instance of ONE.
+    validate : bool
+        If true, check if status in TrainingStatus enumeration. Set to false for non-standard
+        training pipelines.
 
     Returns
     -------
@@ -790,12 +835,22 @@ def query_criterion(subject, status, from_status=None, one=None):
     int
         The number of days it tool to reach `status` (optionally from reaching `from_status`).
     """
+    if validate:
+        status = status.lower().replace(' ', '_')
+        try:
+            status = TrainingStatus[status.upper().replace(' ', '_')].name.lower()
+        except KeyError as ex:
+            raise ValueError(
+                f'Unknown status "{status}". For non-standard training protocols set validate=False'
+            ) from ex
     one = one or ONE()
     subject_json = one.alyx.rest('subjects', 'read', id=subject)['json']
     if not (criteria := subject_json.get('trained_criteria')) or status not in criteria:
         return None, None, None
-    to_date = criteria[status]
-    from_date = criteria.get(from_status)
+    to_date, eid = criteria[status]
+    from_date, _ = criteria.get(from_status, (None, None))
     eids, det = one.search(subject=subject, date_range=[from_date, to_date], details=True)
-    date_range = list(map(datetime.date.fromisoformat, (det[0], det[-1])))
-    return eids[-1], len(eids), (date_range[1] - date_range[0]).days
+    if len(eids) == 0:
+        return eid, None, None
+    delta_date = det[0]['date'] - det[-1]['date']
+    return eid, len(eids), delta_date.days

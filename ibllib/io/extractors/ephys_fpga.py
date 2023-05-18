@@ -703,7 +703,7 @@ class FpgaTrials(extractors_base.BaseExtractor):
     # TODO Modify these attributes based on bpod_trials keys
     save_names = ('_ibl_trials.intervals_bpod.npy',
                   '_ibl_trials.goCueTrigger_times.npy', None, None, None, None, None, None, None,
-                  '_ibl_trials.stimOff_times.npy', None, None, None, None,
+                  '_ibl_trials.stimOff_times.npy', None, None, None, '_ibl_trials.quiescencePeriod.npy',
                   '_ibl_trials.table.pqt', '_ibl_wheel.timestamps.npy',
                   '_ibl_wheel.position.npy', '_ibl_wheelMoves.intervals.npy',
                   '_ibl_wheelMoves.peakAmplitude.npy')

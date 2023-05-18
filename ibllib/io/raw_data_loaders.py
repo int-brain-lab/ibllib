@@ -323,14 +323,13 @@ def _read_settings_json_compatibility_enforced(settings):
             md = json.load(js)
     if 'IS_MOCK' not in md:
         md['IS_MOCK'] = False
-    if 'IBLRIG_VERSION_TAG' not in md:
-        md['IBLRIG_VERSION_TAG'] = ''
-    if not md['IBLRIG_VERSION_TAG']:
-        _logger.warning("You appear to be on an untagged version...")
-        return md
+    if 'IBLRIG_VERSION_TAG' not in md.keys():
+        md['IBLRIG_VERSION_TAG'] = md.get('IBLRIG_VERSION', '')
     # 2018-12-05 Version 3.2.3 fixes (permanent fixes in IBL_RIG from 3.2.4 on)
-    if parse_version(md.get('IBLRIG_VERSION_TAG') or '3.2.3') <= parse_version('3.2.3'):
-        if 'LAST_TRIAL_DATA' in md:
+    if md['IBLRIG_VERSION_TAG'] == '':
+        pass
+    elif parse_version(md.get('IBLRIG_VERSION_TAG')) <= parse_version('3.2.3'):
+        if 'LAST_TRIAL_DATA' in md.keys():
             md.pop('LAST_TRIAL_DATA')
         if 'weighings' in md['PYBPOD_SUBJECT_EXTRA'].keys():
             md['PYBPOD_SUBJECT_EXTRA'].pop('weighings')
