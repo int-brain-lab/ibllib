@@ -6,6 +6,7 @@ import one.alf.io as alfio
 from one.alf.files import session_path_parts
 import matplotlib.pyplot as plt
 from neurodsp.utils import falls
+from pkg_resources import parse_version
 
 from ibllib.plots.misc import squares, vertical_lines
 from ibllib.io.raw_daq_loaders import (extract_sync_timeline, timeline_get_channel,
@@ -17,6 +18,29 @@ from ibllib.io.extractors.camera import attribute_times
 from ibllib.io.extractors.ephys_fpga import _assign_events_bpod
 
 _logger = logging.getLogger(__name__)
+
+
+def patch_imaging_meta(meta: dict) -> dict:
+    """
+    Patch imaging meta data for compatibility across versions.
+
+    A copy of the dict is NOT returned.
+
+    Parameters
+    ----------
+    dict : dict
+        A folder path that contains a rawImagingData.meta file.
+
+    Returns
+    -------
+    dict
+        The loaded meta data file, updated to the most recent version.
+    """
+    # 2023-05-17 (unversioned) adds nFrames and channelSaved keys
+    if parse_version(meta.get('version') or '0.0.0') <= parse_version('0.0.0'):
+        if 'channelSaved' not in meta:
+            meta['channelSaved'] = next((x['channelIdx'] for x in meta['FOV'] if 'channelIdx' in x), [])
+    return meta
 
 
 def plot_timeline(timeline, channels=None, raw=True):
@@ -373,6 +397,7 @@ class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
         line_shifts = []
         for (tmin, tmax), collection in zip(edges, sorted(device_collection)):
             imaging_data = alfio.load_object(self.session_path / collection, 'rawImagingData')
+            imaging_data['meta'] = patch_imaging_meta(imaging_data['meta'])
             # Calculate line shifts
             _, fov_time_shifts, line_time_shifts = self.get_timeshifts(imaging_data['meta'])
             assert len(fov_time_shifts) == self.n_ROIs, f'unexpected number of ROIs for {collection}'

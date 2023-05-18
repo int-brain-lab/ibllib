@@ -282,36 +282,38 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         return list(suite2p_dir.parent.rglob('FOV*/*'))
 
     @staticmethod
-    def _check_meta_data(meta_data_all):
+    def _check_meta_data(meta_data_all: list) -> dict:
         """
-        Check that the meta data is consistent across all raw imaging folders
+        Check that the meta data is consistent across all raw imaging folders.
 
         Parameters
         ----------
         meta_data_all: list of dicts
-            List of metadata dictionaries to be checked for consistency
+            List of metadata dictionaries to be checked for consistency.
 
         Returns
         -------
         dict
-            Single, consolidated dictionary containing metadata
+            Single, consolidated dictionary containing metadata.
         """
-        # Prepare by removing the things we don't expect to match
-        for meta_data in meta_data_all:
-            meta_data.pop('acquisitionStartTime')
-            meta_data['rawScanImageMeta'].pop('ImageDescription')
-            meta_data['rawScanImageMeta'].pop('Software')
+        # Ignore the things we don't expect to match
+        ignore = ('acquisitionStartTime', 'nFrames')
+        ignore_sub = {'rawScanImageMeta': ('ImageDescription', 'Software')}
 
+        def equal_dicts(a, b, skip=None):
+            ka = set(a).difference(skip or ())
+            kb = set(b).difference(skip or ())
+            return ka == kb and all(a[key] == b[key] for key in ka)
+
+        # Compare each dict with the first one in the list
         for i, meta in enumerate(meta_data_all[1:]):
-            if meta != meta_data_all[0]:
-                for k, v in meta_data_all[0].items():
-                    if not v == meta[k]:
+            if meta != meta_data_all[0]:  # compare entire object first
+                for k, v in meta_data_all[0].items():  # check key by key
+                    if not (equal_dicts(v, meta[k], ignore_sub[k])  # compare sub-dicts...
+                            if k in ignore_sub else  # ... if we have keys to ignore in test
+                            not (k in ignore or v == meta[k])):
                         _logger.warning(f'Mismatch in meta data between raw_imaging_data folders for key {k}. '
                                         f'Using meta_data from first folder!')
-            else:
-                _logger.info('Meta data is consistent across all raw imaging folders')
-                pass
-
         return meta_data_all[0]
 
     @staticmethod
@@ -389,10 +391,10 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         pixSizeY = nXnYnZ[:, 1] / sH
         dx = np.round(cXY[:, 0] * pixSizeX).astype(dtype=np.int32)
         dy = np.round(cXY[:, 1] * pixSizeY).astype(dtype=np.int32)
-        nchannels = len(meta['FOV'][0]['channelIdx']) if isinstance(meta['FOV'][0]['channelIdx'], list) else 1
+        nchannels = len(meta['channelSaved']) if isinstance(meta['channelSaved'], list) else 1
 
         db = {
-            'data_path': sorted([str(s) for s in self.session_path.glob(f'{self.device_collection}')]),
+            'data_path': sorted(map(str, self.session_path.glob(f'{self.device_collection}'))),
             'save_path0': str(self.session_path.joinpath('alf')),
             'fast_disk': '',  # TODO
             'look_one_level_down': False,  # don't look in the children folders as that is where the reference data is
@@ -417,8 +419,8 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
             'fs': meta['scanImageParams']['hRoiManager']['scanVolumeRate'],
             'lines': [list(np.asarray(fov['lineIdx']) - 1) for fov in meta['FOV']],  # subtracting 1 to make 0-based
             'tau': 1.5,  # 1.5 is recommended for GCaMP6s TODO: potential deduct the GCamp used from Alyx mouse line?
-            'functional_chan': 1,  # for now, eventually find(ismember(meta.FOV(1).channelIdx == meta.channelID.green))
-            'align_by_chan': 1,  # for now, eventually find(ismember(meta.FOV(1).channelIdx == meta.channelID.red))
+            'functional_chan': 1,  # for now, eventually find(ismember(meta.channelSaved == meta.channelID.green))
+            'align_by_chan': 1,  # for now, eventually find(ismember(meta.channelSaved == meta.channelID.red))
             'dx': dx,
             'dy': dy
         }
@@ -448,8 +450,8 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
 
         """ Metadata and parameters """
         # Load metadata and make sure all metadata is consistent across FOVs
-        rawImagingData = [alfio.load_object(self.session_path.joinpath(f[1]), 'rawImagingData')['meta']
-                          for f in self.input_files if f[0] == '_ibl_rawImagingData.meta.json']
+        meta_files = sorted(self.session_path.glob(f'{self.device_collection}/*rawImagingData.meta.*'))
+        rawImagingData = [mesoscope.patch_imaging_meta(alfio.load_file_content(filepath)) for filepath in meta_files]
         if len(rawImagingData) > 1:
             meta = self._check_meta_data(rawImagingData)
         else:
@@ -546,6 +548,7 @@ class MesoscopeSync(base_tasks.MesoscopeTask):
         # Load first meta data file to determine the number of FOVs
         # Changing FOV between imaging bouts is not supported currently!
         self.rawImagingData = alfio.load_object(self.session_path / next(iter(collections)), 'rawImagingData')
+        self.rawImagingData['meta'] = mesoscope.patch_imaging_meta(self.rawImagingData['meta'])
         n_ROIs = len(self.rawImagingData['meta']['FOV'])
         sync, chmap = self.load_sync()  # Extract sync data from raw DAQ data
         mesosync = mesoscope.MesoscopeSyncTimeline(self.session_path, n_ROIs)
