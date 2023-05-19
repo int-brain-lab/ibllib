@@ -1,3 +1,8 @@
+## Release Notes 2.23
+### Release Notes 2.23.0 2023-05-19
+- quiescence period extraction
+- ONEv2 requirement
+
 ## Release Notes 2.22
 
 ### Release Notes 2.22.3 2023-05-03
