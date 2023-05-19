@@ -649,7 +649,7 @@ class PhasePosQuiescence(BaseBpodTrialsExtractor):
     """Extracts stimulus phase, position and quiescence from Bpod data.
     For extraction of pre-generated events, use the ProbaContrasts extractor instead.
     """
-    save_names = (None, None, None)
+    save_names = (None, None, '_ibl_trials.quiescencePeriod.npy')
     var_names = ('phase', 'position', 'quiescence')
 
     def _extract(self, **kwargs):

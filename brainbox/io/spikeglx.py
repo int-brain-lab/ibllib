@@ -7,7 +7,7 @@ import string
 import random
 
 import numpy as np
-from one.alf.io import remove_uuid_file
+from one.alf.files import remove_uuid_string
 
 import spikeglx
 
@@ -46,13 +46,13 @@ def extract_waveforms(ephys_file, ts, ch, t=2.0, sr=30000, n_ch_probe=385, car=T
     1) Extract all the waveforms for unit1 with and without CAR.
         >>> import numpy as np
         >>> import brainbox as bb
-        >>> import alf.io as aio
+        >>> import one.alf.io as alfio
         >>> import ibllib.ephys.spikes as e_spks
         (*Note, if there is no 'alf' directory, make 'alf' directory from 'ks2' output directory):
         >>> e_spks.ks2_to_alf(path_to_ks_out, path_to_alf_out)
         # Get a clusters bunch and a units bunch from a spikes bunch from an alf directory.
-        >>> clstrs_b = aio.load_object(path_to_alf_out, 'clusters')
-        >>> spks_b = aio.load_object(path_to_alf_out, 'spikes')
+        >>> clstrs_b = alfio.load_object(path_to_alf_out, 'clusters')
+        >>> spks_b = alfio.load_object(path_to_alf_out, 'spikes')
         >>> units_b = bb.processing.get_units_bunch(spks, ['times'])
         # Get the timestamps and 20 channels around the max amp channel for unit1, and extract the
         # two sets of waveforms.
@@ -237,8 +237,7 @@ class Streamer(spikeglx.Reader):
                     raise e
                 _logger.warning(f'Failed to download chunk {first_chunk} to {last_chunk}, retrying')
                 time.sleep(1)
-        cbin_local_path = remove_uuid_file(cbin_local_path)
-        cbin_local_path_renamed = cbin_local_path.with_suffix('.stream.cbin')
+        cbin_local_path_renamed = remove_uuid_string(cbin_local_path).with_suffix('.stream.cbin')
         cbin_local_path.replace(cbin_local_path_renamed)
         assert cbin_local_path_renamed.exists()
 

@@ -210,13 +210,9 @@ class TestRegistration(unittest.TestCase):
             self.rev = self.one.alyx.rest('revisions', 'read', id=self.revision)
         except HTTPError:
             self.rev = self.one.alyx.rest('revisions', 'create', data={'name': self.revision})
-        # Create a tag if doesn't already exist
-        try:
-            self.tag = next(x for x in self.one.alyx.rest('tags', 'list')
-                            if x['name'] == 'test_tag')
-        except StopIteration:
-            self.tag = self.one.alyx.rest('tags', 'create',
-                                          data={'name': 'test_tag', 'protected': True})
+        # Create a new tag
+        tag_data = {'name': f'test_tag_{np.random.randint(0, 1e3)}', 'protected': True}
+        self.tag = self.one.alyx.rest('tags', 'create', data=tag_data)
 
     def test_registration_datasets(self):
         # registers a single file
@@ -252,7 +248,7 @@ class TestRegistration(unittest.TestCase):
         dsets = self.one.alyx.rest('datasets', 'list', session=ses['url'][-36:])
         for d in dsets:
             self.one.alyx.rest('datasets', 'partial_update',
-                               id=d['url'][-36:], data={'tags': ['test_tag']})
+                               id=d['url'][-36:], data={'tags': [self.tag['name']]})
 
         # Test registering with a revision already in the file path, should use this rather than create one with today's date
         flist = list(self.rev_path.glob('*.npy'))
@@ -265,7 +261,7 @@ class TestRegistration(unittest.TestCase):
         dsets = self.one.alyx.rest('datasets', 'list', session=ses['url'][-36:])
         for d in dsets:
             self.one.alyx.rest('datasets', 'partial_update',
-                               id=d['url'][-36:], data={'tags': ['test_tag']})
+                               id=d['url'][-36:], data={'tags': [self.tag['name']]})
 
         # Register again with revision in file path, it should register to self.revision + a
         flist = list(self.rev_path.glob('*.npy'))
@@ -290,7 +286,7 @@ class TestRegistration(unittest.TestCase):
         dsets = self.one.alyx.rest('datasets', 'list', session=ses['url'][-36:], no_cache=True)
         for d in dsets:
             self.one.alyx.rest('datasets', 'partial_update',
-                               id=d['url'][-36:], data={'tags': ['test_tag']})
+                               id=d['url'][-36:], data={'tags': [self.tag['name']]})
 
         # Same day revision
         # Need to remake the original files
