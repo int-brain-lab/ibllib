@@ -447,16 +447,28 @@ class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
             # Split using Exp/BlockStart and Exp/BlockEnd times
             _, subject, date, _ = session_path_parts(self.session_path)
             pattern = rf'(Exp|Block)%s\s{subject}\s{date.replace("-", "")}\s\d+'
-            UDP_start = events.time[events['info'].str.match(pattern % 'Start')]
-            starts = frame_times[[np.where(frame_times >= t)[0][0] for t in UDP_start]]
-            UDP_end = events.time[events['info'].str.match(pattern % 'End')]
-            if UDP_end.any():
-                ends = frame_times[[np.where(frame_times >= t)[0][0] for t in UDP_end]]
+
+            # Get start times
+            UDP_start = events[events['info'].str.match(pattern % 'Start')]
+            if len(UDP_start) > 1 and UDP_start.loc[0, 'info'].startswith('Exp'):
+                # Use ExpStart instead of first bout start
+                UDP_start = UDP_start.copy().drop(1)
+            # Use ExpStart/End instead of first/last BlockStart/End
+            starts = frame_times[[np.where(frame_times >= t)[0][0] for t in UDP_start.time]]
+
+            # Get end times
+            UDP_end = events[events['info'].str.match(pattern % 'End')]
+            if len(UDP_end) > 1 and UDP_end['info'].values[-1].startswith('Exp'):
+                # Use last BlockEnd instead of ExpEnd
+                UDP_end = UDP_end.copy().drop(UDP_end.index[-1])
+            if not UDP_end.empty:
+                ends = frame_times[[np.where(frame_times <= t)[0][-1] for t in UDP_end.time]]
             else:
                 # Get index of last frame to occur within a second of the previous frame
                 consec = np.r_[np.diff(frame_times) > min_gap, True]
                 idx = [np.where(np.logical_and(frame_times > t, consec))[0][0] for t in starts]
                 ends = frame_times[idx]
+
         # Remove any missing imaging bout collections
         edges = np.c_[starts, ends]
         if collections:
