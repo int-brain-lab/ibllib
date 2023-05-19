@@ -451,6 +451,9 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         """ Metadata and parameters """
         # Load metadata and make sure all metadata is consistent across FOVs
         meta_files = sorted(self.session_path.glob(f'{self.device_collection}/*rawImagingData.meta.*'))
+        collections = set(f.parts[-2] for f in meta_files)
+        # Check there is exactly 1 meta file per collection
+        assert len(meta_files) == len(list(self.session_path.glob(self.device_collection))) == len(collections)
         rawImagingData = [mesoscope.patch_imaging_meta(alfio.load_file_content(filepath)) for filepath in meta_files]
         if len(rawImagingData) > 1:
             meta = self._check_meta_data(rawImagingData)
