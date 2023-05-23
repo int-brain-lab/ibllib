@@ -737,7 +737,7 @@ class TestCameraExtractors(unittest.TestCase):
 
         # Taking first after should exclude many pulses
         matches = camera.attribute_times(tsa, tsb, take='after')
-        missing = [0,  4,  5,  7,  8, 10, 11, 13, 14, 16, 17, 19, 20,
+        missing = [0, 4, 5, 7, 8, 10, 11, 13, 14, 16, 17, 19, 20,
                    22, 23, 25, 26, 28, 29, 31, 32, 34, 35, 37, 40, 43]
         expected[missing] = -1
         np.testing.assert_array_equal(matches, expected)

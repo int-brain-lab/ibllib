@@ -11,7 +11,6 @@ import json
 import numpy as np
 import numpy.testing
 from one.api import ONE
-import one.alf.io as alfio
 from iblutil.io import params
 import yaml
 
