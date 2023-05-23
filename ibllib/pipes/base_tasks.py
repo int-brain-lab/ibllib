@@ -281,8 +281,7 @@ class RegisterRawDataTask(DynamicTask):
             The newly registered Alyx notes.
         """
         collection = getattr(self, 'device_collection', None) if collection is None else collection
-        if collection is None:
-            return
+        collection = collection or ''  # If not defined, use no collection
         if collection and '*' in collection:
             collection = [p.name for p in self.session_path.glob(collection)]
             # Check whether folders on disk contain '*'; this is to stop an infinite recursion

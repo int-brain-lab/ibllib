@@ -53,8 +53,6 @@ class TestRegisterRawDataTask(unittest.TestCase):
         task.input_files = task.output_files = []
         task.rename_files()  # Returns without raising
         task.input_files = [('foo.*', collection, True), ]
-        with self.assertRaises(AssertionError):
-            task.rename_files()
         task.output_files = [('_ns_DAQdata.raw.bar', collection, True), ]
         self.session_path.joinpath(collection).mkdir()
         self.session_path.joinpath(collection, 'foo.bar').touch()
@@ -62,6 +60,10 @@ class TestRegisterRawDataTask(unittest.TestCase):
         self.assertTrue(self.session_path.joinpath(collection, '_ns_DAQdata.raw.bar').exists())
         self.assertFalse(self.session_path.joinpath(collection, 'foo.bar').exists())
         with self.assertRaises(FileNotFoundError):
+            task.rename_files()
+        # Check asserts number of inputs == number of outputs
+        task.output_files.append(('_ns_DAQdata.baz.bar', collection, True),)
+        with self.assertRaises(AssertionError):
             task.rename_files()
 
     @classmethod

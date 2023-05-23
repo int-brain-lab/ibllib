@@ -594,7 +594,10 @@ class TestRawDaqLoaders(unittest.TestCase):
             {'name': 'neuralFrames', 'arrayColumn': 2, 'measurement': 'EdgeCount', 'daqChannelID': 'ctr0'},
             {'name': 'rotaryEncoder', 'arrayColumn': 3, 'measurement': 'Position', 'daqChannelID': 'ctr1'}
         ]}
-        alfio.save_object_npy(self.tmpdir.name, self.timeline, 'DAQdata', namespace='timeline')
+        # FIXME Because of non-standard ALF naming we cannot use save_object_npy for this purpose
+        # alfio.save_object_npy(self.tmpdir.name, self.timeline, 'DAQ data', namespace='timeline')
+        for k, v in self.timeline.items():
+            np.save(self.tmpdir.name + f'/_timeline_DAQdata.{k}.npy', v)
         with open(self.tmpdir.name + '/_timeline_DAQdata.meta.json', 'w') as fp:
             json.dump(self.meta, fp)
 

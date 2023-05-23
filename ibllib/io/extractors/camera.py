@@ -496,14 +496,15 @@ def attribute_times(arr, events, tol=.1, injective=True, take='first'):
     numpy.array
         An array the same length as `events`.
     """
-    if take := take.lower() not in ('first', 'nearest', 'after'):
+    if (take := take.lower()) not in ('first', 'nearest', 'after'):
         raise ValueError('Parameter `take` must be either "first", "nearest", or "after"')
     stack = np.ma.masked_invalid(arr, copy=False)
     stack.fill_value = np.inf
     assigned = np.full(events.shape, -1, dtype=int)  # Initialize output array
+    min_tol = 0 if take == 'after' else -tol
     for i, x in enumerate(events):
         dx = stack.filled() - x
-        candidates = 0 < dx < tol if take == 'after' else np.abs(dx) < tol
+        candidates = np.logical_and(min_tol < dx, dx < tol)
         if any(candidates):  # is any value within tolerance
             idx = np.abs(dx).argmin() if take == 'nearest' else np.where(candidates)[0][0]
             assigned[i] = idx
