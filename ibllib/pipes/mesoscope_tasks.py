@@ -141,7 +141,8 @@ class MesoscopeCompress(base_tasks.MesoscopeTask):
             assert outfile.exists(), 'output file missing'
             outfiles.append(outfile)
             compressed_size = outfile.stat().st_size
-            assert compressed_size > 1024, 'Compressed file <1KB'
+            min_size = kwargs.pop('verify_min_size', 1024)
+            assert compressed_size > int(min_size), f'Compressed file < {min_size / 1024:.0f}KB'
             _logger.info('Compression ratio = %.3f, saving %.2f pct (%.2f MB)',
                          uncompressed_size / compressed_size,
                          round((1 - (compressed_size / uncompressed_size)) * 10000) / 100,

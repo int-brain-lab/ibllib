@@ -1,6 +1,7 @@
 import unittest
 import tempfile
 from pathlib import Path
+from functools import partial
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -69,6 +70,18 @@ class TestRegisterRawDataTask(unittest.TestCase):
             cls.tmpdir.cleanup()
         if cls.one and cls.eid:
             cls.one.alyx.rest('sessions', 'delete', id=cls.eid)
+
+
+class TestBehaviourTask(unittest.TestCase):
+    def test_spacer_support(self) -> None:
+        """Test for BehaviourTask._spacer_support method."""
+        to_test = [('100.0.0', False), ('8.0.0', False), ('7.1.0', True), ('8.0.1', True), ('7.2.0', True)]
+        settings = {}
+        spacer_support = partial(base_tasks.BehaviourTask._spacer_support, settings)
+        for version, expected in to_test:
+            settings['IBLRIG_VERSION_TAG'] = version
+            with self.subTest(version):
+                self.assertIs(spacer_support(), expected)
 
 
 if __name__ == '__main__':

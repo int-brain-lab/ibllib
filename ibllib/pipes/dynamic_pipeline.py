@@ -102,7 +102,7 @@ def get_acquisition_description(protocol):
             raise ValueError(f'Unknown protocol "{protocol}"')
         acquisition_description['tasks'] = [{key: {
             'collection': 'raw_behavior_data',
-            'sync_label': 'bpod', 'main': True
+            'sync_label': 'bpod', 'main': True  # FIXME: What is purpose of main key?
         }}]
     acquisition_description['version'] = '1.0.0'
     return acquisition_description

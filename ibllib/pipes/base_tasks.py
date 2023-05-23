@@ -2,6 +2,7 @@
 import logging
 from pathlib import Path
 
+from pkg_resources import parse_version
 from one.webclient import no_cache
 from iblutil.util import flatten
 
@@ -104,6 +105,25 @@ class BehaviourTask(DynamicTask):
         # If inferring the number from the experiment description, assert only one returned (or something went wrong)
         assert number is None or isinstance(number, int)
         return number
+
+    @staticmethod
+    def _spacer_support(settings):
+        """
+        Spacer support was introduced in v7.1 for iblrig v7 and v8.0.1 in v8.
+
+        Parameters
+        ----------
+        settings : dict
+            The task settings dict.
+
+        Returns
+        -------
+        bool
+            True if task spacers are to be expected.
+        """
+        v = parse_version
+        version = v(settings.get('IBLRIG_VERSION_TAG'))
+        return version not in (v('100.0.0'), v('8.0.0')) and version >= v('7.1.0')
 
 
 class VideoTask(DynamicTask):

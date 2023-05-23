@@ -346,7 +346,6 @@ class ChoiceWorldTrialsNidq(base_tasks.BehaviourTask):
                 self.status = -1
 
     def _run(self, update=True, plot_qc=True):
-        # TODO pass in protocol number for fpga trials
         dsets, out_files = self._extract_behaviour()
 
         if not self.one or self.one.offline:
@@ -377,25 +376,6 @@ class ChoiceWorldTrialsTimeline(ChoiceWorldTrialsNidq):
                 signature['output_files'] = [(fn, self.output_collection, True)
                                              for fn in filter(None, extractor.save_names)]
         return signature
-
-    @staticmethod
-    def _spacer_support(settings):
-        """
-        Spacer support was introduced in v7.1 for iblrig v7 and v8.0.1 in v8.
-
-        Parameters
-        ----------
-        settings : dict
-            The task settings dict.
-
-        Returns
-        -------
-        bool
-            True if task spacers are to be expected.
-        """
-        v = parse_version
-        version = v(settings.get('IBLRIG_VERSION_TAG'))
-        return version not in (v('100.0.0'), v('8.0.0')) and version >= v('7.1.0')
 
     def _extract_behaviour(self):
         """Extract the Bpod trials data and Timeline acquired signals."""
