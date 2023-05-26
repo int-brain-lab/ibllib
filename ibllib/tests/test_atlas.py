@@ -366,6 +366,12 @@ class TestAtlasSlicesConversion(unittest.TestCase):
         self.assertTrue(np.allclose(self.ba.bc.xyz2i(np.array([0, 0, 0]), round=False),
                                     ALLEN_CCF_LANDMARKS_MLAPDV_UM['bregma'] / 25))
 
+    def test_lookup_outside_the_brain(self):
+        xyz = [0, 0, 15687588]
+        with self.assertRaises(ValueError):
+            self.ba.get_labels(xyz)
+        self.assertEqual(self.ba.get_labels(xyz, mode='clip'), 0)
+
     def test_lookups(self):
         # the get_labels lookup returns the regions ids (not the indices !!)
         assert self.ba.get_labels([0, 0, self.ba.bc.i2z(103)]) == 304325711

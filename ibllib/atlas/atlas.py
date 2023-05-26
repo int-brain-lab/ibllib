@@ -295,6 +295,9 @@ class BrainAtlas:
         :param mapping: brain region mapping (defaults to original Allen mapping)
         :param radius_um: if not null, returns a regions ids array and an array of proportion
          of regions in a sphere of size radius around the coordinates.
+        :param mode: {‘raise’, 'clip'} determines what to do when determined index lies outside the atlas volume
+        'raise' will raise a ValueError (default)
+        'clip' will replace the index with the closest index inside the volume
         :return: n array of region ids
         """
         mapping = mapping or self.regions.default_mapping
@@ -304,7 +307,7 @@ class BrainAtlas:
             nry = int(np.ceil(radius_um / abs(self.bc.dy) / 1e6))
             nrz = int(np.ceil(radius_um / abs(self.bc.dz) / 1e6))
             nr = [nrx, nry, nrz]
-            iii = self.bc.xyz2i(xyz)
+            iii = self.bc.xyz2i(xyz, mode=mode)
             # computing the cube radius and indices is more complicated as volume indices are not
             # necessariy in ml, ap, dv order so the indices order is dynamic
             rcube = np.meshgrid(*tuple((np.arange(
