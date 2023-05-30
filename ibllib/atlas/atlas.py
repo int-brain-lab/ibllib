@@ -1077,21 +1077,25 @@ class AllenAtlas(BrainAtlas):
         else:
             ValueError("ccf_order needs to be either 'mlapdv' or 'apdvml'")
 
-    def compute_regions_volume(self):
+    def compute_regions_volume(self, cumsum=False):
         """
         Sums the number of voxels in the labels volume for each region.
         Then compute volumes for all of the levels of hierarchy in cubic mm.
+        :param: cumsum: computes the cumulative sum of the volume as per the hierarchy (defaults to False)
         :return:
         """
         nr = self.regions.id.shape[0]
         count = np.bincount(self.label.flatten(), minlength=nr)
-        self.regions.compute_hierarchy()
-        self.regions.volume = np.zeros_like(count)
-        for i in np.arange(nr):
-            if count[i] == 0:
-                continue
-            self.regions.volume[np.unique(self.regions.hierarchy[:, i])] += count[i]
-        self.regions.volume = self.regions.volume * (self.res_um / 1e3) ** 3
+        if not cumsum:
+            self.regions.volume = count * (self.res_um / 1e3) ** 3
+        else:
+            self.regions.compute_hierarchy()
+            self.regions.volume = np.zeros_like(count)
+            for i in np.arange(nr):
+                if count[i] == 0:
+                    continue
+                self.regions.volume[np.unique(self.regions.hierarchy[:, i])] += count[i]
+            self.regions.volume = self.regions.volume * (self.res_um / 1e3) ** 3
 
 
 def NeedlesAtlas(*args, **kwargs):
