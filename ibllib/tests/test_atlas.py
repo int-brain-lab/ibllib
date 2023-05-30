@@ -28,6 +28,15 @@ class TestBrainRegions(unittest.TestCase):
     def setUpClass(self):
         self.brs = BrainRegions()
 
+    def test_to_df(self):
+        df = self.brs.to_df()
+        self.assertTrue(df.shape[0] == self.brs.acronym.shape[0])
+        self.assertEqual(
+            set(['id', 'name', 'acronym', 'hexcolor', 'level', 'parent', 'order']), set(list(df.columns)))
+
+    def test_hexcolor(self):
+        assert self.brs.hexcolor.shape == (self.brs.rgb.shape[0],)
+
     def test_rgba(self):
         assert self.brs.rgba.shape == (self.brs.rgb.shape[0], 4)
 
