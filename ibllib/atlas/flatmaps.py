@@ -137,7 +137,8 @@ def swanson(filename="swanson2allen.npz"):
 
 def swanson_json(filename="swansonpaths.json"):
 
-    OLD_MD5 = ['56daa7022b5e03080d8623814cda6f38',  # old md5 of swanson json without CENT and PTLp
+    OLD_MD5 = ['97ccca2b675b28ba9b15ca8af5ba4111',  # errored map with FOTU and CUL4, 5 mixed up
+               '56daa7022b5e03080d8623814cda6f38',  # old md5 of swanson json without CENT and PTLp
                # and CUL4 split (on s3 called swansonpaths_56daa.json)
                'f848783954883c606ca390ceda9e37d2']
 
@@ -145,7 +146,7 @@ def swanson_json(filename="swansonpaths.json"):
     if not json_file.exists() or md5(json_file) in OLD_MD5:
         json_file.parent.mkdir(exist_ok=True, parents=True)
         _logger.info(f'downloading swanson paths from {aws.S3_BUCKET_IBL} s3 bucket...')
-        aws.s3_download_file(f'atlas/{json_file.name}', json_file)
+        aws.s3_download_file(f'atlas/{json_file.name}', json_file, overwrite=True)
 
     with open(json_file) as f:
         sw_json = json.load(f)
