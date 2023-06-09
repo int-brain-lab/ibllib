@@ -17,6 +17,7 @@ from fnmatch import fnmatch
 
 import numpy as np
 import pandas as pd
+import sparse
 from scipy.io import loadmat
 import one.alf.io as alfio
 from one.alf.spec import is_valid
@@ -203,6 +204,44 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         }
         return signature
 
+    @staticmethod
+    def _masks2sparse(stat, ops):
+        """
+        Extract 3D sparse mask arrays from suit2p output.
+
+        Parameters
+        ----------
+        stat : numpy.array
+            The loaded stat.npy file. A structured array with fields ('lam', 'ypix', 'xpix', 'neuropil_mask').
+        ops : numpy.array
+            The loaded ops.npy file. A structured array with fields ('Ly', 'Lx').
+
+        Returns
+        -------
+        sparse.GCXS
+            A pydata sparse array of type float32, representing the ROI masks.
+        sparse.GCXS
+            A pydata sparse array of type float32, representing the neuropil ROI masks.
+
+        Notes
+        -----
+        Save using sparse.save_npz.
+        """
+        shape = (stat.shape[0], ops['Ly'], ops['Lx'])
+        npx = np.prod(shape[1:])  # Number of pixels per time point
+        coords = [[], [], []]
+        data = []
+        pil_coords = []
+        for i, s in enumerate(stat):
+            coords[0].append(np.full(s['ypix'].shape, i))
+            coords[1].append(s['ypix'])
+            coords[2].append(s['xpix'])
+            data.append(s['lam'])
+            pil_coords.append(s['neuropil_mask'] + i * npx)
+        roi_mask_sp = sparse.COO(list(map(np.concatenate, coords)), np.concatenate(data), shape=shape)
+        pil_mask_sp = sparse.COO(np.unravel_index(np.concatenate(pil_coords), shape), True, shape=shape)
+        return sparse.GCXS.from_coo(roi_mask_sp), sparse.GCXS.from_coo(pil_mask_sp)
+
     def _rename_outputs(self, suite2p_dir, frameQC_names, frameQC, rename_dict=None):
         """
         Convert suite2p output files to ALF datasets.
@@ -263,14 +302,11 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                 pd.DataFrame([(0, 'no cell'), (1, 'cell')], columns=['roi_values', 'roi_labels']
                              ).to_csv(fov_dir.joinpath('mpciROITypes.names.tsv'), sep='\t', index=False)
                 # ROI and neuropil masks
-                roi_mask = np.zeros((stat.shape[0], ops['Ly'], ops['Lx']))
-                pil_mask = np.zeros_like(roi_mask, dtype=bool)
-                npx = np.prod(roi_mask.shape[1:])  # Number of pixels per time point
-                for i, s in enumerate(stat):
-                    roi_mask[i, s['ypix'], s['xpix']] = s['lam']
-                    np.put(pil_mask, s['neuropil_mask'] + i * npx, True)
-                np.save(fov_dir.joinpath('mpciROIs.masks.npy'), roi_mask)
-                np.save(fov_dir.joinpath('mpciROIs.neuropilMasks.npy'), pil_mask)
+                roi_mask, pil_mask = self._masks2sparse(stat, ops)
+                with open(fov_dir.joinpath('mpciROIs.masks.sparse_npz'), 'wb') as fp:
+                    sparse.save_npz(fp, roi_mask)
+                with open(fov_dir.joinpath('mpciROIs.neuropilMasks.sparse_npz'), 'wb') as fp:
+                    sparse.save_npz(fp, pil_mask)
                 # move folders out of suite2p dir
                 # We overwrite existing files
                 for file in filter(lambda x: is_valid(x.name), fov_dir.iterdir()):
