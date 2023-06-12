@@ -17,8 +17,8 @@ class TestMesoscopePreprocess(unittest.TestCase):
 
     def setUp(self) -> None:
         self.td = tempfile.TemporaryDirectory()
-        self.session_path = Path(self.td.name).joinpath('subject', 'date', 'number')
-        self.img_path = self.session_path.joinpath('raw_imaging_data')
+        self.session_path = Path(self.td.name).joinpath('subject', '2020-01-01', '001')
+        self.img_path = self.session_path.joinpath('raw_imaging_data_00')
         self.img_path.mkdir(parents=True)
         self.task = MesoscopePreprocess(self.session_path)
 
