@@ -1,6 +1,5 @@
 import logging
 import pandas as pd
-import numpy as np
 from pathlib import Path
 import shutil
 import os
@@ -11,7 +10,6 @@ from one.api import ONE
 from one.webclient import AlyxClient
 from one.util import filter_datasets
 from one.alf.files import add_uuid_string, session_path_parts
-from iblutil.io.parquet import np2str
 from ibllib.oneibl.registration import register_dataset, get_lab, get_local_data_repository
 from ibllib.oneibl.patcher import FTPPatcher, SDSCPatcher, SDSC_ROOT_PATH, SDSC_PATCH_PATH
 
