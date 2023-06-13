@@ -168,12 +168,7 @@ class ServerGlobusDataHandler(DataHandler):
             sess_path = Path(rel_sess_path).joinpath(d['rel_path'])
             full_local_path = Path(self.globus.endpoints['local']['root_path']).joinpath(sess_path)
             if not full_local_path.exists():
-
-                if one._index_type() is int:
-                    uuid = np2str(np.r_[i[0], i[1]])
-                elif one._index_type() is str:
-                    uuid = i
-
+                uuid = i
                 self.local_paths.append(full_local_path)
                 target_paths.append(sess_path)
                 source_paths.append(add_uuid_string(sess_path, uuid))
@@ -382,12 +377,7 @@ class SDSCDataHandler(DataHandler):
         SDSC_TMP = Path(SDSC_PATCH_PATH.joinpath(self.task.__class__.__name__))
         for i, d in df.iterrows():
             file_path = Path(d['session_path']).joinpath(d['rel_path'])
-
-            if self.one._index_type() is int:
-                uuid = np2str(np.r_[i[0], i[1]])
-            elif self.one._index_type() is str:
-                uuid = i
-
+            uuid = i
             file_uuid = add_uuid_string(file_path, uuid)
             file_link = SDSC_TMP.joinpath(file_path)
             file_link.parent.mkdir(exist_ok=True, parents=True)
