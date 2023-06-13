@@ -221,7 +221,8 @@ class CameraQC(base.QC):
         # Load the audio and raw FPGA times
         if self.sync != 'bpod' and self.sync is not None:
             self.sync_collection = self.sync_collection or 'raw_ephys_data'
-            if (ns := get_sync_namespace(sess_params)) == 'spikeglx':
+            ns = get_sync_namespace(sess_params) or 'spikeglx'
+            if ns == 'spikeglx':
                 sync, chmap = ephys_fpga.get_sync_and_chn_map(self.session_path, self.sync_collection)
             elif ns == 'timeline':
                 sync, chmap = load_timeline_sync_and_chmap(self.session_path / self.sync_collection)
