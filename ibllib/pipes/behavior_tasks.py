@@ -352,7 +352,7 @@ class ChoiceWorldTrialsNidq(base_tasks.BehaviourTask):
             return out_files
 
         self._behaviour_criterion(update=update)
-        self._run_qc(dsets, update=True, plot_qc=True)
+        self._run_qc(dsets, update=update, plot_qc=plot_qc)
         return out_files
 
 
