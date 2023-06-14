@@ -454,9 +454,8 @@ class TrainingStatus(base_tasks.BehaviourTask):
     def _run(self, upload=True):
         """
         Extracts training status for subject
-        TODO need to make compatible with chained protocols
         """
-        df = training_status.get_latest_training_information(self.session_path, self.one, self.collection)
+        df = training_status.get_latest_training_information(self.session_path, self.one)
         if df is not None:
             training_status.make_plots(self.session_path, self.one, df=df, save=True, upload=upload)
             # Update status map in JSON field of subjects endpoint
@@ -465,8 +464,8 @@ class TrainingStatus(base_tasks.BehaviourTask):
                 status = (df.set_index('date')[['training_status', 'session_path']].drop_duplicates(
                     subset='training_status', keep='first').to_dict())
                 date, sess = status.items()
-                data = {'trained_criteria': {v.replace(' ', '_'): (k, self.one.path2eid(sess[1][k])) for k, v
-                                             in date[1].items()}}
+                data = {'trained_criteria': {v.replace(' ', '_'): (k, self.one.path2eid(sess[1][k]))
+                                             for k, v in date[1].items()}}
                 _, subject, *_ = session_path_parts(self.session_path)
                 self.one.alyx.json_field_update('subjects', subject, data=data)
         output_files = []
