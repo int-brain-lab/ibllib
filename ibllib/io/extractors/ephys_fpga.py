@@ -700,7 +700,6 @@ def get_protocol_period(session_path, protocol_number, bpod_sync):
 
 
 class FpgaTrials(extractors_base.BaseExtractor):
-    # TODO Modify these attributes based on bpod_trials keys
     save_names = ('_ibl_trials.intervals_bpod.npy',
                   '_ibl_trials.goCueTrigger_times.npy', None, None, None, None, None, None, None,
                   '_ibl_trials.stimOff_times.npy', None, None, None, '_ibl_trials.quiescencePeriod.npy',
@@ -721,8 +720,8 @@ class FpgaTrials(extractors_base.BaseExtractor):
                          'stimFreezeTrigger_times', 'errorCueTrigger_times')
 
     # Fields from bpod extractor that we want to save
-    bpod_fields = ('feedbackType', 'choice', 'rewardVolume', 'contrastLeft', 'contrastRight', 'probabilityLeft',
-                   'intervals_bpod', 'phase', 'position', 'quiescence')
+    bpod_fields = ('feedbackType', 'choice', 'rewardVolume', 'contrastLeft', 'contrastRight',
+                   'probabilityLeft', 'intervals_bpod', 'phase', 'position', 'quiescence')
 
     """str: The Bpod events to synchronize (must be present in sync channel map)."""
     sync_field = 'intervals'
@@ -731,14 +730,31 @@ class FpgaTrials(extractors_base.BaseExtractor):
         """An extractor for all ephys trial data, in FPGA time"""
         super().__init__(*args, **kwargs)
         self.bpod2fpga = None
-        self.bpod_trials = bpod_trials  # TODO Update var and save names based on this dict
-        self.bpod_extractor = bpod_extractor
+        self.bpod_trials = bpod_trials
+        if bpod_extractor:
+            self.bpod_extractor = bpod_extractor
+            self._update_var_names()
 
-    def _update_var_names(self):
-        # TODO Turn into property getter; requires ensuring the output field are the same for legacy
+    def _update_var_names(self, bpod_fields=None, bpod_rsync_fields=None):
+        """
+        Updates this object's attributes based on the Bpod trials extractor.
+
+        Fields updated: bpod_fields, bpod_rsync_fields, save_names, and var_names.
+
+        Parameters
+        ----------
+        bpod_fields : tuple
+            A set of Bpod trials fields to keep.
+        bpod_rsync_fields : tuple
+            A set of Bpod trials fields to sync to the DAQ times.
+
+        TODO Turn into property getter; requires ensuring the output field are the same for legacy
+        """
         if self.bpod_extractor:
             self.var_names = self.bpod_extractor.var_names
             self.save_names = self.bpod_extractor.save_names
+        self.bpod_rsync_fields = bpod_rsync_fields or self._time_fields(self.bpod_extractor.var_names)
+        self.bpod_fields = bpod_fields or [x for x in self.bpod_extractor.var_names if x not in self.bpod_rsync_fields]
 
     @staticmethod
     def _time_fields(trials_attr) -> set:
