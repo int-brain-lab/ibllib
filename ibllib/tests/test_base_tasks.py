@@ -40,6 +40,12 @@ class TestRegisterRawDataTask(unittest.TestCase):
             plt.close()
 
     def test_register_snapshots(self):
+        """Test ibllib.pipes.base_tasks.RegisterRawDataTask.register_snapshots.
+
+        A more thorough test for this exists in ibllib.tests.test_pipes.TestRegisterRawDataTask.
+        This test does not mock REST (and therefore requires a test database), while the other does.
+        This test could be removed as it's rather redundant.
+        """
         task = base_tasks.RegisterRawDataTask(self.session_path, one=self.one)
         notes = task.register_snapshots()
         self.assertEqual(2, len(notes))

@@ -278,6 +278,12 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
             # Compress suite2p output files
             target = suite2p_dir.parent.joinpath(fov_dir.name)
             target.mkdir(exist_ok=True)
+            # Move bin file out of the way first
+            if fov_dir.joinpath('data.bin').exists():
+                dst = self.session_path.joinpath('raw_bin_files', fov_dir.name, 'data.bin')
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                _logger.debug('Moving bin file to %s', dst.relative_to(self.session_path))
+                fov_dir.joinpath('data.bin').replace(dst)
             shutil.make_archive(str(target / '_suite2p_ROIData.raw'), 'zip', fov_dir, logger=_logger)
             if fov_dir != 'combined':
                 # save frameQC in each dir (for now, maybe there will be fov specific frame QC eventually)
@@ -575,7 +581,7 @@ class MesoscopeSync(base_tasks.MesoscopeTask):
             Files containing frame timestamps for individual FOVs and time offsets for each line scan.
 
         """
-        # TODO function to determine nROIs
+        # TODO function to determine nFOVs
         try:
             alf_path = self.session_path / self.sync_collection
             events = alfio.load_object(alf_path, 'softwareEvents').get('log')
@@ -589,9 +595,9 @@ class MesoscopeSync(base_tasks.MesoscopeTask):
         # Changing FOV between imaging bouts is not supported currently!
         self.rawImagingData = alfio.load_object(self.session_path / next(iter(collections)), 'rawImagingData')
         self.rawImagingData['meta'] = mesoscope.patch_imaging_meta(self.rawImagingData['meta'])
-        n_ROIs = len(self.rawImagingData['meta']['FOV'])
+        n_FOVs = len(self.rawImagingData['meta']['FOV'])
         sync, chmap = self.load_sync()  # Extract sync data from raw DAQ data
-        mesosync = mesoscope.MesoscopeSyncTimeline(self.session_path, n_ROIs)
+        mesosync = mesoscope.MesoscopeSyncTimeline(self.session_path, n_FOVs)
         _, out_files = mesosync.extract(
             save=True, sync=sync, chmap=chmap, device_collection=collections, events=events)
         return out_files

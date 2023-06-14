@@ -658,7 +658,10 @@ class TestRegisterRawDataTask(unittest.TestCase):
         self.session_path.mkdir(parents=True)
 
     def test_rename_files(self):
-        """Test upload of snapshots"""
+        """Test upload of snapshots.
+
+        Another test for this exists in ibllib.tests.test_base_tasks.TestRegisterRawDataTask.
+        """
         # Add base dir snapshot
         (folder := self.session_path.joinpath('snapshots')).mkdir()
         folder.joinpath('snap.PNG').touch()
