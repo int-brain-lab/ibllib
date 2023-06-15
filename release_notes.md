@@ -1,4 +1,11 @@
 ## Release Notes 2.23
+### Release Notes 2.23.1 2023-06-15
+### features
+- split swanson areas
+### bugfixes
+- trainig plots
+- fix datahandler on SDSC for ONEv2 
+
 ### Release Notes 2.23.0 2023-05-19
 - quiescence period extraction
 - ONEv2 requirement
