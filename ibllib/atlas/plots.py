@@ -39,14 +39,14 @@ def get_bc_10():
     return bc
 
 
-def plot_polygon(ax, xy, color, edgecolor='k', linewidth=0.3, alpha=1):
-    p = Polygon(xy, facecolor=color, edgecolor=edgecolor, linewidth=linewidth, alpha=alpha)
+def plot_polygon(ax, xy, color, reg_id, edgecolor='k', linewidth=0.3, alpha=1):
+    p = Polygon(xy, facecolor=color, edgecolor=edgecolor, linewidth=linewidth, alpha=alpha, gid=f'region_{reg_id}')
     ax.add_patch(p)
 
 
-def plot_polygon_with_hole(ax, vertices, codes, color, edgecolor='k', linewidth=0.3, alpha=1):
+def plot_polygon_with_hole(ax, vertices, codes, color, reg_id, edgecolor='k', linewidth=0.3, alpha=1):
     path = mpath.Path(vertices, codes)
-    patch = PathPatch(path, facecolor=color, edgecolor=edgecolor, linewidth=linewidth, alpha=alpha)
+    patch = PathPatch(path, facecolor=color, edgecolor=edgecolor, linewidth=linewidth, alpha=alpha, gid=f'region_{reg_id}')
     ax.add_patch(patch)
 
 
