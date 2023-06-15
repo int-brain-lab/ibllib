@@ -1,9 +1,15 @@
+"""Abstract base classes for dynamic pipeline tasks."""
+import logging
+from pathlib import Path
+
+from pkg_resources import parse_version
 from one.webclient import no_cache
+from iblutil.util import flatten
 
 from ibllib.pipes.tasks import Task
 import ibllib.io.session_params as sess_params
 from ibllib.qc.base import sign_off_dict, SIGN_OFF_CATEGORIES
-import logging
+from ibllib.io.raw_daq_loaders import load_timeline_sync_and_chmap
 
 _logger = logging.getLogger(__name__)
 
@@ -100,6 +106,25 @@ class BehaviourTask(DynamicTask):
         assert number is None or isinstance(number, int)
         return number
 
+    @staticmethod
+    def _spacer_support(settings):
+        """
+        Spacer support was introduced in v7.1 for iblrig v7 and v8.0.1 in v8.
+
+        Parameters
+        ----------
+        settings : dict
+            The task settings dict.
+
+        Returns
+        -------
+        bool
+            True if task spacers are to be expected.
+        """
+        v = parse_version
+        version = v(settings.get('IBLRIG_VERSION_TAG'))
+        return version not in (v('100.0.0'), v('8.0.0')) and version >= v('7.1.0')
+
 
 class VideoTask(DynamicTask):
 
@@ -149,7 +174,54 @@ class WidefieldTask(DynamicTask):
         self.device_collection = self.get_device_collection('widefield', kwargs.get('device_collection', 'raw_widefield_data'))
 
 
-class RegisterRawDataTask(DynamicTask):  # TODO write test
+class MesoscopeTask(DynamicTask):
+    def __init__(self, session_path, **kwargs):
+        super().__init__(session_path, **kwargs)
+
+        self.device_collection = self.get_device_collection(
+            'mesoscope', kwargs.get('device_collection', 'raw_imaging_data_*[0-9]'))
+
+    def get_signatures(self, **kwargs):
+        """
+        From the template signature of the task, create the exact list of inputs and outputs to expect based on the
+        available device collection folders
+
+        Necessary because we don't know in advance how many device collection folders ("imaging bouts") to expect
+        """
+        self.session_path = Path(self.session_path)
+        # Glob for all device collection (raw imaging data) folders
+        raw_imaging_folders = [p.name for p in self.session_path.glob(self.device_collection)]
+        # For all inputs and outputs that are part of the device collection, expand to one file per folder
+        # All others keep unchanged
+        self.input_files = [(sig[0], sig[1].replace(self.device_collection, folder), sig[2])
+                            for folder in raw_imaging_folders for sig in self.signature['input_files']]
+        self.output_files = [(sig[0], sig[1].replace(self.device_collection, folder), sig[2])
+                             for folder in raw_imaging_folders for sig in self.signature['output_files']]
+
+    def load_sync(self):
+        """
+        Load the sync and channel map.
+
+        This method may be expanded to support other raw DAQ data formats.
+
+        Returns
+        -------
+        one.alf.io.AlfBunch
+            A dictionary with keys ('times', 'polarities', 'channels'), containing the sync pulses
+            and the corresponding channel numbers.
+        dict
+            A map of channel names and their corresponding indices.
+        """
+        alf_path = self.session_path / self.sync_collection
+        if self.get_sync_namespace() == 'timeline':
+            # Load the sync and channel map from the raw DAQ data
+            sync, chmap = load_timeline_sync_and_chmap(alf_path)
+        else:
+            raise NotImplementedError
+        return sync, chmap
+
+
+class RegisterRawDataTask(DynamicTask):
     """
     Base register raw task.
     To rename files
@@ -160,10 +232,10 @@ class RegisterRawDataTask(DynamicTask):  # TODO write test
     priority = 100
     job_size = 'small'
 
-    def rename_files(self, symlink_old=False, **kwargs):
+    def rename_files(self, symlink_old=False):
 
-        # If no inputs are given, we don't do any renaming
-        if len(self.input_files) == 0:
+        # If either no inputs or no outputs are given, we don't do any renaming
+        if not all(map(len, (self.input_files, self.output_files))):
             return
 
         # Otherwise we need to make sure there is one to one correspondence for renaming files
@@ -174,8 +246,11 @@ class RegisterRawDataTask(DynamicTask):  # TODO write test
             old_path = self.session_path.joinpath(old_collection).glob(old_file)
             old_path = next(old_path, None)
             # if the file doesn't exist and it is not required we are okay to continue
-            if not old_path and not required:
-                continue
+            if not old_path:
+                if required:
+                    raise FileNotFoundError(str(old_file))
+                else:
+                    continue
 
             new_file, new_collection, _ = after
             new_path = self.session_path.joinpath(new_collection, new_file)
@@ -183,6 +258,66 @@ class RegisterRawDataTask(DynamicTask):  # TODO write test
             old_path.replace(new_path)
             if symlink_old:
                 old_path.symlink_to(new_path)
+
+    def register_snapshots(self, unlink=False, collection=None):
+        """
+        Register any photos in the snapshots folder to the session. Typically imaging users will
+        take numerous photos for reference.  Supported extensions: .jpg, .jpeg, .png, .tif, .tiff
+
+        If a .txt file with the same name exists in the same location, the contents will be added
+        to the note text.
+
+        Parameters
+        ----------
+        unlink : bool
+            If true, files are deleted after upload.
+        collection : str, list, optional
+            Location of 'snapshots' folder relative to the session path. If None, uses
+            'device_collection' attribute (if exists) or root session path.
+
+        Returns
+        -------
+        list of dict
+            The newly registered Alyx notes.
+        """
+        collection = getattr(self, 'device_collection', None) if collection is None else collection
+        collection = collection or ''  # If not defined, use no collection
+        if collection and '*' in collection:
+            collection = [p.name for p in self.session_path.glob(collection)]
+            # Check whether folders on disk contain '*'; this is to stop an infinite recursion
+            assert not any('*' in c for c in collection), 'folders containing asterisks not supported'
+        # If more that one collection exists, register snapshots in each collection
+        if collection and not isinstance(collection, str):
+            return flatten(filter(None, [self.register_snapshots(unlink, c) for c in collection]))
+        snapshots_path = self.session_path.joinpath(*filter(None, (collection, 'snapshots')))
+        if not snapshots_path.exists():
+            return
+
+        eid = self.one.path2eid(self.session_path, query_type='remote')
+        if not eid:
+            _logger.warning('Failed to upload snapshots: session not found on Alyx')
+            return
+        note = dict(user=self.one.alyx.user, content_type='session', object_id=eid, text='')
+
+        notes = []
+        exts = ('.jpg', '.jpeg', '.png', '.tif', '.tiff')
+        for snapshot in filter(lambda x: x.suffix.lower() in exts, snapshots_path.glob('*.*')):
+            _logger.debug('Uploading "%s"...', snapshot.relative_to(self.session_path))
+            if snapshot.with_suffix('.txt').exists():
+                with open(snapshot.with_suffix('.txt'), 'r') as txt_file:
+                    note['text'] = txt_file.read().strip()
+            else:
+                note['text'] = ''
+            with open(snapshot, 'rb') as img_file:
+                files = {'image': img_file}
+                notes.append(self.one.alyx.rest('notes', 'create', data=note, files=files))
+            if unlink:
+                snapshot.unlink()
+        # If nothing else in the snapshots folder, delete the folder
+        if unlink and next(snapshots_path.rglob('*'), None) is None:
+            snapshots_path.rmdir()
+        _logger.info('%i snapshots uploaded to Alyx', len(notes))
+        return notes
 
     def _run(self, **kwargs):
         self.rename_files(**kwargs)

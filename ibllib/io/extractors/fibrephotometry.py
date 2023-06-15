@@ -111,7 +111,7 @@ def sync_photometry_to_daq(vdaq, fs, df_photometry, chmap=DAQ_CHMAP, v_threshold
 def read_daq_voltage(daq_file, chmap=DAQ_CHMAP):
     channel_names = [c.name for c in load_raw_daq_tdms(daq_file)['Analog'].channels()]
     assert all([v in channel_names for v in chmap.values()]), "Missing channel"
-    vdaq, fs = load_channels_tdms(daq_file, chmap=chmap, return_fs=True)
+    vdaq, fs = load_channels_tdms(daq_file, chmap=chmap)
     vdaq = {k: v - np.median(v) for k, v in vdaq.items()}
     return vdaq, fs
 

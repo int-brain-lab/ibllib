@@ -49,6 +49,8 @@ def interpolate_position(re_ts, re_pos, freq=1000, kind='linear', fill_gaps=None
         Timestamps of interpolated positions
     """
     t = np.arange(re_ts[0], re_ts[-1], 1 / freq)  # Evenly resample at frequency
+    if t[-1] > re_ts[-1]:
+        t = t[:-1]  # Occasionally due to precision errors the last sample may be outside of range.
     yinterp = interpolate.interp1d(re_ts, re_pos, kind=kind)(t)
 
     if fill_gaps:

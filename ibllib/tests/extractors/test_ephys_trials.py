@@ -105,6 +105,12 @@ class TestEphysSyncExtraction(unittest.TestCase):
         t, pos = ephys_fpga._rotary_encoder_positions_from_fronts(ta, pa, tb, pb, coding='x2')
         self.assertTrue(np.all(np.isclose(pos_, pos)))
 
+    def test_time_fields(self):
+        """Test for FpgaTrials._time_fields static method."""
+        expected = ('intervals', 'fooBar_times_bpod', 'spike_times', 'baz_timestamps')
+        fields = ephys_fpga.FpgaTrials._time_fields(expected + ('position', 'timebase', 'fooBaz'))
+        self.assertCountEqual(expected, fields)
+
 
 class TestEphysBehaviorExtraction(unittest.TestCase):
     def setUp(self):
