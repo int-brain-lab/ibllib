@@ -10,7 +10,7 @@ from one.api import ONE
 
 import brainbox.behavior.wheel as wheel
 import brainbox.behavior.training as train
-import brainbox.behavior.pyschofit as psy
+import psychofit as psy
 from ibllib.tests import TEST_DB
 
 
