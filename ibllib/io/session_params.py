@@ -473,12 +473,14 @@ def prepare_experiment(session_path, acquisition_description=None, local=None, r
     params = misc.create_basic_transfer_params(transfers_path=local, remote_data_path=remote)
 
     # First attempt to copy to server
-    remote_device_path = get_remote_stub_name(session_path, params['TRANSFER_LABEL'])
-    previous_description = read_params(remote_device_path) if remote_device_path.exists() and not overwrite else {}
-    try:
-        write_yaml(remote_device_path, merge_params(previous_description, acquisition_description))
-    except Exception as ex:
-        warnings.warn(f'Failed to write data to {remote_device_path}: {ex}')
+    local_only = remote is False or params.get('REMOTE_DATA_FOLDER_PATH', False) is False
+    if not local_only:
+        remote_device_path = get_remote_stub_name(session_path, params['TRANSFER_LABEL'])
+        previous_description = read_params(remote_device_path) if remote_device_path.exists() and not overwrite else {}
+        try:
+            write_yaml(remote_device_path, merge_params(previous_description, acquisition_description))
+        except Exception as ex:
+            warnings.warn(f'Failed to write data to {remote_device_path}: {ex}')
 
     # Now copy to local directory
     local = params.get('TRANSFERS_PATH', params['DATA_FOLDER_PATH'])

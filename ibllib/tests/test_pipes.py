@@ -394,6 +394,15 @@ class TestPipesMisc(unittest.TestCase):
         self.assertEqual(transfer_label, params.pop('TRANSFER_LABEL'))
         self.assertCountEqual(expected, params)
 
+        # Test remote as bool
+        with mock.patch('builtins.input', return_value='baz'):
+            params = misc.create_basic_transfer_params(PARAM_STR, remote_data_path=False)
+            self.assertEqual('~/remote_data', params.get('REMOTE_DATA_FOLDER_PATH'))
+            params = misc.create_basic_transfer_params(PARAM_STR, remote_data_path=False, clobber=True)
+            self.assertIs(params.get('REMOTE_DATA_FOLDER_PATH'), False)
+            params = misc.create_basic_transfer_params(PARAM_STR)
+            self.assertIs(params.get('REMOTE_DATA_FOLDER_PATH'), False)
+
         # Test custom function and extra par delete
         with mock.patch('builtins.input', return_value='baz') as in_mock:
             params = misc.create_basic_transfer_params(
