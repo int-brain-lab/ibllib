@@ -465,7 +465,7 @@ class TestVideo(unittest.TestCase):
 
 
 class TestSessionParams(unittest.TestCase):
-    """Tests for ibllib.io.session_params module"""
+    """Tests for ibllib.io.session_params module."""
 
     def setUp(self) -> None:
         self.tmpdir = tempfile.TemporaryDirectory()
@@ -497,6 +497,7 @@ class TestSessionParams(unittest.TestCase):
 
     @patch(session_params.__name__ + '.time.sleep')
     def test_aggregate(self, sleep_mock):
+        """A test for both aggregate_device and merge_params."""
         fullfile = self.devices_path.parent.joinpath('_ibl_experiment.description.yaml')
         file_lock = fullfile.with_suffix('.lock')
 
