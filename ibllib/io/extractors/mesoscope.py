@@ -190,10 +190,56 @@ class TimelineTrials(FpgaTrials):
         trials_table.goCue_times = go_cue
         return trials
 
+    def extract_wheel_sync(self, ticks=WHEEL_TICKS, radius=WHEEL_RADIUS_CM, coding='x4', tmin=None, tmax=None):
+        """
+        Gets the wheel position from Timeline counter channel.
+
+        Parameters
+        ----------
+        ticks : int
+            Number of ticks corresponding to a full revolution (1024 for IBL rotary encoder).
+        radius : float
+            Radius of the wheel. Defaults to 1 for an output in radians.
+        coding : str {'x1', 'x2', 'x4'}
+            Rotary encoder encoding (IBL default is x4).
+        tmin : float
+            The minimum time from which to extract the sync pulses.
+        tmax : float
+            The maximum time up to which we extract the sync pulses.
+
+        Returns
+        -------
+        np.array
+            Wheel timestamps in seconds.
+        np.array
+            Wheel positions in radians.
+
+        See Also
+        --------
+        ibllib.io.extractors.ephys_fpga.extract_wheel_sync
+        """
+        if coding not in ('x1', 'x2', 'x4'):
+            raise ValueError('Unsupported coding; must be one of x1, x2 or x4')
+        raw = correct_counter_discontinuities(timeline_get_channel(self.timeline, 'rotary_encoder'))
+
+        # Timeline evenly samples counter so we extract only change points
+        d = np.diff(raw)
+        ind, = np.where(d.astype(int))
+        pos = raw[ind + 1]
+        pos -= pos[0]  # Start from zero
+        pos = pos / ticks * np.pi * 2 * radius / int(coding[1])  # Convert to radians
+
+        # Get timestamps of changes and trim based on protocol spacers
+        ts = self.timeline['timestamps'][ind + 1]
+        tmin = ts.min() if tmin is None else tmin
+        tmax = ts.max() if tmax is None else tmax
+        mask = np.logical_and(ts >= tmin, ts <= tmax)
+        return ts[mask], pos[mask]
+
     def get_wheel_positions(self, ticks=WHEEL_TICKS, radius=WHEEL_RADIUS_CM, coding='x4',
                             tmin=None, tmax=None, display=False, **kwargs):
         """
-        Gets the wheel position from Timeline counter channel.
+        Gets the wheel position and detected movements from Timeline counter channel.
 
         Called by the super class extractor (FPGATrials._extract).
 
@@ -215,30 +261,12 @@ class TimelineTrials(FpgaTrials):
         Returns
         -------
         dict
-            wheel object with keys ('timestamps', 'position')
+            wheel object with keys ('timestamps', 'position').
         dict
-            wheelMoves object with keys ('intervals' 'peakAmplitude')
+            wheelMoves object with keys ('intervals' 'peakAmplitude').
         """
-        if coding not in ('x1', 'x2', 'x4'):
-            raise ValueError('Unsupported coding; must be one of x1, x2 or x4')
-        info = next(x for x in self.timeline['meta']['inputs'] if x['name'].lower() == 'rotary_encoder')
-        raw = self.timeline['raw'][:, info['arrayColumn'] - 1]  # -1 because MATLAB indexes from 1
-        raw = correct_counter_discontinuities(raw)
-
-        # Timeline evenly samples counter so we extract only change points
-        d = np.diff(raw)
-        ind, = np.where(d.astype(int))
-        pos = raw[ind + 1]
-        pos -= pos[0]  # Start from zero
-        pos = pos / ticks * np.pi * 2 * radius / int(coding[1])  # Convert to radians
-
-        # Get timestamps of changes and trim based on protocol spacers
-        ts = self.timeline['timestamps'][ind + 1]
-        tmin = ts.min() if tmin is None else tmin
-        tmax = ts.max() if tmax is None else tmax
-        mask = np.logical_and(ts >= tmin, ts <= tmax)
-
-        wheel = {'timestamps': ts[mask], 'position': pos[mask]}
+        wheel = self.extract_wheel_sync(ticks=ticks, radius=radius, coding=coding, tmin=tmin, tmax=tmax)
+        wheel = dict(zip(('timestamps', 'position'), wheel))
         moves = extract_wheel_moves(wheel['timestamps'], wheel['position'])
 
         if display:
@@ -402,7 +430,7 @@ class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
             _, fov_time_shifts, line_time_shifts = self.get_timeshifts(imaging_data['meta'])
             assert len(fov_time_shifts) == self.n_ROIs, f'unexpected number of ROIs for {collection}'
             ts = frame_times[np.logical_and(frame_times >= tmin, frame_times <= tmax)]
-            assert ts.size == imaging_data['times_scanImage'].size
+            assert ts.size == imaging_data['times_scanImage'].size, f'unexpected number of DAQ timestamps for {collection}'
             fov_times.append([ts + offset for offset in fov_time_shifts])
             if not line_shifts:
                 line_shifts = line_time_shifts

@@ -53,7 +53,7 @@ from iblutil.util import Bunch
 from iblutil.numerical import within_ranges
 
 from ibllib.io.extractors.camera import extract_camera_sync, extract_all
-from ibllib.io.extractors import ephys_fpga, training_wheel
+from ibllib.io.extractors import ephys_fpga, training_wheel, mesoscope
 from ibllib.io.extractors.video_motion import MotionAlignment
 from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.io import raw_data_loaders as raw
@@ -211,6 +211,7 @@ class CameraQC(base.QC):
         # If there is an experiment description and there are video parameters
         sess_params = read_params(self.session_path) or {}
         task_collection = get_task_collection(sess_params)
+        ns = get_sync_namespace(sess_params)
         self._set_sync(sess_params)
         if not self.sync:
             if not self.type:
@@ -221,7 +222,7 @@ class CameraQC(base.QC):
         # Load the audio and raw FPGA times
         if self.sync != 'bpod' and self.sync is not None:
             self.sync_collection = self.sync_collection or 'raw_ephys_data'
-            ns = get_sync_namespace(sess_params) or 'spikeglx'
+            ns = ns or 'spikeglx'
             if ns == 'spikeglx':
                 sync, chmap = ephys_fpga.get_sync_and_chn_map(self.session_path, self.sync_collection)
             elif ns == 'timeline':
@@ -265,7 +266,13 @@ class CameraQC(base.QC):
         except (StopIteration, ALFObjectNotFound):
             # Extract from raw data
             if self.sync != 'bpod' and self.sync is not None:
-                wheel_data = ephys_fpga.extract_wheel_sync(sync, chmap)
+                if ns == 'spikeglx':
+                    wheel_data = ephys_fpga.extract_wheel_sync(sync, chmap)
+                elif ns == 'timeline':
+                    extractor = mesoscope.TimelineTrials(self.session_path, sync_collection=self.sync_collection)
+                    wheel_data = extractor.extract_wheel_sync()
+                else:
+                    raise NotImplementedError(f'Unknown namespace "{ns}"')
             else:
                 wheel_data = training_wheel.get_wheel_position(
                     self.session_path, task_collection=task_collection)
