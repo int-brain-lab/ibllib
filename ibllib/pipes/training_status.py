@@ -19,7 +19,9 @@ from datetime import datetime
 import seaborn as sns
 
 
-TRAINING_STATUS = {'not_computed': (-2, (0, 0, 0, 0)),
+TRAINING_STATUS = {'untrainable': (-4, (0, 0, 0, 0)),
+                   'unbiasable': (-3, (0, 0, 0, 0)),
+                   'not_computed': (-2, (0, 0, 0, 0)),
                    'habituation': (-1, (0, 0, 0, 0)),
                    'in training': (0, (0, 0, 0, 0)),
                    'trained 1a': (1, (195, 90, 80, 255)),

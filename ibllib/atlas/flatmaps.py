@@ -137,13 +137,16 @@ def swanson(filename="swanson2allen.npz"):
 
 def swanson_json(filename="swansonpaths.json"):
 
-    OLD_MD5 = ['f848783954883c606ca390ceda9e37d2']
+    OLD_MD5 = ['97ccca2b675b28ba9b15ca8af5ba4111',  # errored map with FOTU and CUL4, 5 mixed up
+               '56daa7022b5e03080d8623814cda6f38',  # old md5 of swanson json without CENT and PTLp
+               # and CUL4 split (on s3 called swansonpaths_56daa.json)
+               'f848783954883c606ca390ceda9e37d2']
 
     json_file = AllenAtlas._get_cache_dir().joinpath(filename)
     if not json_file.exists() or md5(json_file) in OLD_MD5:
         json_file.parent.mkdir(exist_ok=True, parents=True)
         _logger.info(f'downloading swanson paths from {aws.S3_BUCKET_IBL} s3 bucket...')
-        aws.s3_download_file(f'atlas/{json_file.name}', json_file)
+        aws.s3_download_file(f'atlas/{json_file.name}', json_file, overwrite=True)
 
     with open(json_file) as f:
         sw_json = json.load(f)
@@ -198,44 +201,45 @@ def plot_swanson_vector(acronyms=None, values=None, ax=None, hemisphere=None, br
                     color = empty_color
 
         coords = reg['coordsReg']
+        reg_id = reg['thisID']
 
         if reg['hole']:
             vertices, codes = coords_for_poly_hole(coords)
             if orientation == 'portrait':
                 vertices[:, [0, 1]] = vertices[:, [1, 0]]
-                plot_polygon_with_hole(ax, vertices, codes, color, **kwargs)
+                plot_polygon_with_hole(ax, vertices, codes, color, reg_id, **kwargs)
                 if hemisphere is not None:
                     color_inv = color if hemisphere == 'mirror' else empty_color
                     vertices_inv = np.copy(vertices)
                     vertices_inv[:, 0] = -1 * vertices_inv[:, 0] + (sw.shape[0] * 2)
-                    plot_polygon_with_hole(ax, vertices_inv, codes, color_inv, **kwargs)
+                    plot_polygon_with_hole(ax, vertices_inv, codes, color_inv, reg_id, **kwargs)
             else:
-                plot_polygon_with_hole(ax, vertices, codes, color, **kwargs)
+                plot_polygon_with_hole(ax, vertices, codes, color, reg_id, **kwargs)
                 if hemisphere is not None:
                     color_inv = color if hemisphere == 'mirror' else empty_color
                     vertices_inv = np.copy(vertices)
                     vertices_inv[:, 1] = -1 * vertices_inv[:, 1] + (sw.shape[0] * 2)
-                    plot_polygon_with_hole(ax, vertices_inv, codes, color_inv, **kwargs)
+                    plot_polygon_with_hole(ax, vertices_inv, codes, color_inv, reg_id, **kwargs)
         else:
             coords = [coords] if type(coords) == dict else coords
             for c in coords:
 
                 if orientation == 'portrait':
                     xy = np.c_[c['y'], c['x']]
-                    plot_polygon(ax, xy, color, **kwargs)
+                    plot_polygon(ax, xy, color, reg_id, **kwargs)
                     if hemisphere is not None:
                         color_inv = color if hemisphere == 'mirror' else empty_color
                         xy_inv = np.copy(xy)
                         xy_inv[:, 0] = -1 * xy_inv[:, 0] + (sw.shape[0] * 2)
-                        plot_polygon(ax, xy_inv, color_inv, **kwargs)
+                        plot_polygon(ax, xy_inv, color_inv, reg_id, **kwargs)
                 else:
                     xy = np.c_[c['x'], c['y']]
-                    plot_polygon(ax, xy, color, **kwargs)
+                    plot_polygon(ax, xy, color, reg_id, **kwargs)
                     if hemisphere is not None:
                         color_inv = color if hemisphere == 'mirror' else empty_color
                         xy_inv = np.copy(xy)
                         xy_inv[:, 1] = -1 * xy_inv[:, 1] + (sw.shape[0] * 2)
-                        plot_polygon(ax, xy_inv, color_inv, **kwargs)
+                        plot_polygon(ax, xy_inv, color_inv, reg_id, **kwargs)
 
     if orientation == 'portrait':
         ax.set_ylim(0, sw.shape[1])
