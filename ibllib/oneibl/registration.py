@@ -110,6 +110,8 @@ def register_session_raw_data(session_path, one=None, overwrite=False, **kwargs)
     list of dicts, dict
         A list of newly created Alyx dataset records or the registration data if dry.
     """
+    # Clear rest cache to make sure we have the latest entries
+    one.alyx.clear_rest_cache()
     client = IBLRegistrationClient(one)
     session_path = Path(session_path)
     eid = one.path2eid(session_path, query_type='remote')  # needs to make sure we're up to date
@@ -121,7 +123,7 @@ def register_session_raw_data(session_path, one=None, overwrite=False, **kwargs)
     # unless overwrite is True, filter out the datasets that already exist
     if not overwrite:
         # query the database for existing datasets on the session and allowed dataset types
-        dsets = datasets2records(one.alyx.rest('datasets', 'list', session=eid))
+        dsets = datasets2records(one.alyx.rest('datasets', 'list', session=eid, no_cache=True))
         already_registered = list(map(session_path.joinpath, dsets['rel_path']))
         file_list = list(filter(lambda f: f not in already_registered, file_list))
 
