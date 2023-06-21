@@ -470,7 +470,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
 
         return db
 
-    def _run(self, run_suite2p=True, rename_files=True, use_badframes=False, **kwargs):
+    def _run(self, run_suite2p=True, rename_files=True, use_badframes=True, **kwargs):
         """
         Process inputs, run suite2p and make outputs alf compatible.
 
