@@ -284,7 +284,11 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 _logger.debug('Moving bin file to %s', dst.relative_to(self.session_path))
                 fov_dir.joinpath('data.bin').replace(dst)
+            # Set logger to warning for the moment to not clutter the logs
+            prev_level = _logger.level
+            _logger.setLevel(logging.WARNING)
             shutil.make_archive(str(target / '_suite2p_ROIData.raw'), 'zip', fov_dir, logger=_logger)
+            _logger.setLevel(prev_level)
             if fov_dir != 'combined':
                 # save frameQC in each dir (for now, maybe there will be fov specific frame QC eventually)
                 if frameQC is not None and len(frameQC) > 0:
