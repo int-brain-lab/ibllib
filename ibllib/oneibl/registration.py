@@ -123,7 +123,7 @@ def register_session_raw_data(session_path, one=None, overwrite=False, **kwargs)
     # unless overwrite is True, filter out the datasets that already exist
     if not overwrite:
         # query the database for existing datasets on the session and allowed dataset types
-        dsets = datasets2records(one.alyx.rest('datasets', 'list', session=eid, query_type='remote'))
+        dsets = datasets2records(one.alyx.rest('datasets', 'list', session=eid, no_cache=True))
         already_registered = list(map(session_path.joinpath, dsets['rel_path']))
         file_list = list(filter(lambda f: f not in already_registered, file_list))
 
