@@ -10,8 +10,17 @@ _logger = logging.getLogger('ibllib')
 
 
 class SyncRegisterRaw(base_tasks.RegisterRawDataTask):
-    """
-    Task to register raw daq data
+    """Task to register raw DAQ data.
+
+    Registers DAQ software output for a given device.  The object should be _*_DAQdata, where the
+    namespace identifies the DAQ model or acquisition software, e.g. 'mcc', 'ni' or 'ni-usb-6211'.
+    At minimum there should be a raw data dataset of the form _*_DAQdata.raw*, e.g.
+    '_mc_DAQdata.raw.pqt'.  The following are optional attribute datasets:
+    - _*_DAQdata.timestamps.npy: for timeline the timestamps array is separate from the samples.
+    - _*_DAQdata.meta.json: for timeline all acquisition meta data (e.g. sample rate, channel
+    names) are stored in a separate file.
+    - _*_DAQdata.wiring.json: for SpikeGLX the channel map is stored in this file.
+    _timeline_softwareEvents.log.htsv: UDP messages and other software events in DAQ time.
     """
     priority = 100
     job_size = 'small'
@@ -21,7 +30,10 @@ class SyncRegisterRaw(base_tasks.RegisterRawDataTask):
         signature = {
             'input_files': [],
             'output_files': [(f'*DAQdata.raw.{self.sync_ext}', self.sync_collection, True),
-                             ('*DAQdata.wiring.json', self.sync_collection, True)]
+                             ('*DAQdata.timestamps.npy', self.sync_collection, False),
+                             ('*DAQdata.meta.json', self.sync_collection, False),
+                             ('*DAQdata.wiring.json', self.sync_collection, False),
+                             ('*softwareEvents.log.htsv', self.sync_collection, False)]
         }
         return signature
 

@@ -1,5 +1,5 @@
 """
-The psychofit toolbox contains tools to fit two-alternative psychometric
+(DEPRECATED) The psychofit toolbox contains tools to fit two-alternative psychometric
 data. The fitting is done using maximal likelihood estimation: one
 assumes that the responses of the subject are given by a binomial
 distribution whose mean is given by the psychometric function.
@@ -16,12 +16,26 @@ Functions in the toolbox are:
 For more info, see:
   - Examples:           Examples of use of psychofit toolbox
 Matteo Carandini, 2000-2015
+
+NB: USE THE PSYCHOFIT PIP PACKAGE INSTEAD.
 """
 
 import functools
+import warnings
+import traceback
+import logging
+
 import numpy as np
 import scipy.optimize
 from scipy.special import erf
+
+
+for line in traceback.format_stack():
+    print(line.strip())
+
+msg = 'brainbox.behavior.pyschofit has been deprecated. Install psychofit via pip. See stack above'
+warnings.warn(msg, DeprecationWarning)
+logging.getLogger(__name__).warning(msg)
 
 
 def mle_fit_psycho(data, P_model='weibull', parstart=None, parmin=None, parmax=None, nfits=5):

@@ -13,7 +13,7 @@ from iblutil.util import Bunch
 from one.api import ONE
 from one.alf.exceptions import ALFObjectNotFound
 
-import brainbox.behavior.pyschofit as psy
+import psychofit as psy
 
 _logger = logging.getLogger('ibllib')
 

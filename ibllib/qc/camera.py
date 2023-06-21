@@ -57,7 +57,8 @@ from ibllib.io.extractors import ephys_fpga, training_wheel
 from ibllib.io.extractors.video_motion import MotionAlignment
 from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.io import raw_data_loaders as raw
-from ibllib.io.session_params import read_params, get_sync
+from ibllib.io.raw_daq_loaders import load_timeline_sync_and_chmap
+from ibllib.io.session_params import read_params, get_sync, get_sync_namespace
 import brainbox.behavior.wheel as wh
 from ibllib.io.video import get_video_meta, get_video_frames_preload, assert_valid_label
 from . import base
@@ -220,7 +221,13 @@ class CameraQC(base.QC):
         # Load the audio and raw FPGA times
         if self.sync != 'bpod' and self.sync is not None:
             self.sync_collection = self.sync_collection or 'raw_ephys_data'
-            sync, chmap = ephys_fpga.get_sync_and_chn_map(self.session_path, self.sync_collection)
+            ns = get_sync_namespace(sess_params) or 'spikeglx'
+            if ns == 'spikeglx':
+                sync, chmap = ephys_fpga.get_sync_and_chn_map(self.session_path, self.sync_collection)
+            elif ns == 'timeline':
+                sync, chmap = load_timeline_sync_and_chmap(self.session_path / self.sync_collection)
+            else:
+                raise NotImplementedError(f'Unknown namespace "{ns}"')
             audio_ttls = ephys_fpga.get_sync_fronts(sync, chmap['audio'])
             self.data['audio'] = audio_ttls['times']  # Get rises
             # Load raw FPGA times
@@ -586,7 +593,7 @@ class CameraQC(base.QC):
         if not data_for_keys(('video', 'pin_state', 'audio'), self.data):
             return 'NOT_SET'
         size_diff = int(self.data['pin_state'].shape[0] - self.data['video']['length'])
-        # NB: The pin state to be high for 2 consecutive frames
+        # NB: The pin state can be high for 2 consecutive frames
         low2high = np.insert(np.diff(self.data['pin_state'][:, -1].astype(int)) == 1, 0, False)
         # NB: Time between two consecutive TTLs can be sub-frame, so this will fail
         ndiff_low2high = int(self.data['audio'][::2].size - sum(low2high))

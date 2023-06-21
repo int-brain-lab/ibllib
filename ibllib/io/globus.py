@@ -1,3 +1,4 @@
+"""TODO: This entire module may be removed in favour of one.remote.globus"""
 import re
 import sys
 import os
@@ -27,6 +28,7 @@ def as_globus_path(path):
         # A globus path
         >>> as_globus_path('/E/FlatIron/integration')
         >>> '/E/FlatIron/integration'
+    TODO Remove in favour of one.remote.globus.as_globus_path
     """
     path = str(path)
     if (
@@ -42,7 +44,7 @@ def as_globus_path(path):
 
 
 def _login(globus_client_id, refresh_tokens=False):
-
+    # TODO Import from one.remove.globus
     client = globus.NativeAppAuthClient(globus_client_id)
     client.oauth2_start_flow(refresh_tokens=refresh_tokens)
 
@@ -62,6 +64,7 @@ def _login(globus_client_id, refresh_tokens=False):
 
 
 def login(globus_client_id):
+    # TODO Import from one.remove.globus
     token = _login(globus_client_id, refresh_tokens=False)
     authorizer = globus.AccessTokenAuthorizer(token['access_token'])
     tc = globus.TransferClient(authorizer=authorizer)
@@ -69,6 +72,7 @@ def login(globus_client_id):
 
 
 def setup(globus_client_id, str_app='globus/default'):
+    # TODO Import from one.remove.globus
     # Lookup and manage consents there
     # https://auth.globus.org/v2/web/consents
     gtok = _login(globus_client_id, refresh_tokens=True)
@@ -76,6 +80,7 @@ def setup(globus_client_id, str_app='globus/default'):
 
 
 def login_auto(globus_client_id, str_app='globus/default'):
+    # TODO Import from one.remove.globus
     token = params.read(str_app, {})
     required_fields = {'refresh_token', 'access_token', 'expires_at_seconds'}
     if not (token and required_fields.issubset(token.as_dict())):
@@ -87,6 +92,7 @@ def login_auto(globus_client_id, str_app='globus/default'):
 
 
 def get_local_endpoint():
+    # TODO Remove in favour of one.remote.globus.get_local_endpoint_id
     if sys.platform == 'win32' or sys.platform == 'cygwin':
         id_path = Path(os.environ['LOCALAPPDATA']).joinpath("Globus Connect")
     else:

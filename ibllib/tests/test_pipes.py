@@ -12,6 +12,7 @@ import numpy as np
 import datetime
 import random
 import string
+from uuid import uuid4
 
 from one.api import ONE
 import iblutil.io.params as iopar
@@ -22,6 +23,7 @@ import ibllib.tests.fixtures.utils as fu
 from ibllib.pipes import misc
 from ibllib.tests import TEST_DB
 import ibllib.pipes.scan_fix_passive_files as fix
+from ibllib.pipes.base_tasks import RegisterRawDataTask
 from ibllib.pipes.ephys_preprocessing import SpikeSorting
 
 
@@ -392,6 +394,15 @@ class TestPipesMisc(unittest.TestCase):
         self.assertEqual(transfer_label, params.pop('TRANSFER_LABEL'))
         self.assertCountEqual(expected, params)
 
+        # Test remote as bool
+        with mock.patch('builtins.input', return_value='baz'):
+            params = misc.create_basic_transfer_params(PARAM_STR, remote_data_path=False)
+            self.assertEqual('~/remote_data', params.get('REMOTE_DATA_FOLDER_PATH'))
+            params = misc.create_basic_transfer_params(PARAM_STR, remote_data_path=False, clobber=True)
+            self.assertIs(params.get('REMOTE_DATA_FOLDER_PATH'), False)
+            params = misc.create_basic_transfer_params(PARAM_STR)
+            self.assertIs(params.get('REMOTE_DATA_FOLDER_PATH'), False)
+
         # Test custom function and extra par delete
         with mock.patch('builtins.input', return_value='baz') as in_mock:
             params = misc.create_basic_transfer_params(
@@ -647,5 +658,45 @@ class TestSpikeSortingTask(unittest.TestCase):
             SpikeSorting.parse_version('version-twelve')
 
 
-if __name__ == "__main__":
+class TestRegisterRawDataTask(unittest.TestCase):
+    def setUp(self) -> None:
+        self.one = ONE(**TEST_DB)
+        self.tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tempdir.cleanup)
+        self.session_path = Path(self.tempdir.name).joinpath('subject', '2023-01-01', '001')
+        self.session_path.mkdir(parents=True)
+
+    def test_rename_files(self):
+        """Test upload of snapshots.
+
+        Another test for this exists in ibllib.tests.test_base_tasks.TestRegisterRawDataTask.
+        """
+        # Add base dir snapshot
+        (folder := self.session_path.joinpath('snapshots')).mkdir()
+        folder.joinpath('snap.PNG').touch()
+        collection = 'raw_task_data'
+        for i, ext in enumerate(['tif', 'jpg']):
+            (p := self.session_path.joinpath(f'{collection}_{i:02}', 'snapshots')).mkdir(parents=True)
+            p.joinpath(f'snapshot.{ext}').touch()
+        # Stuff with text note
+        p = self.session_path.joinpath(f'{collection}_00', 'snapshots', 'pic.jpeg')
+        with open(p, 'wb') as fp:
+            fp.write('foo'.encode())
+        with open(p.with_name('pic.txt'), 'w') as fp:
+            fp.write('bar')
+
+        task = RegisterRawDataTask(self.session_path, one=self.one)
+        with mock.patch.object(self.one.alyx, 'rest') as rest, \
+                mock.patch.object(self.one, 'path2eid', return_value=str(uuid4())):
+            task.register_snapshots(collection=['', f'{collection}*'])
+            self.assertEqual(4, rest.call_count)
+            files = []
+            for args, kwargs in rest.call_args_list:
+                self.assertEqual(('notes', 'create'), args)
+                files.append(Path(kwargs['files']['image'].name).name)
+            expected = ('snap.PNG', 'pic.jpeg', 'snapshot.tif', 'snapshot.jpg')
+            self.assertCountEqual(expected, files)
+
+
+if __name__ == '__main__':
     unittest.main(exit=False, verbosity=2)

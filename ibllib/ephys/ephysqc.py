@@ -370,8 +370,9 @@ def validate_ttl_test(ses_path, display=False):
                        str_ok="PASS: Bpod", str_ko="FAILED: Bpod")
     try:
         # note: tried to depend as little as possible on the extraction code but for the valve...
-        behaviour = ephys_fpga.extract_behaviour_sync(rawsync, chmap=sync_map)
-        res = behaviour.valveOpen_times.size > 1
+        bpod = ephys_fpga.get_sync_fronts(rawsync, sync_map['bpod'])
+        _, t_valve_open, _ = ephys_fpga._assign_events_bpod(bpod['times'], bpod['polarities'])
+        res = t_valve_open.size > 1
     except AssertionError:
         res = False
     # check that the reward valve is actionned at least once

@@ -379,8 +379,9 @@ def create_basic_transfer_params(param_str='transfer_params', local_data_path=No
         The name of the parameters to load/save.
     local_data_path : str, pathlib.Path
         The local root data path, stored with the DATA_FOLDER_PATH key.  If None, user is prompted.
-    remote_data_path : str, pathlib.Path
+    remote_data_path : str, pathlib.Path, bool
         The local root data path, stored with the REMOTE_DATA_FOLDER_PATH key.  If None, user is prompted.
+        If False, the REMOTE_DATA_PATH key is not updated or is set to False if clobber = True.
     clobber : bool
         If True, any parameters in existing parameter file not found as keyword args will be removed,
         otherwise the user is prompted for these also.
@@ -409,6 +410,11 @@ def create_basic_transfer_params(param_str='transfer_params', local_data_path=No
     >>> from functools import partial
     >>> par = create_basic_transfer_params(
     ...     custom_arg=partial(cli_ask_default, 'Please enter custom arg value'))
+
+    Set up with no remote path (NB: if not the first time, use clobber=True to save param key)
+
+    >>> par = create_basic_transfer_params(remote_data_path=False)
+
     """
     parameters = params.as_dict(params.read(param_str, {})) or {}
     if local_data_path is None:
@@ -419,9 +425,12 @@ def create_basic_transfer_params(param_str='transfer_params', local_data_path=No
 
     if remote_data_path is None:
         remote_data_path = parameters.get('REMOTE_DATA_FOLDER_PATH')
-        if not remote_data_path or clobber:
+        if remote_data_path in (None, '') or clobber:
             remote_data_path = cli_ask_default("Where's your REMOTE 'Subjects' data folder?", remote_data_path)
-    parameters['REMOTE_DATA_FOLDER_PATH'] = remote_data_path
+    if remote_data_path is not False:
+        parameters['REMOTE_DATA_FOLDER_PATH'] = remote_data_path
+    elif 'REMOTE_DATA_FOLDER_PATH' not in parameters or clobber:
+        parameters['REMOTE_DATA_FOLDER_PATH'] = False  # Always assume no remote path
 
     # Deal with extraneous parameters
     for k, v in kwargs.items():
