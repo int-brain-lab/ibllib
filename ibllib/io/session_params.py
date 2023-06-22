@@ -157,7 +157,7 @@ def merge_params(a, b, copy=False):
         a = deepcopy(a)
     for k in b:
         if k == 'sync':
-            assert k not in a, 'multiple sync fields defined'
+            assert k not in a or a[k] == b[k], 'multiple sync fields defined'
         if isinstance(b[k], list):
             prev = a.get(k, [])
             # For procedures and projects, remove duplicates

@@ -478,17 +478,21 @@ class TestSessionParams(unittest.TestCase):
         # save as individual files
         self.devices_path = Path(self.tmpdir.name).joinpath('_devices')
 
+        # a sync that's different to widefield and ephys
+        sync = {**self.fixture['sync']['nidq'].copy(), 'collection': 'raw_sync_data'}
+
         computers_descriptions = {
             'widefield': dict(devices={'widefield': self.fixture['devices']['widefield']}),
             'video': '',
             'ephys': dict(devices={'neuropixel': self.fixture['devices']['neuropixel']}),
-            'behaviour': dict(devices={'microphone': self.fixture['devices']['microphone']})
+            'behaviour': dict(devices={'microphone': self.fixture['devices']['microphone']}),
+            'sync': dict(sync={'nidq': sync})
         }
 
         # the behaviour computer contains the task, project and procedure keys
         for k in filter(lambda x: x != 'devices', self.fixture):
             computers_descriptions['behaviour'][k] = self.fixture[k]
-        # the ephys computer contains another sync key!
+        # the ephys computer contains another identical sync key
         computers_descriptions['ephys']['sync'] = self.fixture['sync']
 
         for label, data in computers_descriptions.items():
@@ -530,8 +534,12 @@ class TestSessionParams(unittest.TestCase):
         self.assertCountEqual(data.keys(), expected_keys)
         self.assertTrue(len(data['devices'].keys()) > 1)
 
-        # A device with another sync key
-        file_device = self.devices_path.joinpath('ephys.yaml')
+        # A device with another identical sync key
+        file_device = self.devices_path.joinpath(f'ephys.yaml')
+        session_params.aggregate_device(file_device, fullfile, unlink=True)
+
+        # A device with a different sync
+        file_device = self.devices_path.joinpath(f'sync.yaml')
         with self.assertRaises(AssertionError):
             session_params.aggregate_device(file_device, fullfile, unlink=True)
 
