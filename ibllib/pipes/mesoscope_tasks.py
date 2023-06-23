@@ -678,7 +678,7 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
 
         return sorted([*roi_files, *mean_image_mlapdv, *mean_image_ids])
 
-    def roi_mlapdv(self, nFOV: int, suffix=None) -> (dict[int, np.array], dict[int, np.array]):
+    def roi_mlapdv(self, nFOV: int, suffix=None):
         """
         Extract ROI MLAPDV coordinates and brain location IDs.
 
