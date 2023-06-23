@@ -3,6 +3,7 @@ import logging
 
 import numpy as np
 import one.alf.io as alfio
+from one.util import ensure_list
 from one.alf.files import session_path_parts
 import matplotlib.pyplot as plt
 from neurodsp.utils import falls
@@ -66,6 +67,7 @@ def plot_timeline(timeline, channels=None, raw=True):
     meta = {x.copy().pop('name'): x for x in timeline['meta']['inputs']}
     channels = channels or meta.keys()
     fig, axes = plt.subplots(len(channels), 1, sharex=True)
+    axes = ensure_list(axes)
     if not raw:
         chmap = {ch: meta[ch]['arrayColumn'] for ch in channels}
         sync = extract_sync_timeline(timeline, chmap=chmap)
@@ -130,6 +132,7 @@ class TimelineTrials(FpgaTrials):
 
         # Replace valve open times with those extracted from the DAQ
         # TODO Let's look at the expected open length based on calibration and reward volume
+        assert len(bpod['times']) > 0, 'No Bpod TTLs detected on DAQ'
         _, driver_out, _, = _assign_events_bpod(bpod['times'], bpod['polarities'], False)
         # Use the driver TTLs to find the valve open times that correspond to the valve opening
         valve_open_times = self.get_valve_open_times(driver_ttls=driver_out)
