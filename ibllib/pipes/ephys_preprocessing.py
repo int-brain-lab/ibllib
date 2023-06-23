@@ -5,11 +5,11 @@ import subprocess
 from collections import OrderedDict
 import traceback
 from pathlib import Path
-import packaging.version
 
 import cv2
 import numpy as np
 import pandas as pd
+import packaging.version
 
 import one.alf.io as alfio
 from neurodsp.utils import rms
