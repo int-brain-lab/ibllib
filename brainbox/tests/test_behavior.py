@@ -43,18 +43,18 @@ class TestWheel(unittest.TestCase):
             'intervals': np.array([[0, 62], [63, 90], [95, 110], [115, 135], [140, 200]])
         }
 
-    def test_derivative(self):
-        if self.test_data is None:
-            return
-        t = np.array([0, .5, 1., 1.5, 2, 3, 4, 4.5, 5, 5.5])
-        p = np.arange(len(t))
-        v = wheel.velocity(t, p)
-        self.assertTrue(len(v) == len(t))
-        self.assertTrue(np.all(v[0:4] == 2) and v[5] == 1 and np.all(v[7:] == 2))
-        # import matplotlib.pyplot as plt
-        # plt.figure()
-        # plt.plot(t[:-1] + np.diff(t) / 2, np.diff(p) / np.diff(t), '*-')
-        # plt.plot(t, v, '-*')
+    def test_velocity_filtered(self):
+        """Test for brainbox.behavior.wheel.velocity_filtered"""
+        Fs = 1000
+        pos, _ = wheel.interpolate_position(*self.test_data[1][0], freq=Fs)
+        vel, acc = wheel.velocity_filtered(pos, Fs)
+        self.assertEqual(vel.shape, pos.shape)
+        expected = [-0.03020161, -0.02642356, -0.0229635, -0.01981592, -0.01697264,
+                    -0.01442305, -0.01215438, -0.01015202, -0.00839981, -0.00688036]
+        np.testing.assert_array_almost_equal(vel[-10:], expected)
+        expected = [0., 187.41222339, 4.16291917, 3.94583813, 3.67112556,
+                    3.33635025, 2.94002541, 2.48170905, 1.96209209, 1.38307198]
+        np.testing.assert_array_almost_equal(acc[:10], expected)
 
     def test_movements(self):
         # These test data are the same as those used in the MATLAB code
@@ -104,14 +104,25 @@ class TestWheel(unittest.TestCase):
             np.testing.assert_array_equal(trace_pos[[0, -1]], pos[ind])
 
     def test_direction_changes(self):
+        """Test for brainbox.behavior.wheel.direction_changes"""
         t, pos = self.test_data[0][0]
         on, off, *_ = self.test_data[0][1]
-        vel, _ = wheel.velocity_smoothed(pos, 1000)
+        vel, _ = wheel.velocity_filtered(pos, 1000)
         times, indices = wheel.direction_changes(t, vel, np.c_[on, off])
         # import matplotlib.pyplot as plt
         # plt.plot(np.diff(pos) * 1000)
         # plt.plot(vel)
         self.assertTrue(len(times) == len(indices) == 14, 'incorrect number of arrays returned')
+
+    def test_get_movement_onset(self):
+        """Test for brainbox.behavior.wheel.get_movement_onset"""
+        on, off, *_ = self.test_data[0][1]
+        intervals = np.c_[on, off]
+        times = wheel.get_movement_onset(intervals, self.trials['feedback_times'])
+        expected = [np.nan, 79.66293334, 100.73593334, 129.26693334, np.nan]
+        np.testing.assert_array_almost_equal(times, expected)
+        with self.assertRaises(ValueError):
+            wheel.get_movement_onset(intervals, np.random.permutation(self.trials['feedback_times']))
 
 
 class TestTraining(unittest.TestCase):
