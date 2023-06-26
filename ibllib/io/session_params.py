@@ -470,7 +470,7 @@ def prepare_experiment(session_path, acquisition_description=None, local=None, r
         return
     # Determine if user passed in arg for local/remote subject folder locations or pull in from
     # local param file or prompt user if missing
-    params = misc.create_basic_transfer_params(transfers_path=local, remote_data_path=remote)
+    params = misc.create_basic_transfer_params(local_data_path=local, remote_data_path=remote)
 
     # First attempt to copy to server
     local_only = remote is False or params.get('REMOTE_DATA_FOLDER_PATH', False) is False
