@@ -535,11 +535,11 @@ class TestSessionParams(unittest.TestCase):
         self.assertTrue(len(data['devices'].keys()) > 1)
 
         # A device with another identical sync key
-        file_device = self.devices_path.joinpath(f'ephys.yaml')
+        file_device = self.devices_path.joinpath('ephys.yaml')
         session_params.aggregate_device(file_device, fullfile, unlink=True)
 
         # A device with a different sync
-        file_device = self.devices_path.joinpath(f'sync.yaml')
+        file_device = self.devices_path.joinpath('sync.yaml')
         with self.assertRaises(AssertionError):
             session_params.aggregate_device(file_device, fullfile, unlink=True)
 
