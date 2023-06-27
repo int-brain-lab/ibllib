@@ -524,7 +524,7 @@ class TestSessionParams(unittest.TestCase):
         self.devices_path = Path(self.tmpdir.name).joinpath("_devices")
 
         # a sync that's different to widefield and ephys
-        sync = {**self.fixture['sync']['nidq'].copy(), 'collection': 'raw_sync_data'}
+        sync = {**self.fixture["sync"]["nidq"].copy(), "collection": "raw_sync_data"}
 
         computers_descriptions = {
             "widefield": dict(
@@ -537,6 +537,7 @@ class TestSessionParams(unittest.TestCase):
             "behaviour": dict(
                 devices={"microphone": self.fixture["devices"]["microphone"]}
             ),
+            "sync": dict(sync={"nidq": sync}),
         }
 
         # the behaviour computer contains the task, project and procedure keys
@@ -634,6 +635,7 @@ class TestSessionParams(unittest.TestCase):
 
 class TestRawDaqLoaders(unittest.TestCase):
     """Tests for raw_daq_loaders module"""
+
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmpdir.cleanup)
@@ -644,91 +646,127 @@ class TestRawDaqLoaders(unittest.TestCase):
         self.n_ttl = 6
         pulse_width = int(np.floor(50 * Fs))
         for i in np.arange(1, N, int(np.floor(N / self.n_ttl))):
-            a0_clean[i:i + pulse_width] = 1
-        a0 = (a0_clean * np.full(N, 5)) + np.random.rand(N) + 1  # 0 -> 5V w/ noise and 1V DC offset
-        ctr0 = np.cumsum(a0_clean)  # Counter channel, e.g. [0, 0, 0, 1, 1, 2, 3, 3, 3, 3, [...] n]
-        ctr1 = np.cumsum(a0_clean * np.random.choice([1, -1], N))  # Position channel e.g. [0, 1, 2, 1, ...]
+            a0_clean[i : i + pulse_width] = 1
+        a0 = (
+            (a0_clean * np.full(N, 5)) + np.random.rand(N) + 1
+        )  # 0 -> 5V w/ noise and 1V DC offset
+        ctr0 = np.cumsum(
+            a0_clean
+        )  # Counter channel, e.g. [0, 0, 0, 1, 1, 2, 3, 3, 3, 3, [...] n]
+        ctr1 = np.cumsum(
+            a0_clean * np.random.choice([1, -1], N)
+        )  # Position channel e.g. [0, 1, 2, 1, ...]
 
-        self.timeline = {'timestamps': np.arange(0, N, Fs), 'raw': np.vstack([a0, ctr0, ctr1]).T}
-        self.meta = {'daqSampleRate': Fs, 'inputs': [
-            {'name': 'bpod', 'arrayColumn': 1, 'measurement': 'Voltage', 'daqChannelID': 'ai0'},
-            {'name': 'neuralFrames', 'arrayColumn': 2, 'measurement': 'EdgeCount', 'daqChannelID': 'ctr0'},
-            {'name': 'rotaryEncoder', 'arrayColumn': 3, 'measurement': 'Position', 'daqChannelID': 'ctr1'}
-        ]}
+        self.timeline = {
+            "timestamps": np.arange(0, N, Fs),
+            "raw": np.vstack([a0, ctr0, ctr1]).T,
+        }
+        self.meta = {
+            "daqSampleRate": Fs,
+            "inputs": [
+                {
+                    "name": "bpod",
+                    "arrayColumn": 1,
+                    "measurement": "Voltage",
+                    "daqChannelID": "ai0",
+                },
+                {
+                    "name": "neuralFrames",
+                    "arrayColumn": 2,
+                    "measurement": "EdgeCount",
+                    "daqChannelID": "ctr0",
+                },
+                {
+                    "name": "rotaryEncoder",
+                    "arrayColumn": 3,
+                    "measurement": "Position",
+                    "daqChannelID": "ctr1",
+                },
+            ],
+        }
         # FIXME Because of non-standard ALF naming we cannot use save_object_npy for this purpose
         # alfio.save_object_npy(self.tmpdir.name, self.timeline, 'DAQ data', namespace='timeline')
         for k, v in self.timeline.items():
-            np.save(self.tmpdir.name + f'/_timeline_DAQdata.{k}.npy', v)
-        with open(self.tmpdir.name + '/_timeline_DAQdata.meta.json', 'w') as fp:
+            np.save(self.tmpdir.name + f"/_timeline_DAQdata.{k}.npy", v)
+        with open(self.tmpdir.name + "/_timeline_DAQdata.meta.json", "w") as fp:
             json.dump(self.meta, fp)
 
     def test_extract_sync_timeline(self):
         """Test for extract_sync_timeline function."""
-        chmap = {'bpod': 0, 'neuralFrames': 1, 'rotaryEncoder': 3}
+        chmap = {"bpod": 0, "neuralFrames": 1, "rotaryEncoder": 3}
         sync = raw_daq.extract_sync_timeline(self.tmpdir.name, chmap)
-        self.assertCountEqual(('times', 'channels', 'polarities'), sync.keys())
+        self.assertCountEqual(("times", "channels", "polarities"), sync.keys())
         # Should be sorted by times
-        self.assertTrue(np.all(np.diff(sync['times']) >= 0))
+        self.assertTrue(np.all(np.diff(sync["times"]) >= 0))
         # Number of detected fronts should be correct
-        self.assertEqual(len(sync['times'][sync['channels'] == 0]), self.n_ttl * 2)
+        self.assertEqual(len(sync["times"][sync["channels"] == 0]), self.n_ttl * 2)
         # Check polarities
-        fronts = sync['polarities'][sync['channels'] == 0]
+        fronts = sync["polarities"][sync["channels"] == 0]
         self.assertEqual(1, fronts[0])
         # Check polarities alternate between 1 and -1
         self.assertTrue(
-            np.all(np.unique(np.cumsum(fronts)) == [0, 1]) and np.all(np.unique(fronts) == [-1, 1])
+            np.all(np.unique(np.cumsum(fronts)) == [0, 1])
+            and np.all(np.unique(fronts) == [-1, 1])
         )
         # Check edge count channel sync
-        fronts = sync['polarities'][sync['channels'] == 1]
+        fronts = sync["polarities"][sync["channels"] == 1]
         # Check a few timestamps
-        times = sync['times'][sync['channels'] == 1]
-        np.testing.assert_array_almost_equal(times[:5], np.arange(5) + 1.)
+        times = sync["times"][sync["channels"] == 1]
+        np.testing.assert_array_almost_equal(times[:5], np.arange(5) + 1.0)
         # Because of the way we made the data, the number of fronts should == pulse_width * n_ttl
         # Minus one from unique values because one of those values will be zero
-        self.assertEqual(len(np.unique(self.timeline['raw'][:, 1])) - 1, len(fronts))
+        self.assertEqual(len(np.unique(self.timeline["raw"][:, 1])) - 1, len(fronts))
         self.assertTrue(np.all(fronts == 1))
         # Check position channel sync
-        fronts = sync['polarities'][sync['channels'] == 3]
-        self.assertEqual(len(np.unique(self.timeline['raw'][:, 1])) - 1, len(fronts))
+        fronts = sync["polarities"][sync["channels"] == 3]
+        self.assertEqual(len(np.unique(self.timeline["raw"][:, 1])) - 1, len(fronts))
         self.assertTrue(np.all(np.unique(fronts) == [-1, 1]))
 
         # Check for missing channel warnings
-        chmap['unknown'] = 2  # Add channel that's not in meta file
-        with self.assertLogs(logging.getLogger('ibllib.io.raw_daq_loaders'), logging.WARNING) as log:
+        chmap["unknown"] = 2  # Add channel that's not in meta file
+        with self.assertLogs(
+            logging.getLogger("ibllib.io.raw_daq_loaders"), logging.WARNING
+        ) as log:
             raw_daq.extract_sync_timeline(self.tmpdir.name, chmap)
-            record, = log.records
-            self.assertIn('unknown', record.message)
+            (record,) = log.records
+            self.assertIn("unknown", record.message)
 
         # Check measurement type validation
-        self.meta['inputs'][0]['measurement'] = 'FooBar'
-        with open(self.tmpdir.name + '/_timeline_DAQdata.meta.json', 'w') as fp:
+        self.meta["inputs"][0]["measurement"] = "FooBar"
+        with open(self.tmpdir.name + "/_timeline_DAQdata.meta.json", "w") as fp:
             json.dump(self.meta, fp)
-        self.assertRaises(NotImplementedError, raw_daq.extract_sync_timeline, self.tmpdir.name)
+        self.assertRaises(
+            NotImplementedError, raw_daq.extract_sync_timeline, self.tmpdir.name
+        )
 
     def test_timeline_meta2wiring(self):
         """Test for timeline_meta2wiring function."""
         wiring = raw_daq.timeline_meta2wiring(self.tmpdir.name, save=False)
         expected = {
-            'SYSTEM': 'timeline',
-            'SYNC_WIRING_ANALOG': {'ai0': 'bpod'},
-            'SYNC_WIRING_DIGITAL': {'ctr0': 'neuralFrames', 'ctr1': 'rotaryEncoder'}
+            "SYSTEM": "timeline",
+            "SYNC_WIRING_ANALOG": {"ai0": "bpod"},
+            "SYNC_WIRING_DIGITAL": {"ctr0": "neuralFrames", "ctr1": "rotaryEncoder"},
         }
         self.assertDictEqual(expected, wiring)
         wiring, outpath = raw_daq.timeline_meta2wiring(self.tmpdir.name, save=True)
-        expected_path = Path(self.tmpdir.name, '_timeline_DAQData.wiring.json')
+        expected_path = Path(self.tmpdir.name, "_timeline_DAQData.wiring.json")
         self.assertEqual(expected_path, outpath)
         self.assertTrue(outpath.exists())
 
     def test_timeline_meta2chmap(self):
         """Test for timeline_meta2chmap function."""
         chmap = raw_daq.timeline_meta2chmap(self.meta)
-        expected = {'bpod': 1, 'neuralFrames': 2, 'rotaryEncoder': 3}
+        expected = {"bpod": 1, "neuralFrames": 2, "rotaryEncoder": 3}
         self.assertDictEqual(expected, chmap)
-        chmap = raw_daq.timeline_meta2chmap(self.meta, exclude_channels=('bpod', 'rotaryEncoder'))
-        self.assertDictEqual({'neuralFrames': expected.pop('neuralFrames')}, chmap)
-        chmap = raw_daq.timeline_meta2chmap(self.meta, include_channels=('bpod', 'rotaryEncoder'))
+        chmap = raw_daq.timeline_meta2chmap(
+            self.meta, exclude_channels=("bpod", "rotaryEncoder")
+        )
+        self.assertDictEqual({"neuralFrames": expected.pop("neuralFrames")}, chmap)
+        chmap = raw_daq.timeline_meta2chmap(
+            self.meta, include_channels=("bpod", "rotaryEncoder")
+        )
         self.assertDictEqual(expected, chmap)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main(exit=False, verbosity=2)
