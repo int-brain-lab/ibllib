@@ -664,6 +664,7 @@ class EphysTrials(tasks.Task):
                          ('*trials.goCueTrigger_times.npy', 'alf', True),
                          ('*trials.intervals_bpod.npy', 'alf', True),
                          ('*trials.stimOff_times.npy', 'alf', True),
+                         ('*trials.quiescencePeriod.npy', 'alf', True),
                          ('*wheel.position.npy', 'alf', True),
                          ('*wheel.timestamps.npy', 'alf', True),
                          ('*wheelMoves.intervals.npy', 'alf', True),
@@ -738,6 +739,23 @@ class EphysTrials(tasks.Task):
         self.input_files = full_input_files
 
         self.output_files = self.signature['output_files']
+
+
+class LaserTrialsLegacy(EphysTrials):
+    """This is the legacy extractor for Guido's ephys optogenetic stimulation protocol.
+
+    This is legacy because personal project extractors should be in a separate repository.
+    """
+    def _extract_behaviour(self):
+        dsets, out_files = super()._extract_behaviour()
+
+        # Re-extract the laser datasets as the above default extractor discards them
+        from ibllib.io.extractors import opto_trials
+        laser = opto_trials.LaserBool(self.session_path)
+        dsets_laser, out_files_laser = laser.extract(save=True)
+        dsets.update({k: v for k, v in zip(laser.var_names, dsets_laser)})
+        out_files.extend(out_files_laser)
+        return dsets, out_files
 
 
 class EphysCellsQc(tasks.Task):

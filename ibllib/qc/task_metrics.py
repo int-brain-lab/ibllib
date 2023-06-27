@@ -148,7 +148,7 @@ class TaskQC(base.QC):
         self.log.info(f"Session {self.session_path}: Running QC on behavior data...")
         self.metrics, self.passed = get_bpodqc_metrics_frame(
             self.extractor.data,
-            wheel_gain=self.extractor.settings["STIM_GAIN"],  # The wheel gain
+            wheel_gain=self.extractor.settings['STIM_GAIN'],  # The wheel gain
             photodiode=self.extractor.frame_ttls,
             audio=self.extractor.audio_ttls,
             re_encoding=self.extractor.wheel_encoding or 'X1',
@@ -379,7 +379,7 @@ def check_response_feedback_delays(data, **_):
     """ Checks that the time difference between the response and the feedback onset
     (error sound or valve) is positive and less than 10ms.
 
-    Metric: M = Feedback_time - response_time
+    Metric: M = feedback_time - response_time
     Criterion: 0 < M < 0.010 s
     Units: seconds [s]
 

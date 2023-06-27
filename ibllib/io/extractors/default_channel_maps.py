@@ -52,5 +52,37 @@ DEFAULT_MAPS = {
                   'rotary_encoder_1': 6,
                   'audio': 7,
                   'bpod': 16}
+         },
+
+    'mesoscope':
+        {'timeline': {'left_camera': 0,
+                      'right_camera': 1,
+                      'belly_camera': 2,
+                      'frame2ttl': 3,
+                      'audio': 4,
+                      'bpod': 5,
+                      'rotary_encoder': 6,
+                      'neural_frames': 7}
          }
 }
+
+
+def all_default_labels():
+    """
+    Returns the set of channel map channel names.
+
+    Returns
+    -------
+    set of str
+        The channel names present throughout all default channel maps.
+    """
+    keys = set()
+
+    def _iter_map(d):
+        for k, v in d.items():
+            if isinstance(v, dict):
+                _iter_map(v)
+            else:
+                keys.add(k)
+    _iter_map(DEFAULT_MAPS)
+    return keys

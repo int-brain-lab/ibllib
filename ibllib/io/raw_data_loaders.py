@@ -321,7 +321,7 @@ def _read_settings_json_compatibility_enforced(settings):
     else:
         with open(settings) as js:
             md = json.load(js)
-    if 'IS_MOCK' not in md.keys():
+    if 'IS_MOCK' not in md:
         md['IS_MOCK'] = False
     if 'IBLRIG_VERSION_TAG' not in md.keys():
         md['IBLRIG_VERSION_TAG'] = md.get('IBLRIG_VERSION', '')
@@ -341,7 +341,7 @@ def _read_settings_json_compatibility_enforced(settings):
         dt = dateparser.parse(md['SESSION_DATETIME'])
         md['SESSION_DATETIME'] = date2isostr(dt)
         # add the weight key if it doesn't already exist
-        if 'SUBJECT_WEIGHT' not in md.keys():
+        if 'SUBJECT_WEIGHT' not in md:
             md['SUBJECT_WEIGHT'] = None
     return md
 
@@ -408,7 +408,7 @@ def load_encoder_events(session_path, task_collection='raw_behavior_data', setti
     path = next(path.glob("_iblrig_encoderEvents.raw*.ssv"), None)
     if not settings:
         settings = load_settings(session_path, task_collection=task_collection)
-    if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
+    if settings is None or not settings.get('IBLRIG_VERSION_TAG'):
         settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
         # auto-detect old files when version is not labeled
         with open(path) as fid:
@@ -512,7 +512,7 @@ def load_encoder_positions(session_path, task_collection='raw_behavior_data', se
     path = next(path.glob("_iblrig_encoderPositions.raw*.ssv"), None)
     if not settings:
         settings = load_settings(session_path, task_collection=task_collection)
-    if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
+    if settings is None or not settings.get('IBLRIG_VERSION_TAG'):
         settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
         # auto-detect old files when version is not labeled
         with open(path) as fid:

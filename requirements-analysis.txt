@@ -21,3 +21,4 @@ pyqt5
 pyqtgraph
 ipython
 datajoint
+psychofit

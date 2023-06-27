@@ -352,8 +352,7 @@ def extract_first_movement_times(wheel_moves, trials, min_qt=None):
     all_move_onsets = wheel_moves['intervals'][:, 0]
     # Iterate over trials, extracting onsets approx. within closed-loop period
     cwarn = 0
-    for i, (t1, t2) in enumerate(zip(trials['goCue_times'] - min_qt,
-                                     trials['feedback_times'])):
+    for i, (t1, t2) in enumerate(zip(trials['goCue_times'] - min_qt, trials['feedback_times'])):
         if ~np.isnan(t2 - t1):  # If both timestamps defined
             mask = (all_move_onsets > t1) & (all_move_onsets < t2)
             if np.any(mask):  # If any onsets for this trial

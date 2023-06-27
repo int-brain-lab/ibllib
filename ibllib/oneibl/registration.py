@@ -110,6 +110,8 @@ def register_session_raw_data(session_path, one=None, overwrite=False, **kwargs)
     list of dicts, dict
         A list of newly created Alyx dataset records or the registration data if dry.
     """
+    # Clear rest cache to make sure we have the latest entries
+    one.alyx.clear_rest_cache()
     client = IBLRegistrationClient(one)
     session_path = Path(session_path)
     eid = one.path2eid(session_path, query_type='remote')  # needs to make sure we're up to date
@@ -121,7 +123,7 @@ def register_session_raw_data(session_path, one=None, overwrite=False, **kwargs)
     # unless overwrite is True, filter out the datasets that already exist
     if not overwrite:
         # query the database for existing datasets on the session and allowed dataset types
-        dsets = datasets2records(one.alyx.rest('datasets', 'list', session=eid))
+        dsets = datasets2records(one.alyx.rest('datasets', 'list', session=eid, no_cache=True))
         already_registered = list(map(session_path.joinpath, dsets['rel_path']))
         file_list = list(filter(lambda f: f not in already_registered, file_list))
 
@@ -194,7 +196,7 @@ class IBLRegistrationClient(RegistrationClient):
         assert len({x['IS_MOCK'] for x in settings}) == 1
         assert len({md['PYBPOD_BOARD'] for md in settings}) == 1
         assert len({md.get('IBLRIG_VERSION') for md in settings}) == 1
-        assert len({md['IBLRIG_VERSION_TAG'] for md in settings}) == 1
+        # assert len({md['IBLRIG_VERSION_TAG'] for md in settings}) == 1
 
         # query Alyx endpoints for subject, error if not found
         subject = self.assert_exists(subject, 'subjects')
@@ -250,7 +252,10 @@ class IBLRegistrationClient(RegistrationClient):
             # Submit weights
             for md in filter(lambda md: md.get('SUBJECT_WEIGHT') is not None, settings):
                 user = md.get('PYBPOD_CREATOR')
-                user = user[0] if user[0] in users else self.one.alyx.user
+                if isinstance(user, list):
+                    user = user[0]
+                if user not in users:
+                    user = self.one.alyx.user
                 self.register_weight(subject['nickname'], md['SUBJECT_WEIGHT'],
                                      date_time=md['SESSION_DATETIME'], user=user)
         else:  # if session exists update the JSON field
@@ -260,13 +265,12 @@ class IBLRegistrationClient(RegistrationClient):
         _logger.info(session['url'] + ' ')
         # create associated water administration if not found
         if not session['wateradmin_session_related'] and any(task_data):
-            for md, d in zip(settings, task_data):
-                if d is None:
-                    continue
+            for md, d in filter(all, zip(settings, task_data)):
                 _, _end_time = _get_session_times(ses_path, md, d)
                 user = md.get('PYBPOD_CREATOR')
                 user = user[0] if user[0] in users else self.one.alyx.user
-                if (volume := d[-1]['water_delivered'] / 1000) > 0:
+                volume = d[-1].get('water_delivered', sum(x['reward_amount'] for x in d)) / 1000
+                if volume > 0:
                     self.register_water_administration(
                         subject['nickname'], volume, date_time=_end_time or end_time, user=user,
                         session=session['id'], water_type=md.get('REWARD_TYPE') or 'Water')
@@ -419,6 +423,7 @@ def _get_session_performance(md, ses_data):
     int
         The total number of correct trials across protocols.
     """
+
     if not any(filter(None, ses_data or None)):
         return None, None
 
@@ -428,20 +433,21 @@ def _get_session_performance(md, ses_data):
     else:
         assert isinstance(ses_data, (list, tuple)) and len(ses_data) == len(md)
 
-    # For now just remove missing session data, long run move this function into extractors
-    ses_data = [sd for sd in ses_data if sd]
-    n_trials = [x[-1]['trial_num'] for x in ses_data]
-    # checks that the number of actual trials and labeled number of trials check out
-    assert all(len(x) == n for x, n in zip(ses_data, n_trials))
-    # task specific logic
-    n_correct_trials = []
-    for data, proc in zip(ses_data, map(lambda x: x.get('PYBPOD_PROTOCOL', ''), md)):
-        if 'habituationChoiceWorld' in proc:
-            n_correct_trials.append(0)
+    n_trials = []
+    n_correct = []
+    for data, settings in filter(all, zip(ses_data, md)):
+        # In some protocols trials start from 0, in others, from 1
+        n = data[-1]['trial_num'] + int(data[0]['trial_num'] == 0)  # +1 if starts from 0
+        n_trials.append(n)
+        # checks that the number of actual trials and labeled number of trials check out
+        assert len(data) == n, f'{len(data)} trials in data, however last trial number was {n}'
+        # task specific logic
+        if 'habituationChoiceWorld' in settings.get('PYBPOD_PROTOCOL', ''):
+            n_correct.append(0)
         else:
-            n_correct_trials.append(data[-1]['ntrials_correct'])
+            n_correct.append(data[-1].get('ntrials_correct', sum(x['trial_correct'] for x in data)))
 
-    return sum(n_trials), sum(n_correct_trials)
+    return sum(n_trials), sum(n_correct)
 
 
 def get_local_data_repository(ac):
