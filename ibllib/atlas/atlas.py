@@ -295,6 +295,9 @@ class BrainAtlas:
         :param mapping: brain region mapping (defaults to original Allen mapping)
         :param radius_um: if not null, returns a regions ids array and an array of proportion
          of regions in a sphere of size radius around the coordinates.
+        :param mode: {‘raise’, 'clip'} determines what to do when determined index lies outside the atlas volume
+        'raise' will raise a ValueError (default)
+        'clip' will replace the index with the closest index inside the volume
         :return: n array of region ids
         """
         mapping = mapping or self.regions.default_mapping
@@ -304,7 +307,7 @@ class BrainAtlas:
             nry = int(np.ceil(radius_um / abs(self.bc.dy) / 1e6))
             nrz = int(np.ceil(radius_um / abs(self.bc.dz) / 1e6))
             nr = [nrx, nry, nrz]
-            iii = self.bc.xyz2i(xyz)
+            iii = self.bc.xyz2i(xyz, mode=mode)
             # computing the cube radius and indices is more complicated as volume indices are not
             # necessariy in ml, ap, dv order so the indices order is dynamic
             rcube = np.meshgrid(*tuple((np.arange(
@@ -1074,21 +1077,25 @@ class AllenAtlas(BrainAtlas):
         else:
             ValueError("ccf_order needs to be either 'mlapdv' or 'apdvml'")
 
-    def compute_regions_volume(self):
+    def compute_regions_volume(self, cumsum=False):
         """
         Sums the number of voxels in the labels volume for each region.
         Then compute volumes for all of the levels of hierarchy in cubic mm.
+        :param: cumsum: computes the cumulative sum of the volume as per the hierarchy (defaults to False)
         :return:
         """
         nr = self.regions.id.shape[0]
         count = np.bincount(self.label.flatten(), minlength=nr)
-        self.regions.compute_hierarchy()
-        self.regions.volume = np.zeros_like(count)
-        for i in np.arange(nr):
-            if count[i] == 0:
-                continue
-            self.regions.volume[np.unique(self.regions.hierarchy[:, i])] += count[i]
-        self.regions.volume = self.regions.volume * (self.res_um / 1e3) ** 3
+        if not cumsum:
+            self.regions.volume = count * (self.res_um / 1e3) ** 3
+        else:
+            self.regions.compute_hierarchy()
+            self.regions.volume = np.zeros_like(count)
+            for i in np.arange(nr):
+                if count[i] == 0:
+                    continue
+                self.regions.volume[np.unique(self.regions.hierarchy[:, i])] += count[i]
+            self.regions.volume = self.regions.volume * (self.res_um / 1e3) ** 3
 
 
 def NeedlesAtlas(*args, **kwargs):
