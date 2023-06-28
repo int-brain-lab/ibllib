@@ -344,7 +344,7 @@ class CriticalInsertionNote(CriticalNote):
         'Noise and artifact',
         'Drift',
         'Poor neural yield',
-        'Brain Damage'
+        'Brain Damage',
         'Other'
     ]
 
