@@ -311,7 +311,7 @@ class CameraQC(base.QC):
         :return: 2-element array comprising the start and end times of the active period
         """
         pos, ts = wh.interpolate_position(wheel.timestamps, wheel.position)
-        v, acc = wh.velocity_smoothed(pos, 1000)
+        v, acc = wh.velocity_filtered(pos, 1000)
         on, off, *_ = wh.movements(ts, acc, pos_thresh=.1, make_plots=False)
         edges = np.c_[on, off]
         indices, _ = np.where(np.logical_and(
