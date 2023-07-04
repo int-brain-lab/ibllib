@@ -449,7 +449,7 @@ def get_remote_stub_name(session_path, device_id=None):
     return session_path / '_devices' / remote_filename
 
 
-def prepare_experiment(session_path, acquisition_description=None, local=None, remote=None, overwrite=False):
+def prepare_experiment(session_path, acquisition_description=None, local=None, remote=None, device_id=None, overwrite=False):
     """
     Copy acquisition description yaml to the server and local transfers folder.
 
@@ -463,6 +463,9 @@ def prepare_experiment(session_path, acquisition_description=None, local=None, r
         The path to the local session folders.
     remote : str, pathlib.Path
         The path to the remote server session folders.
+    device_id : str, optional
+        A device name, if None the TRANSFER_LABEL parameter is used (defaults to this device's
+        hostname with a unique numeric ID)
     overwrite : bool
         If true, overwrite any existing file with the new one, otherwise, update the existing file.
     """
@@ -471,11 +474,11 @@ def prepare_experiment(session_path, acquisition_description=None, local=None, r
     # Determine if user passed in arg for local/remote subject folder locations or pull in from
     # local param file or prompt user if missing
     params = misc.create_basic_transfer_params(local_data_path=local, remote_data_path=remote)
-
+    device_id = device_id or params['TRANSFER_LABEL']
     # First attempt to copy to server
     local_only = remote is False or params.get('REMOTE_DATA_FOLDER_PATH', False) is False
     if not local_only:
-        remote_device_path = get_remote_stub_name(session_path, params['TRANSFER_LABEL'])
+        remote_device_path = get_remote_stub_name(session_path, device_id=device_id
         previous_description = read_params(remote_device_path) if remote_device_path.exists() and not overwrite else {}
         try:
             write_yaml(remote_device_path, merge_params(previous_description, acquisition_description))
@@ -484,7 +487,7 @@ def prepare_experiment(session_path, acquisition_description=None, local=None, r
 
     # Now copy to local directory
     local = params.get('TRANSFERS_PATH', params['DATA_FOLDER_PATH'])
-    filename = f'_ibl_experiment.description_{params["TRANSFER_LABEL"]}.yaml'
+    filename = f'_ibl_experiment.description_{device_id}.yaml'
     local_device_path = Path(local).joinpath(session_path, filename)
     previous_description = read_params(local_device_path) if local_device_path.exists() and not overwrite else {}
     write_yaml(local_device_path, merge_params(previous_description, acquisition_description))
