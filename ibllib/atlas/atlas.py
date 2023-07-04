@@ -845,8 +845,11 @@ class Insertion:
         point to the z of the brain surface
         :return: Trajectory object
         """
+        assert brain_atlas, 'Input argument brain_atlas must be defined'
         z = d['z'] / 1e6
         if brain_atlas:
+            if not hasattr(brain_atlas, 'top'):
+                brain_atlas.compute_surface()
             iy = brain_atlas.bc.y2i(d['y'] / 1e6)
             ix = brain_atlas.bc.x2i(d['x'] / 1e6)
             # Only use the brain surface value as z if it isn't NaN (this happens when the surface touches the edges
