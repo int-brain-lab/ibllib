@@ -478,7 +478,7 @@ def prepare_experiment(session_path, acquisition_description=None, local=None, r
     # First attempt to copy to server
     local_only = remote is False or params.get('REMOTE_DATA_FOLDER_PATH', False) is False
     if not local_only:
-        remote_device_path = get_remote_stub_name(session_path, device_id=device_id
+        remote_device_path = get_remote_stub_name(session_path, device_id=device_id)
         previous_description = read_params(remote_device_path) if remote_device_path.exists() and not overwrite else {}
         try:
             write_yaml(remote_device_path, merge_params(previous_description, acquisition_description))
