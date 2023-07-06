@@ -187,18 +187,46 @@ def plot_swanson_vector(acronyms=None, values=None, ax=None, hemisphere=None, br
 
         if acronyms is None:
             color = br.rgba[br.mappings['Swanson'][reg['thisID']]] / 255
+            hem = 'mirror' if hemisphere == 'both' else hemisphere
+            col_r = color if hem in [None, 'right', 'mirror'] else empty_color
+            col_l = color if hem in ['left', 'mirror'] else empty_color
         else:
             idx = np.where(ibr == reg['thisID'])[0]
             if len(idx) > 0:
                 plot_idx.append(ibr[idx[0]])
                 plot_val.append(vals[idx[0]])
                 color = rgba_color[idx[0]] / 255
+                hem = 'right' if hemisphere == 'both' else hemisphere
+                col_r = color if hem in [None, 'right', 'mirror'] else empty_color
+                col_l = color if hem in ['left', 'mirror'] else empty_color
             else:
-                idx = np.where(imr == reg['thisID'])[0]
+                idx = np.where(ibr == reg['thisID'] + br.n_lr)[0]
                 if len(idx) > 0:
-                    color = mask_color
+                    plot_idx.append(ibr[idx[0]])
+                    plot_val.append(vals[idx[0]])
+                    color = rgba_color[idx[0]] / 255
+                    hem = 'left' if hemisphere == 'both' else hemisphere
+                    col_r = color if hem in [None, 'right', 'mirror'] else empty_color
+                    col_l = color if hem in ['left', 'mirror'] else empty_color
+
                 else:
-                    color = empty_color
+                    idx = np.where(imr == reg['thisID'])[0]
+                    if len(idx) > 0:
+                        color = mask_color
+                        hem = 'right' if hemisphere == 'both' else hemisphere
+                        col_r = color if hem in [None, 'right', 'mirror'] else empty_color
+                        col_l = color if hem in ['left', 'mirror'] else empty_color
+                    else:
+                        idx = np.where(imr == reg['thisID'] + br.n_lr)[0]
+                        if len(idx) > 0:
+                            color = mask_color
+                            hem = 'left' if hemisphere == 'both' else hemisphere
+                            col_r = color if hem in [None, 'right', 'mirror'] else empty_color
+                            col_l = color if hem in ['left', 'mirror'] else empty_color
+                        else:
+                            hem = 'mirror' if hemisphere == 'both' else hemisphere
+                            col_r = empty_color
+                            col_l = empty_color
 
         coords = reg['coordsReg']
         reg_id = reg['thisID']
@@ -207,39 +235,34 @@ def plot_swanson_vector(acronyms=None, values=None, ax=None, hemisphere=None, br
             vertices, codes = coords_for_poly_hole(coords)
             if orientation == 'portrait':
                 vertices[:, [0, 1]] = vertices[:, [1, 0]]
-                plot_polygon_with_hole(ax, vertices, codes, color, reg_id, **kwargs)
-                if hemisphere is not None:
-                    color_inv = color if hemisphere == 'mirror' else empty_color
+                plot_polygon_with_hole(ax, vertices, codes, col_r, reg_id, **kwargs)
+                if hem is not None:
                     vertices_inv = np.copy(vertices)
                     vertices_inv[:, 0] = -1 * vertices_inv[:, 0] + (sw.shape[0] * 2)
-                    plot_polygon_with_hole(ax, vertices_inv, codes, color_inv, reg_id, **kwargs)
+                    plot_polygon_with_hole(ax, vertices_inv, codes, col_l, reg_id, **kwargs)
             else:
-                plot_polygon_with_hole(ax, vertices, codes, color, reg_id, **kwargs)
-                if hemisphere is not None:
-                    color_inv = color if hemisphere == 'mirror' else empty_color
+                plot_polygon_with_hole(ax, vertices, codes, col_r, reg_id, **kwargs)
+                if hem is not None:
                     vertices_inv = np.copy(vertices)
                     vertices_inv[:, 1] = -1 * vertices_inv[:, 1] + (sw.shape[0] * 2)
-                    plot_polygon_with_hole(ax, vertices_inv, codes, color_inv, reg_id, **kwargs)
+                    plot_polygon_with_hole(ax, vertices_inv, codes, col_l, reg_id, **kwargs)
         else:
             coords = [coords] if type(coords) == dict else coords
             for c in coords:
-
                 if orientation == 'portrait':
                     xy = np.c_[c['y'], c['x']]
-                    plot_polygon(ax, xy, color, reg_id, **kwargs)
-                    if hemisphere is not None:
-                        color_inv = color if hemisphere == 'mirror' else empty_color
+                    plot_polygon(ax, xy, col_r, reg_id, **kwargs)
+                    if hem is not None:
                         xy_inv = np.copy(xy)
                         xy_inv[:, 0] = -1 * xy_inv[:, 0] + (sw.shape[0] * 2)
-                        plot_polygon(ax, xy_inv, color_inv, reg_id, **kwargs)
+                        plot_polygon(ax, xy_inv, col_l, reg_id, **kwargs)
                 else:
                     xy = np.c_[c['x'], c['y']]
-                    plot_polygon(ax, xy, color, reg_id, **kwargs)
-                    if hemisphere is not None:
-                        color_inv = color if hemisphere == 'mirror' else empty_color
+                    plot_polygon(ax, xy, col_r, reg_id, **kwargs)
+                    if hem is not None:
                         xy_inv = np.copy(xy)
                         xy_inv[:, 1] = -1 * xy_inv[:, 1] + (sw.shape[0] * 2)
-                        plot_polygon(ax, xy_inv, color_inv, reg_id, **kwargs)
+                        plot_polygon(ax, xy_inv, col_l, reg_id, **kwargs)
 
     if orientation == 'portrait':
         ax.set_ylim(0, sw.shape[1])
