@@ -52,7 +52,7 @@ class FibrePhotometryPreprocess(base_tasks.DynamicTask):
         self.regions = regions
 
     def _run(self, **kwargs):
-        _, out_files = FibrePhotometry(self.session_path, collection=self.collection).extract(
+        _, out_files = FibrePhotometry(self.session_path, collection=self.device_collection).extract(
             regions=self.regions, path_out=self.session_path.joinpath('alf', 'photometry'), save=True)
         return out_files
 
