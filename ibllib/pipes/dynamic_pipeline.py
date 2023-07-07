@@ -357,11 +357,11 @@ def make_pipeline(session_path, **pkwargs):
     if 'photometry' in devices:
         # {'collection': 'raw_photometry_data', 'sync_label': 'frame_trigger', 'regions': ['Region1G', 'Region3G']}
         photometry_kwargs = devices['photometry']
-        tasks['TaskFibrePhotometryRegisterRaw'] = type('TaskFibrePhotometryRegisterRaw', (
+        tasks['FibrePhotometryRegisterRaw'] = type('FibrePhotometryRegisterRaw', (
             TaskFibrePhotometryRegisterRaw,), {})(**kwargs, **photometry_kwargs)
-        tasks['TaskFibrePhotometryPreprocess'] = type('TaskFibrePhotometryPreprocess', (
+        tasks['FibrePhotometryPreprocess'] = type('FibrePhotometryPreprocess', (
             TaskFibrePhotometryPreprocess,), {})(**kwargs, **photometry_kwargs, **sync_kwargs,
-                                                 parents=[tasks['TaskFibrePhotometryRegisterRaw']] + sync_tasks)
+                                                 parents=[tasks['FibrePhotometryRegisterRaw']] + sync_tasks)
 
     p = mtasks.Pipeline(session_path=session_path, **pkwargs)
     p.tasks = tasks
