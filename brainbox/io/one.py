@@ -723,7 +723,7 @@ def load_iti(trials):
     np.array
         An array of inter-trial intervals, the last value being NaN.
     """
-    if not {'intervals', 'stimOff_times'} <= trials.keys():
+    if not {'intervals', 'stimOff_times'} <= set(trials.keys()):
         raise ValueError('trials must contain keys {"intervals", "stimOff_times"}')
     return np.r_[(np.roll(trials['intervals'][:, 0], -1) - trials['stimOff_times'])[:-1], np.nan]
 

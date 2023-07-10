@@ -373,7 +373,7 @@ def movements(t, pos, freq=1000, pos_thresh=8, t_thresh=.2, min_gap=.1, pos_thre
     if make_plots:
         fig, axes = plt.subplots(nrows=2, sharex='all')
         indices = np.sort(np.hstack((onset_samps, offset_samps)))  # Points to split trace
-        vel, acc = velocity_smoothed(pos, freq, 0.015)
+        vel, acc = velocity_filtered(pos, freq)
 
         # Plot the wheel position and velocity
         for ax, y in zip(axes, (pos, vel)):
