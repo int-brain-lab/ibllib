@@ -1,44 +1,50 @@
 """Behaviour QC
 This module runs a list of quality control metrics on the behaviour data.
 
-Examples:
-    # Running on a rig computer and updating QC fields in Alyx:
-    from ibllib.qc.task_metrics import TaskQC
-    TaskQC('path/to/session').run(update=True)
+Examples
+--------
+Running on a rig computer and updating QC fields in Alyx:
 
-    # Downloading the required data and inspecting the QC on a different computer:
-    from ibllib.qc.task_metrics import TaskQC
-    qc = TaskQC(eid)
-    outcome, results = qc.run()
+>>> from ibllib.qc.task_metrics import TaskQC
+>>> TaskQC('path/to/session').run(update=True)
 
-    # Inspecting individual test outcomes
-    from ibllib.qc.task_metrics import TaskQC
-    qc = TaskQC(eid)
-    outcome, results, outcomes = qc.compute().compute_session_status()
+Downloading the required data and inspecting the QC on a different computer:
 
-    # Running bpod QC on ephys session
-    from ibllib.qc.task_metrics import TaskQC
-    qc = TaskQC(eid)
-    qc.load_data(bpod_only=True)  # Extract without FPGA
-    bpod_qc = qc.run()
+>>> from ibllib.qc.task_metrics import TaskQC
+>>> qc = TaskQC(eid)
+>>> outcome, results = qc.run()
 
-    # Running bpod QC only, from training rig PC
-    from ibllib.qc.task_metrics import TaskQC
-    from ibllib.qc.qcplots import plot_results
-    session_path = r'/home/nico/Downloads/FlatIron/mrsicflogellab/Subjects/SWC_023/2020-02-14/001'
-    qc = TaskQC(session_path)
-    qc.load_data(bpod_only=True, download_data=False)  # Extract without FPGA
-    qc.run()
-    plot_results(qc, save_path=session_path)
+Inspecting individual test outcomes
 
-    # Running ephys QC, from local server PC (after ephys + bpod data have been copied to a same
-    folder)
-    from ibllib.qc.task_metrics import TaskQC
-    from ibllib.qc.qcplots import plot_results
-    session_path = r'/home/nico/Downloads/FlatIron/mrsicflogellab/Subjects/SWC_023/2020-02-14/001'
-    qc = TaskQC(session_path)
-    qc.run()
-    plot_results(qc, save_path=session_path)
+>>> from ibllib.qc.task_metrics import TaskQC
+>>> qc = TaskQC(eid)
+>>> outcome, results, outcomes = qc.compute().compute_session_status()
+
+Running bpod QC on ephys session
+
+>>> from ibllib.qc.task_metrics import TaskQC
+>>> qc = TaskQC(eid)
+>>> qc.load_data(bpod_only=True)  # Extract without FPGA
+>>> bpod_qc = qc.run()
+
+Running bpod QC only, from training rig PC
+
+>>> from ibllib.qc.task_metrics import TaskQC
+>>> from ibllib.qc.qcplots import plot_results
+>>> session_path = r'/home/nico/Downloads/FlatIron/mrsicflogellab/Subjects/SWC_023/2020-02-14/001'
+>>> qc = TaskQC(session_path)
+>>> qc.load_data(bpod_only=True, download_data=False)  # Extract without FPGA
+>>> qc.run()
+>>> plot_results(qc, save_path=session_path)
+
+Running ephys QC, from local server PC (after ephys + bpod data have been copied to a same folder)
+
+>>> from ibllib.qc.task_metrics import TaskQC
+>>> from ibllib.qc.qcplots import plot_results
+>>> session_path = r'/home/nico/Downloads/FlatIron/mrsicflogellab/Subjects/SWC_023/2020-02-14/001'
+>>> qc = TaskQC(session_path)
+>>> qc.run()
+>>> plot_results(qc, save_path=session_path)
 """
 import logging
 import sys
