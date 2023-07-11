@@ -1,3 +1,4 @@
+"""Tests for ibllib.pipes.mesoscope_tasks"""
 import sys
 import unittest
 from unittest.mock import MagicMock
@@ -6,7 +7,7 @@ import json
 from pathlib import Path
 import numpy as np
 
-from ibllib.pipes.mesoscope_tasks import MesoscopePreprocess
+from ibllib.pipes.mesoscope_tasks import MesoscopePreprocess, MesoscopeFOV
 
 # Mock suit2p which is imported in MesoscopePreprocess
 attrs = {'default_ops.return_value': {}}
@@ -14,6 +15,7 @@ sys.modules['suite2p'] = MagicMock(**attrs)
 
 
 class TestMesoscopePreprocess(unittest.TestCase):
+    """Test for MesoscopePreprocess task."""
 
     def setUp(self) -> None:
         self.td = tempfile.TemporaryDirectory()
@@ -81,3 +83,15 @@ class TestMesoscopePreprocess(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.td.cleanup()
+
+
+class TestMesoscopeFOV(unittest.TestCase):
+    """Test for MesoscopeFOV task."""
+
+    def test_get_provenance(self):
+        filename = 'mpciMeanImage.mlapdv_estimate.npy'
+        provenance = MesoscopeFOV.get_provenance(filename)
+        self.assertEqual('ESTIMATE', provenance.name)
+        filename = 'mpciROIs.brainLocation_ccf_2017.npy'
+        provenance = MesoscopeFOV.get_provenance(filename)
+        self.assertEqual('HISTOLOGY', provenance.name)

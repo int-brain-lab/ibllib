@@ -14,6 +14,7 @@ from pathlib import Path
 from itertools import chain
 from collections import defaultdict
 from fnmatch import fnmatch
+import enum
 
 import numpy as np
 import pandas as pd
@@ -28,6 +29,7 @@ from ibllib.pipes import base_tasks
 from ibllib.io.extractors import mesoscope
 
 _logger = logging.getLogger(__name__)
+Provenance = enum.Enum('Provenance', ['ESTIMATE', 'FUNCTIONAL', 'LANDMARK', 'HISTOLOGY'])  # py3.11 make StrEnum
 
 
 class MesoscopeRegisterSnapshots(base_tasks.MesoscopeTask, base_tasks.RegisterRawDataTask):
@@ -426,6 +428,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         """
 
         # Currently only supporting single plane, assert that this is the case
+        # FIXME This checks for zstacks but not dual plane mode
         if not isinstance(meta['scanImageParams']['hStackManager']['zs'], int):
             raise NotImplementedError('Multi-plane imaging not yet supported, data seems to be multi-plane')
 
@@ -468,7 +471,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
             'nchannels': nchannels,
             'fs': meta['scanImageParams']['hRoiManager']['scanVolumeRate'],
             'lines': [list(np.asarray(fov['lineIdx']) - 1) for fov in meta['FOV']],  # subtracting 1 to make 0-based
-            'tau': 1.5,  # 1.5 is recommended for GCaMP6s TODO: potential deduct the GCamp used from Alyx mouse line?
+            'tau': 1.5,  # 1.5 is recommended for GCaMP6s TODO: potential deduce the GCamp used from Alyx mouse line?
             'functional_chan': 1,  # for now, eventually find(ismember(meta.channelSaved == meta.channelID.green))
             'align_by_chan': 1,  # for now, eventually find(ismember(meta.channelSaved == meta.channelID.red))
             'dx': dx,
@@ -620,12 +623,12 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
     def signature(self):
         signature = {
             'input_files': [('_ibl_rawImagingData.meta.json', self.device_collection, True),
-                            ('mpciMeanImage.brainLocationIds_estimate.npy', 'alf/FOV_*', True),
-                            ('mpciMeanImage.mlapdv_estimate.npy', 'alf/FOV_*', True)],
-            'output_files': [('mpciMeanImage.brainLocationIds_estimate.npy', 'alf/FOV_*', True),
-                             ('mpciMeanImage.mlapdv_estimate.npy', 'alf/FOV_*', True),
-                             ('mpciROIs.mlapdv_estimate.npy', 'alf/FOV_*', True),
-                             ('mpciROIs.brainLocationIds_estimate.npy', 'alf/FOV_*', True)]
+                            ('mpciMeanImage.brainLocationIds*', 'alf/FOV_*', True),
+                            ('mpciMeanImage.mlapdv*', 'alf/FOV_*', True)],
+            'output_files': [('mpciMeanImage.brainLocationIds*.npy', 'alf/FOV_*', True),
+                             ('mpciMeanImage.mlapdv*.npy', 'alf/FOV_*', True),
+                             ('mpciROIs.mlapdv*.npy', 'alf/FOV_*', True),
+                             ('mpciROIs.brainLocationIds*.npy', 'alf/FOV_*', True)]
         }
         return signature
 
@@ -634,7 +637,7 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
         Register fields of view (FOV) to Alyx and extract the coordinates and IDs of each ROI.
 
         Steps:
-            1. Register the location of each FOV in Alyx (TODO not implemented)
+            1. Register the location of each FOV in Alyx
             2. Re-save the mpciMeanImage.brainLocationIds_estimate as an int array
             3. Use mean image coordinates and ROI stack position datasets to extract brain location
              of each ROI.
@@ -666,18 +669,24 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
             _logger.error('No mpciMeanImage.brainLocationIds datasets found')
             return
         # If present, use the MLAPDV datasets that are not estimates
-        suffix, *_ = sorted(set(filename_parts(x.name)[3] or '' for x in mean_image_ids))
+        suffix, *_ = sorted(set(filename_parts(x.name)[3] or '' for x in mean_image_mlapdv))
         mean_image_mlapdv = [x for x in mean_image_mlapdv if filename_parts(x.name)[3] == (suffix or None)]
-        mean_image_ids = [x for x in mean_image_ids if filename_parts(x.name)[3] == (suffix or None)]
+        id_suffix = f'ccf_2017{"_" + suffix if suffix else ""}'
+        mean_image_ids = [x for x in mean_image_ids if filename_parts(x.name)[3] == id_suffix]
+        assert len(mean_image_ids) == len(mean_image_mlapdv) == nFOV
         _logger.info(f'Using %s mlapdv datasets', suffix or 'final')
         roi_mlapdv, roi_brain_ids = self.roi_mlapdv(nFOV, suffix=suffix or None)
         roi_files = []
         # Write MLAPDV + brain location ID of ROIs to disk
         for i in range(nFOV):
             alf_path = self.session_path.joinpath('alf', f'FOV_{i:02}')
-            for attr, arr in (('mlapdv', roi_mlapdv[i]), ('brainLocationIds', roi_brain_ids[i])):
-                roi_files.append(alf_path / to_alf('mpciROIs', attr, 'npy', timescale=suffix))
+            for attr, arr, sfx in (('mlapdv', roi_mlapdv[i], suffix),
+                                   ('brainLocationIds', roi_brain_ids[i], ('ccf', '2017', suffix))):
+                roi_files.append(alf_path / to_alf('mpciROIs', attr, 'npy', timescale=sfx))
                 np.save(roi_files[-1], arr)
+
+        # Register FOVs in Alyx
+        self.register_fov(meta, suffix or None)
 
         return sorted([*roi_files, *mean_image_mlapdv, *mean_image_ids])
 
@@ -712,44 +721,114 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
             stack_pos = alfio.load_file_content(stack_pos_file)
 
             # Load MLAPDV + brain location ID maps of pixels
-            mpciMeanImage = alfio.load_object(alf_path, 'mpciMeanImage',
-                                              attribute=['mlapdv', 'brainLocationIds'], timescale=suffix)
+            mpciMeanImage = alfio.load_object(
+                alf_path, 'mpciMeanImage', attribute=['mlapdv', 'brainLocationIds'])
 
             # Get centroid MLAPDV + brainID by indexing pixel-map with centroid locations
             mlapdv = np.full(stack_pos.shape, np.nan)
             brain_ids = np.full(stack_pos.shape[0], np.nan)
-            sfx = f'_{suffix}' if suffix else ''
             for i in np.arange(stack_pos.shape[0]):
                 idx = (stack_pos[i, 0], stack_pos[i, 1])
+                sfx = f'_{suffix}' if suffix else ''
                 mlapdv[i, :] = mpciMeanImage['mlapdv' + sfx][idx]
-                brain_ids[i] = mpciMeanImage['brainLocationIds' + sfx][idx]
+                brain_ids[i] = mpciMeanImage['brainLocationIds_ccf_2017' + sfx][idx]
             assert ~np.isnan(brain_ids).any()
             all_brain_ids[n] = brain_ids.astype(int)
             all_mlapdv[n] = mlapdv
 
         return all_mlapdv, all_brain_ids
 
-    def register_fov(self, meta: dict):
-        """Create FOV on Alyx"""
+    @staticmethod
+    def get_provenance(filename):
+        """
+        Get the field of view provenance from a mpciMeanImage or mpciROIs dataset.
+
+        Parameters
+        ----------
+        filename : str, pathlib.Path
+            A filename to get the provenance from.
+
+        Returns
+        -------
+        Provenance
+            The provenance of the file.
+        """
+        filename = Path(filename).name
+        timescale = (filename_parts(filename)[3] or '').split('_')
+        provenances = [i.name.lower() for i in Provenance]
+        provenance = (Provenance[x.upper()] for x in timescale if x in provenances)
+        return next(provenance, None) or Provenance.HISTOLOGY
+
+    def register_fov(self, meta: dict, suffix: str = None) -> (list, list):
+        """
+        Create FOV on Alyx.
+
+        Assumes field of view recorded perpendicular to objective.
+        Assumes field of view is plane (negligible volume).
+
+        Required Alyx fixtures:
+            - experiments.ImagingType(name='mesoscope')
+            - experiments.CoordinateSystem(name='IBL-Allen')
+
+        Parameters
+        ----------
+        meta : dict
+            The raw imaging meta data from _ibl_rawImagingData.meta.json.
+        suffix : str
+            The file attribute suffixes to load from the mpciMeanImage object. Either 'estimate' or
+            None. No suffix means the FOV location provenance will be L (Landmark).
+
+        Returns
+        -------
+        list of dict
+            A list registered of field of view entries from Alyx.
+
+        TODO Change mlapdv datasets to um and remove FACTOR var
+        TODO Determine slice and dual plane ID for JSON field
+        TODO stack = one.alyx.rest('imaging-stack', 'create', data={})
+        """
         FACTOR = 1e3  # The meta data are in mm, while the FOV in alyx is in um
         dry = self.one is None or self.one.offline
+        alyx_fovs = []
+        for i, fov in enumerate(meta.get('FOV', [])):
+            # Field of view
+            alyx_FOV = {
+                'session': self.session_path.as_posix() if dry else self.path2eid(),
+                'imaging_type': 'mesoscope', 'name': f'FOV_{i:02}'
+            }
+            if dry:
+                print(alyx_FOV)
+                alyx_FOV['location'] = []
+                alyx_fovs.append(alyx_FOV)
+            else:
+                alyx_fovs.append(self.one.alyx.rest('fields-of-view', 'create', data=alyx_FOV))
 
-        alyx_FOV = {'session': self.session_path if dry else self.path2eid(), 'type': 'mesoscope'}
-        if dry:
-            print(alyx_FOV)
-        else:
-            alyx_FOV = self.one.alyx.rest('FOV', 'create', data=alyx_FOV)
+            # Field of view location
+            assert set(fov.keys()) >= {'MLAPDV', 'nXnYnZ'}
+            data = {'field_of_view': alyx_fovs[-1].get('id'),
+                    'default_provenance': True,
+                    'coordinate_system': 'IBL-Allen',
+                    'n_xyz': fov['nXnYnZ']}
+            if suffix:
+                data['provenance'] = suffix[0].upper()
 
-        locations = []
-        for fov in meta.get('FOV', []):
-            data = {'field_of_view': alyx_FOV.get('id'), 'provenance': 'Landmark'}
-            # TODO Get z values
-            x1, y1 = map(lambda x: float(x) * FACTOR, fov['topLeftMM'])
-            x2, y2 = map(lambda x: float(x) * FACTOR, fov['topLeftMM'])
-            # TODO Brain region estimate
+            # Convert coordinates to 4 x 3 array (n corners by n dimensions)
+            # x1 = top left ml, y1 = top left ap, y2 = top right ap, etc.
+            coords = [fov['MLAPDV'][key] for key in ('topLeft', 'topRight', 'bottomLeft', 'bottomRight')]
+            coords = np.vstack(coords) * FACTOR
+            data.update({k: arr.tolist() for k, arr in zip('xyz', coords.T)})
+
+            # TODO Deal with multiple timescale values, etc.
+            # Load MLAPDV + brain location ID maps of pixels
+            filename = 'mpciMeanImage.brainLocationIds_ccf_2017' + (f'_{suffix}' if suffix else '') + '.npy'
+            filepath = self.session_path.joinpath('alf', f'FOV_{i:02}', filename)
+            mean_image_ids = alfio.load_file_content(filepath)
+
+            data['brain_region'] = np.unique(mean_image_ids).astype(int).tolist()
+
             if dry:
                 print(data)
-                locations.append(data)
-                continue
-            locations.append(self.one.alyx.rest('FOVLocation', 'create', data=data))
-        return alyx_FOV, locations
+                alyx_FOV['location'].append(data)
+            else:
+                alyx_fovs[-1]['location'].append(self.one.alyx.rest('fov-location', 'create', data=data))
+        return alyx_fovs
