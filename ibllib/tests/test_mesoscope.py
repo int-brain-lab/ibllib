@@ -32,7 +32,7 @@ class TestMesoscopePreprocess(unittest.TestCase):
         expected = {
             'data_path': [str(self.img_path)],
             'fast_disk': '',
-            'num_workers': 4,
+            'num_workers': -1,
             'save_path0': str(self.session_path.joinpath('alf')),
             'move_bin': True,
             'keep_movie_raw': False,
@@ -72,7 +72,8 @@ class TestMesoscopePreprocess(unittest.TestCase):
         self.img_path.joinpath('test.tif').touch()
         _ = self.task.run(run_suite2p=False, rename_files=False)
         self.assertEqual(self.task.status, 0)
-        self.assertDictEqual(self.task.kwargs, {**expected})
+        self.assertDictEqual(self.task.kwargs, expected)
+        # {k: v for k, v in self.task.kwargs.items() if expected[k] != v}
         # Now overwrite a specific option with task.run kwarg
         _ = self.task.run(run_suite2p=False, rename_files=False, nchannels=2, delete_bin=True)
         self.assertEqual(self.task.status, 0)

@@ -40,9 +40,13 @@ class MesoscopeRegisterSnapshots(base_tasks.MesoscopeTask, base_tasks.RegisterRa
     @property
     def signature(self):
         signature = {
-            'input_files': [('*.tif', f'{self.device_collection}/reference', False),
+            'input_files': [('referenceImage.raw.tif', f'{self.device_collection}/reference', False),
+                            ('referenceImage.stack.tif', f'{self.device_collection}/reference', False),
+                            ('referenceImage.meta.json', f'{self.device_collection}/reference', False),
                             ('_ibl_rawImagingData.meta.json', f'{self.device_collection}', True)],
-            'output_files': [('reference.image.tif', f'{self.device_collection}/reference', False),
+            'output_files': [('referenceImage.raw.tif', f'{self.device_collection}/reference', False),
+                             ('referenceImage.stack.tif', f'{self.device_collection}/reference', False),
+                             ('referenceImage.meta.json', f'{self.device_collection}/reference', False),
                              ('_ibl_rawImagingData.meta.json', f'{self.device_collection}', True)]
         }
         return signature
