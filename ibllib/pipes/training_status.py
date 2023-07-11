@@ -4,6 +4,8 @@ from one.alf.exceptions import ALFObjectNotFound
 from ibllib.io.raw_data_loaders import load_bpod
 from ibllib.oneibl.registration import _get_session_times
 from ibllib.io.extractors.base import get_pipeline, get_session_extractor_type
+from ibllib.io.session_params import read_params
+from ibllib.pipes.dynamic_pipeline import make_pipeline
 
 from ibllib.plots.snapshot import ReportSnapshot
 from iblutil.numerical import ismember
@@ -17,6 +19,8 @@ import matplotlib.dates as mdates
 from matplotlib.lines import Line2D
 from datetime import datetime
 import seaborn as sns
+import boto3
+from botocore.exceptions import ProfileNotFound
 
 
 TRAINING_STATUS = {'untrainable': (-4, (0, 0, 0, 0)),
@@ -31,28 +35,86 @@ TRAINING_STATUS = {'untrainable': (-4, (0, 0, 0, 0)),
                    'ready4recording': (5, (20, 255, 91, 255))}
 
 
-def get_trials_task(session_path, one):
-    # TODO this eventually needs to be updated for dynamic pipeline tasks
-    pipeline = get_pipeline(session_path)
-    if pipeline == 'training':
-        from ibllib.pipes.training_preprocessing import TrainingTrials
-        task = TrainingTrials(session_path, one=one)
-    elif pipeline == 'ephys':
-        from ibllib.pipes.ephys_preprocessing import EphysTrials
-        task = EphysTrials(session_path, one=one)
-    else:
-        try:
-            # try and look if there is a custom extractor in the personal projects extraction class
-            import projects.base
-            task_type = get_session_extractor_type(session_path)
-            PipelineClass = projects.base.get_pipeline(task_type)
-            pipeline = PipelineClass(session_path, one)
-            trials_task_name = next(task for task in pipeline.tasks if 'Trials' in task)
-            task = pipeline.tasks.get(trials_task_name)
-        except Exception:
-            task = None
+def get_training_table_from_aws(lab, subject):
+    """
+    If aws credentials exist on the local server download the latest training table from aws s3 private bucket
+    :param lab:
+    :param subject:
+    :return:
+    """
+    try:
+        session = boto3.Session(profile_name='ibl_training')
+    except ProfileNotFound:
+        return
 
-    return task
+    local_file_path = f'/mnt/s0/Data/Subjects/{subject}/training.csv'
+    dst_bucket_name = 'ibl-brain-wide-map-private'
+    s3 = session.resource('s3')
+    bucket = s3.Bucket(name=dst_bucket_name)
+    bucket.download_file(f'resources/training/{lab}/{subject}/training.csv',
+                         local_file_path)
+    df = pd.read_csv(local_file_path)
+
+    return df
+
+
+def upload_training_table_to_aws(lab, subject):
+    """
+    If aws credentials exist on the local server upload the training table to aws s3 private bucket
+    :param lab:
+    :param subject:
+    :return:
+    """
+    try:
+        session = boto3.Session(profile_name='ibl_training')
+    except ProfileNotFound:
+        return
+
+    local_file_path = f'/mnt/s0/Data/Subjects/{subject}/training.csv'
+    dst_bucket_name = 'ibl-brain-wide-map-private'
+    s3 = session.resource('s3')
+    bucket = s3.Bucket(name=dst_bucket_name)
+    bucket.upload_file(local_file_path,
+                       f'resources/training/{lab}/{subject}/training.csv')
+
+
+def get_trials_task(session_path, one):
+
+    # TODO this eventually needs to be updated for dynamic pipeline tasks
+    # If experiment description file then process this
+    experiment_description_file = read_params(session_path)
+    if experiment_description_file is not None:
+        tasks = []
+        pipeline = make_pipeline(session_path)
+        trials_tasks = [t for t in pipeline.tasks if 'Trials' in t]
+        for task in trials_tasks:
+            t = pipeline.tasks.get(task)
+            t.__init__(session_path, **t.kwargs)
+            tasks.append(t)
+    else:
+        # Otherwise default to old way of doing things
+        pipeline = get_pipeline(session_path)
+        if pipeline == 'training':
+            from ibllib.pipes.training_preprocessing import TrainingTrials
+            tasks = [TrainingTrials(session_path)]
+        elif pipeline == 'ephys':
+            from ibllib.pipes.ephys_preprocessing import EphysTrials
+            tasks = [EphysTrials(session_path)]
+        else:
+            try:
+                # try and look if there is a custom extractor in the personal projects extraction class
+                import projects.base
+                task_type = get_session_extractor_type(session_path)
+                PipelineClass = projects.base.get_pipeline(task_type)
+                pipeline = PipelineClass(session_path, one)
+                trials_task_name = next(task for task in pipeline.tasks if 'Trials' in task)
+                task = pipeline.tasks.get(trials_task_name)
+                task.__init__(session_path)
+                tasks = [task]
+            except Exception:
+                tasks = []
+
+    return tasks
 
 
 def save_path(subj_path):
@@ -91,27 +153,48 @@ def load_trials(sess_path, one, force=True):
     :param one: ONE instance
     :return:
     """
-    # try and load trials locally
     try:
-        trials = alfio.load_object(sess_path.joinpath('alf'), 'trials', short_keys=True)
+        # try and load all trials that are found locally in the session path locally
+        trial_locations = list(sess_path.rglob('_ibl_trials.stimOnTrigger_times.npy'))
+        if len(trial_locations) > 1:
+            trial_dict = {}
+            for i, loc in enumerate(trial_locations):
+                trial_dict[i] = alfio.load_object(loc.parent, 'trials', short_keys=True)
+            trials = training.concatenate_trials(trial_dict)
+        elif len(trial_locations) == 1:
+            trials = alfio.load_object(trial_locations[0].parent, 'trials', short_keys=True)
+        else:
+            raise ALFObjectNotFound
         if 'probabilityLeft' not in trials.keys():
             raise ALFObjectNotFound
     except ALFObjectNotFound:
+        # Next try and load all trials data through ONE
         try:
             if not force:
                 return None
-            # attempt to download trials using ONE
-            trials = one.load_object(one.path2eid(sess_path), 'trials')
+            eid = one.path2eid(sess_path)
+            trial_collections = one.list_datasets(eid, '_ibl_trials.stimOnTrigger_times.npy')
+            if len(trial_collections) > 1:
+                trial_dict = {}
+                for i, collection in enumerate(trial_collections):
+                    trial_dict[i] = one.load_object(eid, 'trials', collection='/'.join(collection.split('/')[:-1]))
+                trials = training.concatenate_trials(trial_dict)
+            elif len(trial_collections) == 1:
+                trials = one.load_object(eid, 'trials', collection='/'.join(trial_collections[0].split('/')[:-1]))
+            else:
+                raise ALFObjectNotFound
+
             if 'probabilityLeft' not in trials.keys():
                 raise ALFObjectNotFound
         except Exception:
+            # Finally try to rextract the trials data locally
             try:
-                task = get_trials_task(sess_path, one=one)
-                if task is not None:
-                    task.run()
-                    trials = alfio.load_object(sess_path.joinpath('alf'), 'trials')
-                    if 'probabilityLeft' not in trials.keys():
-                        raise ALFObjectNotFound
+                # Get the tasks that need to be run
+                tasks = get_trials_task(sess_path)
+                if len(tasks) > 0:
+                    for task in tasks:
+                        task.run()
+                    return load_trials(sess_path, one=one, force=False)
                 else:
                     trials = None
             except Exception:  # TODO how can i make this more specific
@@ -154,7 +237,11 @@ def get_latest_training_information(sess_path, one):
     """
 
     subj_path = sess_path.parent.parent
-    df = load_existing_dataframe(subj_path)
+    sub = subj_path.parts[-1]
+    lab = one.alyx.rest('subjects', 'list', nickname=sub)[0]['lab']
+    df = get_training_table_from_aws(lab, sub)
+    if df is None:
+        df = load_existing_dataframe(subj_path)
 
     # Find the dates and associated session paths where we don't have data stored in our dataframe
     missing_dates = check_up_to_date(subj_path, df)
@@ -163,6 +250,7 @@ def get_latest_training_information(sess_path, one):
     for _, grp in missing_dates.groupby('date'):
         sess_dicts = get_training_info_for_session(grp.session_path.values, one)
         if len(sess_dicts) == 0:
+            print('in continue')
             continue
 
         for sess_dict in sess_dicts:
@@ -200,6 +288,8 @@ def get_latest_training_information(sess_path, one):
             df.loc[df['session_path'] == sess, 'training_status'] = 'unbiasable'
 
     save_dataframe(df, subj_path)
+
+    upload_training_table_to_aws(lab, sub)
 
     return df
 
