@@ -180,7 +180,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
     """Run suite2p preprocessing on tif files"""
 
     priority = 80
-    cpu = 4
+    cpu = -1
     job_size = 'large'
 
     @property
