@@ -28,6 +28,15 @@ class TestBrainRegions(unittest.TestCase):
     def setUpClass(self):
         self.brs = BrainRegions()
 
+    def test_to_df(self):
+        df = self.brs.to_df()
+        self.assertTrue(df.shape[0] == self.brs.acronym.shape[0])
+        self.assertEqual(
+            set(['id', 'name', 'acronym', 'hexcolor', 'level', 'parent', 'order']), set(list(df.columns)))
+
+    def test_hexcolor(self):
+        assert self.brs.hexcolor.shape == (self.brs.rgb.shape[0],)
+
     def test_rgba(self):
         assert self.brs.rgba.shape == (self.brs.rgb.shape[0], 4)
 
@@ -365,6 +374,12 @@ class TestAtlasSlicesConversion(unittest.TestCase):
     def test_allen_ba(self):
         self.assertTrue(np.allclose(self.ba.bc.xyz2i(np.array([0, 0, 0]), round=False),
                                     ALLEN_CCF_LANDMARKS_MLAPDV_UM['bregma'] / 25))
+
+    def test_lookup_outside_the_brain(self):
+        xyz = [0, 0, 15687588]
+        with self.assertRaises(ValueError):
+            self.ba.get_labels(xyz)
+        self.assertEqual(self.ba.get_labels(xyz, mode='clip'), 0)
 
     def test_lookups(self):
         # the get_labels lookup returns the regions ids (not the indices !!)

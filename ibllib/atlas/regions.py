@@ -24,11 +24,19 @@ class _BrainRegions:
     parent: np.ndarray
     order: np.uint16
 
+    def to_df(self):
+        d = {at: self.__getattribute__(at) for at in ['id', 'name', 'acronym', 'hexcolor', 'level', 'parent', 'order']}
+        return pd.DataFrame(d)
+
     @property
     def rgba(self):
         rgba = np.c_[self.rgb, self.rgb[:, 0] * 0 + 255]
         rgba[0, :] = 0  # set the void to transparent
         return rgba
+
+    @property
+    def hexcolor(self):
+        return np.apply_along_axis(lambda x: "#{0:02x}{1:02x}{2:02x}".format(*x.astype(int)), 1, self.rgb)
 
     def _compute_order(self):
         """
