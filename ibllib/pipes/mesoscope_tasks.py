@@ -674,7 +674,7 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
         id_suffix = f'ccf_2017{"_" + suffix if suffix else ""}'
         mean_image_ids = [x for x in mean_image_ids if filename_parts(x.name)[3] == id_suffix]
         assert len(mean_image_ids) == len(mean_image_mlapdv) == nFOV
-        _logger.info(f'Using %s mlapdv datasets', suffix or 'final')
+        _logger.info('Using %s mlapdv datasets', suffix or 'final')
         roi_mlapdv, roi_brain_ids = self.roi_mlapdv(nFOV, suffix=suffix or None)
         roi_files = []
         # Write MLAPDV + brain location ID of ROIs to disk
