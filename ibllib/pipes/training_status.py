@@ -238,8 +238,12 @@ def get_latest_training_information(sess_path, one):
 
     subj_path = sess_path.parent.parent
     sub = subj_path.parts[-1]
-    lab = one.alyx.rest('subjects', 'list', nickname=sub)[0]['lab']
-    df = get_training_table_from_aws(lab, sub)
+    if one.mode != 'local':
+        lab = one.alyx.rest('subjects', 'list', nickname=sub)[0]['lab']
+        df = get_training_table_from_aws(lab, sub)
+    else:
+        df = None
+
     if df is None:
         df = load_existing_dataframe(subj_path)
 
@@ -250,7 +254,6 @@ def get_latest_training_information(sess_path, one):
     for _, grp in missing_dates.groupby('date'):
         sess_dicts = get_training_info_for_session(grp.session_path.values, one)
         if len(sess_dicts) == 0:
-            print('in continue')
             continue
 
         for sess_dict in sess_dicts:
@@ -289,7 +292,8 @@ def get_latest_training_information(sess_path, one):
 
     save_dataframe(df, subj_path)
 
-    upload_training_table_to_aws(lab, sub)
+    if one.mode != 'local':
+        upload_training_table_to_aws(lab, sub)
 
     return df
 

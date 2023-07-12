@@ -19,7 +19,7 @@ import ibllib.pipes.behavior_tasks as btasks
 import ibllib.pipes.video_tasks as vtasks
 import ibllib.pipes.ephys_tasks as etasks
 import ibllib.pipes.audio_tasks as atasks
-from ibllib.pipes.photometry_tasks import TaskFibrePhotometryPreprocess, TaskFibrePhotometryRegisterRaw
+from ibllib.pipes.photometry_tasks import FibrePhotometryPreprocess, FibrePhotometryRegisterRaw
 
 _logger = logging.getLogger(__name__)
 
@@ -358,9 +358,9 @@ def make_pipeline(session_path, **pkwargs):
         # {'collection': 'raw_photometry_data', 'sync_label': 'frame_trigger', 'regions': ['Region1G', 'Region3G']}
         photometry_kwargs = devices['photometry']
         tasks['FibrePhotometryRegisterRaw'] = type('FibrePhotometryRegisterRaw', (
-            TaskFibrePhotometryRegisterRaw,), {})(**kwargs, **photometry_kwargs)
+            FibrePhotometryRegisterRaw,), {})(**kwargs, **photometry_kwargs)
         tasks['FibrePhotometryPreprocess'] = type('FibrePhotometryPreprocess', (
-            TaskFibrePhotometryPreprocess,), {})(**kwargs, **photometry_kwargs, **sync_kwargs,
+            FibrePhotometryPreprocess,), {})(**kwargs, **photometry_kwargs, **sync_kwargs,
                                                  parents=[tasks['FibrePhotometryRegisterRaw']] + sync_tasks)
 
     p = mtasks.Pipeline(session_path=session_path, **pkwargs)
