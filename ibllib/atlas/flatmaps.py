@@ -1,6 +1,7 @@
 """
 Module that hold techniques to project the brain volume onto 2D images for visualisation purposes
 """
+import copy
 from functools import lru_cache
 import logging
 import json
@@ -9,7 +10,7 @@ import numpy as np
 from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
 import matplotlib.colors
-from matplotlib import cm
+import matplotlib
 
 from iblutil.numerical import ismember
 from iblutil.util import Bunch
@@ -135,7 +136,7 @@ def swanson(filename="swanson2allen.npz"):
     return s2a
 
 
-def swanson_json(filename="swansonpaths.json"):
+def swanson_json(filename="swansonpaths.json", remap=True):
 
     OLD_MD5 = ['97ccca2b675b28ba9b15ca8af5ba4111',  # errored map with FOTU and CUL4, 5 mixed up
                '56daa7022b5e03080d8623814cda6f38',  # old md5 of swanson json without CENT and PTLp
@@ -151,6 +152,36 @@ def swanson_json(filename="swansonpaths.json"):
     with open(json_file) as f:
         sw_json = json.load(f)
 
+    if remap:
+        id_map = {391: [392, 393, 394, 395, 396],
+                  474: [483, 487],
+                  536: [537, 541],
+                  601: [602, 603, 604, 608],
+                  622: [624, 625, 626, 627, 628, 629, 630, 631, 632, 634, 635, 636, 637, 638],
+                  686: [687, 688, 689],
+                  708: [709, 710],
+                  721: [723, 724, 726, 727, 729, 730, 731],
+                  740: [741, 742, 743],
+                  758: [759, 760, 761, 762],
+                  771: [772, 773],
+                  777: [778, 779, 780],
+                  788: [789, 790, 791, 792],
+                  835: [836, 837, 838],
+                  891: [894, 895, 896, 897, 898, 900, 901, 902],
+                  926: [927, 928],
+                  949: [950, 951, 952, 953, 954],
+                  957: [958, 959, 960, 961, 962],
+                  999: [1000, 1001],
+                  578: [579, 580]}
+
+        rev_map = {}
+        for k, vals in id_map.items():
+            for v in vals:
+                rev_map[v] = k
+
+        for sw in sw_json:
+            sw['thisID'] = rev_map.get(sw['thisID'], sw['thisID'])
+
     return sw_json
 
 
@@ -160,14 +191,20 @@ def plot_swanson_vector(acronyms=None, values=None, ax=None, hemisphere=None, br
 
     br = BrainRegions() if br is None else br
     br.compute_hierarchy()
+    sw_shape = (2968, 6820)
 
     if ax is None:
         fig, ax = plt.subplots()
         ax.set_axis_off()
 
+    if hemisphere != 'both' and acronyms is not None and not isinstance(acronyms[0], str):
+        # If negative atlas ids are passed in and we are not going to lateralise (e.g hemisphere='both')
+        # transfer them over to one hemisphere
+        acronyms = np.abs(acronyms)
+
     if acronyms is not None:
         ibr, vals = br.propagate_down(acronyms, values)
-        colormap = cm.get_cmap(cmap)
+        colormap = matplotlib.colormaps.get_cmap(cmap)
         vmin = vmin or np.nanmin(vals)
         vmax = vmax or np.nanmax(vals)
         norm = matplotlib.colors.Normalize(vmin=vmin, vmax=vmax)
@@ -178,81 +215,115 @@ def plot_swanson_vector(acronyms=None, values=None, ax=None, hemisphere=None, br
     else:
         imr = []
 
-    sw = swanson()
     sw_json = swanson_json()
+    if hemisphere == 'both':
+        sw_rev = copy.deepcopy(sw_json)
+        for sw in sw_rev:
+            sw['thisID'] = sw['thisID'] + br.n_lr
+        sw_json = sw_json + sw_rev
 
     plot_idx = []
     plot_val = []
     for i, reg in enumerate(sw_json):
 
+        coords = reg['coordsReg']
+        reg_id = reg['thisID']
+
         if acronyms is None:
             color = br.rgba[br.mappings['Swanson'][reg['thisID']]] / 255
+            if hemisphere is None:
+                col_l = None
+                col_r = color
+            elif hemisphere == 'left':
+                col_l = empty_color if orientation == 'portrait' else color
+                col_r = color if orientation == 'portrait' else empty_color
+            elif hemisphere == 'right':
+                col_l = color if orientation == 'portrait' else empty_color
+                col_r = empty_color if orientation == 'portrait' else color
+            elif hemisphere in ['both', 'mirror']:
+                col_l = color
+                col_r = color
         else:
             idx = np.where(ibr == reg['thisID'])[0]
+            idxm = np.where(imr == reg['thisID'])[0]
             if len(idx) > 0:
                 plot_idx.append(ibr[idx[0]])
                 plot_val.append(vals[idx[0]])
                 color = rgba_color[idx[0]] / 255
+            elif len(idxm) > 0:
+                color = mask_color
             else:
-                idx = np.where(imr == reg['thisID'])[0]
-                if len(idx) > 0:
-                    color = mask_color
-                else:
-                    color = empty_color
+                color = empty_color
 
-        coords = reg['coordsReg']
-        reg_id = reg['thisID']
+            if hemisphere is None:
+                col_l = None
+                col_r = color
+            elif hemisphere == 'left':
+                col_l = empty_color if orientation == 'portrait' else color
+                col_r = color if orientation == 'portrait' else empty_color
+            elif hemisphere == 'right':
+                col_l = color if orientation == 'portrait' else empty_color
+                col_r = empty_color if orientation == 'portrait' else color
+            elif hemisphere == 'mirror':
+                col_l = color
+                col_r = color
+            elif hemisphere == 'both':
+                if reg_id <= br.n_lr:
+                    col_l = color if orientation == 'portrait' else None
+                    col_r = None if orientation == 'portrait' else color
+                else:
+                    col_l = None if orientation == 'portrait' else color
+                    col_r = color if orientation == 'portrait' else None
 
         if reg['hole']:
             vertices, codes = coords_for_poly_hole(coords)
             if orientation == 'portrait':
                 vertices[:, [0, 1]] = vertices[:, [1, 0]]
-                plot_polygon_with_hole(ax, vertices, codes, color, reg_id, **kwargs)
-                if hemisphere is not None:
-                    color_inv = color if hemisphere == 'mirror' else empty_color
+                if col_r is not None:
+                    plot_polygon_with_hole(ax, vertices, codes, col_r, reg_id, **kwargs)
+                if col_l is not None:
                     vertices_inv = np.copy(vertices)
-                    vertices_inv[:, 0] = -1 * vertices_inv[:, 0] + (sw.shape[0] * 2)
-                    plot_polygon_with_hole(ax, vertices_inv, codes, color_inv, reg_id, **kwargs)
+                    vertices_inv[:, 0] = -1 * vertices_inv[:, 0] + (sw_shape[0] * 2)
+                    plot_polygon_with_hole(ax, vertices_inv, codes, col_l, reg_id, **kwargs)
             else:
-                plot_polygon_with_hole(ax, vertices, codes, color, reg_id, **kwargs)
-                if hemisphere is not None:
-                    color_inv = color if hemisphere == 'mirror' else empty_color
+                if col_r is not None:
+                    plot_polygon_with_hole(ax, vertices, codes, col_r, reg_id, **kwargs)
+                if col_l is not None:
                     vertices_inv = np.copy(vertices)
-                    vertices_inv[:, 1] = -1 * vertices_inv[:, 1] + (sw.shape[0] * 2)
-                    plot_polygon_with_hole(ax, vertices_inv, codes, color_inv, reg_id, **kwargs)
+                    vertices_inv[:, 1] = -1 * vertices_inv[:, 1] + (sw_shape[0] * 2)
+                    plot_polygon_with_hole(ax, vertices_inv, codes, col_l, reg_id, **kwargs)
         else:
             coords = [coords] if type(coords) == dict else coords
             for c in coords:
-
                 if orientation == 'portrait':
                     xy = np.c_[c['y'], c['x']]
-                    plot_polygon(ax, xy, color, reg_id, **kwargs)
-                    if hemisphere is not None:
-                        color_inv = color if hemisphere == 'mirror' else empty_color
+                    if col_r is not None:
+                        plot_polygon(ax, xy, col_r, reg_id, **kwargs)
+                    if col_l is not None:
                         xy_inv = np.copy(xy)
-                        xy_inv[:, 0] = -1 * xy_inv[:, 0] + (sw.shape[0] * 2)
-                        plot_polygon(ax, xy_inv, color_inv, reg_id, **kwargs)
+                        xy_inv[:, 0] = -1 * xy_inv[:, 0] + (sw_shape[0] * 2)
+                        plot_polygon(ax, xy_inv, col_l, reg_id, **kwargs)
                 else:
                     xy = np.c_[c['x'], c['y']]
-                    plot_polygon(ax, xy, color, reg_id, **kwargs)
-                    if hemisphere is not None:
-                        color_inv = color if hemisphere == 'mirror' else empty_color
+                    if col_r is not None:
+                        plot_polygon(ax, xy, col_r, reg_id, **kwargs)
+                    if col_l is not None:
                         xy_inv = np.copy(xy)
-                        xy_inv[:, 1] = -1 * xy_inv[:, 1] + (sw.shape[0] * 2)
-                        plot_polygon(ax, xy_inv, color_inv, reg_id, **kwargs)
+                        xy_inv[:, 1] = -1 * xy_inv[:, 1] + (sw_shape[0] * 2)
+                        plot_polygon(ax, xy_inv, col_l, reg_id, **kwargs)
 
     if orientation == 'portrait':
-        ax.set_ylim(0, sw.shape[1])
+        ax.set_ylim(0, sw_shape[1])
         if hemisphere is None:
-            ax.set_xlim(0, sw.shape[0])
+            ax.set_xlim(0, sw_shape[0])
         else:
-            ax.set_xlim(0, 2 * sw.shape[0])
+            ax.set_xlim(0, 2 * sw_shape[0])
     else:
-        ax.set_xlim(0, sw.shape[1])
+        ax.set_xlim(0, sw_shape[1])
         if hemisphere is None:
-            ax.set_ylim(0, sw.shape[0])
+            ax.set_ylim(0, sw_shape[0])
         else:
-            ax.set_ylim(0, 2 * sw.shape[0])
+            ax.set_ylim(0, 2 * sw_shape[0])
 
     if annotate:
         if annotate_list is not None:
@@ -270,11 +341,12 @@ def plot_swanson_vector(acronyms=None, values=None, ax=None, hemisphere=None, br
             annotate_swanson(ax=ax, orientation=orientation, br=br, fontsize=fontsize)
 
     def format_coord(x, y):
-        try:
-            ind = sw[int(y), int(x)]
+        patch = next((p for p in ax.patches if p.contains_point(p.get_transform().transform(np.r_[x, y]))), None)
+        if patch is not None:
+            ind = int(patch.get_gid().split('_')[1])
             ancestors = br.ancestors(br.id[ind])['acronym']
             return f'sw-{ind}, {ancestors}, aid={br.id[ind]}-{br.acronym[ind]} \n {br.name[ind]}'
-        except IndexError:
+        else:
             return ''
 
     ax.format_coord = format_coord
