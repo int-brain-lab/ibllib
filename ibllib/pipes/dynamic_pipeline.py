@@ -361,7 +361,7 @@ def make_pipeline(session_path, **pkwargs):
             FibrePhotometryRegisterRaw,), {})(**kwargs, **photometry_kwargs)
         tasks['FibrePhotometryPreprocess'] = type('FibrePhotometryPreprocess', (
             FibrePhotometryPreprocess,), {})(**kwargs, **photometry_kwargs, **sync_kwargs,
-                                                 parents=[tasks['FibrePhotometryRegisterRaw']] + sync_tasks)
+                                             parents=[tasks['FibrePhotometryRegisterRaw']] + sync_tasks)
 
     p = mtasks.Pipeline(session_path=session_path, **pkwargs)
     p.tasks = tasks
