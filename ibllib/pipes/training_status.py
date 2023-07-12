@@ -155,7 +155,7 @@ def load_trials(sess_path, one, force=True):
     """
     try:
         # try and load all trials that are found locally in the session path locally
-        trial_locations = list(sess_path.rglob('_ibl_trials.stimOnTrigger_times.npy'))
+        trial_locations = list(sess_path.rglob('_ibl_trials.goCueTrigger_times.npy'))
         if len(trial_locations) > 1:
             trial_dict = {}
             for i, loc in enumerate(trial_locations):
@@ -173,7 +173,7 @@ def load_trials(sess_path, one, force=True):
             if not force:
                 return None
             eid = one.path2eid(sess_path)
-            trial_collections = one.list_datasets(eid, '_ibl_trials.stimOnTrigger_times.npy')
+            trial_collections = one.list_datasets(eid, '_ibl_trials.goCueTrigger_times.npy')
             if len(trial_collections) > 1:
                 trial_dict = {}
                 for i, collection in enumerate(trial_collections):
@@ -396,11 +396,14 @@ def compute_session_duration_delay_location(sess_path, **kwargs):
     str {'ephys_rig', 'training_rig'}
         The location of the session.
     """
-    md, sess_data = load_bpod(sess_path, **kwargs)
-    start_time, end_time = _get_session_times(sess_path, md, sess_data)
-    session_duration = int((end_time - start_time).total_seconds() / 60)
-
-    session_delay = md.get('SESSION_START_DELAY_SEC', 0)
+    collections = get_raw_data_collection(sess_path)
+    session_duration = 0
+    session_delay = 0
+    for collection in collections:
+        md, sess_data = load_bpod(sess_path, task_collection=collection)
+        start_time, end_time = _get_session_times(sess_path, md, sess_data)
+        session_duration = session_duration + int((end_time - start_time).total_seconds() / 60)
+        session_delay = session_delay + md.get('SESSION_START_DELAY_SEC', 0)
 
     if 'ephys' in md.get('PYBPOD_BOARD', None):
         session_location = 'ephys_rig'
@@ -408,6 +411,18 @@ def compute_session_duration_delay_location(sess_path, **kwargs):
         session_location = 'training_rig'
 
     return session_duration, session_delay, session_location
+
+
+def get_raw_data_collection(session_path):
+    experiment_description_file = read_params(session_path)
+    if experiment_description_file is not None:
+        pipeline = make_pipeline(session_path)
+        trials_tasks = [t for t in pipeline.tasks if 'Trials' in t]
+        collections = [pipeline.tasks.get(task).kwargs['collection'] for task in trials_tasks]
+    else:
+        collections = ['raw_behavior_data']
+
+    return collections
 
 
 def get_training_info_for_session(session_paths, one, force=True):
@@ -421,11 +436,22 @@ def get_training_info_for_session(session_paths, one, force=True):
     # return list of dicts to add
     sess_dicts = []
     for session_path in session_paths:
+        collections = get_raw_data_collection(session_path)
         session_path = Path(session_path)
         sess_dict = {}
         sess_dict['date'] = str(one.path2ref(session_path)['date'])
         sess_dict['session_path'] = str(session_path)
-        sess_dict['task_protocol'] = get_session_extractor_type(session_path)
+        protocols = []
+        for c in collections:
+            protocols.append(get_session_extractor_type(session_path, task_collection=c))
+
+        if len(set(protocols)) != 1:
+            print(f'Different protocols in same session {session_path} : {protocols}')
+            protocol = '/'.join(protocols)
+        else:
+            protocol = protocols[0]
+
+        sess_dict['task_protocol'] = protocol
 
         if sess_dict['task_protocol'] == 'habituation':
             nan_array = np.array([np.nan])
