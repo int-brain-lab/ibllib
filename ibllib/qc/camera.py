@@ -311,7 +311,7 @@ class CameraQC(base.QC):
         :return: 2-element array comprising the start and end times of the active period
         """
         pos, ts = wh.interpolate_position(wheel.timestamps, wheel.position)
-        v, acc = wh.velocity_smoothed(pos, 1000)
+        v, acc = wh.velocity_filtered(pos, 1000)
         on, off, *_ = wh.movements(ts, acc, pos_thresh=.1, make_plots=False)
         edges = np.c_[on, off]
         indices, _ = np.where(np.logical_and(
@@ -361,19 +361,23 @@ class CameraQC(base.QC):
         dtypes = self.dstypes + self.dstypes_fpga if is_fpga else self.dstypes
         assert_unique = True
         # Check we have raw ephys data for session
-        if is_ephys and len(self.one.list_datasets(self.eid, collection='raw_ephys_data')) == 0:
-            # Assert 3A probe model; if so download all probe data
-            det = self.one.get_details(self.eid, full=True)
-            probe_model = next(x['model'] for x in det['probe_insertion'])
-            assert probe_model == '3A', 'raw ephys data missing'
-            collections += (self.sync_collection or 'raw_ephys_data',)
-            if sess_params:
-                probes = sess_params.get('devices', {}).get('neuropixel', {})
-                probes = set(x.get('collection') for x in chain(*map(dict.values, probes)))
-                collections += tuple(probes)
+        if is_ephys:
+            if len(self.one.list_datasets(self.eid, collection='raw_ephys_data')) == 0:
+                # Assert 3A probe model; if so download all probe data
+                det = self.one.get_details(self.eid, full=True)
+                probe_model = next(x['model'] for x in det['probe_insertion'])
+                assert probe_model == '3A', 'raw ephys data missing'
+                collections += (self.sync_collection or 'raw_ephys_data',)
+                if sess_params:
+                    probes = sess_params.get('devices', {}).get('neuropixel', {})
+                    probes = set(x.get('collection') for x in chain(*map(dict.values, probes)))
+                    collections += tuple(probes)
+                else:
+                    collections += ('raw_ephys_data/probe00', 'raw_ephys_data/probe01')
+                assert_unique = False
             else:
-                collections += ('raw_ephys_data/probe00', 'raw_ephys_data/probe01')
-            assert_unique = False
+                # 3B probes have data in root collection
+                collections += ('raw_ephys_data',)
         for dstype in dtypes:
             datasets = self.one.type2datasets(self.eid, dstype, details=True)
             if 'camera' in dstype.lower():  # Download individual camera file

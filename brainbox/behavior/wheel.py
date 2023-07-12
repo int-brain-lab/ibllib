@@ -1,8 +1,13 @@
 """
-Set of functions to handle wheel data
+Set of functions to handle wheel data.
 """
+import logging
+import warnings
+import traceback
+
 import numpy as np
 from numpy import pi
+from iblutil.numerical import between_sorted
 import scipy.interpolate as interpolate
 import scipy.signal
 from scipy.linalg import hankel
@@ -13,11 +18,11 @@ from matplotlib.collections import LineCollection
 __all__ = ['cm_to_deg',
            'cm_to_rad',
            'interpolate_position',
-           'last_movement_onset',
+           'get_movement_onset',
            'movements',
            'samples_to_cm',
            'traces_by_trial',
-           'velocity_smoothed']
+           'velocity_filtered']
 
 # Define some constants
 ENC_RES = 1024 * 4  # Rotary encoder resolution, assumes X4 encoding
@@ -65,7 +70,7 @@ def interpolate_position(re_ts, re_pos, freq=1000, kind='linear', fill_gaps=None
 
 def velocity(re_ts, re_pos):
     """
-    Compute wheel velocity from non-uniformly sampled wheel data. Returns the velocity
+    (DEPRECATED) Compute wheel velocity from non-uniformly sampled wheel data. Returns the velocity
     at the same samples locations as the position through interpolation.
 
     Parameters
@@ -80,6 +85,13 @@ def velocity(re_ts, re_pos):
     np.ndarray
         numpy array of velocities
     """
+    for line in traceback.format_stack():
+        print(line.strip())
+
+    msg = 'brainbox.behavior.wheel.velocity has been deprecated. Use velocity_filtered instead.'
+    warnings.warn(msg, DeprecationWarning)
+    logging.getLogger(__name__).warning(msg)
+
     dp = np.diff(re_pos)
     dt = np.diff(re_ts)
     # Compute raw velocity
@@ -94,12 +106,23 @@ def velocity(re_ts, re_pos):
 
 def velocity_filtered(pos, fs, corner_frequency=20, order=8):
     """
-    Compute wheel velocity from uniformly sampled wheel data
+    Compute wheel velocity from uniformly sampled wheel data.
 
-    :param pos: vector of uniformly sampled wheel positions
-    :param fs: scalar, sampling frequency
-    :param corner_frequency: scalar, corner frequency of low-pass filter
-    :param order: scalar, order of Butterworth filter
+    pos: array_like
+        Vector of uniformly sampled wheel positions.
+    fs : float
+        Frequency in Hz of the sampling frequency.
+    corner_frequency : float
+       Corner frequency of low-pass filter.
+    order : int
+        Order of Butterworth filter.
+
+    Returns
+    -------
+    vel : np.ndarray
+        Array of velocity values.
+    acc : np.ndarray
+        Array of acceleration values.
     """
     sos = scipy.signal.butter(**{'N': order, 'Wn': corner_frequency / fs * 2, 'btype': 'lowpass'}, output='sos')
     vel = np.insert(np.diff(scipy.signal.sosfiltfilt(sos, pos)), 0, 0) * fs
@@ -109,7 +132,7 @@ def velocity_filtered(pos, fs, corner_frequency=20, order=8):
 
 def velocity_smoothed(pos, freq, smooth_size=0.03):
     """
-    Compute wheel velocity from uniformly sampled wheel data
+    (DEPRECATED) Compute wheel velocity from uniformly sampled wheel data.
 
     Parameters
     ----------
@@ -127,6 +150,13 @@ def velocity_smoothed(pos, freq, smooth_size=0.03):
     acc : np.ndarray
         Array of acceleration values
     """
+    for line in traceback.format_stack():
+        print(line.strip())
+
+    msg = 'brainbox.behavior.wheel.velocity_smoothed has been deprecated. Use velocity_filtered instead.'
+    warnings.warn(msg, DeprecationWarning)
+    logging.getLogger(__name__).warning(msg)
+
     # Define our smoothing window with an area of 1 so the units won't be changed
     std_samps = np.round(smooth_size * freq)  # Standard deviation relative to sampling frequency
     N = std_samps * 6  # Number of points in the Gaussian covering +/-3 standard deviations
@@ -143,15 +173,24 @@ def velocity_smoothed(pos, freq, smooth_size=0.03):
 
 def last_movement_onset(t, vel, event_time):
     """
-    Find the time at which movement started, given an event timestamp that occurred during the
-    movement.  Movement start is defined as the first sample after the velocity has been zero
-    for at least 50ms.  Wheel inputs should be evenly sampled.
+    (DEPRECATED) Find the time at which movement started, given an event timestamp that occurred during the
+    movement.
+
+    Movement start is defined as the first sample after the velocity has been zero for at least 50ms.
+    Wheel inputs should be evenly sampled.
 
     :param t: numpy array of wheel timestamps in seconds
     :param vel: numpy array of wheel velocities
     :param event_time: timestamp anywhere during movement of interest, e.g. peak velocity
     :return: timestamp of movement onset
     """
+    for line in traceback.format_stack():
+        print(line.strip())
+
+    msg = 'brainbox.behavior.wheel.last_movement_onset has been deprecated. Use get_movement_onset instead.'
+    warnings.warn(msg, DeprecationWarning)
+    logging.getLogger(__name__).warning(msg)
+
     # Look back from timestamp
     threshold = 50e-3
     mask = t < event_time
@@ -166,6 +205,42 @@ def last_movement_onset(t, vel, event_time):
 
     # Return timestamp
     return t
+
+
+def get_movement_onset(intervals, event_times):
+    """
+    Find the time at which movement started, given an event timestamp that occurred during the
+    movement.
+
+    Parameters
+    ----------
+    intervals : numpy.array
+        The wheel movement intervals.
+    event_times : numpy.array
+        Sorted event timestamps anywhere during movement of interest, e.g. peak velocity, feedback
+        time.
+
+    Returns
+    -------
+    numpy.array
+        An array the length of event_time of intervals.
+
+    Examples
+    --------
+    Find the last movement onset before each trial response time
+
+    >>> trials = one.load_object(eid, 'trials')
+    >>> wheelMoves = one.load_object(eid, 'wheelMoves')
+    >>> onsets = last_movement_onset(wheelMoves.intervals, trials.response_times)
+    """
+    if not np.all(np.diff(event_times) > 0):
+        raise ValueError('event_times must be in ascending order.')
+    onsets = np.full(event_times.size, np.nan)
+    for i in np.arange(intervals.shape[0]):
+        onset = between_sorted(event_times, intervals[i, :])
+        if np.any(onset):
+            onsets[onset] = intervals[i, 0]
+    return onsets
 
 
 def movements(t, pos, freq=1000, pos_thresh=8, t_thresh=.2, min_gap=.1, pos_thresh_onset=1.5,
@@ -298,7 +373,7 @@ def movements(t, pos, freq=1000, pos_thresh=8, t_thresh=.2, min_gap=.1, pos_thre
     if make_plots:
         fig, axes = plt.subplots(nrows=2, sharex='all')
         indices = np.sort(np.hstack((onset_samps, offset_samps)))  # Points to split trace
-        vel, acc = velocity_smoothed(pos, freq, 0.015)
+        vel, acc = velocity_filtered(pos, freq)
 
         # Plot the wheel position and velocity
         for ax, y in zip(axes, (pos, vel)):
@@ -442,6 +517,6 @@ def traces_by_trial(t, *args, start=None, end=None, separate=True):
     return [(cuts[n][0, :], cuts[n][1, :]) for n in range(len(cuts))] if separate else cuts
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     import doctest
     doctest.testmod()
