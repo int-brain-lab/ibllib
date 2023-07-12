@@ -1,17 +1,20 @@
 """Tests for ibllib.pipes.mesoscope_tasks"""
 import sys
 import unittest
-from unittest.mock import MagicMock
+from unittest import mock
 import tempfile
 import json
 from pathlib import Path
+
+from one.api import ONE
 import numpy as np
 
 from ibllib.pipes.mesoscope_tasks import MesoscopePreprocess, MesoscopeFOV
+from . import TEST_DB
 
 # Mock suit2p which is imported in MesoscopePreprocess
 attrs = {'default_ops.return_value': {}}
-sys.modules['suite2p'] = MagicMock(**attrs)
+sys.modules['suite2p'] = mock.MagicMock(**attrs)
 
 
 class TestMesoscopePreprocess(unittest.TestCase):
@@ -22,7 +25,7 @@ class TestMesoscopePreprocess(unittest.TestCase):
         self.session_path = Path(self.td.name).joinpath('subject', '2020-01-01', '001')
         self.img_path = self.session_path.joinpath('raw_imaging_data_00')
         self.img_path.mkdir(parents=True)
-        self.task = MesoscopePreprocess(self.session_path)
+        self.task = MesoscopePreprocess(self.session_path, one=ONE(**TEST_DB))
 
     def test_meta(self):
         """
@@ -70,17 +73,29 @@ class TestMesoscopePreprocess(unittest.TestCase):
         with open(self.img_path.joinpath('_ibl_rawImagingData.meta.json'), 'w') as f:
             json.dump(meta, f)
         self.img_path.joinpath('test.tif').touch()
-        _ = self.task.run(run_suite2p=False, rename_files=False)
+        with mock.patch.object(self.task, 'get_default_tau', return_value=1.5):
+            _ = self.task.run(run_suite2p=False, rename_files=False)
         self.assertEqual(self.task.status, 0)
         self.assertDictEqual(self.task.kwargs, expected)
         # {k: v for k, v in self.task.kwargs.items() if expected[k] != v}
         # Now overwrite a specific option with task.run kwarg
-        _ = self.task.run(run_suite2p=False, rename_files=False, nchannels=2, delete_bin=True)
+        with mock.patch.object(self.task, 'get_default_tau', return_value=1.5):
+            _ = self.task.run(run_suite2p=False, rename_files=False, nchannels=2, delete_bin=True)
         self.assertEqual(self.task.status, 0)
         self.assertEqual(self.task.kwargs['nchannels'], 2)
         self.assertEqual(self.task.kwargs['delete_bin'], True)
         with open(self.img_path.joinpath('_ibl_rawImagingData.meta.json'), 'w') as f:
             json.dump({}, f)
+
+    def test_get_default_tau(self):
+        """Test for MesoscopePreprocess.get_default_tau method."""
+        subject_detail = {'genotype': [{'allele': 'Cdh23', 'zygosity': 1},
+                                       {'allele': 'Ai95-G6f', 'zygosity': 1},
+                                       {'allele': 'Camk2a-tTa', 'zygosity': 1}]}
+        with mock.patch.object(self.task.one.alyx, 'rest', return_value=subject_detail):
+            self.assertEqual(self.task.get_default_tau(), .7)
+            subject_detail['genotype'].pop(1)
+            self.assertEqual(self.task.get_default_tau(), 1.5)  # return the default value
 
     def tearDown(self) -> None:
         self.td.cleanup()
@@ -90,6 +105,7 @@ class TestMesoscopeFOV(unittest.TestCase):
     """Test for MesoscopeFOV task."""
 
     def test_get_provenance(self):
+        """Test for MesoscopeFOV.get_provenance method."""
         filename = 'mpciMeanImage.mlapdv_estimate.npy'
         provenance = MesoscopeFOV.get_provenance(filename)
         self.assertEqual('ESTIMATE', provenance.name)

@@ -12,9 +12,10 @@ import subprocess
 import shutil
 from pathlib import Path
 from itertools import chain
-from collections import defaultdict
+from collections import defaultdict, Counter
 from fnmatch import fnmatch
 import enum
+import re
 
 import numpy as np
 import pandas as pd
@@ -22,7 +23,7 @@ import sparse
 from scipy.io import loadmat
 import one.alf.io as alfio
 from one.alf.spec import is_valid, to_alf
-from one.alf.files import filename_parts
+from one.alf.files import filename_parts, session_path_parts
 import one.alf.exceptions as alferr
 
 from ibllib.pipes import base_tasks
@@ -416,6 +417,27 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
 
         return frameQC, frameQC_names, bad_frames
 
+    def get_default_tau(self):
+        """
+        Determine the tau (fluorescence decay) from the subject's genotype.
+
+        Returns
+        -------
+        float
+            The tau value to use.
+
+        See Also
+        --------
+        https://suite2p.readthedocs.io/en/latest/settings.html
+        """
+        # These settings are from the suite2P documentation
+        TAU_MAP = {'G6s': 1.5, 'G6m': 1., 'G6f': .7, 'default': 1.5}
+        _, subject, *_ = session_path_parts(self.session_path)
+        genotype = self.one.alyx.rest('subjects', 'read', id=subject)['genotype']
+        match = next(filter(None, (re.match(r'.+-(G\d[fms])$', g['allele']) for g in genotype)), None)
+        key = match.groups()[0] if match else 'default'
+        return TAU_MAP.get(key, TAU_MAP['default'])
+
     def _create_db(self, meta):
         """
         Create the ops dictionary for suite2p based on metadata.
@@ -475,7 +497,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
             'nchannels': nchannels,
             'fs': meta['scanImageParams']['hRoiManager']['scanVolumeRate'],
             'lines': [list(np.asarray(fov['lineIdx']) - 1) for fov in meta['FOV']],  # subtracting 1 to make 0-based
-            'tau': 1.5,  # 1.5 is recommended for GCaMP6s TODO: potential deduce the GCamp used from Alyx mouse line?
+            'tau': self.get_default_tau(),  # deduce the GCamp used from Alyx mouse line (defaults to 1.5; that of GCaMP6s)
             'functional_chan': 1,  # for now, eventually find(ismember(meta.channelSaved == meta.channelID.green))
             'align_by_chan': 1,  # for now, eventually find(ismember(meta.channelSaved == meta.channelID.red))
             'dx': dx,
@@ -789,16 +811,23 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
 
         TODO Change mlapdv datasets to um and remove FACTOR var
         TODO Determine slice and dual plane ID for JSON field
-        TODO stack = one.alyx.rest('imaging-stack', 'create', data={})
         """
         FACTOR = 1e3  # The meta data are in mm, while the FOV in alyx is in um
         dry = self.one is None or self.one.offline
         alyx_fovs = []
+        # Count the number of slices per stack ID: only register stacks that contain more than one slice.
+        slice_counts = Counter(f['stack_id'] for f in meta.get('FOV', []))
+        # Create a new stack in Alyx for all stacks containing more than one slice
+        stack_ids = {i: self.one.alyx.rest('imaging-stack', 'create', data={})['id']
+                     for i in slice_counts if slice_counts[i] > 1}
+
         for i, fov in enumerate(meta.get('FOV', [])):
+            assert set(fov.keys()) >= {'MLAPDV', 'nXnYnZ', 'stack_id'}
             # Field of view
             alyx_FOV = {
                 'session': self.session_path.as_posix() if dry else self.path2eid(),
-                'imaging_type': 'mesoscope', 'name': f'FOV_{i:02}'
+                'imaging_type': 'mesoscope', 'name': f'FOV_{i:02}',
+                'stack': stack_ids.get(fov['stack_id'])
             }
             if dry:
                 print(alyx_FOV)
@@ -808,7 +837,6 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
                 alyx_fovs.append(self.one.alyx.rest('fields-of-view', 'create', data=alyx_FOV))
 
             # Field of view location
-            assert set(fov.keys()) >= {'MLAPDV', 'nXnYnZ'}
             data = {'field_of_view': alyx_fovs[-1].get('id'),
                     'default_provenance': True,
                     'coordinate_system': 'IBL-Allen',
