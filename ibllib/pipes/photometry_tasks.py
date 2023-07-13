@@ -4,8 +4,7 @@ import logging
 from collections import OrderedDict
 
 from ibllib.pipes import tasks, base_tasks
-from ibllib.pipes.training_preprocessing import (
-    TrainingRegisterRaw, TrainingAudio, TrainingTrials, TrainingDLC, TrainingStatus, TrainingVideoCompress)
+import ibllib.pipes.training_preprocessing as tpp
 from ibllib.io.extractors.fibrephotometry import FibrePhotometry
 
 _logger = logging.getLogger('ibllib')
@@ -70,13 +69,13 @@ class FibrePhotometryExtractionPipeline(tasks.Pipeline):
         tasks = OrderedDict()
         self.session_path = session_path
         # level 0
-        tasks['TrainingRegisterRaw'] = TrainingRegisterRaw(self.session_path)
-        tasks['TrainingTrials'] = TrainingTrials(self.session_path)
-        tasks['TrainingVideoCompress'] = TrainingVideoCompress(self.session_path)
-        tasks['TrainingAudio'] = TrainingAudio(self.session_path)
+        tasks['TrainingRegisterRaw'] = tpp.TrainingRegisterRaw(self.session_path)
+        tasks['TrainingTrials'] = tpp.TrainingTrials(self.session_path)
+        tasks['TrainingVideoCompress'] = tpp.TrainingVideoCompress(self.session_path)
+        tasks['TrainingAudio'] = tpp.TrainingAudio(self.session_path)
         # level 1
         tasks['BiasedFibrePhotometry'] = FibrePhotometryPreprocess(self.session_path, parents=[tasks['TrainingTrials']])
-        tasks['TrainingStatus'] = TrainingStatus(self.session_path, parents=[tasks['TrainingTrials']])
-        tasks['TrainingDLC'] = TrainingDLC(
+        tasks['TrainingStatus'] = tpp.TrainingStatus(self.session_path, parents=[tasks['TrainingTrials']])
+        tasks['TrainingDLC'] = tpp.TrainingDLC(
             self.session_path, parents=[tasks['TrainingVideoCompress']])
         self.tasks = tasks

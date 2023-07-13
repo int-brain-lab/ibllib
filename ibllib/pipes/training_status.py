@@ -5,7 +5,7 @@ from ibllib.io.raw_data_loaders import load_bpod
 from ibllib.oneibl.registration import _get_session_times
 from ibllib.io.extractors.base import get_pipeline, get_session_extractor_type
 from ibllib.io.session_params import read_params
-from ibllib.pipes.dynamic_pipeline import make_pipeline
+import ibllib.pipes.dynamic_pipeline as dyn
 
 from ibllib.plots.snapshot import ReportSnapshot
 from iblutil.numerical import ismember
@@ -85,7 +85,7 @@ def get_trials_task(session_path, one):
     experiment_description_file = read_params(session_path)
     if experiment_description_file is not None:
         tasks = []
-        pipeline = make_pipeline(session_path)
+        pipeline = dyn.make_pipeline(session_path)
         trials_tasks = [t for t in pipeline.tasks if 'Trials' in t]
         for task in trials_tasks:
             t = pipeline.tasks.get(task)
@@ -238,8 +238,12 @@ def get_latest_training_information(sess_path, one):
 
     subj_path = sess_path.parent.parent
     sub = subj_path.parts[-1]
-    lab = one.alyx.rest('subjects', 'list', nickname=sub)[0]['lab']
-    df = get_training_table_from_aws(lab, sub)
+    if one.mode != 'local':
+        lab = one.alyx.rest('subjects', 'list', nickname=sub)[0]['lab']
+        df = get_training_table_from_aws(lab, sub)
+    else:
+        df = None
+
     if df is None:
         df = load_existing_dataframe(subj_path)
 
@@ -250,7 +254,6 @@ def get_latest_training_information(sess_path, one):
     for _, grp in missing_dates.groupby('date'):
         sess_dicts = get_training_info_for_session(grp.session_path.values, one)
         if len(sess_dicts) == 0:
-            print('in continue')
             continue
 
         for sess_dict in sess_dicts:
@@ -289,7 +292,8 @@ def get_latest_training_information(sess_path, one):
 
     save_dataframe(df, subj_path)
 
-    upload_training_table_to_aws(lab, sub)
+    if one.mode != 'local':
+        upload_training_table_to_aws(lab, sub)
 
     return df
 
@@ -416,7 +420,7 @@ def compute_session_duration_delay_location(sess_path, **kwargs):
 def get_raw_data_collection(session_path):
     experiment_description_file = read_params(session_path)
     if experiment_description_file is not None:
-        pipeline = make_pipeline(session_path)
+        pipeline = dyn.make_pipeline(session_path)
         trials_tasks = [t for t in pipeline.tasks if 'Trials' in t]
         collections = [pipeline.tasks.get(task).kwargs['collection'] for task in trials_tasks]
     else:
