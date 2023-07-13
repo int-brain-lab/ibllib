@@ -518,7 +518,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
             Whether to rename and reorganize the suite2p outputs to be alf compatible. Defaults is True.
         use_badframes: bool
             Whether to exclude bad frames indicated by the experimenter in exptQC.mat. Default is currently False
-            due to bug in suite2p. Change this in the future
+            due to bug in suite2p. Change this in the future.
 
         Returns
         -------
@@ -640,7 +640,7 @@ class MesoscopeSync(base_tasks.MesoscopeTask):
 
 
 class MesoscopeFOV(base_tasks.MesoscopeTask):
-    """Create FOV and FOV location objects in Alyx from metadata"""
+    """Create FOV and FOV location objects in Alyx from metadata."""
 
     priority = 40
     job_size = 'small'
@@ -663,8 +663,8 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
         Register fields of view (FOV) to Alyx and extract the coordinates and IDs of each ROI.
 
         Steps:
-            1. Register the location of each FOV in Alyx
-            2. Re-save the mpciMeanImage.brainLocationIds_estimate as an int array
+            1. Register the location of each FOV in Alyx.
+            2. Re-save the mpciMeanImage.brainLocationIds_estimate as an int array.
             3. Use mean image coordinates and ROI stack position datasets to extract brain location
              of each ROI.
 
@@ -677,7 +677,8 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
 
         Notes
         -----
-        TODO Deal with already created FOVs
+        Once the FOVs have been registered they cannot be updated with with task. Rerunning this
+        task will result in an error.
         """
         (filename, collection, _), *_ = self.signature['input_files']
         meta_file = next(self.session_path.glob(f'{collection}/{filename}'), None)
@@ -809,25 +810,24 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
         list of dict
             A list registered of field of view entries from Alyx.
 
-        TODO Change mlapdv datasets to um and remove FACTOR var
-        TODO Determine slice and dual plane ID for JSON field
+        TODO Determine dual plane ID for JSON field
         """
-        FACTOR = 1e3  # The meta data are in mm, while the FOV in alyx is in um
         dry = self.one is None or self.one.offline
         alyx_fovs = []
         # Count the number of slices per stack ID: only register stacks that contain more than one slice.
-        slice_counts = Counter(f['stack_id'] for f in meta.get('FOV', []))
-        # Create a new stack in Alyx for all stacks containing more than one slice
-        stack_ids = {i: self.one.alyx.rest('imaging-stack', 'create', data={})['id']
+        slice_counts = Counter(f['roiUUID'] for f in meta.get('FOV', []))
+        # Create a new stack in Alyx for all stacks containing more than one slice.
+        # Map of ScanImage ROI UUID to Alyx ImageStack UUID.
+        stack_ids = {i: self.one.alyx.rest('imaging-stack', 'create', data={'name': i})['id']
                      for i in slice_counts if slice_counts[i] > 1}
 
         for i, fov in enumerate(meta.get('FOV', [])):
-            assert set(fov.keys()) >= {'MLAPDV', 'nXnYnZ', 'stack_id'}
+            assert set(fov.keys()) >= {'MLAPDV', 'nXnYnZ', 'roiUUID'}
             # Field of view
             alyx_FOV = {
                 'session': self.session_path.as_posix() if dry else self.path2eid(),
                 'imaging_type': 'mesoscope', 'name': f'FOV_{i:02}',
-                'stack': stack_ids.get(fov['stack_id'])
+                'stack': stack_ids.get(fov['roiUUID'])
             }
             if dry:
                 print(alyx_FOV)
@@ -847,10 +847,9 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
             # Convert coordinates to 4 x 3 array (n corners by n dimensions)
             # x1 = top left ml, y1 = top left ap, y2 = top right ap, etc.
             coords = [fov['MLAPDV'][key] for key in ('topLeft', 'topRight', 'bottomLeft', 'bottomRight')]
-            coords = np.vstack(coords) * FACTOR
-            data.update({k: arr.tolist() for k, arr in zip('xyz', coords.T)})
+            coords = np.vstack(coords).T
+            data.update({k: arr.tolist() for k, arr in zip('xyz', coords)})
 
-            # TODO Deal with multiple timescale values, etc.
             # Load MLAPDV + brain location ID maps of pixels
             filename = 'mpciMeanImage.brainLocationIds_ccf_2017' + (f'_{suffix}' if suffix else '') + '.npy'
             filepath = self.session_path.joinpath('alf', f'FOV_{i:02}', filename)
