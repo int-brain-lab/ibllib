@@ -80,7 +80,7 @@ def upload_training_table_to_aws(lab, subject):
         bucket = s3.Bucket(name=dst_bucket_name)
         bucket.upload_file(local_file_path,
                            f'resources/training/{lab}/{subject}/training.csv')
-    except ClientError:
+    except (ClientError, FileNotFoundError):
         return
 
 
