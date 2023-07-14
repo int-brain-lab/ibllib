@@ -20,7 +20,7 @@ from matplotlib.lines import Line2D
 from datetime import datetime
 import seaborn as sns
 import boto3
-from botocore.exceptions import ProfileNotFound
+from botocore.exceptions import ProfileNotFound, ClientError
 
 
 TRAINING_STATUS = {'untrainable': (-4, (0, 0, 0, 0)),
@@ -49,11 +49,14 @@ def get_training_table_from_aws(lab, subject):
 
     local_file_path = f'/mnt/s0/Data/Subjects/{subject}/training.csv'
     dst_bucket_name = 'ibl-brain-wide-map-private'
-    s3 = session.resource('s3')
-    bucket = s3.Bucket(name=dst_bucket_name)
-    bucket.download_file(f'resources/training/{lab}/{subject}/training.csv',
-                         local_file_path)
-    df = pd.read_csv(local_file_path)
+    try:
+        s3 = session.resource('s3')
+        bucket = s3.Bucket(name=dst_bucket_name)
+        bucket.download_file(f'resources/training/{lab}/{subject}/training.csv',
+                             local_file_path)
+        df = pd.read_csv(local_file_path)
+    except ClientError:
+        return
 
     return df
 
@@ -72,10 +75,13 @@ def upload_training_table_to_aws(lab, subject):
 
     local_file_path = f'/mnt/s0/Data/Subjects/{subject}/training.csv'
     dst_bucket_name = 'ibl-brain-wide-map-private'
-    s3 = session.resource('s3')
-    bucket = s3.Bucket(name=dst_bucket_name)
-    bucket.upload_file(local_file_path,
-                       f'resources/training/{lab}/{subject}/training.csv')
+    try:
+        s3 = session.resource('s3')
+        bucket = s3.Bucket(name=dst_bucket_name)
+        bucket.upload_file(local_file_path,
+                           f'resources/training/{lab}/{subject}/training.csv')
+    except ClientError:
+        return
 
 
 def get_trials_task(session_path, one):

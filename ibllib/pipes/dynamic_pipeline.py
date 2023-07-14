@@ -308,7 +308,7 @@ def make_pipeline(session_path, **pkwargs):
                 tasks[tn] = type((tn := f'VideoSyncQC_{sync}'), (vtasks.VideoSyncQcNidq,), {})(
                     **kwargs, **video_kwargs, **sync_kwargs, parents=[tasks['VideoCompress']] + sync_tasks)
 
-        if len(sync_kwargs['sync']) != 'bpod':
+        if sync_kwargs['sync'] != 'bpod':
             tasks[tn] = type((tn := 'DLC'), (vtasks.DLC,), {})(
                 **kwargs, **video_kwargs, parents=[dlc_parent_task])
             tasks['PostDLC'] = type('PostDLC', (epp.EphysPostDLC,), {})(
