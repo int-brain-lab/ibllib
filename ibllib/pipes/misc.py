@@ -720,7 +720,6 @@ def confirm_ephys_remote_folder(local_folder=False, remote_folder=False, force=F
         src_session_paths = [x.parent for x in local_folder.rglob("transfer_me.flag")]
     else:
         src_session_paths = session_path if isinstance(session_path, list) else [session_path]
-        src_session_paths = [sp for sp in src_session_paths if sp.joinpath("transfer_me.flag").exists()]
 
     if not src_session_paths:
         log.info("Nothing to transfer, exiting...")
