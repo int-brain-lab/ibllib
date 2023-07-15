@@ -13,6 +13,7 @@ from typing import Union, List
 from inspect import signature
 import uuid
 import socket
+import traceback
 
 import spikeglx
 from iblutil.io import hashfile, params
@@ -79,10 +80,16 @@ def cli_ask_options(prompt: str, options: list, default_idx: int = 0) -> str:
     return ans
 
 
-def behavior_exists(session_path: str) -> bool:
+def behavior_exists(session_path: str, include_devices=False) -> bool:
+    """
+    Returns True if the session has a task behaviour folder
+    :param session_path:
+    :return:
+    """
     session_path = Path(session_path)
-    behavior_path = session_path / "raw_behavior_data"
-    if behavior_path.exists():
+    if include_devices and session_path.joinpath("_devices").exists():
+        return True
+    if session_path.joinpath("raw_behavior_data").exists():
         return True
     return any(session_path.glob('raw_task_data_*'))
 
@@ -692,8 +699,11 @@ def confirm_ephys_remote_folder(local_folder=False, remote_folder=False, force=F
     :param iblscripts_folder:
     :return:
     """
+    # FIXME: session_path can be relative
     pars = load_ephyspc_params()
-
+    if not iblscripts_folder:
+        import deploy
+        iblscripts_folder = Path(deploy.__file__).parent.parent
     if not local_folder:
         local_folder = pars["DATA_FOLDER_PATH"]
     if not remote_folder:
@@ -704,19 +714,23 @@ def confirm_ephys_remote_folder(local_folder=False, remote_folder=False, force=F
     local_folder = subjects_data_folder(local_folder, rglob=True)
     remote_folder = subjects_data_folder(remote_folder, rglob=True)
 
-    log.info("LOCAL:", local_folder)
-    log.info("REMOTE:", remote_folder)
+    log.info(f"local folder: {local_folder}")
+    log.info(f"remote folder: {remote_folder}")
     if session_path is None:
         src_session_paths = [x.parent for x in local_folder.rglob("transfer_me.flag")]
     else:
         src_session_paths = session_path if isinstance(session_path, list) else [session_path]
+        src_session_paths = [sp for sp in src_session_paths if sp.joinpath("transfer_me.flag").exists()]
 
     if not src_session_paths:
         log.info("Nothing to transfer, exiting...")
         return
+    for session_path in src_session_paths:
+        log.info(f"Found : {session_path}")
+    log.info(f"Found: {len(src_session_paths)} sessions to transfer, starting transferring now")
 
     for session_path in src_session_paths:
-        log.info(f"\nFound session: {session_path}")
+        log.info(f"Transferring session: {session_path}")
         # Rename ephys files
         # FIXME: if transfer has failed and wiring file is there renaming will fail!
         rename_ephys_files(str(session_path))
@@ -726,13 +740,10 @@ def confirm_ephys_remote_folder(local_folder=False, remote_folder=False, force=F
         copy_wiring_files(str(session_path), iblscripts_folder)
         try:
             create_alyx_probe_insertions(str(session_path))
-        except BaseException as e:
-            print(
-                e,
-                "\nCreation failed, please create the probe insertions manually.",
-                "Continuing transfer...",
-            )
-        msg = f"Transfer to {remote_folder} with the same name?"
+        except BaseException:
+            log.error(traceback.print_exc())
+            log.info("Probe creation failed, please create the probe insertions manually. Continuing transfer...")
+        msg = f"Transfer {session_path }to {remote_folder} with the same name?"
         resp = input(msg + "\n[y]es/[r]ename/[s]kip/[e]xit\n ^\n> ") or "y"
         resp = resp.lower()
         log.info(resp)
@@ -755,14 +766,12 @@ def confirm_ephys_remote_folder(local_folder=False, remote_folder=False, force=F
             return
 
         remote_session_path = remote_folder / Path(*session_path.parts[-3:])
-        if not behavior_exists(remote_session_path):
-            print(f"No behavior folder found in {remote_session_path}: skipping session...")
+        if not behavior_exists(remote_session_path, include_devices=True):
+            log.error(f"No behavior folder found in {remote_session_path}: skipping session...")
             return
         # TODO: Check flagfiles on src.and dst + alf dir in session folder then remove
         # Try catch? wher catch condition is force transfer maybe
-        transfer_folder(
-            session_path / "raw_ephys_data", remote_session_path / "raw_ephys_data", force=force
-        )
+        transfer_folder(session_path / "raw_ephys_data", remote_session_path / "raw_ephys_data", force=force)
         # if behavior extract_me.flag exists remove it, because of ephys flag
         flag_file = session_path / "transfer_me.flag"
         flag_file.unlink()
@@ -805,7 +814,7 @@ def create_alyx_probe_insertions(
     labels: list = None,
 ):
     if one is None:
-        one = ONE(cache_rest=None)
+        one = ONE(cache_rest=None, mode='local')
     eid = session_path if is_uuid_string(session_path) else one.path2eid(session_path)
     if eid is None:
         log.warning("Session not found on Alyx: please create session before creating insertions")
