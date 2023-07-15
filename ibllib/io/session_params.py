@@ -489,6 +489,7 @@ def prepare_experiment(session_path, acquisition_description=None, local=None, r
         previous_description = read_params(remote_device_path) if remote_device_path.exists() and not overwrite else {}
         try:
             write_yaml(remote_device_path, merge_params(previous_description, acquisition_description))
+            _logger.info(f'Written data to remote device at: {remote_device_path}.')
         except Exception as ex:
             _logger.warning(f'Failed to write data to remote device at: {remote_device_path}. \n {ex}')
 
@@ -497,3 +498,4 @@ def prepare_experiment(session_path, acquisition_description=None, local=None, r
     local_device_path = Path(local).joinpath(session_path, filename)
     previous_description = read_params(local_device_path) if local_device_path.exists() and not overwrite else {}
     write_yaml(local_device_path, merge_params(previous_description, acquisition_description))
+    _logger.info(f'Written data to local session at : {local_device_path}.')
