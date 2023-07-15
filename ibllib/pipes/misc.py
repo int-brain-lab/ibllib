@@ -683,9 +683,15 @@ def rsync_paths(src: Path, dst: Path) -> bool:
     return True
 
 
-def confirm_ephys_remote_folder(
-    local_folder=False, remote_folder=False, force=False, iblscripts_folder=False
-):
+def confirm_ephys_remote_folder(local_folder=False, remote_folder=False, force=False, iblscripts_folder=False,
+                                session_path=None):
+    """
+    :param local_folder: The full path to the local Subjects folder
+    :param remote_folder:  the full path to the remote Subjects folder
+    :param force:
+    :param iblscripts_folder:
+    :return:
+    """
     pars = load_ephyspc_params()
 
     if not local_folder:
@@ -698,16 +704,19 @@ def confirm_ephys_remote_folder(
     local_folder = subjects_data_folder(local_folder, rglob=True)
     remote_folder = subjects_data_folder(remote_folder, rglob=True)
 
-    print("LOCAL:", local_folder)
-    print("REMOTE:", remote_folder)
-    src_session_paths = [x.parent for x in local_folder.rglob("transfer_me.flag")]
+    log.info("LOCAL:", local_folder)
+    log.info("REMOTE:", remote_folder)
+    if session_path is None:
+        src_session_paths = [x.parent for x in local_folder.rglob("transfer_me.flag")]
+    else:
+        src_session_paths = session_path if isinstance(session_path, list) else [session_path]
 
     if not src_session_paths:
-        print("Nothing to transfer, exiting...")
+        log.info("Nothing to transfer, exiting...")
         return
 
     for session_path in src_session_paths:
-        print(f"\nFound session: {session_path}")
+        log.info(f"\nFound session: {session_path}")
         # Rename ephys files
         # FIXME: if transfer has failed and wiring file is there renaming will fail!
         rename_ephys_files(str(session_path))
@@ -726,7 +735,7 @@ def confirm_ephys_remote_folder(
         msg = f"Transfer to {remote_folder} with the same name?"
         resp = input(msg + "\n[y]es/[r]ename/[s]kip/[e]xit\n ^\n> ") or "y"
         resp = resp.lower()
-        print(resp)
+        log.info(resp)
         if resp not in ["y", "r", "s", "e", "yes", "rename", "skip", "exit"]:
             return confirm_ephys_remote_folder(
                 local_folder=local_folder,
