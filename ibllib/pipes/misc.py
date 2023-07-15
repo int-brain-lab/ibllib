@@ -790,7 +790,7 @@ def probe_labels_from_session_path(session_path: Union[str, Path]) -> List[str]:
     :return: list of strings
     """
     plabels = []
-    raw_ephys_folder = session_path.joinpath('raw_ephys_data')
+    raw_ephys_folder = Path(session_path).joinpath('raw_ephys_data')
     for meta_file in raw_ephys_folder.rglob('*.ap.meta'):
         if meta_file.parents[1] != raw_ephys_folder:
             continue
