@@ -394,14 +394,12 @@ def get_collections(sess_params):
 
     def iter_dict(d):
         for k, v in d.items():
-            if not v or isinstance(v, str):
-                continue
             if isinstance(v, list):
                 for d in filter(lambda x: isinstance(x, dict), v):
                     iter_dict(d)
-            elif 'collection' in v:
+            elif isinstance(v, dict) and 'collection' in v:
                 collection_map[k] = v['collection']
-            else:
+            elif isinstance(v, dict):
                 iter_dict(v)
 
     iter_dict(sess_params)

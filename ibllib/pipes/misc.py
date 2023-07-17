@@ -773,12 +773,13 @@ def confirm_ephys_remote_folder(local_folder=False, remote_folder=False, force=F
         transfer_folder(session_path / "raw_ephys_data", remote_session_path / "raw_ephys_data", force=force)
         # if behavior extract_me.flag exists remove it, because of ephys flag
         flag_file = session_path / "transfer_me.flag"
-        flag_file.unlink()
-        if (remote_session_path / "extract_me.flag").exists():
-            (remote_session_path / "extract_me.flag").unlink()
-        # Create remote flags
-        create_ephys_transfer_done_flag(remote_session_path)
-        check_create_raw_session_flag(remote_session_path)
+        if flag_file.exists():  # this file only exists for the iblrig v7 and lower
+            flag_file.unlink()
+            if (remote_session_path / "extract_me.flag").exists():
+                (remote_session_path / "extract_me.flag").unlink()
+            # Create remote flags
+            create_ephys_transfer_done_flag(remote_session_path)
+            check_create_raw_session_flag(remote_session_path)
 
 
 def probe_labels_from_session_path(session_path: Union[str, Path]) -> List[str]:
