@@ -197,7 +197,7 @@ def load_trials(sess_path, one, collections=None, force=True):
                     trial_dict[i] = one.load_object(eid, 'trials', collection=collection)
                 trials = training.concatenate_trials(trial_dict)
             elif len(trial_collections) == 1:
-                trials = one.load_object(eid, 'trials', collection=collections[0])
+                trials = one.load_object(eid, 'trials', collection=trial_collections[0])
             else:
                 raise ALFObjectNotFound
 
