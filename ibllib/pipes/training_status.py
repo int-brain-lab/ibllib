@@ -84,7 +84,7 @@ def upload_training_table_to_aws(lab, subject):
         return
 
 
-def get_trials_task(session_path, one, collections=None):
+def get_trials_task(session_path, one):
 
     # TODO this eventually needs to be updated for dynamic pipeline tasks
     # If experiment description file then process this
@@ -95,14 +95,8 @@ def get_trials_task(session_path, one, collections=None):
         trials_tasks = [t for t in pipeline.tasks if 'Trials' in t]
         for task in trials_tasks:
             t = pipeline.tasks.get(task)
-            if collections is not None:
-                if t.kwargs['collection'] in collections:
-                    t.__init__(session_path, **t.kwargs)
-                    tasks.append(t)
-            else:
-                t.__init__(session_path, **t.kwargs)
-                tasks.append(t)
-
+            t.__init__(session_path, **t.kwargs)
+            tasks.append(t)
     else:
         # Otherwise default to old way of doing things
         pipeline = get_pipeline(session_path)
@@ -167,8 +161,10 @@ def load_trials(sess_path, one, collections=None, force=True):
     """
     try:
         # try and load all trials that are found locally in the session path locally
-        trial_locations = (list(sess_path.rglob('_ibl_trials.goCueTrigger_times.npy'))
-                           if collections is None else collections)
+        if collections is None:
+            trial_locations = list(sess_path.rglob('_ibl_trials.goCueTrigger_times.npy'))
+        else:
+            trial_locations = [Path(sess_path).joinpath(c, '_ibl_trials.goCueTrigger_times.npy') for c in collections]
 
         if len(trial_locations) > 1:
             trial_dict = {}
@@ -188,15 +184,20 @@ def load_trials(sess_path, one, collections=None, force=True):
             if not force:
                 return None
             eid = one.path2eid(sess_path)
-            trial_collections = (one.list_datasets(eid, '_ibl_trials.goCueTrigger_times.npy')
-                                 if collections is None else collections)
+            if collections is None:
+                trial_collections = one.list_datasets(eid, '_ibl_trials.goCueTrigger_times.npy')
+                if len(trial_collections) > 0:
+                    trial_collections = ['/'.join(c.split('/')[:-1]) for c in trial_collections]
+            else:
+                trial_collections = collections
+
             if len(trial_collections) > 1:
                 trial_dict = {}
                 for i, collection in enumerate(trial_collections):
-                    trial_dict[i] = one.load_object(eid, 'trials', collection='/'.join(collection.split('/')[:-1]))
+                    trial_dict[i] = one.load_object(eid, 'trials', collection=collection)
                 trials = training.concatenate_trials(trial_dict)
             elif len(trial_collections) == 1:
-                trials = one.load_object(eid, 'trials', collection='/'.join(trial_collections[0].split('/')[:-1]))
+                trials = one.load_object(eid, 'trials', collection=collections[0])
             else:
                 raise ALFObjectNotFound
 
@@ -206,7 +207,7 @@ def load_trials(sess_path, one, collections=None, force=True):
             # Finally try to rextract the trials data locally
             try:
                 # Get the tasks that need to be run
-                tasks = get_trials_task(sess_path, collections=collections)
+                tasks = get_trials_task(sess_path, one)
                 if len(tasks) > 0:
                     for task in tasks:
                         task.run()
@@ -294,14 +295,14 @@ def get_latest_training_information(sess_path, one):
     df_lim = df.drop_duplicates(subset='session_path', keep='first')
 
     # Detect untrainable
-    if 'untrainable' not in df_lim.training_status.values():
+    if 'untrainable' not in df_lim.training_status.values:
         un_df = df_lim[df_lim['training_status'] == 'in training'].sort_values('date')
         if len(un_df) >= 40:
             sess = un_df.iloc[39].session_path
             df.loc[df['session_path'] == sess, 'training_status'] = 'untrainable'
 
     # Detect unbiasable
-    if 'unbiasable' not in df_lim.training_status.values():
+    if 'unbiasable' not in df_lim.training_status.values:
         un_df = df_lim[df_lim['task_protocol'] == 'biased'].sort_values('date')
         if len(un_df) >= 40:
             tr_st = un_df[0:40].training_status.unique()
@@ -344,7 +345,7 @@ def compute_training_status(df, compute_date, one, force=True):
 
     # compute_date = str(one.path2ref(session_path)['date'])
     df_temp = df[df['date'] <= compute_date]
-    df_temp = df_temp.drop_duplicates('session_path', 'protocol')
+    df_temp = df_temp.drop_duplicates(subset=['session_path', 'task_protocol'])
     df_temp.sort_values('date')
 
     dates = df_temp.date.values
@@ -368,8 +369,8 @@ def compute_training_status(df, compute_date, one, force=True):
         # If habituation skip
         if df_date.iloc[-1]['task_protocol'] == 'habituation':
             continue
-        # Here should we split by protocol
-        # If different protocols we consider them seperately
+        # Here we should split by protocol in an ideal world but that world isn't today. This is only really relevant for
+        # chained protocols
         trials[df_date.iloc[-1]['date']] = load_combined_trials(df_date.session_path.values, one, force=force)
         protocol.append(df_date.iloc[-1]['task_protocol'])
         status.append(df_date.iloc[-1]['training_status'])
@@ -455,7 +456,7 @@ def get_data_collection(session_path):
         if len(collections) == 1 and collections[0] == 'raw_behavior_data':
             alf_collections = ['alf']
         elif all(['raw_task_data' in c for c in collections]):
-            alf_collections = [f'alf/task_{c[:-2]}' for c in collections]
+            alf_collections = [f'alf/task_{c[-2:]}' for c in collections]
         else:
             alf_collections = None
     else:
@@ -465,7 +466,7 @@ def get_data_collection(session_path):
     return collections, alf_collections
 
 
-def get_sess_dict(session_path, one, protocol, collections=None, force=True):
+def get_sess_dict(session_path, one, protocol, alf_collections=None, raw_collections=None, force=True):
 
     sess_dict = {}
     sess_dict['date'] = str(one.path2ref(session_path)['date'])
@@ -491,7 +492,7 @@ def get_sess_dict(session_path, one, protocol, collections=None, force=True):
 
     else:
         # if we can't compute trials then we need to pass
-        trials = load_trials(session_path, one, collections=collections, force=force)
+        trials = load_trials(session_path, one, collections=alf_collections, force=force)
         if trials is None:
             return
 
@@ -515,8 +516,10 @@ def get_sess_dict(session_path, one, protocol, collections=None, force=True):
         sess_dict['reaction_time'] = training.compute_median_reaction_time(trials)
         sess_dict['n_trials'] = training.compute_n_trials(trials)
         sess_dict['sess_duration'], sess_dict['n_delay'], sess_dict['location'] = \
-            compute_session_duration_delay_location(session_path, collections=collections)
+            compute_session_duration_delay_location(session_path, collections=raw_collections)
         sess_dict['training_status'] = 'not_computed'
+
+    return sess_dict
 
 
 def get_training_info_for_session(session_paths, one, force=True):
@@ -532,23 +535,25 @@ def get_training_info_for_session(session_paths, one, force=True):
     for session_path in session_paths:
         collections, alf_collections = get_data_collection(session_path)
         session_path = Path(session_path)
-        sess_dict = {}
-        sess_dict['date'] = str(one.path2ref(session_path)['date'])
-        sess_dict['session_path'] = str(session_path)
         protocols = []
         for c in collections:
             protocols.append(get_session_extractor_type(session_path, task_collection=c))
 
         un_protocols = np.unique(protocols)
         # Example, training, training, biased - training would be combined, biased not
-        if un_protocols != 1:
+        if len(un_protocols) != 1:
             print(f'Different protocols in same session {session_path} : {protocols}')
             for prot in un_protocols:
-                coll = alf_collections[np.where(protocols == prot)[0]]
-                sess_dicts.append(get_sess_dict(session_path, one, prot, collections=coll, force=force))
+                alf = alf_collections[np.where(protocols == prot)[0]]
+                raw = collections[np.where(protocols == prot)[0]]
+                sess_dict = get_sess_dict(session_path, one, prot, alf_collections=alf, raw_collections=raw, force=force)
         else:
             prot = un_protocols[0]
-            sess_dicts.append(get_sess_dict(session_path, one, prot, collections=coll, force=force))
+            sess_dict = get_sess_dict(session_path, one, prot, alf_collections=alf_collections, raw_collections=collections,
+                                      force=force)
+
+        if sess_dict is not None:
+            sess_dicts.append(sess_dict)
 
     protocols = [s['task_protocol'] for s in sess_dicts]
 
@@ -597,23 +602,19 @@ def get_training_info_for_session(session_paths, one, force=True):
 
     else:
         for sess_dict in sess_dicts:
-            keys = sess_dict.keys()
-            for key in keys:
-                sess_dict[f'combined_{key}'] = sess_dict[key]
+            sess_dict['combined_performance'] = sess_dict['performance']
+            sess_dict['combined_contrasts'] = sess_dict['contrasts']
+            sess_dict['combined_performance_easy'] = sess_dict['performance_easy']
+            sess_dict['combined_reaction_time'] = sess_dict['reaction_time']
+            sess_dict['combined_n_trials'] = sess_dict['n_trials']
+            sess_dict['combined_sess_duration'] = sess_dict['sess_duration']
+            sess_dict['combined_n_delay'] = sess_dict['n_delay']
 
-            # sess_dict['combined_performance'] = sess_dict['performance']
-            # sess_dict['combined_contrasts'] = sess_dict['contrasts']
-            # sess_dict['combined_performance_easy'] = sess_dict['performance_easy']
-            # sess_dict['combined_reaction_time'] = sess_dict['reaction_time']
-            # sess_dict['combined_n_trials'] = sess_dict['n_trials']
-            # sess_dict['combined_sess_duration'] = sess_dict['sess_duration']
-            # sess_dict['combined_n_delay'] = sess_dict['n_delay']
-            #
-            # for bias in [50, 20, 80]:
-            #     sess_dict[f'combined_bias_{bias}'] = sess_dict[f'bias_{bias}']
-            #     sess_dict[f'combined_thres_{bias}'] = sess_dict[f'thres_{bias}']
-            #     sess_dict[f'combined_lapsehigh_{bias}'] = sess_dict[f'lapsehigh_{bias}']
-            #     sess_dict[f'combined_lapselow_{bias}'] = sess_dict[f'lapselow_{bias}']
+            for bias in [50, 20, 80]:
+                sess_dict[f'combined_bias_{bias}'] = sess_dict[f'bias_{bias}']
+                sess_dict[f'combined_thres_{bias}'] = sess_dict[f'thres_{bias}']
+                sess_dict[f'combined_lapsehigh_{bias}'] = sess_dict[f'lapsehigh_{bias}']
+                sess_dict[f'combined_lapselow_{bias}'] = sess_dict[f'lapselow_{bias}']
 
     return sess_dicts
 
