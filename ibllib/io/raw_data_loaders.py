@@ -328,6 +328,12 @@ def _read_settings_json_compatibility_enforced(settings):
     # 2018-12-05 Version 3.2.3 fixes (permanent fixes in IBL_RIG from 3.2.4 on)
     if md['IBLRIG_VERSION_TAG'] == '':
         pass
+    elif parse_version(md.get('IBLRIG_VERSION_TAG')) >= parse_version('8.0.0'):
+        md['SESSION_NUMBER'] = str(md['SESSION_NUMBER']).zfill(3)
+        md['PYBPOD_BOARD'] = md['RIG_NAME']
+        md['PYBPOD_CREATOR'] = (md['ALYX_USER'], '')
+        md['SESSION_DATE'] = md['SESSION_START_TIME'][:10]
+        md['SESSION_DATETIME'] = md['SESSION_START_TIME']
     elif parse_version(md.get('IBLRIG_VERSION_TAG')) <= parse_version('3.2.3'):
         if 'LAST_TRIAL_DATA' in md.keys():
             md.pop('LAST_TRIAL_DATA')
