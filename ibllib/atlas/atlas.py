@@ -847,15 +847,14 @@ class Insertion:
         """
         assert brain_atlas, 'Input argument brain_atlas must be defined'
         z = d['z'] / 1e6
-        if brain_atlas:
-            if not hasattr(brain_atlas, 'top'):
-                brain_atlas.compute_surface()
-            iy = brain_atlas.bc.y2i(d['y'] / 1e6)
-            ix = brain_atlas.bc.x2i(d['x'] / 1e6)
-            # Only use the brain surface value as z if it isn't NaN (this happens when the surface touches the edges
-            # of the atlas volume
-            if not np.isnan(brain_atlas.top[iy, ix]):
-                z = brain_atlas.top[iy, ix]
+        if not hasattr(brain_atlas, 'top'):
+            brain_atlas.compute_surface()
+        iy = brain_atlas.bc.y2i(d['y'] / 1e6)
+        ix = brain_atlas.bc.x2i(d['x'] / 1e6)
+        # Only use the brain surface value as z if it isn't NaN (this happens when the surface touches the edges
+        # of the atlas volume
+        if not np.isnan(brain_atlas.top[iy, ix]):
+            z = brain_atlas.top[iy, ix]
         return Insertion(x=d['x'] / 1e6, y=d['y'] / 1e6, z=z,
                          phi=d['phi'], theta=d['theta'], depth=d['depth'] / 1e6,
                          beta=d.get('beta', 0), label=d.get('label', ''))

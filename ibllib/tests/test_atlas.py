@@ -495,7 +495,11 @@ class TestInsertion(unittest.TestCase):
             'theta': 5.0,
             'depth': 4501.0,
             'beta': 0.0}
-        ins = Insertion.from_dict(d)
+
+        brain_atlas = _create_mock_atlas()
+        brain_atlas.compute_surface()
+        brain_atlas.top = brain_atlas.top * np.NaN
+        ins = Insertion.from_dict(d, brain_atlas=brain_atlas)
         # eval the entry point, should be super close
         dxyz = ins.trajectory.eval_x(d['x'] / 1e6) - np.array((d['x'], d['y'], d['z'])) / 1e6
         self.assertTrue(np.all(np.isclose(dxyz, 0)))
