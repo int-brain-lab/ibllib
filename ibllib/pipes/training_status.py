@@ -544,6 +544,8 @@ def get_training_info_for_session(session_paths, one, force=True):
         if len(un_protocols) != 1:
             print(f'Different protocols in same session {session_path} : {protocols}')
             for prot in un_protocols:
+                if prot is False:
+                    continue
                 try:
                     alf = alf_collections[np.where(protocols == prot)[0]]
                     raw = collections[np.where(protocols == prot)[0]]
