@@ -320,7 +320,7 @@ def compute_session_duration_delay_location(sess_path, **kwargs):
     return session_duration, session_delay, session_location
 
 
-def get_training_info_for_session(session_paths, one, force=True):
+def get_training_info_for_session(session_paths, one, task_collection=None, force=True):
     """
     Extract the training information needed for plots for each session
     :param session_paths: list of session paths on same date
@@ -380,7 +380,7 @@ def get_training_info_for_session(session_paths, one, force=True):
             sess_dict['reaction_time'] = training.compute_median_reaction_time(trials)
             sess_dict['n_trials'] = training.compute_n_trials(trials)
             sess_dict['sess_duration'], sess_dict['n_delay'], sess_dict['location'] = \
-                compute_session_duration_delay_location(session_path)
+                compute_session_duration_delay_location(session_path, task_collection=task_collection)
             sess_dict['training_status'] = 'not_computed'
 
         sess_dicts.append(sess_dict)
