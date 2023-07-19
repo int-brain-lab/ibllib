@@ -1,3 +1,12 @@
+## Develop
+### features
+- Training status pipeline now compatible with dynamic pipeline
+- Dynamic DLC task using description file
+- Full photometry lookup table 
+
+### bugfixes
+- fix for untrainable, unbiasable don't repolulate if already exists
+
 ## Release Notes 2.23
 ### Release Notes 2.23.1 2023-06-15
 ### features

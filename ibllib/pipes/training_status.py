@@ -544,8 +544,12 @@ def get_training_info_for_session(session_paths, one, force=True):
         if len(un_protocols) != 1:
             print(f'Different protocols in same session {session_path} : {protocols}')
             for prot in un_protocols:
-                alf = alf_collections[np.where(protocols == prot)[0]]
-                raw = collections[np.where(protocols == prot)[0]]
+                try:
+                    alf = alf_collections[np.where(protocols == prot)[0]]
+                    raw = collections[np.where(protocols == prot)[0]]
+                except TypeError:
+                    alf = None
+                    raw = None
                 sess_dict = get_sess_dict(session_path, one, prot, alf_collections=alf, raw_collections=raw, force=force)
         else:
             prot = un_protocols[0]
