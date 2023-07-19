@@ -1,3 +1,6 @@
+import traceback
+import re
+
 import one.alf.io as alfio
 from one.alf.exceptions import ALFObjectNotFound
 
@@ -5,6 +8,7 @@ from ibllib.io.raw_data_loaders import load_bpod
 from ibllib.oneibl.registration import _get_session_times
 from ibllib.io.extractors.base import get_pipeline, get_session_extractor_type
 
+from iblutil.util import setup_logger
 from ibllib.plots.snapshot import ReportSnapshot
 from iblutil.numerical import ismember
 from brainbox.behavior import training
@@ -17,6 +21,8 @@ import matplotlib.dates as mdates
 from matplotlib.lines import Line2D
 from datetime import datetime
 import seaborn as sns
+
+logger = setup_logger(__name__)
 
 
 TRAINING_STATUS = {'untrainable': (-4, (0, 0, 0, 0)),
@@ -83,7 +89,7 @@ def load_existing_dataframe(subj_path):
         return None
 
 
-def load_trials(sess_path, one, force=True):
+def load_trials(sess_path, one, force=True, task_collection='raw_behavior_data'):
     """
     Load trials data for session. First attempts to load from local session path, if this fails will attempt to download via ONE,
     if this also fails, will then attempt to re-extraxt locally
@@ -93,10 +99,15 @@ def load_trials(sess_path, one, force=True):
     """
     # try and load trials locally
     try:
-        trials = alfio.load_object(sess_path.joinpath('alf'), 'trials', short_keys=True)
+        # if the task collection finishes with 2 digits trials are in a subfolder
+        rematch = re.search(r"\d{2}$", task_collection)
+        subfolder = f"task_{rematch.group()}" if rematch else ''
+        trials = alfio.load_object(sess_path.joinpath('alf', subfolder), 'trials', short_keys=True)
         if 'probabilityLeft' not in trials.keys():
             raise ALFObjectNotFound
     except ALFObjectNotFound:
+        logger.info(f'No trials found at first pass for {sess_path}, trying downloading trials through ONE')
+        logger.debug(traceback.format_exc())
         try:
             if not force:
                 return None
@@ -105,6 +116,8 @@ def load_trials(sess_path, one, force=True):
             if 'probabilityLeft' not in trials.keys():
                 raise ALFObjectNotFound
         except Exception:
+            logger.info('No more luck with ONE, trying to extract data from raw Bpod data')
+            logger.debug(traceback.format_exc())
             try:
                 task = get_trials_task(sess_path, one=one)
                 if task is not None:
@@ -114,13 +127,13 @@ def load_trials(sess_path, one, force=True):
                         raise ALFObjectNotFound
                 else:
                     trials = None
-            except Exception:  # TODO how can i make this more specific
-                trials = None
+            except Exception as e:
+                raise Exception('Exhausted all possibilities for loading trials') from e
 
     return trials
 
 
-def load_combined_trials(sess_paths, one, force=True):
+def load_combined_trials(sess_paths, one, force=True, task_collection='raw_behavior_data'):
     """
     Load and concatenate trials for multiple sessions. Used when we want to concatenate trials for two sessions on the same day
     :param sess_paths: list of paths to sessions
@@ -129,9 +142,9 @@ def load_combined_trials(sess_paths, one, force=True):
     """
     trials_dict = {}
     for sess_path in sess_paths:
-        trials = load_trials(Path(sess_path), one, force=force)
+        trials = load_trials(Path(sess_path), one, force=force, task_collection=task_collection)
         if trials is not None:
-            trials_dict[Path(sess_path).stem] = load_trials(Path(sess_path), one, force=force)
+            trials_dict[Path(sess_path).stem] = trials
 
     return training.concatenate_trials(trials_dict)
 
@@ -335,7 +348,7 @@ def get_training_info_for_session(session_paths, one, task_collection=None, forc
         sess_dict = {}
         sess_dict['date'] = str(one.path2ref(session_path)['date'])
         sess_dict['session_path'] = str(session_path)
-        sess_dict['task_protocol'] = get_session_extractor_type(session_path)
+        sess_dict['task_protocol'] = get_session_extractor_type(session_path, task_collection=task_collection)
 
         if sess_dict['task_protocol'] == 'habituation':
             nan_array = np.array([np.nan])
@@ -356,7 +369,7 @@ def get_training_info_for_session(session_paths, one, task_collection=None, forc
 
         else:
             # if we can't compute trials then we need to pass
-            trials = load_trials(session_path, one, force=force)
+            trials = load_trials(session_path, one, force=force, task_collection=task_collection)
             if trials is None:
                 continue
 
@@ -392,7 +405,7 @@ def get_training_info_for_session(session_paths, one, task_collection=None, forc
 
     if len(sess_dicts) > 1 and len(set(protocols)) == 1:  # Only if all protocols are the same
         print(f'{len(sess_dicts)} sessions being combined for date {sess_dicts[0]["date"]}')
-        combined_trials = load_combined_trials(session_paths, one, force=force)
+        combined_trials = load_combined_trials(session_paths, one, force=force, task_collection=task_collection)
         performance, contrasts, _ = training.compute_performance(combined_trials, prob_right=True)
         psychs = {}
         psychs['50'] = training.compute_psychometric(trials, block=0.5)
@@ -425,10 +438,10 @@ def get_training_info_for_session(session_paths, one, task_collection=None, forc
             if sess_dict['combined_performance'].size != sess_dict['performance'].size:
                 sess_dict['performance'] = \
                     np.r_[sess_dict['performance'],
-                          np.full(sess_dict['combined_performance'].size - sess_dict['performance'].size, np.nan)]
+                          np.full(np.abs(sess_dict['combined_performance'].size - sess_dict['performance'].size), np.nan)]
                 sess_dict['contrasts'] = \
                     np.r_[sess_dict['contrasts'],
-                          np.full(sess_dict['combined_contrasts'].size - sess_dict['contrasts'].size, np.nan)]
+                          np.full(np.abs(sess_dict['combined_contrasts'].size - sess_dict['contrasts'].size), np.nan)]
 
     else:
         for sess_dict in sess_dicts:
