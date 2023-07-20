@@ -1,11 +1,16 @@
 import logging
 import subprocess
+import cv2
+import traceback
+from pathlib import Path
 
 from ibllib.io import ffmpeg, raw_daq_loaders
 from ibllib.pipes import base_tasks
-from ibllib.io.video import label_from_path, get_video_meta
+from ibllib.io.video import get_video_meta
 from ibllib.io.extractors import camera
 from ibllib.qc.camera import run_all_qc as run_camera_qc
+from ibllib.misc import check_nvidia_driver
+from ibllib.io.video import label_from_path, assert_valid_label
 
 _logger = logging.getLogger('ibllib')
 
@@ -283,3 +288,159 @@ class VideoSyncQcNidq(base_tasks.VideoTask):
                       sync_collection=self.sync_collection, sync_type=self.sync)
 
         return output_files
+
+
+class DLC(base_tasks.VideoTask):
+    """
+    This task relies on a correctly installed dlc environment as per
+    https://docs.google.com/document/d/1g0scP6_3EmaXCU4SsDNZWwDTaD9MG0es_grLA-d0gh0/edit#
+
+    If your environment is set up otherwise, make sure that you set the respective attributes:
+    t = EphysDLC(session_path)
+    t.dlcenv = Path('/path/to/your/dlcenv/bin/activate')
+    t.scripts = Path('/path/to/your/iblscripts/deploy/serverpc/dlc')
+    """
+    gpu = 1
+    cpu = 4
+    io_charge = 100
+    level = 2
+    force = True
+    job_size = 'large'
+
+    dlcenv = Path.home().joinpath('Documents', 'PYTHON', 'envs', 'dlcenv', 'bin', 'activate')
+    scripts = Path.home().joinpath('Documents', 'PYTHON', 'iblscripts', 'deploy', 'serverpc', 'dlc')
+
+    @property
+    def signature(self):
+        signature = {
+            'input_files': [(f'_iblrig_{cam}Camera.raw.mp4', self.device_collection, True) for cam in self.cameras],
+            'output_files': [(f'_ibl_{cam}Camera.dlc.pqt', 'alf', True) for cam in self.cameras] +
+                            [(f'{cam}Camera.ROIMotionEnergy.npy', 'alf', True) for cam in self.cameras] +
+                            [(f'{cam}ROIMotionEnergy.position.npy', 'alf', True)for cam in self.cameras]
+        }
+
+        return signature
+
+    def _check_dlcenv(self):
+        """Check that scripts are present, dlcenv can be activated and get iblvideo version"""
+        assert len(list(self.scripts.rglob('run_dlc.*'))) == 2, \
+            f'Scripts run_dlc.sh and run_dlc.py do not exist in {self.scripts}'
+        assert len(list(self.scripts.rglob('run_motion.*'))) == 2, \
+            f'Scripts run_motion.sh and run_motion.py do not exist in {self.scripts}'
+        assert self.dlcenv.exists(), f"DLC environment does not exist in assumed location {self.dlcenv}"
+        command2run = f"source {self.dlcenv}; python -c 'import iblvideo; print(iblvideo.__version__)'"
+        process = subprocess.Popen(
+            command2run,
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            executable="/bin/bash"
+        )
+        info, error = process.communicate()
+        if process.returncode != 0:
+            raise AssertionError(f"DLC environment check failed\n{error.decode('utf-8')}")
+        version = info.decode("utf-8").strip().split('\n')[-1]
+        return version
+
+    @staticmethod
+    def _video_intact(file_mp4):
+        """Checks that the downloaded video can be opened and is not empty"""
+        cap = cv2.VideoCapture(str(file_mp4))
+        frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+        intact = True if frame_count > 0 else False
+        cap.release()
+        return intact
+
+    def _run(self, cams=None, overwrite=False):
+        # Default to all three cams
+        cams = cams or self.cameras
+        cams = assert_valid_label(cams)
+        # Set up
+        self.session_id = self.one.path2eid(self.session_path)
+        actual_outputs = []
+
+        # Loop through cams
+        for cam in cams:
+            # Catch exceptions so that following cameras can still run
+            try:
+                # If all results exist and overwrite is False, skip computation
+                expected_outputs_present, expected_outputs = self.assert_expected(self.output_files, silent=True)
+                if overwrite is False and expected_outputs_present is True:
+                    actual_outputs.extend(expected_outputs)
+                    return actual_outputs
+                else:
+                    file_mp4 = next(self.session_path.joinpath('raw_video_data').glob(f'_iblrig_{cam}Camera.raw*.mp4'))
+                    if not file_mp4.exists():
+                        # In this case we set the status to Incomplete.
+                        _logger.error(f"No raw video file available for {cam}, skipping.")
+                        self.status = -3
+                        continue
+                    if not self._video_intact(file_mp4):
+                        _logger.error(f"Corrupt raw video file {file_mp4}")
+                        self.status = -1
+                        continue
+                    # Check that dlc environment is ok, shell scripts exists, and get iblvideo version, GPU addressable
+                    self.version = self._check_dlcenv()
+                    _logger.info(f'iblvideo version {self.version}')
+                    check_nvidia_driver()
+
+                    _logger.info(f'Running DLC on {cam}Camera.')
+                    command2run = f"{self.scripts.joinpath('run_dlc.sh')} {str(self.dlcenv)} {file_mp4} {overwrite}"
+                    _logger.info(command2run)
+                    process = subprocess.Popen(
+                        command2run,
+                        shell=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        executable="/bin/bash",
+                    )
+                    info, error = process.communicate()
+                    # info_str = info.decode("utf-8").strip()
+                    # _logger.info(info_str)
+                    if process.returncode != 0:
+                        error_str = error.decode("utf-8").strip()
+                        _logger.error(f'DLC failed for {cam}Camera.\n\n'
+                                      f'++++++++ Output of subprocess for debugging ++++++++\n\n'
+                                      f'{error_str}\n'
+                                      f'++++++++++++++++++++++++++++++++++++++++++++\n')
+                        self.status = -1
+                        # We dont' run motion energy, or add any files if dlc failed to run
+                        continue
+                    dlc_result = next(self.session_path.joinpath('alf').glob(f'_ibl_{cam}Camera.dlc*.pqt'))
+                    actual_outputs.append(dlc_result)
+
+                    _logger.info(f'Computing motion energy for {cam}Camera')
+                    command2run = f"{self.scripts.joinpath('run_motion.sh')} {str(self.dlcenv)} {file_mp4} {dlc_result}"
+                    _logger.info(command2run)
+                    process = subprocess.Popen(
+                        command2run,
+                        shell=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        executable="/bin/bash",
+                    )
+                    info, error = process.communicate()
+                    # info_str = info.decode("utf-8").strip()
+                    # _logger.info(info_str)
+                    if process.returncode != 0:
+                        error_str = error.decode("utf-8").strip()
+                        _logger.error(f'Motion energy failed for {cam}Camera.\n\n'
+                                      f'++++++++ Output of subprocess for debugging ++++++++\n\n'
+                                      f'{error_str}\n'
+                                      f'++++++++++++++++++++++++++++++++++++++++++++\n')
+                        self.status = -1
+                        continue
+                    actual_outputs.append(next(self.session_path.joinpath('alf').glob(
+                        f'{cam}Camera.ROIMotionEnergy*.npy')))
+                    actual_outputs.append(next(self.session_path.joinpath('alf').glob(
+                        f'{cam}ROIMotionEnergy.position*.npy')))
+            except BaseException:
+                _logger.error(traceback.format_exc())
+                self.status = -1
+                continue
+        # If status is Incomplete, check that there is at least one output.
+        # # Otherwise make sure it gets set to Empty (outputs = None), and set status to -1 to make sure it doesn't slip
+        if self.status == -3 and len(actual_outputs) == 0:
+            actual_outputs = None
+            self.status = -1
+        return actual_outputs

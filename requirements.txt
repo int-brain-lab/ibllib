@@ -27,5 +27,5 @@ iblutil>=1.5.0
 labcams  # widefield extractor
 ONE-api>=2.0
 slidingRP>=1.0.0  # steinmetz lab refractory period metrics
-wfield>=0.3.6  # widefield extractor
+wfield==0.3.7  # widefield extractor frozen for now (2023/07/15) until Joao fixes latest version
 psychofit
