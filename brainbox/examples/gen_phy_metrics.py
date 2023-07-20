@@ -14,6 +14,7 @@ from one.api import ONE
 from brainbox import metrics
 from brainbox.processing import get_units_bunch
 
+
 def gen_metrics(exp_id, ks_dir, probe_label, ephys_file_path=None):
     """
     Tries to generate single unit metrics for all units metric-by-metric and save the metrics

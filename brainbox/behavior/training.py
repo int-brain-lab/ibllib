@@ -13,7 +13,7 @@ from iblutil.util import Bunch
 from one.api import ONE
 from one.alf.exceptions import ALFObjectNotFound
 
-import brainbox.behavior.pyschofit as psy
+import psychofit as psy
 
 _logger = logging.getLogger('ibllib')
 
@@ -124,8 +124,8 @@ def get_subject_training_status(subj, date=None, details=True, one=None):
 def get_sessions(subj, date=None, one=None):
     """
     Download and load in training data for a specified subject. If a date is given it will load
-    data from the three (or as many are available) previous sessions up to the specified date, if
-    not it will load data from the last three training sessions that have data available.
+    data from the three (or as many as are available) previous sessions up to the specified date.
+    If not it will load data from the last three training sessions that have data available.
 
     :param subj: subject nickname (must match the name registered on Alyx)
     :type subj: string
@@ -385,7 +385,7 @@ def compute_training_info(trials, trials_all):
     """
     Compute all relevant performance metrics for when subject is on trainingChoiceWorld
 
-    :param trials: dict containing trials objects from three consective training sessions,
+    :param trials: dict containing trials objects from three consecutive training sessions,
     keys are session dates
     :type trials: Bunch
     :param trials_all: trials object with data concatenated over three training sessions
@@ -410,7 +410,7 @@ def compute_bias_info(trials, trials_all):
     """
     Compute all relevant performance metrics for when subject is on biasedChoiceWorld
 
-    :param trials: dict containing trials objects from three consective training sessions,
+    :param trials: dict containing trials objects from three consecutive training sessions,
     keys are session dates
     :type trials: Bunch
     :param trials_all: trials object with data concatenated over three training sessions
@@ -667,7 +667,7 @@ def criterion_delay(n_trials, perf_easy):
 
 def plot_psychometric(trials, ax=None, title=None, plot_ci=False, ci_aplha=0.32, **kwargs):
     """
-    Function to plot pyschometric curve plots a la datajoint webpage
+    Function to plot psychometric curve plots a la datajoint webpage
     :param trials:
     :return:
     """
@@ -730,7 +730,7 @@ def plot_psychometric(trials, ax=None, title=None, plot_ci=False, ci_aplha=0.32,
 
 def plot_reaction_time(trials, ax=None, title=None, plot_ci=False, ci_alpha=0.32, **kwargs):
     """
-    Function to plot reaction time against contrast a la datajoint webpage (inversed for some reason??)
+    Function to plot reaction time against contrast a la datajoint webpage (inverted for some reason??)
     :param trials:
     :return:
     """

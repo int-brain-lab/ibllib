@@ -465,7 +465,7 @@ class TestVideo(unittest.TestCase):
 
 
 class TestSessionParams(unittest.TestCase):
-    """Tests for ibllib.io.session_params module"""
+    """Tests for ibllib.io.session_params module."""
 
     def setUp(self) -> None:
         self.tmpdir = tempfile.TemporaryDirectory()
@@ -478,17 +478,21 @@ class TestSessionParams(unittest.TestCase):
         # save as individual files
         self.devices_path = Path(self.tmpdir.name).joinpath('_devices')
 
+        # a sync that's different to widefield and ephys
+        sync = {**self.fixture['sync']['nidq'].copy(), 'collection': 'raw_sync_data'}
+
         computers_descriptions = {
             'widefield': dict(devices={'widefield': self.fixture['devices']['widefield']}),
             'video': '',
             'ephys': dict(devices={'neuropixel': self.fixture['devices']['neuropixel']}),
-            'behaviour': dict(devices={'microphone': self.fixture['devices']['microphone']})
+            'behaviour': dict(devices={'microphone': self.fixture['devices']['microphone']}),
+            'sync': dict(sync={'nidq': sync})
         }
 
         # the behaviour computer contains the task, project and procedure keys
         for k in filter(lambda x: x != 'devices', self.fixture):
             computers_descriptions['behaviour'][k] = self.fixture[k]
-        # the ephys computer contains another sync key!
+        # the ephys computer contains another identical sync key
         computers_descriptions['ephys']['sync'] = self.fixture['sync']
 
         for label, data in computers_descriptions.items():
@@ -497,6 +501,7 @@ class TestSessionParams(unittest.TestCase):
 
     @patch(session_params.__name__ + '.time.sleep')
     def test_aggregate(self, sleep_mock):
+        """A test for both aggregate_device and merge_params."""
         fullfile = self.devices_path.parent.joinpath('_ibl_experiment.description.yaml')
         file_lock = fullfile.with_suffix('.lock')
 
@@ -529,8 +534,12 @@ class TestSessionParams(unittest.TestCase):
         self.assertCountEqual(data.keys(), expected_keys)
         self.assertTrue(len(data['devices'].keys()) > 1)
 
-        # A device with another sync key
+        # A device with another identical sync key
         file_device = self.devices_path.joinpath('ephys.yaml')
+        session_params.aggregate_device(file_device, fullfile, unlink=True)
+
+        # A device with a different sync
+        file_device = self.devices_path.joinpath('sync.yaml')
         with self.assertRaises(AssertionError):
             session_params.aggregate_device(file_device, fullfile, unlink=True)
 

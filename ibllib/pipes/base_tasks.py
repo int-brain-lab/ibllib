@@ -179,7 +179,7 @@ class MesoscopeTask(DynamicTask):
         super().__init__(session_path, **kwargs)
 
         self.device_collection = self.get_device_collection(
-            'mesoscope', kwargs.get('device_collection', 'raw_imaging_data_*[0-9]'))
+            'mesoscope', kwargs.get('device_collection', 'raw_imaging_data_[0-9]*'))
 
     def get_signatures(self, **kwargs):
         """

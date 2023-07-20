@@ -193,7 +193,7 @@ class MotionAlignment:
         x = camera_times[cam_mask]
         Fs = 1000
         pos, t = wh.interpolate_position(wheel.timestamps, wheel.position, freq=Fs)
-        v, _ = wh.velocity_smoothed(pos, Fs)
+        v, _ = wh.velocity_filtered(pos, Fs)
         interp_mask = self.alignment.to_mask(t)
         # Convert to normalized speed
         xs = np.unique([find_nearest(t[interp_mask], ts) for ts in x])
