@@ -252,13 +252,13 @@ def get_session_extractor_type(session_path, task_collection='raw_behavior_data'
         return False
 
 
-def get_pipeline(session_path):
+def get_pipeline(session_path, task_collection='raw_behavior_data'):
     """
     Get the pre-processing pipeline name from a session path
     :param session_path:
     :return:
     """
-    stype = get_session_extractor_type(session_path)
+    stype = get_session_extractor_type(session_path, task_collection=task_collection)
     return _get_pipeline_from_task_type(stype)
 
 

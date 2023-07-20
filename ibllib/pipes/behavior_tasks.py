@@ -455,9 +455,10 @@ class TrainingStatus(base_tasks.BehaviourTask):
         """
         Extracts training status for subject
         """
-        df = training_status.get_latest_training_information(self.session_path, self.one)
+        df = training_status.get_latest_training_information(self.session_path, self.one, task_collection=self.collection)
         if df is not None:
-            training_status.make_plots(self.session_path, self.one, df=df, save=True, upload=upload)
+            training_status.make_plots(
+                self.session_path, self.one, df=df, save=True, upload=upload, task_collection=self.collection)
             # Update status map in JSON field of subjects endpoint
             if self.one and not self.one.offline:
                 _logger.debug('Updating JSON field of subjects endpoint')

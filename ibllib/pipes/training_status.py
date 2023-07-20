@@ -37,9 +37,10 @@ TRAINING_STATUS = {'untrainable': (-4, (0, 0, 0, 0)),
                    'ready4recording': (5, (20, 255, 91, 255))}
 
 
-def get_trials_task(session_path, one):
+def get_trials_task(session_path, one, task_collection='raw_behavior_data'):
     # TODO this eventually needs to be updated for dynamic pipeline tasks
-    pipeline = get_pipeline(session_path)
+    # Yup you're damn right
+    pipeline = get_pipeline(session_path, task_collection=task_collection)
     if pipeline == 'training':
         from ibllib.pipes.training_preprocessing import TrainingTrials
         task = TrainingTrials(session_path, one=one)
@@ -119,7 +120,7 @@ def load_trials(sess_path, one, force=True, task_collection='raw_behavior_data')
             logger.info('No more luck with ONE, trying to extract data from raw Bpod data')
             logger.debug(traceback.format_exc())
             try:
-                task = get_trials_task(sess_path, one=one)
+                task = get_trials_task(sess_path, one=one, task_collection=task_collection)
                 if task is not None:
                     task.run()
                     trials = alfio.load_object(sess_path.joinpath('alf'), 'trials')
@@ -149,7 +150,7 @@ def load_combined_trials(sess_paths, one, force=True, task_collection='raw_behav
     return training.concatenate_trials(trials_dict)
 
 
-def get_latest_training_information(sess_path, one):
+def get_latest_training_information(sess_path, one, task_collection='raw_behavior_data'):
     """
     Extracts the latest training status.
 
@@ -174,7 +175,7 @@ def get_latest_training_information(sess_path, one):
 
     # Iterate through the dates to fill up our training dataframe
     for _, grp in missing_dates.groupby('date'):
-        sess_dicts = get_training_info_for_session(grp.session_path.values, one)
+        sess_dicts = get_training_info_for_session(grp.session_path.values, one, task_collection=task_collection)
         if len(sess_dicts) == 0:
             continue
 
@@ -195,7 +196,7 @@ def get_latest_training_information(sess_path, one):
     # Find the earliest date in missing dates that we need to recompute the training status for
     missing_status = find_earliest_recompute_date(df.drop_duplicates('date').reset_index(drop=True))
     for date in missing_status:
-        df = compute_training_status(df, date, one)
+        df = compute_training_status(df, date, one, task_collection=task_collection)
 
     df_lim = df.drop_duplicates(subset='session_path', keep='first')
     # Detect untrainable
@@ -233,7 +234,7 @@ def find_earliest_recompute_date(df):
     return df[first_index:].date.values
 
 
-def compute_training_status(df, compute_date, one, force=True):
+def compute_training_status(df, compute_date, one, force=True, task_collection='raw_behavior_data'):
     """
     Compute the training status for compute date based on training from that session and two previous days
     :param df: training dataframe
@@ -268,7 +269,8 @@ def compute_training_status(df, compute_date, one, force=True):
         # If habituation skip
         if df_date.iloc[-1]['task_protocol'] == 'habituation':
             continue
-        trials[df_date.iloc[-1]['date']] = load_combined_trials(df_date.session_path.values, one, force=force)
+        trials[df_date.iloc[-1]['date']] = load_combined_trials(
+            df_date.session_path.values, one, force=force, task_collection=task_collection)
         protocol.append(df_date.iloc[-1]['task_protocol'])
         status.append(df_date.iloc[-1]['training_status'])
         if df_date.iloc[-1]['combined_n_delay'] >= 900:  # delay of 15 mins
@@ -625,15 +627,12 @@ def plot_fit_params(df, subject):
     return axs
 
 
-def plot_psychometric_curve(df, subject, one):
+def plot_psychometric_curve(df, subject, one, task_collection='raw_behavior_data'):
     df = df.drop_duplicates('date').reset_index(drop=True)
     sess_path = Path(df.iloc[-1]["session_path"])
-    trials = load_trials(sess_path, one)
-
+    trials = load_trials(sess_path, one, task_collection=task_collection)
     fig, ax1 = plt.subplots(figsize=(8, 6))
-
     training.plot_psychometric(trials, ax=ax1, title=f'{subject} {df.iloc[-1]["date"]}: {df.iloc[-1]["training_status"]}')
-
     return ax1
 
 
@@ -760,7 +759,7 @@ def plot_heatmap_performance_over_days(df, subject):
     return ax1
 
 
-def make_plots(session_path, one, df=None, save=False, upload=False):
+def make_plots(session_path, one, df=None, save=False, upload=False, task_collection='raw_behavior_data'):
     subject = one.path2ref(session_path)['subject']
     subj_path = session_path.parent.parent
 
@@ -775,7 +774,7 @@ def make_plots(session_path, one, df=None, save=False, upload=False):
     ax2 = plot_performance_easy_median_reaction_time(df, subject)
     ax3 = plot_heatmap_performance_over_days(df, subject)
     ax4 = plot_fit_params(df, subject)
-    ax5 = plot_psychometric_curve(df, subject, one)
+    ax5 = plot_psychometric_curve(df, subject, one, task_collection=task_collection)
 
     outputs = []
     if save:
