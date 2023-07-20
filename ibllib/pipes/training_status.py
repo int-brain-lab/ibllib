@@ -427,8 +427,11 @@ def compute_session_duration_delay_location(sess_path, collections=None, **kwarg
 
     session_duration = 0
     session_delay = 0
+    session_location = 'training_rig'
     for collection in collections:
         md, sess_data = load_bpod(sess_path, task_collection=collection)
+        if md is None:
+            continue
         try:
             start_time, end_time = _get_session_times(sess_path, md, sess_data)
             session_duration = session_duration + int((end_time - start_time).total_seconds() / 60)
@@ -437,10 +440,10 @@ def compute_session_duration_delay_location(sess_path, collections=None, **kwarg
             session_duration = session_duration + 0
             session_delay = session_delay + 0
 
-    if 'ephys' in md.get('PYBPOD_BOARD', None):
-        session_location = 'ephys_rig'
-    else:
-        session_location = 'training_rig'
+        if 'ephys' in md.get('PYBPOD_BOARD', None):
+            session_location = 'ephys_rig'
+        else:
+            session_location = 'training_rig'
 
     return session_duration, session_delay, session_location
 
