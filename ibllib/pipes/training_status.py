@@ -226,7 +226,7 @@ def load_trials(sess_path, one, collections=None, force=True):
     return trials
 
 
-def load_combined_trials(sess_paths, one, force=True, task_collection='raw_behavior_data'):
+def load_combined_trials(sess_paths, one, force=True):
     """
     Load and concatenate trials for multiple sessions. Used when we want to concatenate trials for two sessions on the same day
     :param sess_paths: list of paths to sessions
@@ -235,14 +235,14 @@ def load_combined_trials(sess_paths, one, force=True, task_collection='raw_behav
     """
     trials_dict = {}
     for sess_path in sess_paths:
-        trials = load_trials(Path(sess_path), one, force=force, task_collection=task_collection)
+        trials = load_trials(Path(sess_path), one, force=force)
         if trials is not None:
-            trials_dict[Path(sess_path).stem] = trials
+            trials_dict[Path(sess_path).stem] = load_trials(Path(sess_path), one, force=force)
 
     return training.concatenate_trials(trials_dict)
 
 
-def get_latest_training_information(sess_path, one, task_collection='raw_behavior_data'):
+def get_latest_training_information(sess_path, one):
     """
     Extracts the latest training status.
 
@@ -275,7 +275,7 @@ def get_latest_training_information(sess_path, one, task_collection='raw_behavio
 
     # Iterate through the dates to fill up our training dataframe
     for _, grp in missing_dates.groupby('date'):
-        sess_dicts = get_training_info_for_session(grp.session_path.values, one, task_collection=task_collection)
+        sess_dicts = get_training_info_for_session(grp.session_path.values, one)
         if len(sess_dicts) == 0:
             continue
 
@@ -296,7 +296,7 @@ def get_latest_training_information(sess_path, one, task_collection='raw_behavio
     # Find the earliest date in missing dates that we need to recompute the training status for
     missing_status = find_earliest_recompute_date(df.drop_duplicates('date').reset_index(drop=True))
     for date in missing_status:
-        df = compute_training_status(df, date, one, task_collection=task_collection)
+        df = compute_training_status(df, date, one)
 
     df_lim = df.drop_duplicates(subset='session_path', keep='first')
 
@@ -581,7 +581,7 @@ def get_training_info_for_session(session_paths, one, force=True):
 
     if len(sess_dicts) > 1 and len(set(protocols)) == 1:  # Only if all protocols are the same
         print(f'{len(sess_dicts)} sessions being combined for date {sess_dicts[0]["date"]}')
-        combined_trials = load_combined_trials(session_paths, one, force=force, task_collection=task_collection)
+        combined_trials = load_combined_trials(session_paths, one, force=force)
         performance, contrasts, _ = training.compute_performance(combined_trials, prob_right=True)
         psychs = {}
         psychs['50'] = training.compute_psychometric(combined_trials, block=0.5)
@@ -614,10 +614,10 @@ def get_training_info_for_session(session_paths, one, force=True):
             if sess_dict['combined_performance'].size != sess_dict['performance'].size:
                 sess_dict['performance'] = \
                     np.r_[sess_dict['performance'],
-                          np.full(np.abs(sess_dict['combined_performance'].size - sess_dict['performance'].size), np.nan)]
+                          np.full(sess_dict['combined_performance'].size - sess_dict['performance'].size, np.nan)]
                 sess_dict['contrasts'] = \
                     np.r_[sess_dict['contrasts'],
-                          np.full(np.abs(sess_dict['combined_contrasts'].size - sess_dict['contrasts'].size), np.nan)]
+                          np.full(sess_dict['combined_contrasts'].size - sess_dict['contrasts'].size, np.nan)]
 
     else:
         for sess_dict in sess_dicts:
@@ -801,12 +801,15 @@ def plot_fit_params(df, subject):
     return axs
 
 
-def plot_psychometric_curve(df, subject, one, task_collection='raw_behavior_data'):
+def plot_psychometric_curve(df, subject, one):
     df = df.drop_duplicates('date').reset_index(drop=True)
     sess_path = Path(df.iloc[-1]["session_path"])
-    trials = load_trials(sess_path, one, task_collection=task_collection)
+    trials = load_trials(sess_path, one)
+
     fig, ax1 = plt.subplots(figsize=(8, 6))
+
     training.plot_psychometric(trials, ax=ax1, title=f'{subject} {df.iloc[-1]["date"]}: {df.iloc[-1]["training_status"]}')
+
     return ax1
 
 
@@ -948,7 +951,7 @@ def make_plots(session_path, one, df=None, save=False, upload=False, task_collec
     ax2 = plot_performance_easy_median_reaction_time(df, subject)
     ax3 = plot_heatmap_performance_over_days(df, subject)
     ax4 = plot_fit_params(df, subject)
-    ax5 = plot_psychometric_curve(df, subject, one, task_collection=task_collection)
+    ax5 = plot_psychometric_curve(df, subject, one)
 
     outputs = []
     if save:
