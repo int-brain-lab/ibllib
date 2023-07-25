@@ -1,6 +1,3 @@
-import traceback
-import re
-
 import one.alf.io as alfio
 from one.alf.exceptions import ALFObjectNotFound
 
@@ -91,8 +88,6 @@ def upload_training_table_to_aws(lab, subject):
 
 
 def get_trials_task(session_path, one):
-
-    # TODO this eventually needs to be updated for dynamic pipeline tasks
     # If experiment description file then process this
     experiment_description_file = read_params(session_path)
     if experiment_description_file is not None:
@@ -216,8 +211,11 @@ def load_trials(sess_path, one, collections=None, force=True):
                 tasks = get_trials_task(sess_path, one)
                 if len(tasks) > 0:
                     for task in tasks:
-                        task.run()
-                    return load_trials(sess_path, collections=collections, one=one, force=False)
+                        status = task.run()
+                        if status == 0:
+                            return load_trials(sess_path, collections=collections, one=one, force=False)
+                        else:
+                            return
                 else:
                     trials = None
             except Exception as e:
