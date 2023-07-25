@@ -5,8 +5,13 @@ the future there will be compression (and potential cropping), FOV metadata extr
 extraction.
 
 Pipeline:
-    1. Data renamed to be ALF-compliant and registered
+    1. Register reference images and upload snapshots and notes to Alyx
+    2. Run ROI cell detection
+    3. Calculate the pixel and ROI brain locations and register fields of view to Alyx
+    4. Compress the raw imaging data
+    5. Extract the imaging times from the main DAQ
 """
+import json
 import logging
 import subprocess
 import shutil
@@ -16,11 +21,14 @@ from collections import defaultdict, Counter
 from fnmatch import fnmatch
 import enum
 import re
+import time
 
+import numba as nb
 import numpy as np
 import pandas as pd
 import sparse
 from scipy.io import loadmat
+from scipy.interpolate import interpn
 import one.alf.io as alfio
 from one.alf.spec import is_valid, to_alf
 from one.alf.files import filename_parts, session_path_parts
@@ -28,6 +36,9 @@ import one.alf.exceptions as alferr
 
 from ibllib.pipes import base_tasks
 from ibllib.io.extractors import mesoscope
+from ibllib.atlas import ALLEN_CCF_LANDMARKS_MLAPDV_UM, MRITorontoAtlas
+
+import deploy
 
 _logger = logging.getLogger(__name__)
 Provenance = enum.Enum('Provenance', ['ESTIMATE', 'FUNCTIONAL', 'LANDMARK', 'HISTOLOGY'])  # py3.11 make StrEnum
@@ -43,12 +54,10 @@ class MesoscopeRegisterSnapshots(base_tasks.MesoscopeTask, base_tasks.RegisterRa
         signature = {
             'input_files': [('referenceImage.raw.tif', f'{self.device_collection}/reference', False),
                             ('referenceImage.stack.tif', f'{self.device_collection}/reference', False),
-                            ('referenceImage.meta.json', f'{self.device_collection}/reference', False),
-                            ('_ibl_rawImagingData.meta.json', f'{self.device_collection}', True)],
+                            ('referenceImage.meta.json', f'{self.device_collection}/reference', False)],
             'output_files': [('referenceImage.raw.tif', f'{self.device_collection}/reference', False),
                              ('referenceImage.stack.tif', f'{self.device_collection}/reference', False),
-                             ('referenceImage.meta.json', f'{self.device_collection}/reference', False),
-                             ('_ibl_rawImagingData.meta.json', f'{self.device_collection}', True)]
+                             ('referenceImage.meta.json', f'{self.device_collection}/reference', False)]
         }
         return signature
 
@@ -101,7 +110,7 @@ class MesoscopeCompress(base_tasks.MesoscopeTask):
         _logger.setLevel(self._log_level or logging.INFO)
         return super().tearDown()
 
-    def _run(self, remove_uncompressed=True, verify_output=True, clobber=False, **kwargs):
+    def _run(self, remove_uncompressed=False, verify_output=True, clobber=False, **kwargs):
         """
         Run tar compression on all tif files in the device collection.
 
@@ -318,7 +327,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                 np.save(fov_dir.joinpath('mpciMeanImage.images.npy'), np.asarray(ops['meanImg'], dtype=float))
                 np.save(fov_dir.joinpath('mpciROIs.stackPos.npy'), np.asarray([(*s['med'], 0) for s in stat], dtype=int))
                 np.save(fov_dir.joinpath('mpciROIs.cellClassifier.npy'), np.asarray(iscell[:, 1], dtype=float))
-                np.save(fov_dir.joinpath('mpciROIs.mpciROITypes.npy'), np.asarray(iscell[:, 0], dtype=int))
+                np.save(fov_dir.joinpath('mpciROIs.mpciROITypes.npy'), np.asarray(iscell[:, 0], dtype=np.int16))
                 pd.DataFrame([(0, 'no cell'), (1, 'cell')], columns=['roi_values', 'roi_labels']
                              ).to_csv(fov_dir.joinpath('mpciROITypes.names.tsv'), sep='\t', index=False)
                 # ROI and neuropil masks
@@ -649,24 +658,30 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
     def signature(self):
         signature = {
             'input_files': [('_ibl_rawImagingData.meta.json', self.device_collection, True),
-                            ('mpciMeanImage.brainLocationIds*', 'alf/FOV_*', True),
-                            ('mpciMeanImage.mlapdv*', 'alf/FOV_*', True)],
+                            ('mpciROIs.stackPos.npy', 'alf/FOV*', True)],
             'output_files': [('mpciMeanImage.brainLocationIds*.npy', 'alf/FOV_*', True),
                              ('mpciMeanImage.mlapdv*.npy', 'alf/FOV_*', True),
                              ('mpciROIs.mlapdv*.npy', 'alf/FOV_*', True),
-                             ('mpciROIs.brainLocationIds*.npy', 'alf/FOV_*', True)]
+                             ('mpciROIs.brainLocationIds*.npy', 'alf/FOV_*', True),
+                             ('_ibl_rawImagingData.meta.json', self.device_collection, True)]
         }
         return signature
 
-    def _run(self, *args, **kwargs):
+    def _run(self, *args, provenance=Provenance.ESTIMATE, **kwargs):
         """
         Register fields of view (FOV) to Alyx and extract the coordinates and IDs of each ROI.
 
         Steps:
-            1. Register the location of each FOV in Alyx.
-            2. Re-save the mpciMeanImage.brainLocationIds_estimate as an int array.
-            3. Use mean image coordinates and ROI stack position datasets to extract brain location
+            1. Save the mpciMeanImage.brainLocationIds_estimate and mlapdv datasets.
+            2. Use mean image coordinates and ROI stack position datasets to extract brain location
              of each ROI.
+            3. Register the location of each FOV in Alyx.
+
+        Parameters
+        ----------
+        provenance : Provenance
+            The provenance of the coordinates in the meta file. For all but 'HISTOLOGY', the
+            provenance is added as a dataset suffix.  Defaults to ESTIMATE.
 
         Returns
         -------
@@ -680,31 +695,41 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
         Once the FOVs have been registered they cannot be updated with with task. Rerunning this
         task will result in an error.
         """
+        # Load necessary data
         (filename, collection, _), *_ = self.signature['input_files']
         meta_file = next(self.session_path.glob(f'{collection}/{filename}'), None)
         meta = alfio.load_file_content(meta_file) or {}
         nFOV = len(meta.get('FOV', []))
-        # For now let's just register the datasets generated by MATLAB script.
-        mean_image_ids = list(self.session_path.glob('alf/FOV_*/mpciMeanImage.brainLocationIds*'))
-        # Re-save brain location IDs as int
-        for file in mean_image_ids:
-            np.save(file, np.load(file).astype(int))
-        mean_image_mlapdv = list(self.session_path.glob('alf/FOV_*/mpciMeanImage.mlapdv*'))
+        mesoscope_path = Path(deploy.__file__).parent / 'mesoscope'
+        flat_tri = alfio.load_object(mesoscope_path, 'flatTR')
+        dorsal_tri = alfio.load_object(mesoscope_path, 'dorsalTR')
+
+        suffix = None if provenance is Provenance.HISTOLOGY else provenance.name.lower()
+        _logger.info('Extracting %s MLAPDV datasets', suffix or 'final')
+
+        # Extract mean image MLAPDV coordinates and brain location IDs
+        mean_image_mlapdv, mean_image_ids = self.project_mlapdv(meta, flat_tri, dorsal_tri)
+
+        # Save the meta data file with new coordinate fields
+        with open(meta_file, 'w') as fp:
+            json.dump(meta, fp)
+
+        # Save the mean image datasets
+        mean_image_files = []
+        assert set(mean_image_mlapdv.keys()) == set(mean_image_ids.keys()) and len(mean_image_ids) == nFOV
+        for i in range(nFOV):
+            alf_path = self.session_path.joinpath('alf', f'FOV_{i:02}')
+            for attr, arr, sfx in (('mlapdv', mean_image_mlapdv[i], suffix),
+                                   ('brainLocationIds', mean_image_ids[i], ('ccf', '2017', suffix))):
+                mean_image_files.append(alf_path / to_alf('mpciMeanImage', attr, 'npy', timescale=sfx))
+                np.save(mean_image_files[-1], arr)
 
         # Extract ROI MLAPDV coordinates and brain location IDs
-        if len(mean_image_ids) == 0:
-            _logger.error('No mpciMeanImage.brainLocationIds datasets found')
-            return
-        # If present, use the MLAPDV datasets that are not estimates
-        suffix, *_ = sorted(set(filename_parts(x.name)[3] or '' for x in mean_image_mlapdv))
-        mean_image_mlapdv = [x for x in mean_image_mlapdv if filename_parts(x.name)[3] == (suffix or None)]
-        id_suffix = f'ccf_2017{"_" + suffix if suffix else ""}'
-        mean_image_ids = [x for x in mean_image_ids if filename_parts(x.name)[3] == id_suffix]
-        assert len(mean_image_ids) == len(mean_image_mlapdv) == nFOV
-        _logger.info('Using %s mlapdv datasets', suffix or 'final')
-        roi_mlapdv, roi_brain_ids = self.roi_mlapdv(nFOV, suffix=suffix or None)
-        roi_files = []
+        roi_mlapdv, roi_brain_ids = self.roi_mlapdv(nFOV, suffix=suffix)
+
         # Write MLAPDV + brain location ID of ROIs to disk
+        roi_files = []
+        assert set(roi_mlapdv.keys()) == set(roi_brain_ids.keys()) and len(roi_mlapdv) == nFOV
         for i in range(nFOV):
             alf_path = self.session_path.joinpath('alf', f'FOV_{i:02}')
             for attr, arr, sfx in (('mlapdv', roi_mlapdv[i], suffix),
@@ -713,13 +738,16 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
                 np.save(roi_files[-1], arr)
 
         # Register FOVs in Alyx
-        self.register_fov(meta, suffix or None)
+        self.register_fov(meta, suffix)
 
-        return sorted([*roi_files, *mean_image_mlapdv, *mean_image_ids])
+        return sorted([meta_file, *roi_files, *mean_image_files])
 
     def roi_mlapdv(self, nFOV: int, suffix=None):
         """
         Extract ROI MLAPDV coordinates and brain location IDs.
+
+        MLAPDV coordinates are in um relative to bregma.  Location IDs are from the 2017 Allen
+        common coordinate framework atlas.
 
         Parameters
         ----------
@@ -863,3 +891,360 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
             else:
                 alyx_fovs[-1]['location'].append(self.one.alyx.rest('fov-location', 'create', data=data))
         return alyx_fovs
+
+    def project_mlapdv(self, meta, flat_tri, dorsal_tri, atlas=None):
+        """
+        Calculate the mean image pixel locations in MLAPDV coordinates and determine the brain
+        location IDs.
+
+        MLAPDV coordinates are in um relative to bregma.  Location IDs are from the 2017 Allen
+        common coordinate framework atlas.
+
+        Parameters
+        ----------
+        meta : dict
+            The raw imaging data meta file, containing coordinates for the centre of each field of
+            view.
+        flat_tri : one.alf.io.AlfBunch
+            A bunch with keys ('connectivityList', 'points'), containing numpy arrays of triangles
+            representing the flattened dorsal surface of brain.
+        dorsal_tri : one.alf.io.AlfBunch
+            A bunch with keys ('connectivityList', 'points'), containing numpy arrays of triangles
+            representing the dorsal surface of brain.
+        atlas : ibllib.atlas.Atlas
+            An atlas instance.
+
+        Returns
+        -------
+        dict
+            A map of FOV number (int) to mean image MLAPDV coordinates as a 2D numpy array.
+        dict
+            A map of FOV number (int) to mean image brain location IDs as a 2D numpy int array.
+        """
+        # TODO Add readme to go with surface data, etc.
+        mlapdv = {}
+        location_id = {}
+        # Use the MRI atlas as this applies scaling, particularly along the DV axis to (hopefully)
+        # more accurately represent the living brain.
+        atlas = atlas or MRITorontoAtlas(res_um=10)
+        coord_ml = meta['centerMM']['ML']
+        coord_ap = meta['centerMM']['AP']
+        pt = [coord_ml, coord_ap]
+
+        face_ind = find_triangle(np.array(pt), flat_tri.points, flat_tri.connectivityList)
+        assert face_ind != -1
+
+        dorsal_triangle = dorsal_tri.points[dorsal_tri.connectivityList[face_ind, :], :]
+
+        # Get the surface normal unit vector of dorsal triangle
+        normal_vector = surface_normal(dorsal_triangle)
+
+        # find the coordDV that sits on the triangular face and had [coordML, coordAP] coordinates;
+        # the three vertices defining the triangle
+        face_vertices = dorsal_tri.points[dorsal_tri.connectivityList[face_ind, :], :]
+
+        # all the vertices should be on the plane ax + by + cz = 1, so we can find
+        # the abc coefficients by inverting the three equations for the three vertices
+        abc, *_ = np.linalg.lstsq(face_vertices, np.ones(3), rcond=None)
+
+        # and then find a point on that plane that corresponds to a given x-y
+        # coordinate (which is ML-AP coordinate)
+        coord_dv = (1 - np.array([coord_ml, coord_ap]) @ abc[:2]) / abc[2]
+
+        # We should not use the actual surface of the brain for this, as it might be in one of the sulci
+        # DO NOT USE THIS:
+        # coordDV = interp2(axisMLmm, axisAPmm, surfaceDV, coordML, coordAP)
+
+        # Now we need to span the plane of the coverslip with two orthogonal unit vectors.
+        # We start with vY, because the order is important and we usually have less
+        # tilt along AP (pitch), which will cause less deviation in vX from pure ML.
+        vY = np.array([0, normal_vector[2], -normal_vector[1]])  # orthogonal to the normal of the plane
+        vX = np.cross(vY, normal_vector)  # orthogonal to n and to vY
+        # normalize and flip the sign if necessary
+        vX = vX / np.sqrt(vX @ vX) * np.sign(vX[0])  # np.sqrt(vY @ vY) == LR norm of vX
+        vY = vY / np.sqrt(vY @ vY) * np.sign(vY[1])
+
+        # what are the dimensions of the data arrays (ap, ml, dv)
+        (nAP, nML, nDV) = atlas.image.shape
+        # Let's shift the coordinates relative to bregma
+        voxel_size = atlas.res_um  # [um] resolution of the atlas
+        bregma_coords = ALLEN_CCF_LANDMARKS_MLAPDV_UM['bregma'] / voxel_size  # (ml, ap, dv)
+        # bregma_coords = np.array([570, 540, 0])  # Andy's bregma FIXME remove
+        axis_ml_um = (np.arange(nML) - bregma_coords[0] - .5) * voxel_size  # additional 0.5 for symmetry
+        axis_ap_um = (np.arange(nAP) - bregma_coords[1]) * voxel_size * -1.
+        axis_dv_um = (np.arange(nDV) - bregma_coords[2]) * voxel_size * -1.
+
+        # projection of FOVs on the brain surface to get ML-AP-DV coordinates
+        _logger.info('Projecting in 3D')
+        for i, fov in enumerate(meta['FOV']):  # i, fov = next(enumerate(meta['FOV']))
+            start_time = time.time()
+            _logger.info(f'FOV {i + 1}/{len(meta["FOV"])}')
+            y_px_idx, x_px_idx = np.mgrid[0:fov['nXnYnZ'][0], 0:fov['nXnYnZ'][1]]
+
+            # xx and yy are in mm in coverslip space
+            points = ((0, fov['nXnYnZ'][0] - 1), (0, fov['nXnYnZ'][1] - 1))
+            if 'MM' not in fov:
+                fov['MM'] = {
+                    'topLeft': fov.pop('topLeftMM'),
+                    'topRight': fov.pop('topRightMM'),
+                    'bottomLeft': fov.pop('bottomLeftMM'),
+                    'bottomRight': fov.pop('bottomRightMM')
+                }
+            values = [[fov['MM']['topLeft'][0], fov['MM']['topRight'][0]],
+                      [fov['MM']['bottomLeft'][0], fov['MM']['bottomRight'][0]]]
+            xx = interpn(points, values, (y_px_idx, x_px_idx))
+
+            values = [[fov['MM']['topLeft'][1], fov['MM']['topRight'][1]],
+                      [fov['MM']['bottomLeft'][1], fov['MM']['bottomRight'][1]]]
+            yy = interpn(points, values, (y_px_idx, x_px_idx))
+
+            xx = xx.flatten() - coord_ml
+            yy = yy.flatten() - coord_ap
+
+            # rotate xx and yy in 3D
+            # the coords are still on the coverslip, but now have 3D values
+            coords = np.outer(xx, vX) + np.outer(yy, vY)  # (vX * xx) + (vY * yy)
+            coords = coords + [coord_ml, coord_ap, coord_dv]
+            coords = coords * 1e3  # mm -> um
+
+            # for each point of the FOV create a line parametrization (trajectory normal to the coverslip plane).
+            # start just above the coverslip and go 3 mm down, should be enough to 'meet' the brain
+            t = np.arange(-voxel_size, 3e3, voxel_size)
+
+            # Find the MLAPDV atlas coordinate and brain location of each pixel.
+            MLAPDV, annotation = _update_points(
+                t, normal_vector, coords, axis_ml_um, axis_ap_um, axis_dv_um, atlas.label)
+            annotation = atlas.regions.index2id(annotation)  # convert annotation indices to IDs
+
+            if np.any(np.isnan(MLAPDV)):
+                _logger.warning('Areas of FOV lie outside the brain')
+            _logger.info(f'done ({time.time() - start_time:3.1f} seconds)\n')
+            MLAPDV = np.reshape(MLAPDV, [*x_px_idx.shape, 3])
+            annotation = np.reshape(annotation, x_px_idx.shape)
+
+            fov['MLAPDV'] = {
+                'topLeft': MLAPDV[0, 0, :].tolist(),
+                'topRight': MLAPDV[0, -1, :].tolist(),
+                'bottomLeft': MLAPDV[-1, 0, :].tolist(),
+                'bottomRight': MLAPDV[-1, -1, :].tolist(),
+                'center': MLAPDV[round(x_px_idx.shape[0] / 2) - 1, round(x_px_idx.shape[1] / 2) - 1, :].tolist()
+            }
+
+            # Save the brain regions of the corners/centers of FOV (annotation field)
+            fov['brainLocationIds'] = {
+                'topLeft': int(annotation[0, 0]),
+                'topRight': int(annotation[0, -1]),
+                'bottomLeft': int(annotation[-1, 0]),
+                'bottomRight': int(annotation[-1, -1]),
+                'center': int(annotation[round(x_px_idx.shape[0] / 2) - 1, round(x_px_idx.shape[1] / 2) - 1])
+            }
+
+            mlapdv[i] = MLAPDV
+            location_id[i] = annotation
+        return mlapdv, location_id
+
+
+def surface_normal(triangle):
+    """
+    Calculate the surface normal unit vector of one or more triangles.
+
+    Parameters
+    ----------
+    triangle : numpy.array
+        An array of shape (n_triangles, 3, 3) representing (Px Py Pz).
+
+    Returns
+    -------
+    numpy.array
+        The surface normal unit vector(s).
+    """
+    if triangle.shape == (3, 3):
+        triangle = triangle[np.newaxis, :, :]
+    if triangle.shape[1:] != (3, 3):
+        raise ValueError('expected array of shape (3, 3); 3 coordinates in x, y, and z')
+    V = triangle[:, 1, :] - triangle[:, 0, :]  # V = P2 - P1
+    W = triangle[:, 2, :] - triangle[:, 0, :]  # W = P3 - P1
+
+    Nx = (V[:, 1] * W[:, 2]) - (V[:, 2] * W[:, 1])  # Nx = (Vy * Wz) - (Vz * Wy)
+    Ny = (V[:, 2] * W[:, 0]) - (V[:, 0] * W[:, 2])  # Ny = (Vz * Wx) - (Vx * Wz)
+    Nz = (V[:, 0] * W[:, 1]) - (V[:, 1] * W[:, 0])  # Nz = (Vx * Wy) - (Vy * Wx)
+    N = np.c_[Nx, Ny, Nz]
+    # Calculate unit vector. Transpose allows vectorized operation.
+    A = N / np.sqrt((Nx ** 2) + (Ny ** 2) + (Nz ** 2))[np.newaxis].T
+    return A.squeeze()
+
+
+@nb.njit('b1(f8[:,:], f8[:])')
+def in_triangle(triangle, point):
+    """
+    Check whether `point` lies within `triangle`.
+
+    Parameters
+    ----------
+    triangle : numpy.array
+        A (2 x 3) array of x-y coordinates; A(x1, y1), B(x2, y2) and C(x3, y3).
+    point : numpy.array
+        A point, P(x, y).
+
+    Returns
+    -------
+    bool
+        True if coordinate lies within triangle.
+    """
+    def area(x1, y1, x2, y2, x3, y3):
+        """Calculate the area of a triangle, given its vertices."""
+        return abs((x1 * (y2 - y3) + x2 * (y3 - y1) + x3 * (y1 - y2)) / 2.)
+
+    x1, y1, x2, y2, x3, y3 = triangle.flat
+    x, y = point
+    A = area(x1, y1, x2, y2, x3, y3)  # area of triangle ABC
+    A1 = area(x, y, x2, y2, x3, y3)  # area of triangle PBC
+    A2 = area(x1, y1, x, y, x3, y3)  # area of triangle PAC
+    A3 = area(x1, y1, x2, y2, x, y)  # area of triangle PAB
+    # Check if sum of A1, A2 and A3 equals that of A
+    diff = np.abs((A1 + A2 + A3) - A)
+    REL_TOL = 1e-9
+    return diff <= np.abs(REL_TOL * A)  # isclose not yet implemented in numba 0.57
+
+
+@nb.njit('i8(f8[:], f8[:,:], i4[:,:])', nogil=True)
+def find_triangle(point, vertices, connectivity_list):
+    """
+    Find which vertices contain a given point.
+
+    Currently O(n) but could take advantage of connectivity order to be quicker.
+
+    Parameters
+    ----------
+    point : numpy.array
+        The (x, y) coordinate of a point to locate within one of the triangles.
+    vertices : numpy.array
+        An N x 3 array of vertices representing a triangle mesh.
+    connectivity_list : numpy.array
+        An N x 3 array of indices representing the connectivity of `points`.
+
+    Returns
+    -------
+    int
+        The index of the vertices containing `point`, or -1 if not within any triangle.
+    """
+    face_ind = -1
+    for i in nb.prange(connectivity_list.shape[0]):
+        triangle = vertices[connectivity_list[i, :], :]
+        if in_triangle(triangle, point):
+            face_ind = i
+            break
+    return face_ind
+
+
+@nb.njit('Tuple((f8[:], intp[:]))(f8[:], f8[:])', nogil=True)
+def _nearest_neighbour_1d(x, x_new):
+    """
+    Nearest neighbour interpolation with extrapolation.
+
+    This was adapted from scipy.interpolate.interp1d but returns the indices of each nearest x
+    value.  Assumes x is not sorted.
+
+    Parameters
+    ----------
+    x : (N,) array_like
+        A 1-D array of real values.
+    x_new : (N,) array_like
+        A 1D array of values to apply function to.
+
+    Returns
+    -------
+    numpy.array
+        A 1D array of interpolated values.
+    numpy.array
+        A 1D array of indices.
+    """
+    SIDE = 'left'  # use 'right' to round up to nearest int instead of rounding down
+    # Sort values
+    ind = np.argsort(x, kind='mergesort')
+    x = x[ind]
+    x_bds = x / 2.0  # Do division before addition to prevent possible integer overflow
+    x_bds = x_bds[1:] + x_bds[:-1]
+    # Find where in the averaged data the values to interpolate would be inserted.
+    x_new_indices = np.searchsorted(x_bds, x_new, side=SIDE)
+    # Clip x_new_indices so that they are within the range of x indices.
+    x_new_indices = x_new_indices.clip(0, len(x) - 1).astype(np.intp)
+    # Calculate the actual value for each entry in x_new.
+    y_new = x[x_new_indices]
+    return y_new, ind[x_new_indices]
+
+
+@nb.njit('Tuple((f8[:,:], u2[:]))(f8[:], f8[:], f8[:,:], f8[:], f8[:], f8[:], u2[:,:,:])', nogil=True)
+def _update_points(t, normal_vector, coords, axis_ml_um, axis_ap_um, axis_dv_um, atlas_labels):
+    """
+    Determine the MLAPDV coordinate and brain location index for each of the given coordinates.
+
+    This has been optimized in numba. The majority of the time savings come from replacing iterp1d
+    and ismember with _nearest_neighbour_1d which were extremely slow. Parallel iteration further
+    halved the time it took per 512x512 FOV.
+
+    Parameters
+    ----------
+    t : numpy.array
+        An N x 3 evenly spaced set of coordinates representing points going down from the coverslip
+        towards the brain.
+    normal_vector : numpy.array
+        The unit vector of the face normal to the center of the window.
+    coords : numpy.array
+        A set of N x 3 coordinates representing the MLAPDV coordinates of each pixel relative to
+        the center of the window, in micrometers (um).
+    axis_ml_um : numpy.array
+        An evenly spaced array of medio-lateral brain coordinates relative to bregma in um, at the
+        resolution of the atlas image used.
+    axis_ap_um : numpy.array
+        An evenly spaced array of anterio-posterior brain coordinates relative to bregma in um, at
+        the resolution of the atlas image used.
+    axis_dv_um : numpy.array
+        An evenly spaced array of dorso-ventral brain coordinates relative to bregma in um, at
+        the resolution of the atlas image used.
+    atlas_labels : numpy.array
+        A 3D array of integers representing the brain location index of each voxel of a given
+        atlas. The shape is expected to be (nAP, nML, nDV).
+
+    Returns
+    -------
+    numpy.array
+        An N by 3 array containing the MLAPDV coordinates in um of each pixel coordinate.
+        Coordinates outside of the brain are NaN.
+    numpy.array
+        A 1D array of atlas label indices the length of `coordinates`.
+    """
+    # passing through the center of the craniotomy/coverslip
+    traj_coords_centered = np.outer(t, -normal_vector)
+    MLAPDV = np.full_like(coords, np.nan)
+    annotation = np.zeros(coords.shape[0], dtype=np.uint16)
+    n_points = coords.shape[0]
+    for p in nb.prange(n_points):
+        # Shifted to the correct point on the coverslip, in true ML-AP-DV coords
+        traj_coords = traj_coords_centered + coords[p, :]
+
+        # Find intersection coordinate with the brain.
+        # Only use coordinates that exist in the atlas (kind of nearest neighbour interpolation)
+        ml, ml_idx = _nearest_neighbour_1d(axis_ml_um, traj_coords[:, 0])
+        ap, ap_idx = _nearest_neighbour_1d(axis_ap_um, traj_coords[:, 1])
+        dv, dv_idx = _nearest_neighbour_1d(axis_dv_um, traj_coords[:, 2])
+
+        # Iterate over coordinates to find the first (if any) that is within the brain
+        ind = -1
+        area = 0  # 0 = void; 1 = root
+        for i in nb.prange(traj_coords.shape[0]):
+            anno = atlas_labels[ap_idx[i], ml_idx[i], dv_idx[i]]
+            if anno > 0:  # first coordinate in the brain
+                ind = i
+                area = anno
+                if area > 1:  # non-root brain area; we're done
+                    break
+        if area > 1:
+            point = traj_coords[ind, :]
+            MLAPDV[p, :] = point  # in um
+            annotation[p] = area
+        else:
+            MLAPDV[p, :] = np.nan
+            annotation[p] = area  # root or void
+
+    return MLAPDV, annotation

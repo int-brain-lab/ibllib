@@ -353,7 +353,7 @@ def make_pipeline(session_path, **pkwargs):
         tasks['MesoscopeSync'] = type('MesoscopeSync', (mscope_tasks.MesoscopeSync,), {})(
             **kwargs, **mscope_kwargs, **sync_kwargs)
         tasks['MesoscopeCompress'] = type('MesoscopeCompress', (mscope_tasks.MesoscopeCompress,), {})(
-            **kwargs, **mscope_kwargs, parents=[tasks['MesoscopePreprocess'], tasks['MesoscopeSync']])
+            **kwargs, **mscope_kwargs, parents=[tasks['MesoscopePreprocess']])
 
     if 'photometry' in devices:
         # {'collection': 'raw_photometry_data', 'sync_label': 'frame_trigger', 'regions': ['Region1G', 'Region3G']}
