@@ -5,7 +5,9 @@ import traceback
 from pkg_resources import parse_version
 import one.alf.io as alfio
 from one.alf.files import session_path_parts
+from one.api import ONE
 
+from ibllib.oneibl.registration import get_lab
 from ibllib.pipes import base_tasks
 from ibllib.io.raw_data_loaders import load_settings
 from ibllib.qc.task_extractors import TaskQCExtractor
@@ -455,6 +457,13 @@ class TrainingStatus(base_tasks.BehaviourTask):
         """
         Extracts training status for subject
         """
+
+        lab = get_lab(self.session_path, self.one.alyx)
+        if lab == 'cortexlab':
+            one = ONE(base_url='https://alyx.internationalbrainlab.org')
+        else:
+            one = self.one
+
         df = training_status.get_latest_training_information(self.session_path, self.one, task_collection=self.collection)
         if df is not None:
             training_status.make_plots(
