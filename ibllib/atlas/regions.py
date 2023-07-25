@@ -1,3 +1,15 @@
+"""Brain region mappings.
+
+Four mappings are currently available within the IBL, these are:
+
+* Allen Atlas - total of 1328 annotation regions provided by Allen Atlas
+* Beryl Atlas - total of 308 annotation regions
+* Cosmos Atlas - total of 12 annotation regions
+* Swanson Atlas - total of 319 annotation regions
+
+FIXME Explain what each mapping is, its purpose and any relevant publications.
+FIXME Document the two structure trees. Which Website did they come from, and which publication/edition?
+"""
 from dataclasses import dataclass
 import logging
 from pathlib import Path
@@ -16,32 +28,53 @@ FRANKLIN_FILE_REGIONS = str(Path(__file__).parent.joinpath('franklin_paxinos_str
 
 @dataclass
 class _BrainRegions:
+    """A struct of brain regions, their names, IDs, relationships and associated plot colours."""
+
+    """numpy.array: An integer array of unique brain region IDs."""
     id: np.ndarray
+    """numpy.array: A str array of verbose brain region names."""
     name: object
+    """numpy.array: A str array of brain region acronyms."""
     acronym: object
+    """numpy.array: A, (n, 3) uint8 array of brain region RGB colour values."""
     rgb: np.uint8
+    """numpy.array: An unsigned integer array indicating the number of degrees removed from root."""
     level: np.ndarray
+    """numpy.array: An integer array of parent brain region IDs."""
     parent: np.ndarray
+    """numpy.array: FIXME Document - what is brain region order and why is it important?"""
     order: np.uint16
 
     def to_df(self):
-        d = {at: self.__getattribute__(at) for at in ['id', 'name', 'acronym', 'hexcolor', 'level', 'parent', 'order']}
+        """
+        Return dataclass as a pandas DataFrame.
+
+        Returns
+        -------
+        pandas.DataFrame
+            The object as a pandas DataFrame with attributes as columns.
+        """
+        attrs = ['id', 'name', 'acronym', 'hexcolor', 'level', 'parent', 'order']
+        d = dict(zip(attrs, list(map(self.__getattribute__, attrs))))
         return pd.DataFrame(d)
 
     @property
     def rgba(self):
+        """numpy.array: An (n, 4) uint8 array of RGBA values for all n brain regions."""
         rgba = np.c_[self.rgb, self.rgb[:, 0] * 0 + 255]
         rgba[0, :] = 0  # set the void to transparent
         return rgba
 
     @property
     def hexcolor(self):
+        """numpy.array of str: The RGB colour values as hexadecimal triplet strings."""
         return np.apply_along_axis(lambda x: "#{0:02x}{1:02x}{2:02x}".format(*x.astype(int)), 1, self.rgb)
 
     def _compute_order(self):
         """
         Compute the order of regions, per region order by left hemisphere and then right hemisphere
         :return:
+        FIXME This function doesn't do anything.
         """
         orders = np.zeros_like(self.id)
         # Left hemisphere first
@@ -51,7 +84,18 @@ class _BrainRegions:
 
     def get(self, ids) -> Bunch:
         """
-        Get a bunch of the name/id
+        Return a map of id, name, acronym, etc. for the provided IDs.
+
+        Parameters
+        ----------
+        ids : int, tuple of ints, numpy.array
+            One or more brain region IDs to get information for.
+
+        Returns
+        -------
+        iblutil.util.Bunch[str, numpy.array]
+            A dict-like object containing the keys {'id', 'name', 'acronym', 'rgb', 'level',
+            'parent', 'order'} with arrays the length of `ids`.
         """
         uid, uind = np.unique(ids, return_inverse=True)
         a, iself, _ = np.intersect1d(self.id, uid, assume_unique=False, return_indices=True)
@@ -107,7 +151,8 @@ class _BrainRegions:
 
     def descendants(self, ids, **kwargs):
         """
-        Get descendants from one or an array of ids
+        Get descendants from one or more IDs.
+
         :param ids: np.array or scalar representing the region primary key
         :param return_indices: Bool (False) returns the indices in the current br obj
         :return: Bunch
@@ -227,7 +272,7 @@ class _BrainRegions:
         """
         Convert atlas id to acronym and remap
 
-        :param acronym: list or array of atlas ids
+        :param atlas_id: list or array of atlas ids
         :param mapping: target map to remap acronyms
         :return: array of remapped acronyms
         """
@@ -239,7 +284,7 @@ class _BrainRegions:
         """
         Remap atlas id onto mapping
 
-        :param acronym: list or array of atlas ids
+        :param atlas_id: list or array of atlas ids
         :param mapping: target map to remap acronyms
         :return: array of remapped atlas ids
         """
@@ -311,7 +356,6 @@ class _BrainRegions:
         Filter index values  by those on left or right hemisphere
 
         :param values: array of index values
-        :param mapping: mapping to use
         :param hemisphere: hemisphere
         :return:
         """
@@ -350,6 +394,10 @@ class _BrainRegions:
 
 
 class FranklinPaxinosRegions(_BrainRegions):
+    """Mouse Brain in Stereotaxic Coordinates (MBSC).
+
+    Paxinos G, and Franklin KBJ (2012). The Mouse Brain in Stereotaxic Coordinates, 4th edition (Elsevier Academic Press).
+    """
     def __init__(self):
         df_regions = pd.read_csv(FRANKLIN_FILE_REGIONS)
         # get rid of nan values, there are rows that are in Allen but are not in the Franklin Paxinos atlas
@@ -421,6 +469,8 @@ class FranklinPaxinosRegions(_BrainRegions):
 
 class BrainRegions(_BrainRegions):
     """
+    A struct of Allen brain regions, their names, IDs, relationships and associated plot colours.
+
     ibllib.atlas.regions.BrainRegions(brainmap='Allen')
     The Allen atlas ids are kept intact but lateralized as follows: labels are duplicated
      and ids multiplied by -1, with the understanding that left hemisphere regions have negative
@@ -516,7 +566,10 @@ class BrainRegions(_BrainRegions):
 
 def regions_from_allen_csv():
     """
-    Reads csv file containing the ALlen Ontology and instantiates a BrainRegions object
+    (DEPRECATED) Reads csv file containing the ALlen Ontology and instantiates a BrainRegions object.
+
+    NB: Instantiate BrainRegions directly instead.
+
     :return: BrainRegions object
     """
     _logger.warning("ibllib.atlas.regions.regions_from_allen_csv() is deprecated. "

@@ -1,3 +1,4 @@
+"""Gene expression maps."""
 import logging
 from pathlib import Path
 

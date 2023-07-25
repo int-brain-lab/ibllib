@@ -1,6 +1,4 @@
-"""
-Module that hold techniques to project the brain volume onto 2D images for visualisation purposes
-"""
+"""Techniques to project the brain volume onto 2D images for visualisation purposes."""
 import copy
 from functools import lru_cache
 import logging
