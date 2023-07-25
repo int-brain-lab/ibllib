@@ -1,4 +1,3 @@
-import logging
 import time
 from datetime import datetime
 from pathlib import Path
@@ -12,6 +11,7 @@ import importlib
 from one.api import ONE
 from one.webclient import AlyxClient
 from one.remote.globus import get_lab_from_endpoint_id
+from iblutil.util import setup_logger
 
 from ibllib.io.extractors.base import get_pipeline, get_task_protocol, get_session_extractor_type
 from ibllib.pipes import tasks, training_preprocessing, ephys_preprocessing
@@ -21,7 +21,7 @@ from ibllib.oneibl.data_handlers import get_local_data_repository
 from ibllib.io.session_params import read_params
 from ibllib.pipes.dynamic_pipeline import make_pipeline, acquisition_description_legacy_session
 
-_logger = logging.getLogger(__name__)
+_logger = setup_logger(__name__, level='INFO')
 LARGE_TASKS = ['EphysVideoCompress', 'TrainingVideoCompress', 'SpikeSorting', 'EphysDLC']
 
 
@@ -109,6 +109,10 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
     list of dicts
         A list of any datasets registered (only for legacy sessions)
     """
+    for _ in range(10):
+        _logger.info('#' * 110)
+    _logger.info('Start looking for new sessions...')
+    _logger.info('#' * 110)
     if not one:
         one = ONE(cache_rest=None)
     rc = IBLRegistrationClient(one=one)

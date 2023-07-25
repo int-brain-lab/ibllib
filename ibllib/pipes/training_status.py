@@ -1,12 +1,11 @@
-import traceback
-import re
-
 import one.alf.io as alfio
 from one.alf.exceptions import ALFObjectNotFound
 
 from ibllib.io.raw_data_loaders import load_bpod
 from ibllib.oneibl.registration import _get_session_times
 from ibllib.io.extractors.base import get_pipeline, get_session_extractor_type
+from ibllib.io.session_params import read_params
+import ibllib.pipes.dynamic_pipeline as dyn
 
 from iblutil.util import setup_logger
 from ibllib.plots.snapshot import ReportSnapshot
@@ -21,6 +20,8 @@ import matplotlib.dates as mdates
 from matplotlib.lines import Line2D
 from datetime import datetime
 import seaborn as sns
+import boto3
+from botocore.exceptions import ProfileNotFound, ClientError
 
 logger = setup_logger(__name__)
 
@@ -37,29 +38,90 @@ TRAINING_STATUS = {'untrainable': (-4, (0, 0, 0, 0)),
                    'ready4recording': (5, (20, 255, 91, 255))}
 
 
-def get_trials_task(session_path, one, task_collection='raw_behavior_data'):
-    # TODO this eventually needs to be updated for dynamic pipeline tasks
-    # Yup you're damn right
-    pipeline = get_pipeline(session_path, task_collection=task_collection)
-    if pipeline == 'training':
-        from ibllib.pipes.training_preprocessing import TrainingTrials
-        task = TrainingTrials(session_path, one=one)
-    elif pipeline == 'ephys':
-        from ibllib.pipes.ephys_preprocessing import EphysTrials
-        task = EphysTrials(session_path, one=one)
-    else:
-        try:
-            # try and look if there is a custom extractor in the personal projects extraction class
-            import projects.base
-            task_type = get_session_extractor_type(session_path)
-            PipelineClass = projects.base.get_pipeline(task_type)
-            pipeline = PipelineClass(session_path, one)
-            trials_task_name = next(task for task in pipeline.tasks if 'Trials' in task)
-            task = pipeline.tasks.get(trials_task_name)
-        except Exception:
-            task = None
+def get_training_table_from_aws(lab, subject):
+    """
+    If aws credentials exist on the local server download the latest training table from aws s3 private bucket
+    :param lab:
+    :param subject:
+    :return:
+    """
+    try:
+        session = boto3.Session(profile_name='ibl_training')
+    except ProfileNotFound:
+        return
 
-    return task
+    local_file_path = f'/mnt/s0/Data/Subjects/{subject}/training.csv'
+    dst_bucket_name = 'ibl-brain-wide-map-private'
+    try:
+        s3 = session.resource('s3')
+        bucket = s3.Bucket(name=dst_bucket_name)
+        bucket.download_file(f'resources/training/{lab}/{subject}/training.csv',
+                             local_file_path)
+        df = pd.read_csv(local_file_path)
+    except ClientError:
+        return
+
+    return df
+
+
+def upload_training_table_to_aws(lab, subject):
+    """
+    If aws credentials exist on the local server upload the training table to aws s3 private bucket
+    :param lab:
+    :param subject:
+    :return:
+    """
+    try:
+        session = boto3.Session(profile_name='ibl_training')
+    except ProfileNotFound:
+        return
+
+    local_file_path = f'/mnt/s0/Data/Subjects/{subject}/training.csv'
+    dst_bucket_name = 'ibl-brain-wide-map-private'
+    try:
+        s3 = session.resource('s3')
+        bucket = s3.Bucket(name=dst_bucket_name)
+        bucket.upload_file(local_file_path,
+                           f'resources/training/{lab}/{subject}/training.csv')
+    except (ClientError, FileNotFoundError):
+        return
+
+
+def get_trials_task(session_path, one):
+    # If experiment description file then process this
+    experiment_description_file = read_params(session_path)
+    if experiment_description_file is not None:
+        tasks = []
+        pipeline = dyn.make_pipeline(session_path)
+        trials_tasks = [t for t in pipeline.tasks if 'Trials' in t]
+        for task in trials_tasks:
+            t = pipeline.tasks.get(task)
+            t.__init__(session_path, **t.kwargs)
+            tasks.append(t)
+    else:
+        # Otherwise default to old way of doing things
+        pipeline = get_pipeline(session_path)
+        if pipeline == 'training':
+            from ibllib.pipes.training_preprocessing import TrainingTrials
+            tasks = [TrainingTrials(session_path)]
+        elif pipeline == 'ephys':
+            from ibllib.pipes.ephys_preprocessing import EphysTrials
+            tasks = [EphysTrials(session_path)]
+        else:
+            try:
+                # try and look if there is a custom extractor in the personal projects extraction class
+                import projects.base
+                task_type = get_session_extractor_type(session_path)
+                PipelineClass = projects.base.get_pipeline(task_type)
+                pipeline = PipelineClass(session_path, one)
+                trials_task_name = next(task for task in pipeline.tasks if 'Trials' in task)
+                task = pipeline.tasks.get(trials_task_name)
+                task.__init__(session_path)
+                tasks = [task]
+            except Exception:
+                tasks = []
+
+    return tasks
 
 
 def save_path(subj_path):
@@ -90,7 +152,7 @@ def load_existing_dataframe(subj_path):
         return None
 
 
-def load_trials(sess_path, one, force=True, task_collection='raw_behavior_data'):
+def load_trials(sess_path, one, collections=None, force=True):
     """
     Load trials data for session. First attempts to load from local session path, if this fails will attempt to download via ONE,
     if this also fails, will then attempt to re-extraxt locally
@@ -98,34 +160,62 @@ def load_trials(sess_path, one, force=True, task_collection='raw_behavior_data')
     :param one: ONE instance
     :return:
     """
-    # try and load trials locally
     try:
-        # if the task collection finishes with 2 digits trials are in a subfolder
-        rematch = re.search(r"\d{2}$", task_collection)
-        subfolder = f"task_{rematch.group()}" if rematch else ''
-        trials = alfio.load_object(sess_path.joinpath('alf', subfolder), 'trials', short_keys=True)
+        # try and load all trials that are found locally in the session path locally
+        if collections is None:
+            trial_locations = list(sess_path.rglob('_ibl_trials.goCueTrigger_times.npy'))
+        else:
+            trial_locations = [Path(sess_path).joinpath(c, '_ibl_trials.goCueTrigger_times.npy') for c in collections]
+
+        if len(trial_locations) > 1:
+            trial_dict = {}
+            for i, loc in enumerate(trial_locations):
+                trial_dict[i] = alfio.load_object(loc.parent, 'trials', short_keys=True)
+            trials = training.concatenate_trials(trial_dict)
+        elif len(trial_locations) == 1:
+            trials = alfio.load_object(trial_locations[0].parent, 'trials', short_keys=True)
+        else:
+            raise ALFObjectNotFound
+
         if 'probabilityLeft' not in trials.keys():
             raise ALFObjectNotFound
     except ALFObjectNotFound:
-        logger.info(f'No trials found at first pass for {sess_path}, trying downloading trials through ONE')
-        logger.debug(traceback.format_exc())
+        # Next try and load all trials data through ONE
         try:
             if not force:
                 return None
-            # attempt to download trials using ONE
-            trials = one.load_object(one.path2eid(sess_path), 'trials')
+            eid = one.path2eid(sess_path)
+            if collections is None:
+                trial_collections = one.list_datasets(eid, '_ibl_trials.goCueTrigger_times.npy')
+                if len(trial_collections) > 0:
+                    trial_collections = ['/'.join(c.split('/')[:-1]) for c in trial_collections]
+            else:
+                trial_collections = collections
+
+            if len(trial_collections) > 1:
+                trial_dict = {}
+                for i, collection in enumerate(trial_collections):
+                    trial_dict[i] = one.load_object(eid, 'trials', collection=collection)
+                trials = training.concatenate_trials(trial_dict)
+            elif len(trial_collections) == 1:
+                trials = one.load_object(eid, 'trials', collection=trial_collections[0])
+            else:
+                raise ALFObjectNotFound
+
             if 'probabilityLeft' not in trials.keys():
                 raise ALFObjectNotFound
         except Exception:
-            logger.info('No more luck with ONE, trying to extract data from raw Bpod data')
-            logger.debug(traceback.format_exc())
+            # Finally try to rextract the trials data locally
             try:
-                task = get_trials_task(sess_path, one=one, task_collection=task_collection)
-                if task is not None:
-                    task.run()
-                    trials = alfio.load_object(sess_path.joinpath('alf'), 'trials')
-                    if 'probabilityLeft' not in trials.keys():
-                        raise ALFObjectNotFound
+                # Get the tasks that need to be run
+                tasks = get_trials_task(sess_path, one)
+                if len(tasks) > 0:
+                    for task in tasks:
+                        status = task.run()
+                        if status == 0:
+                            return load_trials(sess_path, collections=collections, one=one, force=False)
+                        else:
+                            return
                 else:
                     trials = None
             except Exception as e:
@@ -134,7 +224,7 @@ def load_trials(sess_path, one, force=True, task_collection='raw_behavior_data')
     return trials
 
 
-def load_combined_trials(sess_paths, one, force=True, task_collection='raw_behavior_data'):
+def load_combined_trials(sess_paths, one, force=True):
     """
     Load and concatenate trials for multiple sessions. Used when we want to concatenate trials for two sessions on the same day
     :param sess_paths: list of paths to sessions
@@ -143,14 +233,14 @@ def load_combined_trials(sess_paths, one, force=True, task_collection='raw_behav
     """
     trials_dict = {}
     for sess_path in sess_paths:
-        trials = load_trials(Path(sess_path), one, force=force, task_collection=task_collection)
+        trials = load_trials(Path(sess_path), one, force=force)
         if trials is not None:
-            trials_dict[Path(sess_path).stem] = trials
+            trials_dict[Path(sess_path).stem] = load_trials(Path(sess_path), one, force=force)
 
     return training.concatenate_trials(trials_dict)
 
 
-def get_latest_training_information(sess_path, one, task_collection='raw_behavior_data'):
+def get_latest_training_information(sess_path, one):
     """
     Extracts the latest training status.
 
@@ -168,14 +258,22 @@ def get_latest_training_information(sess_path, one, task_collection='raw_behavio
     """
 
     subj_path = sess_path.parent.parent
-    df = load_existing_dataframe(subj_path)
+    sub = subj_path.parts[-1]
+    if one.mode != 'local':
+        lab = one.alyx.rest('subjects', 'list', nickname=sub)[0]['lab']
+        df = get_training_table_from_aws(lab, sub)
+    else:
+        df = None
+
+    if df is None:
+        df = load_existing_dataframe(subj_path)
 
     # Find the dates and associated session paths where we don't have data stored in our dataframe
     missing_dates = check_up_to_date(subj_path, df)
 
     # Iterate through the dates to fill up our training dataframe
     for _, grp in missing_dates.groupby('date'):
-        sess_dicts = get_training_info_for_session(grp.session_path.values, one, task_collection=task_collection)
+        sess_dicts = get_training_info_for_session(grp.session_path.values, one)
         if len(sess_dicts) == 0:
             continue
 
@@ -196,24 +294,30 @@ def get_latest_training_information(sess_path, one, task_collection='raw_behavio
     # Find the earliest date in missing dates that we need to recompute the training status for
     missing_status = find_earliest_recompute_date(df.drop_duplicates('date').reset_index(drop=True))
     for date in missing_status:
-        df = compute_training_status(df, date, one, task_collection=task_collection)
+        df = compute_training_status(df, date, one)
 
     df_lim = df.drop_duplicates(subset='session_path', keep='first')
+
     # Detect untrainable
-    un_df = df_lim[df_lim['training_status'] == 'in training'].sort_values('date')
-    if len(un_df) >= 40:
-        sess = un_df.iloc[39].session_path
-        df.loc[df['session_path'] == sess, 'training_status'] = 'untrainable'
+    if 'untrainable' not in df_lim.training_status.values:
+        un_df = df_lim[df_lim['training_status'] == 'in training'].sort_values('date')
+        if len(un_df) >= 40:
+            sess = un_df.iloc[39].session_path
+            df.loc[df['session_path'] == sess, 'training_status'] = 'untrainable'
 
     # Detect unbiasable
-    un_df = df_lim[df_lim['task_protocol'] == 'biased'].sort_values('date')
-    if len(un_df) >= 40:
-        tr_st = un_df[0:40].training_status.unique()
-        if 'ready4ephysrig' not in tr_st:
-            sess = un_df.iloc[39].session_path
-            df.loc[df['session_path'] == sess, 'training_status'] = 'unbiasable'
+    if 'unbiasable' not in df_lim.training_status.values:
+        un_df = df_lim[df_lim['task_protocol'] == 'biased'].sort_values('date')
+        if len(un_df) >= 40:
+            tr_st = un_df[0:40].training_status.unique()
+            if 'ready4ephysrig' not in tr_st:
+                sess = un_df.iloc[39].session_path
+                df.loc[df['session_path'] == sess, 'training_status'] = 'unbiasable'
 
     save_dataframe(df, subj_path)
+
+    if one.mode != 'local':
+        upload_training_table_to_aws(lab, sub)
 
     return df
 
@@ -245,7 +349,7 @@ def compute_training_status(df, compute_date, one, force=True, task_collection='
 
     # compute_date = str(one.path2ref(session_path)['date'])
     df_temp = df[df['date'] <= compute_date]
-    df_temp = df_temp.drop_duplicates('session_path')
+    df_temp = df_temp.drop_duplicates(subset=['session_path', 'task_protocol'])
     df_temp.sort_values('date')
 
     dates = df_temp.date.values
@@ -269,8 +373,9 @@ def compute_training_status(df, compute_date, one, force=True, task_collection='
         # If habituation skip
         if df_date.iloc[-1]['task_protocol'] == 'habituation':
             continue
-        trials[df_date.iloc[-1]['date']] = load_combined_trials(
-            df_date.session_path.values, one, force=force, task_collection=task_collection)
+        # Here we should split by protocol in an ideal world but that world isn't today. This is only really relevant for
+        # chained protocols
+        trials[df_date.iloc[-1]['date']] = load_combined_trials(df_date.session_path.values, one, force=force)
         protocol.append(df_date.iloc[-1]['task_protocol'])
         status.append(df_date.iloc[-1]['training_status'])
         if df_date.iloc[-1]['combined_n_delay'] >= 900:  # delay of 15 mins
@@ -301,7 +406,7 @@ def pass_through_training_hierachy(status_new, status_old):
         return status_new
 
 
-def compute_session_duration_delay_location(sess_path, **kwargs):
+def compute_session_duration_delay_location(sess_path, collections=None, **kwargs):
     """
     Get meta information about task. Extracts session duration, delay before session start and location of session
 
@@ -309,7 +414,7 @@ def compute_session_duration_delay_location(sess_path, **kwargs):
     ----------
     sess_path : pathlib.Path, str
         The session path with the pattern subject/yyyy-mm-dd/nnn.
-    task_collection : str
+    collections : list
         The location within the session path directory of task settings and data.
 
     Returns
@@ -321,21 +426,114 @@ def compute_session_duration_delay_location(sess_path, **kwargs):
     str {'ephys_rig', 'training_rig'}
         The location of the session.
     """
-    md, sess_data = load_bpod(sess_path, **kwargs)
-    start_time, end_time = _get_session_times(sess_path, md, sess_data)
-    session_duration = int((end_time - start_time).total_seconds() / 60)
+    if collections is None:
+        collections, _ = get_data_collection(sess_path)
 
-    session_delay = md.get('SESSION_START_DELAY_SEC', 0)
+    session_duration = 0
+    session_delay = 0
+    session_location = 'training_rig'
+    for collection in collections:
+        md, sess_data = load_bpod(sess_path, task_collection=collection)
+        if md is None:
+            continue
+        try:
+            start_time, end_time = _get_session_times(sess_path, md, sess_data)
+            session_duration = session_duration + int((end_time - start_time).total_seconds() / 60)
+            session_delay = session_delay + md.get('SESSION_START_DELAY_SEC', 0)
+        except Exception:
+            session_duration = session_duration + 0
+            session_delay = session_delay + 0
 
-    if 'ephys' in md.get('PYBPOD_BOARD', None):
-        session_location = 'ephys_rig'
-    else:
-        session_location = 'training_rig'
+        if 'ephys' in md.get('PYBPOD_BOARD', None):
+            session_location = 'ephys_rig'
+        else:
+            session_location = 'training_rig'
 
     return session_duration, session_delay, session_location
 
 
-def get_training_info_for_session(session_paths, one, task_collection=None, force=True):
+def get_data_collection(session_path):
+    """
+    Returns the location of the raw behavioral data and extracted trials data for the session path. If
+    multiple locations in one session (e.g for dynamic) returns all of these
+    :param session_path: path of session
+    :return:
+    """
+    experiment_description_file = read_params(session_path)
+    if experiment_description_file is not None:
+        pipeline = dyn.make_pipeline(session_path)
+        trials_tasks = [t for t in pipeline.tasks if 'Trials' in t]
+        collections = [pipeline.tasks.get(task).kwargs['collection'] for task in trials_tasks]
+        if len(collections) == 1 and collections[0] == 'raw_behavior_data':
+            alf_collections = ['alf']
+        elif all(['raw_task_data' in c for c in collections]):
+            alf_collections = [f'alf/task_{c[-2:]}' for c in collections]
+        else:
+            alf_collections = None
+    else:
+        collections = ['raw_behavior_data']
+        alf_collections = ['alf']
+
+    return collections, alf_collections
+
+
+def get_sess_dict(session_path, one, protocol, alf_collections=None, raw_collections=None, force=True):
+
+    sess_dict = {}
+    sess_dict['date'] = str(one.path2ref(session_path)['date'])
+    sess_dict['session_path'] = str(session_path)
+    sess_dict['task_protocol'] = protocol
+
+    if sess_dict['task_protocol'] == 'habituation':
+        nan_array = np.array([np.nan])
+        sess_dict['performance'], sess_dict['contrasts'], _ = (nan_array, nan_array, np.nan)
+        sess_dict['performance_easy'] = np.nan
+        sess_dict['reaction_time'] = np.nan
+        sess_dict['n_trials'] = np.nan
+        sess_dict['sess_duration'] = np.nan
+        sess_dict['n_delay'] = np.nan
+        sess_dict['location'] = np.nan
+        sess_dict['training_status'] = 'habituation'
+        sess_dict['bias_50'], sess_dict['thres_50'], sess_dict['lapsehigh_50'], sess_dict['lapselow_50'] = \
+            (np.nan, np.nan, np.nan, np.nan)
+        sess_dict['bias_20'], sess_dict['thres_20'], sess_dict['lapsehigh_20'], sess_dict['lapselow_20'] = \
+            (np.nan, np.nan, np.nan, np.nan)
+        sess_dict['bias_80'], sess_dict['thres_80'], sess_dict['lapsehigh_80'], sess_dict['lapselow_80'] = \
+            (np.nan, np.nan, np.nan, np.nan)
+
+    else:
+        # if we can't compute trials then we need to pass
+        trials = load_trials(session_path, one, collections=alf_collections, force=force)
+        if trials is None:
+            return
+
+        sess_dict['performance'], sess_dict['contrasts'], _ = training.compute_performance(trials, prob_right=True)
+        if sess_dict['task_protocol'] == 'training':
+            sess_dict['bias_50'], sess_dict['thres_50'], sess_dict['lapsehigh_50'], sess_dict['lapselow_50'] = \
+                training.compute_psychometric(trials)
+            sess_dict['bias_20'], sess_dict['thres_20'], sess_dict['lapsehigh_20'], sess_dict['lapselow_20'] = \
+                (np.nan, np.nan, np.nan, np.nan)
+            sess_dict['bias_80'], sess_dict['thres_80'], sess_dict['lapsehigh_80'], sess_dict['lapselow_80'] = \
+                (np.nan, np.nan, np.nan, np.nan)
+        else:
+            sess_dict['bias_50'], sess_dict['thres_50'], sess_dict['lapsehigh_50'], sess_dict['lapselow_50'] = \
+                training.compute_psychometric(trials, block=0.5)
+            sess_dict['bias_20'], sess_dict['thres_20'], sess_dict['lapsehigh_20'], sess_dict['lapselow_20'] = \
+                training.compute_psychometric(trials, block=0.2)
+            sess_dict['bias_80'], sess_dict['thres_80'], sess_dict['lapsehigh_80'], sess_dict['lapselow_80'] = \
+                training.compute_psychometric(trials, block=0.8)
+
+        sess_dict['performance_easy'] = training.compute_performance_easy(trials)
+        sess_dict['reaction_time'] = training.compute_median_reaction_time(trials)
+        sess_dict['n_trials'] = training.compute_n_trials(trials)
+        sess_dict['sess_duration'], sess_dict['n_delay'], sess_dict['location'] = \
+            compute_session_duration_delay_location(session_path, collections=raw_collections)
+        sess_dict['training_status'] = 'not_computed'
+
+    return sess_dict
+
+
+def get_training_info_for_session(session_paths, one, force=True):
     """
     Extract the training information needed for plots for each session
     :param session_paths: list of session paths on same date
@@ -346,59 +544,33 @@ def get_training_info_for_session(session_paths, one, task_collection=None, forc
     # return list of dicts to add
     sess_dicts = []
     for session_path in session_paths:
+        collections, alf_collections = get_data_collection(session_path)
         session_path = Path(session_path)
-        sess_dict = {}
-        sess_dict['date'] = str(one.path2ref(session_path)['date'])
-        sess_dict['session_path'] = str(session_path)
-        sess_dict['task_protocol'] = get_session_extractor_type(session_path, task_collection=task_collection)
+        protocols = []
+        for c in collections:
+            protocols.append(get_session_extractor_type(session_path, task_collection=c))
 
-        if sess_dict['task_protocol'] == 'habituation':
-            nan_array = np.array([np.nan])
-            sess_dict['performance'], sess_dict['contrasts'], _ = (nan_array, nan_array, np.nan)
-            sess_dict['performance_easy'] = np.nan
-            sess_dict['reaction_time'] = np.nan
-            sess_dict['n_trials'] = np.nan
-            sess_dict['sess_duration'] = np.nan
-            sess_dict['n_delay'] = np.nan
-            sess_dict['location'] = np.nan
-            sess_dict['training_status'] = 'habituation'
-            sess_dict['bias_50'], sess_dict['thres_50'], sess_dict['lapsehigh_50'], sess_dict['lapselow_50'] = \
-                (np.nan, np.nan, np.nan, np.nan)
-            sess_dict['bias_20'], sess_dict['thres_20'], sess_dict['lapsehigh_20'], sess_dict['lapselow_20'] = \
-                (np.nan, np.nan, np.nan, np.nan)
-            sess_dict['bias_80'], sess_dict['thres_80'], sess_dict['lapsehigh_80'], sess_dict['lapselow_80'] = \
-                (np.nan, np.nan, np.nan, np.nan)
-
+        un_protocols = np.unique(protocols)
+        # Example, training, training, biased - training would be combined, biased not
+        if len(un_protocols) != 1:
+            print(f'Different protocols in same session {session_path} : {protocols}')
+            for prot in un_protocols:
+                if prot is False:
+                    continue
+                try:
+                    alf = alf_collections[np.where(protocols == prot)[0]]
+                    raw = collections[np.where(protocols == prot)[0]]
+                except TypeError:
+                    alf = None
+                    raw = None
+                sess_dict = get_sess_dict(session_path, one, prot, alf_collections=alf, raw_collections=raw, force=force)
         else:
-            # if we can't compute trials then we need to pass
-            trials = load_trials(session_path, one, force=force, task_collection=task_collection)
-            if trials is None:
-                continue
+            prot = un_protocols[0]
+            sess_dict = get_sess_dict(session_path, one, prot, alf_collections=alf_collections, raw_collections=collections,
+                                      force=force)
 
-            sess_dict['performance'], sess_dict['contrasts'], _ = training.compute_performance(trials, prob_right=True)
-            if sess_dict['task_protocol'] == 'training':
-                sess_dict['bias_50'], sess_dict['thres_50'], sess_dict['lapsehigh_50'], sess_dict['lapselow_50'] = \
-                    training.compute_psychometric(trials)
-                sess_dict['bias_20'], sess_dict['thres_20'], sess_dict['lapsehigh_20'], sess_dict['lapselow_20'] = \
-                    (np.nan, np.nan, np.nan, np.nan)
-                sess_dict['bias_80'], sess_dict['thres_80'], sess_dict['lapsehigh_80'], sess_dict['lapselow_80'] = \
-                    (np.nan, np.nan, np.nan, np.nan)
-            else:
-                sess_dict['bias_50'], sess_dict['thres_50'], sess_dict['lapsehigh_50'], sess_dict['lapselow_50'] = \
-                    training.compute_psychometric(trials, block=0.5)
-                sess_dict['bias_20'], sess_dict['thres_20'], sess_dict['lapsehigh_20'], sess_dict['lapselow_20'] = \
-                    training.compute_psychometric(trials, block=0.2)
-                sess_dict['bias_80'], sess_dict['thres_80'], sess_dict['lapsehigh_80'], sess_dict['lapselow_80'] = \
-                    training.compute_psychometric(trials, block=0.8)
-
-            sess_dict['performance_easy'] = training.compute_performance_easy(trials)
-            sess_dict['reaction_time'] = training.compute_median_reaction_time(trials)
-            sess_dict['n_trials'] = training.compute_n_trials(trials)
-            sess_dict['sess_duration'], sess_dict['n_delay'], sess_dict['location'] = \
-                compute_session_duration_delay_location(session_path, task_collection=task_collection)
-            sess_dict['training_status'] = 'not_computed'
-
-        sess_dicts.append(sess_dict)
+        if sess_dict is not None:
+            sess_dicts.append(sess_dict)
 
     protocols = [s['task_protocol'] for s in sess_dicts]
 
@@ -407,12 +579,12 @@ def get_training_info_for_session(session_paths, one, task_collection=None, forc
 
     if len(sess_dicts) > 1 and len(set(protocols)) == 1:  # Only if all protocols are the same
         print(f'{len(sess_dicts)} sessions being combined for date {sess_dicts[0]["date"]}')
-        combined_trials = load_combined_trials(session_paths, one, force=force, task_collection=task_collection)
+        combined_trials = load_combined_trials(session_paths, one, force=force)
         performance, contrasts, _ = training.compute_performance(combined_trials, prob_right=True)
         psychs = {}
-        psychs['50'] = training.compute_psychometric(trials, block=0.5)
-        psychs['20'] = training.compute_psychometric(trials, block=0.2)
-        psychs['80'] = training.compute_psychometric(trials, block=0.8)
+        psychs['50'] = training.compute_psychometric(combined_trials, block=0.5)
+        psychs['20'] = training.compute_psychometric(combined_trials, block=0.2)
+        psychs['80'] = training.compute_psychometric(combined_trials, block=0.8)
 
         performance_easy = training.compute_performance_easy(combined_trials)
         reaction_time = training.compute_median_reaction_time(combined_trials)
@@ -440,10 +612,10 @@ def get_training_info_for_session(session_paths, one, task_collection=None, forc
             if sess_dict['combined_performance'].size != sess_dict['performance'].size:
                 sess_dict['performance'] = \
                     np.r_[sess_dict['performance'],
-                          np.full(np.abs(sess_dict['combined_performance'].size - sess_dict['performance'].size), np.nan)]
+                          np.full(sess_dict['combined_performance'].size - sess_dict['performance'].size, np.nan)]
                 sess_dict['contrasts'] = \
                     np.r_[sess_dict['contrasts'],
-                          np.full(np.abs(sess_dict['combined_contrasts'].size - sess_dict['contrasts'].size), np.nan)]
+                          np.full(sess_dict['combined_contrasts'].size - sess_dict['contrasts'].size, np.nan)]
 
     else:
         for sess_dict in sess_dicts:
@@ -627,12 +799,15 @@ def plot_fit_params(df, subject):
     return axs
 
 
-def plot_psychometric_curve(df, subject, one, task_collection='raw_behavior_data'):
+def plot_psychometric_curve(df, subject, one):
     df = df.drop_duplicates('date').reset_index(drop=True)
     sess_path = Path(df.iloc[-1]["session_path"])
-    trials = load_trials(sess_path, one, task_collection=task_collection)
+    trials = load_trials(sess_path, one)
+
     fig, ax1 = plt.subplots(figsize=(8, 6))
+
     training.plot_psychometric(trials, ax=ax1, title=f'{subject} {df.iloc[-1]["date"]}: {df.iloc[-1]["training_status"]}')
+
     return ax1
 
 
@@ -774,7 +949,7 @@ def make_plots(session_path, one, df=None, save=False, upload=False, task_collec
     ax2 = plot_performance_easy_median_reaction_time(df, subject)
     ax3 = plot_heatmap_performance_over_days(df, subject)
     ax4 = plot_fit_params(df, subject)
-    ax5 = plot_psychometric_curve(df, subject, one, task_collection=task_collection)
+    ax5 = plot_psychometric_curve(df, subject, one)
 
     outputs = []
     if save:
