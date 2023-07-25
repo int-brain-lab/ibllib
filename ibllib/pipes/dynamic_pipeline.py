@@ -178,17 +178,26 @@ def make_pipeline(session_path, **pkwargs):
         if extractors := task_info.get('extractors', False):
             extractors = (extractors,) if isinstance(extractors, str) else extractors
             task_name = None  # to avoid unbound variable issue in the first round
-            for j, task in enumerate(extractors):
+            for j, extractor in enumerate(extractors):
                 # Assume previous task in the list is parent
                 parents = [] if j == 0 else [tasks[task_name]]
                 # Make sure extractor and sync task don't collide
                 for sync_option in ('nidq', 'bpod'):
-                    if sync_option in task.lower() and not sync == sync_option:
-                        raise ValueError(f'Extractor "{task}" and sync "{sync}" do not match')
-                try:
-                    task = getattr(btasks, task)
-                except AttributeError:
-                    raise NotImplementedError  # TODO Attempt to import from personal project repo
+                    if sync_option in extractor.lower() and not sync == sync_option:
+                        raise ValueError(f'Extractor "{extractor}" and sync "{sync}" do not match')
+                # Look for the extractor in the behavior extractors module
+                if hasattr(btasks, extractor):
+                    task = getattr(btasks, extractor)
+                # This may happen that the extractor is tied to a specific sync task: look for TrialsChoiceWorldBpod for # example
+                elif hasattr(btasks, extractor + sync.capitalize()):
+                    task = getattr(btasks, extractor + sync.capitalize())
+                else:
+                    # lookup in the project extraction repo if we find an extractor class
+                    import projects.extraction_tasks
+                    if hasattr(projects.extraction_tasks, extractor):
+                        task = getattr(projects.extraction_tasks, extractor)
+                    else:
+                        raise ValueError(f'Extractor "{extractor}" not found in main IBL pipeline nor in personal projects')
                 # Rename the class to something more informative
                 task_name = f'{task.__name__}_{i:02}'
                 # For now we assume that the second task in the list is always the trials extractor, which is dependent
