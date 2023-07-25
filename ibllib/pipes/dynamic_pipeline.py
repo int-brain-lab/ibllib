@@ -19,7 +19,8 @@ import ibllib.pipes.behavior_tasks as btasks
 import ibllib.pipes.video_tasks as vtasks
 import ibllib.pipes.ephys_tasks as etasks
 import ibllib.pipes.audio_tasks as atasks
-from ibllib.pipes.photometry_tasks import TaskFibrePhotometryPreprocess, TaskFibrePhotometryRegisterRaw
+import ibllib.pipes.photometry_tasks as ptasks
+# from ibllib.pipes.photometry_tasks import FibrePhotometryPreprocess, FibrePhotometryRegisterRaw
 
 _logger = logging.getLogger(__name__)
 
@@ -307,9 +308,9 @@ def make_pipeline(session_path, **pkwargs):
                 tasks[tn] = type((tn := f'VideoSyncQC_{sync}'), (vtasks.VideoSyncQcNidq,), {})(
                     **kwargs, **video_kwargs, **sync_kwargs, parents=[tasks['VideoCompress']] + sync_tasks)
 
-        if len(video_kwargs['cameras']) == 3:
-            tasks[tn] = type((tn := 'DLC'), (epp.EphysDLC,), {})(
-                **kwargs, parents=[dlc_parent_task])
+        if sync_kwargs['sync'] != 'bpod':
+            tasks[tn] = type((tn := 'DLC'), (vtasks.DLC,), {})(
+                **kwargs, **video_kwargs, parents=[dlc_parent_task])
             tasks['PostDLC'] = type('PostDLC', (epp.EphysPostDLC,), {})(
                 **kwargs, parents=[tasks['DLC'], tasks[f'VideoSyncQC_{sync}']])
 
@@ -357,11 +358,11 @@ def make_pipeline(session_path, **pkwargs):
     if 'photometry' in devices:
         # {'collection': 'raw_photometry_data', 'sync_label': 'frame_trigger', 'regions': ['Region1G', 'Region3G']}
         photometry_kwargs = devices['photometry']
-        tasks['TaskFibrePhotometryRegisterRaw'] = type('TaskFibrePhotometryRegisterRaw', (
-            TaskFibrePhotometryRegisterRaw,), {})(**kwargs, **photometry_kwargs)
-        tasks['TaskFibrePhotometryPreprocess'] = type('TaskFibrePhotometryPreprocess', (
-            TaskFibrePhotometryPreprocess,), {})(**kwargs, **photometry_kwargs, **sync_kwargs,
-                                                 parents=[tasks['TaskFibrePhotometryRegisterRaw']] + sync_tasks)
+        tasks['FibrePhotometryRegisterRaw'] = type('FibrePhotometryRegisterRaw', (
+            ptasks.FibrePhotometryRegisterRaw,), {})(**kwargs, **photometry_kwargs)
+        tasks['FibrePhotometryPreprocess'] = type('FibrePhotometryPreprocess', (
+            ptasks.FibrePhotometryPreprocess,), {})(**kwargs, **photometry_kwargs, **sync_kwargs,
+                                                    parents=[tasks['FibrePhotometryRegisterRaw']] + sync_tasks)
 
     p = mtasks.Pipeline(session_path=session_path, **pkwargs)
     p.tasks = tasks
