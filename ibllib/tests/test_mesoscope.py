@@ -11,7 +11,7 @@ import numpy as np
 
 from ibllib.pipes.mesoscope_tasks import MesoscopePreprocess, MesoscopeFOV, \
     find_triangle, surface_normal, _nearest_neighbour_1d
-from . import TEST_DB
+from ibllib.tests import TEST_DB
 
 # Mock suit2p which is imported in MesoscopePreprocess
 attrs = {'default_ops.return_value': {}}
