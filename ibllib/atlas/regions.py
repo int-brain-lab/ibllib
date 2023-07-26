@@ -472,9 +472,12 @@ class BrainRegions(_BrainRegions):
     A struct of Allen brain regions, their names, IDs, relationships and associated plot colours.
 
     ibllib.atlas.regions.BrainRegions(brainmap='Allen')
+
+    Notes
+    -----
     The Allen atlas ids are kept intact but lateralized as follows: labels are duplicated
-     and ids multiplied by -1, with the understanding that left hemisphere regions have negative
-     ids.
+    and ids multiplied by -1, with the understanding that left hemisphere regions have negative
+    ids.
     """
     def __init__(self):
         df_regions = pd.read_csv(ALLEN_FILE_REGIONS)

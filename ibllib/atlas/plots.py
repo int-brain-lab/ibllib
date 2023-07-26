@@ -1,30 +1,37 @@
 """
-Module that has convenience plotting functions for 2D atlas slices
+Module that has convenience plotting functions for 2D atlas slices and flatmaps.
 """
-import matplotlib
-import matplotlib.pyplot as plt
-import numpy as np
+import copy
 import logging
-from iblutil.io.hashfile import md5
-import one.remote.aws as aws
 
+import numpy as np
 from scipy.ndimage import gaussian_filter
 from scipy.stats import binned_statistic
+import matplotlib
+import matplotlib.pyplot as plt
 from matplotlib import cm
 from matplotlib.patches import Polygon, PathPatch
 import matplotlib.path as mpath
+from iblutil.io.hashfile import md5
+import one.remote.aws as aws
 
-from ibllib.atlas import AllenAtlas, FlatMap
+from ibllib.atlas import AllenAtlas
+from ibllib.atlas.flatmaps import FlatMap, _swanson_labels_positions, swanson, swanson_json
 from ibllib.atlas.regions import BrainRegions
 from iblutil.numerical import ismember
-
 from ibllib.atlas.atlas import BrainCoordinates, ALLEN_CCF_LANDMARKS_MLAPDV_UM
 
 _logger = logging.getLogger(__name__)
 
 
 def get_bc_10():
+    """
+    FIXME Document
 
+    Returns
+    -------
+
+    """
     dims2xyz = np.array([1, 0, 2])
     res_um = 10
     scaling = np.array([1, 1, 1])
@@ -40,11 +47,46 @@ def get_bc_10():
 
 
 def plot_polygon(ax, xy, color, reg_id, edgecolor='k', linewidth=0.3, alpha=1):
+    """
+    FIXME Document
+
+    Parameters
+    ----------
+    ax
+    xy
+    color
+    reg_id
+    edgecolor
+    linewidth
+    alpha
+
+    Returns
+    -------
+
+    """
     p = Polygon(xy, facecolor=color, edgecolor=edgecolor, linewidth=linewidth, alpha=alpha, gid=f'region_{reg_id}')
     ax.add_patch(p)
 
 
 def plot_polygon_with_hole(ax, vertices, codes, color, reg_id, edgecolor='k', linewidth=0.3, alpha=1):
+    """
+    FIXME Document
+
+    Parameters
+    ----------
+    ax
+    vertices
+    codes
+    color
+    reg_id
+    edgecolor
+    linewidth
+    alpha
+
+    Returns
+    -------
+
+    """
     path = mpath.Path(vertices, codes)
     patch = PathPatch(path, facecolor=color, edgecolor=edgecolor, linewidth=linewidth, alpha=alpha, gid=f'region_{reg_id}')
     ax.add_patch(patch)
@@ -91,11 +133,25 @@ def prepare_lr_data(acronyms_lh, values_lh, acronyms_rh, values_rh):
 
 def reorder_data(acronyms, values, brain_regions=None):
     """
-    Reorder list of acronyms and values to match the Allen ordering
-    :param acronyms: array of acronyms
-    :param values: array of values
-    :param brain_regions: BrainRegions object
-    :return: ordered array of acronyms and values
+    Reorder list of acronyms and values to match the Allen ordering.
+
+    TODO Document better
+
+    Parameters
+    ----------
+    acronyms : array_like of str
+        The acronyms to match the Allen ordering, whatever that means.
+    values : array_like
+        An array of some sort of values I guess...
+    brain_regions : ibllib.atlas.regions.BrainRegions
+        A brain regions object.
+
+    Returns
+    -------
+    numpy.array of str
+        An ordered array of acronyms
+    numpy.array
+        An ordered array of values. I don't know what those values are, not IDs, so maybe indices?
     """
 
     br = brain_regions or BrainRegions()
@@ -115,7 +171,18 @@ def reorder_data(acronyms, values, brain_regions=None):
 
 
 def load_slice_files(slice, mapping):
+    """
+    FIXME Document
 
+    Parameters
+    ----------
+    slice
+    mapping
+
+    Returns
+    -------
+
+    """
     OLD_MD5 = {
         'coronal': [],
         'sagittal': [],
@@ -136,7 +203,28 @@ def load_slice_files(slice, mapping):
 
 def _plot_slice_vector(coords, slice, values, mapping, empty_color='silver', clevels=None, cmap='viridis', show_cbar=False,
                        ba=None, ax=None, slice_json=None, **kwargs):
+    """
+    FIXME Document
 
+    Parameters
+    ----------
+    coords
+    slice
+    values
+    mapping
+    empty_color
+    clevels
+    cmap
+    show_cbar
+    ba
+    ax
+    slice_json
+    kwargs
+
+    Returns
+    -------
+
+    """
     ba = ba or AllenAtlas()
     mapping = mapping.split('-')[0].lower()
     if clevels is None:
@@ -498,7 +586,27 @@ def compute_volume_from_points(xyz, values=None, aggr='sum', fwhm=100, ba=None):
 
 def _plot_slice(coord, slice, region_values, vol_type, background='boundary', map='Allen', clevels=None, cmap='viridis',
                 show_cbar=False, ba=None, ax=None):
+    """
+    FIXME Document
 
+    Parameters
+    ----------
+    coord
+    slice
+    region_values
+    vol_type
+    background
+    map
+    clevels
+    cmap
+    show_cbar
+    ba
+    ax
+
+    Returns
+    -------
+
+    """
     ba = ba or AllenAtlas()
 
     if clevels is None:
@@ -558,6 +666,23 @@ def _plot_slice(coord, slice, region_values, vol_type, background='boundary', ma
 
 
 def plot_scalar_on_barplot(acronyms, values, errors=None, order=True, ylim=None, ax=None, brain_regions=None):
+    """
+    FIXME Document
+
+    Parameters
+    ----------
+    acronyms
+    values
+    errors
+    order
+    ylim
+    ax
+    brain_regions
+
+    Returns
+    -------
+
+    """
     br = brain_regions or BrainRegions()
 
     if order:
@@ -574,3 +699,334 @@ def plot_scalar_on_barplot(acronyms, values, errors=None, order=True, ylim=None,
     ax.bar(np.arange(acronyms.size), values, color=colours)
 
     return fig, ax
+
+
+def plot_swanson_vector(acronyms=None, values=None, ax=None, hemisphere=None, br=None, orientation='landscape',
+                        empty_color='silver', vmin=None, vmax=None, cmap='viridis', annotate=False, annotate_n=10,
+                        annotate_order='top', annotate_list=None, mask=None, mask_color='w', fontsize=10, **kwargs):
+    """
+    FIXME Document!
+
+    Parameters
+    ----------
+    acronyms FIXME Document
+    values FIXME Document
+    ax : matplotlib.pyplot.Axes
+        An axis object to plot onto.
+    hemisphere : {'left', 'right', 'both', 'mirror'}
+        The hemisphere to display.
+    br : ibllib.atlas.BrainRegions
+        A brain regions object.
+    orientation : {landscape', 'portrait'}, default='landscape'
+        The plot orientation.
+    empty_color : str, tuple of int, default='silver'
+        The greyscale matplotlib color code or an RGBA int8 tuple defining the filling of brain
+        regions not provided.
+    vmin FIXME Document
+    vmax FIXME Document
+    cmap FIXME Document
+    annotate : bool, default=False
+        If true, labels the regions with acronyms.
+    annotate_n FIXME Document
+    annotate_order FIXME Document
+    annotate_list FIXME Document
+    mask FIXME Document
+    mask_color FIXME Document
+    fontsize : int
+        The annotation font size in points.
+    **kwargs
+        See plot_polygon and plot_polygon_with_hole.
+
+    Returns
+    -------
+    matplotlib.pyplot.Axes
+        The plotted axes.
+
+    """
+    br = BrainRegions() if br is None else br
+    br.compute_hierarchy()
+    sw_shape = (2968, 6820)
+
+    if ax is None:
+        fig, ax = plt.subplots()
+        ax.set_axis_off()
+
+    if hemisphere != 'both' and acronyms is not None and not isinstance(acronyms[0], str):
+        # If negative atlas ids are passed in and we are not going to lateralise (e.g hemisphere='both')
+        # transfer them over to one hemisphere
+        acronyms = np.abs(acronyms)
+
+    if acronyms is not None:
+        ibr, vals = br.propagate_down(acronyms, values)
+        colormap = matplotlib.colormaps.get_cmap(cmap)
+        vmin = vmin or np.nanmin(vals)
+        vmax = vmax or np.nanmax(vals)
+        norm = matplotlib.colors.Normalize(vmin=vmin, vmax=vmax)
+        rgba_color = colormap(norm(vals), bytes=True)
+
+    if mask is not None:
+        imr, _ = br.propagate_down(mask, np.ones_like(mask))
+    else:
+        imr = []
+
+    sw_json = swanson_json()
+    if hemisphere == 'both':
+        sw_rev = copy.deepcopy(sw_json)
+        for sw in sw_rev:
+            sw['thisID'] = sw['thisID'] + br.n_lr
+        sw_json = sw_json + sw_rev
+
+    plot_idx = []
+    plot_val = []
+    for i, reg in enumerate(sw_json):
+
+        coords = reg['coordsReg']
+        reg_id = reg['thisID']
+
+        if acronyms is None:
+            color = br.rgba[br.mappings['Swanson'][reg['thisID']]] / 255
+            if hemisphere is None:
+                col_l = None
+                col_r = color
+            elif hemisphere == 'left':
+                col_l = empty_color if orientation == 'portrait' else color
+                col_r = color if orientation == 'portrait' else empty_color
+            elif hemisphere == 'right':
+                col_l = color if orientation == 'portrait' else empty_color
+                col_r = empty_color if orientation == 'portrait' else color
+            elif hemisphere in ['both', 'mirror']:
+                col_l = color
+                col_r = color
+        else:
+            idx = np.where(ibr == reg['thisID'])[0]
+            idxm = np.where(imr == reg['thisID'])[0]
+            if len(idx) > 0:
+                plot_idx.append(ibr[idx[0]])
+                plot_val.append(vals[idx[0]])
+                color = rgba_color[idx[0]] / 255
+            elif len(idxm) > 0:
+                color = mask_color
+            else:
+                color = empty_color
+
+            if hemisphere is None:
+                col_l = None
+                col_r = color
+            elif hemisphere == 'left':
+                col_l = empty_color if orientation == 'portrait' else color
+                col_r = color if orientation == 'portrait' else empty_color
+            elif hemisphere == 'right':
+                col_l = color if orientation == 'portrait' else empty_color
+                col_r = empty_color if orientation == 'portrait' else color
+            elif hemisphere == 'mirror':
+                col_l = color
+                col_r = color
+            elif hemisphere == 'both':
+                if reg_id <= br.n_lr:
+                    col_l = color if orientation == 'portrait' else None
+                    col_r = None if orientation == 'portrait' else color
+                else:
+                    col_l = None if orientation == 'portrait' else color
+                    col_r = color if orientation == 'portrait' else None
+
+        if reg['hole']:
+            vertices, codes = coords_for_poly_hole(coords)
+            if orientation == 'portrait':
+                vertices[:, [0, 1]] = vertices[:, [1, 0]]
+                if col_r is not None:
+                    plot_polygon_with_hole(ax, vertices, codes, col_r, reg_id, **kwargs)
+                if col_l is not None:
+                    vertices_inv = np.copy(vertices)
+                    vertices_inv[:, 0] = -1 * vertices_inv[:, 0] + (sw_shape[0] * 2)
+                    plot_polygon_with_hole(ax, vertices_inv, codes, col_l, reg_id, **kwargs)
+            else:
+                if col_r is not None:
+                    plot_polygon_with_hole(ax, vertices, codes, col_r, reg_id, **kwargs)
+                if col_l is not None:
+                    vertices_inv = np.copy(vertices)
+                    vertices_inv[:, 1] = -1 * vertices_inv[:, 1] + (sw_shape[0] * 2)
+                    plot_polygon_with_hole(ax, vertices_inv, codes, col_l, reg_id, **kwargs)
+        else:
+            coords = [coords] if type(coords) == dict else coords
+            for c in coords:
+                if orientation == 'portrait':
+                    xy = np.c_[c['y'], c['x']]
+                    if col_r is not None:
+                        plot_polygon(ax, xy, col_r, reg_id, **kwargs)
+                    if col_l is not None:
+                        xy_inv = np.copy(xy)
+                        xy_inv[:, 0] = -1 * xy_inv[:, 0] + (sw_shape[0] * 2)
+                        plot_polygon(ax, xy_inv, col_l, reg_id, **kwargs)
+                else:
+                    xy = np.c_[c['x'], c['y']]
+                    if col_r is not None:
+                        plot_polygon(ax, xy, col_r, reg_id, **kwargs)
+                    if col_l is not None:
+                        xy_inv = np.copy(xy)
+                        xy_inv[:, 1] = -1 * xy_inv[:, 1] + (sw_shape[0] * 2)
+                        plot_polygon(ax, xy_inv, col_l, reg_id, **kwargs)
+
+    if orientation == 'portrait':
+        ax.set_ylim(0, sw_shape[1])
+        if hemisphere is None:
+            ax.set_xlim(0, sw_shape[0])
+        else:
+            ax.set_xlim(0, 2 * sw_shape[0])
+    else:
+        ax.set_xlim(0, sw_shape[1])
+        if hemisphere is None:
+            ax.set_ylim(0, sw_shape[0])
+        else:
+            ax.set_ylim(0, 2 * sw_shape[0])
+
+    if annotate:
+        if annotate_list is not None:
+            annotate_swanson(ax=ax, acronyms=annotate_list, orientation=orientation, br=br, thres=10, fontsize=fontsize)
+        elif acronyms is not None:
+            ids = br.index2id(np.array(plot_idx))
+            _, indices, _ = np.intersect1d(br.id, br.remap(ids, 'Swanson-lr'), return_indices=True)
+            a, b = ismember(ids, br.id[indices])
+            sorted_id = ids[a]
+            vals = np.array(plot_val)[a]
+            sort_vals = np.argsort(vals) if annotate_order == 'bottom' else np.argsort(vals)[::-1]
+            annotate_swanson(ax=ax, acronyms=sorted_id[sort_vals[:annotate_n]], orientation=orientation, br=br,
+                             thres=10, fontsize=fontsize)
+        else:
+            annotate_swanson(ax=ax, orientation=orientation, br=br, fontsize=fontsize)
+
+    def format_coord(x, y):
+        # FIXME Document!
+        patch = next((p for p in ax.patches if p.contains_point(p.get_transform().transform(np.r_[x, y]))), None)
+        if patch is not None:
+            ind = int(patch.get_gid().split('_')[1])
+            ancestors = br.ancestors(br.id[ind])['acronym']
+            return f'sw-{ind}, {ancestors}, aid={br.id[ind]}-{br.acronym[ind]} \n {br.name[ind]}'
+        else:
+            return ''
+
+    ax.format_coord = format_coord
+
+    ax.invert_yaxis()
+    ax.set_aspect('equal')
+    return ax
+
+
+def plot_swanson(acronyms=None, values=None, ax=None, hemisphere=None, br=None,
+                 orientation='landscape', annotate=False, empty_color='silver', **kwargs):
+    """
+    Displays the 2D image corresponding to the swanson flatmap.
+
+    This case is different from the others in the sense that only a region maps to another regions,
+    there is no correspondence to the spatial 3D coordinates.
+
+    Parameters
+    ----------
+    acronyms FIXME Document
+    values FIXME Document
+    ax : matplotlib.pyplot.Axes
+        An axis object to plot onto.
+    hemisphere : {'left', 'right', 'both', 'mirror'}
+        The hemisphere to display.
+    br : ibllib.atlas.BrainRegions
+        A brain regions object.
+    orientation : {landscape', 'portrait'}, default='landscape'
+        The plot orientation.
+    annotate : bool, default=False
+        If true, labels the regions with acronyms.
+    empty_color : str, tuple of int, default='silver'
+        The greyscale matplotlib color code or an RGBA int8 tuple defining the filling of brain
+        regions not provided.
+    **kwargs
+        See matplotlib.pyplot.imshow.
+
+    Returns
+    -------
+    matplotlib.pyplot.Axes
+        The plotted axes.
+    """
+    mapping = 'Swanson'
+    br = BrainRegions() if br is None else br
+    br.compute_hierarchy()
+    s2a = swanson()
+    # both hemishpere
+    if hemisphere == 'both':
+        _s2a = s2a + np.sum(br.id > 0)
+        _s2a[s2a == 0] = 0
+        _s2a[s2a == 1] = 1
+        s2a = np.r_[s2a, np.flipud(_s2a)]
+        mapping = 'Swanson-lr'
+    elif hemisphere == 'mirror':
+        s2a = np.r_[s2a, np.flipud(s2a)]
+    if orientation == 'portrait':
+        s2a = np.transpose(s2a)
+    if acronyms is None:
+        regions = br.mappings[mapping][s2a]
+        im = br.rgba[regions]
+        iswan = None
+    else:
+        ibr, vals = br.propagate_down(acronyms, values)
+        # we now have the mapped regions and aggregated values, map values onto swanson map
+        iswan, iv = ismember(s2a, ibr)
+        im = np.zeros_like(s2a, dtype=np.float32)
+        im[iswan] = vals[iv]
+        im[~iswan] = np.nan
+    if not ax:
+        ax = plt.gca()
+        ax.set_axis_off()  # unless provided we don't need scales here
+    ax.imshow(im, **kwargs)
+    # overlay the boundaries if value plot
+    imb = np.zeros((*s2a.shape[:2], 4), dtype=np.uint8)
+    # fill in the empty regions with the blank regions colours if necessary
+    if iswan is not None:
+        imb[~iswan] = (np.array(matplotlib.colors.to_rgba(empty_color)) * 255).astype('uint8')
+    imb[s2a == 0] = 255
+    # imb[s2a == 1] = np.array([167, 169, 172, 255])
+    imb[s2a == 1] = np.array([0, 0, 0, 255])
+    ax.imshow(imb)
+    if annotate:
+        annotate_swanson(ax=ax, orientation=orientation, br=br)
+
+    # provides the mean to see the region on axis
+    def format_coord(x, y):
+        ind = s2a[int(y), int(x)]
+        ancestors = br.ancestors(br.id[ind])['acronym']
+        return f'sw-{ind}, {ancestors}, aid={br.id[ind]}-{br.acronym[ind]} \n {br.name[ind]}'
+
+    ax.format_coord = format_coord
+    return ax
+
+
+def annotate_swanson(ax, acronyms=None, orientation='landscape', br=None, thres=20000, **kwargs):
+    """
+    Display annotations on a Swanson flatmap.
+
+    Parameters
+    ----------
+    ax : matplotlib.pyplot.Axes
+        An axis object to plot onto.
+    acronyms : array_like
+        A list or numpy array of acronyms or Allen region IDs. If None plot all acronyms.
+    orientation : {landscape', 'portrait'}, default='landscape'
+        The plot orientation.
+    br : ibllib.atlas.BrainRegions
+        A brain regions object.
+    thres : int, default=20000
+        The number of pixels above which a region is labelled.
+    **kwargs
+        See matplotlib.pyplot.Axes.annotate.
+
+    """
+    br = br or BrainRegions()
+    if acronyms is None:
+        indices = np.arange(br.id.size)
+    else:  # TODO we should in fact remap and compute labels for hierarchical regions
+        aids = br.parse_acronyms_argument(acronyms)
+        _, indices, _ = np.intersect1d(br.id, br.remap(aids, 'Swanson-lr'), return_indices=True)
+    labels = _swanson_labels_positions(thres=thres)
+    for ilabel in labels:
+        # do not display unwanted labels
+        if ilabel not in indices:
+            continue
+        # rotate the labels if the display is in portrait mode
+        xy = np.flip(labels[ilabel]) if orientation == 'portrait' else labels[ilabel]
+        ax.annotate(br.acronym[ilabel], xy=xy, ha='center', va='center', **kwargs)

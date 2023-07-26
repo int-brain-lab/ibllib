@@ -18,4 +18,4 @@ http://download.alleninstitute.org/informatics-archive/current-release/mouse_ccf
 """
 from .atlas import *  # noqa
 from .regions import regions_from_allen_csv
-# from .flatmaps import FlatMap
+from .flatmaps import FlatMap
