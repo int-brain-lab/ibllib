@@ -117,7 +117,7 @@ class TestMesoscopeFOV(unittest.TestCase):
     def test_find_triangle(self):
         """Test for find_triangle function."""
         points = np.array([[2.435, -3.37], [2.435, -1.82], [2.635, -2.], [2.535, -1.7]])
-        connectivity_list = np.array([[0, 1, 2], [1, 2, 3], [2, 3, 4], [3, 4, 5]])
+        connectivity_list = np.array([[0, 1, 2], [1, 2, 3], [2, 3, 4], [3, 4, 5]], dtype=np.intp)
         point = np.array([2.6, -1.9])
         self.assertEqual(1, find_triangle(point, points, connectivity_list))
         point = np.array([3., 1.])  # outside of defined vertices

@@ -38,7 +38,6 @@ from ibllib.pipes import base_tasks
 from ibllib.io.extractors import mesoscope
 from ibllib.atlas import ALLEN_CCF_LANDMARKS_MLAPDV_UM, MRITorontoAtlas
 
-import deploy
 
 _logger = logging.getLogger(__name__)
 Provenance = enum.Enum('Provenance', ['ESTIMATE', 'FUNCTIONAL', 'LANDMARK', 'HISTOLOGY'])  # py3.11 make StrEnum
@@ -700,15 +699,12 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
         meta_file = next(self.session_path.glob(f'{collection}/{filename}'), None)
         meta = alfio.load_file_content(meta_file) or {}
         nFOV = len(meta.get('FOV', []))
-        mesoscope_path = Path(deploy.__file__).parent / 'mesoscope'
-        flat_tri = alfio.load_object(mesoscope_path, 'flatTR')
-        dorsal_tri = alfio.load_object(mesoscope_path, 'dorsalTR')
 
         suffix = None if provenance is Provenance.HISTOLOGY else provenance.name.lower()
         _logger.info('Extracting %s MLAPDV datasets', suffix or 'final')
 
         # Extract mean image MLAPDV coordinates and brain location IDs
-        mean_image_mlapdv, mean_image_ids = self.project_mlapdv(meta, flat_tri, dorsal_tri)
+        mean_image_mlapdv, mean_image_ids = self.project_mlapdv(meta)
 
         # Save the meta data file with new coordinate fields
         with open(meta_file, 'w') as fp:
@@ -892,7 +888,30 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
                 alyx_fovs[-1]['location'].append(self.one.alyx.rest('fov-location', 'create', data=data))
         return alyx_fovs
 
-    def project_mlapdv(self, meta, flat_tri, dorsal_tri, atlas=None):
+    def load_triangulation(self):
+        """
+        Load the surface triangulation file.
+
+        A triangle mesh of the smoothed convex hull of the dorsal surface of the mouse brain,
+        generated from the 2017 Allen 10um annotation volume. This triangulation was generated in
+        MATLAB.
+
+        Returns
+        -------
+        points : numpy.array
+            An N by 3 float array of x-y vertices, defining all points of the triangle mesh. These
+            are in um relative to the IBL bregma coordinates.
+        connectivity_list : numpy.array
+            An N by 3 integer array of vertex indices defining all points that form a triangle.
+        """
+        fixture_path = Path(mesoscope.__file__).parent.joinpath('mesoscope')
+        surface_triangulation = np.load(fixture_path / 'surface_triangulation.npz')
+        points = surface_triangulation['points'].astype('f8')
+        connectivity_list = surface_triangulation['connectivity_list']
+        surface_triangulation.close()
+        return points, connectivity_list
+
+    def project_mlapdv(self, meta, atlas=None):
         """
         Calculate the mean image pixel locations in MLAPDV coordinates and determine the brain
         location IDs.
@@ -905,12 +924,6 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
         meta : dict
             The raw imaging data meta file, containing coordinates for the centre of each field of
             view.
-        flat_tri : one.alf.io.AlfBunch
-            A bunch with keys ('connectivityList', 'points'), containing numpy arrays of triangles
-            representing the flattened dorsal surface of brain.
-        dorsal_tri : one.alf.io.AlfBunch
-            A bunch with keys ('connectivityList', 'points'), containing numpy arrays of triangles
-            representing the dorsal surface of brain.
         atlas : ibllib.atlas.Atlas
             An atlas instance.
 
@@ -921,27 +934,37 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
         dict
             A map of FOV number (int) to mean image brain location IDs as a 2D numpy int array.
         """
-        # TODO Add readme to go with surface data, etc.
         mlapdv = {}
         location_id = {}
         # Use the MRI atlas as this applies scaling, particularly along the DV axis to (hopefully)
         # more accurately represent the living brain.
         atlas = atlas or MRITorontoAtlas(res_um=10)
-        coord_ml = meta['centerMM']['ML']
-        coord_ap = meta['centerMM']['AP']
-        pt = [coord_ml, coord_ap]
+        # The centre of the craniotomy / imaging window
+        coord_ml = meta['centerMM']['ML'] * 1e3  # mm -> um
+        coord_ap = meta['centerMM']['AP'] * 1e3  # mm -> um
+        pt = np.array([coord_ml, coord_ap])
 
-        face_ind = find_triangle(np.array(pt), flat_tri.points, flat_tri.connectivityList)
+        points, connectivity_list = self.load_triangulation()
+        # Only keep faces that have normals pointing up (positive DV value).
+        # Calculate the normal vector pointing out of the convex hull.
+        triangles = points[connectivity_list, :]
+        normals = surface_normal(triangles)
+        up_faces, = np.where(normals[:, -1] > 0)
+        # only keep triangles that have normal vector with positive DV component
+        dorsal_connectivity_list = connectivity_list[up_faces, :]
+        # Flatten triangulation by dropping the dorsal coordinates and find the location of the
+        # window center (we convert mm -> um here)
+        face_ind = find_triangle(pt * 1e-3, points[:, :2] * 1e-3, dorsal_connectivity_list.astype(np.intp))
         assert face_ind != -1
 
-        dorsal_triangle = dorsal_tri.points[dorsal_tri.connectivityList[face_ind, :], :]
+        dorsal_triangle = points[dorsal_connectivity_list[face_ind, :], :]
 
         # Get the surface normal unit vector of dorsal triangle
         normal_vector = surface_normal(dorsal_triangle)
 
         # find the coordDV that sits on the triangular face and had [coordML, coordAP] coordinates;
         # the three vertices defining the triangle
-        face_vertices = dorsal_tri.points[dorsal_tri.connectivityList[face_ind, :], :]
+        face_vertices = points[dorsal_connectivity_list[face_ind, :], :]
 
         # all the vertices should be on the plane ax + by + cz = 1, so we can find
         # the abc coefficients by inverting the three equations for the three vertices
@@ -949,7 +972,7 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
 
         # and then find a point on that plane that corresponds to a given x-y
         # coordinate (which is ML-AP coordinate)
-        coord_dv = (1 - np.array([coord_ml, coord_ap]) @ abc[:2]) / abc[2]
+        coord_dv = (1 - pt @ abc[:2]) / abc[2]
 
         # We should not use the actual surface of the brain for this, as it might be in one of the sulci
         # DO NOT USE THIS:
@@ -969,8 +992,7 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
         # Let's shift the coordinates relative to bregma
         voxel_size = atlas.res_um  # [um] resolution of the atlas
         bregma_coords = ALLEN_CCF_LANDMARKS_MLAPDV_UM['bregma'] / voxel_size  # (ml, ap, dv)
-        # bregma_coords = np.array([570, 540, 0])  # Andy's bregma FIXME remove
-        axis_ml_um = (np.arange(nML) - bregma_coords[0] - .5) * voxel_size  # additional 0.5 for symmetry
+        axis_ml_um = (np.arange(nML) - bregma_coords[0]) * voxel_size
         axis_ap_um = (np.arange(nAP) - bregma_coords[1]) * voxel_size * -1.
         axis_dv_um = (np.arange(nDV) - bregma_coords[2]) * voxel_size * -1.
 
@@ -990,12 +1012,17 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
                     'bottomLeft': fov.pop('bottomLeftMM'),
                     'bottomRight': fov.pop('bottomRightMM')
                 }
+            # The four corners of the FOV, determined by taking the center of the craniotomy in MM,
+            # the x-y coordinates of the imaging window center (from the tiled reference image) in
+            # galvanometer units, and the x-y coordinates of the FOV center in galvanometer units.
             values = [[fov['MM']['topLeft'][0], fov['MM']['topRight'][0]],
                       [fov['MM']['bottomLeft'][0], fov['MM']['bottomRight'][0]]]
+            values = np.array(values) * 1e3  # mm -> um
             xx = interpn(points, values, (y_px_idx, x_px_idx))
 
             values = [[fov['MM']['topLeft'][1], fov['MM']['topRight'][1]],
                       [fov['MM']['bottomLeft'][1], fov['MM']['bottomRight'][1]]]
+            values = np.array(values) * 1e3  # mm -> um
             yy = interpn(points, values, (y_px_idx, x_px_idx))
 
             xx = xx.flatten() - coord_ml
@@ -1005,7 +1032,6 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
             # the coords are still on the coverslip, but now have 3D values
             coords = np.outer(xx, vX) + np.outer(yy, vY)  # (vX * xx) + (vY * yy)
             coords = coords + [coord_ml, coord_ap, coord_dv]
-            coords = coords * 1e3  # mm -> um
 
             # for each point of the FOV create a line parametrization (trajectory normal to the coverslip plane).
             # start just above the coverslip and go 3 mm down, should be enough to 'meet' the brain
@@ -1107,7 +1133,7 @@ def in_triangle(triangle, point):
     return diff <= np.abs(REL_TOL * A)  # isclose not yet implemented in numba 0.57
 
 
-@nb.njit('i8(f8[:], f8[:,:], i4[:,:])', nogil=True)
+@nb.njit('i8(f8[:], f8[:,:], intp[:,:])', nogil=True)
 def find_triangle(point, vertices, connectivity_list):
     """
     Find which vertices contain a given point.
