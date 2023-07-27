@@ -135,7 +135,7 @@ def reorder_data(acronyms, values, brain_regions=None):
     """
     Reorder list of acronyms and values to match the Allen ordering.
 
-    TODO Document better
+    TODO Document more
 
     Parameters
     ----------

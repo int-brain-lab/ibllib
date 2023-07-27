@@ -9,77 +9,74 @@ Terminology
 There are many terms used somewhat incoherently within this API and the community at large. Below
 are some definitions of the most common terms.
 
-* **Atlas** - A set of serial sections along different anatomical planes of a brain where each
-  relevant brain structure is assigned a number of coordinates to define its outline or volume.
-  An atlas essentially comprises a set of images, annotations, and a coordinate system.
+* **Atlas** - A set of serial sections along different anatomical planes of a brain where each relevant brain structure is
+  assigned a number of coordinates to define its outline or volume. An atlas essentially comprises a set of images, annotations,
+  and a coordinate system.
 * **Annotation** - A set of identifiers assigned to different atlas regions.
-* **Mapping** - A function that maps one ordered list of brain region IDs to another, allowing one
-  to control annotation granularity and brain region hierarchy, or to translate brain region names
-  from one atlas to another. The default mapping is identity.
-* **Coordinate framework** - The way in which an atlas translates image coordinates (e.g. Cartesian
-  or sperical coordinates) to real-world anatomical coordinates in (typically physical distance
-  from a given landmark such as bregma, along three axes, ML-AP-DV).
-* **Reference space** - The coordinate system and annotations used by a given atlas. It is
-  sometimes useful to compare anatomy between atlases, which requires expressing one atlas in
-  another's reference space.
-* **Scaling** - Atlases typically comprise images averaged over a number of brains. Scaling allows
-  one to account for any consistent and measurable imgaging or tissue distortion, or to better
-  align to an individual brain of a specific size. The default scaling is identity.
+* **Mapping** - A function that maps one ordered list of brain region IDs to another, allowing one to control annotation
+  granularity and brain region hierarchy, or to translate brain region names from one atlas to another. The default mapping is
+  identity.
+* **Coordinate framework** - The way in which an atlas translates image coordinates (e.g. Cartesian or sperical coordinates) to
+  real-world anatomical coordinates in (typically physical distance from a given landmark such as bregma, along three axes,
+  ML-AP-DV).
+* **Reference space** - The coordinate system and annotations used by a given atlas. It is sometimes useful to compare anatomy
+  between atlases, which requires expressing one atlas in another's reference space.
+* **Scaling** - Atlases typically comprise images averaged over a number of brains. Scaling allows one to account for any
+  consistent and measurable imgaging or tissue distortion, or to better align to an individual brain of a specific size. The
+  default scaling is identity.
 * **Flat map** - An annotated projection of the 3D brain to 2D.
-* **Slice** - A 2D section of a brain atlas volume. Typically these are coronal (cut along the
-  medio-lateral axis), sagittal (along the dorso-ventral axis) or transverse a.k.a. axial,
-  horizontal (along the rostro-caudal a.k.a. anterio-posterior axis).
+* **Slice** - A 2D section of a brain atlas volume. Typically these are coronal (cut along the medio-lateral axis), sagittal
+  (along the dorso-ventral axis) or transverse a.k.a. axial, horizontal (along the rostro-caudal a.k.a. anterio-posterior axis).
 
 
 Atlases
 -------
 There are two principal mouse brain atlases in this module:
 
-1. The Allen Common Coordinate Framework (CCF)[1]_.
-2. The Mouse Brain in Stereotaxic Coordinates (MBSC) 4th Edition, by Paxinos G, and Franklin KBJ[2]_.
+1. The Allen Common Coordinate Framework (CCF) [1]_.
+2. The Mouse Brain in Stereotaxic Coordinates (MBSC) 4th Edition, by Paxinos G, and Franklin KBJ [2]_.
 
-The latter is referred to here as the 'Franklin-Paxinos atlas'.  These atlases comprise a 3D array
-of voxels and their associated brain region identifiers (labels) at a given resolution.
+The latter is referred to here as the 'Franklin-Paxinos atlas'.  These atlases comprise a 3D array of voxels and their associated
+brain region identifiers (labels) at a given resolution.
 
 
 Scalings
 --------
-
 Additionally there are two further atlases that apply some form of scaling to the Allen CCF atlas
-to account for distortion that occurs during the imaging and fixation process:
+to account for distortion that occurs during the imaging and tissue fixation process:
 
-1. The Needles atlas -  14 C57BL/6 mice underwent MRI and conventional Nissl histology, then the
-   images were transformed onto the Allen CCF atlas to determine the scaling[3]_.
-2. The MRI Toronto - 12 p65 mice MRI images were averaged and transformed on the Allen CCF atlas to determine the scaling[4]_.
+1. The Needles atlas - 40 C57BL/6J (p84) mice underwnt MRI imaging post-mortem while the brain was still in the skull, followed by
+   conventional Nissl histology. The images were transformed onto the Allen CCF atlas to determine the scaling [3]_.
+2. The MRI Toronto - 12 p65 mice MRI images were taken *in vivo* then averaged and transformed on the Allen CCF atlas to determine
+   the scaling [4]_.
 
-Scaling of this kind can be applied arbitrarily to better represent mouse age and sex[4]_.
+All scaling is currently linear. Scaling of this kind can be applied arbitrarily to better represent a specific mouse age and
+sex [4]_. NB: In addition to distortions, the Allen CFF atlas is pitched down by about 5 degrees relative to a flat skull (where
+bregma and lambda are at the same DV height) [5]_, however this is not currently accounted for.
 
 TODO Mention FlatMap class.
 
 
 Mappings
 --------
-In addition to the atlases there are also multiple brain region mappings that serve one of two
-purposes: 1. control the granularity particular brain regions; 2. support differing anatomical
-sub-devisions or nomenclature.  TODO Give examples
+In addition to the atlases there are also multiple brain region mappings that serve one of two purposes: 1. control the
+granularity particular brain regions; 2. support differing anatomical sub-devisions or nomenclature.  TODO Give examples
 
 
 Notes
 -----
-The Allen atlas and the CCF annotations have different release dates and versions[5]_. The
-annotations used by IBL are the 2017 version.
+The Allen atlas and the CCF annotations have different release dates and versions [6]_. The annotations used by IBL are the 2017
+version.
 
 The IBL uses the following conventions:
 
-- All atlas images have dimensions (AP, ML, DV). With C-ordering this makes coronal slicing most
-  efficient.
+- All atlas images have dimensions (AP, ML, DV). With C-ordering this makes coronal slicing most efficient.
 - Coordinates are provided in the order (ML AP DV) and are in meters relative to bregma.
 - Left hemisphere ML coordinates are -ve; right, +ve.
 - AP coordinates anterior to bregma are +ve; posterior, -ve.
 - DV coordinates ventral to bregma are -ve; ventral +ve.
-- Bregma was determined by asking five experimentalists to pick the voxel containing bregma on the
-  Allen atlas and taking the average.  NB: The midline appears slightly off-center in the Allen
-  atlas image volume.
+- Bregma was determined by asking five experimentalists to pick the voxel containing bregma on the Allen atlas and taking the
+  average.  NB: The midline appears slightly off-center in the Allen atlas image volume.
 
 
 References
@@ -87,12 +84,14 @@ References
 .. [1] © 2015 Allen Institute for Brain Science. Allen Mouse Brain Atlas (2015) with region annotations (2017).
    Available from: http://download.alleninstitute.org/informatics-archive/current-release/mouse_ccf/annotation/
 .. [2] Paxinos G, and Franklin KBJ (2012). The Mouse Brain in Stereotaxic Coordinates, 4th edition (Elsevier Academic Press)
-.. [3] Johnson GA, Badea A, Brandenburg J, Cofer G, Fubara B, Liu S, Nissanov J (2010). Waxholm space: an image-based reference
-   for coordinating mouse brain research. Neuroimage 53(2):365-72. [doi 10.1016/j.neuroimage.2010.06.067]
-.. [4] Qiu, L.R., Fernandes, D.J., Szulc-Lerch, K.U. et al. (2018). Mouse MRI shows brain areas relatively larger
+.. [3] Dorr AE, Lerch JP, Spring S, Kabani N, Henkelman RM (2008). High resolution three-dimensional brain atlas using an average
+   magnetic resonance image of 40 adult C57Bl/6J mice. Neuroimage 42(1):60-9. [doi 10.1016/j.neuroimage.2008.03.037]
+.. [4] Qiu, LR, Fernandes, DJ, Szulc-Lerch, KU et al. (2018). Mouse MRI shows brain areas relatively larger
    in males emerge before those larger in females. Nat Commun 9, 2615. [doi 10.1038/s41467-018-04921-2]
-.. [5] Allen Mouse Common Coordinate Framework Technical White Paper (October 2017 v3)
-       http://help.brain-map.org/download/attachments/8323525/Mouse_Common_Coordinate_Framework.pdf
+.. [5] International Brain Laboratory et al. (2022). Reproducibility of in-vivo electrophysiological measurements in mice.
+   bioRxiv. [doi 10.1101/2022.05.09.491042]
+.. [6] Allen Mouse Common Coordinate Framework Technical White Paper (October 2017 v3)
+   http://help.brain-map.org/download/attachments/8323525/Mouse_Common_Coordinate_Framework.pdf
 
 
 Examples
@@ -132,7 +131,8 @@ Fixtures
 * **annotation_<res_um>_lut_<LUT_VERSION>.npz** - TODO Document
 * **swansonpaths.json** - TODO Document
 * **swanson2allen.npz** - TODO Document
-* **<name>_<res_um>.nrrd** - TODO Document
+* **<flatmap_name>_<res_um>.nrrd** - TODO Document
+* **gene-expression.pqt** - TODO Document
 """
 from .atlas import *  # noqa
 from .regions import regions_from_allen_csv
