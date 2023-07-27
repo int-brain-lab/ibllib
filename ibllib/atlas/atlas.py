@@ -1,69 +1,5 @@
 """
 Classes for manipulating brain atlases, insertions, and coordinates.
-
-TODO Ask Dan about MRI atlas?
-TODO Document how IBL bregma was determined, and why it is not ML centered
-TODO Where does ccf 2017 come from?
-
-FIXME What MLAPDV conventions are used? Left -, Right +; A +, P -; D -, V: +?
- Needles atlas is different
-
-TODO lambda. Olivier received the following -ve APs: 4.2, 4.136, 4.250 (what about DV?)
-
-
-
-Atlases
--------
-There are two principal mouse brain atlases in this module:
-
-1. The Allen Common Coordinate Framework (CCF). FIXME which version? We write 2017 but I find no associated publication
-2. The Mouse Brain in Stereotaxic Coordinates (MBSC) 4th Edition, by Paxinos G, and Franklin KBJ[1]_.
-
-The latter is referred to here as the 'Franklin-Paxinos atlas'.  These atlases comprise a 3D array
-of voxels and their associated brain region identifiers (labels) at a given resolution.
-
-
-Scalings
---------
-
-Additionally there are two further atlases that apply some form of scaling to the Allen CCF atlas
-to account for warping that occurs during the fixation process:
-
-1. The Needles atlas. FIXME what method was used? Is it electrophysiology? Where's the associated publication?
-2. The MRI Toronto - 12 p65 mice MRI images were averaged and transformed on the Allen CCF atlas to determine the scaling[2]_.
-
-TODO Mention FlatMap class.
-
-Mappings
---------
-In addition to the atlases there are also multiple brain region mappings that serve one of two
-purposes: 1. control the granularity particular brain regions; 2. support differing anatomical
-sub-devisions or nomenclature.  TODO Give examples
-
-
-Notes
------
-The IBL uses the following conventions:
-- All atlas images have dimensions (AP, ML, DV) as coronal slices are considered most common.
-- Coordinates are provided in the order (ML AP DV) and are in meters relative to bregma.
-
-References
-----------
-TODO Add all the references to one place
-.. [1] Paxinos G, and Franklin KBJ (2012). The Mouse Brain in Stereotaxic Coordinates, 4th edition (Elsevier Academic Press)
-.. [2] Qiu, L.R., Fernandes, D.J., Szulc-Lerch, K.U. et al. (2018). Mouse MRI shows brain areas relatively larger
-   in males emerge before those larger in females. Nat Commun 9, 2615. https://doi.org/10.1038/s41467-018-04921-2
-
-Examples
---------
-Find bregma position in indices * resolution in um
-
->>> ba = AllenAtlas()
->>> bregma_index = ALLEN_CCF_LANDMARKS_MLAPDV_UM['bregma'] / ba.res_um
-
-Find bregma position in xyz in m (expect this to be 0 0 0)
-
->>> bregma_xyz = ba.bc.i2xyz(bregma_index)
 """
 from pathlib import Path, PurePosixPath
 from dataclasses import dataclass
@@ -261,7 +197,7 @@ class BrainCoordinates:
             One or more x-axis coordinates, relative to the origin, x0.
         round : bool
             If true, round to the nearest index, replacing NaN values with 0.
-        mode : {'raise', 'clip', 'wrap'}
+        mode : {'raise', 'clip', 'wrap'}, default='raise'
             How to behave if the coordinate lies outside of the volume: raise (default) will raise
             a ValueError; 'clip' will replace the index with the closest index inside the volume;
             'wrap' will return the index as is.
@@ -1325,7 +1261,7 @@ class AllenAtlas(BrainAtlas):
         Parameters
         ----------
         res_um : {10, 25, 50} int
-            The Atlas resolution in micometres; one of 10, 25 or 50um.
+            The Atlas resolution in micrometres; one of 10, 25 or 50um.
         scaling : float, numpy.array
             Scale factor along ml, ap, dv for squeeze and stretch (default: [1, 1, 1]).
         mock : bool
@@ -1409,16 +1345,27 @@ class AllenAtlas(BrainAtlas):
 
     def xyz2ccf(self, xyz, ccf_order='mlapdv', mode='raise'):
         """
-        Converts coordinates to the CCF coordinates, which is assumed to be the cube indices
-        times the spacing.
-        :param xyz: mlapdv coordinates in meters, origin Bregma
-        :param ccf_order: order that you want values returned 'mlapdv' (ibl) or 'apdvml'
-        (Allen mcc vertices)
-        :param mode: {‘raise’, 'clip', 'wrap'} determines what to do when determined index lies outside the atlas volume
-                     'raise' will raise a ValueError
-                     'clip' will replace the index with the closest index inside the volume
-                     'wrap' will wrap around to the other side of the volume. This is only here for legacy reasons
-        :return: coordinates in CCF space um, origin is the front left top corner of the data
+        Converts anatomical coordinates to CCF coordinates.
+
+        Anatomical coordinates are in meters, relative to bregma, which CFF coordinates are
+        assumed to be the volume indices multiplied by the spacing in micormeters.
+
+        Parameters
+        ----------
+        xyz : numpy.array
+            An N by 3 array of anatomical coordinates in meters, relative to bregma.
+        ccf_order : {'mlapdv', 'apdvml'}, default='mlapdv'
+            The order of the CCF coordinates returned. For IBL (the default) this is (ML, AP, DV),
+            for Allen MCC vertices, this is (AP, DV, ML).
+        mode : {'raise', 'clip', 'wrap'}, default='raise'
+            How to behave if the coordinate lies outside of the volume: raise (default) will raise
+            a ValueError; 'clip' will replace the index with the closest index inside the volume;
+            'wrap' will return the index as is.
+
+        Returns
+        -------
+        numpy.array
+            Coordinates in CCF space (um, origin is the front left top corner of the data
         volume, order determined by ccf_order
         """
         ordre = self._ccf_order(ccf_order)
@@ -1427,13 +1374,24 @@ class AllenAtlas(BrainAtlas):
 
     def ccf2xyz(self, ccf, ccf_order='mlapdv'):
         """
-        Converts coordinates from the CCF coordinates, which is assumed to be the cube indices
-        times the spacing.
-        :param ccf coordinates in CCF space in um, origin is the front left top corner of the data
-        volume
-        :param ccf_order: order of ccf coordinates given 'mlapdv' (ibl) or 'apdvml'
-        (Allen mcc vertices)
-        :return: xyz: mlapdv coordinates in m, origin Bregma
+        Convert anatomical coordinates from CCF coordinates.
+
+        Anatomical coordinates are in meters, relative to bregma, which CFF coordinates are
+        assumed to be the volume indices multiplied by the spacing in micormeters.
+
+        Parameters
+        ----------
+        ccf : numpy.array
+            An N by 3 array of coordinates in CCF space (atlas volume indices * um resolution). The
+            origin is the front left top corner of the data volume.
+        ccf_order : {'mlapdv', 'apdvml'}, default='mlapdv'
+            The order of the CCF coordinates given. For IBL (the default) this is (ML, AP, DV),
+            for Allen MCC vertices, this is (AP, DV, ML).
+
+        Returns
+        -------
+        numpy.array
+            The MLAPDV coordinates in meters, relative to bregma.
         """
         ordre = self._ccf_order(ccf_order, reverse=True)
         return self.bc.i2xyz((ccf[..., ordre] / float(self.res_um)))
@@ -1484,8 +1442,18 @@ def NeedlesAtlas(*args, **kwargs):
     Instantiates an atlas.BrainAtlas corresponding to the Allen CCF at the given resolution
     using the IBL Bregma and coordinate system. The Needles atlas defines a stretch along AP
     axis and a squeeze along the DV axis.
-    :param res_um: 10, 25 or 50 um
-    :return: atlas.AllenAtlas
+
+    Parameters
+    ----------
+    res_um : {10, 25, 50} int
+        The Atlas resolution in micrometres; one of 10, 25 or 50um.
+    **kwargs
+        See AllenAtlas.
+
+    Returns
+    -------
+    AllenAtlas
+        An Allen atlas object with MRI atlas scaling applied.
     """
     DV_SCALE = 0.952  # multiplicative factor on DV dimension, determined from MRI->CCF transform
     AP_SCALE = 1.087  # multiplicative factor on AP dimension
@@ -1501,8 +1469,18 @@ def MRITorontoAtlas(*args, **kwargs):
     using the IBL Bregma and coordinate system. The MRI Toronto atlas defines a stretch along AP
     a squeeze along DV *and* a squeeze along ML. These are based on 12 p65 mice MRIs averaged.
     See: https://www.nature.com/articles/s41467-018-04921-2 DB has access to the dataset.
-    :param res_um: 10, 25 or 50 um
-    :return: atlas.AllenAtlas
+
+    Parameters
+    ----------
+    res_um : {10, 25, 50} int
+        The Atlas resolution in micrometres; one of 10, 25 or 50um.
+    **kwargs
+        See AllenAtlas.
+
+    Returns
+    -------
+    AllenAtlas
+        An Allen atlas object with MRI atlas scaling applied.
     """
     ML_SCALE = 0.952
     DV_SCALE = 0.885  # multiplicative factor on DV dimension, determined from MRI->CCF transform

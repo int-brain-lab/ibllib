@@ -7,6 +7,17 @@ Four mappings are currently available within the IBL, these are:
 * Cosmos Atlas - total of 12 annotation regions
 * Swanson Atlas - total of 319 annotation regions
 
+Terminology
+-----------
+* **Name** - The full anatomical name of a brain region.
+* **Acronymn** - A shortened version of a brain region name.
+* **Index** - The index of the of the brain region within the ordered list of brain regions.
+* **ID** - A unique numerical identifier of a brain region.  These are typically integers that
+  therefore take up less space than storing the region names or acronyms.
+* **Mapping** - A function that maps one ordered list of brain region IDs to another, allowing one
+  to control annotation granularity and brain region hierarchy, or to translate brain region names
+  from one atlas to another. The default mapping is identity.
+
 FIXME Explain what each mapping is, its purpose and any relevant publications.
 FIXME Document the two structure trees. Which Website did they come from, and which publication/edition?
 """

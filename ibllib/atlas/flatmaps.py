@@ -20,11 +20,15 @@ _logger = logging.getLogger(__name__)
 
 
 class FlatMap(AllenAtlas):
-    """The Allen Atlas flatmap."""
+    """The Allen Atlas flatmap.
+
+    FIXME Document! How are these flatmaps determined? Are they related to the Swansan atlas or is
+     that something else?
+    """
 
     def __init__(self, flatmap='dorsal_cortex', res_um=25):
         """
-        Avaiable flatmaps are currently 'dorsal_cortex', 'circles' and 'pyramid'
+        Available flatmaps are currently 'dorsal_cortex', 'circles' and 'pyramid'
         :param flatmap:
         :param res_um:
         """
@@ -210,6 +214,18 @@ def circles(N=5, atlas=None, display='flat'):
 
 
 def swanson(filename="swanson2allen.npz"):
+    """
+    FIXME Document! Which publication to reference? Are these specifically for flat maps?
+     Shouldn't this be made into an Atlas class with a mapping or scaling applied?
+
+    Parameters
+    ----------
+    filename
+
+    Returns
+    -------
+
+    """
     # filename could be "swanson2allen_original.npz", or "swanson2allen.npz" for remapped indices to match
     # existing labels in the brain atlas
     OLD_MD5 = [
@@ -226,7 +242,19 @@ def swanson(filename="swanson2allen.npz"):
 
 
 def swanson_json(filename="swansonpaths.json", remap=True):
+    """
+    FIXME Document! What is this JSON file? How was it generated? Is there a publication to go with it?
+     How is it related to the `swanson` function defined above?
 
+    Parameters
+    ----------
+    filename
+    remap
+
+    Returns
+    -------
+
+    """
     OLD_MD5 = ['97ccca2b675b28ba9b15ca8af5ba4111',  # errored map with FOTU and CUL4, 5 mixed up
                '56daa7022b5e03080d8623814cda6f38',  # old md5 of swanson json without CENT and PTLp
                # and CUL4 split (on s3 called swansonpaths_56daa.json)
