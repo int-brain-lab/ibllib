@@ -344,7 +344,9 @@ class LightningPose(base_tasks.VideoTask):
 
         # Gather video files
         self.session_path = Path(self.session_path)
-        mp4_files = list(self.session_path.joinpath(self.device_collection).rglob('*.mp4'))
+        mp4_files = [self.session_path.joinpath(self.device_collection) for cam in self.cameras if
+                     self.session_path.joinpath(self.device_collection, f'_iblrig_{cam}Camera.raw.mp4').exists()]
+
         labels = [label_from_path(x) for x in mp4_files]
         _logger.info(f'Running on {labels} videos')
 
@@ -401,4 +403,3 @@ class LightningPose(base_tasks.VideoTask):
                 continue
 
         return actual_outputs
-
