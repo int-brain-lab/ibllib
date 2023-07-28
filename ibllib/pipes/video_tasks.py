@@ -298,10 +298,8 @@ class LightningPose(base_tasks.VideoTask):
     force = True
     job_size = 'large'
 
-    # env = Path.home().joinpath('Documents', 'PYTHON', 'envs', 'litpose', 'bin', 'activate')
-    # scripts = Path.home().joinpath('Documents', 'PYTHON', 'iblscripts', 'deploy', 'serverpc', 'litpose')
-    env = Path.home().joinpath('workspace', 'envs', 'litpose', 'bin', 'activate')
-    scripts = Path.home().joinpath('workspace', 'iblscripts', 'deploy', 'serverpc', 'litpose')
+    env = Path.home().joinpath('Documents', 'PYTHON', 'envs', 'litpose', 'bin', 'activate')
+    scripts = Path.home().joinpath('Documents', 'PYTHON', 'iblscripts', 'deploy', 'serverpc', 'litpose')
 
     @property
     def signature(self):
