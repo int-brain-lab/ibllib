@@ -229,9 +229,9 @@ class ProbePlot(DefaultPlot):
         """
 
         # Make sure we have inputs as lists, can get input from arrange_channels2banks
-        assert type(img) == list
-        assert type(x) == list
-        assert type(y) == list
+        assert isinstance(img, list)
+        assert isinstance(x, list)
+        assert isinstance(y, list)
 
         data = Bunch({'x': x, 'y': y, 'c': img})
         super().__init__('probe', data)

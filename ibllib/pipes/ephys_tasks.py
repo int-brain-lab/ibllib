@@ -388,7 +388,7 @@ class EphysPulses(base_tasks.EphysTask):
         assert self.device_collection, "device_collection is a required argument"
         assert self.sync_collection, "sync_collection is a required argument"
         self.pname = [self.pname] if isinstance(self.pname, str) else self.pname
-        assert type(self.pname) == list, 'pname task argument should be a list or a string'
+        assert isinstance(self.pname, list), 'pname task argument should be a list or a string'
 
     @property
     def signature(self):
