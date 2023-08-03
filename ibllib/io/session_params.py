@@ -414,7 +414,7 @@ def get_video_compressed(sess_params):
     if not videos:
         return None
 
-    # This is all of nothing, assumes either all videos or not compressed
+    # This is all or nothing, assumes either all videos or not compressed
     for key, vals in videos.items():
         compressed = vals.get('compressed', False)
 
