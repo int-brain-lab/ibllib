@@ -738,6 +738,45 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
 
         return sorted([meta_file, *roi_files, *mean_image_files])
 
+    def update_surgery_json(self, meta, normal_vector):
+        """
+        Update surgery JSON with surface normal vector.
+
+        Adds the key 'surface_normal_unit_vector' to the most recent surgery JSON, containing the
+        provided three element vector.  The recorded craniotomy center must match the coordinates
+        in the provided meta file.
+
+        Parameters
+        ----------
+        meta : dict
+            The imaging meta data file containing the 'centerMM' key.
+        normal_vector : array_like
+            A three element unit vector normal to the surface of the craniotomy center.
+
+        Returns
+        -------
+        dict
+            The updated surgery record, or None if no surgeries found.
+        """
+        if not self.one or self.one.offline:
+            _logger.warning('failed to update surgery JSON: ONE offline')
+            return
+        # Update subject JSON with unit normal vector of craniotomy centre (used in histology)
+        subject = self.one.path2ref(self.session_path, parse=False)['subject']
+        surgeries = self.one.alyx.rest('surgeries', 'list', subject=subject, procedure='craniotomy')
+        if not surgeries:
+            _logger.error(f'Surgery not found for subject "{subject}"')
+            return
+        surgery = surgeries[0]  # Check most recent surgery in list
+        match = (k for k, v in surgery['json'].items() if
+                 str(k).startswith('craniotomy') and np.allclose(v['center'], meta['centerMM']))
+        if (key := next(match, None)) is None:
+            _logger.error('Failed to update surgery JSON: no matching craniotomy found')
+            return surgery
+        data = {key: {**surgery['json'][key], 'surface_normal_unit_vector': tuple(normal_vector)}}
+        surgery['json'] = self.one.alyx.json_field_update('subjects', subject, data=data)
+        return surgery
+
     def roi_mlapdv(self, nFOV: int, suffix=None):
         """
         Extract ROI MLAPDV coordinates and brain location IDs.
@@ -961,6 +1000,9 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
 
         # Get the surface normal unit vector of dorsal triangle
         normal_vector = surface_normal(dorsal_triangle)
+
+        # Update the surgery JSON field with normal unit vector, for use in histology alignment
+        self.update_surgery_json(meta, normal_vector)
 
         # find the coordDV that sits on the triangular face and had [coordML, coordAP] coordinates;
         # the three vertices defining the triangle

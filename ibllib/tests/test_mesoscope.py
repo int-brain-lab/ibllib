@@ -150,6 +150,36 @@ class TestMesoscopeFOV(unittest.TestCase):
         np.testing.assert_array_equal(val, [1., 1., 1., 3., 3., 2., 5., 5.])
         np.testing.assert_array_equal(ind, [1, 1, 1, 4, 4, 0, 3, 3])
 
+    def test_update_surgery_json(self):
+        """Test for MesoscopeFOV.update_surgery_json method.
+
+        Here we mock the Alyx object and simply check the method's calls.
+        """
+        one = ONE(**TEST_DB)
+        task = MesoscopeFOV('/foo/bar/subject/2020-01-01/001', one=one)
+        record = {'json': {'craniotomy_00': {'center': [1., -3.]}, 'craniotomy_01': {'center': [2.7, -1.3]}}}
+        normal_vector = np.array([0.5, 1., 0.])
+        with mock.patch.object(one.alyx, 'rest', return_value=[record, {}]), \
+                mock.patch.object(one.alyx, 'json_field_update') as mock_rest:
+            task.update_surgery_json({'centerMM': [2.7, -1.30000000001]}, normal_vector)
+            expected = {'craniotomy_01': {'center': [2.7, -1.3],
+                                          'surface_normal_unit_vector': (0.5, 1., 0.)}}
+            mock_rest.assert_called_once_with('subjects', 'subject', data=expected)
+
+        # Check errors and warnings
+        # No matching craniotomy center
+        with self.assertLogs('ibllib.pipes.mesoscope_tasks', 'ERROR'), \
+                mock.patch.object(one.alyx, 'rest', return_value=[record, {}]):
+            task.update_surgery_json({'centerMM': [0., 0.]}, normal_vector)
+        # No matching surgery records
+        with self.assertLogs('ibllib.pipes.mesoscope_tasks', 'ERROR'), \
+                mock.patch.object(one.alyx, 'rest', return_value=[]):
+            task.update_surgery_json({'centerMM': [2.7, -1.3]}, normal_vector)
+        # ONE offline
+        one.mode = 'local'
+        with self.assertLogs('ibllib.pipes.mesoscope_tasks', 'WARNING'):
+            task.update_surgery_json({'centerMM': [2.7, -1.3]}, normal_vector)
+
 
 class TestRegisterFOV(unittest.TestCase):
     """Test for MesoscopeFOV.register_fov method."""
