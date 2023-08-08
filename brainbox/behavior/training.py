@@ -123,9 +123,9 @@ def get_subject_training_status(subj, date=None, details=True, one=None):
 
 def get_sessions(subj, date=None, one=None):
     """
-    Download and load in training data for a specified subject. If a date is given it will load data
-    from the three (or as many are available) previous sessions up to the specified date, if not it
-    will load data from the last three training sessions that have data available
+    Download and load in training data for a specified subject. If a date is given it will load
+    data from the three (or as many as are available) previous sessions up to the specified date.
+    If not it will load data from the last three training sessions that have data available.
 
     :param subj: subject nickname (must match the name registered on Alyx)
     :type subj: string

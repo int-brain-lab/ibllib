@@ -3,15 +3,14 @@ import traceback
 from pathlib import Path
 import subprocess
 import re
-import packaging
 import shutil
+
+import packaging.version
 import numpy as np
 import pandas as pd
-
 import spikeglx
 import neuropixel
 from neurodsp.utils import rms
-
 import one.alf.io as alfio
 
 from ibllib.misc import check_nvidia_driver

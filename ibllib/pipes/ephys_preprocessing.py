@@ -5,11 +5,11 @@ import subprocess
 from collections import OrderedDict
 import traceback
 from pathlib import Path
-import packaging.version
 
 import cv2
 import numpy as np
 import pandas as pd
+import packaging.version
 
 import one.alf.io as alfio
 from neurodsp.utils import rms
@@ -551,7 +551,7 @@ class EphysVideoCompress(tasks.Task):
     def get_signatures(self, **kwargs):
         # need to detect the number of cameras
         output_files = Path(self.session_path).joinpath('raw_video_data').glob('*')
-        labels = np.unique([label_from_path(x) for x in output_files])
+        labels = {label_from_path(x) for x in output_files}
 
         full_input_files = []
         for sig in self.signature['input_files']:
