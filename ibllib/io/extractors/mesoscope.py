@@ -3,6 +3,7 @@ import logging
 
 import numpy as np
 import one.alf.io as alfio
+from one.util import ensure_list
 from one.alf.files import session_path_parts
 import matplotlib.pyplot as plt
 from neurodsp.utils import falls
@@ -65,7 +66,8 @@ def plot_timeline(timeline, channels=None, raw=True):
     """
     meta = {x.copy().pop('name'): x for x in timeline['meta']['inputs']}
     channels = channels or meta.keys()
-    fig, axes = plt.subplots(len(channels), 1)
+    fig, axes = plt.subplots(len(channels), 1, sharex=True)
+    axes = ensure_list(axes)
     if not raw:
         chmap = {ch: meta[ch]['arrayColumn'] for ch in channels}
         sync = extract_sync_timeline(timeline, chmap=chmap)
@@ -130,6 +132,7 @@ class TimelineTrials(FpgaTrials):
 
         # Replace valve open times with those extracted from the DAQ
         # TODO Let's look at the expected open length based on calibration and reward volume
+        assert len(bpod['times']) > 0, 'No Bpod TTLs detected on DAQ'
         _, driver_out, _, = _assign_events_bpod(bpod['times'], bpod['polarities'], False)
         # Use the driver TTLs to find the valve open times that correspond to the valve opening
         valve_open_times = self.get_valve_open_times(driver_ttls=driver_out)
@@ -190,10 +193,56 @@ class TimelineTrials(FpgaTrials):
         trials_table.goCue_times = go_cue
         return trials
 
+    def extract_wheel_sync(self, ticks=WHEEL_TICKS, radius=WHEEL_RADIUS_CM, coding='x4', tmin=None, tmax=None):
+        """
+        Gets the wheel position from Timeline counter channel.
+
+        Parameters
+        ----------
+        ticks : int
+            Number of ticks corresponding to a full revolution (1024 for IBL rotary encoder).
+        radius : float
+            Radius of the wheel. Defaults to 1 for an output in radians.
+        coding : str {'x1', 'x2', 'x4'}
+            Rotary encoder encoding (IBL default is x4).
+        tmin : float
+            The minimum time from which to extract the sync pulses.
+        tmax : float
+            The maximum time up to which we extract the sync pulses.
+
+        Returns
+        -------
+        np.array
+            Wheel timestamps in seconds.
+        np.array
+            Wheel positions in radians.
+
+        See Also
+        --------
+        ibllib.io.extractors.ephys_fpga.extract_wheel_sync
+        """
+        if coding not in ('x1', 'x2', 'x4'):
+            raise ValueError('Unsupported coding; must be one of x1, x2 or x4')
+        raw = correct_counter_discontinuities(timeline_get_channel(self.timeline, 'rotary_encoder'))
+
+        # Timeline evenly samples counter so we extract only change points
+        d = np.diff(raw)
+        ind, = np.where(d.astype(int))
+        pos = raw[ind + 1]
+        pos -= pos[0]  # Start from zero
+        pos = pos / ticks * np.pi * 2 * radius / int(coding[1])  # Convert to radians
+
+        # Get timestamps of changes and trim based on protocol spacers
+        ts = self.timeline['timestamps'][ind + 1]
+        tmin = ts.min() if tmin is None else tmin
+        tmax = ts.max() if tmax is None else tmax
+        mask = np.logical_and(ts >= tmin, ts <= tmax)
+        return ts[mask], pos[mask]
+
     def get_wheel_positions(self, ticks=WHEEL_TICKS, radius=WHEEL_RADIUS_CM, coding='x4',
                             tmin=None, tmax=None, display=False, **kwargs):
         """
-        Gets the wheel position from Timeline counter channel.
+        Gets the wheel position and detected movements from Timeline counter channel.
 
         Called by the super class extractor (FPGATrials._extract).
 
@@ -215,30 +264,12 @@ class TimelineTrials(FpgaTrials):
         Returns
         -------
         dict
-            wheel object with keys ('timestamps', 'position')
+            wheel object with keys ('timestamps', 'position').
         dict
-            wheelMoves object with keys ('intervals' 'peakAmplitude')
+            wheelMoves object with keys ('intervals' 'peakAmplitude').
         """
-        if coding not in ('x1', 'x2', 'x4'):
-            raise ValueError('Unsupported coding; must be one of x1, x2 or x4')
-        info = next(x for x in self.timeline['meta']['inputs'] if x['name'].lower() == 'rotary_encoder')
-        raw = self.timeline['raw'][:, info['arrayColumn'] - 1]  # -1 because MATLAB indexes from 1
-        raw = correct_counter_discontinuities(raw)
-
-        # Timeline evenly samples counter so we extract only change points
-        d = np.diff(raw)
-        ind, = np.where(d.astype(int))
-        pos = raw[ind + 1]
-        pos -= pos[0]  # Start from zero
-        pos = pos / ticks * np.pi * 2 * radius / int(coding[1])  # Convert to radians
-
-        # Get timestamps of changes and trim based on protocol spacers
-        ts = self.timeline['timestamps'][ind + 1]
-        tmin = ts.min() if tmin is None else tmin
-        tmax = ts.max() if tmax is None else tmax
-        mask = np.logical_and(ts >= tmin, ts <= tmax)
-
-        wheel = {'timestamps': ts[mask], 'position': pos[mask]}
+        wheel = self.extract_wheel_sync(ticks=ticks, radius=radius, coding=coding, tmin=tmin, tmax=tmax)
+        wheel = dict(zip(('timestamps', 'position'), wheel))
         moves = extract_wheel_moves(wheel['timestamps'], wheel['position'])
 
         if display:
@@ -351,20 +382,36 @@ class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
     var_names = ('mpci_times', 'mpciStack_timeshift')
     save_names = ('mpci.times.npy', 'mpciStack.timeshift.npy')
 
-    """one.alf.io.AlfBunch: The timeline data object"""
-    rawImagingData = None  # TODO Document
+    """one.alf.io.AlfBunch: The raw imaging meta data and frame times"""
+    rawImagingData = None
 
-    def __init__(self, session_path, n_ROIs, **kwargs):
-        super().__init__(session_path, **kwargs)  # TODO Document
-        self.n_ROIs = n_ROIs
-        rois = list(map(lambda n: f'FOV_{n:02}', range(self.n_ROIs)))
-        self.var_names = [f'{x}_{y.lower()}' for x in self.var_names for y in rois]
-        self.save_names = [f'{y}/{x}' for x in self.save_names for y in rois]
+    def __init__(self, session_path, n_FOVs):
+        """
+        Extract the mesoscope frame times from DAQ data acquired through Timeline.
+
+        Parameters
+        ----------
+        session_path : str, pathlib.Path
+            The session path to extract times from.
+        n_FOVs : int
+            The number of fields of view acquired.
+        """
+        super().__init__(session_path)
+        self.n_FOVs = n_FOVs
+        fov = list(map(lambda n: f'FOV_{n:02}', range(self.n_FOVs)))
+        self.var_names = [f'{x}_{y.lower()}' for x in self.var_names for y in fov]
+        self.save_names = [f'{y}/{x}' for x in self.save_names for y in fov]
 
     def _extract(self, sync=None, chmap=None, device_collection='raw_imaging_data', events=None):
         """
         Extract the frame timestamps for each individual field of view (FOV) and the time offsets
         for each line scan.
+
+        The detected frame times from the 'neural_frames' channel of the DAQ are split into bouts
+        corresponding to the number of raw_imaging_data folders. These timestamps should match the
+        number of frame timestamps extracted from the image file headers (found in the
+        rawImagingData.times file).  The field of view (FOV) shifts are then applied to these
+        timestamps for each field of view and provided together with the line shifts.
 
         Parameters
         ----------
@@ -400,9 +447,18 @@ class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
             imaging_data['meta'] = patch_imaging_meta(imaging_data['meta'])
             # Calculate line shifts
             _, fov_time_shifts, line_time_shifts = self.get_timeshifts(imaging_data['meta'])
-            assert len(fov_time_shifts) == self.n_ROIs, f'unexpected number of ROIs for {collection}'
+            assert len(fov_time_shifts) == self.n_FOVs, f'unexpected number of FOVs for {collection}'
             ts = frame_times[np.logical_and(frame_times >= tmin, frame_times <= tmax)]
-            assert ts.size == imaging_data['times_scanImage'].size
+            assert ts.size >= imaging_data['times_scanImage'].size, f'fewer DAQ timestamps for {collection} than expected'
+            if ts.size > imaging_data['times_scanImage'].size:
+                _logger.warning(
+                    'More DAQ frame times detected for %s than were found in the raw image data.\n'
+                    'N DAQ frame times:\t%i\nN raw image data times:\t%i.\n'
+                    'This may occur if the bout detection fails (e.g. UDPs recorded late), '
+                    'when image data is corrupt, or when frames are not written to file.',
+                    collection, ts.size, imaging_data['times_scanImage'].size)
+                _logger.info('Dropping last %i frame times for %s', ts.size - imaging_data['times_scanImage'].size, collection)
+                ts = ts[:imaging_data['times_scanImage'].size]
             fov_times.append([ts + offset for offset in fov_time_shifts])
             if not line_shifts:
                 line_shifts = line_time_shifts
@@ -417,7 +473,7 @@ class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
             _logger.debug('FOV timestamps length does not match neural frame count; imaging bout(s) likely missing')
         return fov_times + line_shifts
 
-    def get_bout_edges(self, frame_times, collections=None, events=None, min_gap=1.):
+    def get_bout_edges(self, frame_times, collections=None, events=None, min_gap=1., display=False):
         """
         Return an array of edge times for each imaging bout corresponding to a raw_imaging_data
         collection.
@@ -432,6 +488,8 @@ class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
             A table of UDP event times, corresponding to times when recordings start and end.
         min_gap : float
             If start or end events not present, split bouts by finding gaps larger than this value.
+        display : bool
+            If true, plot the detected bout edges and raw frame times.
 
         Returns
         -------
@@ -475,11 +533,22 @@ class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
             if edges.shape[0] > len(collections):
                 # Remove any bouts that correspond to a skipped collection
                 # e.g. if {raw_imaging_data_00, raw_imaging_data_02}, remove middle bout
-                n = sorted(int(c.rsplit('_', 1)[-1]) for c in collections)
-                edges = edges[n, :]
+                include = sorted(int(c.rsplit('_', 1)[-1]) for c in collections)
+                edges = edges[include, :]
             elif edges.shape[0] < len(collections):
                 raise ValueError('More raw imaging folders than detected bouts')
 
+        if display:
+            _, ax = plt.subplots(1)
+            ax.step(frame_times, np.arange(frame_times.size), label='frame times', color='k', )
+            vertical_lines(edges[:, 0], ax=ax, ymin=0, ymax=frame_times.size, label='bout start', color='b')
+            vertical_lines(edges[:, 1], ax=ax, ymin=0, ymax=frame_times.size, label='bout end', color='orange')
+            if edges.shape[0] != len(starts):
+                vertical_lines(np.setdiff1d(starts, edges[:, 0]), ax=ax, ymin=0, ymax=frame_times.size,
+                               label='missing bout start', linestyle=':', color='b')
+                vertical_lines(np.setdiff1d(ends, edges[:, 1]), ax=ax, ymin=0, ymax=frame_times.size,
+                               label='missing bout end', linestyle=':', color='orange')
+            ax.set_xlabel('Time / s'), ax.set_ylabel('Frame #'), ax.legend(loc='lower right')
         return edges
 
     @staticmethod

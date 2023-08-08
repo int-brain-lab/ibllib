@@ -11,5 +11,6 @@ recursive-include brainbox/tests/fixtures *
 recursive-include ibllib/qc/reference *
 graft ibllib/tests/extractors/data
 graft ibllib/io/extractors/ephys_sessions
+graft ibllib/io/extractors/mesoscope
 graft ibllib/tests/fixtures
 recursive-include oneibl/tests/fixtures *

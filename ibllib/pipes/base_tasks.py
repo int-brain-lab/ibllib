@@ -254,7 +254,10 @@ class RegisterRawDataTask(DynamicTask):
 
             new_file, new_collection, _ = after
             new_path = self.session_path.joinpath(new_collection, new_file)
+            if old_path == new_path:
+                continue
             new_path.parent.mkdir(parents=True, exist_ok=True)
+            _logger.debug('%s -> %s', old_path.relative_to(self.session_path), new_path.relative_to(self.session_path))
             old_path.replace(new_path)
             if symlink_old:
                 old_path.symlink_to(new_path)

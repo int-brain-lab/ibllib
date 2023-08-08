@@ -479,6 +479,8 @@ def extract_behaviour_sync(sync, chmap=None, display=False, bpod_trials=None, tm
     # If there are no detected trial start times or more than double the trial end pulses,
     # the trial start pulses may be too small to be detected, in which case, sync using the ini_in
     if t_trial_start.size == 0 or (t_trial_start.size / t_iti_in.size) < .5:
+        _logger.info('Attempting to align on ITI in')
+        assert t_iti_in.size > 0, 'no detected ITI in TTLs on the DAQ to align'
         bpod_end = bpod_trials['itiIn_times']
         fcn, drift = neurodsp.utils.sync_timestamps(bpod_end, t_iti_in)
         # if it's drifting too much
@@ -488,6 +490,7 @@ def extract_behaviour_sync(sync, chmap=None, display=False, bpod_trials=None, tm
     else:
         # one issue is that sometimes bpod pulses may not have been detected, in this case
         # perform the sync bpod/FPGA, and add the start that have not been detected
+        _logger.info('Attempting to align on trial start')
         bpod_start = bpod_trials['intervals_bpod'][:, 0]
         fcn, drift, ibpod, ifpga = neurodsp.utils.sync_timestamps(
             bpod_start, t_trial_start, return_indices=True)
