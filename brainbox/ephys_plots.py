@@ -3,7 +3,8 @@ from matplotlib import cm
 import matplotlib.pyplot as plt
 from brainbox.plot_base import (ImagePlot, ScatterPlot, ProbePlot, LinePlot, plot_line,
                                 plot_image, plot_probe, plot_scatter, arrange_channels2banks)
-from brainbox.processing import bincount2D, compute_cluster_average
+from brainbox.processing import compute_cluster_average
+from iblutil.numerical import bincount2D
 from ibllib.atlas.regions import BrainRegions
 
 

@@ -1,6 +1,6 @@
 import numpy as np
 import alf.io
-from brainbox.processing import bincount2D
+from iblutil.numerical import bincount2D
 import matplotlib.pyplot as plt
 import ibllib.plots as iblplt
 
