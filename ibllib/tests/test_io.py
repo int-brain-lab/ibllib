@@ -560,7 +560,7 @@ class TestSessionParams(unittest.TestCase):
         self.assertCountEqual(self.fixture.keys(), data_keys)
 
     def test_patch_data(self):
-        with patch(session_params.__name__ + '.SPEC_VERSION', '1.0.0'),\
+        with patch(session_params.__name__ + '.SPEC_VERSION', '1.0.0'), \
                 self.assertLogs(session_params.__name__, logging.WARNING):
             data = session_params._patch_file({'version': '1.1.0'})
         self.assertEqual(data, {'version': '1.0.0'})
