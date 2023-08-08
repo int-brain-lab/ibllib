@@ -5,6 +5,7 @@ import subprocess
 from collections import OrderedDict
 import traceback
 from pathlib import Path
+import warnings
 
 import cv2
 import numpy as np
@@ -34,6 +35,7 @@ from ibllib.plots.snapshot import ReportSnapshot
 from brainbox.behavior.dlc import likelihood_threshold, get_licks, get_pupil_diameter, get_smooth_pupil_diameter
 
 _logger = logging.getLogger("ibllib")
+warnings.warn('`pipes.training_preprocessing` to be removed in favour of dynamic pipeline')
 
 
 #  level 0

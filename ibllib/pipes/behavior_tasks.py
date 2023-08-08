@@ -77,9 +77,8 @@ class HabituationTrialsBpod(base_tasks.BehaviourTask):
         """
         Extracts an iblrig training session
         """
-        save_path = self.session_path.joinpath(self.output_collection)
-        trials, wheel, output_files = bpod_trials.extract_all(
-            self.session_path, save=True, task_collection=self.collection, save_path=save_path)
+        extractor = bpod_trials.get_bpod_extractor(self.session_path, task_collection=self.collection)
+        trials, output_files = extractor.extract(task_collection=self.collection)
 
         if trials is None:
             return None
@@ -88,8 +87,8 @@ class HabituationTrialsBpod(base_tasks.BehaviourTask):
         # Run the task QC
         # Compile task data for QC
         qc = HabituationQC(self.session_path, one=self.one)
-        qc.extractor = TaskQCExtractor(self.session_path, one=self.one, sync_collection=self.sync_collection, sync_type=self.sync,
-                                       task_collection=self.collection, save_path=save_path)
+        qc.extractor = TaskQCExtractor(self.session_path, sync_collection=self.sync_collection,
+                                       one=self.one, sync_type=self.sync, task_collection=self.collection)
         namespace = 'task' if self.protocol_number is None else f'task_{self.protocol_number:02}'
         qc.run(update=update, namespace=namespace)
         return output_files
@@ -239,9 +238,9 @@ class ChoiceWorldTrialsBpod(base_tasks.BehaviourTask):
         """
         Extracts an iblrig training session
         """
-        save_path = self.session_path.joinpath(self.output_collection)
-        trials, wheel, output_files = bpod_trials.extract_all(
-            self.session_path, save=True, task_collection=self.collection, save_path=save_path)
+        extractor = bpod_trials.get_bpod_extractor(self.session_path, task_collection=self.collection)
+        extractor.default_path = self.output_collection
+        trials, output_files = extractor.extract(task_collection=self.collection, save=True)
         if trials is None:
             return None
         if self.one is None or self.one.offline:
@@ -249,14 +248,15 @@ class ChoiceWorldTrialsBpod(base_tasks.BehaviourTask):
         # Run the task QC
         # Compile task data for QC
         type = get_session_extractor_type(self.session_path, task_collection=self.collection)
+        # FIXME Task data should not need re-extracting
         if type == 'habituation':
             qc = HabituationQC(self.session_path, one=self.one)
             qc.extractor = TaskQCExtractor(self.session_path, one=self.one, sync_collection=self.sync_collection,
-                                           sync_type=self.sync, task_collection=self.collection, save_path=save_path)
+                                           sync_type=self.sync, task_collection=self.collection)
         else:  # Update wheel data
             qc = TaskQC(self.session_path, one=self.one)
             qc.extractor = TaskQCExtractor(self.session_path, one=self.one, sync_collection=self.sync_collection,
-                                           sync_type=self.sync, task_collection=self.collection, save_path=save_path)
+                                           sync_type=self.sync, task_collection=self.collection)
             qc.extractor.wheel_encoding = 'X1'
         # Aggregate and update Alyx QC fields
         namespace = 'task' if self.protocol_number is None else f'task_{self.protocol_number:02}'
@@ -323,8 +323,7 @@ class ChoiceWorldTrialsNidq(base_tasks.BehaviourTask):
         # Run the task QC
         qc = TaskQC(self.session_path, one=self.one, log=_logger)
         qc.extractor = TaskQCExtractor(self.session_path, lazy=True, one=qc.one, sync_collection=self.sync_collection,
-                                       sync_type=self.sync, task_collection=self.collection,
-                                       save_path=self.session_path.joinpath(self.output_collection))
+                                       sync_type=self.sync, task_collection=self.collection)
         # Extract extra datasets required for QC
         qc.extractor.data = trials_data  # FIXME This line is pointless
         qc.extractor.extract_data()
@@ -423,8 +422,7 @@ class ChoiceWorldTrialsTimeline(ChoiceWorldTrialsNidq):
         # TODO Task QC extractor for Timeline
         qc = TaskQC(self.session_path, one=self.one, log=_logger)
         qc.extractor = TaskQCExtractor(self.session_path, lazy=True, one=qc.one, sync_collection=self.sync_collection,
-                                       sync_type=self.sync, task_collection=self.collection,
-                                       save_path=self.session_path.joinpath(self.output_collection))
+                                       sync_type=self.sync, task_collection=self.collection)
         # Extract extra datasets required for QC
         qc.extractor.data = TaskQCExtractor.rename_data(trials_data.copy())
         qc.extractor.load_raw_data()
