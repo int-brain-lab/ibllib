@@ -242,8 +242,9 @@ def swanson(filename="swanson2allen.npz"):
 
 def swanson_json(filename="swansonpaths.json", remap=True):
     """
-    FIXME Document! What is this JSON file? How was it generated? Is there a publication to go with it?
-     How is it related to the `swanson` function defined above?
+    Vectorized version of the swanson bitmap file. The vectorised version was generated from swanson() using matlab contour to find
+    the paths for each region. The paths for each region were then simplified using Ramer Douglas Peucker
+    algorithm https://rdp.readthedocs.io/en/latest/
 
     Parameters
     ----------

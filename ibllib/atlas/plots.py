@@ -26,11 +26,11 @@ _logger = logging.getLogger(__name__)
 
 def get_bc_10():
     """
-    FIXME Document
+    Get BrainCoordinates object for 10um Allen Atlas
 
     Returns
     -------
-
+    BrainCoordinates object
     """
     dims2xyz = np.array([1, 0, 2])
     res_um = 10
@@ -48,17 +48,24 @@ def get_bc_10():
 
 def plot_polygon(ax, xy, color, reg_id, edgecolor='k', linewidth=0.3, alpha=1):
     """
-    FIXME Document
+    Function to plot matplotlib polygon on an axis
 
     Parameters
     ----------
-    ax
-    xy
-    color
-    reg_id
-    edgecolor
-    linewidth
-    alpha
+    ax : matplotlib.pyplot.Axes
+        An axis object to plot onto.
+    xy: numpy.array
+        2D array of x and y coordinates of vertices of polygon
+    color: str, tuple of int
+        The color to fill the polygon
+    reg_id: str, int
+        An id to assign to the polygon
+    edgecolor: str, tuple of int
+        The color of the edge of the polgon
+    linewidth: int
+        The width of the edges of the polygon
+    alpha: float between 0 and 1
+        The opacitiy of the polygon
 
     Returns
     -------
@@ -70,29 +77,58 @@ def plot_polygon(ax, xy, color, reg_id, edgecolor='k', linewidth=0.3, alpha=1):
 
 def plot_polygon_with_hole(ax, vertices, codes, color, reg_id, edgecolor='k', linewidth=0.3, alpha=1):
     """
-    FIXME Document
+    Function to plot matplotlib polygon that contains a hole on an axis
 
     Parameters
     ----------
-    ax
-    vertices
-    codes
-    color
-    reg_id
-    edgecolor
-    linewidth
-    alpha
+    ax : matplotlib.pyplot.Axes
+        An axis object to plot onto.
+    vertices: numpy.array
+        2D array of x and y coordinates of vertices of polygon
+    codes: numpy.array
+        1D array of path codes used to link the vertices
+        (https://matplotlib.org/stable/tutorials/advanced/path_tutorial.html)
+    color: str, tuple of int
+        The color to fill the polygon
+    reg_id: str, int
+        An id to assign to the polygon
+    edgecolor: str, tuple of int
+        The color of the edge of the polgon
+    linewidth: int
+        The width of the edges of the polygon
+    alpha: float between 0 and 1
+        The opacitiy of the polygon
 
     Returns
     -------
 
     """
+
     path = mpath.Path(vertices, codes)
     patch = PathPatch(path, facecolor=color, edgecolor=edgecolor, linewidth=linewidth, alpha=alpha, gid=f'region_{reg_id}')
     ax.add_patch(patch)
 
 
 def coords_for_poly_hole(coords):
+    """
+    Function to convert
+
+    Parameters
+    ----------
+    coords : dict
+        Dictionary containing keys x, y and invert. x and y contain numpy.array of x coordinates, y coordinates
+        for the vertices of the polgyon. The invert key is either 1 or -1 and deterimine how to assign the paths.
+        The value for invert for each polygon was assigned manually after looking at the result
+
+    Returns
+    -------
+    all_coords: numpy.array
+        2D array of x and y coordinates of vertices of polygon
+    all_codes: numpy.array
+        1D array of path codes used to link the vertices
+        (https://matplotlib.org/stable/tutorials/advanced/path_tutorial.html)
+
+    """
     for i, c in enumerate(coords):
         xy = np.c_[c['x'], c['y']]
         codes = np.ones(len(xy), dtype=mpath.Path.code_type) * mpath.Path.LINETO
@@ -172,15 +208,20 @@ def reorder_data(acronyms, values, brain_regions=None):
 
 def load_slice_files(slice, mapping):
     """
-    FIXME Document
+    Function to load in set of vectorised atlas slices for a given atlas axis and mapping. If the data does not
+    exist locally, it will download the files automatically stored in a AWS s3 bucket.
 
     Parameters
     ----------
-    slice
-    mapping
+    slice: {'coronal', 'sagittal', 'horizontal', 'top'}
+        The axis of the atlas to load
+    mapping: {'Allen', 'Beryl', 'Cosmos'}
+        The mapping to load
 
     Returns
     -------
+    slice_data: json
+        A json containing the vertices to draw each region for each slice in the Allen annotation volume
 
     """
     OLD_MD5 = {
@@ -204,25 +245,45 @@ def load_slice_files(slice, mapping):
 def _plot_slice_vector(coords, slice, values, mapping, empty_color='silver', clevels=None, cmap='viridis', show_cbar=False,
                        ba=None, ax=None, slice_json=None, **kwargs):
     """
-    FIXME Document
+    Function to plot scalar value per allen region on vectorised version of histology slice. Do not use directly but use
+    through plot_scalar_on_slice function with vector=True
 
     Parameters
     ----------
-    coords
-    slice
-    values
-    mapping
-    empty_color
-    clevels
-    cmap
-    show_cbar
-    ba
-    ax
-    slice_json
+    coords: float
+        coordinate of slice in um (not needed when slice='top')
+    slice: {'coronal', 'sagittal', 'horizontal', 'top'}
+        the axis through the atlas volume to display
+    values: numpy.array
+        Array of values for each of the lateralised Allen regions found using BrainRegions().acronym. If no
+        value is assigned to the acronym, the value at corresponding to that index should be nan
+    mapping: {'Allen', 'Beryl', 'Cosmos'}
+        the mapping to use
+    empty_color: str, tuple of int, default='silver'
+        The color used to fill the regions that do not have any values assigned (regions with nan)
+    clevels: numpy.array, list or tuple
+        The min and max values to use for the colormap
+    cmap: string
+        Colormap to use
+    show_cbar: bool, default=False
+        Whether or not to display a colorbar
+    ba : ibllib.atlas.AllenAtlas
+        A brain atlas object
+    ax : matplotlib.pyplot.Axes
+        An axis object to plot onto.
+    slice_json: json
+        The set of vectorised slices for this slice, obtained using load_slice_files(slice, mapping)
     kwargs
+        Set of kwargs passed into matplotlib.patches.Polygon
 
     Returns
     -------
+    fig: matplotlib.figure.Figure
+        The plotted figure
+    ax: matplotlib.pyplot.Axes
+        The plotted axes.
+    cbar: matplotlib.pyplot.colorbar
+        matplotlib colorbar object, only returned if show_cbar=True
 
     """
     ba = ba or AllenAtlas()
@@ -463,7 +524,7 @@ def plot_scalar_on_flatmap(regions, values, depth=0, flatmap='dorsal_cortex', ma
 def plot_volume_on_slice(volume, coord=-1000, slice='coronal', mapping='Allen', background='boundary', cmap='Reds',
                          clevels=None, show_cbar=False, brain_atlas=None, ax=None):
     """
-    Plot slice at through volume
+    Plot slice through a volume
 
     :param volume: 3D array of volume (must be same shape as brain_atlas object)
     :param coord: coordinate of slice in um
@@ -587,24 +648,44 @@ def compute_volume_from_points(xyz, values=None, aggr='sum', fwhm=100, ba=None):
 def _plot_slice(coord, slice, region_values, vol_type, background='boundary', map='Allen', clevels=None, cmap='viridis',
                 show_cbar=False, ba=None, ax=None):
     """
-    FIXME Document
+    Function to plot scalar value per allen region on histology slice. Do not use directly but use
+    through plot_scalar_on_slice function
 
     Parameters
     ----------
-    coord
-    slice
-    region_values
-    vol_type
-    background
-    map
-    clevels
-    cmap
-    show_cbar
-    ba
-    ax
+    coord: float
+        coordinate of slice in um (not needed when slice='top')
+    slice: {'coronal', 'sagittal', 'horizontal', 'top'}
+        the axis through the atlas volume to display
+    region_values: numpy.array
+        Array of values for each of the lateralised Allen regions found using BrainRegions().acronym. If no
+        value is assigned to the acronym, the value at corresponding to that index should be nan
+    vol_type: 'value'
+        The type of volume to be displayed, should alwasy be 'value' if values want to be displayed
+    background: {'image', 'boundary'}
+        The background slice to overlay the values onto. When 'image' it uses the Allen dwi image, when
+        'boundary' it displays the boundaries between regions
+    map: {'Allen', 'Beryl', 'Cosmos'}
+        the mapping to use
+    clevels: numpy.array, list or tuple
+        The min and max values to use for the colormap
+    cmap: string
+        Colormap to use
+    show_cbar: bool, default=False
+        Whether or not to display a colorbar
+    ba : ibllib.atlas.AllenAtlas
+        A brain atlas object
+    ax : matplotlib.pyplot.Axes
+        An axis object to plot onto.
 
     Returns
     -------
+    fig: matplotlib.figure.Figure
+        The plotted figure
+    ax: matplotlib.pyplot.Axes
+        The plotted axes.
+    cbar: matplotlib.pyplot.colorbar
+        matplotlib colorbar object, only returned if show_cbar=True
 
     """
     ba = ba or AllenAtlas()
@@ -665,22 +746,32 @@ def _plot_slice(coord, slice, region_values, vol_type, background='boundary', ma
         return fig, ax
 
 
-def plot_scalar_on_barplot(acronyms, values, errors=None, order=True, ylim=None, ax=None, brain_regions=None):
+def plot_scalar_on_barplot(acronyms, values, errors=None, order=True, ax=None, brain_regions=None):
     """
-    FIXME Document
+    Function to plot scalar value per allen region on a bar plot. If order=True, the acronyms and values are reordered according to the order defined
+    in the Allen structure tree
 
     Parameters
     ----------
-    acronyms
-    values
-    errors
-    order
-    ylim
-    ax
-    brain_regions
+    acronyms: numpy.array
+        A 1D array of acronyms
+    values: numpy.array
+        A 1D array of values corresponding to each acronym in the acronyms array
+    errors: numpy.array
+        A 1D array of error values corresponding to each acronym in the acronyms array
+    order: bool, default=True
+        Whether or not to order the acronyms according to the order defined by the Allen structure tree
+    ax : matplotlib.pyplot.Axes
+        An axis object to plot onto.
+    brain_regions : ibllib.atlas.regions.BrainRegions
+        A brain regions object
 
     Returns
     -------
+    fig: matplotlib.figure.Figure
+        The plotted figure
+    ax: matplotlib.pyplot.Axes
+        The plotted axes.
 
     """
     br = brain_regions or BrainRegions()
@@ -705,12 +796,15 @@ def plot_swanson_vector(acronyms=None, values=None, ax=None, hemisphere=None, br
                         empty_color='silver', vmin=None, vmax=None, cmap='viridis', annotate=False, annotate_n=10,
                         annotate_order='top', annotate_list=None, mask=None, mask_color='w', fontsize=10, **kwargs):
     """
-    FIXME Document!
+    Function to plot scalar value per allen region on the swanson projection. Plots on a vecortised version of the
+    swanson projection
 
     Parameters
     ----------
-    acronyms FIXME Document
-    values FIXME Document
+    acronyms: numpy.array
+        A 1D array of acronyms or atlas ids
+    values: numpy.array
+        A 1D array of values corresponding to each acronym in the acronyms array
     ax : matplotlib.pyplot.Axes
         An axis object to plot onto.
     hemisphere : {'left', 'right', 'both', 'mirror'}
@@ -722,16 +816,24 @@ def plot_swanson_vector(acronyms=None, values=None, ax=None, hemisphere=None, br
     empty_color : str, tuple of int, default='silver'
         The greyscale matplotlib color code or an RGBA int8 tuple defining the filling of brain
         regions not provided.
-    vmin FIXME Document
-    vmax FIXME Document
-    cmap FIXME Document
+    vmin: float
+        Minimum value to restrict the colormap
+    vmax: float
+        Maximum value to restrict the colormap
+    cmap: string
+        matplotlib named colormap to use
     annotate : bool, default=False
         If true, labels the regions with acronyms.
-    annotate_n FIXME Document
-    annotate_order FIXME Document
-    annotate_list FIXME Document
-    mask FIXME Document
-    mask_color FIXME Document
+    annotate_n: int
+        The number of regions to annotate
+    annotate_order: {'top', 'bottom'}
+        If annotate_n is specified, whether to annotate the n regions with the highest (top) or lowest (bottom) values
+    annotate_list: numpy.array of list
+        List of regions to annotate, if this is provided, if overwrites annotate_n and annotate_order
+    mask: numpy.array or list
+        List of regions to apply a mask to (fill them with a specific color)
+    mask_color: string, tuple or list
+        Color for the mask
     fontsize : int
         The annotation font size in points.
     **kwargs
@@ -895,6 +997,20 @@ def plot_swanson_vector(acronyms=None, values=None, ax=None, hemisphere=None, br
             annotate_swanson(ax=ax, orientation=orientation, br=br, fontsize=fontsize)
 
     def format_coord(x, y):
+        """
+        Formats the legend to be displayed on the matplotlib figure when hovering over the figure
+
+        Parameters
+        ----------
+        x: float
+            The x position of the mouse
+        y: float
+            The y position of the mouse
+
+        Returns
+        -------
+        string: the string to display
+        """
         # FIXME Document!
         patch = next((p for p in ax.patches if p.contains_point(p.get_transform().transform(np.r_[x, y]))), None)
         if patch is not None:
@@ -921,8 +1037,10 @@ def plot_swanson(acronyms=None, values=None, ax=None, hemisphere=None, br=None,
 
     Parameters
     ----------
-    acronyms FIXME Document
-    values FIXME Document
+    acronyms: numpy.array
+        A 1D array of acronyms or atlas ids
+    values: numpy.array
+        A 1D array of values corresponding to each acronym in the acronyms array
     ax : matplotlib.pyplot.Axes
         An axis object to plot onto.
     hemisphere : {'left', 'right', 'both', 'mirror'}
@@ -931,11 +1049,17 @@ def plot_swanson(acronyms=None, values=None, ax=None, hemisphere=None, br=None,
         A brain regions object.
     orientation : {landscape', 'portrait'}, default='landscape'
         The plot orientation.
-    annotate : bool, default=False
-        If true, labels the regions with acronyms.
     empty_color : str, tuple of int, default='silver'
         The greyscale matplotlib color code or an RGBA int8 tuple defining the filling of brain
         regions not provided.
+    vmin: float
+        Minimum value to restrict the colormap
+    vmax: float
+        Maximum value to restrict the colormap
+    cmap: string
+        matplotlib named colormap to use
+    annotate : bool, default=False
+        If true, labels the regions with acronyms.
     **kwargs
         See matplotlib.pyplot.imshow.
 
