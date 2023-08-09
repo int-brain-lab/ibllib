@@ -748,8 +748,8 @@ def _plot_slice(coord, slice, region_values, vol_type, background='boundary', ma
 
 def plot_scalar_on_barplot(acronyms, values, errors=None, order=True, ax=None, brain_regions=None):
     """
-    Function to plot scalar value per allen region on a bar plot. If order=True, the acronyms and values are reordered according to the order defined
-    in the Allen structure tree
+    Function to plot scalar value per allen region on a bar plot. If order=True, the acronyms and values are reordered
+    according to the order defined in the Allen structure tree
 
     Parameters
     ----------
