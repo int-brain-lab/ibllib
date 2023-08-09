@@ -2,10 +2,12 @@
 
 Four mappings are currently available within the IBL, these are:
 
-* Allen Atlas - total of 1328 annotation regions provided by Allen Atlas
-* Beryl Atlas - total of 308 annotation regions
-* Cosmos Atlas - total of 12 annotation regions
-* Swanson Atlas - total of 319 annotation regions
+* Allen Atlas - total of 1328 annotation regions provided by Allen Atlas.
+* Beryl Atlas - total of 308 annotation regions determined by Nick Steinmetz for the brain wide map, mainly at the level of
+  major cortical areas, nuclei/ganglia. Thus annotations relating to layers and nuclear subregions are absent.
+* Cosmos Atlas - total of 10 annotation regions determined by Nick Steinmetz for coarse analysis.  Annotations include the major
+  divisions of the brain only.
+* Swanson Atlas - total of 319 annotation regions provided by the Swanson atlas (FIXME which one?).
 
 Terminology
 -----------
@@ -16,9 +18,12 @@ Terminology
   therefore take up less space than storing the region names or acronyms.
 * **Mapping** - A function that maps one ordered list of brain region IDs to another, allowing one
   to control annotation granularity and brain region hierarchy, or to translate brain region names
-  from one atlas to another. The default mapping is identity.
+  from one atlas to another. The default mapping is identity. See
+  [atlas package documentation](./ibllib.atlas.html#mappings) for other mappings.
+* **Order** - Each structure is assigned a consistent position within the flattened graph. This
+  value is known as the annotation index, i.e. the annotation volume contains the brain region
+  order at each point in the image.
 
-FIXME Explain what each mapping is, its purpose and any relevant publications.
 FIXME Document the two structure trees. Which Website did they come from, and which publication/edition?
 """
 from dataclasses import dataclass
@@ -31,7 +36,6 @@ from iblutil.util import Bunch
 from iblutil.numerical import ismember
 
 _logger = logging.getLogger(__name__)
-# 'Beryl' is the name given to an atlas containing a subset of the most relevant allen annotations
 FILE_MAPPINGS = str(Path(__file__).parent.joinpath('mappings.pqt'))
 ALLEN_FILE_REGIONS = str(Path(__file__).parent.joinpath('allen_structure_tree.csv'))
 FRANKLIN_FILE_REGIONS = str(Path(__file__).parent.joinpath('franklin_paxinos_structure_tree.csv'))
@@ -53,7 +57,7 @@ class _BrainRegions:
     level: np.ndarray
     """numpy.array: An integer array of parent brain region IDs."""
     parent: np.ndarray
-    """numpy.array: FIXME Document - what is brain region order and why is it important?"""
+    """numpy.array: The position within the flattened graph."""
     order: np.uint16
 
     def to_df(self):
@@ -81,18 +85,6 @@ class _BrainRegions:
         """numpy.array of str: The RGB colour values as hexadecimal triplet strings."""
         return np.apply_along_axis(lambda x: "#{0:02x}{1:02x}{2:02x}".format(*x.astype(int)), 1, self.rgb)
 
-    def _compute_order(self):
-        """
-        Compute the order of regions, per region order by left hemisphere and then right hemisphere
-        :return:
-        FIXME This function doesn't do anything.
-        """
-        orders = np.zeros_like(self.id)
-        # Left hemisphere first
-        orders[1::2] = np.arange(self.n_lr) + self.n_lr + 1
-        # Then right hemisphere
-        orders[2::2] = np.arange(self.n_lr) + 1
-
     def get(self, ids) -> Bunch:
         """
         Return a map of id, name, acronym, etc. for the provided IDs.
@@ -117,13 +109,25 @@ class _BrainRegions:
 
     def _navigate_tree(self, ids, direction='down', return_indices=False):
         """
-        Private method to navigate the tree and get all related objects either up, down or along the branch.
-        By convention the provided id is returned in the list of regions
-        :param ids: array or single allen id (int32)
-        :param direction: 'up' returns ancestors, 'down' descendants
-        :param return indices: Bool (False), if true returns a second argument with indices mapping
-        to the current br object
-        :return: Bunch
+        Navigate the tree and get all related objects either up, down or along the branch.
+
+        By convention the provided id is returned in the list of regions.
+
+        Parameters
+        ----------
+        ids : int, array_like
+            One or more brain region IDs (int32).
+        direction : {'up', 'down'}
+            Whether to return ancestors ('up') or descendants ('down').
+        return_indices : bool, default=False
+            If true returns a second argument with indices mapping to the current brain region
+            object.
+
+        Returns
+        -------
+        iblutil.util.Bunch[str, numpy.array]
+            A dict-like object containing the keys {'id', 'name', 'acronym', 'rgb', 'level',
+            'parent', 'order'} with arrays the length of `ids`.
         """
         indices = ismember(self.id, ids)[0]
         count = np.sum(indices)
@@ -145,10 +149,21 @@ class _BrainRegions:
 
     def subtree(self, scalar_id, return_indices=False):
         """
-        Given a node, returns the subtree containing the node along with ancestors
-        :param return indices: Bool (False), if true returns a second argument with indices mapping
-        to the current br object
-        :return: Bunch
+        Given a node, returns the subtree containing the node along with ancestors.
+
+        Parameters
+        ----------
+        scalar_id : int
+            A brain region ID.
+        return_indices : bool, default=False
+            If true returns a second argument with indices mapping to the current brain region
+            object.
+
+        Returns
+        -------
+        iblutil.util.Bunch[str, numpy.array]
+            A dict-like object containing the keys {'id', 'name', 'acronym', 'rgb', 'level',
+            'parent', 'order'} with arrays the length of one.
         """
         if not np.isscalar(scalar_id):
             assert scalar_id.size == 1
@@ -164,25 +179,51 @@ class _BrainRegions:
         """
         Get descendants from one or more IDs.
 
-        :param ids: np.array or scalar representing the region primary key
-        :param return_indices: Bool (False) returns the indices in the current br obj
-        :return: Bunch
+        Parameters
+        ----------
+        ids : int, array_like
+            One or more brain region IDs.
+        return_indices : bool, default=False
+            If true returns a second argument with indices mapping to the current brain region
+            object.
+
+        Returns
+        -------
+        iblutil.util.Bunch[str, numpy.array]
+            A dict-like object containing the keys {'id', 'name', 'acronym', 'rgb', 'level',
+            'parent', 'order'} with arrays the length of `ids`.
         """
         return self._navigate_tree(ids, direction='down', **kwargs)
 
     def ancestors(self, ids, **kwargs):
         """
-        Get ancestors from one or an array of ids
-        :param ids: np.array or scalar representing the region primary key
-        :param return_indices: Bool (False) returns the indices in the current br obj
-        :return: Bunch
+        Get ancestors from one or more IDs.
+
+        Parameters
+        ----------
+        ids : int, array_like
+            One or more brain region IDs.
+        return_indices : bool, default=False
+            If true returns a second argument with indices mapping to the current brain region
+            object.
+
+        Returns
+        -------
+        iblutil.util.Bunch[str, numpy.array]
+            A dict-like object containing the keys {'id', 'name', 'acronym', 'rgb', 'level',
+            'parent', 'order'} with arrays the length of `ids`.
         """
         return self._navigate_tree(ids, direction='up', **kwargs)
 
     def leaves(self):
         """
-        Get all regions that do not have children
-        :return:
+        Get all regions that do not have children.
+
+        Returns
+        -------
+        iblutil.util.Bunch[str, numpy.array]
+            A dict-like object containing the keys {'id', 'name', 'acronym', 'rgb', 'level',
+            'parent', 'order'} with arrays of matching length.
         """
         leaves = np.setxor1d(self.id, self.parent)
         return self.get(np.int64(leaves[~np.isnan(leaves)]))

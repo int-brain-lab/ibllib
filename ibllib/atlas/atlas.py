@@ -1454,6 +1454,21 @@ def NeedlesAtlas(*args, **kwargs):
     -------
     AllenAtlas
         An Allen atlas object with MRI atlas scaling applied.
+
+    Notes
+    -----
+    The scaling was determined by manually transforming the DSURQE atlas [1]_ onto the Allen CCF.
+    The DSURQE atlas is an MRI atlas acquired from 40 C57BL/6J mice post-mortem, with 40um
+    isometric resolution [2]_.  The alignment was performed by Mayo Faulkner.
+    The atlas data can be found [here](http://repo.mouseimaging.ca/repo/DSURQE_40micron_nifti/).
+    More information on the dataset and segmentation can be found
+    [here](http://repo.mouseimaging.ca/repo/DSURQE_40micron/notes_on_DSURQE_atlas).
+
+    References
+    ----------
+    .. [1] Dorr AE, Lerch JP, Spring S, Kabani N, Henkelman RM (2008). High resolution
+       three-dimensional brain atlas using an average magnetic resonance image of 40 adult C57Bl/6J
+       mice. Neuroimage 42(1):60-9. [doi 10.1016/j.neuroimage.2008.03.037]
     """
     DV_SCALE = 0.952  # multiplicative factor on DV dimension, determined from MRI->CCF transform
     AP_SCALE = 1.087  # multiplicative factor on AP dimension
