@@ -544,6 +544,9 @@ class BrainRegions(_BrainRegions):
             lambda x: int(x, 16) if isinstance(x, str) else 256 ** 3 - 1))
         c = np.flip(np.reshape(c.view(np.uint8), (df_regions.id.size, 4))[:, :3], 1)
         c[0, :] = 0  # set the void region to black
+        # For void assign the depth and level to avoid warnings of nan being converted to int
+        df_regions.loc[0, 'depth'] = 0
+        df_regions.loc[0, 'graph_order'] = 0
         # creates the BrainRegion instance
         super().__init__(id=df_regions.id.to_numpy(),
                          name=df_regions.name.to_numpy(),
@@ -615,8 +618,18 @@ class BrainRegions(_BrainRegions):
         :param target_map: map name onto which to map
         :return:
         """
-        _, inds = ismember(region_ids, self.id[self.mappings[source_map]])
-        return self.id[self.mappings[target_map][inds]]
+        isnan = np.isnan(region_ids)
+        if np.sum(isnan) > 0:
+            # In case the user provides nans
+            nan_loc = np.where(isnan)[0]
+            _, inds = ismember(region_ids[~isnan], self.id[self.mappings[source_map]])
+            mapped_ids = self.id[self.mappings[target_map][inds]].astype(float)
+            mapped_ids = np.insert(mapped_ids, nan_loc, np.full(nan_loc.shape, np.nan))
+        else:
+            _, inds = ismember(region_ids, self.id[self.mappings[source_map]])
+            mapped_ids = self.id[self.mappings[target_map][inds]]
+
+        return mapped_ids
 
 
 def regions_from_allen_csv():
