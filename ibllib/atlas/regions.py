@@ -60,6 +60,19 @@ class _BrainRegions:
     """numpy.array: The position within the flattened graph."""
     order: np.uint16
 
+    def __post_init__(self):
+        self._compute_mappings()
+
+    def _compute_mappings(self):
+        """Compute default mapping for the structure tree.
+
+        Default mapping is identity. This method is intended to be overloaded by subclasses.
+        """
+        self.default_mapping = None
+        self.mappings = dict(default_mapping=self.order)
+        # the number of lateralized regions (typically half the number of regions in a lateralized structure tree)
+        self.n_lr = 0
+
     def to_df(self):
         """
         Return dataclass as a pandas DataFrame.
@@ -228,31 +241,29 @@ class _BrainRegions:
         leaves = np.setxor1d(self.id, self.parent)
         return self.get(np.int64(leaves[~np.isnan(leaves)]))
 
-    def propagate_down(self, acronyms, values):
-        """
-        This function remaps a set of user specified acronyms and values to the
-        swanson map, by filling down the child nodes when higher up values are
-        provided.
-        :param acronyms: list or array of allen ids or acronyms
-        :param values: list or array of associated values
-        :return:
-        """
-        user_aids = self.parse_acronyms_argument(acronyms)
-        _, user_indices = ismember(user_aids, self.id)
-        self.compute_hierarchy()
-        ia, ib = ismember(self.hierarchy, user_indices)
-        v = np.zeros_like(ia, dtype=np.float64) * np.NaN
-        v[ia] = values[ib]
-        all_values = np.nanmedian(v, axis=0)
-        indices = np.where(np.any(ia, axis=0))[0]
-        all_values = all_values[indices]
-        return indices, all_values
-
     def _mapping_from_regions_list(self, new_map, lateralize=False):
         """
-        From a vector of regions id, creates a mapping such as
-        newids = self.mapping
-        :param new_map: np.array: vector of regions id
+        From a vector of region IDs, creates a structure tree index mapping.
+
+        For example, given a subset of brain region IDs, this returns an array the length of the
+        total number of brain regions, where each element is the structure tree index for that
+        region.  The IDs in `new_map` and their descendants are given that ID's index and any
+        missing IDs are given the root index.
+
+
+        Parameters
+        ----------
+        new_map : array_like of int
+            An array of atlas brain region IDs.
+        lateralize : bool
+            If true, lateralized indices are assigned to all IDs. If false, IDs are assigned to q
+            non-lateralized index regardless of their sign.
+
+        Returns
+        -------
+        numpy.array
+            A vector of brain region indices representing the structure tree order corresponding to
+            each input ID and its descendants.
         """
         I_ROOT = 1
         I_VOID = 0
@@ -264,7 +275,7 @@ class _BrainRegions:
         iid, inm = ismember(self.id, new_map)
         iid = np.where(iid)[0]
         mapind = np.zeros_like(self.id) + I_ROOT  # non assigned regions are root
-        # TO DO should root be lateralised?
+        # TODO should root be lateralised?
         mapind[iid] = iid  # regions present in the list have the same index
         # Starting by the higher up levels in the hierarchy, assign all descendants to the mapping
         for i in np.argsort(self.level[iid]):
@@ -426,12 +437,23 @@ class _BrainRegions:
         return inds
 
     def parse_acronyms_argument(self, acronyms, mode='raise'):
-        """
-        Parse an input acronym arguments: returns a numpy array of allen regions ids
-        regardless of the input: list of acronyms, np.array of acronyms strings or np aray of allen ids
-        To be used into functions to provide flexible input type
-        :param acronyms: List, np.array of acronym strings or np.array of allen ids
-        :return: np.array of int ids
+        """Parse input acronyms.
+
+        Returns a numpy array of region IDs regardless of the input: list of acronyms, array of
+        acronym strings or region IDs. To be used by functions to provide flexible input type.
+
+        Parameters
+        ----------
+        acronyms : array_like
+            An array of region acronyms to convert to IDs. An array of region IDs may also be
+            provided, in which case they are simply returned.
+        mode : str, optional
+            If 'raise', asserts that all acronyms exist in the structure tree.
+
+        Returns
+        -------
+        numpy.array of int
+            An array of brain regions corresponding to `acronyms`.
         """
         # first get the allen region ids regardless of the input type
         acronyms = np.array(acronyms)
@@ -439,7 +461,7 @@ class _BrainRegions:
         if not np.issubdtype(acronyms.dtype, np.number):
             user_aids = self.acronym2id(acronyms)
             if mode == 'raise':
-                assert user_aids.size == acronyms.size, "All acronyms should exist in Allen ontology"
+                assert user_aids.size == acronyms.size, 'all acronyms must exist in the ontology'
         else:
             user_aids = acronyms
         return user_aids
@@ -508,15 +530,18 @@ class FranklinPaxinosRegions(_BrainRegions):
                          parent=df_regions['Parent ID'].to_numpy(),
                          order=df_regions['structure Order'].to_numpy().astype(np.uint16))
 
-        self.n_lr = int((len(self.id) - 1) / 2)
-        self._compute_mappings()
-        self.default_mapping = 'FranklinPaxinos'
-
     def _compute_mappings(self):
+        """
+        Compute lateralized and non-lateralized mappings.
+
+        This method is called by __post_init__.
+        """
         self.mappings = {
             'FranklinPaxinos': self._mapping_from_regions_list(np.unique(np.abs(self.id)), lateralize=False),
             'FranklinPaxinos-lr': np.arange(self.id.size),
         }
+        self.default_mapping = 'FranklinPaxinos'
+        self.n_lr = int((len(self.id) - 1) / 2)  # the number of lateralized regions
 
 
 class BrainRegions(_BrainRegions):
@@ -527,9 +552,9 @@ class BrainRegions(_BrainRegions):
 
     Notes
     -----
-    The Allen atlas ids are kept intact but lateralized as follows: labels are duplicated
-    and ids multiplied by -1, with the understanding that left hemisphere regions have negative
-    ids.
+    The Allen atlas IDs are kept intact but lateralized as follows: labels are duplicated
+    and IDs multiplied by -1, with the understanding that left hemisphere regions have negative
+    IDs.
     """
     def __init__(self):
         df_regions = pd.read_csv(ALLEN_FILE_REGIONS)
@@ -555,37 +580,46 @@ class BrainRegions(_BrainRegions):
                          level=df_regions.depth.to_numpy().astype(np.uint16),
                          parent=df_regions.parent_structure_id.to_numpy(),
                          order=df_regions.graph_order.to_numpy().astype(np.uint16))
-        # mappings are indices not ids: they range from 0 to n regions -1
-        mappings = pd.read_parquet(FILE_MAPPINGS)
-        self.mappings = {k: mappings[k].to_numpy() for k in mappings}
-        self.n_lr = int((len(self.id) - 1) / 2)
-        self.default_mapping = 'Allen'
 
     def _compute_mappings(self):
         """
-        Recomputes the mapping indices for all mappings
-        This is left mainly as a reference for adding future mappings as this take a few seconds
-        to execute. In production,we use the MAPPING_FILES pqt to avoid recomputing at each \
-        instantiation
+        Recomputes the mapping indices for all mappings.
+
+        Attempts to load mappings from the FILE_MAPPINGS file, otherwise generates from arrays of
+        brain IDs. In production, we use the MAPPING_FILES pqt to avoid recomputing at each
+        instantiation as this take a few seconds to execute.
+
+        Currently there are 8 available mappings (Allen, Beryl, Cosmos, and Swanson), lateralized
+        (with suffix -lr) and non-lateralized. Each row contains the correspondence to the Allen
+        CCF structure tree order (i.e. index) for each mapping.
+
+        This method is called by __post_init__.
         """
-        beryl = np.load(Path(__file__).parent.joinpath('beryl.npy'))
-        cosmos = np.load(Path(__file__).parent.joinpath('cosmos.npy'))
-        swanson = np.load(Path(__file__).parent.joinpath('swanson_regions.npy'))
-        self.mappings = {
-            'Allen': self._mapping_from_regions_list(np.unique(np.abs(self.id)), lateralize=False),
-            'Allen-lr': np.arange(self.id.size),
-            'Beryl': self._mapping_from_regions_list(beryl, lateralize=False),
-            'Beryl-lr': self._mapping_from_regions_list(beryl, lateralize=True),
-            'Cosmos': self._mapping_from_regions_list(cosmos, lateralize=False),
-            'Cosmos-lr': self._mapping_from_regions_list(cosmos, lateralize=True),
-            'Swanson': self._mapping_from_regions_list(swanson, lateralize=False),
-            'Swanson-lr': self._mapping_from_regions_list(swanson, lateralize=True),
-        }
-        pd.DataFrame(self.mappings).to_parquet(FILE_MAPPINGS)
+        # mappings are indices not ids: they range from 0 to n regions -1
+        if Path(FILE_MAPPINGS).exists():
+            mappings = pd.read_parquet(FILE_MAPPINGS)
+            self.mappings = {k: mappings[k].to_numpy() for k in mappings}
+        else:
+            beryl = np.load(Path(__file__).parent.joinpath('beryl.npy'))
+            cosmos = np.load(Path(__file__).parent.joinpath('cosmos.npy'))
+            swanson = np.load(Path(__file__).parent.joinpath('swanson_regions.npy'))
+            self.mappings = {
+                'Allen': self._mapping_from_regions_list(np.unique(np.abs(self.id)), lateralize=False),
+                'Allen-lr': np.arange(self.id.size),
+                'Beryl': self._mapping_from_regions_list(beryl, lateralize=False),
+                'Beryl-lr': self._mapping_from_regions_list(beryl, lateralize=True),
+                'Cosmos': self._mapping_from_regions_list(cosmos, lateralize=False),
+                'Cosmos-lr': self._mapping_from_regions_list(cosmos, lateralize=True),
+                'Swanson': self._mapping_from_regions_list(swanson, lateralize=False),
+                'Swanson-lr': self._mapping_from_regions_list(swanson, lateralize=True),
+            }
+            pd.DataFrame(self.mappings).to_parquet(FILE_MAPPINGS)
+        self.default_mapping = 'Allen'
+        self.n_lr = int((len(self.id) - 1) / 2)  # the number of lateralized regions
 
     def compute_hierarchy(self):
         """
-        Creates a self.hierarchy attributes that is a n_levels by n_region array
+        Creates a self.hierarchy attribute that is an n_levels by n_region array
         of indices. This is useful to perform fast vectorized computations of
         ancestors and descendants.
         :return:
@@ -610,13 +644,46 @@ class BrainRegions(_BrainRegions):
             self.hierarchy[lev, sel] = np.where(sel)[0]
             _mask[sel] = True
 
+    def propagate_down(self, acronyms, values):
+        """
+        This function remaps a set of user specified acronyms and values to the
+        swanson map, by filling down the child nodes when higher up values are
+        provided.
+        :param acronyms: list or array of allen ids or acronyms
+        :param values: list or array of associated values
+        :return:
+        # FIXME Why only the swanson map? Also, how is this actually related to the Swanson map?
+        """
+        user_aids = self.parse_acronyms_argument(acronyms)
+        _, user_indices = ismember(user_aids, self.id)
+        self.compute_hierarchy()
+        ia, ib = ismember(self.hierarchy, user_indices)
+        v = np.zeros_like(ia, dtype=np.float64) * np.NaN
+        v[ia] = values[ib]
+        all_values = np.nanmedian(v, axis=0)
+        indices = np.where(np.any(ia, axis=0))[0]
+        all_values = all_values[indices]
+        return indices, all_values
+
     def remap(self, region_ids, source_map='Allen', target_map='Beryl'):
         """
-        Remap atlas regions ids from source map to target map
-        :param region_ids: atlas ids to map
-        :param source_map: map name which original region_ids are in
-        :param target_map: map name onto which to map
-        :return:
+        Remap atlas regions IDs from source map to target map.
+
+        Any NaNs in `region_ids` remain as NaN in the output array.
+
+        Parameters
+        ----------
+        region_ids : array_like of int
+            The region IDs to remap.
+        source_map : str
+            The source map name, in `self.mappings`.
+        target_map : str
+            The target map name, in `self.mappings`.
+
+        Returns
+        -------
+        numpy.array of int
+            The input IDs mapped to `target_map`.
         """
         isnan = np.isnan(region_ids)
         if np.sum(isnan) > 0:
