@@ -288,7 +288,7 @@ class EphysCompressNP24(base_tasks.EphysTask):
         }
         return signature
 
-    def _run(self):
+    def _run(self, delete_original=True):
 
         # Do we need the ability to register the files once it already been processed and original file deleted?
 
@@ -296,7 +296,7 @@ class EphysCompressNP24(base_tasks.EphysTask):
         assert len(files) == 1
         bin_file = files[0].get('ap', None)
 
-        np_conv = neuropixel.NP2Converter(bin_file, post_check=True, compress=True, delete_original=True)
+        np_conv = neuropixel.NP2Converter(bin_file, post_check=True, compress=True, delete_original=delete_original)
         np_conv_status = np_conv.process()
         out_files = np_conv.get_processed_files_NP24()
         np_conv.sr.close()
