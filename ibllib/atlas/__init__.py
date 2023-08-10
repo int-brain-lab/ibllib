@@ -37,10 +37,12 @@ Atlases
 There are two principal mouse brain atlases in this module:
 
 1. The Allen Common Coordinate Framework (CCF) [1]_.
-2. The Mouse Brain in Stereotaxic Coordinates (MBSC) 4th Edition, by Paxinos G, and Franklin KBJ [2]_.
+2. The Mouse Brain in Stereotaxic Coordinates (MBSC) 4th Edition, by Paxinos G, and Franklin KBJ [2]_ and matched to
+   to the Allen Common Coordiante Framework by Chon et al. [10]
 
 The latter is referred to here as the 'Franklin-Paxinos atlas'.  These atlases comprise a 3D array of voxels and their associated
-brain region identifiers (labels) at a given resolution.  TODO Mention flat maps.
+brain region identifiers (labels) at a given resolution. The Allen Atlas can be instantiated in 10um, 25um or 50um resolution.
+The Franklin-Paxinos atlas has a resolution of 10um in the ML and DV axis, and 100um in the AP axis. TODO Mention flat maps.
 
 
 Scalings
@@ -121,6 +123,8 @@ References
    ontology and flatmaps. J Comp Neurol. [doi 10.1002/cne.24381]
 .. [9] Allen Mouse Common Coordinate Framework Technical White Paper (October 2017 v3)
    http://help.brain-map.org/download/attachments/8323525/Mouse_Common_Coordinate_Framework.pdf
+.. [10] Chon et al (2019) Enhanced and unified anatomical labeling for a common mouse brain atlas
+   [doi 10.1038/s41467-019-13057-w]
 
 
 Examples
@@ -148,7 +152,7 @@ Fixtures
 
 * **allen_structure_tree.csv** - TODO Document. Where does this come from? Is it modified from either structure_tree_safe.csv or
   structure_tree_safe_2017.csv?
-* **franklin_paxinos_structure_tree.csv** - TODO Document. Where does this come from? Who made it?
+* **franklin_paxinos_structure_tree.csv** - Obtained from Supplementary Data 2 in reference [10].
 * **beryl.npy** - A 306 x 1 int32 array of Allen CCF brain region IDs generated in MATLAB [*]_. See more information see
   `Mappings`_.
 * **cosmos.npy** - A 10 x 1 int32 array of Allen CCF brain region IDs generated in MATLAB [*]_. See more information see
@@ -162,12 +166,19 @@ Fixtures
 
 * **annotation_<res_um>.nrrd** - A 3D volume containing indicies of the regions in the associated
   structure tree.  `res_um` indicates the isometric spacing in microns.  These uint16 indicies are
-  known as the region 'order' in the structure tree, i.e. the position of the region in the
+  known as the region 'index' in the structure tree, i.e. the position of the region in the
   flattened tree.
 * **average_template_<res_um>.nrrd** - TODO Document
 * **annotation_<res_um>_lut_<LUT_VERSION>.npz** - TODO Document
-* **swansonpaths.json** - The paths of a vectorized Swanson flatmap image [*]_? TODO Document who made this, its contents, purpose and
-  data type
+* FranklinPaxinons/annotation_<res_um>.npz - A 3D volume containing indices of the regions associated with
+  the Franklin Paxinos structure tree. The volume was created from the images provided in Supplemtary Data 4 of
+  reference [10] and stitched together as a single volume using SimpleITK.
+* FranklinPaxinons/average_template_<res_um>.npz - A 3D volume containing the Allen dwi image slices corresponding to
+  the slices in the annotation volume. The volume was created from the images provided in Supplemtary Data 5 of
+  reference [10] and stitched together as a single volume using SimpleITK.
+* **swansonpaths.json** - The paths of a vectorized Swanson flatmap image [*]. The vectorized version was generated
+  from the Swanson bitmap image using the matlab contour function to find the paths for each region. The paths for each
+  region were then simplified using the Ramer Douglas Peucker algorithm https://rdp.readthedocs.io/en/latest/
 * **swanson2allen.npz** - TODO Document who made this, its contents, purpose and data type
 * **<flatmap_name>_<res_um>.nrrd** - TODO Document who made this, its contents, purpose and data type
 * **gene-expression.pqt** - TODO Document who made this, its contents, purpose and data type

@@ -242,7 +242,7 @@ def swanson(filename="swanson2allen.npz"):
 
 def swanson_json(filename="swansonpaths.json", remap=True):
     """
-    Vectorized version of the swanson bitmap file. The vectorised version was generated from swanson() using matlab
+    Vectorized version of the swanson bitmap file. The vectorized version was generated from swanson() using matlab
     contour to find the paths for each region. The paths for each region were then simplified using the
     Ramer Douglas Peucker algorithm https://rdp.readthedocs.io/en/latest/
 
@@ -269,6 +269,9 @@ def swanson_json(filename="swansonpaths.json", remap=True):
     with open(json_file) as f:
         sw_json = json.load(f)
 
+    # The swanson contains regions that are children of regions contained within the Allen
+    # annotation volume. Here we remap these regions to the parent that is contained with the
+    # annotation volume
     if remap:
         id_map = {391: [392, 393, 394, 395, 396],
                   474: [483, 487],

@@ -1546,7 +1546,9 @@ class FranklinPaxinosAtlas(BrainAtlas):
     """
     The Franklin & Paxinos brain atlas.
 
-    The Mouse Brain in Stereotaxic Coordinates (MBSC) 4th Edition, by Paxinos G, and Franklin KBJ.
+    The Mouse Brain in Stereotaxic Coordinates (MBSC) 4th Edition, by Paxinos G, and Franklin KBJ and
+    matched to the Allen coordinate Framework by Chon et al, Enhanced and unified anatomical labeling
+    for a common mouse brain atlas.
 
     Instantiates an atlas.BrainAtlas corresponding to the Franklin & Paxinos atlas at the given
     resolution, using the IBL Bregma and coordinate system.
@@ -1558,7 +1560,8 @@ class FranklinPaxinosAtlas(BrainAtlas):
     def __init__(self, res_um=(10, 100, 10), scaling=(1, 1, 1), mock=False, hist_path=None):
         """
         Instantiates an atlas.BrainAtlas corresponding to the Franklin & Paxinos atlas at the given
-        resolution, using the IBL Bregma and coordinate system.
+        resolution, using the IBL Bregma and coordinate system. The Franklin Paxisnos volume has
+        resolution of 10um in ML and DV axis and 100 um in AP direction.
 
         Parameters
         ----------
