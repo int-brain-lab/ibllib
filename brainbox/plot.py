@@ -26,8 +26,8 @@ import numpy as np
 # from matplotlib.ticker import StrMethodFormatter
 from brainbox import singlecell
 from brainbox.metrics import single_units
-from brainbox.processing import bincount2D
 from brainbox.io.spikeglx import extract_waveforms
+from iblutil.numerical import bincount2D
 import spikeglx
 
 

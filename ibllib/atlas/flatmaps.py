@@ -293,7 +293,7 @@ def plot_swanson_vector(acronyms=None, values=None, ax=None, hemisphere=None, br
                     vertices_inv[:, 1] = -1 * vertices_inv[:, 1] + (sw_shape[0] * 2)
                     plot_polygon_with_hole(ax, vertices_inv, codes, col_l, reg_id, **kwargs)
         else:
-            coords = [coords] if type(coords) == dict else coords
+            coords = [coords] if isinstance(coords, dict) else coords
             for c in coords:
                 if orientation == 'portrait':
                     xy = np.c_[c['y'], c['x']]
