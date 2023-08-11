@@ -15,15 +15,13 @@ import one.remote.aws as aws
 from iblutil.numerical import ismember
 from ibllib.atlas.regions import BrainRegions, FranklinPaxinosRegions
 
-
-_logger = logging.getLogger(__name__)
-
 """dict: The ML AP DV voxel coordinates of brain landmarks in the Allen atlas."""
 ALLEN_CCF_LANDMARKS_MLAPDV_UM = {'bregma': np.array([5739, 5400, 332])}
 """dict: The ML AP DV voxel coordinates of brain landmarks in the Franklin & Paxinos atlas."""
 PAXINOS_CCF_LANDMARKS_MLAPDV_UM = {'bregma': np.array([5700, 4300 + 160, 330])}
 """str: The name of the public IBL S3 bucket containing atlas data."""
 S3_BUCKET_IBL = 'ibl-brain-wide-map-public'
+_logger = logging.getLogger(__name__)
 
 
 def cart2sph(x, y, z):
@@ -1097,9 +1095,8 @@ class Trajectory:
 class Insertion:
     """
     Defines an ephys probe insertion in 3D coordinate. IBL conventions.
-    To instantiate, use the static methods:
-    Insertion.from_track
-    Insertion.from_dict
+
+    To instantiate, use the static methods: `Insertion.from_track` and `Insertion.from_dict`.
     """
     x: float
     y: float
@@ -1113,9 +1110,18 @@ class Insertion:
     @staticmethod
     def from_track(xyzs, brain_atlas=None):
         """
-        :param brain_atlas: None. If provided, disregards the z coordinate and locks the insertion
-        point to the z of the brain surface
-        :return: Trajectory object
+        Define an insersion from one or more trajectory.
+
+        Parameters
+        ----------
+        xyzs : numpy.array
+             An n by 3 array xyz coordinates representing an insertion trajectory.
+        brain_atlas : BrainAtlas
+            A brain atlas instance, used to attain the point of entry.
+
+        Returns
+        -------
+        Insertion
         """
         assert brain_atlas, 'Input argument brain_atlas must be defined'
         traj = Trajectory.fit(xyzs)
@@ -1125,38 +1131,44 @@ class Insertion:
         entry = Insertion.get_brain_entry(traj, brain_atlas)
         # convert to spherical system to store the insertion
         depth, theta, phi = cart2sph(*(entry - tip))
-        insertion_dict = {'x': entry[0], 'y': entry[1], 'z': entry[2],
-                          'phi': phi, 'theta': theta, 'depth': depth}
+        insertion_dict = {
+            'x': entry[0], 'y': entry[1], 'z': entry[2], 'phi': phi, 'theta': theta, 'depth': depth
+        }
         return Insertion(**insertion_dict)
 
     @staticmethod
     def from_dict(d, brain_atlas=None):
         """
-        Constructs an Insertion object from the json information stored in probes.description file
-        :param trj: dictionary containing at least the following keys, in um
-           {
-            'x': 544.0,
-            'y': 1285.0,
-            'z': 0.0,
-            'phi': 0.0,
-            'theta': 5.0,
-            'depth': 4501.0
-            }
-        :param brain_atlas: None. If provided, disregards the z coordinate and locks the insertion
-        point to the z of the brain surface
-        :return: Trajectory object
+        Constructs an Insertion object from the json information stored in probes.description file.
+
+        Parameters
+        ----------
+        d : dict
+            A dictionary containing at least the following keys {'x', 'y', 'z', 'phi', 'theta',
+            'depth'}.  The depth and xyz coordinates must be in um.
+        brain_atlas : BrainAtlas, default=None
+            If provided, disregards the z coordinate and locks the insertion point to the z of the
+            brain surface.
+
+        Returns
+        -------
+        Insertion
+
+        Examples
+        --------
+        >>> tri = {'x': 544.0, 'y': 1285.0, 'z': 0.0, 'phi': 0.0, 'theta': 5.0, 'depth': 4501.0}
+        >>> ins = Insertion.from_dict(tri)
         """
         z = d['z'] / 1e6
         if brain_atlas:
             iy = brain_atlas.bc.y2i(d['y'] / 1e6)
             ix = brain_atlas.bc.x2i(d['x'] / 1e6)
-            # Only use the brain surface value as z if it isn't NaN (this happens when the surface touches the edges
-            # of the atlas volume
+            # Only use the brain surface value as z if it isn't NaN (this happens when the surface
+            # touches the edges of the atlas volume
             if not np.isnan(brain_atlas.top[iy, ix]):
                 z = brain_atlas.top[iy, ix]
-        return Insertion(x=d['x'] / 1e6, y=d['y'] / 1e6, z=z,
-                         phi=d['phi'], theta=d['theta'], depth=d['depth'] / 1e6,
-                         beta=d.get('beta', 0), label=d.get('label', ''))
+        return Insertion(x=d['x'] / 1e6, y=d['y'] / 1e6, z=z, phi=d['phi'], theta=d['theta'],
+                         depth=d['depth'] / 1e6, beta=d.get('beta', 0), label=d.get('label', ''))
 
     @property
     def trajectory(self):
@@ -1180,7 +1192,19 @@ class Insertion:
 
     @staticmethod
     def _get_surface_intersection(traj, brain_atlas, surface='top'):
+        """
+        TODO Document!
 
+        Parameters
+        ----------
+        traj
+        brain_atlas
+        surface
+
+        Returns
+        -------
+
+        """
         brain_atlas.compute_surface()
 
         distance = traj.mindist(brain_atlas.srf_xyz)
@@ -1459,10 +1483,10 @@ def NeedlesAtlas(*args, **kwargs):
     -----
     The scaling was determined by manually transforming the DSURQE atlas [1]_ onto the Allen CCF.
     The DSURQE atlas is an MRI atlas acquired from 40 C57BL/6J mice post-mortem, with 40um
-    isometric resolution [2]_.  The alignment was performed by Mayo Faulkner.
-    The atlas data can be found [here](http://repo.mouseimaging.ca/repo/DSURQE_40micron_nifti/).
+    isometric resolution.  The alignment was performed by Mayo Faulkner.
+    The atlas data can be found `here <http://repo.mouseimaging.ca/repo/DSURQE_40micron_nifti/>`__.
     More information on the dataset and segmentation can be found
-    [here](http://repo.mouseimaging.ca/repo/DSURQE_40micron/notes_on_DSURQE_atlas).
+    `here <http://repo.mouseimaging.ca/repo/DSURQE_40micron/notes_on_DSURQE_atlas>`__.
 
     References
     ----------
@@ -1482,8 +1506,7 @@ def MRITorontoAtlas(*args, **kwargs):
 
     Instantiates an atlas.BrainAtlas corresponding to the Allen CCF at the given resolution
     using the IBL Bregma and coordinate system. The MRI Toronto atlas defines a stretch along AP
-    a squeeze along DV *and* a squeeze along ML. These are based on 12 p65 mice MRIs averaged.
-    See: https://www.nature.com/articles/s41467-018-04921-2 DB has access to the dataset.
+    a squeeze along DV *and* a squeeze along ML. These are based on 12 p65 mice MRIs averaged [1]_.
 
     Parameters
     ----------
@@ -1496,6 +1519,12 @@ def MRITorontoAtlas(*args, **kwargs):
     -------
     AllenAtlas
         An Allen atlas object with MRI atlas scaling applied.
+
+    References
+    ----------
+    .. [1] Qiu, LR, Fernandes, DJ, Szulc-Lerch, KU et al. (2018) Mouse MRI shows brain areas
+       relatively larger in males emerge before those larger in females. Nat Commun 9, 2615.
+       [doi 10.1038/s41467-018-04921-2]
     """
     ML_SCALE = 0.952
     DV_SCALE = 0.885  # multiplicative factor on DV dimension, determined from MRI->CCF transform
@@ -1543,25 +1572,17 @@ def _download_atlas_allen(target_file_image):
 
 
 class FranklinPaxinosAtlas(BrainAtlas):
-    """
-    The Franklin & Paxinos brain atlas.
-
-    The Mouse Brain in Stereotaxic Coordinates (MBSC) 4th Edition, by Paxinos G, and Franklin KBJ and
-    matched to the Allen coordinate Framework by Chon et al, Enhanced and unified anatomical labeling
-    for a common mouse brain atlas.
-
-    Instantiates an atlas.BrainAtlas corresponding to the Franklin & Paxinos atlas at the given
-    resolution, using the IBL Bregma and coordinate system.
-    """
 
     """pathlib.PurePosixPath: The default relative path of the atlas file."""
     atlas_rel_path = PurePosixPath('histology', 'ATLAS', 'Needles', 'FranklinPaxinos')
 
     def __init__(self, res_um=(10, 100, 10), scaling=(1, 1, 1), mock=False, hist_path=None):
-        """
-        Instantiates an atlas.BrainAtlas corresponding to the Franklin & Paxinos atlas at the given
-        resolution, using the IBL Bregma and coordinate system. The Franklin Paxisnos volume has
-        resolution of 10um in ML and DV axis and 100 um in AP direction.
+        """The Franklin & Paxinos brain atlas.
+
+        Instantiates an atlas.BrainAtlas corresponding to the Franklin & Paxinos atlas [1]_ at the
+        given resolution, matched to the Allen coordinate Framework [2]_ and using the IBL Bregma
+        and coordinate system. The Franklin Paxisnos volume has resolution of 10um in ML and DV
+        axis and 100 um in AP direction.
 
         Parameters
         ----------
@@ -1580,6 +1601,12 @@ class FranklinPaxinosAtlas(BrainAtlas):
         >>> target_dir = one.cache_dir / AllenAtlas.atlas_rel_path
         ... ba = FranklinPaxinosAtlas(hist_path=target_dir)
 
+        References
+        ----------
+        .. [1] Paxinos G, and Franklin KBJ (2012) The Mouse Brain in Stereotaxic Coordinates, 4th
+        edition (Elsevier Academic Press)
+        .. [2] Chon U et al (2019) Enhanced and unified anatomical labeling for a common mouse
+        brain atlas [doi 10.1038/s41467-019-13057-w]
         """
         # TODO interpolate?
         LUT_VERSION = 'v01'  # version 01 is the lateralized version
