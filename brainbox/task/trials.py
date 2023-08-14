@@ -1,5 +1,4 @@
-from iblutil.numerical import ismember
-from brainbox.processing import bincount2D
+from iblutil.numerical import ismember, bincount2D
 import numpy as np
 
 

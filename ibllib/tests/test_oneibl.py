@@ -64,7 +64,7 @@ class TestFTPPatcher(unittest.TestCase):
         # Silent mode off
         self.reset_params()
         self.one.alyx.silent = False
-        with mock.patch('builtins.input', new=self.mock_input),\
+        with mock.patch('builtins.input', new=self.mock_input), \
                 mock.patch('ibllib.oneibl.patcher.getpass', return_value='foobar'):
             patcher.FTPPatcher(one=self.one)
         self.assertEqual(self.one.alyx._par.FTP_DATA_SERVER_LOGIN, 'usr')

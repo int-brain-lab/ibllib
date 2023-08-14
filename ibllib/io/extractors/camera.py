@@ -446,7 +446,7 @@ def align_with_gpio(timestamps, ttl, pin_state, count, extrapolate_missing=True,
 
     # Remove the rest of the dropped frames
     ts = ts[count]
-    assert np.searchsorted(ts, ttl['times'][0]) == first_uptick,\
+    assert np.searchsorted(ts, ttl['times'][0]) == first_uptick, \
         'time of first sync TTL doesn\'t match after alignment'
     if ts.size != count.size:
         _logger.error('number of timestamps and frames don\'t match after alignment')

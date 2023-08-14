@@ -1,7 +1,7 @@
 import numpy as np
 
 from neurodsp import smooth, utils, fourier
-from brainbox.processing import bincount2D
+from iblutil.numerical import bincount2D
 
 
 def estimate_drift(spike_times, spike_amps, spike_depths, display=False):

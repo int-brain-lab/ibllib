@@ -193,7 +193,7 @@ def _plot_slice_vector(coords, slice, values, mapping, empty_color='silver', cle
         if len(coords) == 0:
             continue
 
-        if type(coords) == list:
+        if isinstance(coords, list):
             vertices, codes = coords_for_poly_hole(coords)
             plot_polygon_with_hole(ax, vertices, codes, color, **kwargs)
         else:

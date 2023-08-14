@@ -377,7 +377,7 @@ class EphysAlignment:
             all_y.append(y)
             all_x.append(x)
             col = region_colours[bound[iB]]
-            if type(col) != str:
+            if not isinstance(col, str):
                 col = '#FFFFFF'
             else:
                 col = '#' + col
