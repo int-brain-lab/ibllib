@@ -768,8 +768,9 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
             _logger.error(f'Surgery not found for subject "{subject}"')
             return
         surgery = surgeries[0]  # Check most recent surgery in list
+        center = (meta['centerMM']['ML'], meta['centerMM']['AP'])
         match = (k for k, v in surgery['json'].items() if
-                 str(k).startswith('craniotomy') and np.allclose(v['center'], meta['centerMM']))
+                 str(k).startswith('craniotomy') and np.allclose(v['center'], center))
         if (key := next(match, None)) is None:
             _logger.error('Failed to update surgery JSON: no matching craniotomy found')
             return surgery

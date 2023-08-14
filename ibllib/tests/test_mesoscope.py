@@ -159,9 +159,10 @@ class TestMesoscopeFOV(unittest.TestCase):
         task = MesoscopeFOV('/foo/bar/subject/2020-01-01/001', one=one)
         record = {'json': {'craniotomy_00': {'center': [1., -3.]}, 'craniotomy_01': {'center': [2.7, -1.3]}}}
         normal_vector = np.array([0.5, 1., 0.])
+        meta = {'centerMM': {'ML': 2.7, 'AP': -1.30000000001}}
         with mock.patch.object(one.alyx, 'rest', return_value=[record, {}]), \
                 mock.patch.object(one.alyx, 'json_field_update') as mock_rest:
-            task.update_surgery_json({'centerMM': [2.7, -1.30000000001]}, normal_vector)
+            task.update_surgery_json(meta, normal_vector)
             expected = {'craniotomy_01': {'center': [2.7, -1.3],
                                           'surface_normal_unit_vector': (0.5, 1., 0.)}}
             mock_rest.assert_called_once_with('subjects', 'subject', data=expected)
@@ -170,15 +171,15 @@ class TestMesoscopeFOV(unittest.TestCase):
         # No matching craniotomy center
         with self.assertLogs('ibllib.pipes.mesoscope_tasks', 'ERROR'), \
                 mock.patch.object(one.alyx, 'rest', return_value=[record, {}]):
-            task.update_surgery_json({'centerMM': [0., 0.]}, normal_vector)
+            task.update_surgery_json({'centerMM': {'ML': 0., 'AP': 0.}}, normal_vector)
         # No matching surgery records
         with self.assertLogs('ibllib.pipes.mesoscope_tasks', 'ERROR'), \
                 mock.patch.object(one.alyx, 'rest', return_value=[]):
-            task.update_surgery_json({'centerMM': [2.7, -1.3]}, normal_vector)
+            task.update_surgery_json(meta, normal_vector)
         # ONE offline
         one.mode = 'local'
         with self.assertLogs('ibllib.pipes.mesoscope_tasks', 'WARNING'):
-            task.update_surgery_json({'centerMM': [2.7, -1.3]}, normal_vector)
+            task.update_surgery_json(meta, normal_vector)
 
 
 class TestRegisterFOV(unittest.TestCase):
