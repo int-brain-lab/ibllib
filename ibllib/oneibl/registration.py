@@ -258,9 +258,11 @@ class IBLRegistrationClient(RegistrationClient):
                     user = self.one.alyx.user
                 self.register_weight(subject['nickname'], md['SUBJECT_WEIGHT'],
                                      date_time=md['SESSION_DATETIME'], user=user)
-        else:  # if session exists update the JSON field
-            session = self.one.alyx.rest('sessions', 'read', id=session_id[0], no_cache=True)
-            self.one.alyx.json_field_update('sessions', session['id'], data=json_field)
+        else:  # if session exists update a few key fields
+            data = {'procedures': procedures, 'projects': projects,
+                    'task_protocol': '/'.join(task_protocols)}
+            session = self.one.alyx.rest('sessions', 'partial_update', id=session_id[0], data=data)
+            session['json'] = self.one.alyx.json_field_update('sessions', session['id'], data=json_field)
 
         _logger.info(session['url'] + ' ')
         # create associated water administration if not found
