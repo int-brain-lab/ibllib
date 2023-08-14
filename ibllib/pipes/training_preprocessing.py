@@ -1,3 +1,9 @@
+"""(Deprecated) Training data preprocessing tasks.
+
+These tasks are part of the old pipeline. This module has been replaced by the dynamic pipeline
+and the `behavior_tasks` module.
+"""
+
 import logging
 from collections import OrderedDict
 from one.alf.files import session_path_parts

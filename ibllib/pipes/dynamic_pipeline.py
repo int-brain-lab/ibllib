@@ -1,3 +1,8 @@
+"""Task pipeline creation from an acquisition description.
+
+The principal function here is `make_pipeline` which reads an `_ibl_experiment.description.yaml`
+file and determines the set of tasks required to preprocess the session.
+"""
 import logging
 import re
 from collections import OrderedDict
