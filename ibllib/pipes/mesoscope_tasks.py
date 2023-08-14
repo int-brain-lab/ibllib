@@ -467,13 +467,13 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
             raise NotImplementedError('Multi-plane imaging not yet supported, data seems to be multi-plane')
 
         # Computing dx and dy
-        cXY = np.array([fov['topLeftDeg'] for fov in meta['FOV']])
+        cXY = np.array([fov['Deg']['topLeft'] for fov in meta['FOV']])
         cXY -= np.min(cXY, axis=0)
         nXnYnZ = np.array([fov['nXnYnZ'] for fov in meta['FOV']])
-        sW = np.sqrt(np.sum((np.array([fov['topRightDeg'] for fov in meta['FOV']]) - np.array(
-            [fov['topLeftDeg'] for fov in meta['FOV']])) ** 2, axis=1))
-        sH = np.sqrt(np.sum((np.array([fov['bottomLeftDeg'] for fov in meta['FOV']]) - np.array(
-            [fov['topLeftDeg'] for fov in meta['FOV']])) ** 2, axis=1))
+        sW = np.sqrt(np.sum((np.array([fov['Deg']['topRight'] for fov in meta['FOV']]) - np.array(
+            [fov['Deg']['topLeft'] for fov in meta['FOV']])) ** 2, axis=1))
+        sH = np.sqrt(np.sum((np.array([fov['Deg']['bottomLeft'] for fov in meta['FOV']]) - np.array(
+            [fov['Deg']['topLeft'] for fov in meta['FOV']])) ** 2, axis=1))
         pixSizeX = nXnYnZ[:, 0] / sW
         pixSizeY = nXnYnZ[:, 1] / sH
         dx = np.round(cXY[:, 0] * pixSizeX).astype(dtype=np.int32)
@@ -697,7 +697,7 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
         # Load necessary data
         (filename, collection, _), *_ = self.signature['input_files']
         meta_file = next(self.session_path.glob(f'{collection}/{filename}'), None)
-        meta = alfio.load_file_content(meta_file) or {}
+        meta = mesoscope.patch_imaging_meta(alfio.load_file_content(meta_file) or {})
         nFOV = len(meta.get('FOV', []))
 
         suffix = None if provenance is Provenance.HISTOLOGY else provenance.name.lower()
@@ -1047,13 +1047,6 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
 
             # xx and yy are in mm in coverslip space
             points = ((0, fov['nXnYnZ'][0] - 1), (0, fov['nXnYnZ'][1] - 1))
-            if 'MM' not in fov:
-                fov['MM'] = {
-                    'topLeft': fov.pop('topLeftMM'),
-                    'topRight': fov.pop('topRightMM'),
-                    'bottomLeft': fov.pop('bottomLeftMM'),
-                    'bottomRight': fov.pop('bottomRightMM')
-                }
             # The four corners of the FOV, determined by taking the center of the craniotomy in MM,
             # the x-y coordinates of the imaging window center (from the tiled reference image) in
             # galvanometer units, and the x-y coordinates of the FOV center in galvanometer units.
