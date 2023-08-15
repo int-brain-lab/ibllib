@@ -38,7 +38,8 @@ def patch_imaging_meta(meta: dict) -> dict:
         The loaded metadata file, updated to the most recent version.
     """
     # 2023-05-17 (unversioned) adds nFrames, channelSaved keys, MM and Deg keys
-    if parse_version(meta.get('version') or '0.0.0') <= parse_version('0.0.0'):
+    version = parse_version(meta.get('version') or '0.0.0')
+    if version <= parse_version('0.0.0'):
         if 'channelSaved' not in meta:
             meta['channelSaved'] = next((x['channelIdx'] for x in meta['FOV'] if 'channelIdx' in x), [])
         fields = ('topLeft', 'topRight', 'bottomLeft', 'bottomRight')
@@ -46,6 +47,9 @@ def patch_imaging_meta(meta: dict) -> dict:
             for unit in ('Deg', 'MM'):
                 if unit not in fov:  # topLeftDeg, etc. -> Deg[topLeft]
                     fov[unit] = {f: fov.pop(f + unit, None) for f in fields}
+    elif version == parse_version('0.1.0'):
+        for fov in meta.get('FOV', []):
+            fov['roiUUID'] = fov.pop('roiUuid')
     return meta
 
 
