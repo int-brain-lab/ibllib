@@ -152,12 +152,14 @@ def load_existing_dataframe(subj_path):
         return None
 
 
-def load_trials(sess_path, one, collections=None, force=True):
+def load_trials(sess_path, one, collections=None, force=True, mode='raise'):
     """
     Load trials data for session. First attempts to load from local session path, if this fails will attempt to download via ONE,
     if this also fails, will then attempt to re-extraxt locally
     :param sess_path: session path
     :param one: ONE instance
+    :param force: when True and if the session trials can't be found, will attempt to re-extract from the disk
+    :param mode: 'raise' or 'warn', if 'raise', will error when forcing re-extraction of past sessions
     :return:
     """
     try:
@@ -219,7 +221,11 @@ def load_trials(sess_path, one, collections=None, force=True):
                 else:
                     trials = None
             except Exception as e:
-                raise Exception('Exhausted all possibilities for loading trials') from e
+                if mode == 'raise':
+                    raise Exception(f'Exhausted all possibilities for loading trials for {sess_path}') from e
+                else:
+                    logger.warning(f'Exhausted all possibilities for loading trials for {sess_path}')
+                    return
 
     return trials
 
@@ -503,7 +509,7 @@ def get_sess_dict(session_path, one, protocol, alf_collections=None, raw_collect
 
     else:
         # if we can't compute trials then we need to pass
-        trials = load_trials(session_path, one, collections=alf_collections, force=force)
+        trials = load_trials(session_path, one, collections=alf_collections, force=force, mode='warn')
         if trials is None:
             return
 
