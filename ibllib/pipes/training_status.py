@@ -360,8 +360,11 @@ def compute_training_status(df, compute_date, one, force=True, task_collection='
 
     dates = df_temp.date.values
 
-    n_dates = np.min([3, len(dates)]).astype(int)
+    n_sess_for_date = len(np.where(dates == compute_date)[0])
+    n_dates = np.min([2 + n_sess_for_date, len(dates)]).astype(int)
     compute_dates = dates[(-1 * n_dates):]
+    if n_sess_for_date > 1:
+        compute_dates = compute_dates[:(-1 * (n_sess_for_date - 1))]
 
     assert compute_dates[-1] == compute_date
 
