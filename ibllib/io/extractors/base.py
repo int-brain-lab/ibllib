@@ -139,7 +139,7 @@ class BaseBpodTrialsExtractor(BaseExtractor):
         """
         self.bpod_trials = bpod_trials
         self.settings = settings
-        self.task_collection = kwargs.get('task_collection', 'raw_behavior_data')
+        self.task_collection = kwargs.pop('task_collection', 'raw_behavior_data')
         if self.bpod_trials is None:
             self.bpod_trials = raw.load_data(self.session_path, task_collection=self.task_collection)
         if not self.settings:
