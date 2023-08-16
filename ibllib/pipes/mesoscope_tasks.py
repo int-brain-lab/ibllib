@@ -691,13 +691,14 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
 
         Notes
         -----
-        Once the FOVs have been registered they cannot be updated with with task. Rerunning this
-        task will result in an error.
+        - Once the FOVs have been registered they cannot be updated with this task. Rerunning this
+          task will result in an error.
+        - This task modifies the first meta JSON file.  All meta files are registered by this task.
         """
         # Load necessary data
         (filename, collection, _), *_ = self.signature['input_files']
-        meta_file = next(self.session_path.glob(f'{collection}/{filename}'), None)
-        meta = mesoscope.patch_imaging_meta(alfio.load_file_content(meta_file) or {})
+        meta_files = sorted(self.session_path.glob(f'{collection}/{filename}'))
+        meta = mesoscope.patch_imaging_meta(alfio.load_file_content(meta_files[0]) or {})
         nFOV = len(meta.get('FOV', []))
 
         suffix = None if provenance is Provenance.HISTOLOGY else provenance.name.lower()
@@ -707,7 +708,7 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
         mean_image_mlapdv, mean_image_ids = self.project_mlapdv(meta)
 
         # Save the meta data file with new coordinate fields
-        with open(meta_file, 'w') as fp:
+        with open(meta_files[0], 'w') as fp:
             json.dump(meta, fp)
 
         # Save the mean image datasets
@@ -736,7 +737,7 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
         # Register FOVs in Alyx
         self.register_fov(meta, suffix)
 
-        return sorted([meta_file, *roi_files, *mean_image_files])
+        return sorted([*meta_files, *roi_files, *mean_image_files])
 
     def update_surgery_json(self, meta, normal_vector):
         """
@@ -795,9 +796,9 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
 
         Returns
         -------
-        dict of int: numpy.array
+        dict of int : numpy.array
             A map of field of view to ROI MLAPDV coordinates.
-        dict of int: numpy.array
+        dict of int : numpy.array
             A map of field of view to ROI brain location IDs.
         """
         all_mlapdv = {}
