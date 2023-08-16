@@ -128,7 +128,7 @@ class BaseBpodTrialsExtractor(BaseExtractor):
     settings = None
     task_collection = None
 
-    def extract(self, task_collection='raw_behavior_data', bpod_trials=None, settings=None, **kwargs):
+    def extract(self, bpod_trials=None, settings=None, **kwargs):
         """
         :param: bpod_trials (optional) bpod trials from jsonable in a dictionary
         :param: settings (optional) bpod iblrig settings json file in a dictionary
@@ -139,7 +139,7 @@ class BaseBpodTrialsExtractor(BaseExtractor):
         """
         self.bpod_trials = bpod_trials
         self.settings = settings
-        self.task_collection = task_collection
+        self.task_collection = kwargs.get('task_collection', 'raw_behavior_data')
         if self.bpod_trials is None:
             self.bpod_trials = raw.load_data(self.session_path, task_collection=self.task_collection)
         if not self.settings:

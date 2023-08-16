@@ -228,12 +228,12 @@ class VideoSyncQcBpod(base_tasks.VideoTask):
         # Video timestamps extraction
         output_files = []
         data, files = camera.extract_all(self.session_path, sync_type=self.sync, sync_collection=self.sync_collection,
-                                         save=True, labels=labels)
+                                         save=True, labels=labels, task_collection=self.collection)
         output_files.extend(files)
 
         # Video QC
         run_camera_qc(self.session_path, update=True, one=self.one, cameras=labels,
-                      sync_collection=self.sync_collection, sync_type=self.sync)
+                      sync_collection=self.sync_collection, sync_type=self.sync, task_collection=self.collection)
 
         return output_files
 
