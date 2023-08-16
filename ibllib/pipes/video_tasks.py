@@ -233,7 +233,7 @@ class VideoSyncQcBpod(base_tasks.VideoTask):
 
         # Video QC
         run_camera_qc(self.session_path, update=True, one=self.one, cameras=labels,
-                      sync_collection=self.sync_collection, sync_type=self.sync, task_collection=self.collection)
+                      sync_collection=self.sync_collection, sync_type=self.sync)
 
         return output_files
 
