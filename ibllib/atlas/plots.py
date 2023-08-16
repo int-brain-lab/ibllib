@@ -7,9 +7,8 @@ import logging
 import numpy as np
 from scipy.ndimage import gaussian_filter
 from scipy.stats import binned_statistic
-import matplotlib
 import matplotlib.pyplot as plt
-from matplotlib import cm
+from matplotlib import cm, colors
 from matplotlib.patches import Polygon, PathPatch
 import matplotlib.path as mpath
 from iblutil.io.hashfile import md5
@@ -208,20 +207,22 @@ def reorder_data(acronyms, values, brain_regions=None):
 
 def load_slice_files(slice, mapping):
     """
-    Function to load in set of vectorised atlas slices for a given atlas axis and mapping. If the data does not
-    exist locally, it will download the files automatically stored in a AWS s3 bucket.
+    Function to load in set of vectorised atlas slices for a given atlas axis and mapping.
+
+    If the data does not exist locally, it will download the files automatically stored in a AWS S3
+    bucket.
 
     Parameters
     ----------
-    slice: {'coronal', 'sagittal', 'horizontal', 'top'}
-        The axis of the atlas to load
-    mapping: {'Allen', 'Beryl', 'Cosmos'}
-        The mapping to load
+    slice : {'coronal', 'sagittal', 'horizontal', 'top'}
+        The axis of the atlas to load.
+    mapping : {'Allen', 'Beryl', 'Cosmos'}
+        The mapping to load.
 
     Returns
     -------
-    slice_data: json
-        A json containing the vertices to draw each region for each slice in the Allen annotation volume
+    slice_data : numpy.array
+        A json containing the vertices to draw each region for each slice in the Allen annotation volume.
 
     """
     OLD_MD5 = {
@@ -246,43 +247,43 @@ def _plot_slice_vector(coords, slice, values, mapping, empty_color='silver', cle
                        ba=None, ax=None, slice_json=None, **kwargs):
     """
     Function to plot scalar value per allen region on vectorised version of histology slice. Do not use directly but use
-    through plot_scalar_on_slice function with vector=True
+    through plot_scalar_on_slice function with vector=True.
 
     Parameters
     ----------
     coords: float
-        coordinate of slice in um (not needed when slice='top')
+        Coordinate of slice in um (not needed when slice='top').
     slice: {'coronal', 'sagittal', 'horizontal', 'top'}
-        the axis through the atlas volume to display
+        The axis through the atlas volume to display.
     values: numpy.array
         Array of values for each of the lateralised Allen regions found using BrainRegions().acronym. If no
-        value is assigned to the acronym, the value at corresponding to that index should be nan
+        value is assigned to the acronym, the value at corresponding to that index should be NaN.
     mapping: {'Allen', 'Beryl', 'Cosmos'}
-        the mapping to use
+        The mapping to use.
     empty_color: str, tuple of int, default='silver'
-        The color used to fill the regions that do not have any values assigned (regions with nan)
+        The color used to fill the regions that do not have any values assigned (regions with NaN).
     clevels: numpy.array, list or tuple
-        The min and max values to use for the colormap
+        The min and max values to use for the colormap.
     cmap: string
-        Colormap to use
+        Colormap to use.
     show_cbar: bool, default=False
-        Whether or not to display a colorbar
+        Whether to display a colorbar.
     ba : ibllib.atlas.AllenAtlas
-        A brain atlas object
+        A brain atlas object.
     ax : matplotlib.pyplot.Axes
         An axis object to plot onto.
-    slice_json: json
-        The set of vectorised slices for this slice, obtained using load_slice_files(slice, mapping)
-    kwargs
-        Set of kwargs passed into matplotlib.patches.Polygon
+    slice_json: numpy.array
+        The set of vectorised slices for this slice, obtained using load_slice_files(slice, mapping).
+    **kwargs
+        Set of kwargs passed into matplotlib.patches.Polygon.
 
     Returns
     -------
     fig: matplotlib.figure.Figure
-        The plotted figure
+        The plotted figure.
     ax: matplotlib.pyplot.Axes
         The plotted axes.
-    cbar: matplotlib.pyplot.colorbar
+    cbar: matplotlib.pyplot.colorbar, optional
         matplotlib colorbar object, only returned if show_cbar=True
 
     """
@@ -303,7 +304,7 @@ def _plot_slice_vector(coords, slice, values, mapping, empty_color='silver', cle
         fig = ax.get_figure()
 
     colormap = cm.get_cmap(cmap)
-    norm = matplotlib.colors.Normalize(vmin=clevels[0], vmax=clevels[1])
+    norm = colors.Normalize(vmin=clevels[0], vmax=clevels[1])
     nan_vals = np.isnan(values)
     rgba_color = np.full((values.size, 4), fill_value=np.nan)
     rgba_color[~nan_vals] = colormap(norm(values[~nan_vals]), bytes=True)
@@ -354,40 +355,71 @@ def _plot_slice_vector(coords, slice, values, mapping, empty_color='silver', cle
         ax.invert_yaxis()
 
     if show_cbar:
-        cbar = fig.colorbar(matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax)
+        cbar = fig.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax)
         return fig, ax, cbar
     else:
         return fig, ax
 
 
-def plot_scalar_on_slice(regions, values, coord=-1000, slice='coronal', mapping='Allen', hemisphere='left',
+def plot_scalar_on_slice(regions, values, coord=-1000, slice='coronal', mapping=None, hemisphere='left',
                          background='image', cmap='viridis', clevels=None, show_cbar=False, empty_color='silver',
                          brain_atlas=None, ax=None, vector=False, slice_files=None, **kwargs):
     """
-    Function to plot scalar value per allen region on histology slice
+    Function to plot scalar value per region on histology slice.
 
-    :param regions: array of acronyms of Allen regions
-    :param values: array of scalar value per acronym. If hemisphere is 'both' and different values want to be shown on each
-    hemispheres, values should contain 2 columns, 1st column for LH values, 2nd column for RH values
-    :param coord: coordinate of slice in um (not needed when slice='top')
-    :param slice: orientation of slice, options are 'coronal', 'sagittal', 'horizontal', 'top' (top view of brain)
-    :param mapping: atlas mapping to use, options are 'Allen', 'Beryl' or 'Cosmos'
-    :param hemisphere: hemisphere to display, options are 'left', 'right', 'both'
-    :param background: background slice to overlay onto, options are 'image' or 'boundary' (only used when vector = False)
-    :param cmap: colormap to use
-    :param clevels: min max color levels [cmin, cmax]
-    :param show_cbar: whether or not to add colorbar to axis
-    :param empty_color: color to use for regions without any values (only used when vector = True)
-    :param brain_atlas: AllenAtlas object
-    :param ax: optional axis object to plot on
-    :param vector: whether to show as bitmap of vector graphic
-    :param slice_files: slice files for
-    :param **kwargs: kwargs to pass to matplotlib polygon e.g linewidth=2, edgecolor='none' (only used when vector = True)
-    :return:
+    Parameters
+    ----------
+    regions : array_like
+        An array of brain region acronyms.
+    values : numpy.array
+        An array of scalar value per acronym. If hemisphere is 'both' and different values want to
+        be shown on each hemisphere, values should contain 2 columns, 1st column for LH values, 2nd
+        column for RH values.
+    coord : float
+        Coordinate of slice in um (not needed when slice='top').
+    slice : {'coronal', 'sagittal', 'horizontal', 'top'}, default='coronal'
+        Orientation of slice.
+    mapping : str, optional
+        Atlas mapping to use, options are depend on atlas used (see `ibllib.atlas.BrainRegions`).
+        If None, the atlas default mapping is used.
+    hemisphere : {'left', 'right', 'both'}, default='left'
+        The hemisphere to display.
+    background : {image', 'boundary'}, default='image'
+        Background slice to overlay onto, options are 'image' or 'boundary'. If `vector` is false,
+        this argument is ignored.
+    cmap: str, default='viridis'
+        Colormap to use.
+    clevels : array_like
+        The min and max color levels to use.
+    show_cbar: bool, default=False
+        Whether to display a colorbar.
+    empty_color : str, default='silver'
+        Color to use for regions without any values (only used when `vector` is true).
+    brain_atlas : ibllib.atlas.AllenAtlas
+        A brain atlas object.
+    ax : matplotlib.pyplot.Axes
+        An axis object to plot onto.
+    vector : bool, default=False
+        Whether to show as bitmap or vector graphic.
+    slice_files: numpy.array
+        The set of vectorised slices for this slice, obtained using `load_slice_files(slice, mapping)`.
+    **kwargs
+        Set of kwargs passed into matplotlib.patches.Polygon, e.g. linewidth=2, edgecolor='None'
+        (only used when vector = True).
+
+    Returns
+    -------
+    fig: matplotlib.figure.Figure
+        The plotted figure.
+    ax: matplotlib.pyplot.Axes
+        The plotted axes.
+    cbar: matplotlib.pyplot.colorbar, optional
+        matplotlib colorbar object, only returned if show_cbar=True.
     """
 
     ba = brain_atlas or AllenAtlas()
     br = ba.regions
+    mapping = mapping or br.default_mapping
 
     if clevels is None:
         clevels = (np.nanmin(values), np.nanmax(values))
@@ -489,7 +521,7 @@ def plot_scalar_on_flatmap(regions, values, depth=0, flatmap='dorsal_cortex', ma
     d_idx = int(np.round(depth / ba.res_um))  # need to find nearest to 25
 
     if background == 'boundary':
-        cmap_bound = matplotlib.cm.get_cmap("bone_r").copy()
+        cmap_bound = cm.get_cmap("bone_r").copy()
         cmap_bound.set_under([1, 1, 1], 0)
 
     if ax:
@@ -514,8 +546,8 @@ def plot_scalar_on_flatmap(regions, values, depth=0, flatmap='dorsal_cortex', ma
             ax.set_xlim(np.ceil(ba.flatmap.shape[1] / 2), ba.flatmap.shape[1])
 
     if show_cbar:
-        norm = matplotlib.colors.Normalize(vmin=clevels[0], vmax=clevels[1], clip=False)
-        cbar = fig.colorbar(matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax)
+        norm = colors.Normalize(vmin=clevels[0], vmax=clevels[1], clip=False)
+        cbar = fig.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax)
         return fig, ax, cbar
     else:
         return fig, ax
@@ -533,7 +565,7 @@ def plot_volume_on_slice(volume, coord=-1000, slice='coronal', mapping='Allen', 
     :param background: background slice to overlay onto, options are 'image' or 'boundary'
     :param cmap: colormap to use
     :param clevels: min max color levels [cmin, cmax]
-    :param show_cbar: whether or not to add colorbar to axis
+    :param show_cbar: whether to add colorbar to axis
     :param brain_atlas: AllenAtlas object
     :param ax: optional axis object to plot on
     :return:
@@ -573,7 +605,7 @@ def plot_points_on_slice(xyz, values=None, coord=-1000, slice='coronal', mapping
     :param background: background slice to overlay onto, options are 'image' or 'boundary'
     :param cmap: colormap to use
     :param clevels: min max color levels [cmin, cmax]
-    :param show_cbar: whether or not to add colorbar to axis
+    :param show_cbar: whether to add colorbar to axis
     :param aggr: aggregation method. Options are sum, count, mean, std, median, min and max.
     Can also give in custom function (https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.binned_statistic.html)
     :param fwhm: fwhm distance of gaussian kernel in um
@@ -648,33 +680,34 @@ def compute_volume_from_points(xyz, values=None, aggr='sum', fwhm=100, ba=None):
 def _plot_slice(coord, slice, region_values, vol_type, background='boundary', map='Allen', clevels=None, cmap='viridis',
                 show_cbar=False, ba=None, ax=None):
     """
-    Function to plot scalar value per allen region on histology slice. Do not use directly but use
-    through plot_scalar_on_slice function
+    Function to plot scalar value per allen region on histology slice.
+
+    Do not use directly but use through plot_scalar_on_slice function.
 
     Parameters
     ----------
     coord: float
-        coordinate of slice in um (not needed when slice='top')
+        coordinate of slice in um (not needed when slice='top').
     slice: {'coronal', 'sagittal', 'horizontal', 'top'}
-        the axis through the atlas volume to display
+        the axis through the atlas volume to display.
     region_values: numpy.array
         Array of values for each of the lateralised Allen regions found using BrainRegions().acronym. If no
-        value is assigned to the acronym, the value at corresponding to that index should be nan
+        value is assigned to the acronym, the value at corresponding to that index should be nan.
     vol_type: 'value'
-        The type of volume to be displayed, should alwasy be 'value' if values want to be displayed
+        The type of volume to be displayed, should always be 'value' if values want to be displayed.
     background: {'image', 'boundary'}
         The background slice to overlay the values onto. When 'image' it uses the Allen dwi image, when
-        'boundary' it displays the boundaries between regions
+        'boundary' it displays the boundaries between regions.
     map: {'Allen', 'Beryl', 'Cosmos'}
-        the mapping to use
+        the mapping to use.
     clevels: numpy.array, list or tuple
-        The min and max values to use for the colormap
-    cmap: string
-        Colormap to use
+        The min and max values to use for the colormap.
+    cmap: str, default='viridis'
+        Colormap to use.
     show_cbar: bool, default=False
-        Whether or not to display a colorbar
+        Whether to display a colorbar.
     ba : ibllib.atlas.AllenAtlas
-        A brain atlas object
+        A brain atlas object.
     ax : matplotlib.pyplot.Axes
         An axis object to plot onto.
 
@@ -685,7 +718,7 @@ def _plot_slice(coord, slice, region_values, vol_type, background='boundary', ma
     ax: matplotlib.pyplot.Axes
         The plotted axes.
     cbar: matplotlib.pyplot.colorbar
-        matplotlib colorbar object, only returned if show_cbar=True
+        matplotlib colorbar object, only returned if show_cbar=True.
 
     """
     ba = ba or AllenAtlas()
@@ -739,8 +772,8 @@ def _plot_slice(coord, slice, region_values, vol_type, background='boundary', ma
             ba.plot_top(volume='boundary', mapping=map, ax=ax)
 
     if show_cbar:
-        norm = matplotlib.colors.Normalize(vmin=clevels[0], vmax=clevels[1], clip=False)
-        cbar = fig.colorbar(matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax)
+        norm = colors.Normalize(vmin=clevels[0], vmax=clevels[1], clip=False)
+        cbar = fig.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax)
         return fig, ax, cbar
     else:
         return fig, ax
@@ -760,7 +793,7 @@ def plot_scalar_on_barplot(acronyms, values, errors=None, order=True, ax=None, b
     errors: numpy.array
         A 1D array of error values corresponding to each acronym in the acronyms array
     order: bool, default=True
-        Whether or not to order the acronyms according to the order defined by the Allen structure tree
+        Whether to order the acronyms according to the order defined by the Allen structure tree
     ax : matplotlib.pyplot.Axes
         An axis object to plot onto.
     brain_regions : ibllib.atlas.regions.BrainRegions
@@ -860,10 +893,10 @@ def plot_swanson_vector(acronyms=None, values=None, ax=None, hemisphere=None, br
 
     if acronyms is not None:
         ibr, vals = br.propagate_down(acronyms, values)
-        colormap = matplotlib.colormaps.get_cmap(cmap)
+        colormap = cm.get_cmap(cmap)
         vmin = vmin or np.nanmin(vals)
         vmax = vmax or np.nanmax(vals)
-        norm = matplotlib.colors.Normalize(vmin=vmin, vmax=vmax)
+        norm = colors.Normalize(vmin=vmin, vmax=vmax)
         rgba_color = colormap(norm(vals), bytes=True)
 
     if mask is not None:
@@ -1072,7 +1105,6 @@ def plot_swanson(acronyms=None, values=None, ax=None, hemisphere=None, br=None,
     br = BrainRegions() if br is None else br
     br.compute_hierarchy()
     s2a = swanson()
-    # both hemishpere
     if hemisphere == 'both':
         _s2a = s2a + np.sum(br.id > 0)
         _s2a[s2a == 0] = 0
@@ -1102,7 +1134,7 @@ def plot_swanson(acronyms=None, values=None, ax=None, hemisphere=None, br=None,
     imb = np.zeros((*s2a.shape[:2], 4), dtype=np.uint8)
     # fill in the empty regions with the blank regions colours if necessary
     if iswan is not None:
-        imb[~iswan] = (np.array(matplotlib.colors.to_rgba(empty_color)) * 255).astype('uint8')
+        imb[~iswan] = (np.array(colors.to_rgba(empty_color)) * 255).astype('uint8')
     imb[s2a == 0] = 255
     # imb[s2a == 1] = np.array([167, 169, 172, 255])
     imb[s2a == 1] = np.array([0, 0, 0, 255])
