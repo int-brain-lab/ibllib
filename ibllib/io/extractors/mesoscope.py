@@ -49,7 +49,8 @@ def patch_imaging_meta(meta: dict) -> dict:
                     fov[unit] = {f: fov.pop(f + unit, None) for f in fields}
     elif version == parse_version('0.1.0'):
         for fov in meta.get('FOV', []):
-            fov['roiUUID'] = fov.pop('roiUuid')
+            if 'roiUuid' in fov:
+                fov['roiUUID'] = fov.pop('roiUuid')
     return meta
 
 
