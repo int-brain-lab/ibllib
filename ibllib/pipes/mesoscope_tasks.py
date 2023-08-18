@@ -1106,7 +1106,22 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
             location_id[i] = annotation
         return mlapdv, location_id
 
-
+class MesoscopePMDCompress(base_tasks.MesoscopeTask):
+    """
+    """
+    
+    import localmd
+    
+    @property
+    def signature(self):
+        signature = {
+            'input_files': [('data.bin', 'raw_bin_files/FOV*')],
+            'output_files': [('PMD.npz', 'alf/FOV*'),
+                             ('mpci.pmdTriptych.tiff', 'alf/FOV*')]
+        }
+        
+        return signature
+    
 def surface_normal(triangle):
     """
     Calculate the surface normal unit vector of one or more triangles.
