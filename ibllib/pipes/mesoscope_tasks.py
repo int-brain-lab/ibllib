@@ -1106,16 +1106,16 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
             location_id[i] = annotation
         return mlapdv, location_id
 
+
 class MesoscopePMDCompress(base_tasks.MesoscopeTask):
     """
-    Run Penalized Matrix Decomposition compression algorithm on 
+    Run Penalized Matrix Decomposition compression algorithm on
     suite2p outputs using "localmd" implementation by Amol Pasarkar.
     """
-    
+
     SHELL_SCRIPT = Path.home().joinpath("Documents/PYTHON/iblscripts/deploy/mesoscope/run_localmd.sh")
-    
-    block_height = block_width = 10    
-        
+    block_height = block_width = 10
+
     @property
     def signature(self):
         signature = {
@@ -1123,56 +1123,51 @@ class MesoscopePMDCompress(base_tasks.MesoscopeTask):
             'output_files': [('PMD.npz', 'alf/FOV*'),
                              ('mpci.pmdTriptych.tiff', 'alf/FOV*')]
         }
-        
+
         return signature
-    
+
     def _run(self):
-        
+
         bin_files = list(self.session_path.joinpath("raw_bin_files").glob("FOV*/data.bin"))
         out_files = []
-        
+
         for bin_file in bin_files:
-            
+
             FOV = str(bin_file.parent)[-2:]
-            
+
             pmdz = self.session_path.joinpath(f"alf/FOV{FOV}/PMD.npz")
             triptych = self.session_path.joinpath(f"alf/FOV{FOV}/mpci.pmdTriptych.tiff")
-            
+
             if pmdz.exists() and triptych.exists():
                 _logger.info(f"Output files found, skipping:\n{pmdz}\n{triptych}")
                 return
-            
+
             # set up subprocess to run main script in iblscripts
-            command = f"{self.SHELL_SCRIPT} {self.session_path} {int(FOV)} {self.block_height} {self.block_width}"
+            command = f"""
+            {self.SHELL_SCRIPT} {self.session_path}
+            {int(FOV)}{self.block_height} {self.block_width}
+            """
+
             _logger.info(command)
-            process = subprocess.Popen(command, shell=True,
-                                      stdout=subprocess.PIPE,
-                                      sterr=subprocess.PIPE,
-                                      executable="/bin/bash")
+            process = subprocess.Popen(
+                command, shell=True,
+                stdout=subprocess.PIPE,
+                sterr=subprocess.PIPE,
+                executable="/bin/bash"
+            )
             info, error = process.communicate()
             info_str = info.decode("utf-8").strip()
             _logger.info(info_str)
             if process.returncode != 0:
                 error_str = error.decode("utf-8").strip()
                 raise RuntimeError(error_str)
-                
+
             out_files.append(pmdz)
             out_files.append(triptych)
-            
-        return out_files
-                
-                
-            
-            
-            
-            
-                
-            
-            
-        
 
-    
-    
+        return out_files
+
+
 def surface_normal(triangle):
     """
     Calculate the surface normal unit vector of one or more triangles.
