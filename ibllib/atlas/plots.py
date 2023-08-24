@@ -893,10 +893,10 @@ def plot_swanson_vector(acronyms=None, values=None, ax=None, hemisphere=None, br
 
     if acronyms is not None:
         ibr, vals = br.propagate_down(acronyms, values)
-        colormap = matplotlib.colormaps.get_cmap(cmap)
+        colormap = cm.get_cmap(cmap)
         vmin = vmin or np.nanmin(vals)
         vmax = vmax or np.nanmax(vals)
-        norm = matplotlib.colors.Normalize(vmin=vmin, vmax=vmax)
+        norm = colors.Normalize(vmin=vmin, vmax=vmax)
         rgba_color = colormap(norm(vals), bytes=True)
 
     if mask is not None:
@@ -1090,7 +1090,7 @@ def plot_swanson(acronyms=None, values=None, ax=None, hemisphere=None, br=None,
     br = BrainRegions() if br is None else br
     br.compute_hierarchy()
     s2a = swanson()
-    # both hemishpere
+    # both hemispheres
     if hemisphere == 'both':
         _s2a = s2a + np.sum(br.id > 0)
         _s2a[s2a == 0] = 0
@@ -1120,7 +1120,7 @@ def plot_swanson(acronyms=None, values=None, ax=None, hemisphere=None, br=None,
     imb = np.zeros((*s2a.shape[:2], 4), dtype=np.uint8)
     # fill in the empty regions with the blank regions colours if necessary
     if iswan is not None:
-        imb[~iswan] = (np.array(matplotlib.colors.to_rgba(empty_color)) * 255).astype('uint8')
+        imb[~iswan] = (np.array(colors.to_rgba(empty_color)) * 255).astype('uint8')
     imb[s2a == 0] = 255
     # imb[s2a == 1] = np.array([167, 169, 172, 255])
     imb[s2a == 1] = np.array([0, 0, 0, 255])
