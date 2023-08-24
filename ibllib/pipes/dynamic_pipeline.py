@@ -27,8 +27,19 @@ _logger = logging.getLogger(__name__)
 
 def acquisition_description_legacy_session(session_path, save=False):
     """
-    From a legacy session create a dictionary corresponding to the acquisition description
-    :return: dict
+    From a legacy session create a dictionary corresponding to the acquisition description.
+
+    Parameters
+    ----------
+    session_path : str, pathlib.Path
+        A path to a session to describe.
+    save : bool
+        If true, saves the acquisition description file to _ibl_experiment.description.yaml.
+
+    Returns
+    -------
+    dict
+        The legacy acquisition description.
     """
     extractor_type = ibllib.io.extractors.base.get_session_extractor_type(session_path=session_path)
     etype2protocol = dict(biased='choice_world_biased', habituation='choice_world_habituation',

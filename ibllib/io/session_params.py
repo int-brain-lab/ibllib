@@ -83,9 +83,19 @@ def _patch_file(data: dict) -> dict:
 
 def write_params(session_path, data) -> Path:
     """
-    :param session_path : pathlib.Path, str
-    :param ad:
-    :return: pathlib.Path: yaml full file path
+    Write acquisition description data to the session path.
+
+    Parameters
+    ----------
+    session_path : str, pathlib.Path
+        A session path containing an _ibl_experiment.description.yaml file.
+    data : dict
+        The acquisition description data to save
+
+    Returns
+    -------
+    pathlib.Path
+        The full path to the saved acquisition description.
     """
     yaml_file = Path(session_path).joinpath('_ibl_experiment.description.yaml')
     write_yaml(yaml_file, data)
