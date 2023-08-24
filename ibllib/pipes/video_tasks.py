@@ -352,9 +352,14 @@ class DLC(base_tasks.VideoTask):
         return intact
 
     def _run(self, cams=None, overwrite=False):
-        # Default to all three cams
-        cams = cams or self.cameras
-        cams = assert_valid_label(cams)
+        # Check that the cams are valid for DLC, remove the ones that aren't
+        candidate_cams = cams or self.cameras
+        cams = []
+        for cam in candidate_cams:
+            try:
+                cams.append(assert_valid_label(cam))
+            except ValueError:
+                _logger.warning(f'{cam} is not a valid video label, this video will be skipped')
         # Set up
         self.session_id = self.one.path2eid(self.session_path)
         actual_outputs = []
