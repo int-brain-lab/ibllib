@@ -8,7 +8,7 @@ from sklearn.manifold import Isomap, MDS, TSNE, LocallyLinearEmbedding
 from sklearn.decomposition import PCA, FactorAnalysis, FastICA
 from one.api import ONE
 
-from brainbox.processing import bincount2D
+from iblutil.numerical import bincount2D
 
 
 def find_nearest(array, value):

@@ -26,12 +26,11 @@ import pandas as pd
 import spikeglx
 from phylib.stats import correlograms
 from iblutil.util import Bunch
-from iblutil.numerical import ismember, between_sorted
+from iblutil.numerical import ismember, between_sorted, bincount2D
 from slidingRP import metrics
 
 from brainbox import singlecell
 from brainbox.io.spikeglx import extract_waveforms
-from brainbox.processing import bincount2D
 from brainbox.metrics import electrode_drift
 
 

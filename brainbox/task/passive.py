@@ -2,7 +2,7 @@
 Functions dealing with passive task
 """
 import numpy as np
-from brainbox.processing import bincount2D
+from iblutil.numerical import bincount2D
 from scipy.linalg import svd
 
 

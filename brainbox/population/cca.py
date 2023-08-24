@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pylab as plt
-from brainbox.processing import bincount2D
+from iblutil.numerical import bincount2D
 
 
 def _smooth(data, sd):

@@ -12,7 +12,7 @@ import scipy.interpolate as interpolate
 from scipy.stats import zscore
 
 from neurodsp.smooth import smooth_interpolate_savgol
-from brainbox.processing import bincount2D
+from iblutil.numerical import bincount2D
 import brainbox.behavior.wheel as bbox_wheel
 
 logger = logging.getLogger('ibllib')
