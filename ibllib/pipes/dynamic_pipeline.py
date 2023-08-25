@@ -208,7 +208,8 @@ def make_pipeline(session_path, **pkwargs):
                     if hasattr(projects.extraction_tasks, extractor):
                         task = getattr(projects.extraction_tasks, extractor)
                     else:
-                        raise ValueError(f'Extractor "{extractor}" not found in main IBL pipeline nor in personal projects')
+                        raise NotImplementedError(
+                            f'Extractor "{extractor}" not found in main IBL pipeline nor in personal projects')
                 # Rename the class to something more informative
                 task_name = f'{task.__name__}_{i:02}'
                 # For now we assume that the second task in the list is always the trials extractor, which is dependent

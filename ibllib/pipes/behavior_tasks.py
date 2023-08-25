@@ -78,7 +78,7 @@ class HabituationTrialsBpod(base_tasks.BehaviourTask):
         Extracts an iblrig training session
         """
         extractor = bpod_trials.get_bpod_extractor(self.session_path, task_collection=self.collection)
-        trials, output_files = extractor.extract(task_collection=self.collection)
+        trials, output_files = extractor.extract(task_collection=self.collection, save=True)
 
         if trials is None:
             return None

@@ -5,6 +5,7 @@ import copy
 import logging
 
 import numpy as np
+import matplotlib
 from scipy.ndimage import gaussian_filter
 from scipy.stats import binned_statistic
 import matplotlib.pyplot as plt
