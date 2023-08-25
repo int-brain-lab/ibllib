@@ -27,7 +27,6 @@ import time
 from datetime import datetime
 import logging
 from pathlib import Path
-import warnings
 from copy import deepcopy
 
 from one.converters import ConversionMixin
@@ -405,14 +404,12 @@ def get_collections(sess_params):
 
     def iter_dict(d):
         for k, v in d.items():
-            if not v or isinstance(v, str):
-                continue
             if isinstance(v, list):
                 for d in filter(lambda x: isinstance(x, dict), v):
                     iter_dict(d)
-            elif 'collection' in v:
+            elif isinstance(v, dict) and 'collection' in v:
                 collection_map[k] = v['collection']
-            else:
+            elif isinstance(v, dict):
                 iter_dict(v)
 
     iter_dict(sess_params)
@@ -459,7 +456,7 @@ def get_remote_stub_name(session_path, device_id=None):
     return session_path / '_devices' / remote_filename
 
 
-def prepare_experiment(session_path, acquisition_description=None, local=None, remote=None, overwrite=False):
+def prepare_experiment(session_path, acquisition_description=None, local=None, remote=None, device_id=None, overwrite=False):
     """
     Copy acquisition description yaml to the server and local transfers folder.
 
@@ -471,30 +468,46 @@ def prepare_experiment(session_path, acquisition_description=None, local=None, r
         The data to write to the experiment.description.yaml file.
     local : str, pathlib.Path
         The path to the local session folders.
+        >>> C:\iblrigv8_data\cortexlab\Subjects  # noqa
     remote : str, pathlib.Path
         The path to the remote server session folders.
+        >>> Y:\Subjects  # noqa
+    device_id : str, optional
+        A device name, if None the TRANSFER_LABEL parameter is used (defaults to this device's
+        hostname with a unique numeric ID)
     overwrite : bool
         If true, overwrite any existing file with the new one, otherwise, update the existing file.
     """
     if not acquisition_description:
         return
+
     # Determine if user passed in arg for local/remote subject folder locations or pull in from
-    # local param file or prompt user if missing
-    params = misc.create_basic_transfer_params(local_data_path=local, remote_data_path=remote)
+    # local param file or prompt user if missing data.
+    if local is None or remote is None or device_id is None:
+        params = misc.create_basic_transfer_params(local_data_path=local, remote_data_path=remote, TRANSFER_LABEL=device_id)
+        local, device_id = (params['DATA_FOLDER_PATH'], params['TRANSFER_LABEL'])
+        # if the user provides False as an argument, it means the intent is to not copy anything, this
+        # won't be preserved by create_basic_transfer_params by default
+        remote = False if remote is False else params['REMOTE_DATA_FOLDER_PATH']
+
+    # THis is in the docstring but still, if the session Path is absolute, we need to make it relative
+    if Path(session_path).is_absolute():
+        session_path = Path(*session_path.parts[-3:])
 
     # First attempt to copy to server
-    local_only = remote is False or params.get('REMOTE_DATA_FOLDER_PATH', False) is False
-    if not local_only:
-        remote_device_path = get_remote_stub_name(session_path, params['TRANSFER_LABEL'])
+    if remote is not False:
+        remote_session_path = Path(remote).joinpath(session_path)
+        remote_device_path = get_remote_stub_name(remote_session_path, device_id=device_id)
         previous_description = read_params(remote_device_path) if remote_device_path.exists() and not overwrite else {}
         try:
             write_yaml(remote_device_path, merge_params(previous_description, acquisition_description))
+            _logger.info(f'Written data to remote device at: {remote_device_path}.')
         except Exception as ex:
-            warnings.warn(f'Failed to write data to {remote_device_path}: {ex}')
+            _logger.warning(f'Failed to write data to remote device at: {remote_device_path}. \n {ex}')
 
-    # Now copy to local directory
-    local = params.get('TRANSFERS_PATH', params['DATA_FOLDER_PATH'])
-    filename = f'_ibl_experiment.description_{params["TRANSFER_LABEL"]}.yaml'
+    # then create on the local machine
+    filename = f'_ibl_experiment.description_{device_id}.yaml'
     local_device_path = Path(local).joinpath(session_path, filename)
     previous_description = read_params(local_device_path) if local_device_path.exists() and not overwrite else {}
     write_yaml(local_device_path, merge_params(previous_description, acquisition_description))
+    _logger.info(f'Written data to local session at : {local_device_path}.')
