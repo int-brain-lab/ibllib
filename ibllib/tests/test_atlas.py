@@ -28,6 +28,15 @@ class TestBrainRegions(unittest.TestCase):
     def setUpClass(self):
         self.brs = BrainRegions()
 
+    def test_to_df(self):
+        df = self.brs.to_df()
+        self.assertTrue(df.shape[0] == self.brs.acronym.shape[0])
+        self.assertEqual(
+            set(['id', 'name', 'acronym', 'hexcolor', 'level', 'parent', 'order']), set(list(df.columns)))
+
+    def test_hexcolor(self):
+        assert self.brs.hexcolor.shape == (self.brs.rgb.shape[0],)
+
     def test_rgba(self):
         assert self.brs.rgba.shape == (self.brs.rgb.shape[0], 4)
 
@@ -86,6 +95,12 @@ class TestBrainRegions(unittest.TestCase):
         cosmos_id = self.brs.remap(atlas_id, source_map='Allen', target_map='Cosmos')
         expected_cosmos_id = [1089, 549]  # HPF and TH
         assert np.all(cosmos_id == expected_cosmos_id)
+
+        # Test remap when we have nans
+        atlas_id = np.array([463, np.nan, 685])
+        cosmos_id = self.brs.remap(atlas_id, source_map='Allen', target_map='Cosmos')
+        expected_cosmos_id = np.array([1089, np.nan, 549], dtype=float)  # HPF and TH
+        np.testing.assert_equal(cosmos_id, expected_cosmos_id)
 
     def test_id2id(self):
         # Test remapping of atlas id to atlas id
@@ -366,6 +381,12 @@ class TestAtlasSlicesConversion(unittest.TestCase):
         self.assertTrue(np.allclose(self.ba.bc.xyz2i(np.array([0, 0, 0]), round=False),
                                     ALLEN_CCF_LANDMARKS_MLAPDV_UM['bregma'] / 25))
 
+    def test_lookup_outside_the_brain(self):
+        xyz = [0, 0, 15687588]
+        with self.assertRaises(ValueError):
+            self.ba.get_labels(xyz)
+        self.assertEqual(self.ba.get_labels(xyz, mode='clip'), 0)
+
     def test_lookups(self):
         # the get_labels lookup returns the regions ids (not the indices !!)
         assert self.ba.get_labels([0, 0, self.ba.bc.i2z(103)]) == 304325711
@@ -480,7 +501,11 @@ class TestInsertion(unittest.TestCase):
             'theta': 5.0,
             'depth': 4501.0,
             'beta': 0.0}
-        ins = Insertion.from_dict(d)
+
+        brain_atlas = _create_mock_atlas()
+        brain_atlas.compute_surface()
+        brain_atlas.top = brain_atlas.top * np.NaN
+        ins = Insertion.from_dict(d, brain_atlas=brain_atlas)
         # eval the entry point, should be super close
         dxyz = ins.trajectory.eval_x(d['x'] / 1e6) - np.array((d['x'], d['y'], d['z'])) / 1e6
         self.assertTrue(np.all(np.isclose(dxyz, 0)))

@@ -13,6 +13,7 @@ from typing import Union, List
 from inspect import signature
 import uuid
 import socket
+import traceback
 
 import spikeglx
 from iblutil.io import hashfile, params
@@ -79,10 +80,16 @@ def cli_ask_options(prompt: str, options: list, default_idx: int = 0) -> str:
     return ans
 
 
-def behavior_exists(session_path: str) -> bool:
+def behavior_exists(session_path: str, include_devices=False) -> bool:
+    """
+    Returns True if the session has a task behaviour folder
+    :param session_path:
+    :return:
+    """
     session_path = Path(session_path)
-    behavior_path = session_path / "raw_behavior_data"
-    if behavior_path.exists():
+    if include_devices and session_path.joinpath("_devices").exists():
+        return True
+    if session_path.joinpath("raw_behavior_data").exists():
         return True
     return any(session_path.glob('raw_task_data_*'))
 
@@ -379,8 +386,9 @@ def create_basic_transfer_params(param_str='transfer_params', local_data_path=No
         The name of the parameters to load/save.
     local_data_path : str, pathlib.Path
         The local root data path, stored with the DATA_FOLDER_PATH key.  If None, user is prompted.
-    remote_data_path : str, pathlib.Path
+    remote_data_path : str, pathlib.Path, bool
         The local root data path, stored with the REMOTE_DATA_FOLDER_PATH key.  If None, user is prompted.
+        If False, the REMOTE_DATA_PATH key is not updated or is set to False if clobber = True.
     clobber : bool
         If True, any parameters in existing parameter file not found as keyword args will be removed,
         otherwise the user is prompted for these also.
@@ -409,6 +417,11 @@ def create_basic_transfer_params(param_str='transfer_params', local_data_path=No
     >>> from functools import partial
     >>> par = create_basic_transfer_params(
     ...     custom_arg=partial(cli_ask_default, 'Please enter custom arg value'))
+
+    Set up with no remote path (NB: if not the first time, use clobber=True to save param key)
+
+    >>> par = create_basic_transfer_params(remote_data_path=False)
+
     """
     parameters = params.as_dict(params.read(param_str, {})) or {}
     if local_data_path is None:
@@ -419,9 +432,12 @@ def create_basic_transfer_params(param_str='transfer_params', local_data_path=No
 
     if remote_data_path is None:
         remote_data_path = parameters.get('REMOTE_DATA_FOLDER_PATH')
-        if not remote_data_path or clobber:
+        if remote_data_path in (None, '') or clobber:
             remote_data_path = cli_ask_default("Where's your REMOTE 'Subjects' data folder?", remote_data_path)
-    parameters['REMOTE_DATA_FOLDER_PATH'] = remote_data_path
+    if remote_data_path is not False:
+        parameters['REMOTE_DATA_FOLDER_PATH'] = remote_data_path
+    elif 'REMOTE_DATA_FOLDER_PATH' not in parameters or clobber:
+        parameters['REMOTE_DATA_FOLDER_PATH'] = False  # Always assume no remote path
 
     # Deal with extraneous parameters
     for k, v in kwargs.items():
@@ -674,11 +690,20 @@ def rsync_paths(src: Path, dst: Path) -> bool:
     return True
 
 
-def confirm_ephys_remote_folder(
-    local_folder=False, remote_folder=False, force=False, iblscripts_folder=False
-):
+def confirm_ephys_remote_folder(local_folder=False, remote_folder=False, force=False, iblscripts_folder=False,
+                                session_path=None):
+    """
+    :param local_folder: The full path to the local Subjects folder
+    :param remote_folder:  the full path to the remote Subjects folder
+    :param force:
+    :param iblscripts_folder:
+    :return:
+    """
+    # FIXME: session_path can be relative
     pars = load_ephyspc_params()
-
+    if not iblscripts_folder:
+        import deploy
+        iblscripts_folder = Path(deploy.__file__).parent.parent
     if not local_folder:
         local_folder = pars["DATA_FOLDER_PATH"]
     if not remote_folder:
@@ -689,16 +714,22 @@ def confirm_ephys_remote_folder(
     local_folder = subjects_data_folder(local_folder, rglob=True)
     remote_folder = subjects_data_folder(remote_folder, rglob=True)
 
-    print("LOCAL:", local_folder)
-    print("REMOTE:", remote_folder)
-    src_session_paths = [x.parent for x in local_folder.rglob("transfer_me.flag")]
+    log.info(f"local folder: {local_folder}")
+    log.info(f"remote folder: {remote_folder}")
+    if session_path is None:
+        src_session_paths = [x.parent for x in local_folder.rglob("transfer_me.flag")]
+    else:
+        src_session_paths = session_path if isinstance(session_path, list) else [session_path]
 
     if not src_session_paths:
-        print("Nothing to transfer, exiting...")
+        log.info("Nothing to transfer, exiting...")
         return
+    for session_path in src_session_paths:
+        log.info(f"Found : {session_path}")
+    log.info(f"Found: {len(src_session_paths)} sessions to transfer, starting transferring now")
 
     for session_path in src_session_paths:
-        print(f"\nFound session: {session_path}")
+        log.info(f"Transferring session: {session_path}")
         # Rename ephys files
         # FIXME: if transfer has failed and wiring file is there renaming will fail!
         rename_ephys_files(str(session_path))
@@ -708,16 +739,13 @@ def confirm_ephys_remote_folder(
         copy_wiring_files(str(session_path), iblscripts_folder)
         try:
             create_alyx_probe_insertions(str(session_path))
-        except BaseException as e:
-            print(
-                e,
-                "\nCreation failed, please create the probe insertions manually.",
-                "Continuing transfer...",
-            )
-        msg = f"Transfer to {remote_folder} with the same name?"
+        except BaseException:
+            log.error(traceback.print_exc())
+            log.info("Probe creation failed, please create the probe insertions manually. Continuing transfer...")
+        msg = f"Transfer {session_path }to {remote_folder} with the same name?"
         resp = input(msg + "\n[y]es/[r]ename/[s]kip/[e]xit\n ^\n> ") or "y"
         resp = resp.lower()
-        print(resp)
+        log.info(resp)
         if resp not in ["y", "r", "s", "e", "yes", "rename", "skip", "exit"]:
             return confirm_ephys_remote_folder(
                 local_folder=local_folder,
@@ -737,22 +765,21 @@ def confirm_ephys_remote_folder(
             return
 
         remote_session_path = remote_folder / Path(*session_path.parts[-3:])
-        if not behavior_exists(remote_session_path):
-            print(f"No behavior folder found in {remote_session_path}: skipping session...")
+        if not behavior_exists(remote_session_path, include_devices=True):
+            log.error(f"No behavior folder found in {remote_session_path}: skipping session...")
             return
         # TODO: Check flagfiles on src.and dst + alf dir in session folder then remove
         # Try catch? wher catch condition is force transfer maybe
-        transfer_folder(
-            session_path / "raw_ephys_data", remote_session_path / "raw_ephys_data", force=force
-        )
+        transfer_folder(session_path / "raw_ephys_data", remote_session_path / "raw_ephys_data", force=force)
         # if behavior extract_me.flag exists remove it, because of ephys flag
         flag_file = session_path / "transfer_me.flag"
-        flag_file.unlink()
-        if (remote_session_path / "extract_me.flag").exists():
-            (remote_session_path / "extract_me.flag").unlink()
-        # Create remote flags
-        create_ephys_transfer_done_flag(remote_session_path)
-        check_create_raw_session_flag(remote_session_path)
+        if flag_file.exists():  # this file only exists for the iblrig v7 and lower
+            flag_file.unlink()
+            if (remote_session_path / "extract_me.flag").exists():
+                (remote_session_path / "extract_me.flag").unlink()
+            # Create remote flags
+            create_ephys_transfer_done_flag(remote_session_path)
+            check_create_raw_session_flag(remote_session_path)
 
 
 def probe_labels_from_session_path(session_path: Union[str, Path]) -> List[str]:
@@ -764,7 +791,7 @@ def probe_labels_from_session_path(session_path: Union[str, Path]) -> List[str]:
     :return: list of strings
     """
     plabels = []
-    raw_ephys_folder = session_path.joinpath('raw_ephys_data')
+    raw_ephys_folder = Path(session_path).joinpath('raw_ephys_data')
     for meta_file in raw_ephys_folder.rglob('*.ap.meta'):
         if meta_file.parents[1] != raw_ephys_folder:
             continue
@@ -787,7 +814,7 @@ def create_alyx_probe_insertions(
     labels: list = None,
 ):
     if one is None:
-        one = ONE(cache_rest=None)
+        one = ONE(cache_rest=None, mode='local')
     eid = session_path if is_uuid_string(session_path) else one.path2eid(session_path)
     if eid is None:
         log.warning("Session not found on Alyx: please create session before creating insertions")

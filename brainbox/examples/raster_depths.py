@@ -8,7 +8,7 @@ import numpy as np
 from oneibl.one import ONE
 import ibllib.plots as iblplt
 
-from brainbox.processing import bincount2D
+from iblutil.numerical import bincount2D
 from brainbox.io import one as bbone
 
 T_BIN = 0.05

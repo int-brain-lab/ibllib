@@ -5,6 +5,7 @@ from collections import OrderedDict
 import logging
 from pathlib import Path
 import uuid
+import re
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -18,7 +19,6 @@ from iblutil.spacer import Spacer
 import ibllib.exceptions as err
 from ibllib.io import raw_data_loaders, session_params
 from ibllib.io.extractors.bpod_trials import extract_all as bpod_extract_all
-from ibllib.io.extractors.opto_trials import LaserBool
 import ibllib.io.extractors.base as extractors_base
 from ibllib.io.extractors.training_wheel import extract_wheel_moves
 import ibllib.plots as plots
@@ -203,8 +203,7 @@ def _assign_events_bpod(bpod_t, bpod_polarities, ignore_first_valve=True):
     return t_trial_start, t_valve_open, t_iti_in
 
 
-def _rotary_encoder_positions_from_fronts(ta, pa, tb, pb, ticks=WHEEL_TICKS, radius=1,
-                                          coding='x4'):
+def _rotary_encoder_positions_from_fronts(ta, pa, tb, pb, ticks=WHEEL_TICKS, radius=WHEEL_RADIUS_CM, coding='x4'):
     """
     Extracts the rotary encoder absolute position as function of time from fronts detected
     on the 2 channels. Outputs in units of radius parameters, by default radians
@@ -361,14 +360,14 @@ def _clean_audio(audio, display=False):
         dd = np.diff(audio['times'])
         1 / np.median(dd[::2]) # 2ms up
         1 / np.median(dd[1::2])  # 4.666 ms down
-        1 / (np.median(dd[::2]) + np.median(dd[1::2])) # both sum to 150 Hx
+        1 / (np.median(dd[::2]) + np.median(dd[1::2])) # both sum to 150 Hz
     This only runs on sessions when the bug is detected and leaves others untouched
     """
     DISCARD_THRESHOLD = 0.01
     average_150_hz = np.mean(1 / np.diff(audio['times'][audio['polarities'] == 1]) > 140)
     naudio = audio['times'].size
     if average_150_hz > 0.7 and naudio > 100:
-        _logger.warning("Soundcard signal on FPGA seems to have been mixed with 150Hz camera")
+        _logger.warning('Soundcard signal on FPGA seems to have been mixed with 150Hz camera')
         keep_ind = np.r_[np.diff(audio['times']) > DISCARD_THRESHOLD, False]
         keep_ind = np.logical_and(keep_ind, audio['polarities'] == -1)
         keep_ind = np.where(keep_ind)[0]
@@ -395,7 +394,7 @@ def _clean_frame2ttl(frame2ttl, display=False):
     frame2ttl_ = {'times': np.delete(frame2ttl['times'], iko),
                   'polarities': np.delete(frame2ttl['polarities'], iko)}
     if iko.size > (0.1 * frame2ttl['times'].size):
-        _logger.warning(f'{iko.size} ({iko.size / frame2ttl["times"].size:.2%} %) '
+        _logger.warning(f'{iko.size} ({iko.size / frame2ttl["times"].size:.2%}) '
                         f'frame to TTL polarity switches below {F2TTL_THRESH} secs')
     if display:  # pragma: no cover
         from ibllib.plots import squares
@@ -431,13 +430,14 @@ def extract_wheel_sync(sync, chmap=None, tmin=None, tmax=None):
     np.array
         Wheel positions in radians.
     """
-    wheel = {}
+    # Assume two separate edge count channels
+    assert chmap.keys() >= {'rotary_encoder_0', 'rotary_encoder_1'}
     channela = get_sync_fronts(sync, chmap['rotary_encoder_0'], tmin=tmin, tmax=tmax)
     channelb = get_sync_fronts(sync, chmap['rotary_encoder_1'], tmin=tmin, tmax=tmax)
-    wheel['re_ts'], wheel['re_pos'] = _rotary_encoder_positions_from_fronts(
+    re_ts, re_pos = _rotary_encoder_positions_from_fronts(
         channela['times'], channela['polarities'], channelb['times'], channelb['polarities'],
-        ticks=WHEEL_TICKS, radius=1, coding='x4')
-    return wheel['re_ts'], wheel['re_pos']
+        ticks=WHEEL_TICKS, radius=WHEEL_RADIUS_CM, coding='x4')
+    return re_ts, re_pos
 
 
 def extract_behaviour_sync(sync, chmap=None, display=False, bpod_trials=None, tmin=None, tmax=None):
@@ -474,9 +474,23 @@ def extract_behaviour_sync(sync, chmap=None, display=False, bpod_trials=None, tm
     audio = _clean_audio(audio)
     # extract events from the fronts for each trace
     t_trial_start, t_valve_open, t_iti_in = _assign_events_bpod(bpod['times'], bpod['polarities'])
-    # one issue is that sometimes bpod pulses may not have been detected, in this case
-    # perform the sync bpod/FPGA, and add the start that have not been detected
-    if bpod_trials:
+    if not bpod_trials:
+        raise ValueError('No Bpod trials to align')
+    # If there are no detected trial start times or more than double the trial end pulses,
+    # the trial start pulses may be too small to be detected, in which case, sync using the ini_in
+    if t_trial_start.size == 0 or (t_trial_start.size / t_iti_in.size) < .5:
+        _logger.info('Attempting to align on ITI in')
+        assert t_iti_in.size > 0, 'no detected ITI in TTLs on the DAQ to align'
+        bpod_end = bpod_trials['itiIn_times']
+        fcn, drift = neurodsp.utils.sync_timestamps(bpod_end, t_iti_in)
+        # if it's drifting too much
+        if drift > 200 and bpod_end.size != t_iti_in.size:
+            raise err.SyncBpodFpgaException('sync cluster f*ck')
+        t_trial_start = fcn(bpod_trials['intervals_bpod'][:, 0])
+    else:
+        # one issue is that sometimes bpod pulses may not have been detected, in this case
+        # perform the sync bpod/FPGA, and add the start that have not been detected
+        _logger.info('Attempting to align on trial start')
         bpod_start = bpod_trials['intervals_bpod'][:, 0]
         fcn, drift, ibpod, ifpga = neurodsp.utils.sync_timestamps(
             bpod_start, t_trial_start, return_indices=True)
@@ -485,11 +499,8 @@ def extract_behaviour_sync(sync, chmap=None, display=False, bpod_trials=None, tm
             raise err.SyncBpodFpgaException('sync cluster f*ck')
         missing_bpod = fcn(bpod_start[np.setxor1d(ibpod, np.arange(len(bpod_start)))])
         t_trial_start = np.sort(np.r_[t_trial_start, missing_bpod])
-    else:
-        _logger.warning('Deprecation Warning: calling FPGA trials extraction without a bpod trials'
-                        ' dictionary will result in an error.')
-    t_ready_tone_in, t_error_tone_in = _assign_events_audio(
-        audio['times'], audio['polarities'])
+
+    t_ready_tone_in, t_error_tone_in = _assign_events_audio(audio['times'], audio['polarities'])
     trials = Bunch({
         'goCue_times': _assign_events_to_trial(t_trial_start, t_ready_tone_in, take='first'),
         'errorCue_times': _assign_events_to_trial(t_trial_start, t_error_tone_in),
@@ -706,19 +717,66 @@ class FpgaTrials(extractors_base.BaseExtractor):
                  'wheel_timestamps', 'wheel_position',
                  'wheelMoves_intervals', 'wheelMoves_peakAmplitude')
 
-    # Fields from bpod extractor that we want to resync to FPGA
+    # Fields from bpod extractor that we want to re-sync to FPGA
     bpod_rsync_fields = ('intervals', 'response_times', 'goCueTrigger_times',
                          'stimOnTrigger_times', 'stimOffTrigger_times',
                          'stimFreezeTrigger_times', 'errorCueTrigger_times')
 
     # Fields from bpod extractor that we want to save
-    bpod_fields = ('feedbackType', 'choice', 'rewardVolume', 'contrastLeft', 'contrastRight', 'probabilityLeft',
-                   'intervals_bpod', 'phase', 'position', 'quiescence')
+    bpod_fields = ('feedbackType', 'choice', 'rewardVolume', 'contrastLeft', 'contrastRight',
+                   'probabilityLeft', 'intervals_bpod', 'phase', 'position', 'quiescence')
 
-    def __init__(self, *args, **kwargs):
+    """str: The Bpod events to synchronize (must be present in sync channel map)."""
+    sync_field = 'intervals'
+
+    def __init__(self, *args, bpod_trials=None, bpod_extractor=None, **kwargs):
         """An extractor for all ephys trial data, in FPGA time"""
         super().__init__(*args, **kwargs)
         self.bpod2fpga = None
+        self.bpod_trials = bpod_trials
+        if bpod_extractor:
+            self.bpod_extractor = bpod_extractor
+            self._update_var_names()
+
+    def _update_var_names(self, bpod_fields=None, bpod_rsync_fields=None):
+        """
+        Updates this object's attributes based on the Bpod trials extractor.
+
+        Fields updated: bpod_fields, bpod_rsync_fields, save_names, and var_names.
+
+        Parameters
+        ----------
+        bpod_fields : tuple
+            A set of Bpod trials fields to keep.
+        bpod_rsync_fields : tuple
+            A set of Bpod trials fields to sync to the DAQ times.
+
+        TODO Turn into property getter; requires ensuring the output field are the same for legacy
+        """
+        if self.bpod_extractor:
+            self.var_names = self.bpod_extractor.var_names
+            self.save_names = self.bpod_extractor.save_names
+        self.bpod_rsync_fields = bpod_rsync_fields or self._time_fields(self.bpod_extractor.var_names)
+        self.bpod_fields = bpod_fields or [x for x in self.bpod_extractor.var_names if x not in self.bpod_rsync_fields]
+
+    @staticmethod
+    def _time_fields(trials_attr) -> set:
+        """
+        Iterates over Bpod trials attributes returning those that correspond to times for syncing.
+
+        Parameters
+        ----------
+        trials_attr : iterable of str
+            The Bpod field names.
+
+        Returns
+        -------
+        set
+            The field names that contain timestamps.
+        """
+        FIELDS = ('times', 'timestamps', 'intervals')
+        pattern = re.compile(fr'^[_\w]*({"|".join(FIELDS)})[_\w]*$')
+        return set(filter(pattern.match, trials_attr))
 
     def _extract(self, sync=None, chmap=None, sync_collection='raw_ephys_data', task_collection='raw_behavior_data', **kwargs):
         """Extracts ephys trials by combining Bpod and FPGA sync pulses"""
@@ -727,18 +785,16 @@ class FpgaTrials(extractors_base.BaseExtractor):
             _sync, _chmap = get_sync_and_chn_map(self.session_path, sync_collection)
             sync = sync or _sync
             chmap = chmap or _chmap
-        # load the bpod data and performs a biased choice world training extraction
-        # TODO these all need to pass in the collection so we can load for different protocols in different folders
-        bpod_raw = raw_data_loaders.load_data(self.session_path, task_collection=task_collection)
-        assert bpod_raw is not None, "No task trials data in raw_behavior_data - Exit"
 
-        bpod_trials = self._extract_bpod(bpod_raw, task_collection=task_collection, save=False)
+        if not self.bpod_trials:
+            self.bpod_trials, *_ = bpod_extract_all(
+                session_path=self.session_path, task_collection=task_collection, save=False,
+                extractor_type=kwargs.get('extractor_type'))
         # Explode trials table df
-        trials_table = alfio.AlfBunch.from_df(bpod_trials.pop('table'))
+        trials_table = alfio.AlfBunch.from_df(self.bpod_trials.pop('table'))
         table_columns = trials_table.keys()
-        bpod_trials.update(trials_table)
-        # synchronize
-        bpod_trials['intervals_bpod'] = np.copy(bpod_trials['intervals'])
+        self.bpod_trials.update(trials_table)
+        self.bpod_trials['intervals_bpod'] = np.copy(self.bpod_trials['intervals'])
 
         # Get the spacer times for this protocol
         if (protocol_number := kwargs.get('protocol_number')) is not None:  # look for spacer
@@ -749,24 +805,27 @@ class FpgaTrials(extractors_base.BaseExtractor):
             tmin = tmax = None
 
         fpga_trials = extract_behaviour_sync(
-            sync=sync, chmap=chmap, bpod_trials=bpod_trials, tmin=tmin, tmax=tmax)
+            sync=sync, chmap=chmap, bpod_trials=self.bpod_trials, tmin=tmin, tmax=tmax)
+        assert self.sync_field in self.bpod_trials and self.sync_field in fpga_trials
+        self.bpod_trials[f'{self.sync_field}_bpod'] = np.copy(self.bpod_trials[self.sync_field])
+
         # checks consistency and compute dt with bpod
         self.bpod2fpga, drift_ppm, ibpod, ifpga = neurodsp.utils.sync_timestamps(
-            bpod_trials['intervals_bpod'][:, 0], fpga_trials.pop('intervals')[:, 0],
+            self.bpod_trials[f'{self.sync_field}_bpod'][:, 0], fpga_trials.pop(self.sync_field)[:, 0],
             return_indices=True)
-        nbpod = bpod_trials['intervals_bpod'].shape[0]
+        nbpod = self.bpod_trials[f'{self.sync_field}_bpod'].shape[0]
         npfga = fpga_trials['feedback_times'].shape[0]
         nsync = len(ibpod)
-        _logger.info(f"N trials: {nbpod} bpod, {npfga} FPGA, {nsync} merged, sync {drift_ppm} ppm")
+        _logger.info(f'N trials: {nbpod} bpod, {npfga} FPGA, {nsync} merged, sync {drift_ppm} ppm')
         if drift_ppm > BPOD_FPGA_DRIFT_THRESHOLD_PPM:
             _logger.warning('BPOD/FPGA synchronization shows values greater than %i ppm',
                             BPOD_FPGA_DRIFT_THRESHOLD_PPM)
         out = OrderedDict()
-        out.update({k: bpod_trials[k][ibpod] for k in self.bpod_fields})
-        out.update({k: self.bpod2fpga(bpod_trials[k][ibpod]) for k in self.bpod_rsync_fields})
+        out.update({k: self.bpod_trials[k][ibpod] for k in self.bpod_fields})
+        out.update({k: self.bpod2fpga(self.bpod_trials[k][ibpod]) for k in self.bpod_rsync_fields})
         out.update({k: fpga_trials[k][ifpga] for k in sorted(fpga_trials.keys())})
         # extract the wheel data
-        wheel, moves = get_wheel_positions(sync=sync, chmap=chmap, tmin=tmin, tmax=tmax)
+        wheel, moves = self.get_wheel_positions(sync=sync, chmap=chmap, tmin=tmin, tmax=tmax)
         from ibllib.io.extractors.training_wheel import extract_first_movement_times
         settings = raw_data_loaders.load_settings(session_path=self.session_path, task_collection=task_collection)
         min_qt = settings.get('QUIESCENT_PERIOD', None)
@@ -781,15 +840,16 @@ class FpgaTrials(extractors_base.BaseExtractor):
         return [out[k] for k in out] + [wheel['timestamps'], wheel['position'],
                                         moves['intervals'], moves['peakAmplitude']]
 
-    def _extract_bpod(self, bpod_trials, task_collection='raw_behavior_data', save=False):
-        bpod_trials, *_ = bpod_extract_all(
-            session_path=self.session_path, save=save, bpod_trials=bpod_trials, task_collection=task_collection)
+    def get_wheel_positions(self, *args, **kwargs):
+        """Extract wheel and wheelMoves objects.
 
-        return bpod_trials
+        This method is called by the main extract method and may be overloaded by subclasses.
+        """
+        return get_wheel_positions(*args, **kwargs)
 
 
-def extract_all(session_path, sync_collection='raw_ephys_data', save=True, task_collection='raw_behavior_data', save_path=None,
-                protocol_number=None, **kwargs):
+def extract_all(session_path, sync_collection='raw_ephys_data', save=True, save_path=None,
+                task_collection='raw_behavior_data', protocol_number=None, **kwargs):
     """
     For the IBL ephys task, reads ephys binary file and extract:
         -   sync
@@ -821,16 +881,22 @@ def extract_all(session_path, sync_collection='raw_ephys_data', save=True, task_
     list of pathlib.Path, None
         If save is True, a list of file paths to the extracted data.
     """
-    extractor_type = extractors_base.get_session_extractor_type(session_path, task_collection=task_collection)
-    _logger.info(f"Extracting {session_path} as {extractor_type}")
+    # Extract Bpod trials
+    bpod_raw = raw_data_loaders.load_data(session_path, task_collection=task_collection)
+    assert bpod_raw is not None, 'No task trials data in raw_behavior_data - Exit'
+    bpod_trials, *_ = bpod_extract_all(
+        session_path=session_path, bpod_trials=bpod_raw, task_collection=task_collection,
+        save=False, extractor_type=kwargs.get('extractor_type'))
+
+    # Sync Bpod trials to FPGA
     sync, chmap = get_sync_and_chn_map(session_path, sync_collection)
     # sync, chmap = get_main_probe_sync(session_path, bin_exists=bin_exists)
-    base = [FpgaTrials]
-    if extractor_type == 'ephys_biased_opto':
-        base.append(LaserBool)
-    outputs, files = extractors_base.run_extractor_classes(
-        base, session_path=session_path, save=save, sync=sync, chmap=chmap, path_out=save_path,
+    trials = FpgaTrials(session_path, bpod_trials=bpod_trials)
+    outputs, files = trials.extract(
+        save=save, sync=sync, chmap=chmap, path_out=save_path,
         task_collection=task_collection, protocol_number=protocol_number, **kwargs)
+    if not isinstance(outputs, dict):
+        outputs = {k: v for k, v in zip(trials.var_names, outputs)}
     return outputs, files
 
 
@@ -902,8 +968,8 @@ def load_channel_map(session_path, sync_collection):
         if data_for_keys(default_chmap.keys(), chmap):
             return chmap
         else:
-            _logger.warning("Keys missing from provided channel map, "
-                            "setting missing keys from default channel map")
+            _logger.warning('Keys missing from provided channel map, '
+                            'setting missing keys from default channel map')
             return {**default_chmap, **chmap}
 
 

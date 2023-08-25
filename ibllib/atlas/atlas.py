@@ -1,29 +1,59 @@
+"""
+Classes for manipulating brain atlases, insertions, and coordinates.
+"""
+from pathlib import Path, PurePosixPath
 from dataclasses import dataclass
 import logging
+
 import matplotlib.pyplot as plt
-from pathlib import Path, PurePosixPath
 import numpy as np
 import nrrd
 
 from one.webclient import http_download_file
 import one.params
 import one.remote.aws as aws
-
 from iblutil.numerical import ismember
 from ibllib.atlas.regions import BrainRegions, FranklinPaxinosRegions
 
-
-_logger = logging.getLogger(__name__)
 ALLEN_CCF_LANDMARKS_MLAPDV_UM = {'bregma': np.array([5739, 5400, 332])}
+"""dict: The ML AP DV voxel coordinates of brain landmarks in the Allen atlas."""
+
 PAXINOS_CCF_LANDMARKS_MLAPDV_UM = {'bregma': np.array([5700, 4300 + 160, 330])}
+"""dict: The ML AP DV voxel coordinates of brain landmarks in the Franklin & Paxinos atlas."""
 
 S3_BUCKET_IBL = 'ibl-brain-wide-map-public'
+"""str: The name of the public IBL S3 bucket containing atlas data."""
+
+_logger = logging.getLogger(__name__)
 
 
 def cart2sph(x, y, z):
     """
-    Converts cartesian to spherical Coordinates
-    theta: polar angle, phi: azimuth
+    Converts cartesian to spherical coordinates.
+
+    Returns spherical coordinates (r, theta, phi).
+
+    Parameters
+    ----------
+    x : numpy.array
+        A 1D array of x-axis coordinates.
+    y : numpy.array
+        A 1D array of y-axis coordinates.
+    z : numpy.array
+        A 1D array of z-axis coordinates.
+
+    Returns
+    -------
+    numpy.array
+        The radial distance of each point.
+    numpy.array
+        The polar angle.
+    numpy.array
+        The azimuthal angle.
+
+    See Also
+    --------
+    sph2cart
     """
     r = np.sqrt(x ** 2 + y ** 2 + z ** 2)
     phi = np.arctan2(y, x) * 180 / np.pi
@@ -37,8 +67,31 @@ def cart2sph(x, y, z):
 
 def sph2cart(r, theta, phi):
     """
-    Converts Spherical to Cartesian coordinates
-    theta: polar angle, phi: azimuth
+    Converts Spherical to Cartesian coordinates.
+
+    Returns Cartesian coordinates (x, y, z).
+
+    Parameters
+    ----------
+    r : numpy.array
+        A 1D array of radial distances.
+    theta : numpy.array
+        A 1D array of polar angles.
+    phi : numpy.array
+        A 1D array of azimuthal angles.
+
+    Returns
+    -------
+    x : numpy.array
+        A 1D array of x-axis coordinates.
+    y : numpy.array
+        A 1D array of y-axis coordinates.
+    z : numpy.array
+        A 1D array of z-axis coordinates.
+
+    See Also
+    --------
+    cart2sph
     """
     x = r * np.cos(phi / 180 * np.pi) * np.sin(theta / 180 * np.pi)
     y = r * np.sin(phi / 180 * np.pi) * np.sin(theta / 180 * np.pi)
@@ -48,47 +101,85 @@ def sph2cart(r, theta, phi):
 
 class BrainCoordinates:
     """
-    Class for mapping and indexing a 3D array to real-world coordinates
-    x = ml, right positive
-    y = ap, anterior positive
-    z = dv, dorsal positive
+    Class for mapping and indexing a 3D array to real-world coordinates.
+
+    * x = ml, right positive
+    * y = ap, anterior positive
+    * z = dv, dorsal positive
 
     The layout of the Atlas dimension is done according to the most used sections so they lay
     contiguous on disk assuming C-ordering: V[iap, iml, idv]
 
-    nxyz: number of elements along each cartesian axis (nx, ny, nz) = (nml, nap, ndv)
-    xyz0: coordinates of the element volume[0, 0, 0]] in the coordinate space
-    dxyz: spatial interval of the volume along the 3 dimensions
+    Parameters
+    ----------
+    nxyz : array_like
+        Number of elements along each Cartesian axis (nx, ny, nz) = (nml, nap, ndv).
+    xyz0 : array_like
+        Coordinates of the element volume[0, 0, 0] in the coordinate space.
+    dxyz : array_like, float
+        Spatial interval of the volume along the 3 dimensions.
+
+    Attributes
+    ----------
+    xyz0 : numpy.array
+        The Cartesian coordinates of the element volume[0, 0, 0], i.e. the origin.
+    x0 : int
+        The x-axis origin coordinate of the element volume.
+    y0 : int
+        The y-axis origin coordinate of the element volume.
+    z0 : int
+        The z-axis origin coordinate of the element volume.
     """
 
-    def __init__(self, nxyz, xyz0=[0, 0, 0], dxyz=[1, 1, 1]):
+    def __init__(self, nxyz, xyz0=(0, 0, 0), dxyz=(1, 1, 1)):
         if np.isscalar(dxyz):
-            dxyz = [dxyz for i in range(3)]
+            dxyz = [dxyz] * 3
         self.x0, self.y0, self.z0 = list(xyz0)
         self.dx, self.dy, self.dz = list(dxyz)
         self.nx, self.ny, self.nz = list(nxyz)
 
     @property
     def dxyz(self):
+        """numpy.array: Spatial interval of the volume along the 3 dimensions."""
         return np.array([self.dx, self.dy, self.dz])
 
     @property
     def nxyz(self):
+        """numpy.array: Coordinates of the element volume[0, 0, 0] in the coordinate space."""
         return np.array([self.nx, self.ny, self.nz])
 
-    """Methods ratios to indice"""
+    """Methods ratios to indices"""
     def r2ix(self, r):
+        # FIXME Document
         return int((self.nx - 1) * r)
 
     def r2iy(self, r):
+        # FIXME Document
         return int((self.nz - 1) * r)
 
     def r2iz(self, r):
+        # FIXME Document
         return int((self.nz - 1) * r)
 
-    """Methods distance to indice"""
+    """Methods distance to indices"""
     @staticmethod
     def _round(i, round=True):
+        """
+        Round an input value to the nearest integer, replacing NaN values with 0.
+
+        Parameters
+        ----------
+        i : int, float, numpy.nan, numpy.array
+            A value or array of values to round.
+        round : bool
+            If false this function is identity.
+
+        Returns
+        -------
+        int, float, numpy.nan, numpy.array
+            If round is true, returns the nearest integer, replacing NaN values with 0, otherwise
+            returns the input unaffected.
+        """
         nanval = 0
         if round:
             ii = np.array(np.round(i)).astype(int)
@@ -98,6 +189,31 @@ class BrainCoordinates:
             return i
 
     def x2i(self, x, round=True, mode='raise'):
+        """
+        Find the nearest volume image index to a given x-axis coordinate.
+
+        Parameters
+        ----------
+        x : float, numpy.array
+            One or more x-axis coordinates, relative to the origin, x0.
+        round : bool
+            If true, round to the nearest index, replacing NaN values with 0.
+        mode : {'raise', 'clip', 'wrap'}, default='raise'
+            How to behave if the coordinate lies outside of the volume: raise (default) will raise
+            a ValueError; 'clip' will replace the index with the closest index inside the volume;
+            'wrap' will return the index as is.
+
+        Returns
+        -------
+        numpy.array
+            The nearest indices of the image volume along the first dimension.
+
+        Raises
+        ------
+        ValueError
+            At least one x value lies outside of the atlas volume. Change 'mode' input to 'wrap' to
+            keep these values unchanged, or 'clip' to return the nearest valid indices.
+        """
         i = np.asarray(self._round((x - self.x0) / self.dx, round=round))
         if np.any(i < 0) or np.any(i >= self.nx):
             if mode == 'clip':
@@ -105,11 +221,36 @@ class BrainCoordinates:
                 i[i >= self.nx] = self.nx - 1
             elif mode == 'raise':
                 raise ValueError("At least one x value lies outside of the atlas volume.")
-            elif mode == 'wrap':
+            elif mode == 'wrap':  # This is only here for legacy reasons
                 pass
         return i
 
     def y2i(self, y, round=True, mode='raise'):
+        """
+        Find the nearest volume image index to a given y-axis coordinate.
+
+        Parameters
+        ----------
+        y : float, numpy.array
+            One or more y-axis coordinates, relative to the origin, y0.
+        round : bool
+            If true, round to the nearest index, replacing NaN values with 0.
+        mode : {'raise', 'clip', 'wrap'}
+            How to behave if the coordinate lies outside of the volume: raise (default) will raise
+            a ValueError; 'clip' will replace the index with the closest index inside the volume;
+            'wrap' will return the index as is.
+
+        Returns
+        -------
+        numpy.array
+            The nearest indices of the image volume along the second dimension.
+
+        Raises
+        ------
+        ValueError
+            At least one y value lies outside of the atlas volume. Change 'mode' input to 'wrap' to
+            keep these values unchanged, or 'clip' to return the nearest valid indices.
+        """
         i = np.asarray(self._round((y - self.y0) / self.dy, round=round))
         if np.any(i < 0) or np.any(i >= self.ny):
             if mode == 'clip':
@@ -117,11 +258,36 @@ class BrainCoordinates:
                 i[i >= self.ny] = self.ny - 1
             elif mode == 'raise':
                 raise ValueError("At least one y value lies outside of the atlas volume.")
-            elif mode == 'wrap':
+            elif mode == 'wrap':  # This is only here for legacy reasons
                 pass
         return i
 
     def z2i(self, z, round=True, mode='raise'):
+        """
+        Find the nearest volume image index to a given z-axis coordinate.
+
+        Parameters
+        ----------
+        z : float, numpy.array
+            One or more z-axis coordinates, relative to the origin, z0.
+        round : bool
+            If true, round to the nearest index, replacing NaN values with 0.
+        mode : {'raise', 'clip', 'wrap'}
+            How to behave if the coordinate lies outside of the volume: raise (default) will raise
+            a ValueError; 'clip' will replace the index with the closest index inside the volume;
+            'wrap' will return the index as is.
+
+        Returns
+        -------
+        numpy.array
+            The nearest indices of the image volume along the third dimension.
+
+        Raises
+        ------
+        ValueError
+            At least one z value lies outside of the atlas volume. Change 'mode' input to 'wrap' to
+            keep these values unchanged, or 'clip' to return the nearest valid indices.
+        """
         i = np.asarray(self._round((z - self.z0) / self.dz, round=round))
         if np.any(i < 0) or np.any(i >= self.nz):
             if mode == 'clip':
@@ -129,16 +295,35 @@ class BrainCoordinates:
                 i[i >= self.nz] = self.nz - 1
             elif mode == 'raise':
                 raise ValueError("At least one z value lies outside of the atlas volume.")
-            elif mode == 'wrap':
+            elif mode == 'wrap':  # This is only here for legacy reasons
                 pass
         return i
 
     def xyz2i(self, xyz, round=True, mode='raise'):
         """
-        :param mode: {‘raise’, 'clip', 'wrap'} determines what to do when determined index lies outside the atlas volume
-                     'raise' will raise a ValueError
-                     'clip' will replace the index with the closest index inside the volume
-                     'wrap' will wrap around to the other side of the volume. This is only here for legacy reasons
+        Find the nearest volume image indices to the given Cartesian coordinates.
+
+        Parameters
+        ----------
+        xyz : array_like
+            One or more Cartesian coordinates, relative to the origin, xyz0.
+        round : bool
+            If true, round to the nearest index, replacing NaN values with 0.
+        mode : {'raise', 'clip', 'wrap'}
+            How to behave if any coordinate lies outside of the volume: raise (default) will raise
+            a ValueError; 'clip' will replace the index with the closest index inside the volume;
+            'wrap' will return the index as is.
+
+        Returns
+        -------
+        numpy.array
+            The nearest indices of the image volume.
+
+        Raises
+        ------
+        ValueError
+            At least one coordinate lies outside of the atlas volume. Change 'mode' input to 'wrap'
+            to keep these values unchanged, or 'clip' to return the nearest valid indices.
         """
         xyz = np.array(xyz)
         dt = int if round else float
@@ -150,15 +335,68 @@ class BrainCoordinates:
 
     """Methods indices to distance"""
     def i2x(self, ind):
+        """
+        Return the x-axis coordinate of a given index.
+
+        Parameters
+        ----------
+        ind : int, numpy.array
+            One or more indices along the first dimension of the image volume.
+
+        Returns
+        -------
+        float, numpy.array
+            The corresponding x-axis coordinate(s), relative to the origin, x0.
+        """
         return ind * self.dx + self.x0
 
     def i2y(self, ind):
+        """
+        Return the y-axis coordinate of a given index.
+
+        Parameters
+        ----------
+        ind : int, numpy.array
+            One or more indices along the second dimension of the image volume.
+
+        Returns
+        -------
+        float, numpy.array
+            The corresponding y-axis coordinate(s), relative to the origin, y0.
+        """
         return ind * self.dy + self.y0
 
     def i2z(self, ind):
+        """
+        Return the z-axis coordinate of a given index.
+
+        Parameters
+        ----------
+        ind : int, numpy.array
+            One or more indices along the third dimension of the image volume.
+
+        Returns
+        -------
+        float, numpy.array
+            The corresponding z-axis coordinate(s), relative to the origin, z0.
+        """
         return ind * self.dz + self.z0
 
     def i2xyz(self, iii):
+        """
+        Return the Cartesian coordinates of a given index.
+
+        Parameters
+        ----------
+        iii : array_like
+            One or more image volume indices.
+
+        Returns
+        -------
+        numpy.array
+            The corresponding xyz coordinates, relative to the origin, xyz0.
+        """
+
         iii = np.array(iii, dtype=float)
         out = np.zeros_like(iii)
         out[..., 0] = self.i2x(iii[..., 0])
@@ -169,17 +407,21 @@ class BrainCoordinates:
     """Methods bounds"""
     @property
     def xlim(self):
+        # FIXME Document
         return self.i2x(np.array([0, self.nx - 1]))
 
     @property
     def ylim(self):
+        # FIXME Document
         return self.i2y(np.array([0, self.ny - 1]))
 
     @property
     def zlim(self):
+        # FIXME Document
         return self.i2z(np.array([0, self.nz - 1]))
 
     def lim(self, axis):
+        # FIXME Document
         if axis == 0:
             return self.xlim
         elif axis == 1:
@@ -190,19 +432,23 @@ class BrainCoordinates:
     """returns scales"""
     @property
     def xscale(self):
+        # FIXME Document
         return self.i2x(np.arange(self.nx))
 
     @property
     def yscale(self):
+        # FIXME Document
         return self.i2y(np.arange(self.ny))
 
     @property
     def zscale(self):
+        # FIXME Document
         return self.i2z(np.arange(self.nz))
 
     """returns the 3d mgrid used for 3d visualization"""
     @property
     def mgrid(self):
+        # FIXME Document
         return np.meshgrid(self.xscale, self.yscale, self.zscale)
 
 
@@ -212,6 +458,12 @@ class BrainAtlas:
     Currently this is designed for the AllenCCF at several resolutions,
     yet this class can be used for other atlases arises.
     """
+
+    """numpy.array: An image volume."""
+    image = None
+    """numpy.array: An annotation label volume."""
+    label = None
+
     def __init__(self, image, label, dxyz, regions, iorigin=[0, 0, 0],
                  dims2xyz=[0, 1, 2], xyz2dims=[0, 1, 2]):
         """
@@ -241,7 +493,7 @@ class BrainAtlas:
     @staticmethod
     def _get_cache_dir():
         par = one.params.get(silent=True)
-        path_atlas = Path(par.CACHE_DIR).joinpath(PurePosixPath('histology', 'ATLAS', 'Needles', 'Allen', 'flatmaps'))
+        path_atlas = Path(par.CACHE_DIR).joinpath('histology', 'ATLAS', 'Needles', 'Allen', 'flatmaps')
         return path_atlas
 
     def compute_surface(self):
@@ -280,10 +532,22 @@ class BrainAtlas:
 
     def _lookup(self, xyz, mode='raise'):
         """
-        Performs a 3D lookup from real world coordinates to the flat indices in the volume
-        defined in the BrainCoordinates object
-        :param xyz: [n, 3] array of coordinates
-        :return: n array of flat indices
+        Performs a 3D lookup from real world coordinates to the flat indices in the volume,
+        defined in the BrainCoordinates object.
+
+        Parameters
+        ----------
+        xyz : numpy.array
+            An (n, 3) array of Cartesian coordinates.
+        mode : {'raise', 'clip', 'wrap'}
+            How to behave if any coordinate lies outside of the volume: raise (default) will raise
+            a ValueError; 'clip' will replace the index with the closest index inside the volume;
+            'wrap' will return the index as is.
+
+        Returns
+        -------
+        numpy.array
+            A 1D array of flat indices.
         """
         return self._lookup_inds(self.bc.xyz2i(xyz, mode=mode), mode=mode)
 
@@ -295,6 +559,9 @@ class BrainAtlas:
         :param mapping: brain region mapping (defaults to original Allen mapping)
         :param radius_um: if not null, returns a regions ids array and an array of proportion
          of regions in a sphere of size radius around the coordinates.
+        :param mode: {‘raise’, 'clip'} determines what to do when determined index lies outside the atlas volume
+        'raise' will raise a ValueError (default)
+        'clip' will replace the index with the closest index inside the volume
         :return: n array of region ids
         """
         mapping = mapping or self.regions.default_mapping
@@ -304,9 +571,9 @@ class BrainAtlas:
             nry = int(np.ceil(radius_um / abs(self.bc.dy) / 1e6))
             nrz = int(np.ceil(radius_um / abs(self.bc.dz) / 1e6))
             nr = [nrx, nry, nrz]
-            iii = self.bc.xyz2i(xyz)
+            iii = self.bc.xyz2i(xyz, mode=mode)
             # computing the cube radius and indices is more complicated as volume indices are not
-            # necessariy in ml, ap, dv order so the indices order is dynamic
+            # necessarily in ml, ap, dv order so the indices order is dynamic
             rcube = np.meshgrid(*tuple((np.arange(
                 -nr[i], nr[i] + 1) * self.bc.dxyz[i]) ** 2 for i in self.xyz2dims))
             rcube = np.sqrt(rcube[0] + rcube[1], rcube[2]) * 1e6
@@ -435,6 +702,32 @@ class BrainAtlas:
 
     @staticmethod
     def _plot_slice(im, extent, ax=None, cmap=None, volume=None, **kwargs):
+        """
+        Plot an atlas slice.
+
+        Parameters
+        ----------
+        im : numpy.array
+            A 2D image slice to plot.
+        extent : array_like
+            The bounding box in data coordinates that the image will fill specified as (left,
+            right, bottom, top) in data coordinates.
+        ax : matplotlib.pyplot.Axes
+            An optional Axes object to plot to.
+        cmap : str, matplotlib.colors.Colormap
+            The Colormap instance or registered colormap name used to map scalar data to colors.
+            Defaults to 'bone'.
+        volume : str
+            If 'boundary', assumes image is an outline of boundaries between all regions.
+            FIXME How does this affect the plot?
+        **kwargs
+            See matplotlib.pyplot.imshow.
+
+        Returns
+        -------
+        matplotlib.pyplot.Axes
+            The image axes.
+        """
         if not ax:
             ax = plt.gca()
             ax.axis('equal')
@@ -687,9 +980,13 @@ class BrainAtlas:
 @dataclass
 class Trajectory:
     """
-    3D Trajectory (usually for a linear probe). Minimally defined by a vector and a point.
-    instantiate from a best fit from a n by 3 array containing xyz coordinates:
-        trj = Trajectory.fit(xyz)
+    3D Trajectory (usually for a linear probe), minimally defined by a vector and a point.
+
+    Examples
+    --------
+    Instantiate from a best fit from an n by 3 array containing xyz coordinates:
+
+    >>> trj = Trajectory.fit(xyz)
     """
     vector: np.ndarray
     point: np.ndarray
@@ -697,9 +994,17 @@ class Trajectory:
     @staticmethod
     def fit(xyz):
         """
-        fits a line to a 3D cloud of points, returns a Trajectory object
-        :param xyz: n by 3 numpy array containing cloud of points
-        :returns: a Trajectory object
+        Fits a line to a 3D cloud of points.
+
+        Parameters
+        ----------
+        xyz : numpy.array
+            An n by 3 array containing a cloud of points to fit a line to.
+
+        Returns
+        -------
+        Trajectory
+            A new trajectory object.
         """
         xyz_mean = np.mean(xyz, axis=0)
         return Trajectory(vector=np.linalg.svd(xyz - xyz_mean)[2][0], point=xyz_mean)
@@ -793,9 +1098,8 @@ class Trajectory:
 class Insertion:
     """
     Defines an ephys probe insertion in 3D coordinate. IBL conventions.
-    To instantiate, use the static methods:
-    Insertion.from_track
-    Insertion.from_dict
+
+    To instantiate, use the static methods: `Insertion.from_track` and `Insertion.from_dict`.
     """
     x: float
     y: float
@@ -809,9 +1113,18 @@ class Insertion:
     @staticmethod
     def from_track(xyzs, brain_atlas=None):
         """
-        :param brain_atlas: None. If provided, disregards the z coordinate and locks the insertion
-        point to the z of the brain surface
-        :return: Trajectory object
+        Define an insersion from one or more trajectory.
+
+        Parameters
+        ----------
+        xyzs : numpy.array
+             An n by 3 array xyz coordinates representing an insertion trajectory.
+        brain_atlas : BrainAtlas
+            A brain atlas instance, used to attain the point of entry.
+
+        Returns
+        -------
+        Insertion
         """
         assert brain_atlas, 'Input argument brain_atlas must be defined'
         traj = Trajectory.fit(xyzs)
@@ -821,35 +1134,44 @@ class Insertion:
         entry = Insertion.get_brain_entry(traj, brain_atlas)
         # convert to spherical system to store the insertion
         depth, theta, phi = cart2sph(*(entry - tip))
-        insertion_dict = {'x': entry[0], 'y': entry[1], 'z': entry[2],
-                          'phi': phi, 'theta': theta, 'depth': depth}
+        insertion_dict = {
+            'x': entry[0], 'y': entry[1], 'z': entry[2], 'phi': phi, 'theta': theta, 'depth': depth
+        }
         return Insertion(**insertion_dict)
 
     @staticmethod
     def from_dict(d, brain_atlas=None):
         """
-        Constructs an Insertion object from the json information stored in probes.description file
-        :param trj: dictionary containing at least the following keys, in um
-           {
-            'x': 544.0,
-            'y': 1285.0,
-            'z': 0.0,
-            'phi': 0.0,
-            'theta': 5.0,
-            'depth': 4501.0
-            }
-        :param brain_atlas: None. If provided, disregards the z coordinate and locks the insertion
-        point to the z of the brain surface
-        :return: Trajectory object
+        Constructs an Insertion object from the json information stored in probes.description file.
+
+        Parameters
+        ----------
+        d : dict
+            A dictionary containing at least the following keys {'x', 'y', 'z', 'phi', 'theta',
+            'depth'}.  The depth and xyz coordinates must be in um.
+        brain_atlas : BrainAtlas, default=None
+            If provided, disregards the z coordinate and locks the insertion point to the z of the
+            brain surface.
+
+        Returns
+        -------
+        Insertion
+
+        Examples
+        --------
+        >>> tri = {'x': 544.0, 'y': 1285.0, 'z': 0.0, 'phi': 0.0, 'theta': 5.0, 'depth': 4501.0}
+        >>> ins = Insertion.from_dict(tri)
         """
+        assert brain_atlas, 'Input argument brain_atlas must be defined'
         z = d['z'] / 1e6
-        if brain_atlas:
-            iy = brain_atlas.bc.y2i(d['y'] / 1e6)
-            ix = brain_atlas.bc.x2i(d['x'] / 1e6)
-            # Only use the brain surface value as z if it isn't NaN (this happens when the surface touches the edges
-            # of the atlas volume
-            if not np.isnan(brain_atlas.top[iy, ix]):
-                z = brain_atlas.top[iy, ix]
+        if not hasattr(brain_atlas, 'top'):
+            brain_atlas.compute_surface()
+        iy = brain_atlas.bc.y2i(d['y'] / 1e6)
+        ix = brain_atlas.bc.x2i(d['x'] / 1e6)
+        # Only use the brain surface value as z if it isn't NaN (this happens when the surface touches the edges
+        # of the atlas volume
+        if not np.isnan(brain_atlas.top[iy, ix]):
+            z = brain_atlas.top[iy, ix]
         return Insertion(x=d['x'] / 1e6, y=d['y'] / 1e6, z=z,
                          phi=d['phi'], theta=d['theta'], depth=d['depth'] / 1e6,
                          beta=d.get('beta', 0), label=d.get('label', ''))
@@ -876,7 +1198,19 @@ class Insertion:
 
     @staticmethod
     def _get_surface_intersection(traj, brain_atlas, surface='top'):
+        """
+        TODO Document!
 
+        Parameters
+        ----------
+        traj
+        brain_atlas
+        surface
+
+        Returns
+        -------
+
+        """
         brain_atlas.compute_surface()
 
         distance = traj.mindist(brain_atlas.srf_xyz)
@@ -926,12 +1260,28 @@ class Insertion:
 
 class AllenAtlas(BrainAtlas):
     """
+    The Allan Common Coordinate Framework (CCF) brain atlas.
+
     Instantiates an atlas.BrainAtlas corresponding to the Allen CCF at the given resolution
     using the IBL Bregma and coordinate system.
     """
 
     """pathlib.PurePosixPath: The default relative path of the Allen atlas file."""
     atlas_rel_path = PurePosixPath('histology', 'ATLAS', 'Needles', 'Allen')
+
+    """numpy.array: A diffusion weighted imaging (DWI) image volume.
+
+    The Allen atlas DWI average template volume has with the shape (ap, ml, dv) and contains uint16
+    values.  FIXME What do the values represent?
+    """
+    image = None
+
+    """numpy.array: An annotation label volume.
+
+    The Allen atlas label volume has with the shape (ap, ml, dv) and contains uint16 indices
+    of the Allen CCF brain regions to which each voxel belongs.
+    """
+    label = None
 
     def __init__(self, res_um=25, scaling=(1, 1, 1), mock=False, hist_path=None):
         """
@@ -941,7 +1291,7 @@ class AllenAtlas(BrainAtlas):
         Parameters
         ----------
         res_um : {10, 25, 50} int
-            The Atlas resolution in micometres; one of 10, 25 or 50um.
+            The Atlas resolution in micrometres; one of 10, 25 or 50um.
         scaling : float, numpy.array
             Scale factor along ml, ap, dv for squeeze and stretch (default: [1, 1, 1]).
         mock : bool
@@ -955,7 +1305,7 @@ class AllenAtlas(BrainAtlas):
         >>> target_dir = one.cache_dir / AllenAtlas.atlas_rel_path
         ... ba = AllenAtlas(hist_path=target_dir)
         """
-        LUT_VERSION = "v01"  # version 01 is the lateralized version
+        LUT_VERSION = 'v01'  # version 01 is the lateralized version
         regions = BrainRegions()
         xyz2dims = np.array([1, 0, 2])  # this is the c-contiguous ordering
         dims2xyz = np.array([1, 0, 2])
@@ -1025,16 +1375,27 @@ class AllenAtlas(BrainAtlas):
 
     def xyz2ccf(self, xyz, ccf_order='mlapdv', mode='raise'):
         """
-        Converts coordinates to the CCF coordinates, which is assumed to be the cube indices
-        times the spacing.
-        :param xyz: mlapdv coordinates in meters, origin Bregma
-        :param ccf_order: order that you want values returned 'mlapdv' (ibl) or 'apdvml'
-        (Allen mcc vertices)
-        :param mode: {‘raise’, 'clip', 'wrap'} determines what to do when determined index lies outside the atlas volume
-                     'raise' will raise a ValueError
-                     'clip' will replace the index with the closest index inside the volume
-                     'wrap' will wrap around to the other side of the volume. This is only here for legacy reasons
-        :return: coordinates in CCF space um, origin is the front left top corner of the data
+        Converts anatomical coordinates to CCF coordinates.
+
+        Anatomical coordinates are in meters, relative to bregma, which CFF coordinates are
+        assumed to be the volume indices multiplied by the spacing in micormeters.
+
+        Parameters
+        ----------
+        xyz : numpy.array
+            An N by 3 array of anatomical coordinates in meters, relative to bregma.
+        ccf_order : {'mlapdv', 'apdvml'}, default='mlapdv'
+            The order of the CCF coordinates returned. For IBL (the default) this is (ML, AP, DV),
+            for Allen MCC vertices, this is (AP, DV, ML).
+        mode : {'raise', 'clip', 'wrap'}, default='raise'
+            How to behave if the coordinate lies outside of the volume: raise (default) will raise
+            a ValueError; 'clip' will replace the index with the closest index inside the volume;
+            'wrap' will return the index as is.
+
+        Returns
+        -------
+        numpy.array
+            Coordinates in CCF space (um, origin is the front left top corner of the data
         volume, order determined by ccf_order
         """
         ordre = self._ccf_order(ccf_order)
@@ -1043,13 +1404,24 @@ class AllenAtlas(BrainAtlas):
 
     def ccf2xyz(self, ccf, ccf_order='mlapdv'):
         """
-        Converts coordinates from the CCF coordinates, which is assumed to be the cube indices
-        times the spacing.
-        :param ccf coordinates in CCF space in um, origin is the front left top corner of the data
-        volume
-        :param ccf_order: order of ccf coordinates given 'mlapdv' (ibl) or 'apdvml'
-        (Allen mcc vertices)
-        :return: xyz: mlapdv coordinates in m, origin Bregma
+        Convert anatomical coordinates from CCF coordinates.
+
+        Anatomical coordinates are in meters, relative to bregma, which CFF coordinates are
+        assumed to be the volume indices multiplied by the spacing in micormeters.
+
+        Parameters
+        ----------
+        ccf : numpy.array
+            An N by 3 array of coordinates in CCF space (atlas volume indices * um resolution). The
+            origin is the front left top corner of the data volume.
+        ccf_order : {'mlapdv', 'apdvml'}, default='mlapdv'
+            The order of the CCF coordinates given. For IBL (the default) this is (ML, AP, DV),
+            for Allen MCC vertices, this is (AP, DV, ML).
+
+        Returns
+        -------
+        numpy.array
+            The MLAPDV coordinates in meters, relative to bregma.
         """
         ordre = self._ccf_order(ccf_order, reverse=True)
         return self.bc.i2xyz((ccf[..., ordre] / float(self.res_um)))
@@ -1074,21 +1446,25 @@ class AllenAtlas(BrainAtlas):
         else:
             ValueError("ccf_order needs to be either 'mlapdv' or 'apdvml'")
 
-    def compute_regions_volume(self):
+    def compute_regions_volume(self, cumsum=False):
         """
         Sums the number of voxels in the labels volume for each region.
         Then compute volumes for all of the levels of hierarchy in cubic mm.
+        :param: cumsum: computes the cumulative sum of the volume as per the hierarchy (defaults to False)
         :return:
         """
         nr = self.regions.id.shape[0]
         count = np.bincount(self.label.flatten(), minlength=nr)
-        self.regions.compute_hierarchy()
-        self.regions.volume = np.zeros_like(count)
-        for i in np.arange(nr):
-            if count[i] == 0:
-                continue
-            self.regions.volume[np.unique(self.regions.hierarchy[:, i])] += count[i]
-        self.regions.volume = self.regions.volume * (self.res_um / 1e3) ** 3
+        if not cumsum:
+            self.regions.volume = count * (self.res_um / 1e3) ** 3
+        else:
+            self.regions.compute_hierarchy()
+            self.regions.volume = np.zeros_like(count)
+            for i in np.arange(nr):
+                if count[i] == 0:
+                    continue
+                self.regions.volume[np.unique(self.regions.hierarchy[:, i])] += count[i]
+            self.regions.volume = self.regions.volume * (self.res_um / 1e3) ** 3
 
 
 def NeedlesAtlas(*args, **kwargs):
@@ -1096,8 +1472,33 @@ def NeedlesAtlas(*args, **kwargs):
     Instantiates an atlas.BrainAtlas corresponding to the Allen CCF at the given resolution
     using the IBL Bregma and coordinate system. The Needles atlas defines a stretch along AP
     axis and a squeeze along the DV axis.
-    :param res_um: 10, 25 or 50 um
-    :return: atlas.AllenAtlas
+
+    Parameters
+    ----------
+    res_um : {10, 25, 50} int
+        The Atlas resolution in micrometres; one of 10, 25 or 50um.
+    **kwargs
+        See AllenAtlas.
+
+    Returns
+    -------
+    AllenAtlas
+        An Allen atlas object with MRI atlas scaling applied.
+
+    Notes
+    -----
+    The scaling was determined by manually transforming the DSURQE atlas [1]_ onto the Allen CCF.
+    The DSURQE atlas is an MRI atlas acquired from 40 C57BL/6J mice post-mortem, with 40um
+    isometric resolution.  The alignment was performed by Mayo Faulkner.
+    The atlas data can be found `here <http://repo.mouseimaging.ca/repo/DSURQE_40micron_nifti/>`__.
+    More information on the dataset and segmentation can be found
+    `here <http://repo.mouseimaging.ca/repo/DSURQE_40micron/notes_on_DSURQE_atlas>`__.
+
+    References
+    ----------
+    .. [1] Dorr AE, Lerch JP, Spring S, Kabani N, Henkelman RM (2008). High resolution
+       three-dimensional brain atlas using an average magnetic resonance image of 40 adult C57Bl/6J
+       mice. Neuroimage 42(1):60-9. [doi 10.1016/j.neuroimage.2008.03.037]
     """
     DV_SCALE = 0.952  # multiplicative factor on DV dimension, determined from MRI->CCF transform
     AP_SCALE = 1.087  # multiplicative factor on AP dimension
@@ -1107,12 +1508,29 @@ def NeedlesAtlas(*args, **kwargs):
 
 def MRITorontoAtlas(*args, **kwargs):
     """
+    The MRI Toronto brain atlas.
+
     Instantiates an atlas.BrainAtlas corresponding to the Allen CCF at the given resolution
     using the IBL Bregma and coordinate system. The MRI Toronto atlas defines a stretch along AP
-    a squeeze along DV *and* a squeeze along ML. These are based on 12 p65 mice MRIs averaged.
-    See: https://www.nature.com/articles/s41467-018-04921-2 DB has access to the dataset.
-    :param res_um: 10, 25 or 50 um
-    :return: atlas.AllenAtlas
+    a squeeze along DV *and* a squeeze along ML. These are based on 12 p65 mice MRIs averaged [1]_.
+
+    Parameters
+    ----------
+    res_um : {10, 25, 50} int
+        The Atlas resolution in micrometres; one of 10, 25 or 50um.
+    **kwargs
+        See AllenAtlas.
+
+    Returns
+    -------
+    AllenAtlas
+        An Allen atlas object with MRI atlas scaling applied.
+
+    References
+    ----------
+    .. [1] Qiu, LR, Fernandes, DJ, Szulc-Lerch, KU et al. (2018) Mouse MRI shows brain areas
+       relatively larger in males emerge before those larger in females. Nat Commun 9, 2615.
+       [doi 10.1038/s41467-018-04921-2]
     """
     ML_SCALE = 0.952
     DV_SCALE = 0.885  # multiplicative factor on DV dimension, determined from MRI->CCF transform
@@ -1142,8 +1560,7 @@ def _download_atlas_allen(target_file_image):
     - © 2015 Allen Institute for Brain Science. Allen Mouse Brain Atlas (2015) with region annotations (2017).
     - Available from: http://download.alleninstitute.org/informatics-archive/current-release/mouse_ccf/annotation/
     - See Allen Mouse Common Coordinate Framework Technical White Paper for details
-     http://help.brain-map.org/download/attachments/8323525/
-     Mouse_Common_Coordinate_Framework.pdf?version=3&modificationDate=1508178848279&api=v2
+      http://help.brain-map.org/download/attachments/8323525/Mouse_Common_Coordinate_Framework.pdf
 
     """
     (target_file_image := Path(target_file_image)).parent.mkdir(exist_ok=True, parents=True)
@@ -1160,85 +1577,18 @@ def _download_atlas_allen(target_file_image):
     return Path(http_download_file(url, target_dir=target_file_image.parent))
 
 
-class FlatMap(AllenAtlas):
-
-    def __init__(self, flatmap='dorsal_cortex', res_um=25):
-        """
-        Avaiable flatmaps are currently 'dorsal_cortex', 'circles' and 'pyramid'
-        :param flatmap:
-        :param res_um:
-        """
-        super().__init__(res_um=res_um)
-        self.name = flatmap
-        if flatmap == 'dorsal_cortex':
-            self._get_flatmap_from_file()
-        elif flatmap == 'circles':
-            from ibllib.atlas.flatmaps import circles
-            if res_um != 25:
-                raise NotImplementedError('Pyramid circles not implemented for resolution other than 25um')
-            self.flatmap, self.ml_scale, self.ap_scale = circles(N=5, atlas=self, display='flat')
-        elif flatmap == 'pyramid':
-            from ibllib.atlas.flatmaps import circles
-            if res_um != 25:
-                raise NotImplementedError('Pyramid circles not implemented for resolution other than 25um')
-            self.flatmap, self.ml_scale, self.ap_scale = circles(N=5, atlas=self, display='pyramid')
-
-    def _get_flatmap_from_file(self):
-        # gets the file in the ONE cache for the flatmap name in the property, downloads it if needed
-        file_flatmap = self._get_cache_dir().joinpath(f'{self.name}_{self.res_um}.nrrd')
-        if not file_flatmap.exists():
-            file_flatmap.parent.mkdir(exist_ok=True, parents=True)
-            aws.s3_download_file(f'atlas/{file_flatmap.name}', file_flatmap)
-        self.flatmap, _ = nrrd.read(file_flatmap)
-
-    def plot_flatmap(self, depth=0, volume='annotation', mapping='Allen', region_values=None, ax=None, **kwargs):
-        """
-        Displays the 2D image corresponding to the flatmap. If there are several depths, by default it
-        will display the first one
-        :param depth: index of the depth to display in the flatmap volume (the last dimension)
-        :param volume:
-        :param mapping:
-        :param region_values:
-        :param ax:
-        :param kwargs:
-        :return:
-        """
-        if self.flatmap.ndim == 3:
-            inds = np.int32(self.flatmap[:, :, depth])
-        else:
-            inds = np.int32(self.flatmap[:, :])
-        regions = self._get_mapping(mapping=mapping)[self.label.flat[inds]]
-        if volume == 'annotation':
-            im = self._label2rgb(regions)
-        elif volume == 'value':
-            im = region_values[regions]
-        elif volume == 'boundary':
-            im = self.compute_boundaries(regions)
-        elif volume == 'image':
-            im = self.image.flat[inds]
-        if not ax:
-            ax = plt.gca()
-
-        return self._plot_slice(im, self.extent_flmap(), ax=ax, volume=volume, **kwargs)
-
-    def extent_flmap(self):
-        extent = np.r_[0, self.flatmap.shape[1], 0, self.flatmap.shape[0]]
-        return extent
-
-
 class FranklinPaxinosAtlas(BrainAtlas):
-    """
-    Instantiates an atlas.BrainAtlas corresponding to the Franklin & Paxinos atlas at the given
-    resolution, using the IBL Bregma and coordinate system.
-    """
 
     """pathlib.PurePosixPath: The default relative path of the atlas file."""
     atlas_rel_path = PurePosixPath('histology', 'ATLAS', 'Needles', 'FranklinPaxinos')
 
     def __init__(self, res_um=(10, 100, 10), scaling=(1, 1, 1), mock=False, hist_path=None):
-        """
-        Instantiates an atlas.BrainAtlas corresponding to the Franklin & Paxinos atlas at the given
-        resolution, using the IBL Bregma and coordinate system.
+        """The Franklin & Paxinos brain atlas.
+
+        Instantiates an atlas.BrainAtlas corresponding to the Franklin & Paxinos atlas [1]_ at the
+        given resolution, matched to the Allen coordinate Framework [2]_ and using the IBL Bregma
+        and coordinate system. The Franklin Paxisnos volume has resolution of 10um in ML and DV
+        axis and 100 um in AP direction.
 
         Parameters
         ----------
@@ -1255,11 +1605,17 @@ class FranklinPaxinosAtlas(BrainAtlas):
         --------
         Instantiate Atlas from a non-default location, in this case the cache_dir of an ONE instance.
         >>> target_dir = one.cache_dir / AllenAtlas.atlas_rel_path
-        ... ba = AllenAtlas(hist_path=target_dir)
+        ... ba = FranklinPaxinosAtlas(hist_path=target_dir)
 
+        References
+        ----------
+        .. [1] Paxinos G, and Franklin KBJ (2012) The Mouse Brain in Stereotaxic Coordinates, 4th
+        edition (Elsevier Academic Press)
+        .. [2] Chon U et al (2019) Enhanced and unified anatomical labeling for a common mouse
+        brain atlas [doi 10.1038/s41467-019-13057-w]
         """
         # TODO interpolate?
-        LUT_VERSION = "v01"  # version 01 is the lateralized version
+        LUT_VERSION = 'v01'  # version 01 is the lateralized version
         regions = FranklinPaxinosRegions()
         xyz2dims = np.array([1, 0, 2])  # this is the c-contiguous ordering
         dims2xyz = np.array([1, 0, 2])
@@ -1310,10 +1666,31 @@ class FranklinPaxinosAtlas(BrainAtlas):
 
     @staticmethod
     def _read_volume(file_volume):
+        """
+        Loads an atlas image volume given a file path.
+
+        Parameters
+        ----------
+        file_volume : pathlib.Path
+            The file path of an image volume.  Currently supports .nrrd and .npz files.
+
+        Returns
+        -------
+        numpy.array
+            The loaded image volume with dimensions (ap, ml, dv).
+
+        Raises
+        ------
+        ValueError
+            Unknown file extension, expects either '.nrrd' or '.npz'.
+        """
         if file_volume.suffix == '.nrrd':
             volume, _ = nrrd.read(file_volume, index_order='C')  # ml, dv, ap
             # we want the coronal slice to be the most contiguous
             volume = np.transpose(volume, (2, 0, 1))  # image[iap, iml, idv]
         elif file_volume.suffix == '.npz':
             volume = np.load(file_volume)['arr_0']
+        else:
+            raise ValueError(
+                f'"{file_volume.suffix}" files not supported, must be either ".nrrd" or ".npz"')
         return volume

@@ -1,6 +1,7 @@
 import logging
 from collections import OrderedDict
 from one.alf.files import session_path_parts
+import warnings
 
 from ibllib.pipes.base_tasks import ExperimentDescriptionRegisterRaw
 from ibllib.pipes import tasks, training_status
@@ -10,18 +11,17 @@ from ibllib.io.extractors import training_audio, bpod_trials, camera
 from ibllib.qc.camera import CameraQC
 from ibllib.qc.task_metrics import TaskQC, HabituationQC
 from ibllib.qc.task_extractors import TaskQCExtractor
-from ibllib.oneibl.registration import register_session_raw_data
 
 _logger = logging.getLogger(__name__)
+warnings.warn('`pipes.training_preprocessing` to be removed in favour of dynamic pipeline')
 
 
 #  level 0
 class TrainingRegisterRaw(tasks.Task):
     priority = 100
 
-    def _run(self, overwrite=False):
-        out_files, _ = register_session_raw_data(self.session_path, one=self.one, dry=True)
-        return out_files
+    def _run(self):
+        return []
 
 
 class TrainingTrials(tasks.Task):

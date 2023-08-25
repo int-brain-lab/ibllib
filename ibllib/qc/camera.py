@@ -53,11 +53,12 @@ from iblutil.util import Bunch
 from iblutil.numerical import within_ranges
 
 from ibllib.io.extractors.camera import extract_camera_sync, extract_all
-from ibllib.io.extractors import ephys_fpga, training_wheel
+from ibllib.io.extractors import ephys_fpga, training_wheel, mesoscope
 from ibllib.io.extractors.video_motion import MotionAlignment
 from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.io import raw_data_loaders as raw
-from ibllib.io.session_params import read_params, get_sync
+from ibllib.io.raw_daq_loaders import load_timeline_sync_and_chmap
+from ibllib.io.session_params import read_params, get_sync, get_sync_namespace
 import brainbox.behavior.wheel as wh
 from ibllib.io.video import get_video_meta, get_video_frames_preload, assert_valid_label
 from . import base
@@ -210,6 +211,7 @@ class CameraQC(base.QC):
         # If there is an experiment description and there are video parameters
         sess_params = read_params(self.session_path) or {}
         task_collection = get_task_collection(sess_params)
+        ns = get_sync_namespace(sess_params)
         self._set_sync(sess_params)
         if not self.sync:
             if not self.type:
@@ -220,7 +222,13 @@ class CameraQC(base.QC):
         # Load the audio and raw FPGA times
         if self.sync != 'bpod' and self.sync is not None:
             self.sync_collection = self.sync_collection or 'raw_ephys_data'
-            sync, chmap = ephys_fpga.get_sync_and_chn_map(self.session_path, self.sync_collection)
+            ns = ns or 'spikeglx'
+            if ns == 'spikeglx':
+                sync, chmap = ephys_fpga.get_sync_and_chn_map(self.session_path, self.sync_collection)
+            elif ns == 'timeline':
+                sync, chmap = load_timeline_sync_and_chmap(self.session_path / self.sync_collection)
+            else:
+                raise NotImplementedError(f'Unknown namespace "{ns}"')
             audio_ttls = ephys_fpga.get_sync_fronts(sync, chmap['audio'])
             self.data['audio'] = audio_ttls['times']  # Get rises
             # Load raw FPGA times
@@ -258,7 +266,13 @@ class CameraQC(base.QC):
         except (StopIteration, ALFObjectNotFound):
             # Extract from raw data
             if self.sync != 'bpod' and self.sync is not None:
-                wheel_data = ephys_fpga.extract_wheel_sync(sync, chmap)
+                if ns == 'spikeglx':
+                    wheel_data = ephys_fpga.extract_wheel_sync(sync, chmap)
+                elif ns == 'timeline':
+                    extractor = mesoscope.TimelineTrials(self.session_path, sync_collection=self.sync_collection)
+                    wheel_data = extractor.extract_wheel_sync()
+                else:
+                    raise NotImplementedError(f'Unknown namespace "{ns}"')
             else:
                 wheel_data = training_wheel.get_wheel_position(
                     self.session_path, task_collection=task_collection)
@@ -304,7 +318,7 @@ class CameraQC(base.QC):
         :return: 2-element array comprising the start and end times of the active period
         """
         pos, ts = wh.interpolate_position(wheel.timestamps, wheel.position)
-        v, acc = wh.velocity_smoothed(pos, 1000)
+        v, acc = wh.velocity_filtered(pos, 1000)
         on, off, *_ = wh.movements(ts, acc, pos_thresh=.1, make_plots=False)
         edges = np.c_[on, off]
         indices, _ = np.where(np.logical_and(
@@ -354,19 +368,23 @@ class CameraQC(base.QC):
         dtypes = self.dstypes + self.dstypes_fpga if is_fpga else self.dstypes
         assert_unique = True
         # Check we have raw ephys data for session
-        if is_ephys and len(self.one.list_datasets(self.eid, collection='raw_ephys_data')) == 0:
-            # Assert 3A probe model; if so download all probe data
-            det = self.one.get_details(self.eid, full=True)
-            probe_model = next(x['model'] for x in det['probe_insertion'])
-            assert probe_model == '3A', 'raw ephys data missing'
-            collections += (self.sync_collection or 'raw_ephys_data',)
-            if sess_params:
-                probes = sess_params.get('devices', {}).get('neuropixel', {})
-                probes = set(x.get('collection') for x in chain(*map(dict.values, probes)))
-                collections += tuple(probes)
+        if is_ephys:
+            if len(self.one.list_datasets(self.eid, collection='raw_ephys_data')) == 0:
+                # Assert 3A probe model; if so download all probe data
+                det = self.one.get_details(self.eid, full=True)
+                probe_model = next(x['model'] for x in det['probe_insertion'])
+                assert probe_model == '3A', 'raw ephys data missing'
+                collections += (self.sync_collection or 'raw_ephys_data',)
+                if sess_params:
+                    probes = sess_params.get('devices', {}).get('neuropixel', {})
+                    probes = set(x.get('collection') for x in chain(*map(dict.values, probes)))
+                    collections += tuple(probes)
+                else:
+                    collections += ('raw_ephys_data/probe00', 'raw_ephys_data/probe01')
+                assert_unique = False
             else:
-                collections += ('raw_ephys_data/probe00', 'raw_ephys_data/probe01')
-            assert_unique = False
+                # 3B probes have data in root collection
+                collections += ('raw_ephys_data',)
         for dstype in dtypes:
             datasets = self.one.type2datasets(self.eid, dstype, details=True)
             if 'camera' in dstype.lower():  # Download individual camera file
@@ -586,7 +604,7 @@ class CameraQC(base.QC):
         if not data_for_keys(('video', 'pin_state', 'audio'), self.data):
             return 'NOT_SET'
         size_diff = int(self.data['pin_state'].shape[0] - self.data['video']['length'])
-        # NB: The pin state to be high for 2 consecutive frames
+        # NB: The pin state can be high for 2 consecutive frames
         low2high = np.insert(np.diff(self.data['pin_state'][:, -1].astype(int)) == 1, 0, False)
         # NB: Time between two consecutive TTLs can be sub-frame, so this will fail
         ndiff_low2high = int(self.data['audio'][::2].size - sum(low2high))

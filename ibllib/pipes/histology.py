@@ -219,7 +219,48 @@ def get_brain_regions(xyz, channels_positions=None, brain_atlas=None):
     return brain_regions, insertion
 
 
-def register_track(probe_id, picks=None, one=None, overwrite=False, channels=True, brain_atlas=None):
+def register_chronic_track(chronic_id, picks=None, one=None, overwrite=False, channels=True, brain_atlas=None):
+    """
+    Register the user picks to a chronic insertion in Alyx.
+    Here we update the database in 4 steps
+    1) The user picks converted to IBL coordinates will be stored in the json field of the
+    corresponding chronic insertion models
+    2) All associated probe insertions are identified and the user picks stored in the json field too
+    2) The trajectory associated to the chronic insertion computed from the histology track is created or patched
+    3) Channel locations are set in the table
+    :param chronic_id:
+    :param picks:
+    :param one:
+    :param overwrite:
+    :param channels:
+    :param brain_atlas:
+    :return:
+    """
+    assert one
+    brain_locations, insertion_histology = register_track(chronic_id, picks=picks, one=one, overwrite=overwrite,
+                                                          channels=channels, brain_atlas=brain_atlas,
+                                                          endpoint='chronic-insertions')
+
+    # Update all the associated probe insertions with the relevant QC and xyz_picks
+    chronic = one.alyx.rest('chronic-insertions', 'list', id=chronic_id)[0]
+    for probe_id in chronic['probe_insertion']:
+        pid = probe_id['id']
+        if picks is None or picks.size == 0:
+            hist_qc = base.QC(pid, one=one, endpoint='insertions')
+            hist_qc.update_extended_qc({'tracing_exists': False})
+            hist_qc.update('CRITICAL', namespace='tracing')
+        else:
+            one.alyx.json_field_update(endpoint='insertions', uuid=pid, field_name='json',
+                                       data={'xyz_picks': np.int32(picks * 1e6).tolist()})
+            # Update the insertion qc to register tracing exits
+            hist_qc = base.QC(pid, one=one, endpoint='insertions')
+            hist_qc.update_extended_qc({'tracing_exists': True})
+
+    return brain_locations, insertion_histology
+
+
+def register_track(probe_id, picks=None, one=None, overwrite=False, channels=True, brain_atlas=None,
+                   endpoint='insertions'):
     """
     Register the user picks to a probe in Alyx
     Here we update Alyx models on the database in 3 steps
@@ -232,15 +273,19 @@ def register_track(probe_id, picks=None, one=None, overwrite=False, channels=Tru
     brain_atlas = brain_atlas or atlas.AllenAtlas()
     # 0) if it's an empty track, create a null trajectory and exit
     if picks is None or picks.size == 0:
-        tdict = {'probe_insertion': probe_id,
-                 'x': None, 'y': None, 'z': None,
+        tdict = {'x': None, 'y': None, 'z': None,
                  'phi': None, 'theta': None, 'depth': None, 'roll': None,
                  'provenance': 'Histology track',
                  'coordinate_system': 'IBL-Allen',
                  }
+        if endpoint == 'chronic-insertions':
+            tdict['chronic_insertion'] = probe_id
+        else:
+            tdict['probe_insertion'] = probe_id
+
         brain_locations = None
         # Update the insertion qc to CRITICAL
-        hist_qc = base.QC(probe_id, one=one, endpoint='insertions')
+        hist_qc = base.QC(probe_id, one=one, endpoint=endpoint)
         hist_qc.update_extended_qc({'tracing_exists': False})
         hist_qc.update('CRITICAL', namespace='tracing')
         insertion_histology = None
@@ -248,17 +293,18 @@ def register_track(probe_id, picks=None, one=None, overwrite=False, channels=Tru
     else:
         brain_locations, insertion_histology = get_brain_regions(picks, brain_atlas=brain_atlas)
         # 1) update the alyx models, first put the picked points in the insertion json
-        one.alyx.json_field_update(endpoint='insertions', uuid=probe_id, field_name='json',
+        one.alyx.json_field_update(endpoint=endpoint, uuid=probe_id, field_name='json',
                                    data={'xyz_picks': np.int32(picks * 1e6).tolist()})
 
         # Update the insertion qc to register tracing exits
-        hist_qc = base.QC(probe_id, one=one, endpoint='insertions')
+        hist_qc = base.QC(probe_id, one=one, endpoint=endpoint)
         hist_qc.update_extended_qc({'tracing_exists': True})
         # 2) patch or create the trajectory coming from histology track
-        tdict = create_trajectory_dict(probe_id, insertion_histology, provenance='Histology track')
+        tdict = create_trajectory_dict(probe_id, insertion_histology, provenance='Histology track', endpoint=endpoint)
 
+    alyx_end = 'chronic_insertion' if endpoint == 'chronic-insertions' else 'probe_insertion'
     hist_traj = one.alyx.get('/trajectories?'
-                             f'&probe_insertion={probe_id}'
+                             f'&{alyx_end}={probe_id}'
                              '&provenance=Histology track', clobber=True)
     # if the trajectory exists, remove it, this will cascade delete existing channel locations
     if len(hist_traj):
@@ -319,7 +365,7 @@ def register_aligned_track(probe_id, xyz_channels, chn_coords=None, one=None, ov
         one.alyx.rest('channels', 'create', data=channel_dict)
 
 
-def create_trajectory_dict(probe_id, insertion, provenance):
+def create_trajectory_dict(probe_id, insertion, provenance, endpoint='insertions'):
     """
     Create trajectory dictionary in form to upload to alyx
     :param probe id: unique id of probe insertion
@@ -328,11 +374,12 @@ def create_trajectory_dict(probe_id, insertion, provenance):
     :type insertion: object atlas.Insertion
     :param provenance: 'Histology track' or 'Ephys aligned histology track'
     :type provenance: string
+    :param endpoint: Alyx endpoint, either 'insertions', or 'chronic-insertions'
+    :type endpoint: string
     :return tdict:
     :type tdict: dict
     """
-    tdict = {'probe_insertion': probe_id,
-             'x': insertion.x * 1e6,
+    tdict = {'x': insertion.x * 1e6,
              'y': insertion.y * 1e6,
              'z': insertion.z * 1e6,
              'phi': insertion.phi,
@@ -342,6 +389,10 @@ def create_trajectory_dict(probe_id, insertion, provenance):
              'provenance': provenance,
              'coordinate_system': 'IBL-Allen',
              }
+    if endpoint == 'chronic-insertions':
+        tdict['chronic_insertion'] = probe_id
+    else:
+        tdict['probe_insertion'] = probe_id
 
     return tdict
 
@@ -378,6 +429,54 @@ def _parse_filename(track_file):
                      'name': '_'.join(tmp[inumber + 1:- 1]),
                      'subject': '_'.join(tmp[1:inumber])}
     return search_filter
+
+
+def register_chronic_track_files(path_tracks, one=None, overwrite=False, brain_atlas=None):
+    """
+    Registers track files for chronic insertions
+    :param path_tracks:
+    :param one:
+    :param overwrite:
+    :param brain_atlas:
+    :return:
+    """
+
+    brain_atlas = brain_atlas or atlas.AllenAtlas()
+    glob_pattern = "*_probe*_pts*.csv"
+    path_tracks = Path(path_tracks)
+
+    if not path_tracks.is_dir():
+        track_files = [path_tracks]
+    else:
+        track_files = list(path_tracks.rglob(glob_pattern))
+        track_files.sort()
+
+    assert path_tracks.exists()
+    assert one
+
+    ntracks = len(track_files)
+    for ind, track_file in enumerate(track_files):
+        # Nomenclature expected:
+        # '{yyyy-mm-dd}}_{nickname}_{session_number}_{probe_label}_pts.csv'
+        # beware: there may be underscores in the subject nickname
+
+        search_filter = _parse_filename(track_file)
+        probe = one.alyx.rest('chronic-insertions', 'list', no_cache=True, **search_filter)
+        if len(probe) == 0:
+            raise ValueError(f"Could not find associated chronic insertion for {search_filter['subject']},"
+                             f"{search_filter['name']}")
+        elif len(probe) == 1:
+            probe = probe[0]
+        else:
+            raise ValueError("Multiple chronic insertions found.")
+        chronic_id = probe['id']
+        try:
+            xyz_picks = load_track_csv(track_file, brain_atlas=brain_atlas)
+            register_chronic_track(chronic_id, xyz_picks, one=one, overwrite=overwrite, brain_atlas=brain_atlas)
+        except Exception as e:
+            _logger.error(str(track_file))
+            raise e
+        _logger.info(f"{ind + 1}/{ntracks}, {str(track_file)}")
 
 
 def register_track_files(path_tracks, one=None, overwrite=False, brain_atlas=None):

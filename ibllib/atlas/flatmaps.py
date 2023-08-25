@@ -1,26 +1,119 @@
-"""
-Module that hold techniques to project the brain volume onto 2D images for visualisation purposes
-"""
+"""Techniques to project the brain volume onto 2D images for visualisation purposes."""
 from functools import lru_cache
 import logging
 import json
 
+import nrrd
 import numpy as np
 from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
-import matplotlib.colors
-from matplotlib import cm
 
-from iblutil.numerical import ismember
 from iblutil.util import Bunch
 from iblutil.io.hashfile import md5
 import one.remote.aws as aws
 
-from ibllib.atlas.atlas import AllenAtlas, BrainRegions
-from ibllib.atlas.plots import plot_polygon, plot_polygon_with_hole, coords_for_poly_hole
+from ibllib.atlas.atlas import AllenAtlas
 
 
 _logger = logging.getLogger(__name__)
+
+
+class FlatMap(AllenAtlas):
+    """The Allen Atlas flatmap.
+
+    FIXME Document! How are these flatmaps determined? Are they related to the Swansan atlas or is
+     that something else?
+    """
+
+    def __init__(self, flatmap='dorsal_cortex', res_um=25):
+        """
+        Available flatmaps are currently 'dorsal_cortex', 'circles' and 'pyramid'
+        :param flatmap:
+        :param res_um:
+        """
+        super().__init__(res_um=res_um)
+        self.name = flatmap
+        if flatmap == 'dorsal_cortex':
+            self._get_flatmap_from_file()
+        elif flatmap == 'circles':
+            if res_um != 25:
+                raise NotImplementedError('Pyramid circles not implemented for resolution other than 25um')
+            self.flatmap, self.ml_scale, self.ap_scale = circles(N=5, atlas=self, display='flat')
+        elif flatmap == 'pyramid':
+            if res_um != 25:
+                raise NotImplementedError('Pyramid circles not implemented for resolution other than 25um')
+            self.flatmap, self.ml_scale, self.ap_scale = circles(N=5, atlas=self, display='pyramid')
+
+    def _get_flatmap_from_file(self):
+        # gets the file in the ONE cache for the flatmap name in the property, downloads it if needed
+        file_flatmap = self._get_cache_dir().joinpath(f'{self.name}_{self.res_um}.nrrd')
+        if not file_flatmap.exists():
+            file_flatmap.parent.mkdir(exist_ok=True, parents=True)
+            aws.s3_download_file(f'atlas/{file_flatmap.name}', file_flatmap)
+        self.flatmap, _ = nrrd.read(file_flatmap)
+
+    def plot_flatmap(self, depth=0, volume='annotation', mapping='Allen', region_values=None, ax=None, **kwargs):
+        """
+        Displays the 2D image corresponding to the flatmap.
+
+        If there are several depths, by default it will display the first one.
+
+        Parameters
+        ----------
+        depth : int
+            Index of the depth to display in the flatmap volume (the last dimension).
+        volume : {'image', 'annotation', 'boundary', 'value'}
+            - 'image' - Allen image volume.
+            - 'annotation' - Allen annotation volume.
+            - 'boundary' - outline of boundaries between all regions.
+            - 'volume' - custom volume, must pass in volume of shape BrainAtlas.image.shape as
+               regions_value argument.
+        mapping : str, default='Allen'
+            The brain region mapping to use.
+        region_values : numpy.array
+            An array the shape of the brain atlas image containing custom region values. Used when
+            `volume` value is 'volume'.
+        ax : matplotlib.pyplot.Axes, optional
+            A set of axes to plot to.
+        **kwargs
+            See matplotlib.pyplot.imshow.
+
+        Returns
+        -------
+        matplotlib.pyplot.Axes
+            The plotted image axes.
+        """
+        if self.flatmap.ndim == 3:
+            inds = np.int32(self.flatmap[:, :, depth])
+        else:
+            inds = np.int32(self.flatmap[:, :])
+        regions = self._get_mapping(mapping=mapping)[self.label.flat[inds]]
+        if volume == 'annotation':
+            im = self._label2rgb(regions)
+        elif volume == 'value':
+            im = region_values[regions]
+        elif volume == 'boundary':
+            im = self.compute_boundaries(regions)
+        elif volume == 'image':
+            im = self.image.flat[inds]
+        else:
+            raise ValueError(f'Volume type "{volume}" not supported')
+        if not ax:
+            ax = plt.gca()
+
+        return self._plot_slice(im, self.extent_flmap(), ax=ax, volume=volume, **kwargs)
+
+    def extent_flmap(self):
+        """
+        Returns the boundary coordinates of the flat map.
+
+        Returns
+        -------
+        numpy.array
+            The bounding coordinates of the flat map image, specified as (left, right, bottom, top).
+        """
+        extent = np.r_[0, self.flatmap.shape[1], 0, self.flatmap.shape[0]]
+        return extent
 
 
 @lru_cache(maxsize=1, typed=False)
@@ -120,6 +213,18 @@ def circles(N=5, atlas=None, display='flat'):
 
 
 def swanson(filename="swanson2allen.npz"):
+    """
+    FIXME Document! Which publication to reference? Are these specifically for flat maps?
+     Shouldn't this be made into an Atlas class with a mapping or scaling applied?
+
+    Parameters
+    ----------
+    filename
+
+    Returns
+    -------
+
+    """
     # filename could be "swanson2allen_original.npz", or "swanson2allen.npz" for remapped indices to match
     # existing labels in the brain atlas
     OLD_MD5 = [
@@ -135,8 +240,21 @@ def swanson(filename="swanson2allen.npz"):
     return s2a
 
 
-def swanson_json(filename="swansonpaths.json"):
+def swanson_json(filename="swansonpaths.json", remap=True):
+    """
+    Vectorized version of the swanson bitmap file. The vectorized version was generated from swanson() using matlab
+    contour to find the paths for each region. The paths for each region were then simplified using the
+    Ramer Douglas Peucker algorithm https://rdp.readthedocs.io/en/latest/
 
+    Parameters
+    ----------
+    filename
+    remap
+
+    Returns
+    -------
+
+    """
     OLD_MD5 = ['97ccca2b675b28ba9b15ca8af5ba4111',  # errored map with FOTU and CUL4, 5 mixed up
                '56daa7022b5e03080d8623814cda6f38',  # old md5 of swanson json without CENT and PTLp
                # and CUL4 split (on s3 called swansonpaths_56daa.json)
@@ -151,215 +269,57 @@ def swanson_json(filename="swansonpaths.json"):
     with open(json_file) as f:
         sw_json = json.load(f)
 
+    # The swanson contains regions that are children of regions contained within the Allen
+    # annotation volume. Here we remap these regions to the parent that is contained with the
+    # annotation volume
+    if remap:
+        id_map = {391: [392, 393, 394, 395, 396],
+                  474: [483, 487],
+                  536: [537, 541],
+                  601: [602, 603, 604, 608],
+                  622: [624, 625, 626, 627, 628, 629, 630, 631, 632, 634, 635, 636, 637, 638],
+                  686: [687, 688, 689],
+                  708: [709, 710],
+                  721: [723, 724, 726, 727, 729, 730, 731],
+                  740: [741, 742, 743],
+                  758: [759, 760, 761, 762],
+                  771: [772, 773],
+                  777: [778, 779, 780],
+                  788: [789, 790, 791, 792],
+                  835: [836, 837, 838],
+                  891: [894, 895, 896, 897, 898, 900, 901, 902],
+                  926: [927, 928],
+                  949: [950, 951, 952, 953, 954],
+                  957: [958, 959, 960, 961, 962],
+                  999: [1000, 1001],
+                  578: [579, 580]}
+
+        rev_map = {}
+        for k, vals in id_map.items():
+            for v in vals:
+                rev_map[v] = k
+
+        for sw in sw_json:
+            sw['thisID'] = rev_map.get(sw['thisID'], sw['thisID'])
+
     return sw_json
-
-
-def plot_swanson_vector(acronyms=None, values=None, ax=None, hemisphere=None, br=None, orientation='landscape',
-                        empty_color='silver', vmin=None, vmax=None, cmap='viridis', annotate=False, annotate_n=10,
-                        annotate_order='top', annotate_list=None, mask=None, mask_color='w', fontsize=10, **kwargs):
-
-    br = BrainRegions() if br is None else br
-    br.compute_hierarchy()
-
-    if ax is None:
-        fig, ax = plt.subplots()
-        ax.set_axis_off()
-
-    if acronyms is not None:
-        ibr, vals = br.propagate_down(acronyms, values)
-        colormap = cm.get_cmap(cmap)
-        vmin = vmin or np.nanmin(vals)
-        vmax = vmax or np.nanmax(vals)
-        norm = matplotlib.colors.Normalize(vmin=vmin, vmax=vmax)
-        rgba_color = colormap(norm(vals), bytes=True)
-
-    if mask is not None:
-        imr, _ = br.propagate_down(mask, np.ones_like(mask))
-    else:
-        imr = []
-
-    sw = swanson()
-    sw_json = swanson_json()
-
-    plot_idx = []
-    plot_val = []
-    for i, reg in enumerate(sw_json):
-
-        if acronyms is None:
-            color = br.rgba[br.mappings['Swanson'][reg['thisID']]] / 255
-        else:
-            idx = np.where(ibr == reg['thisID'])[0]
-            if len(idx) > 0:
-                plot_idx.append(ibr[idx[0]])
-                plot_val.append(vals[idx[0]])
-                color = rgba_color[idx[0]] / 255
-            else:
-                idx = np.where(imr == reg['thisID'])[0]
-                if len(idx) > 0:
-                    color = mask_color
-                else:
-                    color = empty_color
-
-        coords = reg['coordsReg']
-        reg_id = reg['thisID']
-
-        if reg['hole']:
-            vertices, codes = coords_for_poly_hole(coords)
-            if orientation == 'portrait':
-                vertices[:, [0, 1]] = vertices[:, [1, 0]]
-                plot_polygon_with_hole(ax, vertices, codes, color, reg_id, **kwargs)
-                if hemisphere is not None:
-                    color_inv = color if hemisphere == 'mirror' else empty_color
-                    vertices_inv = np.copy(vertices)
-                    vertices_inv[:, 0] = -1 * vertices_inv[:, 0] + (sw.shape[0] * 2)
-                    plot_polygon_with_hole(ax, vertices_inv, codes, color_inv, reg_id, **kwargs)
-            else:
-                plot_polygon_with_hole(ax, vertices, codes, color, reg_id, **kwargs)
-                if hemisphere is not None:
-                    color_inv = color if hemisphere == 'mirror' else empty_color
-                    vertices_inv = np.copy(vertices)
-                    vertices_inv[:, 1] = -1 * vertices_inv[:, 1] + (sw.shape[0] * 2)
-                    plot_polygon_with_hole(ax, vertices_inv, codes, color_inv, reg_id, **kwargs)
-        else:
-            coords = [coords] if type(coords) == dict else coords
-            for c in coords:
-
-                if orientation == 'portrait':
-                    xy = np.c_[c['y'], c['x']]
-                    plot_polygon(ax, xy, color, reg_id, **kwargs)
-                    if hemisphere is not None:
-                        color_inv = color if hemisphere == 'mirror' else empty_color
-                        xy_inv = np.copy(xy)
-                        xy_inv[:, 0] = -1 * xy_inv[:, 0] + (sw.shape[0] * 2)
-                        plot_polygon(ax, xy_inv, color_inv, reg_id, **kwargs)
-                else:
-                    xy = np.c_[c['x'], c['y']]
-                    plot_polygon(ax, xy, color, reg_id, **kwargs)
-                    if hemisphere is not None:
-                        color_inv = color if hemisphere == 'mirror' else empty_color
-                        xy_inv = np.copy(xy)
-                        xy_inv[:, 1] = -1 * xy_inv[:, 1] + (sw.shape[0] * 2)
-                        plot_polygon(ax, xy_inv, color_inv, reg_id, **kwargs)
-
-    if orientation == 'portrait':
-        ax.set_ylim(0, sw.shape[1])
-        if hemisphere is None:
-            ax.set_xlim(0, sw.shape[0])
-        else:
-            ax.set_xlim(0, 2 * sw.shape[0])
-    else:
-        ax.set_xlim(0, sw.shape[1])
-        if hemisphere is None:
-            ax.set_ylim(0, sw.shape[0])
-        else:
-            ax.set_ylim(0, 2 * sw.shape[0])
-
-    if annotate:
-        if annotate_list is not None:
-            annotate_swanson(ax=ax, acronyms=annotate_list, orientation=orientation, br=br, thres=10, fontsize=fontsize)
-        elif acronyms is not None:
-            ids = br.index2id(np.array(plot_idx))
-            _, indices, _ = np.intersect1d(br.id, br.remap(ids, 'Swanson-lr'), return_indices=True)
-            a, b = ismember(ids, br.id[indices])
-            sorted_id = ids[a]
-            vals = np.array(plot_val)[a]
-            sort_vals = np.argsort(vals) if annotate_order == 'bottom' else np.argsort(vals)[::-1]
-            annotate_swanson(ax=ax, acronyms=sorted_id[sort_vals[:annotate_n]], orientation=orientation, br=br,
-                             thres=10, fontsize=fontsize)
-        else:
-            annotate_swanson(ax=ax, orientation=orientation, br=br, fontsize=fontsize)
-
-    def format_coord(x, y):
-        try:
-            ind = sw[int(y), int(x)]
-            ancestors = br.ancestors(br.id[ind])['acronym']
-            return f'sw-{ind}, {ancestors}, aid={br.id[ind]}-{br.acronym[ind]} \n {br.name[ind]}'
-        except IndexError:
-            return ''
-
-    ax.format_coord = format_coord
-
-    ax.invert_yaxis()
-    ax.set_aspect('equal')
-
-
-def plot_swanson(acronyms=None, values=None, ax=None, hemisphere=None, br=None,
-                 orientation='landscape', annotate=False, empty_color='silver', **kwargs):
-    """
-    Displays the 2D image corresponding to the swanson flatmap.
-    This case is different from the others in the sense that only a region maps to another regions, there
-    is no correspondency from the spatial 3D coordinates.
-    :param acronyms:
-    :param values:
-    :param hemisphere: hemisphere to display, options are 'left', 'right', 'both' or 'mirror'
-    :param br: ibllib.atlas.BrainRegions object
-    :param ax: matplotlib axis object to plot onto
-    :param orientation: 'landscape' (default) or 'portrait'
-    :param annotate: (False) if True, labels regions with acronyms
-    :param empty_color: (grey) matplotlib color code or rgb_a int8 tuple defining the filling
-     of brain regions not provided. Defaults to 'silver'
-    :param kwargs: arguments for imshow
-    :return:
-    """
-    mapping = 'Swanson'
-    br = BrainRegions() if br is None else br
-    br.compute_hierarchy()
-    s2a = swanson()
-    # both hemishpere
-    if hemisphere == 'both':
-        _s2a = s2a + np.sum(br.id > 0)
-        _s2a[s2a == 0] = 0
-        _s2a[s2a == 1] = 1
-        s2a = np.r_[s2a, np.flipud(_s2a)]
-        mapping = 'Swanson-lr'
-    elif hemisphere == 'mirror':
-        s2a = np.r_[s2a, np.flipud(s2a)]
-    if orientation == 'portrait':
-        s2a = np.transpose(s2a)
-    if acronyms is None:
-        regions = br.mappings[mapping][s2a]
-        im = br.rgba[regions]
-        iswan = None
-    else:
-        ibr, vals = br.propagate_down(acronyms, values)
-        # we now have the mapped regions and aggregated values, map values onto swanson map
-        iswan, iv = ismember(s2a, ibr)
-        im = np.zeros_like(s2a, dtype=np.float32)
-        im[iswan] = vals[iv]
-        im[~iswan] = np.nan
-    if not ax:
-        ax = plt.gca()
-        ax.set_axis_off()  # unless provided we don't need scales here
-    ax.imshow(im, **kwargs)
-    # overlay the boundaries if value plot
-    imb = np.zeros((*s2a.shape[:2], 4), dtype=np.uint8)
-    # fill in the empty regions with the blank regions colours if necessary
-    if iswan is not None:
-        imb[~iswan] = (np.array(matplotlib.colors.to_rgba(empty_color)) * 255).astype('uint8')
-    imb[s2a == 0] = 255
-    # imb[s2a == 1] = np.array([167, 169, 172, 255])
-    imb[s2a == 1] = np.array([0, 0, 0, 255])
-    ax.imshow(imb)
-    if annotate:
-        annotate_swanson(ax=ax, orientation=orientation, br=br)
-
-    # provides the mean to see the region on axis
-    def format_coord(x, y):
-        ind = s2a[int(y), int(x)]
-        ancestors = br.ancestors(br.id[ind])['acronym']
-        return f'sw-{ind}, {ancestors}, aid={br.id[ind]}-{br.acronym[ind]} \n {br.name[ind]}'
-
-    ax.format_coord = format_coord
-    return ax
 
 
 @lru_cache(maxsize=None)
 def _swanson_labels_positions(thres=20000):
     """
-    This functions computes label positions to overlay on the Swanson flatmap
-    :return: dictionary where keys are acronyms
+    Computes label positions to overlay on the Swanson flatmap.
+
+    Parameters
+    ----------
+    thres : int, default=20000
+        The number of pixels above which a region is labeled.
+
+    Returns
+    -------
+    dict of str
+        A map of brain acronym to a tuple of x y coordinates.
     """
-    NPIX_THRESH = thres  # number of pixels above which region is labeled
     s2a = swanson()
     iw, ih = np.meshgrid(np.arange(s2a.shape[1]), np.arange(s2a.shape[0]))
     # compute the center of mass of all regions (fast enough to do on the fly)
@@ -371,7 +331,7 @@ def _swanson_labels_positions(thres=20000):
     NWH, NWW = (200, 600)
     h, w = s2a.shape
     labels = {}
-    for ilabel in np.where(bc > NPIX_THRESH)[0]:
+    for ilabel in np.where(bc > thres)[0]:
         x, y = (cmw[ilabel], cmh[ilabel])
         # the polygon is convex and the label is outside. Dammit !!!
         if s2a[int(y), int(x)] != ilabel:
@@ -390,29 +350,3 @@ def _swanson_labels_positions(thres=20000):
             # ax.plot(x, y, 'r+')
         labels[ilabel] = (x, y)
     return labels
-
-
-def annotate_swanson(ax, acronyms=None, orientation='landscape', br=None, thres=20000, **kwargs):
-    """
-    Display annotations on the flatmap
-    :param ax:
-    :param acronyms: (None) list or np.array of acronyms or allen region ids. If None plot all.
-    :param orientation:
-    :param br: BrainRegions object
-    :param kwargs: arguments for the annotate function
-    :return:
-    """
-    br = br or BrainRegions()
-    if acronyms is None:
-        indices = np.arange(br.id.size)
-    else:  # tech debt: here in fact we should remap and compute labels for hierarchical regions
-        aids = br.parse_acronyms_argument(acronyms)
-        _, indices, _ = np.intersect1d(br.id, br.remap(aids, 'Swanson-lr'), return_indices=True)
-    labels = _swanson_labels_positions(thres=thres)
-    for ilabel in labels:
-        # do not display uwanted labels
-        if ilabel not in indices:
-            continue
-        # rotate the labels if the dislay is in portrait mode
-        xy = np.flip(labels[ilabel]) if orientation == 'portrait' else labels[ilabel]
-        ax.annotate(br.acronym[ilabel], xy=xy, ha='center', va='center', **kwargs)

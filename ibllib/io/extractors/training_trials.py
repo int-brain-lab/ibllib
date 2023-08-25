@@ -9,6 +9,7 @@ from ibllib.io.extractors.training_wheel import Wheel
 
 
 _logger = logging.getLogger(__name__)
+__all__ = ['TrainingTrials', 'extract_all']
 
 
 class FeedbackType(BaseBpodTrialsExtractor):
@@ -51,10 +52,18 @@ class ContrastLR(BaseBpodTrialsExtractor):
     var_names = ('contrastLeft', 'contrastRight')
 
     def _extract(self):
-        contrastLeft = np.array([t['contrast']['value'] if np.sign(
-            t['position']) < 0 else np.nan for t in self.bpod_trials])
-        contrastRight = np.array([t['contrast']['value'] if np.sign(
-            t['position']) > 0 else np.nan for t in self.bpod_trials])
+        # iblrigv8 has only flat values in the trial table so we can switch to parquet table when times come
+        # and all the clutter here would fit in ~30 lines
+        if isinstance(self.bpod_trials[0]['contrast'], float):
+            contrastLeft = np.array([t['contrast'] if np.sign(
+                t['position']) < 0 else np.nan for t in self.bpod_trials])
+            contrastRight = np.array([t['contrast'] if np.sign(
+                t['position']) > 0 else np.nan for t in self.bpod_trials])
+        else:
+            contrastLeft = np.array([t['contrast']['value'] if np.sign(
+                t['position']) < 0 else np.nan for t in self.bpod_trials])
+            contrastRight = np.array([t['contrast']['value'] if np.sign(
+                t['position']) > 0 else np.nan for t in self.bpod_trials])
 
         return contrastLeft, contrastRight
 
@@ -111,9 +120,13 @@ class RepNum(BaseBpodTrialsExtractor):
     var_names = 'repNum'
 
     def _extract(self):
-        trial_repeated = np.array(
-            [t['contrast']['type'] == 'RepeatContrast' for t in self.bpod_trials])
-        trial_repeated = trial_repeated.astype(int)
+        def get_trial_repeat(trial):
+            if 'debias_trial' in trial:
+                return trial['debias_trial']
+            else:
+                return trial['contrast']['type'] == 'RepeatContrast'
+
+        trial_repeated = np.array(list(map(get_trial_repeat, self.bpod_trials))).astype(int)
         repNum = trial_repeated.copy()
         c = 0
         for i in range(len(trial_repeated)):
@@ -684,6 +697,24 @@ class TrialsTable(BaseBpodTrialsExtractor):
         return table.to_df(), *(out.pop(x) for x in self.var_names if x != 'table')
 
 
+class TrainingTrials(BaseBpodTrialsExtractor):
+    save_names = ('_ibl_trials.repNum.npy', '_ibl_trials.goCueTrigger_times.npy', '_ibl_trials.stimOnTrigger_times.npy', None,
+                  None, None, None, '_ibl_trials.table.pqt', None, None, '_ibl_wheel.timestamps.npy', '_ibl_wheel.position.npy',
+                  '_ibl_wheelMoves.intervals.npy', '_ibl_wheelMoves.peakAmplitude.npy', None, None, None, None, None)
+    var_names = ('repNum', 'goCueTrigger_times', 'stimOnTrigger_times', 'itiIn_times', 'stimOffTrigger_times',
+                 'stimFreezeTrigger_times', 'errorCueTrigger_times', 'table', 'stimOff_times', 'stimFreeze_times',
+                 'wheel_timestamps', 'wheel_position', 'wheel_moves_intervals', 'wheel_moves_peak_amplitude',
+                 'peakVelocity_times', 'is_final_movement', 'phase', 'position', 'quiescence')
+
+    def _extract(self):
+        base = [RepNum, GoCueTriggerTimes, StimOnTriggerTimes, ItiInTimes, StimOffTriggerTimes, StimFreezeTriggerTimes,
+                ErrorCueTriggerTimes, TrialsTable, PhasePosQuiescence]
+        out, _ = run_extractor_classes(
+            base, session_path=self.session_path, bpod_trials=self.bpod_trials, settings=self.settings, save=False,
+            task_collection=self.task_collection)
+        return tuple(out.pop(x) for x in self.var_names)
+
+
 def extract_all(session_path, save=False, bpod_trials=None, settings=None, task_collection='raw_behavior_data', save_path=None):
     """Extract trials and wheel data.
 
@@ -711,19 +742,15 @@ def extract_all(session_path, save=False, bpod_trials=None, settings=None, task_
     if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
         settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
 
-    base = [RepNum, GoCueTriggerTimes]
     # Version check
     if parse_version(settings['IBLRIG_VERSION_TAG']) >= parse_version('5.0.0'):
         # We now extract a single trials table
-        base.extend([
-            StimOnTriggerTimes, ItiInTimes, StimOffTriggerTimes, StimFreezeTriggerTimes,
-            ErrorCueTriggerTimes, TrialsTable, PhasePosQuiescence
-        ])
+        base = [TrainingTrials]
     else:
-        base.extend([
-            Intervals, Wheel, FeedbackType, ContrastLR, ProbabilityLeft, Choice, IncludedTrials,
+        base = [
+            RepNum, GoCueTriggerTimes, Intervals, Wheel, FeedbackType, ContrastLR, ProbabilityLeft, Choice, IncludedTrials,
             StimOnTimes_deprecated, RewardVolume, FeedbackTimes, ResponseTimes, GoCueTimes, PhasePosQuiescence
-        ])
+        ]
 
     out, fil = run_extractor_classes(base, save=save, session_path=session_path, bpod_trials=bpod_trials, settings=settings,
                                      task_collection=task_collection, path_out=save_path)

@@ -5,11 +5,12 @@ import subprocess
 from collections import OrderedDict
 import traceback
 from pathlib import Path
-import packaging.version
+import warnings
 
 import cv2
 import numpy as np
 import pandas as pd
+import packaging.version
 
 import one.alf.io as alfio
 from neurodsp.utils import rms
@@ -21,8 +22,7 @@ from ibllib.io import ffmpeg
 from ibllib.io.video import label_from_path, assert_valid_label
 from ibllib.io.extractors import ephys_fpga, ephys_passive, camera
 from ibllib.pipes import tasks, base_tasks
-from ibllib.pipes.training_preprocessing import TrainingRegisterRaw as EphysRegisterRaw
-from ibllib.pipes.training_preprocessing import TrainingStatus as EphysTrainingStatus
+import ibllib.pipes.training_preprocessing as tpp
 from ibllib.pipes.misc import create_alyx_probe_insertions
 from ibllib.qc.alignment_qc import get_aligned_channels
 from ibllib.qc.task_extractors import TaskQCExtractor
@@ -35,6 +35,7 @@ from ibllib.plots.snapshot import ReportSnapshot
 from brainbox.behavior.dlc import likelihood_threshold, get_licks, get_pupil_diameter, get_smooth_pupil_diameter
 
 _logger = logging.getLogger("ibllib")
+warnings.warn('`pipes.training_preprocessing` to be removed in favour of dynamic pipeline')
 
 
 #  level 0
@@ -552,7 +553,7 @@ class EphysVideoCompress(tasks.Task):
     def get_signatures(self, **kwargs):
         # need to detect the number of cameras
         output_files = Path(self.session_path).joinpath('raw_video_data').glob('*')
-        labels = np.unique([label_from_path(x) for x in output_files])
+        labels = {label_from_path(x) for x in output_files}
 
         full_input_files = []
         for sig in self.signature['input_files']:
@@ -664,6 +665,7 @@ class EphysTrials(tasks.Task):
                          ('*trials.goCueTrigger_times.npy', 'alf', True),
                          ('*trials.intervals_bpod.npy', 'alf', True),
                          ('*trials.stimOff_times.npy', 'alf', True),
+                         ('*trials.quiescencePeriod.npy', 'alf', True),
                          ('*wheel.position.npy', 'alf', True),
                          ('*wheel.timestamps.npy', 'alf', True),
                          ('*wheelMoves.intervals.npy', 'alf', True),
@@ -738,6 +740,23 @@ class EphysTrials(tasks.Task):
         self.input_files = full_input_files
 
         self.output_files = self.signature['output_files']
+
+
+class LaserTrialsLegacy(EphysTrials):
+    """This is the legacy extractor for Guido's ephys optogenetic stimulation protocol.
+
+    This is legacy because personal project extractors should be in a separate repository.
+    """
+    def _extract_behaviour(self):
+        dsets, out_files = super()._extract_behaviour()
+
+        # Re-extract the laser datasets as the above default extractor discards them
+        from ibllib.io.extractors import opto_trials
+        laser = opto_trials.LaserBool(self.session_path)
+        dsets_laser, out_files_laser = laser.extract(save=True)
+        dsets.update({k: v for k, v in zip(laser.var_names, dsets_laser)})
+        out_files.extend(out_files_laser)
+        return dsets, out_files
 
 
 class EphysCellsQc(tasks.Task):
@@ -1306,7 +1325,7 @@ class EphysExtractionPipeline(tasks.Pipeline):
         self.session_path = session_path
         # level 0
         tasks['ExperimentDescriptionRegisterRaw'] = base_tasks.ExperimentDescriptionRegisterRaw(self.session_path)
-        tasks["EphysRegisterRaw"] = EphysRegisterRaw(self.session_path)
+        tasks["EphysRegisterRaw"] = tpp.TrainingRegisterRaw(self.session_path)
         tasks["EphysPulses"] = EphysPulses(self.session_path)
         tasks["EphysRawQC"] = RawEphysQC(self.session_path)
         tasks["EphysAudio"] = EphysAudio(self.session_path)
@@ -1323,7 +1342,7 @@ class EphysExtractionPipeline(tasks.Pipeline):
             self.session_path, parents=[tasks["EphysVideoCompress"], tasks["EphysPulses"], tasks["EphysTrials"]])
         tasks["EphysCellsQc"] = EphysCellsQc(self.session_path, parents=[tasks["SpikeSorting"]])
         tasks["EphysDLC"] = EphysDLC(self.session_path, parents=[tasks["EphysVideoCompress"]])
-        tasks['EphysTrainingStatus'] = EphysTrainingStatus(self.session_path, parents=[tasks["EphysTrials"]])
+        tasks['EphysTrainingStatus'] = tpp.TrainingStatus(self.session_path, parents=[tasks["EphysTrials"]])
         # level 3
         tasks["EphysPostDLC"] = EphysPostDLC(self.session_path, parents=[tasks["EphysDLC"], tasks["EphysTrials"],
                                                                          tasks["EphysVideoSyncQc"]])

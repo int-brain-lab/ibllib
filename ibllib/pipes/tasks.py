@@ -17,6 +17,7 @@ from ibllib.oneibl.registration import get_lab
 from iblutil.util import Bunch
 import one.params
 from one.api import ONE
+from one import webclient
 
 _logger = logging.getLogger(__name__)
 TASK_STATUS_SET = {'Waiting', 'Held', 'Started', 'Errored', 'Empty', 'Complete', 'Incomplete', 'Abandoned'}
@@ -72,6 +73,21 @@ class Task(abc.ABC):
     @property
     def name(self):
         return self.__class__.__name__
+
+    def path2eid(self):
+        """
+        Fetch the experiment UUID from the Task session path, without using the REST cache.
+
+        This method ensures that the eid will be returned for newly created sessions.
+
+        Returns
+        -------
+        str
+            The experiment UUID corresponding to the session path.
+        """
+        assert self.session_path and self.one and not self.one.offline
+        with webclient.no_cache(self.one.alyx):
+            return self.one.path2eid(self.session_path, query_type='remote')
 
     def run(self, **kwargs):
         """
@@ -479,7 +495,7 @@ class Pipeline(abc.ABC):
 
         for t in task_items:
             # get the parents' alyx ids to reference in the database
-            if type(t) == dict:
+            if isinstance(t, dict):
                 t = Bunch(t)
                 executable = t.executable
                 arguments = t.arguments
