@@ -90,7 +90,7 @@ def get_acquisition_description(protocol):
     else:
         devices = {
             'cameras': {
-                'left': {'collection': 'raw_video_data', 'sync_label': 'frame2ttl'},
+                'left': {'collection': 'raw_video_data', 'sync_label': 'audio'},
             },
             'microphone': {
                 'microphone': {'collection': 'raw_behavior_data', 'sync_label': None}
@@ -98,9 +98,7 @@ def get_acquisition_description(protocol):
         }
         acquisition_description = {  # this is the current ephys pipeline description
             'devices': devices,
-            'sync': {
-                'bpod': {'collection': 'raw_behavior_data', 'extension': 'bin'}
-            },
+            'sync': {'bpod': {'collection': 'raw_behavior_data'}},
             'procedures': ['Behavior training/tasks'],
             'projects': ['ibl_neuropixel_brainwide_01']
         }

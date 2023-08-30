@@ -7,9 +7,9 @@ from pathlib import Path
 import sys
 import logging
 import json
+from datetime import datetime
 
 import numpy as np
-import numpy.testing
 from one.api import ONE
 from iblutil.io import params
 import yaml
@@ -363,6 +363,7 @@ class TestsGlobus(unittest.TestCase):
         self.addCleanup(self.patcher.stop)
 
     def test_as_globus_path(self):
+        assert datetime.now() < datetime(2023, 10, 30)
         # A Windows path
         if sys.platform == 'win32':
             # "/E/FlatIron/integration"
@@ -380,6 +381,7 @@ class TestsGlobus(unittest.TestCase):
 
     @unittest.mock.patch('iblutil.io.params.read')
     def test_login_auto(self, mock_params):
+        assert datetime.now() < datetime(2023, 10, 30)
         client_id = 'h3u2ier'
         # Test ValueError thrown with incorrect parameters
         mock_params.return_value = None  # No parameters saved
