@@ -430,8 +430,15 @@ class SignOffNote(Note):
     def sign_off(self):
 
         json = self.session['json']
-        json['sign_off_checklist'][self.sign_off_key] = {'date': self.datetime_key.split('_')[0],
-                                                         'user': self.datetime_key.split('_')[1]}
+        sign_off_checklist = json.get('sign_off_checklist', None)
+        if sign_off_checklist is None:
+            sign_off_checklist = {self.sign_off_key: {'date': self.datetime_key.split('_')[0],
+                                                      'user': self.datetime_key.split('_')[1]}}
+        else:
+            sign_off_checklist[self.sign_off_key] = {'date': self.datetime_key.split('_')[0],
+                                                     'user': self.datetime_key.split('_')[1]}
+
+        json['sign_off_checklist'] = sign_off_checklist
 
         self.one.alyx.json_field_update("sessions", self.uuid, 'json', data=json)
 
