@@ -114,6 +114,7 @@ class Note(abc.ABC):
         :param content_type: alyx endpoint of uuid
         """
         self.uuid = uuid
+        assert not one.offline, 'ONE must be connected with an Alyx instance'
         self.one = one
         self.selected_reasons = []
         self.other_reason = []
@@ -471,6 +472,10 @@ class SignOffNote(Note):
             self._update_note(notes[0]['id'], text)
 
     def get_datetime_key(self):
+        assert not self.one.offline, 'ONE must be in online mode'
+        if not self.one.alyx.is_logged_in:
+            self.one.alyx.authenticate()
+            assert self.one.alyx.is_logged_in, 'you must be logged in to the AlyxClient'
         user = self.one.alyx.user
         date = datetime.now().date().isoformat()
         return date + '_' + user
