@@ -170,7 +170,8 @@ class TestSignOffNote(unittest.TestCase):
     def test_sign_off(self):
         sess = one.alyx.rest('sessions', 'read', id=self.eid, no_cache=True)
 
-        note = usrpmt.TaskSignOffNote(self.eid, one, sign_off_key=self.sign_off_keys[0])
+        with self.assertWarns(FutureWarning):
+            note = usrpmt.TaskSignOffNote(self.eid, one, sign_off_key=self.sign_off_keys[0])
         note.sign_off()
 
         sess = one.alyx.rest('sessions', 'read', id=self.eid, no_cache=True)
