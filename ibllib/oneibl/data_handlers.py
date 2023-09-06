@@ -121,7 +121,7 @@ class ServerGlobusDataHandler(DataHandler):
         """
         from one.remote.globus import Globus, get_lab_from_endpoint_id  # noqa
         super().__init__(session_path, signatures, one=one)
-        self.globus = Globus(client_name='server')
+        self.globus = Globus(client_name='server', headless=True)
 
         # on local servers set up the local root path manually as some have different globus config paths
         self.globus.endpoints['local']['root_path'] = '/mnt/s0/Data/Subjects'
@@ -131,7 +131,8 @@ class ServerGlobusDataHandler(DataHandler):
 
         # For cortex lab we need to get the endpoint from the ibl alyx
         if self.lab == 'cortexlab':
-            self.globus.add_endpoint(f'flatiron_{self.lab}', alyx=ONE(base_url='https://alyx.internationalbrainlab.org').alyx)
+            alyx = AlyxClient(base_url='https://alyx.internationalbrainlab.org')
+            self.globus.add_endpoint(f'flatiron_{self.lab}', alyx=alyx)
         else:
             self.globus.add_endpoint(f'flatiron_{self.lab}', alyx=self.one.alyx)
 
@@ -255,7 +256,7 @@ class RemoteAwsDataHandler(DataHandler):
         """
         # Set up Globus
         from one.remote.globus import Globus # noqa
-        self.globus = Globus(client_name='server')
+        self.globus = Globus(client_name='server', headless=True)
         self.lab = session_path_parts(self.session_path, as_dict=True)['lab']
         if self.lab == 'cortexlab' and 'cortexlab' in self.one.alyx.base_url:
             base_url = 'https://alyx.internationalbrainlab.org'

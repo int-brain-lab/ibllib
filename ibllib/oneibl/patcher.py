@@ -18,7 +18,6 @@ from ibllib.oneibl.registration import register_dataset
 
 _logger = logging.getLogger(__name__)
 
-FLAT_IRON_GLOBUS_ID = 'ab2d064c-413d-11eb-b188-0ee0d5d9299f'
 FLATIRON_HOST = 'ibl.flatironinstitute.org'
 FLATIRON_PORT = 61022
 FLATIRON_USER = 'datauser'
@@ -199,19 +198,19 @@ class GlobusPatcher(Patcher):
 
     def __init__(self, client_name='default', one=None, label='ibllib patch'):
         assert one
-        self.local_endpoint = getattr(globus.load_client_params(f'globus.{client_name}'),
-                                      'local_endpoint', globus.get_local_endpoint_id())
-        self.transfer_client = globus.create_globus_client(client_name)
+        self.globus = globus.Globus(client_name)
         self.label = label
-        # transfers/delete from the current computer to the flatiron: mandatory and executed first
-        self.globus_transfer = globus_sdk.TransferData(
-            self.transfer_client, self.local_endpoint, FLAT_IRON_GLOBUS_ID, verify_checksum=True,
-            sync_level='checksum', label=label)
-        self.globus_delete = globus_sdk.DeleteData(
-            self.transfer_client, FLAT_IRON_GLOBUS_ID, verify_checksum=True,
-            sync_level='checksum', label=label)
         # get a dictionary of data repositories from Alyx (with globus ids)
-        self.repos = {r['name']: r for r in one.alyx.rest('data-repository', 'list')}
+        self.globus.fetch_endpoints_from_alyx(one.alyx)
+        flatiron_id = self.globus.endpoints['flatiron_cortexlab']['id']
+        if not 'flatiron' in self.globus.endpoints:
+            self.globus.add_endpoint(flatiron_id, 'flatiron', root_path='/')
+            self.globus.endpoints['flatiron'] = self.globus.endpoints['flatiron_cortexlab']
+        # transfers/delete from the current computer to the flatiron: mandatory and executed first
+        local_id = self.globus.endpoints['local']['id']
+        self.globus_transfer = globus_sdk.TransferData(
+            self.globus.client, local_id, flatiron_id, verify_checksum=True, sync_level='checksum', label=label)
+        self.globus_delete = globus_sdk.DeleteData(self.globus.client, flatiron_id, label=label)
         # transfers/delete from flatiron to optional third parties to synchronize / delete
         self.globus_transfers_locals = {}
         self.globus_deletes_locals = {}
@@ -232,7 +231,7 @@ class GlobusPatcher(Patcher):
 
     def _rm(self, flatiron_path, dry=True):
         flatiron_path = Path('/').joinpath(flatiron_path.relative_to(Path(FLATIRON_MOUNT)))
-        _logger.info(f"Globus del {flatiron_path}")
+        _logger.info(f'Globus del {flatiron_path}')
         if not dry:
             if isinstance(self.globus_delete, globus_sdk.transfer.data.DeleteData):
                 self.globus_delete.add_item(flatiron_path)
@@ -253,25 +252,24 @@ class GlobusPatcher(Patcher):
         for dset in responses:
             # get the flatiron path
             fr = next(fr for fr in dset['file_records'] if 'flatiron' in fr['data_repository'])
-            flatiron_path = self.repos[fr['data_repository']]['globus_path']
-            flatiron_path = Path(flatiron_path).joinpath(fr['relative_path'])
-            flatiron_path = add_uuid_string(flatiron_path, dset['id']).as_posix()
+            relative_path = add_uuid_string(fr['relative_path'], dset['id']).as_posix()
+            flatiron_path = self.globus.to_address(relative_path, fr['data_repository'])
             # loop over the remaining repositories (local servers) and create a transfer
             # from flatiron to the local server
             for fr in dset['file_records']:
                 if fr['data_repository'] == DMZ_REPOSITORY:
                     continue
-                repo_gid = self.repos[fr['data_repository']]['globus_endpoint_id']
-                if repo_gid == FLAT_IRON_GLOBUS_ID:
+                repo_gid = self.globus.endpoints[fr['data_repository']]['id']
+                flatiron_id = self.globus.endpoints['flatiron']['id']
+                if repo_gid == flatiron_id:
                     continue
                 # if there is no transfer already created, initialize it
                 if repo_gid not in self.globus_transfers_locals:
                     self.globus_transfers_locals[repo_gid] = globus_sdk.TransferData(
-                        self.transfer_client, FLAT_IRON_GLOBUS_ID, repo_gid, verify_checksum=True,
+                        self.globus.client, flatiron_id, repo_gid, verify_checksum=True,
                         sync_level='checksum', label=f"{self.label} on {fr['data_repository']}")
                 # get the local server path and create the transfer item
-                local_server_path = self.repos[fr['data_repository']]['globus_path']
-                local_server_path = Path(local_server_path).joinpath(fr['relative_path'])
+                local_server_path = self.globus.to_address(fr['relative_path'], fr['data_repository'])
                 self.globus_transfers_locals[repo_gid].add_item(flatiron_path, local_server_path)
         return responses
 
@@ -282,7 +280,7 @@ class GlobusPatcher(Patcher):
         :param: local_servers (False): if True, sync the local servers after the main transfer
         :return: None
         """
-        gtc = self.transfer_client
+        gtc = self.globus.client
 
         def _wait_for_task(resp):
             # patcher.transfer_client.get_task(task_id='364fbdd2-4deb-11eb-8ffb-0a34088e79f9')
@@ -320,8 +318,7 @@ class GlobusPatcher(Patcher):
             self.globus_delete = globus_sdk.DeleteData(
                 gtc,
                 endpoint=self.globus_delete['endpoint'],
-                label=self.globus_delete['label'],
-                verify_checksum=True, sync_level='checksum')
+                label=self.globus_delete['label'])
 
         # launch the local transfers and local deletes
         if local_servers:
@@ -337,11 +334,11 @@ class GlobusPatcher(Patcher):
         for lt in self.globus_transfers_locals:
             transfer = self.globus_transfers_locals[lt]
             if len(transfer['DATA']) > 0:
-                self.transfer_client.submit_transfer(transfer)
+                self.globus.client.submit_transfer(transfer)
         for ld in self.globus_deletes_locals:
             delete = self.globus_deletes_locals[ld]
             if len(transfer['DATA']) > 0:
-                self.transfer_client.submit_delete(delete)
+                self.globus.client.submit_delete(delete)
 
 
 class SSHPatcher(Patcher):

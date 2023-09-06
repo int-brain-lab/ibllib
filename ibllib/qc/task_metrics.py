@@ -151,7 +151,7 @@ class TaskQC(base.QC):
         if self.extractor is None:
             kwargs['download_data'] = kwargs.pop('download_data', self.download_data)
             self.load_data(**kwargs)
-        self.log.info(f"Session {self.session_path}: Running QC on behavior data...")
+        self.log.info(f'Session {self.session_path}: Running QC on behavior data...')
         self.metrics, self.passed = get_bpodqc_metrics_frame(
             self.extractor.data,
             wheel_gain=self.extractor.settings['STIM_GAIN'],  # The wheel gain
