@@ -1,6 +1,8 @@
 import abc
 import ftplib
 from pathlib import Path, PurePosixPath, WindowsPath
+from collections import defaultdict
+from itertools import groupby, starmap
 import subprocess
 import logging
 from getpass import getpass
@@ -9,8 +11,9 @@ import shutil
 import globus_sdk
 import iblutil.io.params as iopar
 from one.alf.files import get_session_path, add_uuid_string
-from one.alf.spec import is_uuid_string
+from one.alf.spec import is_uuid_string, is_uuid
 from one import params
+from one.webclient import AlyxClient
 from one.converters import path_from_dataset
 from one.remote import globus
 
@@ -203,7 +206,7 @@ class GlobusPatcher(Patcher):
         # get a dictionary of data repositories from Alyx (with globus ids)
         self.globus.fetch_endpoints_from_alyx(one.alyx)
         flatiron_id = self.globus.endpoints['flatiron_cortexlab']['id']
-        if not 'flatiron' in self.globus.endpoints:
+        if 'flatiron' not in self.globus.endpoints:
             self.globus.add_endpoint(flatiron_id, 'flatiron', root_path='/')
             self.globus.endpoints['flatiron'] = self.globus.endpoints['flatiron_cortexlab']
         # transfers/delete from the current computer to the flatiron: mandatory and executed first
@@ -339,6 +342,71 @@ class GlobusPatcher(Patcher):
             delete = self.globus_deletes_locals[ld]
             if len(transfer['DATA']) > 0:
                 self.globus.client.submit_delete(delete)
+
+
+class IBLGlobusPatcher(Patcher, globus.Globus):
+    """This is a replacement for the GlobusPatcher class, utilizing the ONE Globus class.
+
+    The GlobusPatcher class is more complicated but has the advantage of being able to launch
+    transfers independently to registration, although it remains to be seen whether this is useful.
+    """
+    def __init__(self, alyx=None, client_name='default'):
+        """
+
+        Parameters
+        ----------
+        alyx : one.webclient.AlyxClient
+            An instance of Alyx to use.
+        client_name : str, default='default'
+            The Globus client name.
+        """
+        self.alyx = alyx or AlyxClient()
+        globus.Globus.__init__(client_name=client_name)  # NB we don't init Patcher as we're not using ONE
+
+    def delete_dataset(self, dataset, dry=False):
+        """
+        Delete a dataset off Alyx and remove file record from all Globus repositories.
+
+        Parameters
+        ----------
+        dataset : uuid.UUID, str, dict
+            The dataset record or ID to delete.
+        dry : bool
+            If true, dataset is not deleted and file paths that would be removed are returned.
+
+        Returns
+        -------
+        list of uuid.UUID
+            A list of Globus delete task IDs if dry is false.
+        dict of str
+            A map of data repository names and relative paths of the deleted files.
+        """
+        if is_uuid(dataset):
+            did = dataset
+            dataset = self.alyx.rest('datasets', 'read', id=did)
+        else:
+            did = dataset['url'].split('/')[-1]
+
+        files_by_repo = defaultdict(list)  # uuid.UUID -> [pathlib.PurePosixPath]
+        file_records = filter(lambda x: x['exists'], dataset['file_records'])
+        for repo, record in groupby(file_records, lambda x: x['data_repository']):
+            if not record['globus_id']:
+                raise NotImplementedError
+            if repo not in self.endpoints:
+                self.add_endpoint(repo, alyx=self.alyx)
+            filepath = PurePosixPath(record['relative_path'])
+            if 'flatiron' in repo:
+                filepath = add_uuid_string(filepath, did)
+            files_by_repo[repo].append(filepath)
+
+        if dry:
+            return [], files_by_repo
+
+        # Delete the files
+        task_ids = list(starmap(self.delete_data, files_by_repo.items()))
+        # Delete the dataset from Alyx
+        self.alyx.rest('datasets', 'delete', id=did)
+        return task_ids, files_by_repo
 
 
 class SSHPatcher(Patcher):
