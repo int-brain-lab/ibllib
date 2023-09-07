@@ -1145,7 +1145,7 @@ class MesoscopePMDCompress(base_tasks.MesoscopeTask):
             # set up subprocess to run main script in iblscripts
             command = f"""
             {self.SHELL_SCRIPT} {self.session_path}
-            {int(FOV)}{self.block_height} {self.block_width}
+            {int(FOV)} {self.block_height} {self.block_width}
             """
 
             _logger.info(command)
