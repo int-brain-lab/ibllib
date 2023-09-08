@@ -1107,21 +1107,21 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
         return mlapdv, location_id
 
 
-class MesoscopePMDCompress(base_tasks.MesoscopeTask):
+class MesoscopePMDCompress(base_tasks.DynamicTask):
     """
     Run Penalized Matrix Decomposition compression algorithm on
     suite2p outputs using "localmd" implementation by Amol Pasarkar.
     """
 
     SHELL_SCRIPT = Path.home().joinpath("Documents/PYTHON/iblscripts/deploy/mesoscope/run_localmd.sh")
-    block_height = block_width = 10
+    block_height = block_width = 20
 
     @property
     def signature(self):
         signature = {
-            'input_files': [('data.bin', 'raw_bin_files/FOV*')],
-            'output_files': [('PMD.npz', 'alf/FOV*'),
-                             ('mpci.pmdTriptych.tiff', 'alf/FOV*')]
+            'input_files': [('data.bin', 'raw_bin_files/FOV*', True)],
+            'output_files': [('PMD.npz', 'alf/FOV*', True),
+                             ('mpci.pmdTriptych.tiff', 'alf/FOV*', True)]
         }
 
         return signature
@@ -1144,15 +1144,14 @@ class MesoscopePMDCompress(base_tasks.MesoscopeTask):
 
             # set up subprocess to run main script in iblscripts
             command = f"""
-            {self.SHELL_SCRIPT} {self.session_path}
-            {int(FOV)} {self.block_height} {self.block_width}
+            {self.SHELL_SCRIPT} {self.session_path} {int(FOV)} {self.block_height} {self.block_width}
             """
 
             _logger.info(command)
             process = subprocess.Popen(
                 command, shell=True,
                 stdout=subprocess.PIPE,
-                sterr=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 executable="/bin/bash"
             )
             info, error = process.communicate()
