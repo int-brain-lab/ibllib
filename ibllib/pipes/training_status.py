@@ -586,7 +586,8 @@ def get_training_info_for_session(session_paths, one, force=True):
     if len(protocols) > 0 and len(set(protocols)) != 1:
         print(f'Different protocols on same date {sess_dicts[0]["date"]} : {protocols}')
 
-    if len(sess_dicts) > 1 and len(set(protocols)) == 1:  # Only if all protocols are the same
+    # Only if all protocols are the same and are not habituation
+    if len(sess_dicts) > 1 and len(set(protocols)) == 1 and protocols[0] != 'habituation':  # Only if all protocols are the same
         print(f'{len(sess_dicts)} sessions being combined for date {sess_dicts[0]["date"]}')
         combined_trials = load_combined_trials(session_paths, one, force=force)
         performance, contrasts, _ = training.compute_performance(combined_trials, prob_right=True)
