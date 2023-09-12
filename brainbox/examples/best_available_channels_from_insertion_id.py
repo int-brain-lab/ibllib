@@ -1,6 +1,6 @@
 from one.api import ONE
 
-from ibllib.atlas import atlas
+from iblatlas import atlas
 from brainbox.io.one import load_channels_from_insertion
 
 pid = "8413c5c6-b42b-4ec6-b751-881a54413628"

@@ -19,7 +19,7 @@ from one.api import ONE
 import one.alf.io as alfio
 
 from ibllib.pipes.ephys_alignment import EphysAlignment
-from ibllib.atlas import atlas
+from iblatlas import atlas
 
 
 # Instantiate brain atlas and one

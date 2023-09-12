@@ -7,7 +7,7 @@ Code by G. Meijer
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
-from ibllib import atlas
+from ibatlas import atlas
 
 
 def _label2values(imlabel, fill_values, ba):
