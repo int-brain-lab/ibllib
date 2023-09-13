@@ -15,14 +15,13 @@ class HabituationTrials(BaseBpodTrialsExtractor):
     var_names = ('feedbackType', 'rewardVolume', 'stimOff_times', 'contrastLeft', 'contrastRight',
                  'feedback_times', 'stimOn_times', 'stimOnTrigger_times', 'intervals',
                  'goCue_times', 'goCueTrigger_times', 'itiIn_times', 'stimOffTrigger_times',
-                 'stimCenterTrigger_times', 'stimCenter_times')
+                 'stimCenterTrigger_times', 'stimCenter_times', 'position', 'phase')
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        exclude = ['itiIn_times', 'stimOffTrigger_times',
-                   'stimCenter_times', 'stimCenterTrigger_times']
-        self.save_names = tuple([f'_ibl_trials.{x}.npy' if x not in exclude else None
-                                 for x in self.var_names])
+        exclude = ['itiIn_times', 'stimOffTrigger_times', 'stimCenter_times',
+                   'stimCenterTrigger_times', 'position', 'phase']
+        self.save_names = tuple(f'_ibl_trials.{x}.npy' if x not in exclude else None for x in self.var_names)
 
     def _extract(self):
         # Extract all trials...
@@ -100,6 +99,10 @@ class HabituationTrials(BaseBpodTrialsExtractor):
             [tr["behavior_data"]["States timestamps"]
              ["iti"][0][0] for tr in self.bpod_trials]
         )
+
+        # Phase and position
+        out['position'] = np.array([t['position'] for t in self.bpod_trials])
+        out['phase'] = np.array([t['stim_phase'] for t in self.bpod_trials])
 
         # NB: We lose the last trial because the stim off event occurs at trial_num + 1
         n_trials = out['stimOff_times'].size

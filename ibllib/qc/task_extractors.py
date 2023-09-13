@@ -35,7 +35,7 @@ class TaskQCExtractor(object):
         :param lazy: if True, the data are not extracted immediately
         :param one: an instance of ONE, used to download the raw data if download_data is True
         :param download_data: if True, any missing raw data is downloaded via ONE
-        :param bpod_only: extract from from raw Bpod data only, even for FPGA sessions
+        :param bpod_only: extract from raw Bpod data only, even for FPGA sessions
         """
         if not is_session_path(session_path):
             raise ValueError('Invalid session path')
