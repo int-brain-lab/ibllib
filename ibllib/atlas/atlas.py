@@ -1,13 +1,8 @@
 """
 Classes for manipulating brain atlases, insertions, and coordinates.
 """
-from pathlib import Path, PurePosixPath
-from dataclasses import dataclass
-import logging
+
 import warnings
-
-import numpy as np
-
 import iblatlas.atlas
 
 
@@ -19,27 +14,6 @@ def deprecated_decorator(function):
         return function(*args, **kwargs)
 
     return deprecated_function
-
-def deprecated_dataclass(dataclass):
-    def deprecated_function():
-        warning_text = f"{dataclass.__module__}.{dataclass.__name__} is deprecated. " \
-                       f"Use iblatlas.{dataclass.__module__.split('.')[-1]}.{dataclass.__name__} instead"
-        warnings.warn(warning_text, DeprecationWarning)
-        return dataclass
-
-    return deprecated_function()
-
-
-ALLEN_CCF_LANDMARKS_MLAPDV_UM = {'bregma': np.array([5739, 5400, 332])}
-"""dict: The ML AP DV voxel coordinates of brain landmarks in the Allen atlas."""
-
-PAXINOS_CCF_LANDMARKS_MLAPDV_UM = {'bregma': np.array([5700, 4300 + 160, 330])}
-"""dict: The ML AP DV voxel coordinates of brain landmarks in the Franklin & Paxinos atlas."""
-
-S3_BUCKET_IBL = 'ibl-brain-wide-map-public'
-"""str: The name of the public IBL S3 bucket containing atlas data."""
-
-_logger = logging.getLogger(__name__)
 
 
 @deprecated_decorator
@@ -62,178 +36,14 @@ class Trajectory(iblatlas.atlas.Trajectory):
 
     >>> trj = Trajectory.fit(xyz)
     """
-    vector: np.ndarray
-    point: np.ndarray
-
-    def __init_sublcall__(self):
-        warning_text = f"{dataclass.__module__}.{dataclass.__name__} is deprecated. " \
-                       f"Use iblatlas.{dataclass.__module__.split('.')[-1]}.{dataclass.__name__} instead"
-        warnings.warn(warning_text, DeprecationWarning)
 
 
-@deprecated_dataclass
-@dataclass
 class Insertion(iblatlas.atlas.Insertion):
     """
     Defines an ephys probe insertion in 3D coordinate. IBL conventions.
 
     To instantiate, use the static methods: `Insertion.from_track` and `Insertion.from_dict`.
     """
-    x: float
-    y: float
-    z: float
-    phi: float
-    theta: float
-    depth: float
-    label: str = ''
-    beta: float = 0
-
-    @staticmethod
-    def from_track(xyzs, brain_atlas=None):
-        """
-        Define an insersion from one or more trajectory.
-
-        Parameters
-        ----------
-        xyzs : numpy.array
-             An n by 3 array xyz coordinates representing an insertion trajectory.
-        brain_atlas : BrainAtlas
-            A brain atlas instance, used to attain the point of entry.
-
-        Returns
-        -------
-        Insertion
-        """
-        assert brain_atlas, 'Input argument brain_atlas must be defined'
-        traj = Trajectory.fit(xyzs)
-        # project the deepest point into the vector to get the tip coordinate
-        tip = traj.project(xyzs[np.argmin(xyzs[:, 2]), :])
-        # get intersection with the brain surface as an entry point
-        entry = Insertion.get_brain_entry(traj, brain_atlas)
-        # convert to spherical system to store the insertion
-        depth, theta, phi = cart2sph(*(entry - tip))
-        insertion_dict = {
-            'x': entry[0], 'y': entry[1], 'z': entry[2], 'phi': phi, 'theta': theta, 'depth': depth
-        }
-        return Insertion(**insertion_dict)
-
-    @staticmethod
-    def from_dict(d, brain_atlas=None):
-        """
-        Constructs an Insertion object from the json information stored in probes.description file.
-
-        Parameters
-        ----------
-        d : dict
-            A dictionary containing at least the following keys {'x', 'y', 'z', 'phi', 'theta',
-            'depth'}.  The depth and xyz coordinates must be in um.
-        brain_atlas : BrainAtlas, default=None
-            If provided, disregards the z coordinate and locks the insertion point to the z of the
-            brain surface.
-
-        Returns
-        -------
-        Insertion
-
-        Examples
-        --------
-        >>> tri = {'x': 544.0, 'y': 1285.0, 'z': 0.0, 'phi': 0.0, 'theta': 5.0, 'depth': 4501.0}
-        >>> ins = Insertion.from_dict(tri)
-        """
-        assert brain_atlas, 'Input argument brain_atlas must be defined'
-        z = d['z'] / 1e6
-        if not hasattr(brain_atlas, 'top'):
-            brain_atlas.compute_surface()
-        iy = brain_atlas.bc.y2i(d['y'] / 1e6)
-        ix = brain_atlas.bc.x2i(d['x'] / 1e6)
-        # Only use the brain surface value as z if it isn't NaN (this happens when the surface touches the edges
-        # of the atlas volume
-        if not np.isnan(brain_atlas.top[iy, ix]):
-            z = brain_atlas.top[iy, ix]
-        return Insertion(x=d['x'] / 1e6, y=d['y'] / 1e6, z=z,
-                         phi=d['phi'], theta=d['theta'], depth=d['depth'] / 1e6,
-                         beta=d.get('beta', 0), label=d.get('label', ''))
-
-    @property
-    def trajectory(self):
-        """
-        Gets the trajectory object matching insertion coordinates
-        :return: atlas.Trajectory
-        """
-        return Trajectory.fit(self.xyz)
-
-    @property
-    def xyz(self):
-        return np.c_[self.entry, self.tip].transpose()
-
-    @property
-    def entry(self):
-        return np.array((self.x, self.y, self.z))
-
-    @property
-    def tip(self):
-        return sph2cart(- self.depth, self.theta, self.phi) + np.array((self.x, self.y, self.z))
-
-    @staticmethod
-    def _get_surface_intersection(traj, brain_atlas, surface='top'):
-        """
-        TODO Document!
-
-        Parameters
-        ----------
-        traj
-        brain_atlas
-        surface
-
-        Returns
-        -------
-
-        """
-        brain_atlas.compute_surface()
-
-        distance = traj.mindist(brain_atlas.srf_xyz)
-        dist_sort = np.argsort(distance)
-        # In some cases the nearest two intersection points are not the top and bottom of brain
-        # So we find all intersection points that fall within one voxel and take the one with
-        # highest dV to be entry and lowest dV to be exit
-        idx_lim = np.sum(distance[dist_sort] * 1e6 < np.max(brain_atlas.res_um))
-        dist_lim = dist_sort[0:idx_lim]
-        z_val = brain_atlas.srf_xyz[dist_lim, 2]
-        if surface == 'top':
-            ma = np.argmax(z_val)
-            _xyz = brain_atlas.srf_xyz[dist_lim[ma], :]
-            _ixyz = brain_atlas.bc.xyz2i(_xyz)
-            _ixyz[brain_atlas.xyz2dims[2]] += 1
-        elif surface == 'bottom':
-            ma = np.argmin(z_val)
-            _xyz = brain_atlas.srf_xyz[dist_lim[ma], :]
-            _ixyz = brain_atlas.bc.xyz2i(_xyz)
-
-        xyz = brain_atlas.bc.i2xyz(_ixyz.astype(float))
-
-        return xyz
-
-    @staticmethod
-    def get_brain_exit(traj, brain_atlas):
-        """
-        Given a Trajectory and a BrainAtlas object, computes the brain exit coordinate as the
-        intersection of the trajectory and the brain surface (brain_atlas.surface)
-        :param brain_atlas:
-        :return: 3 element array x,y,z
-        """
-        # Find point where trajectory intersects with bottom of brain
-        return Insertion._get_surface_intersection(traj, brain_atlas, surface='bottom')
-
-    @staticmethod
-    def get_brain_entry(traj, brain_atlas):
-        """
-        Given a Trajectory and a BrainAtlas object, computes the brain entry coordinate as the
-        intersection of the trajectory and the brain surface (brain_atlas.surface)
-        :param brain_atlas:
-        :return: 3 element array x,y,z
-        """
-        # Find point where trajectory intersects with top of brain
-        return Insertion._get_surface_intersection(traj, brain_atlas, surface='top')
 
 
 @deprecated_decorator

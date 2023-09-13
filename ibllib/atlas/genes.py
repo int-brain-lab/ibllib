@@ -16,4 +16,3 @@ def allen_gene_expression(filename='gene-expression.pqt', folder_cache=None):
     """
 
     return genes.allen_gene_expression(filename=filename, folder_cache=folder_cache)
-

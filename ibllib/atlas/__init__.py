@@ -197,3 +197,7 @@ References
 from .atlas import *  # noqa
 from .regions import regions_from_allen_csv
 from .flatmaps import FlatMap
+import warnings
+
+warnings.warn('ibllib.atlas is deprecated. Please install iblatlas using "pip install iblatlas" and use '
+              'this module instead', DeprecationWarning)

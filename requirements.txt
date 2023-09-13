@@ -30,3 +30,4 @@ ONE-api>=2.2
 slidingRP>=1.0.0  # steinmetz lab refractory period metrics
 wfield==0.3.7  # widefield extractor frozen for now (2023/07/15) until Joao fixes latest version
 psychofit
+iblatlas
