@@ -116,6 +116,10 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
     list of dicts
         A list of any datasets registered (only for legacy sessions)
     """
+    for _ in range(10):
+        _logger.info('#' * 110)
+    _logger.info('Start looking for new sessions...')
+    _logger.info('#' * 110)
     if not one:
         one = ONE(cache_rest=None)
     rc = IBLRegistrationClient(one=one)

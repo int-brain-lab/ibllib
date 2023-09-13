@@ -5,6 +5,7 @@ i.e. habituation, training or biased.
 import logging
 import importlib
 from collections import OrderedDict
+import warnings
 
 from pkg_resources import parse_version
 from ibllib.io.extractors import habituation_trials, training_trials, biased_trials, opto_trials
@@ -54,6 +55,7 @@ def extract_all(session_path, save=True, bpod_trials=None, settings=None,
     list of pathlib.Path
         The output files if save is true.
     """
+    warnings.warn('`extract_all` functions soon to be deprecated, use `bpod_trials.get_bpod_extractor` instead', FutureWarning)
     if not extractor_type:
         extractor_type = get_session_extractor_type(session_path, task_collection=task_collection)
     _logger.info(f'Extracting {session_path} as {extractor_type}')
@@ -101,6 +103,23 @@ def extract_all(session_path, save=True, bpod_trials=None, settings=None,
 
 
 def get_bpod_extractor(session_path, protocol=None, task_collection='raw_behavior_data') -> BaseBpodTrialsExtractor:
+    """
+    Returns an extractor for a given session.
+
+    Parameters
+    ----------
+    session_path : str, pathlib.Path
+        The path to the session to be extracted.
+    protocol : str, optional
+        The protocol name, otherwise uses the PYBPOD_PROTOCOL key in iblrig task settings files.
+    task_collection : str
+        The folder within the session that contains the raw task data.
+
+    Returns
+    -------
+    BaseBpodTrialsExtractor
+        An instance of the task extractor class, instantiated with the session path.
+    """
     builtins = {
         'HabituationTrials': HabituationTrials,
         'TrainingTrials': TrainingTrials,

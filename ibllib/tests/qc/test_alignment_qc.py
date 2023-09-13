@@ -16,7 +16,7 @@ from ibllib.tests import TEST_DB
 from ibllib.atlas import AllenAtlas
 from ibllib.pipes.misc import create_alyx_probe_insertions
 from ibllib.qc.alignment_qc import AlignmentQC
-from ibllib.pipes.histology import register_track
+from ibllib.pipes.histology import register_track, register_chronic_track
 from one.registration import RegistrationClient
 
 
@@ -64,6 +64,59 @@ class TestTracingQc(unittest.TestCase):
     def tearDownClass(cls) -> None:
         one.alyx.rest('insertions', 'delete', id=cls.probe01_id)
         one.alyx.rest('insertions', 'delete', id=cls.probe00_id)
+
+
+class TestChronicTracingQC(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        probe = ''.join(random.choices(string.ascii_letters, k=5))
+        serial = ''.join(random.choices(string.ascii_letters, k=10))
+
+        # Make a chronic insertions
+        ref = one.eid2ref(EPHYS_SESSION)
+        insdict = {"subject": ref['subject'], "name": probe, "model": '3B2', "serial": serial}
+        ins = one.alyx.rest('chronic-insertions', 'create', data=insdict)
+        cls.chronic_id = ins['id']
+        # Make a probe insertions
+        insdict = {"session": EPHYS_SESSION, "name": probe, "model": '3B2', "serial": serial,
+                   "chronic_insertion": cls.chronic_id}
+        ins = one.alyx.rest('insertions', 'create', data=insdict)
+        cls.probe_id = ins['id']
+
+        # Load in the tracing data
+        data = np.load(Path(Path(__file__).parent.parent.
+                       joinpath('fixtures', 'qc', 'data_alignmentqc_existing.npz')),
+                       allow_pickle=True)
+        cls.xyz_picks = np.array(data['xyz_picks']) / 1e6
+
+    def test_tracing_exists(self):
+        register_chronic_track(self.chronic_id, picks=self.xyz_picks, one=one, overwrite=True,
+                               channels=False, brain_atlas=brain_atlas)
+        insertion = one.alyx.get('/insertions/' + self.probe_id, clobber=True)
+
+        assert (insertion['json']['qc'] == 'NOT_SET')
+        assert (insertion['json']['extended_qc']['tracing_exists'] == 1)
+
+        insertion = one.alyx.get('/chronic-insertions/' + self.chronic_id, clobber=True)
+
+        assert (insertion['json']['qc'] == 'NOT_SET')
+        assert (insertion['json']['extended_qc']['tracing_exists'] == 1)
+
+    def test_tracing_not_exists(self):
+        register_chronic_track(self.chronic_id, picks=None, one=one, overwrite=True,
+                               channels=False, brain_atlas=brain_atlas)
+        insertion = one.alyx.get('/insertions/' + self.probe_id, clobber=True)
+        assert (insertion['json']['qc'] == 'CRITICAL')
+        assert (insertion['json']['extended_qc']['tracing_exists'] == 0)
+
+        insertion = one.alyx.get('/chronic-insertions/' + self.chronic_id, clobber=True)
+        assert (insertion['json']['qc'] == 'CRITICAL')
+        assert (insertion['json']['extended_qc']['tracing_exists'] == 0)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        one.alyx.rest('insertions', 'delete', id=cls.probe_id)
+        one.alyx.rest('chronic-insertions', 'delete', id=cls.chronic_id)
 
 
 class TestAlignmentQcExisting(unittest.TestCase):

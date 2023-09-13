@@ -496,7 +496,7 @@ class Pipeline(abc.ABC):
 
         for t in task_items:
             # get the parents' alyx ids to reference in the database
-            if type(t) == dict:
+            if isinstance(t, dict):
                 t = Bunch(t)
                 executable = t.executable
                 arguments = t.arguments

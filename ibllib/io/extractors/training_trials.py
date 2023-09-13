@@ -52,10 +52,18 @@ class ContrastLR(BaseBpodTrialsExtractor):
     var_names = ('contrastLeft', 'contrastRight')
 
     def _extract(self):
-        contrastLeft = np.array([t['contrast']['value'] if np.sign(
-            t['position']) < 0 else np.nan for t in self.bpod_trials])
-        contrastRight = np.array([t['contrast']['value'] if np.sign(
-            t['position']) > 0 else np.nan for t in self.bpod_trials])
+        # iblrigv8 has only flat values in the trial table so we can switch to parquet table when times come
+        # and all the clutter here would fit in ~30 lines
+        if isinstance(self.bpod_trials[0]['contrast'], float):
+            contrastLeft = np.array([t['contrast'] if np.sign(
+                t['position']) < 0 else np.nan for t in self.bpod_trials])
+            contrastRight = np.array([t['contrast'] if np.sign(
+                t['position']) > 0 else np.nan for t in self.bpod_trials])
+        else:
+            contrastLeft = np.array([t['contrast']['value'] if np.sign(
+                t['position']) < 0 else np.nan for t in self.bpod_trials])
+            contrastRight = np.array([t['contrast']['value'] if np.sign(
+                t['position']) > 0 else np.nan for t in self.bpod_trials])
 
         return contrastLeft, contrastRight
 
@@ -112,9 +120,13 @@ class RepNum(BaseBpodTrialsExtractor):
     var_names = 'repNum'
 
     def _extract(self):
-        trial_repeated = np.array(
-            [t['contrast']['type'] == 'RepeatContrast' for t in self.bpod_trials])
-        trial_repeated = trial_repeated.astype(int)
+        def get_trial_repeat(trial):
+            if 'debias_trial' in trial:
+                return trial['debias_trial']
+            else:
+                return trial['contrast']['type'] == 'RepeatContrast'
+
+        trial_repeated = np.array(list(map(get_trial_repeat, self.bpod_trials))).astype(int)
         repNum = trial_repeated.copy()
         c = 0
         for i in range(len(trial_repeated)):

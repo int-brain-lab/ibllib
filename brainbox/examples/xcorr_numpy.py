@@ -5,7 +5,7 @@ import numpy as np
 from oneibl.one import ONE
 import alf.io as ioalf
 
-from brainbox.processing import bincount2D
+from iblutil.numerical import bincount2D
 
 
 class Bunch(dict):

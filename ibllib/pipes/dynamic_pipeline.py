@@ -32,8 +32,19 @@ _logger = logging.getLogger(__name__)
 
 def acquisition_description_legacy_session(session_path, save=False):
     """
-    From a legacy session create a dictionary corresponding to the acquisition description
-    :return: dict
+    From a legacy session create a dictionary corresponding to the acquisition description.
+
+    Parameters
+    ----------
+    session_path : str, pathlib.Path
+        A path to a session to describe.
+    save : bool
+        If true, saves the acquisition description file to _ibl_experiment.description.yaml.
+
+    Returns
+    -------
+    dict
+        The legacy acquisition description.
     """
     extractor_type = ibllib.io.extractors.base.get_session_extractor_type(session_path=session_path)
     etype2protocol = dict(biased='choice_world_biased', habituation='choice_world_habituation',
@@ -183,17 +194,27 @@ def make_pipeline(session_path, **pkwargs):
         if extractors := task_info.get('extractors', False):
             extractors = (extractors,) if isinstance(extractors, str) else extractors
             task_name = None  # to avoid unbound variable issue in the first round
-            for j, task in enumerate(extractors):
+            for j, extractor in enumerate(extractors):
                 # Assume previous task in the list is parent
                 parents = [] if j == 0 else [tasks[task_name]]
                 # Make sure extractor and sync task don't collide
                 for sync_option in ('nidq', 'bpod'):
-                    if sync_option in task.lower() and not sync == sync_option:
-                        raise ValueError(f'Extractor "{task}" and sync "{sync}" do not match')
-                try:
-                    task = getattr(btasks, task)
-                except AttributeError:
-                    raise NotImplementedError  # TODO Attempt to import from personal project repo
+                    if sync_option in extractor.lower() and not sync == sync_option:
+                        raise ValueError(f'Extractor "{extractor}" and sync "{sync}" do not match')
+                # Look for the extractor in the behavior extractors module
+                if hasattr(btasks, extractor):
+                    task = getattr(btasks, extractor)
+                # This may happen that the extractor is tied to a specific sync task: look for TrialsChoiceWorldBpod for # example
+                elif hasattr(btasks, extractor + sync.capitalize()):
+                    task = getattr(btasks, extractor + sync.capitalize())
+                else:
+                    # lookup in the project extraction repo if we find an extractor class
+                    import projects.extraction_tasks
+                    if hasattr(projects.extraction_tasks, extractor):
+                        task = getattr(projects.extraction_tasks, extractor)
+                    else:
+                        raise NotImplementedError(
+                            f'Extractor "{extractor}" not found in main IBL pipeline nor in personal projects')
                 # Rename the class to something more informative
                 task_name = f'{task.__name__}_{i:02}'
                 # For now we assume that the second task in the list is always the trials extractor, which is dependent
@@ -289,8 +310,10 @@ def make_pipeline(session_path, **pkwargs):
 
     # Video tasks
     if 'cameras' in devices:
+        cams = list(devices['cameras'].keys())
+        subset_cams = [c for c in cams if c in ('left', 'right', 'body')]
         video_kwargs = {'device_collection': 'raw_video_data',
-                        'cameras': list(devices['cameras'].keys())}
+                        'cameras': cams}
         video_compressed = sess_params.get_video_compressed(acquisition_description)
 
         if video_compressed:
@@ -310,10 +333,14 @@ def make_pipeline(session_path, **pkwargs):
                 tasks[tn] = type((tn := f'VideoSyncQC_{sync}'), (vtasks.VideoSyncQcBpod,), {})(
                     **kwargs, **video_kwargs, **sync_kwargs, parents=[tasks['VideoCompress']])
             elif sync == 'nidq':
+                # Here we restrict to videos that we support (left, right or body)
+                video_kwargs['cameras'] = subset_cams
                 tasks[tn] = type((tn := f'VideoSyncQC_{sync}'), (vtasks.VideoSyncQcNidq,), {})(
                     **kwargs, **video_kwargs, **sync_kwargs, parents=[tasks['VideoCompress']] + sync_tasks)
 
         if sync_kwargs['sync'] != 'bpod':
+            # Here we restrict to videos that we support (left, right or body)
+            video_kwargs['cameras'] = subset_cams
             tasks[tn] = type((tn := 'DLC'), (vtasks.DLC,), {})(
                 **kwargs, **video_kwargs, parents=[dlc_parent_task])
             tasks['PostDLC'] = type('PostDLC', (epp.EphysPostDLC,), {})(

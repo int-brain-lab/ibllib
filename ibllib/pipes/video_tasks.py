@@ -228,7 +228,7 @@ class VideoSyncQcBpod(base_tasks.VideoTask):
         # Video timestamps extraction
         output_files = []
         data, files = camera.extract_all(self.session_path, sync_type=self.sync, sync_collection=self.sync_collection,
-                                         save=True, labels=labels)
+                                         save=True, labels=labels, task_collection=self.collection)
         output_files.extend(files)
 
         # Video QC
@@ -270,6 +270,7 @@ class VideoSyncQcNidq(base_tasks.VideoTask):
 
         mp4_files = self.session_path.joinpath(self.device_collection).glob('*.mp4')
         labels = [label_from_path(x) for x in mp4_files]
+        labels = [lab for lab in labels if lab in ('left', 'right', 'body')]
 
         kwargs = {}
         if self.sync_namespace == 'timeline':
@@ -352,9 +353,14 @@ class DLC(base_tasks.VideoTask):
         return intact
 
     def _run(self, cams=None, overwrite=False):
-        # Default to all three cams
-        cams = cams or self.cameras
-        cams = assert_valid_label(cams)
+        # Check that the cams are valid for DLC, remove the ones that aren't
+        candidate_cams = cams or self.cameras
+        cams = []
+        for cam in candidate_cams:
+            try:
+                cams.append(assert_valid_label(cam))
+            except ValueError:
+                _logger.warning(f'{cam} is not a valid video label, this video will be skipped')
         # Set up
         self.session_id = self.one.path2eid(self.session_path)
         actual_outputs = []

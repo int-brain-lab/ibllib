@@ -3,32 +3,44 @@ Prompt experimenter for reason for marking session/insertion as CRITICAL
 Choices are listed in the global variables. Multiple reasons can be selected.
 Places info in Alyx session note in a format that is machine retrievable (text->json)
 """
-# Author: Gaelle
 import abc
 import logging
 import json
-from requests.exceptions import HTTPError
+import warnings
 from datetime import datetime
-from one.api import ONE
+from one.api import OneAlyx
+from one.webclient import AlyxClient
 
-_logger = logging.getLogger("ibllib")
+_logger = logging.getLogger('ibllib')
 
 
-def main_gui(uuid, reasons_selected, one=None):
+def main_gui(uuid, reasons_selected, one=None, alyx=None):
     """
-    Main function to call to input a reason for marking an insertion as
-    CRITICAL from the alignment GUI. It will:
-    - create note text, after deleting any similar notes existing already
+    Main function to call to input a reason for marking an insertion as CRITICAL from the alignment GUI.
 
-    :param: uuid: insertion id
-    :param: reasons_selected: list of str, str are picked within REASONS_INS_CRIT_GUI
+    It wil create note text, after deleting any similar notes existing already.
+
+    Parameters
+    ----------
+    uuid : uuid.UUID, str
+        An insertion ID.
+    reasons_selected : list of str
+        A subset of REASONS_INS_CRIT_GUI.
+    one : one.api.OneAlyx
+        (DEPRECATED) An instance of ONE. NB: Pass in an instance of AlyxClient instead.
+    alyx : one.webclient.AlyxClient
+        An AlyxClient instance.
     """
     # hit the database to check if uuid is insertion uuid
-    ins_list = one.alyx.rest('insertions', 'list', id=uuid, no_cache=True)
+    if alyx is None and one is not None:
+        # Deprecate ONE in future because instantiating it takes longer and is unnecessary
+        warnings.warn('In future please pass in an AlyxClient instance (i.e. `one.alyx`)', FutureWarning)
+        alyx = one if isinstance(one, AlyxClient) else one.alyx
+    ins_list = alyx.rest('insertions', 'list', id=uuid, no_cache=True)
     if len(ins_list) != 1:
         raise ValueError(f'N={len(ins_list)} insertion found, expected N=1. Check uuid provided.')
 
-    note = CriticalInsertionNote(uuid, one)
+    note = CriticalInsertionNote(uuid, alyx)
 
     # assert that reasons are all within REASONS_INS_CRIT_GUI
     for item_str in reasons_selected:
@@ -39,44 +51,57 @@ def main_gui(uuid, reasons_selected, one=None):
     note._upload_note(overwrite=True)
 
 
-def main(uuid, one=None):
+def main(uuid, one=None, alyx=None):
     """
-    Main function to call to input a reason for marking a session/insertion
-    as CRITICAL programmatically. It will:
+    Main function to call to input a reason for marking a session/insertion as CRITICAL programmatically.
+
+    It will:
     - ask reasons for selection of critical status
     - check if 'other' reason has been selected, inquire why (free text)
     - create note text, checking whether similar notes exist already
-    - upload note to Alyx if none exist previously or if overwrite is chosen
-    Q&A are prompted via the Python terminal.
+    - upload note to Alyx if none exist previously or if overwrite is chosen Q&A are prompted via the Python terminal
 
-    Example:
-    # Retrieve Alyx note to test
-    one = ONE(base_url='https://dev.alyx.internationalbrainlab.org')
-    uuid = '2ffd3ed5-477e-4153-9af7-7fdad3c6946b'
-    main(uuid=uuid, one=one)
+    Parameters
+    ----------
+    uuid : uuid.UUID, str
+        An experiment UUID or an insertion UUID.
+    one : one.api.OneAlyx
+        (DEPRECATED) An instance of ONE. NB: Pass in an instance of AlyxClient instead.
+    alyx : one.webclient.AlyxClient
+        An AlyxClient instance.
 
-    # Get notes with pattern
-    notes = one.alyx.rest('notes', 'list',
-                          django=f'text__icontains,{STR_NOTES_STATIC},'
-                                 f'object_id,{uuid}')
-    test_json_read = json.loads(notes[0]['text'])
+    Examples
+    --------
+    Retrieve Alyx note to test
 
-    :param uuid: session/insertion uuid
-    :param one: default: None -> ONE()
-    :return:
+    >>> alyx = AlyxClient(base_url='https://dev.alyx.internationalbrainlab.org')
+    >>> uuid = '2ffd3ed5-477e-4153-9af7-7fdad3c6946b'
+    >>> main(uuid=uuid, alyx=alyx)
+
+    Get notes with pattern
+
+    >>> notes = alyx.rest('notes', 'list',
+    ...                   django=f'text__icontains,{STR_NOTES_STATIC},'
+    ...                          f'object_id,{uuid}')
+    >>> test_json_read = json.loads(notes[0]['text'])
+
     """
-    if one is None:
-        one = ONE()
+    if alyx is None and one is not None:
+        # Deprecate ONE in future because instantiating it takes longer and is unnecessary
+        warnings.warn('In future please pass in an AlyxClient instance (i.e. `one.alyx`)', FutureWarning)
+        alyx = one if isinstance(one, AlyxClient) else one.alyx
+    if not alyx:
+        alyx = AlyxClient()
     # ask reasons for selection of critical status
 
     # hit the database to know if uuid is insertion or session uuid
-    sess_list = one.alyx.get('/sessions?&django=pk,' + uuid, clobber=True)
-    ins_list = one.alyx.get('/insertions?&django=pk,' + uuid, clobber=True)
+    sess_list = alyx.get('/sessions?&django=pk,' + uuid, clobber=True)
+    ins_list = alyx.get('/insertions?&django=pk,' + uuid, clobber=True)
 
     if len(sess_list) > 0 and len(ins_list) == 0:  # session
-        note = CriticalSessionNote(uuid, one)
+        note = CriticalSessionNote(uuid, alyx)
     elif len(ins_list) > 0 and len(sess_list) == 0:  # insertion
-        note = CriticalInsertionNote(uuid, one)
+        note = CriticalInsertionNote(uuid, alyx)
     else:
         raise ValueError(f'Inadequate number of session (n={len(sess_list)}) '
                          f'or insertion (n={len(ins_list)}) found for uuid {uuid}.'
@@ -104,17 +129,26 @@ class Note(abc.ABC):
     def n_description(self):
         return len(self.default_descriptions)
 
-    def __init__(self, uuid, one, content_type=None):
+    def __init__(self, uuid, alyx, content_type=None):
         """
         Base class for attaching notes to an alyx endpoint. Do not use this class directly but use parent classes that inherit
         this base class
 
-        :param uuid: uuid of session/ insertion or other model to attach note to
-        :param one: ONE instance
-        :param content_type: alyx endpoint of uuid
+        Parameters
+        ----------
+        uuid : uuid.UUID, str
+            A UUID of a session, insertion, or other Alyx model to attach note to.
+        alyx : one.webclient.AlyxClient
+            An AlyxClient instance.
+        content_type : str
+            The Alyx model name of the UUID.
         """
         self.uuid = uuid
-        self.one = one
+        if isinstance(alyx, OneAlyx):
+            # Deprecate ONE in future because instantiating it takes longer and is unnecessary
+            warnings.warn('In future please pass in an AlyxClient instance (i.e. `one.alyx`)', FutureWarning)
+            alyx = alyx.alyx
+        self.alyx = alyx
         self.selected_reasons = []
         self.other_reason = []
         if content_type is not None:
@@ -124,22 +158,24 @@ class Note(abc.ABC):
 
     def get_content_type(self):
         """
-        Infer the content_type from the uuid. Only checks to see if uuid is a session or insertion. If not recognised will raise
-        an error and the content_type must be specified on note initialisation e.g Note(uuid, one, content_type='subject')
-        :return:
+        Infer the content_type from the uuid. Only checks to see if uuid is a session or insertion.
+        If not recognised will raise an error and the content_type must be specified on note
+        initialisation e.g. Note(uuid, alyx, content_type='subject')
+
+        Returns
+        -------
+        str
+            The Alyx model name, inferred from the UUID.
         """
 
         # see if it as session or an insertion
-        if self.one.uuid2path(self.uuid):
+        if self.alyx.rest('sessions', 'list', id=self.uuid):
             content_type = 'session'
+        elif self.alyx.rest('insertions', 'list', id=self.uuid):
+            content_type = 'probeinsertion'
         else:
-            try:
-                _ = self.one.pid2uuid(self.uuid)
-                content_type = 'probeinsertion'
-            except HTTPError:
-                raise ValueError('Content type cannot be recognised from {uuid}. Specify on '
-                                 'initialistion e.g Note(uuid, one, content_type="subject"')
-
+            raise ValueError(f'Content type cannot be recognised from {self.uuid}. '
+                             'Specify on initialistion e.g Note(uuid, alyx, content_type="subject"')
         return content_type
 
     def describe(self):
@@ -159,14 +195,21 @@ class Note(abc.ABC):
 
     def upload_note(self, nums=None, other_reason=None, **kwargs):
         """
-        Upload note to alyx. If no values for nums and other_reason are specified, user will receive a prompt in command line
-        asking them to choose from default list of reasons to add to note as well as option for free text. To upload without
-        receiving prompt a value for either nums or other_reason must be given
+        Upload note to Alyx.
 
-        :param nums: string of numbers matching those in default descrptions, e.g, '1,3'. Options can be see using note.describe()
-        :param other_reason: other comment or reasons to add to note (string)
-        :param kwargs:
-        :return:
+        If no values for nums and other_reason are specified, user will receive a prompt in command
+        line asking them to choose from default list of reasons to add to note as well as option
+        for free text. To upload without receiving prompt a value for either `nums` or
+        `other_reason` must be given.
+
+        Parameters
+        ----------
+        nums : str
+            string of numbers matching those in default descriptions, e.g, '1,3'. Options can be
+            seen using note.describe().
+        other_reason : str
+            Other comment or reason(s) to add to note.
+
         """
 
         if nums is None and other_reason is None:
@@ -188,30 +231,29 @@ class Note(abc.ABC):
 
     def _create_note(self, text):
 
-        data = {'user': self.one.alyx.user,
+        data = {'user': self.alyx.user,
                 'content_type': self.content_type,
                 'object_id': self.uuid,
                 'text': f'{text}'}
-        self.one.alyx.rest('notes', 'create', data=data)
+        self.alyx.rest('notes', 'create', data=data)
 
     def _update_note(self, note_id, text):
 
-        data = {'user': self.one.alyx.user,
+        data = {'user': self.alyx.user,
                 'content_type': self.content_type,
                 'object_id': self.uuid,
                 'text': f'{text}'}
-        self.one.alyx.rest('notes', 'partial_update', id=note_id, data=data)
+        self.alyx.rest('notes', 'partial_update', id=note_id, data=data)
 
     def _delete_note(self, note_id):
-        self.one.alyx.rest('notes', 'delete', id=note_id)
+        self.alyx.rest('notes', 'delete', id=note_id)
 
     def _delete_notes(self, notes):
         for note in notes:
             self._delete_note(note['id'])
 
     def _check_existing_note(self):
-        notes = self.one.alyx.rest('notes', 'list', django=f'text__icontains,{self.note_title},object_id,{self.uuid}',
-                                   no_cache=True)
+        notes = self.alyx.rest('notes', 'list', django=f'text__icontains,{self.note_title},object_id,{self.uuid}', no_cache=True)
         if len(notes) == 0:
             return False, None
         else:
@@ -329,22 +371,28 @@ class CriticalInsertionNote(CriticalNote):
     """
     Class for uploading a critical note to an insertion.
 
-    Example
-    -------
-    note = CriticalInsertionNote(pid, one)
-    # print list of default reasons
-    note.describe()
-    # to receive a command line prompt to fill in note
-    note.upload_note()
-    # to upload note automatically without prompt
-    note.upload_note(nums='1,4', other_reason='lots of bad channels')
+    Examples
+    --------
+    >>> note = CriticalInsertionNote(pid, AlyxClient())
+
+    Print list of default reasons
+
+    >>> note.describe()
+
+    To receive a command line prompt to fill in note
+
+    >>> note.upload_note()
+
+    To upload note automatically without prompt
+
+    >>> note.upload_note(nums='1,4', other_reason='lots of bad channels')
     """
 
     descriptions_gui = [
         'Noise and artifact',
         'Drift',
         'Poor neural yield',
-        'Brain Damage'
+        'Brain Damage',
         'Other'
     ]
 
@@ -365,8 +413,8 @@ class CriticalInsertionNote(CriticalNote):
     def note_title(self):
         return '=== EXPERIMENTER REASON(S) FOR MARKING THE INSERTION AS CRITICAL ==='
 
-    def __init__(self, uuid, one):
-        super(CriticalInsertionNote, self).__init__(uuid, one, content_type='probeinsertion')
+    def __init__(self, uuid, alyx):
+        super(CriticalInsertionNote, self).__init__(uuid, alyx, content_type='probeinsertion')
 
 
 class CriticalSessionNote(CriticalNote):
@@ -375,13 +423,19 @@ class CriticalSessionNote(CriticalNote):
 
     Example
     -------
-    note = CriticalInsertionNote(uuid, one)
-    # print list of default reasons
-    note.describe()
-    # to receive a command line prompt to fill in note
-    note.upload_note()
-    # to upload note automatically without prompt
-    note.upload_note(nums='1,4', other_reason='session with no ephys recording')
+    >>> note = CriticalInsertionNote(uuid, AlyxClient)
+
+    Print list of default reasons
+
+    >>> note.describe()
+
+    To receive a command line prompt to fill in note
+
+    >>> note.upload_note()
+
+    To upload note automatically without prompt
+
+    >>> note.upload_note(nums='1,4', other_reason='session with no ephys recording')
     """
 
     descriptions = [
@@ -399,8 +453,8 @@ class CriticalSessionNote(CriticalNote):
     def note_title(self):
         return '=== EXPERIMENTER REASON(S) FOR MARKING THE SESSION AS CRITICAL ==='
 
-    def __init__(self, uuid, one):
-        super(CriticalSessionNote, self).__init__(uuid, one, content_type='session')
+    def __init__(self, uuid, alyx):
+        super(CriticalSessionNote, self).__init__(uuid, alyx, content_type='session')
 
 
 class SignOffNote(Note):
@@ -417,11 +471,11 @@ class SignOffNote(Note):
     def note_title(self):
         return f'=== SIGN-OFF NOTE FOR {self.sign_off_key} ==='
 
-    def __init__(self, uuid, one, sign_off_key):
+    def __init__(self, uuid, alyx, sign_off_key):
         self.sign_off_key = sign_off_key
-        super(SignOffNote, self).__init__(uuid, one, content_type='session')
+        super(SignOffNote, self).__init__(uuid, alyx, content_type='session')
         self.datetime_key = self.get_datetime_key()
-        self.session = one.alyx.rest('sessions', 'read', id=self.uuid, no_cache=True)
+        self.session = self.alyx.rest('sessions', 'read', id=self.uuid, no_cache=True)
 
     def upload_note(self, nums=None, other_reason=None, **kwargs):
         super(SignOffNote, self).upload_note(nums=nums, other_reason=other_reason, **kwargs)
@@ -430,10 +484,17 @@ class SignOffNote(Note):
     def sign_off(self):
 
         json = self.session['json']
-        json['sign_off_checklist'][self.sign_off_key] = {'date': self.datetime_key.split('_')[0],
-                                                         'user': self.datetime_key.split('_')[1]}
+        sign_off_checklist = json.get('sign_off_checklist', None)
+        if sign_off_checklist is None:
+            sign_off_checklist = {self.sign_off_key: {'date': self.datetime_key.split('_')[0],
+                                                      'user': self.datetime_key.split('_')[1]}}
+        else:
+            sign_off_checklist[self.sign_off_key] = {'date': self.datetime_key.split('_')[0],
+                                                     'user': self.datetime_key.split('_')[1]}
 
-        self.one.alyx.json_field_update("sessions", self.uuid, 'json', data=json)
+        json['sign_off_checklist'] = sign_off_checklist
+
+        self.alyx.json_field_update("sessions", self.uuid, 'json', data=json)
 
     def format_note(self, **kwargs):
 
@@ -464,7 +525,10 @@ class SignOffNote(Note):
             self._update_note(notes[0]['id'], text)
 
     def get_datetime_key(self):
-        user = self.one.alyx.user
+        if not self.alyx.is_logged_in:
+            self.alyx.authenticate()
+            assert self.alyx.is_logged_in, 'you must be logged in to the AlyxClient'
+        user = self.alyx.user
         date = datetime.now().date().isoformat()
         return date + '_' + user
 
@@ -474,17 +538,25 @@ class TaskSignOffNote(SignOffNote):
     """
     Class for signing off a task part of a session and optionally adding a related explanation note.
 
-    Example
-    -------
-    note = TaskSignOffNote(uuid, one, '_ephysChoiceWorld_00')
-    # to sign off session without any note
-    note.sign_off()
-    # print list of default reasons
-    note.describe()
-    # to upload note and sign off with prompt
-    note.upload_note()
-    # to upload note automatically without prompt
-    note.upload_note(nums='1,4', other_reason='session with no ephys recording')
+    Examples
+    --------
+    >>> note = TaskSignOffNote(eid, AlyxClient(), '_ephysChoiceWorld_00')
+
+    To sign off session without any note
+
+    >>> note.sign_off()
+
+    Print list of default reasons
+
+    >>> note.describe()
+
+    To upload note and sign off with prompt
+
+    >>> note.upload_note()
+
+    To upload note automatically without prompt
+
+    >>> note.upload_note(nums='1,4', other_reason='session with no ephys recording')
     """
 
     descriptions = [
@@ -499,17 +571,25 @@ class PassiveSignOffNote(SignOffNote):
     """
     Class for signing off a passive part of a session and optionally adding a related explanation note.
 
-    Example
-    -------
-    note = PassiveSignOffNote(uuid, one, '_passiveChoiceWorld_00')
-    # to sign off session without any note
-    note.sign_off()
-    # print list of default reasons
-    note.describe()
-    # to upload note and sign off with prompt
-    note.upload_note()
-    # to upload note automatically without prompt
-    note.upload_note(nums='1,4', other_reason='session with no ephys recording')
+    Examples
+    --------
+    >>> note = PassiveSignOffNote(eid, AlyxClient(), '_passiveChoiceWorld_00')
+
+    To sign off session without any note
+
+    >>> note.sign_off()
+
+    Print list of default reasons
+
+    >>> note.describe()
+
+    To upload note and sign off with prompt
+
+    >>> note.upload_note()
+
+    To upload note automatically without prompt
+
+    >>> note.upload_note(nums='1,4', other_reason='session with no ephys recording')
     """
 
     descriptions = [
@@ -526,17 +606,25 @@ class VideoSignOffNote(SignOffNote):
     """
     Class for signing off a video part of a session and optionally adding a related explanation note.
 
-    Example
-    -------
-    note = VideoSignOffNote(uuid, one, '_camera_left')
-    # to sign off session without any note
-    note.sign_off()
-    # print list of default reasons
-    note.describe()
-    # to upload note and sign off with prompt
-    note.upload_note()
-    # to upload note automatically without prompt
-    note.upload_note(nums='1,4', other_reason='session with no ephys recording')
+    Examples
+    --------
+    >>> note = VideoSignOffNote(eid, AlyxClient(), '_camera_left')
+
+    To sign off session without any note
+
+    >>> note.sign_off()
+
+    Print list of default reasons
+
+    >>> note.describe()
+
+    To upload note and sign off with prompt
+
+    >>> note.upload_note()
+
+    To upload note automatically without prompt
+
+    >>> note.upload_note(nums='1,4', other_reason='session with no ephys recording')
     """
 
     descriptions = [
@@ -554,17 +642,25 @@ class RawEphysSignOffNote(SignOffNote):
     """
     Class for signing off a raw ephys part of a session and optionally adding a related explanation note.
 
-    Example
-    -------
-    note = RawEphysSignOffNote(uuid, one, '_neuropixel_raw_probe00')
-    # to sign off session without any note
-    note.sign_off()
-    # print list of default reasons
-    note.describe()
-    # to upload note and sign off with prompt
-    note.upload_note()
-    # to upload note automatically without prompt
-    note.upload_note(nums='1,4', other_reason='session with no ephys recording')
+    Examples
+    --------
+    >>> note = RawEphysSignOffNote(uuid, AlyxClient(), '_neuropixel_raw_probe00')
+
+    To sign off session without any note
+
+    >>> note.sign_off()
+
+    Print list of default reasons
+
+    >>> note.describe()
+
+    To upload note and sign off with prompt
+
+    >>> note.upload_note()
+
+    To upload note automatically without prompt
+
+    >>> note.upload_note(nums='1,4', other_reason='session with no ephys recording')
     """
 
     descriptions = [
@@ -577,19 +673,27 @@ class RawEphysSignOffNote(SignOffNote):
 class SpikeSortingSignOffNote(SignOffNote):
 
     """
-    Class for signing off a spikesorting part of a session and optionally adding a related explanation note.
+    Class for signing off a spike sorting part of a session and optionally adding a related explanation note.
 
-    Example
-    -------
-    note = SpikeSortingSignOffNote(uuid, one, '_neuropixel_spike_sorting_probe00')
-    # to sign off session without any note
-    note.sign_off()
-    # print list of default reasons
-    note.describe()
-    # to upload note and sign off with prompt
-    note.upload_note()
-    # to upload note automatically without prompt
-    note.upload_note(nums='1,4', other_reason='session with no ephys recording')
+    Examples
+    --------
+    >>> note = SpikeSortingSignOffNote(uuid, AlyxClient(), '_neuropixel_spike_sorting_probe00')
+
+    To sign off session without any note
+
+    >>> note.sign_off()
+
+    Print list of default reasons
+
+    >>> note.describe()
+
+    To upload note and sign off with prompt
+
+    >>> note.upload_note()
+
+    To upload note automatically without prompt
+
+    >>> note.upload_note(nums='1,4', other_reason='session with no ephys recording')
     """
 
     descriptions = [
@@ -603,17 +707,25 @@ class AlignmentSignOffNote(SignOffNote):
     """
     Class for signing off a alignment part of a session and optionally adding a related explanation note.
 
-    Example
-    -------
-    note = AlignmentSignOffNote(uuid, one, '_neuropixel_alignment_probe00')
-    # to sign off session without any note
-    note.sign_off()
-    # print list of default reasons
-    note.describe()
-    # to upload note and sign off with prompt
-    note.upload_note()
-    # to upload note automatically without prompt
-    note.upload_note(nums='1,4', other_reason='session with no ephys recording')
+    Examples
+    --------
+    >>> note = AlignmentSignOffNote(uuid, AlyxClient(), '_neuropixel_alignment_probe00')
+
+    To sign off session without any note
+
+    >>> note.sign_off()
+
+    Print list of default reasons
+
+    >>> note.describe()
+
+    To upload note and sign off with prompt
+
+    >>> note.upload_note()
+
+    To upload note automatically without prompt
+
+    >>> note.upload_note(nums='1,4', other_reason='session with no ephys recording')
     """
 
     descriptions = []

@@ -7,6 +7,7 @@ and the `behavior_tasks` module.
 import logging
 from collections import OrderedDict
 from one.alf.files import session_path_parts
+import warnings
 
 from ibllib.pipes.base_tasks import ExperimentDescriptionRegisterRaw
 from ibllib.pipes import tasks, training_status
@@ -18,6 +19,7 @@ from ibllib.qc.task_metrics import TaskQC, HabituationQC
 from ibllib.qc.task_extractors import TaskQCExtractor
 
 _logger = logging.getLogger(__name__)
+warnings.warn('`pipes.training_preprocessing` to be removed in favour of dynamic pipeline')
 
 
 #  level 0

@@ -238,9 +238,9 @@ class CameraTimestampsBpod(BaseBpodTrialsExtractor):
         # is empty, or contains only one value (i.e. doesn't change)
         if gpio is not None and gpio['indices'].size > 1:
             _logger.info('Aligning to sync TTLs')
-            task_collection = kwargs.get('task_collection', 'raw_behavior_data')
             # Extract audio TTLs
-            _, audio = raw.load_bpod_fronts(self.session_path, data=self.bpod_trials, task_collection=task_collection)
+            _, audio = raw.load_bpod_fronts(self.session_path, data=self.bpod_trials,
+                                            task_collection=self.task_collection)
             _, ts = raw.load_camera_ssv_times(self.session_path, 'left')
             """
             There are many sync TTLs that are for some reason missed by the GPIO.  Conversely
@@ -446,7 +446,7 @@ def align_with_gpio(timestamps, ttl, pin_state, count, extrapolate_missing=True,
 
     # Remove the rest of the dropped frames
     ts = ts[count]
-    assert np.searchsorted(ts, ttl['times'][0]) == first_uptick,\
+    assert np.searchsorted(ts, ttl['times'][0]) == first_uptick, \
         'time of first sync TTL doesn\'t match after alignment'
     if ts.size != count.size:
         _logger.error('number of timestamps and frames don\'t match after alignment')

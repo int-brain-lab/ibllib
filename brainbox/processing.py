@@ -7,7 +7,13 @@ import numpy as np
 import pandas as pd
 from scipy import interpolate, sparse
 from brainbox import core
+from iblutil.numerical import bincount2D as _bincount2D
 from iblutil.util import Bunch
+import logging
+import warnings
+import traceback
+
+_logger = logging.getLogger(__name__)
 
 
 def sync(dt, times=None, values=None, timeseries=None, offsets=None, interp='zero',
@@ -131,45 +137,14 @@ def bincount2D(x, y, xbin=0, ybin=0, xlim=None, ylim=None, weights=None):
     :param weights: (optional) defaults to None, weights to apply to each value for aggregation
     :return: 3 numpy arrays MAP [ny,nx] image, xscale [nx], yscale [ny]
     """
-    # if no bounds provided, use min/max of vectors
-    if xlim is None:
-        xlim = [np.min(x), np.max(x)]
-    if ylim is None:
-        ylim = [np.min(y), np.max(y)]
-
-    def _get_scale_and_indices(v, bin, lim):
-        # if bin is a nonzero scalar, this is a bin size: create scale and indices
-        if np.isscalar(bin) and bin != 0:
-            scale = np.arange(lim[0], lim[1] + bin / 2, bin)
-            ind = (np.floor((v - lim[0]) / bin)).astype(np.int64)
-        # if bin == 0, aggregate over unique values
-        else:
-            scale, ind = np.unique(v, return_inverse=True)
-        return scale, ind
-
-    xscale, xind = _get_scale_and_indices(x, xbin, xlim)
-    yscale, yind = _get_scale_and_indices(y, ybin, ylim)
-    # aggregate by using bincount on absolute indices for a 2d array
-    nx, ny = [xscale.size, yscale.size]
-    ind2d = np.ravel_multi_index(np.c_[yind, xind].transpose(), dims=(ny, nx))
-    r = np.bincount(ind2d, minlength=nx * ny, weights=weights).reshape(ny, nx)
-
-    # if a set of specific values is requested output an array matching the scale dimensions
-    if not np.isscalar(xbin) and xbin.size > 1:
-        _, iout, ir = np.intersect1d(xbin, xscale, return_indices=True)
-        _r = r.copy()
-        r = np.zeros((ny, xbin.size))
-        r[:, iout] = _r[:, ir]
-        xscale = xbin
-
-    if not np.isscalar(ybin) and ybin.size > 1:
-        _, iout, ir = np.intersect1d(ybin, yscale, return_indices=True)
-        _r = r.copy()
-        r = np.zeros((ybin.size, r.shape[1]))
-        r[iout, :] = _r[ir, :]
-        yscale = ybin
-
-    return r, xscale, yscale
+    for line in traceback.format_stack():
+        print(line.strip())
+    warning_text = """Deprecation warning: bincount2D() is now a part of iblutil.
+                    brainbox.processing.bincount2D is deprecated and will be removed in
+                    future versions. Please replace imports with iblutil.numerical.bincount2D."""
+    _logger.warning(warning_text)
+    warnings.warn(warning_text, DeprecationWarning)
+    return _bincount2D(x, y, xbin, ybin, xlim, ylim, weights)
 
 
 def compute_cluster_average(spike_clusters, spike_var):

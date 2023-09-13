@@ -7,6 +7,7 @@ from ibllib.io.extractors.base import get_pipeline, get_session_extractor_type
 from ibllib.io.session_params import read_params
 import ibllib.pipes.dynamic_pipeline as dyn
 
+from iblutil.util import setup_logger
 from ibllib.plots.snapshot import ReportSnapshot
 from iblutil.numerical import ismember
 from brainbox.behavior import training
@@ -21,6 +22,8 @@ from datetime import datetime
 import seaborn as sns
 import boto3
 from botocore.exceptions import ProfileNotFound, ClientError
+
+logger = setup_logger(__name__)
 
 
 TRAINING_STATUS = {'untrainable': (-4, (0, 0, 0, 0)),
@@ -85,8 +88,6 @@ def upload_training_table_to_aws(lab, subject):
 
 
 def get_trials_task(session_path, one):
-
-    # TODO this eventually needs to be updated for dynamic pipeline tasks
     # If experiment description file then process this
     experiment_description_file = read_params(session_path)
     if experiment_description_file is not None:
@@ -151,12 +152,14 @@ def load_existing_dataframe(subj_path):
         return None
 
 
-def load_trials(sess_path, one, collections=None, force=True):
+def load_trials(sess_path, one, collections=None, force=True, mode='raise'):
     """
     Load trials data for session. First attempts to load from local session path, if this fails will attempt to download via ONE,
     if this also fails, will then attempt to re-extraxt locally
     :param sess_path: session path
     :param one: ONE instance
+    :param force: when True and if the session trials can't be found, will attempt to re-extract from the disk
+    :param mode: 'raise' or 'warn', if 'raise', will error when forcing re-extraction of past sessions
     :return:
     """
     try:
@@ -210,12 +213,19 @@ def load_trials(sess_path, one, collections=None, force=True):
                 tasks = get_trials_task(sess_path, one)
                 if len(tasks) > 0:
                     for task in tasks:
-                        task.run()
-                    return load_trials(sess_path, collections=collections, one=one, force=False)
+                        status = task.run()
+                        if status == 0:
+                            return load_trials(sess_path, collections=collections, one=one, force=False)
+                        else:
+                            return
                 else:
                     trials = None
-            except Exception:  # TODO how can i make this more specific
-                trials = None
+            except Exception as e:
+                if mode == 'raise':
+                    raise Exception(f'Exhausted all possibilities for loading trials for {sess_path}') from e
+                else:
+                    logger.warning(f'Exhausted all possibilities for loading trials for {sess_path}')
+                    return
 
     return trials
 
@@ -334,7 +344,7 @@ def find_earliest_recompute_date(df):
     return df[first_index:].date.values
 
 
-def compute_training_status(df, compute_date, one, force=True):
+def compute_training_status(df, compute_date, one, force=True, task_collection='raw_behavior_data'):
     """
     Compute the training status for compute date based on training from that session and two previous days
     :param df: training dataframe
@@ -350,8 +360,11 @@ def compute_training_status(df, compute_date, one, force=True):
 
     dates = df_temp.date.values
 
-    n_dates = np.min([3, len(dates)]).astype(int)
+    n_sess_for_date = len(np.where(dates == compute_date)[0])
+    n_dates = np.min([2 + n_sess_for_date, len(dates)]).astype(int)
     compute_dates = dates[(-1 * n_dates):]
+    if n_sess_for_date > 1:
+        compute_dates = compute_dates[:(-1 * (n_sess_for_date - 1))]
 
     assert compute_dates[-1] == compute_date
 
@@ -499,7 +512,7 @@ def get_sess_dict(session_path, one, protocol, alf_collections=None, raw_collect
 
     else:
         # if we can't compute trials then we need to pass
-        trials = load_trials(session_path, one, collections=alf_collections, force=force)
+        trials = load_trials(session_path, one, collections=alf_collections, force=force, mode='warn')
         if trials is None:
             return
 
@@ -930,7 +943,7 @@ def plot_heatmap_performance_over_days(df, subject):
     return ax1
 
 
-def make_plots(session_path, one, df=None, save=False, upload=False):
+def make_plots(session_path, one, df=None, save=False, upload=False, task_collection='raw_behavior_data'):
     subject = one.path2ref(session_path)['subject']
     subj_path = session_path.parent.parent
 

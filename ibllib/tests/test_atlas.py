@@ -96,6 +96,12 @@ class TestBrainRegions(unittest.TestCase):
         expected_cosmos_id = [1089, 549]  # HPF and TH
         assert np.all(cosmos_id == expected_cosmos_id)
 
+        # Test remap when we have nans
+        atlas_id = np.array([463, np.nan, 685])
+        cosmos_id = self.brs.remap(atlas_id, source_map='Allen', target_map='Cosmos')
+        expected_cosmos_id = np.array([1089, np.nan, 549], dtype=float)  # HPF and TH
+        np.testing.assert_equal(cosmos_id, expected_cosmos_id)
+
     def test_id2id(self):
         # Test remapping of atlas id to atlas id
         atlas_id = np.array([463, 685])
@@ -495,7 +501,11 @@ class TestInsertion(unittest.TestCase):
             'theta': 5.0,
             'depth': 4501.0,
             'beta': 0.0}
-        ins = Insertion.from_dict(d)
+
+        brain_atlas = _create_mock_atlas()
+        brain_atlas.compute_surface()
+        brain_atlas.top = brain_atlas.top * np.NaN
+        ins = Insertion.from_dict(d, brain_atlas=brain_atlas)
         # eval the entry point, should be super close
         dxyz = ins.trajectory.eval_x(d['x'] / 1e6) - np.array((d['x'], d['y'], d['z'])) / 1e6
         self.assertTrue(np.all(np.isclose(dxyz, 0)))

@@ -10,6 +10,7 @@ import subprocess
 from collections import OrderedDict
 import traceback
 from pathlib import Path
+import warnings
 
 import cv2
 import numpy as np
@@ -39,6 +40,7 @@ from ibllib.plots.snapshot import ReportSnapshot
 from brainbox.behavior.dlc import likelihood_threshold, get_licks, get_pupil_diameter, get_smooth_pupil_diameter
 
 _logger = logging.getLogger("ibllib")
+warnings.warn('`pipes.training_preprocessing` to be removed in favour of dynamic pipeline')
 
 
 #  level 0
@@ -1286,7 +1288,8 @@ class EphysPassive(tasks.Task):
                         ('_spikeglx_sync.times.*', 'raw_ephys_data*', True),
                         ('*.meta', 'raw_ephys_data*', True),
                         ('*wiring.json', 'raw_ephys_data*', False),
-                        ('_iblrig_RFMapStim.raw*', 'raw_passive_data', True)],
+                        ('_iblrig_RFMapStim.raw*', 'raw_passive_data', True),
+                        ('_iblrig_taskSettings.raw*.json', 'raw_passive_data', True)],
         'output_files': [('_ibl_passiveGabor.table.csv', 'alf', True),
                          ('_ibl_passivePeriods.intervalsTable.csv', 'alf', True),
                          ('_ibl_passiveRFM.times.npy', 'alf', True),
