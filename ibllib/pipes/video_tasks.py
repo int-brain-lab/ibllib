@@ -1,9 +1,13 @@
 import logging
 import subprocess
-import cv2
 import traceback
 from pathlib import Path
 
+import cv2
+import pandas as pd
+import numpy as np
+
+from ibllib.qc.dlc import DlcQC
 from ibllib.io import ffmpeg, raw_daq_loaders
 from ibllib.pipes import base_tasks
 from ibllib.io.video import get_video_meta
@@ -11,6 +15,9 @@ from ibllib.io.extractors import camera
 from ibllib.qc.camera import run_all_qc as run_camera_qc
 from ibllib.misc import check_nvidia_driver
 from ibllib.io.video import label_from_path, assert_valid_label
+from ibllib.plots.snapshot import ReportSnapshot
+from ibllib.plots.figures import dlc_qc_plot
+from brainbox.behavior.dlc import likelihood_threshold, get_licks, get_pupil_diameter, get_smooth_pupil_diameter
 
 _logger = logging.getLogger('ibllib')
 
@@ -48,9 +55,9 @@ class VideoRegisterRaw(base_tasks.VideoTask, base_tasks.RegisterRawDataTask):
         required = any('Camera.frameData' in x or 'Camera.timestamps' in x for x in map(str, files))
         if not (everything_is_fine and required):
             for out in self.outputs:
-                _logger.error(f"{out}")
+                _logger.error(f'{out}')
             if raise_error:
-                raise FileNotFoundError("Missing outputs after task completion")
+                raise FileNotFoundError('Missing outputs after task completion')
 
         return everything_is_fine, files
 
@@ -120,7 +127,7 @@ class VideoConvert(base_tasks.VideoTask):
             # convert the avi files to mp4
             avi_file = next(self.session_path.joinpath(self.device_collection).glob(f'{cam}_cam*.avi'))
             mp4_file = self.session_path.joinpath(self.device_collection, f'_iblrig_{cam}Camera.raw.mp4')
-            command2run = f"ffmpeg -i {str(avi_file)} -c:v copy -c:a copy -y {str(mp4_file)}"
+            command2run = f'ffmpeg -i {str(avi_file)} -c:v copy -c:a copy -y {str(mp4_file)}'
 
             process = subprocess.Popen(command2run, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             info, error = process.communicate()
@@ -191,7 +198,7 @@ class VideoSyncQcCamlog(base_tasks.VideoTask):
 class VideoSyncQcBpod(base_tasks.VideoTask):
     """
     Task to sync camera timestamps to main DAQ timestamps
-    N.B Signatures only reflect new daq naming convention, non compatible with ephys when not running on server
+    N.B Signatures only reflect new daq naming convention, non-compatible with ephys when not running on server
     """
     priority = 40
     job_size = 'small'
@@ -241,7 +248,7 @@ class VideoSyncQcBpod(base_tasks.VideoTask):
 class VideoSyncQcNidq(base_tasks.VideoTask):
     """
     Task to sync camera timestamps to main DAQ timestamps
-    N.B Signatures only reflect new daq naming convention, non compatible with ephys when not running on server
+    N.B Signatures only reflect new daq naming convention, non-compatible with ephys when not running on server
     """
     priority = 40
     job_size = 'small'
@@ -328,19 +335,19 @@ class DLC(base_tasks.VideoTask):
             f'Scripts run_dlc.sh and run_dlc.py do not exist in {self.scripts}'
         assert len(list(self.scripts.rglob('run_motion.*'))) == 2, \
             f'Scripts run_motion.sh and run_motion.py do not exist in {self.scripts}'
-        assert self.dlcenv.exists(), f"DLC environment does not exist in assumed location {self.dlcenv}"
+        assert self.dlcenv.exists(), f'DLC environment does not exist in assumed location {self.dlcenv}'
         command2run = f"source {self.dlcenv}; python -c 'import iblvideo; print(iblvideo.__version__)'"
         process = subprocess.Popen(
             command2run,
             shell=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            executable="/bin/bash"
+            executable='/bin/bash'
         )
         info, error = process.communicate()
         if process.returncode != 0:
             raise AssertionError(f"DLC environment check failed\n{error.decode('utf-8')}")
-        version = info.decode("utf-8").strip().split('\n')[-1]
+        version = info.decode('utf-8').strip().split('\n')[-1]
         return version
 
     @staticmethod
@@ -378,11 +385,11 @@ class DLC(base_tasks.VideoTask):
                     file_mp4 = next(self.session_path.joinpath('raw_video_data').glob(f'_iblrig_{cam}Camera.raw*.mp4'))
                     if not file_mp4.exists():
                         # In this case we set the status to Incomplete.
-                        _logger.error(f"No raw video file available for {cam}, skipping.")
+                        _logger.error(f'No raw video file available for {cam}, skipping.')
                         self.status = -3
                         continue
                     if not self._video_intact(file_mp4):
-                        _logger.error(f"Corrupt raw video file {file_mp4}")
+                        _logger.error(f'Corrupt raw video file {file_mp4}')
                         self.status = -1
                         continue
                     # Check that dlc environment is ok, shell scripts exists, and get iblvideo version, GPU addressable
@@ -398,13 +405,13 @@ class DLC(base_tasks.VideoTask):
                         shell=True,
                         stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE,
-                        executable="/bin/bash",
+                        executable='/bin/bash',
                     )
                     info, error = process.communicate()
                     # info_str = info.decode("utf-8").strip()
                     # _logger.info(info_str)
                     if process.returncode != 0:
-                        error_str = error.decode("utf-8").strip()
+                        error_str = error.decode('utf-8').strip()
                         _logger.error(f'DLC failed for {cam}Camera.\n\n'
                                       f'++++++++ Output of subprocess for debugging ++++++++\n\n'
                                       f'{error_str}\n'
@@ -423,13 +430,13 @@ class DLC(base_tasks.VideoTask):
                         shell=True,
                         stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE,
-                        executable="/bin/bash",
+                        executable='/bin/bash',
                     )
                     info, error = process.communicate()
-                    # info_str = info.decode("utf-8").strip()
+                    # info_str = info.decode('utf-8').strip()
                     # _logger.info(info_str)
                     if process.returncode != 0:
-                        error_str = error.decode("utf-8").strip()
+                        error_str = error.decode('utf-8').strip()
                         _logger.error(f'Motion energy failed for {cam}Camera.\n\n'
                                       f'++++++++ Output of subprocess for debugging ++++++++\n\n'
                                       f'{error_str}\n'
@@ -440,7 +447,7 @@ class DLC(base_tasks.VideoTask):
                         f'{cam}Camera.ROIMotionEnergy*.npy')))
                     actual_outputs.append(next(self.session_path.joinpath('alf').glob(
                         f'{cam}ROIMotionEnergy.position*.npy')))
-            except BaseException:
+            except Exception:
                 _logger.error(traceback.format_exc())
                 self.status = -1
                 continue
@@ -450,3 +457,154 @@ class DLC(base_tasks.VideoTask):
             actual_outputs = None
             self.status = -1
         return actual_outputs
+
+
+class EphysPostDLC(base_tasks.VideoTask):
+    """
+    The post_dlc task takes dlc traces as input and computes useful quantities, as well as qc.
+    """
+    io_charge = 90
+    level = 3
+    force = True
+
+    def __int__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.trials_collection = kwargs.get('trials_collection', 'alf')
+
+    @property
+    def signature(self):
+        return {
+            'input_files': [(f'_ibl_{cam}Camera.dlc.pqt', 'alf', True) for cam in self.cameras] +
+                           [(f'_ibl_{cam}Camera.times.npy', 'alf', True) for cam in self.cameras] +
+            # the following are required for the DLC plot only
+            # they are not strictly required, some plots just might be skipped
+            # In particular the raw videos don't need to be downloaded as they can be streamed
+                           [(f'_iblrig_{cam}Camera.raw.mp4', self.device_collection, True) for cam in self.cameras] +
+                           [(f'{cam}ROIMotionEnergy.position.npy', 'alf', False) for cam in self.cameras],
+            'output_files': [(f'_ibl_{cam}Camera.features.pqt', 'alf', True) for cam in self.cameras] +
+                            [('licks.times.npy', 'alf', True)]
+        }
+
+    def _run(self, overwrite=True, run_qc=True, plot_qc=True):
+        """
+        Run the PostDLC task. Returns a list of file locations for the output files in signature. The created plot
+        (dlc_qc_plot.png) is not returned, but saved in session_path/snapshots and uploaded to Alyx as a note.
+
+        :param overwrite: bool, whether to recompute existing output files (default is False).
+                          Note that the dlc_qc_plot will be (re-)computed even if overwrite = False
+        :param run_qc: bool, whether to run the DLC QC (default is True)
+        :param plot_qc: book, whether to create the dlc_qc_plot (default is True)
+
+        """
+        # Check if output files exist locally
+        exist, output_files = self.assert_expected(self.signature['output_files'], silent=True)
+        if exist and not overwrite:
+            _logger.warning('EphysPostDLC outputs exist and overwrite=False, skipping computations of outputs.')
+        else:
+            if exist and overwrite:
+                _logger.warning('EphysPostDLC outputs exist and overwrite=True, overwriting existing outputs.')
+            # Find all available dlc files
+            dlc_files = list(Path(self.session_path).joinpath('alf').glob('_ibl_*Camera.dlc.*'))
+            for dlc_file in dlc_files:
+                _logger.debug(dlc_file)
+            output_files = []
+            combined_licks = []
+
+            for dlc_file in dlc_files:
+                # Catch unforeseen exceptions and move on to next cam
+                try:
+                    cam = label_from_path(dlc_file)
+                    # load dlc trace and camera times
+                    dlc = pd.read_parquet(dlc_file)
+                    dlc_thresh = likelihood_threshold(dlc, 0.9)
+                    # try to load respective camera times
+                    try:
+                        dlc_t = np.load(next(Path(self.session_path).joinpath('alf').glob(f'_ibl_{cam}Camera.times.*npy')))
+                        times = True
+                        if dlc_t.shape[0] == 0:
+                            _logger.error(f'camera.times empty for {cam} camera. '
+                                          f'Computations using camera.times will be skipped')
+                            self.status = -1
+                            times = False
+                        elif dlc_t.shape[0] < len(dlc_thresh):
+                            _logger.error(f'Camera times shorter than DLC traces for {cam} camera. '
+                                          f'Computations using camera.times will be skipped')
+                            self.status = -1
+                            times = 'short'
+                    except StopIteration:
+                        self.status = -1
+                        times = False
+                        _logger.error(f'No camera.times for {cam} camera. '
+                                      f'Computations using camera.times will be skipped')
+                    # These features are only computed from left and right cam
+                    if cam in ('left', 'right'):
+                        features = pd.DataFrame()
+                        # If camera times are available, get the lick time stamps for combined array
+                        if times is True:
+                            _logger.info(f'Computing lick times for {cam} camera.')
+                            combined_licks.append(get_licks(dlc_thresh, dlc_t))
+                        elif times is False:
+                            _logger.warning(f'Skipping lick times for {cam} camera as no camera.times available')
+                        elif times == 'short':
+                            _logger.warning(f'Skipping lick times for {cam} camera as camera.times are too short')
+                        # Compute pupil diameter, raw and smoothed
+                        _logger.info(f'Computing raw pupil diameter for {cam} camera.')
+                        features['pupilDiameter_raw'] = get_pupil_diameter(dlc_thresh)
+                        try:
+                            _logger.info(f'Computing smooth pupil diameter for {cam} camera.')
+                            features['pupilDiameter_smooth'] = get_smooth_pupil_diameter(features['pupilDiameter_raw'],
+                                                                                         cam)
+                        except Exception:
+                            _logger.error(f'Computing smooth pupil diameter for {cam} camera failed, saving all NaNs.')
+                            _logger.error(traceback.format_exc())
+                            features['pupilDiameter_smooth'] = np.nan
+                        # Save to parquet
+                        features_file = Path(self.session_path).joinpath('alf', f'_ibl_{cam}Camera.features.pqt')
+                        features.to_parquet(features_file)
+                        output_files.append(features_file)
+
+                    # For all cams, compute DLC QC if times available
+                    if run_qc is True and times in [True, 'short']:
+                        # Setting download_data to False because at this point the data should be there
+                        qc = DlcQC(self.session_path, side=cam, one=self.one, download_data=False)
+                        qc.run(update=True)
+                    else:
+                        if times is False:
+                            _logger.warning(f'Skipping QC for {cam} camera as no camera.times available')
+                        if not run_qc:
+                            _logger.warning(f'Skipping QC for {cam} camera as run_qc=False')
+
+                except Exception:
+                    _logger.error(traceback.format_exc())
+                    self.status = -1
+                    continue
+
+            # Combined lick times
+            if len(combined_licks) > 0:
+                lick_times_file = Path(self.session_path).joinpath('alf', 'licks.times.npy')
+                np.save(lick_times_file, sorted(np.concatenate(combined_licks)))
+                output_files.append(lick_times_file)
+            else:
+                _logger.warning('No lick times computed for this session.')
+
+        if plot_qc:
+            _logger.info('Creating DLC QC plot')
+            try:
+                session_id = self.one.path2eid(self.session_path)
+                fig_path = self.session_path.joinpath('snapshot', 'dlc_qc_plot.png')
+                if not fig_path.parent.exists():
+                    fig_path.parent.mkdir(parents=True, exist_ok=True)
+                fig = dlc_qc_plot(self.session_path, one=self.one, cameras=self.cameras, device_collection=self.device_collection,
+                                  trials_collection=self.trials_collection)
+                fig.savefig(fig_path)
+                fig.clf()
+                snp = ReportSnapshot(self.session_path, session_id, one=self.one)
+                snp.outputs = [fig_path]
+                snp.register_images(widths=['orig'],
+                                    function=str(dlc_qc_plot.__module__) + '.' + str(dlc_qc_plot.__name__))
+            except Exception:
+                _logger.error('Could not create and/or upload DLC QC Plot')
+                _logger.error(traceback.format_exc())
+                self.status = -1
+
+        return output_files

@@ -669,7 +669,8 @@ def raw_destripe(raw, fs, t0, i_plt, n_plt,
     return fig, axs
 
 
-def dlc_qc_plot(session_path, one=None):
+def dlc_qc_plot(session_path, one=None, device_collection='raw_video_data',
+                cameras=('left', 'right', 'body'), trials_collection='alf'):
     """
     Creates DLC QC plot.
     Data is searched first locally, then on Alyx. Panels that lack required data are skipped.
@@ -707,14 +708,13 @@ def dlc_qc_plot(session_path, one=None):
     if one.alyx.base_url == 'https://alyx.cortexlab.net':
         one = ONE(base_url='https://alyx.internationalbrainlab.org')
     data = {}
-    cams = ['left', 'right', 'body']
     session_path = Path(session_path)
 
     # Load data for each camera
-    for cam in cams:
+    for cam in cameras:
         # Load a single frame for each video
         # Check if video data is available locally,if yes, load a single frame
-        video_path = session_path.joinpath('raw_video_data', f'_iblrig_{cam}Camera.raw.mp4')
+        video_path = session_path.joinpath(device_collection, f'_iblrig_{cam}Camera.raw.mp4')
         if video_path.exists():
             data[f'{cam}_frame'] = get_video_frame(video_path, frame_number=5 * 60 * SAMPLING[cam])[:, :, 0]
         # If not, try to stream a frame (try three times)
@@ -725,7 +725,7 @@ def dlc_qc_plot(session_path, one=None):
                     try:
                         data[f'{cam}_frame'] = get_video_frame(video_url, frame_number=5 * 60 * SAMPLING[cam])[:, :, 0]
                         break
-                    except BaseException:
+                    except Exception:
                         if tries < 2:
                             tries += 1
                             logger.info(f"Streaming {cam} video failed, retrying x{tries}")
@@ -757,19 +757,20 @@ def dlc_qc_plot(session_path, one=None):
                 data[f'{cam}_{feat}'] = None
 
     # If we have no frame and/or no DLC and/or no times for all cams, raise an error, something is really wrong
-    assert any([data[f'{cam}_frame'] is not None for cam in cams]), "No camera data could be loaded, aborting."
-    assert any([data[f'{cam}_dlc'] is not None for cam in cams]), "No DLC data could be loaded, aborting."
-    assert any([data[f'{cam}_times'] is not None for cam in cams]), "No camera times data could be loaded, aborting."
+    assert any(data[f'{cam}_frame'] is not None for cam in cameras), "No camera data could be loaded, aborting."
+    assert any(data[f'{cam}_dlc'] is not None for cam in cameras), "No DLC data could be loaded, aborting."
+    assert any(data[f'{cam}_times'] is not None for cam in cameras), "No camera times data could be loaded, aborting."
 
     # Load session level data
     for alf_object in ['trials', 'wheel', 'licks']:
         try:
-            data[f'{alf_object}'] = alfio.load_object(session_path.joinpath('alf'), alf_object)  # load locally
+            data[f'{alf_object}'] = alfio.load_object(session_path.joinpath(trials_collection), alf_object)  # load locally
             continue
         except ALFObjectNotFound:
             pass
         try:
-            data[f'{alf_object}'] = one.load_object(one.path2eid(session_path), alf_object)  # then try from alyx
+            # then try from alyx
+            data[f'{alf_object}'] = one.load_object(one.path2eid(session_path), alf_object, collection=trials_collection)
         except ALFObjectNotFound:
             logger.warning(f"Could not load {alf_object} object, some plots have to be skipped.")
             data[f'{alf_object}'] = None
@@ -786,7 +787,7 @@ def dlc_qc_plot(session_path, one=None):
     # Make a list of panels, if inputs are missing, instead input a text to display
     panels = []
     # Panel A, B, C: Trace on frame
-    for cam in cams:
+    for cam in cameras:
         if data[f'{cam}_frame'] is not None and data[f'{cam}_dlc'] is not None:
             panels.append((plot_trace_on_frame,
                            {'frame': data[f'{cam}_frame'], 'dlc_df': data[f'{cam}_dlc'], 'cam': cam}))
@@ -795,15 +796,14 @@ def dlc_qc_plot(session_path, one=None):
 
     # If trials data is not there, we cannot plot any of the trial average plots, skip all remaining panels
     if data['trials'] is None:
-        panels.extend([(None, 'No trial data,\ncannot compute trial avgs') for i in range(7)])
+        panels.extend([(None, 'No trial data,\ncannot compute trial avgs')] * 7)
     else:
         # Panel D: Motion energy
-        camera_dict = {'left': {'motion_energy': data['left_ROIMotionEnergy'], 'times': data['left_times']},
-                       'right': {'motion_energy': data['right_ROIMotionEnergy'], 'times': data['right_times']},
-                       'body': {'motion_energy': data['body_ROIMotionEnergy'], 'times': data['body_times']}}
-        for cam in ['left', 'right', 'body']:  # Remove cameras where we don't have motion energy AND camera times
-            if camera_dict[cam]['motion_energy'] is None or camera_dict[cam]['times'] is None:
-                _ = camera_dict.pop(cam)
+        camera_dict = {}
+        for cam in cameras:  # Remove cameras where we don't have motion energy AND camera times
+            d = {'motion_energy': data.get(f'{cam}_ROIMotionEnergy'), 'times': data.get(f'{cam}_times')}
+            if None not in d.values():
+                camera_dict[cam] = d
         if len(camera_dict) > 0:
             panels.append((plot_motion_energy_hist, {'camera_dict': camera_dict, 'trials_df': data['trials']}))
         else:
@@ -833,7 +833,7 @@ def dlc_qc_plot(session_path, one=None):
                                              'trials_df': data['trials'], 'feature': 'nose_tip', 'legend': False,
                                              'cam': cam}))
         else:
-            panels.extend([(None, 'Data missing or corrupt\nSpeed histograms') for i in range(2)])
+            panels.extend([(None, 'Data missing or corrupt\nSpeed histograms')] * 2)
 
         # Panel H and I: Lick plots
         if data['licks'] and data['licks'].times.shape[0] > 0:
@@ -846,7 +846,7 @@ def dlc_qc_plot(session_path, one=None):
         # Try if all data is there for left cam first, otherwise right
         for cam in ['left', 'right']:
             fail = False
-            if (data[f'{cam}_times'] is not None and data[f'{cam}_features'] is not None
+            if (data.get(f'{cam}_times') is not None and data.get(f'{cam}_features') is not None
                     and len(data[f'{cam}_times']) >= len(data[f'{cam}_features'])
                     and not np.all(np.isnan(data[f'{cam}_features'].pupilDiameter_smooth))):
                 break
@@ -872,7 +872,7 @@ def dlc_qc_plot(session_path, one=None):
         else:
             try:
                 panel[0](**panel[1])
-            except BaseException:
+            except Exception:
                 logger.error(f'Error in {panel[0].__name__}\n' + traceback.format_exc())
                 ax.text(.5, .5, f'Error while plotting\n{panel[0].__name__}', color='r', fontweight='bold',
                         fontsize=12, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
