@@ -461,10 +461,9 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
             Inputs to suite2p run that deviate from default parameters.
         """
 
-        # Currently only supporting single plane, assert that this is the case
-        # FIXME This checks for zstacks but not dual plane mode
-        if not isinstance(meta['scanImageParams']['hStackManager']['zs'], int):
-            raise NotImplementedError('Multi-plane imaging not yet supported, data seems to be multi-plane')
+        # Currently supporting z-stacks but not supporting dual plane / volumetric imaging, assert that this is not the case
+        if meta['FOV']['nXnYnZ'][2]>1
+            raise NotImplementedError('Dual-plane imaging not yet supported, data seems to more than one plane per FOV')
 
         # Computing dx and dy
         cXY = np.array([fov['Deg']['topLeft'] for fov in meta['FOV']])
@@ -479,6 +478,16 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         dx = np.round(cXY[:, 0] * pixSizeX).astype(dtype=np.int32)
         dy = np.round(cXY[:, 1] * pixSizeY).astype(dtype=np.int32)
         nchannels = len(meta['channelSaved']) if isinstance(meta['channelSaved'], list) else 1
+
+        # Computing number of unique z-planes (slices in tiff)
+        #FIXME this should work if all FOVs are discrete or if all FOVs are continuous, but may not work for combination of both
+        slice_ids = np.array([fov['slice_id'] for fov in meta['FOV']])
+        nplanes = len(np.unique(slice_ids))
+
+        # Figuring out how many SI Rois we have (one unique ROI may have several FOVs)
+        #FIXME currently unused
+        roiUUIDs = np.array([fov['roiUUID'] for fov in meta['FOV']])
+        nrois = len(np.unique(roiUUIDs))
 
         db = {
             'data_path': sorted(map(str, self.session_path.glob(f'{self.device_collection}'))),
@@ -498,13 +507,13 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
             'block_size': [128, 128],
             'save_mat': True,  # save the data to Fall.mat
             'move_bin': True,  # move the binary file to save_path
-            'scalefactor': 1,  # scale manually in x to account for overlap between adjacent ribbons UCL mesoscope
             'mesoscan': True,
-            'nplanes': 1,
+            'nplanes': nplanes, 
             'nrois': len(meta['FOV']),
             'nchannels': nchannels,
             'fs': meta['scanImageParams']['hRoiManager']['scanVolumeRate'],
             'lines': [list(np.asarray(fov['lineIdx']) - 1) for fov in meta['FOV']],  # subtracting 1 to make 0-based
+            'slices': list(slice_ids), #this tells us which FOV corresponds to which tiff slices
             'tau': self.get_default_tau(),  # deduce the GCamp used from Alyx mouse line (defaults to 1.5; that of GCaMP6s)
             'functional_chan': 1,  # for now, eventually find(ismember(meta.channelSaved == meta.channelID.green))
             'align_by_chan': 1,  # for now, eventually find(ismember(meta.channelSaved == meta.channelID.red))
