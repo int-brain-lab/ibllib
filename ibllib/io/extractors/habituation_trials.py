@@ -23,7 +23,7 @@ class HabituationTrials(BaseBpodTrialsExtractor):
                    'stimCenterTrigger_times', 'position', 'phase']
         self.save_names = tuple(f'_ibl_trials.{x}.npy' if x not in exclude else None for x in self.var_names)
 
-    def _extract(self):
+    def _extract(self) -> dict:
         # Extract all trials...
 
         # Get all stim_sync events detected
@@ -106,7 +106,8 @@ class HabituationTrials(BaseBpodTrialsExtractor):
 
         # NB: We lose the last trial because the stim off event occurs at trial_num + 1
         n_trials = out['stimOff_times'].size
-        return [out[k][:n_trials] for k in self.var_names]
+        # return [out[k][:n_trials] for k in self.var_names]
+        return {k: out[k][:n_trials] for k in self.var_names}
 
 
 def extract_all(session_path, save=False, bpod_trials=False, settings=False, task_collection='raw_behavior_data', save_path=None):

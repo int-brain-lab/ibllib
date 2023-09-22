@@ -1,4 +1,5 @@
 import logging
+import warnings
 
 import numpy as np
 from scipy.interpolate import interp1d
@@ -26,11 +27,11 @@ REQUIRED_FIELDS = ['choice', 'contrastLeft', 'contrastRight', 'correct',
                    'wheel_position', 'wheel_timestamps']
 
 
-class TaskQCExtractor(object):
+class TaskQCExtractor:
     def __init__(self, session_path, lazy=False, one=None, download_data=False, bpod_only=False,
                  sync_collection=None, sync_type=None, task_collection=None):
         """
-        A class for extracting the task data required to perform task quality control
+        A class for extracting the task data required to perform task quality control.
         :param session_path: a valid session path
         :param lazy: if True, the data are not extracted immediately
         :param one: an instance of ONE, used to download the raw data if download_data is True
@@ -151,6 +152,8 @@ class TaskQCExtractor(object):
         intervals_bpod to be assigned to the data attribute before calling this function.
         :return:
         """
+        warnings.warn('The TaskQCExtractor.extract_data will be removed in the future, '
+                      'use dynamic pipeline behaviour tasks instead.', DeprecationWarning)
         self.log.info(f'Extracting session: {self.session_path}')
         self.type = self.type or get_session_extractor_type(self.session_path, task_collection=self.task_collection)
         # Finds the sync type when it isn't explicitly set, if ephys we assume nidq otherwise bpod

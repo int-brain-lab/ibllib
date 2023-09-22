@@ -9,14 +9,12 @@ from one.api import ONE
 
 from ibllib.oneibl.registration import get_lab
 from ibllib.pipes import base_tasks
-from ibllib.io.raw_data_loaders import load_settings
+from ibllib.io.raw_data_loaders import load_settings, load_bpod_fronts
 from ibllib.qc.task_extractors import TaskQCExtractor
 from ibllib.qc.task_metrics import HabituationQC, TaskQC
 from ibllib.io.extractors.ephys_passive import PassiveChoiceWorld
-from ibllib.io.extractors import bpod_trials
-from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.io.extractors.bpod_trials import get_bpod_extractor
-from ibllib.io.extractors.ephys_fpga import extract_all
+from ibllib.io.extractors.ephys_fpga import FpgaTrials, get_sync_and_chn_map
 from ibllib.io.extractors.mesoscope import TimelineTrials
 from ibllib.pipes import training_status
 from ibllib.plots.figures import BehaviourPlots
@@ -73,25 +71,43 @@ class HabituationTrialsBpod(base_tasks.BehaviourTask):
         }
         return signature
 
-    def _run(self, update=True):
+    def _run(self, update=True, save=True):
         """
         Extracts an iblrig training session
         """
-        extractor = bpod_trials.get_bpod_extractor(self.session_path, task_collection=self.collection)
-        trials, output_files = extractor.extract(task_collection=self.collection, save=True)
+        trials, output_files = self._extract_behaviour(save=save)
 
         if trials is None:
             return None
         if self.one is None or self.one.offline:
             return output_files
+
         # Run the task QC
+        self._run_qc(trials, update=update)
+        return output_files
+
+    def _extract_behaviour(self, **kwargs):
+        self.extractor = get_bpod_extractor(self.session_path, task_collection=self.collection)
+        self.extractor.default_path = self.output_collection
+        return self.extractor.extract(task_collection=self.collection, **kwargs)
+
+    def _run_qc(self, trials_data=None, update=True):
+        if not self.extractor or trials_data is None:
+            trials_data, _ = self._extract_behaviour(save=False)
+        if not trials_data:
+            raise ValueError('No trials data found')
+
         # Compile task data for QC
         qc = HabituationQC(self.session_path, one=self.one)
-        qc.extractor = TaskQCExtractor(self.session_path, sync_collection=self.sync_collection,
+        qc.extractor = TaskQCExtractor(self.session_path, lazy=True, sync_collection=self.sync_collection,
                                        one=self.one, sync_type=self.sync, task_collection=self.collection)
+
+        # Currently only the data field is accessed
+        qc.extractor.data = qc.extractor.rename_data(trials_data.copy())
+
         namespace = 'task' if self.protocol_number is None else f'task_{self.protocol_number:02}'
         qc.run(update=update, namespace=namespace)
-        return output_files
+        return qc
 
 
 class TrialRegisterRaw(base_tasks.RegisterRawDataTask, base_tasks.BehaviourTask):
@@ -213,6 +229,7 @@ class PassiveTaskTimeline(base_tasks.BehaviourTask, base_tasks.MesoscopeTask):
 class ChoiceWorldTrialsBpod(base_tasks.BehaviourTask):
     priority = 90
     job_size = 'small'
+    extractor = None
 
     @property
     def signature(self):
@@ -234,38 +251,54 @@ class ChoiceWorldTrialsBpod(base_tasks.BehaviourTask):
         }
         return signature
 
-    def _run(self, update=True):
+    def _run(self, update=True, save=True):
         """
         Extracts an iblrig training session
         """
-        extractor = bpod_trials.get_bpod_extractor(self.session_path, task_collection=self.collection)
-        extractor.default_path = self.output_collection
-        trials, output_files = extractor.extract(task_collection=self.collection, save=True)
+        trials, output_files = self._extract_behaviour(save=save)
         if trials is None:
             return None
         if self.one is None or self.one.offline:
             return output_files
+
         # Run the task QC
-        # Compile task data for QC
-        type = get_session_extractor_type(self.session_path, task_collection=self.collection)
-        # FIXME Task data should not need re-extracting
-        if type == 'habituation':
-            qc = HabituationQC(self.session_path, one=self.one)
-            qc.extractor = TaskQCExtractor(self.session_path, one=self.one, sync_collection=self.sync_collection,
-                                           sync_type=self.sync, task_collection=self.collection)
-        else:  # Update wheel data
-            qc = TaskQC(self.session_path, one=self.one)
-            qc.extractor = TaskQCExtractor(self.session_path, one=self.one, sync_collection=self.sync_collection,
-                                           sync_type=self.sync, task_collection=self.collection)
-            qc.extractor.wheel_encoding = 'X1'
-        # Aggregate and update Alyx QC fields
-        namespace = 'task' if self.protocol_number is None else f'task_{self.protocol_number:02}'
-        qc.run(update=update, namespace=namespace)
+        self._run_qc(trials)
 
         return output_files
 
+    def _extract_behaviour(self, **kwargs):
+        self.extractor = get_bpod_extractor(self.session_path, task_collection=self.collection)
+        self.extractor.default_path = self.output_collection
+        return self.extractor.extract(task_collection=self.collection, **kwargs)
 
-class ChoiceWorldTrialsNidq(base_tasks.BehaviourTask):
+    def _run_qc(self, trials_data=None, update=True):
+        if not self.extractor or trials_data is None:
+            trials_data, _ = self._extract_behaviour(save=False)
+        if not trials_data:
+            raise ValueError('No trials data found')
+
+        # Compile task data for QC
+        qc_extractor = TaskQCExtractor(self.session_path, lazy=True, sync_collection=self.sync_collection, one=self.one,
+                                       sync_type=self.sync, task_collection=self.collection)
+        qc_extractor.data = qc_extractor.rename_data(trials_data)
+        if type(self.extractor).__name__ == 'HabituationTrials':
+            qc = HabituationQC(self.session_path, one=self.one, log=_logger)
+        else:
+            qc = TaskQC(self.session_path, one=self.one, log=_logger)
+            qc_extractor.wheel_encoding = 'X1'
+            qc_extractor.settings = self.extractor.settings
+            qc_extractor.frame_ttls, qc_extractor.audio_ttls = load_bpod_fronts(
+                self.session_path, task_collection=self.collection)
+        qc.extractor = qc_extractor
+
+        # Aggregate and update Alyx QC fields
+        namespace = 'task' if self.protocol_number is None else f'task_{self.protocol_number:02}'
+        qc.run(update=update, namespace=namespace)
+        return qc
+
+
+
+class ChoiceWorldTrialsNidq(ChoiceWorldTrialsBpod):
     priority = 90
     job_size = 'small'
 
@@ -312,21 +345,41 @@ class ChoiceWorldTrialsNidq(base_tasks.BehaviourTask):
                 "sessions", eid, "extended_qc", {"behavior": int(good_enough)}
             )
 
-    def _extract_behaviour(self):
-        dsets, out_files = extract_all(self.session_path, self.sync_collection, task_collection=self.collection,
-                                       save_path=self.session_path.joinpath(self.output_collection),
-                                       protocol_number=self.protocol_number, save=True)
+    def _extract_behaviour(self, save=True, **kwargs):
+        # Extract Bpod trials
+        bpod_trials, _ = super()._extract_behaviour(save=False, **kwargs)
 
-        return dsets, out_files
+        # Sync Bpod trials to FPGA
+        sync, chmap = get_sync_and_chn_map(self.session_path, self.sync_collection)
+        self.extractor = FpgaTrials(self.session_path, bpod_trials=bpod_trials, bpod_extractor=self.extractor)
+        outputs, files = self.extractor.extract(
+            save=save, sync=sync, chmap=chmap, path_out=self.session_path.joinpath(self.output_collection),
+            task_collection=self.collection, protocol_number=self.protocol_number, **kwargs)
+        return outputs, files
 
-    def _run_qc(self, trials_data, update=True, plot_qc=True):
-        # Run the task QC
-        qc = TaskQC(self.session_path, one=self.one, log=_logger)
-        qc.extractor = TaskQCExtractor(self.session_path, lazy=True, one=qc.one, sync_collection=self.sync_collection,
+    def _run_qc(self, trials_data=None, update=False, plot_qc=False):
+        if not self.extractor or trials_data is None:
+            trials_data, _ = self._extract_behaviour(save=False)
+        if not trials_data:
+            raise ValueError('No trials data found')
+
+        # Compile task data for QC
+        qc_extractor = TaskQCExtractor(self.session_path, lazy=True, sync_collection=self.sync_collection, one=self.one,
                                        sync_type=self.sync, task_collection=self.collection)
-        # Extract extra datasets required for QC
-        qc.extractor.data = trials_data  # FIXME This line is pointless
-        qc.extractor.extract_data()
+        qc_extractor.data = qc_extractor.rename_data(trials_data.copy())
+        if type(self.extractor).__name__ == 'HabituationTrials':
+            qc = HabituationQC(self.session_path, one=self.one, log=_logger)
+        else:
+            qc = TaskQC(self.session_path, one=self.one, log=_logger)
+            qc_extractor.settings = self.extractor.settings
+            # Add Bpod wheel data
+            wheel_ts_bpod = self.extractor.bpod2fpga(self.extractor.bpod_trials['wheel_timestamps'])
+            qc_extractor.data['wheel_timestamps_bpod'] = wheel_ts_bpod
+            qc_extractor.data['wheel_position_bpod'] = self.extractor.bpod_trials['wheel_position']
+            qc_extractor.wheel_encoding = 'X4'
+            qc_extractor.frame_ttls = self.extractor.frame2ttl
+            qc_extractor.audio_ttls = self.extractor.audio
+        qc.extractor = qc_extractor
 
         # Aggregate and update Alyx QC fields
         namespace = 'task' if self.protocol_number is None else f'task_{self.protocol_number:02}'
@@ -345,9 +398,10 @@ class ChoiceWorldTrialsNidq(base_tasks.BehaviourTask):
                 _logger.error('Could not create Trials QC Plot')
                 _logger.error(traceback.format_exc())
                 self.status = -1
+        return qc
 
-    def _run(self, update=True, plot_qc=True):
-        dsets, out_files = self._extract_behaviour()
+    def _run(self, update=True, plot_qc=True, save=True):
+        dsets, out_files = self._extract_behaviour(save=save)
 
         if not self.one or self.one.offline:
             return out_files
@@ -378,62 +432,23 @@ class ChoiceWorldTrialsTimeline(ChoiceWorldTrialsNidq):
                                              for fn in filter(None, extractor.save_names)]
         return signature
 
-    def _extract_behaviour(self):
+    def _extract_behaviour(self, save=True, **kwargs):
         """Extract the Bpod trials data and Timeline acquired signals."""
         # First determine the extractor from the task protocol
-        extractor = get_bpod_extractor(self.session_path, self.protocol, self.collection)
-        ret, _ = extractor.extract(save=False, task_collection=self.collection)
-        bpod_trials = {k: v for k, v in zip(extractor.var_names, ret)}
+        bpod_trials, _ = ChoiceWorldTrialsBpod._extract_behaviour(self, save=False, **kwargs)
 
-        trials = TimelineTrials(self.session_path, bpod_trials=bpod_trials)
+        # Sync Bpod trials to DAQ
+        self.extractor = TimelineTrials(self.session_path, bpod_trials=bpod_trials, bpod_extractor=self.extractor)
         save_path = self.session_path / self.output_collection
-        if not self._spacer_support(extractor.settings):
+        if not self._spacer_support(self.extractor.settings):
             _logger.warning('Protocol spacers not supported; setting protocol_number to None')
             self.protocol_number = None
-        dsets, out_files = trials.extract(
-            save=True, path_out=save_path, sync_collection=self.sync_collection,
-            task_collection=self.collection, protocol_number=self.protocol_number)
 
-        if not isinstance(dsets, dict):
-            dsets = {k: v for k, v in zip(trials.var_names, dsets)}
-
-        self.timeline = trials.timeline  # Store for QC later
-        self.frame2ttl = trials.frame2ttl
-        self.audio = trials.audio
+        dsets, out_files = self.extractor.extract(
+            save=save, path_out=save_path, sync_collection=self.sync_collection,
+            task_collection=self.collection, protocol_number=self.protocol_number, **kwargs)
 
         return dsets, out_files
-
-    def _run_qc(self, trials_data, update=True, **kwargs):
-        """
-        Run the task QC and update Alyx with results.
-
-        Parameters
-        ----------
-        trials_data : dict
-            The extracted trials data.
-        update : bool
-            If true, update Alyx with the result.
-
-        Notes
-        -----
-        - Unlike the super class, currently the QC plots are not generated.
-        - Expects the frame2ttl and audio attributes to be set from running _extract_behaviour.
-        """
-        # TODO Task QC extractor for Timeline
-        qc = TaskQC(self.session_path, one=self.one, log=_logger)
-        qc.extractor = TaskQCExtractor(self.session_path, lazy=True, one=qc.one, sync_collection=self.sync_collection,
-                                       sync_type=self.sync, task_collection=self.collection)
-        # Extract extra datasets required for QC
-        qc.extractor.data = TaskQCExtractor.rename_data(trials_data.copy())
-        qc.extractor.load_raw_data()
-
-        qc.extractor.frame_ttls = self.frame2ttl
-        qc.extractor.audio_ttls = self.audio
-        # qc.extractor.bpod_ttls = channel_events('bpod')
-
-        # Aggregate and update Alyx QC fields
-        namespace = 'task' if self.protocol_number is None else f'task_{self.protocol_number:02}'
-        qc.run(update=update, namespace=namespace)
 
 
 class TrainingStatus(base_tasks.BehaviourTask):

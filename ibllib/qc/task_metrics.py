@@ -835,7 +835,7 @@ def check_goCue_delays(data, **_):
     effectively played is smaller than 1ms.
 
     Metric: M = goCue_times - goCueTrigger_times
-    Criterion: 0 < M <= 0.001 s
+    Criterion: 0 < M <= 0.0015 s
     Units: seconds [s]
 
     :param data: dict of trial data with keys ('goCue_times', 'goCueTrigger_times', 'intervals')
@@ -850,7 +850,7 @@ def check_errorCue_delays(data, **_):
     """ Check that the time difference between the error sound being triggered and
     effectively played is smaller than 1ms.
     Metric: M = errorCue_times - errorCueTrigger_times
-    Criterion: 0 < M <= 0.001 s
+    Criterion: 0 < M <= 0.0015 s
     Units: seconds [s]
 
     :param data: dict of trial data with keys ('errorCue_times', 'errorCueTrigger_times',
@@ -868,7 +868,7 @@ def check_stimOn_delays(data, **_):
     and the stimulus effectively appearing on the screen is smaller than 150 ms.
 
     Metric: M = stimOn_times - stimOnTrigger_times
-    Criterion: 0 < M < 0.150 s
+    Criterion: 0 < M < 0.15 s
     Units: seconds [s]
 
     :param data: dict of trial data with keys ('stimOn_times', 'stimOnTrigger_times',
@@ -886,7 +886,7 @@ def check_stimOff_delays(data, **_):
     is smaller than 150 ms.
 
     Metric: M = stimOff_times - stimOffTrigger_times
-    Criterion: 0 < M < 0.150 s
+    Criterion: 0 < M < 0.15 s
     Units: seconds [s]
 
     :param data: dict of trial data with keys ('stimOff_times', 'stimOffTrigger_times',
@@ -904,7 +904,7 @@ def check_stimFreeze_delays(data, **_):
     is smaller than 150 ms.
 
     Metric: M = stimFreeze_times - stimFreezeTrigger_times
-    Criterion: 0 < M < 0.150 s
+    Criterion: 0 < M < 0.15 s
     Units: seconds [s]
 
     :param data: dict of trial data with keys ('stimFreeze_times', 'stimFreezeTrigger_times',

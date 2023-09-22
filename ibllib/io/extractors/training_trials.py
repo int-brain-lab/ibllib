@@ -706,13 +706,13 @@ class TrainingTrials(BaseBpodTrialsExtractor):
                  'wheel_timestamps', 'wheel_position', 'wheel_moves_intervals', 'wheel_moves_peak_amplitude',
                  'peakVelocity_times', 'is_final_movement', 'phase', 'position', 'quiescence')
 
-    def _extract(self):
+    def _extract(self) -> dict:
         base = [RepNum, GoCueTriggerTimes, StimOnTriggerTimes, ItiInTimes, StimOffTriggerTimes, StimFreezeTriggerTimes,
                 ErrorCueTriggerTimes, TrialsTable, PhasePosQuiescence]
         out, _ = run_extractor_classes(
             base, session_path=self.session_path, bpod_trials=self.bpod_trials, settings=self.settings, save=False,
             task_collection=self.task_collection)
-        return tuple(out.pop(x) for x in self.var_names)
+        return {k: out[k] for k in self.var_names}
 
 
 def extract_all(session_path, save=False, bpod_trials=None, settings=None, task_collection='raw_behavior_data', save_path=None):
