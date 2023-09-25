@@ -18,7 +18,7 @@ from iblutil.util import Bunch
 
 import ibllib.plots
 from atlaselectrophysiology import rendering
-import ibllib.atlas as atlas
+import iblatlas.atlas as atlas
 
 one = ONE(base_url='https://openalyx.internationalbrainlab.org')
 subject = 'KS023'

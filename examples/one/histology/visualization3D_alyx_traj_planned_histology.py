@@ -10,7 +10,7 @@ from one.api import ONE
 from mayavi import mlab
 
 from atlaselectrophysiology import rendering
-import ibllib.atlas as atlas
+import iblatlas.atlas as atlas
 
 # === Parameters section (edit) ===
 

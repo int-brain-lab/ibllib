@@ -1,7 +1,7 @@
 import scipy
 import numpy as np
 import ibllib.pipes.histology as histology
-import ibllib.atlas as atlas
+import iblatlas.atlas as atlas
 TIP_SIZE_UM = 200
 
 

@@ -15,7 +15,7 @@ from one.api import ONE
 
 import ibllib.plots
 from atlaselectrophysiology import rendering
-import ibllib.atlas as atlas
+import iblatlas.atlas as atlas
 from iblutil.util import Bunch
 
 one = ONE(base_url="https://alyx.internationalbrainlab.org")

@@ -1,4 +1,4 @@
-from ibllib.atlas import AllenAtlas
+from iblatlas.atlas import AllenAtlas
 
 ba = AllenAtlas()
 

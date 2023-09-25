@@ -6,7 +6,7 @@ from pathlib import Path
 from neuropixel import trace_header
 import spikeglx
 
-from ibllib.atlas import AllenAtlas
+from iblatlas.atlas import AllenAtlas
 from ibllib.pipes import histology
 from ibllib.pipes.ephys_alignment import EphysAlignment
 from ibllib.qc import base

@@ -12,7 +12,7 @@ from one.api import ONE
 from mayavi import mlab
 
 import ibllib.pipes.histology as histology
-import ibllib.atlas as atlas
+import iblatlas.atlas as atlas
 from atlaselectrophysiology import rendering
 
 # Instantiate brain atlas and one

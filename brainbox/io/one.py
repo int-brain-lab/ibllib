@@ -21,7 +21,8 @@ import spikeglx
 
 from iblutil.util import Bunch
 from ibllib.io.extractors.training_wheel import extract_wheel_moves, extract_first_movement_times
-from ibllib.atlas import atlas, AllenAtlas, BrainRegions
+from iblatlas.atlas import AllenAtlas, BrainRegions
+from iblatlas import atlas
 from ibllib.pipes import histology
 from ibllib.pipes.ephys_alignment import EphysAlignment
 from ibllib.plots import vertical_lines
@@ -243,7 +244,7 @@ def channel_locations_interpolation(channels_aligned, channels=None, brain_regio
       'x', 'y', 'z', 'acronym', 'axial_um'
       those are the guide for the interpolation
     :param channels: Bunch or dictionary of aligned channels containing at least keys 'localCoordinates'
-    :param brain_regions: None (default) or ibllib.atlas.BrainRegions object
+    :param brain_regions: None (default) or iblatlas.regions.BrainRegions object
      if None will return a dict with keys 'localCoordinates', 'mlapdv', 'brainLocationIds_ccf_2017
      if a brain region object is provided, outputts a dict with keys
       'x', 'y', 'z', 'acronym', 'atlas_id', 'axial_um', 'lateral_um'
@@ -372,7 +373,7 @@ def load_channel_locations(eid, probe=None, one=None, aligned=False, brain_atlas
         An instance of ONE (shouldn't be in 'local' mode)
     aligned : bool
         Whether to get the latest user aligned channel when not resolved or use histology track
-    brain_atlas : ibllib.atlas.BrainAtlas
+    brain_atlas : iblatlas.BrainAtlas
         Brain atlas object (default: Allen atlas)
     Returns
     -------
@@ -417,7 +418,7 @@ def load_spike_sorting_fast(eid, one=None, probe=None, dataset_types=None, spike
     :param dataset_types: additional spikes/clusters objects to add to the standard default list
     :param spike_sorter: name of the spike sorting you want to load (None for default)
     :param collection: name of the spike sorting collection to load - exclusive with spike sorter name ex: "alf/probe00"
-    :param brain_regions: ibllib.atlas.regions.BrainRegions object - will label acronyms if provided
+    :param brain_regions: iblatlas.regions.BrainRegions object - will label acronyms if provided
     :param nested: if a single probe is required, do not output a dictionary with the probe name as key
     :param return_collection: (False) if True, will return the collection used to load
     :return: spikes, clusters, channels (dict of bunch, 1 bunch per probe)
@@ -458,7 +459,7 @@ def load_spike_sorting(eid, one=None, probe=None, dataset_types=None, spike_sort
     :param probe: name of probe to load in, if not given all probes for session will be loaded
     :param dataset_types: additional spikes/clusters objects to add to the standard default list
     :param spike_sorter: name of the spike sorting you want to load (None for default)
-    :param brain_regions: ibllib.atlas.regions.BrainRegions object - will label acronyms if provided
+    :param brain_regions: iblatlas.regions.BrainRegions object - will label acronyms if provided
     :param return_collection:(bool - False) if True, returns the collection for loading the data
     :return: spikes, clusters (dict of bunch, 1 bunch per probe)
     """
@@ -497,7 +498,7 @@ def load_spike_sorting_with_channel(eid, one=None, probe=None, aligned=False, da
     spike_sorter : str
         Name of the spike sorting you want to load (None for default which is pykilosort if it's
         available otherwise the default MATLAB kilosort)
-    brain_atlas : ibllib.atlas.BrainAtlas
+    brain_atlas : iblatlas.atlas.BrainAtlas
         Brain atlas object (default: Allen atlas)
     return_collection: bool
         Returns an extra argument with the collection chosen
