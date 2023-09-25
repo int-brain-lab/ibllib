@@ -1,3 +1,8 @@
+## Develop
+### features
+- Deprecate ibllib.atlas. Code now contained in package iblatlas
+
+
 ## Release Notes 2.25
 
 ### features
