@@ -10,7 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from ibllib.pipes import histology
-import ibllib.atlas as atlas
+import iblatlas.atlas as atlas
 
 # === Parameters section (edit) ===
 

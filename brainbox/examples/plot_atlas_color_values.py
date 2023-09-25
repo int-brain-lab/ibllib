@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from ibllib import atlas
+from iblatlas import atlas
 from brainbox.atlas import plot_atlas
 
 

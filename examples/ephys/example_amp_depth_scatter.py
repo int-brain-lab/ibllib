@@ -6,7 +6,7 @@ Example of how to plot scatter plot of spike depths vs spike times vs spike firi
 
 from one.api import ONE
 from brainbox.io.one import SpikeSortingLoader
-from ibllib.atlas import AllenAtlas
+from iblatlas.atlas import AllenAtlas
 
 import matplotlib.pyplot as plt
 import numpy as np

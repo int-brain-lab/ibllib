@@ -177,7 +177,7 @@ class WidefieldFOV(base_tasks.WidefieldTask):
         outfiles = []
 
         # from wfield import load_allen_landmarks, SVDStack, atlas_from_landmarks_file
-        # from ibllib.atlas.regions import BrainRegions
+        # from iblatlas.regions import BrainRegions
         # from iblutil.numerical import ismember
         # import numpy as np
         # U = np.load(self.session_path.joinpath('alf/widefield', 'widefieldU.images.npy'))

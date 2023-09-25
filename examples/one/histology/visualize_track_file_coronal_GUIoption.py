@@ -7,7 +7,7 @@ environment installation guide https://github.com/int-brain-lab/iblenv
 import numpy as np
 
 from ibllib.pipes import histology
-import ibllib.atlas as atlas
+import iblatlas.atlas as atlas
 
 # === Parameters section (edit) ===
 track_file = "/Users/gaelle/Downloads/electrodetracks_lic3/2019-08-27_lic3_002_probe00_pts.csv"

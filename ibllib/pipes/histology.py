@@ -7,7 +7,7 @@ from one.api import ONE
 import one.alf.io as alfio
 
 from neuropixel import TIP_SIZE_UM, trace_header
-import ibllib.atlas as atlas
+import iblatlas.atlas as atlas
 from ibllib.ephys.spikes import probes_description as extract_probes
 from ibllib.qc import base
 
@@ -595,7 +595,7 @@ def coverage(trajs, ba=None, dist_fcn=[100, 150]):
     """
     Computes a coverage volume from
     :param trajs: dictionary of trajectories from Alyx rest endpoint (one.alyx.rest...)
-    :param ba: ibllib.atlas.BrainAtlas instance
+    :param ba: iblatlas.atlas.BrainAtlas instance
     :return: 3D np.array the same size as the volume provided in the brain atlas
     """
     # in um. Coverage = 1 below the first value, 0 after the second, cosine taper in between

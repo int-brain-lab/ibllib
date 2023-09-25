@@ -5,7 +5,7 @@ For a given eID, plot the probe(s) track(s) and the corresponding raster(s).
 import matplotlib.pyplot as plt
 from one.api import ONE
 
-import ibllib.atlas as atlas
+import iblatlas.atlas as atlas
 import brainbox.io.one as bbone
 import brainbox.plot as bbplot
 

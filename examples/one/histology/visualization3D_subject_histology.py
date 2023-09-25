@@ -13,7 +13,7 @@ from mayavi import mlab
 from one.api import ONE
 
 from atlaselectrophysiology import rendering
-import ibllib.atlas as atlas
+import iblatlas.atlas as atlas
 
 one = ONE(base_url="https://alyx.internationalbrainlab.org")
 
