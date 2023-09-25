@@ -462,7 +462,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         """
 
         # Currently supporting z-stacks but not supporting dual plane / volumetric imaging, assert that this is not the case
-        if meta['FOV']['nXnYnZ'][2]>1
+        if meta['FOV']['nXnYnZ'][2] > 1:
             raise NotImplementedError('Dual-plane imaging not yet supported, data seems to more than one plane per FOV')
 
         # Computing dx and dy
