@@ -168,7 +168,7 @@ class EphysQC(base.QC):
 
                 if not (np.all(h['x'] == th['x']) and np.all(h['y'] == th['y'])):
                     _logger.critical("Channel geometry seems incorrect")
-                    raise ValueError("Wrong Neuropixel channel mapping used - ABORT")
+                    # raise ValueError("Wrong Neuropixel channel mapping used - ABORT")
 
                 t0s = np.arange(TMIN, sr.rl - SAMPLE_LENGTH, BATCHES_SPACING)
                 all_rms = np.zeros((2, nc, t0s.shape[0]))

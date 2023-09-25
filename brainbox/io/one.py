@@ -1054,10 +1054,16 @@ class SpikeSortingLoader:
     def pid2ref(self):
         return f"{self.one.eid2ref(self.eid, as_dict=False)}_{self.pname}"
 
-    def raster(self, spikes, channels, save_dir=None, br=None, label='raster', time_series=None):
+    def raster(self, spikes, channels, save_dir=None, br=None, label='raster', time_series=None, **kwargs):
         """
-        :param spikes: spikes dictionary
-        :param save_dir: optional if specified
+        :param spikes: spikes dictionary or Bunch
+        :param channels: channels dictionary or Bunch.
+        :param save_dir: if specified save to this directory as "{pid}_{probe}_{label}.png".
+            Otherwise, plot.
+        :param br: brain regions object (optional)
+        :param label: label for saved image (optional, default="raster")
+        :param time_series: timeseries dictionary for behavioral event times (optional)
+        :param **kwargs: kwargs passed to `driftmap()` (optional)
         :return:
         """
         br = br or BrainRegions()
@@ -1066,7 +1072,10 @@ class SpikeSortingLoader:
             'width_ratios': [.95, .05], 'height_ratios': [.1, .9]}, figsize=(16, 9), sharex='col')
         axs[0, 1].set_axis_off()
         # axs[0, 0].set_xticks([])
-        brainbox.plot.driftmap(spikes['times'], spikes['depths'], t_bin=0.007, d_bin=10, vmax=0.5, ax=axs[1, 0])
+        if kwargs is None:
+            # set default raster plot parameters
+            kwargs = {"t_bin": 0.007, "d_bin": 10, "vmax": 0.5}
+        brainbox.plot.driftmap(spikes['times'], spikes['depths'], ax=axs[1, 0], **kwargs)
         title_str = f"{self.pid2ref}, {self.pid} \n" \
                     f"{spikes['clusters'].size:_} spikes, {np.unique(spikes['clusters']).size:_} clusters"
         axs[0, 0].title.set_text(title_str)
