@@ -3,7 +3,7 @@ import numpy as np
 from one.api import ONE
 from neurodsp.utils import fcn_cosine
 
-import ibllib.atlas as atlas
+import iblatlas.atlas as atlas
 from ibllib.pipes.histology import coverage
 
 ba = atlas.AllenAtlas()

@@ -14,7 +14,7 @@ regardless of the spike sorting version loaded. The steps are (from most advance
 """
 
 from one.api import ONE
-from ibllib.atlas import AllenAtlas
+from iblatlas.atlas import AllenAtlas
 from brainbox.io.one import SpikeSortingLoader
 
 

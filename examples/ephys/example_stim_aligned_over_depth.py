@@ -8,7 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from one.api import ONE
-from ibllib.atlas import AllenAtlas
+from iblatlas.atlas import AllenAtlas
 
 from brainbox.io.one import SpikeSortingLoader
 from brainbox.task.passive import get_stim_aligned_activity as stim_aligned_activity_over_depth

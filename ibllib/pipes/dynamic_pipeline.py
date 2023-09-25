@@ -306,7 +306,7 @@ def make_pipeline(session_path, **pkwargs):
     # Video tasks
     if 'cameras' in devices:
         cams = list(devices['cameras'].keys())
-        subset_cams = [c for c in cams if c in ('left', 'right', 'body')]
+        subset_cams = [c for c in cams if c in ('left', 'right', 'body', 'belly')]
         video_kwargs = {'device_collection': 'raw_video_data',
                         'cameras': cams}
         video_compressed = sess_params.get_video_compressed(acquisition_description)
