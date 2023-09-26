@@ -21,7 +21,7 @@ import ibllib.io.video as vidio
 from iblutil.util import Bunch
 from ibllib.io.extractors.ephys_fpga import get_sync_fronts, get_sync_and_chn_map
 import ibllib.io.raw_data_loaders as raw
-from ibllib.io.extractors.camera import CameraTimestampsBpod
+import ibllib.io.extractors.camera as cam
 import brainbox.video as video
 import brainbox.behavior.wheel as wh
 from brainbox.singlecell import bin_spikes
@@ -431,7 +431,7 @@ class MotionAlignmentFullSession:
             sr = get_sync_fronts(sync, chmap[f'{self.label}_camera'])
             self.ttls = sr.times[::2]
         else:
-            cam_extractor = CameraTimestampsBpod(session_path=self.session_path)
+            cam_extractor = cam.CameraTimestampsBpod(session_path=self.session_path)
             cam_extractor.bpod_trials = raw.load_data(self.session_path, task_collection='raw_behavior_data')
             self.ttls = cam_extractor._times_from_bpod()
 
