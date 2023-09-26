@@ -74,13 +74,19 @@ def wiggle(w, fs=1, gain=0.71, color='k', ax=None, fill=True, linewidth=0.5, t0=
 
 
 class Density:
-    def __init__(self, w, fs=1, cmap='Greys_r', ax=None, taxis=0, title=None, **kwargs):
+    def __init__(self, w, fs=30_000, cmap='Greys_r', ax=None, taxis=0, title=None, gain = None, **kwargs):
         """
-        Matplotlib display of traces as a density display
+        Matplotlib display of traces as a density display using `imshow()`.
 
         :param w: 2D array (numpy array dimension nsamples, ntraces)
-        :param fs: sampling frequency (Hz)
-        :param ax: axis to plot in
+        :param fs: sampling frequency (Hz). [default: 30000]
+        :param cmap: Name of MPL colormap to use in `imshow()`. [default: 'Greys_r']
+        :param ax: Axis to plot in. If `None`, a new one is created. [default: `None`]
+        :param taxis: Time axis of input array (w). [default: 0]
+        :param title: Title to display on plot. [default: `None`]
+        :param gain: Gain in dB to display. Note: overrides `vmin` and `vmax` kwargs to `imshow()`. 
+            Default: [`None` (auto)]
+        :param kwargs: Key word arguments passed to `imshow()`
         :return: None
         """
         w = w.reshape(w.shape[0], -1)
@@ -98,6 +104,9 @@ class Density:
             self.figure, ax = plt.subplots()
         else:
             self.figure = ax.get_figure()
+        if gain:
+            kwargs["vmin"] = - 4 * (10 ** (gain / 20))
+            kwargs["vmax"] = -kwargs["vmin"]
         self.im = ax.imshow(w, aspect='auto', cmap=cmap, extent=extent, origin=origin, **kwargs)
         ax.set_ylabel(ylabel)
         ax.set_xlabel(xlabel)
