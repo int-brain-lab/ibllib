@@ -1,4 +1,11 @@
-## Develop
+## Release Notes 2.26
+
+### features
+- Deprecate ibllib.atlas. Code now contained in package iblatlas
+
+
+## Release Notes 2.25
+
 ### features
 - Training status pipeline now compatible with dynamic pipeline
 - Dynamic DLC task using description file
@@ -6,6 +13,10 @@
 
 ### bugfixes
 - fix for untrainable, unbiasable don't repolulate if already exists
+### 2.25.1
+- relax assertion on Neuropixel channel mappings to allow for personal projects
+### 2.25.2
+- listing of all collections does not skip repeat task protocols anymore for copy/extraction
 
 ## Release Notes 2.23
 ### Release Notes 2.23.1 2023-06-15

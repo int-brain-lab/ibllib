@@ -382,7 +382,7 @@ def get_task_protocol_number(sess_params, task_protocol=None):
         return (next(iter(numbers)) if len(numbers) == 1 else numbers) or None
 
 
-def get_collections(sess_params):
+def get_collections(sess_params, flat=False):
     """
     Find all collections associated with the session.
 
@@ -390,11 +390,16 @@ def get_collections(sess_params):
     ----------
     sess_params : dict
         The loaded experiment description map.
+    flat : bool (False)
+        If True, return a flat list of unique collections, otherwise return a map of device/sync/task
 
     Returns
     -------
     dict[str, str]
         A map of device/sync/task and the corresponding collection name.
+
+    list[str]
+        A flat list of unique collection names.
 
     Notes
     -----
@@ -408,12 +413,27 @@ def get_collections(sess_params):
                 for d in filter(lambda x: isinstance(x, dict), v):
                     iter_dict(d)
             elif isinstance(v, dict) and 'collection' in v:
-                collection_map[k] = v['collection']
+                print(k)
+                # if the key already exists, append the collection name to the list
+                if k in collection_map:
+                    clist = collection_map[k] if isinstance(collection_map[k], list) else [collection_map[k]]
+                    collection_map[k] = list(set(clist + [v['collection']]))
+                else:
+                    collection_map[k] = v['collection']
             elif isinstance(v, dict):
                 iter_dict(v)
 
     iter_dict(sess_params)
-    return collection_map
+    if flat:
+        cflat = []
+        for k, v in collection_map.items():
+            if isinstance(v, list):
+                cflat.extend(v)
+            else:
+                cflat.append(v)
+        return list(set(cflat))
+    else:
+        return collection_map
 
 
 def get_video_compressed(sess_params):
