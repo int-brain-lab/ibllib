@@ -394,8 +394,6 @@ class MotionAlignment:
             plt.show()
 
 
-session_path = one.eid2path(eid)
-session_path = Path('/mnt/ibl').joinpath(*session_path.parts[-5:])
 class MotionAlignmentFullSession:
     def __init__(self, session_path, label, **kwargs):
         self.session_path = session_path
@@ -422,9 +420,9 @@ class MotionAlignmentFullSession:
         self.wheel_timestamps = wheel.timestamps
         wheel_pos, self.wheel_time = wh.interpolate_position(wheel.timestamps, wheel.position, freq=1000)
         self.wheel_vel, _ = wh.velocity_filtered(wheel_pos, 1000)
-        self.camera_times = alfio.load_file_content(next(alf_path.glob(f'_ibl_{self.label}Camera.times.*.npy')))
+        self.camera_times = alfio.load_file_content(next(alf_path.glob(f'_ibl_{self.label}Camera.times*.npy')))
         self.camera_path = str(next(self.session_path.joinpath('raw_video_data').glob(
-            f'_iblrig_{self.label}Camera.raw.*.mp4')))
+            f'_iblrig_{self.label}Camera.raw*.mp4')))
         self.camera_meta = vidio.get_video_meta(self.camera_path)
 
         # TODO should read in the description file to get the correct sync location
@@ -448,8 +446,10 @@ class MotionAlignmentFullSession:
             self.times = self.ttls[self.tdiff:]
             self.short_flag = False
 
+        self.frate = round(1 / np.nanmedian(np.diff(self.ttl_times)))
+
         if behavior:
-            self.trials = alfio.load_file_content(next(alf_path.glob(f'_ibl_trials.table.*.pqt')))
+            self.trials = alfio.load_file_content(next(alf_path.glob('_ibl_trials.table.*.pqt')))
             self.dlc = alfio.load_file_content(next(alf_path.glob(f'_ibl_{self.label}Camera.dlc.*.pqt')))
             self.dlc = likelihood_threshold(self.dlc)
 
@@ -614,7 +614,6 @@ class MotionAlignmentFullSession:
 
         return np.cumsum(dy) + y[0]
 
-
     def qc_shifts(self, shifts, shifts_filt):
 
         ttl_per = (np.abs(self.tdiff) / self.camera_meta['length']) * 100 if self.tdiff < 0 else 0
@@ -622,39 +621,40 @@ class MotionAlignmentFullSession:
         shifts_sum = np.where(np.abs(np.diff(shifts)) > 10)[0].size
         shifts_filt_sum = np.where(np.abs(np.diff(shifts_filt)) > 1)[0].size
 
-        qc = {}
+        qc = dict()
         qc['ttl_per'] = ttl_per
         qc['nan_per'] = nan_per
         qc['shifts_sum'] = shifts_sum
         qc['shifts_filt_sum'] = shifts_filt_sum
 
-        return qc
+        qc_outcome = True
+        # If more than 10% of ttls are missing we don't get new times
+        if ttl_per > 10:
+            qc_outcome = False
+        # If too many of the shifts are nans it means the alignment is not accurate
+        if nan_per > 40:
+            qc_outcome = False
+        # If there are too many artefacts could be errors
+        if shifts_sum > 60:
+            qc_outcome = False
+        # If there are jumps > 1 in the filtered shifts then there is a problem
+        if shifts_filt_sum > 0:
+            qc_outcome = False
 
-        # # If more than 10% of ttls are missing we don't get new times
-        # if ttl_per > 10:
-        #     return False
-        # # If too many of the shifts are nans it means the alignment is not accurate
-        # if nan_per > 40:
-        #     return False
-        # # If there are too many artefacts could be errors
-        # if shifts_sum > 80:
-        #     return False
-        # # If there are jumps > 1 in the filtered shifts then there is a problem
-        # if shifts_filt_sum > 0:
-        #     return False
-        #
-        # return True
+        return qc, qc_outcome
 
     def extract_times(self, shifts_filt, t_shifts):
 
-        fps = 1 / np.nanmean(np.diff(self.ttl_times))
-        t_new = t_shifts - (shifts_filt * 1 / fps)
+        t_new = t_shifts - (shifts_filt * 1 / self.frate)
         fcn = interpolate.interp1d(t_shifts, t_new, fill_value="extrapolate")
         new_times = fcn(self.ttl_times)
 
-        # TODO if short we need to interpolate the end times
+        if self.tdiff < 0:
+            to_app = (np.arange(np.abs(self.tdiff), ) + 1) / self.frate + new_times[-1]
+            new_times = np.r_[new_times, to_app]
 
         return new_times
+
     @staticmethod
     def single_cluster_raster(spike_times, events, trial_idx, dividers, colors, labels, weights=None, fr=True,
                               norm=False,
@@ -728,7 +728,7 @@ class MotionAlignmentFullSession:
 
     def plot_with_behavior(self):
 
-        dlc = likelihood_threshold(self.dlc)
+        self.dlc = likelihood_threshold(self.dlc)
         trial_idx, dividers = find_trial_ids(self.trials, sort='side')
         feature_ext = get_speed(self.dlc, self.camera_times, self.label, feature='paw_r')
         feature_new = get_speed(self.dlc, self.new_times, self.label, feature='paw_r')
@@ -790,7 +790,7 @@ class MotionAlignmentFullSession:
         ax22.set_xlabel('Time from first move')
 
         self.single_cluster_raster(self.new_times, self.trials['firstMovement_times'].values, trial_idx, dividers, ['g', 'y'],
-                                  ['left', 'right'], weights=feature_new, fr=False, axs=[ax31, ax32])
+                                   ['left', 'right'], weights=feature_new, fr=False, axs=[ax31, ax32])
         ax31.sharex(ax32)
         ax31.set_ylabel('Paw r velocity')
         ax31.set_title('New times')
@@ -863,10 +863,9 @@ class MotionAlignmentFullSession:
         for vals in out[:-1]:
             self.all_me = np.r_[self.all_me, vals]
 
-        frate = round(1 / np.nanmedian(np.diff(self.ttl_times)))
         toverlap = self.twin - 1
         all_me = np.r_[np.full((int(self.camera_meta['fps'] * toverlap)), np.nan), self.all_me]
-        to_app = self.times[0] - ((np.arange(int(self.camera_meta['fps'] * toverlap), ) + 1) / frate)[::-1]
+        to_app = self.times[0] - ((np.arange(int(self.camera_meta['fps'] * toverlap), ) + 1) / self.frate)[::-1]
         times = np.r_[to_app, self.times]
 
         wg = WindowGenerator(all_me.size - 1, int(self.camera_meta['fps'] * self.twin),
@@ -888,7 +887,7 @@ class MotionAlignmentFullSession:
         shifts_filt = self.clean_shifts(shifts_filt, n=1)
         self.shifts_filt = self.clean_shifts(shifts_filt, n=2)
 
-        self.qc = self.qc_shifts(self.shifts, self.shifts_filt)
+        self.qc, self.qc_outcome = self.qc_shifts(self.shifts, self.shifts_filt)
 
         self.new_times = self.extract_times(self.shifts_filt, self.t_shifts)
 
