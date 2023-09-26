@@ -297,7 +297,6 @@ class ChoiceWorldTrialsBpod(base_tasks.BehaviourTask):
         return qc
 
 
-
 class ChoiceWorldTrialsNidq(ChoiceWorldTrialsBpod):
     priority = 90
     job_size = 'small'

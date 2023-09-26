@@ -802,7 +802,8 @@ class FpgaTrials(extractors_base.BaseExtractor):
         pattern = re.compile(fr'^[_\w]*({"|".join(FIELDS)})[_\w]*$')
         return set(filter(pattern.match, trials_attr))
 
-    def _extract(self, sync=None, chmap=None, sync_collection='raw_ephys_data', task_collection='raw_behavior_data', **kwargs) -> dict:
+    def _extract(self, sync=None, chmap=None, sync_collection='raw_ephys_data',
+                 task_collection='raw_behavior_data', **kwargs) -> dict:
         """Extracts ephys trials by combining Bpod and FPGA sync pulses"""
         # extract the behaviour data from bpod
         if sync is None or chmap is None:
