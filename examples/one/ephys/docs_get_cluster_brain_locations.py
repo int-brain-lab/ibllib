@@ -13,7 +13,7 @@ the terminal. In this case no plot is generated.
 from one.api import ONE
 import numpy as np
 import matplotlib.pyplot as plt
-from ibllib.atlas import BrainRegions
+from iblatlas.regions import BrainRegions
 
 one = ONE(base_url='https://openalyx.internationalbrainlab.org', silent=True)
 

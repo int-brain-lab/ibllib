@@ -300,7 +300,7 @@ class RemoteAwsDataHandler(DataHandler):
 
         for collection, files in collections.items():
             globus_files = self.globus.ls(f'flatiron_{self.lab}', collection, remove_uuid=True, return_size=True)
-            file_names = [gl[0] for gl in globus_files]
+            file_names = [str(gl[0]) for gl in globus_files]
             file_sizes = [gl[1] for gl in globus_files]
 
             for name, details in files.items():

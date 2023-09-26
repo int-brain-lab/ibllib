@@ -303,8 +303,10 @@ def make_pipeline(session_path, **pkwargs):
 
     # Video tasks
     if 'cameras' in devices:
+        cams = list(devices['cameras'].keys())
+        subset_cams = [c for c in cams if c in ('left', 'right', 'body', 'belly')]
         video_kwargs = {'device_collection': 'raw_video_data',
-                        'cameras': list(devices['cameras'].keys())}
+                        'cameras': cams}
         video_compressed = sess_params.get_video_compressed(acquisition_description)
 
         if video_compressed:
@@ -324,10 +326,14 @@ def make_pipeline(session_path, **pkwargs):
                 tasks[tn] = type((tn := f'VideoSyncQC_{sync}'), (vtasks.VideoSyncQcBpod,), {})(
                     **kwargs, **video_kwargs, **sync_kwargs, parents=[tasks['VideoCompress']])
             elif sync == 'nidq':
+                # Here we restrict to videos that we support (left, right or body)
+                video_kwargs['cameras'] = subset_cams
                 tasks[tn] = type((tn := f'VideoSyncQC_{sync}'), (vtasks.VideoSyncQcNidq,), {})(
                     **kwargs, **video_kwargs, **sync_kwargs, parents=[tasks['VideoCompress']] + sync_tasks)
 
         if sync_kwargs['sync'] != 'bpod':
+            # Here we restrict to videos that we support (left, right or body)
+            video_kwargs['cameras'] = subset_cams
             tasks[tn] = type((tn := 'DLC'), (vtasks.DLC,), {})(
                 **kwargs, **video_kwargs, parents=[dlc_parent_task])
             tasks['PostDLC'] = type('PostDLC', (epp.EphysPostDLC,), {})(

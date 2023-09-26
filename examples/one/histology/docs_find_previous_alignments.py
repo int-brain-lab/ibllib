@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 from one.api import ONE
 
 from ibllib.pipes.ephys_alignment import EphysAlignment
-import ibllib.atlas as atlas
+import iblatlas.atlas as atlas
 
 # Instantiate brain atlas and one
 brain_atlas = atlas.AllenAtlas(25)

@@ -6,7 +6,7 @@ Example of how to compute and plot the event aligned activity for a single clust
 
 from one.api import ONE
 from brainbox.io.one import SpikeSortingLoader
-from ibllib.atlas import AllenAtlas
+from iblatlas.atlas import AllenAtlas
 
 import matplotlib.pyplot as plt
 import numpy as np
