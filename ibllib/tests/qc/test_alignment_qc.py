@@ -13,7 +13,7 @@ from one.api import ONE
 from neuropixel import trace_header
 
 from ibllib.tests import TEST_DB
-from ibllib.atlas import AllenAtlas
+from iblatlas.atlas import AllenAtlas
 from ibllib.pipes.misc import create_alyx_probe_insertions
 from ibllib.qc.alignment_qc import AlignmentQC
 from ibllib.pipes.histology import register_track, register_chronic_track

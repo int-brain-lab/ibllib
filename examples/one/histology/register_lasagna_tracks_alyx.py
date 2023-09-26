@@ -24,7 +24,7 @@ the registration (used for automatic testing of the example).
 """
 # Author: Olivier, Gaelle
 from pathlib import Path
-from ibllib.atlas import AllenAtlas
+from iblatlas.atlas import AllenAtlas
 from one.api import ONE
 
 from ibllib.pipes import histology

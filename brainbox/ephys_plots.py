@@ -5,7 +5,7 @@ from brainbox.plot_base import (ImagePlot, ScatterPlot, ProbePlot, LinePlot, plo
                                 plot_image, plot_probe, plot_scatter, arrange_channels2banks)
 from brainbox.processing import compute_cluster_average
 from iblutil.numerical import bincount2D
-from ibllib.atlas.regions import BrainRegions
+from iblatlas.regions import BrainRegions
 
 
 def image_lfp_spectrum_plot(lfp_power, lfp_freq, chn_coords=None, chn_inds=None, freq_range=(0, 300),
