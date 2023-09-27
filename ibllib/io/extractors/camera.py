@@ -16,7 +16,7 @@ from iblutil.numerical import within_ranges
 from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.io.extractors.ephys_fpga import get_sync_fronts, get_sync_and_chn_map
 import ibllib.io.raw_data_loaders as raw
-from ibllib.io.extractors.video_motion import MotionAlignmentFullSession
+import ibllib.io.extractors.video_motion as vmotion
 from ibllib.io.extractors.base import (
     BaseBpodTrialsExtractor,
     BaseExtractor,
@@ -153,7 +153,8 @@ class CameraTimestampsFPGA(BaseExtractor):
         _logger.warning('Attempting to align using wheel')
 
         try:
-            motion_class = MotionAlignmentFullSession(self.session_path, self.label, behavior=False, upload=True)
+            motion_class = vmotion.MotionAlignmentFullSession(self.session_path, self.label, behavior=False,
+                                                              upload=True)
             new_times = motion_class.process()
             if not motion_class.qc_outcome:
                 raise ValueError(f'Wheel alignment failed to pass qc: {motion_class.qc}')
