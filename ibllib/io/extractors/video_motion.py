@@ -22,6 +22,7 @@ from iblutil.util import Bunch
 from ibllib.io.extractors.ephys_fpga import get_sync_fronts, get_sync_and_chn_map
 import ibllib.io.raw_data_loaders as raw
 import ibllib.io.extractors.camera as cam
+from ibllib.plots.snapshot import ReportSnapshot
 import brainbox.video as video
 import brainbox.behavior.wheel as wh
 from brainbox.singlecell import bin_spikes
@@ -400,11 +401,16 @@ class MotionAlignmentFullSession:
         self.label = label
         self.threshold = kwargs.get('threshold', 20)
         self.behavior = kwargs.get('behavior', False)
+        self.upload = kwargs.get('upload', False)
         self.twin = kwargs.get('twin', 150)
         self.nprocess = kwargs.get('nprocess', int(cpu_count() - cpu_count() / 4))
 
         self.load_data(sync=kwargs.get('sync', 'nidq'), location=kwargs.get('location', None), behavior=self.behavior)
         self.roi, self.mask = self.get_roi_mask()
+
+        if self.upload:
+            self.one = ONE(mode='remote')
+            self.eid = self.one.path2eid(self.session_path)
 
     def load_data(self, sync='nidq', location=None, behavior=False):
         def fix_keys(alf_object):
@@ -890,5 +896,14 @@ class MotionAlignmentFullSession:
         self.qc, self.qc_outcome = self.qc_shifts(self.shifts, self.shifts_filt)
 
         self.new_times = self.extract_times(self.shifts_filt, self.t_shifts)
+
+        if self.upload:
+            fig = self.plot_with_behavior() if self.behavior else self.plot_without_behavior()
+            save_fig_path = Path(self.session_path.joinpath('snapshot', 'video', 'video_wheel_alignment.png'))
+            save_fig_path.parent.mkdir(exist_ok=True, parents=True)
+            fig.savefig(save_fig_path)
+            snp = ReportSnapshot(self.session_path, self.eid, content_type='session', one=self.one)
+            snp.outputs = [save_fig_path]
+            snp.register_images(widths=['orig'])
 
         return self.new_times
