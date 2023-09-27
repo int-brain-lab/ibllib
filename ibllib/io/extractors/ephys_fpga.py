@@ -734,7 +734,7 @@ class FpgaTrials(extractors_base.BaseExtractor):
         super().__init__(*args, **kwargs)
         self.bpod2fpga = None
         self.bpod_trials = bpod_trials
-        self.frame2ttl = self.audio = self.bpod = None
+        self.frame2ttl = self.audio = self.bpod = self.settings = None
         if bpod_extractor:
             self.bpod_extractor = bpod_extractor
             self._update_var_names()
