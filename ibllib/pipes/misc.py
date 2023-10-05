@@ -9,7 +9,7 @@ import sys
 import time
 import logging
 from pathlib import Path
-from typing import Union, List
+from typing import Union, List, Callable, Any
 from inspect import signature
 import uuid
 import socket
@@ -1147,13 +1147,46 @@ class WindowsInhibitor:
     ES_CONTINUOUS = 0x80000000
     ES_SYSTEM_REQUIRED = 0x00000001
 
-    def __init__(self):
-        pass
-
-    def inhibit(self):
-        print("Preventing Windows from going to sleep")
+    @staticmethod
+    def inhibit(quiet: bool = False):
+        if quiet:
+            log.debug("Preventing Windows from going to sleep")
+        else:
+            print("Preventing Windows from going to sleep")
         ctypes.windll.kernel32.SetThreadExecutionState(WindowsInhibitor.ES_CONTINUOUS | WindowsInhibitor.ES_SYSTEM_REQUIRED)
 
-    def uninhibit(self):
-        print("Allowing Windows to go to sleep")
+    @staticmethod
+    def uninhibit(quiet: bool = False):
+        if quiet:
+            log.debug("Allowing Windows from going to sleep")
+        else:
+            print("Allowing Windows to go to sleep")
         ctypes.windll.kernel32.SetThreadExecutionState(WindowsInhibitor.ES_CONTINUOUS)
+
+
+def sleepless(func: Callable[..., Any]) -> Callable[..., Any]:
+    """
+    Decorator to ensure that the system doesn't enter sleep or idle mode during a long-running task.
+
+    This decorator wraps a function and sets the thread execution state to prevent
+    the system from entering sleep or idle mode while the decorated function is
+    running.
+
+    Parameters
+    ----------
+    func : callable
+        The function to decorate.
+
+    Returns
+    -------
+    callable
+        The decorated function.
+    """
+    def inner(*args, **kwargs) -> Any:
+        if os.name == 'nt':
+            WindowsInhibitor().inhibit(quiet=True)
+        result = func(*args, **kwargs)
+        if os.name == 'nt':
+            WindowsInhibitor().uninhibit(quiet=True)
+        return result
+    return inner
