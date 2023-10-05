@@ -1148,12 +1148,18 @@ class WindowsInhibitor:
     ES_SYSTEM_REQUIRED = 0x00000001
 
     @staticmethod
+    def _set_thread_execution_state(state: int) -> None:
+        result = ctypes.windll.kernel32.SetThreadExecutionState(state)
+        if result == 0:
+            log.error("Failed to set thread execution state.")
+
+    @staticmethod
     def inhibit(quiet: bool = False):
         if quiet:
             log.debug("Preventing Windows from going to sleep")
         else:
             print("Preventing Windows from going to sleep")
-        ctypes.windll.kernel32.SetThreadExecutionState(WindowsInhibitor.ES_CONTINUOUS | WindowsInhibitor.ES_SYSTEM_REQUIRED)
+        WindowsInhibitor._set_thread_execution_state(WindowsInhibitor.ES_CONTINUOUS | WindowsInhibitor.ES_SYSTEM_REQUIRED)
 
     @staticmethod
     def uninhibit(quiet: bool = False):
@@ -1161,7 +1167,7 @@ class WindowsInhibitor:
             log.debug("Allowing Windows from going to sleep")
         else:
             print("Allowing Windows to go to sleep")
-        ctypes.windll.kernel32.SetThreadExecutionState(WindowsInhibitor.ES_CONTINUOUS)
+        WindowsInhibitor._set_thread_execution_state(WindowsInhibitor.ES_CONTINUOUS)
 
 
 def sleepless(func: Callable[..., Any]) -> Callable[..., Any]:
