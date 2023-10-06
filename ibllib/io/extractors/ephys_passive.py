@@ -227,7 +227,7 @@ def _get_passive_spacers(session_path, sync_collection='raw_ephys_data',
                 f'trace ({int(np.size(spacer_times) / 2)})'
             )
 
-    if tmax is None:
+    if tmax is None:  # TODO THIS NEEDS CHANGING AS FOR DYNAMIC PIPELINE F2TTL slower than valve
         tmax = fttl['times'][-1]
 
     spacer_times = np.r_[spacer_times.flatten(), tmax]

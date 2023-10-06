@@ -13,7 +13,7 @@ from neuropixel import trace_header, TIP_SIZE_UM
 from ibllib import __version__ as ibllib_version
 from ibllib.pipes.ephys_alignment import EphysAlignment
 from ibllib.pipes.histology import interpolate_along_track
-from ibllib.atlas import AllenAtlas
+from iblatlas.atlas import AllenAtlas
 
 _logger = logging.getLogger(__name__)
 
@@ -56,8 +56,8 @@ class ReportSnapshotProbe(ReportSnapshot):
         """
         :param pid: probe insertion UUID from Alyx
         :param one: one instance
-        :param brain_regions: (optional) ibllib.atlas.BrainRegion object
-        :param brain_atlas: (optional) ibllib.atlas.AllenAtlas object
+        :param brain_regions: (optional) iblatlas.regions.BrainRegion object
+        :param brain_atlas: (optional) iblatlas.atlas.AllenAtlas object
         :param kwargs:
         """
         assert one

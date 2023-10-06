@@ -6,7 +6,7 @@ import pandas as pd
 from mayavi import mlab
 from atlaselectrophysiology import rendering
 
-import ibllib.atlas as atlas
+import iblatlas.atlas as atlas
 
 # the csv file is available here:
 # https://github.com/int-brain-lab/ibllib-matlab/blob/master/needles/maps/first_pass_map.csv

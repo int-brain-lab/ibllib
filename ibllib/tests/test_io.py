@@ -578,6 +578,16 @@ class TestSessionParams(unittest.TestCase):
         }
         self.assertCountEqual(expected, collections)
 
+    def test_get_collections_repeat_protocols(self):
+        tasks = dict(tasks=[
+            {'passiveChoiceWorld': {'collection': 'raw_passive_data', 'sync_label': 'bpod'}},
+            {'ephysChoiceWorld': {'collection': 'raw_behavior_data', 'sync_label': 'bpod'}},
+            {'passiveChoiceWorld': {'collection': 'raw_passive_data_bis'}}])
+        collections = session_params.get_collections(tasks)
+        self.assertEqual(set(collections['passiveChoiceWorld']), set(['raw_passive_data_bis', 'raw_passive_data']))
+        collections = session_params.get_collections(tasks, flat=True)
+        self.assertEqual(set(collections), set(['raw_passive_data_bis', 'raw_passive_data', 'raw_behavior_data']))
+
 
 class TestRawDaqLoaders(unittest.TestCase):
     """Tests for raw_daq_loaders module"""

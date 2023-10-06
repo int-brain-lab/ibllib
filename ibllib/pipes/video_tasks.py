@@ -277,7 +277,7 @@ class VideoSyncQcNidq(base_tasks.VideoTask):
 
         mp4_files = self.session_path.joinpath(self.device_collection).glob('*.mp4')
         labels = [label_from_path(x) for x in mp4_files]
-        labels = [lab for lab in labels if lab in ('left', 'right', 'body')]
+        labels = [lab for lab in labels if lab in ('left', 'right', 'body', 'belly')]
 
         kwargs = {}
         if self.sync_namespace == 'timeline':

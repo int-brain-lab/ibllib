@@ -9,7 +9,7 @@ from oneibl.one import ONE
 
 import ibllib.plots
 from iblutil.util import Bunch
-import ibllib.atlas as atlas
+import iblatlas.atlas as atlas
 from atlaselectrophysiology import rendering
 import brainbox.io.one as bbone
 

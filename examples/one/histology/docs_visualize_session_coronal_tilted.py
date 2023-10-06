@@ -10,7 +10,7 @@ environment installation guide https://github.com/int-brain-lab/iblenv
 import numpy as np
 from one.api import ONE
 
-import ibllib.atlas as atlas
+import iblatlas.atlas as atlas
 import brainbox.io.one as bbone
 
 # === Parameters section (edit) ===

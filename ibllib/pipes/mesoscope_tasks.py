@@ -36,7 +36,7 @@ import one.alf.exceptions as alferr
 
 from ibllib.pipes import base_tasks
 from ibllib.io.extractors import mesoscope
-from ibllib.atlas import ALLEN_CCF_LANDMARKS_MLAPDV_UM, MRITorontoAtlas
+from iblatlas.atlas import ALLEN_CCF_LANDMARKS_MLAPDV_UM, MRITorontoAtlas
 
 
 _logger = logging.getLogger(__name__)
