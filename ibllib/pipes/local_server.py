@@ -149,7 +149,7 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
             if pipe is not None:
                 pipes.append(pipe)
         except Exception:
-            _logger.error(f'Failed to register session %s:\n%s', session_path.relative_to(root_path), traceback.format_exc())
+            _logger.error('Failed to register session %s:\n%s', session_path.relative_to(root_path), traceback.format_exc())
             continue
 
     return pipes, all_datasets
