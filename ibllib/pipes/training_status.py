@@ -475,7 +475,7 @@ def get_data_collection(session_path):
         collections = [pipeline.tasks.get(task).kwargs['collection'] for task in trials_tasks]
         if len(collections) == 1 and collections[0] == 'raw_behavior_data':
             alf_collections = ['alf']
-        elif all(['raw_task_data' in c for c in collections]):
+        elif all('raw_task_data' in c for c in collections):
             alf_collections = [f'alf/task_{c[-2:]}' for c in collections]
         else:
             alf_collections = None

@@ -152,7 +152,7 @@ def make_pipeline(session_path, **pkwargs):
     # Syncing tasks
     (sync, sync_args), = acquisition_description['sync'].items()
     sync_args['sync_collection'] = sync_args.pop('collection')  # rename the key so it matches task run arguments
-    sync_args['sync_ext'] = sync_args.pop('extension')
+    sync_args['sync_ext'] = sync_args.pop('extension', None)
     sync_args['sync_namespace'] = sync_args.pop('acquisition_software', None)
     sync_kwargs = {'sync': sync, **sync_args}
     sync_tasks = []

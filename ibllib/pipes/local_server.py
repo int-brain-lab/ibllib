@@ -109,10 +109,7 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
     list of dicts
         A list of any datasets registered (only for legacy sessions)
     """
-    for _ in range(10):
-        _logger.info('#' * 110)
     _logger.info('Start looking for new sessions...')
-    _logger.info('#' * 110)
     if not one:
         one = ONE(cache_rest=None)
     rc = IBLRegistrationClient(one=one)
@@ -152,8 +149,7 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
             if pipe is not None:
                 pipes.append(pipe)
         except Exception:
-            _logger.error(traceback.format_exc())
-            _logger.warning(f'Creating session / registering raw datasets {session_path} errored')
+            _logger.error(f'Failed to register session %s:\n%s', session_path.relative_to(root_path), traceback.format_exc())
             continue
 
     return pipes, all_datasets
