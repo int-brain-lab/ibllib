@@ -510,7 +510,7 @@ def prepare_experiment(session_path, acquisition_description=None, local=None, r
         # won't be preserved by create_basic_transfer_params by default
         remote = False if remote is False else params['REMOTE_DATA_FOLDER_PATH']
 
-    # THis is in the docstring but still, if the session Path is absolute, we need to make it relative
+    # This is in the docstring but still, if the session Path is absolute, we need to make it relative
     if Path(session_path).is_absolute():
         session_path = Path(*session_path.parts[-3:])
 

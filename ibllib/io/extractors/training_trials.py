@@ -682,8 +682,8 @@ class TrialsTable(BaseBpodTrialsExtractor):
     """
     save_names = ('_ibl_trials.table.pqt', None, None, '_ibl_wheel.timestamps.npy', '_ibl_wheel.position.npy',
                   '_ibl_wheelMoves.intervals.npy', '_ibl_wheelMoves.peakAmplitude.npy', None, None)
-    var_names = ('table', 'stimOff_times', 'stimFreeze_times', 'wheel_timestamps', 'wheel_position', 'wheel_moves_intervals',
-                 'wheel_moves_peak_amplitude', 'peakVelocity_times', 'is_final_movement')
+    var_names = ('table', 'stimOff_times', 'stimFreeze_times', 'wheel_timestamps', 'wheel_position', 'wheelMoves_intervals',
+                 'wheelMoves_peakAmplitude', 'peakVelocity_times', 'is_final_movement')
 
     def _extract(self, extractor_classes=None, **kwargs):
         base = [Intervals, GoCueTimes, ResponseTimes, Choice, StimOnOffFreezeTimes, ContrastLR, FeedbackTimes, FeedbackType,
@@ -703,16 +703,16 @@ class TrainingTrials(BaseBpodTrialsExtractor):
                   '_ibl_wheelMoves.intervals.npy', '_ibl_wheelMoves.peakAmplitude.npy', None, None, None, None, None)
     var_names = ('repNum', 'goCueTrigger_times', 'stimOnTrigger_times', 'itiIn_times', 'stimOffTrigger_times',
                  'stimFreezeTrigger_times', 'errorCueTrigger_times', 'table', 'stimOff_times', 'stimFreeze_times',
-                 'wheel_timestamps', 'wheel_position', 'wheel_moves_intervals', 'wheel_moves_peak_amplitude',
+                 'wheel_timestamps', 'wheel_position', 'wheelMoves_intervals', 'wheelMoves_peakAmplitude',
                  'peakVelocity_times', 'is_final_movement', 'phase', 'position', 'quiescence')
 
-    def _extract(self):
+    def _extract(self) -> dict:
         base = [RepNum, GoCueTriggerTimes, StimOnTriggerTimes, ItiInTimes, StimOffTriggerTimes, StimFreezeTriggerTimes,
                 ErrorCueTriggerTimes, TrialsTable, PhasePosQuiescence]
         out, _ = run_extractor_classes(
             base, session_path=self.session_path, bpod_trials=self.bpod_trials, settings=self.settings, save=False,
             task_collection=self.task_collection)
-        return tuple(out.pop(x) for x in self.var_names)
+        return {k: out[k] for k in self.var_names}
 
 
 def extract_all(session_path, save=False, bpod_trials=None, settings=None, task_collection='raw_behavior_data', save_path=None):
