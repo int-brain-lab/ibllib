@@ -95,12 +95,12 @@ class TrialsTableBiased(BaseBpodTrialsExtractor):
         intervals, goCue_times, response_times, choice, stimOn_times, contrastLeft, contrastRight,
         feedback_times, feedbackType, rewardVolume, probabilityLeft, firstMovement_times
     Additionally extracts the following wheel data:
-        wheel_timestamps, wheel_position, wheel_moves_intervals, wheel_moves_peak_amplitude
+        wheel_timestamps, wheel_position, wheelMoves_intervals, wheelMoves_peakAmplitude
     """
     save_names = ('_ibl_trials.table.pqt', None, None, '_ibl_wheel.timestamps.npy', '_ibl_wheel.position.npy',
                   '_ibl_wheelMoves.intervals.npy', '_ibl_wheelMoves.peakAmplitude.npy', None, None)
-    var_names = ('table', 'stimOff_times', 'stimFreeze_times', 'wheel_timestamps', 'wheel_position', 'wheel_moves_intervals',
-                 'wheel_moves_peak_amplitude', 'peakVelocity_times', 'is_final_movement')
+    var_names = ('table', 'stimOff_times', 'stimFreeze_times', 'wheel_timestamps', 'wheel_position', 'wheelMoves_intervals',
+                 'wheelMoves_peakAmplitude', 'peakVelocity_times', 'is_final_movement')
 
     def _extract(self, extractor_classes=None, **kwargs):
         base = [Intervals, GoCueTimes, ResponseTimes, Choice, StimOnOffFreezeTimes, ContrastLR, FeedbackTimes, FeedbackType,
@@ -120,13 +120,13 @@ class TrialsTableEphys(BaseBpodTrialsExtractor):
         intervals, goCue_times, response_times, choice, stimOn_times, contrastLeft, contrastRight,
         feedback_times, feedbackType, rewardVolume, probabilityLeft, firstMovement_times
     Additionally extracts the following wheel data:
-        wheel_timestamps, wheel_position, wheel_moves_intervals, wheel_moves_peak_amplitude
+        wheel_timestamps, wheel_position, wheelMoves_intervals, wheelMoves_peakAmplitude
     """
     save_names = ('_ibl_trials.table.pqt', None, None, '_ibl_wheel.timestamps.npy', '_ibl_wheel.position.npy',
                   '_ibl_wheelMoves.intervals.npy', '_ibl_wheelMoves.peakAmplitude.npy', None,
                   None, None, None, '_ibl_trials.quiescencePeriod.npy')
-    var_names = ('table', 'stimOff_times', 'stimFreeze_times', 'wheel_timestamps', 'wheel_position', 'wheel_moves_intervals',
-                 'wheel_moves_peak_amplitude', 'peakVelocity_times', 'is_final_movement',
+    var_names = ('table', 'stimOff_times', 'stimFreeze_times', 'wheel_timestamps', 'wheel_position', 'wheelMoves_intervals',
+                 'wheelMoves_peakAmplitude', 'peakVelocity_times', 'is_final_movement',
                  'phase', 'position', 'quiescence')
 
     def _extract(self, extractor_classes=None, **kwargs):
@@ -154,16 +154,16 @@ class BiasedTrials(BaseBpodTrialsExtractor):
                   None, None, '_ibl_trials.quiescencePeriod.npy')
     var_names = ('goCueTrigger_times', 'stimOnTrigger_times', 'itiIn_times', 'stimOffTrigger_times', 'stimFreezeTrigger_times',
                  'errorCueTrigger_times', 'table', 'stimOff_times', 'stimFreeze_times', 'wheel_timestamps', 'wheel_position',
-                 'wheel_moves_intervals', 'wheel_moves_peak_amplitude', 'peakVelocity_times', 'is_final_movement', 'included',
+                 'wheelMoves_intervals', 'wheelMoves_peakAmplitude', 'peakVelocity_times', 'is_final_movement', 'included',
                  'phase', 'position', 'quiescence')
 
-    def _extract(self, extractor_classes=None, **kwargs):
+    def _extract(self, extractor_classes=None, **kwargs) -> dict:
         base = [GoCueTriggerTimes, StimOnTriggerTimes, ItiInTimes, StimOffTriggerTimes, StimFreezeTriggerTimes,
                 ErrorCueTriggerTimes, TrialsTableBiased, IncludedTrials, PhasePosQuiescence]
         # Exclude from trials table
         out, _ = run_extractor_classes(base, session_path=self.session_path, bpod_trials=self.bpod_trials, settings=self.settings,
                                        save=False, task_collection=self.task_collection)
-        return tuple(out.pop(x) for x in self.var_names)
+        return {k: out[k] for k in self.var_names}
 
 
 class EphysTrials(BaseBpodTrialsExtractor):
@@ -177,16 +177,16 @@ class EphysTrials(BaseBpodTrialsExtractor):
                   '_ibl_trials.included.npy', None, None, '_ibl_trials.quiescencePeriod.npy')
     var_names = ('goCueTrigger_times', 'stimOnTrigger_times', 'itiIn_times', 'stimOffTrigger_times', 'stimFreezeTrigger_times',
                  'errorCueTrigger_times', 'table', 'stimOff_times', 'stimFreeze_times', 'wheel_timestamps', 'wheel_position',
-                 'wheel_moves_intervals', 'wheel_moves_peak_amplitude', 'peakVelocity_times', 'is_final_movement', 'included',
+                 'wheelMoves_intervals', 'wheelMoves_peakAmplitude', 'peakVelocity_times', 'is_final_movement', 'included',
                  'phase', 'position', 'quiescence')
 
-    def _extract(self, extractor_classes=None, **kwargs):
+    def _extract(self, extractor_classes=None, **kwargs) -> dict:
         base = [GoCueTriggerTimes, StimOnTriggerTimes, ItiInTimes, StimOffTriggerTimes, StimFreezeTriggerTimes,
                 ErrorCueTriggerTimes, TrialsTableEphys, IncludedTrials, PhasePosQuiescence]
         # Exclude from trials table
         out, _ = run_extractor_classes(base, session_path=self.session_path, bpod_trials=self.bpod_trials, settings=self.settings,
                                        save=False, task_collection=self.task_collection)
-        return tuple(out.pop(x) for x in self.var_names)
+        return {k: out[k] for k in self.var_names}
 
 
 def extract_all(session_path, save=False, bpod_trials=False, settings=False, extra_classes=None,

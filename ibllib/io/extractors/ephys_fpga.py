@@ -17,7 +17,7 @@ from iblutil.util import Bunch
 from iblutil.spacer import Spacer
 
 import ibllib.exceptions as err
-from ibllib.io import raw_data_loaders, session_params
+from ibllib.io import raw_data_loaders as raw, session_params
 from ibllib.io.extractors.bpod_trials import extract_all as bpod_extract_all
 import ibllib.io.extractors.base as extractors_base
 from ibllib.io.extractors.training_wheel import extract_wheel_moves
@@ -554,7 +554,7 @@ def extract_behaviour_sync(sync, chmap=None, display=False, bpod_trials=None, tm
         ax.set_yticks([0, 1, 2, 3, 4, 5])
         ax.set_ylim([0, 5])
 
-    return trials
+    return trials, frame2ttl, audio, bpod
 
 
 def extract_sync(session_path, overwrite=False, ephys_files=None, namespace='spikeglx'):
@@ -734,6 +734,7 @@ class FpgaTrials(extractors_base.BaseExtractor):
         super().__init__(*args, **kwargs)
         self.bpod2fpga = None
         self.bpod_trials = bpod_trials
+        self.frame2ttl = self.audio = self.bpod = self.settings = None
         if bpod_extractor:
             self.bpod_extractor = bpod_extractor
             self._update_var_names()
@@ -750,14 +751,37 @@ class FpgaTrials(extractors_base.BaseExtractor):
             A set of Bpod trials fields to keep.
         bpod_rsync_fields : tuple
             A set of Bpod trials fields to sync to the DAQ times.
-
-        TODO Turn into property getter; requires ensuring the output field are the same for legacy
         """
         if self.bpod_extractor:
-            self.var_names = self.bpod_extractor.var_names
-            self.save_names = self.bpod_extractor.save_names
-        self.bpod_rsync_fields = bpod_rsync_fields or self._time_fields(self.bpod_extractor.var_names)
-        self.bpod_fields = bpod_fields or [x for x in self.bpod_extractor.var_names if x not in self.bpod_rsync_fields]
+            for var_name, save_name in zip(self.bpod_extractor.var_names, self.bpod_extractor.save_names):
+                if var_name not in self.var_names:
+                    self.var_names += (var_name,)
+                    self.save_names += (save_name,)
+
+            # self.var_names = self.bpod_extractor.var_names
+            # self.save_names = self.bpod_extractor.save_names
+            self.settings = self.bpod_extractor.settings  # This is used by the TaskQC
+            self.bpod_rsync_fields = bpod_rsync_fields
+            if self.bpod_rsync_fields is None:
+                self.bpod_rsync_fields = tuple(self._time_fields(self.bpod_extractor.var_names))
+                if 'table' in self.bpod_extractor.var_names:
+                    if not self.bpod_trials:
+                        self.bpod_trials = self.bpod_extractor.extract(save=False)
+                    table_keys = alfio.AlfBunch.from_df(self.bpod_trials['table']).keys()
+                    self.bpod_rsync_fields += tuple(self._time_fields(table_keys))
+        elif bpod_rsync_fields:
+            self.bpod_rsync_fields = bpod_rsync_fields
+        excluded = (*self.bpod_rsync_fields, 'table')
+        if bpod_fields:
+            assert not set(self.bpod_fields).intersection(excluded), 'bpod_fields must not also be bpod_rsync_fields'
+            self.bpod_fields = bpod_fields
+        elif self.bpod_extractor:
+            self.bpod_fields = tuple(x for x in self.bpod_extractor.var_names if x not in excluded)
+            if 'table' in self.bpod_extractor.var_names:
+                if not self.bpod_trials:
+                    self.bpod_trials = self.bpod_extractor.extract(save=False)
+                table_keys = alfio.AlfBunch.from_df(self.bpod_trials['table']).keys()
+                self.bpod_fields += (*[x for x in table_keys if x not in excluded], self.sync_field + '_bpod')
 
     @staticmethod
     def _time_fields(trials_attr) -> set:
@@ -778,7 +802,8 @@ class FpgaTrials(extractors_base.BaseExtractor):
         pattern = re.compile(fr'^[_\w]*({"|".join(FIELDS)})[_\w]*$')
         return set(filter(pattern.match, trials_attr))
 
-    def _extract(self, sync=None, chmap=None, sync_collection='raw_ephys_data', task_collection='raw_behavior_data', **kwargs):
+    def _extract(self, sync=None, chmap=None, sync_collection='raw_ephys_data',
+                 task_collection='raw_behavior_data', **kwargs) -> dict:
         """Extracts ephys trials by combining Bpod and FPGA sync pulses"""
         # extract the behaviour data from bpod
         if sync is None or chmap is None:
@@ -804,7 +829,8 @@ class FpgaTrials(extractors_base.BaseExtractor):
         else:
             tmin = tmax = None
 
-        fpga_trials = extract_behaviour_sync(
+        # Store the cleaned frame2ttl, audio, and bpod pulses as this will be used for QC
+        fpga_trials, self.frame2ttl, self.audio, self.bpod = extract_behaviour_sync(
             sync=sync, chmap=chmap, bpod_trials=self.bpod_trials, tmin=tmin, tmax=tmax)
         assert self.sync_field in self.bpod_trials and self.sync_field in fpga_trials
         self.bpod_trials[f'{self.sync_field}_bpod'] = np.copy(self.bpod_trials[self.sync_field])
@@ -827,18 +853,20 @@ class FpgaTrials(extractors_base.BaseExtractor):
         # extract the wheel data
         wheel, moves = self.get_wheel_positions(sync=sync, chmap=chmap, tmin=tmin, tmax=tmax)
         from ibllib.io.extractors.training_wheel import extract_first_movement_times
-        settings = raw_data_loaders.load_settings(session_path=self.session_path, task_collection=task_collection)
-        min_qt = settings.get('QUIESCENT_PERIOD', None)
+        if not self.settings:
+            self.settings = raw.load_settings(session_path=self.session_path, task_collection=task_collection)
+        min_qt = self.settings.get('QUIESCENT_PERIOD', None)
         first_move_onsets, *_ = extract_first_movement_times(moves, out, min_qt=min_qt)
         out.update({'firstMovement_times': first_move_onsets})
         # Re-create trials table
         trials_table = alfio.AlfBunch({x: out.pop(x) for x in table_columns})
         out['table'] = trials_table.to_df()
 
+        out.update({f'wheel_{k}': v for k, v in wheel.items()})
+        out.update({f'wheelMoves_{k}': v for k, v in moves.items()})
         out = {k: out[k] for k in self.var_names if k in out}  # Reorder output
-        assert tuple(filter(lambda x: 'wheel' not in x, self.var_names)) == tuple(out.keys())
-        return [out[k] for k in out] + [wheel['timestamps'], wheel['position'],
-                                        moves['intervals'], moves['peakAmplitude']]
+        assert self.var_names == tuple(out.keys())
+        return out
 
     def get_wheel_positions(self, *args, **kwargs):
         """Extract wheel and wheelMoves objects.
@@ -882,7 +910,7 @@ def extract_all(session_path, sync_collection='raw_ephys_data', save=True, save_
         If save is True, a list of file paths to the extracted data.
     """
     # Extract Bpod trials
-    bpod_raw = raw_data_loaders.load_data(session_path, task_collection=task_collection)
+    bpod_raw = raw.load_data(session_path, task_collection=task_collection)
     assert bpod_raw is not None, 'No task trials data in raw_behavior_data - Exit'
     bpod_trials, *_ = bpod_extract_all(
         session_path=session_path, bpod_trials=bpod_raw, task_collection=task_collection,
