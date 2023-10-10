@@ -455,8 +455,8 @@ class MotionAlignmentFullSession:
         self.frate = round(1 / np.nanmedian(np.diff(self.ttl_times)))
 
         try:
-            self.trials = alfio.load_file_content(next(alf_path.glob('_ibl_trials.table.*.pqt')))
-            self.dlc = alfio.load_file_content(next(alf_path.glob(f'_ibl_{self.label}Camera.dlc.*.pqt')))
+            self.trials = alfio.load_file_content(next(alf_path.glob('_ibl_trials.table*.pqt')))
+            self.dlc = alfio.load_file_content(next(alf_path.glob(f'_ibl_{self.label}Camera.dlc*.pqt')))
             self.dlc = likelihood_threshold(self.dlc)
             self.behavior = True
         except (ALFObjectNotFound, StopIteration):
