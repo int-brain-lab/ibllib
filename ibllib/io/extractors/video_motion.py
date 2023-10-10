@@ -4,21 +4,32 @@ in order to check timestamp alignment.
 """
 import matplotlib
 import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
 from matplotlib.widgets import RectangleSelector
 import numpy as np
-from scipy import signal
+from scipy import signal, ndimage, interpolate
 import cv2
 from itertools import cycle
 import matplotlib.animation as animation
 import logging
 from pathlib import Path
+from joblib import Parallel, delayed, cpu_count
 
+from neurodsp.utils import WindowGenerator
 from one.api import ONE
 import ibllib.io.video as vidio
 from iblutil.util import Bunch
+from ibllib.io.extractors.ephys_fpga import get_sync_fronts, get_sync_and_chn_map
+import ibllib.io.raw_data_loaders as raw
+import ibllib.io.extractors.camera as cam
+from ibllib.plots.snapshot import ReportSnapshot
 import brainbox.video as video
 import brainbox.behavior.wheel as wh
+from brainbox.singlecell import bin_spikes
+from brainbox.behavior.dlc import likelihood_threshold, get_speed
+from brainbox.task.trials import find_trial_ids
 import one.alf.io as alfio
+from one.alf.exceptions import ALFObjectNotFound
 from one.alf.spec import is_session_path, is_uuid_string
 
 
@@ -383,3 +394,520 @@ class MotionAlignment:
             anim.save(str(filename), writer=writer)
         else:
             plt.show()
+
+
+class MotionAlignmentFullSession:
+    def __init__(self, session_path, label, **kwargs):
+        self.session_path = session_path
+        self.label = label
+        self.threshold = kwargs.get('threshold', 20)
+        self.upload = kwargs.get('upload', False)
+        self.twin = kwargs.get('twin', 150)
+        self.nprocess = kwargs.get('nprocess', int(cpu_count() - cpu_count() / 4))
+
+        self.load_data(sync=kwargs.get('sync', 'nidq'), location=kwargs.get('location', None))
+        self.roi, self.mask = self.get_roi_mask()
+
+        if self.upload:
+            self.one = ONE(mode='remote')
+            self.one.alyx.authenticate()
+            self.eid = self.one.path2eid(self.session_path)
+
+    def load_data(self, sync='nidq', location=None):
+        def fix_keys(alf_object):
+            ob = Bunch()
+            for key in alf_object.keys():
+                vals = alf_object[key]
+                ob[key.split('.')[0]] = vals
+            return ob
+
+        alf_path = self.session_path.joinpath('alf')
+        wheel = (fix_keys(alfio.load_object(alf_path, 'wheel')) if location == 'SDSC'
+                 else alfio.load_object(alf_path, 'wheel'))
+        self.wheel_timestamps = wheel.timestamps
+        wheel_pos, self.wheel_time = wh.interpolate_position(wheel.timestamps, wheel.position, freq=1000)
+        self.wheel_vel, _ = wh.velocity_filtered(wheel_pos, 1000)
+        self.camera_times = alfio.load_file_content(next(alf_path.glob(f'_ibl_{self.label}Camera.times*.npy')))
+        self.camera_path = str(next(self.session_path.joinpath('raw_video_data').glob(
+            f'_iblrig_{self.label}Camera.raw*.mp4')))
+        self.camera_meta = vidio.get_video_meta(self.camera_path)
+
+        # TODO should read in the description file to get the correct sync location
+        if sync == 'nidq':
+            sync, chmap = get_sync_and_chn_map(self.session_path, sync_collection='raw_ephys_data')
+            sr = get_sync_fronts(sync, chmap[f'{self.label}_camera'])
+            self.ttls = sr.times[::2]
+        else:
+            cam_extractor = cam.CameraTimestampsBpod(session_path=self.session_path)
+            cam_extractor.bpod_trials = raw.load_data(self.session_path, task_collection='raw_behavior_data')
+            self.ttls = cam_extractor._times_from_bpod()
+
+        self.tdiff = self.ttls.size - self.camera_meta['length']
+
+        if self.tdiff < 0:
+            self.ttl_times = self.ttls
+            self.times = np.r_[self.ttl_times, np.full((np.abs(self.tdiff)), np.nan)]
+            self.short_flag = True
+        elif self.tdiff > 0:
+            self.ttl_times = self.ttls[self.tdiff:]
+            self.times = self.ttls[self.tdiff:]
+            self.short_flag = False
+
+        self.frate = round(1 / np.nanmedian(np.diff(self.ttl_times)))
+
+        try:
+            self.trials = alfio.load_file_content(next(alf_path.glob('_ibl_trials.table*.pqt')))
+            self.dlc = alfio.load_file_content(next(alf_path.glob(f'_ibl_{self.label}Camera.dlc*.pqt')))
+            self.dlc = likelihood_threshold(self.dlc)
+            self.behavior = True
+        except (ALFObjectNotFound, StopIteration):
+            self.behavior = False
+
+        self.frame_example = vidio.get_video_frames_preload(self.camera_path, np.arange(10, 11), mask=np.s_[:, :, 0])
+
+    def get_roi_mask(self):
+
+        if self.label == 'right':
+            roi = ((450, 512), (120, 200))
+        else:
+            roi = ((900, 1024), (850, 1010))
+        roi_mask = (*[slice(*r) for r in roi], 0)
+
+        return roi, roi_mask
+
+    def find_contaminated_frames(self, video_frames, thresold=20, normalise=True):
+        high = np.zeros((video_frames.shape[0]))
+        for idx, frame in enumerate(video_frames):
+            ret, _ = cv2.threshold(cv2.GaussianBlur(frame, (5, 5), 0), 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            high[idx] = ret
+
+        if normalise:
+            high -= np.min(high)
+
+        contaminated_frames = np.where(high > thresold)[0]
+
+        return contaminated_frames
+
+    def compute_motion_energy(self, first, last, wg, iw):
+
+        if iw == wg.nwin - 1:
+            return
+
+        cap = cv2.VideoCapture(self.camera_path)
+        frames = vidio.get_video_frames_preload(cap, np.arange(first, last), mask=self.mask)
+        idx = self.find_contaminated_frames(frames, self.threshold)
+
+        if len(idx) != 0:
+
+            before_status = False
+            after_status = False
+
+            counter = 0
+            n_frames = 200
+            while np.any(idx == 0) and counter < 20 and iw != 0:
+                n_before_offset = (counter + 1) * n_frames
+                first -= n_frames
+                extra_frames = vidio.get_video_frames_preload(cap, frame_numbers=np.arange(first - n_frames, first),
+                                                              mask=self.mask)
+                frames = np.concatenate([extra_frames, frames], axis=0)
+
+                idx = self.find_contaminated_frames(frames, self.threshold)
+                before_status = True
+                counter += 1
+            if counter > 0:
+                print(f'In before: {counter}')
+
+            counter = 0
+            while np.any(idx == frames.shape[0] - 1) and counter < 20 and iw != wg.nwin - 1:
+                n_after_offset = (counter + 1) * n_frames
+                last += n_frames
+                extra_frames = vidio.get_video_frames_preload(cap, frame_numbers=np.arange(last, last + n_frames),
+                                                              mask=self.mask)
+                frames = np.concatenate([frames, extra_frames], axis=0)
+                idx = self.find_contaminated_frames(frames, self.threshold)
+                after_status = True
+                counter += 1
+
+            if counter > 0:
+                print(f'In after: {counter}')
+
+            intervals = np.split(idx, np.where(np.diff(idx) != 1)[0] + 1)
+            for ints in intervals:
+                if len(ints) > 0 and ints[0] == 0:
+                    ints = ints[1:]
+                if len(ints) > 0 and ints[-1] == frames.shape[0] - 1:
+                    ints = ints[:-1]
+                th_all = np.zeros_like(frames[0])
+                for idx in ints:
+                    img = np.copy(frames[idx])
+                    blur = cv2.GaussianBlur(img, (5, 5), 0)
+                    ret, th = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+                    th = cv2.GaussianBlur(th, (5, 5), 10)
+                    th_all += th
+                vals = np.mean(np.dstack([frames[ints[0] - 1], frames[ints[-1] + 1]]), axis=-1)
+                for idx in ints:
+                    img = frames[idx]
+                    img[th_all > 0] = vals[th_all > 0]
+
+            if before_status:
+                frames = frames[n_before_offset:]
+            if after_status:
+                frames = frames[:(-1 * n_after_offset)]
+
+        frame_me, _ = video.motion_energy(frames, diff=2, normalize=False)
+
+        cap.release()
+
+        return frame_me[2:]
+
+    def compute_shifts(self, times, me, first, last, iw, wg):
+
+        if iw == wg.nwin - 1:
+            return np.nan, np.nan
+        t_first = times[first]
+        t_last = times[last]
+        if np.isnan(t_last) and np.isnan(t_first):
+            return np.nan, np.nan
+        elif np.isnan(t_last):
+            t_last = times[np.where(~np.isnan(times))[0][-1]]
+
+        mask = np.logical_and(times >= t_first, times <= t_last)
+        align_me = me[np.where(mask)[0]]
+        align_me = (align_me - np.nanmin(align_me)) / (np.nanmax(align_me) - np.nanmin(align_me))
+
+        # Find closest timepoints in wheel that match the camera times
+        wh_mask = np.logical_and(self.wheel_time >= t_first, self.wheel_time <= t_last)
+        if np.sum(wh_mask) == 0:
+            return np.nan, np.nan
+        xs = np.searchsorted(self.wheel_time[wh_mask], times[mask])
+        xs[xs == np.sum(wh_mask)] = np.sum(wh_mask) - 1
+        # Convert to normalized speed
+        vs = np.abs(self.wheel_vel[wh_mask][xs])
+        vs = (vs - np.min(vs)) / (np.max(vs) - np.min(vs))
+
+        isnan = np.isnan(align_me)
+
+        if np.sum(isnan) > 0:
+            where_nan = np.where(isnan)[0]
+            assert where_nan[0] == 0
+            assert where_nan[-1] == np.sum(isnan) - 1
+
+        if np.all(isnan):
+            return np.nan, np.nan
+
+        xcorr = signal.correlate(align_me[~isnan], vs[~isnan])
+        shift = np.nanargmax(xcorr) - align_me[~isnan].size + 2
+
+        return shift, t_first + (t_last - t_first) / 2
+
+    def clean_shifts(self, x, n=1):
+        y = x.copy()
+        dy = np.diff(y, prepend=y[0])
+        while True:
+            pos = np.where(dy == 1)[0] if n == 1 else np.where(dy > 2)[0]
+            # added frames: this doesn't make sense and this is noise
+            if pos.size == 0:
+                break
+            neg = np.where(dy == -1)[0] if n == 1 else np.where(dy < -2)[0]
+
+            if len(pos) > len(neg):
+                neg = np.append(neg, dy.size - 1)
+
+            iss = np.minimum(np.searchsorted(neg, pos), neg.size - 1)
+            imin = np.argmin(np.minimum(np.abs(pos - neg[iss - 1]), np.abs(pos - neg[iss])))
+
+            idx = np.max([0, iss[imin] - 1])
+            ineg = neg[idx:iss[imin] + 1]
+            ineg = ineg[np.argmin(np.abs(pos[imin] - ineg))]
+            dy[pos[imin]] = 0
+            dy[ineg] = 0
+
+        return np.cumsum(dy) + y[0]
+
+    def qc_shifts(self, shifts, shifts_filt):
+
+        ttl_per = (np.abs(self.tdiff) / self.camera_meta['length']) * 100 if self.tdiff < 0 else 0
+        nan_per = (np.sum(np.isnan(shifts_filt)) / shifts_filt.size) * 100
+        shifts_sum = np.where(np.abs(np.diff(shifts)) > 10)[0].size
+        shifts_filt_sum = np.where(np.abs(np.diff(shifts_filt)) > 1)[0].size
+
+        qc = dict()
+        qc['ttl_per'] = ttl_per
+        qc['nan_per'] = nan_per
+        qc['shifts_sum'] = shifts_sum
+        qc['shifts_filt_sum'] = shifts_filt_sum
+
+        qc_outcome = True
+        # If more than 10% of ttls are missing we don't get new times
+        if ttl_per > 10:
+            qc_outcome = False
+        # If too many of the shifts are nans it means the alignment is not accurate
+        if nan_per > 40:
+            qc_outcome = False
+        # If there are too many artefacts could be errors
+        if shifts_sum > 60:
+            qc_outcome = False
+        # If there are jumps > 1 in the filtered shifts then there is a problem
+        if shifts_filt_sum > 0:
+            qc_outcome = False
+
+        return qc, qc_outcome
+
+    def extract_times(self, shifts_filt, t_shifts):
+
+        t_new = t_shifts - (shifts_filt * 1 / self.frate)
+        fcn = interpolate.interp1d(t_shifts, t_new, fill_value="extrapolate")
+        new_times = fcn(self.ttl_times)
+
+        if self.tdiff < 0:
+            to_app = (np.arange(np.abs(self.tdiff), ) + 1) / self.frate + new_times[-1]
+            new_times = np.r_[new_times, to_app]
+
+        return new_times
+
+    @staticmethod
+    def single_cluster_raster(spike_times, events, trial_idx, dividers, colors, labels, weights=None, fr=True,
+                              norm=False,
+                              axs=None):
+        pre_time = 0.4
+        post_time = 1
+        raster_bin = 0.01
+        psth_bin = 0.05
+        raster, t_raster = bin_spikes(
+            spike_times, events, pre_time=pre_time, post_time=post_time, bin_size=raster_bin, weights=weights)
+        psth, t_psth = bin_spikes(
+            spike_times, events, pre_time=pre_time, post_time=post_time, bin_size=psth_bin, weights=weights)
+
+        if fr:
+            psth = psth / psth_bin
+
+        if norm:
+            psth = psth - np.repeat(psth[:, 0][:, np.newaxis], psth.shape[1], axis=1)
+            raster = raster - np.repeat(raster[:, 0][:, np.newaxis], raster.shape[1], axis=1)
+
+        dividers = [0] + dividers + [len(trial_idx)]
+        if axs is None:
+            fig, axs = plt.subplots(2, 1, figsize=(4, 6), gridspec_kw={'height_ratios': [1, 3], 'hspace': 0},
+                                    sharex=True)
+        else:
+            fig = axs[0].get_figure()
+
+        label, lidx = np.unique(labels, return_index=True)
+        label_pos = []
+        for lab, lid in zip(label, lidx):
+            idx = np.where(np.array(labels) == lab)[0]
+            for iD in range(len(idx)):
+                if iD == 0:
+                    t_ids = trial_idx[dividers[idx[iD]] + 1:dividers[idx[iD] + 1] + 1]
+                    t_ints = dividers[idx[iD] + 1] - dividers[idx[iD]]
+                else:
+                    t_ids = np.r_[t_ids, trial_idx[dividers[idx[iD]] + 1:dividers[idx[iD] + 1] + 1]]
+                    t_ints = np.r_[t_ints, dividers[idx[iD] + 1] - dividers[idx[iD]]]
+
+            psth_div = np.nanmean(psth[t_ids], axis=0)
+            std_div = np.nanstd(psth[t_ids], axis=0) / np.sqrt(len(t_ids))
+
+            axs[0].fill_between(t_psth, psth_div - std_div,
+                                psth_div + std_div, alpha=0.4, color=colors[lid])
+            axs[0].plot(t_psth, psth_div, alpha=1, color=colors[lid])
+
+            lab_max = idx[np.argmax(t_ints)]
+            label_pos.append((dividers[lab_max + 1] - dividers[lab_max]) / 2 + dividers[lab_max])
+
+        axs[1].imshow(raster[trial_idx], cmap='binary', origin='lower',
+                      extent=[np.min(t_raster), np.max(t_raster), 0, len(trial_idx)], aspect='auto')
+
+        width = raster_bin * 4
+        for iD in range(len(dividers) - 1):
+            axs[1].fill_between([post_time + raster_bin / 2, post_time + raster_bin / 2 + width],
+                                [dividers[iD + 1], dividers[iD + 1]], [dividers[iD], dividers[iD]], color=colors[iD])
+
+        axs[1].set_xlim([-1 * pre_time, post_time + raster_bin / 2 + width])
+        secax = axs[1].secondary_yaxis('right')
+
+        secax.set_yticks(label_pos)
+        secax.set_yticklabels(label, rotation=90,
+                              rotation_mode='anchor', ha='center')
+        for ic, c in enumerate(np.array(colors)[lidx]):
+            secax.get_yticklabels()[ic].set_color(c)
+
+        axs[0].axvline(0, *axs[0].get_ylim(), c='k', ls='--', zorder=10)  # TODO this doesn't always work
+        axs[1].axvline(0, *axs[1].get_ylim(), c='k', ls='--', zorder=10)
+
+        return fig, axs
+
+    def plot_with_behavior(self):
+
+        self.dlc = likelihood_threshold(self.dlc)
+        trial_idx, dividers = find_trial_ids(self.trials, sort='side')
+        feature_ext = get_speed(self.dlc, self.camera_times, self.label, feature='paw_r')
+        feature_new = get_speed(self.dlc, self.new_times, self.label, feature='paw_r')
+
+        fig = plt.figure()
+        fig.set_size_inches(15, 9)
+        gs = gridspec.GridSpec(1, 5, figure=fig, width_ratios=[4, 1, 1, 1, 3], wspace=0.3, hspace=0.5)
+        gs0 = gridspec.GridSpecFromSubplotSpec(3, 1, subplot_spec=gs[0, 0])
+        ax01 = fig.add_subplot(gs0[0, 0])
+        ax02 = fig.add_subplot(gs0[1, 0])
+        ax03 = fig.add_subplot(gs0[2, 0])
+        gs1 = gridspec.GridSpecFromSubplotSpec(2, 1, subplot_spec=gs[0, 1], height_ratios=[1, 3])
+        ax11 = fig.add_subplot(gs1[0, 0])
+        ax12 = fig.add_subplot(gs1[1, 0])
+        gs2 = gridspec.GridSpecFromSubplotSpec(2, 1, subplot_spec=gs[0, 2], height_ratios=[1, 3])
+        ax21 = fig.add_subplot(gs2[0, 0])
+        ax22 = fig.add_subplot(gs2[1, 0])
+        gs3 = gridspec.GridSpecFromSubplotSpec(2, 1, subplot_spec=gs[0, 3], height_ratios=[1, 3])
+        ax31 = fig.add_subplot(gs3[0, 0])
+        ax32 = fig.add_subplot(gs3[1, 0])
+        gs4 = gridspec.GridSpecFromSubplotSpec(2, 1, subplot_spec=gs[0, 4])
+        ax41 = fig.add_subplot(gs4[0, 0])
+        ax42 = fig.add_subplot(gs4[1, 0])
+
+        ax01.plot(self.t_shifts, self.shifts, label='shifts')
+        ax01.plot(self.t_shifts, self.shifts_filt, label='shifts_filt')
+        ax01.set_ylim(np.min(self.shifts_filt) - 10, np.max(self.shifts_filt) + 10)
+        ax01.legend()
+        ax01.set_ylabel('Frames')
+        ax01.set_xlabel('Time in session')
+
+        xs = np.searchsorted(self.ttl_times, self.t_shifts)
+        ttl_diff = (self.times - self.camera_times)[xs] * self.camera_meta['fps']
+        ax02.plot(self.t_shifts, ttl_diff, label='extracted - ttl')
+        ax02.set_ylim(np.min(ttl_diff) - 10, np.max(ttl_diff) + 10)
+        ax02.legend()
+        ax02.set_ylabel('Frames')
+        ax02.set_xlabel('Time in session')
+
+        ax03.plot(self.camera_times, (self.camera_times - self.new_times) * self.camera_meta['fps'],
+                  'k', label='extracted - new')
+        ax03.legend()
+        ax03.set_ylim(-5, 5)
+        ax03.set_ylabel('Frames')
+        ax03.set_xlabel('Time in session')
+
+        self.single_cluster_raster(self.wheel_timestamps, self.trials['firstMovement_times'].values, trial_idx, dividers,
+                                   ['g', 'y'], ['left', 'right'], weights=self.wheel_vel, fr=False, axs=[ax11, ax12])
+        ax11.sharex(ax12)
+        ax11.set_ylabel('Wheel velocity')
+        ax11.set_title('Wheel')
+        ax12.set_xlabel('Time from first move')
+
+        self.single_cluster_raster(self.camera_times, self.trials['firstMovement_times'].values, trial_idx, dividers,
+                                   ['g', 'y'], ['left', 'right'], weights=feature_ext, fr=False, axs=[ax21, ax22])
+        ax21.sharex(ax22)
+        ax21.set_ylabel('Paw r velocity')
+        ax21.set_title('Extracted times')
+        ax22.set_xlabel('Time from first move')
+
+        self.single_cluster_raster(self.new_times, self.trials['firstMovement_times'].values, trial_idx, dividers, ['g', 'y'],
+                                   ['left', 'right'], weights=feature_new, fr=False, axs=[ax31, ax32])
+        ax31.sharex(ax32)
+        ax31.set_ylabel('Paw r velocity')
+        ax31.set_title('New times')
+        ax32.set_xlabel('Time from first move')
+
+        ax41.imshow(self.frame_example[0])
+        rect = matplotlib.patches.Rectangle((self.roi[1][1], self.roi[0][0]), self.roi[1][0] - self.roi[1][1],
+                                            self.roi[0][1] - self.roi[0][0],
+                                            linewidth=4, edgecolor='g', facecolor='none')
+        ax41.add_patch(rect)
+
+        ax42.plot(self.all_me)
+
+        return fig
+
+    def plot_without_behavior(self):
+
+        fig = plt.figure()
+        fig.set_size_inches(7, 7)
+        gs = gridspec.GridSpec(1, 2, figure=fig)
+        gs0 = gridspec.GridSpecFromSubplotSpec(3, 1, subplot_spec=gs[0, 0])
+        ax01 = fig.add_subplot(gs0[0, 0])
+        ax02 = fig.add_subplot(gs0[1, 0])
+        ax03 = fig.add_subplot(gs0[2, 0])
+
+        gs1 = gridspec.GridSpecFromSubplotSpec(2, 1, subplot_spec=gs[0, 1])
+        ax04 = fig.add_subplot(gs1[0, 0])
+        ax05 = fig.add_subplot(gs1[1, 0])
+
+        ax01.plot(self.t_shifts, self.shifts, label='shifts')
+        ax01.plot(self.t_shifts, self.shifts_filt, label='shifts_filt')
+        ax01.set_ylim(np.min(self.shifts_filt) - 10, np.max(self.shifts_filt) + 10)
+        ax01.legend()
+        ax01.set_ylabel('Frames')
+        ax01.set_xlabel('Time in session')
+
+        xs = np.searchsorted(self.ttl_times, self.t_shifts)
+        ttl_diff = (self.times - self.camera_times)[xs] * self.camera_meta['fps']
+        ax02.plot(self.t_shifts, ttl_diff, label='extracted - ttl')
+        ax02.set_ylim(np.min(ttl_diff) - 10, np.max(ttl_diff) + 10)
+        ax02.legend()
+        ax02.set_ylabel('Frames')
+        ax02.set_xlabel('Time in session')
+
+        ax03.plot(self.camera_times, (self.camera_times - self.new_times) * self.camera_meta['fps'],
+                  'k', label='extracted - new')
+        ax03.legend()
+        ax03.set_ylim(-5, 5)
+        ax03.set_ylabel('Frames')
+        ax03.set_xlabel('Time in session')
+
+        ax04.imshow(self.frame_example[0])
+        rect = matplotlib.patches.Rectangle((self.roi[1][1], self.roi[0][0]), self.roi[1][0] - self.roi[1][1],
+                                            self.roi[0][1] - self.roi[0][0],
+                                            linewidth=4, edgecolor='g', facecolor='none')
+        ax04.add_patch(rect)
+
+        ax05.plot(self.all_me)
+
+        return fig
+
+    def process(self):
+
+        # Compute the motion energy of the wheel for the whole video
+        wg = WindowGenerator(self.camera_meta['length'], 5000, 4)
+        out = Parallel(n_jobs=self.nprocess)(delayed(self.compute_motion_energy)(first, last, wg, iw)
+                                             for iw, (first, last) in enumerate(wg.firstlast))
+        # Concatenate the motion energy into one big array
+        self.all_me = np.array([])
+        for vals in out[:-1]:
+            self.all_me = np.r_[self.all_me, vals]
+
+        toverlap = self.twin - 1
+        all_me = np.r_[np.full((int(self.camera_meta['fps'] * toverlap)), np.nan), self.all_me]
+        to_app = self.times[0] - ((np.arange(int(self.camera_meta['fps'] * toverlap), ) + 1) / self.frate)[::-1]
+        times = np.r_[to_app, self.times]
+
+        wg = WindowGenerator(all_me.size - 1, int(self.camera_meta['fps'] * self.twin),
+                             int(self.camera_meta['fps'] * toverlap))
+
+        out = Parallel(n_jobs=self.nprocess)(delayed(self.compute_shifts)(times, all_me, first, last, iw, wg)
+                                             for iw, (first, last) in enumerate(wg.firstlast))
+
+        self.shifts = np.array([])
+        self.t_shifts = np.array([])
+        for vals in out[:-1]:
+            self.shifts = np.r_[self.shifts, vals[0]]
+            self.t_shifts = np.r_[self.t_shifts, vals[1]]
+
+        idx = np.bitwise_and(self.t_shifts >= self.ttl_times[0], self.t_shifts < self.ttl_times[-1])
+        self.shifts = self.shifts[idx]
+        self.t_shifts = self.t_shifts[idx]
+        shifts_filt = ndimage.percentile_filter(self.shifts, 80, 120)
+        shifts_filt = self.clean_shifts(shifts_filt, n=1)
+        self.shifts_filt = self.clean_shifts(shifts_filt, n=2)
+
+        self.qc, self.qc_outcome = self.qc_shifts(self.shifts, self.shifts_filt)
+
+        self.new_times = self.extract_times(self.shifts_filt, self.t_shifts)
+
+        if self.upload:
+            fig = self.plot_with_behavior() if self.behavior else self.plot_without_behavior()
+            save_fig_path = Path(self.session_path.joinpath('snapshot', 'video', 'video_wheel_alignment.png'))
+            save_fig_path.parent.mkdir(exist_ok=True, parents=True)
+            fig.savefig(save_fig_path)
+            snp = ReportSnapshot(self.session_path, self.eid, content_type='session', one=self.one)
+            snp.outputs = [save_fig_path]
+            snp.register_images(widths=['orig'])
+
+        return self.new_times
