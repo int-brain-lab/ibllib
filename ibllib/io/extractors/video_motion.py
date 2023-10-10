@@ -459,7 +459,7 @@ class MotionAlignmentFullSession:
             self.dlc = alfio.load_file_content(next(alf_path.glob(f'_ibl_{self.label}Camera.dlc.*.pqt')))
             self.dlc = likelihood_threshold(self.dlc)
             self.behavior = True
-        except ALFObjectNotFound:
+        except (ALFObjectNotFound, StopIteration):
             self.behavior = False
 
         self.frame_example = vidio.get_video_frames_preload(self.camera_path, np.arange(10, 11), mask=np.s_[:, :, 0])

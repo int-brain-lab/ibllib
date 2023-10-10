@@ -153,6 +153,10 @@ class CameraTimestampsFPGA(BaseExtractor):
         _logger.warning('Attempting to align using wheel')
 
         try:
+            if self.label not in ['left', 'right']:
+                # Can only use wheel alignment for left and right cameras
+                raise ValueError(f'Wheel alignment not supported for {self.label} camera')
+
             motion_class = vmotion.MotionAlignmentFullSession(self.session_path, self.label, upload=True)
             new_times = motion_class.process()
             if not motion_class.qc_outcome:
