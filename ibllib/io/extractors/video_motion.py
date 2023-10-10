@@ -903,7 +903,8 @@ class MotionAlignmentFullSession:
 
         if self.upload:
             fig = self.plot_with_behavior() if self.behavior else self.plot_without_behavior()
-            save_fig_path = Path(self.session_path.joinpath('snapshot', 'video', 'video_wheel_alignment.png'))
+            save_fig_path = Path(self.session_path.joinpath('snapshot', 'video',
+                                                            f'video_wheel_alignment_{self.label}.png'))
             save_fig_path.parent.mkdir(exist_ok=True, parents=True)
             fig.savefig(save_fig_path)
             snp = ReportSnapshot(self.session_path, self.eid, content_type='session', one=self.one)
