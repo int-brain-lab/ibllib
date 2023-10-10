@@ -410,6 +410,7 @@ class MotionAlignmentFullSession:
 
         if self.upload:
             self.one = ONE(mode='remote')
+            self.one.alyx.authenticate()
             self.eid = self.one.path2eid(self.session_path)
 
     def load_data(self, sync='nidq', location=None):
