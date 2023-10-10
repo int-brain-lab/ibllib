@@ -16,7 +16,7 @@ import importlib
 
 from one.api import ONE
 from one.webclient import AlyxClient
-from one.remote.globus import get_lab_from_endpoint_id
+from one.remote.globus import get_lab_from_endpoint_id, get_local_endpoint_id
 
 from ibllib.io.extractors.base import get_pipeline, get_task_protocol, get_session_extractor_type
 from ibllib.pipes import tasks, training_preprocessing, ephys_preprocessing
@@ -81,9 +81,10 @@ def report_health(one):
     status.update(_get_volume_usage('/mnt/s0/Data', 'raid'))
     status.update(_get_volume_usage('/', 'system'))
 
-    lab_names = get_lab_from_endpoint_id(alyx=one.alyx)
-    for ln in lab_names:
-        one.alyx.json_field_update(endpoint='labs', uuid=ln, field_name='json', data=status)
+    data_repos = one.alyx.rest('data-repository', 'list', globus_endpoint_id=get_local_endpoint_id())
+
+    for dr in data_repos:
+        one.alyx.json_field_update(endpoint='data-repository', uuid=dr['name'], field_name='json', data=status)
 
 
 def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
