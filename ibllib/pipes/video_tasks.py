@@ -480,7 +480,9 @@ class EphysPostDLC(base_tasks.VideoTask):
             # they are not strictly required, some plots just might be skipped
             # In particular the raw videos don't need to be downloaded as they can be streamed
                            [(f'_iblrig_{cam}Camera.raw.mp4', self.device_collection, True) for cam in self.cameras] +
-                           [(f'{cam}ROIMotionEnergy.position.npy', 'alf', False) for cam in self.cameras],
+                           [(f'{cam}ROIMotionEnergy.position.npy', 'alf', False) for cam in self.cameras] +
+            # The trials table is used in the DLC QC, however this is not an essential dataset
+                           [('_ibl_trials.table.pqt', self.trials_collection, False)],
             'output_files': [(f'_ibl_{cam}Camera.features.pqt', 'alf', True) for cam in self.cameras] +
                             [('licks.times.npy', 'alf', True)]
         }
@@ -503,7 +505,7 @@ class EphysPostDLC(base_tasks.VideoTask):
         else:
             if exist and overwrite:
                 _logger.warning('EphysPostDLC outputs exist and overwrite=True, overwriting existing outputs.')
-            # Find all available dlc files
+            # Find all available DLC files
             dlc_files = list(Path(self.session_path).joinpath('alf').glob('_ibl_*Camera.dlc.*'))
             for dlc_file in dlc_files:
                 _logger.debug(dlc_file)

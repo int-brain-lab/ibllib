@@ -802,7 +802,7 @@ def dlc_qc_plot(session_path, one=None, device_collection='raw_video_data',
         camera_dict = {}
         for cam in cameras:  # Remove cameras where we don't have motion energy AND camera times
             d = {'motion_energy': data.get(f'{cam}_ROIMotionEnergy'), 'times': data.get(f'{cam}_times')}
-            if None not in d.values():
+            if not any(x is None for x in d.values()):
                 camera_dict[cam] = d
         if len(camera_dict) > 0:
             panels.append((plot_motion_energy_hist, {'camera_dict': camera_dict, 'trials_df': data['trials']}))

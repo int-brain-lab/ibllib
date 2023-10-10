@@ -337,6 +337,8 @@ def make_pipeline(session_path, **pkwargs):
 
         if sync_kwargs['sync'] != 'bpod':
             # Here we restrict to videos that we support (left, right or body)
+            # Currently there is no plan to run DLC on the belly cam
+            subset_cams = [c for c in cams if c in ('left', 'right', 'body')]
             video_kwargs['cameras'] = subset_cams
             tasks[tn] = type((tn := 'DLC'), (vtasks.DLC,), {})(
                 **kwargs, **video_kwargs, parents=[dlc_parent_task])
@@ -344,7 +346,7 @@ def make_pipeline(session_path, **pkwargs):
             # The PostDLC plots require a trials object for QC
             # Find the first task that outputs a trials.table dataset
             trials_task = (
-                t for t in tasks if any('trials.table' in f for f in t.signature.get('output_files', []))
+                t for t in tasks.values() if any('trials.table' in f for f in t.signature.get('output_files', []))
             )
             if trials_task := next(trials_task, None):
                 parents = [tasks['DLC'], tasks[f'VideoSyncQC_{sync}'], trials_task]
@@ -352,8 +354,8 @@ def make_pipeline(session_path, **pkwargs):
             else:
                 parents = [tasks['DLC'], tasks[f'VideoSyncQC_{sync}']]
                 trials_collection = 'alf'
-            tasks[tn] = type((tn := 'DLC'), (vtasks.EphysPostDLC,), {})(
-                **kwargs, **video_kwargs, trials_collection=trials_collection, parents=parents)
+            tasks[tn] = type((tn := 'PostDLC'), (vtasks.EphysPostDLC,), {})(
+                **kwargs, cameras=subset_cams, trials_collection=trials_collection, parents=parents)
 
     # Audio tasks
     if 'microphone' in devices:

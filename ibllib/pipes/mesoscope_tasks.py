@@ -461,14 +461,15 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
             Inputs to suite2p run that deviate from default parameters.
         """
 
-        # Currently supporting z-stacks but not supporting dual plane / volumetric imaging, assert that this is not the case
-        if meta['FOV']['nXnYnZ'][2] > 1:
-            raise NotImplementedError('Dual-plane imaging not yet supported, data seems to more than one plane per FOV')
-
         # Computing dx and dy
         cXY = np.array([fov['Deg']['topLeft'] for fov in meta['FOV']])
         cXY -= np.min(cXY, axis=0)
         nXnYnZ = np.array([fov['nXnYnZ'] for fov in meta['FOV']])
+
+        # Currently supporting z-stacks but not supporting dual plane / volumetric imaging, assert that this is not the case
+        if np.any(nXnYnZ[:, 2] > 1):
+            raise NotImplementedError('Dual-plane imaging not yet supported, data seems to more than one plane per FOV')
+
         sW = np.sqrt(np.sum((np.array([fov['Deg']['topRight'] for fov in meta['FOV']]) - np.array(
             [fov['Deg']['topLeft'] for fov in meta['FOV']])) ** 2, axis=1))
         sH = np.sqrt(np.sum((np.array([fov['Deg']['bottomLeft'] for fov in meta['FOV']]) - np.array(

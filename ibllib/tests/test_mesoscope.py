@@ -35,23 +35,22 @@ class TestMesoscopePreprocess(unittest.TestCase):
         """
         expected = {
             'data_path': [str(self.img_path)],
-            'fast_disk': '',
-            'num_workers': -1,
             'save_path0': str(self.session_path.joinpath('alf')),
-            'move_bin': True,
+            'fast_disk': '',
+            'look_one_level_down': False,
+            'num_workers': -1,
+            'num_workers_roi': -1,
             'keep_movie_raw': False,
             'delete_bin': False,
             'batch_size': 500,
-            'combined': False,
-            'look_one_level_down': False,
-            'num_workers_roi': -1,
             'nimg_init': 400,
+            'combined': False,
             'nonrigid': True,
             'maxregshift': 0.05,
             'denoise': 1,
             'block_size': [128, 128],
             'save_mat': True,
-            'scalefactor': 1,
+            'move_bin': True,
             'mesoscan': True,
             'nplanes': 1,
             'tau': 1.5,
@@ -61,6 +60,7 @@ class TestMesoscopePreprocess(unittest.TestCase):
             'nchannels': 1,
             'fs': 6.8,
             'lines': [[3, 4, 5]],
+            'slices': [0],
             'dx': np.array([0], dtype=int),
             'dy': np.array([0], dtype=int),
         }
@@ -69,7 +69,7 @@ class TestMesoscopePreprocess(unittest.TestCase):
             'scanImageParams': {'hStackManager': {'zs': 320},
                                 'hRoiManager': {'scanVolumeRate': 6.8}},
             'FOV': [{'topLeftDeg': [-1, 1.3], 'topRightDeg': [3, 1.3], 'bottomLeftDeg': [-1, 5.2],
-                     'nXnYnZ': [512, 512, 1], 'channelIdx': 2, 'lineIdx': [4, 5, 6]}]
+                     'nXnYnZ': [512, 512, 1], 'channelIdx': 2, 'lineIdx': [4, 5, 6], 'slice_id': 0}]
         }
         with open(self.img_path.joinpath('_ibl_rawImagingData.meta.json'), 'w') as f:
             json.dump(meta, f)
