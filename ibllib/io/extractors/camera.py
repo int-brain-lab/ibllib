@@ -153,8 +153,7 @@ class CameraTimestampsFPGA(BaseExtractor):
         _logger.warning('Attempting to align using wheel')
 
         try:
-            motion_class = vmotion.MotionAlignmentFullSession(self.session_path, self.label, behavior=False,
-                                                              upload=True)
+            motion_class = vmotion.MotionAlignmentFullSession(self.session_path, self.label, upload=True)
             new_times = motion_class.process()
             if not motion_class.qc_outcome:
                 raise ValueError(f'Wheel alignment failed to pass qc: {motion_class.qc}')

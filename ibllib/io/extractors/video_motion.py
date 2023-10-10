@@ -29,6 +29,7 @@ from brainbox.singlecell import bin_spikes
 from brainbox.behavior.dlc import likelihood_threshold, get_speed
 from brainbox.task.trials import find_trial_ids
 import one.alf.io as alfio
+from one.alf.exceptions import ALFObjectNotFound
 from one.alf.spec import is_session_path, is_uuid_string
 
 
@@ -400,19 +401,18 @@ class MotionAlignmentFullSession:
         self.session_path = session_path
         self.label = label
         self.threshold = kwargs.get('threshold', 20)
-        self.behavior = kwargs.get('behavior', False)
         self.upload = kwargs.get('upload', False)
         self.twin = kwargs.get('twin', 150)
         self.nprocess = kwargs.get('nprocess', int(cpu_count() - cpu_count() / 4))
 
-        self.load_data(sync=kwargs.get('sync', 'nidq'), location=kwargs.get('location', None), behavior=self.behavior)
+        self.load_data(sync=kwargs.get('sync', 'nidq'), location=kwargs.get('location', None))
         self.roi, self.mask = self.get_roi_mask()
 
         if self.upload:
             self.one = ONE(mode='remote')
             self.eid = self.one.path2eid(self.session_path)
 
-    def load_data(self, sync='nidq', location=None, behavior=False):
+    def load_data(self, sync='nidq', location=None):
         def fix_keys(alf_object):
             ob = Bunch()
             for key in alf_object.keys():
@@ -454,10 +454,13 @@ class MotionAlignmentFullSession:
 
         self.frate = round(1 / np.nanmedian(np.diff(self.ttl_times)))
 
-        if behavior:
+        try:
             self.trials = alfio.load_file_content(next(alf_path.glob('_ibl_trials.table.*.pqt')))
             self.dlc = alfio.load_file_content(next(alf_path.glob(f'_ibl_{self.label}Camera.dlc.*.pqt')))
             self.dlc = likelihood_threshold(self.dlc)
+            self.behavior = True
+        except ALFObjectNotFound:
+            self.behavior = False
 
         self.frame_example = vidio.get_video_frames_preload(self.camera_path, np.arange(10, 11), mask=np.s_[:, :, 0])
 
