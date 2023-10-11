@@ -881,7 +881,7 @@ class MotionAlignmentFullSession:
         wg = WindowGenerator(all_me.size - 1, int(self.camera_meta['fps'] * self.twin),
                              int(self.camera_meta['fps'] * toverlap))
 
-        out = Parallel(n_jobs=self.nprocess)(delayed(self.compute_shifts)(times, all_me, first, last, iw, wg)
+        out = Parallel(n_jobs=4)(delayed(self.compute_shifts)(times, all_me, first, last, iw, wg)
                                              for iw, (first, last) in enumerate(wg.firstlast))
 
         self.shifts = np.array([])
@@ -903,11 +903,13 @@ class MotionAlignmentFullSession:
 
         if self.upload:
             fig = self.plot_with_behavior() if self.behavior else self.plot_without_behavior()
-            save_fig_path = Path(self.session_path.joinpath('snapshot', 'video', 'video_wheel_alignment.png'))
+            save_fig_path = Path(self.session_path.joinpath('snapshot', 'video',
+                                                            f'video_wheel_alignment_{self.label}.png'))
             save_fig_path.parent.mkdir(exist_ok=True, parents=True)
             fig.savefig(save_fig_path)
             snp = ReportSnapshot(self.session_path, self.eid, content_type='session', one=self.one)
             snp.outputs = [save_fig_path]
             snp.register_images(widths=['orig'])
+            plt.close(fig)
 
         return self.new_times
