@@ -1,3 +1,8 @@
+"""(Deprecated) Electrophysiology data preprocessing tasks.
+
+These tasks are part of the old pipeline. This module has been replaced by the `ephys_tasks` module
+and the dynamic pipeline.
+"""
 import logging
 import re
 import shutil
