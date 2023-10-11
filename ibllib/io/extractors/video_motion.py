@@ -40,11 +40,7 @@ def find_nearest(array, value):
 
 
 class MotionAlignment:
-    roi = {
-        'left': ((800, 1020), (233, 1096)),
-        'right': ((426, 510), (104, 545)),
-        'body': ((402, 481), (31, 103))
-    }
+    roi = {'left': ((800, 1020), (233, 1096)), 'right': ((426, 510), (104, 545)), 'body': ((402, 481), (31, 103))}
 
     def __init__(self, eid=None, one=None, log=logging.getLogger(__name__), **kwargs):
         self.one = one or ONE()
@@ -94,12 +90,9 @@ class MotionAlignment:
             return np.array([[x1, x2], [y1, y2]])
 
         plt.imshow(frame)
-        roi = RectangleSelector(plt.gca(), line_select_callback,
-                                drawtype='box', useblit=True,
-                                button=[1, 3],  # don't use middle button
-                                minspanx=5, minspany=5,
-                                spancoords='pixels',
-                                interactive=True)
+        roi = RectangleSelector(plt.gca(), line_select_callback, drawtype='box', useblit=True, button=[1, 3],
+                                # don't use middle button
+                                minspanx=5, minspany=5, spancoords='pixels', interactive=True)
         plt.show()
         ((x1, x2, *_), (y1, *_, y2)) = roi.corners
         col = np.arange(round(x1), round(x2), dtype=int)
@@ -115,14 +108,13 @@ class MotionAlignment:
             self.data.wheel = self.one.load_object(self.eid, 'wheel')
             self.data.trials = self.one.load_object(self.eid, 'trials')
             cam = self.one.load(self.eid, ['camera.times'], dclass_output=True)
-            self.data.camera_times = {vidio.label_from_path(url): ts
-                                      for ts, url in zip(cam.data, cam.url)}
+            self.data.camera_times = {vidio.label_from_path(url): ts for ts, url in zip(cam.data, cam.url)}
         else:
             alf_path = self.session_path / 'alf'
             self.data.wheel = alfio.load_object(alf_path, 'wheel', short_keys=True)
             self.data.trials = alfio.load_object(alf_path, 'trials')
-            self.data.camera_times = {vidio.label_from_path(x): alfio.load_file_content(x)
-                                      for x in alf_path.glob('*Camera.times*')}
+            self.data.camera_times = {vidio.label_from_path(x): alfio.load_file_content(x) for x in
+                                      alf_path.glob('*Camera.times*')}
         assert all(x is not None for x in self.data.values())
 
     def _set_eid_or_path(self, session_path_or_eid):
@@ -191,8 +183,7 @@ class MotionAlignment:
         roi = (*[slice(*r) for r in self.roi[side]], 0)
         try:
             # TODO Add function arg to make grayscale
-            self.alignment.frames = \
-                vidio.get_video_frames_preload(camera_path, frame_numbers, mask=roi)
+            self.alignment.frames = vidio.get_video_frames_preload(camera_path, frame_numbers, mask=roi)
             assert self.alignment.frames.size != 0
         except AssertionError:
             self.log.error('Failed to open video')
@@ -239,8 +230,8 @@ class MotionAlignment:
             y = np.pad(self.alignment.df, 1, 'edge')
             ax[0].plot(x, y, '-x', label='wheel motion energy')
             thresh = stDev > sd_thresh
-            ax[0].vlines(x[np.array(np.pad(thresh, 1, 'constant', constant_values=False))], 0, 1,
-                         linewidth=0.5, linestyle=':', label=f'>{sd_thresh} s.d. diff')
+            ax[0].vlines(x[np.array(np.pad(thresh, 1, 'constant', constant_values=False))], 0, 1, linewidth=0.5, linestyle=':',
+                         label=f'>{sd_thresh} s.d. diff')
             ax[1].plot(t[interp_mask], np.abs(v[interp_mask]))
 
             # Plot other stuff
@@ -307,9 +298,7 @@ class MotionAlignment:
             data['frame_num'] = 0
             mkr = find_nearest(wheel.timestamps[wheel_mask], ts_0)
 
-            data['marker'], = ax.plot(
-                wheel.timestamps[wheel_mask][mkr],
-                wheel.position[wheel_mask][mkr], 'r-x')
+            data['marker'], = ax.plot(wheel.timestamps[wheel_mask][mkr], wheel.position[wheel_mask][mkr], 'r-x')
             ax.set_ylabel('Wheel position (rad))')
             ax.set_xlabel('Time (s))')
             return
@@ -338,19 +327,13 @@ class MotionAlignment:
             data['im'].set_data(frame)
 
             mkr = find_nearest(wheel.timestamps[wheel_mask], t_x)
-            data['marker'].set_data(
-                wheel.timestamps[wheel_mask][mkr],
-                wheel.position[wheel_mask][mkr]
-            )
+            data['marker'].set_data(wheel.timestamps[wheel_mask][mkr], wheel.position[wheel_mask][mkr])
 
             return data['im'], data['ln'], data['marker']
 
         anim = animation.FuncAnimation(fig, animate, init_func=init_plot,
-                                       frames=(range(len(self.alignment.df))
-                                               if save
-                                               else cycle(range(60))),
-                                       interval=20, blit=False,
-                                       repeat=not save, cache_frame_data=False)
+                                       frames=(range(len(self.alignment.df)) if save else cycle(range(60))), interval=20,
+                                       blit=False, repeat=not save, cache_frame_data=False)
         anim.running = False
 
         def process_key(event):
@@ -422,14 +405,12 @@ class MotionAlignmentFullSession:
             return ob
 
         alf_path = self.session_path.joinpath('alf')
-        wheel = (fix_keys(alfio.load_object(alf_path, 'wheel')) if location == 'SDSC'
-                 else alfio.load_object(alf_path, 'wheel'))
+        wheel = (fix_keys(alfio.load_object(alf_path, 'wheel')) if location == 'SDSC' else alfio.load_object(alf_path, 'wheel'))
         self.wheel_timestamps = wheel.timestamps
         wheel_pos, self.wheel_time = wh.interpolate_position(wheel.timestamps, wheel.position, freq=1000)
         self.wheel_vel, _ = wh.velocity_filtered(wheel_pos, 1000)
         self.camera_times = alfio.load_file_content(next(alf_path.glob(f'_ibl_{self.label}Camera.times*.npy')))
-        self.camera_path = str(next(self.session_path.joinpath('raw_video_data').glob(
-            f'_iblrig_{self.label}Camera.raw*.mp4')))
+        self.camera_path = str(next(self.session_path.joinpath('raw_video_data').glob(f'_iblrig_{self.label}Camera.raw*.mp4')))
         self.camera_meta = vidio.get_video_meta(self.camera_path)
 
         # TODO should read in the description file to get the correct sync location
@@ -521,8 +502,7 @@ class MotionAlignmentFullSession:
             while np.any(idx == frames.shape[0] - 1) and counter < 20 and iw != wg.nwin - 1:
                 n_after_offset = (counter + 1) * n_frames
                 last += n_frames
-                extra_frames = vidio.get_video_frames_preload(cap, frame_numbers=np.arange(last, last + n_frames),
-                                                              mask=self.mask)
+                extra_frames = vidio.get_video_frames_preload(cap, frame_numbers=np.arange(last, last + n_frames), mask=self.mask)
                 frames = np.concatenate([frames, extra_frames], axis=0)
                 idx = self.find_contaminated_frames(frames, self.threshold)
                 after_status = True
@@ -666,8 +646,7 @@ class MotionAlignmentFullSession:
         return new_times
 
     @staticmethod
-    def single_cluster_raster(spike_times, events, trial_idx, dividers, colors, labels, weights=None, fr=True,
-                              norm=False,
+    def single_cluster_raster(spike_times, events, trial_idx, dividers, colors, labels, weights=None, fr=True, norm=False,
                               axs=None):
         pre_time = 0.4
         post_time = 1
@@ -687,8 +666,7 @@ class MotionAlignmentFullSession:
 
         dividers = [0] + dividers + [len(trial_idx)]
         if axs is None:
-            fig, axs = plt.subplots(2, 1, figsize=(4, 6), gridspec_kw={'height_ratios': [1, 3], 'hspace': 0},
-                                    sharex=True)
+            fig, axs = plt.subplots(2, 1, figsize=(4, 6), gridspec_kw={'height_ratios': [1, 3], 'hspace': 0}, sharex=True)
         else:
             fig = axs[0].get_figure()
 
@@ -707,8 +685,7 @@ class MotionAlignmentFullSession:
             psth_div = np.nanmean(psth[t_ids], axis=0)
             std_div = np.nanstd(psth[t_ids], axis=0) / np.sqrt(len(t_ids))
 
-            axs[0].fill_between(t_psth, psth_div - std_div,
-                                psth_div + std_div, alpha=0.4, color=colors[lid])
+            axs[0].fill_between(t_psth, psth_div - std_div, psth_div + std_div, alpha=0.4, color=colors[lid])
             axs[0].plot(t_psth, psth_div, alpha=1, color=colors[lid])
 
             lab_max = idx[np.argmax(t_ints)]
@@ -726,8 +703,7 @@ class MotionAlignmentFullSession:
         secax = axs[1].secondary_yaxis('right')
 
         secax.set_yticks(label_pos)
-        secax.set_yticklabels(label, rotation=90,
-                              rotation_mode='anchor', ha='center')
+        secax.set_yticklabels(label, rotation=90, rotation_mode='anchor', ha='center')
         for ic, c in enumerate(np.array(colors)[lidx]):
             secax.get_yticklabels()[ic].set_color(c)
 
@@ -778,8 +754,7 @@ class MotionAlignmentFullSession:
         ax02.set_ylabel('Frames')
         ax02.set_xlabel('Time in session')
 
-        ax03.plot(self.camera_times, (self.camera_times - self.new_times) * self.camera_meta['fps'],
-                  'k', label='extracted - new')
+        ax03.plot(self.camera_times, (self.camera_times - self.new_times) * self.camera_meta['fps'], 'k', label='extracted - new')
         ax03.legend()
         ax03.set_ylim(-5, 5)
         ax03.set_ylabel('Frames')
@@ -792,8 +767,8 @@ class MotionAlignmentFullSession:
         ax11.set_title('Wheel')
         ax12.set_xlabel('Time from first move')
 
-        self.single_cluster_raster(self.camera_times, self.trials['firstMovement_times'].values, trial_idx, dividers,
-                                   ['g', 'y'], ['left', 'right'], weights=feature_ext, fr=False, axs=[ax21, ax22])
+        self.single_cluster_raster(self.camera_times, self.trials['firstMovement_times'].values, trial_idx, dividers, ['g', 'y'],
+                                   ['left', 'right'], weights=feature_ext, fr=False, axs=[ax21, ax22])
         ax21.sharex(ax22)
         ax21.set_ylabel('Paw r velocity')
         ax21.set_title('Extracted times')
@@ -808,8 +783,7 @@ class MotionAlignmentFullSession:
 
         ax41.imshow(self.frame_example[0])
         rect = matplotlib.patches.Rectangle((self.roi[1][1], self.roi[0][0]), self.roi[1][0] - self.roi[1][1],
-                                            self.roi[0][1] - self.roi[0][0],
-                                            linewidth=4, edgecolor='g', facecolor='none')
+                                            self.roi[0][1] - self.roi[0][0], linewidth=4, edgecolor='g', facecolor='none')
         ax41.add_patch(rect)
 
         ax42.plot(self.all_me)
@@ -845,8 +819,7 @@ class MotionAlignmentFullSession:
         ax02.set_ylabel('Frames')
         ax02.set_xlabel('Time in session')
 
-        ax03.plot(self.camera_times, (self.camera_times - self.new_times) * self.camera_meta['fps'],
-                  'k', label='extracted - new')
+        ax03.plot(self.camera_times, (self.camera_times - self.new_times) * self.camera_meta['fps'], 'k', label='extracted - new')
         ax03.legend()
         ax03.set_ylim(-5, 5)
         ax03.set_ylabel('Frames')
@@ -854,8 +827,7 @@ class MotionAlignmentFullSession:
 
         ax04.imshow(self.frame_example[0])
         rect = matplotlib.patches.Rectangle((self.roi[1][1], self.roi[0][0]), self.roi[1][0] - self.roi[1][1],
-                                            self.roi[0][1] - self.roi[0][0],
-                                            linewidth=4, edgecolor='g', facecolor='none')
+                                            self.roi[0][1] - self.roi[0][0], linewidth=4, edgecolor='g', facecolor='none')
         ax04.add_patch(rect)
 
         ax05.plot(self.all_me)
@@ -866,8 +838,8 @@ class MotionAlignmentFullSession:
 
         # Compute the motion energy of the wheel for the whole video
         wg = WindowGenerator(self.camera_meta['length'], 5000, 4)
-        out = Parallel(n_jobs=self.nprocess)(delayed(self.compute_motion_energy)(first, last, wg, iw)
-                                             for iw, (first, last) in enumerate(wg.firstlast))
+        out = Parallel(n_jobs=self.nprocess)(
+            delayed(self.compute_motion_energy)(first, last, wg, iw) for iw, (first, last) in enumerate(wg.firstlast))
         # Concatenate the motion energy into one big array
         self.all_me = np.array([])
         for vals in out[:-1]:
@@ -878,11 +850,11 @@ class MotionAlignmentFullSession:
         to_app = self.times[0] - ((np.arange(int(self.camera_meta['fps'] * toverlap), ) + 1) / self.frate)[::-1]
         times = np.r_[to_app, self.times]
 
-        wg = WindowGenerator(all_me.size - 1, int(self.camera_meta['fps'] * self.twin),
-                             int(self.camera_meta['fps'] * toverlap))
+        wg = WindowGenerator(all_me.size - 1, int(self.camera_meta['fps'] * self.twin), int(self.camera_meta['fps'] * toverlap))
 
-        out = Parallel(n_jobs=self.nprocess)(delayed(self.compute_shifts)(times, all_me, first, last, iw, wg)
-                                             for iw, (first, last) in enumerate(wg.firstlast))
+        out = Parallel(n_jobs=4)(
+            delayed(self.compute_shifts)(times, all_me, first, last, iw, wg) for iw, (first, last) in enumerate(wg.firstlast)
+        )
 
         self.shifts = np.array([])
         self.t_shifts = np.array([])
@@ -903,11 +875,12 @@ class MotionAlignmentFullSession:
 
         if self.upload:
             fig = self.plot_with_behavior() if self.behavior else self.plot_without_behavior()
-            save_fig_path = Path(self.session_path.joinpath('snapshot', 'video', 'video_wheel_alignment.png'))
+            save_fig_path = Path(self.session_path.joinpath('snapshot', 'video', f'video_wheel_alignment_{self.label}.png'))
             save_fig_path.parent.mkdir(exist_ok=True, parents=True)
             fig.savefig(save_fig_path)
             snp = ReportSnapshot(self.session_path, self.eid, content_type='session', one=self.one)
             snp.outputs = [save_fig_path]
             snp.register_images(widths=['orig'])
+            plt.close(fig)
 
         return self.new_times

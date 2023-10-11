@@ -15,6 +15,7 @@ import json
 import logging
 import subprocess
 import shutil
+import uuid
 from pathlib import Path
 from itertools import chain
 from collections import defaultdict, Counter
@@ -461,24 +462,34 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
             Inputs to suite2p run that deviate from default parameters.
         """
 
-        # Currently only supporting single plane, assert that this is the case
-        # FIXME This checks for zstacks but not dual plane mode
-        if not isinstance(meta['scanImageParams']['hStackManager']['zs'], int):
-            raise NotImplementedError('Multi-plane imaging not yet supported, data seems to be multi-plane')
-
         # Computing dx and dy
-        cXY = np.array([fov['topLeftDeg'] for fov in meta['FOV']])
+        cXY = np.array([fov['Deg']['topLeft'] for fov in meta['FOV']])
         cXY -= np.min(cXY, axis=0)
         nXnYnZ = np.array([fov['nXnYnZ'] for fov in meta['FOV']])
-        sW = np.sqrt(np.sum((np.array([fov['topRightDeg'] for fov in meta['FOV']]) - np.array(
-            [fov['topLeftDeg'] for fov in meta['FOV']])) ** 2, axis=1))
-        sH = np.sqrt(np.sum((np.array([fov['bottomLeftDeg'] for fov in meta['FOV']]) - np.array(
-            [fov['topLeftDeg'] for fov in meta['FOV']])) ** 2, axis=1))
+
+        # Currently supporting z-stacks but not supporting dual plane / volumetric imaging, assert that this is not the case
+        if np.any(nXnYnZ[:, 2] > 1):
+            raise NotImplementedError('Dual-plane imaging not yet supported, data seems to more than one plane per FOV')
+
+        sW = np.sqrt(np.sum((np.array([fov['Deg']['topRight'] for fov in meta['FOV']]) - np.array(
+            [fov['Deg']['topLeft'] for fov in meta['FOV']])) ** 2, axis=1))
+        sH = np.sqrt(np.sum((np.array([fov['Deg']['bottomLeft'] for fov in meta['FOV']]) - np.array(
+            [fov['Deg']['topLeft'] for fov in meta['FOV']])) ** 2, axis=1))
         pixSizeX = nXnYnZ[:, 0] / sW
         pixSizeY = nXnYnZ[:, 1] / sH
         dx = np.round(cXY[:, 0] * pixSizeX).astype(dtype=np.int32)
         dy = np.round(cXY[:, 1] * pixSizeY).astype(dtype=np.int32)
         nchannels = len(meta['channelSaved']) if isinstance(meta['channelSaved'], list) else 1
+
+        # Computing number of unique z-planes (slices in tiff)
+        # FIXME this should work if all FOVs are discrete or if all FOVs are continuous, but may not work for combination of both
+        slice_ids = [fov['slice_id'] for fov in meta['FOV']]
+        nplanes = len(set(slice_ids))
+
+        # Figuring out how many SI Rois we have (one unique ROI may have several FOVs)
+        # FIXME currently unused
+        # roiUUIDs = np.array([fov['roiUUID'] for fov in meta['FOV']])
+        # nrois = len(np.unique(roiUUIDs))
 
         db = {
             'data_path': sorted(map(str, self.session_path.glob(f'{self.device_collection}'))),
@@ -498,13 +509,13 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
             'block_size': [128, 128],
             'save_mat': True,  # save the data to Fall.mat
             'move_bin': True,  # move the binary file to save_path
-            'scalefactor': 1,  # scale manually in x to account for overlap between adjacent ribbons UCL mesoscope
             'mesoscan': True,
-            'nplanes': 1,
+            'nplanes': nplanes,
             'nrois': len(meta['FOV']),
             'nchannels': nchannels,
             'fs': meta['scanImageParams']['hRoiManager']['scanVolumeRate'],
             'lines': [list(np.asarray(fov['lineIdx']) - 1) for fov in meta['FOV']],  # subtracting 1 to make 0-based
+            'slices': slice_ids,  # this tells us which FOV corresponds to which tiff slices
             'tau': self.get_default_tau(),  # deduce the GCamp used from Alyx mouse line (defaults to 1.5; that of GCaMP6s)
             'functional_chan': 1,  # for now, eventually find(ismember(meta.channelSaved == meta.channelID.green))
             'align_by_chan': 1,  # for now, eventually find(ismember(meta.channelSaved == meta.channelID.red))
@@ -691,13 +702,14 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
 
         Notes
         -----
-        Once the FOVs have been registered they cannot be updated with with task. Rerunning this
-        task will result in an error.
+        - Once the FOVs have been registered they cannot be updated with this task. Rerunning this
+          task will result in an error.
+        - This task modifies the first meta JSON file.  All meta files are registered by this task.
         """
         # Load necessary data
         (filename, collection, _), *_ = self.signature['input_files']
-        meta_file = next(self.session_path.glob(f'{collection}/{filename}'), None)
-        meta = alfio.load_file_content(meta_file) or {}
+        meta_files = sorted(self.session_path.glob(f'{collection}/{filename}'))
+        meta = mesoscope.patch_imaging_meta(alfio.load_file_content(meta_files[0]) or {})
         nFOV = len(meta.get('FOV', []))
 
         suffix = None if provenance is Provenance.HISTOLOGY else provenance.name.lower()
@@ -707,7 +719,7 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
         mean_image_mlapdv, mean_image_ids = self.project_mlapdv(meta)
 
         # Save the meta data file with new coordinate fields
-        with open(meta_file, 'w') as fp:
+        with open(meta_files[0], 'w') as fp:
             json.dump(meta, fp)
 
         # Save the mean image datasets
@@ -736,7 +748,47 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
         # Register FOVs in Alyx
         self.register_fov(meta, suffix)
 
-        return sorted([meta_file, *roi_files, *mean_image_files])
+        return sorted([*meta_files, *roi_files, *mean_image_files])
+
+    def update_surgery_json(self, meta, normal_vector):
+        """
+        Update surgery JSON with surface normal vector.
+
+        Adds the key 'surface_normal_unit_vector' to the most recent surgery JSON, containing the
+        provided three element vector.  The recorded craniotomy center must match the coordinates
+        in the provided meta file.
+
+        Parameters
+        ----------
+        meta : dict
+            The imaging meta data file containing the 'centerMM' key.
+        normal_vector : array_like
+            A three element unit vector normal to the surface of the craniotomy center.
+
+        Returns
+        -------
+        dict
+            The updated surgery record, or None if no surgeries found.
+        """
+        if not self.one or self.one.offline:
+            _logger.warning('failed to update surgery JSON: ONE offline')
+            return
+        # Update subject JSON with unit normal vector of craniotomy centre (used in histology)
+        subject = self.one.path2ref(self.session_path, parse=False)['subject']
+        surgeries = self.one.alyx.rest('surgeries', 'list', subject=subject, procedure='craniotomy')
+        if not surgeries:
+            _logger.error(f'Surgery not found for subject "{subject}"')
+            return
+        surgery = surgeries[0]  # Check most recent surgery in list
+        center = (meta['centerMM']['ML'], meta['centerMM']['AP'])
+        match = (k for k, v in surgery['json'].items() if
+                 str(k).startswith('craniotomy') and np.allclose(v['center'], center))
+        if (key := next(match, None)) is None:
+            _logger.error('Failed to update surgery JSON: no matching craniotomy found')
+            return surgery
+        data = {key: {**surgery['json'][key], 'surface_normal_unit_vector': tuple(normal_vector)}}
+        surgery['json'] = self.one.alyx.json_field_update('subjects', subject, data=data)
+        return surgery
 
     def roi_mlapdv(self, nFOV: int, suffix=None):
         """
@@ -755,9 +807,9 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
 
         Returns
         -------
-        dict of int: numpy.array
+        dict of int : numpy.array
             A map of field of view to ROI MLAPDV coordinates.
-        dict of int: numpy.array
+        dict of int : numpy.array
             A map of field of view to ROI brain location IDs.
         """
         all_mlapdv = {}
@@ -842,8 +894,11 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
         slice_counts = Counter(f['roiUUID'] for f in meta.get('FOV', []))
         # Create a new stack in Alyx for all stacks containing more than one slice.
         # Map of ScanImage ROI UUID to Alyx ImageStack UUID.
-        stack_ids = {i: self.one.alyx.rest('imaging-stack', 'create', data={'name': i})['id']
-                     for i in slice_counts if slice_counts[i] > 1}
+        if dry:
+            stack_ids = {i: uuid.uuid4() for i in slice_counts if slice_counts[i] > 1}
+        else:
+            stack_ids = {i: self.one.alyx.rest('imaging-stack', 'create', data={'name': i})['id']
+                         for i in slice_counts if slice_counts[i] > 1}
 
         for i, fov in enumerate(meta.get('FOV', [])):
             assert set(fov.keys()) >= {'MLAPDV', 'nXnYnZ', 'roiUUID'}
@@ -962,6 +1017,9 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
         # Get the surface normal unit vector of dorsal triangle
         normal_vector = surface_normal(dorsal_triangle)
 
+        # Update the surgery JSON field with normal unit vector, for use in histology alignment
+        self.update_surgery_json(meta, normal_vector)
+
         # find the coordDV that sits on the triangular face and had [coordML, coordAP] coordinates;
         # the three vertices defining the triangle
         face_vertices = points[dorsal_connectivity_list[face_ind, :], :]
@@ -1005,13 +1063,6 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
 
             # xx and yy are in mm in coverslip space
             points = ((0, fov['nXnYnZ'][0] - 1), (0, fov['nXnYnZ'][1] - 1))
-            if 'MM' not in fov:
-                fov['MM'] = {
-                    'topLeft': fov.pop('topLeftMM'),
-                    'topRight': fov.pop('topRightMM'),
-                    'bottomLeft': fov.pop('bottomLeftMM'),
-                    'bottomRight': fov.pop('bottomRightMM')
-                }
             # The four corners of the FOV, determined by taking the center of the craniotomy in MM,
             # the x-y coordinates of the imaging window center (from the tiled reference image) in
             # galvanometer units, and the x-y coordinates of the FOV center in galvanometer units.
