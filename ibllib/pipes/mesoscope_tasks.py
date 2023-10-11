@@ -15,6 +15,7 @@ import json
 import logging
 import subprocess
 import shutil
+import uuid
 from pathlib import Path
 from itertools import chain
 from collections import defaultdict, Counter
@@ -893,8 +894,11 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
         slice_counts = Counter(f['roiUUID'] for f in meta.get('FOV', []))
         # Create a new stack in Alyx for all stacks containing more than one slice.
         # Map of ScanImage ROI UUID to Alyx ImageStack UUID.
-        stack_ids = {i: self.one.alyx.rest('imaging-stack', 'create', data={'name': i})['id']
-                     for i in slice_counts if slice_counts[i] > 1}
+        if dry:
+            stack_ids = {i: uuid.uuid4() for i in slice_counts if slice_counts[i] > 1}
+        else:
+            stack_ids = {i: self.one.alyx.rest('imaging-stack', 'create', data={'name': i})['id']
+                         for i in slice_counts if slice_counts[i] > 1}
 
         for i, fov in enumerate(meta.get('FOV', [])):
             assert set(fov.keys()) >= {'MLAPDV', 'nXnYnZ', 'roiUUID'}

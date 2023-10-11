@@ -204,7 +204,7 @@ class TestRegisterFOV(unittest.TestCase):
                   'bottomLeft': [2317.3, -2181.4, -466.3], 'bottomRight': [2862.7, -2206.9, -679.4],
                   'center': [2596.1, -1900.5, -588.6]}
         meta = {'FOV': [{'MLAPDV': mlapdv, 'nXnYnZ': [512, 512, 1], 'roiUUID': 0}]}
-        with unittest.mock.patch.object(self.one.alyx, 'rest') as mock_rest:
+        with unittest.mock.patch.object(task.one.alyx, 'rest') as mock_rest:
             task.register_fov(meta, 'estimate')
         calls = mock_rest.call_args_list
         self.assertEqual(3, len(calls))
@@ -228,8 +228,8 @@ class TestRegisterFOV(unittest.TestCase):
         # Check dry mode with suffix input = None
         for file in self.session_path.joinpath('alf', 'FOV_00').glob('mpciMeanImage.*'):
             file.replace(file.with_name(file.name.replace('_estimate', '')))
-        self.one.mode = 'local'
-        with unittest.mock.patch.object(self.one.alyx, 'rest') as mock_rest:
+        task.one.mode = 'local'
+        with unittest.mock.patch.object(task.one.alyx, 'rest') as mock_rest:
             out = task.register_fov(meta, None)
             mock_rest.assert_not_called()
         self.assertEqual(1, len(out))
