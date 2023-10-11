@@ -881,7 +881,7 @@ class MotionAlignmentFullSession:
         wg = WindowGenerator(all_me.size - 1, int(self.camera_meta['fps'] * self.twin),
                              int(self.camera_meta['fps'] * toverlap))
 
-        out = Parallel(n_jobs=self.nprocess)(delayed(self.compute_shifts)(times, all_me, first, last, iw, wg)
+        out = Parallel(n_jobs=4)(delayed(self.compute_shifts)(times, all_me, first, last, iw, wg)
                                              for iw, (first, last) in enumerate(wg.firstlast))
 
         self.shifts = np.array([])
@@ -910,5 +910,6 @@ class MotionAlignmentFullSession:
             snp = ReportSnapshot(self.session_path, self.eid, content_type='session', one=self.one)
             snp.outputs = [save_fig_path]
             snp.register_images(widths=['orig'])
+            plt.close(fig)
 
         return self.new_times
