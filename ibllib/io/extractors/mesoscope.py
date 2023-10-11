@@ -100,7 +100,7 @@ class TimelineTrials(FpgaTrials):
         super().__init__(*args, **kwargs)
         self.timeline = alfio.load_object(self.session_path / sync_collection, 'DAQdata', namespace='timeline')
 
-    def _extract(self, sync=None, chmap=None, sync_collection='raw_sync_data', **kwargs):
+    def _extract(self, sync=None, chmap=None, sync_collection='raw_sync_data', **kwargs) -> dict:
         if not (sync or chmap):
             sync, chmap = load_timeline_sync_and_chmap(
                 self.session_path / sync_collection, timeline=self.timeline, chmap=chmap)
@@ -110,20 +110,17 @@ class TimelineTrials(FpgaTrials):
         trials = super()._extract(sync, chmap, sync_collection, extractor_type='ephys', **kwargs)
 
         # If no protocol number is defined, trim timestamps based on Bpod trials intervals
-        trials_table = trials[self.var_names.index('table')]
+        trials_table = trials['table']
         bpod = get_sync_fronts(sync, chmap['bpod'])
         if kwargs.get('protocol_number') is None:
             tmin = trials_table.intervals_0.iloc[0] - 1
             tmax = trials_table.intervals_1.iloc[-1]
             # Ensure wheel is cut off based on trials
-            wheel_ts_idx = self.var_names.index('wheel_timestamps')
-            mask = np.logical_and(tmin <= trials[wheel_ts_idx], trials[wheel_ts_idx] <= tmax)
-            trials[wheel_ts_idx] = trials[wheel_ts_idx][mask]
-            wheel_pos_idx = self.var_names.index('wheel_position')
-            trials[wheel_pos_idx] = trials[wheel_pos_idx][mask]
-            move_idx = self.var_names.index('wheelMoves_intervals')
-            mask = np.logical_and(trials[move_idx][:, 0] >= tmin, trials[move_idx][:, 0] <= tmax)
-            trials[move_idx] = trials[move_idx][mask, :]
+            mask = np.logical_and(tmin <= trials['wheel_timestamps'], trials['wheel_timestamps'] <= tmax)
+            trials['wheel_timestamps'] = trials['wheel_timestamps'][mask]
+            trials['wheel_position'] = trials['wheel_position'][mask]
+            mask = np.logical_and(trials['wheelMoves_intervals'][:, 0] >= tmin, trials['wheelMoves_intervals'][:, 0] <= tmax)
+            trials['wheelMoves_intervals'] = trials['wheelMoves_intervals'][mask, :]
         else:
             tmin, tmax = get_protocol_period(self.session_path, kwargs['protocol_number'], bpod)
         bpod = get_sync_fronts(sync, chmap['bpod'], tmin, tmax)
@@ -138,7 +135,7 @@ class TimelineTrials(FpgaTrials):
         valve_open_times = self.get_valve_open_times(driver_ttls=driver_out)
         assert len(valve_open_times) == sum(trials_table.feedbackType == 1)  # TODO Relax assertion
         correct = trials_table.feedbackType == 1
-        trials[self.var_names.index('valveOpen_times')][correct] = valve_open_times
+        trials['valveOpen_times'][correct] = valve_open_times
         trials_table.feedback_times[correct] = valve_open_times
 
         # Replace audio events
@@ -191,7 +188,7 @@ class TimelineTrials(FpgaTrials):
 
         trials_table.feedback_times[~correct] = error_cue
         trials_table.goCue_times = go_cue
-        return trials
+        return {k: trials[k] for k in self.var_names}
 
     def extract_wheel_sync(self, ticks=WHEEL_TICKS, radius=WHEEL_RADIUS_CM, coding='x4', tmin=None, tmax=None):
         """

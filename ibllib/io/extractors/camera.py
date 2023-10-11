@@ -16,6 +16,7 @@ from iblutil.numerical import within_ranges
 from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.io.extractors.ephys_fpga import get_sync_fronts, get_sync_and_chn_map
 import ibllib.io.raw_data_loaders as raw
+import ibllib.io.extractors.video_motion as vmotion
 from ibllib.io.extractors.base import (
     BaseBpodTrialsExtractor,
     BaseExtractor,
@@ -148,12 +149,30 @@ class CameraTimestampsFPGA(BaseExtractor):
             except AssertionError as ex:
                 _logger.critical('Failed to extract using %s: %s', sync_label, ex)
 
-        # If you reach here extracting using sync TTLs was not possible
-        _logger.warning('Alignment by wheel data not yet implemented')
+        # If you reach here extracting using sync TTLs was not possible, we attempt to align using wheel motion energy
+        _logger.warning('Attempting to align using wheel')
+
+        try:
+            if self.label not in ['left', 'right']:
+                # Can only use wheel alignment for left and right cameras
+                raise ValueError(f'Wheel alignment not supported for {self.label} camera')
+
+            motion_class = vmotion.MotionAlignmentFullSession(self.session_path, self.label, upload=True)
+            new_times = motion_class.process()
+            if not motion_class.qc_outcome:
+                raise ValueError(f'Wheel alignment failed to pass qc: {motion_class.qc}')
+            else:
+                _logger.warning(f'Wheel alignment successful, qc: {motion_class.qc}')
+                return new_times
+
+        except Exception as err:
+            _logger.critical(f'Failed to align with wheel: {err}')
+
         if length < raw_ts.size:
             df = raw_ts.size - length
             _logger.info(f'Discarding first {df} pulses')
             raw_ts = raw_ts[df:]
+
         return raw_ts
 
 
