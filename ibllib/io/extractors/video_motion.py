@@ -1053,8 +1053,8 @@ class MotionAlignmentFullSession:
         wg = WindowGenerator(all_me.size - 1, int(self.camera_meta['fps'] * self.twin),
                              int(self.camera_meta['fps'] * toverlap))
 
-        out = Parallel(n_jobs=self.nprocess)(delayed(self.compute_shifts)(times, all_me, first, last, iw, wg)
-                                             for iw, (first, last) in enumerate(wg.firstlast))
+        out = Parallel(n_jobs=1)(delayed(self.compute_shifts)(times, all_me, first, last, iw, wg)
+                                 for iw, (first, last) in enumerate(wg.firstlast))
 
         self.shifts = np.array([])
         self.t_shifts = np.array([])
