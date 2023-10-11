@@ -178,8 +178,12 @@ class TestMesoscopeFOV(unittest.TestCase):
             task.update_surgery_json(meta, normal_vector)
         # ONE offline
         one.mode = 'local'
-        with self.assertLogs('ibllib.pipes.mesoscope_tasks', 'WARNING'):
-            task.update_surgery_json(meta, normal_vector)
+        try:
+            with self.assertLogs('ibllib.pipes.mesoscope_tasks', 'WARNING'):
+                task.update_surgery_json(meta, normal_vector)
+        finally:
+            # ONE function is cached so we must reset the mode for other tests
+            one.mode = 'auto'
 
 
 class TestRegisterFOV(unittest.TestCase):
@@ -237,3 +241,10 @@ class TestRegisterFOV(unittest.TestCase):
         locations = out[0]['location']
         self.assertEqual(1, len(locations))
         self.assertEqual('L', locations[0].get('provenance', 'L'))
+
+    def tearDown(self) -> None:
+        """
+        The ONE function is cached and therefore the One object persists beyond this test.
+        Here we return the mode back to the default after testing behaviour in offline mode.
+        """
+        self.one.mode = 'auto'
