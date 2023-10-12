@@ -160,13 +160,13 @@ class CameraTimestampsFPGA(BaseExtractor):
             motion_class = vmotion.MotionAlignmentFullSession(self.session_path, self.label, sync='nidq', upload=True)
             new_times = motion_class.process()
             if not motion_class.qc_outcome:
-                raise ValueError(f'Wheel alignment failed to pass qc: {motion_class.qc}')
+                raise ValueError(f'Wheel alignment for {self.label} camera failed to pass qc: {motion_class.qc}')
             else:
-                _logger.warning(f'Wheel alignment successful, qc: {motion_class.qc}')
+                _logger.warning(f'Wheel alignment for {self.label} camera successful, qc: {motion_class.qc}')
                 return new_times
 
         except Exception as err:
-            _logger.critical(f'Failed to align with wheel: {err}')
+            _logger.critical(f'Failed to align with wheel for {self.label} camera: {err}')
 
         if length < raw_ts.size:
             df = raw_ts.size - length

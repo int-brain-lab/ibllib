@@ -1,3 +1,7 @@
+## Develop
+- Add full video wheel motion alignment code to ibllib.io.extractors.video_motion module
+- Change FPGA camera extractor to attempt wheel alignment if audio alignment fails
+
 ## Release Notes 2.26
 
 ### features
