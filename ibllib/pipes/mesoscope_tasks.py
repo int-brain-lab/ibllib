@@ -216,6 +216,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                              ('mpciROIs.stackPos.npy', 'alf/FOV*', True),
                              ('mpciROIs.mpciROITypes.npy', 'alf/FOV*', True),
                              ('mpciROIs.cellClassifier.npy', 'alf/FOV*', True),
+                             ('mpciROIs.uuids.csv', 'alf/FOV*', True),
                              ('mpciROITypes.names.tsv', 'alf/FOV*', True),
                              ('mpciROIs.masks.npy', 'alf/FOV*', True),
                              ('mpciROIs.neuropilMasks.npy', 'alf/FOV*', True),
@@ -328,6 +329,11 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                 np.save(fov_dir.joinpath('mpciROIs.stackPos.npy'), np.asarray([(*s['med'], 0) for s in stat], dtype=int))
                 np.save(fov_dir.joinpath('mpciROIs.cellClassifier.npy'), np.asarray(iscell[:, 1], dtype=float))
                 np.save(fov_dir.joinpath('mpciROIs.mpciROITypes.npy'), np.asarray(iscell[:, 0], dtype=np.int16))
+                # clusters uuids
+                uuid_list = ['uuids'] + list(map(str, [uuid.uuid4() for _ in range(len(iscell))]))
+                with open(fov_dir.joinpath('mpciROIs.uuids.csv'), 'w+') as fid:
+                    fid.write('\n'.join(uuid_list))
+
                 pd.DataFrame([(0, 'no cell'), (1, 'cell')], columns=['roi_values', 'roi_labels']
                              ).to_csv(fov_dir.joinpath('mpciROITypes.names.tsv'), sep='\t', index=False)
                 # ROI and neuropil masks
