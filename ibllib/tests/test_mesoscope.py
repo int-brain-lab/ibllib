@@ -4,6 +4,7 @@ import unittest
 from unittest import mock
 import tempfile
 import json
+from itertools import chain
 from pathlib import Path
 
 from one.api import ONE
@@ -11,6 +12,7 @@ import numpy as np
 
 from ibllib.pipes.mesoscope_tasks import MesoscopePreprocess, MesoscopeFOV, \
     find_triangle, surface_normal, _nearest_neighbour_1d
+from ibllib.io.extractors import mesoscope
 from ibllib.tests import TEST_DB
 
 # Mock suit2p which is imported in MesoscopePreprocess
@@ -248,3 +250,21 @@ class TestRegisterFOV(unittest.TestCase):
         Here we return the mode back to the default after testing behaviour in offline mode.
         """
         self.one.mode = 'auto'
+
+
+class TestImagingMeta(unittest.TestCase):
+    """Test raw imaging metadata versioning."""
+    def test_patch_imaging_meta(self):
+        """Test for ibllib.io.extractors.mesoscope.patch_imaging_meta function."""
+        meta = {'version': '0.1.0', 'FOV': [{'roiUuid': None}, {'roiUUID': None}]}
+        new_meta = mesoscope.patch_imaging_meta(meta)
+        self.assertEqual(set(chain(*map(dict.keys, new_meta['FOV']))), {'roiUUID'})
+        meta = {'FOV': [
+            dict.fromkeys(['topLeftDeg', 'topRightDeg', 'bottomLeftDeg', 'bottomRightDeg']),
+            dict.fromkeys(['topLeftMM', 'topRightMM', 'bottomLeftMM', 'bottomRightMM'])
+        ]}
+        new_meta = mesoscope.patch_imaging_meta(meta)
+        self.assertIn('channelSaved', new_meta)
+        self.assertCountEqual(new_meta['FOV'][0], ('Deg', 'MM'))
+        expected = ('topLeft', 'topRight', 'bottomLeft', 'bottomRight')
+        self.assertCountEqual(new_meta['FOV'][0]['MM'], expected)
