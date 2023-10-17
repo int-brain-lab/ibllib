@@ -4,7 +4,6 @@ from pathlib import Path, PurePosixPath, WindowsPath
 from collections import defaultdict
 from itertools import starmap
 from subprocess import Popen, PIPE, STDOUT
-from urllib.parse import urlparse
 import subprocess
 import logging
 from getpass import getpass
@@ -18,6 +17,7 @@ from one import params
 from one.webclient import AlyxClient
 from one.converters import path_from_dataset
 from one.remote import globus
+from one.remote.aws import url2uri
 
 from ibllib.oneibl.registration import register_dataset
 
@@ -32,13 +32,6 @@ FTP_PORT = 21
 DMZ_REPOSITORY = 'ibl_patcher'  # in alyx, the repository name containing the patched filerecords
 SDSC_ROOT_PATH = PurePosixPath('/mnt/ibl')
 SDSC_PATCH_PATH = PurePosixPath('/home/datauser/temp')
-
-
-def url2uri(data_path):
-    parsed = urlparse(data_path)
-    assert parsed.netloc and parsed.scheme and parsed.path
-    bucket_name = parsed.netloc.split('.')[0]
-    return f's3://{bucket_name}{parsed.path}'
 
 
 def _run_command(cmd, dry=True):
