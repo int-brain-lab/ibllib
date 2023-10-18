@@ -131,7 +131,7 @@ class ServerGlobusDataHandler(DataHandler):
 
         # For cortex lab we need to get the endpoint from the ibl alyx
         if self.lab == 'cortexlab':
-            alyx = AlyxClient(base_url='https://alyx.internationalbrainlab.org')
+            alyx = AlyxClient(base_url='https://alyx.internationalbrainlab.org', cache_rest=None)
             self.globus.add_endpoint(f'flatiron_{self.lab}', alyx=alyx)
         else:
             self.globus.add_endpoint(f'flatiron_{self.lab}', alyx=self.one.alyx)
@@ -141,21 +141,19 @@ class ServerGlobusDataHandler(DataHandler):
     def setUp(self):
         """Function to download necessary data to run tasks using globus-sdk."""
         if self.lab == 'cortexlab':
-            one = ONE(base_url='https://alyx.internationalbrainlab.org')
-            df = super().getData(one=one)
+            df = super().getData(one=ONE(base_url='https://alyx.internationalbrainlab.org'))
         else:
-            one = self.one
-            df = super().getData()
+            df = super().getData(one=self.one)
 
         if len(df) == 0:
-            # If no datasets found in the cache only work off local file system do not attempt to download any missing data
-            # using globus
+            # If no datasets found in the cache only work off local file system do not attempt to
+            # download any missing data using Globus
             return
 
         # Check for space on local server. If less that 500 GB don't download new data
         space_free = shutil.disk_usage(self.globus.endpoints['local']['root_path'])[2]
         if space_free < 500e9:
-            _logger.warning('Space left on server is < 500GB, wont redownload new data')
+            _logger.warning('Space left on server is < 500GB, won\'t re-download new data')
             return
 
         rel_sess_path = '/'.join(df.iloc[0]['session_path'].split('/')[-3:])
@@ -191,7 +189,7 @@ class ServerGlobusDataHandler(DataHandler):
         return register_dataset(outputs, one=self.one, versions=versions, repository=data_repo, **kwargs)
 
     def cleanUp(self):
-        """Clean up, remove the files that were downloaded from globus once task has completed."""
+        """Clean up, remove the files that were downloaded from Globus once task has completed."""
         for file in self.local_paths:
             os.unlink(file)
 
