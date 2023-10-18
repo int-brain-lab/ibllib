@@ -280,6 +280,7 @@ class TimelineTrials(FpgaTrials):
         moves = extract_wheel_moves(wheel['timestamps'], wheel['position'])
 
         if display:
+            assert self.bpod_trials, 'no bpod trials to compare'
             fig, (ax0, ax1) = plt.subplots(nrows=2, sharex=True)
             bpod_ts = self.bpod_trials['wheel_timestamps']
             bpod_pos = self.bpod_trials['wheel_position']

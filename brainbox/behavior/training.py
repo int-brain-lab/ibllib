@@ -83,7 +83,8 @@ class TrainingStatus(IntFlag):
     ... assert TrainingStatus[status.upper()] in ~TrainingStatus.FAILED, 'Subject untrained'
     ... assert TrainingStatus[status.upper()] in TrainingStatus.TRAINED ^ TrainingStatus.READY
 
-    # Get the next training status
+    Get the next training status
+
     >>> next(member for member in sorted(TrainingStatus) if member > TrainingStatus[status.upper()])
     <TrainingStatus.READY4RECORDING: 128>
 
@@ -91,7 +92,7 @@ class TrainingStatus(IntFlag):
     -----
     - ~TrainingStatus.TRAINED means any status but trained 1a or trained 1b.
     - A subject may acheive both TRAINED_1A and TRAINED_1B within a single session, therefore it
-     is possible to have skipped the TRAINED_1A session status.
+      is possible to have skipped the TRAINED_1A session status.
     """
     UNTRAINABLE = auto()
     UNBIASABLE = auto()
