@@ -23,24 +23,34 @@ _logger = logging.getLogger(__name__)
 
 def patch_imaging_meta(meta: dict) -> dict:
     """
-    Patch imaging meta data for compatibility across versions.
+    Patch imaging metadata for compatibility across versions.
 
     A copy of the dict is NOT returned.
 
     Parameters
     ----------
-    dict : dict
+    meta : dict
         A folder path that contains a rawImagingData.meta file.
 
     Returns
     -------
     dict
-        The loaded meta data file, updated to the most recent version.
+        The loaded metadata file, updated to the most recent version.
     """
-    # 2023-05-17 (unversioned) adds nFrames and channelSaved keys
-    if parse_version(meta.get('version') or '0.0.0') <= parse_version('0.0.0'):
+    # 2023-05-17 (unversioned) adds nFrames, channelSaved keys, MM and Deg keys
+    version = parse_version(meta.get('version') or '0.0.0')
+    if version <= parse_version('0.0.0'):
         if 'channelSaved' not in meta:
             meta['channelSaved'] = next((x['channelIdx'] for x in meta['FOV'] if 'channelIdx' in x), [])
+        fields = ('topLeft', 'topRight', 'bottomLeft', 'bottomRight')
+        for fov in meta.get('FOV', []):
+            for unit in ('Deg', 'MM'):
+                if unit not in fov:  # topLeftDeg, etc. -> Deg[topLeft]
+                    fov[unit] = {f: fov.pop(f + unit, None) for f in fields}
+    elif version == parse_version('0.1.0'):
+        for fov in meta.get('FOV', []):
+            if 'roiUuid' in fov:
+                fov['roiUUID'] = fov.pop('roiUuid')
     return meta
 
 

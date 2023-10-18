@@ -40,11 +40,7 @@ def find_nearest(array, value):
 
 
 class MotionAlignment:
-    roi = {
-        'left': ((800, 1020), (233, 1096)),
-        'right': ((426, 510), (104, 545)),
-        'body': ((402, 481), (31, 103))
-    }
+    roi = {'left': ((800, 1020), (233, 1096)), 'right': ((426, 510), (104, 545)), 'body': ((402, 481), (31, 103))}
 
     def __init__(self, eid=None, one=None, log=logging.getLogger(__name__), **kwargs):
         self.one = one or ONE()
@@ -94,12 +90,9 @@ class MotionAlignment:
             return np.array([[x1, x2], [y1, y2]])
 
         plt.imshow(frame)
-        roi = RectangleSelector(plt.gca(), line_select_callback,
-                                drawtype='box', useblit=True,
-                                button=[1, 3],  # don't use middle button
-                                minspanx=5, minspany=5,
-                                spancoords='pixels',
-                                interactive=True)
+        roi = RectangleSelector(plt.gca(), line_select_callback, drawtype='box', useblit=True, button=[1, 3],
+                                # don't use middle button
+                                minspanx=5, minspany=5, spancoords='pixels', interactive=True)
         plt.show()
         ((x1, x2, *_), (y1, *_, y2)) = roi.corners
         col = np.arange(round(x1), round(x2), dtype=int)
@@ -115,14 +108,13 @@ class MotionAlignment:
             self.data.wheel = self.one.load_object(self.eid, 'wheel')
             self.data.trials = self.one.load_object(self.eid, 'trials')
             cam = self.one.load(self.eid, ['camera.times'], dclass_output=True)
-            self.data.camera_times = {vidio.label_from_path(url): ts
-                                      for ts, url in zip(cam.data, cam.url)}
+            self.data.camera_times = {vidio.label_from_path(url): ts for ts, url in zip(cam.data, cam.url)}
         else:
             alf_path = self.session_path / 'alf'
             self.data.wheel = alfio.load_object(alf_path, 'wheel', short_keys=True)
             self.data.trials = alfio.load_object(alf_path, 'trials')
-            self.data.camera_times = {vidio.label_from_path(x): alfio.load_file_content(x)
-                                      for x in alf_path.glob('*Camera.times*')}
+            self.data.camera_times = {vidio.label_from_path(x): alfio.load_file_content(x) for x in
+                                      alf_path.glob('*Camera.times*')}
         assert all(x is not None for x in self.data.values())
 
     def _set_eid_or_path(self, session_path_or_eid):
@@ -191,8 +183,7 @@ class MotionAlignment:
         roi = (*[slice(*r) for r in self.roi[side]], 0)
         try:
             # TODO Add function arg to make grayscale
-            self.alignment.frames = \
-                vidio.get_video_frames_preload(camera_path, frame_numbers, mask=roi)
+            self.alignment.frames = vidio.get_video_frames_preload(camera_path, frame_numbers, mask=roi)
             assert self.alignment.frames.size != 0
         except AssertionError:
             self.log.error('Failed to open video')
@@ -239,8 +230,8 @@ class MotionAlignment:
             y = np.pad(self.alignment.df, 1, 'edge')
             ax[0].plot(x, y, '-x', label='wheel motion energy')
             thresh = stDev > sd_thresh
-            ax[0].vlines(x[np.array(np.pad(thresh, 1, 'constant', constant_values=False))], 0, 1,
-                         linewidth=0.5, linestyle=':', label=f'>{sd_thresh} s.d. diff')
+            ax[0].vlines(x[np.array(np.pad(thresh, 1, 'constant', constant_values=False))], 0, 1, linewidth=0.5, linestyle=':',
+                         label=f'>{sd_thresh} s.d. diff')
             ax[1].plot(t[interp_mask], np.abs(v[interp_mask]))
 
             # Plot other stuff
@@ -307,9 +298,7 @@ class MotionAlignment:
             data['frame_num'] = 0
             mkr = find_nearest(wheel.timestamps[wheel_mask], ts_0)
 
-            data['marker'], = ax.plot(
-                wheel.timestamps[wheel_mask][mkr],
-                wheel.position[wheel_mask][mkr], 'r-x')
+            data['marker'], = ax.plot(wheel.timestamps[wheel_mask][mkr], wheel.position[wheel_mask][mkr], 'r-x')
             ax.set_ylabel('Wheel position (rad))')
             ax.set_xlabel('Time (s))')
             return
@@ -338,19 +327,13 @@ class MotionAlignment:
             data['im'].set_data(frame)
 
             mkr = find_nearest(wheel.timestamps[wheel_mask], t_x)
-            data['marker'].set_data(
-                wheel.timestamps[wheel_mask][mkr],
-                wheel.position[wheel_mask][mkr]
-            )
+            data['marker'].set_data(wheel.timestamps[wheel_mask][mkr], wheel.position[wheel_mask][mkr])
 
             return data['im'], data['ln'], data['marker']
 
         anim = animation.FuncAnimation(fig, animate, init_func=init_plot,
-                                       frames=(range(len(self.alignment.df))
-                                               if save
-                                               else cycle(range(60))),
-                                       interval=20, blit=False,
-                                       repeat=not save, cache_frame_data=False)
+                                       frames=(range(len(self.alignment.df)) if save else cycle(range(60))), interval=20,
+                                       blit=False, repeat=not save, cache_frame_data=False)
         anim.running = False
 
         def process_key(event):
@@ -398,6 +381,17 @@ class MotionAlignment:
 
 class MotionAlignmentFullSession:
     def __init__(self, session_path, label, **kwargs):
+        """
+        Class to extract camera times using video motion energy wheel alignment
+        :param session_path: path of the session
+        :param label: video label, only 'left' and 'right' videos are supported
+        :param kwargs: threshold - the threshold to apply when identifying frames with artefacts (default 20)
+                       upload - whether to upload summary figure to alyx (default False)
+                       twin - the window length used when computing the shifts between the wheel and video
+                       nprocesses - the number of CPU processes to use
+                       sync - the type of sync scheme used (options 'nidq' or 'bpod')
+                       location - whether the code is being run on SDSC or not (options 'SDSC' or None)
+        """
         self.session_path = session_path
         self.label = label
         self.threshold = kwargs.get('threshold', 20)
@@ -414,7 +408,19 @@ class MotionAlignmentFullSession:
             self.eid = self.one.path2eid(self.session_path)
 
     def load_data(self, sync='nidq', location=None):
+        """
+        Loads relevant data from disk to perform motion alignment
+        :param sync: type of sync used, 'nidq' or 'bpod'
+        :param location: where the code is being run, if location='SDSC', the dataset uuids are removed
+                        when loading the data
+        :return:
+        """
         def fix_keys(alf_object):
+            """
+            Given an alf object removes the dataset uuid from the keys
+            :param alf_object:
+            :return:
+            """
             ob = Bunch()
             for key in alf_object.keys():
                 vals = alf_object[key]
@@ -422,39 +428,50 @@ class MotionAlignmentFullSession:
             return ob
 
         alf_path = self.session_path.joinpath('alf')
-        wheel = (fix_keys(alfio.load_object(alf_path, 'wheel')) if location == 'SDSC'
-                 else alfio.load_object(alf_path, 'wheel'))
+        wheel = (fix_keys(alfio.load_object(alf_path, 'wheel')) if location == 'SDSC' else alfio.load_object(alf_path, 'wheel'))
         self.wheel_timestamps = wheel.timestamps
+        # Compute interpolated wheel position and wheel times
         wheel_pos, self.wheel_time = wh.interpolate_position(wheel.timestamps, wheel.position, freq=1000)
+        # Compute wheel velocity
         self.wheel_vel, _ = wh.velocity_filtered(wheel_pos, 1000)
+        # Load in original camera times
         self.camera_times = alfio.load_file_content(next(alf_path.glob(f'_ibl_{self.label}Camera.times*.npy')))
-        self.camera_path = str(next(self.session_path.joinpath('raw_video_data').glob(
-            f'_iblrig_{self.label}Camera.raw*.mp4')))
+        self.camera_path = str(next(self.session_path.joinpath('raw_video_data').glob(f'_iblrig_{self.label}Camera.raw*.mp4')))
         self.camera_meta = vidio.get_video_meta(self.camera_path)
 
         # TODO should read in the description file to get the correct sync location
         if sync == 'nidq':
+            # If the sync is 'nidq' we read in the camera ttls from the spikeglx sync object
             sync, chmap = get_sync_and_chn_map(self.session_path, sync_collection='raw_ephys_data')
             sr = get_sync_fronts(sync, chmap[f'{self.label}_camera'])
             self.ttls = sr.times[::2]
         else:
+            # Otherwise we assume the sync is 'bpod' and we read in the camera ttls from the raw bpod data
             cam_extractor = cam.CameraTimestampsBpod(session_path=self.session_path)
             cam_extractor.bpod_trials = raw.load_data(self.session_path, task_collection='raw_behavior_data')
             self.ttls = cam_extractor._times_from_bpod()
 
+        # Check if the ttl and video sizes match up
         self.tdiff = self.ttls.size - self.camera_meta['length']
 
         if self.tdiff < 0:
+            # In this case there are fewer ttls than camera frames. This is not ideal, for now we pad the ttls with
+            # nans but if this is too many we reject the wheel alignment based on the qc
             self.ttl_times = self.ttls
             self.times = np.r_[self.ttl_times, np.full((np.abs(self.tdiff)), np.nan)]
             self.short_flag = True
         elif self.tdiff > 0:
+            # In this case there are more ttls than camera frames. This happens often, for now we remove the first
+            # tdiff ttls from the ttls
             self.ttl_times = self.ttls[self.tdiff:]
             self.times = self.ttls[self.tdiff:]
             self.short_flag = False
 
+        # Compute the frame rate of the camera
         self.frate = round(1 / np.nanmedian(np.diff(self.ttl_times)))
 
+        # We attempt to load in some behavior data (trials and dlc). This is only needed for the summary plots, having
+        # trial aligned paw velocity (from the dlc) is a nice sanity check to make sure the alignment went well
         try:
             self.trials = alfio.load_file_content(next(alf_path.glob('_ibl_trials.table*.pqt')))
             self.dlc = alfio.load_file_content(next(alf_path.glob(f'_ibl_{self.label}Camera.dlc*.pqt')))
@@ -463,9 +480,15 @@ class MotionAlignmentFullSession:
         except (ALFObjectNotFound, StopIteration):
             self.behavior = False
 
+        # Load in a single frame that we will use for the summary plot
         self.frame_example = vidio.get_video_frames_preload(self.camera_path, np.arange(10, 11), mask=np.s_[:, :, 0])
 
     def get_roi_mask(self):
+        """
+        Compute the region of interest mask for a given camera. This corresponds to a box in the video that we will
+        use to compute the wheel motion energy
+        :return:
+        """
 
         if self.label == 'right':
             roi = ((450, 512), (120, 200))
@@ -476,27 +499,53 @@ class MotionAlignmentFullSession:
         return roi, roi_mask
 
     def find_contaminated_frames(self, video_frames, thresold=20, normalise=True):
+        """
+        Finds frames in the video that have artefacts such as the mouse's paw or a human hand. In order to determine
+        frames with contamination an Otsu thresholding is applied to each frame to detect the artefact from the
+        background image
+        :param video_frames: np array of video frames (nframes, nwidth, nheight)
+        :param thresold: threshold to differentiate artefact from background
+        :param normalise: whether to normalise the threshold values for each frame to the baseline
+        :return: mask of frames that are contaminated
+        """
         high = np.zeros((video_frames.shape[0]))
+        # Iterate through each frame and compute and store the otsu threshold value for each frame
         for idx, frame in enumerate(video_frames):
             ret, _ = cv2.threshold(cv2.GaussianBlur(frame, (5, 5), 0), 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
             high[idx] = ret
 
+        # If normalise is True, we divide the threshold values for each frame by the minimum value
         if normalise:
             high -= np.min(high)
 
+        # Identify the frames that have a threshold value greater than the specified threshold cutoff
         contaminated_frames = np.where(high > thresold)[0]
 
         return contaminated_frames
 
     def compute_motion_energy(self, first, last, wg, iw):
+        """
+        Computes the video motion energy for frame indexes between first and last. This function is written to be run
+        in a parallel fashion jusing joblib.parallel
+        :param first: first frame index of frame interval to consider
+        :param last: last frame index of frame interval to consider
+        :param wg: WindowGenerator
+        :param iw: iteration of the WindowGenerator
+        :return:
+        """
 
         if iw == wg.nwin - 1:
             return
 
+        # Open the video and read in the relvant video frames between first idx and last idx
         cap = cv2.VideoCapture(self.camera_path)
         frames = vidio.get_video_frames_preload(cap, np.arange(first, last), mask=self.mask)
+        # Identify if any of the frames have artefacts in them
         idx = self.find_contaminated_frames(frames, self.threshold)
 
+        # If some of the frames are contaminated we find all the continuous intervals of contamination
+        # and set the value for contaminated pixels for these frames to the average of the first frame before and after
+        # this contamination interval
         if len(idx) != 0:
 
             before_status = False
@@ -504,6 +553,9 @@ class MotionAlignmentFullSession:
 
             counter = 0
             n_frames = 200
+            # If it is the first frame that is contaminated, we need to read in a bit more of the video to find a
+            # frame prior to contamination. We attempt this 20 times, after that we just take the value for the first
+            # frame
             while np.any(idx == 0) and counter < 20 and iw != 0:
                 n_before_offset = (counter + 1) * n_frames
                 first -= n_frames
@@ -518,11 +570,13 @@ class MotionAlignmentFullSession:
                 print(f'In before: {counter}')
 
             counter = 0
+            # If it is the last frame that is contaminated, we need to read in a bit more of the video to find a
+            # frame after the contamination. We attempt this 20 times, after that we just take the value for the last
+            # frame
             while np.any(idx == frames.shape[0] - 1) and counter < 20 and iw != wg.nwin - 1:
                 n_after_offset = (counter + 1) * n_frames
                 last += n_frames
-                extra_frames = vidio.get_video_frames_preload(cap, frame_numbers=np.arange(last, last + n_frames),
-                                                              mask=self.mask)
+                extra_frames = vidio.get_video_frames_preload(cap, frame_numbers=np.arange(last, last + n_frames), mask=self.mask)
                 frames = np.concatenate([frames, extra_frames], axis=0)
                 idx = self.find_contaminated_frames(frames, self.threshold)
                 after_status = True
@@ -531,6 +585,8 @@ class MotionAlignmentFullSession:
             if counter > 0:
                 print(f'In after: {counter}')
 
+            # We find all the continuous intervals that contain contamination and fix the affected pixels
+            # by taking the average value of the frame prior and after contamination
             intervals = np.split(idx, np.where(np.diff(idx) != 1)[0] + 1)
             for ints in intervals:
                 if len(ints) > 0 and ints[0] == 0:
@@ -538,22 +594,28 @@ class MotionAlignmentFullSession:
                 if len(ints) > 0 and ints[-1] == frames.shape[0] - 1:
                     ints = ints[:-1]
                 th_all = np.zeros_like(frames[0])
+                # We find all affected pixels
                 for idx in ints:
                     img = np.copy(frames[idx])
                     blur = cv2.GaussianBlur(img, (5, 5), 0)
                     ret, th = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
                     th = cv2.GaussianBlur(th, (5, 5), 10)
                     th_all += th
+                # Compute the average image of the frame prior and after the interval
                 vals = np.mean(np.dstack([frames[ints[0] - 1], frames[ints[-1] + 1]]), axis=-1)
+                # For each frame set the affected pixels to the value of the clean average image
                 for idx in ints:
                     img = frames[idx]
                     img[th_all > 0] = vals[th_all > 0]
 
+            # If we have read in extra video frames we need to cut these off and make sure we only
+            # consider the frames between the interval first and last given as args
             if before_status:
                 frames = frames[n_before_offset:]
             if after_status:
                 frames = frames[:(-1 * n_after_offset)]
 
+        # Once the frames have been cleaned we compute the motion energy between frames
         frame_me, _ = video.motion_energy(frames, diff=2, normalize=False)
 
         cap.release()
@@ -561,32 +623,54 @@ class MotionAlignmentFullSession:
         return frame_me[2:]
 
     def compute_shifts(self, times, me, first, last, iw, wg):
+        """
+        Compute the cross-correlation between the video motion energy and the wheel velocity to find the mismatch
+        between the camera ttls and the video frames. This function is written to run in a parallel manner using
+        joblib.parallel
 
+        :param times: the times of the video frames across the whole session (ttls)
+        :param me: the video motion energy computed across the whole session
+        :param first: first time idx to consider
+        :param last: last time idx to consider
+        :param wg: WindowGenerator
+        :param iw: iteration of the WindowGenerator
+        :return:
+        """
+
+        # If we are in the last window we exit
         if iw == wg.nwin - 1:
             return np.nan, np.nan
+
+        # Find the time interval we are interested in
         t_first = times[first]
         t_last = times[last]
+
+        # If both times during this interval are nan exit
         if np.isnan(t_last) and np.isnan(t_first):
             return np.nan, np.nan
+        # If only the last time is nan, we find the last non nan time value
         elif np.isnan(t_last):
             t_last = times[np.where(~np.isnan(times))[0][-1]]
 
+        # Find the mask of timepoints that fall in this interval
         mask = np.logical_and(times >= t_first, times <= t_last)
+        # Restrict the video motion energy to this interval and normalise the values
         align_me = me[np.where(mask)[0]]
         align_me = (align_me - np.nanmin(align_me)) / (np.nanmax(align_me) - np.nanmin(align_me))
 
-        # Find closest timepoints in wheel that match the camera times
+        # Find closest timepoints in wheel that match the time interval
         wh_mask = np.logical_and(self.wheel_time >= t_first, self.wheel_time <= t_last)
         if np.sum(wh_mask) == 0:
             return np.nan, np.nan
+        # Find the mask for the wheel times
         xs = np.searchsorted(self.wheel_time[wh_mask], times[mask])
         xs[xs == np.sum(wh_mask)] = np.sum(wh_mask) - 1
         # Convert to normalized speed
         vs = np.abs(self.wheel_vel[wh_mask][xs])
         vs = (vs - np.min(vs)) / (np.max(vs) - np.min(vs))
 
+        # Account for nan values in the video motion energy
         isnan = np.isnan(align_me)
-
         if np.sum(isnan) > 0:
             where_nan = np.where(isnan)[0]
             assert where_nan[0] == 0
@@ -595,12 +679,22 @@ class MotionAlignmentFullSession:
         if np.all(isnan):
             return np.nan, np.nan
 
+        # Compute the cross correlation between the video motion energy and the wheel speed
         xcorr = signal.correlate(align_me[~isnan], vs[~isnan])
+        # The max value of the cross correlation indicates the shift that needs to be applied
+        # The +2 comes from the fact that the video motion energy was computed from the difference between frames
         shift = np.nanargmax(xcorr) - align_me[~isnan].size + 2
 
         return shift, t_first + (t_last - t_first) / 2
 
     def clean_shifts(self, x, n=1):
+        """
+        Removes artefacts from the computed shifts across time. We assume that the shifts should never increase
+        over time and that the jump between consecutive shifts shouldn't be greater than 1
+        :param x: computed shifts
+        :param n: condition to apply
+        :return:
+        """
         y = x.copy()
         dy = np.diff(y, prepend=y[0])
         while True:
@@ -625,6 +719,17 @@ class MotionAlignmentFullSession:
         return np.cumsum(dy) + y[0]
 
     def qc_shifts(self, shifts, shifts_filt):
+        """
+        Compute qc values for the wheel alignment. We consider 4 things
+        1. The number of camera ttl values that are missing (when we have less ttls than video frames)
+        2. The number of shifts that have nan values, this means the video motion energy computation
+        3. The number of large jumps (>10) between the computed shifts
+        4. The number of jumps (>1) between the shifts after they have been cleaned
+
+        :param shifts: np.array of shifts over session
+        :param shifts_filt: np.array of shifts after being cleaned over session
+        :return:
+        """
 
         ttl_per = (np.abs(self.tdiff) / self.camera_meta['length']) * 100 if self.tdiff < 0 else 0
         nan_per = (np.sum(np.isnan(shifts_filt)) / shifts_filt.size) * 100
@@ -654,11 +759,21 @@ class MotionAlignmentFullSession:
         return qc, qc_outcome
 
     def extract_times(self, shifts_filt, t_shifts):
+        """
+        Extracts new camera times after applying the computed shifts across the session
 
+        :param shifts_filt: filtered shifts computed across session
+        :param t_shifts: time point of computed shifts
+        :return:
+        """
+
+        # Compute the interpolation function to apply to the ttl times
         t_new = t_shifts - (shifts_filt * 1 / self.frate)
         fcn = interpolate.interp1d(t_shifts, t_new, fill_value="extrapolate")
+        # Apply the function and get out new times
         new_times = fcn(self.ttl_times)
 
+        # If we are missing ttls then interpolate and append the correct number at the end
         if self.tdiff < 0:
             to_app = (np.arange(np.abs(self.tdiff), ) + 1) / self.frate + new_times[-1]
             new_times = np.r_[new_times, to_app]
@@ -667,8 +782,21 @@ class MotionAlignmentFullSession:
 
     @staticmethod
     def single_cluster_raster(spike_times, events, trial_idx, dividers, colors, labels, weights=None, fr=True,
-                              norm=False,
-                              axs=None):
+                              norm=False, axs=None):
+        """
+        Compute and plot trial aligned spike rasters and psth
+        :param spike_times: times of variable
+        :param events: trial times to align to
+        :param trial_idx: trial idx to sort by
+        :param dividers:
+        :param colors:
+        :param labels:
+        :param weights:
+        :param fr:
+        :param norm:
+        :param axs:
+        :return:
+        """
         pre_time = 0.4
         post_time = 1
         raster_bin = 0.01
@@ -687,8 +815,7 @@ class MotionAlignmentFullSession:
 
         dividers = [0] + dividers + [len(trial_idx)]
         if axs is None:
-            fig, axs = plt.subplots(2, 1, figsize=(4, 6), gridspec_kw={'height_ratios': [1, 3], 'hspace': 0},
-                                    sharex=True)
+            fig, axs = plt.subplots(2, 1, figsize=(4, 6), gridspec_kw={'height_ratios': [1, 3], 'hspace': 0}, sharex=True)
         else:
             fig = axs[0].get_figure()
 
@@ -707,8 +834,7 @@ class MotionAlignmentFullSession:
             psth_div = np.nanmean(psth[t_ids], axis=0)
             std_div = np.nanstd(psth[t_ids], axis=0) / np.sqrt(len(t_ids))
 
-            axs[0].fill_between(t_psth, psth_div - std_div,
-                                psth_div + std_div, alpha=0.4, color=colors[lid])
+            axs[0].fill_between(t_psth, psth_div - std_div, psth_div + std_div, alpha=0.4, color=colors[lid])
             axs[0].plot(t_psth, psth_div, alpha=1, color=colors[lid])
 
             lab_max = idx[np.argmax(t_ints)]
@@ -726,8 +852,7 @@ class MotionAlignmentFullSession:
         secax = axs[1].secondary_yaxis('right')
 
         secax.set_yticks(label_pos)
-        secax.set_yticklabels(label, rotation=90,
-                              rotation_mode='anchor', ha='center')
+        secax.set_yticklabels(label, rotation=90, rotation_mode='anchor', ha='center')
         for ic, c in enumerate(np.array(colors)[lidx]):
             secax.get_yticklabels()[ic].set_color(c)
 
@@ -737,6 +862,10 @@ class MotionAlignmentFullSession:
         return fig, axs
 
     def plot_with_behavior(self):
+        """
+        Makes a summary figure of the alignment when behaviour data is available
+        :return:
+        """
 
         self.dlc = likelihood_threshold(self.dlc)
         trial_idx, dividers = find_trial_ids(self.trials, sort='side')
@@ -778,8 +907,7 @@ class MotionAlignmentFullSession:
         ax02.set_ylabel('Frames')
         ax02.set_xlabel('Time in session')
 
-        ax03.plot(self.camera_times, (self.camera_times - self.new_times) * self.camera_meta['fps'],
-                  'k', label='extracted - new')
+        ax03.plot(self.camera_times, (self.camera_times - self.new_times) * self.camera_meta['fps'], 'k', label='extracted - new')
         ax03.legend()
         ax03.set_ylim(-5, 5)
         ax03.set_ylabel('Frames')
@@ -792,8 +920,8 @@ class MotionAlignmentFullSession:
         ax11.set_title('Wheel')
         ax12.set_xlabel('Time from first move')
 
-        self.single_cluster_raster(self.camera_times, self.trials['firstMovement_times'].values, trial_idx, dividers,
-                                   ['g', 'y'], ['left', 'right'], weights=feature_ext, fr=False, axs=[ax21, ax22])
+        self.single_cluster_raster(self.camera_times, self.trials['firstMovement_times'].values, trial_idx, dividers, ['g', 'y'],
+                                   ['left', 'right'], weights=feature_ext, fr=False, axs=[ax21, ax22])
         ax21.sharex(ax22)
         ax21.set_ylabel('Paw r velocity')
         ax21.set_title('Extracted times')
@@ -808,8 +936,7 @@ class MotionAlignmentFullSession:
 
         ax41.imshow(self.frame_example[0])
         rect = matplotlib.patches.Rectangle((self.roi[1][1], self.roi[0][0]), self.roi[1][0] - self.roi[1][1],
-                                            self.roi[0][1] - self.roi[0][0],
-                                            linewidth=4, edgecolor='g', facecolor='none')
+                                            self.roi[0][1] - self.roi[0][0], linewidth=4, edgecolor='g', facecolor='none')
         ax41.add_patch(rect)
 
         ax42.plot(self.all_me)
@@ -817,6 +944,10 @@ class MotionAlignmentFullSession:
         return fig
 
     def plot_without_behavior(self):
+        """
+        Makes a summary figure of the alignment when behaviour data is not available
+        :return:
+        """
 
         fig = plt.figure()
         fig.set_size_inches(7, 7)
@@ -845,8 +976,7 @@ class MotionAlignmentFullSession:
         ax02.set_ylabel('Frames')
         ax02.set_xlabel('Time in session')
 
-        ax03.plot(self.camera_times, (self.camera_times - self.new_times) * self.camera_meta['fps'],
-                  'k', label='extracted - new')
+        ax03.plot(self.camera_times, (self.camera_times - self.new_times) * self.camera_meta['fps'], 'k', label='extracted - new')
         ax03.legend()
         ax03.set_ylim(-5, 5)
         ax03.set_ylabel('Frames')
@@ -854,8 +984,7 @@ class MotionAlignmentFullSession:
 
         ax04.imshow(self.frame_example[0])
         rect = matplotlib.patches.Rectangle((self.roi[1][1], self.roi[0][0]), self.roi[1][0] - self.roi[1][1],
-                                            self.roi[0][1] - self.roi[0][0],
-                                            linewidth=4, edgecolor='g', facecolor='none')
+                                            self.roi[0][1] - self.roi[0][0], linewidth=4, edgecolor='g', facecolor='none')
         ax04.add_patch(rect)
 
         ax05.plot(self.all_me)
@@ -863,11 +992,25 @@ class MotionAlignmentFullSession:
         return fig
 
     def process(self):
+        """
+        Main function used to apply the video motion wheel alignment to the camera times. This function does the
+        following
+        1. Computes the video motion energy across the whole session (computed in windows and parallelised)
+        2. Computes the shift that should be applied to the camera times across the whole session by computing
+           the cross correlation between the video motion energy and the wheel speed (computed in
+           overlapping windows and parallelised)
+        3. Removes artefacts from the computed shifts
+        4. Computes the qc for the wheel alignment
+        5. Extracts the new camera times using the shifts computed from the video wheel alignment
+        6. If upload is True, creates a summary plot of the alignment and uploads the figure to the relevant session
+          on alyx
+        :return:
+        """
 
         # Compute the motion energy of the wheel for the whole video
         wg = WindowGenerator(self.camera_meta['length'], 5000, 4)
-        out = Parallel(n_jobs=self.nprocess)(delayed(self.compute_motion_energy)(first, last, wg, iw)
-                                             for iw, (first, last) in enumerate(wg.firstlast))
+        out = Parallel(n_jobs=self.nprocess)(
+            delayed(self.compute_motion_energy)(first, last, wg, iw) for iw, (first, last) in enumerate(wg.firstlast))
         # Concatenate the motion energy into one big array
         self.all_me = np.array([])
         for vals in out[:-1]:
@@ -878,11 +1021,10 @@ class MotionAlignmentFullSession:
         to_app = self.times[0] - ((np.arange(int(self.camera_meta['fps'] * toverlap), ) + 1) / self.frate)[::-1]
         times = np.r_[to_app, self.times]
 
-        wg = WindowGenerator(all_me.size - 1, int(self.camera_meta['fps'] * self.twin),
-                             int(self.camera_meta['fps'] * toverlap))
+        wg = WindowGenerator(all_me.size - 1, int(self.camera_meta['fps'] * self.twin), int(self.camera_meta['fps'] * toverlap))
 
-        out = Parallel(n_jobs=self.nprocess)(delayed(self.compute_shifts)(times, all_me, first, last, iw, wg)
-                                             for iw, (first, last) in enumerate(wg.firstlast))
+        out = Parallel(n_jobs=1)(delayed(self.compute_shifts)(times, all_me, first, last, iw, wg)
+                                 for iw, (first, last) in enumerate(wg.firstlast))
 
         self.shifts = np.array([])
         self.t_shifts = np.array([])
@@ -903,11 +1045,12 @@ class MotionAlignmentFullSession:
 
         if self.upload:
             fig = self.plot_with_behavior() if self.behavior else self.plot_without_behavior()
-            save_fig_path = Path(self.session_path.joinpath('snapshot', 'video', 'video_wheel_alignment.png'))
+            save_fig_path = Path(self.session_path.joinpath('snapshot', 'video', f'video_wheel_alignment_{self.label}.png'))
             save_fig_path.parent.mkdir(exist_ok=True, parents=True)
             fig.savefig(save_fig_path)
             snp = ReportSnapshot(self.session_path, self.eid, content_type='session', one=self.one)
             snp.outputs = [save_fig_path]
             snp.register_images(widths=['orig'])
+            plt.close(fig)
 
         return self.new_times

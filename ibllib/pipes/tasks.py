@@ -1,3 +1,4 @@
+"""The abstract Pipeline and Task superclasses and concrete task runner."""
 from pathlib import Path
 import abc
 import logging
@@ -602,22 +603,39 @@ class Pipeline(abc.ABC):
 def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
                   max_md5_size=None, machine=None, clobber=True, location='server', mode='log'):
     """
-    Runs a single Alyx job and registers output datasets
-    :param tdict:
-    :param session_path:
-    :param one:
-    :param job_deck: optional list of job dictionaries belonging to the session. Needed
-    to check dependency status if the jdict has a parent field. If jdict has a parent and
-    job_deck is not entered, will query the database
-    :param max_md5_size: in bytes, if specified, will not compute the md5 checksum above a given
-    filesize to save time
-    :param machine: string identifying the machine the task is run on, optional
-    :param clobber: bool, if True any existing logs are overwritten, default is True
-    :param location: where you are running the task, 'server' - local lab server, 'remote' - any
-    compute node/ computer, 'SDSC' - flatiron compute node, 'AWS' - using data from aws s3
-    :param mode: str ('log' or 'raise') behaviour to adopt if an error occured. If 'raise', it
-    will Raise the error at the very end of this function (ie. after having labeled the tasks)
-    :return:
+    Runs a single Alyx job and registers output datasets.
+
+    Parameters
+    ----------
+    tdict : dict
+        An Alyx task dictionary to instantiate and run.
+    session_path : str, pathlib.Path
+        A session path containing the task input data.
+    one : one.api.OneAlyx
+        An instance of ONE.
+    job_deck : list of dict, optional
+        A list of all tasks in the same pipeline. If None, queries Alyx to get this.
+    max_md5_size : int, optional
+        An optional maximum file size in bytes. Files with sizes larger than this will not have
+        their MD5 checksum calculated to save time.
+    machine : str, optional
+        A string identifying the machine the task is run on.
+    clobber : bool, default=True
+        If true any existing logs are overwritten on Alyx.
+    location : {'remote', 'server', 'sdsc', 'aws'}
+        Where you are running the task, 'server' - local lab server, 'remote' - any
+        compute node/ computer, 'sdsc' - Flatiron compute node, 'aws' - using data from AWS S3
+        node.
+    mode : {'log', 'raise}, default='log'
+        Behaviour to adopt if an error occurred. If 'raise', it will raise the error at the very
+        end of this function (i.e. after having labeled the tasks).
+
+    Returns
+    -------
+    Task
+        The instantiated task object that was run.
+    list of pathlib.Path
+        A list of registered datasets.
     """
     registered_dsets = []
     # here we need to check parents' status, get the job_deck if not available

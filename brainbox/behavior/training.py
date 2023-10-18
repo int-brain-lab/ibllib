@@ -1,3 +1,42 @@
+"""Computing and testing IBL training status criteria.
+
+For an in-depth description of each training status, see `Appendix 2`_ of the IBL Protocol For Mice
+Training.
+
+.. _Appendix 2: https://figshare.com/articles/preprint/A_standardized_and_reproducible_method_to_\
+measure_decision-making_in_mice_Appendix_2_IBL_protocol_for_mice_training/11634729
+
+Examples
+--------
+Plot the psychometric curve for a given session.
+
+>>> trials = ONE().load_object(eid, 'trials')
+>>> fix, ax = plot_psychometric(trials)
+
+Compute 'response times', defined as the duration of open-loop for each contrast.
+
+>>> reaction_time, contrasts, n_contrasts = compute_reaction_time(trials)
+
+Compute 'reaction times', defined as the time between go cue and first detected movement.
+NB: These may be negative!
+
+>>> reaction_time, contrasts, n_contrasts = compute_reaction_time(
+...     trials, stim_on_type='goCue_times', stim_off_type='firstMovement_times')
+
+Compute 'response times', defined as the time between first detected movement and response.
+
+>>> reaction_time, contrasts, n_contrasts = compute_reaction_time(
+...     trials, stim_on_type='firstMovement_times', stim_off_type='response_times')
+
+Compute 'movement times', defined as the time between last detected movement and response threshold.
+
+>>> import brainbox.behavior.wheel as wh
+>>> wheel_moves = ONE().load_object(eid, 'wheeMoves')
+>>> trials['lastMovement_times'] = wh.get_movement_onset(wheel_moves.intervals, trial_data.response_times)
+>>> reaction_time, contrasts, n_contrasts = compute_reaction_time(
+...     trials, stim_on_type='lastMovement_times', stim_off_type='response_times')
+
+"""
 import logging
 import datetime
 import re
@@ -11,6 +50,7 @@ import pandas as pd
 from scipy.stats import bootstrap
 from iblutil.util import Bunch
 from one.api import ONE
+from one.alf.io import AlfBunch
 from one.alf.exceptions import ALFObjectNotFound
 
 import psychofit as psy
@@ -24,6 +64,7 @@ TRIALS_KEYS = ['contrastLeft',
                'choice',
                'response_times',
                'stimOn_times']
+"""list of str: The required keys in the trials object for computing training status."""
 
 
 @unique
@@ -68,17 +109,23 @@ class TrainingStatus(IntFlag):
 
 def get_lab_training_status(lab, date=None, details=True, one=None):
     """
-    Computes the training status of all alive and water restricted subjects in a specified lab
+    Computes the training status of all alive and water restricted subjects in a specified lab.
 
-    :param lab: lab name (must match the name registered on Alyx)
-    :type lab: string
-    :param date: the date from which to compute training status from. If not specified will compute
-    from the latest date with available data
-    :type date: string of format 'YYYY-MM-DD'
-    :param details: whether to display all information about training status computation e.g
-    performance, number of trials, psychometric fit parameters
-    :type details: bool
-    :param one: instantiation of ONE class
+    The response are printed to std out.
+
+    Parameters
+    ----------
+    lab : str
+        Lab name (must match the name registered on Alyx).
+    date : str
+        The ISO date from which to compute training status. If not specified will compute from the
+        latest date with available data.  Format should be 'YYYY-MM-DD'.
+    details : bool
+        Whether to display all information about training status computation e.g. performance,
+        number of trials, psychometric fit parameters.
+    one : one.api.OneAlyx
+        An instance of ONE.
+
     """
     one = one or ONE()
     subj_lab = one.alyx.rest('subjects', 'list', lab=lab, alive=True, water_restricted=True)
@@ -89,17 +136,20 @@ def get_lab_training_status(lab, date=None, details=True, one=None):
 
 def get_subject_training_status(subj, date=None, details=True, one=None):
     """
-    Computes the training status of specified subject
+    Computes the training status of specified subject and prints results to std out.
 
-    :param subj: subject nickname (must match the name registered on Alyx)
-    :type subj: string
-    :param date: the date from which to compute training status from. If not specified will compute
-    from the latest date with available data
-    :type date: string of format 'YYYY-MM-DD'
-    :param details: whether to display all information about training status computation e.g
-    performance, number of trials, psychometric fit parameters
-    :type details: bool
-    :param one: instantiation of ONE class
+    Parameters
+    ----------
+    subj : str
+        Subject nickname (must match the name registered on Alyx).
+    date : str
+        The ISO date from which to compute training status. If not specified will compute from the
+        latest date with available data.  Format should be 'YYYY-MM-DD'.
+    details : bool
+        Whether to display all information about training status computation e.g. performance,
+        number of trials, psychometric fit parameters.
+    one : one.api.OneAlyx
+        An instance of ONE.
     """
     one = one or ONE()
 
@@ -127,19 +177,28 @@ def get_sessions(subj, date=None, one=None):
     data from the three (or as many as are available) previous sessions up to the specified date.
     If not it will load data from the last three training sessions that have data available.
 
-    :param subj: subject nickname (must match the name registered on Alyx)
-    :type subj: string
-    :param date: the date from which to compute training status from. If not specified will compute
-    from the latest date with available data
-    :type date: string of format 'YYYY-MM-DD'
-    :param one: instantiation of ONE class
-    :returns:
-        - trials - dict of trials objects where each key is the session date
-        - task_protocol - list of the task protocol used for each of the sessions
-        - ephys_sess_data - list of dates where training was conducted on ephys rig. Empty list if
-                            all sessions on training rig
-        - n_delay - number of sessions on ephys rig that had delay prior to starting session
-                    > 15min. Returns 0 is no sessions detected
+    Parameters
+    ----------
+    subj : str
+        Subject nickname (must match the name registered on Alyx).
+    date : str
+        The ISO date from which to compute training status. If not specified will compute from the
+        latest date with available data.  Format should be 'YYYY-MM-DD'.
+    one : one.api.OneAlyx
+        An instance of ONE.
+
+    Returns
+    -------
+    iblutil.util.Bunch
+        Dictionary of trials objects where each key is the ISO session date string.
+    list of str
+        List of the task protocol used for each of the sessions.
+    list of str
+        List of ISO date strings where training was conducted on ephys rig. Empty list if all
+        sessions on training rig.
+    n_delay : int
+        Number of sessions on ephys rig that had delay prior to starting session > 15min.
+        Returns 0 if no sessions detected.
     """
     one = one or ONE()
 
@@ -225,21 +284,31 @@ def get_sessions(subj, date=None, one=None):
 
 def get_training_status(trials, task_protocol, ephys_sess_dates, n_delay):
     """
-    Compute training status of a subject from three consecutive training datasets
+    Compute training status of a subject from consecutive training datasets.
 
-    :param trials: dict containing trials objects from three consecutive training sessions
-    :type trials: Bunch
-    :param task_protocol: task protocol used for the three training session, can be 'training',
-    'biased' or 'ephys'
-    :type task_protocol: list of strings
-    :param ephys_sess_dates: dates of sessions conducted on ephys rig
-    :type ephys_sess_dates: list of strings
-    :param n_delay: number of sessions on ephys rig with delay before start > 15 min
-    :type n_delay: int
-    :returns:
-        - status - training status of subject
-        - info - Bunch containing performance metrics that decide training status e.g performance
-                 on easy trials, number of trials, psychometric fit parameters, reaction time
+    For IBL, training status is calculated using trials from the last three consecutive sessions.
+
+    Parameters
+    ----------
+    trials : dict of str
+        Dictionary of trials objects where each key is the ISO session date string.
+    task_protocol : list of str
+        Task protocol used for each training session in `trials`, can be 'training', 'biased' or
+        'ephys'.
+    ephys_sess_dates : list of str
+        List of ISO date strings where training was conducted on ephys rig. Empty list if all
+        sessions on training rig.
+    n_delay : int
+        Number of sessions on ephys rig that had delay prior to starting session > 15min.
+        Returns 0 if no sessions detected.
+
+    Returns
+    -------
+    str
+        Training status of the subject.
+    iblutil.util.Bunch
+        Bunch containing performance metrics that decide training status i.e. performance on easy
+        trials, number of trials, psychometric fit parameters, reaction time.
     """
 
     info = Bunch()
@@ -313,28 +382,31 @@ def get_training_status(trials, task_protocol, ephys_sess_dates, n_delay):
 def display_status(subj, sess_dates, status, perf_easy=None, n_trials=None, psych=None,
                    psych_20=None, psych_80=None, rt=None):
     """
-    Display training status of subject to terminal
+    Display training status of subject to terminal.
 
-    :param subj: subject nickname
-    :type subj: string
-    :param sess_dates: training session dates used to determine training status
-    :type sess_dates: list of strings
-    :param status: training status of subject
-    :type status: string
-    :param perf_easy: performance on easy trials for each training sessions
-    :type perf_easy: np.array
-    :param n_trials: number of trials for each training sessions
-    :type n_trials: np.array
-    :param psych: parameters of psychometric curve fit to data from all training sessions
-    :type psych: np.array - bias, threshold, lapse high, lapse low
-    :param psych_20: parameters of psychometric curve fit to data in 20 (probability left) block
-    from all training sessions
-    :type psych_20: np.array - bias, threshold, lapse high, lapse low
-    :param psych_80: parameters of psychometric curve fit to data in 80 (probability left) block
-    from all training sessions
-    :type psych_80: np.array - bias, threshold, lapse high, lapse low
-    :param rt: median reaction time on zero contrast trials across all training sessions (if nan
-    indicates no zero contrast stimuli in training sessions)
+    Parameters
+    ----------
+    subj : str
+        Subject nickname (must match the name registered on Alyx).
+    sess_dates : list of str
+        ISO date strings of training sessions used to determine training status.
+    status : str
+        Training status of subject.
+    perf_easy : numpy.array
+        Proportion of correct high contrast trials for each training session.
+    n_trials : numpy.array
+        Total number of trials for each training session.
+    psych : numpy.array
+        Psychometric parameters fit to data from all training sessions - bias, threshold, lapse
+        high, lapse low.
+    psych_20 : numpy.array
+        The fit psychometric parameters for the blocks where probability of a left stimulus is 0.2.
+    psych_80 : numpy.array
+        The fit psychometric parameters for the blocks where probability of a left stimulus is 0.8.
+    rt : float
+        The median response time for zero contrast trials across all training sessions. NaN
+        indicates no zero contrast stimuli in training sessions.
+
     """
 
     if perf_easy is None:
@@ -366,15 +438,19 @@ def display_status(subj, sess_dates, status, perf_easy=None, n_trials=None, psyc
 
 def concatenate_trials(trials):
     """
-    Concatenate trials from different training sessions
+    Concatenate trials from different training sessions.
 
-    :param trials: dict containing trials objects from three consecutive training sessions,
-    keys are session dates
-    :type trials: Bunch
-    :return: trials object with data concatenated over three training sessions
-    :rtype: dict
+    Parameters
+    ----------
+    trials : dict of str
+        Dictionary of trials objects where each key is the ISO session date string.
+
+    Returns
+    -------
+    one.alf.io.AlfBunch
+        Trials object with data concatenated over three training sessions.
     """
-    trials_all = Bunch()
+    trials_all = AlfBunch()
     for k in TRIALS_KEYS:
         trials_all[k] = np.concatenate(list(trials[kk][k] for kk in trials.keys()))
 
@@ -383,18 +459,27 @@ def concatenate_trials(trials):
 
 def compute_training_info(trials, trials_all):
     """
-    Compute all relevant performance metrics for when subject is on trainingChoiceWorld
+    Compute all relevant performance metrics for when subject is on trainingChoiceWorld.
 
-    :param trials: dict containing trials objects from three consecutive training sessions,
-    keys are session dates
-    :type trials: Bunch
-    :param trials_all: trials object with data concatenated over three training sessions
-    :type trials_all: Bunch
-    :returns:
-        - perf_easy - performance of easy trials for each session
-        - n_trials - number of trials in each session
-        - psych - parameters for psychometric curve fit to all sessions
-        - rt - median reaction time for zero contrast stimuli over all sessions
+    Parameters
+    ----------
+    trials : dict of str
+        Dictionary of trials objects where each key is the ISO session date string.
+    trials_all : one.alf.io.AlfBunch
+        Trials object with data concatenated over three training sessions.
+
+    Returns
+    -------
+    numpy.array
+        Proportion of correct high contrast trials for each session.
+    numpy.array
+        Total number of trials for each training session.
+    numpy.array
+        Array of psychometric parameters fit to `all_trials` - bias, threshold, lapse high,
+        lapse low.
+    float
+        The median response time for all zero-contrast trials across all sessions. Returns NaN if
+        no trials zero-contrast trials).
     """
 
     signed_contrast = get_signed_contrast(trials_all)
@@ -504,17 +589,50 @@ def compute_n_trials(trials):
     return trials['choice'].shape[0]
 
 
-def compute_psychometric(trials, signed_contrast=None, block=None, plotting=False, compute_ci=False, alpha=0.32):
+def compute_psychometric(trials, signed_contrast=None, block=None, plotting=False, compute_ci=False, alpha=.032):
     """
-    Compute psychometric fit parameters for trials object
+    Compute psychometric fit parameters for trials object.
 
-    :param trials: trials object that must contain contrastLeft, contrastRight and probabilityLeft
-    :type trials: dict
-    :param signed_contrast: array of signed contrasts in percent, where -ve values are on the left
-    :type signed_contrast: np.array
-    :param block: biased block can be either 0.2 or 0.8
-    :type block: float
-    :return: array of psychometric fit parameters - bias, threshold, lapse high, lapse low
+    Parameters
+    ----------
+    trials : one.alf.io.AlfBunch
+        An ALF trials object containing the keys {'probabilityLeft', 'contrastLeft',
+        'contrastRight', 'feedbackType', 'choice', 'response_times', 'stimOn_times'}.
+    signed_contrast : numpy.array
+        An array of signed contrasts in percent the length of trials, where left contrasts are -ve.
+        If None, these are computed from the trials object.
+    block : float
+        The block type to compute. If None, all trials are included, otherwise only trials where
+        probabilityLeft matches this value are included.  For biasedChoiceWorld, the
+        probabilityLeft set is {0.5, 0.2, 0.8}.
+    plotting : bool
+        Which set of psychofit model parameters to use (see notes).
+    compute_ci : bool
+        If true, computes and returns the confidence intervals for response at each contrast.
+    alpha : float, default=0.032
+        Significance level for confidence interval. Must be in (0, 1). If `compute_ci` is false,
+        this value is ignored.
+
+    Returns
+    -------
+    numpy.array
+        Array of psychometric fit parameters - bias, threshold, lapse high, lapse low.
+    (tuple of numpy.array)
+        If `compute_ci` is true, a tuple of
+
+    See Also
+    --------
+    statsmodels.stats.proportion.proportion_confint - The function used to compute confidence
+      interval.
+    psychofit.mle_fit_psycho - The function used to fit the psychometric parameters.
+
+    Notes
+    -----
+    The psychofit starting parameters and model constraints used for the fit when computing the
+    training status (e.g. trained_1a, etc.) are sub-optimal and can produce a poor fit. To keep
+    the precise criteria the same for all subjects, these parameters have not changed. To produce a
+    better fit for plotting purposes, or to calculate the training status in a manner inconsistent
+    with the IBL training pipeline, use plotting=True.
     """
 
     if signed_contrast is None:
@@ -528,10 +646,12 @@ def compute_psychometric(trials, signed_contrast=None, block=None, plotting=Fals
     if not np.any(block_idx):
         return np.nan * np.zeros(4)
 
-    prob_choose_right, contrasts, n_contrasts = compute_performance(trials, signed_contrast=signed_contrast, block=block,
-                                                                    prob_right=True)
+    prob_choose_right, contrasts, n_contrasts = compute_performance(
+        trials, signed_contrast=signed_contrast, block=block, prob_right=True)
 
     if plotting:
+        # These starting parameters and constraints tend to produce a better fit, and are therefore
+        # used for plotting.
         psych, _ = psy.mle_fit_psycho(
             np.vstack([contrasts, n_contrasts, prob_choose_right]),
             P_model='erf_psycho_2gammas',
@@ -540,7 +660,8 @@ def compute_psychometric(trials, signed_contrast=None, block=None, plotting=Fals
             parmax=np.array([50., 50., 0.2, 0.2]),
             nfits=10)
     else:
-
+        # These starting parameters and constraints are not ideal but are still used for computing
+        # the training status for consistency.
         psych, _ = psy.mle_fit_psycho(
             np.vstack([contrasts, n_contrasts, prob_choose_right]),
             P_model='erf_psycho_2gammas',
@@ -552,7 +673,7 @@ def compute_psychometric(trials, signed_contrast=None, block=None, plotting=Fals
         import statsmodels.stats.proportion as smp # noqa
         # choice == -1 means contrast on right hand side
         n_right = np.vectorize(lambda x: np.sum(trials['choice'][(x == signed_contrast) & block_idx] == -1))(contrasts)
-        ci = smp.proportion_confint(n_right, n_contrasts, alpha=alpha / 10, method='normal') - prob_choose_right
+        ci = smp.proportion_confint(n_right, n_contrasts, alpha=alpha, method='normal') - prob_choose_right
 
         return psych, ci
     else:
@@ -561,17 +682,39 @@ def compute_psychometric(trials, signed_contrast=None, block=None, plotting=Fals
 
 def compute_median_reaction_time(trials, stim_on_type='stimOn_times', contrast=None, signed_contrast=None):
     """
-    Compute median reaction time on zero contrast trials from trials object
+    Compute median response time on zero contrast trials from trials object
 
-    :param trials: trials object that must contain response_times and stimOn_times
-    :type trials: dict
-    :param stim_on_type: feedback from which to compute the reaction time. Default is stimOn_times
-    i.e when stimulus is presented
-    :type stim_on_type: string (must be a valid key in trials object)
-    :param signed_contrast: array of signed contrasts in percent, where -ve values are on the left
-    :type signed_contrast: np.array
-    :return: float of median reaction time at zero contrast (returns nan if no zero contrast
-    trials in trials object)
+    Parameters
+    ----------
+    trials : one.alf.io.AlfBunch
+        An ALF trials object containing the keys {'probabilityLeft', 'contrastLeft',
+        'contrastRight', 'feedbackType', 'choice', 'response_times', 'stimOn_times'}.
+    stim_on_type : str, default='stimOn_times'
+        The trials key to use when calculating the response times. The difference between this and
+        'feedback_times' is used (see notes).
+    contrast : float
+        If None, the median response time is calculated for all trials, regardless of contrast,
+        otherwise only trials where the matching signed percent contrast was presented are used.
+    signed_contrast : numpy.array
+        An array of signed contrasts in percent the length of trials, where left contrasts are -ve.
+        If None, these are computed from the trials object.
+
+    Returns
+    -------
+    float
+        The median response time for trials with `contrast` (returns NaN if no trials matching
+        `contrast` in trials object).
+
+    Notes
+    -----
+    - The `stim_on_type` is 'stimOn_times' by default, however for IBL rig data, the photodiode is
+      sometimes not calibrated properly which can lead to inaccurate (or absent, i.e. NaN) stim on
+      times. Therefore, it is sometimes more accurate to use the 'stimOnTrigger_times' (the time of
+      the stimulus onset command), if available, or the 'goCue_times' (the time of the soundcard
+      output TTL when the audio go cue is played) or the 'goCueTrigger_times' (the time of the
+      audio go cue command).
+    - The response/reaction time here is defined as the time between stim on and feedback, i.e. the
+      entire open-loop trial duration.
     """
     if signed_contrast is None:
         signed_contrast = get_signed_contrast(trials)
@@ -593,13 +736,55 @@ def compute_median_reaction_time(trials, stim_on_type='stimOn_times', contrast=N
 def compute_reaction_time(trials, stim_on_type='stimOn_times', stim_off_type='response_times', signed_contrast=None, block=None,
                           compute_ci=False, alpha=0.32):
     """
-    Compute median reaction time for all contrasts
-    :param trials: trials object that must contain response_times and stimOn_times
-    :param stim_on_type:
-    :param stim_off_type:
-    :param signed_contrast:
-    :param block:
-    :return:
+    Compute median response time for all contrasts.
+
+    Parameters
+    ----------
+    trials : one.alf.io.AlfBunch
+        An ALF trials object containing the keys {'probabilityLeft', 'contrastLeft',
+        'contrastRight', 'feedbackType', 'choice', 'response_times', 'stimOn_times'}.
+    stim_on_type : str, default='stimOn_times'
+        The trials key to use when calculating the response times. The difference between this and
+        `stim_off_type` is used (see notes).
+    stim_off_type : str, default='response_times'
+        The trials key to use when calculating the response times. The difference between this and
+        `stim_on_type` is used (see notes).
+    signed_contrast : numpy.array
+        An array of signed contrasts in percent the length of trials, where left contrasts are -ve.
+        If None, these are computed from the trials object.
+    block : float
+        The block type to compute. If None, all trials are included, otherwise only trials where
+        probabilityLeft matches this value are included.  For biasedChoiceWorld, the
+        probabilityLeft set is {0.5, 0.2, 0.8}.
+    compute_ci : bool
+        If true, computes and returns the confidence intervals for response time at each contrast.
+    alpha : float, default=0.32
+        Significance level for confidence interval. Must be in (0, 1). If `compute_ci` is false,
+        this value is ignored.
+
+    Returns
+    -------
+    numpy.array
+        The median response times for each unique signed contrast.
+    numpy.array
+        The set of unique signed contrasts.
+    numpy.array
+        The number of trials for each unique signed contrast.
+    (numpy.array)
+        If `compute_ci` is true, an array of confidence intervals is return in the shape (n_trials,
+        2).
+
+    Notes
+    -----
+    - The response/reaction time by default is the time between stim on and response, i.e. the
+      entire open-loop trial duration. One could use 'stimOn_times' and 'firstMovement_times' to
+      get the true reaction time, or 'firstMovement_times' and 'response_times' to get the true
+      response times, or calculate the last movement onset times and calculate the true movement
+      times.  See module examples for how to calculate this.
+
+    See Also
+    --------
+    scipy.stats.bootstrap - the function used to compute the confidence interval.
     """
 
     if signed_contrast is None:
@@ -628,9 +813,35 @@ def compute_reaction_time(trials, stim_on_type='stimOn_times', stim_off_type='re
 
 def criterion_1a(psych, n_trials, perf_easy):
     """
-    Returns bool indicating whether criterion for trained_1a is met. All criteria documented here
-    (https://figshare.com/articles/preprint/A_standardized_and_reproducible_method_to_measure_
-    decision-making_in_mice_Appendix_2_IBL_protocol_for_mice_training/11634729)
+    Returns bool indicating whether criteria for status 'trained_1a' are met.
+
+    Criteria
+    --------
+    - Bias is less than 16
+    - Threshold is less than 19
+    - Lapse rate on both sides is less than 0.2
+    - The total number of trials is greater than 200 for each session
+    - Performance on easy contrasts > 80% for all sessions
+
+    Parameters
+    ----------
+    psych : numpy.array
+        The fit psychometric parameters three consecutive sessions. Parameters are bias, threshold,
+        lapse high, lapse low.
+    n_trials : numpy.array of int
+        The number for trials for each session.
+    perf_easy : numpy.array of float
+        The proportion of correct high contrast trials for each session.
+
+    Returns
+    -------
+    bool
+        True if the criteria are met for 'trained_1a'.
+
+    Notes
+    -----
+    The parameter thresholds chosen here were originally determined by averaging the parameter fits
+    for a number of sessions determined to be of 'good' performance by an experimenter.
     """
 
     criterion = (abs(psych[0]) < 16 and psych[1] < 19 and psych[2] < 0.2 and psych[3] < 0.2 and
@@ -640,7 +851,41 @@ def criterion_1a(psych, n_trials, perf_easy):
 
 def criterion_1b(psych, n_trials, perf_easy, rt):
     """
-    Returns bool indicating whether criterion for trained_1b is met.
+    Returns bool indicating whether criteria for trained_1b are met.
+
+    Criteria
+    --------
+    - Bias is less than 10
+    - Threshold is less than 20 (see notes)
+    - Lapse rate on both sides is less than 0.1
+    - The total number of trials is greater than 400 for each session
+    - Performance on easy contrasts > 90% for all sessions
+    - The median response time across all zero contrast trials is less than 2 seconds
+
+    Parameters
+    ----------
+    psych : numpy.array
+        The fit psychometric parameters three consecutive sessions. Parameters are bias, threshold,
+        lapse high, lapse low.
+    n_trials : numpy.array of int
+        The number for trials for each session.
+    perf_easy : numpy.array of float
+        The proportion of correct high contrast trials for each session.
+    rt : float
+        The median response time for zero contrast trials.
+
+    Returns
+    -------
+    bool
+        True if the criteria are met for 'trained_1b'.
+
+    Notes
+    -----
+    The parameter thresholds chosen here were originally chosen to be slightly stricter than 1a,
+    however it was decided to use round numbers so that readers would not assume a level of
+    precision that isn't there (remember, these parameters were not chosen with any rigor). This
+    regrettably means that the maximum threshold fit for 1b is greater than for 1a, meaning the
+    slope of the psychometric curve may be slightly less steep than 1a.
     """
     criterion = (abs(psych[0]) < 10 and psych[1] < 20 and psych[2] < 0.1 and psych[3] < 0.1 and
                  np.all(n_trials > 400) and np.all(perf_easy > 0.9) and rt < 2)
@@ -649,27 +894,108 @@ def criterion_1b(psych, n_trials, perf_easy, rt):
 
 def criterion_ephys(psych_20, psych_80, n_trials, perf_easy, rt):
     """
-    Returns bool indicating whether criterion for ready4ephysrig or ready4recording is met.
+    Returns bool indicating whether criteria for ready4ephysrig or ready4recording are met.
+
+    NB: The difference between these two is whether the sessions were acquired ot a recording rig
+    with a delay before the first trial. Neither of these two things are tested here.
+
+    Criteria
+    --------
+    - Lapse on both sides < 0.1 for both bias blocks
+    - Bias shift between blocks > 5
+    - Total number of trials > 400 for all sessions
+    - Performance on easy contrasts > 90% for all sessions
+    - Median response time for zero contrast stimuli < 2 seconds
+
+    Parameters
+    ----------
+    psych_20 : numpy.array
+        The fit psychometric parameters for the blocks where probability of a left stimulus is 0.2.
+        Parameters are bias, threshold, lapse high, lapse low.
+    psych_80 : numpy.array
+        The fit psychometric parameters for the blocks where probability of a left stimulus is 0.8.
+        Parameters are bias, threshold, lapse high, lapse low.
+    n_trials : numpy.array
+        The number of trials for each session (typically three consecutive sessions).
+    perf_easy : numpy.array
+        The proportion of correct high contrast trials for each session (typically three
+        consecutive sessions).
+    rt : float
+        The median response time for zero contrast trials.
+
+    Returns
+    -------
+    bool
+        True if subject passes the ready4ephysrig or ready4recording criteria.
     """
-    criterion = (psych_20[2] < 0.1 and psych_20[3] < 0.1 and psych_80[2] < 0.1 and psych_80[3] and
-                 psych_80[0] - psych_20[0] > 5 and np.all(n_trials > 400) and
-                 np.all(perf_easy > 0.9) and rt < 2)
+
+    criterion = (np.all(np.r_[psych_20[2:4], psych_80[2:4]] < 0.1) and  # lapse
+                 psych_80[0] - psych_20[0] > 5 and np.all(n_trials > 400) and  # bias shift and n trials
+                 np.all(perf_easy > 0.9) and rt < 2)  # overall performance and response times
     return criterion
 
 
 def criterion_delay(n_trials, perf_easy):
     """
-    Returns bool indicating whether criterion for ready4delay is met.
+    Returns bool indicating whether criteria for 'ready4delay' is met.
+
+    Criteria
+    --------
+    - Total number of trials for any of the sessions is greater than 400
+    - Performance on easy contrasts is greater than 90% for any of the sessions
+
+    Parameters
+    ----------
+    n_trials : numpy.array of int
+        The number of trials for each session (typically three consecutive sessions).
+    perf_easy : numpy.array
+        The proportion of correct high contrast trials for each session (typically three
+        consecutive sessions).
+
+    Returns
+    -------
+    bool
+        True if subject passes the 'ready4delay' criteria.
     """
     criterion = np.any(n_trials > 400) and np.any(perf_easy > 0.9)
     return criterion
 
 
-def plot_psychometric(trials, ax=None, title=None, plot_ci=False, ci_aplha=0.32, **kwargs):
+def plot_psychometric(trials, ax=None, title=None, plot_ci=False, ci_alpha=0.032, **kwargs):
     """
-    Function to plot psychometric curve plots a la datajoint webpage
-    :param trials:
-    :return:
+    Function to plot psychometric curve plots a la datajoint webpage.
+
+    Parameters
+    ----------
+    trials : one.alf.io.AlfBunch
+        An ALF trials object containing the keys {'probabilityLeft', 'contrastLeft',
+        'contrastRight', 'feedbackType', 'choice', 'response_times', 'stimOn_times'}.
+    ax : matplotlib.pyplot.Axes
+        An axis object to plot onto.
+    title : str
+        An optional plot title.
+    plot_ci : bool
+        If true, computes and plots the confidence intervals for response at each contrast.
+    ci_alpha : float, default=0.032
+        Significance level for confidence interval. Must be in (0, 1). If `plot_ci` is false,
+        this value is ignored.
+    **kwargs
+        If `ax` is None, these arguments are passed to matplotlib.pyplot.subplots.
+
+    Returns
+    -------
+    matplotlib.pyplot.Figure
+        The figure handle containing the plot.
+    matplotlib.pyplot.Axes
+        The plotted axes.
+
+    See Also
+    --------
+    statsmodels.stats.proportion.proportion_confint - The function used to compute confidence
+      interval.
+    psychofit.mle_fit_psycho - The function used to fit the psychometric parameters.
+    psychofit.erf_psycho_2gammas - The function used to transform contrast to response probability
+      using the fit parameters.
     """
 
     signed_contrast = get_signed_contrast(trials)
@@ -677,23 +1003,23 @@ def plot_psychometric(trials, ax=None, title=None, plot_ci=False, ci_aplha=0.32,
 
     prob_right_50, contrasts_50, _ = compute_performance(trials, signed_contrast=signed_contrast, block=0.5, prob_right=True)
     out_50 = compute_psychometric(trials, signed_contrast=signed_contrast, block=0.5, plotting=True,
-                                  compute_ci=plot_ci, alpha=ci_aplha)
+                                  compute_ci=plot_ci, alpha=ci_alpha)
     pars_50 = out_50[0] if plot_ci else out_50
     prob_right_fit_50 = psy.erf_psycho_2gammas(pars_50, contrasts_fit)
 
     prob_right_20, contrasts_20, _ = compute_performance(trials, signed_contrast=signed_contrast, block=0.2, prob_right=True)
     out_20 = compute_psychometric(trials, signed_contrast=signed_contrast, block=0.2, plotting=True,
-                                  compute_ci=plot_ci, alpha=ci_aplha)
+                                  compute_ci=plot_ci, alpha=ci_alpha)
     pars_20 = out_20[0] if plot_ci else out_20
     prob_right_fit_20 = psy.erf_psycho_2gammas(pars_20, contrasts_fit)
 
     prob_right_80, contrasts_80, _ = compute_performance(trials, signed_contrast=signed_contrast, block=0.8, prob_right=True)
     out_80 = compute_psychometric(trials, signed_contrast=signed_contrast, block=0.8, plotting=True,
-                                  compute_ci=plot_ci, alpha=ci_aplha)
+                                  compute_ci=plot_ci, alpha=ci_alpha)
     pars_80 = out_80[0] if plot_ci else out_80
     prob_right_fit_80 = psy.erf_psycho_2gammas(pars_80, contrasts_fit)
 
-    cmap = sns.diverging_palette(20, 220, n=3, center="dark")
+    cmap = sns.diverging_palette(20, 220, n=3, center='dark')
 
     if not ax:
         fig, ax = plt.subplots(**kwargs)
@@ -730,9 +1056,37 @@ def plot_psychometric(trials, ax=None, title=None, plot_ci=False, ci_aplha=0.32,
 
 def plot_reaction_time(trials, ax=None, title=None, plot_ci=False, ci_alpha=0.32, **kwargs):
     """
-    Function to plot reaction time against contrast a la datajoint webpage (inverted for some reason??)
-    :param trials:
-    :return:
+    Function to plot reaction time against contrast a la datajoint webpage.
+
+    The reaction times are plotted individually for the following three blocks: {0.5, 0.2, 0.8}.
+
+    Parameters
+    ----------
+    trials : one.alf.io.AlfBunch
+        An ALF trials object containing the keys {'probabilityLeft', 'contrastLeft',
+        'contrastRight', 'feedbackType', 'choice', 'response_times', 'stimOn_times'}.
+    ax : matplotlib.pyplot.Axes
+        An axis object to plot onto.
+    title : str
+        An optional plot title.
+    plot_ci : bool
+        If true, computes and plots the confidence intervals for response at each contrast.
+    ci_alpha : float, default=0.32
+        Significance level for confidence interval. Must be in (0, 1). If `plot_ci` is false,
+        this value is ignored.
+    **kwargs
+        If `ax` is None, these arguments are passed to matplotlib.pyplot.subplots.
+
+    Returns
+    -------
+    matplotlib.pyplot.Figure
+        The figure handle containing the plot.
+    matplotlib.pyplot.Axes
+        The plotted axes.
+
+    See Also
+    --------
+    scipy.stats.bootstrap - the function used to compute the confidence interval.
     """
 
     signed_contrast = get_signed_contrast(trials)
@@ -740,7 +1094,7 @@ def plot_reaction_time(trials, ax=None, title=None, plot_ci=False, ci_alpha=0.32
     out_20 = compute_reaction_time(trials, signed_contrast=signed_contrast, block=0.2, compute_ci=plot_ci, alpha=ci_alpha)
     out_80 = compute_reaction_time(trials, signed_contrast=signed_contrast, block=0.8, compute_ci=plot_ci, alpha=ci_alpha)
 
-    cmap = sns.diverging_palette(20, 220, n=3, center="dark")
+    cmap = sns.diverging_palette(20, 220, n=3, center='dark')
 
     if not ax:
         fig, ax = plt.subplots(**kwargs)
@@ -774,14 +1128,29 @@ def plot_reaction_time(trials, ax=None, title=None, plot_ci=False, ci_alpha=0.32
 
 def plot_reaction_time_over_trials(trials, stim_on_type='stimOn_times', ax=None, title=None, **kwargs):
     """
-    Function to plot reaction time with trial number a la datajoint webpage
+    Function to plot reaction time with trial number a la datajoint webpage.
 
-    :param trials:
-    :param stim_on_type:
-    :param ax:
-    :param title:
-    :param kwargs:
-    :return:
+    Parameters
+    ----------
+    trials : one.alf.io.AlfBunch
+        An ALF trials object containing the keys {'probabilityLeft', 'contrastLeft',
+        'contrastRight', 'feedbackType', 'choice', 'response_times', 'stimOn_times'}.
+    stim_on_type : str, default='stimOn_times'
+        The trials key to use when calculating the response times. The difference between this and
+        'feedback_times' is used (see notes for `compute_median_reaction_time`).
+    ax : matplotlib.pyplot.Axes
+        An axis object to plot onto.
+    title : str
+        An optional plot title.
+    **kwargs
+        If `ax` is None, these arguments are passed to matplotlib.pyplot.subplots.
+
+    Returns
+    -------
+    matplotlib.pyplot.Figure
+        The figure handle containing the plot.
+    matplotlib.pyplot.Axes
+        The plotted axes.
     """
 
     reaction_time = pd.DataFrame()
