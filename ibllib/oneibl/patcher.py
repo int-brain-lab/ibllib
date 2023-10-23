@@ -1,3 +1,25 @@
+"""A module for ad-hoc dataset modification and registration.
+
+Unlike the DataHandler class in oneibl.data_handlers, the Patcher class allows one to fully remove
+datasets (delete them from the database and repositories), and to overwrite datasets on both the
+main repositories and the local servers.  Additionally the Patcher can handle datasets from
+multiple sessions at once.
+
+Examples
+--------
+Delete a dataset from Alyx and all associated repositories.
+
+>>> dataset_id = 'f4aafe6c-a7ab-4390-82cd-2c0e245322a5'
+>>> task_ids, files_by_repo = IBLGlobusPatcher(AlyxClient(), 'admin').delete_dataset(dataset_id)
+
+Patch some local datasets using Globus
+
+>>> from one.api import ONE
+>>> patcher = GlobusPatcher('admin', ONE(), label='UCLA audio times patch')
+>>> responses = patcher.patch_datasets(file_paths)  # register the new datasets to Alyx
+>>> patcher.launch_transfers(local_servers=True)  # transfer to all remote repositories
+
+"""
 import abc
 import ftplib
 from pathlib import Path, PurePosixPath, WindowsPath
@@ -18,6 +40,7 @@ from one.webclient import AlyxClient
 from one.converters import path_from_dataset
 from one.remote import globus
 from one.remote.aws import url2uri
+from one.util import ensure_list
 
 from ibllib.oneibl.registration import register_dataset
 
@@ -58,7 +81,7 @@ def sdsc_path_from_dataset(dset, root_path=SDSC_ROOT_PATH):
     """
     Returns sdsc file path from a dset record or a list of dsets records from REST
     :param dset: dset dictionary or list of dictionaries from ALyx rest endpoint
-    :param root_path: (optional) the prefix path such as one download directory or sdsc root
+    :param root_path: (optional) the prefix path such as one download directory or SDSC root
     """
     return path_from_dataset(dset, root_path=root_path, uuid=True)
 
@@ -68,7 +91,7 @@ def globus_path_from_dataset(dset, repository=None, uuid=False):
     Returns local one file path from a dset record or a list of dsets records from REST
     :param dset: dset dictionary or list of dictionaries from ALyx rest endpoint
     :param repository: (optional) repository name of the file record (if None, will take
-     the first filerecord with an URL)
+     the first filerecord with a URL)
     """
     return path_from_dataset(dset, root_path=PurePosixPath('/'), repository=repository, uuid=uuid)
 
@@ -91,7 +114,7 @@ class Patcher(abc.ABC):
         assert dset_id
         assert is_uuid_string(dset_id)
         assert path.exists()
-        dset = self.one.alyx.rest('datasets', "read", id=dset_id)
+        dset = self.one.alyx.rest('datasets', 'read', id=dset_id)
         fr = next(fr for fr in dset['file_records'] if 'flatiron' in fr['data_repository'])
         remote_path = Path(fr['data_repository_path']).joinpath(fr['relative_path'])
         remote_path = add_uuid_string(remote_path, dset_id).as_posix()
@@ -134,7 +157,7 @@ class Patcher(abc.ABC):
         nses = len(register_dict)
         for i, label in enumerate(register_dict):
             _files = register_dict[label]['files']
-            _logger.info(f"{i}/{nses} {label}, registering {len(_files)} files")
+            _logger.info(f"{i + 1}/{nses} {label}, registering {len(_files)} files")
             responses.append(self.register_dataset(_files, **kwargs))
         return responses
 
@@ -157,7 +180,7 @@ class Patcher(abc.ABC):
             file_list = [Path(file_list)]
         assert len(set([get_session_path(f) for f in file_list])) == 1
         assert all([Path(f).exists() for f in file_list])
-        response = self.register_dataset(file_list, dry=dry, **kwargs)
+        response = ensure_list(self.register_dataset(file_list, dry=dry, **kwargs))
         if dry:
             return
         # from the dataset info, set flatIron flag to exists=True
@@ -182,7 +205,7 @@ class Patcher(abc.ABC):
         nses = len(register_dict)
         for i, label in enumerate(register_dict):
             _files = register_dict[label]['files']
-            _logger.info(f"{i}/{nses} {label}, registering {len(_files)} files")
+            _logger.info(f'{i + 1}/{nses} {label}, registering {len(_files)} files')
             responses.extend(self.patch_dataset(_files, **kwargs))
         return responses
 
@@ -195,27 +218,28 @@ class Patcher(abc.ABC):
         pass
 
 
-class GlobusPatcher(Patcher):
+class GlobusPatcher(Patcher, globus.Globus):
     """
     Requires GLOBUS keys access
 
     """
 
     def __init__(self, client_name='default', one=None, label='ibllib patch'):
-        assert one
-        self.globus = globus.Globus(client_name)
+        assert one and not one.offline
+        Patcher.__init__(self, one=one)
+        globus.Globus.__init__(self, client_name)
         self.label = label
         # get a dictionary of data repositories from Alyx (with globus ids)
-        self.globus.fetch_endpoints_from_alyx(one.alyx)
-        flatiron_id = self.globus.endpoints['flatiron_cortexlab']['id']
-        if 'flatiron' not in self.globus.endpoints:
-            self.globus.add_endpoint(flatiron_id, 'flatiron', root_path='/')
-            self.globus.endpoints['flatiron'] = self.globus.endpoints['flatiron_cortexlab']
+        self.fetch_endpoints_from_alyx(one.alyx)
+        flatiron_id = self.endpoints['flatiron_cortexlab']['id']
+        if 'flatiron' not in self.endpoints:
+            self.add_endpoint(flatiron_id, 'flatiron', root_path='/')
+            self.endpoints['flatiron'] = self.endpoints['flatiron_cortexlab']
         # transfers/delete from the current computer to the flatiron: mandatory and executed first
-        local_id = self.globus.endpoints['local']['id']
+        local_id = self.endpoints['local']['id']
         self.globus_transfer = globus_sdk.TransferData(
-            self.globus.client, local_id, flatiron_id, verify_checksum=True, sync_level='checksum', label=label)
-        self.globus_delete = globus_sdk.DeleteData(self.globus.client, flatiron_id, label=label)
+            self.client, local_id, flatiron_id, verify_checksum=True, sync_level='checksum', label=label)
+        self.globus_delete = globus_sdk.DeleteData(self.client, flatiron_id, label=label)
         # transfers/delete from flatiron to optional third parties to synchronize / delete
         self.globus_transfers_locals = {}
         self.globus_deletes_locals = {}
@@ -227,18 +251,18 @@ class GlobusPatcher(Patcher):
         )
         _logger.info(f"Globus copy {local_path} to {remote_path}")
         if not dry:
-            if isinstance(self.globus_transfer, globus_sdk.transfer.data.TransferData):
-                self.globus_transfer.add_item(local_path, remote_path)
+            if isinstance(self.globus_transfer, globus_sdk.TransferData):
+                self.globus_transfer.add_item(local_path, remote_path.as_posix())
             else:
                 self.globus_transfer.path_src.append(local_path)
-                self.globus_transfer.path_dest.append(remote_path)
+                self.globus_transfer.path_dest.append(remote_path.as_posix())
         return 0, ''
 
     def _rm(self, flatiron_path, dry=True):
         flatiron_path = Path('/').joinpath(flatiron_path.relative_to(Path(FLATIRON_MOUNT)))
         _logger.info(f'Globus del {flatiron_path}')
         if not dry:
-            if isinstance(self.globus_delete, globus_sdk.transfer.data.DeleteData):
+            if isinstance(self.globus_delete, globus_sdk.DeleteData):
                 self.globus_delete.add_item(flatiron_path)
             else:
                 self.globus_delete.path.append(flatiron_path)
@@ -258,23 +282,25 @@ class GlobusPatcher(Patcher):
             # get the flatiron path
             fr = next(fr for fr in dset['file_records'] if 'flatiron' in fr['data_repository'])
             relative_path = add_uuid_string(fr['relative_path'], dset['id']).as_posix()
-            flatiron_path = self.globus.to_address(relative_path, fr['data_repository'])
+            flatiron_path = self.to_address(relative_path, fr['data_repository'])
             # loop over the remaining repositories (local servers) and create a transfer
             # from flatiron to the local server
             for fr in dset['file_records']:
                 if fr['data_repository'] == DMZ_REPOSITORY:
                     continue
-                repo_gid = self.globus.endpoints[fr['data_repository']]['id']
-                flatiron_id = self.globus.endpoints['flatiron']['id']
+                if fr['data_repository'] not in self.endpoints:
+                    continue
+                repo_gid = self.endpoints[fr['data_repository']]['id']
+                flatiron_id = self.endpoints['flatiron']['id']
                 if repo_gid == flatiron_id:
                     continue
                 # if there is no transfer already created, initialize it
                 if repo_gid not in self.globus_transfers_locals:
                     self.globus_transfers_locals[repo_gid] = globus_sdk.TransferData(
-                        self.globus.client, flatiron_id, repo_gid, verify_checksum=True,
+                        self.client, flatiron_id, repo_gid, verify_checksum=True,
                         sync_level='checksum', label=f"{self.label} on {fr['data_repository']}")
                 # get the local server path and create the transfer item
-                local_server_path = self.globus.to_address(fr['relative_path'], fr['data_repository'])
+                local_server_path = self.to_address(fr['relative_path'], fr['data_repository'])
                 self.globus_transfers_locals[repo_gid].add_item(flatiron_path, local_server_path)
         return responses
 
@@ -285,7 +311,7 @@ class GlobusPatcher(Patcher):
         :param: local_servers (False): if True, sync the local servers after the main transfer
         :return: None
         """
-        gtc = self.globus.client
+        gtc = self.client
 
         def _wait_for_task(resp):
             # patcher.transfer_client.get_task(task_id='364fbdd2-4deb-11eb-8ffb-0a34088e79f9')
@@ -339,11 +365,11 @@ class GlobusPatcher(Patcher):
         for lt in self.globus_transfers_locals:
             transfer = self.globus_transfers_locals[lt]
             if len(transfer['DATA']) > 0:
-                self.globus.client.submit_transfer(transfer)
+                self.client.submit_transfer(transfer)
         for ld in self.globus_deletes_locals:
             delete = self.globus_deletes_locals[ld]
             if len(transfer['DATA']) > 0:
-                self.globus.client.submit_delete(delete)
+                self.client.submit_delete(delete)
 
 
 class IBLGlobusPatcher(Patcher, globus.Globus):

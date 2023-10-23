@@ -378,6 +378,7 @@ class ChoiceWorldTrialsNidq(ChoiceWorldTrialsBpod):
             qc_extractor.wheel_encoding = 'X4'
             qc_extractor.frame_ttls = self.extractor.frame2ttl
             qc_extractor.audio_ttls = self.extractor.audio
+            qc_extractor.bpod_ttls = self.extractor.bpod  # used only in iblapps task QC viewer
         qc.extractor = qc_extractor
 
         # Aggregate and update Alyx QC fields

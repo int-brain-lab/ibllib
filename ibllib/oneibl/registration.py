@@ -4,7 +4,7 @@ import datetime
 import logging
 import itertools
 
-from pkg_resources import parse_version
+from packaging import version
 from one.alf.files import get_session_path, folder_parts, get_alf_path
 from one.registration import RegistrationClient, get_dataset_type
 from one.remote.globus import get_local_endpoint_id, get_lab_from_endpoint_id
@@ -351,7 +351,7 @@ def _alyx_procedure_from_task_type(task_type):
 def rename_files_compatibility(ses_path, version_tag):
     if not version_tag:
         return
-    if parse_version(version_tag) <= parse_version('3.2.3'):
+    if version.parse(version_tag) <= version.parse('3.2.3'):
         task_code = ses_path.glob('**/_ibl_trials.iti_duration.npy')
         for fn in task_code:
             fn.replace(fn.parent.joinpath('_ibl_trials.itiDuration.npy'))

@@ -111,7 +111,6 @@ class TimelineTrials(FpgaTrials):
 
         # If no protocol number is defined, trim timestamps based on Bpod trials intervals
         trials_table = trials['table']
-        bpod = get_sync_fronts(sync, chmap['bpod'])
         if kwargs.get('protocol_number') is None:
             tmin = trials_table.intervals_0.iloc[0] - 1
             tmax = trials_table.intervals_1.iloc[-1]
@@ -122,15 +121,16 @@ class TimelineTrials(FpgaTrials):
             mask = np.logical_and(trials['wheelMoves_intervals'][:, 0] >= tmin, trials['wheelMoves_intervals'][:, 0] <= tmax)
             trials['wheelMoves_intervals'] = trials['wheelMoves_intervals'][mask, :]
         else:
+            bpod = get_sync_fronts(sync, chmap['bpod'])
             tmin, tmax = get_protocol_period(self.session_path, kwargs['protocol_number'], bpod)
-        bpod = get_sync_fronts(sync, chmap['bpod'], tmin, tmax)
+        self.bpod = get_sync_fronts(sync, chmap['bpod'], tmin, tmax)
 
         self.frame2ttl = get_sync_fronts(sync, chmap['frame2ttl'], tmin, tmax)  # save for later access by QC
 
         # Replace valve open times with those extracted from the DAQ
         # TODO Let's look at the expected open length based on calibration and reward volume
-        assert len(bpod['times']) > 0, 'No Bpod TTLs detected on DAQ'
-        _, driver_out, _, = _assign_events_bpod(bpod['times'], bpod['polarities'], False)
+        assert len(self.bpod['times']) > 0, 'No Bpod TTLs detected on DAQ'
+        _, driver_out, _, = _assign_events_bpod(self.bpod['times'], self.bpod['polarities'], False)
         # Use the driver TTLs to find the valve open times that correspond to the valve opening
         valve_open_times = self.get_valve_open_times(driver_ttls=driver_out)
         assert len(valve_open_times) == sum(trials_table.feedbackType == 1)  # TODO Relax assertion

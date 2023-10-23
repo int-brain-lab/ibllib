@@ -563,6 +563,7 @@ class TaskSignOffNote(SignOffNote):
         'raw trial data does not exist',
         'wheel data corrupt',
         'task data could not be synced',
+        'stimulus timings unreliable'
     ]
 
 
