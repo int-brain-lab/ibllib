@@ -1,3 +1,8 @@
+"""Task pipeline creation from an acquisition description.
+
+The principal function here is `make_pipeline` which reads an `_ibl_experiment.description.yaml`
+file and determines the set of tasks required to preprocess the session.
+"""
 import logging
 import re
 from collections import OrderedDict
@@ -9,7 +14,6 @@ import spikeglx
 
 import ibllib.io.session_params as sess_params
 import ibllib.io.extractors.base
-import ibllib.pipes.ephys_preprocessing as epp
 import ibllib.pipes.tasks as mtasks
 import ibllib.pipes.base_tasks as bstasks
 import ibllib.pipes.widefield_tasks as wtasks
@@ -305,14 +309,12 @@ def make_pipeline(session_path, **pkwargs):
     if 'cameras' in devices:
         cams = list(devices['cameras'].keys())
         subset_cams = [c for c in cams if c in ('left', 'right', 'body', 'belly')]
-        video_kwargs = {'device_collection': 'raw_video_data',
-                        'cameras': cams}
+        video_kwargs = {'device_collection': 'raw_video_data', 'cameras': cams}
         video_compressed = sess_params.get_video_compressed(acquisition_description)
 
         if video_compressed:
             # This is for widefield case where the video is already compressed
-            tasks[tn] = type((tn := 'VideoConvert'), (vtasks.VideoConvert,), {})(
-                **kwargs, **video_kwargs)
+            tasks[tn] = type((tn := 'VideoConvert'), (vtasks.VideoConvert,), {})(**kwargs, **video_kwargs)
             dlc_parent_task = tasks['VideoConvert']
             tasks[tn] = type((tn := f'VideoSyncQC_{sync}'), (vtasks.VideoSyncQcCamlog,), {})(
                 **kwargs, **video_kwargs, **sync_kwargs)
@@ -333,11 +335,25 @@ def make_pipeline(session_path, **pkwargs):
 
         if sync_kwargs['sync'] != 'bpod':
             # Here we restrict to videos that we support (left, right or body)
+            # Currently there is no plan to run DLC on the belly cam
+            subset_cams = [c for c in cams if c in ('left', 'right', 'body')]
             video_kwargs['cameras'] = subset_cams
             tasks[tn] = type((tn := 'DLC'), (vtasks.DLC,), {})(
                 **kwargs, **video_kwargs, parents=[dlc_parent_task])
-            tasks['PostDLC'] = type('PostDLC', (epp.EphysPostDLC,), {})(
-                **kwargs, parents=[tasks['DLC'], tasks[f'VideoSyncQC_{sync}']])
+
+            # The PostDLC plots require a trials object for QC
+            # Find the first task that outputs a trials.table dataset
+            trials_task = (
+                t for t in tasks.values() if any('trials.table' in f for f in t.signature.get('output_files', []))
+            )
+            if trials_task := next(trials_task, None):
+                parents = [tasks['DLC'], tasks[f'VideoSyncQC_{sync}'], trials_task]
+                trials_collection = getattr(trials_task, 'output_collection', 'alf')
+            else:
+                parents = [tasks['DLC'], tasks[f'VideoSyncQC_{sync}']]
+                trials_collection = 'alf'
+            tasks[tn] = type((tn := 'PostDLC'), (vtasks.EphysPostDLC,), {})(
+                **kwargs, cameras=subset_cams, trials_collection=trials_collection, parents=parents)
 
     # Audio tasks
     if 'microphone' in devices:

@@ -90,6 +90,10 @@ class TestEphysSyncExtraction(unittest.TestCase):
         desired_out = np.array([4, 13, np.nan, 33, np.nan])
         self.assertTrue(np.allclose(desired_out, t_event_nans, equal_nan=True, atol=0, rtol=0))
 
+        # test errors
+        self.assertRaises(ValueError, ephys_fpga._assign_events_to_trial, np.array([0., 2., 1.]), t_event)
+        self.assertRaises(ValueError, ephys_fpga._assign_events_to_trial, t_trial_start, np.array([0., 2., 1.]))
+
     def test_wheel_trace_from_sync(self):
         pos_ = - np.array([-1, 0, -1, -2, -1, -2]) * (np.pi / ephys_fpga.WHEEL_TICKS)
         ta = np.array([1, 2, 3, 4, 5, 6])

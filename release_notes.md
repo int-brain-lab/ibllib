@@ -1,8 +1,15 @@
+## Develop
+- Add full video wheel motion alignment code to ibllib.io.extractors.video_motion module
+- Change FPGA camera extractor to attempt wheel alignment if audio alignment fails
+
 ## Release Notes 2.26
 
 ### features
 - Deprecate ibllib.atlas. Code now contained in package iblatlas
 
+### bugfixes
+### 2.26.1
+- fix typo in criterion_ephys where lapse high for 0.8 blocks only passed when non-zero.
 
 ## Release Notes 2.25
 
@@ -12,7 +19,7 @@
 - Full photometry lookup table 
 
 ### bugfixes
-- fix for untrainable, unbiasable don't repolulate if already exists
+- fix for untrainable, unbiasable don't repopulate if already exists
 ### 2.25.1
 - relax assertion on Neuropixel channel mappings to allow for personal projects
 ### 2.25.2
