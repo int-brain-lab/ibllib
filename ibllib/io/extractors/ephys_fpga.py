@@ -832,9 +832,12 @@ class FpgaTrials(extractors_base.BaseExtractor):
             # in ephysChoiceWorld that tend to ruin the final trial extraction).
             t_trial_start, *_ = _assign_events_bpod(bpod['times'], bpod['polarities'])
             bpod_start = self.bpod_trials['intervals_bpod'][:, 0]
-            fcn, *_ = neurodsp.utils.sync_timestamps(bpod_start, t_trial_start)
-            tmin = fcn(trials_table['intervals'][0, 0]) - 1
-            tmax = fcn(trials_table['intervals'][-1, 1]) + 1
+            if len(t_trial_start) > len(bpod_start) / 2:
+                fcn, *_ = neurodsp.utils.sync_timestamps(bpod_start, t_trial_start)
+                tmin = fcn(trials_table['intervals'][0, 0]) - 1
+                tmax = fcn(trials_table['intervals'][-1, 1]) + 1
+            else:  # This type of alignment fails for some sessions, e.g. mesoscope
+                tmin = tmax = None
 
         # Store the cleaned frame2ttl, audio, and bpod pulses as this will be used for QC
         fpga_trials, self.frame2ttl, self.audio, self.bpod = extract_behaviour_sync(

@@ -18,7 +18,7 @@ one = ONE(**TEST_DB)
 
 def mock_input(prompt):
     if "Select from this list the reason(s)" in prompt:
-        return "1,3"
+        return "1," + prompt[prompt.index(') Other') - 1]  # always choose last option, 'Other'
     elif "Explain why you selected" in prompt:
         return "estoy un poco preocupada"
     elif "You are about to delete" in prompt:

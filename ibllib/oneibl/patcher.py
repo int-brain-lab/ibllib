@@ -250,6 +250,7 @@ class GlobusPatcher(Patcher, globus.Globus):
             remote_path.relative_to(PurePosixPath(FLATIRON_MOUNT))
         )
         _logger.info(f"Globus copy {local_path} to {remote_path}")
+        local_path = globus.as_globus_path(local_path)
         if not dry:
             if isinstance(self.globus_transfer, globus_sdk.TransferData):
                 self.globus_transfer.add_item(local_path, remote_path.as_posix())
@@ -263,9 +264,9 @@ class GlobusPatcher(Patcher, globus.Globus):
         _logger.info(f'Globus del {flatiron_path}')
         if not dry:
             if isinstance(self.globus_delete, globus_sdk.DeleteData):
-                self.globus_delete.add_item(flatiron_path)
+                self.globus_delete.add_item(flatiron_path.as_posix())
             else:
-                self.globus_delete.path.append(flatiron_path)
+                self.globus_delete.path.append(flatiron_path.as_posix())
         return 0, ''
 
     def patch_datasets(self, file_list, **kwargs):
