@@ -58,9 +58,9 @@ class TestUserPmtSess(unittest.TestCase):
         print(critical_dict)
         expected_dict = {
             'title': '=== EXPERIMENTER REASON(S) FOR MARKING THE SESSION AS CRITICAL ===',
-            'reasons_selected': ['synching impossible', 'essential dataset missing'],
-            'reason_for_other': []}
-        assert expected_dict == critical_dict
+            'reasons_selected': ['synching impossible', 'Other'],
+            'reason_for_other': 'estoy un poco preocupada'}
+        self.assertDictEqual(expected_dict, critical_dict)
 
     def test_userinput_ins(self):
         eid = self.ins_id  # probe id
@@ -70,9 +70,9 @@ class TestUserPmtSess(unittest.TestCase):
         critical_dict = json.loads(note[0]['text'])
         expected_dict = {
             'title': '=== EXPERIMENTER REASON(S) FOR MARKING THE INSERTION AS CRITICAL ===',
-            'reasons_selected': ['Track not visible on imaging data', 'Drift'],
-            'reason_for_other': []}
-        assert expected_dict == critical_dict
+            'reasons_selected': ['Track not visible on imaging data', 'Other'],
+            'reason_for_other': 'estoy un poco preocupada'}
+        self.assertDictEqual(expected_dict, critical_dict)
 
     def test_note_already_existing(self):
         eid = self.sess_id  # sess id
@@ -85,8 +85,8 @@ class TestUserPmtSess(unittest.TestCase):
             usrpmt.main(eid, one=one)
 
         note = one.alyx.rest('notes', 'list', django=f'object_id,{eid}', no_cache=True)
-        assert len(note) == 1
-        assert original_note_id != note[0]['id']
+        self.assertEqual(len(note), 1)
+        self.assertNotEquals(original_note_id, note[0]['id'])
 
     def test_guiinput_ins(self):
         eid = self.ins_id  # probe id
@@ -103,12 +103,12 @@ class TestUserPmtSess(unittest.TestCase):
         note = one.alyx.rest('notes', 'list',
                              django=f'text__icontains,{str_notes_static},object_id,{eid}',
                              no_cache=True)
-        assert len(note) == 1
+        self.assertEqual(len(note), 1)
         critical_dict = json.loads(note[0]['text'])
         expected_dict = {
             'title': '=== EXPERIMENTER REASON(S) FOR MARKING THE INSERTION AS CRITICAL ===',
             'reasons_selected': ['Drift'], 'reason_for_other': []}
-        assert expected_dict == critical_dict
+        self.assertDictEqual(expected_dict, critical_dict)
 
     def test_note_probe_ins(self):
         # Note: this test is redundant with the above, but it tests specifically whether
@@ -135,7 +135,7 @@ class TestUserPmtSess(unittest.TestCase):
         notes = one.alyx.rest('notes', 'list',
                               django=f'text__icontains,{note_text},object_id,{eid}',
                               no_cache=True)
-        assert len(notes) == 1
+        self.assertEqual(len(notes), 1)
 
     def tearDown(self) -> None:
         try:
