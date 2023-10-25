@@ -1,4 +1,5 @@
 import unittest
+from unittest import mock
 
 import numpy as np
 
@@ -100,6 +101,7 @@ class TestQC(unittest.TestCase):
         self.assertEqual(updated, {**current, **data}, 'failed to update the extended qc')
 
     def test_outcome_setter(self):
+        """Test for QC.outcome property setter."""
         qc = self.qc
         qc.outcome = 'Fail'
         self.assertEqual(qc.outcome, 'FAIL')
@@ -116,11 +118,23 @@ class TestQC(unittest.TestCase):
         self.assertEqual(qc.outcome, 'PASS')
 
     def test_code_to_outcome(self):
+        """Test for QC.code_to_outcome method."""
         self.assertEqual(QC.code_to_outcome(3), 'FAIL')
 
     def test_overall_outcome(self):
+        """Test for QC.overall_outcome method."""
         self.assertEqual(QC.overall_outcome(['PASS', 'NOT_SET', None, 'FAIL']), 'FAIL')
 
+    def test_compute_outcome_from_extended_qc(self):
+        """Test for QC.compute_outcome_from_extended_qc method."""
+        detail = {'extended_qc': {'foo': 'FAIL', 'bar': 'WARNING', '_baz_': 'CRITICAL'},
+                  'json': {'extended_qc': {'foo': 'PASS', 'bar': 'WARNING', '_baz_': 'CRITICAL'}}}
+        with mock.patch.object(self.qc.one.alyx, 'get', return_value=detail):
+            self.qc.json = False
+            self.assertEqual(self.qc.compute_outcome_from_extended_qc(), 'FAIL')
+            self.qc.json = True
+            self.assertEqual(self.qc.compute_outcome_from_extended_qc(), 'WARNING')
 
-if __name__ == "__main__":
+
+if __name__ == '__main__':
     unittest.main(exit=False, verbosity=2)

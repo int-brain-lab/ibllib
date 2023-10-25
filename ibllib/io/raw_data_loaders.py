@@ -16,7 +16,7 @@ from pathlib import Path, PureWindowsPath
 from typing import Union
 
 from dateutil import parser as dateparser
-from pkg_resources import parse_version
+from packaging import version
 import numpy as np
 import pandas as pd
 
@@ -325,16 +325,26 @@ def _read_settings_json_compatibility_enforced(settings):
         md['IS_MOCK'] = False
     if 'IBLRIG_VERSION_TAG' not in md.keys():
         md['IBLRIG_VERSION_TAG'] = md.get('IBLRIG_VERSION', '')
+    if 'device_sound' not in md:
+        # sound device must be defined in version 8 and later  # FIXME this assertion will cause tests to break
+        assert version.parse(md.get('IBLRIG_VERSION_TAG', '0')) < version.parse('8.0.0')
+        # in v7 we must infer the device from the sampling frequency if SD is None
+        if 'sounddevice' in md.get('SD', ''):
+            device = 'xonar'
+        else:
+            freq_map = {192000: 'xonar', 96000: 'harp', 44100: 'sysdefault'}
+            device = freq_map.get(md.get('SOUND_SAMPLE_FREQ'), 'unknown')
+        md['device_sound'] = {'OUTPUT': device}
     # 2018-12-05 Version 3.2.3 fixes (permanent fixes in IBL_RIG from 3.2.4 on)
     if md['IBLRIG_VERSION_TAG'] == '':
         pass
-    elif parse_version(md.get('IBLRIG_VERSION_TAG')) >= parse_version('8.0.0'):
+    elif version.parse(md.get('IBLRIG_VERSION_TAG', '0')) >= version.parse('8.0.0'):
         md['SESSION_NUMBER'] = str(md['SESSION_NUMBER']).zfill(3)
         md['PYBPOD_BOARD'] = md['RIG_NAME']
         md['PYBPOD_CREATOR'] = (md['ALYX_USER'], '')
         md['SESSION_DATE'] = md['SESSION_START_TIME'][:10]
         md['SESSION_DATETIME'] = md['SESSION_START_TIME']
-    elif parse_version(md.get('IBLRIG_VERSION_TAG')) <= parse_version('3.2.3'):
+    elif version.parse(md.get('IBLRIG_VERSION_TAG', '0')) <= version.parse('3.2.3'):
         if 'LAST_TRIAL_DATA' in md.keys():
             md.pop('LAST_TRIAL_DATA')
         if 'weighings' in md['PYBPOD_SUBJECT_EXTRA'].keys():
@@ -423,7 +433,7 @@ def load_encoder_events(session_path, task_collection='raw_behavior_data', setti
             settings = {'IBLRIG_VERSION_TAG': '0.0.0'}
     if not path:
         return None
-    if parse_version(settings['IBLRIG_VERSION_TAG']) >= parse_version('5.0.0'):
+    if version.parse(settings['IBLRIG_VERSION_TAG']) >= version.parse('5.0.0'):
         return _load_encoder_events_file_ge5(path)
     else:
         return _load_encoder_events_file_lt5(path)
@@ -528,7 +538,7 @@ def load_encoder_positions(session_path, task_collection='raw_behavior_data', se
     if not path:
         _logger.warning("No data loaded: could not find raw encoderPositions file")
         return None
-    if parse_version(settings['IBLRIG_VERSION_TAG']) >= parse_version('5.0.0'):
+    if version.parse(settings['IBLRIG_VERSION_TAG']) >= version.parse('5.0.0'):
         return _load_encoder_positions_file_ge5(path)
     else:
         return _load_encoder_positions_file_lt5(path)
@@ -963,3 +973,4 @@ def patch_settings(session_path, collection='raw_behavior_data',
     with open(file_path, 'w') as fp:
         json.dump(settings, fp, indent=' ')
     return settings
+

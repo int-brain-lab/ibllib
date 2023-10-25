@@ -130,23 +130,34 @@ class TaskQC(base.QC):
         self.passed = None
 
     def load_data(self, bpod_only=False, download_data=True):
-        """Extract the data from raw data files
+        """Extract the data from raw data files.
+
         Extracts all the required task data from the raw data files.
 
-        :param bpod_only: if True no data is extracted from the FPGA for ephys sessions
-        :param download_data: if True, any missing raw data is downloaded via ONE.
+        Parameters
+        ----------
+        bpod_only : bool
+            If True no data is extracted from the FPGA for ephys sessions.
+        download_data : bool
+            If True, any missing raw data is downloaded via ONE. By default data are not downloaded
+            if a session path was provided to the constructor.
         """
         self.extractor = TaskQCExtractor(
             self.session_path, one=self.one, download_data=download_data, bpod_only=bpod_only)
 
     def compute(self, **kwargs):
-        """Compute and store the QC metrics
+        """Compute and store the QC metrics.
+
         Runs the QC on the session and stores a map of the metrics for each datapoint for each
-        test, and a map of which datapoints passed for each test
-        :param bpod_only: if True no data is extracted from the FPGA for ephys sessions
-        :param download_data: if True, any missing raw data is downloaded via ONE.  By default
-        data are not downloaded if a session path was provided to the constructor.
-        :return:
+        test, and a map of which datapoints passed for each test.
+
+        Parameters
+        ----------
+        bpod_only : bool
+            If True no data is extracted from the FPGA for ephys sessions.
+        download_data : bool
+            If True, any missing raw data is downloaded via ONE. By default data are not downloaded
+            if a session path was provided to the constructor.
         """
         if self.extractor is None:
             kwargs['download_data'] = kwargs.pop('download_data', self.download_data)
@@ -164,11 +175,26 @@ class TaskQC(base.QC):
 
     def run(self, update=False, namespace='task', **kwargs):
         """
-        :param update: if True, updates the session QC fields on Alyx
-        :param bpod_only: if True no data is extracted from the FPGA for ephys sessions
-        :param download_data: if True, any missing raw data is downloaded via ONE.  By default
-        data are not downloaded if a session path was provided to the constructor.
-        :return: QC outcome (str), a dict for extended QC
+        Compute the QC outcomes and return overall task QC outcome.
+
+        Parameters
+        ----------
+        update : bool
+            If True, updates the session QC fields on Alyx.
+        namespace : str
+            The namespace of the QC fields in the Alyx JSON field.
+        bpod_only : bool
+            If True no data is extracted from the FPGA for ephys sessions.
+        download_data : bool
+            If True, any missing raw data is downloaded via ONE. By default data are not downloaded
+            if a session path was provided to the constructor.
+
+        Returns
+        -------
+        str
+            Overall task QC outcome.
+        dict
+            A map of QC tests and the proportion of data points that passed them.
         """
         if self.metrics is None:
             self.compute(**kwargs)
@@ -183,9 +209,18 @@ class TaskQC(base.QC):
         """
         Given a dictionary of results, computes the overall session QC for each key and aggregates
         in a single value
-        :param results: a dictionary of qc keys containing (usually scalar) values
-        :return: Overall session QC outcome as a string
-        :return: A dict of QC tests and their outcomes
+
+        Parameters
+        ----------
+        results : dict
+            A dictionary of QC keys containing (usually scalar) values.
+
+        Returns
+        -------
+        str
+            Overall session QC outcome as a string.
+        dict
+            A map of QC tests and their outcomes.
         """
         indices = np.zeros(len(results), dtype=int)
         for i, k in enumerate(results):
@@ -203,10 +238,16 @@ class TaskQC(base.QC):
 
     def compute_session_status(self):
         """
-        Computes the overall session QC for each key and aggregates in a single value
-        :return: Overall session QC outcome as a string
-        :return: A dict of QC tests and the proportion of data points that passed them
-        :return: A dict of QC tests and their outcomes
+        Computes the overall session QC for each key and aggregates in a single value.
+
+        Returns
+        -------
+        str
+            Overall session QC outcome.
+        dict
+            A map of QC tests and the proportion of data points that passed them.
+        dict
+            A map of QC tests and their outcomes.
         """
         if self.passed is None:
             raise AttributeError('passed is None; compute QC first')

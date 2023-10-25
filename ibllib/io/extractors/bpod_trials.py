@@ -1,4 +1,5 @@
-"""Trials data extraction from raw Bpod output
+"""Trials data extraction from raw Bpod output.
+
 This module will extract the Bpod trials and wheel data based on the task protocol,
 i.e. habituation, training or biased.
 """
