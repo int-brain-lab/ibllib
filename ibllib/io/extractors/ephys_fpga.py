@@ -113,13 +113,12 @@ def _sync_to_alf(raw_ephys_apfile, output_path=None, save=False, parts=''):
     else:
         raw_ephys_apfile = Path(raw_ephys_apfile)
         sr = spikeglx.Reader(raw_ephys_apfile)
-    opened = sr.is_open
-    if not opened:  # if not (opened := sr.is_open)  # py3.8
+    if not (opened := sr.is_open):
         sr.open()
     # if no output, need a temp folder to swap for big files
     if not output_path:
         output_path = raw_ephys_apfile.parent
-    file_ftcp = Path(output_path).joinpath(f'fronts_times_channel_polarity{str(uuid.uuid4())}.bin')
+    file_ftcp = Path(output_path).joinpath(f'fronts_times_channel_polarity{uuid.uuid4()}.bin')
 
     # loop over chunks of the raw ephys file
     wg = neurodsp.utils.WindowGenerator(sr.ns, int(SYNC_BATCH_SIZE_SECS * sr.fs), overlap=1)
