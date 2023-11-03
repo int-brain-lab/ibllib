@@ -8,7 +8,7 @@ import importlib
 from collections import OrderedDict
 import warnings
 
-from pkg_resources import parse_version
+from packaging import version
 from ibllib.io.extractors import habituation_trials, training_trials, biased_trials, opto_trials
 from ibllib.io.extractors.base import get_bpod_extractor_class, protocol2extractor
 from ibllib.io.extractors.habituation_trials import HabituationTrials
@@ -89,8 +89,8 @@ def extract_all(session_path, save=True, bpod_trials=None, settings=None,
         files_wheel = []
         wheel = OrderedDict({k: trials.pop(k) for k in tuple(trials.keys()) if 'wheel' in k})
     elif extractor_type == 'habituation':
-        if settings['IBLRIG_VERSION_TAG'] and \
-                parse_version(settings['IBLRIG_VERSION_TAG']) <= parse_version('5.0.0'):
+        if settings['IBLRIG_VERSION'] and \
+                version.parse(settings['IBLRIG_VERSION']) <= version.parse('5.0.0'):
             _logger.warning('No extraction of legacy habituation sessions')
             return None, None, None
         trials, files_trials = habituation_trials.extract_all(session_path, bpod_trials=bpod_trials, settings=settings, save=save,

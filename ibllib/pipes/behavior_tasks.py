@@ -2,7 +2,7 @@
 import logging
 import traceback
 
-from pkg_resources import parse_version
+from packaging import version
 import one.alf.io as alfio
 from one.alf.files import session_path_parts
 from one.api import ONE
@@ -209,8 +209,8 @@ class PassiveTaskTimeline(base_tasks.BehaviourTask, base_tasks.MesoscopeTask):
         This class exists to load the sync file and set the protocol_number to None
         """
         settings = load_settings(self.session_path, self.collection)
-        version = settings.get('IBLRIG_VERSION_TAG', '100.0.0')
-        if version == '100.0.0' or parse_version(version) <= parse_version('7.1.0'):
+        ver = settings.get('IBLRIG_VERSION') or '100.0.0'
+        if ver == '100.0.0' or version.parse(ver) <= version.parse('7.1.0'):
             _logger.warning('Protocol spacers not supported; setting protocol_number to None')
             self.protocol_number = None
 

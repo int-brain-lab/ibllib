@@ -1,6 +1,6 @@
 from pathlib import Path, PureWindowsPath
 
-from pkg_resources import parse_version
+from packaging import version
 import numpy as np
 from one.alf.io import AlfBunch
 
@@ -80,8 +80,8 @@ class ProbaContrasts(BaseBpodTrialsExtractor):
         pLeft = pLeft[: ntrials]
 
         phase_path = sessions_folder.joinpath(f"session_{num}_stim_phase.npy")
-        is_patched_version = parse_version(
-            settings.get('IBLRIG_VERSION_TAG', 0)) > parse_version('6.4.0')
+        is_patched_version = version.parse(
+            settings.get('IBLRIG_VERSION') or '0') > version.parse('6.4.0')
         if phase_path.exists() and is_patched_version:
             phase = np.load(phase_path)[:ntrials]
 
@@ -209,13 +209,13 @@ def extract_all(session_path, save=False, bpod_trials=False, settings=False, ext
     if not settings:
         settings = raw.load_settings(session_path, task_collection=task_collection)
     if settings is None:
-        settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
+        settings = {'IBLRIG_VERSION': '100.0.0'}
 
-    if settings['IBLRIG_VERSION_TAG'] == '':
-        settings['IBLRIG_VERSION_TAG'] = '100.0.0'
+    if settings['IBLRIG_VERSION'] == '':
+        settings['IBLRIG_VERSION'] = '100.0.0'
 
     # Version check
-    if parse_version(settings['IBLRIG_VERSION_TAG']) >= parse_version('5.0.0'):
+    if version.parse(settings['IBLRIG_VERSION']) >= version.parse('5.0.0'):
         # We now extract a single trials table
         base = [BiasedTrials]
     else:

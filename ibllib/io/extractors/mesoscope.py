@@ -7,7 +7,7 @@ from one.util import ensure_list
 from one.alf.files import session_path_parts
 import matplotlib.pyplot as plt
 from neurodsp.utils import falls
-from pkg_resources import parse_version
+from packaging import version
 
 from ibllib.plots.misc import squares, vertical_lines
 from ibllib.io.raw_daq_loaders import (extract_sync_timeline, timeline_get_channel,
@@ -38,8 +38,8 @@ def patch_imaging_meta(meta: dict) -> dict:
         The loaded metadata file, updated to the most recent version.
     """
     # 2023-05-17 (unversioned) adds nFrames, channelSaved keys, MM and Deg keys
-    version = parse_version(meta.get('version') or '0.0.0')
-    if version <= parse_version('0.0.0'):
+    ver = version.parse(meta.get('version') or '0.0.0')
+    if ver <= version.parse('0.0.0'):
         if 'channelSaved' not in meta:
             meta['channelSaved'] = next((x['channelIdx'] for x in meta['FOV'] if 'channelIdx' in x), [])
         fields = ('topLeft', 'topRight', 'bottomLeft', 'bottomRight')
@@ -47,7 +47,7 @@ def patch_imaging_meta(meta: dict) -> dict:
             for unit in ('Deg', 'MM'):
                 if unit not in fov:  # topLeftDeg, etc. -> Deg[topLeft]
                     fov[unit] = {f: fov.pop(f + unit, None) for f in fields}
-    elif version == parse_version('0.1.0'):
+    elif ver == version.parse('0.1.0'):
         for fov in meta.get('FOV', []):
             if 'roiUuid' in fov:
                 fov['roiUUID'] = fov.pop('roiUuid')

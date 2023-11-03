@@ -4,7 +4,7 @@ import datetime
 import logging
 import itertools
 
-from pkg_resources import parse_version
+from packaging import version
 from one.alf.files import get_session_path, folder_parts, get_alf_path
 from one.registration import RegistrationClient, get_dataset_type
 from one.remote.globus import get_local_endpoint_id, get_lab_from_endpoint_id
@@ -230,7 +230,7 @@ class IBLRegistrationClient(RegistrationClient):
             n_trials, n_correct_trials = _get_session_performance(settings, task_data)
 
             # TODO Add task_protocols to Alyx sessions endpoint
-            task_protocols = [md['PYBPOD_PROTOCOL'] + md['IBLRIG_VERSION_TAG'] for md in settings]
+            task_protocols = [md['PYBPOD_PROTOCOL'] + md['IBLRIG_VERSION'] for md in settings]
             # unless specified label the session projects with subject projects
             projects = subject['projects'] if projects is None else projects
             # makes sure projects is a list
@@ -298,7 +298,7 @@ class IBLRegistrationClient(RegistrationClient):
 
         # register all files that match the Alyx patterns and file_list
         if any(settings):
-            rename_files_compatibility(ses_path, settings[0]['IBLRIG_VERSION_TAG'])
+            rename_files_compatibility(ses_path, settings[0]['IBLRIG_VERSION'])
         F = filter(lambda x: self._register_bool(x.name, file_list), self.find_files(ses_path))
         recs = self.register_files(F, created_by=users[0] if users else None, versions=ibllib.__version__)
         return session, recs
@@ -370,7 +370,7 @@ def _alyx_procedure_from_task_type(task_type):
 def rename_files_compatibility(ses_path, version_tag):
     if not version_tag:
         return
-    if parse_version(version_tag) <= parse_version('3.2.3'):
+    if version.parse(version_tag) <= version.parse('3.2.3'):
         task_code = ses_path.glob('**/_ibl_trials.iti_duration.npy')
         for fn in task_code:
             fn.replace(fn.parent.joinpath('_ibl_trials.itiDuration.npy'))
