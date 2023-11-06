@@ -363,7 +363,7 @@ class TestsGlobus(unittest.TestCase):
         self.addCleanup(self.patcher.stop)
 
     def test_as_globus_path(self):
-        assert datetime.now() < datetime(2023, 10, 30)
+        assert datetime.now() < datetime(2024, 1, 30), 'remove deprecated module'
         # A Windows path
         if sys.platform == 'win32':
             # "/E/FlatIron/integration"
@@ -381,7 +381,7 @@ class TestsGlobus(unittest.TestCase):
 
     @unittest.mock.patch('iblutil.io.params.read')
     def test_login_auto(self, mock_params):
-        assert datetime.now() < datetime(2023, 10, 30)
+        assert datetime.now() < datetime(2024, 1, 30), 'remove deprecated module'
         client_id = 'h3u2ier'
         # Test ValueError thrown with incorrect parameters
         mock_params.return_value = None  # No parameters saved
