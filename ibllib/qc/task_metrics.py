@@ -429,7 +429,8 @@ def check_stimOn_goCue_delays(data, audio_output='harp', **_):
 
     Notes
     -----
-    For non-harp soundcards the permissible delay is 0.053s
+    For non-harp sound card the permissible delay is 0.053s. This was chosen by taking the 99.5th
+    percentile of delays over 500 training sessions using the Xonar soundcard.
     """
     # Calculate the difference between stimOn and goCue times.
     # If either are NaN, the result will be Inf to ensure that it crosses the failure threshold.
@@ -453,7 +454,8 @@ def check_response_feedback_delays(data, audio_output='harp', **_):
 
     Notes
     -----
-    For non-harp soundcards the permissible delay is 0.053s
+    For non-harp sound card the permissible delay is 0.053s. This was chosen by taking the 99.5th
+    percentile of delays over 500 training sessions using the Xonar soundcard.
     """
     threshold = 0.01 if audio_output.lower() == 'harp' else 0.053
     metric = np.nan_to_num(data['feedback_times'] - data['response_times'], nan=np.inf)
@@ -908,7 +910,8 @@ def check_goCue_delays(data, audio_output='harp', **_):
 
     Notes
     -----
-    For non-harp soundcards the permissible delay is 0.053s
+    For non-harp sound card the permissible delay is 0.053s. This was chosen by taking the 99.5th
+    percentile of delays over 500 training sessions using the Xonar soundcard.
     """
     threshold = 0.0015 if audio_output.lower() == 'harp' else 0.053
     metric = np.nan_to_num(data['goCue_times'] - data['goCueTrigger_times'], nan=np.inf)
@@ -930,7 +933,8 @@ def check_errorCue_delays(data, audio_output='harp', **_):
 
     Notes
     -----
-    For non-harp soundcards the permissible delay is 0.062s
+    For non-harp sound card the permissible delay is 0.062s. This was chosen by taking the 99.5th
+    percentile of delays over 500 training sessions using the Xonar soundcard.
     """
     threshold = 0.0015 if audio_output.lower() == 'harp' else 0.062
     metric = np.nan_to_num(data['errorCue_times'] - data['errorCueTrigger_times'], nan=np.inf)
