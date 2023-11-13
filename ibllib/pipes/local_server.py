@@ -1,3 +1,9 @@
+"""Lab server pipeline construction and task runner.
+
+This is the module called by the job services on the lab servers.  See
+iblscripts/deploy/serverpc/crons for the service scripts that employ this module.
+"""
+import logging
 import time
 from datetime import datetime
 from pathlib import Path
@@ -10,8 +16,7 @@ import importlib
 
 from one.api import ONE
 from one.webclient import AlyxClient
-from one.remote.globus import get_lab_from_endpoint_id
-from iblutil.util import setup_logger
+from one.remote.globus import get_lab_from_endpoint_id, get_local_endpoint_id
 
 from ibllib.io.extractors.base import get_pipeline, get_task_protocol, get_session_extractor_type
 from ibllib.pipes import tasks, training_preprocessing, ephys_preprocessing
@@ -21,8 +26,10 @@ from ibllib.oneibl.data_handlers import get_local_data_repository
 from ibllib.io.session_params import read_params
 from ibllib.pipes.dynamic_pipeline import make_pipeline, acquisition_description_legacy_session
 
-_logger = setup_logger(__name__, level='INFO')
-LARGE_TASKS = ['EphysVideoCompress', 'TrainingVideoCompress', 'SpikeSorting', 'EphysDLC']
+_logger = logging.getLogger(__name__)
+LARGE_TASKS = [
+    'EphysVideoCompress', 'TrainingVideoCompress', 'SpikeSorting', 'EphysDLC', 'MesoscopePreprocess'
+]
 
 
 def _get_pipeline_class(session_path, one):
@@ -65,7 +72,7 @@ def _get_volume_usage(vol, label=''):
 
 def report_health(one):
     """
-    Get a few indicators and label the json field of the corresponding lab with them
+    Get a few indicators and label the json field of the corresponding lab with them.
     """
     status = {'python_version': sys.version,
               'ibllib_version': pkg_resources.get_distribution("ibllib").version,
@@ -74,9 +81,10 @@ def report_health(one):
     status.update(_get_volume_usage('/mnt/s0/Data', 'raid'))
     status.update(_get_volume_usage('/', 'system'))
 
-    lab_names = get_lab_from_endpoint_id(alyx=one.alyx)
-    for ln in lab_names:
-        one.alyx.json_field_update(endpoint='labs', uuid=ln, field_name='json', data=status)
+    data_repos = one.alyx.rest('data-repository', 'list', globus_endpoint_id=get_local_endpoint_id())
+
+    for dr in data_repos:
+        one.alyx.json_field_update(endpoint='data-repository', uuid=dr['name'], field_name='json', data=status)
 
 
 def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
@@ -162,11 +170,20 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
 def task_queue(mode='all', lab=None, alyx=None):
     """
     Query waiting jobs from the specified Lab
-    :param mode: Whether to return all waiting tasks, or only small or large (specified in LARGE_TASKS) jobs
-    :param lab: lab name as per Alyx, otherwise try to infer from local globus install
-    :param one: ONE instance
-    -------
 
+    Parameters
+    ----------
+    mode : {'all', 'small', 'large'}
+        Whether to return all waiting tasks, or only small or large (specified in LARGE_TASKS) jobs.
+    lab : str
+        Lab name as per Alyx, otherwise try to infer from local Globus install.
+    alyx : one.webclient.AlyxClient
+        An Alyx instance.
+
+    Returns
+    -------
+    list of dict
+        A list of Alyx tasks associated with `lab` that have a 'Waiting' status.
     """
     alyx = alyx or AlyxClient(cache_rest=None)
     if lab is None:
@@ -206,14 +223,29 @@ def task_queue(mode='all', lab=None, alyx=None):
 def tasks_runner(subjects_path, tasks_dict, one=None, dry=False, count=5, time_out=None, **kwargs):
     """
     Function to run a list of tasks (task dictionary from Alyx query) on a local server
-    :param subjects_path:
-    :param tasks_dict:
-    :param one:
-    :param dry:
-    :param count: maximum number of tasks to run
-    :param time_out: between each task, if time elapsed is greater than time out, returns (seconds)
-    :param kwargs:
-    :return: list of dataset dictionaries
+
+    Parameters
+    ----------
+    subjects_path : str, pathlib.Path
+        The location of the subject session folders, e.g. '/mnt/s0/Data/Subjects'.
+    tasks_dict : list of dict
+        A list of tasks to run. Typically the output of `task_queue`.
+    one : one.api.OneAlyx
+        An instance of ONE.
+    dry : bool, default=False
+        If true, simply prints the full session paths and task names without running the tasks.
+    count : int, default=5
+        The maximum number of tasks to run from the tasks_dict list.
+    time_out : float, optional
+        The time in seconds to run tasks before exiting. If set this will run tasks until the
+        timeout has elapsed.  NB: Only checks between tasks and will not interrupt a running task.
+    **kwargs
+        See ibllib.pipes.tasks.run_alyx_task.
+
+    Returns
+    -------
+    list of pathlib.Path
+        A list of datasets registered to Alyx.
     """
     if one is None:
         one = ONE(cache_rest=None)

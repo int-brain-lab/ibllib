@@ -1,3 +1,4 @@
+"""Miscellaneous pipeline utility functions."""
 import ctypes
 import hashlib
 import json
