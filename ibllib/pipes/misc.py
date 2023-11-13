@@ -8,6 +8,7 @@ import subprocess
 import sys
 import time
 import logging
+from functools import wraps
 from pathlib import Path
 from typing import Union, List, Callable, Any
 from inspect import signature
@@ -1164,7 +1165,7 @@ class WindowsInhibitor:
     @staticmethod
     def uninhibit(quiet: bool = False):
         if quiet:
-            log.debug("Allowing Windows from going to sleep")
+            log.debug("Allowing Windows to go to sleep")
         else:
             print("Allowing Windows to go to sleep")
         WindowsInhibitor._set_thread_execution_state(WindowsInhibitor.ES_CONTINUOUS)
@@ -1188,6 +1189,8 @@ def sleepless(func: Callable[..., Any]) -> Callable[..., Any]:
     callable
         The decorated function.
     """
+
+    @wraps(func)
     def inner(*args, **kwargs) -> Any:
         if os.name == 'nt':
             WindowsInhibitor().inhibit(quiet=True)
