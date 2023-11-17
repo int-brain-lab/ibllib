@@ -73,8 +73,7 @@ class HabituationTrials(BaseBpodTrialsExtractor):
         There should be exactly three TTLs per trial.  stimOff_times should be the first TTL pulse.
         If 1 or more pulses are missing, we can not be confident of assigning the correct one.
         """
-        out['stimOff_times'] = np.array([sync[0] if len(sync) == 3 else np.nan
-                                         for sync, off in zip(ttls[1:], ends)])
+        out['stimOff_times'] = np.array([sync[0] if len(sync) == 3 else np.nan for sync in ttls[1:]])
 
         # Trial intervals
         """
@@ -85,8 +84,13 @@ class HabituationTrials(BaseBpodTrialsExtractor):
         # NB: We lose the last trial because the stim off event occurs at trial_num + 1
         n_trials = out['stimOff_times'].size
         out['intervals'] = np.c_[starts, np.r_[ends, np.nan]][:n_trials, :]
-        to_update = out['intervals'][:, 1] < out['stimOff_times']
-        out['intervals'][to_update, 1] = out['stimOff_times'][to_update]
+
+        to_correct = ~np.isnan(out['stimOff_times']) & (out['stimOff_times'] > out['intervals'][:, 1])
+        if np.any(to_correct):
+            _logger.debug(
+                '%i/%i stim off events occurring outside trial intervals; using stim off times as trial end',
+                sum(to_correct), len(to_correct))
+            out['intervals'][to_correct, 1] = out['stimOff_times'][to_correct]
 
         # itiIn times
         out['itiIn_times'] = np.r_[ends, np.nan]
@@ -133,11 +137,8 @@ class HabituationTrials(BaseBpodTrialsExtractor):
 
         # Double-check that the early and late trial events occur within the trial intervals
         idx = ~np.isnan(out['stimOn_times'][:n_trials])
-        if np.any(out['stimOn_times'][:n_trials][idx] < out['intervals'][idx, 0]):
-            _logger.warning('Stim on events occurring outside trial intervals')
-        idx = ~np.isnan(out['stimOff_times'])
-        if np.any(out['stimOff_times'][idx] > out['intervals'][idx, 1]):
-            _logger.warning('Stim off events occurring outside trial intervals')
+        assert not np.any(out['stimOn_times'][:n_trials][idx] < out['intervals'][idx, 0]), \
+            'Stim on events occurring outside trial intervals'
 
         # Truncate arrays and return in correct order
         return {k: out[k][:n_trials] for k in self.var_names}
