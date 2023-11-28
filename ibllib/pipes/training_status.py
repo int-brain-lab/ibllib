@@ -165,9 +165,9 @@ def load_trials(sess_path, one, collections=None, force=True, mode='raise'):
     try:
         # try and load all trials that are found locally in the session path locally
         if collections is None:
-            trial_locations = list(sess_path.rglob('_ibl_trials.goCueTrigger_times.npy'))
+            trial_locations = list(sess_path.rglob('_ibl_trials.goCueTrigger_times.*npy'))
         else:
-            trial_locations = [Path(sess_path).joinpath(c, '_ibl_trials.goCueTrigger_times.npy') for c in collections]
+            trial_locations = [Path(sess_path).joinpath(c, '_ibl_trials.goCueTrigger_times.*npy') for c in collections]
 
         if len(trial_locations) > 1:
             trial_dict = {}
