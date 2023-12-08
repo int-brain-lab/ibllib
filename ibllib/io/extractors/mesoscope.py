@@ -1,22 +1,24 @@
 """Mesoscope (timeline) data extraction."""
 import logging
+from itertools import cycle
 
 import numpy as np
+from scipy.signal import find_peaks
 import one.alf.io as alfio
 from one.util import ensure_list
 from one.alf.files import session_path_parts
 import matplotlib.pyplot as plt
-from neurodsp.utils import falls
+from matplotlib.colors import TABLEAU_COLORS
 from pkg_resources import parse_version
 
 from ibllib.plots.misc import squares, vertical_lines
 from ibllib.io.raw_daq_loaders import (extract_sync_timeline, timeline_get_channel,
                                        correct_counter_discontinuities, load_timeline_sync_and_chmap)
 import ibllib.io.extractors.base as extractors_base
-from ibllib.io.extractors.ephys_fpga import FpgaTrials, WHEEL_TICKS, WHEEL_RADIUS_CM, get_sync_fronts, get_protocol_period
+from ibllib.io.extractors.ephys_fpga import FpgaTrials, WHEEL_TICKS, WHEEL_RADIUS_CM, _assign_events_to_trial
 from ibllib.io.extractors.training_wheel import extract_wheel_moves
 from ibllib.io.extractors.camera import attribute_times
-from ibllib.io.extractors.ephys_fpga import _assign_events_bpod
+from brainbox.behavior.wheel import velocity_filtered
 
 _logger = logging.getLogger(__name__)
 
@@ -102,103 +104,240 @@ def plot_timeline(timeline, channels=None, raw=True):
 class TimelineTrials(FpgaTrials):
     """Similar extraction to the FPGA, however counter and position channels are treated differently."""
 
-    """one.alf.io.AlfBunch: The timeline data object"""
     timeline = None
+    """one.alf.io.AlfBunch: The timeline data object."""
+
+    sync_field = 'itiIn_times'  # trial start events
+    """str: The trial event to synchronize (must be present in extracted trials)."""
 
     def __init__(self, *args, sync_collection='raw_sync_data', **kwargs):
         """An extractor for all ephys trial data, in Timeline time"""
         super().__init__(*args, **kwargs)
         self.timeline = alfio.load_object(self.session_path / sync_collection, 'DAQdata', namespace='timeline')
 
-    def _extract(self, sync=None, chmap=None, sync_collection='raw_sync_data', **kwargs) -> dict:
-        if not (sync or chmap):
-            sync, chmap = load_timeline_sync_and_chmap(
-                self.session_path / sync_collection, timeline=self.timeline, chmap=chmap)
+    def load_sync(self, sync_collection='raw_sync_data', chmap=None, **_):
+        """Load the DAQ sync and channel map data.
 
+        Parameters
+        ----------
+        sync_collection : str
+            The session subdirectory where the sync data are located.
+        chmap : dict
+            A map of channel names and their corresponding indices. If None, the channel map is
+            loaded using the :func:`ibllib.io.raw_daq_loaders.timeline_meta2chmap` method.
+
+        Returns
+        -------
+        one.alf.io.AlfBunch
+            A dictionary with keys ('times', 'polarities', 'channels'), containing the sync pulses
+            and the corresponding channel numbers.
+        dict
+            A map of channel names and their corresponding indices.
+        """
+        if not self.timeline:
+            self.timeline = alfio.load_object(self.session_path / sync_collection, 'DAQdata', namespace='timeline')
+        sync, chmap = load_timeline_sync_and_chmap(
+            self.session_path / sync_collection, timeline=self.timeline, chmap=chmap)
+        return sync, chmap
+
+    def _extract(self, sync=None, chmap=None, sync_collection='raw_sync_data', **kwargs) -> dict:
+        trials = super()._extract(sync, chmap, sync_collection='raw_sync_data', **kwargs)
         if kwargs.get('display', False):
             plot_timeline(self.timeline, channels=chmap.keys(), raw=True)
-        trials = super()._extract(sync, chmap, sync_collection, extractor_type='ephys', **kwargs)
+        return trials
 
-        # If no protocol number is defined, trim timestamps based on Bpod trials intervals
-        trials_table = trials['table']
-        bpod = get_sync_fronts(sync, chmap['bpod'])
-        if kwargs.get('protocol_number') is None:
-            tmin = trials_table.intervals_0.iloc[0] - 1
-            tmax = trials_table.intervals_1.iloc[-1]
-            # Ensure wheel is cut off based on trials
-            mask = np.logical_and(tmin <= trials['wheel_timestamps'], trials['wheel_timestamps'] <= tmax)
-            trials['wheel_timestamps'] = trials['wheel_timestamps'][mask]
-            trials['wheel_position'] = trials['wheel_position'][mask]
-            mask = np.logical_and(trials['wheelMoves_intervals'][:, 0] >= tmin, trials['wheelMoves_intervals'][:, 0] <= tmax)
-            trials['wheelMoves_intervals'] = trials['wheelMoves_intervals'][mask, :]
+    def extract_behaviour_sync(self, sync, chmap, start_times=None, display=False, **kwargs):
+        """
+        Extract task related event times from the sync.
+
+        TODO Change docstring
+        The trial start times are the shortest Bpod TTLs and occur at the start of the trial. The
+        first trial start TTL of the session is longer and must be handled differently. The trial
+        start TTL is used to assign the other trial events to each trial.
+
+        The trial end is the end of the so-called 'ITI' Bpod event TTL (classified as the longest
+        of the three Bpod event TTLs). Go cue audio TTLs are the shorter of the two expected audio
+        tones. The first of these after each trial start is taken to be the go cue time. Error
+        tones are longer audio TTLs and assigned as the last of such occurrence after each trial
+        start. The valve open Bpod TTLs are medium-length, the last of which is used for each trial.
+        The feedback times are times of either valve open or error tone as there should be only one
+        such event per trial.
+
+        The stimulus times are taken from the frame2ttl events (with improbably high frequency TTLs
+        removed): the first TTL after each trial start is assumed to be the stim onset time; the
+        second to last and last are taken as the stimulus freeze and offset times, respectively.
+
+        Parameters
+        ----------
+        sync : dict
+            'polarities' of fronts detected on sync trace for all 16 chans and their 'times'
+        chmap : dict
+            Map of channel names and their corresponding index.  Default to constant.
+        start_times : numpy.array
+            An optional array of timestamps to separate trial events by. This is useful if after
+            syncing the clocks, some trial start TTLs are found to be missed. If None, uses
+            'trial_start' Bpod event.
+        display : bool, matplotlib.pyplot.Axes
+            Show the full session sync pulses display.
+
+        Returns
+        -------
+        dict
+            A map of trial event timestamps.
+        """
+        # Get the events from the sync.
+        # Store the cleaned frame2ttl, audio, and bpod pulses as this will be used for QC
+        self.frame2ttl = self.get_stimulus_update_times(sync, chmap, **kwargs)
+        self.audio, audio_event_intervals = self.get_audio_event_times(sync, chmap, **kwargs)
+        if not set(audio_event_intervals.keys()) >= {'ready_tone', 'error_tone'}:
+            raise ValueError(
+                'Expected at least "ready_tone" and "error_tone" audio events.'
+                '`audio_event_ttls` kwarg may be incorrect.')
+
+        self.bpod, bpod_event_intervals = self.get_bpod_event_times(sync, chmap, **kwargs)
+        if not set(bpod_event_intervals.keys()) >= {'valve_open', 'trial_end'}:
+            raise ValueError(
+                'Expected at least "trial_end" and "valve_open" audio events. '
+                '`bpod_event_ttls` kwarg may be incorrect.')
+
+        t_iti_in, t_trial_end = bpod_event_intervals['trial_end'].T
+        trials = alfio.AlfBunch({
+            'itiIn_times': t_iti_in,
+            'intervals_1': t_trial_end,
+            'valveOpen_intervals': bpod_event_intervals['valve_open'],
+            'goCue_times': audio_event_intervals['ready_tone'][:, 0],
+            'errorTone_times': audio_event_intervals['error_tone'][:, 0]
+        })
+
+        if display:  # pragma: no cover
+            width = 0.5
+            ymax = 5
+            if isinstance(display, bool):
+                plt.figure('Bpod FPGA Sync')
+                ax = plt.gca()
+            else:
+                ax = display
+            squares(self.bpod['times'], self.bpod['polarities'] * 0.4 + 1, ax=ax, color='k')
+            squares(self.frame2ttl['times'], self.frame2ttl['polarities'] * 0.4 + 2, ax=ax, color='k')
+            squares(self.audio['times'], self.audio['polarities'] * 0.4 + 3, ax=ax, color='k')
+            color_map = TABLEAU_COLORS.keys()
+            for (event_name, event_times), c in zip(trials.items(), cycle(color_map)):
+                vertical_lines(event_times.flat, ymin=0, ymax=ymax, ax=ax, color=c, label=event_name, linewidth=width)
+            ax.legend()
+            ax.set_yticks([0, 1, 2, 3])
+            ax.set_yticklabels(['', 'bpod', 'f2ttl', 'audio'])
+            ax.set_ylim([0, 4])
+
+        return trials
+
+    def build_trials(self, fpga_trials, sync=None, chmap=None, **kwargs):
+        # Sync the Bpod clock to the DAQ
+        self.bpod2fpga, drift_ppm, ibpod, ifpga = self.sync_bpod_clock(self.bpod_trials, fpga_trials, self.sync_field)
+
+        out = dict()
+        out['intervals'] = self.bpod2fpga(self.bpod_trials['intervals'])
+        out['itiIn_times'] = fpga_trials['itiIn_times'][ifpga]
+        start_times = out['intervals'][:, 0]
+
+        # Extract valve open times from the DAQ
+        valve_driver_ttls = fpga_trials.pop('valveOpen_intervals')
+        correct = self.bpod_trials['feedbackType'] == 1
+        # If there is a reward_valve channel, the valve has
+        if any(ch['name'] == 'reward_valve' for ch in self.timeline['meta']['inputs']):
+            # TODO Let's look at the expected open length based on calibration and reward volume
+            # import scipy.interpolate
+            # # FIXME support v7 settings?
+            # fcn_vol2time = scipy.interpolate.pchip(
+            #     self.bpod_extractor.settings['device_valve']['WATER_CALIBRATION_WEIGHT_PERDROP'],
+            #     self.bpod_extractor.settings['device_valve']['WATER_CALIBRATION_OPEN_TIMES']
+            # )
+            # reward_time = fcn_vol2time(self.bpod_extractor.settings.get('REWARD_AMOUNT_UL')) / 1e3
+
+            # Use the driver TTLs to find the valve open times that correspond to the valve opening
+            valve_intervals, valve_open_times = self.get_valve_open_times(driver_ttls=valve_driver_ttls)
+            if valve_open_times.size != np.sum(correct):
+                _logger.warning(
+                    'Number of valve open times does not equal number of correct trials (%i != %i)',
+                    valve_open_times.size, np.sum(correct))
+
+            out['valveOpen_times'] = _assign_events_to_trial(start_times, valve_open_times)
         else:
-            tmin, tmax = get_protocol_period(self.session_path, kwargs['protocol_number'], bpod)
-        bpod = get_sync_fronts(sync, chmap['bpod'], tmin, tmax)
+            # Use the valve controller TTLs recorded on the Bpod channel as the reward time
+            out['valveOpen_times'] = _assign_events_to_trial(start_times, valve_driver_ttls[:, 0])
 
-        self.frame2ttl = get_sync_fronts(sync, chmap['frame2ttl'], tmin, tmax)  # save for later access by QC
+        # Stimulus times extracted the same as usual
+        out['stimFreeze_times'] = _assign_events_to_trial(start_times, self.frame2ttl['times'], take=-2)
+        out['stimOn_times'] = _assign_events_to_trial(start_times, self.frame2ttl['times'], take='first')
+        out['stimOff_times'] = _assign_events_to_trial(start_times, self.frame2ttl['times'])
 
-        # Replace valve open times with those extracted from the DAQ
-        # TODO Let's look at the expected open length based on calibration and reward volume
-        assert len(bpod['times']) > 0, 'No Bpod TTLs detected on DAQ'
-        _, driver_out, _, = _assign_events_bpod(bpod['times'], bpod['polarities'], False)
-        # Use the driver TTLs to find the valve open times that correspond to the valve opening
-        valve_open_times = self.get_valve_open_times(driver_ttls=driver_out)
-        assert len(valve_open_times) == sum(trials_table.feedbackType == 1)  # TODO Relax assertion
-        correct = trials_table.feedbackType == 1
-        trials['valveOpen_times'][correct] = valve_open_times
-        trials_table.feedback_times[correct] = valve_open_times
+        # Audio times
+        error_cue = fpga_trials['errorTone_times']
+        if error_cue.size != np.sum(~correct):
+            _logger.warning(
+                'N detected error tones does not match number of incorrect trials (%i != %i)',
+                error_cue.size, np.sum(~correct))
+        go_cue = fpga_trials['goCue_times']
+        out['goCue_times'] = _assign_events_to_trial(start_times, go_cue, take='first')
+        out['errorCue_times'] = _assign_events_to_trial(start_times, error_cue)
 
-        # Replace audio events
-        self.audio = get_sync_fronts(sync, chmap['audio'], tmin, tmax)
-        # Attempt to assign the go cue and error tone onsets based on TTL length
-        go_cue, error_cue = self._assign_events_audio(self.audio['times'], self.audio['polarities'])
-
-        assert error_cue.size == np.sum(~correct), 'N detected error tones does not match number of incorrect trials'
-        assert go_cue.size <= len(trials_table), 'More go cue tones detected than trials!'
-
-        if go_cue.size < len(trials_table):
-            _logger.warning('%i go cue tones missed', len(trials_table) - go_cue.size)
+        if go_cue.size > start_times.size:
+            _logger.warning(
+                'More go cue tones detected than trials! (%i vs %i)', go_cue.size, start_times.size)
+        elif go_cue.size < start_times.size:
             """
             If the error cues are all assigned and some go cues are missed it may be that some
-            responses were so fast that the go cue and error tone merged.
+            responses were so fast that the go cue and error tone merged, or the go cue TTL was too
+            long.
             """
+            _logger.warning('%i go cue tones missed', start_times.size - go_cue.size)
             err_trig = self.bpod2fpga(self.bpod_trials['errorCueTrigger_times'])
             go_trig = self.bpod2fpga(self.bpod_trials['goCueTrigger_times'])
             assert not np.any(np.isnan(go_trig))
-            assert err_trig.size == go_trig.size
-
-            def first_true(arr):
-                """Return the index of the first True value in an array."""
-                indices = np.where(arr)[0]
-                return None if len(indices) == 0 else indices[0]
+            assert err_trig.size == go_trig.size  # should be length of n trials with NaNs
 
             # Find which trials are missing a go cue
-            _go_cue = np.full(len(trials_table), np.nan)
-            for i, intervals in enumerate(trials_table[['intervals_0', 'intervals_1']].values):
-                idx = first_true(np.logical_and(go_cue > intervals[0], go_cue < intervals[1]))
-                if idx is not None:
-                    _go_cue[i] = go_cue[idx]
+            _go_cue = _assign_events_to_trial(start_times, go_cue, take='first')
+            error_cue = _assign_events_to_trial(start_times, error_cue)
+            missing = np.isnan(_go_cue)
 
             # Get all the DAQ timestamps where audio channel was HIGH
             raw = timeline_get_channel(self.timeline, 'audio')
             raw = (raw - raw.min()) / (raw.max() - raw.min())  # min-max normalize
             ups = self.timeline.timestamps[raw > .5]  # timestamps where input HIGH
-            for i in np.where(np.isnan(_go_cue))[0]:
-                # Get the timestamp of the first HIGH after the trigger times
-                _go_cue[i] = ups[first_true(ups > go_trig[i])]
-                idx = first_true(np.logical_and(
-                    error_cue > trials_table['intervals_0'][i],
-                    error_cue < trials_table['intervals_1'][i]))
-                if np.isnan(err_trig[i]):
-                    if idx is not None:
-                        error_cue = np.delete(error_cue, idx)  # Remove mis-assigned error tone time
-                else:
-                    error_cue[idx] = ups[first_true(ups > err_trig[i])]
-            go_cue = _go_cue
 
-        trials_table.feedback_times[~correct] = error_cue
-        trials_table.goCue_times = go_cue
-        return {k: trials[k] for k in self.var_names}
+            # Get the timestamps of the first HIGH after the trigger times (allow up to 200ms after).
+            # Indices of ups directly following a go trigger, or -1 if none found (or trigger NaN)
+            idx = attribute_times(ups, go_trig, tol=0.2, take='after')
+            # Trial indices that didn't have detected goCue and now has been assigned an `ups` index
+            assigned = np.where(idx != -1 & missing)[0]  # ignore unassigned
+            _go_cue[assigned] = ups[idx[assigned]]
+
+            # Remove mis-assigned error tone times (i.e. those that have now been assigned to goCue)
+            error_cue_without_trig, = np.where(~np.isnan(error_cue) & np.isnan(err_trig))
+            i_to_remove = np.intersect1d(assigned, error_cue_without_trig, assume_unique=True)
+            error_cue[i_to_remove] = np.nan
+
+            # For those trials where go cue was merged with the error cue and therefore mis-assigned,
+            # we must re-assign the error cue times as the first HIGH after the error trigger.
+            idx = attribute_times(ups, err_trig, tol=0.2, take='after')
+            assigned = np.where(idx != -1 & missing)[0]  # ignore unassigned
+            error_cue[assigned] = ups[idx[assigned]]
+            out['goCue_times'] = _go_cue
+            out['errorCue_times'] = error_cue
+
+        # Because we're not
+        assert np.intersect1d(out['goCue_times'], out['errorCue_times']).size == 0, \
+            'audio tones not assigned correctly; tones likely missed'
+
+        # Feedback times
+        out['feedback_times'] = np.copy(out['valveOpen_times'])
+        ind_err = np.isnan(out['valveOpen_times'])
+        out['feedback_times'][ind_err] = out['errorCue_times'][ind_err]
+
+        out.update({k: self.bpod_trials[k][ibpod] for k in self.bpod_fields})
+        out.update({k: self.bpod2fpga(self.bpod_trials[k][ibpod]) for k in self.bpod_rsync_fields})
+
+        return out
 
     def extract_wheel_sync(self, ticks=WHEEL_TICKS, radius=WHEEL_RADIUS_CM, coding='x4', tmin=None, tmax=None):
         """
@@ -234,7 +373,7 @@ class TimelineTrials(FpgaTrials):
 
         # Timeline evenly samples counter so we extract only change points
         d = np.diff(raw)
-        ind, = np.where(d.astype(int))
+        ind, = np.where(~np.isclose(d, 0))
         pos = raw[ind + 1]
         pos -= pos[0]  # Start from zero
         pos = pos / ticks * np.pi * 2 * radius / int(coding[1])  # Convert to radians
@@ -290,7 +429,7 @@ class TimelineTrials(FpgaTrials):
             ax1.set_ylabel('DAQ wheel position / rad'), ax1.set_xlabel('Time / s')
         return wheel, moves
 
-    def get_valve_open_times(self, display=False, threshold=-2.5, floor_percentile=10, driver_ttls=None):
+    def get_valve_open_times(self, display=False, threshold=100, driver_ttls=None):
         """
         Get the valve open times from the raw timeline voltage trace.
 
@@ -299,44 +438,82 @@ class TimelineTrials(FpgaTrials):
         display : bool
             Plot detected times on the raw voltage trace.
         threshold : float
-            The threshold for applying to analogue channels.
-        floor_percentile : float
-            10% removes the percentile value of the analog trace before thresholding. This is to
-            avoid DC offset drift.
+            The threshold of voltage change to apply. The default was set by eye; units should be
+            Volts per sample but doesn't appear to be.
         driver_ttls : numpy.array
             An optional array of driver TTLs to use for assigning with the valve times.
 
         Returns
         -------
         numpy.array
-            The detected valve open times.
-
-        TODO extract close times too
+            The detected valve open intervals.
+        numpy.array
+            If driver_ttls is not None, returns an array of open times that occurred directly after
+            the driver TTLs.
         """
+        WARN_THRESH = 10e-3  # open time threshold below which to log warning
         tl = self.timeline
         info = next(x for x in tl['meta']['inputs'] if x['name'] == 'reward_valve')
         values = tl['raw'][:, info['arrayColumn'] - 1]  # Timeline indices start from 1
-        offset = np.percentile(values, floor_percentile, axis=0)
-        idx = falls(values - offset, step=threshold)  # Voltage falls when valve opens
-        open_times = tl['timestamps'][idx]
+
+        # The voltage changes over ~1ms and can therefore occur over two DAQ samples at 2kHz
+        # making simple thresholding an issue.  For this reason we convolve the signal with a
+        # window and detect the peaks and troughs.
+        if (Fs := tl['meta']['daqSampleRate']) != 2000:  # e.g. 2kHz
+            _logger.warning('Reward valve detection not tested with a DAQ sample rate of %i', Fs)
+        dt = 1e-3  # change in voltage takes ~1ms when changing valve open state
+        N = dt / (1 / Fs)  # this means voltage change occurs over N samples
+        vel, _ = velocity_filtered(values, int(Fs / N))  # filtered voltage change over time
+        ups, _ = find_peaks(vel, height=threshold)  # valve closes (-5V -> 0V)
+        downs, _ = find_peaks(-1 * vel, height=threshold)  # valve opens (0V -> -5V)
+
+        # Convert these times into intervals
+        ixs = np.argsort(np.r_[downs, ups])  # sort indices
+        times = tl['timestamps'][np.r_[downs, ups]][ixs]  # ordered valve event times
+        polarities = np.r_[np.zeros_like(downs) - 1, np.ones_like(ups)][ixs]  # polarity sorted
+        missing = np.where(np.diff(polarities) == 0)[0]  # if some changes were missed insert NaN
+        times = np.insert(times, missing + int(polarities[0] == -1), np.nan)
+        if polarities[-1] == -1:  # ensure ends with a valve close
+            times = np.r_[times, np.nan]
+        if polarities[0] == 1:  # ensure starts with a valve open
+            # It seems it can start out at -5V (open), then when the reward happens it closes and
+            # immediately opens. In this case we insert discard the first open time.
+            times = np.r_[np.nan, times]
+        intervals = times.reshape(-1, 2)
+
+        # Log warning of improbably short intervals
+        short = np.sum(np.diff(intervals) < WARN_THRESH)
+        if short > 0:
+            _logger.warning('%i valve open intervals shorter than %i ms', short, WARN_THRESH)
+
         # The closing of the valve is noisy. Keep only the falls that occur immediately after a Bpod TTL
         if driver_ttls is not None:
             # Returns an array of open_times indices, one for each driver TTL
-            ind = attribute_times(open_times, driver_ttls, tol=.1, take='after')
-            open_times = open_times[ind[ind >= 0]]
+            ind = attribute_times(intervals[:, 0], driver_ttls[:, 0], tol=.1, take='after')
+            open_times = intervals[ind[ind >= 0], 0]
             # TODO Log any > 40ms? Difficult to report missing valve times because of calibration
 
         if display:
             fig, (ax0, ax1) = plt.subplots(nrows=2, sharex=True)
-            ax0.plot(tl['timestamps'], timeline_get_channel(tl, 'bpod'), 'k-o')
+            ax0.plot(tl['timestamps'], timeline_get_channel(tl, 'bpod'), color='grey', linestyle='-')
             if driver_ttls is not None:
-                vertical_lines(driver_ttls, ymax=5, ax=ax0, linestyle='--', color='b')
-            ax1.plot(tl['timestamps'], values - offset, 'k-o')
+                x = np.empty_like(driver_ttls.flatten())
+                x[0::2] = driver_ttls[:, 0]
+                x[1::2] = driver_ttls[:, 1]
+                y = np.ones_like(x)
+                y[1::2] -= 2
+                squares(x, y, ax=ax0, yrange=[0, 5])
+                # vertical_lines(driver_ttls, ymax=5, ax=ax0, linestyle='--', color='b')
+                ax0.plot(open_times, np.ones_like(open_times) * 4.5, 'g*')
+            ax1.plot(tl['timestamps'], values, 'k-o')
             ax1.set_ylabel('Voltage / V'), ax1.set_xlabel('Time / s')
-            ax1.plot(tl['timestamps'][idx], np.zeros_like(idx), 'r*')
-            if driver_ttls is not None:
-                ax1.plot(open_times, np.zeros_like(open_times), 'g*')
-        return open_times
+
+            ax2 = ax1.twinx()
+            ax2.set_ylabel('dV', color='grey')
+            ax2.plot(tl['timestamps'], vel, linestyle='-', color='grey')
+            ax2.plot(intervals[:, 1], np.ones(len(intervals)) * threshold, 'r*', label='close')
+            ax2.plot(intervals[:, 0], np.ones(len(intervals)) * threshold, 'g*', label='open')
+        return intervals if driver_ttls is None else (intervals, open_times)
 
     def _assign_events_audio(self, audio_times, audio_polarities, display=False):
         """
@@ -360,7 +537,7 @@ class TimelineTrials(FpgaTrials):
         """
         # make sure that there are no 2 consecutive fall or consecutive rise events
         assert np.all(np.abs(np.diff(audio_polarities)) == 2)
-        # take only even time differences: ie. from rising to falling fronts
+        # take only even time differences: i.e. from rising to falling fronts
         dt = np.diff(audio_times)
         onsets = audio_polarities[:-1] == 1
 

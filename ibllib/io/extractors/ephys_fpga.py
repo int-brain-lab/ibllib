@@ -900,8 +900,8 @@ class FpgaTrials(extractors_base.BaseExtractor):
         Returns
         -------
         one.alf.io.AlfBunch
-            A dictionary with keys ('times', 'polarities', 'channels'), containing the sync pulses and
-            the corresponding channel numbers.
+            A dictionary with keys ('times', 'polarities', 'channels'), containing the sync pulses
+            and the corresponding channel numbers.
         dict
             A map of channel names and their corresponding indices.
         """
@@ -992,24 +992,9 @@ class FpgaTrials(extractors_base.BaseExtractor):
         # Get the trial events from the DAQ sync TTLs
         fpga_trials = self.extract_behaviour_sync(sync, chmap, **kwargs)
 
-        # Sync the Bpod clock to the DAQ
-        self.bpod2fpga, drift_ppm, ibpod, ifpga = self.sync_bpod_clock(self.bpod_trials, fpga_trials, self.sync_field)
+        # Sync clocks and build final trials datasets
+        out = self.build_trials(fpga_trials, sync=sync, chmap=chmap, **kwargs)
 
-        if np.any(np.diff(ibpod) != 1) and self.sync_field == 'intervals_0':
-            # One issue is that sometimes pulses may not have been detected, in this case
-            # add the events that have not been detected and re-extract the behaviour sync.
-            # This is only really relevant for the Bpod interval events as the other TTLs are
-            # from devices where a missing TTL likely means the Bpod event was truly absent.
-            _logger.warning('Missing Bpod TTLs; reassigning events using aligned Bpod start times')
-            bpod_start = self.bpod_trials['intervals'][:, 0]
-            missing_bpod = self.bpod2fpga(bpod_start[np.setxor1d(ibpod, np.arange(len(bpod_start)))])
-            t_trial_start = np.sort(np.r_[fpga_trials['intervals'][:, 0], missing_bpod])
-            fpga_trials = self.extract_behaviour_sync(sync, chmap, start_times=t_trial_start, **kwargs)
-
-        out = dict()
-        out.update({k: self.bpod_trials[k][ibpod] for k in self.bpod_fields})
-        out.update({k: self.bpod2fpga(self.bpod_trials[k][ibpod]) for k in self.bpod_rsync_fields})
-        out.update({k: fpga_trials[k][ifpga] for k in sorted(fpga_trials.keys())})
         # extract the wheel data
         if any(x.startswith('wheel') for x in self.var_names):
             wheel, moves = self.get_wheel_positions(sync=sync, chmap=chmap, tmin=tmin, tmax=tmax)
@@ -1096,9 +1081,16 @@ class FpgaTrials(extractors_base.BaseExtractor):
             ]
             bpod_event_intervals[pretrial] = bpod_event_intervals[pretrial][1:, :]
 
+        t_trial_start = bpod_event_intervals['trial_start'][:, 0]
         t_iti_in, t_trial_end = bpod_event_intervals['trial_end'].T
-        # Drop last trial start if incomplete
-        t_trial_start = bpod_event_intervals['trial_start'][:len(t_trial_end), 0]
+        # Some protocols, e.g. Guido's ephys biased opto task, have no trial end TTL.
+        # This is not essential as the trial start is used to sync the clocks.
+        if t_trial_end.size == 0:
+            _logger.warning('No trial end / ITI in TTLs found')
+            t_trial_end = np.full_like(t_trial_start, np.nan)
+        else:
+            # Drop last trial start if incomplete
+            t_trial_start = t_trial_start[:len(t_trial_end)]
         t_valve_open = bpod_event_intervals['valve_open'][:, 0]
         t_ready_tone_in = audio_event_intervals['ready_tone'][:, 0]
         t_error_tone_in = audio_event_intervals['error_tone'][:, 0]
@@ -1136,11 +1128,32 @@ class FpgaTrials(extractors_base.BaseExtractor):
             for (event_name, event_times), c in zip(trials.to_df().items(), cycle(color_map)):
                 plots.vertical_lines(event_times, ymin=0, ymax=ymax, ax=ax, color=c, label=event_name, linewidth=width)
             ax.legend()
-            ax.set_yticks([0, 1, 2])
-            ax.set_yticklabels(['bpod', 'f2ttl', 'audio'])
+            ax.set_yticks([0, 1, 2, 3])
+            ax.set_yticklabels(['', 'bpod', 'f2ttl', 'audio'])
             ax.set_ylim([0, 5])
 
         return trials
+
+    def build_trials(self, fpga_trials, sync=None, chmap=None, **kwargs):
+        # Sync the Bpod clock to the DAQ
+        self.bpod2fpga, drift_ppm, ibpod, ifpga = self.sync_bpod_clock(self.bpod_trials, fpga_trials, self.sync_field)
+
+        if np.any(np.diff(ibpod) != 1) and self.sync_field == 'intervals_0':
+            # One issue is that sometimes pulses may not have been detected, in this case
+            # add the events that have not been detected and re-extract the behaviour sync.
+            # This is only really relevant for the Bpod interval events as the other TTLs are
+            # from devices where a missing TTL likely means the Bpod event was truly absent.
+            _logger.warning('Missing Bpod TTLs; reassigning events using aligned Bpod start times')
+            bpod_start = self.bpod_trials['intervals'][:, 0]
+            missing_bpod = self.bpod2fpga(bpod_start[np.setxor1d(ibpod, np.arange(len(bpod_start)))])
+            t_trial_start = np.sort(np.r_[fpga_trials['intervals'][:, 0], missing_bpod])
+            fpga_trials = self.extract_behaviour_sync(sync, chmap, start_times=t_trial_start, **kwargs)
+
+        out = dict()
+        out.update({k: self.bpod_trials[k][ibpod] for k in self.bpod_fields})
+        out.update({k: self.bpod2fpga(self.bpod_trials[k][ibpod]) for k in self.bpod_rsync_fields})
+        out.update({k: fpga_trials[k][ifpga] for k in sorted(fpga_trials.keys())})
+        return out
 
     def get_wheel_positions(self, *args, **kwargs):
         """Extract wheel and wheelMoves objects.
@@ -1569,9 +1582,9 @@ class FpgaTrialsHabituation(FpgaTrials):
             for (event_name, event_times), c in zip(trials.to_df().items(), cycle(color_map)):
                 plots.vertical_lines(event_times, ymin=0, ymax=ymax, ax=ax, color=c, label=event_name, linewidth=width)
             ax.legend()
-            ax.set_yticks([0, 1, 2])
-            ax.set_yticklabels(['bpod', 'f2ttl', 'audio'])
-            ax.set_ylim([0, 5])
+            ax.set_yticks([0, 1, 2, 3])
+            ax.set_yticklabels(['', 'bpod', 'f2ttl', 'audio'])
+            ax.set_ylim([0, 4])
 
         return trials
 
