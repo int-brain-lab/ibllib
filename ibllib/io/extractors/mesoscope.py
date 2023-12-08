@@ -1,6 +1,5 @@
 """Mesoscope (timeline) data extraction."""
 import logging
-from itertools import cycle
 
 import numpy as np
 from scipy.signal import find_peaks
@@ -8,7 +7,6 @@ import one.alf.io as alfio
 from one.util import ensure_list
 from one.alf.files import session_path_parts
 import matplotlib.pyplot as plt
-from matplotlib.colors import TABLEAU_COLORS
 from pkg_resources import parse_version
 
 from ibllib.plots.misc import squares, vertical_lines
@@ -146,26 +144,51 @@ class TimelineTrials(FpgaTrials):
             plot_timeline(self.timeline, channels=chmap.keys(), raw=True)
         return trials
 
-    def extract_behaviour_sync(self, sync, chmap, start_times=None, display=False, **kwargs):
+    def get_bpod_event_times(self, sync, chmap, bpod_event_ttls=None, display=False, **kwargs):
+        """
+        Extract Bpod times from sync.
+
+        Unlike the superclass method. This one doesn't reassign the first trial pulse.
+
+        Parameters
+        ----------
+        sync : dict
+            A dictionary with keys ('times', 'polarities', 'channels'), containing the sync pulses
+            and the corresponding channel numbers. Must contain a 'bpod' key.
+        chmap : dict
+            A map of channel names and their corresponding indices.
+        bpod_event_ttls : dict of tuple
+            A map of event names to (min, max) TTL length.
+
+        Returns
+        -------
+        dict
+            A dictionary with keys {'times', 'polarities'} containing Bpod TTL fronts.
+        dict
+            A dictionary of events (from `bpod_event_ttls`) and their intervals as an Nx2 array.
+        """
+        # Assign the Bpod BNC2 events based on TTL length. The defaults are below, however these
+        # lengths are defined by the state machine of the task protocol and therefore vary.
+        if bpod_event_ttls is None:
+            # The trial start TTLs are often too short for the low sampling rate of the DAQ and are
+            # therefore not used in extraction
+            bpod_event_ttls = {'valve_open': (2.33e-4, 0.4), 'trial_end': (0.4, np.inf)}
+        bpod, bpod_event_intervals = super().get_bpod_event_times(
+            sync=sync, chmap=chmap, bpod_event_ttls=bpod_event_ttls, display=display, **kwargs)
+
+        # TODO Here we can make use of the 'bpod_rising_edge' channel, if available
+        return bpod, bpod_event_intervals
+
+    def build_trials(self, sync=None, chmap=None, **kwargs):
         """
         Extract task related event times from the sync.
 
-        TODO Change docstring
-        The trial start times are the shortest Bpod TTLs and occur at the start of the trial. The
-        first trial start TTL of the session is longer and must be handled differently. The trial
-        start TTL is used to assign the other trial events to each trial.
+        The two major differences are that the sampling rate is lower for imaging so the short Bpod
+        trial start TTLs are often absent. For this reason, the sync happens using the ITI_in TTL.
 
-        The trial end is the end of the so-called 'ITI' Bpod event TTL (classified as the longest
-        of the three Bpod event TTLs). Go cue audio TTLs are the shorter of the two expected audio
-        tones. The first of these after each trial start is taken to be the go cue time. Error
-        tones are longer audio TTLs and assigned as the last of such occurrence after each trial
-        start. The valve open Bpod TTLs are medium-length, the last of which is used for each trial.
-        The feedback times are times of either valve open or error tone as there should be only one
-        such event per trial.
-
-        The stimulus times are taken from the frame2ttl events (with improbably high frequency TTLs
-        removed): the first TTL after each trial start is assumed to be the stim onset time; the
-        second to last and last are taken as the stimulus freeze and offset times, respectively.
+        Second, the valve used at the mesoscope has a way to record the raw voltage across the
+        solenoid, giving a more accurate readout of the valve's activity. If the reward_valve
+        channel is present on the DAQ, this is used to extract the valve open times.
 
         Parameters
         ----------
@@ -173,12 +196,6 @@ class TimelineTrials(FpgaTrials):
             'polarities' of fronts detected on sync trace for all 16 chans and their 'times'
         chmap : dict
             Map of channel names and their corresponding index.  Default to constant.
-        start_times : numpy.array
-            An optional array of timestamps to separate trial events by. This is useful if after
-            syncing the clocks, some trial start TTLs are found to be missed. If None, uses
-            'trial_start' Bpod event.
-        display : bool, matplotlib.pyplot.Axes
-            Show the full session sync pulses display.
 
         Returns
         -------
@@ -201,46 +218,36 @@ class TimelineTrials(FpgaTrials):
                 '`bpod_event_ttls` kwarg may be incorrect.')
 
         t_iti_in, t_trial_end = bpod_event_intervals['trial_end'].T
-        trials = alfio.AlfBunch({
+        fpga_events = alfio.AlfBunch({
             'itiIn_times': t_iti_in,
             'intervals_1': t_trial_end,
-            'valveOpen_intervals': bpod_event_intervals['valve_open'],
             'goCue_times': audio_event_intervals['ready_tone'][:, 0],
             'errorTone_times': audio_event_intervals['error_tone'][:, 0]
         })
 
-        if display:  # pragma: no cover
-            width = 0.5
-            ymax = 5
-            if isinstance(display, bool):
-                plt.figure('Bpod FPGA Sync')
-                ax = plt.gca()
-            else:
-                ax = display
-            squares(self.bpod['times'], self.bpod['polarities'] * 0.4 + 1, ax=ax, color='k')
-            squares(self.frame2ttl['times'], self.frame2ttl['polarities'] * 0.4 + 2, ax=ax, color='k')
-            squares(self.audio['times'], self.audio['polarities'] * 0.4 + 3, ax=ax, color='k')
-            color_map = TABLEAU_COLORS.keys()
-            for (event_name, event_times), c in zip(trials.items(), cycle(color_map)):
-                vertical_lines(event_times.flat, ymin=0, ymax=ymax, ax=ax, color=c, label=event_name, linewidth=width)
-            ax.legend()
-            ax.set_yticks([0, 1, 2, 3])
-            ax.set_yticklabels(['', 'bpod', 'f2ttl', 'audio'])
-            ax.set_ylim([0, 4])
-
-        return trials
-
-    def build_trials(self, fpga_trials, sync=None, chmap=None, **kwargs):
         # Sync the Bpod clock to the DAQ
-        self.bpod2fpga, drift_ppm, ibpod, ifpga = self.sync_bpod_clock(self.bpod_trials, fpga_trials, self.sync_field)
+        self.bpod2fpga, drift_ppm, ibpod, ifpga = self.sync_bpod_clock(self.bpod_trials, fpga_events, self.sync_field)
 
         out = dict()
-        out['intervals'] = self.bpod2fpga(self.bpod_trials['intervals'])
-        out['itiIn_times'] = fpga_trials['itiIn_times'][ifpga]
+        out.update({k: self.bpod_trials[k][ibpod] for k in self.bpod_fields})
+        out.update({k: self.bpod2fpga(self.bpod_trials[k][ibpod]) for k in self.bpod_rsync_fields})
+
         start_times = out['intervals'][:, 0]
+        last_trial_end = out['intervals'][-1, 1]
+
+        def assign_to_trial(events, take='last'):
+            """Assign DAQ events to trials.
+
+            Because we may not have trial start TTLs on the DAQ (because of the low sampling rate),
+            there may be an extra last trial that's not in the Bpod intervals as the extractor
+            ignores the last trial. This function trims the input array before assigning so that
+            the last trial's events are correctly assigned.
+            """
+            return _assign_events_to_trial(start_times, events[events <= last_trial_end], take)
+        out['itiIn_times'] = assign_to_trial(fpga_events['itiIn_times'][ifpga])
 
         # Extract valve open times from the DAQ
-        valve_driver_ttls = fpga_trials.pop('valveOpen_intervals')
+        valve_driver_ttls = bpod_event_intervals['valve_open']
         correct = self.bpod_trials['feedbackType'] == 1
         # If there is a reward_valve channel, the valve has
         if any(ch['name'] == 'reward_valve' for ch in self.timeline['meta']['inputs']):
@@ -260,25 +267,25 @@ class TimelineTrials(FpgaTrials):
                     'Number of valve open times does not equal number of correct trials (%i != %i)',
                     valve_open_times.size, np.sum(correct))
 
-            out['valveOpen_times'] = _assign_events_to_trial(start_times, valve_open_times)
+            out['valveOpen_times'] = assign_to_trial(valve_open_times)
         else:
             # Use the valve controller TTLs recorded on the Bpod channel as the reward time
-            out['valveOpen_times'] = _assign_events_to_trial(start_times, valve_driver_ttls[:, 0])
+            out['valveOpen_times'] = assign_to_trial(valve_driver_ttls[:, 0])
 
         # Stimulus times extracted the same as usual
-        out['stimFreeze_times'] = _assign_events_to_trial(start_times, self.frame2ttl['times'], take=-2)
-        out['stimOn_times'] = _assign_events_to_trial(start_times, self.frame2ttl['times'], take='first')
-        out['stimOff_times'] = _assign_events_to_trial(start_times, self.frame2ttl['times'])
+        out['stimFreeze_times'] = assign_to_trial(self.frame2ttl['times'], take=-2)
+        out['stimOn_times'] = assign_to_trial(self.frame2ttl['times'], take='first')
+        out['stimOff_times'] = assign_to_trial(self.frame2ttl['times'])
 
         # Audio times
-        error_cue = fpga_trials['errorTone_times']
+        error_cue = fpga_events['errorTone_times']
         if error_cue.size != np.sum(~correct):
             _logger.warning(
                 'N detected error tones does not match number of incorrect trials (%i != %i)',
                 error_cue.size, np.sum(~correct))
-        go_cue = fpga_trials['goCue_times']
-        out['goCue_times'] = _assign_events_to_trial(start_times, go_cue, take='first')
-        out['errorCue_times'] = _assign_events_to_trial(start_times, error_cue)
+        go_cue = fpga_events['goCue_times']
+        out['goCue_times'] = assign_to_trial(go_cue, take='first')
+        out['errorCue_times'] = assign_to_trial(error_cue)
 
         if go_cue.size > start_times.size:
             _logger.warning(
@@ -296,8 +303,8 @@ class TimelineTrials(FpgaTrials):
             assert err_trig.size == go_trig.size  # should be length of n trials with NaNs
 
             # Find which trials are missing a go cue
-            _go_cue = _assign_events_to_trial(start_times, go_cue, take='first')
-            error_cue = _assign_events_to_trial(start_times, error_cue)
+            _go_cue = assign_to_trial(go_cue, take='first')
+            error_cue = assign_to_trial(error_cue)
             missing = np.isnan(_go_cue)
 
             # Get all the DAQ timestamps where audio channel was HIGH
@@ -333,9 +340,6 @@ class TimelineTrials(FpgaTrials):
         out['feedback_times'] = np.copy(out['valveOpen_times'])
         ind_err = np.isnan(out['valveOpen_times'])
         out['feedback_times'][ind_err] = out['errorCue_times'][ind_err]
-
-        out.update({k: self.bpod_trials[k][ibpod] for k in self.bpod_fields})
-        out.update({k: self.bpod2fpga(self.bpod_trials[k][ibpod]) for k in self.bpod_rsync_fields})
 
         return out
 
