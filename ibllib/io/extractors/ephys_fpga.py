@@ -1677,14 +1677,14 @@ def extract_all(session_path, sync_collection='raw_ephys_data', save=True, save_
     # Extract Bpod trials
     bpod_raw = raw.load_data(session_path, task_collection=task_collection)
     assert bpod_raw is not None, 'No task trials data in raw_behavior_data - Exit'
-    bpod_trials, *_ = bpod_extract_all(
+    bpod_trials, bpod_wheel, *_ = bpod_extract_all(
         session_path=session_path, bpod_trials=bpod_raw, task_collection=task_collection,
         save=False, extractor_type=kwargs.get('extractor_type'))
 
     # Sync Bpod trials to FPGA
     sync, chmap = get_sync_and_chn_map(session_path, sync_collection)
     # sync, chmap = get_main_probe_sync(session_path, bin_exists=bin_exists)
-    trials = FpgaTrials(session_path, bpod_trials=bpod_trials)
+    trials = FpgaTrials(session_path, bpod_trials=bpod_trials | bpod_wheel)
     outputs, files = trials.extract(
         save=save, sync=sync, chmap=chmap, path_out=save_path,
         task_collection=task_collection, protocol_number=protocol_number, **kwargs)
