@@ -715,6 +715,10 @@ class EphysTrials(tasks.Task):
         qc.extractor.data['wheel_timestamps_bpod'] = wheel_ts_bpod
         qc.extractor.data['wheel_position_bpod'] = self.extractor.bpod_trials['wheel_position']
         qc.extractor.wheel_encoding = 'X4'
+        qc.extractor.settings = self.extractor.settings
+        qc.extractor.frame_ttls = self.extractor.frame2ttl
+        qc.extractor.audio_ttls = self.extractor.audio
+        qc.extractor.bpod_ttls = self.extractor.bpod
 
         # Aggregate and update Alyx QC fields
         qc.run(update=True)
