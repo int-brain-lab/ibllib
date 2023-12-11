@@ -227,8 +227,8 @@ def _get_passive_spacers(session_path, sync_collection='raw_ephys_data',
                 f'trace ({int(np.size(spacer_times) / 2)})'
             )
 
-    if tmax is None:  # TODO THIS NEEDS CHANGING AS FOR DYNAMIC PIPELINE F2TTL slower than valve
-        tmax = fttl['times'][-1]
+    if tmax is None:
+        tmax = sync['times'][-1]
 
     spacer_times = np.r_[spacer_times.flatten(), tmax]
     return spacer_times[0], spacer_times[1::2], spacer_times[2::2]
@@ -418,8 +418,10 @@ def _extract_passiveAudio_intervals(audio: dict, rig_version: str) -> Tuple[np.a
         soundOff_times = audio["times"][audio["polarities"] < 0]
 
         # Check they are the correct number
-        assert len(soundOn_times) == NTONES + NNOISES, "Wrong number of sound ONSETS"
-        assert len(soundOff_times) == NTONES + NNOISES, "Wrong number of sound OFFSETS"
+        assert len(soundOn_times) == NTONES + NNOISES, f"Wrong number of sound ONSETS, " \
+                                                       f"{len(soundOn_times)}/{NTONES + NNOISES}"
+        assert len(soundOff_times) == NTONES + NNOISES, f"Wrong number of sound OFFSETS, " \
+                                                        f"{len(soundOn_times)}/{NTONES + NNOISES}"
 
         diff = soundOff_times - soundOn_times
         # Tone is ~100ms so check if diff < 0.3
