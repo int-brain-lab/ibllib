@@ -275,10 +275,6 @@ class TaskQC(base.QC):
 
 class HabituationQC(TaskQC):
 
-    criteria = dict()
-    criteria['default'] = {'PASS': 0.99, 'WARNING': 0.90, 'FAIL': 0}  # Note: WARNING was 0.95 prior to Aug 2022
-    criteria['_task_phase_distribution'] = {'PASS': 0.99, 'NOT_SET': 0}  # This rarely passes due to low trial num
-
     def compute(self, download_data=None, **kwargs):
         """Compute and store the QC metrics.
 
@@ -368,7 +364,7 @@ class HabituationQC(TaskQC):
         check = prefix + 'phase_distribution'
         metric, _ = np.histogram(data['phase'])
         _, p = chisquare(metric)
-        passed[check] = p < 0.05
+        passed[check] = p < 0.05 if len(data['phase']) >= 400 else None  # skip if too few trials
         metrics[check] = metric
 
         # Checks common to training QC
@@ -1075,7 +1071,7 @@ def check_wheel_integrity(data, re_encoding='X1', enc_res=None, **_):
 # === Pre-stimulus checks ===
 def check_stimulus_move_before_goCue(data, photodiode=None, **_):
     """ Check that there are no visual stimulus change(s) between the start of the trial and the
-    go cue sound onset, expect for stim on.
+    go cue sound onset, except for stim on.
 
     Metric: M = number of visual stimulus change events between trial start and goCue_times
     Criterion: M == 1
@@ -1088,6 +1084,7 @@ def check_stimulus_move_before_goCue(data, photodiode=None, **_):
     -----
     - There should be exactly 1 stimulus change before goCue; stimulus onset. Even if the stimulus
       contrast is 0, the sync square will still flip at stimulus onset, etc.
+    - If there are no goCue times (all are NaN), the status should be NOT_SET.
     """
     if photodiode is None:
         _log.warning('No photodiode TTL input in function call, returning None')
@@ -1100,6 +1097,7 @@ def check_stimulus_move_before_goCue(data, photodiode=None, **_):
         metric = np.append(metric, np.count_nonzero(s[s > i] < c))
 
     passed = (metric == 1).astype(float)
+    passed[np.isnan(data['goCue_times'])] = np.nan
     assert data['intervals'].shape[0] == len(metric) == len(passed)
     return metric, passed
 
