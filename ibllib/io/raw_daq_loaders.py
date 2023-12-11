@@ -292,7 +292,7 @@ def extract_sync_timeline(timeline, chmap=None, floor_percentile=10, threshold=N
             # Bidirectional; extract indices where delta != 0
             raw = correct_counter_discontinuities(raw)
             d = np.diff(raw)
-            ind, = np.where(d.astype(int))
+            ind, = np.where(~np.isclose(d, 0))
             sync.polarities = np.concatenate((sync.polarities, np.sign(d[ind]).astype('i1')))
             ind += 1
         else:
