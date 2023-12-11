@@ -455,16 +455,21 @@ def _get_session_performance(md, ses_data):
     n_trials = []
     n_correct = []
     for data, settings in filter(all, zip(ses_data, md)):
-        # In some protocols trials start from 0, in others, from 1
-        n = data[-1]['trial_num'] + int(data[0]['trial_num'] == 0)  # +1 if starts from 0
-        n_trials.append(n)
-        # checks that the number of actual trials and labeled number of trials check out
-        assert len(data) == n, f'{len(data)} trials in data, however last trial number was {n}'
-        # task specific logic
-        if 'habituationChoiceWorld' in settings.get('PYBPOD_PROTOCOL', ''):
-            n_correct.append(0)
-        else:
-            n_correct.append(data[-1].get('ntrials_correct', sum(x['trial_correct'] for x in data)))
+        try:
+            # In some protocols trials start from 0, in others, from 1
+            n = data[-1]['trial_num'] + int(data[0]['trial_num'] == 0)  # +1 if starts from 0
+            n_trials.append(n)
+            # checks that the number of actual trials and labeled number of trials check out
+            assert len(data) == n, f'{len(data)} trials in data, however last trial number was {n}'
+            # task specific logic
+            if 'habituationChoiceWorld' in settings.get('PYBPOD_PROTOCOL', ''):
+                n_correct.append(0)
+            else:
+                n_correct.append(data[-1].get('ntrials_correct', sum(x['trial_correct'] for x in data)))
+        except KeyError:
+            # Some custom tasks don't contain trial_num info
+            n_trials.append(settings.get('NTRIALS', 0))
+            n_correct.append(settings.get('NTRIALS_CORRECT', 0))
 
     return sum(n_trials), sum(n_correct)
 
