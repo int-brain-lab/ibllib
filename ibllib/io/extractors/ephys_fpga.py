@@ -982,12 +982,14 @@ class FpgaTrials(extractors_base.BaseExtractor):
             # Older sessions don't have protocol spacers so we sync the Bpod intervals here to
             # find the approximate end time of the protocol (this will exclude the passive signals
             # in ephysChoiceWorld that tend to ruin the final trial extraction).
-            t_trial_start, *_ = _assign_events_bpod(bpod['times'], bpod['polarities'])
-            bpod_start = self.bpod_trials['intervals_bpod'][:, 0]
-            if len(t_trial_start) > len(bpod_start) / 2:
+            _, trial_ints = self.get_bpod_event_times(sync, chmap, **kwargs)
+            t_trial_start = trial_ints.get('trial_start', np.array([[np.nan, np.nan]]))[:, 0]
+            bpod_start = self.bpod_trials['intervals'][:, 0]
+            if len(t_trial_start) > len(bpod_start) / 2:  # if least half the trial start TTLs detected
+                _logger.warning('Attempting to get protocol period from aligning trial start TTLs')
                 fcn, *_ = neurodsp.utils.sync_timestamps(bpod_start, t_trial_start)
-                tmin = fcn(trials_table['intervals'][0, 0]) - 1
-                tmax = fcn(trials_table['intervals'][-1, 1]) + 1
+                tmin = fcn(self.bpod_trials['intervals'][0, 0]) - 1
+                tmax = fcn(self.bpod_trials['intervals'][-1, 1]) + 1
             else:  # This type of alignment fails for some sessions, e.g. mesoscope
                 tmin = tmax = None
 
