@@ -568,7 +568,7 @@ def plot_probe(data, ax=None, show_cbar=True, make_pretty=True, fig_kwargs=dict(
         im = NonUniformImage(ax, interpolation='nearest', cmap=data['cmap'])
         im.set_clim(data['clim'][0], data['clim'][1])
         im.set_data(x, y, dat.T)
-        ax.images.append(im)
+        ax.add_image(im)
 
     ax.set_xlim(data['xlim'][0], data['xlim'][1])
     ax.set_ylim(data['ylim'][0], data['ylim'][1])
