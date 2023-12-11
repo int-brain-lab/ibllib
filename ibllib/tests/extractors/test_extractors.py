@@ -423,7 +423,7 @@ class TestExtractTrialData(unittest.TestCase):
     def test_get_included_trials(self):
         # TRAINING SESSIONS
         it = training_trials.IncludedTrials(
-            self.training_lt5['path']).extract(settings={'IBLRIG_VERSION_TAG': '4.9.9'})[0]
+            self.training_lt5['path']).extract(settings={'IBLRIG_VERSION': '4.9.9'})[0]
         self.assertTrue(isinstance(it, np.ndarray))
         # -- version >= 5.0.0
         it = training_trials.IncludedTrials(
@@ -432,7 +432,7 @@ class TestExtractTrialData(unittest.TestCase):
 
         # BIASED SESSIONS
         it = biased_trials.IncludedTrials(
-            self.biased_lt5['path']).extract(settings={'IBLRIG_VERSION_TAG': '4.9.9'})[0]
+            self.biased_lt5['path']).extract(settings={'IBLRIG_VERSION': '4.9.9'})[0]
         self.assertTrue(isinstance(it, np.ndarray))
         # -- version >= 5.0.0
         it = biased_trials.IncludedTrials(
@@ -445,7 +445,7 @@ class TestExtractTrialData(unittest.TestCase):
         # Expect an error raised because no wheel moves were present in test data
         with self.assertRaises(ValueError) as ex:
             training_trials.extract_all(
-                self.training_lt5['path'], settings={'IBLRIG_VERSION_TAG': '4.9.9'}, save=True)
+                self.training_lt5['path'], settings={'IBLRIG_VERSION': '4.9.9'}, save=True)
             self.assertIn('_ibl_wheelMoves.intervals.npy appears to be empty', str(ex.exception))
         # -- version >= 5.0.0
         out, files = training_trials.extract_all(self.training_ge5['path'], save=True)
@@ -459,7 +459,7 @@ class TestExtractTrialData(unittest.TestCase):
             Wheel.var_names = tuple()
             Wheel().extract.return_value = ({}, [])
             out, files = biased_trials.extract_all(
-                self.biased_lt5['path'], settings={'IBLRIG_VERSION_TAG': '4.9.9'}, save=True)
+                self.biased_lt5['path'], settings={'IBLRIG_VERSION': '4.9.9'}, save=True)
             self.assertEqual(15, len(out))
             self.assertTrue(all(map(Path.exists, files)))
         # -- version >= 5.0.0
@@ -508,18 +508,18 @@ class TestExtractTrialData(unittest.TestCase):
 
     def test_load_encoder_positions(self):
         raw.load_encoder_positions(self.training_lt5['path'],
-                                   settings={'IBLRIG_VERSION_TAG': '4.9.9'})
+                                   settings={'IBLRIG_VERSION': '4.9.9'})
         raw.load_encoder_positions(self.training_ge5['path'])
         raw.load_encoder_positions(self.biased_lt5['path'],
-                                   settings={'IBLRIG_VERSION_TAG': '4.9.9'})
+                                   settings={'IBLRIG_VERSION': '4.9.9'})
         raw.load_encoder_positions(self.biased_ge5['path'])
 
     def test_load_encoder_events(self):
         raw.load_encoder_events(self.training_lt5['path'],
-                                settings={'IBLRIG_VERSION_TAG': '4.9.9'})
+                                settings={'IBLRIG_VERSION': '4.9.9'})
         raw.load_encoder_events(self.training_ge5['path'])
         raw.load_encoder_events(self.biased_lt5['path'],
-                                settings={'IBLRIG_VERSION_TAG': '4.9.9'})
+                                settings={'IBLRIG_VERSION': '4.9.9'})
         raw.load_encoder_events(self.biased_ge5['path'])
 
     def test_size_outputs(self):

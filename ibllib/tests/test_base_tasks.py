@@ -87,7 +87,7 @@ class TestBehaviourTask(unittest.TestCase):
         settings = {}
         spacer_support = partial(base_tasks.BehaviourTask._spacer_support, settings)
         for version, expected in to_test:
-            settings['IBLRIG_VERSION_TAG'] = version
+            settings['IBLRIG_VERSION'] = version
             with self.subTest(version):
                 self.assertIs(spacer_support(), expected)
 

@@ -93,9 +93,11 @@ def _load_task_protocol(session_path: str, task_collection: str = 'raw_passive_d
     :type session_path: str
     :return: ibl rig task protocol version
     :rtype: str
+
+    FIXME This function has a misleading name
     """
     settings = rawio.load_settings(session_path, task_collection=task_collection)
-    ses_ver = settings["IBLRIG_VERSION_TAG"]
+    ses_ver = settings["IBLRIG_VERSION"]
 
     return ses_ver
 
