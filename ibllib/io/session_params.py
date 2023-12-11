@@ -413,7 +413,6 @@ def get_collections(sess_params, flat=False):
                 for d in filter(lambda x: isinstance(x, dict), v):
                     iter_dict(d)
             elif isinstance(v, dict) and 'collection' in v:
-                print(k)
                 # if the key already exists, append the collection name to the list
                 if k in collection_map:
                     clist = collection_map[k] if isinstance(collection_map[k], list) else [collection_map[k]]

@@ -183,6 +183,8 @@ class EphysTrials(BaseBpodTrialsExtractor):
     def _extract(self, extractor_classes=None, **kwargs) -> dict:
         base = [GoCueTriggerTimes, StimOnTriggerTimes, ItiInTimes, StimOffTriggerTimes, StimFreezeTriggerTimes,
                 ErrorCueTriggerTimes, TrialsTableEphys, IncludedTrials, PhasePosQuiescence]
+        # Get all detected TTLs. These are stored for QC purposes
+        self.frame2ttl, self.audio = raw.load_bpod_fronts(self.session_path, data=self.bpod_trials)
         # Exclude from trials table
         out, _ = run_extractor_classes(base, session_path=self.session_path, bpod_trials=self.bpod_trials, settings=self.settings,
                                        save=False, task_collection=self.task_collection)

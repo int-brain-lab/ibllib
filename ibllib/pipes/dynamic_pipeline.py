@@ -230,22 +230,28 @@ def make_pipeline(session_path, **pkwargs):
             # -   choice_world_biased
             # -   choice_world_training
             # -   choice_world_habituation
-            if 'habituation' in protocol:
-                registration_class = btasks.HabituationRegisterRaw
-                behaviour_class = btasks.HabituationTrialsBpod
-                compute_status = False
-            elif 'passiveChoiceWorld' in protocol:
+            if 'passiveChoiceWorld' in protocol:
                 registration_class = btasks.PassiveRegisterRaw
                 behaviour_class = btasks.PassiveTask
                 compute_status = False
             elif sync_kwargs['sync'] == 'bpod':
-                registration_class = btasks.TrialRegisterRaw
-                behaviour_class = btasks.ChoiceWorldTrialsBpod
-                compute_status = True
+                if 'habituation' in protocol:
+                    registration_class = btasks.HabituationRegisterRaw
+                    behaviour_class = btasks.HabituationTrialsBpod
+                    compute_status = False
+                else:
+                    registration_class = btasks.TrialRegisterRaw
+                    behaviour_class = btasks.ChoiceWorldTrialsBpod
+                    compute_status = True
             elif sync_kwargs['sync'] == 'nidq':
-                registration_class = btasks.TrialRegisterRaw
-                behaviour_class = btasks.ChoiceWorldTrialsNidq
-                compute_status = True
+                if 'habituation' in protocol:
+                    registration_class = btasks.HabituationRegisterRaw
+                    behaviour_class = btasks.HabituationTrialsNidq
+                    compute_status = False
+                else:
+                    registration_class = btasks.TrialRegisterRaw
+                    behaviour_class = btasks.ChoiceWorldTrialsNidq
+                    compute_status = True
             else:
                 raise NotImplementedError
             tasks[f'RegisterRaw_{protocol}_{i:02}'] = type(f'RegisterRaw_{protocol}_{i:02}', (registration_class,), {})(

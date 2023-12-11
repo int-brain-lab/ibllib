@@ -1,4 +1,5 @@
-"""Behaviour QC
+"""Behaviour QC.
+
 This module runs a list of quality control metrics on the behaviour data.
 
 Examples
@@ -216,7 +217,7 @@ class TaskQC(base.QC):
         return outcome, results
 
     @staticmethod
-    def compute_session_status_from_dict(results):
+    def compute_session_status_from_dict(results, criteria=None):
         """
         Given a dictionary of results, computes the overall session QC for each key and aggregates
         in a single value
@@ -225,6 +226,8 @@ class TaskQC(base.QC):
         ----------
         results : dict
             A dictionary of QC keys containing (usually scalar) values.
+        criteria : dict
+            A dictionary of qc keys containing map of PASS, WARNING, FAIL thresholds.
 
         Returns
         -------
@@ -234,11 +237,12 @@ class TaskQC(base.QC):
             A map of QC tests and their outcomes.
         """
         indices = np.zeros(len(results), dtype=int)
+        criteria = criteria or TaskQC.criteria
         for i, k in enumerate(results):
-            if k in TaskQC.criteria.keys():
-                indices[i] = TaskQC._thresholding(results[k], thresholds=TaskQC.criteria[k])
+            if k in criteria.keys():
+                indices[i] = TaskQC._thresholding(results[k], thresholds=criteria[k])
             else:
-                indices[i] = TaskQC._thresholding(results[k], thresholds=TaskQC.criteria['default'])
+                indices[i] = TaskQC._thresholding(results[k], thresholds=criteria['default'])
 
         def key_map(x):
             return 'NOT_SET' if x < 0 else list(TaskQC.criteria['default'].keys())[x]
@@ -265,14 +269,19 @@ class TaskQC(base.QC):
         # Get mean passed of each check, or None if passed is None or all NaN
         results = {k: None if v is None or np.isnan(v).all() else np.nanmean(v)
                    for k, v in self.passed.items()}
-        session_outcome, outcomes = self.compute_session_status_from_dict(results)
+        session_outcome, outcomes = self.compute_session_status_from_dict(results, self.criteria)
         return session_outcome, results, outcomes
 
 
 class HabituationQC(TaskQC):
 
-    def compute(self, download_data=None):
+    criteria = dict()
+    criteria['default'] = {'PASS': 0.99, 'WARNING': 0.90, 'FAIL': 0}  # Note: WARNING was 0.95 prior to Aug 2022
+    criteria['_task_phase_distribution'] = {'PASS': 0.99, 'NOT_SET': 0}  # This rarely passes due to low trial num
+
+    def compute(self, download_data=None, **kwargs):
         """Compute and store the QC metrics.
+
         Runs the QC on the session and stores a map of the metrics for each datapoint for each
         test, and a map of which datapoints passed for each test.
         :return:
@@ -280,7 +289,7 @@ class HabituationQC(TaskQC):
         if self.extractor is None:
             # If download_data is None, decide based on whether eid or session path was provided
             ensure_data = self.download_data if download_data is None else download_data
-            self.load_data(download_data=ensure_data)
+            self.load_data(download_data=ensure_data, **kwargs)
         self.log.info(f'Session {self.session_path}: Running QC on habituation data...')
 
         # Initialize checks
@@ -355,6 +364,7 @@ class HabituationQC(TaskQC):
         passed[check] = (metric <= 2 * np.pi) & (metric >= 0)
         metrics[check] = metric
 
+        # This is not very useful as a check because there are so few trials
         check = prefix + 'phase_distribution'
         metric, _ = np.histogram(data['phase'])
         _, p = chisquare(metric)

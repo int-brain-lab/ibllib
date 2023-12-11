@@ -513,12 +513,16 @@ def attribute_times(arr, events, tol=.1, injective=True, take='first'):
     Returns
     -------
     numpy.array
-        An array the same length as `events`.
+        An array the same length as `events` containing indices of `arr` corresponding to each
+        event.
     """
     if (take := take.lower()) not in ('first', 'nearest', 'after'):
         raise ValueError('Parameter `take` must be either "first", "nearest", or "after"')
     stack = np.ma.masked_invalid(arr, copy=False)
     stack.fill_value = np.inf
+    # If there are no invalid values, the mask is False so let's ensure it's a bool array
+    if stack.mask is np.bool_(0):
+        stack.mask = np.zeros(arr.shape, dtype=bool)
     assigned = np.full(events.shape, -1, dtype=int)  # Initialize output array
     min_tol = 0 if take == 'after' else -tol
     for i, x in enumerate(events):
