@@ -7,7 +7,6 @@ import one.alf.io as alfio
 from one.util import ensure_list
 from one.alf.files import session_path_parts
 import matplotlib.pyplot as plt
-from neurodsp.utils import falls
 from packaging import version
 
 from ibllib.plots.misc import squares, vertical_lines
