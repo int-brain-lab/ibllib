@@ -694,7 +694,8 @@ class EphysTrials(tasks.Task):
         )
 
     def _extract_behaviour(self):
-        dsets, out_files = ephys_fpga.extract_all(self.session_path, save=True)
+        dsets, out_files, self.extractor = ephys_fpga.extract_all(
+            self.session_path, save=True, return_extractor=True)
 
         return dsets, out_files
 
@@ -709,8 +710,16 @@ class EphysTrials(tasks.Task):
         qc = TaskQC(self.session_path, one=self.one, log=_logger)
         qc.extractor = TaskQCExtractor(self.session_path, lazy=True, one=qc.one)
         # Extract extra datasets required for QC
-        qc.extractor.data = dsets
-        qc.extractor.extract_data()
+        qc.extractor.data = qc.extractor.rename_data(dsets)
+        wheel_ts_bpod = self.extractor.bpod2fpga(self.extractor.bpod_trials['wheel_timestamps'])
+        qc.extractor.data['wheel_timestamps_bpod'] = wheel_ts_bpod
+        qc.extractor.data['wheel_position_bpod'] = self.extractor.bpod_trials['wheel_position']
+        qc.extractor.wheel_encoding = 'X4'
+        qc.extractor.settings = self.extractor.settings
+        qc.extractor.frame_ttls = self.extractor.frame2ttl
+        qc.extractor.audio_ttls = self.extractor.audio
+        qc.extractor.bpod_ttls = self.extractor.bpod
+
         # Aggregate and update Alyx QC fields
         qc.run(update=True)
 

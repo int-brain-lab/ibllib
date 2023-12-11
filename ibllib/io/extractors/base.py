@@ -29,9 +29,16 @@ class BaseExtractor(abc.ABC):
     """
 
     session_path = None
+    """pathlib.Path: Absolute path of session folder."""
+
     save_names = None
+    """tuple of str: The filenames of each extracted dataset, or None if array should not be saved."""
+
     var_names = None
+    """tuple of str: A list of names for the extracted variables. These become the returned output keys."""
+
     default_path = Path('alf')  # relative to session
+    """pathlib.Path: The default output folder relative to `session_path`."""
 
     def __init__(self, session_path=None):
         # If session_path is None Path(session_path) will fail
@@ -127,6 +134,8 @@ class BaseBpodTrialsExtractor(BaseExtractor):
     bpod_trials = None
     settings = None
     task_collection = None
+    frame2ttl = None
+    audio = None
 
     def extract(self, bpod_trials=None, settings=None, **kwargs):
         """

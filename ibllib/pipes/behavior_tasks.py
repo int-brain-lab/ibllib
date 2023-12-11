@@ -14,7 +14,7 @@ from ibllib.qc.task_extractors import TaskQCExtractor
 from ibllib.qc.task_metrics import HabituationQC, TaskQC
 from ibllib.io.extractors.ephys_passive import PassiveChoiceWorld
 from ibllib.io.extractors.bpod_trials import get_bpod_extractor
-from ibllib.io.extractors.ephys_fpga import FpgaTrials, get_sync_and_chn_map
+from ibllib.io.extractors.ephys_fpga import FpgaTrials, FpgaTrialsHabituation, get_sync_and_chn_map
 from ibllib.io.extractors.mesoscope import TimelineTrials
 from ibllib.pipes import training_status
 from ibllib.plots.figures import BehaviourPlots
@@ -102,11 +102,58 @@ class HabituationTrialsBpod(base_tasks.BehaviourTask):
         qc.extractor = TaskQCExtractor(self.session_path, lazy=True, sync_collection=self.sync_collection,
                                        one=self.one, sync_type=self.sync, task_collection=self.collection)
 
-        # Currently only the data field is accessed
+        # Update extractor fields
         qc.extractor.data = qc.extractor.rename_data(trials_data.copy())
+        qc.extractor.frame_ttls = self.extractor.frame2ttl  # used in iblapps QC viewer
+        qc.extractor.audio_ttls = self.extractor.audio  # used in iblapps QC viewer
+        qc.extractor.settings = self.extractor.settings
 
         namespace = 'task' if self.protocol_number is None else f'task_{self.protocol_number:02}'
         qc.run(update=update, namespace=namespace)
+        return qc
+
+
+class HabituationTrialsNidq(HabituationTrialsBpod):
+    priority = 90
+    job_size = 'small'
+
+    @property
+    def signature(self):
+        signature = super().signature
+        signature['input_files'] = [
+            ('_iblrig_taskData.raw.*', self.collection, True),
+            ('_iblrig_taskSettings.raw.*', self.collection, True),
+            (f'_{self.sync_namespace}_sync.channels.npy', self.sync_collection, True),
+            (f'_{self.sync_namespace}_sync.polarities.npy', self.sync_collection, True),
+            (f'_{self.sync_namespace}_sync.times.npy', self.sync_collection, True),
+            ('*wiring.json', self.sync_collection, False),
+            ('*.meta', self.sync_collection, True)]
+        return signature
+
+    def _extract_behaviour(self, save=True, **kwargs):
+        """Extract the habituationChoiceWorld trial data using NI DAQ clock."""
+        # Extract Bpod trials
+        bpod_trials, _ = super()._extract_behaviour(save=False, **kwargs)
+
+        # Sync Bpod trials to FPGA
+        sync, chmap = get_sync_and_chn_map(self.session_path, self.sync_collection)
+        self.extractor = FpgaTrialsHabituation(
+            self.session_path, bpod_trials=bpod_trials, bpod_extractor=self.extractor)
+
+        # NB: The stimOff times are called stimCenter times for habituation choice world
+        outputs, files = self.extractor.extract(
+            save=save, sync=sync, chmap=chmap, path_out=self.session_path.joinpath(self.output_collection),
+            task_collection=self.collection, protocol_number=self.protocol_number, **kwargs)
+        return outputs, files
+
+    def _run_qc(self, trials_data=None, update=True, **_):
+        """Run and update QC.
+
+        This adds the bpod TTLs to the QC object *after* the QC is run in the super call method.
+        The raw Bpod TTLs are not used by the QC however they are used in the iblapps QC plot.
+        """
+        qc = super()._run_qc(trials_data=trials_data, update=update)
+        qc.extractor.bpod_ttls = self.extractor.bpod
         return qc
 
 
@@ -286,9 +333,9 @@ class ChoiceWorldTrialsBpod(base_tasks.BehaviourTask):
         else:
             qc = TaskQC(self.session_path, one=self.one, log=_logger)
             qc_extractor.wheel_encoding = 'X1'
-            qc_extractor.settings = self.extractor.settings
-            qc_extractor.frame_ttls, qc_extractor.audio_ttls = load_bpod_fronts(
-                self.session_path, task_collection=self.collection)
+        qc_extractor.settings = self.extractor.settings
+        qc_extractor.frame_ttls, qc_extractor.audio_ttls = load_bpod_fronts(
+            self.session_path, task_collection=self.collection)
         qc.extractor = qc_extractor
 
         # Aggregate and update Alyx QC fields
@@ -370,15 +417,15 @@ class ChoiceWorldTrialsNidq(ChoiceWorldTrialsBpod):
             qc = HabituationQC(self.session_path, one=self.one, log=_logger)
         else:
             qc = TaskQC(self.session_path, one=self.one, log=_logger)
-            qc_extractor.settings = self.extractor.settings
             # Add Bpod wheel data
             wheel_ts_bpod = self.extractor.bpod2fpga(self.extractor.bpod_trials['wheel_timestamps'])
             qc_extractor.data['wheel_timestamps_bpod'] = wheel_ts_bpod
             qc_extractor.data['wheel_position_bpod'] = self.extractor.bpod_trials['wheel_position']
             qc_extractor.wheel_encoding = 'X4'
-            qc_extractor.frame_ttls = self.extractor.frame2ttl
-            qc_extractor.audio_ttls = self.extractor.audio
-            qc_extractor.bpod_ttls = self.extractor.bpod  # used only in iblapps task QC viewer
+        qc_extractor.frame_ttls = self.extractor.frame2ttl
+        qc_extractor.audio_ttls = self.extractor.audio
+        qc_extractor.bpod_ttls = self.extractor.bpod
+        qc_extractor.settings = self.extractor.settings
         qc.extractor = qc_extractor
 
         # Aggregate and update Alyx QC fields
