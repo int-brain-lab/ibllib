@@ -187,9 +187,9 @@ def squares(tscale, polarity, ax=None, yrange=[-1, 1], **kwargs):
 
 def vertical_lines(x, ymin=0, ymax=1, ax=None, **kwargs):
     """
-    From a x vector, draw separate vertical lines at each x location ranging from ymin to ymax
+    From an x vector, draw separate vertical lines at each x location ranging from ymin to ymax
 
-    :param x: numpy array vector of x values where to display lnes
+    :param x: numpy array vector of x values where to display lines
     :param ymin: lower end of the lines (scalar)
     :param ymax: higher end of the lines (scalar)
     :param ax: (optional) matplotlib axis instance

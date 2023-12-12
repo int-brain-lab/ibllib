@@ -230,7 +230,7 @@ class IBLRegistrationClient(RegistrationClient):
             n_trials, n_correct_trials = _get_session_performance(settings, task_data)
 
             # TODO Add task_protocols to Alyx sessions endpoint
-            task_protocols = [md['PYBPOD_PROTOCOL'] + md['IBLRIG_VERSION_TAG'] for md in settings]
+            task_protocols = [md['PYBPOD_PROTOCOL'] + md['IBLRIG_VERSION'] for md in settings]
             # unless specified label the session projects with subject projects
             projects = subject['projects'] if projects is None else projects
             # makes sure projects is a list
@@ -298,7 +298,7 @@ class IBLRegistrationClient(RegistrationClient):
 
         # register all files that match the Alyx patterns and file_list
         if any(settings):
-            rename_files_compatibility(ses_path, settings[0]['IBLRIG_VERSION_TAG'])
+            rename_files_compatibility(ses_path, settings[0]['IBLRIG_VERSION'])
         F = filter(lambda x: self._register_bool(x.name, file_list), self.find_files(ses_path))
         recs = self.register_files(F, created_by=users[0] if users else None, versions=ibllib.__version__)
         return session, recs

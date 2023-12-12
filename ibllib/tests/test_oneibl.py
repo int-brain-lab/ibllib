@@ -225,7 +225,7 @@ MOCK_SESSION_SETTINGS = {
     'SUBJECT_NAME': SUBJECT,
     'PYBPOD_BOARD': '_iblrig_mainenlab_behavior_1',
     'PYBPOD_PROTOCOL': '_iblrig_tasks_ephysChoiceWorld',
-    'IBLRIG_VERSION_TAG': '5.4.1',
+    'IBLRIG_VERSION': '5.4.1',
     'SUBJECT_WEIGHT': 22,
 }
 

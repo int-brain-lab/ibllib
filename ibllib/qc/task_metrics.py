@@ -55,6 +55,7 @@ from functools import reduce
 from collections.abc import Sized
 
 import numpy as np
+from packaging import version
 from scipy.stats import chisquare
 
 from brainbox.behavior.wheel import cm_to_rad, traces_by_trial
@@ -131,27 +132,47 @@ class TaskQC(base.QC):
         self.passed = None
 
     def load_data(self, bpod_only=False, download_data=True):
-        """Extract the data from raw data files
+        """Extract the data from raw data files.
+
         Extracts all the required task data from the raw data files.
 
-        :param bpod_only: if True no data is extracted from the FPGA for ephys sessions
-        :param download_data: if True, any missing raw data is downloaded via ONE.
+        Parameters
+        ----------
+        bpod_only : bool
+            If True no data is extracted from the FPGA for ephys sessions.
+        download_data : bool
+            If True, any missing raw data is downloaded via ONE. By default data are not downloaded
+            if a session path was provided to the constructor.
         """
         self.extractor = TaskQCExtractor(
             self.session_path, one=self.one, download_data=download_data, bpod_only=bpod_only)
 
     def compute(self, **kwargs):
-        """Compute and store the QC metrics
+        """Compute and store the QC metrics.
+
         Runs the QC on the session and stores a map of the metrics for each datapoint for each
-        test, and a map of which datapoints passed for each test
-        :param bpod_only: if True no data is extracted from the FPGA for ephys sessions
-        :param download_data: if True, any missing raw data is downloaded via ONE.  By default
-        data are not downloaded if a session path was provided to the constructor.
-        :return:
+        test, and a map of which datapoints passed for each test.
+
+        Parameters
+        ----------
+        bpod_only : bool
+            If True no data is extracted from the FPGA for ephys sessions.
+        download_data : bool
+            If True, any missing raw data is downloaded via ONE. By default data are not downloaded
+            if a session path was provided to the constructor.
         """
         if self.extractor is None:
             kwargs['download_data'] = kwargs.pop('download_data', self.download_data)
             self.load_data(**kwargs)
+
+        ver = self.extractor.settings.get('IBLRIG_VERSION', '') or '0.0.0'
+        if version.parse(ver) >= version.parse('8.0.0'):
+            self.criteria['_task_iti_delays'] = {'PASS': 0.99, 'WARNING': 0}
+            self.criteria['_task_passed_trial_checks'] = {'PASS': 0.7, 'WARNING': 0}
+        else:
+            self.criteria['_task_iti_delays'] = {'NOT_SET': 0}
+            self.criteria['_task_passed_trial_checks'] = {'NOT_SET': 0}
+
         self.log.info(f'Session {self.session_path}: Running QC on behavior data...')
         self.metrics, self.passed = get_bpodqc_metrics_frame(
             self.extractor.data,
@@ -159,17 +180,33 @@ class TaskQC(base.QC):
             photodiode=self.extractor.frame_ttls,
             audio=self.extractor.audio_ttls,
             re_encoding=self.extractor.wheel_encoding or 'X1',
-            min_qt=self.extractor.settings.get('QUIESCENT_PERIOD') or 0.2
+            min_qt=self.extractor.settings.get('QUIESCENT_PERIOD') or 0.2,
+            audio_output=self.extractor.settings.get('device_sound', {}).get('OUTPUT', 'unknown')
         )
         return
 
     def run(self, update=False, namespace='task', **kwargs):
         """
-        :param update: if True, updates the session QC fields on Alyx
-        :param bpod_only: if True no data is extracted from the FPGA for ephys sessions
-        :param download_data: if True, any missing raw data is downloaded via ONE.  By default
-        data are not downloaded if a session path was provided to the constructor.
-        :return: QC outcome (str), a dict for extended QC
+        Compute the QC outcomes and return overall task QC outcome.
+
+        Parameters
+        ----------
+        update : bool
+            If True, updates the session QC fields on Alyx.
+        namespace : str
+            The namespace of the QC fields in the Alyx JSON field.
+        bpod_only : bool
+            If True no data is extracted from the FPGA for ephys sessions.
+        download_data : bool
+            If True, any missing raw data is downloaded via ONE. By default data are not downloaded
+            if a session path was provided to the constructor.
+
+        Returns
+        -------
+        str
+            Overall task QC outcome.
+        dict
+            A map of QC tests and the proportion of data points that passed them.
         """
         if self.metrics is None:
             self.compute(**kwargs)
@@ -184,10 +221,20 @@ class TaskQC(base.QC):
         """
         Given a dictionary of results, computes the overall session QC for each key and aggregates
         in a single value
-        :param results: a dictionary of qc keys containing (usually scalar) values.
-        :param criteria: a dictionary of qc keys containing map of PASS, WARNING, FAIL thresholds.
-        :return: Overall session QC outcome as a string
-        :return: A dict of QC tests and their outcomes
+
+        Parameters
+        ----------
+        results : dict
+            A dictionary of QC keys containing (usually scalar) values.
+        criteria : dict
+            A dictionary of qc keys containing map of PASS, WARNING, FAIL thresholds.
+
+        Returns
+        -------
+        str
+            Overall session QC outcome as a string.
+        dict
+            A map of QC tests and their outcomes.
         """
         indices = np.zeros(len(results), dtype=int)
         criteria = criteria or TaskQC.criteria
@@ -206,10 +253,16 @@ class TaskQC(base.QC):
 
     def compute_session_status(self):
         """
-        Computes the overall session QC for each key and aggregates in a single value
-        :return: Overall session QC outcome as a string
-        :return: A dict of QC tests and the proportion of data points that passed them
-        :return: A dict of QC tests and their outcomes
+        Computes the overall session QC for each key and aggregates in a single value.
+
+        Returns
+        -------
+        str
+            Overall session QC outcome.
+        dict
+            A map of QC tests and the proportion of data points that passed them.
+        dict
+            A map of QC tests and their outcomes.
         """
         if self.passed is None:
             raise AttributeError('passed is None; compute QC first')
@@ -222,15 +275,11 @@ class TaskQC(base.QC):
 
 class HabituationQC(TaskQC):
 
-    criteria = dict()
-    criteria['default'] = {'PASS': 0.99, 'WARNING': 0.90, 'FAIL': 0}  # Note: WARNING was 0.95 prior to Aug 2022
-    criteria['_task_phase_distribution'] = {'PASS': 0.99, 'NOT_SET': 0}  # This rarely passes due to low trial num
-
     def compute(self, download_data=None, **kwargs):
         """Compute and store the QC metrics.
 
         Runs the QC on the session and stores a map of the metrics for each datapoint for each
-        test, and a map of which datapoints passed for each test
+        test, and a map of which datapoints passed for each test.
         :return:
         """
         if self.extractor is None:
@@ -242,6 +291,7 @@ class HabituationQC(TaskQC):
         # Initialize checks
         prefix = '_task_'
         data = self.extractor.data
+        audio_output = self.extractor.settings.get('device_sound', {}).get('OUTPUT', 'unknown')
         metrics = {}
         passed = {}
 
@@ -314,7 +364,7 @@ class HabituationQC(TaskQC):
         check = prefix + 'phase_distribution'
         metric, _ = np.histogram(data['phase'])
         _, p = chisquare(metric)
-        passed[check] = p < 0.05
+        passed[check] = p < 0.05 if len(data['phase']) >= 400 else None  # skip if too few trials
         metrics[check] = metric
 
         # Checks common to training QC
@@ -322,7 +372,7 @@ class HabituationQC(TaskQC):
                   check_stimOn_delays, check_stimOff_delays]
         for fcn in checks:
             check = prefix + fcn.__name__[6:]
-            metrics[check], passed[check] = fcn(data)
+            metrics[check], passed[check] = fcn(data, audio_output=audio_output)
 
         self.metrics, self.passed = (metrics, passed)
 
@@ -372,7 +422,7 @@ def get_bpodqc_metrics_frame(data, **kwargs):
 
 # === Delays between events checks ===
 
-def check_stimOn_goCue_delays(data, **_):
+def check_stimOn_goCue_delays(data, audio_output='harp', **_):
     """ Checks that the time difference between the onset of the visual stimulus
     and the onset of the go cue tone is positive and less than 10ms.
 
@@ -381,16 +431,23 @@ def check_stimOn_goCue_delays(data, **_):
     Units: seconds [s]
 
     :param data: dict of trial data with keys ('goCue_times', 'stimOn_times', 'intervals')
+    :param audio_output: audio output device name.
+
+    Notes
+    -----
+    For non-harp sound card the permissible delay is 0.053s. This was chosen by taking the 99.5th
+    percentile of delays over 500 training sessions using the Xonar soundcard.
     """
     # Calculate the difference between stimOn and goCue times.
     # If either are NaN, the result will be Inf to ensure that it crosses the failure threshold.
+    threshold = 0.01 if audio_output.lower() == 'harp' else 0.053
     metric = np.nan_to_num(data['goCue_times'] - data['stimOn_times'], nan=np.inf)
-    passed = (metric < 0.01) & (metric > 0)
+    passed = (metric < threshold) & (metric > 0)
     assert data['intervals'].shape[0] == len(metric) == len(passed)
     return metric, passed
 
 
-def check_response_feedback_delays(data, **_):
+def check_response_feedback_delays(data, audio_output='harp', **_):
     """ Checks that the time difference between the response and the feedback onset
     (error sound or valve) is positive and less than 10ms.
 
@@ -399,9 +456,16 @@ def check_response_feedback_delays(data, **_):
     Units: seconds [s]
 
     :param data: dict of trial data with keys ('feedback_times', 'response_times', 'intervals')
+    :param audio_output: audio output device name.
+
+    Notes
+    -----
+    For non-harp sound card the permissible delay is 0.053s. This was chosen by taking the 99.5th
+    percentile of delays over 500 training sessions using the Xonar soundcard.
     """
+    threshold = 0.01 if audio_output.lower() == 'harp' else 0.053
     metric = np.nan_to_num(data['feedback_times'] - data['response_times'], nan=np.inf)
-    passed = (metric < 0.01) & (metric > 0)
+    passed = (metric < threshold) & (metric > 0)
     assert data['intervals'].shape[0] == len(metric) == len(passed)
     return metric, passed
 
@@ -839,7 +903,7 @@ def check_trial_length(data, **_):
 
 # === Trigger-response delay checks ===
 
-def check_goCue_delays(data, **_):
+def check_goCue_delays(data, audio_output='harp', **_):
     """ Check that the time difference between the go cue sound being triggered and
     effectively played is smaller than 1ms.
 
@@ -847,15 +911,22 @@ def check_goCue_delays(data, **_):
     Criterion: 0 < M <= 0.0015 s
     Units: seconds [s]
 
-    :param data: dict of trial data with keys ('goCue_times', 'goCueTrigger_times', 'intervals')
+    :param data: dict of trial data with keys ('goCue_times', 'goCueTrigger_times', 'intervals').
+    :param audio_output: audio output device name.
+
+    Notes
+    -----
+    For non-harp sound card the permissible delay is 0.053s. This was chosen by taking the 99.5th
+    percentile of delays over 500 training sessions using the Xonar soundcard.
     """
+    threshold = 0.0015 if audio_output.lower() == 'harp' else 0.053
     metric = np.nan_to_num(data['goCue_times'] - data['goCueTrigger_times'], nan=np.inf)
-    passed = (metric <= 0.0015) & (metric > 0)
+    passed = (metric <= threshold) & (metric > 0)
     assert data['intervals'].shape[0] == len(metric) == len(passed)
     return metric, passed
 
 
-def check_errorCue_delays(data, **_):
+def check_errorCue_delays(data, audio_output='harp', **_):
     """ Check that the time difference between the error sound being triggered and
     effectively played is smaller than 1ms.
     Metric: M = errorCue_times - errorCueTrigger_times
@@ -864,9 +935,16 @@ def check_errorCue_delays(data, **_):
 
     :param data: dict of trial data with keys ('errorCue_times', 'errorCueTrigger_times',
     'intervals', 'correct')
+    :param audio_output: audio output device name.
+
+    Notes
+    -----
+    For non-harp sound card the permissible delay is 0.062s. This was chosen by taking the 99.5th
+    percentile of delays over 500 training sessions using the Xonar soundcard.
     """
+    threshold = 0.0015 if audio_output.lower() == 'harp' else 0.062
     metric = np.nan_to_num(data['errorCue_times'] - data['errorCueTrigger_times'], nan=np.inf)
-    passed = ((metric <= 0.0015) & (metric > 0)).astype(float)
+    passed = ((metric <= threshold) & (metric > 0)).astype(float)
     passed[data['correct']] = metric[data['correct']] = np.nan
     assert data['intervals'].shape[0] == len(metric) == len(passed)
     return metric, passed
@@ -993,14 +1071,20 @@ def check_wheel_integrity(data, re_encoding='X1', enc_res=None, **_):
 # === Pre-stimulus checks ===
 def check_stimulus_move_before_goCue(data, photodiode=None, **_):
     """ Check that there are no visual stimulus change(s) between the start of the trial and the
-    go cue sound onset - 20 ms.
+    go cue sound onset, except for stim on.
 
-    Metric: M = number of visual stimulus change events between trial start and goCue_times - 20ms
-    Criterion: M == 0
+    Metric: M = number of visual stimulus change events between trial start and goCue_times
+    Criterion: M == 1
     Units: -none-, integer
 
     :param data: dict of trial data with keys ('goCue_times', 'intervals', 'choice')
     :param photodiode: the fronts from Bpod's BNC1 input or FPGA frame2ttl channel
+
+    Notes
+    -----
+    - There should be exactly 1 stimulus change before goCue; stimulus onset. Even if the stimulus
+      contrast is 0, the sync square will still flip at stimulus onset, etc.
+    - If there are no goCue times (all are NaN), the status should be NOT_SET.
     """
     if photodiode is None:
         _log.warning('No photodiode TTL input in function call, returning None')
@@ -1010,11 +1094,10 @@ def check_stimulus_move_before_goCue(data, photodiode=None, **_):
     s = s[~np.isnan(s)]  # Remove NaNs
     metric = np.array([])
     for i, c in zip(data['intervals'][:, 0], data['goCue_times']):
-        metric = np.append(metric, np.count_nonzero(s[s > i] < (c - 0.02)))
+        metric = np.append(metric, np.count_nonzero(s[s > i] < c))
 
-    passed = (metric == 0).astype(float)
-    # Remove no go trials
-    passed[data['choice'] == 0] = np.nan
+    passed = (metric == 1).astype(float)
+    passed[np.isnan(data['goCue_times'])] = np.nan
     assert data['intervals'].shape[0] == len(metric) == len(passed)
     return metric, passed
 
