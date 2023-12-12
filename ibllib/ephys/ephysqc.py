@@ -370,7 +370,7 @@ def validate_ttl_test(ses_path, display=False):
     try:
         # note: tried to depend as little as possible on the extraction code but for the valve...
         extractor = ephys_fpga.FpgaTrials(ses_path)
-        bpod_intervals = extractor.get_bpod_event_times(sync, sync_map)
+        _, bpod_intervals = extractor.get_bpod_event_times(rawsync, sync_map)
         t_valve_open = bpod_intervals['valve_open'][:, 0]
         res = t_valve_open.size > 1
     except AssertionError:
