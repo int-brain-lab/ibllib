@@ -988,8 +988,10 @@ class FpgaTrials(extractors_base.BaseExtractor):
             if len(t_trial_start) > len(bpod_start) / 2:  # if least half the trial start TTLs detected
                 _logger.warning('Attempting to get protocol period from aligning trial start TTLs')
                 fcn, *_ = neurodsp.utils.sync_timestamps(bpod_start, t_trial_start)
-                tmin = fcn(self.bpod_trials['intervals'][0, 0]) - 1
-                tmax = fcn(self.bpod_trials['intervals'][-1, 1]) + 1
+                buffer = 2.5  # the number of seconds to include before/after task
+                start, end = fcn(self.bpod_trials['intervals'].flat[[0, -1]])
+                tmin = min(sync['times'][0], start - buffer)
+                tmax = max(sync['times'][-1], end + buffer)
             else:  # This type of alignment fails for some sessions, e.g. mesoscope
                 tmin = tmax = None
 
