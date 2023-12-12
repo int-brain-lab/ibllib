@@ -3,7 +3,6 @@ Quality control of raw Neuropixel electrophysiology data.
 """
 from pathlib import Path
 import logging
-import shutil
 
 import numpy as np
 import pandas as pd
@@ -19,7 +18,7 @@ from brainbox.io.spikeglx import Streamer
 from brainbox.metrics.single_units import spike_sorting_metrics
 from ibllib.ephys import sync_probes, spikes
 from ibllib.qc import base
-from ibllib.io.extractors import ephys_fpga, training_wheel
+from ibllib.io.extractors import ephys_fpga
 from phylib.io import model
 
 
@@ -370,8 +369,9 @@ def validate_ttl_test(ses_path, display=False):
                        str_ok="PASS: Bpod", str_ko="FAILED: Bpod")
     try:
         # note: tried to depend as little as possible on the extraction code but for the valve...
-        bpod = ephys_fpga.get_sync_fronts(rawsync, sync_map['bpod'])
-        _, t_valve_open, _ = ephys_fpga._assign_events_bpod(bpod['times'], bpod['polarities'])
+        extractor = ephys_fpga.FpgaTrials(ses_path)
+        bpod_intervals = extractor.get_bpod_event_times(sync, sync_map)
+        t_valve_open = bpod_intervals['valve_open'][:, 0]
         res = t_valve_open.size > 1
     except AssertionError:
         res = False
@@ -569,42 +569,3 @@ def qc_fpga_task(fpga_trials, alf_trials):
     qc_session = {k: np.all(qc_trials[k]) for k in qc_trials}
 
     return qc_session, qc_trials
-
-
-def _qc_from_path(sess_path, display=True):
-    WHEEL = False
-    sess_path = Path(sess_path)
-    temp_alf_folder = sess_path.joinpath('fpga_test', 'alf')
-    temp_alf_folder.mkdir(parents=True, exist_ok=True)
-
-    sync, chmap = ephys_fpga.get_main_probe_sync(sess_path, bin_exists=False)
-    _ = ephys_fpga.extract_all(sess_path, output_path=temp_alf_folder, save=True)
-    # check that the output is complete
-    fpga_trials, *_ = ephys_fpga.extract_behaviour_sync(sync, chmap=chmap, display=display)
-    # align with the bpod
-    bpod2fpga = ephys_fpga.align_with_bpod(temp_alf_folder.parent)
-    alf_trials = alfio.load_object(temp_alf_folder, 'trials')
-    shutil.rmtree(temp_alf_folder)
-    # do the QC
-    qcs, qct = qc_fpga_task(fpga_trials, alf_trials)
-
-    # do the wheel part
-    if WHEEL:
-        bpod_wheel = training_wheel.get_wheel_data(sess_path, save=False)
-        fpga_wheel = ephys_fpga.extract_wheel_sync(sync, chmap=chmap, save=False)
-
-        if display:
-            import matplotlib.pyplot as plt
-            t0 = max(np.min(bpod2fpga(bpod_wheel['re_ts'])), np.min(fpga_wheel['re_ts']))
-            dy = np.interp(t0, fpga_wheel['re_ts'], fpga_wheel['re_pos']) - np.interp(
-                t0, bpod2fpga(bpod_wheel['re_ts']), bpod_wheel['re_pos'])
-
-            fix, axes = plt.subplots(nrows=2, sharex='all', sharey='all')
-            # axes[0].plot(t, pos), axes[0].title.set_text('Extracted')
-            axes[0].plot(bpod2fpga(bpod_wheel['re_ts']), bpod_wheel['re_pos'] + dy)
-            axes[0].plot(fpga_wheel['re_ts'], fpga_wheel['re_pos'])
-            axes[0].title.set_text('FPGA')
-            axes[1].plot(bpod2fpga(bpod_wheel['re_ts']), bpod_wheel['re_pos'] + dy)
-            axes[1].title.set_text('Bpod')
-
-    return alfio.dataframe({**fpga_trials, **alf_trials, **qct})
