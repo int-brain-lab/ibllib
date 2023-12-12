@@ -1,5 +1,6 @@
 {"ephysChoiceWorld": "EphysTrials",
  "_biasedChoiceWorld": "BiasedTrials",
  "_habituationChoiceWorld": "HabituationTrials",
- "_trainingChoiceWorld": "TrainingTrials"
+ "_trainingChoiceWorld": "TrainingTrials",
+ "_trainingPhaseChoiceWorld": "TrainingTrials"
 }

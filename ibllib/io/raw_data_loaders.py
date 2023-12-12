@@ -985,11 +985,14 @@ def patch_settings(session_path, collection='raw_behavior_data',
                 )
 
     if new_collection:
-        old_path = settings['SESSION_RAW_DATA_FOLDER']
-        new_path = PureWindowsPath(settings['SESSION_RAW_DATA_FOLDER']).with_name(new_collection)
-        for k in settings.keys():
-            if isinstance(settings[k], str):
-                settings[k] = settings[k].replace(old_path, str(new_path))
+        if 'SESSION_RAW_DATA_FOLDER' not in settings:
+            _logger.warning('SESSION_RAW_DATA_FOLDER key not in settings; collection not updated')
+        else:
+            old_path = settings['SESSION_RAW_DATA_FOLDER']
+            new_path = PureWindowsPath(settings['SESSION_RAW_DATA_FOLDER']).with_name(new_collection)
+            for k in settings.keys():
+                if isinstance(settings[k], str):
+                    settings[k] = settings[k].replace(old_path, str(new_path))
     with open(file_path, 'w') as fp:
         json.dump(settings, fp, indent=' ')
     return settings

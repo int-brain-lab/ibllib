@@ -1,11 +1,13 @@
 import unittest
-import tempfile
 from unittest import mock
+import tempfile
 from pathlib import PurePosixPath, Path
 import json
 import datetime
 import random
 import string
+import uuid
+from itertools import chain
 
 from requests import HTTPError
 import numpy as np
@@ -76,6 +78,85 @@ class TestFTPPatcher(unittest.TestCase):
             'FTP_DATA_SERVER': 'ftp://server.net',
             'FTP_DATA_SERVER_LOGIN': 'usr'}
         return FTP_pars[next(k for k in FTP_pars.keys() if k in prompt.replace(',', '').split())]
+
+
+class TestGlobusPatcher(unittest.TestCase):
+    """Tests for the ibllib.oneibl.patcher.GlobusPatcher class."""
+
+    globus_sdk_mock = None
+    """unittest.mock._patch: Mock object for globus_sdk package."""
+
+    @mock.patch('one.remote.globus._setup')
+    def setUp(self, _) -> None:
+        # Create a temp dir for writing datasets to
+        self.tempdir = tempfile.TemporaryDirectory()
+        # The github CI root dir contains an alias/symlink so we must resolve it
+        self.root_path = Path(self.tempdir.name).resolve()
+        self.addCleanup(self.tempdir.cleanup)
+        # Mock the Globus setup process so the parameters aren't overwritten
+        self.pars = iopar.from_dict({
+            'GLOBUS_CLIENT_ID': '123',
+            'refresh_token': '456',
+            'local_endpoint': str(uuid.uuid1()),
+            'local_path': str(self.root_path),
+            'access_token': 'abc',
+            'expires_at_seconds': datetime.datetime.now().timestamp() + 60**2
+        })
+        # Mock the globus SDK so that no actual tasks are submitted
+        self.globus_sdk_mock = mock.patch('one.remote.globus.globus_sdk')
+        self.globus_sdk_mock.start()
+        self.addCleanup(self.globus_sdk_mock.stop)
+        self.one = ONE(**TEST_DB)
+        with mock.patch('one.remote.globus.load_client_params', return_value=self.pars):
+            self.globus_patcher = patcher.GlobusPatcher(one=self.one)
+
+    def test_patch_datasets(self):
+        """Tests for GlobusPatcher.patch_datasets and GlobusPatcher.launch_transfers methods."""
+        # Create a couple of datasets to patch
+        file_list = ['ZFM-01935/2021-02-05/001/alf/_ibl_wheelMoves.intervals.npy',
+                     'ZM_1743/2019-06-14/001/alf/_ibl_wheel.position.npy']
+        dids = ['80fabd30-9dc8-4778-b349-d175af63e1bd', 'fede964f-55cd-4267-95e0-327454e68afb']
+        # These exist on the test database, so get their info in order to mock registration response
+        for r in (responses := self.one.alyx.rest('datasets', 'list', django=f'pk__in,{dids}')):
+            r['id'] = r['url'].split('/')[-1]
+        assert len(responses) == 2, f'one or both datasets {dids} not on database'
+        # Create the files on disk
+        for file in (file_list := list(map(self.root_path.joinpath, file_list))):
+            file.parent.mkdir(exist_ok=True, parents=True)
+            file.touch()
+
+        # Mock the post method of AlyxClient and assert that it was called during registration
+        with mock.patch.object(self.one.alyx, 'post') as rest_mock:
+            rest_mock.side_effect = responses
+            self.globus_patcher.patch_datasets(file_list)
+            self.assertEqual(rest_mock.call_count, 2)
+            for call, file in zip(rest_mock.call_args_list, file_list):
+                self.assertEqual(call.args[0], '/register-file')
+                path = file.relative_to(self.root_path).as_posix()
+                self.assertTrue(path.startswith(call.kwargs['data']['path']))
+                self.assertTrue(path.endswith(call.kwargs['data']['filenames'][0]))
+
+        # Check whether the globus transfers were updated
+        self.assertIsNotNone(self.globus_patcher.globus_transfer)
+        transfer_data = self.globus_patcher.globus_transfer['DATA']
+        self.assertEqual(len(transfer_data), len(file_list))
+        for data, file, did in zip(transfer_data, file_list, dids):
+            path = file.relative_to(self.root_path).as_posix()
+            self.assertTrue(data['source_path'].endswith(path))
+            self.assertIn(did, data['destination_path'], 'failed to add UUID to destination file name')
+
+        # Check added local server transfers
+        self.assertTrue(len(self.globus_patcher.globus_transfers_locals))
+        transfer_data = list(chain(*[x['DATA'] for x in self.globus_patcher.globus_transfers_locals.values()]))
+        for data, file, did in zip(transfer_data, file_list, dids):
+            path = file.relative_to(self.root_path).as_posix()
+            self.assertEqual(data['destination_path'], '/mnt/s0/Data/Subjects/' + path)
+            self.assertIn(did, data['source_path'], 'failed to add UUID to source file name')
+
+        # Check behaviour when tasks submitted
+        self.globus_patcher.client.get_task.return_value = {'completion_time': 0, 'fatal_error': None}
+        self.globus_patcher.launch_transfers(local_servers=True)
+        self.globus_patcher.client.submit_transfer.assert_called()
 
 
 class TestAlyx2Path(unittest.TestCase):
