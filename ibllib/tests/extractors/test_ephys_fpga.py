@@ -4,6 +4,7 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
+import numpy.testing
 
 from ibllib.io.extractors import ephys_fpga
 import spikeglx
@@ -164,7 +165,7 @@ class TestEphysFPGA_TTLsExtraction(unittest.TestCase):
         audio_ = ephys_fpga._clean_audio(audio)
         expected = {'times': np.array([3399.4090251, 3399.50411559, 3400.306602, 3400.80061926]),
                     'polarities': np.array([1., -1., 1., -1.])}
-        assert all([np.all(audio_[k] == expected[k]) for k in audio_])
+        assert all(np.all(audio_[k] == expected[k]) for k in audio_)
 
     def test_audio_ttl_start_up_down(self):
         """
@@ -173,18 +174,28 @@ class TestEphysFPGA_TTLsExtraction(unittest.TestCase):
         The extraction should handle both cases seamlessly: cf eid d839491f-55d8-4cbe-a298-7839208ba12b
         """
 
-        def _test_audio(audio):
-            ready, error = ephys_fpga._assign_events_audio(audio['times'], audio['polarities'])
-            assert np.all(ready == audio['times'][audio['ready_tone']])
-            assert np.all(error == audio['times'][audio['error_tone']])
+        def _test_audio(audio, audio_intervals):
+            for tone, intervals in audio_intervals.items():
+                if tone == 'unassigned':
+                    self.assertFalse(len(intervals))
+                else:
+                    np.testing.assert_array_almost_equal(
+                        intervals[:, 0], audio['times'][audio[tone]], err_msg=tone)
         audio = {
             'times': np.array([1740.1032, 1740.20176667, 1741.0786, 1741.57713333, 1744.78716667, 1744.88573333]),
             'polarities': np.array([1., -1., 1., -1., 1., -1.]),
             'error_tone': np.array([False, False, True, False, False, False]),
-            'ready_tone': np.array([True, False, False, False, True, False])
+            'ready_tone': np.array([True, False, False, False, True, False]),
+            'channels': np.zeros(6, dtype=int)
         }
-        _test_audio(audio)  # this tests the usual pulses
-        _test_audio({k: audio[k][1:] for k in audio})  # this tests when it starts in upstate
+        extractor = ephys_fpga.FpgaTrials('subject/2023-01-01/000')  # placeholder session path unused
+        _audio, audio_intervals = extractor.get_audio_event_times(audio, {'audio': 0})
+        _test_audio(audio, audio_intervals)  # this tests the usual pulses
+        audio['channels'][0] = 1  # this tests when it starts in upstate
+        audio['ready_tone'][0] = False  # the first ready tone should now be skipped
+        _audio, audio_intervals = extractor.get_audio_event_times(audio, {'audio': 0})
+        _test_audio(audio, audio_intervals)
+        np.testing.assert_array_equal(_audio['times'], audio['times'][1:])
 
     def test_ttl_bpod_gaelle_writes_protocols_but_guido_doesnt_read_them(self):
         bpod_t = np.array([5.423290950005423, 6.397993470006398, 6.468919710006469,
@@ -194,13 +205,21 @@ class TestEphysFPGA_TTLsExtraction(unittest.TestCase):
                            17.175015660017174, 18.204012750018205, 18.704029410018705,
                            19.286337840019286, 19.28643783001929, 21.76005711002176,
                            21.83095002002183, 22.85998044002286])
+        pol = (np.mod(np.arange(bpod_t.size), 2) - 0.5) * 2
+        sync = {'times': bpod_t, 'polarities': pol, 'channels': np.zeros_like(bpod_t, dtype=int)}
+        extractor = ephys_fpga.FpgaTrials('subject/2023-01-01/000')  # placeholder session path unused
+        _, bpod_intervals = extractor.get_bpod_event_times(sync, {'bpod': 0})
+
+        expected = bpod_t[[1, 5, 9, 15]]
+        np.testing.assert_array_equal(bpod_intervals['trial_start'][:, 0], expected)
+
         # when the bpod has started before the ephys, the first pulses may have been missed
         # and the first TTL may be negative/. This needs to yield the same result as if the
         # bpod was started properly
-        pol = (np.mod(np.arange(bpod_t.size), 2) - 0.5) * 2
-        st, op, iti = ephys_fpga._assign_events_bpod(bpod_t=bpod_t, bpod_polarities=pol)
-        st_, op_, iti_ = ephys_fpga._assign_events_bpod(bpod_t=bpod_t[1:], bpod_polarities=pol[1:])
-        assert np.all(st == st_) and np.all(op == op_) and np.all(iti_ == iti)
+        sync['channels'][0] = 1
+        _, bpod_intervals_ = extractor.get_bpod_event_times(sync, {'bpod': 0})
+        for event, intervals in bpod_intervals.items():
+            np.testing.assert_array_equal(intervals, bpod_intervals_[event], err_msg=event)
 
     def test_frame2ttl_flickers(self):
         """
