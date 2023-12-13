@@ -617,7 +617,7 @@ def add_missing_passive_spacer(session_path, sync, chmap, spacer_times, acquisit
     for i, (protocol, task_info) in enumerate(chain(*map(dict.items, tasks))):
         if 'passive' in protocol:
             passive_locs.append(i)
-    assert len(passive_locs) == 0, 'Currently only supports one passive task per session'
+    assert len(passive_locs) == 1, 'Currently only supports one passive task per session'
     assert insert_idx == passive_locs[0], 'Detected protocol order does not match description file'
 
     if insert_idx > 0:
