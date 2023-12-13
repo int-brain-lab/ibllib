@@ -4,14 +4,14 @@ import json
 import random
 import string
 import datetime
-import numpy as np
 
+import numpy as np
 import requests
 from one.api import ONE
+from one.registration import RegistrationClient
 
 from ibllib.tests import TEST_DB
 import ibllib.qc.critical_reasons as usrpmt
-from one.registration import RegistrationClient
 
 one = ONE(**TEST_DB)
 
@@ -33,7 +33,6 @@ class TestUserPmtSess(unittest.TestCase):
         one.alyx.clear_rest_cache()
         # Create new session on database with a random date to avoid race conditions
         date = str(datetime.date(2022, rng.integers(1, 12), rng.integers(1, 28)))
-        from one.registration import RegistrationClient
         _, eid = RegistrationClient(one).create_new_session('ZM_1150', date=date)
         eid = str(eid)
         # Currently the task protocol of a session must contain 'ephys' in order to create an insertion!
@@ -144,6 +143,10 @@ class TestUserPmtSess(unittest.TestCase):
         except requests.HTTPError as ex:
             if ex.errno != 404:
                 raise ex
+
+        notes = one.alyx.rest('notes', 'list', django=f'object_id,{self.sess_id}', no_cache=True)
+        for n in notes:
+            one.alyx.rest('notes', 'delete', id=n['id'])
         text = '"title": "=== EXPERIMENTER REASON(S)'
         notes = one.alyx.rest('notes', 'list', django=f'text__icontains,{text}', no_cache=True)
         for n in notes:
@@ -152,10 +155,6 @@ class TestUserPmtSess(unittest.TestCase):
         notes = one.alyx.rest('notes', 'list', django=f'text__icontains,{text}', no_cache=True)
         for n in notes:
             one.alyx.rest('notes', 'delete', n['id'])
-
-        note = one.alyx.rest('notes', 'list', django=f'object_id,{self.sess_id}', no_cache=True)
-        for no in note:
-            one.alyx.rest('notes', 'delete', id=no['id'])
 
 
 class TestSignOffNote(unittest.TestCase):
