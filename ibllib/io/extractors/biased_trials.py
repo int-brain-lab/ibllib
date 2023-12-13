@@ -53,6 +53,8 @@ class ProbaContrasts(BaseBpodTrialsExtractor):
         if num is None:
             num = settings.get("PREGENERATED_SESSION_NUM", None)
         if num is None:
+            num = settings.get('SESSION_TEMPLATE_ID', None)
+        if num is None:
             fn = settings.get('SESSION_LOADED_FILE_PATH', '')
             fn = PureWindowsPath(fn).name
             num = ''.join([d for d in fn if d.isdigit()])
