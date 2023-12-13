@@ -607,8 +607,8 @@ def add_missing_passive_spacer(session_path, sync, chmap, spacer_times, acquisit
         protocol spacers
     """
 
-    passive_start, _, ends = epassive._get_passive_spacers(session_path, sync=sync, sync_map=chmap)
-    passive_end = ends[-1]
+    passive_start, starts, _ = epassive._get_passive_spacers(session_path, sync=sync, sync_map=chmap)
+    passive_end = starts[-1]
     insert_idx = np.searchsorted(spacer_times, passive_start)
 
     tasks = acquisition_description.get('tasks', [])
@@ -624,7 +624,7 @@ def add_missing_passive_spacer(session_path, sync, chmap, spacer_times, acquisit
         assert passive_start > spacer_times[insert_idx - 1], 'Start of passive session overlaps with previous ' \
                                                              'task protocol'
     if insert_idx < n_tasks:
-        assert passive_end < spacer_times[insert_idx + 1], 'End of passive session overlaps with next task protocol'
+        assert passive_end < spacer_times[insert_idx], 'End of passive session overlaps with next task protocol'
 
     spacer_times = np.insert(spacer_times, insert_idx, passive_start)
 
