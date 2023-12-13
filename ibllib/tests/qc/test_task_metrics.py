@@ -527,7 +527,8 @@ class TestHabituationQC(unittest.TestCase):
         eid = '8dd0fcb0-1151-4c97-ae35-2e2421695ad7'
         one = ONE(**TEST_DB)
         self.qc = qcmetrics.HabituationQC(eid, one=one)
-        self.qc.extractor = Bunch({'data': self.load_fake_bpod_data()})  # Dummy extractor obj
+        # Dummy extractor obj
+        self.qc.extractor = Bunch({'data': self.load_fake_bpod_data(), 'settings': {}})
 
     @staticmethod
     def load_fake_bpod_data(n=5):
@@ -578,5 +579,5 @@ class TestHabituationQC(unittest.TestCase):
             self.assertEqual(outcomes['_task_habituation_time'], 'NOT_SET')
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main(exit=False, verbosity=2)

@@ -4,7 +4,7 @@ import datetime
 import logging
 import itertools
 
-from pkg_resources import parse_version
+from packaging import version
 from one.alf.files import get_session_path, folder_parts, get_alf_path
 from one.registration import RegistrationClient, get_dataset_type
 from one.remote.globus import get_local_endpoint_id, get_lab_from_endpoint_id
@@ -172,31 +172,14 @@ class IBLRegistrationClient(RegistrationClient):
 
         # Read in the experiment description file if it exists and get projects and procedures from here
         experiment_description_file = session_params.read_params(ses_path)
+        _, subject, date, number, *_ = folder_parts(ses_path)
         if experiment_description_file is None:
             collections = ['raw_behavior_data']
         else:
-            projects = experiment_description_file.get('projects', projects)
-            procedures = experiment_description_file.get('procedures', procedures)
-            collections = ensure_list(session_params.get_task_collection(experiment_description_file))
-
-        # read meta data from the rig for the session from the task settings file
-        task_data = (raw.load_bpod(ses_path, collection) for collection in sorted(collections))
-        # Filter collections where settings file was not found
-        if not (task_data := list(zip(*filter(lambda x: x[0] is not None, task_data)))):
-            raise ValueError(f'_iblrig_taskSettings.raw.json not found in {ses_path} Abort.')
-        settings, task_data = task_data
-        if len(settings) != len(collections):
-            raise ValueError(f'_iblrig_taskSettings.raw.json not found in {ses_path} Abort.')
-
-        # Do some validation
-        _, subject, date, number, *_ = folder_parts(ses_path)
-        assert len({x['SUBJECT_NAME'] for x in settings}) == 1 and settings[0]['SUBJECT_NAME'] == subject
-        assert len({x['SESSION_DATE'] for x in settings}) == 1 and settings[0]['SESSION_DATE'] == date
-        assert len({x['SESSION_NUMBER'] for x in settings}) == 1 and settings[0]['SESSION_NUMBER'] == number
-        assert len({x['IS_MOCK'] for x in settings}) == 1
-        assert len({md['PYBPOD_BOARD'] for md in settings}) == 1
-        assert len({md.get('IBLRIG_VERSION') for md in settings}) == 1
-        # assert len({md['IBLRIG_VERSION_TAG'] for md in settings}) == 1
+            # Combine input projects/procedures with those in experiment description
+            projects = list({*experiment_description_file.get('projects', []), *(projects or [])})
+            procedures = list({*experiment_description_file.get('procedures', []), *(procedures or [])})
+            collections = session_params.get_task_collection(experiment_description_file)
 
         # query Alyx endpoints for subject, error if not found
         subject = self.assert_exists(subject, 'subjects')
@@ -206,31 +189,62 @@ class IBLRegistrationClient(RegistrationClient):
                                               date_range=date,
                                               number=number,
                                               details=True, query_type='remote')
-        users = []
-        for user in filter(None, map(lambda x: x.get('PYBPOD_CREATOR'), settings)):
-            user = self.assert_exists(user[0], 'users')  # user is list of [username, uuid]
-            users.append(user['username'])
+        if collections is None:  # No task data
+            assert len(session) != 0, 'no session on Alyx and no tasks in experiment description'
+            # Fetch the full session JSON and assert that some basic information is present.
+            # Basically refuse to extract the data if key information is missing
+            session_details = self.one.alyx.rest('sessions', 'read', id=session_id[0], no_cache=True)
+            required = ('location', 'start_time', 'lab', 'users')
+            missing = [k for k in required if not session_details[k]]
+            assert not any(missing), 'missing session information: ' + ', '.join(missing)
+            task_protocols = task_data = settings = []
+            json_field = None
+            users = session_details['users']
+        else:  # Get session info from task data
+            collections = ensure_list(collections)
+            # read meta data from the rig for the session from the task settings file
+            task_data = (raw.load_bpod(ses_path, collection) for collection in sorted(collections))
+            # Filter collections where settings file was not found
+            if not (task_data := list(zip(*filter(lambda x: x[0] is not None, task_data)))):
+                raise ValueError(f'_iblrig_taskSettings.raw.json not found in {ses_path} Abort.')
+            settings, task_data = task_data
+            if len(settings) != len(collections):
+                raise ValueError(f'_iblrig_taskSettings.raw.json not found in {ses_path} Abort.')
 
-        # extract information about session duration and performance
-        start_time, end_time = _get_session_times(str(ses_path), settings, task_data)
-        n_trials, n_correct_trials = _get_session_performance(settings, task_data)
+            # Do some validation
+            assert len({x['SUBJECT_NAME'] for x in settings}) == 1 and settings[0]['SUBJECT_NAME'] == subject['nickname']
+            assert len({x['SESSION_DATE'] for x in settings}) == 1 and settings[0]['SESSION_DATE'] == date
+            assert len({x['SESSION_NUMBER'] for x in settings}) == 1 and settings[0]['SESSION_NUMBER'] == number
+            assert len({x['IS_MOCK'] for x in settings}) == 1
+            assert len({md['PYBPOD_BOARD'] for md in settings}) == 1
+            assert len({md.get('IBLRIG_VERSION') for md in settings}) == 1
+            # assert len({md['IBLRIG_VERSION_TAG'] for md in settings}) == 1
 
-        # TODO Add task_protocols to Alyx sessions endpoint
-        task_protocols = [md['PYBPOD_PROTOCOL'] + md['IBLRIG_VERSION_TAG'] for md in settings]
-        # unless specified label the session projects with subject projects
-        projects = subject['projects'] if projects is None else projects
-        # makes sure projects is a list
-        projects = [projects] if isinstance(projects, str) else projects
+            users = []
+            for user in filter(None, map(lambda x: x.get('PYBPOD_CREATOR'), settings)):
+                user = self.assert_exists(user[0], 'users')  # user is list of [username, uuid]
+                users.append(user['username'])
 
-        # unless specified label the session procedures with task protocol lookup
-        procedures = procedures or list(set(filter(None, map(self._alyx_procedure_from_task, task_protocols))))
-        procedures = [procedures] if isinstance(procedures, str) else procedures
-        json_fields_names = ['IS_MOCK', 'IBLRIG_VERSION']
-        json_field = {k: settings[0].get(k) for k in json_fields_names}
-        # The poo count field is only updated if the field is defined in at least one of the settings
-        poo_counts = [md.get('POOP_COUNT') for md in settings if md.get('POOP_COUNT') is not None]
-        if poo_counts:
-            json_field['POOP_COUNT'] = int(sum(poo_counts))
+            # extract information about session duration and performance
+            start_time, end_time = _get_session_times(str(ses_path), settings, task_data)
+            n_trials, n_correct_trials = _get_session_performance(settings, task_data)
+
+            # TODO Add task_protocols to Alyx sessions endpoint
+            task_protocols = [md['PYBPOD_PROTOCOL'] + md['IBLRIG_VERSION'] for md in settings]
+            # unless specified label the session projects with subject projects
+            projects = subject['projects'] if projects is None else projects
+            # makes sure projects is a list
+            projects = [projects] if isinstance(projects, str) else projects
+
+            # unless specified label the session procedures with task protocol lookup
+            procedures = procedures or list(set(filter(None, map(self._alyx_procedure_from_task, task_protocols))))
+            procedures = [procedures] if isinstance(procedures, str) else procedures
+            json_fields_names = ['IS_MOCK', 'IBLRIG_VERSION']
+            json_field = {k: settings[0].get(k) for k in json_fields_names}
+            # The poo count field is only updated if the field is defined in at least one of the settings
+            poo_counts = [md.get('POOP_COUNT') for md in settings if md.get('POOP_COUNT') is not None]
+            if poo_counts:
+                json_field['POOP_COUNT'] = int(sum(poo_counts))
 
         if not session:  # Create session and weighings
             ses_ = {'subject': subject['nickname'],
@@ -258,9 +272,13 @@ class IBLRegistrationClient(RegistrationClient):
                     user = self.one.alyx.user
                 self.register_weight(subject['nickname'], md['SUBJECT_WEIGHT'],
                                      date_time=md['SESSION_DATETIME'], user=user)
-        else:  # if session exists update the JSON field
-            session = self.one.alyx.rest('sessions', 'read', id=session_id[0], no_cache=True)
-            self.one.alyx.json_field_update('sessions', session['id'], data=json_field)
+        else:  # if session exists update a few key fields
+            data = {'procedures': procedures, 'projects': projects}
+            if task_protocols:
+                data['task_protocol'] = '/'.join(task_protocols)
+            session = self.one.alyx.rest('sessions', 'partial_update', id=session_id[0], data=data)
+            if json_field:
+                session['json'] = self.one.alyx.json_field_update('sessions', session['id'], data=json_field)
 
         _logger.info(session['url'] + ' ')
         # create associated water administration if not found
@@ -279,7 +297,8 @@ class IBLRegistrationClient(RegistrationClient):
             return session, None
 
         # register all files that match the Alyx patterns and file_list
-        rename_files_compatibility(ses_path, settings[0]['IBLRIG_VERSION_TAG'])
+        if any(settings):
+            rename_files_compatibility(ses_path, settings[0]['IBLRIG_VERSION'])
         F = filter(lambda x: self._register_bool(x.name, file_list), self.find_files(ses_path))
         recs = self.register_files(F, created_by=users[0] if users else None, versions=ibllib.__version__)
         return session, recs
@@ -351,7 +370,7 @@ def _alyx_procedure_from_task_type(task_type):
 def rename_files_compatibility(ses_path, version_tag):
     if not version_tag:
         return
-    if parse_version(version_tag) <= parse_version('3.2.3'):
+    if version.parse(version_tag) <= version.parse('3.2.3'):
         task_code = ses_path.glob('**/_ibl_trials.iti_duration.npy')
         for fn in task_code:
             fn.replace(fn.parent.joinpath('_ibl_trials.itiDuration.npy'))

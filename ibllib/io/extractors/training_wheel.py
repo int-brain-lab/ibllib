@@ -385,8 +385,8 @@ class Wheel(BaseBpodTrialsExtractor):
     save_names = ('_ibl_wheel.timestamps.npy', '_ibl_wheel.position.npy',
                   '_ibl_wheelMoves.intervals.npy', '_ibl_wheelMoves.peakAmplitude.npy', None,
                   '_ibl_trials.firstMovement_times.npy', None)
-    var_names = ('wheel_timestamps', 'wheel_position', 'wheel_moves_intervals',
-                 'wheel_moves_peak_amplitude', 'peakVelocity_times', 'firstMovement_times',
+    var_names = ('wheel_timestamps', 'wheel_position', 'wheelMoves_intervals',
+                 'wheelMoves_peakAmplitude', 'peakVelocity_times', 'firstMovement_times',
                  'is_final_movement')
 
     def _extract(self):

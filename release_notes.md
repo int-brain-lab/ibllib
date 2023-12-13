@@ -1,3 +1,27 @@
+## Release Notes 2.27
+
+### features
+- Add full video wheel motion alignment code to ibllib.io.extractors.video_motion module
+- Change FPGA camera extractor to attempt wheel alignment if audio alignment fails
+- Flexible FpgaTrials class allows subclassing for changes in hardware and task
+- Task QC thresholds depend on sound card
+- Extractor classes now return dicts instead of tuple
+- Support extraction of habituationChoiceWorld with FPGA
+- New IBLGlobusPatcher class allows safe and complete deletion of datasets
+
+### bugfixes
+- Fix numpy version dependent error in io.extractors.camera.attribute_times
+- Fix for habituationChoiceWorld stim off times occuring outside of trial intervals
+- Improvements to Timeline trials extractor, especially for valve open times
+- trainingPhaseChoiceWorld added to Bpod protocol extractor map fixture
+- Last trial of FPGA sessions now correctly extracted
+- Correct dynamic pipeline extraction of passive choice world trials
+
+### other
+- Removed deprecated pyschofit module
+- Deprecated oneibl.globus module in favour of one.remote.globus
+- Deprecated qc.task_extractors in favour of behaviour pipeline tasks
+
 ## Release Notes 2.26
 
 ### features

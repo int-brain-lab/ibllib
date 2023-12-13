@@ -1,14 +1,47 @@
-"""Data extraction from raw FPGA output
-Complete FPGA data extraction depends on Bpod extraction
+"""Data extraction from raw FPGA output.
+
+The behaviour extraction happens in the following stages:
+
+    1. The NI DAQ events are extracted into a map of event times and TTL polarities.
+    2. The Bpod trial events are extracted from the raw Bpod data, depending on the task protocol.
+    3. As protocols may be chained together within a given recording, the period of a given task
+       protocol is determined using the 'spacer' DAQ signal (see `get_protocol_period`).
+    4. Physical behaviour events such as stim on and reward time are separated out by TTL length or
+       sequence within the trial.
+    5. The Bpod clock is sync'd with the FPGA using one of the extracted trial events.
+    6. The Bpod software events are then converted to FPGA time.
+
+Examples
+--------
+For simple extraction, use the FPGATrials class:
+
+>>> extractor = FpgaTrials(session_path)
+>>> trials, _ = extractor.extract(update=False, save=False)
+
+Notes
+-----
+Sync extraction in this module only supports FPGA data acquired with an NI DAQ as part of a
+Neuropixels recording system, however a sync and channel map extracted from a different DAQ format
+can be passed to the FpgaTrials class.
+
+See Also
+--------
+For dynamic pipeline sessions it is best to call the extractor via the BehaviorTask class.
+
+TODO notes on subclassing various methods of FpgaTrials for custom hardware.
 """
-from collections import OrderedDict
 import logging
+from itertools import cycle
 from pathlib import Path
 import uuid
 import re
+import warnings
+from functools import partial
 
 import matplotlib.pyplot as plt
+from matplotlib.colors import TABLEAU_COLORS
 import numpy as np
+from packaging import version
 
 import spikeglx
 import neurodsp.utils
@@ -17,21 +50,26 @@ from iblutil.util import Bunch
 from iblutil.spacer import Spacer
 
 import ibllib.exceptions as err
-from ibllib.io import raw_data_loaders, session_params
+from ibllib.io import raw_data_loaders as raw, session_params
 from ibllib.io.extractors.bpod_trials import extract_all as bpod_extract_all
 import ibllib.io.extractors.base as extractors_base
 from ibllib.io.extractors.training_wheel import extract_wheel_moves
-import ibllib.plots as plots
+from ibllib import plots
 from ibllib.io.extractors.default_channel_maps import DEFAULT_MAPS
 
 _logger = logging.getLogger(__name__)
 
-SYNC_BATCH_SIZE_SECS = 100  # number of samples to read at once in bin file for sync
-WHEEL_RADIUS_CM = 1  # stay in radians
-WHEEL_TICKS = 1024
+SYNC_BATCH_SIZE_SECS = 100
+"""int: Number of samples to read at once in bin file for sync."""
 
-BPOD_FPGA_DRIFT_THRESHOLD_PPM = 150  # throws an error if bpod to fpga clock drift is higher
-F2TTL_THRESH = 0.01  # consecutive pulses with less than this threshold ignored
+WHEEL_RADIUS_CM = 1  # stay in radians
+"""float: The radius of the wheel used in the task. A value of 1 ensures units remain in radians."""
+
+WHEEL_TICKS = 1024
+"""int: The number of encoder pulses per channel for one complete rotation."""
+
+BPOD_FPGA_DRIFT_THRESHOLD_PPM = 150
+"""int: Throws an error if Bpod to FPGA clock drift is higher than this value."""
 
 CHMAPS = {'3A':
           {'ap':
@@ -62,10 +100,11 @@ CHMAPS = {'3A':
            {'imec_sync': 6}
            },
           }
+"""dict: The default channel indices corresponding to various devices for different recording systems."""
 
 
 def data_for_keys(keys, data):
-    """Check keys exist in 'data' dict and contain values other than None"""
+    """Check keys exist in 'data' dict and contain values other than None."""
     return data is not None and all(k in data and data.get(k, None) is not None for k in keys)
 
 
@@ -113,13 +152,12 @@ def _sync_to_alf(raw_ephys_apfile, output_path=None, save=False, parts=''):
     else:
         raw_ephys_apfile = Path(raw_ephys_apfile)
         sr = spikeglx.Reader(raw_ephys_apfile)
-    opened = sr.is_open
-    if not opened:  # if not (opened := sr.is_open)  # py3.8
+    if not (opened := sr.is_open):
         sr.open()
     # if no output, need a temp folder to swap for big files
     if not output_path:
         output_path = raw_ephys_apfile.parent
-    file_ftcp = Path(output_path).joinpath(f'fronts_times_channel_polarity{str(uuid.uuid4())}.bin')
+    file_ftcp = Path(output_path).joinpath(f'fronts_times_channel_polarity{uuid.uuid4()}.bin')
 
     # loop over chunks of the raw ephys file
     wg = neurodsp.utils.WindowGenerator(sr.ns, int(SYNC_BATCH_SIZE_SECS * sr.fs), overlap=1)
@@ -147,60 +185,6 @@ def _sync_to_alf(raw_ephys_apfile, output_path=None, save=False, parts=''):
         return Bunch(sync), out_files
     else:
         return Bunch(sync)
-
-
-def _assign_events_bpod(bpod_t, bpod_polarities, ignore_first_valve=True):
-    """
-    From detected fronts on the bpod sync traces, outputs the synchronisation events
-    related to trial start and valve opening
-    :param bpod_t: numpy vector containing times of fronts
-    :param bpod_fronts: numpy vector containing polarity of fronts (1 rise, -1 fall)
-    :param ignore_first_valve (True): removes detected valve events at indices le 2
-    :return: numpy arrays of times t_trial_start, t_valve_open and t_iti_in
-    """
-    TRIAL_START_TTL_LEN = 2.33e-4  # the TTL length is 0.1ms but this has proven to drift on
-    # some bpods and this is the highest possible value that discriminates trial start from valve
-    ITI_TTL_LEN = 0.4
-    # make sure that there are no 2 consecutive fall or consecutive rise events
-    assert np.all(np.abs(np.diff(bpod_polarities)) == 2)
-    if bpod_polarities[0] == -1:
-        bpod_t = np.delete(bpod_t, 0)
-    # take only even time differences: ie. from rising to falling fronts
-    dt = np.diff(bpod_t)[::2]
-    # detect start trials event assuming length is 0.23 ms except the first trial
-    i_trial_start = np.r_[0, np.where(dt <= TRIAL_START_TTL_LEN)[0] * 2]
-    t_trial_start = bpod_t[i_trial_start]
-    # the last trial is a dud and should be removed
-    t_trial_start = t_trial_start[:-1]
-    # valve open events are between 50ms to 300 ms
-    i_valve_open = np.where(np.logical_and(dt > TRIAL_START_TTL_LEN,
-                                           dt < ITI_TTL_LEN))[0] * 2
-    if ignore_first_valve:
-        i_valve_open = np.delete(i_valve_open, np.where(i_valve_open < 2))
-    t_valve_open = bpod_t[i_valve_open]
-    # ITI events are above 400 ms
-    i_iti_in = np.where(dt > ITI_TTL_LEN)[0] * 2
-    i_iti_in = np.delete(i_iti_in, np.where(i_valve_open < 2))
-    t_iti_in = bpod_t[i_iti_in]
-    ## some debug plots when needed
-    # import matplotlib.pyplot as plt
-    # import ibllib.plots as plots
-    # events = {'id': np.zeros(bpod_t.shape), 't': bpod_t, 'p': bpod_polarities}
-    # events['id'][i_trial_start] = 1
-    # events['id'][i_valve_open] = 2
-    # events['id'][i_iti_in] = 3
-    # i_abnormal = np.where(np.diff(events['id'][bpod_polarities != -1]) == 0)
-    # t_abnormal = events['t'][bpod_polarities != -1][i_abnormal]
-    # assert np.all(events != 0)
-    # plt.figure()
-    # plots.squares(bpod_t, bpod_polarities, label='raw fronts')
-    # plots.vertical_lines(t_trial_start, ymin=-0.2, ymax=1.1, linewidth=0.5, label='trial start')
-    # plots.vertical_lines(t_valve_open, ymin=-0.2, ymax=1.1, linewidth=0.5, label='valve open')
-    # plots.vertical_lines(t_iti_in, ymin=-0.2, ymax=1.1, linewidth=0.5, label='iti_in')
-    # plt.plot(t_abnormal, t_abnormal * 0 + .5, 'k*')
-    # plt.legend()
-
-    return t_trial_start, t_valve_open, t_iti_in
 
 
 def _rotary_encoder_positions_from_fronts(ta, pa, tb, pb, ticks=WHEEL_TICKS, radius=WHEEL_RADIUS_CM, coding='x4'):
@@ -247,51 +231,33 @@ def _rotary_encoder_positions_from_fronts(ta, pa, tb, pb, ticks=WHEEL_TICKS, rad
         return t, p
 
 
-def _assign_events_audio(audio_t, audio_polarities, return_indices=False, display=False):
-    """
-    From detected fronts on the audio sync traces, outputs the synchronisation events
-    related to tone in
-
-    :param audio_t: numpy vector containing times of fronts
-    :param audio_fronts: numpy vector containing polarity of fronts (1 rise, -1 fall)
-    :param return_indices (False): returns indices of tones
-    :param display (False): for debug mode, displays the raw fronts overlaid with detections
-    :return: numpy arrays t_ready_tone_in, t_error_tone_in
-    :return: numpy arrays ind_ready_tone_in, ind_error_tone_in if return_indices=True
-    """
-    # make sure that there are no 2 consecutive fall or consecutive rise events
-    assert np.all(np.abs(np.diff(audio_polarities)) == 2)
-    # take only even time differences: ie. from rising to falling fronts
-    dt = np.diff(audio_t)
-    # detect ready tone by length below 110 ms
-    i_ready_tone_in = np.where(np.logical_and(dt <= 0.11, audio_polarities[:-1] == 1))[0]
-    t_ready_tone_in = audio_t[i_ready_tone_in]
-    # error tones are events lasting from 400ms to 1200ms
-    i_error_tone_in = np.where(np.logical_and(np.logical_and(0.4 < dt, dt < 1.2), audio_polarities[:-1] == 1))[0]
-    t_error_tone_in = audio_t[i_error_tone_in]
-    if display:  # pragma: no cover
-        from ibllib.plots import squares, vertical_lines
-        squares(audio_t, audio_polarities, yrange=[-1, 1],)
-        vertical_lines(t_ready_tone_in, ymin=-.8, ymax=.8)
-        vertical_lines(t_error_tone_in, ymin=-.8, ymax=.8)
-
-    if return_indices:
-        return t_ready_tone_in, t_error_tone_in, i_ready_tone_in, i_error_tone_in
-    else:
-        return t_ready_tone_in, t_error_tone_in
-
-
 def _assign_events_to_trial(t_trial_start, t_event, take='last'):
     """
     Assign events to a trial given trial start times and event times.
 
-    Trials without an event
-    result in nan value in output time vector.
+    Trials without an event result in nan value in output time vector.
     The output has a consistent size with t_trial_start and ready to output to alf.
-    :param t_trial_start: numpy vector of trial start times
-    :param t_event: numpy vector of event times to assign to trials
-    :param take: 'last' or 'first' (optional, default 'last'): index to take in case of duplicates
-    :return: numpy array of event times with the same shape of trial start.
+
+    Parameters
+    ----------
+    t_trial_start : numpy.array
+        An array of start times, used to bin edges for assigning values from `t_event`.
+    t_event : numpy.array
+        An array of event times to assign to trials.
+    take : str {'first', 'last'}, int
+        'first' takes first event > t_trial_start; 'last' takes last event < the next
+        t_trial_start; an int defines the index to take for events within trial bounds. The index
+        may be negative.
+
+    Returns
+    -------
+    numpy.array
+        An array the length of `t_trial_start` containing values from `t_event`. Unassigned values
+        are replaced with np.nan.
+
+    See Also
+    --------
+    FpgaTrials._assign_events - Assign trial events based on TTL length.
     """
     # make sure the events are sorted
     try:
@@ -316,7 +282,7 @@ def _assign_events_to_trial(t_trial_start, t_event, take='last'):
     else:  # if the index is arbitrary, needs to be numeric (could be negative if from the end)
         iall = np.unique(ind)
         minsize = take + 1 if take >= 0 else - take
-        # for each trial, take the takenth element if there are enough values in trial
+        # for each trial, take the take nth element if there are enough values in trial
         for iu in iall:
             match = t_event[iu == ind]
             if len(match) >= minsize:
@@ -382,25 +348,39 @@ def _clean_audio(audio, display=False):
     return audio
 
 
-def _clean_frame2ttl(frame2ttl, display=False):
+def _clean_frame2ttl(frame2ttl, threshold=0.01, display=False):
     """
+    Clean the frame2ttl events.
+
     Frame 2ttl calibration can be unstable and the fronts may be flickering at an unrealistic
     pace. This removes the consecutive frame2ttl pulses happening too fast, below a threshold
-    of F2TTL_THRESH
+    of F2TTL_THRESH.
+
+    Parameters
+    ----------
+    frame2ttl : dict
+        A dictionary of frame2TTL events, with keys {'times', 'polarities'}.
+    threshold : float
+        Consecutive pulses occurring with this many seconds ignored.
+    display : bool
+        If true, plots the input TTLs and the cleaned output.
+
+    Returns
+    -------
+
     """
     dt = np.diff(frame2ttl['times'])
-    iko = np.where(np.logical_and(dt < F2TTL_THRESH, frame2ttl['polarities'][:-1] == -1))[0]
+    iko = np.where(np.logical_and(dt < threshold, frame2ttl['polarities'][:-1] == -1))[0]
     iko = np.unique(np.r_[iko, iko + 1])
     frame2ttl_ = {'times': np.delete(frame2ttl['times'], iko),
                   'polarities': np.delete(frame2ttl['polarities'], iko)}
     if iko.size > (0.1 * frame2ttl['times'].size):
         _logger.warning(f'{iko.size} ({iko.size / frame2ttl["times"].size:.2%}) '
-                        f'frame to TTL polarity switches below {F2TTL_THRESH} secs')
+                        f'frame to TTL polarity switches below {threshold} secs')
     if display:  # pragma: no cover
-        from ibllib.plots import squares
-        plt.figure()
-        squares(frame2ttl['times'] * 1000, frame2ttl['polarities'], yrange=[0.1, 0.9])
-        squares(frame2ttl_['times'] * 1000, frame2ttl_['polarities'], yrange=[1.1, 1.9])
+        fig, (ax0, ax1) = plt.subplots(2, sharex=True)
+        plots.squares(frame2ttl['times'] * 1000, frame2ttl['polarities'], yrange=[0.1, 0.9], ax=ax0)
+        plots.squares(frame2ttl_['times'] * 1000, frame2ttl_['polarities'], yrange=[1.1, 1.9], ax=ax1)
         import seaborn as sns
         sns.displot(dt[dt < 0.05], binwidth=0.0005)
 
@@ -425,9 +405,9 @@ def extract_wheel_sync(sync, chmap=None, tmin=None, tmax=None):
 
     Returns
     -------
-    np.array
+    numpy.array
         Wheel timestamps in seconds.
-    np.array
+    numpy.array
         Wheel positions in radians.
     """
     # Assume two separate edge count channels
@@ -438,123 +418,6 @@ def extract_wheel_sync(sync, chmap=None, tmin=None, tmax=None):
         channela['times'], channela['polarities'], channelb['times'], channelb['polarities'],
         ticks=WHEEL_TICKS, radius=WHEEL_RADIUS_CM, coding='x4')
     return re_ts, re_pos
-
-
-def extract_behaviour_sync(sync, chmap=None, display=False, bpod_trials=None, tmin=None, tmax=None):
-    """
-    Extract task related event times from the sync.
-
-    Parameters
-    ----------
-    sync : dict
-        'polarities' of fronts detected on sync trace for all 16 chans and their 'times'
-    chmap : dict
-        Map of channel names and their corresponding index.  Default to constant.
-    display : bool, matplotlib.pyplot.Axes
-        Show the full session sync pulses display
-    bpod_trials : dict
-        The same trial events as recorded through Bpod. Assumed to contain an 'intervals_bpod' key.
-    tmin : float
-        The minimum time from which to extract the sync pulses.
-    tmax : float
-        The maximum time up to which we extract the sync pulses.
-
-    Returns
-    -------
-    dict
-        A map of trial event timestamps.
-    """
-    bpod = get_sync_fronts(sync, chmap['bpod'], tmin=tmin, tmax=tmax)
-    if bpod.times.size == 0:
-        raise err.SyncBpodFpgaException('No Bpod event found in FPGA. No behaviour extraction. '
-                                        'Check channel maps.')
-    frame2ttl = get_sync_fronts(sync, chmap['frame2ttl'], tmin=tmin, tmax=tmax)
-    frame2ttl = _clean_frame2ttl(frame2ttl)
-    audio = get_sync_fronts(sync, chmap['audio'], tmin=tmin, tmax=tmax)
-    audio = _clean_audio(audio)
-    # extract events from the fronts for each trace
-    t_trial_start, t_valve_open, t_iti_in = _assign_events_bpod(bpod['times'], bpod['polarities'])
-    if not bpod_trials:
-        raise ValueError('No Bpod trials to align')
-    # If there are no detected trial start times or more than double the trial end pulses,
-    # the trial start pulses may be too small to be detected, in which case, sync using the ini_in
-    if t_trial_start.size == 0 or (t_trial_start.size / t_iti_in.size) < .5:
-        _logger.info('Attempting to align on ITI in')
-        assert t_iti_in.size > 0, 'no detected ITI in TTLs on the DAQ to align'
-        bpod_end = bpod_trials['itiIn_times']
-        fcn, drift = neurodsp.utils.sync_timestamps(bpod_end, t_iti_in)
-        # if it's drifting too much
-        if drift > 200 and bpod_end.size != t_iti_in.size:
-            raise err.SyncBpodFpgaException('sync cluster f*ck')
-        t_trial_start = fcn(bpod_trials['intervals_bpod'][:, 0])
-    else:
-        # one issue is that sometimes bpod pulses may not have been detected, in this case
-        # perform the sync bpod/FPGA, and add the start that have not been detected
-        _logger.info('Attempting to align on trial start')
-        bpod_start = bpod_trials['intervals_bpod'][:, 0]
-        fcn, drift, ibpod, ifpga = neurodsp.utils.sync_timestamps(
-            bpod_start, t_trial_start, return_indices=True)
-        # if it's drifting too much
-        if drift > 200 and bpod_start.size != t_trial_start.size:
-            raise err.SyncBpodFpgaException('sync cluster f*ck')
-        missing_bpod = fcn(bpod_start[np.setxor1d(ibpod, np.arange(len(bpod_start)))])
-        t_trial_start = np.sort(np.r_[t_trial_start, missing_bpod])
-
-    t_ready_tone_in, t_error_tone_in = _assign_events_audio(audio['times'], audio['polarities'])
-    trials = Bunch({
-        'goCue_times': _assign_events_to_trial(t_trial_start, t_ready_tone_in, take='first'),
-        'errorCue_times': _assign_events_to_trial(t_trial_start, t_error_tone_in),
-        'valveOpen_times': _assign_events_to_trial(t_trial_start, t_valve_open),
-        'stimFreeze_times': _assign_events_to_trial(t_trial_start, frame2ttl['times'], take=-2),
-        'stimOn_times': _assign_events_to_trial(t_trial_start, frame2ttl['times'], take='first'),
-        'stimOff_times': _assign_events_to_trial(t_trial_start, frame2ttl['times']),
-        'itiIn_times': _assign_events_to_trial(t_trial_start, t_iti_in)
-    })
-    # feedback times are valve open on good trials and error tone in on error trials
-    trials['feedback_times'] = np.copy(trials['valveOpen_times'])
-    ind_err = np.isnan(trials['valveOpen_times'])
-    trials['feedback_times'][ind_err] = trials['errorCue_times'][ind_err]
-    trials['intervals'] = np.c_[t_trial_start, trials['itiIn_times']]
-
-    if display:  # pragma: no cover
-        width = 0.5
-        ymax = 5
-        if isinstance(display, bool):
-            plt.figure("Ephys FPGA Sync")
-            ax = plt.gca()
-        else:
-            ax = display
-        r0 = get_sync_fronts(sync, chmap['rotary_encoder_0'], tmin=tmin, tmax=tmax)
-        plots.squares(bpod['times'], bpod['polarities'] * 0.4 + 1, ax=ax, color='k')
-        plots.squares(frame2ttl['times'], frame2ttl['polarities'] * 0.4 + 2, ax=ax, color='k')
-        plots.squares(audio['times'], audio['polarities'] * 0.4 + 3, ax=ax, color='k')
-        plots.squares(r0['times'], r0['polarities'] * 0.4 + 4, ax=ax, color='k')
-        plots.vertical_lines(t_ready_tone_in, ymin=0, ymax=ymax,
-                             ax=ax, label='goCue_times', color='b', linewidth=width)
-        plots.vertical_lines(t_trial_start, ymin=0, ymax=ymax,
-                             ax=ax, label='start_trial', color='m', linewidth=width)
-        plots.vertical_lines(t_error_tone_in, ymin=0, ymax=ymax,
-                             ax=ax, label='error tone', color='r', linewidth=width)
-        plots.vertical_lines(t_valve_open, ymin=0, ymax=ymax,
-                             ax=ax, label='valveOpen_times', color='g', linewidth=width)
-        plots.vertical_lines(trials['stimFreeze_times'], ymin=0, ymax=ymax,
-                             ax=ax, label='stimFreeze_times', color='y', linewidth=width)
-        plots.vertical_lines(trials['stimOff_times'], ymin=0, ymax=ymax,
-                             ax=ax, label='stim off', color='c', linewidth=width)
-        plots.vertical_lines(trials['stimOn_times'], ymin=0, ymax=ymax,
-                             ax=ax, label='stimOn_times', color='tab:orange', linewidth=width)
-        c = get_sync_fronts(sync, chmap['left_camera'], tmin=tmin, tmax=tmax)
-        plots.squares(c['times'], c['polarities'] * 0.4 + 5, ax=ax, color='k')
-        c = get_sync_fronts(sync, chmap['right_camera'], tmin=tmin, tmax=tmax)
-        plots.squares(c['times'], c['polarities'] * 0.4 + 6, ax=ax, color='k')
-        c = get_sync_fronts(sync, chmap['body_camera'], tmin=tmin, tmax=tmax)
-        plots.squares(c['times'], c['polarities'] * 0.4 + 7, ax=ax, color='k')
-        ax.legend()
-        ax.set_yticklabels(['', 'bpod', 'f2ttl', 'audio', 're_0', ''])
-        ax.set_yticks([0, 1, 2, 3, 4, 5])
-        ax.set_ylim([0, 5])
-
-    return trials
 
 
 def extract_sync(session_path, overwrite=False, ephys_files=None, namespace='spikeglx'):
@@ -703,37 +566,43 @@ def get_protocol_period(session_path, protocol_number, bpod_sync):
 
 
 class FpgaTrials(extractors_base.BaseExtractor):
-    save_names = ('_ibl_trials.intervals_bpod.npy',
-                  '_ibl_trials.goCueTrigger_times.npy', None, None, None, None, None, None, None,
+    save_names = ('_ibl_trials.goCueTrigger_times.npy', None, None, None, None, None, None, None,
                   '_ibl_trials.stimOff_times.npy', None, None, None, '_ibl_trials.quiescencePeriod.npy',
                   '_ibl_trials.table.pqt', '_ibl_wheel.timestamps.npy',
                   '_ibl_wheel.position.npy', '_ibl_wheelMoves.intervals.npy',
                   '_ibl_wheelMoves.peakAmplitude.npy')
-    var_names = ('intervals_bpod',
-                 'goCueTrigger_times', 'stimOnTrigger_times',
+    var_names = ('goCueTrigger_times', 'stimOnTrigger_times',
                  'stimOffTrigger_times', 'stimFreezeTrigger_times', 'errorCueTrigger_times',
                  'errorCue_times', 'itiIn_times', 'stimFreeze_times', 'stimOff_times',
                  'valveOpen_times', 'phase', 'position', 'quiescence', 'table',
                  'wheel_timestamps', 'wheel_position',
                  'wheelMoves_intervals', 'wheelMoves_peakAmplitude')
 
-    # Fields from bpod extractor that we want to re-sync to FPGA
     bpod_rsync_fields = ('intervals', 'response_times', 'goCueTrigger_times',
                          'stimOnTrigger_times', 'stimOffTrigger_times',
                          'stimFreezeTrigger_times', 'errorCueTrigger_times')
+    """tuple of str: Fields from Bpod extractor that we want to re-sync to FPGA."""
 
-    # Fields from bpod extractor that we want to save
     bpod_fields = ('feedbackType', 'choice', 'rewardVolume', 'contrastLeft', 'contrastRight',
-                   'probabilityLeft', 'intervals_bpod', 'phase', 'position', 'quiescence')
+                   'probabilityLeft', 'phase', 'position', 'quiescence')
+    """tuple of str: Fields from bpod extractor that we want to save."""
 
-    """str: The Bpod events to synchronize (must be present in sync channel map)."""
-    sync_field = 'intervals'
+    sync_field = 'intervals_0'  # trial start events
+    """str: The trial event to synchronize (must be present in extracted trials)."""
+
+    bpod = None
+    """dict of numpy.array: The Bpod out TTLs recorded on the DAQ. Used in the QC viewer plot."""
 
     def __init__(self, *args, bpod_trials=None, bpod_extractor=None, **kwargs):
-        """An extractor for all ephys trial data, in FPGA time"""
+        """An extractor for ephysChoiceWorld trials data, in FPGA time.
+
+        This class may be subclassed to handle moderate variations in hardware and task protocol,
+        however there is flexible
+        """
         super().__init__(*args, **kwargs)
         self.bpod2fpga = None
         self.bpod_trials = bpod_trials
+        self.frame2ttl = self.audio = self.bpod = self.settings = None
         if bpod_extractor:
             self.bpod_extractor = bpod_extractor
             self._update_var_names()
@@ -750,14 +619,37 @@ class FpgaTrials(extractors_base.BaseExtractor):
             A set of Bpod trials fields to keep.
         bpod_rsync_fields : tuple
             A set of Bpod trials fields to sync to the DAQ times.
-
-        TODO Turn into property getter; requires ensuring the output field are the same for legacy
         """
         if self.bpod_extractor:
-            self.var_names = self.bpod_extractor.var_names
-            self.save_names = self.bpod_extractor.save_names
-        self.bpod_rsync_fields = bpod_rsync_fields or self._time_fields(self.bpod_extractor.var_names)
-        self.bpod_fields = bpod_fields or [x for x in self.bpod_extractor.var_names if x not in self.bpod_rsync_fields]
+            for var_name, save_name in zip(self.bpod_extractor.var_names, self.bpod_extractor.save_names):
+                if var_name not in self.var_names:
+                    self.var_names += (var_name,)
+                    self.save_names += (save_name,)
+
+            # self.var_names = self.bpod_extractor.var_names
+            # self.save_names = self.bpod_extractor.save_names
+            self.settings = self.bpod_extractor.settings  # This is used by the TaskQC
+            self.bpod_rsync_fields = bpod_rsync_fields
+            if self.bpod_rsync_fields is None:
+                self.bpod_rsync_fields = tuple(self._time_fields(self.bpod_extractor.var_names))
+                if 'table' in self.bpod_extractor.var_names:
+                    if not self.bpod_trials:
+                        self.bpod_trials = self.bpod_extractor.extract(save=False)
+                    table_keys = alfio.AlfBunch.from_df(self.bpod_trials['table']).keys()
+                    self.bpod_rsync_fields += tuple(self._time_fields(table_keys))
+        elif bpod_rsync_fields:
+            self.bpod_rsync_fields = bpod_rsync_fields
+        excluded = (*self.bpod_rsync_fields, 'table')
+        if bpod_fields:
+            assert not set(self.bpod_fields).intersection(excluded), 'bpod_fields must not also be bpod_rsync_fields'
+            self.bpod_fields = bpod_fields
+        elif self.bpod_extractor:
+            self.bpod_fields = tuple(x for x in self.bpod_extractor.var_names if x not in excluded)
+            if 'table' in self.bpod_extractor.var_names:
+                if not self.bpod_trials:
+                    self.bpod_trials = self.bpod_extractor.extract(save=False)
+                table_keys = alfio.AlfBunch.from_df(self.bpod_trials['table']).keys()
+                self.bpod_fields += tuple([x for x in table_keys if x not in excluded])
 
     @staticmethod
     def _time_fields(trials_attr) -> set:
@@ -778,67 +670,273 @@ class FpgaTrials(extractors_base.BaseExtractor):
         pattern = re.compile(fr'^[_\w]*({"|".join(FIELDS)})[_\w]*$')
         return set(filter(pattern.match, trials_attr))
 
-    def _extract(self, sync=None, chmap=None, sync_collection='raw_ephys_data', task_collection='raw_behavior_data', **kwargs):
-        """Extracts ephys trials by combining Bpod and FPGA sync pulses"""
-        # extract the behaviour data from bpod
+    def load_sync(self, sync_collection='raw_ephys_data', **kwargs):
+        """Load the DAQ sync and channel map data.
+
+        This method may be subclassed for novel DAQ systems. The sync must contain the following
+        keys: 'times' - an array timestamps in seconds; 'polarities' - an array of {-1, 1}
+        corresponding to TTL LOW and TTL HIGH, respectively; 'channels' - an array of ints
+        corresponding to channel number.
+
+        Parameters
+        ----------
+        sync_collection : str
+            The session subdirectory where the sync data are located.
+        kwargs
+            Optional arguments used by subclass methods.
+
+        Returns
+        -------
+        one.alf.io.AlfBunch
+            A dictionary with keys ('times', 'polarities', 'channels'), containing the sync pulses
+            and the corresponding channel numbers.
+        dict
+            A map of channel names and their corresponding indices.
+        """
+        return get_sync_and_chn_map(self.session_path, sync_collection)
+
+    def _extract(self, sync=None, chmap=None, sync_collection='raw_ephys_data',
+                 task_collection='raw_behavior_data', **kwargs) -> dict:
+        """Extracts ephys trials by combining Bpod and FPGA sync pulses.
+
+        It is essential that the `var_names`, `bpod_rsync_fields`, `bpod_fields`, and `sync_field`
+        attributes are all correct for the bpod protocol used.
+
+        Below are the steps involved:
+          0. Load sync and bpod trials, if required.
+          1. Determine protocol period and discard sync events outside the task.
+          2. Classify multiplexed TTL events based on length (see :meth:`FpgaTrials.build_trials`).
+          3. Sync the Bpod clock to the DAQ clock using one of the assigned trial events.
+          4. Assign classified TTL events to trial events based on order within the trial.
+          4. Convert Bpod software event times to DAQ clock.
+          5. Extract the wheel from the DAQ rotary encoder signal, if required.
+
+        Parameters
+        ----------
+        sync : dict
+            A dictionary with keys ('times', 'polarities', 'channels'), containing the sync pulses
+            and the corresponding channel numbers. If None, the sync is loaded using the
+            `load_sync` method.
+        chmap : dict
+            A map of channel names and their corresponding indices. If None, the channel map is
+            loaded using the :meth:`FpgaTrials.load_sync` method.
+        sync_collection : str
+            The session subdirectory where the sync data are located. This is only used if the
+            sync or channel maps are not provided.
+        task_collection : str
+            The session subdirectory where the raw Bpod data are located. This is used for loading
+            the task settings and extracting the bpod trials, if not already done.
+        protocol_number : int
+            The protocol number if multiple protocols were run during the session. If provided, a
+            spacer signal must be present in order to determine the correct period.
+        kwargs
+            Optional arguments for subclass methods to use.
+
+        Returns
+        -------
+        dict
+            A dictionary of numpy arrays with `FpgaTrials.var_names` as keys.
+        """
         if sync is None or chmap is None:
-            _sync, _chmap = get_sync_and_chn_map(self.session_path, sync_collection)
+            _sync, _chmap = self.load_sync(sync_collection)
             sync = sync or _sync
             chmap = chmap or _chmap
 
-        if not self.bpod_trials:
+        if not self.bpod_trials:  # extract the behaviour data from bpod
             self.bpod_trials, *_ = bpod_extract_all(
                 session_path=self.session_path, task_collection=task_collection, save=False,
                 extractor_type=kwargs.get('extractor_type'))
-        # Explode trials table df
-        trials_table = alfio.AlfBunch.from_df(self.bpod_trials.pop('table'))
-        table_columns = trials_table.keys()
-        self.bpod_trials.update(trials_table)
-        self.bpod_trials['intervals_bpod'] = np.copy(self.bpod_trials['intervals'])
 
+        # Explode trials table df
+        if 'table' in self.var_names:
+            trials_table = alfio.AlfBunch.from_df(self.bpod_trials.pop('table'))
+            table_columns = trials_table.keys()
+            self.bpod_trials.update(trials_table)
+        else:
+            if 'table' in self.bpod_trials:
+                _logger.error(
+                    '"table" found in Bpod trials but missing from `var_names` attribute and will'
+                    'therefore not be extracted. This is likely in error.')
+            table_columns = None
+
+        bpod = get_sync_fronts(sync, chmap['bpod'])
         # Get the spacer times for this protocol
-        if (protocol_number := kwargs.get('protocol_number')) is not None:  # look for spacer
+        if any(arg in kwargs for arg in ('tmin', 'tmax')):
+            tmin, tmax = kwargs.get('tmin'), kwargs.get('tmax')
+        elif (protocol_number := kwargs.get('protocol_number')) is not None:  # look for spacer
             # The spacers are TTLs generated by Bpod at the start of each protocol
-            bpod = get_sync_fronts(sync, chmap['bpod'])
             tmin, tmax = get_protocol_period(self.session_path, protocol_number, bpod)
         else:
-            tmin = tmax = None
+            # Older sessions don't have protocol spacers so we sync the Bpod intervals here to
+            # find the approximate end time of the protocol (this will exclude the passive signals
+            # in ephysChoiceWorld that tend to ruin the final trial extraction).
+            _, trial_ints = self.get_bpod_event_times(sync, chmap, **kwargs)
+            t_trial_start = trial_ints.get('trial_start', np.array([[np.nan, np.nan]]))[:, 0]
+            bpod_start = self.bpod_trials['intervals'][:, 0]
+            if len(t_trial_start) > len(bpod_start) / 2:  # if least half the trial start TTLs detected
+                _logger.warning('Attempting to get protocol period from aligning trial start TTLs')
+                fcn, *_ = neurodsp.utils.sync_timestamps(bpod_start, t_trial_start)
+                buffer = 2.5  # the number of seconds to include before/after task
+                start, end = fcn(self.bpod_trials['intervals'].flat[[0, -1]])
+                tmin = min(sync['times'][0], start - buffer)
+                tmax = max(sync['times'][-1], end + buffer)
+            else:  # This type of alignment fails for some sessions, e.g. mesoscope
+                tmin = tmax = None
 
-        fpga_trials = extract_behaviour_sync(
-            sync=sync, chmap=chmap, bpod_trials=self.bpod_trials, tmin=tmin, tmax=tmax)
-        assert self.sync_field in self.bpod_trials and self.sync_field in fpga_trials
-        self.bpod_trials[f'{self.sync_field}_bpod'] = np.copy(self.bpod_trials[self.sync_field])
+        # Remove unnecessary data from sync
+        selection = np.logical_and(
+            sync['times'] <= (tmax if tmax is not None else sync['times'][-1]),
+            sync['times'] >= (tmin if tmin is not None else sync['times'][0]),
+        )
+        sync = alfio.AlfBunch({k: v[selection] for k, v in sync.items()})
+        _logger.debug('Protocol period from %.2fs to %.2fs (~%.0f min duration)',
+                      *sync['times'][[0, -1]], np.diff(sync['times'][[0, -1]]) / 60)
 
-        # checks consistency and compute dt with bpod
-        self.bpod2fpga, drift_ppm, ibpod, ifpga = neurodsp.utils.sync_timestamps(
-            self.bpod_trials[f'{self.sync_field}_bpod'][:, 0], fpga_trials.pop(self.sync_field)[:, 0],
-            return_indices=True)
-        nbpod = self.bpod_trials[f'{self.sync_field}_bpod'].shape[0]
-        npfga = fpga_trials['feedback_times'].shape[0]
-        nsync = len(ibpod)
-        _logger.info(f'N trials: {nbpod} bpod, {npfga} FPGA, {nsync} merged, sync {drift_ppm} ppm')
-        if drift_ppm > BPOD_FPGA_DRIFT_THRESHOLD_PPM:
-            _logger.warning('BPOD/FPGA synchronization shows values greater than %i ppm',
-                            BPOD_FPGA_DRIFT_THRESHOLD_PPM)
-        out = OrderedDict()
+        # Get the trial events from the DAQ sync TTLs, sync clocks and build final trials datasets
+        out = self.build_trials(sync=sync, chmap=chmap, **kwargs)
+
+        # extract the wheel data
+        if any(x.startswith('wheel') for x in self.var_names):
+            wheel, moves = self.get_wheel_positions(sync=sync, chmap=chmap, tmin=tmin, tmax=tmax)
+            from ibllib.io.extractors.training_wheel import extract_first_movement_times
+            if not self.settings:
+                self.settings = raw.load_settings(session_path=self.session_path, task_collection=task_collection)
+            min_qt = self.settings.get('QUIESCENT_PERIOD', None)
+            first_move_onsets, *_ = extract_first_movement_times(moves, out, min_qt=min_qt)
+            out.update({'firstMovement_times': first_move_onsets})
+            out.update({f'wheel_{k}': v for k, v in wheel.items()})
+            out.update({f'wheelMoves_{k}': v for k, v in moves.items()})
+
+        # Re-create trials table
+        if table_columns:
+            trials_table = alfio.AlfBunch({x: out.pop(x) for x in table_columns})
+            out['table'] = trials_table.to_df()
+
+        out = alfio.AlfBunch({k: out[k] for k in self.var_names if k in out})  # Reorder output
+        assert self.var_names == tuple(out.keys())
+        return out
+
+    def build_trials(self, sync, chmap, display=False, **kwargs):
+        """
+        Extract task related event times from the sync.
+
+        The trial start times are the shortest Bpod TTLs and occur at the start of the trial. The
+        first trial start TTL of the session is longer and must be handled differently. The trial
+        start TTL is used to assign the other trial events to each trial.
+
+        The trial end is the end of the so-called 'ITI' Bpod event TTL (classified as the longest
+        of the three Bpod event TTLs). Go cue audio TTLs are the shorter of the two expected audio
+        tones. The first of these after each trial start is taken to be the go cue time. Error
+        tones are longer audio TTLs and assigned as the last of such occurrence after each trial
+        start. The valve open Bpod TTLs are medium-length, the last of which is used for each trial.
+        The feedback times are times of either valve open or error tone as there should be only one
+        such event per trial.
+
+        The stimulus times are taken from the frame2ttl events (with improbably high frequency TTLs
+        removed): the first TTL after each trial start is assumed to be the stim onset time; the
+        second to last and last are taken as the stimulus freeze and offset times, respectively.
+
+        Parameters
+        ----------
+        sync : dict
+            'polarities' of fronts detected on sync trace for all 16 chans and their 'times'
+        chmap : dict
+            Map of channel names and their corresponding index.  Default to constant.
+        display : bool, matplotlib.pyplot.Axes
+            Show the full session sync pulses display.
+
+        Returns
+        -------
+        dict
+            A map of trial event timestamps.
+        """
+        # Get the events from the sync.
+        # Store the cleaned frame2ttl, audio, and bpod pulses as this will be used for QC
+        self.frame2ttl = self.get_stimulus_update_times(sync, chmap, **kwargs)
+        self.audio, audio_event_intervals = self.get_audio_event_times(sync, chmap, **kwargs)
+        if not set(audio_event_intervals.keys()) >= {'ready_tone', 'error_tone'}:
+            raise ValueError(
+                'Expected at least "ready_tone" and "error_tone" audio events.'
+                '`audio_event_ttls` kwarg may be incorrect.')
+        self.bpod, bpod_event_intervals = self.get_bpod_event_times(sync, chmap, **kwargs)
+        if not set(bpod_event_intervals.keys()) >= {'trial_start', 'valve_open', 'trial_end'}:
+            raise ValueError(
+                'Expected at least "trial_start", "trial_end", and "valve_open" audio events. '
+                '`bpod_event_ttls` kwarg may be incorrect.')
+
+        t_iti_in, t_trial_end = bpod_event_intervals['trial_end'].T
+        fpga_events = alfio.AlfBunch({
+            'goCue_times': audio_event_intervals['ready_tone'][:, 0],
+            'errorCue_times': audio_event_intervals['error_tone'][:, 0],
+            'valveOpen_times': bpod_event_intervals['valve_open'][:, 0],
+            'valveClose_times': bpod_event_intervals['valve_open'][:, 1],
+            'itiIn_times': t_iti_in,
+            'intervals_0': bpod_event_intervals['trial_start'][:, 0],
+            'intervals_1': t_trial_end
+        })
+
+        # Sync the Bpod clock to the DAQ.
+        # NB: The Bpod extractor typically drops the final, incomplete, trial. Hence there is
+        # usually at least one extra FPGA event. This shouldn't affect the sync. The final trial is
+        # dropped after assigning the FPGA events, using the `ifpga` index. Doing this after
+        # assigning the FPGA trial events ensures the last trial has the correct timestamps.
+        self.bpod2fpga, drift_ppm, ibpod, ifpga = self.sync_bpod_clock(self.bpod_trials, fpga_events, self.sync_field)
+
+        if np.any(np.diff(ibpod) != 1) and self.sync_field == 'intervals_0':
+            # One issue is that sometimes pulses may not have been detected, in this case
+            # add the events that have not been detected and re-extract the behaviour sync.
+            # This is only really relevant for the Bpod interval events as the other TTLs are
+            # from devices where a missing TTL likely means the Bpod event was truly absent.
+            _logger.warning('Missing Bpod TTLs; reassigning events using aligned Bpod start times')
+            bpod_start = self.bpod_trials['intervals'][:, 0]
+            missing_bpod = self.bpod2fpga(bpod_start[np.setxor1d(ibpod, np.arange(len(bpod_start)))])
+            t_trial_start = np.sort(np.r_[fpga_events['intervals_0'][:, 0], missing_bpod])
+        else:
+            t_trial_start = fpga_events['intervals_0']
+
+        # Assign the FPGA events to individual trials
+        fpga_trials = {
+            'goCue_times': _assign_events_to_trial(t_trial_start, fpga_events['goCue_times'], take='first'),
+            'errorCue_times': _assign_events_to_trial(t_trial_start, fpga_events['errorCue_times']),
+            'valveOpen_times': _assign_events_to_trial(t_trial_start, fpga_events['valveOpen_times']),
+            'itiIn_times': _assign_events_to_trial(t_trial_start, fpga_events['itiIn_times']),
+            'stimFreeze_times': _assign_events_to_trial(t_trial_start, self.frame2ttl['times'], take=-2),
+            'stimOn_times': _assign_events_to_trial(t_trial_start, self.frame2ttl['times'], take='first'),
+            'stimOff_times': _assign_events_to_trial(t_trial_start, self.frame2ttl['times'])
+        }
+
+        # Feedback times are valve open on correct trials and error tone in on incorrect trials
+        fpga_trials['feedback_times'] = np.copy(fpga_trials['valveOpen_times'])
+        ind_err = np.isnan(fpga_trials['valveOpen_times'])
+        fpga_trials['feedback_times'][ind_err] = fpga_trials['errorCue_times'][ind_err]
+
+        out = alfio.AlfBunch()
+        # Add the Bpod trial events, converting the timestamp fields to FPGA time.
+        # NB: The trial intervals are by default a Bpod rsync field.
         out.update({k: self.bpod_trials[k][ibpod] for k in self.bpod_fields})
         out.update({k: self.bpod2fpga(self.bpod_trials[k][ibpod]) for k in self.bpod_rsync_fields})
-        out.update({k: fpga_trials[k][ifpga] for k in sorted(fpga_trials.keys())})
-        # extract the wheel data
-        wheel, moves = self.get_wheel_positions(sync=sync, chmap=chmap, tmin=tmin, tmax=tmax)
-        from ibllib.io.extractors.training_wheel import extract_first_movement_times
-        settings = raw_data_loaders.load_settings(session_path=self.session_path, task_collection=task_collection)
-        min_qt = settings.get('QUIESCENT_PERIOD', None)
-        first_move_onsets, *_ = extract_first_movement_times(moves, out, min_qt=min_qt)
-        out.update({'firstMovement_times': first_move_onsets})
-        # Re-create trials table
-        trials_table = alfio.AlfBunch({x: out.pop(x) for x in table_columns})
-        out['table'] = trials_table.to_df()
+        out.update({k: fpga_trials[k][ifpga] for k in fpga_trials.keys()})
 
-        out = {k: out[k] for k in self.var_names if k in out}  # Reorder output
-        assert tuple(filter(lambda x: 'wheel' not in x, self.var_names)) == tuple(out.keys())
-        return [out[k] for k in out] + [wheel['timestamps'], wheel['position'],
-                                        moves['intervals'], moves['peakAmplitude']]
+        if display:  # pragma: no cover
+            width = 0.5
+            ymax = 5
+            if isinstance(display, bool):
+                plt.figure('Bpod FPGA Sync')
+                ax = plt.gca()
+            else:
+                ax = display
+            plots.squares(self.bpod['times'], self.bpod['polarities'] * 0.4 + 1, ax=ax, color='k')
+            plots.squares(self.frame2ttl['times'], self.frame2ttl['polarities'] * 0.4 + 2, ax=ax, color='k')
+            plots.squares(self.audio['times'], self.audio['polarities'] * 0.4 + 3, ax=ax, color='k')
+            color_map = TABLEAU_COLORS.keys()
+            for (event_name, event_times), c in zip(fpga_events.items(), cycle(color_map)):
+                plots.vertical_lines(event_times, ymin=0, ymax=ymax, ax=ax, color=c, label=event_name, linewidth=width)
+            ax.legend()
+            ax.set_yticks([0, 1, 2, 3])
+            ax.set_yticklabels(['', 'bpod', 'f2ttl', 'audio'])
+            ax.set_ylim([0, 5])
+
+        return out
 
     def get_wheel_positions(self, *args, **kwargs):
         """Extract wheel and wheelMoves objects.
@@ -846,6 +944,493 @@ class FpgaTrials(extractors_base.BaseExtractor):
         This method is called by the main extract method and may be overloaded by subclasses.
         """
         return get_wheel_positions(*args, **kwargs)
+
+    def get_stimulus_update_times(self, sync, chmap, display=False, **_):
+        """
+        Extract stimulus update times from sync.
+
+        Gets the stimulus times from the frame2ttl channel and cleans the signal.
+
+        Parameters
+        ----------
+        sync : dict
+            A dictionary with keys ('times', 'polarities', 'channels'), containing the sync pulses
+            and the corresponding channel numbers.
+        chmap : dict
+            A map of channel names and their corresponding indices. Must contain a 'frame2ttl' key.
+        display : bool
+            If true, plots the input TTLs and the cleaned output.
+
+        Returns
+        -------
+        dict
+            A dictionary with keys {'times', 'polarities'} containing stimulus TTL fronts.
+        """
+        frame2ttl = get_sync_fronts(sync, chmap['frame2ttl'])
+        frame2ttl = _clean_frame2ttl(frame2ttl, display=display)
+        return frame2ttl
+
+    def get_audio_event_times(self, sync, chmap, audio_event_ttls=None, display=False, **_):
+        """
+        Extract audio times from sync.
+
+        Gets the TTL times from the 'audio' channel, cleans the signal, and classifies each TTL
+        event by length.
+
+        Parameters
+        ----------
+        sync : dict
+            A dictionary with keys ('times', 'polarities', 'channels'), containing the sync pulses
+            and the corresponding channel numbers.
+        chmap : dict
+            A map of channel names and their corresponding indices. Must contain an 'audio' key.
+        audio_event_ttls : dict
+            A map of event names to (min, max) TTL length.
+        display : bool
+            If true, plots the input TTLs and the cleaned output.
+
+        Returns
+        -------
+        dict
+            A dictionary with keys {'times', 'polarities'} containing audio TTL fronts.
+        dict
+            A dictionary of events (from `audio_event_ttls`) and their intervals as an Nx2 array.
+        """
+        audio = get_sync_fronts(sync, chmap['audio'])
+        audio = _clean_audio(audio)
+
+        if audio['times'].size == 0:
+            _logger.error('No audio sync fronts found.')
+
+        if audio_event_ttls is None:
+            # For training/biased/ephys protocols, the ready tone should be below 110 ms. The error
+            # tone should be between 400ms and 1200ms
+            audio_event_ttls = {'ready_tone': (0, 0.11), 'error_tone': (0.4, 1.2)}
+        audio_event_intervals = self._assign_events(audio['times'], audio['polarities'], audio_event_ttls, display=display)
+
+        return audio, audio_event_intervals
+
+    def get_bpod_event_times(self, sync, chmap, bpod_event_ttls=None, display=False, **kwargs):
+        """
+        Extract Bpod times from sync.
+
+        Gets the Bpod TTL times from the sync 'bpod' channel and classifies each TTL event by
+        length. NB: The first trial has an abnormal trial_start TTL that is usually mis-assigned.
+        This method accounts for this.
+
+        Parameters
+        ----------
+        sync : dict
+            A dictionary with keys ('times', 'polarities', 'channels'), containing the sync pulses
+            and the corresponding channel numbers. Must contain a 'bpod' key.
+        chmap : dict
+            A map of channel names and their corresponding indices.
+        bpod_event_ttls : dict of tuple
+            A map of event names to (min, max) TTL length.
+
+        Returns
+        -------
+        dict
+            A dictionary with keys {'times', 'polarities'} containing Bpod TTL fronts.
+        dict
+            A dictionary of events (from `bpod_event_ttls`) and their intervals as an Nx2 array.
+        """
+        bpod = get_sync_fronts(sync, chmap['bpod'])
+        if bpod.times.size == 0:
+            raise err.SyncBpodFpgaException('No Bpod event found in FPGA. No behaviour extraction. '
+                                            'Check channel maps.')
+        # Assign the Bpod BNC2 events based on TTL length. The defaults are below, however these
+        # lengths are defined by the state machine of the task protocol and therefore vary.
+        if bpod_event_ttls is None:
+            # For training/biased/ephys protocols, the trial start TTL length is 0.1ms but this has
+            # proven to drift on some Bpods and this is the highest possible value that
+            # discriminates trial start from valve. Valve open events are between 50ms to 300 ms.
+            # ITI events are above 400 ms.
+            bpod_event_ttls = {
+                'trial_start': (0, 2.33e-4), 'valve_open': (2.33e-4, 0.4), 'trial_end': (0.4, np.inf)}
+        bpod_event_intervals = self._assign_events(
+            bpod['times'], bpod['polarities'], bpod_event_ttls, display=display)
+
+        if 'trial_start' not in bpod_event_intervals or bpod_event_intervals['trial_start'].size == 0:
+            return bpod, bpod_event_intervals
+
+        # The first trial pulse is longer and often assigned to another event.
+        # Here we move the earliest non-trial_start event to the trial_start array.
+        t0 = bpod_event_intervals['trial_start'][0, 0]  # expect 1st event to be trial_start
+        pretrial = [(k, v[0, 0]) for k, v in bpod_event_intervals.items() if v.size and v[0, 0] < t0]
+        if pretrial:
+            (pretrial, _) = sorted(pretrial, key=lambda x: x[1])[0]  # take the earliest event
+            dt = np.diff(bpod_event_intervals[pretrial][0, :]) * 1e3  # record TTL length to log
+            _logger.debug('Reassigning first %s to trial_start. TTL length = %.3g ms', pretrial, dt)
+            bpod_event_intervals['trial_start'] = np.r_[
+                bpod_event_intervals[pretrial][0:1, :], bpod_event_intervals['trial_start']
+            ]
+            bpod_event_intervals[pretrial] = bpod_event_intervals[pretrial][1:, :]
+
+        return bpod, bpod_event_intervals
+
+    @staticmethod
+    def _assign_events(ts, polarities, event_lengths, precedence='shortest', display=False):
+        """
+        Classify TTL events by length.
+
+        Outputs the synchronisation events such as trial intervals, valve opening, and audio.
+
+        Parameters
+        ----------
+        ts : numpy.array
+            Numpy vector containing times of TTL fronts.
+        polarities : numpy.array
+            Numpy vector containing polarity of TTL fronts (1 rise, -1 fall).
+        event_lengths : dict of tuple
+            A map of TTL events and the range of permissible lengths, where l0 < ttl <= l1.
+        precedence : str {'shortest', 'longest', 'dict order'}
+            In the case of overlapping event TTL lengths, assign shortest/longest first or go by
+            the `event_lengths` dict order.
+        display : bool
+            If true, plots the TTLs with coloured lines delineating the assigned events.
+
+        Returns
+        -------
+        Dict[str, numpy.array]
+            A dictionary of events and their intervals as an Nx2 array.
+
+        See Also
+        --------
+        _assign_events_to_trial - classify TTLs by event order within a given trial period.
+        """
+        event_intervals = dict.fromkeys(event_lengths)
+        assert 'unassigned' not in event_lengths.keys()
+
+        if len(ts) == 0:
+            return {k: np.array([[], []]).T for k in (*event_lengths.keys(), 'unassigned')}
+
+        # make sure that there are no 2 consecutive fall or consecutive rise events
+        assert np.all(np.abs(np.diff(polarities)) == 2)
+        if polarities[0] == -1:
+            ts = np.delete(ts, 0)
+        if polarities[-1] == 1:  # if the final TTL is left HIGH, insert a NaN
+            ts = np.r_[ts, np.nan]
+        # take only even time differences: i.e. from rising to falling fronts
+        dt = np.diff(ts)[::2]
+
+        # Assign events from shortest TTL to largest
+        assigned = np.zeros(ts.shape, dtype=bool)
+        if precedence.lower() == 'shortest':
+            event_items = sorted(event_lengths.items(), key=lambda x: np.diff(x[1]))
+        elif precedence.lower() == 'longest':
+            event_items = sorted(event_lengths.items(), key=lambda x: np.diff(x[1]), reverse=True)
+        elif precedence.lower() == 'dict order':
+            event_items = event_lengths.items()
+        else:
+            raise ValueError(f'Precedence must be one of "shortest", "longest", "dict order", got "{precedence}".')
+        for event, (min_len, max_len) in event_items:
+            _logger.debug('%s: %.4G < ttl <= %.4G', event, min_len, max_len)
+            i_event = np.where(np.logical_and(dt > min_len, dt <= max_len))[0] * 2
+            i_event = i_event[np.where(~assigned[i_event])[0]]  # remove those already assigned
+            event_intervals[event] = np.c_[ts[i_event], ts[i_event + 1]]
+            assigned[np.r_[i_event, i_event + 1]] = True
+
+        # Include the unassigned events for convenience and debugging
+        event_intervals['unassigned'] = ts[~assigned].reshape(-1, 2)
+
+        # Assert that event TTLs mutually exclusive
+        all_assigned = np.concatenate(list(event_intervals.values())).flatten()
+        assert all_assigned.size == np.unique(all_assigned).size, 'TTLs assigned to multiple events'
+
+        # some debug plots when needed
+        if display:  # pragma: no cover
+            plt.figure()
+            plots.squares(ts, polarities, label='raw fronts')
+            for event, intervals in event_intervals.items():
+                plots.vertical_lines(intervals[:, 0], ymin=-0.2, ymax=1.1, linewidth=0.5, label=event)
+            plt.legend()
+
+        # Return map of event intervals in the same order as `event_lengths` dict
+        return {k: event_intervals[k] for k in (*event_lengths, 'unassigned')}
+
+    @staticmethod
+    def sync_bpod_clock(bpod_trials, fpga_trials, sync_field):
+        """
+        Sync the Bpod clock to FPGA one using the provided trial event.
+
+        It assumes that `sync_field` is in both `fpga_trials` and `bpod_trials`. Syncing on both
+        intervals is not supported so to sync on trial start times, `sync_field` should be
+        'intervals_0'.
+
+        Parameters
+        ----------
+        bpod_trials : dict
+            A dictionary of extracted Bpod trial events.
+        fpga_trials : dict
+            A dictionary of TTL events extracted from FPGA sync (see `extract_behaviour_sync`
+            method).
+        sync_field : str
+            The trials key to use for syncing clocks. For intervals (i.e. Nx2 arrays) append the
+            column index, e.g. 'intervals_0'.
+
+        Returns
+        -------
+        function
+            Interpolation function such that f(timestamps_bpod) = timestamps_fpga.
+        float
+            The clock drift in parts per million.
+        numpy.array of int
+            The indices of the Bpod trial events in the FPGA trial events array.
+        numpy.array of int
+            The indices of the FPGA trial events in the Bpod trial events array.
+
+        Raises
+        ------
+        ValueError
+            The key `sync_field` was not found in either the `bpod_trials` or `fpga_trials` dicts.
+        """
+        _logger.info(f'Attempting to align Bpod clock to DAQ using trial event "{sync_field}"')
+        bpod_fpga_timestamps = [None, None]
+        for i, trials in enumerate((bpod_trials, fpga_trials)):
+            if sync_field not in trials:
+                # handle syncing on intervals
+                if not (m := re.match(r'(.*)_(\d)', sync_field)):
+                    # If missing from bpod trials, either the sync field is incorrect,
+                    # or the Bpod extractor is incorrect. If missing from the fpga events, check
+                    # the sync field and the `extract_behaviour_sync` method.
+                    raise ValueError(
+                        f'Sync field "{sync_field}" not in extracted {"fpga" if i else "bpod"} events')
+                _sync_field, n = m.groups()
+                bpod_fpga_timestamps[i] = trials[_sync_field][:, int(n)]
+            else:
+                bpod_fpga_timestamps[i] = trials[sync_field]
+
+        # Sync the two timestamps
+        fcn, drift, ibpod, ifpga = neurodsp.utils.sync_timestamps(*bpod_fpga_timestamps, return_indices=True)
+
+        # If it's drifting too much throw warning or error
+        _logger.info('N trials: %i bpod, %i FPGA, %i merged, sync %.5f ppm',
+                     *map(len, bpod_fpga_timestamps), len(ibpod), drift)
+        if drift > 200 and bpod_fpga_timestamps[0].size != bpod_fpga_timestamps[1].size:
+            raise err.SyncBpodFpgaException('sync cluster f*ck')
+        elif drift > BPOD_FPGA_DRIFT_THRESHOLD_PPM:
+            _logger.warning('BPOD/FPGA synchronization shows values greater than %.2f ppm',
+                            BPOD_FPGA_DRIFT_THRESHOLD_PPM)
+
+        return fcn, drift, ibpod, ifpga
+
+
+class FpgaTrialsHabituation(FpgaTrials):
+    """Extract habituationChoiceWorld trial events from an NI DAQ."""
+
+    save_names = ('_ibl_trials.stimCenter_times.npy', '_ibl_trials.feedbackType.npy', '_ibl_trials.rewardVolume.npy',
+                  '_ibl_trials.stimOff_times.npy', '_ibl_trials.contrastLeft.npy', '_ibl_trials.contrastRight.npy',
+                  '_ibl_trials.feedback_times.npy', '_ibl_trials.stimOn_times.npy', '_ibl_trials.stimOnTrigger_times.npy',
+                  '_ibl_trials.intervals.npy', '_ibl_trials.goCue_times.npy', '_ibl_trials.goCueTrigger_times.npy',
+                  None, None, None, None, None)
+    """tuple of str: The filenames of each extracted dataset, or None if array should not be saved."""
+
+    var_names = ('stimCenter_times', 'feedbackType', 'rewardVolume', 'stimOff_times', 'contrastLeft',
+                 'contrastRight', 'feedback_times', 'stimOn_times', 'stimOnTrigger_times', 'intervals',
+                 'goCue_times', 'goCueTrigger_times', 'itiIn_times', 'stimOffTrigger_times',
+                 'stimCenterTrigger_times', 'position', 'phase')
+    """tuple of str: A list of names for the extracted variables. These become the returned output keys."""
+
+    bpod_rsync_fields = ('intervals', 'stimOn_times', 'feedback_times', 'stimCenterTrigger_times',
+                         'goCue_times', 'itiIn_times', 'stimOffTrigger_times', 'stimOff_times',
+                         'stimCenter_times', 'stimOnTrigger_times', 'goCueTrigger_times')
+    """tuple of str: Fields from Bpod extractor that we want to re-sync to FPGA."""
+
+    bpod_fields = ('feedbackType', 'rewardVolume', 'contrastLeft', 'contrastRight', 'position', 'phase')
+    """tuple of str: Fields from Bpod extractor that we want to save."""
+
+    sync_field = 'feedback_times'  # valve open events
+    """str: The trial event to synchronize (must be present in extracted trials)."""
+
+    def _extract(self, sync=None, chmap=None, sync_collection='raw_ephys_data',
+                 task_collection='raw_behavior_data', **kwargs) -> dict:
+        """
+        Extract habituationChoiceWorld trial events from an NI DAQ.
+
+        It is essential that the `var_names`, `bpod_rsync_fields`, `bpod_fields`, and `sync_field`
+        attributes are all correct for the bpod protocol used.
+
+        Unlike FpgaTrials, this class assumes different Bpod TTL events and syncs the Bpod clock
+        using the valve open times, instead of the trial start times.
+
+        Parameters
+        ----------
+        sync : dict
+            A dictionary with keys ('times', 'polarities', 'channels'), containing the sync pulses
+            and the corresponding channel numbers. If None, the sync is loaded using the
+            `load_sync` method.
+        dict
+            A map of channel names and their corresponding indices. If None, the channel map is
+            loaded using the `load_sync` method.
+        sync_collection : str
+            The session subdirectory where the sync data are located. This is only used if the
+            sync or channel maps are not provided.
+        task_collection : str
+            The session subdirectory where the raw Bpod data are located. This is used for loading
+            the task settings and extracting the bpod trials, if not already done.
+        protocol_number : int
+            The protocol number if multiple protocols were run during the session. If provided, a
+            spacer signal must be present in order to determine the correct period.
+        kwargs
+            Optional arguments for class methods, e.g. 'display', 'bpod_event_ttls'.
+
+        Returns
+        -------
+        dict
+            A dictionary of numpy arrays with `FpgaTrialsHabituation.var_names` as keys.
+        """
+        # Version check: the ITI in TTL was added in a later version
+        if not self.settings:
+            self.settings = raw.load_settings(session_path=self.session_path, task_collection=task_collection)
+        iblrig_version = version.parse(self.settings.get('IBL_VERSION', '0.0.0'))
+        if version.parse('8.9.3') <= iblrig_version < version.parse('8.12.6'):
+            """A second 1s TTL was added in this version during the 'iti' state, however this is
+            unrelated to the trial ITI and is unfortunately the same length as the trial start TTL."""
+            raise NotImplementedError('Ambiguous TTLs in 8.9.3 >= version < 8.12.6')
+
+        trials = super()._extract(sync=sync, chmap=chmap, sync_collection=sync_collection,
+                                  task_collection=task_collection, **kwargs)
+
+        return trials
+
+    def get_bpod_event_times(self, sync, chmap, bpod_event_ttls=None, display=False, **kwargs):
+        """
+        Extract Bpod times from sync.
+
+        Currently (at least v8.12 and below) there is no trial start or end TTL, only an ITI pulse.
+        Also the first trial pulse is incorrectly assigned due to its abnormal length.
+
+        Parameters
+        ----------
+        sync : dict
+            A dictionary with keys ('times', 'polarities', 'channels'), containing the sync pulses
+            and the corresponding channel numbers. Must contain a 'bpod' key.
+        chmap : dict
+            A map of channel names and their corresponding indices.
+        bpod_event_ttls : dict of tuple
+            A map of event names to (min, max) TTL length.
+
+        Returns
+        -------
+        dict
+            A dictionary with keys {'times', 'polarities'} containing Bpod TTL fronts.
+        dict
+            A dictionary of events (from `bpod_event_ttls`) and their intervals as an Nx2 array.
+        """
+        bpod = get_sync_fronts(sync, chmap['bpod'])
+        if bpod.times.size == 0:
+            raise err.SyncBpodFpgaException('No Bpod event found in FPGA. No behaviour extraction. '
+                                            'Check channel maps.')
+        # Assign the Bpod BNC2 events based on TTL length. The defaults are below, however these
+        # lengths are defined by the state machine of the task protocol and therefore vary.
+        if bpod_event_ttls is None:
+            # Currently (at least v8.12 and below) there is no trial start or end TTL, only an ITI pulse
+            bpod_event_ttls = {'trial_iti': (1, 1.1), 'valve_open': (0, 0.4)}
+        bpod_event_intervals = self._assign_events(
+            bpod['times'], bpod['polarities'], bpod_event_ttls, display=display)
+
+        # The first trial pulse is shorter and assigned to valve_open. Here we remove the first
+        # valve event, prepend a 0 to the trial_start events, and drop the last trial if it was
+        # incomplete in Bpod.
+        bpod_event_intervals['trial_iti'] = np.r_[bpod_event_intervals['valve_open'][0:1, :],
+                                                  bpod_event_intervals['trial_iti']]
+        bpod_event_intervals['valve_open'] = bpod_event_intervals['valve_open'][1:, :]
+
+        return bpod, bpod_event_intervals
+
+    def build_trials(self, sync, chmap, display=False, **kwargs):
+        """
+        Extract task related event times from the sync.
+
+        This is called by the superclass `_extract` method.  The key difference here is that the
+        `trial_start` LOW->HIGH is the trial end, and HIGH->LOW is trial start.
+
+        Parameters
+        ----------
+        sync : dict
+            'polarities' of fronts detected on sync trace for all 16 chans and their 'times'
+        chmap : dict
+            Map of channel names and their corresponding index.  Default to constant.
+        display : bool, matplotlib.pyplot.Axes
+            Show the full session sync pulses display.
+
+        Returns
+        -------
+        dict
+            A map of trial event timestamps.
+        """
+        # Get the events from the sync.
+        # Store the cleaned frame2ttl, audio, and bpod pulses as this will be used for QC
+        self.frame2ttl = self.get_stimulus_update_times(sync, chmap, **kwargs)
+        self.audio, audio_event_intervals = self.get_audio_event_times(sync, chmap, **kwargs)
+        self.bpod, bpod_event_intervals = self.get_bpod_event_times(sync, chmap, **kwargs)
+        if not set(bpod_event_intervals.keys()) >= {'valve_open', 'trial_iti'}:
+            raise ValueError(
+                'Expected at least "trial_iti" and "valve_open" Bpod events. `bpod_event_ttls` kwarg may be incorrect.')
+
+        fpga_events = alfio.AlfBunch({
+            'feedback_times': bpod_event_intervals['valve_open'][:, 0],
+            'valveClose_times': bpod_event_intervals['valve_open'][:, 1],
+            'intervals_0': bpod_event_intervals['trial_iti'][:, 1],
+            'intervals_1': bpod_event_intervals['trial_iti'][:, 0],
+            'goCue_times': audio_event_intervals['ready_tone'][:, 0]
+        })
+        n_trials = self.bpod_trials['intervals'].shape[0]
+
+        # Sync the Bpod clock to the DAQ.
+        self.bpod2fpga, drift_ppm, ibpod, ifpga = self.sync_bpod_clock(self.bpod_trials, fpga_events, self.sync_field)
+
+        out = alfio.AlfBunch()
+        # Add the Bpod trial events, converting the timestamp fields to FPGA time.
+        # NB: The trial intervals are by default a Bpod rsync field.
+        out.update({k: self.bpod_trials[k][ibpod] for k in self.bpod_fields})
+        out.update({k: self.bpod2fpga(self.bpod_trials[k][ibpod]) for k in self.bpod_rsync_fields})
+
+        # Assigning each event to a trial ensures exactly one event per trial (missing events are NaN)
+        assign_to_trial = partial(_assign_events_to_trial, fpga_events['intervals_0'])
+        trials = alfio.AlfBunch({
+            'goCue_times': assign_to_trial(fpga_events['goCue_times'], take='first')[:n_trials],
+            'feedback_times': assign_to_trial(fpga_events['feedback_times'])[:n_trials],
+            'stimCenter_times': assign_to_trial(self.frame2ttl['times'], take=-2)[:n_trials],
+            'stimOn_times': assign_to_trial(self.frame2ttl['times'], take='first')[:n_trials],
+            'stimOff_times': assign_to_trial(self.frame2ttl['times'])[:n_trials],
+        })
+
+        # If stim on occurs before trial end, use stim on time. Likewise for trial end and stim off
+        to_correct = ~np.isnan(trials['stimOn_times']) & (trials['stimOn_times'] < out['intervals'][:, 0])
+        if np.any(to_correct):
+            _logger.warning('%i/%i stim on events occurring outside trial intervals', sum(to_correct), len(to_correct))
+            out['intervals'][to_correct, 0] = trials['stimOn_times'][to_correct]
+        to_correct = ~np.isnan(trials['stimOff_times']) & (trials['stimOff_times'] > out['intervals'][:, 1])
+        if np.any(to_correct):
+            _logger.debug(
+                '%i/%i stim off events occurring outside trial intervals; using stim off times as trial end',
+                sum(to_correct), len(to_correct))
+            out['intervals'][to_correct, 1] = trials['stimOff_times'][to_correct]
+
+        out.update({k: trials[k][ifpga] for k in trials.keys()})
+
+        if display:  # pragma: no cover
+            width = 0.5
+            ymax = 5
+            if isinstance(display, bool):
+                plt.figure('Bpod FPGA Sync')
+                ax = plt.gca()
+            else:
+                ax = display
+            plots.squares(self.bpod['times'], self.bpod['polarities'] * 0.4 + 1, ax=ax, color='k')
+            plots.squares(self.frame2ttl['times'], self.frame2ttl['polarities'] * 0.4 + 2, ax=ax, color='k')
+            plots.squares(self.audio['times'], self.audio['polarities'] * 0.4 + 3, ax=ax, color='k')
+            color_map = TABLEAU_COLORS.keys()
+            for (event_name, event_times), c in zip(trials.to_df().items(), cycle(color_map)):
+                plots.vertical_lines(event_times, ymin=0, ymax=ymax, ax=ax, color=c, label=event_name, linewidth=width)
+            ax.legend()
+            ax.set_yticks([0, 1, 2, 3])
+            ax.set_yticklabels(['', 'bpod', 'f2ttl', 'audio'])
+            ax.set_ylim([0, 4])
+
+        return out
 
 
 def extract_all(session_path, sync_collection='raw_ephys_data', save=True, save_path=None,
@@ -855,7 +1440,11 @@ def extract_all(session_path, sync_collection='raw_ephys_data', save=True, save_
         -   sync
         -   wheel
         -   behaviour
-        -   video time stamps
+
+    These `extract_all` functions should be deprecated as they make assumptions about hardware
+    parameters.  Additionally the FpgaTrials class now automatically loads DAQ sync files, extracts
+    the Bpod trials, and returns a dict instead of a tuple. Therefore this function is entirely
+    redundant. See the examples for the correct way to extract NI DAQ behaviour sessions.
 
     Parameters
     ----------
@@ -881,23 +1470,31 @@ def extract_all(session_path, sync_collection='raw_ephys_data', save=True, save_
     list of pathlib.Path, None
         If save is True, a list of file paths to the extracted data.
     """
+    warnings.warn(
+        'ibllib.io.extractors.ephys_fpga.extract_all will be removed in future versions; '
+        'use FpgaTrials instead. For reliable extraction, use the dynamic pipeline behaviour tasks.',
+        FutureWarning)
+    return_extractor = kwargs.pop('return_extractor', False)
     # Extract Bpod trials
-    bpod_raw = raw_data_loaders.load_data(session_path, task_collection=task_collection)
+    bpod_raw = raw.load_data(session_path, task_collection=task_collection)
     assert bpod_raw is not None, 'No task trials data in raw_behavior_data - Exit'
-    bpod_trials, *_ = bpod_extract_all(
+    bpod_trials, bpod_wheel, *_ = bpod_extract_all(
         session_path=session_path, bpod_trials=bpod_raw, task_collection=task_collection,
         save=False, extractor_type=kwargs.get('extractor_type'))
 
     # Sync Bpod trials to FPGA
     sync, chmap = get_sync_and_chn_map(session_path, sync_collection)
     # sync, chmap = get_main_probe_sync(session_path, bin_exists=bin_exists)
-    trials = FpgaTrials(session_path, bpod_trials=bpod_trials)
+    trials = FpgaTrials(session_path, bpod_trials=bpod_trials | bpod_wheel)
     outputs, files = trials.extract(
         save=save, sync=sync, chmap=chmap, path_out=save_path,
         task_collection=task_collection, protocol_number=protocol_number, **kwargs)
     if not isinstance(outputs, dict):
         outputs = {k: v for k, v in zip(trials.var_names, outputs)}
-    return outputs, files
+    if return_extractor:
+        return outputs, files, trials
+    else:
+        return outputs, files
 
 
 def get_sync_and_chn_map(session_path, sync_collection):

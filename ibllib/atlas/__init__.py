@@ -1,4 +1,7 @@
-"""A package for working with brain atlases.
+"""(DEPRECATED) A package for working with brain atlases.
+
+For the correct atlas documentation, see
+https://docs.internationalbrainlab.org/_autosummary/iblatlas.html
 
 For examples and tutorials on using the IBL atlas package, see
 https://docs.internationalbrainlab.org/atlas_examples.html

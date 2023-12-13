@@ -29,9 +29,16 @@ class BaseExtractor(abc.ABC):
     """
 
     session_path = None
+    """pathlib.Path: Absolute path of session folder."""
+
     save_names = None
+    """tuple of str: The filenames of each extracted dataset, or None if array should not be saved."""
+
     var_names = None
+    """tuple of str: A list of names for the extracted variables. These become the returned output keys."""
+
     default_path = Path('alf')  # relative to session
+    """pathlib.Path: The default output folder relative to `session_path`."""
 
     def __init__(self, session_path=None):
         # If session_path is None Path(session_path) will fail
@@ -127,6 +134,8 @@ class BaseBpodTrialsExtractor(BaseExtractor):
     bpod_trials = None
     settings = None
     task_collection = None
+    frame2ttl = None
+    audio = None
 
     def extract(self, bpod_trials=None, settings=None, **kwargs):
         """
@@ -145,9 +154,9 @@ class BaseBpodTrialsExtractor(BaseExtractor):
         if not self.settings:
             self.settings = raw.load_settings(self.session_path, task_collection=self.task_collection)
         if self.settings is None:
-            self.settings = {"IBLRIG_VERSION_TAG": "100.0.0"}
-        elif self.settings.get("IBLRIG_VERSION_TAG", "") == "":
-            self.settings["IBLRIG_VERSION_TAG"] = "100.0.0"
+            self.settings = {"IBLRIG_VERSION": "100.0.0"}
+        elif self.settings.get("IBLRIG_VERSION", "") == "":
+            self.settings["IBLRIG_VERSION"] = "100.0.0"
         return super(BaseBpodTrialsExtractor, self).extract(**kwargs)
 
 

@@ -19,7 +19,6 @@ from ibllib.qc.alignment_qc import AlignmentQC
 from ibllib.pipes.histology import register_track, register_chronic_track
 from one.registration import RegistrationClient
 
-
 EPHYS_SESSION = 'b1c968ad-4874-468d-b2e4-5ffa9b9964e9'
 one = ONE(**TEST_DB)
 brain_atlas = AllenAtlas(25)
@@ -35,9 +34,15 @@ class TestTracingQc(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
+        rng = np.random.default_rng()
         probe = [''.join(random.choices(string.ascii_letters, k=5)),
                  ''.join(random.choices(string.ascii_letters, k=5))]
-        ins = create_alyx_probe_insertions(session_path=EPHYS_SESSION, model='3B2', labels=probe,
+        date = str(datetime.date(2019, rng.integers(1, 12), rng.integers(1, 28)))
+        _, eid = RegistrationClient(one).create_new_session('ZM_1150', date=date)
+        cls.eid = str(eid)
+        # Currently the task protocol of a session must contain 'ephys' in order to create an insertion!
+        one.alyx.rest('sessions', 'partial_update', id=cls.eid, data={'task_protocol': 'ephys'})
+        ins = create_alyx_probe_insertions(session_path=cls.eid, model='3B2', labels=probe,
                                            one=one, force=True)
         cls.probe00_id, cls.probe01_id = (x['id'] for x in ins)
         data = np.load(Path(Path(__file__).parent.parent.
@@ -50,35 +55,42 @@ class TestTracingQc(unittest.TestCase):
                        channels=False, brain_atlas=brain_atlas)
         insertion = one.alyx.get('/insertions/' + self.probe00_id, clobber=True)
 
-        assert (insertion['json']['qc'] == 'NOT_SET')
-        assert (insertion['json']['extended_qc']['tracing_exists'] == 1)
+        self.assertEqual(insertion['json']['qc'], 'NOT_SET')
+        self.assertEqual(insertion['json']['extended_qc']['tracing_exists'], 1)
 
     def test_tracing_not_exists(self):
         register_track(self.probe01_id, picks=None, one=one, overwrite=True,
                        channels=False, brain_atlas=brain_atlas)
         insertion = one.alyx.get('/insertions/' + self.probe01_id, clobber=True)
-        assert (insertion['json']['qc'] == 'CRITICAL')
-        assert (insertion['json']['extended_qc']['tracing_exists'] == 0)
+        self.assertEqual(insertion['json']['qc'], 'CRITICAL')
+        self.assertEqual(insertion['json']['extended_qc']['tracing_exists'], 0)
 
     @classmethod
     def tearDownClass(cls) -> None:
         one.alyx.rest('insertions', 'delete', id=cls.probe01_id)
         one.alyx.rest('insertions', 'delete', id=cls.probe00_id)
+        one.alyx.rest('sessions', 'delete', id=cls.eid)
 
 
 class TestChronicTracingQC(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
+        rng = np.random.default_rng()
         probe = ''.join(random.choices(string.ascii_letters, k=5))
         serial = ''.join(random.choices(string.ascii_letters, k=10))
 
         # Make a chronic insertions
-        ref = one.eid2ref(EPHYS_SESSION)
-        insdict = {"subject": ref['subject'], "name": probe, "model": '3B2', "serial": serial}
+        date = str(datetime.date(2019, rng.integers(1, 12), rng.integers(1, 28)))
+        _, eid = RegistrationClient(one).create_new_session('ZM_1150', date=date)
+        cls.eid = str(eid)
+        # Currently the task protocol of a session must contain 'ephys' in order to create an insertion!
+        one.alyx.rest('sessions', 'partial_update', id=cls.eid, data={'task_protocol': 'ephys'})
+
+        insdict = {"subject": 'ZM_1150', "name": probe, "model": '3B2', "serial": serial}
         ins = one.alyx.rest('chronic-insertions', 'create', data=insdict)
         cls.chronic_id = ins['id']
         # Make a probe insertions
-        insdict = {"session": EPHYS_SESSION, "name": probe, "model": '3B2', "serial": serial,
+        insdict = {"session": cls.eid, "name": probe, "model": '3B2', "serial": serial,
                    "chronic_insertion": cls.chronic_id}
         ins = one.alyx.rest('insertions', 'create', data=insdict)
         cls.probe_id = ins['id']
@@ -94,37 +106,43 @@ class TestChronicTracingQC(unittest.TestCase):
                                channels=False, brain_atlas=brain_atlas)
         insertion = one.alyx.get('/insertions/' + self.probe_id, clobber=True)
 
-        assert (insertion['json']['qc'] == 'NOT_SET')
-        assert (insertion['json']['extended_qc']['tracing_exists'] == 1)
+        self.assertEqual(insertion['json']['qc'], 'NOT_SET')
+        self.assertEqual(insertion['json']['extended_qc']['tracing_exists'], 1)
 
         insertion = one.alyx.get('/chronic-insertions/' + self.chronic_id, clobber=True)
 
-        assert (insertion['json']['qc'] == 'NOT_SET')
-        assert (insertion['json']['extended_qc']['tracing_exists'] == 1)
+        self.assertEqual(insertion['json']['qc'], 'NOT_SET')
+        self.assertEqual(insertion['json']['extended_qc']['tracing_exists'], 1)
 
     def test_tracing_not_exists(self):
         register_chronic_track(self.chronic_id, picks=None, one=one, overwrite=True,
                                channels=False, brain_atlas=brain_atlas)
         insertion = one.alyx.get('/insertions/' + self.probe_id, clobber=True)
-        assert (insertion['json']['qc'] == 'CRITICAL')
-        assert (insertion['json']['extended_qc']['tracing_exists'] == 0)
+        self.assertEqual(insertion['json']['qc'], 'CRITICAL')
+        self.assertEqual(insertion['json']['extended_qc']['tracing_exists'], 0)
 
         insertion = one.alyx.get('/chronic-insertions/' + self.chronic_id, clobber=True)
-        assert (insertion['json']['qc'] == 'CRITICAL')
-        assert (insertion['json']['extended_qc']['tracing_exists'] == 0)
+        self.assertEqual(insertion['json']['qc'], 'CRITICAL')
+        self.assertEqual(insertion['json']['extended_qc']['tracing_exists'], 0)
 
     @classmethod
     def tearDownClass(cls) -> None:
         one.alyx.rest('insertions', 'delete', id=cls.probe_id)
         one.alyx.rest('chronic-insertions', 'delete', id=cls.chronic_id)
+        one.alyx.rest('sessions', 'delete', id=cls.eid)
 
 
 class TestAlignmentQcExisting(unittest.TestCase):
     probe_id = None
     prev_traj_id = None
+    eid = None
+    alignments = None
+    xyz_picks = None
+    trajectory = None
 
     @classmethod
     def setUpClass(cls) -> None:
+        rng = np.random.default_rng()
         data = np.load(Path(Path(__file__).parent.parent.
                             joinpath('fixtures', 'qc', 'data_alignmentqc_existing.npz')),
                        allow_pickle=True)
@@ -137,7 +155,7 @@ class TestAlignmentQcExisting(unittest.TestCase):
         insertion = data['insertion'].tolist()
         insertion['name'] = ''.join(random.choices(string.ascii_letters, k=5))
         insertion['json'] = {'xyz_picks': cls.xyz_picks}
-        date = str(datetime.date(2019, np.random.randint(1, 12), np.random.randint(1, 28)))
+        date = str(datetime.date(2019, rng.integers(1, 12), rng.integers(1, 28)))
         _, eid = RegistrationClient(one).create_new_session('ZM_1150', date=date)
         cls.eid = str(eid)
         # Currently the task protocol of a session must contain 'ephys' in order to create an insertion!
@@ -240,9 +258,14 @@ class TestAlignmentQcExisting(unittest.TestCase):
 class TestAlignmentQcManual(unittest.TestCase):
     probe_id = None
     prev_traj_id = None
+    eid = None
+    alignments = None
+    xyz_picks = None
+    trajectory = None
 
     @classmethod
     def setUpClass(cls) -> None:
+        rng = np.random.default_rng()
         data = np.load(Path(Path(__file__).parent.parent.
                             joinpath('fixtures', 'qc', 'data_alignmentqc_manual.npz')),
                        allow_pickle=True)
@@ -257,7 +280,7 @@ class TestAlignmentQcManual(unittest.TestCase):
         insertion['name'] = ''.join(random.choices(string.ascii_letters, k=5))
         insertion['json'] = {'xyz_picks': cls.xyz_picks}
 
-        date = str(datetime.date(2018, np.random.randint(1, 12), np.random.randint(1, 28)))
+        date = str(datetime.date(2018, rng.integers(1, 12), rng.integers(1, 28)))
         _, eid = RegistrationClient(one).create_new_session('ZM_1150', date=date)
         cls.eid = str(eid)
         insertion['session'] = cls.eid
@@ -375,6 +398,9 @@ def _verify(tc, alignment_resolved=None, alignment_count=None,
 
 class TestUploadToFlatIron(unittest.TestCase):
     probe_id = None
+    alignments = None
+    xyz_picks = None
+    trajectory = None
 
     @unittest.skip("Skip FTP upload test")
     @classmethod
@@ -410,7 +436,7 @@ class TestUploadToFlatIron(unittest.TestCase):
         print(cls.file_paths)
 
     def test_data_content(self):
-        alf_path = one.path_from_eid(EPHYS_SESSION).joinpath('alf', self.probe_name)
+        alf_path = one.eid2path(EPHYS_SESSION).joinpath('alf', self.probe_name)
         channels_mlapdv = np.load(alf_path.joinpath('channels.mlapdv.npy'))
         self.assertTrue(np.all(np.abs(channels_mlapdv) > 0))
         channels_id = np.load(alf_path.joinpath('channels.brainLocationIds_ccf_2017.npy'))
@@ -429,5 +455,5 @@ class TestUploadToFlatIron(unittest.TestCase):
         one.alyx.rest('insertions', 'delete', id=cls.probe_id)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main(exit=False, verbosity=2)

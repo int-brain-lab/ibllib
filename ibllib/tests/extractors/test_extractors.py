@@ -1,3 +1,4 @@
+"""Test trials, wheel and camera extractors."""
 import functools
 import shutil
 import tempfile
@@ -47,10 +48,12 @@ class TestExtractTrialData(unittest.TestCase):
         self.biased_lt5 = {'path': self.main_path / 'data' / 'session_biased_lt5'}
         self.training_ge5 = {'path': self.main_path / 'data' / 'session_training_ge5'}
         self.biased_ge5 = {'path': self.main_path / 'data' / 'session_biased_ge5'}
+        self.ephys = {'path': self.main_path / 'data' / 'session_ephys'}
         self.training_lt5['ntrials'] = len(raw.load_data(self.training_lt5['path']))
         self.biased_lt5['ntrials'] = len(raw.load_data(self.biased_lt5['path']))
         self.training_ge5['ntrials'] = len(raw.load_data(self.training_ge5['path']))
         self.biased_ge5['ntrials'] = len(raw.load_data(self.biased_ge5['path']))
+        self.ephys['ntrials'] = len(raw.load_data(self.ephys['path']))
         # turn off logging for unit testing as we will purposedly go into warning/error cases
         self.wheel_ge5_path = self.main_path / 'data' / 'wheel_ge5'
         self.wheel_lt5_path = self.main_path / 'data' / 'wheel_lt5'
@@ -143,6 +146,22 @@ class TestExtractTrialData(unittest.TestCase):
         probs = md['BLOCK_PROBABILITY_SET']
         probs.append(0.5)
         self.assertTrue(sum([x in probs for x in pl]) == len(pl))
+
+        # EPHYS SESSION
+        data = raw.load_data(self.ephys['path'])
+        md = raw.load_settings(self.ephys['path'])
+        *_, pLeft0, _ = biased_trials.ProbaContrasts(
+            self.ephys['path']).extract(bpod_trials=data, settings=md)[0]
+        self.assertEqual(len(pLeft0), self.ephys['ntrials'], 'ephys prob left')
+        # Test if only generative prob values in data
+        self.assertTrue(all(x in [0.2, 0.5, 0.8] for x in np.unique(pLeft0)))
+        # Test if settings file has empty LEN_DATA result is same
+        md.update({'LEN_BLOCKS': None})
+        *_, pLeft1, _ = biased_trials.ProbaContrasts(
+            self.ephys['path']).extract(bpod_trials=data, settings=md)[0]
+        self.assertTrue(all(pLeft0 == pLeft1))
+        # Test if only generative prob values in data
+        self.assertTrue(all(x in [0.2, 0.5, 0.8] for x in np.unique(pLeft1)))
 
     def test_get_choice(self):
         # TRAINING SESSIONS
@@ -423,7 +442,7 @@ class TestExtractTrialData(unittest.TestCase):
     def test_get_included_trials(self):
         # TRAINING SESSIONS
         it = training_trials.IncludedTrials(
-            self.training_lt5['path']).extract(settings={'IBLRIG_VERSION_TAG': '4.9.9'})[0]
+            self.training_lt5['path']).extract(settings={'IBLRIG_VERSION': '4.9.9'})[0]
         self.assertTrue(isinstance(it, np.ndarray))
         # -- version >= 5.0.0
         it = training_trials.IncludedTrials(
@@ -432,7 +451,7 @@ class TestExtractTrialData(unittest.TestCase):
 
         # BIASED SESSIONS
         it = biased_trials.IncludedTrials(
-            self.biased_lt5['path']).extract(settings={'IBLRIG_VERSION_TAG': '4.9.9'})[0]
+            self.biased_lt5['path']).extract(settings={'IBLRIG_VERSION': '4.9.9'})[0]
         self.assertTrue(isinstance(it, np.ndarray))
         # -- version >= 5.0.0
         it = biased_trials.IncludedTrials(
@@ -445,7 +464,7 @@ class TestExtractTrialData(unittest.TestCase):
         # Expect an error raised because no wheel moves were present in test data
         with self.assertRaises(ValueError) as ex:
             training_trials.extract_all(
-                self.training_lt5['path'], settings={'IBLRIG_VERSION_TAG': '4.9.9'}, save=True)
+                self.training_lt5['path'], settings={'IBLRIG_VERSION': '4.9.9'}, save=True)
             self.assertIn('_ibl_wheelMoves.intervals.npy appears to be empty', str(ex.exception))
         # -- version >= 5.0.0
         out, files = training_trials.extract_all(self.training_ge5['path'], save=True)
@@ -459,7 +478,7 @@ class TestExtractTrialData(unittest.TestCase):
             Wheel.var_names = tuple()
             Wheel().extract.return_value = ({}, [])
             out, files = biased_trials.extract_all(
-                self.biased_lt5['path'], settings={'IBLRIG_VERSION_TAG': '4.9.9'}, save=True)
+                self.biased_lt5['path'], settings={'IBLRIG_VERSION': '4.9.9'}, save=True)
             self.assertEqual(15, len(out))
             self.assertTrue(all(map(Path.exists, files)))
         # -- version >= 5.0.0
@@ -508,18 +527,18 @@ class TestExtractTrialData(unittest.TestCase):
 
     def test_load_encoder_positions(self):
         raw.load_encoder_positions(self.training_lt5['path'],
-                                   settings={'IBLRIG_VERSION_TAG': '4.9.9'})
+                                   settings={'IBLRIG_VERSION': '4.9.9'})
         raw.load_encoder_positions(self.training_ge5['path'])
         raw.load_encoder_positions(self.biased_lt5['path'],
-                                   settings={'IBLRIG_VERSION_TAG': '4.9.9'})
+                                   settings={'IBLRIG_VERSION': '4.9.9'})
         raw.load_encoder_positions(self.biased_ge5['path'])
 
     def test_load_encoder_events(self):
         raw.load_encoder_events(self.training_lt5['path'],
-                                settings={'IBLRIG_VERSION_TAG': '4.9.9'})
+                                settings={'IBLRIG_VERSION': '4.9.9'})
         raw.load_encoder_events(self.training_ge5['path'])
         raw.load_encoder_events(self.biased_lt5['path'],
-                                settings={'IBLRIG_VERSION_TAG': '4.9.9'})
+                                settings={'IBLRIG_VERSION': '4.9.9'})
         raw.load_encoder_events(self.biased_ge5['path'])
 
     def test_size_outputs(self):
@@ -761,5 +780,5 @@ class TestCameraExtractors(unittest.TestCase):
             camera.attribute_times(tsa, tsb, injective=False, take='closest')
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main(exit=False, verbosity=2)

@@ -1,3 +1,74 @@
+"""The abstract Pipeline and Task superclasses and concrete task runner.
+
+Examples
+--------
+
+1. Running a task on your local computer.
+|  Download: via ONE.
+|  Upload: N/A.
+
+>>> task = VideoSyncQcBpod(session_path, one=one, location='remote', sync='bpod')
+>>> task.run()
+
+2. Running a task on the local server that belongs to a given subject (e.g SWC054 on floferlab).
+|  Download: all data expected to be present.
+|  Upload: normal way of registering datasets, filerecords created and bulk sync, bulk transfer
+   jobs on Alyx transfer the data.
+
+>>> from ibllib.pipes.video_tasks import VideoSyncQcBpod
+>>> session_path = '/mnt/ibl/s0/Data/Subjects/SWC054/2023-01-01/001'
+>>> task = VideoSyncQcBpod(session_path, one=one, sync='bpod')
+>>> task.run()
+>>> task.register_datasets(one=one, labs=get_lab(session_path, alyx=ONE().alyx))
+
+3. Running a task on the local server that belongs to that subject and forcing redownload of
+missing data.
+|  Download: via Globus (TODO we should change this to use boto3 as globus is slow).
+|  Upload: normal way of registering datasets, filerecords created and bulk sync, bulk transfer
+   jobs on Alyx transfer the data.
+
+>>> task = VideoSyncQcBpod(session_path, one=one, sync='bpod')
+>>> task.force = True
+>>> task.run()
+>>> task.register_datasets(one=one, labs=get_lab(session_path, alyx=ONE().alyx))
+>>> task.cleanUp()  # Delete the files that have been downloaded
+
+4. Running a task on the local server that doesn't belongs to that subject
+(e.g SWC054 on angelakilab).
+|  Download: via boto3, the AWS file records must exist and be set to exists = True.
+|  Upload: via globus, automatically uploads the datasets directly to FlatIron via globus.
+   Creates FlatIron filerecords and sets these to True once the globus task has completed.
+
+>>> task = VideoSyncQcBpod(session_path, one=one, location='AWS', sync='bpod')
+>>> task.run()
+>>> task.register_datasets()
+>>> task.cleanUp()  # Delete the files that have been downloaded
+
+5. Running a task on SDSC.
+|  Download: via creating symlink to relevant datasets on SDSC.
+|  Upload: via copying files to relevant location on SDSC.
+
+>>> task = VideoSyncQcBpod(session_path, one=one, location='SDSC', sync='bpod')
+>>> task.run()
+>>> response = task.register_datasets()
+>>> # Here we just make sure filerecords are all correct
+>>> for resp in response:
+...    fi = next((fr for fr in resp['file_records'] if 'flatiron' in fr['data_repository']), None)
+...    if fi is not None:
+...        if not fi['exists']:
+...            one.alyx.rest('files', 'partial_update', id=fi['id'], data={'exists': True})
+...
+...     aws = next((fr for fr in resp['file_records'] if 'aws' in fr['data_repository']), None)
+...     if aws is not None:
+...         one.alyx.rest('files', 'partial_update', id=aws['id'], data={'exists': False})
+...
+...     sr = next((fr for fr in resp['file_records'] if 'SR' in fr['data_repository']), None)
+...     if sr is not None:
+...         one.alyx.rest('files', 'partial_update', id=sr['id'], data={'exists': False})
+... # Finally remove symlinks once the task has completed
+... task.cleanUp()
+
+"""
 from pathlib import Path
 import abc
 import logging
@@ -602,22 +673,39 @@ class Pipeline(abc.ABC):
 def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
                   max_md5_size=None, machine=None, clobber=True, location='server', mode='log'):
     """
-    Runs a single Alyx job and registers output datasets
-    :param tdict:
-    :param session_path:
-    :param one:
-    :param job_deck: optional list of job dictionaries belonging to the session. Needed
-    to check dependency status if the jdict has a parent field. If jdict has a parent and
-    job_deck is not entered, will query the database
-    :param max_md5_size: in bytes, if specified, will not compute the md5 checksum above a given
-    filesize to save time
-    :param machine: string identifying the machine the task is run on, optional
-    :param clobber: bool, if True any existing logs are overwritten, default is True
-    :param location: where you are running the task, 'server' - local lab server, 'remote' - any
-    compute node/ computer, 'SDSC' - flatiron compute node, 'AWS' - using data from aws s3
-    :param mode: str ('log' or 'raise') behaviour to adopt if an error occured. If 'raise', it
-    will Raise the error at the very end of this function (ie. after having labeled the tasks)
-    :return:
+    Runs a single Alyx job and registers output datasets.
+
+    Parameters
+    ----------
+    tdict : dict
+        An Alyx task dictionary to instantiate and run.
+    session_path : str, pathlib.Path
+        A session path containing the task input data.
+    one : one.api.OneAlyx
+        An instance of ONE.
+    job_deck : list of dict, optional
+        A list of all tasks in the same pipeline. If None, queries Alyx to get this.
+    max_md5_size : int, optional
+        An optional maximum file size in bytes. Files with sizes larger than this will not have
+        their MD5 checksum calculated to save time.
+    machine : str, optional
+        A string identifying the machine the task is run on.
+    clobber : bool, default=True
+        If true any existing logs are overwritten on Alyx.
+    location : {'remote', 'server', 'sdsc', 'aws'}
+        Where you are running the task, 'server' - local lab server, 'remote' - any
+        compute node/ computer, 'sdsc' - Flatiron compute node, 'aws' - using data from AWS S3
+        node.
+    mode : {'log', 'raise}, default='log'
+        Behaviour to adopt if an error occurred. If 'raise', it will raise the error at the very
+        end of this function (i.e. after having labeled the tasks).
+
+    Returns
+    -------
+    Task
+        The instantiated task object that was run.
+    list of pathlib.Path
+        A list of registered datasets.
     """
     registered_dsets = []
     # here we need to check parents' status, get the job_deck if not available
