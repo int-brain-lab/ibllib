@@ -19,7 +19,6 @@ from ibllib.qc.alignment_qc import AlignmentQC
 from ibllib.pipes.histology import register_track, register_chronic_track
 from one.registration import RegistrationClient
 
-
 EPHYS_SESSION = 'b1c968ad-4874-468d-b2e4-5ffa9b9964e9'
 one = ONE(**TEST_DB)
 brain_atlas = AllenAtlas(25)
@@ -37,7 +36,12 @@ class TestTracingQc(unittest.TestCase):
     def setUpClass(cls) -> None:
         probe = [''.join(random.choices(string.ascii_letters, k=5)),
                  ''.join(random.choices(string.ascii_letters, k=5))]
-        ins = create_alyx_probe_insertions(session_path=EPHYS_SESSION, model='3B2', labels=probe,
+        date = str(datetime.date(2019, np.random.randint(1, 12), np.random.randint(1, 28)))
+        _, eid = RegistrationClient(one).create_new_session('ZM_1150', date=date)
+        cls.eid = str(eid)
+        # Currently the task protocol of a session must contain 'ephys' in order to create an insertion!
+        one.alyx.rest('sessions', 'partial_update', id=cls.eid, data={'task_protocol': 'ephys'})
+        ins = create_alyx_probe_insertions(session_path=cls.eid, model='3B2', labels=probe,
                                            one=one, force=True)
         cls.probe00_id, cls.probe01_id = (x['id'] for x in ins)
         data = np.load(Path(Path(__file__).parent.parent.
@@ -64,6 +68,7 @@ class TestTracingQc(unittest.TestCase):
     def tearDownClass(cls) -> None:
         one.alyx.rest('insertions', 'delete', id=cls.probe01_id)
         one.alyx.rest('insertions', 'delete', id=cls.probe00_id)
+        one.alyx.rest('sessions', 'delete', id=cls.eid)
 
 
 class TestChronicTracingQC(unittest.TestCase):
@@ -73,12 +78,17 @@ class TestChronicTracingQC(unittest.TestCase):
         serial = ''.join(random.choices(string.ascii_letters, k=10))
 
         # Make a chronic insertions
-        ref = one.eid2ref(EPHYS_SESSION)
-        insdict = {"subject": ref['subject'], "name": probe, "model": '3B2', "serial": serial}
+        date = str(datetime.date(2019, np.random.randint(1, 12), np.random.randint(1, 28)))
+        _, eid = RegistrationClient(one).create_new_session('ZM_1150', date=date)
+        cls.eid = str(eid)
+        # Currently the task protocol of a session must contain 'ephys' in order to create an insertion!
+        one.alyx.rest('sessions', 'partial_update', id=cls.eid, data={'task_protocol': 'ephys'})
+
+        insdict = {"subject": 'ZM_1150', "name": probe, "model": '3B2', "serial": serial}
         ins = one.alyx.rest('chronic-insertions', 'create', data=insdict)
         cls.chronic_id = ins['id']
         # Make a probe insertions
-        insdict = {"session": EPHYS_SESSION, "name": probe, "model": '3B2', "serial": serial,
+        insdict = {"session": cls.eid, "name": probe, "model": '3B2', "serial": serial,
                    "chronic_insertion": cls.chronic_id}
         ins = one.alyx.rest('insertions', 'create', data=insdict)
         cls.probe_id = ins['id']
@@ -117,6 +127,7 @@ class TestChronicTracingQC(unittest.TestCase):
     def tearDownClass(cls) -> None:
         one.alyx.rest('insertions', 'delete', id=cls.probe_id)
         one.alyx.rest('chronic-insertions', 'delete', id=cls.chronic_id)
+        one.alyx.rest('sessions', 'delete', id=cls.eid)
 
 
 class TestAlignmentQcExisting(unittest.TestCase):
