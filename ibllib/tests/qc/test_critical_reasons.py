@@ -4,21 +4,21 @@ import json
 import random
 import string
 import datetime
-import numpy as np
 
+import numpy as np
 import requests
 from one.api import ONE
+from one.registration import RegistrationClient
 
 from ibllib.tests import TEST_DB
 import ibllib.qc.critical_reasons as usrpmt
-from one.registration import RegistrationClient
 
 one = ONE(**TEST_DB)
 
 
 def mock_input(prompt):
     if "Select from this list the reason(s)" in prompt:
-        return "1,3"
+        return "1," + prompt[prompt.index(') Other') - 1]  # always choose last option, 'Other'
     elif "Explain why you selected" in prompt:
         return "estoy un poco preocupada"
     elif "You are about to delete" in prompt:
@@ -28,11 +28,11 @@ def mock_input(prompt):
 class TestUserPmtSess(unittest.TestCase):
 
     def setUp(self) -> None:
+        rng = np.random.default_rng()
         # Make sure tests use correct session ID
         one.alyx.clear_rest_cache()
         # Create new session on database with a random date to avoid race conditions
-        date = str(datetime.date(2022, np.random.randint(1, 12), np.random.randint(1, 28)))
-        from one.registration import RegistrationClient
+        date = str(datetime.date(2022, rng.integers(1, 12), rng.integers(1, 28)))
         _, eid = RegistrationClient(one).create_new_session('ZM_1150', date=date)
         eid = str(eid)
         # Currently the task protocol of a session must contain 'ephys' in order to create an insertion!
@@ -58,9 +58,9 @@ class TestUserPmtSess(unittest.TestCase):
         print(critical_dict)
         expected_dict = {
             'title': '=== EXPERIMENTER REASON(S) FOR MARKING THE SESSION AS CRITICAL ===',
-            'reasons_selected': ['synching impossible', 'essential dataset missing'],
-            'reason_for_other': []}
-        assert expected_dict == critical_dict
+            'reasons_selected': ['synching impossible', 'Other'],
+            'reason_for_other': 'estoy un poco preocupada'}
+        self.assertDictEqual(expected_dict, critical_dict)
 
     def test_userinput_ins(self):
         eid = self.ins_id  # probe id
@@ -70,9 +70,9 @@ class TestUserPmtSess(unittest.TestCase):
         critical_dict = json.loads(note[0]['text'])
         expected_dict = {
             'title': '=== EXPERIMENTER REASON(S) FOR MARKING THE INSERTION AS CRITICAL ===',
-            'reasons_selected': ['Track not visible on imaging data', 'Drift'],
-            'reason_for_other': []}
-        assert expected_dict == critical_dict
+            'reasons_selected': ['Track not visible on imaging data', 'Other'],
+            'reason_for_other': 'estoy un poco preocupada'}
+        self.assertDictEqual(expected_dict, critical_dict)
 
     def test_note_already_existing(self):
         eid = self.sess_id  # sess id
@@ -85,8 +85,8 @@ class TestUserPmtSess(unittest.TestCase):
             usrpmt.main(eid, one=one)
 
         note = one.alyx.rest('notes', 'list', django=f'object_id,{eid}', no_cache=True)
-        assert len(note) == 1
-        assert original_note_id != note[0]['id']
+        self.assertEqual(len(note), 1)
+        self.assertNotEquals(original_note_id, note[0]['id'])
 
     def test_guiinput_ins(self):
         eid = self.ins_id  # probe id
@@ -103,12 +103,12 @@ class TestUserPmtSess(unittest.TestCase):
         note = one.alyx.rest('notes', 'list',
                              django=f'text__icontains,{str_notes_static},object_id,{eid}',
                              no_cache=True)
-        assert len(note) == 1
+        self.assertEqual(len(note), 1)
         critical_dict = json.loads(note[0]['text'])
         expected_dict = {
             'title': '=== EXPERIMENTER REASON(S) FOR MARKING THE INSERTION AS CRITICAL ===',
             'reasons_selected': ['Drift'], 'reason_for_other': []}
-        assert expected_dict == critical_dict
+        self.assertDictEqual(expected_dict, critical_dict)
 
     def test_note_probe_ins(self):
         # Note: this test is redundant with the above, but it tests specifically whether
@@ -135,7 +135,7 @@ class TestUserPmtSess(unittest.TestCase):
         notes = one.alyx.rest('notes', 'list',
                               django=f'text__icontains,{note_text},object_id,{eid}',
                               no_cache=True)
-        assert len(notes) == 1
+        self.assertEqual(len(notes), 1)
 
     def tearDown(self) -> None:
         try:
@@ -143,6 +143,10 @@ class TestUserPmtSess(unittest.TestCase):
         except requests.HTTPError as ex:
             if ex.errno != 404:
                 raise ex
+
+        notes = one.alyx.rest('notes', 'list', django=f'object_id,{self.sess_id}', no_cache=True)
+        for n in notes:
+            one.alyx.rest('notes', 'delete', id=n['id'])
         text = '"title": "=== EXPERIMENTER REASON(S)'
         notes = one.alyx.rest('notes', 'list', django=f'text__icontains,{text}', no_cache=True)
         for n in notes:
@@ -151,10 +155,6 @@ class TestUserPmtSess(unittest.TestCase):
         notes = one.alyx.rest('notes', 'list', django=f'text__icontains,{text}', no_cache=True)
         for n in notes:
             one.alyx.rest('notes', 'delete', n['id'])
-
-        note = one.alyx.rest('notes', 'list', django=f'object_id,{self.sess_id}', no_cache=True)
-        for no in note:
-            one.alyx.rest('notes', 'delete', id=no['id'])
 
 
 class TestSignOffNote(unittest.TestCase):

@@ -7,6 +7,7 @@ Raw Data Loader functions for PyBpod rig
 
 Module contains one loader function per raw datafile
 """
+import re
 import json
 import logging
 import wave
@@ -16,7 +17,7 @@ from pathlib import Path, PureWindowsPath
 from typing import Union
 
 from dateutil import parser as dateparser
-from pkg_resources import parse_version
+from packaging import version
 import numpy as np
 import pandas as pd
 
@@ -323,18 +324,47 @@ def _read_settings_json_compatibility_enforced(settings):
             md = json.load(js)
     if 'IS_MOCK' not in md:
         md['IS_MOCK'] = False
+    # Many v < 8 sessions had both version and version tag keys. v > 8 have a version tag.
+    # Some sessions have neither key.  From v8 onwards we will use IBLRIG_VERSION to test rig
+    # version, however some places may still use the version tag.
     if 'IBLRIG_VERSION_TAG' not in md.keys():
         md['IBLRIG_VERSION_TAG'] = md.get('IBLRIG_VERSION', '')
+    if 'IBLRIG_VERSION' not in md.keys():
+        md['IBLRIG_VERSION'] = md['IBLRIG_VERSION_TAG']
+    elif all([md['IBLRIG_VERSION'], md['IBLRIG_VERSION_TAG']]):
+        # This may not be an issue; not sure what the intended difference between these keys was
+        assert md['IBLRIG_VERSION'] == md['IBLRIG_VERSION_TAG'], 'version and version tag mismatch'
+    # Test version can be parsed. If not, log an error and set the version to nothing
+    try:
+        version.parse(md['IBLRIG_VERSION'] or '0')
+    except version.InvalidVersion as ex:
+        _logger.error('%s in iblrig settings, this may affect extraction', ex)
+        # try a more relaxed version parse
+        laxed_parse = re.search(r'^\d+\.\d+\.\d+', md['IBLRIG_VERSION'])
+        # Set the tag as the invalid version
+        md['IBLRIG_VERSION_TAG'] = md['IBLRIG_VERSION']
+        # overwrite version with either successfully parsed one or an empty string
+        md['IBLRIG_VERSION'] = laxed_parse.group() if laxed_parse else ''
+    if 'device_sound' not in md:
+        # sound device must be defined in version 8 and later  # FIXME this assertion will cause tests to break
+        assert version.parse(md['IBLRIG_VERSION'] or '0') < version.parse('8.0.0')
+        # in v7 we must infer the device from the sampling frequency if SD is None
+        if 'sounddevice' in md.get('SD', ''):
+            device = 'xonar'
+        else:
+            freq_map = {192000: 'xonar', 96000: 'harp', 44100: 'sysdefault'}
+            device = freq_map.get(md.get('SOUND_SAMPLE_FREQ'), 'unknown')
+        md['device_sound'] = {'OUTPUT': device}
     # 2018-12-05 Version 3.2.3 fixes (permanent fixes in IBL_RIG from 3.2.4 on)
-    if md['IBLRIG_VERSION_TAG'] == '':
+    if md['IBLRIG_VERSION'] == '':
         pass
-    elif parse_version(md.get('IBLRIG_VERSION_TAG')) >= parse_version('8.0.0'):
+    elif version.parse(md['IBLRIG_VERSION']) >= version.parse('8.0.0'):
         md['SESSION_NUMBER'] = str(md['SESSION_NUMBER']).zfill(3)
         md['PYBPOD_BOARD'] = md['RIG_NAME']
         md['PYBPOD_CREATOR'] = (md['ALYX_USER'], '')
         md['SESSION_DATE'] = md['SESSION_START_TIME'][:10]
         md['SESSION_DATETIME'] = md['SESSION_START_TIME']
-    elif parse_version(md.get('IBLRIG_VERSION_TAG')) <= parse_version('3.2.3'):
+    elif version.parse(md['IBLRIG_VERSION']) <= version.parse('3.2.3'):
         if 'LAST_TRIAL_DATA' in md.keys():
             md.pop('LAST_TRIAL_DATA')
         if 'weighings' in md['PYBPOD_SUBJECT_EXTRA'].keys():
@@ -414,16 +444,16 @@ def load_encoder_events(session_path, task_collection='raw_behavior_data', setti
     path = next(path.glob("_iblrig_encoderEvents.raw*.ssv"), None)
     if not settings:
         settings = load_settings(session_path, task_collection=task_collection)
-    if settings is None or not settings.get('IBLRIG_VERSION_TAG'):
-        settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
+    if settings is None or not settings.get('IBLRIG_VERSION'):
+        settings = {'IBLRIG_VERSION': '100.0.0'}
         # auto-detect old files when version is not labeled
         with open(path) as fid:
             line = fid.readline()
         if line.startswith('Event') and 'StateMachine' in line:
-            settings = {'IBLRIG_VERSION_TAG': '0.0.0'}
+            settings = {'IBLRIG_VERSION': '0.0.0'}
     if not path:
         return None
-    if parse_version(settings['IBLRIG_VERSION_TAG']) >= parse_version('5.0.0'):
+    if version.parse(settings['IBLRIG_VERSION']) >= version.parse('5.0.0'):
         return _load_encoder_events_file_ge5(path)
     else:
         return _load_encoder_events_file_lt5(path)
@@ -518,17 +548,17 @@ def load_encoder_positions(session_path, task_collection='raw_behavior_data', se
     path = next(path.glob("_iblrig_encoderPositions.raw*.ssv"), None)
     if not settings:
         settings = load_settings(session_path, task_collection=task_collection)
-    if settings is None or not settings.get('IBLRIG_VERSION_TAG'):
-        settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
+    if settings is None or not settings.get('IBLRIG_VERSION'):
+        settings = {'IBLRIG_VERSION': '100.0.0'}
         # auto-detect old files when version is not labeled
         with open(path) as fid:
             line = fid.readline()
         if line.startswith('Position'):
-            settings = {'IBLRIG_VERSION_TAG': '0.0.0'}
+            settings = {'IBLRIG_VERSION': '0.0.0'}
     if not path:
         _logger.warning("No data loaded: could not find raw encoderPositions file")
         return None
-    if parse_version(settings['IBLRIG_VERSION_TAG']) >= parse_version('5.0.0'):
+    if version.parse(settings['IBLRIG_VERSION']) >= version.parse('5.0.0'):
         return _load_encoder_positions_file_ge5(path)
     else:
         return _load_encoder_positions_file_lt5(path)
@@ -955,11 +985,14 @@ def patch_settings(session_path, collection='raw_behavior_data',
                 )
 
     if new_collection:
-        old_path = settings['SESSION_RAW_DATA_FOLDER']
-        new_path = PureWindowsPath(settings['SESSION_RAW_DATA_FOLDER']).with_name(new_collection)
-        for k in settings.keys():
-            if isinstance(settings[k], str):
-                settings[k] = settings[k].replace(old_path, str(new_path))
+        if 'SESSION_RAW_DATA_FOLDER' not in settings:
+            _logger.warning('SESSION_RAW_DATA_FOLDER key not in settings; collection not updated')
+        else:
+            old_path = settings['SESSION_RAW_DATA_FOLDER']
+            new_path = PureWindowsPath(settings['SESSION_RAW_DATA_FOLDER']).with_name(new_collection)
+            for k in settings.keys():
+                if isinstance(settings[k], str):
+                    settings[k] = settings[k].replace(old_path, str(new_path))
     with open(file_path, 'w') as fp:
         json.dump(settings, fp, indent=' ')
     return settings

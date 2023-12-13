@@ -2,7 +2,7 @@
 import logging
 from pathlib import Path
 
-from pkg_resources import parse_version
+from packaging import version
 from one.webclient import no_cache
 from iblutil.util import flatten
 
@@ -121,9 +121,9 @@ class BehaviourTask(DynamicTask):
         bool
             True if task spacers are to be expected.
         """
-        v = parse_version
-        version = v(settings.get('IBLRIG_VERSION_TAG'))
-        return version not in (v('100.0.0'), v('8.0.0')) and version >= v('7.1.0')
+        v = version.parse
+        ver = v(settings.get('IBLRIG_VERSION') or '100.0.0')
+        return ver not in (v('100.0.0'), v('8.0.0')) and ver >= v('7.1.0')
 
 
 class VideoTask(DynamicTask):

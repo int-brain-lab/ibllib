@@ -222,7 +222,7 @@ class QC:
         """
         details = self.one.alyx.get(f'/{self.endpoint}/{self.eid}', clobber=True)
         extended_qc = details['json']['extended_qc'] if self.json else details['extended_qc']
-        return self.overall_outcome(v for k, v in extended_qc or {} if k[0] != '_')
+        return self.overall_outcome(v for k, v in extended_qc.items() or {} if k[0] != '_')
 
 
 def sign_off_dict(exp_dec, sign_off_categories=None):

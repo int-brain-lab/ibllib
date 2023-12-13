@@ -1,6 +1,6 @@
 import logging
 import numpy as np
-from pkg_resources import parse_version
+from packaging import version
 from one.alf.io import AlfBunch
 
 import ibllib.io.raw_data_loaders as raw
@@ -216,7 +216,7 @@ class FeedbackTimes(BaseBpodTrialsExtractor):
 
     def _extract(self):
         # Version check
-        if parse_version(self.settings['IBLRIG_VERSION_TAG']) >= parse_version('5.0.0'):
+        if version.parse(self.settings['IBLRIG_VERSION'] or '100.0.0') >= version.parse('5.0.0'):
             merge = self.get_feedback_times_ge5(self.session_path, task_collection=self.task_collection, data=self.bpod_trials)
         else:
             merge = self.get_feedback_times_lt5(self.session_path, task_collection=self.task_collection, data=self.bpod_trials)
@@ -287,7 +287,7 @@ class GoCueTriggerTimes(BaseBpodTrialsExtractor):
     var_names = 'goCueTrigger_times'
 
     def _extract(self):
-        if parse_version(self.settings['IBLRIG_VERSION_TAG']) >= parse_version('5.0.0'):
+        if version.parse(self.settings['IBLRIG_VERSION'] or '100.0.0') >= version.parse('5.0.0'):
             goCue = np.array([tr['behavior_data']['States timestamps']
                               ['play_tone'][0][0] for tr in self.bpod_trials])
         else:
@@ -361,7 +361,7 @@ class IncludedTrials(BaseBpodTrialsExtractor):
     var_names = 'included'
 
     def _extract(self):
-        if parse_version(self.settings['IBLRIG_VERSION_TAG']) >= parse_version('5.0.0'):
+        if version.parse(self.settings['IBLRIG_VERSION'] or '100.0.0') >= version.parse('5.0.0'):
             trials_included = self.get_included_trials_ge5(
                 data=self.bpod_trials, settings=self.settings)
         else:
@@ -370,7 +370,7 @@ class IncludedTrials(BaseBpodTrialsExtractor):
 
     @staticmethod
     def get_included_trials_lt5(data=False):
-        trials_included = np.array([True for t in data])
+        trials_included = np.ones(len(data), dtype=bool)
         return trials_included
 
     @staticmethod
@@ -387,7 +387,7 @@ class ItiInTimes(BaseBpodTrialsExtractor):
     var_names = 'itiIn_times'
 
     def _extract(self):
-        if parse_version(self.settings["IBLRIG_VERSION_TAG"]) < parse_version("5.0.0"):
+        if version.parse(self.settings["IBLRIG_VERSION"] or '100.0.0') < version.parse("5.0.0"):
             iti_in = np.ones(len(self.bpod_trials)) * np.nan
         else:
             iti_in = np.array(
@@ -416,7 +416,7 @@ class StimFreezeTriggerTimes(BaseBpodTrialsExtractor):
     var_names = 'stimFreezeTrigger_times'
 
     def _extract(self):
-        if parse_version(self.settings["IBLRIG_VERSION_TAG"]) < parse_version("6.2.5"):
+        if version.parse(self.settings["IBLRIG_VERSION"] or '100.0.0') < version.parse("6.2.5"):
             return np.ones(len(self.bpod_trials)) * np.nan
         freeze_reward = np.array(
             [
@@ -460,9 +460,9 @@ class StimOffTriggerTimes(BaseBpodTrialsExtractor):
     var_names = 'stimOffTrigger_times'
 
     def _extract(self):
-        if parse_version(self.settings["IBLRIG_VERSION_TAG"]) >= parse_version("6.2.5"):
+        if version.parse(self.settings["IBLRIG_VERSION"] or '100.0.0') >= version.parse("6.2.5"):
             stim_off_trigger_state = "hide_stim"
-        elif parse_version(self.settings["IBLRIG_VERSION_TAG"]) >= parse_version("5.0.0"):
+        elif version.parse(self.settings["IBLRIG_VERSION"]) >= version.parse("5.0.0"):
             stim_off_trigger_state = "exit_state"
         else:
             stim_off_trigger_state = "trial_start"
@@ -518,7 +518,7 @@ class StimOnTimes_deprecated(BaseBpodTrialsExtractor):
         # Version check
         _logger.warning("Deprecation Warning: this is an old version of stimOn extraction."
                         "From version 5., use StimOnOffFreezeTimes")
-        if parse_version(self.settings['IBLRIG_VERSION_TAG']) >= parse_version('5.0.0'):
+        if version.parse(self.settings['IBLRIG_VERSION'] or '100.0.0') >= version.parse('5.0.0'):
             stimOn_times = self.get_stimOn_times_ge5(self.session_path, data=self.bpod_trials,
                                                      task_collection=self.task_collection)
         else:
@@ -739,11 +739,11 @@ def extract_all(session_path, save=False, bpod_trials=None, settings=None, task_
         bpod_trials = raw.load_data(session_path, task_collection=task_collection)
     if not settings:
         settings = raw.load_settings(session_path, task_collection=task_collection)
-    if settings is None or settings['IBLRIG_VERSION_TAG'] == '':
-        settings = {'IBLRIG_VERSION_TAG': '100.0.0'}
+    if settings is None or settings['IBLRIG_VERSION'] == '':
+        settings = {'IBLRIG_VERSION': '100.0.0'}
 
     # Version check
-    if parse_version(settings['IBLRIG_VERSION_TAG']) >= parse_version('5.0.0'):
+    if version.parse(settings['IBLRIG_VERSION']) >= version.parse('5.0.0'):
         # We now extract a single trials table
         base = [TrainingTrials]
     else:

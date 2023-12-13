@@ -154,13 +154,12 @@ def _sync_to_alf(raw_ephys_apfile, output_path=None, save=False, parts=''):
     else:
         raw_ephys_apfile = Path(raw_ephys_apfile)
         sr = spikeglx.Reader(raw_ephys_apfile)
-    opened = sr.is_open
-    if not opened:  # if not (opened := sr.is_open)  # py3.8
+    if not (opened := sr.is_open):
         sr.open()
     # if no output, need a temp folder to swap for big files
     if not output_path:
         output_path = raw_ephys_apfile.parent
-    file_ftcp = Path(output_path).joinpath(f'fronts_times_channel_polarity{str(uuid.uuid4())}.bin')
+    file_ftcp = Path(output_path).joinpath(f'fronts_times_channel_polarity{uuid.uuid4()}.bin')
 
     # loop over chunks of the raw ephys file
     wg = neurodsp.utils.WindowGenerator(sr.ns, int(SYNC_BATCH_SIZE_SECS * sr.fs), overlap=1)
@@ -188,62 +187,6 @@ def _sync_to_alf(raw_ephys_apfile, output_path=None, save=False, parts=''):
         return Bunch(sync), out_files
     else:
         return Bunch(sync)
-
-
-def _assign_events_bpod(bpod_t, bpod_polarities, ignore_first_valve=True):
-    """
-    From detected fronts on the bpod sync traces, outputs the synchronisation events
-    related to trial start and valve opening
-    :param bpod_t: numpy vector containing times of fronts
-    :param bpod_fronts: numpy vector containing polarity of fronts (1 rise, -1 fall)
-    :param ignore_first_valve (True): removes detected valve events at indices le 2
-    :return: numpy arrays of times t_trial_start, t_valve_open and t_iti_in
-
-    TODO Remove function (now using FpgaTrials._assign_events)
-    """
-    TRIAL_START_TTL_LEN = 2.33e-4  # the TTL length is 0.1ms but this has proven to drift on
-    # some bpods and this is the highest possible value that discriminates trial start from valve
-    ITI_TTL_LEN = 0.4
-    # make sure that there are no 2 consecutive fall or consecutive rise events
-    assert np.all(np.abs(np.diff(bpod_polarities)) == 2)
-    if bpod_polarities[0] == -1:
-        bpod_t = np.delete(bpod_t, 0)
-    # take only even time differences: ie. from rising to falling fronts
-    dt = np.diff(bpod_t)[::2]
-    # detect start trials event assuming length is 0.23 ms except the first trial
-    i_trial_start = np.r_[0, np.where(dt <= TRIAL_START_TTL_LEN)[0] * 2]
-    t_trial_start = bpod_t[i_trial_start]
-    # the last trial is a dud and should be removed
-    t_trial_start = t_trial_start[:-1]
-    # valve open events are between 50ms to 300 ms
-    i_valve_open = np.where(np.logical_and(dt > TRIAL_START_TTL_LEN,
-                                           dt < ITI_TTL_LEN))[0] * 2
-    if ignore_first_valve:
-        i_valve_open = np.delete(i_valve_open, np.where(i_valve_open < 2))
-    t_valve_open = bpod_t[i_valve_open]
-    # ITI events are above 400 ms
-    i_iti_in = np.where(dt > ITI_TTL_LEN)[0] * 2
-    i_iti_in = np.delete(i_iti_in, np.where(i_valve_open < 2))
-    t_iti_in = bpod_t[i_iti_in]
-    ## some debug plots when needed
-    # import matplotlib.pyplot as plt
-    # import ibllib.plots as plots
-    # events = {'id': np.zeros(bpod_t.shape), 't': bpod_t, 'p': bpod_polarities}
-    # events['id'][i_trial_start] = 1
-    # events['id'][i_valve_open] = 2
-    # events['id'][i_iti_in] = 3
-    # i_abnormal = np.where(np.diff(events['id'][bpod_polarities != -1]) == 0)
-    # t_abnormal = events['t'][bpod_polarities != -1][i_abnormal]
-    # assert np.all(events != 0)
-    # plt.figure()
-    # plots.squares(bpod_t, bpod_polarities, label='raw fronts')
-    # plots.vertical_lines(t_trial_start, ymin=-0.2, ymax=1.1, linewidth=0.5, label='trial start')
-    # plots.vertical_lines(t_valve_open, ymin=-0.2, ymax=1.1, linewidth=0.5, label='valve open')
-    # plots.vertical_lines(t_iti_in, ymin=-0.2, ymax=1.1, linewidth=0.5, label='iti_in')
-    # plt.plot(t_abnormal, t_abnormal * 0 + .5, 'k*')
-    # plt.legend()
-
-    return t_trial_start, t_valve_open, t_iti_in
 
 
 def _rotary_encoder_positions_from_fronts(ta, pa, tb, pb, ticks=WHEEL_TICKS, radius=WHEEL_RADIUS_CM, coding='x4'):
@@ -288,42 +231,6 @@ def _rotary_encoder_positions_from_fronts(ta, pa, tb, pb, ticks=WHEEL_TICKS, rad
         p = p[ordre]
         p = - np.cumsum(p) / ticks * np.pi * 2 * radius / 4
         return t, p
-
-
-def _assign_events_audio(audio_t, audio_polarities, return_indices=False, display=False):
-    """
-    From detected fronts on the audio sync traces, outputs the synchronisation events
-    related to tone in
-
-    :param audio_t: numpy vector containing times of fronts
-    :param audio_fronts: numpy vector containing polarity of fronts (1 rise, -1 fall)
-    :param return_indices (False): returns indices of tones
-    :param display (False): for debug mode, displays the raw fronts overlaid with detections
-    :return: numpy arrays t_ready_tone_in, t_error_tone_in
-    :return: numpy arrays ind_ready_tone_in, ind_error_tone_in if return_indices=True
-
-    TODO Remove function (now using FpgaTrials._assign_events)
-    """
-    # make sure that there are no 2 consecutive fall or consecutive rise events
-    assert np.all(np.abs(np.diff(audio_polarities)) == 2)
-    # take only even time differences: ie. from rising to falling fronts
-    dt = np.diff(audio_t)
-    # detect ready tone by length below 110 ms
-    i_ready_tone_in = np.where(np.logical_and(dt <= 0.11, audio_polarities[:-1] == 1))[0]
-    t_ready_tone_in = audio_t[i_ready_tone_in]
-    # error tones are events lasting from 400ms to 1200ms
-    i_error_tone_in = np.where(np.logical_and(np.logical_and(0.4 < dt, dt < 1.2), audio_polarities[:-1] == 1))[0]
-    t_error_tone_in = audio_t[i_error_tone_in]
-    if display:  # pragma: no cover
-        from ibllib.plots import squares, vertical_lines
-        squares(audio_t, audio_polarities, yrange=[-1, 1],)
-        vertical_lines(t_ready_tone_in, ymin=-.8, ymax=.8)
-        vertical_lines(t_error_tone_in, ymin=-.8, ymax=.8)
-
-    if return_indices:
-        return t_ready_tone_in, t_error_tone_in, i_ready_tone_in, i_error_tone_in
-    else:
-        return t_ready_tone_in, t_error_tone_in
 
 
 def _assign_events_to_trial(t_trial_start, t_event, take='last'):
@@ -513,126 +420,6 @@ def extract_wheel_sync(sync, chmap=None, tmin=None, tmax=None):
         channela['times'], channela['polarities'], channelb['times'], channelb['polarities'],
         ticks=WHEEL_TICKS, radius=WHEEL_RADIUS_CM, coding='x4')
     return re_ts, re_pos
-
-
-def extract_behaviour_sync(sync, chmap, display=False, bpod_trials=None, tmin=None, tmax=None):
-    """
-    Extract task related event times from the sync.
-
-    Parameters
-    ----------
-    sync : dict
-        'polarities' of fronts detected on sync trace for all 16 chans and their 'times'
-    chmap : dict
-        Map of channel names and their corresponding index.  Default to constant.
-    display : bool, matplotlib.pyplot.Axes
-        Show the full session sync pulses display
-    bpod_trials : dict
-        The same trial events as recorded through Bpod. Assumed to contain an 'intervals_bpod' key.
-    tmin : float
-        The minimum time from which to extract the sync pulses.
-    tmax : float
-        The maximum time up to which we extract the sync pulses.
-
-    Returns
-    -------
-    dict
-        A map of trial event timestamps.
-
-    TODO Remove this function (now using FpgaTrials.extract_behaviour_sync)
-    """
-    bpod = get_sync_fronts(sync, chmap['bpod'], tmin=tmin, tmax=tmax)
-    if bpod.times.size == 0:
-        raise err.SyncBpodFpgaException('No Bpod event found in FPGA. No behaviour extraction. '
-                                        'Check channel maps.')
-    frame2ttl = get_sync_fronts(sync, chmap['frame2ttl'], tmin=tmin, tmax=tmax)
-    frame2ttl = _clean_frame2ttl(frame2ttl)
-    audio = get_sync_fronts(sync, chmap['audio'], tmin=tmin, tmax=tmax)
-    audio = _clean_audio(audio)
-    # extract events from the fronts for each trace
-    t_trial_start, t_valve_open, t_iti_in = _assign_events_bpod(bpod['times'], bpod['polarities'])
-    if not bpod_trials:
-        raise ValueError('No Bpod trials to align')
-    intervals_bpod = bpod_trials['intervals']
-    # If there are no detected trial start times or more than double the trial end pulses,
-    # the trial start pulses may be too small to be detected, in which case, sync using the ini_in
-    if t_trial_start.size == 0 or (t_trial_start.size / t_iti_in.size) < .5:
-        _logger.info('Attempting to align on ITI in')
-        assert t_iti_in.size > 0, 'no detected ITI in TTLs on the DAQ to align'
-        bpod_end = bpod_trials['itiIn_times']
-        fcn, drift = neurodsp.utils.sync_timestamps(bpod_end, t_iti_in)
-        # if it's drifting too much
-        if drift > 200 and bpod_end.size != t_iti_in.size:
-            raise err.SyncBpodFpgaException('sync cluster f*ck')
-        t_trial_start = fcn(intervals_bpod[:, 0])
-    else:
-        # one issue is that sometimes bpod pulses may not have been detected, in this case
-        # perform the sync bpod/FPGA, and add the start that have not been detected
-        _logger.info('Attempting to align on trial start')
-        bpod_start = intervals_bpod[:, 0]
-        fcn, drift, ibpod, ifpga = neurodsp.utils.sync_timestamps(
-            bpod_start, t_trial_start, return_indices=True)
-        # if it's drifting too much
-        if drift > 200 and bpod_start.size != t_trial_start.size:
-            raise err.SyncBpodFpgaException('sync cluster f*ck')
-        missing_bpod = fcn(bpod_start[np.setxor1d(ibpod, np.arange(len(bpod_start)))])
-        t_trial_start = np.sort(np.r_[t_trial_start, missing_bpod])
-
-    t_ready_tone_in, t_error_tone_in = _assign_events_audio(audio['times'], audio['polarities'])
-    trials = Bunch({
-        'goCue_times': _assign_events_to_trial(t_trial_start, t_ready_tone_in, take='first'),
-        'errorCue_times': _assign_events_to_trial(t_trial_start, t_error_tone_in),
-        'valveOpen_times': _assign_events_to_trial(t_trial_start, t_valve_open),
-        'stimFreeze_times': _assign_events_to_trial(t_trial_start, frame2ttl['times'], take=-2),
-        'stimOn_times': _assign_events_to_trial(t_trial_start, frame2ttl['times'], take='first'),
-        'stimOff_times': _assign_events_to_trial(t_trial_start, frame2ttl['times']),
-        'itiIn_times': _assign_events_to_trial(t_trial_start, t_iti_in)
-    })
-    # feedback times are valve open on good trials and error tone in on error trials
-    trials['feedback_times'] = np.copy(trials['valveOpen_times'])
-    ind_err = np.isnan(trials['valveOpen_times'])
-    trials['feedback_times'][ind_err] = trials['errorCue_times'][ind_err]
-    trials['intervals'] = np.c_[t_trial_start, trials['itiIn_times']]
-
-    if display:  # pragma: no cover
-        width = 0.5
-        ymax = 5
-        if isinstance(display, bool):
-            plt.figure("Ephys FPGA Sync")
-            ax = plt.gca()
-        else:
-            ax = display
-        r0 = get_sync_fronts(sync, chmap['rotary_encoder_0'], tmin=tmin, tmax=tmax)
-        plots.squares(bpod['times'], bpod['polarities'] * 0.4 + 1, ax=ax, color='k')
-        plots.squares(frame2ttl['times'], frame2ttl['polarities'] * 0.4 + 2, ax=ax, color='k')
-        plots.squares(audio['times'], audio['polarities'] * 0.4 + 3, ax=ax, color='k')
-        plots.squares(r0['times'], r0['polarities'] * 0.4 + 4, ax=ax, color='k')
-        plots.vertical_lines(t_ready_tone_in, ymin=0, ymax=ymax,
-                             ax=ax, label='goCue_times', color='b', linewidth=width)
-        plots.vertical_lines(t_trial_start, ymin=0, ymax=ymax,
-                             ax=ax, label='start_trial', color='m', linewidth=width)
-        plots.vertical_lines(t_error_tone_in, ymin=0, ymax=ymax,
-                             ax=ax, label='error tone', color='r', linewidth=width)
-        plots.vertical_lines(t_valve_open, ymin=0, ymax=ymax,
-                             ax=ax, label='valveOpen_times', color='g', linewidth=width)
-        plots.vertical_lines(trials['stimFreeze_times'], ymin=0, ymax=ymax,
-                             ax=ax, label='stimFreeze_times', color='y', linewidth=width)
-        plots.vertical_lines(trials['stimOff_times'], ymin=0, ymax=ymax,
-                             ax=ax, label='stim off', color='c', linewidth=width)
-        plots.vertical_lines(trials['stimOn_times'], ymin=0, ymax=ymax,
-                             ax=ax, label='stimOn_times', color='tab:orange', linewidth=width)
-        c = get_sync_fronts(sync, chmap['left_camera'], tmin=tmin, tmax=tmax)
-        plots.squares(c['times'], c['polarities'] * 0.4 + 5, ax=ax, color='k')
-        c = get_sync_fronts(sync, chmap['right_camera'], tmin=tmin, tmax=tmax)
-        plots.squares(c['times'], c['polarities'] * 0.4 + 6, ax=ax, color='k')
-        c = get_sync_fronts(sync, chmap['body_camera'], tmin=tmin, tmax=tmax)
-        plots.squares(c['times'], c['polarities'] * 0.4 + 7, ax=ax, color='k')
-        ax.legend()
-        ax.set_yticklabels(['', 'bpod', 'f2ttl', 'audio', 're_0', ''])
-        ax.set_yticks([0, 1, 2, 3, 4, 5])
-        ax.set_ylim([0, 5])
-
-    return trials, frame2ttl, audio, bpod
 
 
 def extract_sync(session_path, overwrite=False, ephys_files=None, namespace='spikeglx'):
@@ -1038,13 +825,28 @@ class FpgaTrials(extractors_base.BaseExtractor):
                     'therefore not be extracted. This is likely in error.')
             table_columns = None
 
+        bpod = get_sync_fronts(sync, chmap['bpod'])
         # Get the spacer times for this protocol
         if any(arg in kwargs for arg in ('tmin', 'tmax')):
             tmin, tmax = kwargs.get('tmin'), kwargs.get('tmax')
         elif (protocol_number := kwargs.get('protocol_number')) is not None:  # look for spacer
             tmin, tmax = get_protocol_period(self.session_path, protocol_number, sync, chmap)
         else:
-            tmin = tmax = None
+            # Older sessions don't have protocol spacers so we sync the Bpod intervals here to
+            # find the approximate end time of the protocol (this will exclude the passive signals
+            # in ephysChoiceWorld that tend to ruin the final trial extraction).
+            _, trial_ints = self.get_bpod_event_times(sync, chmap, **kwargs)
+            t_trial_start = trial_ints.get('trial_start', np.array([[np.nan, np.nan]]))[:, 0]
+            bpod_start = self.bpod_trials['intervals'][:, 0]
+            if len(t_trial_start) > len(bpod_start) / 2:  # if least half the trial start TTLs detected
+                _logger.warning('Attempting to get protocol period from aligning trial start TTLs')
+                fcn, *_ = neurodsp.utils.sync_timestamps(bpod_start, t_trial_start)
+                buffer = 2.5  # the number of seconds to include before/after task
+                start, end = fcn(self.bpod_trials['intervals'].flat[[0, -1]])
+                tmin = min(sync['times'][0], start - buffer)
+                tmax = max(sync['times'][-1], end + buffer)
+            else:  # This type of alignment fails for some sessions, e.g. mesoscope
+                tmin = tmax = None
 
         # Remove unnecessary data from sync
         selection = np.logical_and(

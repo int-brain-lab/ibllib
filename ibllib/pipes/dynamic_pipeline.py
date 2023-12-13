@@ -94,7 +94,7 @@ def get_acquisition_description(protocol):
     else:
         devices = {
             'cameras': {
-                'left': {'collection': 'raw_video_data', 'sync_label': 'frame2ttl'},
+                'left': {'collection': 'raw_video_data', 'sync_label': 'audio'},
             },
             'microphone': {
                 'microphone': {'collection': 'raw_behavior_data', 'sync_label': None}
@@ -102,9 +102,7 @@ def get_acquisition_description(protocol):
         }
         acquisition_description = {  # this is the current ephys pipeline description
             'devices': devices,
-            'sync': {
-                'bpod': {'collection': 'raw_behavior_data', 'extension': 'bin'}
-            },
+            'sync': {'bpod': {'collection': 'raw_behavior_data'}},
             'procedures': ['Behavior training/tasks'],
             'projects': ['ibl_neuropixel_brainwide_01']
         }
@@ -158,7 +156,7 @@ def make_pipeline(session_path, **pkwargs):
     # Syncing tasks
     (sync, sync_args), = acquisition_description['sync'].items()
     sync_args['sync_collection'] = sync_args.pop('collection')  # rename the key so it matches task run arguments
-    sync_args['sync_ext'] = sync_args.pop('extension')
+    sync_args['sync_ext'] = sync_args.pop('extension', None)
     sync_args['sync_namespace'] = sync_args.pop('acquisition_software', None)
     sync_kwargs = {'sync': sync, **sync_args}
     sync_tasks = []

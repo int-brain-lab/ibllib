@@ -1,4 +1,74 @@
-"""The abstract Pipeline and Task superclasses and concrete task runner."""
+"""The abstract Pipeline and Task superclasses and concrete task runner.
+
+Examples
+--------
+
+1. Running a task on your local computer.
+|  Download: via ONE.
+|  Upload: N/A.
+
+>>> task = VideoSyncQcBpod(session_path, one=one, location='remote', sync='bpod')
+>>> task.run()
+
+2. Running a task on the local server that belongs to a given subject (e.g SWC054 on floferlab).
+|  Download: all data expected to be present.
+|  Upload: normal way of registering datasets, filerecords created and bulk sync, bulk transfer
+   jobs on Alyx transfer the data.
+
+>>> from ibllib.pipes.video_tasks import VideoSyncQcBpod
+>>> session_path = '/mnt/ibl/s0/Data/Subjects/SWC054/2023-01-01/001'
+>>> task = VideoSyncQcBpod(session_path, one=one, sync='bpod')
+>>> task.run()
+>>> task.register_datasets(one=one, labs=get_lab(session_path, alyx=ONE().alyx))
+
+3. Running a task on the local server that belongs to that subject and forcing redownload of
+missing data.
+|  Download: via Globus (TODO we should change this to use boto3 as globus is slow).
+|  Upload: normal way of registering datasets, filerecords created and bulk sync, bulk transfer
+   jobs on Alyx transfer the data.
+
+>>> task = VideoSyncQcBpod(session_path, one=one, sync='bpod')
+>>> task.force = True
+>>> task.run()
+>>> task.register_datasets(one=one, labs=get_lab(session_path, alyx=ONE().alyx))
+>>> task.cleanUp()  # Delete the files that have been downloaded
+
+4. Running a task on the local server that doesn't belongs to that subject
+(e.g SWC054 on angelakilab).
+|  Download: via boto3, the AWS file records must exist and be set to exists = True.
+|  Upload: via globus, automatically uploads the datasets directly to FlatIron via globus.
+   Creates FlatIron filerecords and sets these to True once the globus task has completed.
+
+>>> task = VideoSyncQcBpod(session_path, one=one, location='AWS', sync='bpod')
+>>> task.run()
+>>> task.register_datasets()
+>>> task.cleanUp()  # Delete the files that have been downloaded
+
+5. Running a task on SDSC.
+|  Download: via creating symlink to relevant datasets on SDSC.
+|  Upload: via copying files to relevant location on SDSC.
+
+>>> task = VideoSyncQcBpod(session_path, one=one, location='SDSC', sync='bpod')
+>>> task.run()
+>>> response = task.register_datasets()
+>>> # Here we just make sure filerecords are all correct
+>>> for resp in response:
+...    fi = next((fr for fr in resp['file_records'] if 'flatiron' in fr['data_repository']), None)
+...    if fi is not None:
+...        if not fi['exists']:
+...            one.alyx.rest('files', 'partial_update', id=fi['id'], data={'exists': True})
+...
+...     aws = next((fr for fr in resp['file_records'] if 'aws' in fr['data_repository']), None)
+...     if aws is not None:
+...         one.alyx.rest('files', 'partial_update', id=aws['id'], data={'exists': False})
+...
+...     sr = next((fr for fr in resp['file_records'] if 'SR' in fr['data_repository']), None)
+...     if sr is not None:
+...         one.alyx.rest('files', 'partial_update', id=sr['id'], data={'exists': False})
+... # Finally remove symlinks once the task has completed
+... task.cleanUp()
+
+"""
 from pathlib import Path
 import abc
 import logging
