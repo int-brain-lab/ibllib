@@ -55,15 +55,15 @@ class TestTracingQc(unittest.TestCase):
                        channels=False, brain_atlas=brain_atlas)
         insertion = one.alyx.get('/insertions/' + self.probe00_id, clobber=True)
 
-        assert (insertion['json']['qc'] == 'NOT_SET')
-        assert (insertion['json']['extended_qc']['tracing_exists'] == 1)
+        self.assertEqual(insertion['json']['qc'], 'NOT_SET')
+        self.assertEqual(insertion['json']['extended_qc']['tracing_exists'], 1)
 
     def test_tracing_not_exists(self):
         register_track(self.probe01_id, picks=None, one=one, overwrite=True,
                        channels=False, brain_atlas=brain_atlas)
         insertion = one.alyx.get('/insertions/' + self.probe01_id, clobber=True)
-        assert (insertion['json']['qc'] == 'CRITICAL')
-        assert (insertion['json']['extended_qc']['tracing_exists'] == 0)
+        self.assertEqual(insertion['json']['qc'], 'CRITICAL')
+        self.assertEqual(insertion['json']['extended_qc']['tracing_exists'], 0)
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -106,24 +106,24 @@ class TestChronicTracingQC(unittest.TestCase):
                                channels=False, brain_atlas=brain_atlas)
         insertion = one.alyx.get('/insertions/' + self.probe_id, clobber=True)
 
-        assert (insertion['json']['qc'] == 'NOT_SET')
-        assert (insertion['json']['extended_qc']['tracing_exists'] == 1)
+        self.assertEqual(insertion['json']['qc'], 'NOT_SET')
+        self.assertEqual(insertion['json']['extended_qc']['tracing_exists'], 1)
 
         insertion = one.alyx.get('/chronic-insertions/' + self.chronic_id, clobber=True)
 
-        assert (insertion['json']['qc'] == 'NOT_SET')
-        assert (insertion['json']['extended_qc']['tracing_exists'] == 1)
+        self.assertEqual(insertion['json']['qc'], 'NOT_SET')
+        self.assertEqual(insertion['json']['extended_qc']['tracing_exists'], 1)
 
     def test_tracing_not_exists(self):
         register_chronic_track(self.chronic_id, picks=None, one=one, overwrite=True,
                                channels=False, brain_atlas=brain_atlas)
         insertion = one.alyx.get('/insertions/' + self.probe_id, clobber=True)
-        assert (insertion['json']['qc'] == 'CRITICAL')
-        assert (insertion['json']['extended_qc']['tracing_exists'] == 0)
+        self.assertEqual(insertion['json']['qc'], 'CRITICAL')
+        self.assertEqual(insertion['json']['extended_qc']['tracing_exists'], 0)
 
         insertion = one.alyx.get('/chronic-insertions/' + self.chronic_id, clobber=True)
-        assert (insertion['json']['qc'] == 'CRITICAL')
-        assert (insertion['json']['extended_qc']['tracing_exists'] == 0)
+        self.assertEqual(insertion['json']['qc'], 'CRITICAL')
+        self.assertEqual(insertion['json']['extended_qc']['tracing_exists'], 0)
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -135,6 +135,10 @@ class TestChronicTracingQC(unittest.TestCase):
 class TestAlignmentQcExisting(unittest.TestCase):
     probe_id = None
     prev_traj_id = None
+    eid = None
+    alignments = None
+    xyz_picks = None
+    trajectory = None
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -254,6 +258,10 @@ class TestAlignmentQcExisting(unittest.TestCase):
 class TestAlignmentQcManual(unittest.TestCase):
     probe_id = None
     prev_traj_id = None
+    eid = None
+    alignments = None
+    xyz_picks = None
+    trajectory = None
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -390,6 +398,9 @@ def _verify(tc, alignment_resolved=None, alignment_count=None,
 
 class TestUploadToFlatIron(unittest.TestCase):
     probe_id = None
+    alignments = None
+    xyz_picks = None
+    trajectory = None
 
     @unittest.skip("Skip FTP upload test")
     @classmethod
@@ -425,7 +436,7 @@ class TestUploadToFlatIron(unittest.TestCase):
         print(cls.file_paths)
 
     def test_data_content(self):
-        alf_path = one.path_from_eid(EPHYS_SESSION).joinpath('alf', self.probe_name)
+        alf_path = one.eid2path(EPHYS_SESSION).joinpath('alf', self.probe_name)
         channels_mlapdv = np.load(alf_path.joinpath('channels.mlapdv.npy'))
         self.assertTrue(np.all(np.abs(channels_mlapdv) > 0))
         channels_id = np.load(alf_path.joinpath('channels.brainLocationIds_ccf_2017.npy'))
@@ -444,5 +455,5 @@ class TestUploadToFlatIron(unittest.TestCase):
         one.alyx.rest('insertions', 'delete', id=cls.probe_id)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main(exit=False, verbosity=2)

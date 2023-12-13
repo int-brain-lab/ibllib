@@ -1,18 +1,30 @@
 import unittest
 from unittest import mock
+import random
 
 import numpy as np
 
+from ibllib.tests import TEST_DB
 from ibllib.qc.base import QC
 from one.api import ONE
-from ibllib.tests import TEST_DB
+from one.registration import RegistrationClient
 
 one = ONE(**TEST_DB)
 
 
 class TestQC(unittest.TestCase):
+    """Test base QC class."""
+
+    eid = None
+    """str: An experiment UUID to use for updating QC fields."""
+
+    @classmethod
+    def setUpClass(cls):
+        date = f'20{random.randint(0, 30):02}-{random.randint(1, 12):02}-{random.randint(1, 28):02}'
+        _, eid = RegistrationClient(one).create_new_session('ZM_1150', date=date)
+        cls.eid = str(eid)
+
     def setUp(self) -> None:
-        self.eid = 'b1c968ad-4874-468d-b2e4-5ffa9b9964e9'
         ses = one.alyx.rest('sessions', 'partial_update', id=self.eid, data={'qc': 'NOT_SET'})
         assert ses['qc'] == 'NOT_SET', 'failed to reset qc field for test'
         extended = one.alyx.json_field_write('sessions', field_name='extended_qc',
@@ -94,7 +106,7 @@ class TestQC(unittest.TestCase):
             self.qc.update('%INVALID%')
 
     def test_extended_qc(self) -> None:
-        """Test that the extended_qc JSON field is correctly updated"""
+        """Test that the extended_qc JSON field is correctly updated."""
         current = one.alyx.rest('sessions', 'read', id=self.eid)['extended_qc']
         data = {'_qc_test_foo': np.random.rand(), '_qc_test_bar': np.random.rand()}
         updated = self.qc.update_extended_qc(data)
@@ -134,6 +146,10 @@ class TestQC(unittest.TestCase):
             self.assertEqual(self.qc.compute_outcome_from_extended_qc(), 'FAIL')
             self.qc.json = True
             self.assertEqual(self.qc.compute_outcome_from_extended_qc(), 'WARNING')
+
+    @classmethod
+    def tearDownClass(cls):
+        one.alyx.rest('sessions', 'delete', id=cls.eid)
 
 
 if __name__ == '__main__':

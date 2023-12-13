@@ -15,6 +15,7 @@
 - Improvements to Timeline trials extractor, especially for valve open times
 - trainingPhaseChoiceWorld added to Bpod protocol extractor map fixture
 - Last trial of FPGA sessions now correctly extracted
+- Correct dynamic pipeline extraction of passive choice world trials
 
 ### other
 - Removed deprecated pyschofit module
