@@ -267,6 +267,7 @@ class TestRegistrationEndpoint(unittest.TestCase):
 class TestRegistration(unittest.TestCase):
 
     def setUp(self) -> None:
+        rng = np.random.default_rng()
         self.one = ONE(**TEST_DB, cache_rest=None)
         # makes sure tests start without session created
         eid = self.one.search(subject=SUBJECT, date_range='2018-04-01', query_type='remote')
@@ -292,7 +293,7 @@ class TestRegistration(unittest.TestCase):
         except HTTPError:
             self.rev = self.one.alyx.rest('revisions', 'create', data={'name': self.revision})
         # Create a new tag
-        tag_data = {'name': f'test_tag_{np.random.randint(0, 1e3)}', 'protected': True}
+        tag_data = {'name': f'test_tag_{rng.integers(0, 1e3)}', 'protected': True}
         self.tag = self.one.alyx.rest('tags', 'create', data=tag_data)
 
     def test_registration_datasets(self):
