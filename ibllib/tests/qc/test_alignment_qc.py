@@ -34,9 +34,10 @@ class TestTracingQc(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
+        rng = np.random.default_rng()
         probe = [''.join(random.choices(string.ascii_letters, k=5)),
                  ''.join(random.choices(string.ascii_letters, k=5))]
-        date = str(datetime.date(2019, np.random.randint(1, 12), np.random.randint(1, 28)))
+        date = str(datetime.date(2019, rng.integers(1, 12), rng.integers(1, 28)))
         _, eid = RegistrationClient(one).create_new_session('ZM_1150', date=date)
         cls.eid = str(eid)
         # Currently the task protocol of a session must contain 'ephys' in order to create an insertion!
@@ -74,11 +75,12 @@ class TestTracingQc(unittest.TestCase):
 class TestChronicTracingQC(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
+        rng = np.random.default_rng()
         probe = ''.join(random.choices(string.ascii_letters, k=5))
         serial = ''.join(random.choices(string.ascii_letters, k=10))
 
         # Make a chronic insertions
-        date = str(datetime.date(2019, np.random.randint(1, 12), np.random.randint(1, 28)))
+        date = str(datetime.date(2019, rng.integers(1, 12), rng.integers(1, 28)))
         _, eid = RegistrationClient(one).create_new_session('ZM_1150', date=date)
         cls.eid = str(eid)
         # Currently the task protocol of a session must contain 'ephys' in order to create an insertion!
@@ -136,6 +138,7 @@ class TestAlignmentQcExisting(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
+        rng = np.random.default_rng()
         data = np.load(Path(Path(__file__).parent.parent.
                             joinpath('fixtures', 'qc', 'data_alignmentqc_existing.npz')),
                        allow_pickle=True)
@@ -148,7 +151,7 @@ class TestAlignmentQcExisting(unittest.TestCase):
         insertion = data['insertion'].tolist()
         insertion['name'] = ''.join(random.choices(string.ascii_letters, k=5))
         insertion['json'] = {'xyz_picks': cls.xyz_picks}
-        date = str(datetime.date(2019, np.random.randint(1, 12), np.random.randint(1, 28)))
+        date = str(datetime.date(2019, rng.integers(1, 12), rng.integers(1, 28)))
         _, eid = RegistrationClient(one).create_new_session('ZM_1150', date=date)
         cls.eid = str(eid)
         # Currently the task protocol of a session must contain 'ephys' in order to create an insertion!
@@ -254,6 +257,7 @@ class TestAlignmentQcManual(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
+        rng = np.random.default_rng()
         data = np.load(Path(Path(__file__).parent.parent.
                             joinpath('fixtures', 'qc', 'data_alignmentqc_manual.npz')),
                        allow_pickle=True)
@@ -268,7 +272,7 @@ class TestAlignmentQcManual(unittest.TestCase):
         insertion['name'] = ''.join(random.choices(string.ascii_letters, k=5))
         insertion['json'] = {'xyz_picks': cls.xyz_picks}
 
-        date = str(datetime.date(2018, np.random.randint(1, 12), np.random.randint(1, 28)))
+        date = str(datetime.date(2018, rng.integers(1, 12), rng.integers(1, 28)))
         _, eid = RegistrationClient(one).create_new_session('ZM_1150', date=date)
         cls.eid = str(eid)
         insertion['session'] = cls.eid

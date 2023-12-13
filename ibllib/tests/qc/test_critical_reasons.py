@@ -28,10 +28,11 @@ def mock_input(prompt):
 class TestUserPmtSess(unittest.TestCase):
 
     def setUp(self) -> None:
+        rng = np.random.default_rng()
         # Make sure tests use correct session ID
         one.alyx.clear_rest_cache()
         # Create new session on database with a random date to avoid race conditions
-        date = str(datetime.date(2022, np.random.randint(1, 12), np.random.randint(1, 28)))
+        date = str(datetime.date(2022, rng.integers(1, 12), rng.integers(1, 28)))
         from one.registration import RegistrationClient
         _, eid = RegistrationClient(one).create_new_session('ZM_1150', date=date)
         eid = str(eid)
