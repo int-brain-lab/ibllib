@@ -272,9 +272,6 @@ class TestRegistration(unittest.TestCase):
         }
 
         # makes sure tests start without session created
-        eid = self.one.search(subject=self.subject, date_range='2018-04-01', query_type='remote')
-        for ei in eid:
-            self.one.alyx.rest('sessions', 'delete', id=ei)
         self.td = tempfile.TemporaryDirectory()
         self.session_path = Path(self.td.name).joinpath(self.subject, '2018-04-01', '002')
         self.alf_path = self.session_path.joinpath('alf')
@@ -506,12 +503,14 @@ class TestRegistration(unittest.TestCase):
         # Delete weighings
         for w in self.one.alyx.rest('subjects', 'read', id=self.subject)['weighings']:
             self.one.alyx.rest('weighings', 'delete', id=w['url'].split('/')[-1])
+        # Delete sessions
+        eid = self.one.search(subject=self.subject, date_range='2018-04-01', query_type='remote')
+        for ei in eid:
+            self.one.alyx.rest('sessions', 'delete', id=ei)
 
     @classmethod
     def tearDownClass(cls) -> None:
-        # Note: datasets deleted in cascade
-        for ses in cls.one.alyx.rest('sessions', 'list', subject=cls.subject, no_cache=True):
-            cls.one.alyx.rest('sessions', 'delete', id=ses['url'][-36:])
+        # Note: sessions and datasets deleted in cascade
         cls.one.alyx.rest('subjects', 'delete', id=cls.subject)
 
 
