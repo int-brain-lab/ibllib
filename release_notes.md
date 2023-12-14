@@ -16,6 +16,9 @@
 - trainingPhaseChoiceWorld added to Bpod protocol extractor map fixture
 - Last trial of FPGA sessions now correctly extracted
 - Correct dynamic pipeline extraction of passive choice world trials
+#### 2.27.1
+- Correct handling of missing TTLs in FpgaTrialsHabituation
+
 
 ### other
 - Removed deprecated pyschofit module
