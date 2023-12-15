@@ -38,6 +38,7 @@ DEVICE_FLAG_MAP = {'neuropixel': 'ephys',
 
 def subjects_data_folder(folder: Path, rglob: bool = False) -> Path:
     """Given a root_data_folder will try to find a 'Subjects' data folder.
+
     If Subjects folder is passed will return it directly."""
     if not isinstance(folder, Path):
         folder = Path(folder)
