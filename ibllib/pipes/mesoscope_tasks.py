@@ -1128,23 +1128,36 @@ class MesoscopePMDCompress(base_tasks.DynamicTask):
 
     def _run(self):
 
-        bin_files = list(self.session_path.joinpath("raw_bin_files").glob("FOV*/data.bin"))
+        bin_files = sorted(list(self.session_path.joinpath("raw_bin_files").glob("FOV*/data.bin")))
         out_files = []
 
         for bin_file in bin_files:
 
             FOV = str(bin_file.parent)[-2:]
 
-            pmdz = self.session_path.joinpath(f"alf/FOV{FOV}/PMD.npz")
-            triptych = self.session_path.joinpath(f"alf/FOV{FOV}/mpci.pmdTriptych.tiff")
+            alf_path = self.session_path.joinpath(f"alf/FOV_{FOV}")
+
+            pmdz = alf_path.joinpath("PMD.npz")
+            triptych = alf_path.joinpath("mpci.pmdTriptych.tiff")
 
             if pmdz.exists() and triptych.exists():
                 _logger.info(f"Output files found, skipping:\n{pmdz}\n{triptych}")
                 return
 
+	    # get ops file
+            suite2p_file = alf_path.joinpath("_suite2p_ROIData.raw.zip")
+            s2p = np.load(suite2p_file, allow_pickle=True)
+            try:
+                ops = s2p['ops'].item()
+            finally:
+                s2p.close()
+
+            ops_path = alf_path.joinpath("ops.npy")
+            np.save(ops_path, ops)
+
             # set up subprocess to run main script in iblscripts
             command = f"""
-            {self.SHELL_SCRIPT} {self.session_path} {int(FOV)} {self.block_height} {self.block_width}
+            {self.SHELL_SCRIPT} {str(bin_file)} {str(ops_path)} {str(pmdz.parent)} {self.block_height} {self.block_width}
             """
 
             _logger.info(command)
