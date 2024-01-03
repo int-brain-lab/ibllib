@@ -295,11 +295,7 @@ class Task(abc.ABC):
         """
 
     def setUp(self, **kwargs):
-        """
-        Setup method to get the data handler and ensure all data is available locally to run task
-        :param kwargs:
-        :return:
-        """
+        """Get the data handler and ensure all data is available locally to run task."""
         if self.location == 'server':
             self.get_signatures(**kwargs)
 

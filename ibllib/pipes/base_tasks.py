@@ -1,6 +1,7 @@
 """Abstract base classes for dynamic pipeline tasks."""
 import logging
 from pathlib import Path
+from abc import abstractmethod
 
 from packaging import version
 from one.webclient import no_cache
@@ -75,6 +76,9 @@ class DynamicTask(Task):
 
 class BehaviourTask(DynamicTask):
 
+    extractor = None
+    """ibllib.io.extractors.base.BaseBpodExtractor: A trials extractor object."""
+
     def __init__(self, session_path, **kwargs):
         super().__init__(session_path, **kwargs)
 
@@ -124,6 +128,51 @@ class BehaviourTask(DynamicTask):
         v = version.parse
         ver = v(settings.get('IBLRIG_VERSION') or '100.0.0')
         return ver not in (v('100.0.0'), v('8.0.0')) and ver >= v('7.1.0')
+
+    def extract_behaviour(self, save=True):
+        """Extract trials data.
+
+        This is an abstract method called by `_run` and `run_qc` methods.  Subclasses should return
+        the extracted trials data and a list of output files. This method should also save the
+        trials extractor object to the :prop:`extarctor` property for use by `run_qc`.
+
+        Parameters
+        ----------
+        save : bool
+            Whether to save the extracted data as ALF datasets.
+
+        Returns
+        -------
+        dict
+            A dictionary of trials data.
+        list of pathlib.Path
+            A list of output file paths if save == true.
+        """
+        return None, None
+
+    def run_qc(self, trials_data=None, update=True):
+        """Run task QC.
+
+        Subclass method should return the QC object. This just validates the trials_data is not
+        None.
+
+        Parameters
+        ----------
+        trials_data : dict
+            A dictionary of extracted trials data. The output of :meth:`extract_behaviour`.
+        update : bool
+            If true, update Alyx with the QC outcome.
+
+        Returns
+        -------
+        ibllib.qc.task_metrics.TaskQC
+            A TaskQC object replete with task data and computed metrics.
+        """
+        if not self.extractor or trials_data is None:
+            trials_data, _ = self.extract_behaviour(save=False)
+        if not trials_data:
+            raise ValueError('No trials data found')
+        return trials_data
 
 
 class VideoTask(DynamicTask):

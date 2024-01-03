@@ -47,27 +47,42 @@ class TrainingTrials(tasks.Task):
                          ('*wheelMoves.peakAmplitude.npy', 'alf', True)]
     }
 
-    def _run(self):
-        """
-        Extracts an iblrig training session
-        """
-        trials, wheel, output_files = bpod_trials.extract_all(self.session_path, save=True)
+    def extract_behaviour(self, save=True):
+        """Extracts an iblrig training session."""
+        trials, wheel, output_files = bpod_trials.extract_all(self.session_path, save=save)
         if trials is None:
-            return None
-        if self.one is None or self.one.offline:
-            return output_files
-        # Run the task QC
+            return None, None
+        if wheel is not None:
+            trials.update(wheel)
+        return trials, output_files
+
+    def run_qc(self, trials_data=None, update=True):
+        if trials_data is None:
+            trials_data, _ = self.extract_behaviour(save=False)
+        if not trials_data:
+            raise ValueError('No trials data found')
+
         # Compile task data for QC
-        type = get_session_extractor_type(self.session_path)
-        if type == 'habituation':
+        extractor_type = get_session_extractor_type(self.session_path)
+        if extractor_type == 'habituation':
             qc = HabituationQC(self.session_path, one=self.one)
-            qc.extractor = TaskQCExtractor(self.session_path, one=self.one)
-        else:  # Update wheel data
+        else:
             qc = TaskQC(self.session_path, one=self.one)
-            qc.extractor = TaskQCExtractor(self.session_path, one=self.one)
-            qc.extractor.wheel_encoding = 'X1'
+        qc.extractor = TaskQCExtractor(self.session_path, one=self.one, lazy=True)
+        qc.extractor.type = extractor_type
+        qc.data = qc.extractor.rename_data(trials_data)
+        qc.extractor.load_raw_data()  # re-loads raw data and populates various properties
         # Aggregate and update Alyx QC fields
-        qc.run(update=True)
+        qc.run(update=update)
+
+        return qc
+
+    def _run(self, **_):
+        """Extracts an iblrig training session and runs QC."""
+        trials_data, output_files = self.extract_behaviour()
+        if self.one and not self.one.offline:
+            # Run the task QC
+            self.run_qc(trials_data)
         return output_files
 
 
