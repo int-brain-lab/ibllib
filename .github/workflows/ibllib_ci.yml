@@ -15,7 +15,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false  # Whether to stop execution of other instances
-      max-parallel: 4
+      max-parallel: 2
       matrix:
         os: ["windows-latest", "ubuntu-latest"]
         python-version: ["3.8", "3.11"]

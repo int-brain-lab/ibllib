@@ -1,3 +1,9 @@
+"""Downloading of task dependent datasets and registration of task output datasets.
+
+The DataHandler class is used by the pipes.tasks.Task class to ensure dependent datasets are
+present and to register and upload the output datasets.  For examples on how to run a task using
+specific data handlers, see :func:`ibllib.pipes.tasks`.
+"""
 import logging
 import pandas as pd
 from pathlib import Path
@@ -121,7 +127,7 @@ class ServerGlobusDataHandler(DataHandler):
         """
         from one.remote.globus import Globus, get_lab_from_endpoint_id  # noqa
         super().__init__(session_path, signatures, one=one)
-        self.globus = Globus(client_name='server')
+        self.globus = Globus(client_name='server', headless=True)
 
         # on local servers set up the local root path manually as some have different globus config paths
         self.globus.endpoints['local']['root_path'] = '/mnt/s0/Data/Subjects'
@@ -229,7 +235,10 @@ class RemoteHttpDataHandler(DataHandler):
 class RemoteAwsDataHandler(DataHandler):
     def __init__(self, task, session_path, signature, one=None):
         """
-        Data handler for running tasks on remote compute node. Will download missing data from private ibl s3 AWS data bucket
+        Data handler for running tasks on remote compute node.
+
+        This will download missing data from the private IBL S3 AWS data bucket.  New datasets are
+        uploaded via Globus.
 
         :param session_path: path to session
         :param signature: input and output file signatures
@@ -254,7 +263,7 @@ class RemoteAwsDataHandler(DataHandler):
         """
         # Set up Globus
         from one.remote.globus import Globus # noqa
-        self.globus = Globus(client_name='server')
+        self.globus = Globus(client_name='server', headless=True)
         self.lab = session_path_parts(self.session_path, as_dict=True)['lab']
         if self.lab == 'cortexlab' and 'cortexlab' in self.one.alyx.base_url:
             base_url = 'https://alyx.internationalbrainlab.org'
@@ -328,7 +337,7 @@ class RemoteAwsDataHandler(DataHandler):
 
 class RemoteGlobusDataHandler(DataHandler):
     """
-    Data handler for running tasks on remote compute node. Will download missing data using globus
+    Data handler for running tasks on remote compute node. Will download missing data using Globus.
 
     :param session_path: path to session
     :param signature: input and output file signatures

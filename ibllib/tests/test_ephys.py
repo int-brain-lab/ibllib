@@ -140,7 +140,6 @@ class TestEphysQC(unittest.TestCase):
             cls.tempdir.cleanup()
 
     def setUp(self) -> None:
-
         self.eid = 'b1c968ad-4874-468d-b2e4-5ffa9b9964e9'
         # make a temp probe insertion
         self.pname = 'probe02'

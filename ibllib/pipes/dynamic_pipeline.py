@@ -13,7 +13,7 @@ import yaml
 import spikeglx
 
 import ibllib.io.session_params as sess_params
-import ibllib.io.extractors.base
+from ibllib.io.extractors.base import get_pipeline, get_session_extractor_type
 import ibllib.pipes.tasks as mtasks
 import ibllib.pipes.base_tasks as bstasks
 import ibllib.pipes.widefield_tasks as wtasks
@@ -45,7 +45,7 @@ def acquisition_description_legacy_session(session_path, save=False):
     dict
         The legacy acquisition description.
     """
-    extractor_type = ibllib.io.extractors.base.get_session_extractor_type(session_path=session_path)
+    extractor_type = get_session_extractor_type(session_path)
     etype2protocol = dict(biased='choice_world_biased', habituation='choice_world_habituation',
                           training='choice_world_training', ephys='choice_world_recording')
     dict_ad = get_acquisition_description(etype2protocol[extractor_type])
@@ -94,7 +94,7 @@ def get_acquisition_description(protocol):
     else:
         devices = {
             'cameras': {
-                'left': {'collection': 'raw_video_data', 'sync_label': 'frame2ttl'},
+                'left': {'collection': 'raw_video_data', 'sync_label': 'audio'},
             },
             'microphone': {
                 'microphone': {'collection': 'raw_behavior_data', 'sync_label': None}
@@ -102,9 +102,7 @@ def get_acquisition_description(protocol):
         }
         acquisition_description = {  # this is the current ephys pipeline description
             'devices': devices,
-            'sync': {
-                'bpod': {'collection': 'raw_behavior_data', 'extension': 'bin'}
-            },
+            'sync': {'bpod': {'collection': 'raw_behavior_data'}},
             'procedures': ['Behavior training/tasks'],
             'projects': ['ibl_neuropixel_brainwide_01']
         }
@@ -132,7 +130,7 @@ def make_pipeline(session_path, **pkwargs):
     ----------
     session_path : str, Path
         The absolute session path, i.e. '/path/to/subject/yyyy-mm-dd/nnn'.
-    **pkwargs
+    pkwargs
         Optional arguments passed to the ibllib.pipes.tasks.Pipeline constructor.
 
     Returns
@@ -149,7 +147,7 @@ def make_pipeline(session_path, **pkwargs):
     if not acquisition_description:
         raise ValueError('Experiment description file not found or is empty')
     devices = acquisition_description.get('devices', {})
-    kwargs = {'session_path': session_path}
+    kwargs = {'session_path': session_path, 'one': pkwargs.get('one')}
 
     # Registers the experiment description file
     tasks['ExperimentDescriptionRegisterRaw'] = type('ExperimentDescriptionRegisterRaw',
@@ -158,7 +156,7 @@ def make_pipeline(session_path, **pkwargs):
     # Syncing tasks
     (sync, sync_args), = acquisition_description['sync'].items()
     sync_args['sync_collection'] = sync_args.pop('collection')  # rename the key so it matches task run arguments
-    sync_args['sync_ext'] = sync_args.pop('extension')
+    sync_args['sync_ext'] = sync_args.pop('extension', None)
     sync_args['sync_namespace'] = sync_args.pop('acquisition_software', None)
     sync_kwargs = {'sync': sync, **sync_args}
     sync_tasks = []
@@ -432,3 +430,65 @@ def load_pipeline_dict(path):
         task_list = yaml.full_load(file)
 
     return task_list
+
+
+def get_trials_tasks(session_path, one=None):
+    """
+    Return a list of pipeline trials extractor task objects for a given session.
+
+    This function supports both legacy and dynamic pipeline sessions.
+
+    Parameters
+    ----------
+    session_path : str, pathlib.Path
+        An absolute path to a session.
+    one : one.api.One
+        An ONE instance.
+
+    Returns
+    -------
+    list of pipes.tasks.Task
+        A list of task objects for the provided session.
+
+    """
+    # Check for an experiment.description file; ensure downloaded if possible
+    if one and one.to_eid(session_path):  # to_eid returns None if session not registered
+        one.load_datasets(session_path, ['_ibl_experiment.description'], download_only=True, assert_present=False)
+    experiment_description = sess_params.read_params(session_path)
+
+    # If experiment description file then use this to make the pipeline
+    if experiment_description is not None:
+        tasks = []
+        pipeline = make_pipeline(session_path, one=one)
+        trials_tasks = [t for t in pipeline.tasks if 'Trials' in t]
+        for task in trials_tasks:
+            t = pipeline.tasks.get(task)
+            t.__init__(session_path, **t.kwargs)
+            tasks.append(t)
+    else:
+        # Otherwise default to old way of doing things
+        pipeline = get_pipeline(session_path)
+        if pipeline == 'training':
+            from ibllib.pipes.training_preprocessing import TrainingTrials
+            tasks = [TrainingTrials(session_path, one=one)]
+        elif pipeline == 'ephys':
+            from ibllib.pipes.ephys_preprocessing import EphysTrials
+            tasks = [EphysTrials(session_path, one=one)]
+        else:
+            try:
+                # try to find a custom extractor in the personal projects extraction class
+                import projects.base
+                task_type = get_session_extractor_type(session_path)
+                assert (PipelineClass := projects.base.get_pipeline(task_type))
+                pipeline = PipelineClass(session_path, one=one)
+                trials_task_name = next((task for task in pipeline.tasks if 'Trials' in task), None)
+                assert trials_task_name, (f'No "Trials" tasks for custom pipeline '
+                                          f'"{pipeline.name}" with extractor type "{task_type}"')
+                task = pipeline.tasks.get(trials_task_name)
+                task(session_path)
+                tasks = [task]
+            except (ModuleNotFoundError, AssertionError) as ex:
+                _logger.warning('Failed to get trials tasks: %s', ex)
+                tasks = []
+
+    return tasks
