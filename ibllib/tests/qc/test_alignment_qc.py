@@ -266,16 +266,13 @@ class TestAlignmentQcManual(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         rng = np.random.default_rng()
-        data = np.load(Path(Path(__file__).parent.parent.
-                            joinpath('fixtures', 'qc', 'data_alignmentqc_manual.npz')),
-                       allow_pickle=True)
+        fixture_path = Path(__file__).parent.parent.joinpath('fixtures', 'qc')
+        data = np.load(fixture_path / 'data_alignmentqc_manual.npz', allow_pickle=True)
         cls.xyz_picks = (data['xyz_picks'] * 1e6).tolist()
         cls.alignments = data['alignments'].tolist()
         cls.cluster_chns = data['cluster_chns']
 
-        data = np.load(Path(Path(__file__).parent.parent.
-                            joinpath('fixtures', 'qc', 'data_alignmentqc_existing.npz')),
-                       allow_pickle=True)
+        data = np.load(fixture_path / 'data_alignmentqc_existing.npz', allow_pickle=True)
         insertion = data['insertion'].tolist()
         insertion['name'] = ''.join(random.choices(string.ascii_letters, k=5))
         insertion['json'] = {'xyz_picks': cls.xyz_picks}
