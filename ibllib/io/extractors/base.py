@@ -1,4 +1,5 @@
 """Base Extractor classes.
+
 A module for the base Extractor classes.  The Extractor, given a session path, will extract the
 processed data from raw hardware files and optionally save them.
 """
@@ -10,7 +11,6 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from one.alf.files import get_session_path
 from ibllib.io import raw_data_loaders as raw
 from ibllib.io.raw_data_loaders import load_settings, _logger
 
@@ -162,7 +162,8 @@ class BaseBpodTrialsExtractor(BaseExtractor):
 
 def run_extractor_classes(classes, session_path=None, **kwargs):
     """
-    Run a set of extractors with the same inputs
+    Run a set of extractors with the same inputs.
+
     :param classes: list of Extractor class
     :param save: True/False
     :param path_out: (defaults to alf path)
@@ -195,12 +196,30 @@ def run_extractor_classes(classes, session_path=None, **kwargs):
 
 
 def _get_task_types_json_config():
+    """
+    Return the extractor types map.
+
+    This function is only used for legacy sessions, i.e. those without an experiment description
+    file and will be removed in favor of :func:`_get_task_extractor_map`, which directly returns
+    the Bpod extractor class name. The experiment description file cuts out the need for pipeline
+    name identifiers.
+
+    Returns
+    -------
+    Dict[str, str]
+        A map of task protocol to task extractor identifier, e.g. 'ephys', 'habituation', etc.
+
+    See Also
+    --------
+    _get_task_extractor_map - returns a map of task protocol to Bpod trials extractor class name.
+    """
     with open(Path(__file__).parent.joinpath('extractor_types.json')) as fp:
         task_types = json.load(fp)
     try:
         # look if there are custom extractor types in the personal projects repo
         import projects.base
         custom_extractors = Path(projects.base.__file__).parent.joinpath('extractor_types.json')
+        _logger.debug('Loading extractor types from %s', custom_extractors)
         with open(custom_extractors) as fp:
             custom_task_types = json.load(fp)
         task_types.update(custom_task_types)
@@ -210,8 +229,28 @@ def _get_task_types_json_config():
 
 
 def get_task_protocol(session_path, task_collection='raw_behavior_data'):
+    """
+    Return the task protocol name from task settings.
+
+    If the session path and/or task collection do not exist, the settings file is missing or
+    otherwise can not be parsed, or if the 'PYBPOD_PROTOCOL' key is absent, None is returned.
+    A warning is logged if the session path or settings file doesn't exist. An error is logged if
+    the settings file can not be parsed.
+
+    Parameters
+    ----------
+    session_path : str, pathlib.Path
+        The absolute session path.
+    task_collection : str
+        The session path directory containing the task settings file.
+
+    Returns
+    -------
+    str or None
+        The Pybpod task protocol name or None if not found.
+    """
     try:
-        settings = load_settings(get_session_path(session_path), task_collection=task_collection)
+        settings = load_settings(session_path, task_collection=task_collection)
     except json.decoder.JSONDecodeError:
         _logger.error(f'Can\'t read settings for {session_path}')
         return
@@ -223,11 +262,26 @@ def get_task_protocol(session_path, task_collection='raw_behavior_data'):
 
 def get_task_extractor_type(task_name):
     """
-    Returns the task type string from the full pybpod task name:
-    _iblrig_tasks_biasedChoiceWorld3.7.0 returns "biased"
-    _iblrig_tasks_trainingChoiceWorld3.6.0 returns "training'
-    :param task_name:
-    :return: one of ['biased', 'habituation', 'training', 'ephys', 'mock_ephys', 'sync_ephys']
+    Returns the task type string from the full pybpod task name.
+
+    Parameters
+    ----------
+    task_name : str
+        The complete task protocol name from the PYBPOD_PROTOCOL field of the task settings.
+
+    Returns
+    -------
+    str
+        The extractor type identifier. Examples include 'biased', 'habituation', 'training',
+        'ephys', 'mock_ephys' and 'sync_ephys'.
+
+    Examples
+    --------
+    >>> get_task_extractor_type('_iblrig_tasks_biasedChoiceWorld3.7.0')
+    'biased'
+
+    >>> get_task_extractor_type('_iblrig_tasks_trainingChoiceWorld3.6.0')
+    'training'
     """
     if isinstance(task_name, Path):
         task_name = get_task_protocol(task_name)
@@ -245,16 +299,30 @@ def get_task_extractor_type(task_name):
 
 def get_session_extractor_type(session_path, task_collection='raw_behavior_data'):
     """
-    From a session path, loads the settings file, finds the task and checks if extractors exist
-    task names examples:
-    :param session_path:
-    :return: bool
+    Infer trials extractor type from task settings.
+
+    From a session path, loads the settings file, finds the task and checks if extractors exist.
+    Examples include 'biased', 'habituation', 'training', 'ephys', 'mock_ephys', and 'sync_ephys'.
+    Note this should only be used for legacy sessions, i.e. those without an experiment description
+    file.
+
+    Parameters
+    ----------
+    session_path : str, pathlib.Path
+        The session path for which to determine the pipeline.
+    task_collection : str
+        The session path directory containing the raw task data.
+
+    Returns
+    -------
+    str or False
+        The task extractor type, e.g. 'biased', 'habituation', 'ephys', or False if unknown.
     """
-    settings = load_settings(session_path, task_collection=task_collection)
-    if settings is None:
-        _logger.error(f'ABORT: No data found in "{task_collection}" folder {session_path}')
+    task_protocol = get_task_protocol(session_path, task_collection=task_collection)
+    if task_protocol is None:
+        _logger.error(f'ABORT: No task protocol found in "{task_collection}" folder {session_path}')
         return False
-    extractor_type = get_task_extractor_type(settings['PYBPOD_PROTOCOL'])
+    extractor_type = get_task_extractor_type(task_protocol)
     if extractor_type:
         return extractor_type
     else:
@@ -263,9 +331,22 @@ def get_session_extractor_type(session_path, task_collection='raw_behavior_data'
 
 def get_pipeline(session_path, task_collection='raw_behavior_data'):
     """
-    Get the pre-processing pipeline name from a session path
-    :param session_path:
-    :return:
+    Get the pre-processing pipeline name from a session path.
+
+    Note this is only suitable for legacy sessions, i.e. those without an experiment description
+    file. This function will be removed in the future.
+
+    Parameters
+    ----------
+    session_path : str, pathlib.Path
+        The session path for which to determine the pipeline.
+    task_collection : str
+        The session path directory containing the raw task data.
+
+    Returns
+    -------
+    str
+        The pipeline name inferred from the extractor type, e.g. 'ephys', 'training', 'widefield'.
     """
     stype = get_session_extractor_type(session_path, task_collection=task_collection)
     return _get_pipeline_from_task_type(stype)
@@ -273,18 +354,29 @@ def get_pipeline(session_path, task_collection='raw_behavior_data'):
 
 def _get_pipeline_from_task_type(stype):
     """
-    Returns the pipeline from the task type. Some tasks types directly define the pipeline
-    :param stype: session_type or task extractor type
-    :return:
+    Return the pipeline from the task type.
+
+    Some task types directly define the pipeline. Note this is only suitable for legacy sessions,
+    i.e. those without an experiment description file. This function will be removed in the future.
+
+    Parameters
+    ----------
+    stype : str
+        The session type or task extractor type, e.g. 'habituation', 'ephys', etc.
+
+    Returns
+    -------
+    str
+        A task pipeline identifier.
     """
     if stype in ['ephys_biased_opto', 'ephys', 'ephys_training', 'mock_ephys', 'sync_ephys']:
         return 'ephys'
     elif stype in ['habituation', 'training', 'biased', 'biased_opto']:
         return 'training'
-    elif 'widefield' in stype:
+    elif isinstance(stype, str) and 'widefield' in stype:
         return 'widefield'
     else:
-        return stype
+        return stype or ''
 
 
 def _get_task_extractor_map():
@@ -293,7 +385,7 @@ def _get_task_extractor_map():
 
     Returns
     -------
-    dict(str, str)
+    Dict[str, str]
         A map of task protocol to Bpod trials extractor class.
     """
     FILENAME = 'task_extractor_map.json'
@@ -315,26 +407,26 @@ def get_bpod_extractor_class(session_path, task_collection='raw_behavior_data'):
     """
     Get the Bpod trials extractor class associated with a given Bpod session.
 
+    Note that unlike :func:`get_session_extractor_type`, this function maps directly to the Bpod
+    trials extractor class name. This is hardware invariant and is purly to determine the Bpod only
+    trials extractor.
+
     Parameters
     ----------
     session_path : str, pathlib.Path
         The session path containing Bpod behaviour data.
     task_collection : str
-        The session_path subfolder containing the Bpod settings file.
+        The session_path sub-folder containing the Bpod settings file.
 
     Returns
     -------
     str
         The extractor class name.
     """
-    # Attempt to load settings files
-    settings = load_settings(session_path, task_collection=task_collection)
-    if settings is None:
-        raise ValueError(f'No data found in "{task_collection}" folder {session_path}')
-    # Attempt to get task protocol
-    protocol = settings.get('PYBPOD_PROTOCOL')
+    # Attempt to get protocol name from settings file
+    protocol = get_task_protocol(session_path, task_collection=task_collection)
     if not protocol:
-        raise ValueError(f'No task protocol found in {session_path/task_collection}')
+        raise ValueError(f'No task protocol found in {Path(session_path) / task_collection}')
     return protocol2extractor(protocol)
 
 
@@ -342,7 +434,8 @@ def protocol2extractor(protocol):
     """
     Get the Bpod trials extractor class associated with a given Bpod task protocol.
 
-    The Bpod task protocol can be found in the 'PYBPOD_PROTOCOL' field of _iblrig_taskSettings.raw.json.
+    The Bpod task protocol can be found in the 'PYBPOD_PROTOCOL' field of the
+    _iblrig_taskSettings.raw.json file.
 
     Parameters
     ----------

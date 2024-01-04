@@ -216,7 +216,7 @@ def create_fake_raw_behavior_data_folder(
 ):
     """Create the folder structure for a raw behaviour session.
 
-    Creates a raw_behavior_data folder and optionally, touches some files and writes a experiment
+    Creates a raw_behavior_data folder and optionally, touches some files and writes an experiment
     description stub to a `_devices` folder.
 
     Parameters
@@ -304,8 +304,26 @@ def create_fake_raw_behavior_data_folder(
 
 
 def populate_task_settings(fpath: Path, patch: dict):
-    with fpath.open("w") as f:
+    """
+    Populate a task settings JSON file.
+
+    Parameters
+    ----------
+    fpath : pathlib.Path
+        A path to a raw task settings folder or the full settings file path.
+    patch : dict
+        The settings dict to write to file.
+
+    Returns
+    -------
+    pathlib.Path
+        The full settings file path.
+    """
+    if fpath.is_dir():
+        fpath /= '_iblrig_taskSettings.raw.json'
+    with fpath.open('w') as f:
         json.dump(patch, f, indent=1)
+    return fpath
 
 
 def create_fake_complete_ephys_session(
