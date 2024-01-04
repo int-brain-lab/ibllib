@@ -1485,7 +1485,7 @@ def extract_all(session_path, sync_collection='raw_ephys_data', save=True, save_
     # Sync Bpod trials to FPGA
     sync, chmap = get_sync_and_chn_map(session_path, sync_collection)
     # sync, chmap = get_main_probe_sync(session_path, bin_exists=bin_exists)
-    trials = FpgaTrials(session_path, bpod_trials=bpod_trials | bpod_wheel)
+    trials = FpgaTrials(session_path, bpod_trials={**bpod_trials, **bpod_wheel})  # py3.9 -> |
     outputs, files = trials.extract(
         save=save, sync=sync, chmap=chmap, path_out=save_path,
         task_collection=task_collection, protocol_number=protocol_number, **kwargs)
