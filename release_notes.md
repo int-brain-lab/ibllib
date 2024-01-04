@@ -1,8 +1,7 @@
 ## Release Notes 2.28
 
-### features
-
 ### bugfixes
+- Fix ibllib.io.extractors.ephys_fpga.extract_all for python 3.8 
 
 ### other
 - Change behavior qc to pass if number of trials > 400 (from start) can be found for which easy trial performance > 0.9
