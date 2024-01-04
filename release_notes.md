@@ -1,5 +1,8 @@
 ## Release Notes 2.28
 
+### features
+- Added ibllib.pipes.dynamic_pipeline.get_trials_tasks function
+
 ### bugfixes
 - Fix ibllib.io.extractors.ephys_fpga.extract_all for python 3.8 
 
