@@ -1,7 +1,6 @@
 """Abstract base classes for dynamic pipeline tasks."""
 import logging
 from pathlib import Path
-from abc import abstractmethod
 
 from packaging import version
 from one.webclient import no_cache

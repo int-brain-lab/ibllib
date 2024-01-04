@@ -7,7 +7,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationTool
 import pandas as pd
 import numpy as np
 
-import qt as qt
+from ibllib.misc import qt
 
 _logger = logging.getLogger(__name__)
 

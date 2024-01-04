@@ -3,16 +3,21 @@ import argparse
 from itertools import cycle
 import random
 from collections.abc import Sized
+from pathlib import Path
 
 import pandas as pd
-import qt as qt
+import numpy as np
 from matplotlib.colors import TABLEAU_COLORS
 from one.api import ONE
 from one.alf.spec import is_session_path
 
 import ibllib.plots as plots
+from ibllib.misc import qt
 from ibllib.qc.task_metrics import TaskQC
 from ibllib.pipes.dynamic_pipeline import get_trials_tasks
+from ibllib.pipes.base_tasks import BehaviourTask
+from ibllib.pipes.behavior_tasks import HabituationTrialsBpod, ChoiceWorldTrialsBpod
+from ibllib.pipes.training_preprocessing import TrainingTrials
 
 from . import ViewEphysQC
 
@@ -103,8 +108,8 @@ class QcFrame:
         return self.qc.extractor.data['intervals'].shape[0]
 
     def get_wheel_data(self):
-        return {'re_pos': self.qc.extractor.data.get('wheel_position'),
-                're_ts': self.qc.extractor.data.get('wheel_timestamps')}
+        return {'re_pos': self.qc.extractor.data.get('wheel_position', np.array([])),
+                're_ts': self.qc.extractor.data.get('wheel_timestamps', np.array([]))}
 
     def create_plots(self, axes,
                      wheel_axes=None, trial_events=None, color_map=None, linestyle=None):
@@ -160,7 +165,8 @@ class QcFrame:
             ylabels = ['', 'frame2ttl', 'sound', '']
 
         for event, c, l in zip(trial_events, cycle(color_map), linestyle):
-            plots.vertical_lines(trial_data[event], label=event, color=c, linestyle=l, **plot_args)
+            if event in trial_data:
+                plots.vertical_lines(trial_data[event], label=event, color=c, linestyle=l, **plot_args)
 
         axes.legend(loc='upper left', fontsize='xx-small', bbox_to_anchor=(1, 0.5))
         axes.set_yticks(list(range(plot_args['ymax'] + 1)))
@@ -171,38 +177,69 @@ class QcFrame:
             wheel_data = self.get_wheel_data()
             wheel_plot_args = {
                 'ax': wheel_axes,
-                'ymin': wheel_data['re_pos'].min(),
-                'ymax': wheel_data['re_pos'].max()}
+                'ymin': wheel_data['re_pos'].min() if wheel_data['re_pos'].size else 0,
+                'ymax': wheel_data['re_pos'].max() if wheel_data['re_pos'].size else 1}
             plot_args = {**plot_args, **wheel_plot_args}
 
             wheel_axes.plot(wheel_data['re_ts'], wheel_data['re_pos'], 'k-x')
             for event, c, ln in zip(trial_events, cycle(color_map), linestyle):
-                plots.vertical_lines(trial_data[event],
-                                     label=event, color=c, linestyle=ln, **plot_args)
+                if event in trial_data:
+                    plots.vertical_lines(trial_data[event],
+                                         label=event, color=c, linestyle=ln, **plot_args)
 
 
-def show_session_task_qc(qc_or_session=None, bpod_only=False, local=False, one=None):
+def get_bpod_trials_task(task):
+    """
+    Return the correct trials task for extracting only the Bpod trials.
+
+    Parameters
+    ----------
+    task : ibllib.pipes.tasks.Task
+        A pipeline task from which to derive the Bpod trials task.
+
+    Returns
+    -------
+    ibllib.pipes.tasks.Task
+        A Bpod choice world trials task instance.
+    """
+    if isinstance(task, TrainingTrials) or task.__class__ in (ChoiceWorldTrialsBpod, HabituationTrialsBpod):
+        pass  # do nothing; already Bpod only
+    elif isinstance(task, BehaviourTask):
+        # A dynamic pipeline task
+        trials_class = HabituationTrialsBpod if 'habituation' in task.protocol else ChoiceWorldTrialsBpod
+        task = trials_class(task.session_path,
+                            collection=task.collection, protocol_number=task.protocol_number,
+                            protocol=task.protocol, one=task.one)
+    else:  # A legacy pipeline task (should be EphysTrials as there are no other options)
+        task = TrainingTrials(task.session_path, one=task.one)
+    return task
+
+
+def show_session_task_qc(qc_or_session=None, bpod_only=False, local=False, one=None, protocol_number=None):
     """
     Displays the task QC for a given session.
+
+    NB: For this to work, all behaviour trials task classes must implement a `run_qc` method.
 
     Parameters
     ----------
     qc_or_session : str, pathlib.Path, ibllib.qc.task_metrics.TaskQC, QcFrame
         An experiment ID, session path, or TaskQC object.
     bpod_only : bool
-        If true, display Bpod extracted events instead of data from the DAQ. !!NOT IMPLEMENTED!!
+        If true, display Bpod extracted events instead of data from the DAQ.
     local : bool
         If true, asserts all data local (i.e. do not attempt to download missing datasets).
     one : one.api.One
         An instance of ONE.
+    protocol_number : int
+        If not None, displays the QC for the protocol number provided. Argument is ignored if
+        `qc_or_session` is a TaskQC object or QcFrame instance.
 
     Returns
     -------
     QcFrame
         The QcFrame object.
     """
-    if bpod_only is True:
-        raise NotImplementedError
     if isinstance(qc_or_session, QcFrame):
         qc = qc_or_session
     elif isinstance(qc_or_session, TaskQC):
@@ -213,14 +250,31 @@ def show_session_task_qc(qc_or_session=None, bpod_only=False, local=False, one=N
             eid = one.to_eid(qc_or_session)
             session_path = one.eid2path(eid)
         else:
-            session_path = qc_or_session
+            session_path = Path(qc_or_session)
         tasks = get_trials_tasks(session_path, one=None if local else one)
-        # TODO Param to choose which task to pick if more than one
-        task = next(t for t in tasks if 'passive' not in t.name.lower())
+        # Get the correct task and ensure not passive
+        if protocol_number is None:
+            if not (task := next((t for t in tasks if 'passive' not in t.name.lower()), None)):
+                raise ValueError('No non-passive behaviour tasks found for session ' + '/'.join(session_path.parts[-3:]))
+        elif not isinstance(protocol_number, int) or protocol_number < 0:
+            raise TypeError('Protocol number must be a positive integer')
+        elif protocol_number > len(tasks) - 1:
+            raise ValueError('Invalid protocol number')
+        else:
+            task = tasks[protocol_number]
+            if 'passive' in task.name.lower():
+                raise ValueError('QC display not supported for passive protocols')
+        # If Bpod only and not a dynamic pipeline Bpod behaviour task OR legacy TrainingTrials task
+        if bpod_only and 'bpod' not in task.name.lower():
+            # Use the dynamic pipeline Bpod behaviour task instead (should work with legacy pipeline too)
+            task = get_bpod_trials_task(task)
+        _logger.debug('Using %s task', task.name)
+        # Ensure required data are present
         task.location = 'server' if local else 'remote'  # affects whether missing data are downloaded
         task.setUp()
         if local:  # currently setUp does not raise on missing data
             task.assert_expected_inputs(raise_error=True)
+        # Compute the QC and build the frame
         task_qc = task.run_qc(update=False)
         qc = QcFrame(task_qc)
 
@@ -230,7 +284,7 @@ def show_session_task_qc(qc_or_session=None, bpod_only=False, local=False, one=N
         events = map(lambda x: x.replace('stimFreeze', 'stimCenter'), events)
 
     # Run QC and plot
-    w = ViewEphysQC.viewqc(wheel=qc.get_wheel_data)
+    w = ViewEphysQC.viewqc(wheel=qc.get_wheel_data())
     qc.create_plots(w.wplot.canvas.ax,
                     wheel_axes=w.wplot.canvas.ax2,
                     trial_events=list(events),
