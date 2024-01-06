@@ -881,6 +881,11 @@ class SpikeSortingLoader:
         self.download_spike_sorting_object(obj, *args, **kwargs)
         return self._load_object(self.files[obj])
 
+    def get_version(self, spike_sorter='pykilosort'):
+        collection = self._get_spike_sorting_collection(spike_sorter=spike_sorter)
+        dset = self.one.alyx.rest('datasets', 'list', session=self.eid, collection=collection, name='spikes.times.npy')
+        return dset[0]['version'] if len(dset) else 'unknown'
+
     def download_spike_sorting_object(self, obj, spike_sorter='pykilosort', dataset_types=None, collection=None,
                                       missing='raise', **kwargs):
         """
@@ -1282,7 +1287,7 @@ class SessionLoader:
         """
         # itiDuration frequently has a mismatched dimension, and we don't need it, exclude using regex
         self.one.wildcards = False
-        self.trials = self.one.load_object(self.eid, 'trials', collection='alf', attribute=r'(?!itiDuration).*').to_df()
+        self.trials = self.one.load_object(self.eid, 'trials', attribute=r'(?!itiDuration).*').to_df()
         self.one.wildcards = True
         self.data_info.loc[self.data_info['name'] == 'trials', 'is_loaded'] = True
 
