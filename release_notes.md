@@ -1,3 +1,14 @@
+## Release Notes 2.28
+
+### features
+- Added ibllib.pipes.dynamic_pipeline.get_trials_tasks function
+
+### bugfixes
+- Fix ibllib.io.extractors.ephys_fpga.extract_all for python 3.8 
+
+### other
+- Change behavior qc to pass if number of trials > 400 (from start) can be found for which easy trial performance > 0.9
+
 ## Release Notes 2.27
 
 ### features
@@ -16,6 +27,9 @@
 - trainingPhaseChoiceWorld added to Bpod protocol extractor map fixture
 - Last trial of FPGA sessions now correctly extracted
 - Correct dynamic pipeline extraction of passive choice world trials
+#### 2.27.1
+- Correct handling of missing TTLs in FpgaTrialsHabituation
+
 
 ### other
 - Removed deprecated pyschofit module

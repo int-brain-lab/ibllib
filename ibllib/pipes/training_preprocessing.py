@@ -19,7 +19,7 @@ from ibllib.qc.task_metrics import TaskQC, HabituationQC
 from ibllib.qc.task_extractors import TaskQCExtractor
 
 _logger = logging.getLogger(__name__)
-warnings.warn('`pipes.training_preprocessing` to be removed in favour of dynamic pipeline')
+warnings.warn('`pipes.training_preprocessing` to be removed in favour of dynamic pipeline', FutureWarning)
 
 
 #  level 0

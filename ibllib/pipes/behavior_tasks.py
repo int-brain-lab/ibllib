@@ -374,17 +374,26 @@ class ChoiceWorldTrialsNidq(ChoiceWorldTrialsBpod):
         }
         return signature
 
-    def _behaviour_criterion(self, update=True):
+    def _behaviour_criterion(self, update=True, truncate_to_pass=True):
         """
         Computes and update the behaviour criterion on Alyx
         """
         from brainbox.behavior import training
 
-        trials = alfio.load_object(self.session_path.joinpath(self.output_collection), 'trials')
+        trials = alfio.load_object(self.session_path.joinpath(self.output_collection), 'trials').to_df()
         good_enough = training.criterion_delay(
-            n_trials=trials["intervals"].shape[0],
+            n_trials=trials.shape[0],
             perf_easy=training.compute_performance_easy(trials),
         )
+        if truncate_to_pass and not good_enough:
+            n_trials = trials.shape[0]
+            while not good_enough and n_trials > 400:
+                n_trials -= 1
+                good_enough = training.criterion_delay(
+                    n_trials=n_trials,
+                    perf_easy=training.compute_performance_easy(trials[:n_trials]),
+                )
+
         if update:
             eid = self.one.path2eid(self.session_path, query_type='remote')
             self.one.alyx.json_field_update(

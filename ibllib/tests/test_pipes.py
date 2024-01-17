@@ -21,6 +21,7 @@ from packaging.version import Version, InvalidVersion
 import ibllib.io.extractors.base
 import ibllib.tests.fixtures.utils as fu
 from ibllib.pipes import misc
+from ibllib.pipes.misc import sleepless
 from ibllib.tests import TEST_DB
 import ibllib.pipes.scan_fix_passive_files as fix
 from ibllib.pipes.base_tasks import RegisterRawDataTask
@@ -696,6 +697,24 @@ class TestRegisterRawDataTask(unittest.TestCase):
                 files.append(Path(kwargs['files']['image'].name).name)
             expected = ('snap.PNG', 'pic.jpeg', 'snapshot.tif', 'snapshot.jpg')
             self.assertCountEqual(expected, files)
+
+
+class TestSleeplessDecorator(unittest.TestCase):
+
+    def test_decorator_argument_passing(self):
+
+        def dummy_function(arg1, arg2):
+            return arg1, arg2
+
+        # Applying the decorator to the dummy function
+        decorated_func = sleepless(dummy_function)
+
+        # Check if the function name is maintained
+        self.assertEqual(decorated_func.__name__, 'dummy_function')
+
+        # Check if arguments are passed correctly
+        result = decorated_func("test1", "test2")
+        self.assertEqual(result, ("test1", "test2"))
 
 
 if __name__ == '__main__':

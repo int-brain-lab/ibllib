@@ -1,4 +1,5 @@
 """ Camera extractor functions.
+
 This module handles extraction of camera timestamps for both Bpod and DAQ.
 """
 import logging
@@ -29,7 +30,7 @@ _logger = logging.getLogger(__name__)
 
 def extract_camera_sync(sync, chmap=None):
     """
-    Extract camera timestamps from the sync matrix
+    Extract camera timestamps from the sync matrix.
 
     :param sync: dictionary 'times', 'polarities' of fronts detected on sync trace
     :param chmap: dictionary containing channel indices. Default to constant.
@@ -45,7 +46,8 @@ def extract_camera_sync(sync, chmap=None):
 
 def get_video_length(video_path):
     """
-    Returns video length
+    Returns video length.
+
     :param video_path: A path to the video
     :return:
     """
@@ -58,9 +60,7 @@ def get_video_length(video_path):
 
 
 class CameraTimestampsFPGA(BaseExtractor):
-    """
-    Extractor for videos using DAQ sync and channel map.
-    """
+    """Extractor for videos using DAQ sync and channel map."""
 
     def __init__(self, label, session_path=None):
         super().__init__(session_path)

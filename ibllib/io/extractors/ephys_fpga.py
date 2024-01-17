@@ -1441,7 +1441,6 @@ class FpgaTrialsHabituation(FpgaTrials):
             'intervals_1': bpod_event_intervals['trial_iti'][:, 0],
             'goCue_times': audio_event_intervals['ready_tone'][:, 0]
         })
-        n_trials = self.bpod_trials['intervals'].shape[0]
 
         # Sync the Bpod clock to the DAQ.
         self.bpod2fpga, drift_ppm, ibpod, ifpga = self.sync_bpod_clock(self.bpod_trials, fpga_events, self.sync_field)
@@ -1455,26 +1454,25 @@ class FpgaTrialsHabituation(FpgaTrials):
         # Assigning each event to a trial ensures exactly one event per trial (missing events are NaN)
         assign_to_trial = partial(_assign_events_to_trial, fpga_events['intervals_0'])
         trials = alfio.AlfBunch({
-            'goCue_times': assign_to_trial(fpga_events['goCue_times'], take='first')[:n_trials],
-            'feedback_times': assign_to_trial(fpga_events['feedback_times'])[:n_trials],
-            'stimCenter_times': assign_to_trial(self.frame2ttl['times'], take=-2)[:n_trials],
-            'stimOn_times': assign_to_trial(self.frame2ttl['times'], take='first')[:n_trials],
-            'stimOff_times': assign_to_trial(self.frame2ttl['times'])[:n_trials],
+            'goCue_times': assign_to_trial(fpga_events['goCue_times'], take='first'),
+            'feedback_times': assign_to_trial(fpga_events['feedback_times']),
+            'stimCenter_times': assign_to_trial(self.frame2ttl['times'], take=-2),
+            'stimOn_times': assign_to_trial(self.frame2ttl['times'], take='first'),
+            'stimOff_times': assign_to_trial(self.frame2ttl['times']),
         })
+        out.update({k: trials[k][ifpga] for k in trials.keys()})
 
         # If stim on occurs before trial end, use stim on time. Likewise for trial end and stim off
-        to_correct = ~np.isnan(trials['stimOn_times']) & (trials['stimOn_times'] < out['intervals'][:, 0])
+        to_correct = ~np.isnan(out['stimOn_times']) & (out['stimOn_times'] < out['intervals'][:, 0])
         if np.any(to_correct):
             _logger.warning('%i/%i stim on events occurring outside trial intervals', sum(to_correct), len(to_correct))
-            out['intervals'][to_correct, 0] = trials['stimOn_times'][to_correct]
-        to_correct = ~np.isnan(trials['stimOff_times']) & (trials['stimOff_times'] > out['intervals'][:, 1])
+            out['intervals'][to_correct, 0] = out['stimOn_times'][to_correct]
+        to_correct = ~np.isnan(out['stimOff_times']) & (out['stimOff_times'] > out['intervals'][:, 1])
         if np.any(to_correct):
             _logger.debug(
                 '%i/%i stim off events occurring outside trial intervals; using stim off times as trial end',
                 sum(to_correct), len(to_correct))
-            out['intervals'][to_correct, 1] = trials['stimOff_times'][to_correct]
-
-        out.update({k: trials[k][ifpga] for k in trials.keys()})
+            out['intervals'][to_correct, 1] = out['stimOff_times'][to_correct]
 
         if display:  # pragma: no cover
             width = 0.5
@@ -1550,7 +1548,7 @@ def extract_all(session_path, sync_collection='raw_ephys_data', save=True, save_
     # Sync Bpod trials to FPGA
     sync, chmap = get_sync_and_chn_map(session_path, sync_collection)
     # sync, chmap = get_main_probe_sync(session_path, bin_exists=bin_exists)
-    trials = FpgaTrials(session_path, bpod_trials=bpod_trials | bpod_wheel)
+    trials = FpgaTrials(session_path, bpod_trials={**bpod_trials, **bpod_wheel})  # py3.9 -> |
     outputs, files = trials.extract(
         save=save, sync=sync, chmap=chmap, path_out=save_path,
         task_collection=task_collection, protocol_number=protocol_number, **kwargs)

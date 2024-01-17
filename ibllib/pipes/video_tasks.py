@@ -467,7 +467,7 @@ class EphysPostDLC(base_tasks.VideoTask):
     level = 3
     force = True
 
-    def __int__(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.trials_collection = kwargs.get('trials_collection', 'alf')
 
