@@ -9,6 +9,10 @@
 ### other
 - Change behavior qc to pass if number of trials > 400 (from start) can be found for which easy trial performance > 0.9
 
+#### 2.28.1
+- Typo in ibllib.pipes.video_tasks.EphysPostDLC class
+- ibllib.io.raw_data_loaders.patch_settings works with iblrigv8 settings files
+
 ## Release Notes 2.27
 
 ### features
