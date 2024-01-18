@@ -1,5 +1,11 @@
 ## Release Notes 2.28
 
+#### 2.28.1
+- Typo in ibllib.pipes.video_tasks.EphysPostDLC class
+- ibllib.io.raw_data_loaders.patch_settings works with iblrigv8 settings files
+
+## Release Notes 2.28
+
 ### features
 - Added ibllib.pipes.dynamic_pipeline.get_trials_tasks function
 
