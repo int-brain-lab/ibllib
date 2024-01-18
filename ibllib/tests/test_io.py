@@ -166,11 +166,15 @@ class TestsRawDataLoaders(unittest.TestCase):
         self.session = Path(__file__).parent.joinpath('extractors', 'data', 'session_biased_ge5')
         data = raw.load_encoder_trial_info(self.session)
         self.assertTrue(data is not None)
+        self.assertIsNone(raw.load_encoder_trial_info(self.session.with_name('empty')))
+        self.assertIsNone(raw.load_encoder_trial_info(None))
 
     def test_load_camera_ssv_times(self):
         session = Path(__file__).parent.joinpath('extractors', 'data', 'session_ephys')
         with self.assertRaises(ValueError):
             raw.load_camera_ssv_times(session, 'tail')
+        with self.assertRaises(FileNotFoundError):
+            raw.load_camera_ssv_times(session.with_name('foobar'), 'body')
         bonsai, camera = raw.load_camera_ssv_times(session, 'body')
         self.assertTrue(bonsai.size == camera.size == 6001)
         self.assertEqual(bonsai.dtype.str, '<M8[ns]')
@@ -296,6 +300,18 @@ class TestsRawDataLoaders(unittest.TestCase):
         }
         self.assertTrue(fd.dtypes.to_dict() == parsed_dtypes)
         self.assertTrue(all([x == np.int64 for x in fd_raw.dtypes]))
+
+    def test_load_settings(self):
+        main_path = Path(__file__).parent.joinpath('extractors', 'data')
+        self.training_ge5 = main_path / 'session_training_ge5'
+        settings = raw.load_settings(self.training_ge5)
+        self.assertIsInstance(settings, dict)
+        self.assertEqual(144, len(settings))
+        with self.assertLogs(raw._logger, level=20):
+            self.assertIsNone(raw.load_settings(None))
+        # Should return None when path empty
+        with self.assertLogs(raw._logger, level=20):
+            self.assertIsNone(raw.load_settings(self.training_ge5, 'raw_task_data_00'))
 
     def tearDown(self):
         self.tempfile.close()

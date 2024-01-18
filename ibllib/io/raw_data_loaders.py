@@ -736,16 +736,6 @@ def _groom_wheel_data_ge5(data, label='file ', path=''):
     return data
 
 
-def save_bool(save, dataset_type):
-    if isinstance(save, bool):
-        out = save
-    elif isinstance(save, list):
-        out = (dataset_type in save) or (Path(dataset_type).stem in save)
-    if out:
-        _logger.debug('extracting' + dataset_type)
-    return out
-
-
 def sync_trials_robust(t0, t1, diff_threshold=0.001, drift_threshold_ppm=200, max_shift=5,
                        return_index=False):
     """
