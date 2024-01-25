@@ -537,7 +537,7 @@ def get_training_info_for_session(session_paths, one, force=True):
         for c in collections:
             try:
                 prot = get_bpod_extractor_class(session_path, task_collection=c)
-                prot = prot[:-6].lower
+                prot = prot[:-6].lower()
             except Exception:
                 prot = get_session_extractor_type(session_path, task_collection=c)
             protocols.append(prot)
