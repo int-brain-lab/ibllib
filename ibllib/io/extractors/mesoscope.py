@@ -13,7 +13,8 @@ from ibllib.plots.misc import squares, vertical_lines
 from ibllib.io.raw_daq_loaders import (extract_sync_timeline, timeline_get_channel,
                                        correct_counter_discontinuities, load_timeline_sync_and_chmap)
 import ibllib.io.extractors.base as extractors_base
-from ibllib.io.extractors.ephys_fpga import FpgaTrials, WHEEL_TICKS, WHEEL_RADIUS_CM, _assign_events_to_trial
+from ibllib.io.extractors.ephys_fpga import (FpgaTrials, WHEEL_TICKS, WHEEL_RADIUS_CM, _assign_events_to_trial,
+                                             get_sync_fronts)
 from ibllib.io.extractors.training_wheel import extract_wheel_moves
 from ibllib.io.extractors.camera import attribute_times
 from brainbox.behavior.wheel import velocity_filtered
@@ -563,6 +564,218 @@ class TimelineTrials(FpgaTrials):
             ax[1].legend()
 
         return t_ready_tone_in, t_error_tone_in
+
+
+class TimelineFunkyTrials(TimelineTrials):
+    """ Extraction of timeline trials for dodgey sessions that lacked bpod, valve and f2ttl daq signals. Also
+    some sessions were contaminated with large random noice seen on all channels"""
+
+    sync_field = 'audio'  # audio is our only reliable ttl signal for these sessions
+    """str: The trial event to synchronize (must be present in extracted trials)."""
+    extract_valve = True
+    """bool: Whether to use the raw valve signal to compute feedback times or to use the bpod values"""
+    def get_bpod_event_times(self, sync, chmap, bpod_event_ttls=None, display=False, **kwargs):
+        """
+        Extract Bpod times from sync.
+
+        Unlike the superclass method. This one doesn't reassign the first trial pulse.
+
+        Parameters
+        ----------
+        sync : dict
+            A dictionary with keys ('times', 'polarities', 'channels'), containing the sync pulses
+            and the corresponding channel numbers. Must contain a 'bpod' key.
+        chmap : dict
+            A map of channel names and their corresponding indices.
+        bpod_event_ttls : dict of tuple
+            A map of event names to (min, max) TTL length.
+
+        Returns
+        -------
+        dict
+            A dictionary with keys {'times', 'polarities'} containing Bpod TTL fronts.
+        dict
+            A dictionary of events (from `bpod_event_ttls`) and their intervals as an Nx2 array.
+        """
+
+        bpod = get_sync_fronts(sync, chmap['bpod'])
+        if bpod.times.size == 0:
+            return None, {'valve_open': np.array([[], []]).T, 'trial_end': np.array([[], []]).T}
+        else:
+            return super().get_bpod_event_times(sync, chmap, bpod_event_ttls=bpod_event_ttls, display=display,
+                                                **kwargs)
+
+    def build_trials(self, sync=None, chmap=None, **kwargs):
+        """
+        Extract task related event times from the sync.
+
+        Compared to TimelineTrials we account for cases when the ttl signal from the DAQ is missing
+        from any/ all of the bpod, frame2ttl and valve. When the data is missing the associated timings
+        are not taken from the DAQ events, but interpolated from the bpod events.
+
+        For this logic to work it is important that the sync, chmap does not contain the traces from
+        channels that have rubbish data on them.
+        Use ibllib.io.extractors.raw_daq_loaders.extract_timeline_sync with a specific chmap to ensure that
+        the sync trace does not contain artefactual ttls from channels that weren't connected properly.
+
+        Parameters
+        ----------
+        sync : dict
+            'polarities' of fronts detected on sync trace for all 16 chans and their 'times'
+        chmap : dict
+            Map of channel names and their corresponding index.  Default to constant.
+
+        Returns
+        -------
+        dict
+            A map of trial event timestamps.
+        """
+        # Get the events from the sync.
+        # Store the cleaned frame2ttl, audio, and bpod pulses as this will be used for QC
+        self.frame2ttl = self.get_stimulus_update_times(sync, chmap, **kwargs)
+        self.audio, audio_event_intervals = self.get_audio_event_times(sync, chmap, **kwargs)
+        if not set(audio_event_intervals.keys()) >= {'ready_tone', 'error_tone'}:
+            raise ValueError(
+                'Expected at least "ready_tone" and "error_tone" audio events.'
+                '`audio_event_ttls` kwarg may be incorrect.')
+
+        self.bpod, bpod_event_intervals = self.get_bpod_event_times(sync, chmap, **kwargs)
+        if not set(bpod_event_intervals.keys()) >= {'valve_open', 'trial_end'}:
+            raise ValueError(
+                'Expected at least "trial_end" and "valve_open" audio events. '
+                '`bpod_event_ttls` kwarg may be incorrect.')
+
+        t_iti_in, t_trial_end = bpod_event_intervals['trial_end'].T
+
+        fpga_events = alfio.AlfBunch({
+            'itiIn_times': t_iti_in,
+            'intervals_1': t_trial_end,
+            'goCue_times': audio_event_intervals['ready_tone'][:, 0],
+            'errorTone_times': audio_event_intervals['error_tone'][:, 0],
+            'audio': audio_event_intervals['ready_tone'][:, 0],
+        })
+
+        self.bpod_trials['audio'] = self.bpod_trials['goCueTrigger_times']
+
+        # Sync the Bpod clock to the DAQ
+        self.bpod2fpga, drift_ppm, ibpod, ifpga = self.sync_bpod_clock(self.bpod_trials, fpga_events, self.sync_field)
+
+        out = dict()
+        out.update({k: self.bpod_trials[k][ibpod] for k in self.bpod_fields})
+        out.update({k: self.bpod2fpga(self.bpod_trials[k][ibpod]) for k in self.bpod_rsync_fields})
+
+        start_times = out['intervals'][:, 0]
+        last_trial_end = out['intervals'][-1, 1]
+
+        def assign_to_trial(events, take='last'):
+            """Assign DAQ events to trials.
+
+            Because we may not have trial start TTLs on the DAQ (because of the low sampling rate),
+            there may be an extra last trial that's not in the Bpod intervals as the extractor
+            ignores the last trial. This function trims the input array before assigning so that
+            the last trial's events are correctly assigned.
+            """
+            return _assign_events_to_trial(start_times, events[events <= last_trial_end], take)
+
+        if fpga_events['itiIn_times'].size > 0:
+            out['itiIn_times'] = assign_to_trial(fpga_events['itiIn_times'][ifpga])
+
+        correct = self.bpod_trials['feedbackType'] == 1
+        if self.extract_valve:
+            # Extract valve open times from the DAQ
+            valve_driver_ttls = bpod_event_intervals['valve_open']
+            # If there is a reward_valve channel, the valve has
+            if any(ch['name'] == 'reward_valve' for ch in self.timeline['meta']['inputs']):
+
+                # Use the driver TTLs to find the valve open times that correspond to the valve opening
+                valve_intervals, valve_open_times = self.get_valve_open_times(driver_ttls=valve_driver_ttls)
+                if valve_open_times.size == 0:
+                    valve_intervals = valve_intervals[~np.isnan(valve_intervals[:, 1])]
+                    valve_open_times = valve_intervals[:, 0]
+
+                if valve_open_times.size != np.sum(correct):
+                    _logger.warning(
+                        'Number of valve open times does not equal number of correct trials (%i != %i)',
+                        valve_open_times.size, np.sum(correct))
+
+                out['valveOpen_times'] = assign_to_trial(valve_open_times)
+            else:
+                # Use the valve controller TTLs recorded on the Bpod channel as the reward time
+                out['valveOpen_times'] = np.copy(out['feedback_times'])
+        else:
+            out['valveOpen_times'] = np.copy(out['feedback_times'])
+
+        # Stimulus times extracted the same as usual
+        if self.frame2ttl['times'].size > 0:
+            out['stimFreeze_times'] = assign_to_trial(self.frame2ttl['times'], take=-2)
+            out['stimOn_times'] = assign_to_trial(self.frame2ttl['times'], take='first')
+            out['stimOff_times'] = assign_to_trial(self.frame2ttl['times'])
+
+        # Audio times
+        error_cue = fpga_events['errorTone_times']
+        if error_cue.size != np.sum(~correct):
+            _logger.warning(
+                'N detected error tones does not match number of incorrect trials (%i != %i)',
+                error_cue.size, np.sum(~correct))
+        go_cue = fpga_events['goCue_times']
+        out['goCue_times'] = assign_to_trial(go_cue, take='first')
+        out['errorCue_times'] = assign_to_trial(error_cue)
+
+        if go_cue.size > start_times.size:
+            _logger.warning(
+                'More go cue tones detected than trials! (%i vs %i)', go_cue.size, start_times.size)
+        elif go_cue.size < start_times.size:
+            """
+            If the error cues are all assigned and some go cues are missed it may be that some
+            responses were so fast that the go cue and error tone merged, or the go cue TTL was too
+            long.
+            """
+            _logger.warning('%i go cue tones missed', start_times.size - go_cue.size)
+            err_trig = self.bpod2fpga(self.bpod_trials['errorCueTrigger_times'])
+            go_trig = self.bpod2fpga(self.bpod_trials['goCueTrigger_times'])
+            assert not np.any(np.isnan(go_trig))
+            assert err_trig.size == go_trig.size  # should be length of n trials with NaNs
+
+            # Find which trials are missing a go cue
+            _go_cue = assign_to_trial(go_cue, take='first')
+            error_cue = assign_to_trial(error_cue)
+            missing = np.isnan(_go_cue)
+
+            # Get all the DAQ timestamps where audio channel was HIGH
+            raw = timeline_get_channel(self.timeline, 'audio')
+            raw = (raw - raw.min()) / (raw.max() - raw.min())  # min-max normalize
+            ups = self.timeline.timestamps[raw > .5]  # timestamps where input HIGH
+
+            # Get the timestamps of the first HIGH after the trigger times (allow up to 200ms after).
+            # Indices of ups directly following a go trigger, or -1 if none found (or trigger NaN)
+            idx = attribute_times(ups, go_trig, tol=0.2, take='after')
+            # Trial indices that didn't have detected goCue and now has been assigned an `ups` index
+            assigned = np.where(idx != -1 & missing)[0]  # ignore unassigned
+            _go_cue[assigned] = ups[idx[assigned]]
+
+            # Remove mis-assigned error tone times (i.e. those that have now been assigned to goCue)
+            error_cue_without_trig, = np.where(~np.isnan(error_cue) & np.isnan(err_trig))
+            i_to_remove = np.intersect1d(assigned, error_cue_without_trig, assume_unique=True)
+            error_cue[i_to_remove] = np.nan
+
+            # For those trials where go cue was merged with the error cue and therefore mis-assigned,
+            # we must re-assign the error cue times as the first HIGH after the error trigger.
+            idx = attribute_times(ups, err_trig, tol=0.2, take='after')
+            assigned = np.where(idx != -1 & missing)[0]  # ignore unassigned
+            error_cue[assigned] = ups[idx[assigned]]
+            out['goCue_times'] = _go_cue
+            out['errorCue_times'] = error_cue
+
+        # Because we're not
+        assert np.intersect1d(out['goCue_times'], out['errorCue_times']).size == 0, \
+            'audio tones not assigned correctly; tones likely missed'
+
+        # Feedback times
+        out['feedback_times'] = np.copy(out['valveOpen_times'])
+        ind_err = np.isnan(out['valveOpen_times'])
+        out['feedback_times'][ind_err] = out['errorCue_times'][ind_err]
+
+        return out
 
 
 class MesoscopeSyncTimeline(extractors_base.BaseExtractor):

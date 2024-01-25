@@ -221,7 +221,7 @@ def load_timeline_sync_and_chmap(alf_path, chmap=None, timeline=None, save=True)
     return sync, chmap
 
 
-def extract_sync_timeline(timeline, chmap=None, floor_percentile=10, threshold=None):
+def extract_sync_timeline(timeline, chmap=None, floor_percentile=10, threshold=None, clean_audio=False):
     """
     Load sync channels from a timeline object.
 
@@ -241,6 +241,8 @@ def extract_sync_timeline(timeline, chmap=None, floor_percentile=10, threshold=N
     threshold : float, dict of str: float
         The threshold for applying to analogue channels. If None, take mean after subtracting
         floor percentile offset.
+    clean_audio : bool:
+        Whether to remove valve artefacts from the audio signal
 
     Returns
     -------
@@ -271,6 +273,11 @@ def extract_sync_timeline(timeline, chmap=None, floor_percentile=10, threshold=N
         if info['measurement'] == 'Voltage':
             # Get TLLs by applying a threshold to the diff of voltage samples
             offset = np.percentile(raw, floor_percentile, axis=0)
+
+            # Some signals are contaminated by the valve we want to it from the audio
+            if clean_audio and label == 'audio':
+                raw = timeline_remove_valve_from_audio(raw, offset)
+
             daqID = info['daqChannelID']
             logger.debug(f'{label} ({daqID}): estimated analogue channel DC Offset approx. {np.mean(offset):.2f}')
             step = threshold.get(label) if isinstance(threshold, dict) else threshold
@@ -310,6 +317,35 @@ def extract_sync_timeline(timeline, chmap=None, floor_percentile=10, threshold=N
         return sync, chmap
     else:
         return sync
+
+
+def timeline_remove_valve_from_audio(raw, offset, thresholds=(9, 4)):
+    """
+    Given the raw audio sync signal, removes valve artefacts by finding peaks that are above a given threshold.
+    Best result was observed when removing peaks in two steps with thresholds of 9 and 4 V.
+
+    Parameters
+    ----------
+    raw : numpy.array
+        An array containing the raw signal on audio channel
+    offset : float
+        DC offset of the raw signal, removed indices of peaks are replaced with this value
+    thresholds: tuple, list
+        Thresholds to apply to the raw signal to remove peaks
+
+    Returns
+    -------
+    np.array
+        An array containing the raw signal on the audio channel after artefactual peaks have been removed
+    """
+
+    for step in thresholds:
+        iup = neurodsp.utils.rises(raw - offset, step=step, analog=True)
+        idown = neurodsp.utils.falls(raw - offset, step=step, analog=True)
+        intervals = np.c_[iup, idown]
+        raw[intervals] = offset
+
+    return raw
 
 
 def timeline_meta2wiring(path, save=False):
