@@ -13,6 +13,9 @@
 - Typo in ibllib.pipes.video_tasks.EphysPostDLC class
 - ibllib.io.raw_data_loaders.patch_settings works with iblrigv8 settings files
 
+#### 2.28.2
+- Fix loading of personal projects extractor map
+
 ## Release Notes 2.27
 
 ### features

@@ -395,7 +395,7 @@ def _get_task_extractor_map():
         # look if there are custom extractor types in the personal projects repo
         import projects.base
         custom_extractors = Path(projects.base.__file__).parent.joinpath(FILENAME)
-        with open(custom_extractors) as fp:
+        with open(custom_extractors, 'r') as fp:
             custom_task_types = json.load(fp)
         task_extractors.update(custom_task_types)
     except (ModuleNotFoundError, FileNotFoundError):

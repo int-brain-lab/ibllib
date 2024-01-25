@@ -3,9 +3,9 @@
 # @Author: Niccolò Bonacchi, Miles Wells
 # @Date: Monday, July 16th 2018, 1:28:46 pm
 """
-Raw Data Loader functions for PyBpod rig
+Raw Data Loader functions for PyBpod rig.
 
-Module contains one loader function per raw datafile
+Module contains one loader function per raw datafile.
 """
 import re
 import json
@@ -107,7 +107,7 @@ def load_data(session_path: Union[str, Path], task_collection='raw_behavior_data
 
 
 def load_camera_frameData(session_path, camera: str = 'left', raw: bool = False) -> pd.DataFrame:
-    """ Loads binary frame data from Bonsai camera recording workflow.
+    """Loads binary frame data from Bonsai camera recording workflow.
 
     Args:
         session_path (StrPath): Path to session folder
