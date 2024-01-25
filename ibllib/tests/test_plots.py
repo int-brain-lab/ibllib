@@ -22,7 +22,7 @@ class TestSnapshot(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        # Make a small image an store in tmp file
+        # Make a small image and store in tmp file
         cls.tmp_dir = tempfile.TemporaryDirectory()
         cls.img_file = Path(cls.tmp_dir.name).joinpath('test.png')
         image = Image.new('RGBA', size=(WIDTH, HEIGHT), color=(155, 0, 0))
@@ -40,7 +40,7 @@ class TestSnapshot(unittest.TestCase):
         cls.eid = str(eid)
 
     def _get_image(self, url):
-        # This is a bit of a hack because when running a the server locally, the request to the media folder fail
+        # This is a bit of a hack because when running the server locally, the request to the media folder fails
         rel_path = urlparse(url).path[1:]
         try:
             img_file = list(Path('/var/www/').rglob(rel_path))[0]

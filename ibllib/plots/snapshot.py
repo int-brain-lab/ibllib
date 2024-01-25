@@ -216,7 +216,7 @@ class Snapshot:
         """
         # the protocol is not compatible with byte streaming and json, so serialize the json object here
         # Make sure that user is logged in, if not, try to log in
-        assert self.one.alyx.is_logged_in, "No Alyx user is logged in, try running one.alyx.authenticate() first"
+        assert self.one.alyx.is_logged_in, 'No Alyx user is logged in, try running one.alyx.authenticate() first'
         note = {
             'user': self.one.alyx.user, 'content_type': self.content_type, 'object_id': self.object_id,
             'text': text, 'width': width, 'json': json.dumps(json_field)}
@@ -232,16 +232,15 @@ class Snapshot:
         # Catch error that results from object_id - content_type mismatch
         try:
             note_db = self.one.alyx.rest('notes', 'create', data=note, files={'image': fig_open})
-            fig_open.close()
             return note_db
         except requests.HTTPError as e:
-            if "matching query does not exist.'" in str(e):
-                fig_open.close()
+            if 'matching query does not exist' in str(e):
                 _logger.error(f'The object_id {self.object_id} does not match an object of type {self.content_type}')
                 _logger.debug(traceback.format_exc())
             else:
-                fig_open.close()
-                raise
+                raise e
+        finally:
+            fig_open.close()
 
     def register_images(self, image_list=None, texts=None, widths=None, jsons=None):
         """
