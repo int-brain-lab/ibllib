@@ -3,7 +3,7 @@ from one.alf.exceptions import ALFObjectNotFound
 
 from ibllib.io.raw_data_loaders import load_bpod
 from ibllib.oneibl.registration import _get_session_times
-from ibllib.io.extractors.base import get_session_extractor_type
+from ibllib.io.extractors.base import get_session_extractor_type, get_bpod_extractor_class
 from ibllib.io.session_params import read_params
 from ibllib.io.extractors.bpod_trials import get_bpod_extractor
 
@@ -535,7 +535,12 @@ def get_training_info_for_session(session_paths, one, force=True):
         session_path = Path(session_path)
         protocols = []
         for c in collections:
-            protocols.append(get_session_extractor_type(session_path, task_collection=c))
+            try:
+                prot = get_bpod_extractor_class(session_path, task_collection=c)
+                prot = prot[:-6].lower
+            except Exception:
+                prot = get_session_extractor_type(session_path, task_collection=c)
+            protocols.append(prot)
 
         un_protocols = np.unique(protocols)
         # Example, training, training, biased - training would be combined, biased not
