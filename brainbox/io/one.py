@@ -967,13 +967,6 @@ class SpikeSortingLoader:
             if cbin_file is not None:
                 return spikeglx.Reader(cbin_file)
 
-    def ap_reader(self, stream=True):
-        """
-        Returns a reader for the raw AP data
-        :return:
-        """
-        pass
-
     def load_channels(self, **kwargs):
         """
         Loads channels
