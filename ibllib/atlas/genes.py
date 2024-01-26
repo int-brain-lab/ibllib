@@ -1,6 +1,6 @@
 """Gene expression maps."""
 
-from iblatlas import genes
+from iblatlas.genomics import genes
 from ibllib.atlas import deprecated_decorator
 
 

@@ -1,3 +1,8 @@
+## Release Notes 2.29
+
+### features
+- Added raw data loaders and synchronisation tools in brainbox.io.one.SpikeSortingLoader, method `ssl.raw_electrophysiology()`
+
 ## Release Notes 2.28
 
 ### features
