@@ -570,9 +570,9 @@ class StimOnTimes_deprecated(BaseBpodTrialsExtractor):
     @staticmethod
     def get_stimOn_times_lt5(session_path, data=False, task_collection='raw_behavior_data'):
         """
-        Find the time of the statemachine command to turn on hte stim
+        Find the time of the statemachine command to turn on the stim
         (state stim_on start or rotary_encoder_event2)
-        Find the next frame change from the photodiodeafter that TS.
+        Find the next frame change from the photodiode after that TS.
         Screen is not displaying anything until then.
         (Frame changes are in BNC1High and BNC1Low)
         """

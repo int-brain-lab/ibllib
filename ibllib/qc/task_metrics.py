@@ -174,7 +174,7 @@ class TaskQC(base.QC):
             self.criteria['_task_passed_trial_checks'] = {'NOT_SET': 0}
 
         self.log.info(f'Session {self.session_path}: Running QC on behavior data...')
-        self.metrics, self.passed = get_bpodqc_metrics_frame(
+        self.get_bpodqc_metrics_frame(
             self.extractor.data,
             wheel_gain=self.extractor.settings['STIM_GAIN'],  # The wheel gain
             photodiode=self.extractor.frame_ttls,
@@ -183,7 +183,56 @@ class TaskQC(base.QC):
             min_qt=self.extractor.settings.get('QUIESCENT_PERIOD') or 0.2,
             audio_output=self.extractor.settings.get('device_sound', {}).get('OUTPUT', 'unknown')
         )
-        return
+
+    def _get_checks(self):
+        """
+        Find all methods that begin with 'check_'.
+
+        Returns
+        -------
+        Dict[str, function]
+            A map of QC check function names and the corresponding functions that return `metric`
+            (any), `passed` (bool).
+        """
+        def is_metric(x):
+            return isfunction(x) and x.__name__.startswith('check_')
+
+        return dict(getmembers(sys.modules[__name__], is_metric))
+
+    def get_bpodqc_metrics_frame(self, data, **kwargs):
+        """
+        Evaluates all the QC metric functions in this module (those starting with 'check') and
+        returns the results.  The optional kwargs listed below are passed to each QC metric function.
+        :param data: dict of extracted task data
+        :param re_encoding: the encoding of the wheel data, X1, X2 or X4
+        :param enc_res: the rotary encoder resolution
+        :param wheel_gain: the STIM_GAIN task parameter
+        :param photodiode: the fronts from Bpod's BNC1 input or FPGA frame2ttl channel
+        :param audio: the fronts from Bpod's BNC2 input FPGA audio sync channel
+        :param min_qt: the QUIESCENT_PERIOD task parameter
+        :return metrics: dict of checks and their QC metrics
+        :return passed: dict of checks and a float array of which samples passed
+        """
+
+        # Find all methods that begin with 'check_'
+        checks = self._get_checks()
+        prefix = '_task_'  # Extended QC fields will start with this
+        # Method 'check_foobar' stored with key '_task_foobar' in metrics map
+        qc_metrics_map = {prefix + k[6:]: fn(data, **kwargs) for k, fn in checks.items()}
+
+        # Split metrics and passed frames
+        self.metrics = {}
+        self.passed = {}
+        for k in qc_metrics_map:
+            self.metrics[k], self.passed[k] = qc_metrics_map[k]
+
+        # Add a check for trial level pass: did a given trial pass all checks?
+        n_trials = data['intervals'].shape[0]
+        # Trial-level checks return an array the length that equals the number of trials
+        trial_level_passed = [m for m in self.passed.values() if isinstance(m, Sized) and len(m) == n_trials]
+        name = prefix + 'passed_trial_checks'
+        self.metrics[name] = reduce(np.logical_and, trial_level_passed or (None, None))
+        self.passed[name] = self.metrics[name].astype(float) if trial_level_passed else None
 
     def run(self, update=False, namespace='task', **kwargs):
         """
@@ -375,46 +424,6 @@ class HabituationQC(TaskQC):
             metrics[check], passed[check] = fcn(data, audio_output=audio_output)
 
         self.metrics, self.passed = (metrics, passed)
-
-
-def get_bpodqc_metrics_frame(data, **kwargs):
-    """
-    Evaluates all the QC metric functions in this module (those starting with 'check') and
-    returns the results.  The optional kwargs listed below are passed to each QC metric function.
-    :param data: dict of extracted task data
-    :param re_encoding: the encoding of the wheel data, X1, X2 or X4
-    :param enc_res: the rotary encoder resolution
-    :param wheel_gain: the STIM_GAIN task parameter
-    :param photodiode: the fronts from Bpod's BNC1 input or FPGA frame2ttl channel
-    :param audio: the fronts from Bpod's BNC2 input FPGA audio sync channel
-    :param min_qt: the QUIESCENT_PERIOD task parameter
-    :return metrics: dict of checks and their QC metrics
-    :return passed: dict of checks and a float array of which samples passed
-    """
-    def is_metric(x):
-        return isfunction(x) and x.__name__.startswith('check_')
-    # Find all methods that begin with 'check_'
-    checks = getmembers(sys.modules[__name__], is_metric)
-    prefix = '_task_'  # Extended QC fields will start with this
-    # Method 'check_foobar' stored with key '_task_foobar' in metrics map
-    qc_metrics_map = {prefix + k[6:]: fn(data, **kwargs) for k, fn in checks}
-
-    # Split metrics and passed frames
-    metrics = {}
-    passed = {}
-    for k in qc_metrics_map:
-        metrics[k], passed[k] = qc_metrics_map[k]
-
-    # Add a check for trial level pass: did a given trial pass all checks?
-    n_trials = data['intervals'].shape[0]
-    # Trial-level checks return an array the length that equals the number of trials
-    trial_level_passed = [m for m in passed.values()
-                          if isinstance(m, Sized) and len(m) == n_trials]
-    name = prefix + 'passed_trial_checks'
-    metrics[name] = reduce(np.logical_and, trial_level_passed or (None, None))
-    passed[name] = metrics[name].astype(float) if trial_level_passed else None
-
-    return metrics, passed
 
 
 # SINGLE METRICS

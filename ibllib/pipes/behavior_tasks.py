@@ -277,6 +277,7 @@ class ChoiceWorldTrialsBpod(base_tasks.BehaviourTask):
     priority = 90
     job_size = 'small'
     extractor = None
+    """ibllib.io.extractors.base.BaseBpodTrialsExtractor: An instance of the Bpod trials extractor."""
 
     @property
     def signature(self):
@@ -318,7 +319,24 @@ class ChoiceWorldTrialsBpod(base_tasks.BehaviourTask):
         self.extractor.default_path = self.output_collection
         return self.extractor.extract(task_collection=self.collection, **kwargs)
 
-    def _run_qc(self, trials_data=None, update=True):
+    def _run_qc(self, trials_data=None, update=True, QC=None):
+        """
+        Run the task QC.
+
+        Parameters
+        ----------
+        trials_data : dict
+            The complete extracted task data.
+        update : bool
+            If True, updates the session QC fields on Alyx.
+        QC : ibllib.qc.task_metrics.TaskQC
+            An optional QC class to instantiate.
+
+        Returns
+        -------
+        ibllib.qc.task_metrics.TaskQC
+            The task QC object.
+        """
         if not self.extractor or trials_data is None:
             trials_data, _ = self._extract_behaviour(save=False)
         if not trials_data:
@@ -328,10 +346,11 @@ class ChoiceWorldTrialsBpod(base_tasks.BehaviourTask):
         qc_extractor = TaskQCExtractor(self.session_path, lazy=True, sync_collection=self.sync_collection, one=self.one,
                                        sync_type=self.sync, task_collection=self.collection)
         qc_extractor.data = qc_extractor.rename_data(trials_data)
-        if type(self.extractor).__name__ == 'HabituationTrials':
-            qc = HabituationQC(self.session_path, one=self.one, log=_logger)
-        else:
-            qc = TaskQC(self.session_path, one=self.one, log=_logger)
+        if not QC:
+            QC = HabituationQC if type(self.extractor).__name__ == 'HabituationTrials' else TaskQC
+            _logger.debug('Running QC with %s.%s', QC.__module__, QC.__name__)
+        qc = QC(self.session_path, one=self.one, log=_logger)
+        if QC is not HabituationQC:
             qc_extractor.wheel_encoding = 'X1'
         qc_extractor.settings = self.extractor.settings
         qc_extractor.frame_ttls, qc_extractor.audio_ttls = load_bpod_fronts(
@@ -412,7 +431,7 @@ class ChoiceWorldTrialsNidq(ChoiceWorldTrialsBpod):
             task_collection=self.collection, protocol_number=self.protocol_number, **kwargs)
         return outputs, files
 
-    def _run_qc(self, trials_data=None, update=False, plot_qc=False):
+    def _run_qc(self, trials_data=None, update=False, plot_qc=False, QC=None):
         if not self.extractor or trials_data is None:
             trials_data, _ = self._extract_behaviour(save=False)
         if not trials_data:
@@ -422,10 +441,11 @@ class ChoiceWorldTrialsNidq(ChoiceWorldTrialsBpod):
         qc_extractor = TaskQCExtractor(self.session_path, lazy=True, sync_collection=self.sync_collection, one=self.one,
                                        sync_type=self.sync, task_collection=self.collection)
         qc_extractor.data = qc_extractor.rename_data(trials_data.copy())
-        if type(self.extractor).__name__ == 'HabituationTrials':
-            qc = HabituationQC(self.session_path, one=self.one, log=_logger)
-        else:
-            qc = TaskQC(self.session_path, one=self.one, log=_logger)
+        if not QC:
+            QC = HabituationQC if type(self.extractor).__name__ == 'HabituationTrials' else TaskQC
+        _logger.debug('Running QC with %s.%s', QC.__module__, QC.__name__)
+        qc = QC(self.session_path, one=self.one, log=_logger)
+        if QC is not HabituationQC:
             # Add Bpod wheel data
             wheel_ts_bpod = self.extractor.bpod2fpga(self.extractor.bpod_trials['wheel_timestamps'])
             qc_extractor.data['wheel_timestamps_bpod'] = wheel_ts_bpod
