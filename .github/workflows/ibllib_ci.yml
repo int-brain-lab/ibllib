@@ -10,28 +10,9 @@ on:
     branches: [ master, develop ]
 
 jobs:
-  detect-outstanding-prs:  # Don't run builds for push events if associated with PR
-    runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ github.token }}
-    outputs:
-      abort: ${{ steps.debounce.outputs.abort }}
-    steps:
-      - name: Debounce
-        if: github.event_name == 'push'
-        id: debounce
-        run: |
-          pr_branches=$(gh pr list --json headRefName --repo $GITHUB_REPOSITORY)
-          if [[ $(echo "$pr_branches" | jq -r --arg GITHUB_REF '.[].headRefName | select(. == $GITHUB_REF)') ]]; then
-            echo "This push is associated with a pull request. Skipping the job."
-            echo "abort=true" >> "$GITHUB_OUTPUT"
-          fi
-
   build:
     name: build (${{ matrix.python-version }}, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    needs: debounce
-    if: needs.debounce.outputs.abort != 'true'
     strategy:
       fail-fast: false  # Whether to stop execution of other instances
       max-parallel: 2
