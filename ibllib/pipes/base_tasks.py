@@ -93,9 +93,66 @@ class BehaviourTask(DynamicTask):
             self.output_collection += f'/task_{self.protocol_number:02}'
 
     def get_protocol(self, protocol=None, task_collection=None):
-        return protocol if protocol else sess_params.get_task_protocol(self.session_params, task_collection)
+        """
+        Return the task protocol name.
+
+        This returns the task protocol based on the task collection. If `protocol` is not None, this
+        acts as an identity function. If both `task_collection` and `protocol` are None, returns
+        the protocol defined in the experiment description file only if a single protocol was run.
+        If the `task_collection` is not None, the associated protocol name is returned.
+
+
+        Parameters
+        ----------
+        protocol : str
+            A task protocol name. If not None, the same value is returned.
+        task_collection : str
+            The task collection whose protocol name to return. May be None if only one protocol run.
+
+        Returns
+        -------
+        str, None
+            The task protocol name, or None, if no protocol found.
+
+        Raises
+        ------
+        ValueError
+            For session with multiple task protocols, a task collection must be passed.
+        """
+        if protocol:
+            return protocol
+        protocol = sess_params.get_task_protocol(self.session_params, task_collection) or None
+        if isinstance(protocol, set):
+            if len(protocol) == 1:
+                protocol = next(iter(protocol))
+            else:
+                raise ValueError('Multiple task protocols for session. Task collection must be explicitly defined.')
+        return protocol
 
     def get_task_collection(self, collection=None):
+        """
+        Return the task collection.
+
+        If `collection` is not None, this acts as an identity function. Otherwise loads it from
+        the experiment description if only one protocol was run.
+
+        Parameters
+        ----------
+        collection : str
+            A task collection. If not None, the same value is returned.
+
+        Returns
+        -------
+        str, None
+            The task collection, or None if no task protocols were run.
+
+        Raises
+        ------
+        AssertionError
+            Raised if multiple protocols were run and collection is None, or if experiment
+            description file is improperly formatted.
+
+        """
         if not collection:
             collection = sess_params.get_task_collection(self.session_params)
         # If inferring the collection from the experiment description, assert only one returned
@@ -103,6 +160,31 @@ class BehaviourTask(DynamicTask):
         return collection
 
     def get_protocol_number(self, number=None, task_protocol=None):
+        """
+        Return the task protocol number.
+
+        Numbering starts from 0. If the 'protocol_number' field is missing from the experiment
+        description, None is returned. If `task_protocol` is None, the first protocol number if n
+        protocols == 1, otherwise returns None.
+
+        NB: :func:`ibllib.pipes.dynamic_pipeline.make_pipeline` will determine the protocol number
+        from the order of the tasks in the experiment description if the task collection follows
+        the pattern 'raw_task_data_XX'. If the task protocol does not follow this pattern, the
+        experiment description file should explicitly define the number with the 'protocol_number'
+        field.
+
+        Parameters
+        ----------
+        number : int
+            The protocol number. If not None, the same value is returned.
+        task_protocol : str
+            The task protocol name.
+
+        Returns
+        -------
+        int, None
+            The task protocol number, if defined.
+        """
         if number is None:  # Do not use "if not number" as that will return True if number is 0
             number = sess_params.get_task_protocol_number(self.session_params, task_protocol)
         # If inferring the number from the experiment description, assert only one returned (or something went wrong)
@@ -133,7 +215,7 @@ class BehaviourTask(DynamicTask):
 
         This is an abstract method called by `_run` and `run_qc` methods.  Subclasses should return
         the extracted trials data and a list of output files. This method should also save the
-        trials extractor object to the :prop:`extarctor` property for use by `run_qc`.
+        trials extractor object to the :prop:`extractor` property for use by `run_qc`.
 
         Parameters
         ----------

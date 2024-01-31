@@ -1,3 +1,26 @@
+## Release Notes 2.29
+
+### features
+- Added raw data loaders and synchronisation tools in brainbox.io.one.SpikeSortingLoader, method `ssl.raw_electrophysiology()`
+
+## Release Notes 2.28
+
+### features
+- Added ibllib.pipes.dynamic_pipeline.get_trials_tasks function
+
+### bugfixes
+- Fix ibllib.io.extractors.ephys_fpga.extract_all for python 3.8 
+
+### other
+- Change behavior qc to pass if number of trials > 400 (from start) can be found for which easy trial performance > 0.9
+
+#### 2.28.1
+- Typo in ibllib.pipes.video_tasks.EphysPostDLC class
+- ibllib.io.raw_data_loaders.patch_settings works with iblrigv8 settings files
+
+#### 2.28.2
+- Fix loading of personal projects extractor map
+
 ## Release Notes 2.27
 
 ### features
@@ -16,6 +39,9 @@
 - trainingPhaseChoiceWorld added to Bpod protocol extractor map fixture
 - Last trial of FPGA sessions now correctly extracted
 - Correct dynamic pipeline extraction of passive choice world trials
+#### 2.27.1
+- Correct handling of missing TTLs in FpgaTrialsHabituation
+
 
 ### other
 - Removed deprecated pyschofit module

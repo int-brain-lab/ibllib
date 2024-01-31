@@ -381,7 +381,7 @@ class Task(abc.ABC):
         everything_is_fine = True
         files = []
         for expected_file in expected_files:
-            actual_files = list(Path(self.session_path).rglob(str(Path(expected_file[1]).joinpath(expected_file[0]))))
+            actual_files = list(Path(self.session_path).rglob(str(Path(*filter(None, reversed(expected_file[:2]))))))
             if len(actual_files) == 0 and expected_file[2]:
                 everything_is_fine = False
                 if not silent:
