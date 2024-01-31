@@ -9,6 +9,7 @@ from one.api import ONE
 from one.registration import RegistrationClient
 
 from ibllib.pipes import base_tasks
+from ibllib.pipes.behavior_tasks import ChoiceWorldTrialsBpod
 from ibllib.tests import TEST_DB
 
 
@@ -90,6 +91,44 @@ class TestBehaviourTask(unittest.TestCase):
             settings['IBLRIG_VERSION'] = version
             with self.subTest(version):
                 self.assertIs(spacer_support(), expected)
+
+    def test_get_task_collection(self) -> None:
+        """Test for BehaviourTask.get_task_collection method."""
+        params = {'tasks': [{'fooChoiceWorld': {'collection': 'raw_task_data_00'}}]}
+        task = ChoiceWorldTrialsBpod('foo/bar')
+        self.assertIsNone(task.get_task_collection())
+        task.session_params = params
+        self.assertEqual('raw_task_data_00', task.get_task_collection())
+        params['tasks'].append({'barChoiceWorld': {'collection': 'raw_task_data_01'}})
+        self.assertRaises(AssertionError, task.get_task_collection)
+        self.assertEqual('raw_task_data_02', task.get_task_collection('raw_task_data_02'))
+
+    def test_get_protocol(self) -> None:
+        """Test for BehaviourTask.get_protocol method."""
+        task = ChoiceWorldTrialsBpod('foo/bar')
+        self.assertIsNone(task.get_protocol())
+        self.assertEqual('foobar', task.get_protocol(protocol='foobar'))
+        task.session_params = {'tasks': [{'fooChoiceWorld': {'collection': 'raw_task_data_00'}}]}
+        self.assertEqual('fooChoiceWorld', task.get_protocol())
+        task.session_params['tasks'].append({'barChoiceWorld': {'collection': 'raw_task_data_01'}})
+        self.assertRaises(ValueError, task.get_protocol)
+        self.assertEqual('barChoiceWorld', task.get_protocol(task_collection='raw_task_data_01'))
+        self.assertIsNone(task.get_protocol(task_collection='raw_behavior_data'))
+
+    def test_get_protocol_number(self) -> None:
+        """Test for BehaviourTask.get_protocol_number method."""
+        params = {'tasks': [
+            {'fooChoiceWorld': {'collection': 'raw_task_data_00', 'protocol_number': 0}},
+            {'barChoiceWorld': {'collection': 'raw_task_data_01', 'protocol_number': 1}}
+        ]}
+        task = ChoiceWorldTrialsBpod('foo/bar')
+        self.assertIsNone(task.get_protocol_number())
+        self.assertRaises(AssertionError, task.get_protocol_number, number='foo')
+        self.assertEqual(1, task.get_protocol_number(number=1))
+        task.session_params = params
+        self.assertEqual(1, task.get_protocol_number())
+        for i, proc in enumerate(('fooChoiceWorld', 'barChoiceWorld')):
+            self.assertEqual(i, task.get_protocol_number(task_protocol=proc))
 
 
 if __name__ == '__main__':
