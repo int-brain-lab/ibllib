@@ -1,4 +1,5 @@
 """Tests for the ibllib.qc.task_qc_viewer package."""
+import os
 import unittest
 from unittest import mock
 
@@ -13,11 +14,22 @@ from ibllib.qc.task_metrics import TaskQC
 from ibllib.tests import TEST_DB
 
 
+MOCK_QT = os.environ.get('IBL_MOCK_QT', True)
+"""bool: If true, do not run the QT application."""
+
+
 class TestTaskQC(unittest.TestCase):
     """Tests for ibllib.qc.task_qc_viewer.task_qc module."""
 
     def setUp(self):
         self.one = ONE(**TEST_DB, mode='local')
+        """Some testing environments do not have the correct QT libraries. It is difficult to
+        ensure Qt is installed correctly as Anaconda, OpenCV, and system QT installations can
+        disrupt the lib paths. If MOCK_QT is true, the QC application is never run."""
+        if MOCK_QT:
+            qt_mock = mock.patch('ibllib.qc.task_qc_viewer.ViewEphysQC.viewqc')
+            qt_mock.start()
+            self.addCleanup(qt_mock.stop)
 
     def test_get_bpod_trials_task(self):
         """Test get_bpod_trials_task function."""
