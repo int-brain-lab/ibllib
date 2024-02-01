@@ -249,10 +249,29 @@ class BehaviourTask(DynamicTask):
         ibllib.qc.task_metrics.TaskQC
             A TaskQC object replete with task data and computed metrics.
         """
+        self._assert_trials_data(trials_data)
+        return None
+
+    def _assert_trials_data(self, trials_data=None):
+        """Check trials data available.
+
+        Called by :meth:`run_qc`, this extracts the trial data if `trials_data` is None, and raises
+        if :meth:`extract_behaviour` returns None.
+
+        Parameters
+        ----------
+        trials_data : dict, None
+            A dictionary of extracted trials data or None.
+
+        Returns
+        -------
+        trials_data : dict
+            A dictionary of extracted trials data. The output of :meth:`extract_behaviour`.
+        """
         if not self.extractor or trials_data is None:
             trials_data, _ = self.extract_behaviour(save=False)
-        if not trials_data:
-            raise ValueError('No trials data found')
+        if not (trials_data and self.extractor):
+            raise ValueError('No trials data and/or extractor found')
         return trials_data
 
 

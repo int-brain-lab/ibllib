@@ -71,7 +71,7 @@ class TestTaskQC(unittest.TestCase):
         self.assertRaises(ValueError, show_session_task_qc, session_path, one=self.one)
 
         # Set up QC mock
-        qc_mock = mock.Mock(spec=TaskQC)
+        qc_mock = mock.Mock(spec=TaskQC, unsafe=True)
         qc_mock.metrics = {'foo': .7}
         qc_mock.compute_session_status.return_value = ('Fail', qc_mock.metrics, {'foo': 'FAIL'})
         qc_mock.extractor.data = {'intervals': np.array([[0, 1]])}

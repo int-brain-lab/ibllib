@@ -92,7 +92,7 @@ class HabituationTrialsBpod(base_tasks.BehaviourTask):
         return self.extractor.extract(task_collection=self.collection, **kwargs)
 
     def run_qc(self, trials_data=None, update=True):
-        trials_data = super().run_qc(trials_data, update=False)  # validate trials data
+        trials_data = self._assert_trials_data(trials_data)  # validate trials data
 
         # Compile task data for QC
         qc = HabituationQC(self.session_path, one=self.one)
@@ -332,7 +332,7 @@ class ChoiceWorldTrialsBpod(base_tasks.BehaviourTask):
         ibllib.qc.task_metrics.TaskQC
             The task QC object.
         """
-        trials_data = super().run_qc(trials_data, update=False)  # validate trials data
+        trials_data = self._assert_trials_data(trials_data)  # validate trials data
 
         # Compile task data for QC
         qc_extractor = TaskQCExtractor(self.session_path, lazy=True, sync_collection=self.sync_collection, one=self.one,
@@ -424,7 +424,7 @@ class ChoiceWorldTrialsNidq(ChoiceWorldTrialsBpod):
         return outputs, files
 
     def run_qc(self, trials_data=None, update=False, plot_qc=False, QC=None):
-        trials_data = super().run_qc(trials_data, update=False)  # validate trials data
+        trials_data = self._assert_trials_data(trials_data)  # validate trials data
 
         # Compile task data for QC
         qc_extractor = TaskQCExtractor(self.session_path, lazy=True, sync_collection=self.sync_collection, one=self.one,
