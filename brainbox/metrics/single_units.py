@@ -981,7 +981,7 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
     r.amp_std_dB[ir] = np.array(camp['log_amps'].std())
     srp = metrics.slidingRP_all(spikeTimes=spike_times, spikeClusters=spike_clusters,
                                 **{'sampleRate': 30000, 'binSizeCorr': 1 / 30000})
-    r.slidingRP_viol[srp['cidx']] = srp['value']
+    r.slidingRP_viol = srp['value']
 
     # loop over each cluster to compute the rest of the metrics
     for ic in np.arange(nclust):
