@@ -7,17 +7,16 @@ import numpy as np
 import copy
 import random
 import string
-import datetime
 
 from one.api import ONE
 from neuropixel import trace_header
 
 from ibllib.tests import TEST_DB
+from ibllib.tests.fixtures.utils import register_new_session
 from iblatlas.atlas import AllenAtlas
 from ibllib.pipes.misc import create_alyx_probe_insertions
 from ibllib.qc.alignment_qc import AlignmentQC
 from ibllib.pipes.histology import register_track, register_chronic_track
-from one.registration import RegistrationClient
 
 EPHYS_SESSION = 'b1c968ad-4874-468d-b2e4-5ffa9b9964e9'
 one = ONE(**TEST_DB)
@@ -34,11 +33,9 @@ class TestTracingQc(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        rng = np.random.default_rng()
         probe = [''.join(random.choices(string.ascii_letters, k=5)),
                  ''.join(random.choices(string.ascii_letters, k=5))]
-        date = str(datetime.date(2019, rng.integers(1, 12), rng.integers(1, 28)))
-        _, eid = RegistrationClient(one).create_new_session('ZM_1150', date=date)
+        _, eid = register_new_session(one, subject='ZM_1150')
         cls.eid = str(eid)
         # Currently the task protocol of a session must contain 'ephys' in order to create an insertion!
         one.alyx.rest('sessions', 'partial_update', id=cls.eid, data={'task_protocol': 'ephys'})
@@ -75,13 +72,11 @@ class TestTracingQc(unittest.TestCase):
 class TestChronicTracingQC(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        rng = np.random.default_rng()
         probe = ''.join(random.choices(string.ascii_letters, k=5))
         serial = ''.join(random.choices(string.ascii_letters, k=10))
 
         # Make a chronic insertions
-        date = str(datetime.date(2019, rng.integers(1, 12), rng.integers(1, 28)))
-        _, eid = RegistrationClient(one).create_new_session('ZM_1150', date=date)
+        _, eid = register_new_session(one, subject='ZM_1150')
         cls.eid = str(eid)
         # Currently the task protocol of a session must contain 'ephys' in order to create an insertion!
         one.alyx.rest('sessions', 'partial_update', id=cls.eid, data={'task_protocol': 'ephys'})
@@ -142,7 +137,6 @@ class TestAlignmentQcExisting(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        rng = np.random.default_rng()
         data = np.load(Path(Path(__file__).parent.parent.
                             joinpath('fixtures', 'qc', 'data_alignmentqc_existing.npz')),
                        allow_pickle=True)
@@ -155,8 +149,7 @@ class TestAlignmentQcExisting(unittest.TestCase):
         insertion = data['insertion'].tolist()
         insertion['name'] = ''.join(random.choices(string.ascii_letters, k=5))
         insertion['json'] = {'xyz_picks': cls.xyz_picks}
-        date = str(datetime.date(2019, rng.integers(1, 12), rng.integers(1, 28)))
-        _, eid = RegistrationClient(one).create_new_session('ZM_1150', date=date)
+        _, eid = register_new_session(one, subject='ZM_1150')
         cls.eid = str(eid)
         # Currently the task protocol of a session must contain 'ephys' in order to create an insertion!
         one.alyx.rest('sessions', 'partial_update', id=cls.eid, data={'task_protocol': 'ephys'})
@@ -265,7 +258,6 @@ class TestAlignmentQcManual(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        rng = np.random.default_rng()
         fixture_path = Path(__file__).parent.parent.joinpath('fixtures', 'qc')
         data = np.load(fixture_path / 'data_alignmentqc_manual.npz', allow_pickle=True)
         cls.xyz_picks = (data['xyz_picks'] * 1e6).tolist()
@@ -277,8 +269,7 @@ class TestAlignmentQcManual(unittest.TestCase):
         insertion['name'] = ''.join(random.choices(string.ascii_letters, k=5))
         insertion['json'] = {'xyz_picks': cls.xyz_picks}
 
-        date = str(datetime.date(2018, rng.integers(1, 12), rng.integers(1, 28)))
-        _, eid = RegistrationClient(one).create_new_session('ZM_1150', date=date)
+        _, eid = register_new_session(one, subject='ZM_1150')
         cls.eid = str(eid)
         insertion['session'] = cls.eid
         probe_insertion = one.alyx.rest('insertions', 'create', data=insertion)

@@ -77,7 +77,7 @@ class TestTaskQC(unittest.TestCase):
         qc_mock.extractor.data = {'intervals': np.array([[0, 1]])}
         qc_mock.extractor.frame_ttls = qc_mock.extractor.audio_ttls = qc_mock.extractor.bpod_ttls = mock.MagicMock()
 
-        active_task = mock.Mock(spec=ChoiceWorldTrialsNidq)
+        active_task = mock.Mock(spec=ChoiceWorldTrialsNidq, unsafe=True)
         active_task.run_qc.return_value = qc_mock
         active_task.name = 'Trials_activeChoiceWorld_01'
         trials_tasks_mock.return_value = [passive_task, active_task]
