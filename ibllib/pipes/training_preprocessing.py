@@ -70,7 +70,7 @@ class TrainingTrials(tasks.Task):
             qc = TaskQC(self.session_path, one=self.one)
         qc.extractor = TaskQCExtractor(self.session_path, one=self.one, lazy=True)
         qc.extractor.type = extractor_type
-        qc.data = qc.extractor.rename_data(trials_data)
+        qc.extractor.data = qc.extractor.rename_data(trials_data)
         qc.extractor.load_raw_data()  # re-loads raw data and populates various properties
         # Aggregate and update Alyx QC fields
         qc.run(update=update)
@@ -80,7 +80,7 @@ class TrainingTrials(tasks.Task):
     def _run(self, **_):
         """Extracts an iblrig training session and runs QC."""
         trials_data, output_files = self.extract_behaviour()
-        if self.one and not self.one.offline:
+        if self.one and not self.one.offline and trials_data:
             # Run the task QC
             self.run_qc(trials_data)
         return output_files
