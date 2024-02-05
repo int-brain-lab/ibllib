@@ -124,7 +124,7 @@ class PlotWindow(QtWidgets.QWidget):
 
 class GraphWindow(QtWidgets.QWidget):
     def __init__(self, parent=None, wheel=None):
-        QtWidgets.QWidget.__init__(self, parent=None)
+        QtWidgets.QWidget.__init__(self, parent=parent)
         vLayout = QtWidgets.QVBoxLayout(self)
         hLayout = QtWidgets.QHBoxLayout()
         self.pathLE = QtWidgets.QLineEdit(self)
@@ -134,16 +134,16 @@ class GraphWindow(QtWidgets.QWidget):
         vLayout.addLayout(hLayout)
         self.pandasTv = QtWidgets.QTableView(self)
         vLayout.addWidget(self.pandasTv)
-        self.loadBtn.clicked.connect(self.loadFile)
+        self.loadBtn.clicked.connect(self.load_file)
         self.pandasTv.setSortingEnabled(True)
         self.pandasTv.doubleClicked.connect(self.tv_double_clicked)
         self.wplot = PlotWindow(wheel=wheel)
         self.wplot.show()
         self.wheel = wheel
 
-    def loadFile(self):
-        fileName, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Open File", "",
-                                                            "CSV Files (*.csv)")
+    def load_file(self):
+        fileName, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self, "Open File", "", "CSV Files (*.csv)")
         self.pathLE.setText(fileName)
         df = pd.read_csv(fileName)
         self.update_df(df)
@@ -160,8 +160,8 @@ class GraphWindow(QtWidgets.QWidget):
         finish = df.loc[ind.row()]['intervals_1']
         dt = finish - start
         if self.wheel:
-            idx = np.searchsorted(self.wheel['re_ts'], np.array([start - dt / 10,
-                                                                 finish + dt / 10]))
+            idx = np.searchsorted(
+                self.wheel['re_ts'], np.array([start - dt / 10, finish + dt / 10]))
             period = self.wheel['re_pos'][idx[0]:idx[1]]
             if period.size == 0:
                 _logger.warning('No wheel data during trial #%i', ind.row())
