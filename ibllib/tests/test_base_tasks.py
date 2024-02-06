@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 import tempfile
 from pathlib import Path
 from functools import partial
@@ -95,7 +96,7 @@ class TestBehaviourTask(unittest.TestCase):
     def test_get_task_collection(self) -> None:
         """Test for BehaviourTask.get_task_collection method."""
         params = {'tasks': [{'fooChoiceWorld': {'collection': 'raw_task_data_00'}}]}
-        task = ChoiceWorldTrialsBpod('foo/bar')
+        task = ChoiceWorldTrialsBpod('')
         self.assertIsNone(task.get_task_collection())
         task.session_params = params
         self.assertEqual('raw_task_data_00', task.get_task_collection())
@@ -105,7 +106,7 @@ class TestBehaviourTask(unittest.TestCase):
 
     def test_get_protocol(self) -> None:
         """Test for BehaviourTask.get_protocol method."""
-        task = ChoiceWorldTrialsBpod('foo/bar')
+        task = ChoiceWorldTrialsBpod('')
         self.assertIsNone(task.get_protocol())
         self.assertEqual('foobar', task.get_protocol(protocol='foobar'))
         task.session_params = {'tasks': [{'fooChoiceWorld': {'collection': 'raw_task_data_00'}}]}
@@ -121,7 +122,7 @@ class TestBehaviourTask(unittest.TestCase):
             {'fooChoiceWorld': {'collection': 'raw_task_data_00', 'protocol_number': 0}},
             {'barChoiceWorld': {'collection': 'raw_task_data_01', 'protocol_number': 1}}
         ]}
-        task = ChoiceWorldTrialsBpod('foo/bar')
+        task = ChoiceWorldTrialsBpod('')
         self.assertIsNone(task.get_protocol_number())
         self.assertRaises(AssertionError, task.get_protocol_number, number='foo')
         self.assertEqual(1, task.get_protocol_number(number=1))
@@ -129,6 +130,31 @@ class TestBehaviourTask(unittest.TestCase):
         self.assertEqual(1, task.get_protocol_number())
         for i, proc in enumerate(('fooChoiceWorld', 'barChoiceWorld')):
             self.assertEqual(i, task.get_protocol_number(task_protocol=proc))
+
+    def test_assert_trials_data(self):
+        """Test for BehaviourTask._assert_trials_data method."""
+        task = ChoiceWorldTrialsBpod('')
+        trials_data = {'foo': [1, 2, 3]}
+
+        def _set(**_):
+            task.extractor = True  # set extractor attribute
+            return trials_data, None
+
+        with patch.object(task, 'extract_behaviour', side_effect=_set) as mock:
+            # Trials data but no extractor
+            self.assertEqual(trials_data, task._assert_trials_data(trials_data))
+            mock.assert_called_with(save=False)
+        with patch.object(task, 'extract_behaviour', return_value=(trials_data, None)) as mock:
+            # Extractor but no trials data
+            self.assertEqual(trials_data, task._assert_trials_data(None))
+            mock.assert_called_with(save=False)
+            # Returns no trials
+            mock.return_value = (None, None)
+            self.assertRaises(ValueError, task._assert_trials_data)
+        with patch.object(task, 'extract_behaviour', return_value=(trials_data, None)) as mock:
+            # Both extractor and trials data
+            self.assertEqual(trials_data, task._assert_trials_data(trials_data))
+            mock.assert_not_called()
 
 
 if __name__ == '__main__':

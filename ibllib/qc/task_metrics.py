@@ -87,6 +87,9 @@ class TaskQC(base.QC):
     criteria['_task_iti_delays'] = {'NOT_SET': 0}
     criteria['_task_passed_trial_checks'] = {'NOT_SET': 0}
 
+    extractor = None
+    """ibllib.qc.task_extractors.TaskQCExtractor: A task extractor object containing raw and extracted data."""
+
     @staticmethod
     def _thresholding(qc_value, thresholds=None):
         """

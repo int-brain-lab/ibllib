@@ -1,7 +1,3 @@
-#!/usr/bin/env python
-# -*- coding:utf-8 -*-
-# @Author: Niccolò Bonacchi, Miles Wells
-# @Date: Monday, July 16th 2018, 1:28:46 pm
 """
 Raw Data Loader functions for PyBpod rig.
 

@@ -3,14 +3,12 @@ from unittest import mock
 import json
 import random
 import string
-import datetime
 
-import numpy as np
 import requests
 from one.api import ONE
-from one.registration import RegistrationClient
 
 from ibllib.tests import TEST_DB
+from ibllib.tests.fixtures.utils import register_new_session
 import ibllib.qc.critical_reasons as usrpmt
 
 one = ONE(**TEST_DB)
@@ -28,12 +26,10 @@ def mock_input(prompt):
 class TestUserPmtSess(unittest.TestCase):
 
     def setUp(self) -> None:
-        rng = np.random.default_rng()
         # Make sure tests use correct session ID
         one.alyx.clear_rest_cache()
         # Create new session on database with a random date to avoid race conditions
-        date = str(datetime.date(2022, rng.integers(1, 12), rng.integers(1, 28)))
-        _, eid = RegistrationClient(one).create_new_session('ZM_1150', date=date)
+        _, eid = register_new_session(one, subject='ZM_1150')
         eid = str(eid)
         # Currently the task protocol of a session must contain 'ephys' in order to create an insertion!
         one.alyx.rest('sessions', 'partial_update', id=eid, data={'task_protocol': 'ephys'})
@@ -159,7 +155,7 @@ class TestUserPmtSess(unittest.TestCase):
 
 class TestSignOffNote(unittest.TestCase):
     def setUp(self) -> None:
-        path, eid = RegistrationClient(one).create_new_session('ZM_1743')
+        path, eid = register_new_session(one, subject='ZM_1743')
         self.eid = str(eid)
         self.sign_off_keys = ['biasedChoiceWorld_00', 'passiveChoiceWorld_01']
         data = {'sign_off_checklist': dict.fromkeys(map(lambda x: f'{x}', self.sign_off_keys)),
