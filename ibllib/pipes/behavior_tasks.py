@@ -533,11 +533,12 @@ class TrainingStatus(base_tasks.BehaviourTask):
 
     def _run(self, upload=True):
         """
-        Extracts training status for subject
+        Extracts training status for subject.
         """
 
         lab = get_lab(self.session_path, self.one.alyx)
-        if lab == 'cortexlab':
+        if lab == 'cortexlab' and 'cortexlab' in self.one.alyx.base_url:
+            _logger.info('Switching from cortexlab Alyx to IBL Alyx for training status queries.')
             one = ONE(base_url='https://alyx.internationalbrainlab.org')
         else:
             one = self.one

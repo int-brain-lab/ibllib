@@ -7,17 +7,18 @@ import logging
 import time
 from datetime import datetime
 from pathlib import Path
-import pkg_resources
 import re
 import subprocess
 import sys
 import traceback
 import importlib
+import importlib.metadata
 
 from one.api import ONE
 from one.webclient import AlyxClient
 from one.remote.globus import get_lab_from_endpoint_id, get_local_endpoint_id
 
+from ibllib import __version__ as ibllib_version
 from ibllib.io.extractors.base import get_pipeline, get_task_protocol, get_session_extractor_type
 from ibllib.pipes import tasks, training_preprocessing, ephys_preprocessing
 from ibllib.time import date2isostr
@@ -75,8 +76,8 @@ def report_health(one):
     Get a few indicators and label the json field of the corresponding lab with them.
     """
     status = {'python_version': sys.version,
-              'ibllib_version': pkg_resources.get_distribution("ibllib").version,
-              'phylib_version': pkg_resources.get_distribution("phylib").version,
+              'ibllib_version': ibllib_version,
+              'phylib_version': importlib.metadata.version('phylib'),
               'local_time': date2isostr(datetime.now())}
     status.update(_get_volume_usage('/mnt/s0/Data', 'raid'))
     status.update(_get_volume_usage('/', 'system'))
