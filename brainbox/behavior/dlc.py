@@ -57,7 +57,6 @@ def likelihood_threshold(dlc, threshold=0.9):
     for feat in features:
         nan_fill = dlc[f'{feat}_likelihood'] < threshold
         dlc.loc[nan_fill, (f'{feat}_x', f'{feat}_y')] = np.nan
-
     return dlc
 
 
