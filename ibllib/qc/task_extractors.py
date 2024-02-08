@@ -118,14 +118,12 @@ class TaskQCExtractor:
             )
 
     def load_raw_data(self):
-        """
-        Loads the TTLs, raw task data and task settings
-        :return:
-        """
+        """Loads the TTLs, raw task data and task settings."""
         self.log.info(f'Loading raw data from {self.session_path}')
         self.type = self.type or get_session_extractor_type(self.session_path, task_collection=self.task_collection)
         # Finds the sync type when it isn't explicitly set, if ephys we assume nidq otherwise bpod
         self.sync_type = self.sync_type or 'nidq' if self.type == 'ephys' else 'bpod'
+        self.wheel_encoding = 'X4' if (self.sync_type != 'bpod' and not self.bpod_only) else 'X1'
 
         self.settings, self.raw_data = raw.load_bpod(self.session_path, task_collection=self.task_collection)
         # Fetch the TTLs for the photodiode and audio
@@ -147,22 +145,18 @@ class TaskQCExtractor:
             self.frame_ttls, self.audio_ttls, self.bpod_ttls = ttls
 
     def extract_data(self):
-        """Extracts and loads behaviour data for QC
+        """Extracts and loads behaviour data for QC.
+
         NB: partial extraction when bpod_only attribute is False requires intervals and
         intervals_bpod to be assigned to the data attribute before calling this function.
-        :return:
         """
         warnings.warn('The TaskQCExtractor.extract_data will be removed in the future, '
                       'use dynamic pipeline behaviour tasks instead.', DeprecationWarning)
         self.log.info(f'Extracting session: {self.session_path}')
-        self.type = self.type or get_session_extractor_type(self.session_path, task_collection=self.task_collection)
-        # Finds the sync type when it isn't explicitly set, if ephys we assume nidq otherwise bpod
-        self.sync_type = self.sync_type or 'nidq' if self.type == 'ephys' else 'bpod'
-
-        self.wheel_encoding = 'X4' if (self.sync_type != 'bpod' and not self.bpod_only) else 'X1'
 
         if not self.raw_data:
             self.load_raw_data()
+
         # Run extractors
         if self.sync_type != 'bpod' and not self.bpod_only:
             data, _ = ephys_fpga.extract_all(self.session_path, save=False, task_collection=self.task_collection)

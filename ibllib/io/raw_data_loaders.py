@@ -1,11 +1,7 @@
-#!/usr/bin/env python
-# -*- coding:utf-8 -*-
-# @Author: Niccolò Bonacchi, Miles Wells
-# @Date: Monday, July 16th 2018, 1:28:46 pm
 """
-Raw Data Loader functions for PyBpod rig
+Raw Data Loader functions for PyBpod rig.
 
-Module contains one loader function per raw datafile
+Module contains one loader function per raw datafile.
 """
 import re
 import json
@@ -107,7 +103,7 @@ def load_data(session_path: Union[str, Path], task_collection='raw_behavior_data
 
 
 def load_camera_frameData(session_path, camera: str = 'left', raw: bool = False) -> pd.DataFrame:
-    """ Loads binary frame data from Bonsai camera recording workflow.
+    """Loads binary frame data from Bonsai camera recording workflow.
 
     Args:
         session_path (StrPath): Path to session folder
@@ -736,16 +732,6 @@ def _groom_wheel_data_ge5(data, label='file ', path=''):
     return data
 
 
-def save_bool(save, dataset_type):
-    if isinstance(save, bool):
-        out = save
-    elif isinstance(save, list):
-        out = (dataset_type in save) or (Path(dataset_type).stem in save)
-    if out:
-        _logger.debug('extracting' + dataset_type)
-    return out
-
-
 def sync_trials_robust(t0, t1, diff_threshold=0.001, drift_threshold_ppm=200, max_shift=5,
                        return_index=False):
     """
@@ -945,7 +931,7 @@ def patch_settings(session_path, collection='raw_behavior_data',
     if not settings:
         raise IOError('Settings file not found')
 
-    filename = PureWindowsPath(settings['SETTINGS_FILE_PATH']).name
+    filename = PureWindowsPath(settings.get('SETTINGS_FILE_PATH', '_iblrig_taskSettings.raw.json')).name
     file_path = Path(session_path).joinpath(collection, filename)
 
     if subject:
@@ -955,7 +941,8 @@ def patch_settings(session_path, collection='raw_behavior_data',
         for k in settings.keys():
             if isinstance(settings[k], str):
                 settings[k] = settings[k].replace(f'\\Subjects\\{old_subject}', f'\\Subjects\\{subject}')
-        settings['SESSION_NAME'] = '\\'.join([subject, *settings['SESSION_NAME'].split('\\')[1:]])
+        if 'SESSION_NAME' in settings:
+            settings['SESSION_NAME'] = '\\'.join([subject, *settings['SESSION_NAME'].split('\\')[1:]])
         settings.pop('PYBPOD_SUBJECT_EXTRA', None)  # Get rid of Alyx subject info
 
     if date:
@@ -970,6 +957,10 @@ def patch_settings(session_path, collection='raw_behavior_data',
                     f'\\{settings["SUBJECT_NAME"]}\\{date}'
                 )
         settings['SESSION_DATETIME'] = date + settings['SESSION_DATETIME'][10:]
+        if 'SESSION_END_TIME' in settings:
+            settings['SESSION_END_TIME'] = date + settings['SESSION_END_TIME'][10:]
+        if 'SESSION_START_TIME' in settings:
+            settings['SESSION_START_TIME'] = date + settings['SESSION_START_TIME'][10:]
 
     if number:
         # Patch session number

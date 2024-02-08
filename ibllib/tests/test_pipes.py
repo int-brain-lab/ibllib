@@ -8,8 +8,6 @@ import unittest
 from pathlib import Path
 from unittest import mock
 from functools import partial
-import numpy as np
-import datetime
 import random
 import string
 from uuid import uuid4
@@ -289,9 +287,7 @@ class TestPipesMisc(unittest.TestCase):
         # Connect to test DB
         one = ONE(**TEST_DB)
         # Create new session on database with a random date to avoid race conditions
-        date = str(datetime.date(2022, np.random.randint(1, 12), np.random.randint(1, 28)))
-        from one.registration import RegistrationClient
-        _, eid = RegistrationClient(one).create_new_session('ZM_1150', date=date)
+        _, eid = fu.register_new_session(one, subject='ZM_1150')
         eid = str(eid)
         # Currently the task protocol of a session must contain 'ephys' in order to create an insertion!
         one.alyx.rest('sessions', 'partial_update', id=eid, data={'task_protocol': 'ephys'})

@@ -4,10 +4,8 @@ import os
 import uuid
 import tempfile
 from pathlib import Path
-import sys
 import logging
 import json
-from datetime import datetime
 
 import numpy as np
 from one.api import ONE
@@ -15,7 +13,7 @@ from iblutil.io import params
 import yaml
 
 from ibllib.tests import TEST_DB
-from ibllib.io import flags, misc, globus, video, session_params
+from ibllib.io import flags, misc, video, session_params
 import ibllib.io.raw_data_loaders as raw
 import ibllib.io.raw_daq_loaders as raw_daq
 
@@ -166,11 +164,15 @@ class TestsRawDataLoaders(unittest.TestCase):
         self.session = Path(__file__).parent.joinpath('extractors', 'data', 'session_biased_ge5')
         data = raw.load_encoder_trial_info(self.session)
         self.assertTrue(data is not None)
+        self.assertIsNone(raw.load_encoder_trial_info(self.session.with_name('empty')))
+        self.assertIsNone(raw.load_encoder_trial_info(None))
 
     def test_load_camera_ssv_times(self):
         session = Path(__file__).parent.joinpath('extractors', 'data', 'session_ephys')
         with self.assertRaises(ValueError):
             raw.load_camera_ssv_times(session, 'tail')
+        with self.assertRaises(FileNotFoundError):
+            raw.load_camera_ssv_times(session.with_name('foobar'), 'body')
         bonsai, camera = raw.load_camera_ssv_times(session, 'body')
         self.assertTrue(bonsai.size == camera.size == 6001)
         self.assertEqual(bonsai.dtype.str, '<M8[ns]')
@@ -297,6 +299,18 @@ class TestsRawDataLoaders(unittest.TestCase):
         self.assertTrue(fd.dtypes.to_dict() == parsed_dtypes)
         self.assertTrue(all([x == np.int64 for x in fd_raw.dtypes]))
 
+    def test_load_settings(self):
+        main_path = Path(__file__).parent.joinpath('extractors', 'data')
+        self.training_ge5 = main_path / 'session_training_ge5'
+        settings = raw.load_settings(self.training_ge5)
+        self.assertIsInstance(settings, dict)
+        self.assertEqual(144, len(settings))
+        with self.assertLogs(raw._logger, level=20):
+            self.assertIsNone(raw.load_settings(None))
+        # Should return None when path empty
+        with self.assertLogs(raw._logger, level=20):
+            self.assertIsNone(raw.load_settings(self.training_ge5, 'raw_task_data_00'))
+
     def tearDown(self):
         self.tempfile.close()
         os.unlink(self.tempfile.name)
@@ -351,55 +365,6 @@ class TestsMisc(unittest.TestCase):
         misc.delete_empty_folders(self.tempdir, dry=False, recursive=True)
         pos = [x.exists() for x in self.subdirs]
         self.assertTrue(all([x == y for x, y in zip(pos, pos_expected)]))
-
-
-class TestsGlobus(unittest.TestCase):
-    def setUp(self):
-        self.patcher = patch.multiple('globus_sdk',
-                                      NativeAppAuthClient=unittest.mock.DEFAULT,
-                                      RefreshTokenAuthorizer=unittest.mock.DEFAULT,
-                                      TransferClient=unittest.mock.DEFAULT)
-        self.patcher.start()
-        self.addCleanup(self.patcher.stop)
-
-    def test_as_globus_path(self):
-        assert datetime.now() < datetime(2024, 1, 30), 'remove deprecated module'
-        # A Windows path
-        if sys.platform == 'win32':
-            # "/E/FlatIron/integration"
-            actual = globus.as_globus_path('E:\\FlatIron\\integration')
-            self.assertTrue(actual.startswith('/E/'))
-            # A relative POSIX path
-            actual = globus.as_globus_path('/mnt/foo/../data/integration')
-            expected = '/mnt/data/integration'  # "/C/mnt/data/integration
-            self.assertTrue(actual.endswith(expected))
-
-        # A globus path
-        actual = globus.as_globus_path('/E/FlatIron/integration')
-        expected = '/E/FlatIron/integration'
-        self.assertEqual(expected, actual)
-
-    @unittest.mock.patch('iblutil.io.params.read')
-    def test_login_auto(self, mock_params):
-        assert datetime.now() < datetime(2024, 1, 30), 'remove deprecated module'
-        client_id = 'h3u2ier'
-        # Test ValueError thrown with incorrect parameters
-        mock_params.return_value = None  # No parameters saved
-        with self.assertRaises(ValueError):
-            globus.login_auto(client_id)
-        # mock_params.assert_called_with('globus/default')
-
-        pars = params.from_dict({'access_token': '7r3hj89', 'expires_at_seconds': '2020-09-10'})
-        mock_params.return_value = pars  # Incomplete parameter object
-        with self.assertRaises(ValueError):
-            globus.login_auto(client_id)
-
-        # Complete parameter object
-        mock_params.return_value = pars.set('refresh_token', '37yh4')
-        gtc = globus.login_auto(client_id)
-        self.assertIsInstance(gtc, unittest.mock.Mock)
-        mock, _ = self.patcher.get_original()
-        mock.assert_called_once_with(client_id)
 
 
 class TestVideo(unittest.TestCase):
@@ -588,7 +553,7 @@ class TestSessionParams(unittest.TestCase):
         collections = session_params.get_collections(tasks)
         self.assertEqual(set(collections['passiveChoiceWorld']), set(['raw_passive_data_bis', 'raw_passive_data']))
         collections = session_params.get_collections(tasks, flat=True)
-        self.assertEqual(set(collections), set(['raw_passive_data_bis', 'raw_passive_data', 'raw_behavior_data']))
+        self.assertEqual(collections, {'raw_passive_data_bis', 'raw_passive_data', 'raw_behavior_data'})
 
 
 class TestRawDaqLoaders(unittest.TestCase):

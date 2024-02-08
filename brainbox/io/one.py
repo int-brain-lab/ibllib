@@ -28,6 +28,7 @@ from ibllib.pipes.ephys_alignment import EphysAlignment
 from ibllib.plots import vertical_lines
 
 import brainbox.plot
+from brainbox.io.spikeglx import Streamer
 from brainbox.ephys_plots import plot_brain_regions
 from brainbox.metrics.single_units import quick_unit_metrics
 from brainbox.behavior.wheel import interpolate_position, velocity_filtered
@@ -793,6 +794,7 @@ class SpikeSortingLoader:
     datasets: list = None   # list of all datasets belonging to the session
     # the following properties are the outcome of a reading function
     files: dict = None
+    raw_data_files: list = None  # list of raw ap and lf files corresponding to the recording
     collection: str = ''
     histology: str = ''  # 'alf', 'resolved', 'aligned' or 'traced'
     spike_sorter: str = 'pykilosort'
@@ -829,6 +831,7 @@ class SpikeSortingLoader:
         if self.atlas is None:
             self.atlas = AllenAtlas()
         self.files = {}
+        self.raw_data_files = []
 
     def _load_object(self, *args, **kwargs):
         """
@@ -881,6 +884,11 @@ class SpikeSortingLoader:
         self.download_spike_sorting_object(obj, *args, **kwargs)
         return self._load_object(self.files[obj])
 
+    def get_version(self, spike_sorter='pykilosort'):
+        collection = self._get_spike_sorting_collection(spike_sorter=spike_sorter)
+        dset = self.one.alyx.rest('datasets', 'list', session=self.eid, collection=collection, name='spikes.times.npy')
+        return dset[0]['version'] if len(dset) else 'unknown'
+
     def download_spike_sorting_object(self, obj, spike_sorter='pykilosort', dataset_types=None, collection=None,
                                       missing='raise', **kwargs):
         """
@@ -918,6 +926,46 @@ class SpikeSortingLoader:
         for obj in ['spikes', 'clusters', 'channels']:
             self.download_spike_sorting_object(obj=obj, **kwargs)
         self.spike_sorting_path = self.files['spikes'][0].parent
+
+    def download_raw_electrophysiology(self, band='ap'):
+        """
+        Downloads raw electrophysiology data files on local disk.
+        :param band: "ap" (default) or "lf" for LFP band
+        :return: list of raw data files full paths (ch, meta and cbin files)
+        """
+        raw_data_files = []
+        for suffix in [f'*.{band}.ch', f'*.{band}.meta', f'*.{band}.cbin']:
+            try:
+                # FIXME: this will fail if multiple LFP segments are found
+                raw_data_files.append(self.one.load_dataset(
+                    self.eid,
+                    download_only=True,
+                    collection=f'raw_ephys_data/{self.pname}',
+                    dataset=suffix,
+                    check_hash=False,
+                ))
+            except ALFObjectNotFound:
+                _logger.debug(f"{self.session_path} can't locate raw data collection raw_ephys_data/{self.pname}, file {suffix}")
+        self.raw_data_files = list(set(self.raw_data_files + raw_data_files))
+        return raw_data_files
+
+    def raw_electrophysiology(self, stream=True, band='ap', **kwargs):
+        """
+        Returns a reader for the raw electrophysiology data
+        By default it is a streamer object, but if stream is False, it will return a spikeglx.Reader after having
+        downloaded the raw data file if necessary
+        :param stream:
+        :param band:
+        :param kwargs:
+        :return:
+        """
+        if stream:
+            return Streamer(pid=self.pid, one=self.one, typ=band, **kwargs)
+        else:
+            raw_data_files = self.download_raw_electrophysiology(band=band)
+            cbin_file = next(filter(lambda f: f.name.endswith(f'.{band}.cbin'), raw_data_files), None)
+            if cbin_file is not None:
+                return spikeglx.Reader(cbin_file)
 
     def load_channels(self, **kwargs):
         """
@@ -1282,7 +1330,8 @@ class SessionLoader:
         """
         # itiDuration frequently has a mismatched dimension, and we don't need it, exclude using regex
         self.one.wildcards = False
-        self.trials = self.one.load_object(self.eid, 'trials', collection='alf', attribute=r'(?!itiDuration).*').to_df()
+        self.trials = self.one.load_object(
+            self.eid, 'trials', collection='alf', attribute=r'(?!itiDuration).*').to_df()
         self.one.wildcards = True
         self.data_info.loc[self.data_info['name'] == 'trials', 'is_loaded'] = True
 

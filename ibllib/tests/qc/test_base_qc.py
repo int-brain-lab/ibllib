@@ -1,13 +1,12 @@
 import unittest
 from unittest import mock
-import random
 
 import numpy as np
+from one.api import ONE
 
 from ibllib.tests import TEST_DB
 from ibllib.qc.base import QC
-from one.api import ONE
-from one.registration import RegistrationClient
+from ibllib.tests.fixtures.utils import register_new_session
 
 one = ONE(**TEST_DB)
 
@@ -20,8 +19,7 @@ class TestQC(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        date = f'20{random.randint(0, 30):02}-{random.randint(1, 12):02}-{random.randint(1, 28):02}'
-        _, eid = RegistrationClient(one).create_new_session('ZM_1150', date=date)
+        _, eid = register_new_session(one, subject='ZM_1150')
         cls.eid = str(eid)
 
     def setUp(self) -> None:
