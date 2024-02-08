@@ -4,7 +4,7 @@ import gc
 import logging
 import os
 from pathlib import Path
-
+import re
 
 import numpy as np
 import pandas as pd
@@ -963,9 +963,11 @@ class SpikeSortingLoader:
             return Streamer(pid=self.pid, one=self.one, typ=band, **kwargs)
         else:
             raw_data_files = self.download_raw_electrophysiology(band=band)
-            cbin_file = next(filter(lambda f: f.name.endswith(f'.{band}.cbin'), raw_data_files), None)
+            cbin_file = next((f for f in raw_data_files if re.match(r"^.*\.ap\..*bin$", f.name)), None)
+            meta_file = next((f for f in raw_data_files if re.match(r"^.*\.ap\..*meta$", f.name)), None)
+            ch_file = next((f for f in raw_data_files if re.match(r"^.*\.ap\..*ch$", f.name)), None)
             if cbin_file is not None:
-                return spikeglx.Reader(cbin_file)
+                return spikeglx.Reader(cbin_file, meta_file=meta_file, ch_file=ch_file)
 
     def load_channels(self, **kwargs):
         """
