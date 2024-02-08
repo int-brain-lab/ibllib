@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from one.api import ONE
-from neurodsp.utils import fcn_cosine
+from ibldsp.utils import fcn_cosine
 
 import iblatlas.atlas as atlas
 from ibllib.pipes.histology import coverage
