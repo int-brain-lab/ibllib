@@ -3,9 +3,16 @@
 # @Author: Niccolò Bonacchi
 # @Date: Friday, October 9th 2020, 12:02:56 pm
 import json
+import random
+import string
+import logging
 from pathlib import Path
 
+from one.registration import RegistrationClient
+
 from ibllib.io import session_params
+
+_logger = logging.getLogger(__name__)
 
 
 def create_fake_session_folder(
@@ -81,7 +88,7 @@ def populate_raw_spikeglx(session_path,
     Touch file tree to emulate files saved by SpikeGLX
     :param session_path: The raw ephys data path to place files
     :param model: Probe model file structure ('3A' or '3B')
-    :param legacy: If true, the emulate older SpikeGLX version where all files are saved
+    :param legacy: If true, emulate older SpikeGLX version where all files are saved
     into a single folder
     :param user_label: User may input any name into SpikeGLX and filenames will include this
     :param n_probes: Number of probe datafiles to touch
@@ -374,3 +381,36 @@ def create_fake_ephys_recording_bad_passive_transfer_sessions(
     populate_task_settings(fpath, passive_settings)
 
     return session_path, passive_session_path
+
+
+def register_new_session(one, subject=None, date=None):
+    """
+    Register a new test session.
+
+    NB: This creates the session path on disk, using `one.cache_dir`.
+
+    Parameters
+    ----------
+    one : one.api.OneAlyx
+        An instance of ONE.
+    subject : str
+        The subject name. If None, a new random subject is created.
+    date : str
+        An ISO date string. If None, a random one is created.
+
+    Returns
+    -------
+    pathlib.Path
+        New local session path.
+    uuid.UUID
+        The experiment UUID.
+    """
+    if not date:
+        date = f'20{random.randint(0, 99):02}-{random.randint(1, 12):02}-{random.randint(1, 28):02}'
+    if not subject:
+        subject = ''.join(random.choices(string.ascii_letters, k=10))
+        one.alyx.rest('subjects', 'create', data={'lab': 'mainenlab', 'nickname': subject})
+
+    session_path, eid = RegistrationClient(one).create_new_session(subject, date=str(date)[:10])
+    _logger.debug('Registered session %s with eid %s', session_path, eid)
+    return session_path, eid

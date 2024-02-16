@@ -17,13 +17,16 @@ from ibllib.io.raw_data_loaders import load_settings, _logger
 
 class BaseExtractor(abc.ABC):
     """
-    Base extractor class
+    Base extractor class.
+
     Writing an extractor checklist:
-    -   on the child class, overload the _extract method
-    -   this method should output one or several numpy.arrays or dataframe with a consistent shape
-    -   save_names is a list or a string of filenames, there should be one per dataset
-    -   set save_names to None for a dataset that doesn't need saving (could be set dynamically
-    in the _extract method)
+
+    - on the child class, overload the _extract method
+    - this method should output one or several numpy.arrays or dataframe with a consistent shape
+    - save_names is a list or a string of filenames, there should be one per dataset
+    - set save_names to None for a dataset that doesn't need saving (could be set dynamically in
+      the _extract method)
+
     :param session_path: Absolute path of session folder
     :type session_path: str/Path
     """
@@ -122,10 +125,11 @@ class BaseExtractor(abc.ABC):
 
 class BaseBpodTrialsExtractor(BaseExtractor):
     """
-    Base (abstract) extractor class for bpod jsonable data set
-    Wrps the _extract private method
+    Base (abstract) extractor class for bpod jsonable data set.
 
-    :param session_path: Absolute path of session folder
+    Wraps the _extract private method.
+
+    :param session_path: Absolute path of session folder.
     :type session_path: str
     :param bpod_trials
     :param settings
@@ -158,6 +162,12 @@ class BaseBpodTrialsExtractor(BaseExtractor):
         elif self.settings.get("IBLRIG_VERSION", "") == "":
             self.settings["IBLRIG_VERSION"] = "100.0.0"
         return super(BaseBpodTrialsExtractor, self).extract(**kwargs)
+
+    @property
+    def alf_path(self):
+        """pathlib.Path: The full task collection filepath."""
+        if self.session_path:
+            return self.session_path.joinpath(self.task_collection or '').absolute()
 
 
 def run_extractor_classes(classes, session_path=None, **kwargs):
