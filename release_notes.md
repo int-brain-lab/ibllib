@@ -1,3 +1,12 @@
+## Release Notes 2.30
+
+### features
+- Task QC viewer
+- Raw ephys data loading documentation
+
+### other
+- Pandas 3.0 support
+
 ## Release Notes 2.29
 
 ### features

@@ -467,6 +467,8 @@ def get_trials_tasks(session_path, one=None):
             tasks.append(t)
     else:
         # Otherwise default to old way of doing things
+        if one and one.to_eid(session_path):
+            one.load_dataset(session_path, '_iblrig_taskSettings.raw', collection='raw_behavior_data', download_only=True)
         pipeline = get_pipeline(session_path)
         if pipeline == 'training':
             from ibllib.pipes.training_preprocessing import TrainingTrials

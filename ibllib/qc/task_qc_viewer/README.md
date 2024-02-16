@@ -4,18 +4,14 @@ alongside an interactive table.  The UUID is the session id.
 
 ## Usage: command line
 
-Launch the Viewer by typing `python task_qc.py session-uuid` , example:
+Launch the Viewer by typing `task_qc session-uuid` , example:
 ```sh
-python task_qc.py c9fec76e-7a20-4da4-93ad-04510a89473b
-# or with ipython
-ipython task_qc.py -- c9fec76e-7a20-4da4-93ad-04510a89473b
+task_qc c9fec76e-7a20-4da4-93ad-04510a89473b
 ```
 
 Or just using a local path (on a local server for example):
 ```sh
-python task_qc.py /mnt/s0/Subjects/KS022/2019-12-10/001 --local
-# or with ipython
-ipython task_qc.py -- /mnt/s0/Subjects/KS022/2019-12-10/001 --local
+task_qc /mnt/s0/Subjects/KS022/2019-12-10/001 --local
 ```
 
 ## Usage: from ipython prompt

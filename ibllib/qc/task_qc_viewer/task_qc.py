@@ -14,12 +14,11 @@ from one.alf.spec import is_session_path
 import ibllib.plots as plots
 from ibllib.misc import qt
 from ibllib.qc.task_metrics import TaskQC
+from ibllib.qc.task_qc_viewer import ViewEphysQC
 from ibllib.pipes.dynamic_pipeline import get_trials_tasks
 from ibllib.pipes.base_tasks import BehaviourTask
 from ibllib.pipes.behavior_tasks import HabituationTrialsBpod, ChoiceWorldTrialsBpod
 from ibllib.pipes.training_preprocessing import TrainingTrials
-
-from . import ViewEphysQC
 
 EVENT_MAP = {'goCue_times': ['#2ca02c', 'solid'],  # green
              'goCueTrigger_times': ['#2ca02c', 'dotted'],  # green
@@ -296,7 +295,7 @@ def show_session_task_qc(qc_or_session=None, bpod_only=False, local=False, one=N
     return qc
 
 
-if __name__ == '__main__':
+def qc_gui_cli():
     """Run TaskQC viewer with wheel data.
 
     For information on the QC checks see the QC Flags & failures document:
@@ -316,3 +315,7 @@ if __name__ == '__main__':
     args = parser.parse_args()  # returns data from the options specified (echo)
 
     show_session_task_qc(qc_or_session=args.session, bpod_only=args.bpod, local=args.local)
+
+
+if __name__ == '__main__':
+    qc_gui_cli()
