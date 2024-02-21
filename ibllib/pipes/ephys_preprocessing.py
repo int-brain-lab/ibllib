@@ -693,24 +693,23 @@ class EphysTrials(tasks.Task):
             "sessions", eid, "extended_qc", {"behavior": int(good_enough)}
         )
 
-    def _extract_behaviour(self):
+    def extract_behaviour(self, save=True):
         dsets, out_files, self.extractor = ephys_fpga.extract_all(
-            self.session_path, save=True, return_extractor=True)
+            self.session_path, save=save, return_extractor=True)
 
         return dsets, out_files
 
-    def _run(self, plot_qc=True):
-        dsets, out_files = self._extract_behaviour()
+    def run_qc(self, trials_data=None, update=True, plot_qc=False):
+        if trials_data is None:
+            trials_data, _ = self.extract_behaviour(save=False)
+        if not trials_data:
+            raise ValueError('No trials data found')
 
-        if not self.one or self.one.offline:
-            return out_files
-
-        self._behaviour_criterion()
         # Run the task QC
         qc = TaskQC(self.session_path, one=self.one, log=_logger)
         qc.extractor = TaskQCExtractor(self.session_path, lazy=True, one=qc.one)
         # Extract extra datasets required for QC
-        qc.extractor.data = qc.extractor.rename_data(dsets)
+        qc.extractor.data = qc.extractor.rename_data(trials_data)
         wheel_ts_bpod = self.extractor.bpod2fpga(self.extractor.bpod_trials['wheel_timestamps'])
         qc.extractor.data['wheel_timestamps_bpod'] = wheel_ts_bpod
         qc.extractor.data['wheel_position_bpod'] = self.extractor.bpod_trials['wheel_position']
@@ -721,7 +720,7 @@ class EphysTrials(tasks.Task):
         qc.extractor.bpod_ttls = self.extractor.bpod
 
         # Aggregate and update Alyx QC fields
-        qc.run(update=True)
+        qc.run(update=update)
 
         if plot_qc:
             _logger.info("Creating Trials QC plots")
@@ -734,7 +733,14 @@ class EphysTrials(tasks.Task):
                 _logger.error('Could not create Trials QC Plot')
                 _logger.error(traceback.format_exc())
                 self.status = -1
+        return qc
 
+    def _run(self, plot_qc=True):
+        dsets, out_files = self.extract_behaviour()
+
+        if self.one and not self.one.offline:
+            self._behaviour_criterion()
+            self.run_qc(trials_data=dsets, update=True, plot_qc=plot_qc)
         return out_files
 
     def get_signatures(self, **kwargs):
@@ -761,8 +767,8 @@ class LaserTrialsLegacy(EphysTrials):
 
     This is legacy because personal project extractors should be in a separate repository.
     """
-    def _extract_behaviour(self):
-        dsets, out_files = super()._extract_behaviour()
+    def extract_behaviour(self):
+        dsets, out_files = super().extract_behaviour()
 
         # Re-extract the laser datasets as the above default extractor discards them
         from ibllib.io.extractors import opto_trials

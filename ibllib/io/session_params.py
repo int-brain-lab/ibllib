@@ -318,7 +318,10 @@ def get_task_protocol(sess_params, task_collection=None):
     """
     collections = get_collections({'tasks': sess_params.get('tasks')})
     if task_collection is None:
-        return set(collections.keys())  # Return all protocols
+        if len(collections) == 0:
+            return None
+        else:
+            return set(collections.keys())  # Return all protocols
     else:
         return next((k for k, v in collections.items() if v == task_collection), None)
 

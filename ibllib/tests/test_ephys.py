@@ -229,5 +229,5 @@ class TestDetectBadChannels(unittest.TestCase):
         # ephys_bad_channels(data.T, 30000, labels, xfeats)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main(exit=False, verbosity=2)

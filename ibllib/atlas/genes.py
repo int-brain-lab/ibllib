@@ -1,6 +1,6 @@
 """Gene expression maps."""
 
-from iblatlas import genes
+from iblatlas.genomics import agea
 from ibllib.atlas import deprecated_decorator
 
 
@@ -15,4 +15,4 @@ def allen_gene_expression(filename='gene-expression.pqt', folder_cache=None):
     (nexperiments, ml, dv, ap). The spacing between slices is 200 um
     """
 
-    return genes.allen_gene_expression(filename=filename, folder_cache=folder_cache)
+    return agea.load(filename=filename, folder_cache=folder_cache)

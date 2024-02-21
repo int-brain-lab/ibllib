@@ -1,3 +1,17 @@
+## Release Notes 2.30
+
+### features
+- Task QC viewer
+- Raw ephys data loading documentation
+
+### other
+- Pandas 3.0 support
+
+## Release Notes 2.29
+
+### features
+- Added raw data loaders and synchronisation tools in brainbox.io.one.SpikeSortingLoader, method `ssl.raw_electrophysiology()`
+
 ## Release Notes 2.28
 
 ### features
