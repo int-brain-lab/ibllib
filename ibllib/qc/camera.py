@@ -69,6 +69,7 @@ try:
 except ImportError:
     _log.warning('labcams not installed')
 
+
 class CameraQC(base.QC):
     """A class for computing camera QC metrics"""
     dstypes = [
