@@ -43,7 +43,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 from matplotlib.patches import Rectangle
-from labcams import parse_cam_log
 
 import one.alf.io as alfio
 from one.util import filter_datasets
@@ -65,6 +64,10 @@ from . import base
 
 _log = logging.getLogger(__name__)
 
+try:
+    from labcams import parse_cam_log
+except ImportError:
+    _log.warning('labcams not installed')
 
 class CameraQC(base.QC):
     """A class for computing camera QC metrics"""
