@@ -245,7 +245,7 @@ def show_session_task_qc(qc_or_session=None, bpod_only=False, local=False, one=N
         qc = QcFrame(qc_or_session)
     else:  # assumed to be eid or session path
         one = one or ONE(mode='local' if local else 'auto')
-        if not is_session_path(qc_or_session):
+        if not is_session_path(Path(qc_or_session)):
             eid = one.to_eid(qc_or_session)
             session_path = one.eid2path(eid)
         else:
@@ -309,7 +309,7 @@ def qc_gui_cli():
     # Parse parameters
     parser = argparse.ArgumentParser(description='Quick viewer to see the behaviour data from'
                                                  'choice world sessions.')
-    parser.add_argument('session', help='session uuid')
+    parser.add_argument('session', help='session uuid or path')
     parser.add_argument('--bpod', action='store_true', help='run QC on Bpod data only (no FPGA)')
     parser.add_argument('--local', action='store_true', help='run from disk location (lab server')
     args = parser.parse_args()  # returns data from the options specified (echo)

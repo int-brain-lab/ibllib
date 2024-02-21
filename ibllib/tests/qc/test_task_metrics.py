@@ -13,12 +13,45 @@ from brainbox.behavior.wheel import cm_to_rad
 
 
 class TestAggregateOutcome(unittest.TestCase):
+
+    def test_deprecation_warning(self):
+        """Remove TaskQC.compute_session_status_from_dict after 2024-04-01."""
+        from datetime import datetime
+        self.assertFalse(datetime.now() > datetime(2024, 4, 1), 'remove TaskQC.compute_session_status_from_dict method.')
+        qc_dict = {'_task_iti_delays': .99}
+        with self.assertWarns(DeprecationWarning), self.assertLogs(qcmetrics.__name__, 'WARNING'):
+            out = qcmetrics.TaskQC.compute_session_status_from_dict(qc_dict)
+            expected = ('NOT_SET', {'_task_iti_delays': 'NOT_SET'})
+            self.assertEqual(expected, out, 'failed to use BWM criteria')
+            # Should handle criteria as input, both as arg and kwarg
+            criteria = {'_task_iti_delays': {'PASS': 0.9, 'FAIL': 0}, 'default': {'PASS': 0.9, 'WARNING': 0.4}}
+            out = qcmetrics.TaskQC.compute_session_status_from_dict(qc_dict, criteria=criteria)
+            expected = ('PASS', {'_task_iti_delays': 'PASS'})
+            self.assertEqual(expected, out, 'failed to use BWM criteria')
+            out = qcmetrics.TaskQC.compute_session_status_from_dict(qc_dict, criteria)
+            self.assertEqual(expected, out, 'failed to use BWM criteria')
+            qc = qcmetrics.TaskQC('/foo/subject/2024-01-01/001', one=ONE(mode='local', **TEST_DB))
+        self.assertRaises(TypeError, qcmetrics.TaskQC.compute_session_status_from_dict)
+        if getattr(self, 'assertNoLogs', False) is False:
+            self.skipTest('Python < 3.10')  # py 3.8
+        with self.assertWarns(DeprecationWarning), self.assertNoLogs(qcmetrics.__name__, 'WARNING'):
+            out = qc.compute_session_status_from_dict(qc_dict)
+            expected = ('NOT_SET', {'_task_iti_delays': 'NOT_SET'})
+            self.assertEqual(expected, out, 'failed to use BWM criteria')
+            # Should handle criteria as input, both as arg and kwarg
+            criteria = {'_task_iti_delays': {'PASS': 0.9, 'FAIL': 0}, 'default': {'PASS': 0}}
+            out, _ = qc.compute_session_status_from_dict(qc_dict, criteria=criteria)
+            self.assertEqual('PASS', out)
+            out, _ = qc.compute_session_status_from_dict(qc_dict, criteria)
+            self.assertEqual('PASS', out)
+        self.assertRaises(TypeError, qc.compute_session_status_from_dict)
+
     def test_outcome_from_dict_default(self):
         # For a task that has no costume thresholds, default is 0.99 PASS and 0.9 WARNING and 0 FAIL,
         # np.nan and None return not set
         qc_dict = {'gnap': .99, 'gnop': np.nan, 'gnip': None, 'gnep': 0.9, 'gnup': 0.89}
         expect = {'gnap': 'PASS', 'gnop': 'NOT_SET', 'gnip': 'NOT_SET', 'gnep': 'WARNING', 'gnup': 'FAIL'}
-        outcome, outcome_dict = qcmetrics.TaskQC.compute_session_status_from_dict(qc_dict)
+        outcome, outcome_dict = qcmetrics.compute_session_status_from_dict(qc_dict, qcmetrics.BWM_CRITERIA)
         self.assertEqual(outcome, 'FAIL')
         self.assertEqual(expect, outcome_dict)
 
@@ -26,7 +59,7 @@ class TestAggregateOutcome(unittest.TestCase):
         # For '_task_stimFreeze_delays' the threshold are 0.99 PASS and 0 WARNING
         qc_dict = {'gnap': .99, 'gnop': np.nan, '_task_stimFreeze_delays': .1}
         expect = {'gnap': 'PASS', 'gnop': 'NOT_SET', '_task_stimFreeze_delays': 'WARNING'}
-        outcome, outcome_dict = qcmetrics.TaskQC.compute_session_status_from_dict(qc_dict)
+        outcome, outcome_dict = qcmetrics.compute_session_status_from_dict(qc_dict, qcmetrics.BWM_CRITERIA)
         self.assertEqual(outcome, 'WARNING')
         self.assertEqual(expect, outcome_dict)
 
@@ -34,7 +67,7 @@ class TestAggregateOutcome(unittest.TestCase):
         # For '_task_iti_delays' the threshold is 0 NOT_SET
         qc_dict = {'gnap': .99, 'gnop': np.nan, '_task_iti_delays': .1}
         expect = {'gnap': 'PASS', 'gnop': 'NOT_SET', '_task_iti_delays': 'NOT_SET'}
-        outcome, outcome_dict = qcmetrics.TaskQC.compute_session_status_from_dict(qc_dict)
+        outcome, outcome_dict = qcmetrics.compute_session_status_from_dict(qc_dict, qcmetrics.BWM_CRITERIA)
         self.assertEqual(outcome, 'PASS')
         self.assertEqual(expect, outcome_dict)
 
@@ -42,7 +75,7 @@ class TestAggregateOutcome(unittest.TestCase):
         # When qc values are below 0 or above 1, give error
         qc_dict = {'gnap': 1.01, 'gnop': 0, 'gnip': 0.99}
         with self.assertRaises(ValueError) as e:
-            outcome, outcome_dict = qcmetrics.TaskQC.compute_session_status_from_dict(qc_dict)
+            outcome, outcome_dict = qcmetrics.compute_session_status_from_dict(qc_dict, qcmetrics.BWM_CRITERIA)
         self.assertTrue(e.exception.args[0] == 'Values out of bound')
 
 

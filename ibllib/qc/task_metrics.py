@@ -2,6 +2,9 @@
 
 This module runs a list of quality control metrics on the behaviour data.
 
+NB: The QC should be loaded using :meth:`ibllib.pipes.base_tasks.BehaviourTask.run_qc` and not
+instantiated directly.
+
 Examples
 --------
 Running on a rig computer and updating QC fields in Alyx:
@@ -49,13 +52,14 @@ Running ephys QC, from local server PC (after ephys + bpod data have been copied
 """
 import logging
 import sys
+import warnings
+from packaging import version
 from datetime import datetime, timedelta
 from inspect import getmembers, isfunction
-from functools import reduce
+from functools import reduce, wraps
 from collections.abc import Sized
 
 import numpy as np
-from packaging import version
 from scipy.stats import chisquare
 
 from brainbox.behavior.wheel import cm_to_rad, traces_by_trial
@@ -67,31 +71,99 @@ from . import base
 _log = logging.getLogger(__name__)
 
 
+BWM_CRITERIA = {
+    'default': {'PASS': 0.99, 'WARNING': 0.90, 'FAIL': 0},  # Note: WARNING was 0.95 prior to Aug 2022
+    '_task_stimOff_itiIn_delays': {'PASS': 0.99, 'WARNING': 0},
+    '_task_positive_feedback_stimOff_delays': {'PASS': 0.99, 'WARNING': 0},
+    '_task_negative_feedback_stimOff_delays': {'PASS': 0.99, 'WARNING': 0},
+    '_task_wheel_move_during_closed_loop': {'PASS': 0.99, 'WARNING': 0},
+    '_task_response_stimFreeze_delays': {'PASS': 0.99, 'WARNING': 0},
+    '_task_detected_wheel_moves': {'PASS': 0.99, 'WARNING': 0},
+    '_task_trial_length': {'PASS': 0.99, 'WARNING': 0},
+    '_task_goCue_delays': {'PASS': 0.99, 'WARNING': 0},
+    '_task_errorCue_delays': {'PASS': 0.99, 'WARNING': 0},
+    '_task_stimOn_delays': {'PASS': 0.99, 'WARNING': 0},
+    '_task_stimOff_delays': {'PASS': 0.99, 'WARNING': 0},
+    '_task_stimFreeze_delays': {'PASS': 0.99, 'WARNING': 0},
+    '_task_iti_delays': {'NOT_SET': 0},
+    '_task_passed_trial_checks': {'NOT_SET': 0}
+}
+
+
+def _static_check(func):
+    """Log a warning when static method called with class instead of object.
+
+    The TaskQC 'criteria' attribute is now varies depending on the task version and may be changed
+    in subclasses depending on hardware and task protocol. Therefore the
+    TaskQC.compute_session_status_from_dict method should be called with an object instance in
+    order use the correct criteria.
+    """
+    @wraps(func)
+    def inner(*args, **kwargs):
+        warnings.warn('TaskQC.compute_session_status_from_dict is deprecated. '
+                      'Use ibllib.qc.task_metrics.compute_session_status_from_dict instead', DeprecationWarning)
+        if not args:  # allow function to raise on missing param
+            return compute_session_status_from_dict(*args, **kwargs)
+        if not isinstance(args[0], TaskQC):
+            _log.warning(
+                'Calling TaskQC.compute_session_status_from_dict as a static method yields inconsistent results.'
+            )
+            if len(args) == 1 and kwargs.get('criteria', None) is None:
+                kwargs['criteria'] = BWM_CRITERIA  # old behaviour
+        else:
+            if kwargs.get('criteria', None) is None and len(args) == 2:
+                kwargs['criteria'] = args[0].criteria  # ensure we use the obj's modified criteria
+            args = args[1:]
+        return compute_session_status_from_dict(*args, **kwargs)
+    return inner
+
+
+def compute_session_status_from_dict(results, criteria=None):
+    """
+    Given a dictionary of results, computes the overall session QC for each key and aggregates
+    in a single value
+
+    Parameters
+    ----------
+    results : dict
+        A dictionary of QC keys containing (usually scalar) values.
+    criteria : dict
+        A dictionary of qc keys containing map of PASS, WARNING, FAIL thresholds.
+
+    Returns
+    -------
+    str
+        Overall session QC outcome as a string.
+    dict
+        A map of QC tests and their outcomes.
+    """
+    if not criteria:
+        criteria = {'default': BWM_CRITERIA['default']}
+    indices = np.zeros(len(results), dtype=int)
+    for i, k in enumerate(results):
+        if k in criteria.keys():
+            indices[i] = TaskQC.thresholding(results[k], thresholds=criteria[k])
+        else:
+            indices[i] = TaskQC.thresholding(results[k], thresholds=criteria['default'])
+
+    def key_map(x):
+        return 'NOT_SET' if x < 0 else list(criteria['default'].keys())[x]
+    # Criteria map is in order of severity so the max index is our overall QC outcome
+    session_outcome = key_map(max(indices))
+    outcomes = dict(zip(results.keys(), map(key_map, indices)))
+    return session_outcome, outcomes
+
+
 class TaskQC(base.QC):
     """A class for computing task QC metrics"""
 
-    criteria = dict()
-    criteria['default'] = {'PASS': 0.99, 'WARNING': 0.90, 'FAIL': 0}  # Note: WARNING was 0.95 prior to Aug 2022
-    criteria['_task_stimOff_itiIn_delays'] = {'PASS': 0.99, 'WARNING': 0}
-    criteria['_task_positive_feedback_stimOff_delays'] = {'PASS': 0.99, 'WARNING': 0}
-    criteria['_task_negative_feedback_stimOff_delays'] = {'PASS': 0.99, 'WARNING': 0}
-    criteria['_task_wheel_move_during_closed_loop'] = {'PASS': 0.99, 'WARNING': 0}
-    criteria['_task_response_stimFreeze_delays'] = {'PASS': 0.99, 'WARNING': 0}
-    criteria['_task_detected_wheel_moves'] = {'PASS': 0.99, 'WARNING': 0}
-    criteria['_task_trial_length'] = {'PASS': 0.99, 'WARNING': 0}
-    criteria['_task_goCue_delays'] = {'PASS': 0.99, 'WARNING': 0}
-    criteria['_task_errorCue_delays'] = {'PASS': 0.99, 'WARNING': 0}
-    criteria['_task_stimOn_delays'] = {'PASS': 0.99, 'WARNING': 0}
-    criteria['_task_stimOff_delays'] = {'PASS': 0.99, 'WARNING': 0}
-    criteria['_task_stimFreeze_delays'] = {'PASS': 0.99, 'WARNING': 0}
-    criteria['_task_iti_delays'] = {'NOT_SET': 0}
-    criteria['_task_passed_trial_checks'] = {'NOT_SET': 0}
+    criteria = BWM_CRITERIA
 
     extractor = None
     """ibllib.qc.task_extractors.TaskQCExtractor: A task extractor object containing raw and extracted data."""
 
     @staticmethod
-    def _thresholding(qc_value, thresholds=None):
+    def thresholding(qc_value, thresholds=None):
         """
         Computes the outcome of a single key by applying thresholding.
         :param qc_value: proportion of passing qcs, between 0 and 1
@@ -99,9 +171,8 @@ class TaskQC(base.QC):
          (cf. TaskQC.criteria attribute)
         :return: int where -1: NOT_SET, 0: PASS, 1: WARNING, 2: FAIL
         """
+        thresholds = thresholds or {}
         MAX_BOUND, MIN_BOUND = (1, 0)
-        if not thresholds:
-            thresholds = TaskQC.criteria['default'].copy()
         if qc_value is None or np.isnan(qc_value):
             return int(-1)
         elif (qc_value > MAX_BOUND) or (qc_value < MIN_BOUND):
@@ -133,6 +204,9 @@ class TaskQC(base.QC):
         # Metrics and passed trials
         self.metrics = None
         self.passed = None
+
+        # Criteria (initialize as outcomes vary by class, task, and hardware)
+        self.criteria = BWM_CRITERIA.copy()
 
     def load_data(self, bpod_only=False, download_data=True):
         """Extract the data from raw data files.
@@ -268,11 +342,15 @@ class TaskQC(base.QC):
             self.update(outcome, namespace)
         return outcome, results
 
+    @_static_check
     @staticmethod
     def compute_session_status_from_dict(results, criteria=None):
         """
-        Given a dictionary of results, computes the overall session QC for each key and aggregates
-        in a single value
+        (DEPRECATED) Given a dictionary of results, computes the overall session QC for each key
+        and aggregates in a single value.
+
+        NB: Use :func:`ibllib.qc.task_metrics.compute_session_status_from_dict` instead and always
+        pass in the criteria.
 
         Parameters
         ----------
@@ -288,20 +366,7 @@ class TaskQC(base.QC):
         dict
             A map of QC tests and their outcomes.
         """
-        indices = np.zeros(len(results), dtype=int)
-        criteria = criteria or TaskQC.criteria
-        for i, k in enumerate(results):
-            if k in criteria.keys():
-                indices[i] = TaskQC._thresholding(results[k], thresholds=criteria[k])
-            else:
-                indices[i] = TaskQC._thresholding(results[k], thresholds=criteria['default'])
-
-        def key_map(x):
-            return 'NOT_SET' if x < 0 else list(TaskQC.criteria['default'].keys())[x]
-        # Criteria map is in order of severity so the max index is our overall QC outcome
-        session_outcome = key_map(max(indices))
-        outcomes = dict(zip(results.keys(), map(key_map, indices)))
-        return session_outcome, outcomes
+        ...  # no longer called by decorator
 
     def compute_session_status(self):
         """
@@ -321,7 +386,7 @@ class TaskQC(base.QC):
         # Get mean passed of each check, or None if passed is None or all NaN
         results = {k: None if v is None or np.isnan(v).all() else np.nanmean(v)
                    for k, v in self.passed.items()}
-        session_outcome, outcomes = self.compute_session_status_from_dict(results, self.criteria)
+        session_outcome, outcomes = compute_session_status_from_dict(results, self.criteria)
         return session_outcome, results, outcomes
 
 
@@ -346,6 +411,11 @@ class HabituationQC(TaskQC):
         audio_output = self.extractor.settings.get('device_sound', {}).get('OUTPUT', 'unknown')
         metrics = {}
         passed = {}
+
+        # Modify criteria based on version
+        ver = self.extractor.settings.get('IBLRIG_VERSION', '') or '0.0.0'
+        is_v8 = version.parse(ver) >= version.parse('8.0.0')
+        self.criteria['_task_iti_delays'] = {'PASS': 0.99, 'WARNING': 0} if is_v8 else {'NOT_SET': 0}
 
         # Check all reward volumes == 3.0ul
         check = prefix + 'reward_volumes'
@@ -417,6 +487,15 @@ class HabituationQC(TaskQC):
         metric, _ = np.histogram(data['phase'])
         _, p = chisquare(metric)
         passed[check] = p < 0.05 if len(data['phase']) >= 400 else None  # skip if too few trials
+        metrics[check] = metric
+
+        # Check that the period of gray screen between stim off and the start of the next trial is
+        # 1s +/- 10%.
+        check = prefix + 'iti_delays'
+        iti = (np.roll(data['stimOn_times'], -1) - data['stimOff_times'])[:-1]
+        metric = np.r_[np.nan_to_num(iti, nan=np.inf), np.nan] - 1.
+        passed[check] = np.abs(metric) <= 0.1
+        passed[check][-1] = np.NaN
         metrics[check] = metric
 
         # Checks common to training QC
@@ -526,7 +605,7 @@ def check_stimOff_itiIn_delays(data, **_):
 
 
 def check_iti_delays(data, **_):
-    """ Check that the period of gray screen between stim off and the start of the next trial is
+    """ Check that the period of grey screen between stim off and the start of the next trial is
     0.5s +/- 200%.
 
     Metric: M = stimOff (n) - trialStart (n+1) - 0.5
@@ -536,13 +615,14 @@ def check_iti_delays(data, **_):
     :param data: dict of trial data with keys ('stimOff_times', 'intervals')
     """
     # Initialize array the length of completed trials
+    ITI = .5
     metric = np.full(data['intervals'].shape[0], np.nan)
     passed = metric.copy()
     # Get the difference between stim off and the start of the next trial
     # Missing data are set to Inf, except for the last trial which is a NaN
     metric[:-1] = \
-        np.nan_to_num(data['intervals'][1:, 0] - data['stimOff_times'][:-1] - 0.5, nan=np.inf)
-    passed[:-1] = np.abs(metric[:-1]) < .5  # Last trial is not counted
+        np.nan_to_num(data['intervals'][1:, 0] - data['stimOff_times'][:-1] - ITI, nan=np.inf)
+    passed[:-1] = np.abs(metric[:-1]) < (ITI * 2)  # Last trial is not counted
     assert data['intervals'].shape[0] == len(metric) == len(passed)
     return metric, passed
 
