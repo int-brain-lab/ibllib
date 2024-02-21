@@ -32,6 +32,8 @@ class TestAggregateOutcome(unittest.TestCase):
             self.assertEqual(expected, out, 'failed to use BWM criteria')
             qc = qcmetrics.TaskQC('/foo/subject/2024-01-01/001', one=ONE(mode='local', **TEST_DB))
         self.assertRaises(TypeError, qcmetrics.TaskQC.compute_session_status_from_dict)
+        if getattr(self, 'assertNoLogs', False) is False:
+            self.skipTest('Python < 3.10')  # py 3.8
         with self.assertWarns(DeprecationWarning), self.assertNoLogs(qcmetrics.__name__, 'WARNING'):
             out = qc.compute_session_status_from_dict(qc_dict)
             expected = ('NOT_SET', {'_task_iti_delays': 'NOT_SET'})
