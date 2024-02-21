@@ -24,10 +24,8 @@ tqdm>=4.32.1
 iblatlas>=0.4.0
 ibl-neuropixel>=0.8.1
 iblutil>=1.7.0
-labcams  # widefield extractor
 mtscomp>=1.0.1
 ONE-api>=2.6
 phylib>=2.4
 psychofit
 slidingRP>=1.0.0  # steinmetz lab refractory period metrics
-wfield==0.3.7  # widefield extractor frozen for now (2023/07/15) until Joao fixes latest version
