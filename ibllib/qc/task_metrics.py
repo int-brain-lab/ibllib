@@ -101,7 +101,7 @@ def _static_check(func):
     @wraps(func)
     def inner(*args, **kwargs):
         warnings.warn('TaskQC.compute_session_status_from_dict is deprecated. '
-                      'Use ibllib.qc.task_metrics.compute_session_status_from_dict instead')
+                      'Use ibllib.qc.task_metrics.compute_session_status_from_dict instead', DeprecationWarning)
         if not args:  # allow function to raise on missing param
             return compute_session_status_from_dict(*args, **kwargs)
         if not isinstance(args[0], TaskQC):
@@ -110,8 +110,9 @@ def _static_check(func):
             )
             if len(args) == 1 and kwargs.get('criteria', None) is None:
                 kwargs['criteria'] = BWM_CRITERIA  # old behaviour
-        elif kwargs.get('criteria', None) is None and len(args) == 2:
-            kwargs['criteria'] = args[0].criteria  # ensure we use the obj's modified criteria
+        else:
+            if kwargs.get('criteria', None) is None and len(args) == 2:
+                kwargs['criteria'] = args[0].criteria  # ensure we use the obj's modified criteria
             args = args[1:]
         return compute_session_status_from_dict(*args, **kwargs)
     return inner
