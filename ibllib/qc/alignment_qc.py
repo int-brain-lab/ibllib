@@ -2,6 +2,7 @@ import logging
 
 import numpy as np
 from pathlib import Path
+from one.alf.spec import QC
 
 from neuropixel import trace_header
 import spikeglx
@@ -11,7 +12,6 @@ from ibllib.pipes import histology
 from ibllib.pipes.ephys_alignment import EphysAlignment
 from ibllib.qc import base
 from ibllib.oneibl.patcher import FTPPatcher
-from ibllib.qc.base import CRITERIA as CRITERIA_BASE
 
 _log = logging.getLogger(__name__)
 CRITERIA = {"PASS": 0.8}
@@ -383,7 +383,7 @@ class AlignmentQC(base.QC):
         outcomes = [align[2].split(':')[0] for key, align in self.alignments.items()
                     if len(align) == 3]
         if len(outcomes) > 0:
-            vals = [CRITERIA_BASE[out] for out in outcomes]
+            vals = list(map(QC.validate, outcomes))
             max_qc = np.argmax(vals)
             outcome = outcomes[max_qc]
             self.update(outcome, namespace='experimenter', override=override)

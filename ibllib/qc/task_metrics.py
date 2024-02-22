@@ -54,6 +54,7 @@ import logging
 import sys
 import warnings
 from packaging import version
+from pathlib import Path
 from datetime import datetime, timedelta
 from inspect import getmembers, isfunction
 from functools import reduce, wraps
@@ -65,7 +66,7 @@ from scipy.stats import chisquare
 from brainbox.behavior.wheel import cm_to_rad, traces_by_trial
 from ibllib.qc.task_extractors import TaskQCExtractor
 from ibllib.io.extractors import ephys_fpga
-from one.alf.spec import is_session_path
+from one.alf import spec
 from . import base
 
 _log = logging.getLogger(__name__)
@@ -132,25 +133,18 @@ def compute_session_status_from_dict(results, criteria=None):
 
     Returns
     -------
-    str
-        Overall session QC outcome as a string.
+    one.alf.spec.QC
+        Overall session QC outcome.
     dict
         A map of QC tests and their outcomes.
     """
     if not criteria:
         criteria = {'default': BWM_CRITERIA['default']}
-    indices = np.zeros(len(results), dtype=int)
-    for i, k in enumerate(results):
-        if k in criteria.keys():
-            indices[i] = TaskQC.thresholding(results[k], thresholds=criteria[k])
-        else:
-            indices[i] = TaskQC.thresholding(results[k], thresholds=criteria['default'])
+    outcomes = {k: TaskQC.thresholding(v, thresholds=criteria.get(k, criteria['default']))
+                for k, v in results.items()}
 
-    def key_map(x):
-        return 'NOT_SET' if x < 0 else list(criteria['default'].keys())[x]
     # Criteria map is in order of severity so the max index is our overall QC outcome
-    session_outcome = key_map(max(indices))
-    outcomes = dict(zip(results.keys(), map(key_map, indices)))
+    session_outcome = base.QC.overall_outcome(outcomes.values())
     return session_outcome, outcomes
 
 
@@ -163,30 +157,34 @@ class TaskQC(base.QC):
     """ibllib.qc.task_extractors.TaskQCExtractor: A task extractor object containing raw and extracted data."""
 
     @staticmethod
-    def thresholding(qc_value, thresholds=None):
+    def thresholding(qc_value, thresholds=None) -> spec.QC:
         """
         Computes the outcome of a single key by applying thresholding.
-        :param qc_value: proportion of passing qcs, between 0 and 1
-        :param thresholds: dictionary with keys 'PASS', 'WARNING', 'FAIL'
-         (cf. TaskQC.criteria attribute)
-        :return: int where -1: NOT_SET, 0: PASS, 1: WARNING, 2: FAIL
+
+        Parameters
+        ----------
+        qc_value : float
+            Proportion of passing qcs, between 0 and 1.
+        thresholds : dict
+            Dictionary with keys 'PASS', 'WARNING', 'FAIL', (or enum
+            integers, c.f. one.alf.spec.QC).
+
+        Returns
+        -------
+        one.alf.spec.QC
+            The outcome.
         """
-        thresholds = thresholds or {}
+        thresholds = {spec.QC.validate(k): v for k, v in thresholds.items() or {}}
         MAX_BOUND, MIN_BOUND = (1, 0)
         if qc_value is None or np.isnan(qc_value):
-            return int(-1)
+            return spec.QC.NOT_SET
         elif (qc_value > MAX_BOUND) or (qc_value < MIN_BOUND):
             raise ValueError('Values out of bound')
-        if 'PASS' in thresholds.keys() and qc_value >= thresholds['PASS']:
-            return 0
-        if 'WARNING' in thresholds.keys() and qc_value >= thresholds['WARNING']:
-            return 1
-        if 'FAIL' in thresholds and qc_value >= thresholds['FAIL']:
-            return 2
-        if 'NOT_SET' in thresholds and qc_value >= thresholds['NOT_SET']:
-            return -1
+        for crit in filter(None, sorted(spec.QC)):
+            if crit in thresholds.keys() and qc_value >= thresholds[crit]:
+                return crit
         # if None of this applies, return 'NOT_SET'
-        return -1
+        return spec.QC.NOT_SET
 
     def __init__(self, session_path_or_eid, **kwargs):
         """
@@ -195,7 +193,7 @@ class TaskQC(base.QC):
         :param one: An ONE instance for fetching and setting the QC on Alyx
         """
         # When an eid is provided, we will download the required data by default (if necessary)
-        self.download_data = not is_session_path(session_path_or_eid)
+        self.download_data = not spec.is_session_path(Path(session_path_or_eid))
         super().__init__(session_path_or_eid, **kwargs)
 
         # Data
