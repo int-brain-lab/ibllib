@@ -107,7 +107,7 @@ class TestTaskMetrics(unittest.TestCase):
         correct[np.argmax(choice == -1)] = 0
 
         quiescence_length = 0.2 + np.random.standard_exponential(size=(n,))
-        iti_length = 0.5  # inter-trial interval
+        iti_length = 1  # inter-trial interval
         # trial lengths include quiescence period, a couple small trigger delays and iti
         trial_lengths = quiescence_length + resp_feeback_delay + (trigg_delay * 4) + iti_length
         # add on 60s for nogos + feedback time (1 or 2s) + ~0.5s for other responses
