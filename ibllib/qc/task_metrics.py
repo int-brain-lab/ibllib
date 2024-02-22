@@ -606,23 +606,23 @@ def check_stimOff_itiIn_delays(data, **_):
 
 def check_iti_delays(data, **_):
     """ Check that the period of grey screen between stim off and the start of the next trial is
-    0.5s +/- 200%.
+    1s +/- 10%.
 
-    Metric: M = stimOff (n) - trialStart (n+1) - 0.5
-    Criterion: |M| < 1
+    Metric: M = stimOff (n) - trialStart (n+1) - 1.
+    Criterion: |M| < 0.1
     Units: seconds [s]
 
     :param data: dict of trial data with keys ('stimOff_times', 'intervals')
     """
     # Initialize array the length of completed trials
-    ITI = .5
+    ITI = 1.
     metric = np.full(data['intervals'].shape[0], np.nan)
     passed = metric.copy()
     # Get the difference between stim off and the start of the next trial
     # Missing data are set to Inf, except for the last trial which is a NaN
     metric[:-1] = \
         np.nan_to_num(data['intervals'][1:, 0] - data['stimOff_times'][:-1] - ITI, nan=np.inf)
-    passed[:-1] = np.abs(metric[:-1]) < (ITI * 2)  # Last trial is not counted
+    passed[:-1] = np.abs(metric[:-1]) < (ITI / 10)  # Last trial is not counted
     assert data['intervals'].shape[0] == len(metric) == len(passed)
     return metric, passed
 
