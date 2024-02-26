@@ -3,7 +3,8 @@
 ### features
 - training status uses new extractor map
 - refactor neurodsp to ibldsp
-- task qc update for new ITI defintion
+- ITI qc check for iblrig v8
+- Support habituationChoiceWorld extraction in iblrig v8.15.0
 
 ### bugfixes
 - NP2 waveforms extracted with correct dtype
