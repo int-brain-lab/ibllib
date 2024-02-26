@@ -1,3 +1,15 @@
+## Release Notes 2.31
+
+### features
+- training status uses new extractor map
+- refactor neurodsp to ibldsp
+- ITI qc check for iblrig v8
+- Support habituationChoiceWorld extraction in iblrig v8.15.0
+
+### bugfixes
+- NP2 waveforms extracted with correct dtype
+- Sorted cluster ids in single unit metrics
+
 ## Release Notes 2.30
 
 ### features

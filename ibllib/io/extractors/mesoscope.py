@@ -105,7 +105,7 @@ class TimelineTrials(FpgaTrials):
     timeline = None
     """one.alf.io.AlfBunch: The timeline data object."""
 
-    sync_field = 'itiIn_times'  # trial start events
+    sync_field = 'itiIn_times'
     """str: The trial event to synchronize (must be present in extracted trials)."""
 
     def __init__(self, *args, sync_collection='raw_sync_data', **kwargs):

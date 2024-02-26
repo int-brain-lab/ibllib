@@ -1,30 +1,29 @@
-import one.alf.io as alfio
-from one.alf.exceptions import ALFObjectNotFound
-
-from ibllib.io.raw_data_loaders import load_bpod
-from ibllib.oneibl.registration import _get_session_times
-from ibllib.io.extractors.base import get_session_extractor_type
-from ibllib.io.session_params import read_params
-from ibllib.io.extractors.bpod_trials import get_bpod_extractor
-
-from iblutil.util import setup_logger
-from ibllib.plots.snapshot import ReportSnapshot
-from iblutil.numerical import ismember
-from brainbox.behavior import training
+import logging
+from pathlib import Path
+from datetime import datetime
+from itertools import chain
 
 import numpy as np
 import pandas as pd
-from pathlib import Path
+from iblutil.numerical import ismember
+import one.alf.io as alfio
+from one.alf.exceptions import ALFObjectNotFound
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.lines import Line2D
-from datetime import datetime
 import seaborn as sns
 import boto3
 from botocore.exceptions import ProfileNotFound, ClientError
-from itertools import chain
 
-logger = setup_logger(__name__)
+from ibllib.io.raw_data_loaders import load_bpod
+from ibllib.oneibl.registration import _get_session_times
+from ibllib.io.extractors.base import get_session_extractor_type, get_bpod_extractor_class
+from ibllib.io.session_params import read_params
+from ibllib.io.extractors.bpod_trials import get_bpod_extractor
+from ibllib.plots.snapshot import ReportSnapshot
+from brainbox.behavior import training
+
+logger = logging.getLogger(__name__)
 
 
 TRAINING_STATUS = {'untrainable': (-4, (0, 0, 0, 0)),
@@ -265,7 +264,7 @@ def get_latest_training_information(sess_path, one):
     save_dataframe(df, subj_path)
 
     # Now go through the backlog and compute the training status for sessions. If for example one was missing as it is cumulative
-    # we need to go through and compute all the back log
+    # we need to go through and compute all the backlog
     # Find the earliest date in missing dates that we need to recompute the training status for
     missing_status = find_earliest_recompute_date(df.drop_duplicates('date').reset_index(drop=True))
     for date in missing_status:
@@ -313,13 +312,28 @@ def find_earliest_recompute_date(df):
     return df[first_index:].date.values
 
 
-def compute_training_status(df, compute_date, one, force=True, task_collection='raw_behavior_data'):
+def compute_training_status(df, compute_date, one, force=True):
     """
-    Compute the training status for compute date based on training from that session and two previous days
-    :param df: training dataframe
-    :param compute_date: date to compute training on
-    :param one: ONE instance
+    Compute the training status for compute date based on training from that session and two previous days.
+
+    When true and if the session trials can't be found, will attempt to re-extract from disk.
     :return:
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        A training data frame, e.g. one generated from :func:`get_training_info_for_session`.
+    compute_date : str, datetime.datetime, pandas.Timestamp
+        The date to compute training on.
+    one : one.api.One
+        An instance of ONE for loading trials data.
+    force : bool
+        When true and if the session trials can't be found, will attempt to re-extract from disk.
+
+    Returns
+    -------
+    pandas.DataFrame
+        The input data frame with a 'training_status' column populated for `compute_date`.
     """
 
     # compute_date = str(one.path2ref(session_path)['date'])
@@ -431,11 +445,34 @@ def compute_session_duration_delay_location(sess_path, collections=None, **kwarg
 
 
 def get_data_collection(session_path):
-    """
-    Returns the location of the raw behavioral data and extracted trials data for the session path. If
-    multiple locations in one session (e.g for dynamic) returns all of these
-    :param session_path: path of session
-    :return:
+    """Return the location of the raw behavioral data and extracted trials data for a given session.
+
+    For multiple locations in one session (e.g. chained protocols), returns all collections.
+    Passive protocols are excluded.
+
+    Parameters
+    ----------
+    session_path : pathlib.Path
+        A session path in the form subject/date/number.
+
+    Returns
+    -------
+    list of str
+        A list of sub-directory names that contain raw behaviour data.
+    list of str
+        A list of sub-directory names that contain ALF trials data.
+
+    Examples
+    --------
+    An iblrig v7 session
+
+    >>> get_data_collection(Path(r'C:/data/subject/2023-01-01/001'))
+    ['raw_behavior_data'], ['alf']
+
+    An iblrig v8 session where two protocols were run
+
+    >>> get_data_collection(Path(r'C:/data/subject/2023-01-01/001'))
+    ['raw_task_data_00', 'raw_task_data_01], ['alf/task_00', 'alf/task_01']
     """
     experiment_description = read_params(session_path)
     collections = []
@@ -522,10 +559,22 @@ def get_sess_dict(session_path, one, protocol, alf_collections=None, raw_collect
 
 def get_training_info_for_session(session_paths, one, force=True):
     """
-    Extract the training information needed for plots for each session
-    :param session_paths: list of session paths on same date
-    :param one: ONE instance
-    :return:
+    Extract the training information needed for plots for each session.
+
+    Parameters
+    ----------
+    session_paths : list of pathlib.Path
+        List of session paths on same date.
+    one : one.api.One
+        An ONE instance.
+    force : bool
+        When true and if the session trials can't be found, will attempt to re-extract from disk.
+
+    Returns
+    -------
+    list of dict
+        A list of dictionaries the length of `session_paths` containing individual and aggregate
+        performance information.
     """
 
     # return list of dicts to add
@@ -535,7 +584,12 @@ def get_training_info_for_session(session_paths, one, force=True):
         session_path = Path(session_path)
         protocols = []
         for c in collections:
-            protocols.append(get_session_extractor_type(session_path, task_collection=c))
+            try:
+                prot = get_bpod_extractor_class(session_path, task_collection=c)
+                prot = prot[:-6].lower()
+            except Exception:
+                prot = get_session_extractor_type(session_path, task_collection=c)
+            protocols.append(prot)
 
         un_protocols = np.unique(protocols)
         # Example, training, training, biased - training would be combined, biased not
@@ -554,8 +608,8 @@ def get_training_info_for_session(session_paths, one, force=True):
                 sess_dict = get_sess_dict(session_path, one, prot, alf_collections=alf, raw_collections=raw, force=force)
         else:
             prot = un_protocols[0]
-            sess_dict = get_sess_dict(session_path, one, prot, alf_collections=alf_collections, raw_collections=collections,
-                                      force=force)
+            sess_dict = get_sess_dict(
+                session_path, one, prot, alf_collections=alf_collections, raw_collections=collections, force=force)
 
         if sess_dict is not None:
             sess_dicts.append(sess_dict)

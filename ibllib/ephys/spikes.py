@@ -142,7 +142,7 @@ def ks2_to_alf(ks_path, bin_path, out_path, bin_file=None, ampfactor=1, label=No
     """
     m = ephysqc.phy_model_from_ks2_path(ks2_path=ks_path, bin_path=bin_path, bin_file=bin_file)
     ac = phylib.io.alf.EphysAlfCreator(m)
-    ac.convert(out_path, label=label, force=force, ampfactor=ampfactor)
+    ac.convert(out_path, label=label, force=force, ampfactor=float(ampfactor))
 
 
 def ks2_to_tar(ks_path, out_path, force=False):
