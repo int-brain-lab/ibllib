@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import scipy.interpolate as interpolate
 from scipy.stats import zscore
 
-from neurodsp.smooth import smooth_interpolate_savgol
+from ibldsp.smooth import smooth_interpolate_savgol
 from iblutil.numerical import bincount2D
 import brainbox.behavior.wheel as bbox_wheel
 

@@ -18,7 +18,7 @@ import pandas as pd
 import packaging.version
 
 import one.alf.io as alfio
-from neurodsp.utils import rms
+from ibldsp.utils import rms
 import spikeglx
 
 from ibllib.misc import check_nvidia_driver

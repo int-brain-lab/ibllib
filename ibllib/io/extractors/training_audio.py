@@ -9,8 +9,8 @@ import scipy.ndimage
 from scipy.io import wavfile
 
 
-from neurodsp.utils import WindowGenerator
-from neurodsp import fourier
+from ibldsp.utils import WindowGenerator
+from ibldsp import fourier
 import ibllib.io.raw_data_loaders as ioraw
 from ibllib.io.extractors.training_trials import GoCueTimes
 

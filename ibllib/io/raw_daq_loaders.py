@@ -6,7 +6,7 @@ import json
 
 import nptdms
 import numpy as np
-import neurodsp.utils
+import ibldsp.utils
 import one.alf.io as alfio
 import one.alf.exceptions as alferr
 from one.alf.spec import to_alf
@@ -134,7 +134,7 @@ def load_sync_tdms(path, sync_map, fs=None, threshold=2.5, floor_percentile=10):
     logger.info(f'estimated analogue channel DC Offset approx. {np.mean(offset):.2f}')
     analogue -= offset
     ttl = analogue > threshold
-    ind, sign = neurodsp.utils.fronts(ttl.astype(int))
+    ind, sign = ibldsp.utils.fronts(ttl.astype(int))
     try:  # attempt to get the times from the meta data
         times = np.vstack([ch.time_track() for ch in raw_channels])
         times = times[tuple(ind)]
@@ -276,8 +276,8 @@ def extract_sync_timeline(timeline, chmap=None, floor_percentile=10, threshold=N
             step = threshold.get(label) if isinstance(threshold, dict) else threshold
             if step is None:
                 step = np.max(raw - offset) / 2
-            iup = neurodsp.utils.rises(raw - offset, step=step, analog=True)
-            idown = neurodsp.utils.falls(raw - offset, step=step, analog=True)
+            iup = ibldsp.utils.rises(raw - offset, step=step, analog=True)
+            idown = ibldsp.utils.falls(raw - offset, step=step, analog=True)
             pol = np.r_[np.ones_like(iup), -np.ones_like(idown)].astype('i1')
             ind = np.r_[iup, idown]
 

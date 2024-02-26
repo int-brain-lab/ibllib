@@ -11,7 +11,7 @@ import one.alf.io as alfio
 from iblutil.util import Bunch
 import spikeglx
 import neuropixel
-from neurodsp import fourier, utils, voltage
+from ibldsp import fourier, utils, voltage
 from tqdm import tqdm
 
 from brainbox.io.spikeglx import Streamer
