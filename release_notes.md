@@ -1,3 +1,14 @@
+## Release Notes 2.31
+
+### features
+- training status uses new extractor map
+- refactor neurodsp to ibldsp
+- task qc update for new ITI defintion
+
+### bugfixes
+- NP2 waveforms extracted with correct dtype
+- Sorted cluster ids in single unit metrics
+
 ## Release Notes 2.30
 
 ### features
