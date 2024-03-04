@@ -1,3 +1,11 @@
+## Release Notes 2.32
+
+## features
+- SDSC patcher automatically support revisons
+
+## others
+- Add extra key to alignment qc with manual resolution for channel upload
+- 
 ## Release Notes 2.31
 
 ### features
