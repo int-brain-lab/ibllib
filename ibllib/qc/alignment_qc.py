@@ -2,6 +2,7 @@ import logging
 
 import numpy as np
 from pathlib import Path
+from datetime import date
 
 from neuropixel import trace_header
 import spikeglx
@@ -166,7 +167,7 @@ class AlignmentQC(base.QC):
 
         return results
 
-    def resolve_manual(self, align_key, update=True, upload_alyx=True, upload_flatiron=True,
+    def resolve_manual(self, align_key, update=True, upload_alyx=True, upload_flatiron=False,
                        force=False):
         """
         Method to manually resolve the alignment of a probe insertion with a given alignment
@@ -193,6 +194,7 @@ class AlignmentQC(base.QC):
             results['alignment_resolved'] = True
             results['alignment_stored'] = align_key
             results['alignment_resolved_by'] = 'experimenter'
+            results['alignment_resolved_date'] = date.today().isoformat()
 
             if update:
                 self.update_extended_qc(results)
