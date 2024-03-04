@@ -11,8 +11,17 @@ import ibllib.io.extractors.base as extractors_base
 from ibllib.io.extractors.ephys_fpga import get_sync_fronts, get_sync_and_chn_map
 from ibllib.io.video import get_video_meta
 
-import wfield.cli as wfield_cli
-from labcams.io import parse_cam_log
+_logger = logging.getLogger('ibllib')
+
+try:
+    import wfield.cli as wfield_cli
+except ImportError:
+    _logger.warning('wfield not installed')
+
+try:
+    from labcams.io import parse_cam_log
+except ImportError:
+    _logger.warning('labcams not installed')
 
 _logger = logging.getLogger('ibllib')
 

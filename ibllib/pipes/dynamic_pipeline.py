@@ -2,6 +2,23 @@
 
 The principal function here is `make_pipeline` which reads an `_ibl_experiment.description.yaml`
 file and determines the set of tasks required to preprocess the session.
+
+In the experiment description file there is a 'tasks' key that defines each task protocol and the
+location of the raw data (i.e. task collection). The protocol subkey may contain an 'extractors'
+field that should contain a list of dynamic pipeline task class names for extracting the task data.
+These must be subclasses of the :class:`ibllib.pipes.base_tasks.DynamicTask` class. If the
+extractors key is absent or empty, the tasks are chosen based on the sync label and protocol name.
+
+NB: The standard behvaiour extraction task classes (e.g.
+:class:`ibllib.pipes.behaviour_tasks.ChoiceWorldTrialsBpod` and :class:`ibllib.pipes.behaviour_tasks.ChoiceWorldTrialsNidq`)
+handle the clock synchronization, behaviour plots and QC. This is typically independent of the Bpod
+trials extraction (i.e. extraction of trials data from the Bpod raw data, in Bpod time). The Bpod
+trials extractor class is determined by the :func:`ibllib.io.extractors.base.protocol2extractor`
+map. IBL protocols may be added to the ibllib.io.extractors.task_extractor_map.json file, while
+non-IBL ones should be in projects.base.task_extractor_map.json file located in the personal
+projects repo. The Bpod trials extractor class must be a subclass of the
+:class:`ibllib.io.extractors.base.BaseBpodTrialsExtractor` class, and located in either the
+personal projects repo or in :py:mod:`ibllib.io.extractors.bpod_trials` module.
 """
 import logging
 import re
@@ -467,6 +484,8 @@ def get_trials_tasks(session_path, one=None):
             tasks.append(t)
     else:
         # Otherwise default to old way of doing things
+        if one and one.to_eid(session_path):
+            one.load_dataset(session_path, '_iblrig_taskSettings.raw', collection='raw_behavior_data', download_only=True)
         pipeline = get_pipeline(session_path)
         if pipeline == 'training':
             from ibllib.pipes.training_preprocessing import TrainingTrials

@@ -11,7 +11,7 @@ import iblatlas.atlas as atlas
 from ibllib.ephys.spikes import probes_description as extract_probes
 from ibllib.qc import base
 
-from neurodsp.utils import fcn_cosine
+from ibldsp.utils import fcn_cosine
 
 
 _logger = logging.getLogger(__name__)

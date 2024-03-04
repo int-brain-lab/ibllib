@@ -1,6 +1,4 @@
-"""
-Set of functions to deal with dlc data
-"""
+"""Set of functions to deal with dlc data."""
 import logging
 import pandas as pd
 import warnings
@@ -11,7 +9,7 @@ import matplotlib.pyplot as plt
 import scipy.interpolate as interpolate
 from scipy.stats import zscore
 
-from neurodsp.smooth import smooth_interpolate_savgol
+from ibldsp.smooth import smooth_interpolate_savgol
 from iblutil.numerical import bincount2D
 import brainbox.behavior.wheel as bbox_wheel
 
@@ -48,7 +46,9 @@ def insert_idx(array, values):
 
 def likelihood_threshold(dlc, threshold=0.9):
     """
-    Set dlc points with likelihood less than threshold to nan
+    Set dlc points with likelihood less than threshold to nan.
+
+    FIXME Add unit test.
     :param dlc: dlc pqt object
     :param threshold: likelihood threshold
     :return:
@@ -56,14 +56,13 @@ def likelihood_threshold(dlc, threshold=0.9):
     features = np.unique(['_'.join(x.split('_')[:-1]) for x in dlc.keys()])
     for feat in features:
         nan_fill = dlc[f'{feat}_likelihood'] < threshold
-        dlc[f'{feat}_x'][nan_fill] = np.nan
-        dlc[f'{feat}_y'][nan_fill] = np.nan
-
+        dlc.loc[nan_fill, (f'{feat}_x', f'{feat}_y')] = np.nan
     return dlc
 
 
 def get_speed(dlc, dlc_t, camera, feature='paw_r'):
     """
+    FIXME Document and add unit test!
 
     :param dlc: dlc pqt table
     :param dlc_t: dlc time points

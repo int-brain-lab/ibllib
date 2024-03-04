@@ -9,6 +9,7 @@ import subprocess
 import sys
 import time
 import logging
+import warnings
 from functools import wraps
 from pathlib import Path
 from typing import Union, List, Callable, Any
@@ -16,6 +17,7 @@ from inspect import signature
 import uuid
 import socket
 import traceback
+import tempfile
 
 import spikeglx
 from iblutil.io import hashfile, params
@@ -164,36 +166,48 @@ def rename_session(session_path: str, new_subject=None, new_date=None, new_numbe
     return new_session_path
 
 
-def backup_session(session_path):
-    """Used to move the contents of a session to a backup folder, likely before the folder is
+def backup_session(folder_path, root=None, extra=''):
+    """
+    Used to move the contents of a session to a backup folder, likely before the folder is
     removed.
 
-    :param session_path: A session path to be backed up
-    :return: True if directory was backed up or exits if something went wrong
-    :rtype: Bool
+    Parameters
+    ----------
+    folder_path : str, pathlib.Path
+        The folder path to remove.
+    root : str, pathlib.Path
+        Copy folder tree relative to this. If None, copies from the session_path root.
+    extra : str, pathlib.Path
+        Extra folder parts to append to destination root path.
+
+    Returns
+    -------
+    pathlib.Path
+        The location of the backup data, if succeeded to copy.
     """
-    bk_session_path = Path()
-    if Path(session_path).exists():
+    if not root:
+        if session_path := get_session_path(folder_path):
+            root = session_path.parents[2]
+        else:
+            root = folder_path.parent
+    folder_path = Path(folder_path)
+    bk_path = Path(tempfile.gettempdir(), 'backup_sessions', extra, folder_path.relative_to(root))
+    if folder_path.exists():
+        if not folder_path.is_dir():
+            log.error(f'The given folder path is not a directory: {folder_path}')
+            return
         try:
-            bk_session_path = Path(*session_path.parts[:-4]).joinpath(
-                "Subjects_backup_renamed_sessions", Path(*session_path.parts[-3:]))
-            Path(bk_session_path.parent).mkdir(parents=True)
-            print(f"Created path: {bk_session_path.parent}")
-            # shutil.copytree(session_path, bk_session_path, dirs_exist_ok=True)
-            shutil.copytree(session_path, bk_session_path)  # python 3.7 compatibility
-            print(f"Copied contents from {session_path} to {bk_session_path}")
-            return True
+            log.debug(f'Created path: {bk_path.parent}')
+            bk_path = shutil.copytree(folder_path, bk_path)
+            log.info(f'Copied contents from {folder_path} to {bk_path}')
+            return bk_path
         except FileExistsError:
-            log.error(f"A backup session for the given path already exists: {bk_session_path}, "
-                      f"manual intervention is necessary.")
-            raise
-        except shutil.Error:
-            log.error(f'Some kind of copy error occurred when moving files from {session_path} to '
-                      f'{bk_session_path}')
-            log.error(shutil.Error)
+            log.error(f'A backup session for the given path already exists: {bk_path}, '
+                      f'manual intervention is necessary.')
+        except shutil.Error as ex:
+            log.error('Failed to copy files from %s to %s: %s', folder_path, bk_path, ex)
     else:
-        log.error(f"The given session path does not exist: {session_path}")
-        return False
+        log.error('The given session path does not exist: %s', folder_path)
 
 
 def copy_with_check(src, dst, **kwargs):
@@ -365,6 +379,8 @@ def load_params_dict(params_fname: str) -> dict:
 
 
 def load_videopc_params():
+    """(DEPRECATED) This will be removed in favour of iblrigv8 functions."""
+    warnings.warn('load_videopc_params will be removed in favour of iblrigv8', FutureWarning)
     if not load_params_dict("videopc_params"):
         create_videopc_params()
     return load_params_dict("videopc_params")
@@ -472,6 +488,9 @@ def create_basic_transfer_params(param_str='transfer_params', local_data_path=No
 
 
 def create_videopc_params(force=False, silent=False):
+    """(DEPRECATED) This will be removed in favour of iblrigv8 functions."""
+    url = 'https://github.com/int-brain-lab/iblrig/blob/videopc/docs/source/video.rst'
+    warnings.warn(f'create_videopc_params is deprecated, see {url}', DeprecationWarning)
     if Path(params.getfile("videopc_params")).exists() and not force:
         print(f"{params.getfile('videopc_params')} exists already, exiting...")
         print(Path(params.getfile("videopc_params")).exists())

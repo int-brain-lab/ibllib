@@ -17,9 +17,13 @@ from ibllib.pipes import base_tasks
 from ibllib.io.video import get_video_meta
 from ibllib.plots.snapshot import ReportSnapshot
 
-import labcams.io
 
 _logger = logging.getLogger(__name__)
+
+try:
+    import labcams.io
+except ImportError:
+    _logger.warning('labcams not installed')
 
 
 class WidefieldRegisterRaw(base_tasks.WidefieldTask, base_tasks.RegisterRawDataTask):

@@ -7,7 +7,7 @@ import scipy.signal
 
 from one.api import ONE
 import neuropixel
-from neurodsp import voltage
+from ibldsp import voltage
 
 from ibllib.ephys import ephysqc, spikes
 from ibllib.tests import TEST_DB
@@ -229,5 +229,5 @@ class TestDetectBadChannels(unittest.TestCase):
         # ephys_bad_channels(data.T, 30000, labels, xfeats)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main(exit=False, verbosity=2)

@@ -1,3 +1,37 @@
+## Release Notes 2.32
+
+## features
+- SDSC patcher automatically support revisons
+
+## others
+- Add extra key to alignment qc with manual resolution for channel upload
+- 
+## Release Notes 2.31
+
+### features
+- training status uses new extractor map
+- refactor neurodsp to ibldsp
+- ITI qc check for iblrig v8
+- Support habituationChoiceWorld extraction in iblrig v8.15.0
+
+### bugfixes
+- NP2 waveforms extracted with correct dtype
+- Sorted cluster ids in single unit metrics
+
+## Release Notes 2.30
+
+### features
+- Task QC viewer
+- Raw ephys data loading documentation
+
+### other
+- Pandas 3.0 support
+
+## Release Notes 2.29
+
+### features
+- Added raw data loaders and synchronisation tools in brainbox.io.one.SpikeSortingLoader, method `ssl.raw_electrophysiology()`
+
 ## Release Notes 2.28
 
 ### features
@@ -8,6 +42,13 @@
 
 ### other
 - Change behavior qc to pass if number of trials > 400 (from start) can be found for which easy trial performance > 0.9
+
+#### 2.28.1
+- Typo in ibllib.pipes.video_tasks.EphysPostDLC class
+- ibllib.io.raw_data_loaders.patch_settings works with iblrigv8 settings files
+
+#### 2.28.2
+- Fix loading of personal projects extractor map
 
 ## Release Notes 2.27
 

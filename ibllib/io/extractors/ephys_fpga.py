@@ -45,7 +45,7 @@ from packaging import version
 from itertools import chain
 
 import spikeglx
-import neurodsp.utils
+import ibldsp.utils
 import one.alf.io as alfio
 from iblutil.util import Bunch
 from iblutil.spacer import Spacer
@@ -162,11 +162,11 @@ def _sync_to_alf(raw_ephys_apfile, output_path=None, save=False, parts=''):
     file_ftcp = Path(output_path).joinpath(f'fronts_times_channel_polarity{uuid.uuid4()}.bin')
 
     # loop over chunks of the raw ephys file
-    wg = neurodsp.utils.WindowGenerator(sr.ns, int(SYNC_BATCH_SIZE_SECS * sr.fs), overlap=1)
+    wg = ibldsp.utils.WindowGenerator(sr.ns, int(SYNC_BATCH_SIZE_SECS * sr.fs), overlap=1)
     fid_ftcp = open(file_ftcp, 'wb')
     for sl in wg.slice:
         ss = sr.read_sync(sl)
-        ind, fronts = neurodsp.utils.fronts(ss, axis=0)
+        ind, fronts = ibldsp.utils.fronts(ss, axis=0)
         # a = sr.read_sync_analog(sl)
         sav = np.c_[(ind[0, :] + sl.start) / sr.fs, ind[1, :], fronts.astype(np.double)]
         sav.tofile(fid_ftcp)
@@ -840,7 +840,7 @@ class FpgaTrials(extractors_base.BaseExtractor):
             bpod_start = self.bpod_trials['intervals'][:, 0]
             if len(t_trial_start) > len(bpod_start) / 2:  # if least half the trial start TTLs detected
                 _logger.warning('Attempting to get protocol period from aligning trial start TTLs')
-                fcn, *_ = neurodsp.utils.sync_timestamps(bpod_start, t_trial_start)
+                fcn, *_ = ibldsp.utils.sync_timestamps(bpod_start, t_trial_start)
                 buffer = 2.5  # the number of seconds to include before/after task
                 start, end = fcn(self.bpod_trials['intervals'].flat[[0, -1]])
                 tmin = min(sync['times'][0], start - buffer)
@@ -1267,7 +1267,7 @@ class FpgaTrials(extractors_base.BaseExtractor):
                 bpod_fpga_timestamps[i] = trials[sync_field]
 
         # Sync the two timestamps
-        fcn, drift, ibpod, ifpga = neurodsp.utils.sync_timestamps(*bpod_fpga_timestamps, return_indices=True)
+        fcn, drift, ibpod, ifpga = ibldsp.utils.sync_timestamps(*bpod_fpga_timestamps, return_indices=True)
 
         # If it's drifting too much throw warning or error
         _logger.info('N trials: %i bpod, %i FPGA, %i merged, sync %.5f ppm',

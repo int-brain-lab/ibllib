@@ -8,8 +8,6 @@ import unittest
 from pathlib import Path
 from unittest import mock
 from functools import partial
-import numpy as np
-import datetime
 import random
 import string
 from uuid import uuid4
@@ -289,9 +287,7 @@ class TestPipesMisc(unittest.TestCase):
         # Connect to test DB
         one = ONE(**TEST_DB)
         # Create new session on database with a random date to avoid race conditions
-        date = str(datetime.date(2022, np.random.randint(1, 12), np.random.randint(1, 28)))
-        from one.registration import RegistrationClient
-        _, eid = RegistrationClient(one).create_new_session('ZM_1150', date=date)
+        _, eid = fu.register_new_session(one, subject='ZM_1150')
         eid = str(eid)
         # Currently the task protocol of a session must contain 'ephys' in order to create an insertion!
         one.alyx.rest('sessions', 'partial_update', id=eid, data={'task_protocol': 'ephys'})
@@ -452,6 +448,7 @@ class TestSyncData(unittest.TestCase):
             p.touch()
         # Create video data too
         fu.create_fake_raw_video_data_folder(self.session_path)
+        self.bk_root = Path(tempfile.gettempdir(), 'backup_sessions')  # location of backup data
 
     def test_rdiff_install(self):
         if os.name == "nt":  # remove executable if on windows
@@ -551,19 +548,48 @@ class TestSyncData(unittest.TestCase):
 
     def test_backup_session(self):
         # Test when backup path does NOT already exist
-        self.assertTrue(misc.backup_session(self.session_path))
+        dst = misc.backup_session(self.session_path)
+        self.assertIsNotNone(dst)
+        expected = self.bk_root.joinpath(*self.session_path.parts[-3:])
+        self.assertEqual(expected, dst)
+        self.assertEqual(len(list(self.session_path.rglob('*'))), len(list(dst.rglob('*'))))
 
         # Test when backup path does exist
-        bk_session_path = Path(*self.session_path.parts[:-4]).joinpath(
-            "Subjects_backup_renamed_sessions", Path(*self.session_path.parts[-3:]))
-        Path(bk_session_path.parent).mkdir(parents=True, exist_ok=True)
-        with self.assertRaises(FileExistsError):
-            misc.backup_session(self.session_path)
-        print(">>> Error messages regarding a 'backup session already exists' or a 'given session "
-              "path does not exist' is expected in this test. <<< ")
+        with self.assertLogs(misc.__name__, level='ERROR'):
+            self.assertIsNone(misc.backup_session(self.session_path))
 
         # Test when a bad session path is given
-        self.assertFalse(misc.backup_session("a session path that does NOT exist"))
+        with self.assertLogs(misc.__name__, level='ERROR'):
+            self.assertIsNone(misc.backup_session(self.session_path.with_name('notexist')))
+
+        # Test unexpected copy error
+        shutil.rmtree(dst)
+        with mock.patch(misc.__name__ + '.shutil.copytree', side_effect=shutil.Error('foo msg')), \
+                self.assertLogs(misc.__name__, level='ERROR') as log:
+            self.assertIsNone(misc.backup_session(self.session_path))
+            self.assertIn('foo msg', log.records[-1].getMessage())
+
+        # Test invalid folder (not dir)
+        assert not dst.exists()
+        with self.assertLogs(misc.__name__, level='ERROR'):
+            file = next(self.session_path.rglob('*.mp4'))
+            self.assertIsNone(misc.backup_session(file))
+
+        # Test root kwarg
+        dst = misc.backup_session(self.session_path, root=self.session_path.parents[4])
+        self.assertIsNotNone(dst)
+        expected = self.bk_root.joinpath(*self.session_path.parts[-5:])
+        self.assertEqual(expected, dst)
+
+        # Test extra kwarg
+        dst = misc.backup_session(self.session_path, extra='fake_remote')
+        self.assertIsNotNone(dst)
+        expected = self.bk_root.joinpath('fake_remote', *self.session_path.parts[-3:])
+        self.assertEqual(expected, dst)
+
+    def tearDown(self):
+        for folder in filter(lambda x: x.name.startswith('fake'), self.bk_root.iterdir()):
+            shutil.rmtree(folder, ignore_errors=True)
 
 
 class TestScanFixPassiveFiles(unittest.TestCase):

@@ -30,6 +30,7 @@ from pathlib import Path
 from copy import deepcopy
 
 from one.converters import ConversionMixin
+from iblutil.util import flatten
 from packaging import version
 
 import ibllib.pipes.misc as misc
@@ -317,7 +318,10 @@ def get_task_protocol(sess_params, task_collection=None):
     """
     collections = get_collections({'tasks': sess_params.get('tasks')})
     if task_collection is None:
-        return set(collections.keys())  # Return all protocols
+        if len(collections) == 0:
+            return None
+        else:
+            return set(collections.keys())  # Return all protocols
     else:
         return next((k for k, v in collections.items() if v == task_collection), None)
 
@@ -391,15 +395,15 @@ def get_collections(sess_params, flat=False):
     sess_params : dict
         The loaded experiment description map.
     flat : bool (False)
-        If True, return a flat list of unique collections, otherwise return a map of device/sync/task
+        If True, return a flat set of collections, otherwise return a map of device/sync/task
 
     Returns
     -------
     dict[str, str]
         A map of device/sync/task and the corresponding collection name.
 
-    list[str]
-        A flat list of unique collection names.
+    set[str]
+        A set of unique collection names.
 
     Notes
     -----
@@ -423,16 +427,7 @@ def get_collections(sess_params, flat=False):
                 iter_dict(v)
 
     iter_dict(sess_params)
-    if flat:
-        cflat = []
-        for k, v in collection_map.items():
-            if isinstance(v, list):
-                cflat.extend(v)
-            else:
-                cflat.append(v)
-        return list(set(cflat))
-    else:
-        return collection_map
+    return set(flatten(collection_map.values())) if flat else collection_map
 
 
 def get_video_compressed(sess_params):

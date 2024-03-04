@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import spikeglx
 import neuropixel
-from neurodsp.utils import rms
+from ibldsp.utils import rms
 import one.alf.io as alfio
 
 from ibllib.misc import check_nvidia_driver

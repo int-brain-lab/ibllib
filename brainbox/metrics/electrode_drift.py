@@ -1,6 +1,6 @@
 import numpy as np
 
-from neurodsp import smooth, utils, fourier
+from ibldsp import smooth, utils, fourier
 from iblutil.numerical import bincount2D
 
 
