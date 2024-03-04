@@ -623,7 +623,7 @@ def add_missing_passive_spacer(session_path, sync, chmap, spacer_times, acquisit
     if insert_idx > 0:
         assert passive_start > spacer_times[insert_idx - 1], 'Start of passive session overlaps with previous ' \
                                                              'task protocol'
-    if insert_idx < n_tasks:
+    if insert_idx < n_tasks and insert_idx != n_tasks - 1:
         assert passive_end < spacer_times[insert_idx], 'End of passive session overlaps with next task protocol'
 
     spacer_times = np.insert(spacer_times, insert_idx, passive_start)
