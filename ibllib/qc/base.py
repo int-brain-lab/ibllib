@@ -30,7 +30,6 @@ class QC:
         else:
             self.endpoint = endpoint
             self._confirm_endpoint_id(endpoint_id)
-            self.json = True
 
         # Ensure outcome attribute matches Alyx record
         updatable = self.eid and self.one and not self.one.offline
@@ -109,7 +108,10 @@ class QC:
         # Have as read for now since 'list' isn't working
         target_obj = self.one.alyx.get(f'/{self.endpoint}/{endpoint_id}', clobber=True) or None
         if target_obj:
+            self.json = 'extended_qc' not in target_obj
             self.eid = endpoint_id
+            if not self.json:
+                return  # No need to set up JSON for QC
             json_field = target_obj.get('json')
             if not json_field:
                 self.one.alyx.json_field_update(endpoint=self.endpoint, uuid=self.eid,
@@ -124,16 +126,28 @@ class QC:
             raise ValueError("'endpoint_id' must be a valid uuid")
 
     def update(self, outcome=None, namespace='experimenter', override=False):
-        """Update the qc field in Alyx
-        Updates the 'qc' field in Alyx if the new QC outcome is worse than the current value.
-        :param outcome: A string; one of "CRITICAL", "FAIL", "WARNING", "PASS" or "NOT_SET"
-        :param namespace: The extended QC key specifying the type of QC associated with the outcome
-        :param override: If True the QC field is updated even if new value is better than previous
-        :return: The current QC outcome str on Alyx
+        """Update the qc field in Alyx.
 
-        Example:
-            qc = QC('path/to/session')
-            qc.update('PASS')  # Update current QC field to 'PASS' if not set
+        Updates the 'qc' field in Alyx if the new QC outcome is worse than the current value.
+
+        Parameters
+        ----------
+        outcome : str, int, one.alf.spec.QC
+            A QC outcome; one of "CRITICAL", "FAIL", "WARNING", "PASS" or "NOT_SET".
+        namespace : str
+            The extended QC key specifying the type of QC associated with the outcome.
+        override : bool
+            If True the QC field is updated even if new value is better than previous.
+
+        Returns
+        -------
+        one.alf.spec.QC
+            The current QC outcome on Alyx.
+
+        Example
+        -------
+        >>> qc = QC('path/to/session')
+        >>> qc.update('PASS')  # Update current QC field to 'PASS' if not set
         """
         assert self.one, "instance of one should be provided"
         if self.one.offline:

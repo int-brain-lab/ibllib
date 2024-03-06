@@ -311,6 +311,8 @@ class ChoiceWorldTrialsBpod(base_tasks.BehaviourTask):
 
     def extract_behaviour(self, **kwargs):
         self.extractor = get_bpod_extractor(self.session_path, task_collection=self.collection)
+        _logger.info('Bpod trials extractor: %s.%s',
+                     self.extractor.__module__, self.extractor.__class__.__name__)
         self.extractor.default_path = self.output_collection
         return self.extractor.extract(task_collection=self.collection, **kwargs)
 
@@ -453,12 +455,11 @@ class ChoiceWorldTrialsNidq(ChoiceWorldTrialsBpod):
         if plot_qc:
             _logger.info('Creating Trials QC plots')
             try:
-                # TODO needs to be adapted for chained protocols
                 session_id = self.one.path2eid(self.session_path)
-                plot_task = BehaviourPlots(session_id, self.session_path, one=self.one)
+                plot_task = BehaviourPlots(
+                    session_id, self.session_path, one=self.one, task_collection=self.output_collection)
                 _ = plot_task.run()
                 self.plot_tasks.append(plot_task)
-
             except Exception:
                 _logger.error('Could not create Trials QC Plot')
                 _logger.error(traceback.format_exc())

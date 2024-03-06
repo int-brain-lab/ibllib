@@ -387,6 +387,40 @@ class TaskQC(base.QC):
         session_outcome, outcomes = compute_session_status_from_dict(results, self.criteria)
         return session_outcome, results, outcomes
 
+    @staticmethod
+    def compute_dataset_qc_status(outcomes):
+        """Return map of dataset specific QC values.
+
+        Parameters
+        ----------
+        outcomes : dict
+            Map of checks and their individual outcomes.
+
+        Returns
+        -------
+        dict
+            Map of dataset names and their outcome.
+        """
+        trials_table_outcomes = {
+            'intervals': outcomes.get('_task_iti_delays', spec.QC.NOT_SET),
+            'goCue_times': outcomes.get('_task_goCue_delays', spec.QC.NOT_SET),
+            'response_times': spec.QC.NOT_SET, 'choice': spec.QC.NOT_SET,
+            'stimOn_times': outcomes.get('_task_stimOn_delays', spec.QC.NOT_SET),
+            'contrastLeft': spec.QC.NOT_SET, 'contrastRight': spec.QC.NOT_SET,
+            'feedbackType': spec.QC.NOT_SET, 'probabilityLeft': spec.QC.NOT_SET,
+            'feedback_times': outcomes.get('_task_errorCue_delays', spec.QC.NOT_SET),
+            'firstMovement_times': spec.QC.NOT_SET
+        }
+        reward_checks = ('_task_reward_volumes', '_task_reward_volume_set')
+        trials_table_outcomes['rewardVolume']: TaskQC.overall_outcome(
+            (outcomes.get(x, spec.QC.NOT_SET) for x in reward_checks)
+        )
+        dataset_outcomes = {
+            '_ibl_trials.stimOff_times': outcomes.get('_task_stimOff_delays', spec.QC.NOT_SET),
+            '_ibl_trials.table': trials_table_outcomes,
+        }
+        return dataset_outcomes
+
 
 class HabituationQC(TaskQC):
 
