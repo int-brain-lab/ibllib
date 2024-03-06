@@ -1,16 +1,20 @@
 ## Release Notes 2.32
 
 ## features
-- SDSC patcher automatically support revisons
+- SDSC patcher automatically support revisions
 
-## others
+## other
 - Add extra key to alignment qc with manual resolution for channel upload
-- 
+
+#### 2.32.3
+- FpgaTrials supports alignment of Bpod datasets not part of trials object
+- Support chained protocols in BehaviourPlots task
+
 ## Release Notes 2.31
 
 ### features
-- training status uses new extractor map
-- refactor neurodsp to ibldsp
+- Training status uses new extractor map
+- Refactor neurodsp to ibldsp
 - ITI qc check for iblrig v8
 - Support habituationChoiceWorld extraction in iblrig v8.15.0
 
