@@ -33,7 +33,7 @@ class QC:
 
         # Ensure outcome attribute matches Alyx record
         updatable = self.eid and self.one and not self.one.offline
-        self._outcome = self.update('NOT_SET', namespace='') if updatable else 'NOT_SET'
+        self._outcome = spec.QC.validate(self.update('NOT_SET', namespace='') if updatable else 'NOT_SET')
         self.log.debug(f'Current QC status is {self.outcome}')
 
     @abstractmethod
