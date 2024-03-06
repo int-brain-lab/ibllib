@@ -1,4 +1,4 @@
-import neurodsp.utils
+import ibldsp.utils
 import spikeglx
 import ibllib.io.extractors.ephys_fpga
 
@@ -15,7 +15,7 @@ sync = ibllib.io.extractors.ephys_fpga._sync_to_alf(sr, output_path, save=False)
 
 # if the data is needed as well, loop over the file
 # raw data contains raw ephys traces, while raw_sync contains the 16 sync traces
-wg = neurodsp.utils.WindowGenerator(sr.ns, BATCH_SIZE_SAMPLES, overlap=1)
+wg = ibldsp.utils.WindowGenerator(sr.ns, BATCH_SIZE_SAMPLES, overlap=1)
 for first, last in wg.firstlast:
     rawdata, rawsync = sr.read_samples(first, last)
     wg.print_progress()
