@@ -215,10 +215,11 @@ def make_pipeline(session_path, **pkwargs):
                 for sync_option in ('nidq', 'bpod'):
                     if sync_option in extractor.lower() and not sync == sync_option:
                         raise ValueError(f'Extractor "{extractor}" and sync "{sync}" do not match')
+                # TODO Assert sync_label correct here (currently unused)
                 # Look for the extractor in the behavior extractors module
                 if hasattr(btasks, extractor):
                     task = getattr(btasks, extractor)
-                # This may happen that the extractor is tied to a specific sync task: look for TrialsChoiceWorldBpod for # example
+                # This may happen that the extractor is tied to a specific sync task: look for TrialsChoiceWorldBpod for example
                 elif hasattr(btasks, extractor + sync.capitalize()):
                     task = getattr(btasks, extractor + sync.capitalize())
                 else:
@@ -229,6 +230,8 @@ def make_pipeline(session_path, **pkwargs):
                     else:
                         raise NotImplementedError(
                             f'Extractor "{extractor}" not found in main IBL pipeline nor in personal projects')
+                _logger.debug('%s (protocol #%i, task #%i) = %s.%s',
+                              protocol, i, j, task.__module__, task.__name__)
                 # Rename the class to something more informative
                 task_name = f'{task.__name__}_{i:02}'
                 # For now we assume that the second task in the list is always the trials extractor, which is dependent
