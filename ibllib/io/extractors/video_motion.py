@@ -15,7 +15,7 @@ import logging
 from pathlib import Path
 from joblib import Parallel, delayed, cpu_count
 
-from neurodsp.utils import WindowGenerator
+from ibldsp.utils import WindowGenerator
 from one.api import ONE
 import ibllib.io.video as vidio
 from iblutil.util import Bunch

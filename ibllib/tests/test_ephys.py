@@ -7,7 +7,7 @@ import scipy.signal
 
 from one.api import ONE
 import neuropixel
-from neurodsp import voltage
+from ibldsp import voltage
 
 from ibllib.ephys import ephysqc, spikes
 from ibllib.tests import TEST_DB
