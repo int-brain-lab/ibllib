@@ -161,6 +161,9 @@ class BaseBpodTrialsExtractor(BaseExtractor):
             self.settings = {"IBLRIG_VERSION": "100.0.0"}
         elif self.settings.get("IBLRIG_VERSION", "") == "":
             self.settings["IBLRIG_VERSION"] = "100.0.0"
+        # Get all detected TTLs. These are stored for QC purposes
+        self.frame2ttl, self.audio = raw.load_bpod_fronts(self.session_path, data=self.bpod_trials)
+
         return super(BaseBpodTrialsExtractor, self).extract(**kwargs)
 
     @property

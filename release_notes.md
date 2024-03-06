@@ -8,6 +8,7 @@
 
 #### 2.32.1
 - FpgaTrials supports alignment of Bpod datasets not part of trials object
+- Support chained protocols in BehaviourPlots task
 
 ## Release Notes 2.31
 
