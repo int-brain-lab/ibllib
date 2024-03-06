@@ -46,6 +46,7 @@ from packaging import version
 import spikeglx
 import ibldsp.utils
 import one.alf.io as alfio
+from one.alf.files import filename_parts
 from iblutil.util import Bunch
 from iblutil.spacer import Spacer
 
@@ -816,6 +817,34 @@ class FpgaTrials(extractors_base.BaseExtractor):
         assert self.var_names == tuple(out.keys())
         return out
 
+    def _is_trials_object_attribute(self, var_name, variable_length_vars=None):
+        """
+        Check if variable name is expected to have the same length as trials.intervals.
+
+        Parameters
+        ----------
+        var_name : str
+            The variable name to check.
+        variable_length_vars : list
+            Set of variable names that are not expected to have the same length as trials.intervals.
+            This list may be passed by superclasses.
+
+        Returns
+        -------
+        bool
+            True if variable is a trials dataset.
+
+        Examples
+        --------
+        >>> assert self._is_trials_object_attribute('stimOnTrigger_times') is True
+        >>> assert self._is_trials_object_attribute('wheel_position') is False
+        """
+        save_name = self.save_names[self.var_names.index(var_name)] if var_name in self.var_names else None
+        if save_name:
+            return filename_parts(save_name)[1] == 'trials'
+        else:
+            return var_name not in (variable_length_vars or [])
+
     def build_trials(self, sync, chmap, display=False, **kwargs):
         """
         Extract task related event times from the sync.
@@ -914,7 +943,10 @@ class FpgaTrials(extractors_base.BaseExtractor):
         # Add the Bpod trial events, converting the timestamp fields to FPGA time.
         # NB: The trial intervals are by default a Bpod rsync field.
         out.update({k: self.bpod_trials[k][ibpod] for k in self.bpod_fields})
-        out.update({k: self.bpod2fpga(self.bpod_trials[k][ibpod]) for k in self.bpod_rsync_fields})
+        for k in self.bpod_rsync_fields:
+            # Some personal projects may extract non-trials object datasets that may not have 1 event per trial
+            idx = ibpod if self._is_trials_object_attribute(k) else np.arange(len(self.bpod_trials[k]), dtype=int)
+            out[k] = self.bpod2fpga(self.bpod_trials[k][idx])
         out.update({k: fpga_trials[k][ifpga] for k in fpga_trials.keys()})
 
         if display:  # pragma: no cover
