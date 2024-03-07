@@ -141,9 +141,11 @@ class ServerDataHandler(DataHandler):
         data_repo = get_local_data_repository(self.one.alyx)
         # If clobber = False, do not re-upload the outputs that have already been processed
         to_upload = list(filter(None if clobber else lambda x: x not in self.processed, outputs))
-        records = register_dataset(to_upload, one=self.one, versions=versions, repository=data_repo, **kwargs)
-        if not kwargs.get('dry', False):
-            self.processed.update({k: v for k, v in zip(to_upload, records)})  # Store processed outputs
+        records = register_dataset(to_upload, one=self.one, versions=versions, repository=data_repo, **kwargs) or []
+        if kwargs.get('dry', False):
+            return records
+        # Store processed outputs
+        self.processed.update({k: v for k, v in zip(to_upload, records)})
         return [self.processed[x] for x in outputs]
 
     def cleanUp(self):
