@@ -175,7 +175,8 @@ class QC:
         return self.outcome
 
     def update_extended_qc(self, data):
-        """Update the extended_qc field in Alyx
+        """Update the extended_qc field in Alyx.
+
         Subclasses should chain a call to this.
         :param data: a dict of qc tests and their outcomes, typically a value between 0. and 1.
         :return: the updated extended_qc field

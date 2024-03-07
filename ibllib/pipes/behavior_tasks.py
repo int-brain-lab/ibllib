@@ -1,17 +1,21 @@
 """Standard task protocol extractor dynamic pipeline tasks."""
 import logging
 import traceback
+from pathlib import PurePosixPath
 
 from packaging import version
 import one.alf.io as alfio
 from one.alf.files import session_path_parts
+from one.alf import spec
 from one.api import ONE
 
 from ibllib.oneibl.registration import get_lab
+from ibllib.oneibl.data_handlers import ServerDataHandler
 from ibllib.pipes import base_tasks
 from ibllib.io.raw_data_loaders import load_settings, load_bpod_fronts
 from ibllib.qc.task_extractors import TaskQCExtractor
 from ibllib.qc.task_metrics import HabituationQC, TaskQC
+from ibllib.qc.base import QC
 from ibllib.io.extractors.ephys_passive import PassiveChoiceWorld
 from ibllib.io.extractors.bpod_trials import get_bpod_extractor
 from ibllib.io.extractors.ephys_fpga import FpgaTrials, FpgaTrialsHabituation, get_sync_and_chn_map
@@ -72,9 +76,7 @@ class HabituationTrialsBpod(base_tasks.BehaviourTask):
         return signature
 
     def _run(self, update=True, save=True):
-        """
-        Extracts an iblrig training session
-        """
+        """Extracts an iblrig training session."""
         trials, output_files = self.extract_behaviour(save=save)
 
         if trials is None:
@@ -296,7 +298,7 @@ class ChoiceWorldTrialsBpod(base_tasks.BehaviourTask):
         }
         return signature
 
-    def _run(self, update=True, save=True):
+    def _run(self, update=True, save=True, **kwargs):
         """Extracts an iblrig training session."""
         trials, output_files = self.extract_behaviour(save=save)
         if trials is None:
@@ -305,7 +307,16 @@ class ChoiceWorldTrialsBpod(base_tasks.BehaviourTask):
             return output_files
 
         # Run the task QC
-        self.run_qc(trials)
+        qc = self.run_qc(trials, update=update, **kwargs)
+        if update and not self.one.offline:
+            on_server = self.location == 'server' and isinstance(self.data_handler, ServerDataHandler)
+            if not on_server:
+                _logger.warning('Updating dataset QC only supported on local servers')
+            else:
+                labs = get_lab(self.session_path, self.one.alyx)
+                # registered_dsets = self.register_datasets(labs=labs)
+                datasets = self.data_handler.uploadData(output_files, self.version, labs=labs)
+                self.update_dataset_qc(qc, datasets, self.one)
 
         return output_files
 
@@ -355,6 +366,55 @@ class ChoiceWorldTrialsBpod(base_tasks.BehaviourTask):
         namespace = 'task' if self.protocol_number is None else f'task_{self.protocol_number:02}'
         qc.run(update=update, namespace=namespace)
         return qc
+
+    @staticmethod
+    def update_dataset_qc(qc, registered_datasets, one, override=False):
+        """
+        Update QC values for individual datasets.
+
+        Parameters
+        ----------
+        qc : ibllib.qc.task_metrics.TaskQC
+            A TaskQC object that has been run.
+        registered_datasets : list of dict
+            A list of Alyx dataset records.
+        one : one.api.OneAlyx
+            An online instance of ONE.
+        override : bool
+            If True the QC field is updated even if new value is better than previous.
+
+        Returns
+        -------
+        list of dict
+            The list of registered datasets but with the 'qc' fields updated.
+        """
+        # Create map of dataset name, sans extension, to dataset id
+        stem2id = {PurePosixPath(dset['name']).stem: dset.get('id', dset['url'][-36:]) for dset in registered_datasets}
+        # Ensure dataset stems are unique
+        assert len(stem2id) == len(registered_datasets), 'ambiguous dataset names'
+
+        # dict of QC check to outcome (as enum value)
+        *_, outcomes = qc.compute_session_status()
+        # work over map of dataset name (sans extension) to outcome (enum or dict of columns: enum)
+        for name, outcome in qc.compute_dataset_qc_status(outcomes).items():
+            # if outcome is a dict, calculate aggregate outcome for each column
+            if isinstance(outcome, dict):
+                extended_qc = outcome
+                outcome = qc.overall_outcome(outcome.values())
+            else:
+                extended_qc = {}
+            # check if dataset was registered to Alyx
+            if not (did := stem2id.get(name)):
+                _logger.debug('dataset %s not registered, skipping', name)
+                continue
+            # update the dataset QC value on Alyx
+            if outcome > spec.QC.NOT_SET or override:
+                dset_qc = QC(did, one=one, log=_logger, endpoint='datasets')
+                dset = next(x for x in registered_datasets if did == x.get('id') or did in x.get('url', ''))
+                dset['qc'] = dset_qc.update(outcome, namespace='task', override=override).name
+                if extended_qc:
+                    dset_qc.update_extended_qc(extended_qc)
+        return registered_datasets
 
 
 class ChoiceWorldTrialsNidq(ChoiceWorldTrialsBpod):
@@ -467,14 +527,11 @@ class ChoiceWorldTrialsNidq(ChoiceWorldTrialsBpod):
         return qc
 
     def _run(self, update=True, plot_qc=True, save=True):
-        dsets, out_files = self.extract_behaviour(save=save)
+        output_files = super()._run(update=update, save=save, plot_qc=plot_qc)
+        if update and not self.one.offline:
+            self._behaviour_criterion(update=update)
 
-        if not self.one or self.one.offline:
-            return out_files
-
-        self._behaviour_criterion(update=update)
-        self.run_qc(dsets, update=update, plot_qc=plot_qc)
-        return out_files
+        return output_files
 
 
 class ChoiceWorldTrialsTimeline(ChoiceWorldTrialsNidq):
