@@ -108,7 +108,7 @@ class QC:
         # Have as read for now since 'list' isn't working
         target_obj = self.one.alyx.get(f'/{self.endpoint}/{endpoint_id}', clobber=True) or None
         if target_obj:
-            self.json = 'extended_qc' not in target_obj
+            self.json = 'qc' not in target_obj
             self.eid = endpoint_id
             if not self.json:
                 return  # No need to set up JSON for QC
@@ -182,7 +182,7 @@ class QC:
         :return: the updated extended_qc field
         """
         assert self.eid, 'Unable to update Alyx; eID not set'
-        assert self.one, "instance of one should be provided"
+        assert self.one, 'instance of one should be provided'
         if self.one.offline:
             self.log.warning('Running on OneOffline instance, unable to update remote QC')
             return
@@ -196,7 +196,7 @@ class QC:
                     data[k] = None if np.isnan(v).all() else v
 
         details = self.one.alyx.get(f'/{self.endpoint}/{self.eid}', clobber=True)
-        if self.json:
+        if 'extended_qc' not in details:
             extended_qc = details['json']['extended_qc'] or {}
             extended_qc.update(data)
             extended_qc_dict = {'extended_qc': extended_qc}

@@ -54,7 +54,7 @@ import logging
 import sys
 import warnings
 from packaging import version
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from datetime import datetime, timedelta
 from inspect import getmembers, isfunction
 from functools import reduce, wraps
@@ -146,6 +146,55 @@ def compute_session_status_from_dict(results, criteria=None):
     # Criteria map is in order of severity so the max index is our overall QC outcome
     session_outcome = base.QC.overall_outcome(outcomes.values())
     return session_outcome, outcomes
+
+
+def update_dataset_qc(qc, registered_datasets, one, override=False):
+    """
+    Update QC values for individual datasets.
+
+    Parameters
+    ----------
+    qc : ibllib.qc.task_metrics.TaskQC
+        A TaskQC object that has been run.
+    registered_datasets : list of dict
+        A list of Alyx dataset records.
+    one : one.api.OneAlyx
+        An online instance of ONE.
+    override : bool
+        If True the QC field is updated even if new value is better than previous.
+
+    Returns
+    -------
+    list of dict
+        The list of registered datasets but with the 'qc' fields updated.
+    """
+    # Create map of dataset name, sans extension, to dataset id
+    stem2id = {PurePosixPath(dset['name']).stem: dset.get('id', dset['url'][-36:]) for dset in registered_datasets}
+    # Ensure dataset stems are unique
+    assert len(stem2id) == len(registered_datasets), 'ambiguous dataset names'
+
+    # dict of QC check to outcome (as enum value)
+    *_, outcomes = qc.compute_session_status()
+    # work over map of dataset name (sans extension) to outcome (enum or dict of columns: enum)
+    for name, outcome in qc.compute_dataset_qc_status(outcomes).items():
+        # if outcome is a dict, calculate aggregate outcome for each column
+        if isinstance(outcome, dict):
+            extended_qc = outcome
+            outcome = qc.overall_outcome(outcome.values())
+        else:
+            extended_qc = {}
+        # check if dataset was registered to Alyx
+        if not (did := stem2id.get(name)):
+            _log.debug('dataset %s not registered, skipping', name)
+            continue
+        # update the dataset QC value on Alyx
+        if outcome > spec.QC.NOT_SET or override:
+            dset_qc = base.QC(did, one=one, log=_log, endpoint='datasets')
+            dset = next(x for x in registered_datasets if did == x.get('id') or did in x.get('url', ''))
+            dset['qc'] = dset_qc.update(outcome, namespace='', override=override).name
+            if extended_qc:
+                dset_qc.update_extended_qc(extended_qc)
+    return registered_datasets
 
 
 class TaskQC(base.QC):
