@@ -101,7 +101,7 @@ class Patcher(abc.ABC):
         assert one
         self.one = one
 
-    def _patch_dataset(self, path, dset_id=None, dry=False, ftp=False):
+    def _patch_dataset(self, path, dset_id=None, revision=None, dry=False, ftp=False):
         """
         This private methods gets the dataset information from alyx, computes the local
         and remote paths and initiates the file copy
@@ -113,6 +113,10 @@ class Patcher(abc.ABC):
                 dset_id = None
         assert dset_id
         assert is_uuid_string(dset_id)
+        # If the revision is not None then we need to add the revision into the path. Note the moving of the file
+        # is handled by one registration client
+        if revision is not None:
+            path = path.parent.joinpath(f'#{revision}#', path.name)
         assert path.exists()
         dset = self.one.alyx.rest('datasets', 'read', id=dset_id)
         fr = next(fr for fr in dset['file_records'] if 'flatiron' in fr['data_repository'])
@@ -185,7 +189,7 @@ class Patcher(abc.ABC):
             return
         # from the dataset info, set flatIron flag to exists=True
         for p, d in zip(file_list, response):
-            self._patch_dataset(p, dset_id=d['id'], dry=dry, ftp=ftp)
+            self._patch_dataset(p, dset_id=d['id'], revision=d['revision'], dry=dry, ftp=ftp)
         return response
 
     def patch_datasets(self, file_list, **kwargs):

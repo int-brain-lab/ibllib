@@ -524,6 +524,23 @@ class TestFpgaTrials(unittest.TestCase):
         fields = ephys_fpga.FpgaTrials._time_fields(expected + ('position', 'timebase', 'fooBaz'))
         self.assertCountEqual(expected, fields)
 
+    def test_is_trials_object_attribute(self):
+        """Test for FpgaTrials._is_trials_object_attribute method."""
+        extractor = ephys_fpga.FpgaTrials('subject/2020-01-01/001')
+        # Should assume this is a trials attribute if no save name defined
+        self.assertTrue(extractor._is_trials_object_attribute('stimOnTrigger_times'))
+        # Save name not trials attribute
+        self.assertFalse(extractor._is_trials_object_attribute('wheel_position'))
+        # Save name is trials attribute
+        self.assertTrue(extractor._is_trials_object_attribute('table'))
+        # Check with toy variables
+        extractor.var_names += ('foo_bar',)
+        extractor.save_names += (None,)
+        self.assertTrue(extractor._is_trials_object_attribute('foo_bar'))
+        self.assertFalse(extractor._is_trials_object_attribute('foo_bar', variable_length_vars='foo_bar'))
+        extractor.save_names = extractor.save_names[:-1] + ('_ibl_foo.bar_times.csv',)
+        self.assertFalse(extractor._is_trials_object_attribute('foo_bar'))
+
 
 if __name__ == '__main__':
     unittest.main(exit=False, verbosity=2)

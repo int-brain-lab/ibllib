@@ -926,6 +926,23 @@ def patch_settings(session_path, collection='raw_behavior_data',
     -------
     dict
         The modified settings.
+
+    Examples
+    --------
+    File is in /data/subject/2020-01-01/002/raw_behavior_data. Patch the file then move to new location.
+    >>> patch_settings('/data/subject/2020-01-01/002', number='001')
+    >>> shutil.move('/data/subject/2020-01-01/002/raw_behavior_data/', '/data/subject/2020-01-01/001/raw_behavior_data/')
+
+    File is moved into new collection within the same session, then patched.
+    >>> shutil.move('./subject/2020-01-01/002/raw_task_data_00/', './subject/2020-01-01/002/raw_task_data_01/')
+    >>> patch_settings('/data/subject/2020-01-01/002', collection='raw_task_data_01', new_collection='raw_task_data_01')
+
+    Update subject, date and number.
+    >>> new_session_path = Path('/data/foobar/2024-02-24/002')
+    >>> old_session_path = Path('/data/baz/2024-02-23/001')
+    >>> patch_settings(old_session_path, collection='raw_task_data_00',
+    ...     subject=new_session_path.parts[-3], date=new_session_path.parts[-2], number=new_session_path.parts[-1])
+    >>> shutil.move(old_session_path, new_session_path)
     """
     settings = load_settings(session_path, collection)
     if not settings:
