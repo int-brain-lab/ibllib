@@ -7,6 +7,7 @@ import numpy as np
 import copy
 import random
 import string
+from datetime import date
 
 from one.api import ONE
 from neuropixel import trace_header
@@ -322,7 +323,8 @@ class TestAlignmentQcManual(unittest.TestCase):
                 alignment_stored='2020-09-28T15:57:25_mayo',
                 alignment_count=3,
                 trajectory_created=False,
-                alignment_qc=0.604081)
+                alignment_qc=0.604081,
+                alignment_date=date.today().isoformat())
 
     def _03_manual_resolution_not_latest(self):
         align_qc = AlignmentQC(self.probe_id, one=one, brain_atlas=brain_atlas, channels=False)
@@ -338,7 +340,8 @@ class TestAlignmentQcManual(unittest.TestCase):
                 alignment_stored='2020-09-28T10:03:06_alejandro',
                 alignment_count=3,
                 trajectory_created=True,
-                alignment_qc=0.604081)
+                alignment_qc=0.604081,
+                alignment_date=date.today().isoformat())
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -347,7 +350,7 @@ class TestAlignmentQcManual(unittest.TestCase):
 
 
 def _verify(tc, alignment_resolved=None, alignment_count=None,
-            alignment_stored=None, trajectory_created=False, alignment_qc=None):
+            alignment_stored=None, trajectory_created=False, alignment_qc=None, alignment_date=None):
     """
     For a given test case with a `probe_id` attribute, check that Alyx returns insertion records
     that match the provided parameters.
@@ -382,6 +385,8 @@ def _verify(tc, alignment_resolved=None, alignment_count=None,
                             f'&probe_id={tc.probe_id}'
                             '&provenance=Ephys aligned histology track', clobber=True)
         tc.assertNotEqual(tc.prev_traj_id == traj[0]['id'], trajectory_created)
+    if alignment_date:
+        tc.assertEqual(insertion['json']['extended_qc']['alignment_resolved_date'], alignment_date)
 
 
 class TestUploadToFlatIron(unittest.TestCase):

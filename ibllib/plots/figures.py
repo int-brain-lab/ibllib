@@ -12,7 +12,7 @@ import pandas as pd
 import scipy.signal
 import matplotlib.pyplot as plt
 
-from neurodsp import voltage
+from ibldsp import voltage
 from ibllib.plots.snapshot import ReportSnapshotProbe, ReportSnapshot
 from one.api import ONE
 import one.alf.io as alfio
@@ -71,35 +71,58 @@ def remove_axis_outline(ax):
 
 
 class BehaviourPlots(ReportSnapshot):
-    """
-    Behavioural plots
-    """
+    """Behavioural plots."""
 
-    signature = {
-        'input_files': [
-            ('*trials.table.pqt', 'alf', True),
-        ],
-        'output_files': [
-            ('psychometric_curve.png', 'snapshot/behaviour', True),
-            ('chronometric_curve.png', 'snapshot/behaviour', True),
-            ('reaction_time_with_trials.png', 'snapshot/behaviour', True)
-        ]
-    }
+    @property
+    def signature(self):
+        signature = {
+            'input_files': [
+                ('*trials.table.pqt', self.trials_collection, True),
+            ],
+            'output_files': [
+                ('psychometric_curve.png', 'snapshot/behaviour', True),
+                ('chronometric_curve.png', 'snapshot/behaviour', True),
+                ('reaction_time_with_trials.png', 'snapshot/behaviour', True)
+            ]
+        }
+        return signature
 
     def __init__(self, eid, session_path=None, one=None, **kwargs):
+        """
+        Generate and upload behaviour plots.
+
+        Parameters
+        ----------
+        eid : str, uuid.UUID
+            An experiment UUID.
+        session_path : pathlib.Path
+            A session path.
+        one : one.api.One
+            An instance of ONE for registration to Alyx.
+        trials_collection : str
+            The location of the trials data (default: 'alf').
+        kwargs
+            Arguments for ReportSnapshot constructor.
+        """
         self.one = one
         self.eid = eid
         self.session_path = session_path or self.one.eid2path(self.eid)
+        self.trials_collection = kwargs.pop('trials_collection', 'alf')
         super(BehaviourPlots, self).__init__(self.session_path, self.eid, one=self.one,
                                              **kwargs)
-        self.output_directory = self.session_path.joinpath('snapshot', 'behaviour')
+        # Output directory should mirror trials collection, sans 'alf' part
+        self.output_directory = self.session_path.joinpath(
+            'snapshot', 'behaviour', self.trials_collection.removeprefix('alf').strip('/'))
         self.output_directory.mkdir(exist_ok=True, parents=True)
 
     def _run(self):
 
         output_files = []
-        trials = alfio.load_object(self.session_path.joinpath('alf'), 'trials')
-        title = '_'.join(list(self.session_path.parts[-3:]))
+        trials = alfio.load_object(self.session_path.joinpath(self.trials_collection), 'trials')
+        if self.one:
+            title = self.one.path2ref(self.session_path, as_dict=False)
+        else:
+            title = '_'.join(list(self.session_path.parts[-3:]))
 
         fig, ax = training.plot_psychometric(trials, title=title, figsize=(8, 6))
         set_axis_label_size(ax)
@@ -127,9 +150,7 @@ class BehaviourPlots(ReportSnapshot):
 
 # TODO put into histology and alignment pipeline
 class HistologySlices(ReportSnapshotProbe):
-    """
-    Plots coronal and sagittal slice showing electrode locations
-    """
+    """Plots coronal and sagittal slice showing electrode locations."""
 
     def _run(self):
 
@@ -614,7 +635,7 @@ def raw_destripe(raw, fs, t0, i_plt, n_plt,
     '''
 
     # Import
-    from neurodsp import voltage
+    from ibldsp import voltage
     from ibllib.plots import Density
 
     # Init fig

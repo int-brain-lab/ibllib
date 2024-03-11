@@ -1,6 +1,8 @@
 import unittest
+from unittest import mock
 from functools import partial
 from pathlib import Path
+from uuid import uuid4
 
 import numpy as np
 
@@ -11,6 +13,19 @@ from ibllib.tests import TEST_DB
 from ibllib.qc import task_metrics as qcmetrics
 
 from brainbox.behavior.wheel import cm_to_rad
+
+
+def _create_test_qc_outcomes():
+    """Create task QC outcomes dict.
+
+     Used by TestAggregateOutcome.test_compute_dateset_qc_status and TestDatasetQC.
+     """
+    outcomes = {'_task_' + k[6:]: spec.QC.NOT_SET for k in qcmetrics.TaskQC._get_checks(...)}
+    outcomes['_task_reward_volumes'] = outcomes['_task_stimOn_delays'] = spec.QC.WARNING
+    outcomes['_task_reward_volume_set'] = outcomes['_task_goCue_delays'] = spec.QC.FAIL
+    outcomes['_task_errorCue_delays'] = outcomes['_task_stimOff_delays'] = spec.QC.PASS
+    outcomes['_task_iti_delays'] = spec.QC.CRITICAL
+    return outcomes
 
 
 class TestAggregateOutcome(unittest.TestCase):
@@ -82,6 +97,69 @@ class TestAggregateOutcome(unittest.TestCase):
         with self.assertRaises(ValueError) as e:
             qcmetrics.compute_session_status_from_dict(qc_dict, qcmetrics.BWM_CRITERIA)
         self.assertTrue(e.exception.args[0] == 'Values out of bound')
+
+    def test_compute_dateset_qc_status(self):
+        """Test TaskQC.compute_dateset_qc_status method."""
+        outcomes = _create_test_qc_outcomes()
+        dataset_outcomes = qcmetrics.TaskQC.compute_dataset_qc_status(outcomes)
+        expected = {'_ibl_trials.stimOff_times': spec.QC.PASS,
+                    '_ibl_trials.table': {
+                        'intervals': spec.QC.CRITICAL,
+                        'goCue_times': spec.QC.FAIL,
+                        'response_times': spec.QC.NOT_SET,
+                        'choice': spec.QC.NOT_SET,
+                        'stimOn_times': spec.QC.WARNING,
+                        'contrastLeft': spec.QC.NOT_SET,
+                        'contrastRight': spec.QC.NOT_SET,
+                        'feedbackType': spec.QC.NOT_SET,
+                        'probabilityLeft': spec.QC.NOT_SET,
+                        'feedback_times': spec.QC.PASS,
+                        'firstMovement_times': spec.QC.NOT_SET}}
+        self.assertDictEqual(expected, dataset_outcomes)
+
+
+class TestDatasetQC(unittest.TestCase):
+    def test_update_dataset_qc(self):
+        """Test task_metrics.update_dataset_qc function."""
+        registered_datasets = [
+            {'name': '_ibl_trials.table.pqt', 'qc': 'NOT_SET', 'url': f'http://alyx.com/{uuid4()}'},
+            {'name': '_ibl_other.intervals.npy', 'qc': 'PASS', 'url': f'http://alyx.com/{uuid4()}'},
+            {'name': '_ibl_trials.stimOff_times.npy', 'qc': 'NOT_SET', 'url': f'http://alyx.com/{uuid4()}'}
+        ]
+        one = mock.MagicMock()
+        one.alyx.get.side_effect = lambda *args, **kwargs: {'qc': spec.QC.NOT_SET.name, 'json': {'extended_qc': None}}
+        one.alyx.rest.side_effect = lambda *args, **kwargs: kwargs.get('data')
+        one.offline = False
+        qc = qcmetrics.TaskQC('subject/2020-01-01/001', one=one)
+        task_qc_results = (spec.QC.CRITICAL, {}, _create_test_qc_outcomes())  # Inject some toy trials QC results
+        with mock.patch.object(qc, 'compute_session_status', return_value=task_qc_results):
+            out = qcmetrics.update_dataset_qc(qc, registered_datasets.copy(), one, override=False)
+            self.assertEqual(3, len(out))
+            self.assertEqual(['CRITICAL', 'PASS', 'PASS'], [x['qc'] for x in out])
+        # Check extended qc
+        extended_qc = one.alyx.json_field_update.call_args.kwargs.get('data', {}).get('extended_qc', {})
+        # Check a few of the fields
+        self.assertEqual(spec.QC.WARNING, extended_qc.get('stimOn_times'))
+        self.assertEqual(spec.QC.CRITICAL, extended_qc.get('intervals'))
+        self.assertEqual(spec.QC.FAIL, extended_qc.get('goCue_times'))
+        self.assertEqual(spec.QC.NOT_SET, extended_qc.get('response_times'))
+
+        # Test behaviour when dataset QC not in registered datasets list
+        one.reset_mock()
+        with mock.patch.object(qc, 'compute_session_status', return_value=task_qc_results), \
+                mock.patch.object(qc, 'compute_dataset_qc_status', return_value={'_ibl_foo.bar': spec.QC.PASS}), \
+                self.assertLogs(qcmetrics.__name__, level=10) as cm:
+            out = qcmetrics.update_dataset_qc(qc, registered_datasets.copy(), one, override=False)
+            self.assertEqual(registered_datasets, out)
+            self.assertIn('dataset _ibl_foo.bar not registered', cm.output[-1])
+            one.alyx.get.assert_not_called()
+            one.alyx.rest.assert_not_called()
+
+        # Test assertion on duplicate dataset stems
+        registered_datasets.append({
+            'name': '_ibl_other.intervals.csv', 'qc': 'FAIL', 'url': f'http://alyx.com/{uuid4()}'
+        })
+        self.assertRaises(AssertionError, qcmetrics.update_dataset_qc, qc, registered_datasets.copy(), one)
 
 
 class TestTaskMetrics(unittest.TestCase):

@@ -44,8 +44,9 @@ import numpy as np
 from packaging import version
 
 import spikeglx
-import neurodsp.utils
+import ibldsp.utils
 import one.alf.io as alfio
+from one.alf.files import filename_parts
 from iblutil.util import Bunch
 from iblutil.spacer import Spacer
 
@@ -160,11 +161,11 @@ def _sync_to_alf(raw_ephys_apfile, output_path=None, save=False, parts=''):
     file_ftcp = Path(output_path).joinpath(f'fronts_times_channel_polarity{uuid.uuid4()}.bin')
 
     # loop over chunks of the raw ephys file
-    wg = neurodsp.utils.WindowGenerator(sr.ns, int(SYNC_BATCH_SIZE_SECS * sr.fs), overlap=1)
+    wg = ibldsp.utils.WindowGenerator(sr.ns, int(SYNC_BATCH_SIZE_SECS * sr.fs), overlap=1)
     fid_ftcp = open(file_ftcp, 'wb')
     for sl in wg.slice:
         ss = sr.read_sync(sl)
-        ind, fronts = neurodsp.utils.fronts(ss, axis=0)
+        ind, fronts = ibldsp.utils.fronts(ss, axis=0)
         # a = sr.read_sync_analog(sl)
         sav = np.c_[(ind[0, :] + sl.start) / sr.fs, ind[1, :], fronts.astype(np.double)]
         sav.tofile(fid_ftcp)
@@ -775,7 +776,7 @@ class FpgaTrials(extractors_base.BaseExtractor):
             bpod_start = self.bpod_trials['intervals'][:, 0]
             if len(t_trial_start) > len(bpod_start) / 2:  # if least half the trial start TTLs detected
                 _logger.warning('Attempting to get protocol period from aligning trial start TTLs')
-                fcn, *_ = neurodsp.utils.sync_timestamps(bpod_start, t_trial_start)
+                fcn, *_ = ibldsp.utils.sync_timestamps(bpod_start, t_trial_start)
                 buffer = 2.5  # the number of seconds to include before/after task
                 start, end = fcn(self.bpod_trials['intervals'].flat[[0, -1]])
                 tmin = min(sync['times'][0], start - buffer)
@@ -815,6 +816,34 @@ class FpgaTrials(extractors_base.BaseExtractor):
         out = alfio.AlfBunch({k: out[k] for k in self.var_names if k in out})  # Reorder output
         assert self.var_names == tuple(out.keys())
         return out
+
+    def _is_trials_object_attribute(self, var_name, variable_length_vars=None):
+        """
+        Check if variable name is expected to have the same length as trials.intervals.
+
+        Parameters
+        ----------
+        var_name : str
+            The variable name to check.
+        variable_length_vars : list
+            Set of variable names that are not expected to have the same length as trials.intervals.
+            This list may be passed by superclasses.
+
+        Returns
+        -------
+        bool
+            True if variable is a trials dataset.
+
+        Examples
+        --------
+        >>> assert self._is_trials_object_attribute('stimOnTrigger_times') is True
+        >>> assert self._is_trials_object_attribute('wheel_position') is False
+        """
+        save_name = self.save_names[self.var_names.index(var_name)] if var_name in self.var_names else None
+        if save_name:
+            return filename_parts(save_name)[1] == 'trials'
+        else:
+            return var_name not in (variable_length_vars or [])
 
     def build_trials(self, sync, chmap, display=False, **kwargs):
         """
@@ -914,7 +943,10 @@ class FpgaTrials(extractors_base.BaseExtractor):
         # Add the Bpod trial events, converting the timestamp fields to FPGA time.
         # NB: The trial intervals are by default a Bpod rsync field.
         out.update({k: self.bpod_trials[k][ibpod] for k in self.bpod_fields})
-        out.update({k: self.bpod2fpga(self.bpod_trials[k][ibpod]) for k in self.bpod_rsync_fields})
+        for k in self.bpod_rsync_fields:
+            # Some personal projects may extract non-trials object datasets that may not have 1 event per trial
+            idx = ibpod if self._is_trials_object_attribute(k) else np.arange(len(self.bpod_trials[k]), dtype=int)
+            out[k] = self.bpod2fpga(self.bpod_trials[k][idx])
         out.update({k: fpga_trials[k][ifpga] for k in fpga_trials.keys()})
 
         if display:  # pragma: no cover
@@ -1202,7 +1234,7 @@ class FpgaTrials(extractors_base.BaseExtractor):
                 bpod_fpga_timestamps[i] = trials[sync_field]
 
         # Sync the two timestamps
-        fcn, drift, ibpod, ifpga = neurodsp.utils.sync_timestamps(*bpod_fpga_timestamps, return_indices=True)
+        fcn, drift, ibpod, ifpga = ibldsp.utils.sync_timestamps(*bpod_fpga_timestamps, return_indices=True)
 
         # If it's drifting too much throw warning or error
         _logger.info('N trials: %i bpod, %i FPGA, %i merged, sync %.5f ppm',
