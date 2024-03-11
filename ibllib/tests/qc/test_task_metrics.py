@@ -122,9 +122,9 @@ class TestDatasetQC(unittest.TestCase):
     def test_update_dataset_qc(self):
         """Test task_metrics.update_dataset_qc function."""
         registered_datasets = [
-            {'name': '_ibl_trials.table.pqt', 'qc': 'NOT_SET', 'url': f'http://alyx.com/{uuid4()}'},
-            {'name': '_ibl_other.intervals.npy', 'qc': 'PASS', 'url': f'http://alyx.com/{uuid4()}'},
-            {'name': '_ibl_trials.stimOff_times.npy', 'qc': 'NOT_SET', 'url': f'http://alyx.com/{uuid4()}'}
+            {'name': '_ibl_trials.table.pqt', 'qc': 'NOT_SET', 'id': str(uuid4())},
+            {'name': '_ibl_other.intervals.npy', 'qc': 'PASS', 'id': str(uuid4())},
+            {'name': '_ibl_trials.stimOff_times.npy', 'qc': 'NOT_SET', 'id': str(uuid4())}
         ]
         one = mock.MagicMock()
         one.alyx.get.side_effect = lambda *args, **kwargs: {'qc': spec.QC.NOT_SET.name, 'json': {'extended_qc': None}}
@@ -157,7 +157,7 @@ class TestDatasetQC(unittest.TestCase):
 
         # Test assertion on duplicate dataset stems
         registered_datasets.append({
-            'name': '_ibl_other.intervals.csv', 'qc': 'FAIL', 'url': f'http://alyx.com/{uuid4()}'
+            'name': '_ibl_other.intervals.csv', 'qc': 'FAIL', 'id': str(uuid4())
         })
         self.assertRaises(AssertionError, qcmetrics.update_dataset_qc, qc, registered_datasets.copy(), one)
 

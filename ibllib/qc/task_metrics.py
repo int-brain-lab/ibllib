@@ -169,7 +169,7 @@ def update_dataset_qc(qc, registered_datasets, one, override=False):
         The list of registered datasets but with the 'qc' fields updated.
     """
     # Create map of dataset name, sans extension, to dataset id
-    stem2id = {PurePosixPath(dset['name']).stem: dset.get('id', dset['url'][-36:]) for dset in registered_datasets}
+    stem2id = {PurePosixPath(dset['name']).stem: dset.get('id') for dset in registered_datasets}
     # Ensure dataset stems are unique
     assert len(stem2id) == len(registered_datasets), 'ambiguous dataset names'
 
@@ -190,7 +190,7 @@ def update_dataset_qc(qc, registered_datasets, one, override=False):
         # update the dataset QC value on Alyx
         if outcome > spec.QC.NOT_SET or override:
             dset_qc = base.QC(did, one=one, log=_log, endpoint='datasets')
-            dset = next(x for x in registered_datasets if did == x.get('id') or did in x.get('url', ''))
+            dset = next(x for x in registered_datasets if did == x.get('id'))
             dset['qc'] = dset_qc.update(outcome, namespace='', override=override).name
             if extended_qc:
                 dset_qc.update_extended_qc(extended_qc)

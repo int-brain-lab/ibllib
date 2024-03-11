@@ -150,11 +150,11 @@ class QC:
         >>> qc = QC('path/to/session')
         >>> qc.update('PASS')  # Update current QC field to 'PASS' if not set
         """
-        assert self.one, "instance of one should be provided"
+        assert self.one, 'instance of one should be provided'
         if self.one.offline:
             self.log.warning('Running on OneOffline instance, unable to update remote QC')
             return
-        outcome = spec.QC.validate(outcome or self.outcome)
+        outcome = spec.QC.validate(self.outcome if outcome is None else outcome)
         assert self.eid, 'Unable to update Alyx; eID not set'
         if namespace:  # Record in extended qc
             self.update_extended_qc({namespace: outcome.name})
