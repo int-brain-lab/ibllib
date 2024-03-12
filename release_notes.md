@@ -10,6 +10,9 @@
 - FpgaTrials supports alignment of Bpod datasets not part of trials object
 - Support chained protocols in BehaviourPlots task
 
+#### 2.32.4
+- Add support for variations of the biaseCW task in the json task description
+
 ## Release Notes 2.31
 
 ### features
