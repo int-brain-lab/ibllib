@@ -17,6 +17,5 @@
  "_habituationChoiceWorld": "habituation",
  "_trainingChoiceWorld": "training",
  "ephysMockChoiceWorld": "mock_ephys",
- "ephys_certification": "sync_ephys",
- "trainingPhaseChoiceWorld": "training"
+ "ephys_certification": "sync_ephys"
 }
