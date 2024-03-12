@@ -18,8 +18,4 @@
  "_trainingChoiceWorld": "training",
  "ephysMockChoiceWorld": "mock_ephys",
  "ephys_certification": "sync_ephys",
- "trainingPhaseChoiceWorld": "training",
- "advancedChoiceWorld": "training",
- "imagingChoiceWorld": "biased",
- "neuromodulatorChoiceWorld": "biased"
 }
