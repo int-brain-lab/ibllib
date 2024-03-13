@@ -108,20 +108,21 @@ class QC:
     def _confirm_endpoint_id(self, endpoint_id):
         # Have as read for now since 'list' isn't working
         target_obj = self.one.alyx.get(f'/{self.endpoint}/{endpoint_id}', clobber=True) or None
+        default_data = {}
         if target_obj:
             self.json = 'qc' not in target_obj
             self.eid = endpoint_id
-            if not self.json:
+            if self.json:
+                default_data['qc'] = 'NOT_SET'
+            if 'extended_qc' not in target_obj:
+                default_data['extended_qc'] = {}
+
+            if not default_data:
                 return  # No need to set up JSON for QC
             json_field = target_obj.get('json')
-            if not json_field:
+            if not json_field or (self.json and not json_field.get('qc', None)):
                 self.one.alyx.json_field_update(endpoint=self.endpoint, uuid=self.eid,
-                                                field_name='json', data={'qc': 'NOT_SET',
-                                                                         'extended_qc': {}})
-            elif not json_field.get('qc', None):
-                self.one.alyx.json_field_update(endpoint=self.endpoint, uuid=self.eid,
-                                                field_name='json', data={'qc': 'NOT_SET',
-                                                                         'extended_qc': {}})
+                                                field_name='json', data=default_data)
         else:
             self.log.error('Cannot run QC: endpoint id is not recognised')
             raise ValueError("'endpoint_id' must be a valid uuid")
