@@ -221,7 +221,7 @@ class IBLRegistrationClient(RegistrationClient):
             # assert len({md['IBLRIG_VERSION_TAG'] for md in settings}) == 1
 
             users = []
-            for user in filter(None, map(lambda x: x.get('PYBPOD_CREATOR'), settings)):
+            for user in filter(lambda x: x and x[1], map(lambda x: x.get('PYBPOD_CREATOR'), settings)):
                 user = self.assert_exists(user[0], 'users')  # user is list of [username, uuid]
                 users.append(user['username'])
 
@@ -246,7 +246,7 @@ class IBLRegistrationClient(RegistrationClient):
             if poo_counts:
                 json_field['POOP_COUNT'] = int(sum(poo_counts))
 
-        if not session:  # Create session and weighings
+        if not len(session):  # Create session and weighings
             ses_ = {'subject': subject['nickname'],
                     'users': users or [subject['responsible_user']],
                     'location': settings[0]['PYBPOD_BOARD'],
@@ -273,9 +273,13 @@ class IBLRegistrationClient(RegistrationClient):
                 self.register_weight(subject['nickname'], md['SUBJECT_WEIGHT'],
                                      date_time=md['SESSION_DATETIME'], user=user)
         else:  # if session exists update a few key fields
-            data = {'procedures': procedures, 'projects': projects}
+            data = {'procedures': procedures, 'projects': projects,
+                    'n_correct_trials': n_correct_trials, 'n_trials': n_trials}
             if task_protocols:
                 data['task_protocol'] = '/'.join(task_protocols)
+            if end_time:
+                data['end_time'] = self.ensure_ISO8601(end_time)
+
             session = self.one.alyx.rest('sessions', 'partial_update', id=session_id[0], data=data)
             if json_field:
                 session['json'] = self.one.alyx.json_field_update('sessions', session['id'], data=json_field)
@@ -401,14 +405,16 @@ def _get_session_times(fn, md, ses_data):
     """
     if isinstance(md, dict):
         start_time = _start_time = isostr2date(md['SESSION_DATETIME'])
+        end_time = isostr2date(md['SESSION_END_TIME']) if md.get('SESSION_END_TIME') else None
     else:
         start_time = isostr2date(md[0]['SESSION_DATETIME'])
         _start_time = isostr2date(md[-1]['SESSION_DATETIME'])
+        end_time = isostr2date(md[-1]['SESSION_END_TIME']) if md[-1].get('SESSION_END_TIME') else None
         assert isinstance(ses_data, (list, tuple)) and len(ses_data) == len(md)
         assert len(md) == 1 or start_time < _start_time
         ses_data = ses_data[-1]
-    if not ses_data:
-        return start_time, None
+    if not ses_data or end_time is not None:
+        return start_time, end_time
     c = ses_duration_secs = 0
     for sd in reversed(ses_data):
         ses_duration_secs = (sd['behavior_data']['Trial end timestamp'] -
