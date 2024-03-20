@@ -555,6 +555,23 @@ class TestSessionParams(unittest.TestCase):
         collections = session_params.get_collections(tasks, flat=True)
         self.assertEqual(collections, {'raw_passive_data_bis', 'raw_passive_data', 'raw_behavior_data'})
 
+    def test_merge_params(self):
+        """Test for ibllib.io.session_params.merge_params functions."""
+        a = self.fixture
+        b = {'procedures': ['Imaging', 'Injection'], 'tasks': [{'fooChoiceWorld': {'collection': 'bar'}}]}
+        c = session_params.merge_params(a, b, copy=True)
+        self.assertCountEqual(['Imaging', 'Behavior training/tasks', 'Injection'], c['procedures'])
+        self.assertCountEqual(['passiveChoiceWorld', 'ephysChoiceWorld', 'fooChoiceWorld'], (list(x)[0] for x in c['tasks']))
+        # Ensure a and b not modified
+        self.assertNotEqual(set(c['procedures']), set(a['procedures']))
+        self.assertNotEqual(set(a['procedures']), set(b['procedures']))
+        # Test without copy
+        session_params.merge_params(a, b, copy=False)
+        self.assertCountEqual(['Imaging', 'Behavior training/tasks', 'Injection'], a['procedures'])
+        # Test assertion on duplicate sync
+        b['sync'] = {'foodaq': {'collection': 'raw_sync_data'}}
+        self.assertRaises(AssertionError, session_params.merge_params, a, b)
+
 
 class TestRawDaqLoaders(unittest.TestCase):
     """Tests for raw_daq_loaders module"""
