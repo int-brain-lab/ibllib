@@ -7,6 +7,7 @@ import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 from one.api import ONE
+from one.alf import spec
 from iblutil.util import Bunch
 
 from ibllib.tests import TEST_DB
@@ -49,7 +50,7 @@ class TestCameraQC(unittest.TestCase):
         n = len(self.qc.data['frame_samples'])
         self.qc.frame_samples_idx = np.arange(n)
         self.qc.n_samples = 3
-        self.assertEqual('PASS', self.qc.check_brightness(display=True))
+        self.assertIs(spec.QC.PASS, self.qc.check_brightness(display=True))
         # Check plots
         fig = plt.gcf()
         self.assertEqual(3, len(fig.axes))
@@ -57,41 +58,41 @@ class TestCameraQC(unittest.TestCase):
         np.testing.assert_array_almost_equal(fig.axes[0].lines[0]._y, expected)
         # Make frames a third as bright
         self.qc.data['frame_samples'] = (self.qc.data['frame_samples'] / 3).astype(np.int32)
-        self.assertEqual('WARNING', self.qc.check_brightness())
+        self.assertIs(spec.QC.WARNING, self.qc.check_brightness())
         # Change proportion of passing frames
         self.qc.n_samples = 1000
-        self.assertEqual('FAIL', self.qc.check_brightness())
+        self.assertIs(spec.QC.FAIL, self.qc.check_brightness())
         self.qc.n_samples = 3
         # Change thresholds
         self.qc.data['frame_samples'] = self.qc.load_reference_frames('left')
-        self.assertEqual('FAIL', self.qc.check_brightness(bounds=(10, 20)))
-        self.assertEqual('FAIL', self.qc.check_brightness(max_std=1e-6))
+        self.assertIs(spec.QC.FAIL, self.qc.check_brightness(bounds=(10, 20)))
+        self.assertIs(spec.QC.FAIL, self.qc.check_brightness(max_std=1e-6))
         # Check outcome when no frame samples loaded
         self.qc.data['frame_samples'] = None
-        self.assertEqual('NOT_SET', self.qc.check_brightness())
+        self.assertIs(spec.QC.NOT_SET, self.qc.check_brightness())
 
     def test_check_file_headers(self):
         self.qc.data['video'] = {'fps': 60.}
-        self.assertEqual('PASS', self.qc.check_file_headers())
+        self.assertIs(spec.QC.PASS, self.qc.check_file_headers())
         self.qc.data['video']['fps'] = 150
-        self.assertEqual('FAIL', self.qc.check_file_headers())
+        self.assertIs(spec.QC.FAIL, self.qc.check_file_headers())
         self.qc.data['video'] = None
-        self.assertEqual('NOT_SET', self.qc.check_file_headers())
+        self.assertIs(spec.QC.NOT_SET, self.qc.check_file_headers())
 
     def test_check_framerate(self):
         FPS = 60.
         self.qc.data['video'] = {'fps': FPS}
         self.qc.data['timestamps'] = np.array([round(1 / FPS, 4)] * 1000).cumsum()
         outcome, frate = self.qc.check_framerate()
-        self.assertEqual('PASS', outcome)
+        self.assertIs(spec.QC.PASS, outcome)
         self.assertEqual(59.88, frate)
-        self.assertEqual('FAIL', self.qc.check_framerate(threshold=1e-2)[0])
+        self.assertIs(spec.QC.FAIL, self.qc.check_framerate(threshold=1e-2)[0])
         self.qc.data['timestamps'] = None
-        self.assertEqual('NOT_SET', self.qc.check_framerate())
+        self.assertIs(spec.QC.NOT_SET, self.qc.check_framerate())
 
     def test_check_pin_state(self):
         FPS = 60.
-        self.assertEqual('NOT_SET', self.qc.check_pin_state())
+        self.assertIs(spec.QC.NOT_SET, self.qc.check_pin_state())
         # Add some dummy data
         self.qc.data.timestamps = np.array([round(1 / FPS, 4)] * 5).cumsum()
         self.qc.data.pin_state = np.zeros((self.qc.data.timestamps.size, 4), dtype=bool)
@@ -101,50 +102,50 @@ class TestCameraQC(unittest.TestCase):
 
         # Check passes and plots results
         outcome, *_ = self.qc.check_pin_state(display=True)
-        self.assertEqual('PASS', outcome)
+        self.assertIs(spec.QC.PASS, outcome)
         a, b = [ln.get_xdata() for ln in plt.gcf().axes[0].lines]
         self.assertEqual(a, self.qc.data.timestamps[1])
         np.testing.assert_array_equal(b, self.qc.data.audio)
 
         # Fudge some numbers
         self.qc.data['video']['length'] = self.qc.data.pin_state.shape[0] - 3
-        self.assertEqual('WARNING', self.qc.check_pin_state()[0])
+        self.assertIs(spec.QC.WARNING, self.qc.check_pin_state()[0])
         self.qc.data['video']['length'] = 10
         outcome, *dTTL = self.qc.check_pin_state()
-        self.assertEqual('FAIL', outcome)
+        self.assertIs(spec.QC.FAIL, outcome)
         self.assertEqual([0, -5], dTTL)
 
     def test_check_dropped_frames(self):
         n = 20
         self.qc.data.count = np.arange(n)
         self.qc.data.video = {'length': n}
-        self.assertEqual('PASS', self.qc.check_dropped_frames()[0])
+        self.assertIs(spec.QC.PASS, self.qc.check_dropped_frames()[0])
 
         # Drop some frames
         dropped = 6
         self.qc.data.count = np.append(self.qc.data.count, n + dropped)
         outcome, dframe, sz_diff = self.qc.check_dropped_frames()
-        self.assertEqual('FAIL', outcome)
+        self.assertIs(spec.QC.FAIL, outcome)
         self.assertEqual(dropped, dframe)
         self.assertEqual(1, sz_diff)
 
         # Verify threshold arg; should be warning due to size diff
         outcome, *_ = self.qc.check_dropped_frames(threshold=70.)
-        self.assertEqual('WARNING', outcome)
+        self.assertIs(spec.QC.WARNING, outcome)
 
         # Verify critical outcome
         self.qc.data.count = np.random.permutation(self.qc.data.count)  # Count out of order
-        self.assertEqual('CRITICAL', self.qc.check_dropped_frames([0]))
+        self.assertIs(spec.QC.CRITICAL, self.qc.check_dropped_frames([0]))
 
         # Verify not set outcome
         self.qc.data.video = None
-        self.assertEqual('NOT_SET', self.qc.check_dropped_frames())
+        self.assertIs(spec.QC.NOT_SET, self.qc.check_dropped_frames())
 
     def test_check_focus(self):
         self.qc.label = 'left'
         self.qc.frame_samples_idx = np.linspace(0, 100, 20, dtype=int)
         outcome = self.qc.check_focus(test=True, display=True)
-        self.assertEqual('PASS', outcome)
+        self.assertIs(spec.QC.PASS, outcome)
         # Verify figures
         figs = plt.get_fignums()
         self.assertEqual(len(plt.figure(figs[0]).axes), 16)
@@ -161,17 +162,17 @@ class TestCameraQC(unittest.TestCase):
 
         # Verify not set outcome
         outcome = self.qc.check_focus()
-        self.assertEqual('NOT_SET', outcome)
+        self.assertIs(spec.QC.NOT_SET, outcome)
 
         # Verify ROI
         self.qc.data.frame_samples = self.qc.load_reference_frames('left')
         outcome = self.qc.check_focus(roi=None)
-        self.assertEqual('PASS', outcome)
+        self.assertIs(spec.QC.PASS, outcome)
 
     def test_check_position(self):
         # Verify test mode
         outcome = self.qc.check_position(test=True, display=True)
-        self.assertEqual('PASS', outcome)
+        self.assertIs(spec.QC.PASS, outcome)
 
         # Verify plots
         axes = plt.gcf().axes
@@ -181,24 +182,24 @@ class TestCameraQC(unittest.TestCase):
 
         # Verify not set (no frame samples and not in test mode)
         outcome = self.qc.check_position()
-        self.assertEqual('NOT_SET', outcome)
+        self.assertIs(spec.QC.NOT_SET, outcome)
 
         # Verify percent threshold as False
         thresh = (75, 80)
         outcome = self.qc.check_position(test=True, pct_thresh=False,
                                          hist_thresh=thresh, display=True)
-        self.assertEqual('FAIL', outcome)
+        self.assertIs(spec.QC.FAIL, outcome)
         fig = plt.get_fignums()[-1]
         thr = [ln._y[0] for ln in plt.figure(fig).axes[2].lines[1:]]
         self.assertCountEqual(thr, thresh, 'unexpected thresholds in figure')
 
     def test_check_resolution(self):
         self.qc.data['video'] = {'width': 1280, 'height': 1024}
-        self.assertEqual('PASS', self.qc.check_resolution())
+        self.assertIs(spec.QC.PASS, self.qc.check_resolution())
         self.qc.data['video']['width'] = 150
-        self.assertEqual('FAIL', self.qc.check_resolution())
+        self.assertIs(spec.QC.FAIL, self.qc.check_resolution())
         self.qc.data['video'] = None
-        self.assertEqual('NOT_SET', self.qc.check_resolution())
+        self.assertIs(spec.QC.NOT_SET, self.qc.check_resolution())
 
     def test_check_timestamps(self):
         FPS = 60.
@@ -206,17 +207,17 @@ class TestCameraQC(unittest.TestCase):
         self.qc.data['video'] = Bunch({'fps': FPS, 'length': n})
         self.qc.data['timestamps'] = np.array([round(1 / FPS, 4)] * n).cumsum()
         # Verify passes
-        self.assertEqual('PASS', self.qc.check_timestamps())
+        self.assertIs(spec.QC.PASS, self.qc.check_timestamps())
         # Verify fails
         self.qc.data['timestamps'] = np.array([round(1 / 30, 4)] * 100).cumsum()
-        self.assertEqual('FAIL', self.qc.check_timestamps())
+        self.assertIs(spec.QC.FAIL, self.qc.check_timestamps())
         # Verify not set
         self.qc.data['video'] = None
-        self.assertEqual('NOT_SET', self.qc.check_timestamps())
+        self.assertIs(spec.QC.NOT_SET, self.qc.check_timestamps())
 
     def test_check_camera_times(self):
         outcome = self.qc.check_camera_times()
-        self.assertEqual('NOT_SET', outcome)
+        self.assertIs(spec.QC.NOT_SET, outcome)
 
         # Verify passes
         self.qc.label = 'body'
@@ -226,20 +227,20 @@ class TestCameraQC(unittest.TestCase):
         self.qc.data.video = Bunch({'length': self.qc.data.bonsai_times.size})
 
         outcome, _ = self.qc.check_camera_times()
-        self.assertEqual('PASS', outcome)
+        self.assertIs(spec.QC.PASS, outcome)
 
         # Verify warning
         n_over = 14
         self.qc.data.video['length'] -= n_over
         outcome, actual = self.qc.check_camera_times()
 
-        self.assertEqual('WARNING', outcome)
+        self.assertIs(spec.QC.WARNING, outcome)
         self.assertEqual(n_over, actual)
 
     def test_check_wheel_alignment(self):
         """This just checks data validation.  Integration tests test the MotionAlignment class"""
         outcome = self.qc.check_wheel_alignment()
-        self.assertEqual('NOT_SET', outcome)
+        self.assertIs(spec.QC.NOT_SET, outcome)
 
         # Expect FAIL when no overlapping timestamps between wheel and camera
         self.qc.data['wheel'] = {
@@ -249,13 +250,13 @@ class TestCameraQC(unittest.TestCase):
         }
         self.qc.data['timestamps'] = np.arange(5000, 6000)
         outcome = self.qc.check_wheel_alignment()
-        self.assertEqual('FAIL', outcome)
+        self.assertIs(spec.QC.FAIL, outcome)
 
         # Expect NOT_SET when some overlapping timestamps but chosen period out of range
         self.qc.data['timestamps'] -= 1500
         with self.assertLogs(logging.getLogger('ibllib'), logging.WARNING):
             outcome = self.qc.check_wheel_alignment()
-        self.assertEqual('NOT_SET', outcome)
+        self.assertIs(spec.QC.NOT_SET, outcome)
 
     def test_get_active_wheel_period(self):
         """Check that warning is raised, period is returned None, and QC is NOT_SET
@@ -267,7 +268,7 @@ class TestCameraQC(unittest.TestCase):
             period = self.qc.get_active_wheel_period(self.qc.data['wheel'])
         self.assertEqual(None, period)
         outcome = self.qc.check_wheel_alignment()
-        self.assertEqual('NOT_SET', outcome)
+        self.assertIs(spec.QC.NOT_SET, outcome)
 
     def test_ensure_data(self):
         self.qc.eid = self.eid

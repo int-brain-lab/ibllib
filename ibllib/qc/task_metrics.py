@@ -54,6 +54,7 @@ import logging
 import sys
 import warnings
 from packaging import version
+from pathlib import Path, PurePosixPath
 from datetime import datetime, timedelta
 from inspect import getmembers, isfunction
 from functools import reduce, wraps
@@ -65,7 +66,7 @@ from scipy.stats import chisquare
 from brainbox.behavior.wheel import cm_to_rad, traces_by_trial
 from ibllib.qc.task_extractors import TaskQCExtractor
 from ibllib.io.extractors import ephys_fpga
-from one.alf.spec import is_session_path
+from one.alf import spec
 from . import base
 
 _log = logging.getLogger(__name__)
@@ -132,26 +133,68 @@ def compute_session_status_from_dict(results, criteria=None):
 
     Returns
     -------
-    str
-        Overall session QC outcome as a string.
+    one.alf.spec.QC
+        Overall session QC outcome.
     dict
         A map of QC tests and their outcomes.
     """
     if not criteria:
         criteria = {'default': BWM_CRITERIA['default']}
-    indices = np.zeros(len(results), dtype=int)
-    for i, k in enumerate(results):
-        if k in criteria.keys():
-            indices[i] = TaskQC.thresholding(results[k], thresholds=criteria[k])
-        else:
-            indices[i] = TaskQC.thresholding(results[k], thresholds=criteria['default'])
+    outcomes = {k: TaskQC.thresholding(v, thresholds=criteria.get(k, criteria['default']))
+                for k, v in results.items()}
 
-    def key_map(x):
-        return 'NOT_SET' if x < 0 else list(criteria['default'].keys())[x]
     # Criteria map is in order of severity so the max index is our overall QC outcome
-    session_outcome = key_map(max(indices))
-    outcomes = dict(zip(results.keys(), map(key_map, indices)))
+    session_outcome = base.QC.overall_outcome(outcomes.values())
     return session_outcome, outcomes
+
+
+def update_dataset_qc(qc, registered_datasets, one, override=False):
+    """
+    Update QC values for individual datasets.
+
+    Parameters
+    ----------
+    qc : ibllib.qc.task_metrics.TaskQC
+        A TaskQC object that has been run.
+    registered_datasets : list of dict
+        A list of Alyx dataset records.
+    one : one.api.OneAlyx
+        An online instance of ONE.
+    override : bool
+        If True the QC field is updated even if new value is better than previous.
+
+    Returns
+    -------
+    list of dict
+        The list of registered datasets but with the 'qc' fields updated.
+    """
+    # Create map of dataset name, sans extension, to dataset id
+    stem2id = {PurePosixPath(dset['name']).stem: dset.get('id') for dset in registered_datasets}
+    # Ensure dataset stems are unique
+    assert len(stem2id) == len(registered_datasets), 'ambiguous dataset names'
+
+    # dict of QC check to outcome (as enum value)
+    *_, outcomes = qc.compute_session_status()
+    # work over map of dataset name (sans extension) to outcome (enum or dict of columns: enum)
+    for name, outcome in qc.compute_dataset_qc_status(outcomes).items():
+        # if outcome is a dict, calculate aggregate outcome for each column
+        if isinstance(outcome, dict):
+            extended_qc = outcome
+            outcome = qc.overall_outcome(outcome.values())
+        else:
+            extended_qc = {}
+        # check if dataset was registered to Alyx
+        if not (did := stem2id.get(name)):
+            _log.debug('dataset %s not registered, skipping', name)
+            continue
+        # update the dataset QC value on Alyx
+        if outcome > spec.QC.NOT_SET or override:
+            dset_qc = base.QC(did, one=one, log=_log, endpoint='datasets')
+            dset = next(x for x in registered_datasets if did == x.get('id'))
+            dset['qc'] = dset_qc.update(outcome, namespace='', override=override).name
+            if extended_qc:
+                dset_qc.update_extended_qc(extended_qc)
+    return registered_datasets
 
 
 class TaskQC(base.QC):
@@ -163,30 +206,34 @@ class TaskQC(base.QC):
     """ibllib.qc.task_extractors.TaskQCExtractor: A task extractor object containing raw and extracted data."""
 
     @staticmethod
-    def thresholding(qc_value, thresholds=None):
+    def thresholding(qc_value, thresholds=None) -> spec.QC:
         """
         Computes the outcome of a single key by applying thresholding.
-        :param qc_value: proportion of passing qcs, between 0 and 1
-        :param thresholds: dictionary with keys 'PASS', 'WARNING', 'FAIL'
-         (cf. TaskQC.criteria attribute)
-        :return: int where -1: NOT_SET, 0: PASS, 1: WARNING, 2: FAIL
+
+        Parameters
+        ----------
+        qc_value : float
+            Proportion of passing qcs, between 0 and 1.
+        thresholds : dict
+            Dictionary with keys 'PASS', 'WARNING', 'FAIL', (or enum
+            integers, c.f. one.alf.spec.QC).
+
+        Returns
+        -------
+        one.alf.spec.QC
+            The outcome.
         """
-        thresholds = thresholds or {}
+        thresholds = {spec.QC.validate(k): v for k, v in thresholds.items() or {}}
         MAX_BOUND, MIN_BOUND = (1, 0)
         if qc_value is None or np.isnan(qc_value):
-            return int(-1)
+            return spec.QC.NOT_SET
         elif (qc_value > MAX_BOUND) or (qc_value < MIN_BOUND):
             raise ValueError('Values out of bound')
-        if 'PASS' in thresholds.keys() and qc_value >= thresholds['PASS']:
-            return 0
-        if 'WARNING' in thresholds.keys() and qc_value >= thresholds['WARNING']:
-            return 1
-        if 'FAIL' in thresholds and qc_value >= thresholds['FAIL']:
-            return 2
-        if 'NOT_SET' in thresholds and qc_value >= thresholds['NOT_SET']:
-            return -1
+        for crit in filter(None, sorted(spec.QC)):
+            if crit in thresholds.keys() and qc_value >= thresholds[crit]:
+                return crit
         # if None of this applies, return 'NOT_SET'
-        return -1
+        return spec.QC.NOT_SET
 
     def __init__(self, session_path_or_eid, **kwargs):
         """
@@ -195,7 +242,7 @@ class TaskQC(base.QC):
         :param one: An ONE instance for fetching and setting the QC on Alyx
         """
         # When an eid is provided, we will download the required data by default (if necessary)
-        self.download_data = not is_session_path(session_path_or_eid)
+        self.download_data = not spec.is_session_path(Path(session_path_or_eid))
         super().__init__(session_path_or_eid, **kwargs)
 
         # Data
@@ -388,6 +435,40 @@ class TaskQC(base.QC):
                    for k, v in self.passed.items()}
         session_outcome, outcomes = compute_session_status_from_dict(results, self.criteria)
         return session_outcome, results, outcomes
+
+    @staticmethod
+    def compute_dataset_qc_status(outcomes):
+        """Return map of dataset specific QC values.
+
+        Parameters
+        ----------
+        outcomes : dict
+            Map of checks and their individual outcomes.
+
+        Returns
+        -------
+        dict
+            Map of dataset names and their outcome.
+        """
+        trials_table_outcomes = {
+            'intervals': outcomes.get('_task_iti_delays', spec.QC.NOT_SET),
+            'goCue_times': outcomes.get('_task_goCue_delays', spec.QC.NOT_SET),
+            'response_times': spec.QC.NOT_SET, 'choice': spec.QC.NOT_SET,
+            'stimOn_times': outcomes.get('_task_stimOn_delays', spec.QC.NOT_SET),
+            'contrastLeft': spec.QC.NOT_SET, 'contrastRight': spec.QC.NOT_SET,
+            'feedbackType': spec.QC.NOT_SET, 'probabilityLeft': spec.QC.NOT_SET,
+            'feedback_times': outcomes.get('_task_errorCue_delays', spec.QC.NOT_SET),
+            'firstMovement_times': spec.QC.NOT_SET
+        }
+        reward_checks = ('_task_reward_volumes', '_task_reward_volume_set')
+        trials_table_outcomes['rewardVolume']: TaskQC.overall_outcome(
+            (outcomes.get(x, spec.QC.NOT_SET) for x in reward_checks)
+        )
+        dataset_outcomes = {
+            '_ibl_trials.stimOff_times': outcomes.get('_task_stimOff_delays', spec.QC.NOT_SET),
+            '_ibl_trials.table': trials_table_outcomes,
+        }
+        return dataset_outcomes
 
 
 class HabituationQC(TaskQC):

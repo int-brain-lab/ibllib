@@ -4,20 +4,11 @@ from pathlib import Path
 from itertools import chain
 
 import numpy as np
-
 from one.api import ONE
-from one.alf.spec import is_session_path, is_uuid_string
+from one.alf import spec
 
 """dict: custom sign off categories"""
 SIGN_OFF_CATEGORIES = {'neuropixel': ['raw', 'spike_sorting', 'alignment']}
-
-"""dict: Map for comparing QC outcomes"""
-CRITERIA = {'CRITICAL': 4,
-            'FAIL': 3,
-            'WARNING': 2,
-            'PASS': 1,
-            'NOT_SET': 0
-            }
 
 
 class QC:
@@ -39,11 +30,10 @@ class QC:
         else:
             self.endpoint = endpoint
             self._confirm_endpoint_id(endpoint_id)
-            self.json = True
 
         # Ensure outcome attribute matches Alyx record
         updatable = self.eid and self.one and not self.one.offline
-        self._outcome = self.update('NOT_SET', namespace='') if updatable else 'NOT_SET'
+        self._outcome = self.update('NOT_SET', namespace='') if updatable else spec.QC.NOT_SET
         self.log.debug(f'Current QC status is {self.outcome}')
 
     @abstractmethod
@@ -62,44 +52,37 @@ class QC:
 
     @property
     def outcome(self):
+        """one.alf.spec.QC: The overall session outcome."""
         return self._outcome
 
     @outcome.setter
     def outcome(self, value):
-        value = value.upper()  # Ensure outcome is uppercase
-        if value not in CRITERIA:
-            raise ValueError('Invalid outcome; must be one of ' + ', '.join(CRITERIA.keys()))
-        if CRITERIA[self._outcome] < CRITERIA[value]:
+        value = spec.QC.validate(value)  # ensure valid enum
+        if self._outcome < value:
             self._outcome = value
 
     @staticmethod
-    def overall_outcome(outcomes: iter, agg=max) -> str:
+    def overall_outcome(outcomes: iter, agg=max) -> spec.QC:
         """
         Given an iterable of QC outcomes, returns the overall (i.e. worst) outcome.
 
         Example:
           QC.overall_outcome(['PASS', 'NOT_SET', None, 'FAIL'])  # Returns 'FAIL'
 
-        :param outcomes: An iterable of QC outcomes
-        :param agg: outcome code aggregate function, default is max (i.e. worst)
-        :return: The overall outcome string
-        """
-        outcomes = filter(lambda x: x or (isinstance(x, float) and not np.isnan(x)), outcomes)
-        code = agg(CRITERIA.get(x, 0) if isinstance(x, str) else x for x in outcomes)
-        return next(k for k, v in CRITERIA.items() if v == code)
+        Parameters
+        ----------
+        outcomes : iterable of one.alf.spec.QC, str or int
+            An iterable of QC outcomes.
+        agg : function
+            Outcome code aggregate function, default is max (i.e. worst).
 
-    @staticmethod
-    def code_to_outcome(code: int) -> str:
+        Returns
+        -------
+        one.alf.spec.QC
+            The overall outcome.
         """
-        Given an outcome id, returns the corresponding string.
-
-        Example:
-          QC.overall_outcome(['PASS', 'NOT_SET', None, 'FAIL'])  # Returns 'FAIL'
-
-        :param code: The outcome id
-        :return: The overall outcome string
-        """
-        return next(k for k, v in CRITERIA.items() if v == code)
+        outcomes = filter(lambda x: x not in (None, np.NaN), outcomes)
+        return agg(map(spec.QC.validate, outcomes))
 
     def _set_eid_or_path(self, session_path_or_eid):
         """Parse a given eID or session path
@@ -108,11 +91,11 @@ class QC:
         :return:
         """
         self.eid = None
-        if is_uuid_string(str(session_path_or_eid)):
+        if spec.is_uuid_string(str(session_path_or_eid)):
             self.eid = session_path_or_eid
             # Try to set session_path if data is found locally
             self.session_path = self.one.eid2path(self.eid)
-        elif is_session_path(session_path_or_eid):
+        elif spec.is_session_path(session_path_or_eid):
             self.session_path = Path(session_path_or_eid)
             if self.one is not None:
                 self.eid = self.one.path2eid(self.session_path)
@@ -125,68 +108,83 @@ class QC:
     def _confirm_endpoint_id(self, endpoint_id):
         # Have as read for now since 'list' isn't working
         target_obj = self.one.alyx.get(f'/{self.endpoint}/{endpoint_id}', clobber=True) or None
+        default_data = {}
         if target_obj:
+            self.json = 'qc' not in target_obj
             self.eid = endpoint_id
+            if self.json:
+                default_data['qc'] = 'NOT_SET'
+            if 'extended_qc' not in target_obj:
+                default_data['extended_qc'] = {}
+
+            if not default_data:
+                return  # No need to set up JSON for QC
             json_field = target_obj.get('json')
-            if not json_field:
+            if not json_field or (self.json and not json_field.get('qc', None)):
                 self.one.alyx.json_field_update(endpoint=self.endpoint, uuid=self.eid,
-                                                field_name='json', data={'qc': 'NOT_SET',
-                                                                         'extended_qc': {}})
-            elif not json_field.get('qc', None):
-                self.one.alyx.json_field_update(endpoint=self.endpoint, uuid=self.eid,
-                                                field_name='json', data={'qc': 'NOT_SET',
-                                                                         'extended_qc': {}})
+                                                field_name='json', data=default_data)
         else:
             self.log.error('Cannot run QC: endpoint id is not recognised')
             raise ValueError("'endpoint_id' must be a valid uuid")
 
     def update(self, outcome=None, namespace='experimenter', override=False):
-        """Update the qc field in Alyx
-        Updates the 'qc' field in Alyx if the new QC outcome is worse than the current value.
-        :param outcome: A string; one of "CRITICAL", "FAIL", "WARNING", "PASS" or "NOT_SET"
-        :param namespace: The extended QC key specifying the type of QC associated with the outcome
-        :param override: If True the QC field is updated even if new value is better than previous
-        :return: The current QC outcome str on Alyx
+        """Update the qc field in Alyx.
 
-        Example:
-            qc = QC('path/to/session')
-            qc.update('PASS')  # Update current QC field to 'PASS' if not set
+        Updates the 'qc' field in Alyx if the new QC outcome is worse than the current value.
+
+        Parameters
+        ----------
+        outcome : str, int, one.alf.spec.QC
+            A QC outcome; one of "CRITICAL", "FAIL", "WARNING", "PASS" or "NOT_SET".
+        namespace : str
+            The extended QC key specifying the type of QC associated with the outcome.
+        override : bool
+            If True the QC field is updated even if new value is better than previous.
+
+        Returns
+        -------
+        one.alf.spec.QC
+            The current QC outcome on Alyx.
+
+        Example
+        -------
+        >>> qc = QC('path/to/session')
+        >>> qc.update('PASS')  # Update current QC field to 'PASS' if not set
         """
-        assert self.one, "instance of one should be provided"
+        assert self.one, 'instance of one should be provided'
         if self.one.offline:
             self.log.warning('Running on OneOffline instance, unable to update remote QC')
             return
-        outcome = outcome or self.outcome
-        outcome = outcome.upper()  # Ensure outcome is uppercase
-        if outcome not in CRITERIA:
-            raise ValueError('Invalid outcome; must be one of ' + ', '.join(CRITERIA.keys()))
+        outcome = spec.QC.validate(self.outcome if outcome is None else outcome)
         assert self.eid, 'Unable to update Alyx; eID not set'
         if namespace:  # Record in extended qc
-            self.update_extended_qc({namespace: outcome})
+            self.update_extended_qc({namespace: outcome.name})
         details = self.one.alyx.get(f'/{self.endpoint}/{self.eid}', clobber=True)
         current_status = (details['json'] if self.json else details)['qc']
+        current_status = spec.QC.validate(current_status)
 
-        if CRITERIA[current_status] < CRITERIA[outcome] or override:
+        if current_status < outcome or override:
             r = self.one.alyx.json_field_update(endpoint=self.endpoint, uuid=self.eid,
-                                                field_name='json', data={'qc': outcome}) \
+                                                field_name='json', data={'qc': outcome.name}) \
                 if self.json else self.one.alyx.rest(self.endpoint, 'partial_update', id=self.eid,
-                                                     data={'qc': outcome})
+                                                     data={'qc': outcome.name})
 
-            current_status = r['qc'].upper()
+            current_status = spec.QC.validate(r['qc'])
             assert current_status == outcome, 'Failed to update session QC'
-            self.log.info(f'QC field successfully updated to {outcome} for {self.endpoint[:-1]} '
+            self.log.info(f'QC field successfully updated to {outcome.name} for {self.endpoint[:-1]} '
                           f'{self.eid}')
         self._outcome = current_status
         return self.outcome
 
     def update_extended_qc(self, data):
-        """Update the extended_qc field in Alyx
+        """Update the extended_qc field in Alyx.
+
         Subclasses should chain a call to this.
         :param data: a dict of qc tests and their outcomes, typically a value between 0. and 1.
         :return: the updated extended_qc field
         """
         assert self.eid, 'Unable to update Alyx; eID not set'
-        assert self.one, "instance of one should be provided"
+        assert self.one, 'instance of one should be provided'
         if self.one.offline:
             self.log.warning('Running on OneOffline instance, unable to update remote QC')
             return
@@ -200,7 +198,7 @@ class QC:
                     data[k] = None if np.isnan(v).all() else v
 
         details = self.one.alyx.get(f'/{self.endpoint}/{self.eid}', clobber=True)
-        if self.json:
+        if 'extended_qc' not in details:
             extended_qc = details['json']['extended_qc'] or {}
             extended_qc.update(data)
             extended_qc_dict = {'extended_qc': extended_qc}

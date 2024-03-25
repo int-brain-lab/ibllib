@@ -92,8 +92,8 @@ def save_path(subj_path):
 
 
 def save_dataframe(df, subj_path):
-    """
-    Save training dataframe to disk
+    """Save training dataframe to disk.
+
     :param df: dataframe to save
     :param subj_path: path to subject folder
     :return:
@@ -102,8 +102,8 @@ def save_dataframe(df, subj_path):
 
 
 def load_existing_dataframe(subj_path):
-    """
-    Load training dataframe from disk, if dataframe doesn't exist returns None
+    """Load training dataframe from disk, if dataframe doesn't exist returns None.
+
     :param subj_path: path to subject folder
     :return:
     """
@@ -695,9 +695,9 @@ def check_up_to_date(subj_path, df):
     pandas.DataFrame
         A table of dates and session paths that are missing from the computed training table.
     """
-    df_session = pd.DataFrame()
+    df_session = pd.DataFrame(columns=['date', 'session_path'])
 
-    for session in alfio.iter_sessions(subj_path):
+    for session in alfio.iter_sessions(subj_path, pattern='????-??-??/*'):
         s_df = pd.DataFrame({'date': session.parts[-2], 'session_path': str(session)}, index=[0])
         df_session = pd.concat([df_session, s_df], ignore_index=True)
 
