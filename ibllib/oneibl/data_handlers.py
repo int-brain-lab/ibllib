@@ -145,8 +145,8 @@ class ServerDataHandler(DataHandler):
         if kwargs.get('dry', False):
             return records
         # Store processed outputs
-        self.processed.update({k: v for k, v in zip(to_upload, records)})
-        return [self.processed[x] for x in outputs]
+        self.processed.update({k: v for k, v in zip(to_upload, records) if v})
+        return [self.processed[x] for x in outputs if x in self.processed]
 
     def cleanUp(self):
         """Empties and returns the processed dataset mep."""

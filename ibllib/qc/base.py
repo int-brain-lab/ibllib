@@ -33,7 +33,7 @@ class QC:
 
         # Ensure outcome attribute matches Alyx record
         updatable = self.eid and self.one and not self.one.offline
-        self._outcome = spec.QC.validate(self.update('NOT_SET', namespace='') if updatable else 'NOT_SET')
+        self._outcome = self.update('NOT_SET', namespace='') if updatable else spec.QC.NOT_SET
         self.log.debug(f'Current QC status is {self.outcome}')
 
     @abstractmethod
@@ -52,6 +52,7 @@ class QC:
 
     @property
     def outcome(self):
+        """one.alf.spec.QC: The overall session outcome."""
         return self._outcome
 
     @outcome.setter
@@ -107,20 +108,21 @@ class QC:
     def _confirm_endpoint_id(self, endpoint_id):
         # Have as read for now since 'list' isn't working
         target_obj = self.one.alyx.get(f'/{self.endpoint}/{endpoint_id}', clobber=True) or None
+        default_data = {}
         if target_obj:
             self.json = 'qc' not in target_obj
             self.eid = endpoint_id
-            if not self.json:
+            if self.json:
+                default_data['qc'] = 'NOT_SET'
+            if 'extended_qc' not in target_obj:
+                default_data['extended_qc'] = {}
+
+            if not default_data:
                 return  # No need to set up JSON for QC
             json_field = target_obj.get('json')
-            if not json_field:
+            if not json_field or (self.json and not json_field.get('qc', None)):
                 self.one.alyx.json_field_update(endpoint=self.endpoint, uuid=self.eid,
-                                                field_name='json', data={'qc': 'NOT_SET',
-                                                                         'extended_qc': {}})
-            elif not json_field.get('qc', None):
-                self.one.alyx.json_field_update(endpoint=self.endpoint, uuid=self.eid,
-                                                field_name='json', data={'qc': 'NOT_SET',
-                                                                         'extended_qc': {}})
+                                                field_name='json', data=default_data)
         else:
             self.log.error('Cannot run QC: endpoint id is not recognised')
             raise ValueError("'endpoint_id' must be a valid uuid")
@@ -149,11 +151,11 @@ class QC:
         >>> qc = QC('path/to/session')
         >>> qc.update('PASS')  # Update current QC field to 'PASS' if not set
         """
-        assert self.one, "instance of one should be provided"
+        assert self.one, 'instance of one should be provided'
         if self.one.offline:
             self.log.warning('Running on OneOffline instance, unable to update remote QC')
             return
-        outcome = spec.QC.validate(outcome or self.outcome)
+        outcome = spec.QC.validate(self.outcome if outcome is None else outcome)
         assert self.eid, 'Unable to update Alyx; eID not set'
         if namespace:  # Record in extended qc
             self.update_extended_qc({namespace: outcome.name})
