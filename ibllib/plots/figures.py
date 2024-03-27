@@ -785,7 +785,11 @@ def dlc_qc_plot(session_path, one=None, device_collection='raw_video_data',
     # Load session level data
     for alf_object in ['trials', 'wheel', 'licks']:
         try:
-            data[f'{alf_object}'] = alfio.load_object(session_path.joinpath(trials_collection), alf_object)  # load locally
+            if alf_object == 'licks':
+                data[f'{alf_object}'] = alfio.load_object(session_path.joinpath('alf'),
+                                                          alf_object)  # load locally
+            else:
+                data[f'{alf_object}'] = alfio.load_object(session_path.joinpath(trials_collection), alf_object)  # load locally
             continue
         except ALFObjectNotFound:
             pass

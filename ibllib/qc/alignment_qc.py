@@ -316,7 +316,7 @@ class AlignmentQC(base.QC):
                 ephys_traj = self.one.alyx.get(f'/trajectories?&probe_insertion={self.eid}'
                                                '&provenance=Ephys aligned histology track',
                                                clobber=True)
-                patch_dict = {'json': self.alignments}
+                patch_dict = {'probe_insertion': self.eid, 'json': self.alignments}
                 self.one.alyx.rest('trajectories', 'partial_update', id=ephys_traj[0]['id'],
                                    data=patch_dict)
 

@@ -12,6 +12,7 @@ from one.webclient import AlyxClient
 from one.converters import ConversionMixin
 import one.alf.exceptions as alferr
 from one.util import datasets2records, ensure_list
+from one.api import ONE
 
 import ibllib
 import ibllib.io.extractors.base
@@ -78,6 +79,25 @@ def register_dataset(file_list, one=None, exists=False, versions=None, **kwargs)
     assert all(Path(f).exists() for f in file_list)
 
     client = IBLRegistrationClient(one)
+
+    # Check for protected datasets
+    # Account for cases where we are connected to cortex lab database
+    if one.alyx.base_url == 'https://alyx.cortexlab.net':
+        protected_status = IBLRegistrationClient(
+            ONE(base_url='https://alyx.internationalbrainlab.org', mode='remote')).check_protected_files(file_list)
+    else:
+        protected_status = client.check_protected_files(file_list)
+
+    if isinstance(protected_status, list):
+        protected = any(d['status_code'] == 403 for d in protected_status)
+    else:
+        protected = protected_status['status_code'] == 403
+
+    # If we find a protected dataset, and we don't have a force=True flag, raise an error
+    if protected and not kwargs.pop('force', False):
+        raise FileExistsError('Protected datasets were found in the file list. To force the registration of datasets '
+                              'add the force=True argument.')
+
     # If the repository is specified then for the registration client we want server_only=True to
     # make sure we don't make any other repositories for the lab
     if kwargs.get('repository') and not kwargs.get('server_only', False):
