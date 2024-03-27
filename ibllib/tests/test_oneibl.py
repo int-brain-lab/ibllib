@@ -126,7 +126,7 @@ class TestGlobusPatcher(unittest.TestCase):
 
         # Mock the post method of AlyxClient and assert that it was called during registration
         with mock.patch.object(self.one.alyx, 'post') as rest_mock:
-            rest_mock.side_effect = responses
+            rest_mock.side_effect = [[r] for r in responses]
             self.globus_patcher.patch_datasets(file_list)
             self.assertEqual(rest_mock.call_count, 2)
             for call, file in zip(rest_mock.call_args_list, file_list):
@@ -434,9 +434,12 @@ class TestRegistration(unittest.TestCase):
                               query_type='remote')[0]
         ses_info = self.one.alyx.rest('sessions', 'read', id=eid)
         self.assertTrue(ses_info['procedures'] == ['Behavior training/tasks'])
-        self.one.alyx.rest('sessions', 'delete', id=eid)
-        # re-register the session as unknown protocol this time
+        # re-register the session as unknown protocol, this time without removing session first
         self.settings['PYBPOD_PROTOCOL'] = 'gnagnagna'
+        # also add an end time
+        start = datetime.datetime.fromisoformat(self.settings['SESSION_DATETIME'])
+        self.settings['SESSION_START_TIME'] = rc.ensure_ISO8601(start)
+        self.settings['SESSION_END_TIME'] = rc.ensure_ISO8601(start + datetime.timedelta(hours=1))
         with open(settings_file, 'w') as fid:
             json.dump(self.settings, fid)
         rc.register_session(self.session_path)
@@ -444,6 +447,7 @@ class TestRegistration(unittest.TestCase):
                               query_type='remote')[0]
         ses_info = self.one.alyx.rest('sessions', 'read', id=eid)
         self.assertTrue(ses_info['procedures'] == [])
+        self.assertEqual(self.settings['SESSION_END_TIME'], ses_info['end_time'])
         self.one.alyx.rest('sessions', 'delete', id=eid)
 
     def test_register_chained_session(self):
@@ -462,12 +466,13 @@ class TestRegistration(unittest.TestCase):
 
         # Save experiment description
         session_params.write_params(self.session_path, experiment_description)
-
+        self.settings['POOP_COUNT'] = 10
         with open(behaviour_paths[1].joinpath('_iblrig_taskSettings.raw.json'), 'w') as fid:
             json.dump(self.settings, fid)
 
         settings = self.settings.copy()
         settings['PYBPOD_PROTOCOL'] = '_iblrig_tasks_passiveChoiceWorld'
+        settings['POOP_COUNT'] = 53
         start_time = (datetime.datetime.fromisoformat(settings['SESSION_DATETIME']) -
                       datetime.timedelta(hours=1, minutes=2, seconds=12))
         settings['SESSION_DATETIME'] = start_time.isoformat()
@@ -480,7 +485,9 @@ class TestRegistration(unittest.TestCase):
         ses_info = self.one.alyx.rest('sessions', 'read', id=session['id'])
         self.assertCountEqual(experiment_description['procedures'], ses_info['procedures'])
         self.assertCountEqual(experiment_description['projects'], ses_info['projects'])
-        self.assertCountEqual({'IS_MOCK': False, 'IBLRIG_VERSION': None}, ses_info['json'])
+        # Poo count should be sum of values in both settings files
+        expected = {'IS_MOCK': False, 'IBLRIG_VERSION': '5.4.1', 'POOP_COUNT': 63}
+        self.assertDictEqual(expected, ses_info['json'])
         self.assertEqual('2018-04-01T11:46:14.795526', ses_info['start_time'])
         # Test task protocol
         expected = '_iblrig_tasks_passiveChoiceWorld5.4.1/_iblrig_tasks_ephysChoiceWorld5.4.1'

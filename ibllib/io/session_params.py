@@ -169,9 +169,9 @@ def merge_params(a, b, copy=False):
         if k == 'sync':
             assert k not in a or a[k] == b[k], 'multiple sync fields defined'
         if isinstance(b[k], list):
-            prev = a.get(k, [])
+            prev = list(a.get(k, []))
             # For procedures and projects, remove duplicates
-            to_add = b[k] if k == 'tasks' else set(prev) ^ set(b[k])
+            to_add = b[k] if k == 'tasks' else set(b[k]) - set(prev)
             a[k] = prev + list(to_add)
         elif isinstance(b[k], dict):
             a[k] = {**a.get(k, {}), **b[k]}
