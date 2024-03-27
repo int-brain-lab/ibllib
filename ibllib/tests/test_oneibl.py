@@ -126,7 +126,7 @@ class TestGlobusPatcher(unittest.TestCase):
 
         # Mock the post method of AlyxClient and assert that it was called during registration
         with mock.patch.object(self.one.alyx, 'post') as rest_mock:
-            rest_mock.side_effect = responses
+            rest_mock.side_effect = [[r] for r in responses]
             self.globus_patcher.patch_datasets(file_list)
             self.assertEqual(rest_mock.call_count, 2)
             for call, file in zip(rest_mock.call_args_list, file_list):
