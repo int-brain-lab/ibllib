@@ -186,6 +186,7 @@ class TestAlignmentQcExisting(unittest.TestCase):
                       self.alignments['2020-06-26T16:40:14_Karolina_Socha']}
         trajectory = copy.deepcopy(self.trajectory)
         trajectory.update({'json': alignments})
+        trajectory.update({'chronic_insertion': None})
         _ = one.alyx.rest('trajectories', 'create', data=trajectory)
         align_qc = AlignmentQC(self.probe_id, one=one, brain_atlas=brain_atlas, channels=False)
         align_qc.run(update=True, upload_alyx=True, upload_flatiron=False)
@@ -277,6 +278,7 @@ class TestAlignmentQcManual(unittest.TestCase):
         cls.probe_id = probe_insertion['id']
         cls.trajectory = data['trajectory'].tolist()
         cls.trajectory.update({'probe_insertion': cls.probe_id})
+        cls.trajectory.update({'chronic_insertion': None})
         cls.trajectory.update({'json': cls.alignments})
         cls.traj = one.alyx.rest('trajectories', 'create', data=cls.trajectory)
 
@@ -415,6 +417,7 @@ class TestUploadToFlatIron(unittest.TestCase):
         cls.probe_name = probe_insertion['name']
         cls.trajectory = data['trajectory'].tolist()
         cls.trajectory.update({'probe_insertion': cls.probe_id})
+        cls.trajectory.update({'chronic_insertion': None})
         cls.trajectory.update({'json': cls.alignments})
         cls.traj = one.alyx.rest('trajectories', 'create', data=cls.trajectory)
 

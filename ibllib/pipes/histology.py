@@ -391,8 +391,10 @@ def create_trajectory_dict(probe_id, insertion, provenance, endpoint='insertions
              }
     if endpoint == 'chronic-insertions':
         tdict['chronic_insertion'] = probe_id
+        tdict['probe_insertion'] = None
     else:
         tdict['probe_insertion'] = probe_id
+        tdict['chronic_insertion'] = None
 
     return tdict
 
