@@ -191,9 +191,7 @@ class TestPipelineAlyx(unittest.TestCase):
         with mock.patch.object(ibllib.pipes.tasks.Task, '_lock_file_path',
                                return_value=Path(self.session_path).joinpath('.gpu_lock')):
             task_deck, datasets = pipeline.run(machine='testmachine')
-            check_statuses = (desired_statuses[t['name']] == t['status'] for t in task_deck)
-            # [(t['name'], t['status'], desired_statuses[t['name']]) for t in task_deck]
-            self.assertTrue(all(check_statuses))
+            self.assertCountEqual(desired_statuses.items(), [(t['name'], t['status']) for t in task_deck])
             self.assertEqual(set(d['name'] for d in datasets), set(desired_datasets))
 
         # check logs

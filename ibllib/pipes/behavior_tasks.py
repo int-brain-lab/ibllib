@@ -8,10 +8,11 @@ from one.alf.files import session_path_parts
 from one.api import ONE
 
 from ibllib.oneibl.registration import get_lab
+from ibllib.oneibl.data_handlers import ServerDataHandler
 from ibllib.pipes import base_tasks
 from ibllib.io.raw_data_loaders import load_settings, load_bpod_fronts
 from ibllib.qc.task_extractors import TaskQCExtractor
-from ibllib.qc.task_metrics import HabituationQC, TaskQC
+from ibllib.qc.task_metrics import HabituationQC, TaskQC, update_dataset_qc
 from ibllib.io.extractors.ephys_passive import PassiveChoiceWorld
 from ibllib.io.extractors.bpod_trials import get_bpod_extractor
 from ibllib.io.extractors.ephys_fpga import FpgaTrials, FpgaTrialsHabituation, get_sync_and_chn_map
@@ -72,9 +73,7 @@ class HabituationTrialsBpod(base_tasks.BehaviourTask):
         return signature
 
     def _run(self, update=True, save=True):
-        """
-        Extracts an iblrig training session
-        """
+        """Extracts an iblrig training session."""
         trials, output_files = self.extract_behaviour(save=save)
 
         if trials is None:
@@ -296,7 +295,7 @@ class ChoiceWorldTrialsBpod(base_tasks.BehaviourTask):
         }
         return signature
 
-    def _run(self, update=True, save=True):
+    def _run(self, update=True, save=True, **kwargs):
         """Extracts an iblrig training session."""
         trials, output_files = self.extract_behaviour(save=save)
         if trials is None:
@@ -305,7 +304,16 @@ class ChoiceWorldTrialsBpod(base_tasks.BehaviourTask):
             return output_files
 
         # Run the task QC
-        self.run_qc(trials)
+        qc = self.run_qc(trials, update=update, **kwargs)
+        if update and not self.one.offline:
+            on_server = self.location == 'server' and isinstance(self.data_handler, ServerDataHandler)
+            if not on_server:
+                _logger.warning('Updating dataset QC only supported on local servers')
+            else:
+                labs = get_lab(self.session_path, self.one.alyx)
+                # registered_dsets = self.register_datasets(labs=labs)
+                datasets = self.data_handler.uploadData(output_files, self.version, labs=labs)
+                update_dataset_qc(qc, datasets, self.one)
 
         return output_files
 
@@ -467,14 +475,11 @@ class ChoiceWorldTrialsNidq(ChoiceWorldTrialsBpod):
         return qc
 
     def _run(self, update=True, plot_qc=True, save=True):
-        dsets, out_files = self.extract_behaviour(save=save)
+        output_files = super()._run(update=update, save=save, plot_qc=plot_qc)
+        if update and not self.one.offline:
+            self._behaviour_criterion(update=update)
 
-        if not self.one or self.one.offline:
-            return out_files
-
-        self._behaviour_criterion(update=update)
-        self.run_qc(dsets, update=update, plot_qc=plot_qc)
-        return out_files
+        return output_files
 
 
 class ChoiceWorldTrialsTimeline(ChoiceWorldTrialsNidq):

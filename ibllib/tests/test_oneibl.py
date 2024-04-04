@@ -11,12 +11,13 @@ from itertools import chain
 
 from requests import HTTPError
 import numpy as np
+
 from one.api import ONE
 from one.webclient import AlyxClient
 import one.alf.exceptions as alferr
 import iblutil.io.params as iopar
 
-from ibllib.oneibl import patcher, registration
+from ibllib.oneibl import patcher, registration, data_handlers as handlers
 import ibllib.io.extractors.base
 from ibllib.tests import TEST_DB
 from ibllib.io import session_params
@@ -243,6 +244,8 @@ class TestRegistrationEndpoint(unittest.TestCase):
             self.assertEqual(out, to[1])
         # also makes sure that all task types have a defined procedure
         task_types = ibllib.io.extractors.base._get_task_types_json_config()
+        for key in ['THIS FILE', 'SEE', '********', '************']:
+            task_types.pop(key)
         for task_type in set([task_types[tt] for tt in task_types]):
             assert registration._alyx_procedure_from_task_type(task_type) is not None, task_type + ' has no associate procedure'
 
@@ -524,6 +527,67 @@ class TestRegistration(unittest.TestCase):
     def tearDownClass(cls) -> None:
         # Note: sessions and datasets deleted in cascade
         cls.one.alyx.rest('subjects', 'delete', id=cls.subject)
+
+
+class TestDataHandlers(unittest.TestCase):
+    """Tests for ibllib.oneibl.data_handlers.DataHandler classes."""
+
+    @mock.patch('ibllib.oneibl.data_handlers.register_dataset')
+    def test_server_upload_data(self, register_dataset_mock):
+        """A test for ServerDataHandler.uploadData method."""
+        one = mock.MagicMock()
+        one.alyx = None
+        signature = {
+            'input_files': [],
+            'output_files': [
+                ('_iblrig_taskData.raw.*', 'raw_task_data_00', True),
+                ('_iblrig_taskSettings.raw.*', 'raw_task_data_00', True),
+                ('_iblrig_encoderEvents.raw*', 'raw_task_data_00', False),
+            ]
+        }
+
+        handler = handlers.ServerDataHandler('subject/2023-01-01/001', signature, one=one)
+        register_dataset_mock.return_value = [{'id': 1}, {'id': 2}, {'id': 3}]  # toy alyx dataset records
+        # in reality these would be pathlib.Path objects
+        files = ['_iblrig_taskData.raw.jsonable', '_iblrig_taskSettings.raw.json', '_iblrig_encoderEvents.raw.json']
+
+        # check dry=True (shouldn't updated processed map)
+        out = handler.uploadData(files, '0.0.0', dry=True)
+        self.assertEqual(register_dataset_mock.return_value, out)
+        self.assertEqual({}, handler.processed)
+        register_dataset_mock.assert_called_once_with(files, one=one, versions=['0.0.0'] * 3, repository=None, dry=True)
+        register_dataset_mock.reset_mock()
+
+        # check dry=False
+        out = handler.uploadData(files, '0.0.0', dry=False)
+        self.assertEqual(register_dataset_mock.return_value, out)
+        register_dataset_mock.assert_called_once_with(files, one=one, versions=['0.0.0'] * 3, repository=None, dry=False)
+        expected = {k: v for k, v in zip(files, register_dataset_mock.return_value)}
+        self.assertDictEqual(expected, handler.processed)
+
+        # with clobber=False, register_dataset should be called with no new files to register
+        expected = out
+        register_dataset_mock.return_value = None
+        out = handler.uploadData(files, '0.0.0', dry=False)
+        self.assertEqual([], register_dataset_mock.call_args.args[0])
+        self.assertEqual(expected, out, 'failed to return previously registered dataset records')
+
+        # try with 1 new file
+        register_dataset_mock.return_value = [{'id': 4}]
+        files.append('_misc_taskSettings.raw.json')
+        out = handler.uploadData(files, '0.0.0')
+        self.assertEqual([files[-1]], register_dataset_mock.call_args.args[0])
+        expected += register_dataset_mock.return_value
+        self.assertEqual(expected, out)
+        expected = {k: v for k, v in zip(files, expected)}
+        self.assertDictEqual(expected, handler.processed)
+
+        # try with clobber=True
+        register_dataset_mock.return_value = out
+        out = handler.uploadData(files, '0.0.0', clobber=True)
+        self.assertEqual(files, register_dataset_mock.call_args.args[0], 'failed to re-register files')
+        self.assertEqual(4, len(out))
+        self.assertDictEqual(expected, handler.processed)
 
 
 if __name__ == '__main__':

@@ -1,15 +1,31 @@
 import unittest
+from unittest import mock
 from functools import partial
 from pathlib import Path
+from uuid import uuid4
 
 import numpy as np
 
 from iblutil.util import Bunch
 from one.api import ONE
+from one.alf import spec
 from ibllib.tests import TEST_DB
 from ibllib.qc import task_metrics as qcmetrics
 
 from brainbox.behavior.wheel import cm_to_rad
+
+
+def _create_test_qc_outcomes():
+    """Create task QC outcomes dict.
+
+     Used by TestAggregateOutcome.test_compute_dateset_qc_status and TestDatasetQC.
+     """
+    outcomes = {'_task_' + k[6:]: spec.QC.NOT_SET for k in qcmetrics.TaskQC._get_checks(...)}
+    outcomes['_task_reward_volumes'] = outcomes['_task_stimOn_delays'] = spec.QC.WARNING
+    outcomes['_task_reward_volume_set'] = outcomes['_task_goCue_delays'] = spec.QC.FAIL
+    outcomes['_task_errorCue_delays'] = outcomes['_task_stimOff_delays'] = spec.QC.PASS
+    outcomes['_task_iti_delays'] = spec.QC.CRITICAL
+    return outcomes
 
 
 class TestAggregateOutcome(unittest.TestCase):
@@ -19,14 +35,15 @@ class TestAggregateOutcome(unittest.TestCase):
         from datetime import datetime
         self.assertFalse(datetime.now() > datetime(2024, 4, 10), 'remove TaskQC.compute_session_status_from_dict method.')
         qc_dict = {'_task_iti_delays': .99}
-        with self.assertWarns(DeprecationWarning), self.assertLogs(qcmetrics.__name__, 'WARNING'):
+        with self.assertWarns(DeprecationWarning), self.assertLogs(qcmetrics.__name__, spec.QC.WARNING):
             out = qcmetrics.TaskQC.compute_session_status_from_dict(qc_dict)
-            expected = ('NOT_SET', {'_task_iti_delays': 'NOT_SET'})
+            expected = (spec.QC.NOT_SET, {'_task_iti_delays': spec.QC.NOT_SET})
             self.assertEqual(expected, out, 'failed to use BWM criteria')
             # Should handle criteria as input, both as arg and kwarg
-            criteria = {'_task_iti_delays': {'PASS': 0.9, 'FAIL': 0}, 'default': {'PASS': 0.9, 'WARNING': 0.4}}
+            criteria = {'_task_iti_delays': {spec.QC.PASS: 0.9, spec.QC.FAIL: 0},
+                        'default': {spec.QC.PASS: 0.9, spec.QC.WARNING: 0.4}}
             out = qcmetrics.TaskQC.compute_session_status_from_dict(qc_dict, criteria=criteria)
-            expected = ('PASS', {'_task_iti_delays': 'PASS'})
+            expected = (spec.QC.PASS, {'_task_iti_delays': spec.QC.PASS})
             self.assertEqual(expected, out, 'failed to use BWM criteria')
             out = qcmetrics.TaskQC.compute_session_status_from_dict(qc_dict, criteria)
             self.assertEqual(expected, out, 'failed to use BWM criteria')
@@ -36,47 +53,112 @@ class TestAggregateOutcome(unittest.TestCase):
             self.skipTest('Python < 3.10')  # py 3.8
         with self.assertWarns(DeprecationWarning), self.assertNoLogs(qcmetrics.__name__, 'WARNING'):
             out = qc.compute_session_status_from_dict(qc_dict)
-            expected = ('NOT_SET', {'_task_iti_delays': 'NOT_SET'})
+            expected = (spec.QC.NOT_SET, {'_task_iti_delays': spec.QC.NOT_SET})
             self.assertEqual(expected, out, 'failed to use BWM criteria')
             # Should handle criteria as input, both as arg and kwarg
-            criteria = {'_task_iti_delays': {'PASS': 0.9, 'FAIL': 0}, 'default': {'PASS': 0}}
+            criteria = {'_task_iti_delays': {spec.QC.PASS: 0.9, spec.QC.FAIL: 0}, 'default': {spec.QC.PASS: 0}}
             out, _ = qc.compute_session_status_from_dict(qc_dict, criteria=criteria)
-            self.assertEqual('PASS', out)
+            self.assertEqual(spec.QC.PASS, out)
             out, _ = qc.compute_session_status_from_dict(qc_dict, criteria)
-            self.assertEqual('PASS', out)
+            self.assertEqual(spec.QC.PASS, out)
         self.assertRaises(TypeError, qc.compute_session_status_from_dict)
 
     def test_outcome_from_dict_default(self):
         # For a task that has no costume thresholds, default is 0.99 PASS and 0.9 WARNING and 0 FAIL,
         # np.nan and None return not set
         qc_dict = {'gnap': .99, 'gnop': np.nan, 'gnip': None, 'gnep': 0.9, 'gnup': 0.89}
-        expect = {'gnap': 'PASS', 'gnop': 'NOT_SET', 'gnip': 'NOT_SET', 'gnep': 'WARNING', 'gnup': 'FAIL'}
+        expect = {
+            'gnap': spec.QC.PASS, 'gnop': spec.QC.NOT_SET, 'gnip': spec.QC.NOT_SET,
+            'gnep': spec.QC.WARNING, 'gnup': spec.QC.FAIL}
         outcome, outcome_dict = qcmetrics.compute_session_status_from_dict(qc_dict, qcmetrics.BWM_CRITERIA)
-        self.assertEqual(outcome, 'FAIL')
+        self.assertEqual(outcome, spec.QC.FAIL)
         self.assertEqual(expect, outcome_dict)
 
     def test_outcome_from_dict_stimFreeze_delays(self):
         # For '_task_stimFreeze_delays' the threshold are 0.99 PASS and 0 WARNING
         qc_dict = {'gnap': .99, 'gnop': np.nan, '_task_stimFreeze_delays': .1}
-        expect = {'gnap': 'PASS', 'gnop': 'NOT_SET', '_task_stimFreeze_delays': 'WARNING'}
+        expect = {'gnap': spec.QC.PASS, 'gnop': spec.QC.NOT_SET, '_task_stimFreeze_delays': spec.QC.WARNING}
         outcome, outcome_dict = qcmetrics.compute_session_status_from_dict(qc_dict, qcmetrics.BWM_CRITERIA)
-        self.assertEqual(outcome, 'WARNING')
+        self.assertEqual(outcome, spec.QC.WARNING)
         self.assertEqual(expect, outcome_dict)
 
     def test_outcome_from_dict_iti_delays(self):
         # For '_task_iti_delays' the threshold is 0 NOT_SET
         qc_dict = {'gnap': .99, 'gnop': np.nan, '_task_iti_delays': .1}
-        expect = {'gnap': 'PASS', 'gnop': 'NOT_SET', '_task_iti_delays': 'NOT_SET'}
+        expect = {'gnap': spec.QC.PASS, 'gnop': spec.QC.NOT_SET, '_task_iti_delays': spec.QC.NOT_SET}
         outcome, outcome_dict = qcmetrics.compute_session_status_from_dict(qc_dict, qcmetrics.BWM_CRITERIA)
-        self.assertEqual(outcome, 'PASS')
+        self.assertEqual(outcome, spec.QC.PASS)
         self.assertEqual(expect, outcome_dict)
 
     def test_out_of_bounds(self):
         # When qc values are below 0 or above 1, give error
         qc_dict = {'gnap': 1.01, 'gnop': 0, 'gnip': 0.99}
         with self.assertRaises(ValueError) as e:
-            outcome, outcome_dict = qcmetrics.compute_session_status_from_dict(qc_dict, qcmetrics.BWM_CRITERIA)
+            qcmetrics.compute_session_status_from_dict(qc_dict, qcmetrics.BWM_CRITERIA)
         self.assertTrue(e.exception.args[0] == 'Values out of bound')
+
+    def test_compute_dateset_qc_status(self):
+        """Test TaskQC.compute_dateset_qc_status method."""
+        outcomes = _create_test_qc_outcomes()
+        dataset_outcomes = qcmetrics.TaskQC.compute_dataset_qc_status(outcomes)
+        expected = {'_ibl_trials.stimOff_times': spec.QC.PASS,
+                    '_ibl_trials.table': {
+                        'intervals': spec.QC.CRITICAL,
+                        'goCue_times': spec.QC.FAIL,
+                        'response_times': spec.QC.NOT_SET,
+                        'choice': spec.QC.NOT_SET,
+                        'stimOn_times': spec.QC.WARNING,
+                        'contrastLeft': spec.QC.NOT_SET,
+                        'contrastRight': spec.QC.NOT_SET,
+                        'feedbackType': spec.QC.NOT_SET,
+                        'probabilityLeft': spec.QC.NOT_SET,
+                        'feedback_times': spec.QC.PASS,
+                        'firstMovement_times': spec.QC.NOT_SET}}
+        self.assertDictEqual(expected, dataset_outcomes)
+
+
+class TestDatasetQC(unittest.TestCase):
+    def test_update_dataset_qc(self):
+        """Test task_metrics.update_dataset_qc function."""
+        registered_datasets = [
+            {'name': '_ibl_trials.table.pqt', 'qc': 'NOT_SET', 'id': str(uuid4())},
+            {'name': '_ibl_other.intervals.npy', 'qc': 'PASS', 'id': str(uuid4())},
+            {'name': '_ibl_trials.stimOff_times.npy', 'qc': 'NOT_SET', 'id': str(uuid4())}
+        ]
+        one = mock.MagicMock()
+        one.alyx.get.side_effect = lambda *args, **kwargs: {'qc': spec.QC.NOT_SET.name, 'json': {'extended_qc': None}}
+        one.alyx.rest.side_effect = lambda *args, **kwargs: kwargs.get('data')
+        one.offline = False
+        qc = qcmetrics.TaskQC('subject/2020-01-01/001', one=one)
+        task_qc_results = (spec.QC.CRITICAL, {}, _create_test_qc_outcomes())  # Inject some toy trials QC results
+        with mock.patch.object(qc, 'compute_session_status', return_value=task_qc_results):
+            out = qcmetrics.update_dataset_qc(qc, registered_datasets.copy(), one, override=False)
+            self.assertEqual(3, len(out))
+            self.assertEqual(['CRITICAL', 'PASS', 'PASS'], [x['qc'] for x in out])
+        # Check extended qc
+        extended_qc = one.alyx.json_field_update.call_args.kwargs.get('data', {}).get('extended_qc', {})
+        # Check a few of the fields
+        self.assertEqual(spec.QC.WARNING, extended_qc.get('stimOn_times'))
+        self.assertEqual(spec.QC.CRITICAL, extended_qc.get('intervals'))
+        self.assertEqual(spec.QC.FAIL, extended_qc.get('goCue_times'))
+        self.assertEqual(spec.QC.NOT_SET, extended_qc.get('response_times'))
+
+        # Test behaviour when dataset QC not in registered datasets list
+        one.reset_mock()
+        with mock.patch.object(qc, 'compute_session_status', return_value=task_qc_results), \
+                mock.patch.object(qc, 'compute_dataset_qc_status', return_value={'_ibl_foo.bar': spec.QC.PASS}), \
+                self.assertLogs(qcmetrics.__name__, level=10) as cm:
+            out = qcmetrics.update_dataset_qc(qc, registered_datasets.copy(), one, override=False)
+            self.assertEqual(registered_datasets, out)
+            self.assertIn('dataset _ibl_foo.bar not registered', cm.output[-1])
+            one.alyx.get.assert_not_called()
+            one.alyx.rest.assert_not_called()
+
+        # Test assertion on duplicate dataset stems
+        registered_datasets.append({
+            'name': '_ibl_other.intervals.csv', 'qc': 'FAIL', 'id': str(uuid4())
+        })
+        self.assertRaises(AssertionError, qcmetrics.update_dataset_qc, qc, registered_datasets.copy(), one)
 
 
 class TestTaskMetrics(unittest.TestCase):
@@ -116,39 +198,39 @@ class TestTaskMetrics(unittest.TestCase):
         end_times = np.cumsum(trial_lengths) - 1e-2
 
         data = {
-            "phase": np.random.uniform(low=0, high=2 * np.pi, size=(n,)),
-            "quiescence": quiescence_length,
-            "choice": choice,
-            "correct": correct,
-            "intervals": np.c_[start_times, end_times],
-            "itiIn_times": end_times - iti_length + stimOff_itiIn_delay,
-            "position": np.ones_like(choice) * 35
+            'phase': np.random.uniform(low=0, high=2 * np.pi, size=(n,)),
+            'quiescence': quiescence_length,
+            'choice': choice,
+            'correct': correct,
+            'intervals': np.c_[start_times, end_times],
+            'itiIn_times': end_times - iti_length + stimOff_itiIn_delay,
+            'position': np.ones_like(choice) * 35
         }
 
-        data["stimOnTrigger_times"] = start_times + data["quiescence"] + 1e-4
-        data["stimOn_times"] = data["stimOnTrigger_times"] + 1e-1
-        data["goCueTrigger_times"] = data["stimOn_times"] + 1e-3
-        data["goCue_times"] = data["goCueTrigger_times"] + trigg_delay
+        data['stimOnTrigger_times'] = start_times + data['quiescence'] + 1e-4
+        data['stimOn_times'] = data['stimOnTrigger_times'] + 1e-1
+        data['goCueTrigger_times'] = data['stimOn_times'] + 1e-3
+        data['goCue_times'] = data['goCueTrigger_times'] + trigg_delay
 
-        data["response_times"] = end_times - (
+        data['response_times'] = end_times - (
             resp_feeback_delay + iti_length + (~correct + 1)
         )
-        data["feedback_times"] = data["response_times"] + resp_feeback_delay
-        data["stimFreeze_times"] = data["response_times"] + 1e-2
-        data["stimFreezeTrigger_times"] = data["stimFreeze_times"] - trigg_delay
-        data["feedbackType"] = np.vectorize(lambda x: -1 if x == 0 else x)(data["correct"])
-        outcome = data["feedbackType"].copy()
-        outcome[data["choice"] == 0] = 0
-        data["outcome"] = outcome
+        data['feedback_times'] = data['response_times'] + resp_feeback_delay
+        data['stimFreeze_times'] = data['response_times'] + 1e-2
+        data['stimFreezeTrigger_times'] = data['stimFreeze_times'] - trigg_delay
+        data['feedbackType'] = np.vectorize(lambda x: -1 if x == 0 else x)(data['correct'])
+        outcome = data['feedbackType'].copy()
+        outcome[data['choice'] == 0] = 0
+        data['outcome'] = outcome
         # Delay of 1 second if correct, 2 seconds if incorrect
-        data["stimOffTrigger_times"] = data["feedback_times"] + (~correct + 1)
-        data["stimOff_times"] = data["stimOffTrigger_times"] + trigg_delay
+        data['stimOffTrigger_times'] = data['feedback_times'] + (~correct + 1)
+        data['stimOff_times'] = data['stimOffTrigger_times'] + trigg_delay
         # Error tone times nan on incorrect trials
         outcome_times = np.vectorize(lambda x, y: x + 1e-2 if y else np.nan)
-        data["errorCueTrigger_times"] = outcome_times(data["feedback_times"], ~data["correct"])
-        data["errorCue_times"] = data["errorCueTrigger_times"] + trigg_delay
-        data["valveOpen_times"] = outcome_times(data["feedback_times"], data["correct"])
-        data["rewardVolume"] = ~np.isnan(data["valveOpen_times"]) * 3.0
+        data['errorCueTrigger_times'] = outcome_times(data['feedback_times'], ~data['correct'])
+        data['errorCue_times'] = data['errorCueTrigger_times'] + trigg_delay
+        data['valveOpen_times'] = outcome_times(data['feedback_times'], data['correct'])
+        data['rewardVolume'] = ~np.isnan(data['valveOpen_times']) * 3.0
 
         return data
 
@@ -220,7 +302,7 @@ class TestTaskMetrics(unittest.TestCase):
 
         # Stitch wheel fragments and assert no skips
         wheel_data = np.concatenate(list(map(np.column_stack, wheel_data)))
-        assert np.all(np.diff(wheel_data[:, 0]) > 0), "timestamps don't strictly increase"
+        assert np.all(np.diff(wheel_data[:, 0]) > 0), 'timestamps don\'t strictly increase'
         np.testing.assert_allclose(np.abs(np.diff(wheel_data[:, 1])), resolution)
         assert len(movement_times) == trial_data['intervals'].shape[0]
         return {
@@ -231,179 +313,179 @@ class TestTaskMetrics(unittest.TestCase):
 
     def test_check_stimOn_goCue_delays(self):
         metric, passed = qcmetrics.check_stimOn_goCue_delays(self.data)
-        self.assertTrue(np.allclose(metric, 0.0011), "failed to return correct metric")
+        self.assertTrue(np.allclose(metric, 0.0011), 'failed to return correct metric')
         # Set incorrect timestamp (goCue occurs before stimOn)
-        self.data["goCue_times"][-1] = self.data["stimOn_times"][-1] - 1e-4
+        self.data['goCue_times'][-1] = self.data['stimOn_times'][-1] - 1e-4
         metric, passed = qcmetrics.check_stimOn_goCue_delays(self.data)
-        n = len(self.data["stimOn_times"])
+        n = len(self.data['stimOn_times'])
         expected = (n - 1) / n
-        self.assertEqual(np.nanmean(passed), expected, "failed to detect dodgy timestamp")
+        self.assertEqual(np.nanmean(passed), expected, 'failed to detect dodgy timestamp')
 
     def test_check_response_feedback_delays(self):
         metric, passed = qcmetrics.check_response_feedback_delays(self.data)
-        self.assertTrue(np.allclose(metric, 0.001), "failed to return correct metric")
+        self.assertTrue(np.allclose(metric, 0.001), 'failed to return correct metric')
         # Set incorrect timestamp (feedback occurs before response)
-        self.data["feedback_times"][-1] = self.data["response_times"][-1] - 1e-4
+        self.data['feedback_times'][-1] = self.data['response_times'][-1] - 1e-4
         metric, passed = qcmetrics.check_response_feedback_delays(self.data)
-        n = len(self.data["feedback_times"])
+        n = len(self.data['feedback_times'])
         expected = (n - 1) / n
-        self.assertEqual(np.nanmean(passed), expected, "failed to detect dodgy timestamp")
+        self.assertEqual(np.nanmean(passed), expected, 'failed to detect dodgy timestamp')
 
     def test_check_response_stimFreeze_delays(self):
         metric, passed = qcmetrics.check_response_stimFreeze_delays(self.data)
-        self.assertTrue(np.allclose(metric, 1e-2), "failed to return correct metric")
+        self.assertTrue(np.allclose(metric, 1e-2), 'failed to return correct metric')
         # Set incorrect timestamp (stimFreeze occurs before response)
-        self.data["stimFreeze_times"][-1] = self.data["response_times"][-1] - 1e-4
+        self.data['stimFreeze_times'][-1] = self.data['response_times'][-1] - 1e-4
         metric, passed = qcmetrics.check_response_stimFreeze_delays(self.data)
-        n = len(self.data["feedback_times"]) - np.sum(self.data["choice"] == 0)
+        n = len(self.data['feedback_times']) - np.sum(self.data['choice'] == 0)
         expected = (n - 1) / n
-        self.assertEqual(np.nanmean(passed), expected, "failed to detect dodgy timestamp")
+        self.assertEqual(np.nanmean(passed), expected, 'failed to detect dodgy timestamp')
 
     def test_check_positive_feedback_stimOff_delays(self):
         metric, passed = qcmetrics.check_positive_feedback_stimOff_delays(self.data)
         self.assertTrue(
-            np.allclose(metric[self.data["correct"]], 1e-4), "failed to return correct metric"
+            np.allclose(metric[self.data['correct']], 1e-4), 'failed to return correct metric'
         )
         # Set incorrect timestamp (stimOff occurs just after response)
-        id = np.argmax(self.data["correct"])
-        self.data["stimOff_times"][id] = self.data["response_times"][id] + 1e-2
+        id = np.argmax(self.data['correct'])
+        self.data['stimOff_times'][id] = self.data['response_times'][id] + 1e-2
         metric, passed = qcmetrics.check_positive_feedback_stimOff_delays(self.data)
-        expected = (self.data["correct"].sum() - 1) / self.data["correct"].sum()
-        self.assertEqual(np.nanmean(passed), expected, "failed to detect dodgy timestamp")
+        expected = (self.data['correct'].sum() - 1) / self.data['correct'].sum()
+        self.assertEqual(np.nanmean(passed), expected, 'failed to detect dodgy timestamp')
 
     def test_check_negative_feedback_stimOff_delays(self):
-        err_trial = ~self.data["correct"]
+        err_trial = ~self.data['correct']
         metric, passed = qcmetrics.check_negative_feedback_stimOff_delays(self.data)
         values = np.abs(metric[err_trial])
-        self.assertTrue(np.allclose(values, 1e-2), "failed to return correct metric")
+        self.assertTrue(np.allclose(values, 1e-2), 'failed to return correct metric')
         # Set incorrect timestamp (stimOff occurs 1s after response)
         id = np.argmax(err_trial)
-        self.data["stimOff_times"][id] = self.data["response_times"][id] + 1
+        self.data['stimOff_times'][id] = self.data['response_times'][id] + 1
         metric, passed = qcmetrics.check_negative_feedback_stimOff_delays(self.data)
         expected = (err_trial.sum() - 1) / err_trial.sum()
-        self.assertEqual(np.nanmean(passed), expected, "failed to detect dodgy timestamp")
+        self.assertEqual(np.nanmean(passed), expected, 'failed to detect dodgy timestamp')
 
     def test_check_error_trial_event_sequence(self):
         metric, passed = qcmetrics.check_error_trial_event_sequence(self.data)
-        self.assertTrue(np.all(metric == ~self.data['correct']), "failed to return correct metric")
+        self.assertTrue(np.all(metric == ~self.data['correct']), 'failed to return correct metric')
         self.assertTrue(np.all(passed))
         # Set incorrect timestamp (itiIn occurs before errorCue)
-        err_trial = ~self.data["correct"]
+        err_trial = ~self.data['correct']
         (id,) = np.where(err_trial)
-        self.data["intervals"][id[0], 0] = np.inf
-        self.data["errorCue_times"][id[1]] = 0
+        self.data['intervals'][id[0], 0] = np.inf
+        self.data['errorCue_times'][id[1]] = 0
         metric, passed = qcmetrics.check_error_trial_event_sequence(self.data)
         expected = (err_trial.sum() - 2) / err_trial.sum()
-        self.assertEqual(np.nanmean(passed), expected, "failed to detect dodgy timestamp")
+        self.assertEqual(np.nanmean(passed), expected, 'failed to detect dodgy timestamp')
 
     def test_check_correct_trial_event_sequence(self):
         metric, passed = qcmetrics.check_correct_trial_event_sequence(self.data)
-        self.assertTrue(np.all(metric == self.data['correct']), "failed to return correct metric")
+        self.assertTrue(np.all(metric == self.data['correct']), 'failed to return correct metric')
         self.assertTrue(np.all(passed))
         # Set incorrect timestamp
-        correct = self.data["correct"]
+        correct = self.data['correct']
         id = np.argmax(correct)
-        self.data["intervals"][id, 0] = np.inf
+        self.data['intervals'][id, 0] = np.inf
         metric, passed = qcmetrics.check_correct_trial_event_sequence(self.data)
         expected = (correct.sum() - 1) / correct.sum()
-        self.assertEqual(np.nanmean(passed), expected, "failed to detect dodgy timestamp")
+        self.assertEqual(np.nanmean(passed), expected, 'failed to detect dodgy timestamp')
 
     def test_check_trial_length(self):
         metric, passed = qcmetrics.check_trial_length(self.data)
-        self.assertTrue(np.all(metric), "failed to return correct metric")
+        self.assertTrue(np.all(metric), 'failed to return correct metric')
         # Set incorrect timestamp
-        self.data["goCue_times"][-1] = 0
+        self.data['goCue_times'][-1] = 0
         metric, passed = qcmetrics.check_trial_length(self.data)
-        n = len(self.data["goCue_times"])
+        n = len(self.data['goCue_times'])
         expected = (n - 1) / n
-        self.assertEqual(np.nanmean(passed), expected, "failed to detect dodgy timestamp")
+        self.assertEqual(np.nanmean(passed), expected, 'failed to detect dodgy timestamp')
 
     def test_check_goCue_delays(self):
         metric, passed = qcmetrics.check_goCue_delays(self.data)
-        self.assertTrue(np.allclose(metric, 1e-4), "failed to return correct metric")
+        self.assertTrue(np.allclose(metric, 1e-4), 'failed to return correct metric')
         # Set incorrect timestamp
-        self.data["goCue_times"][1] = self.data["goCueTrigger_times"][1] + 0.1
+        self.data['goCue_times'][1] = self.data['goCueTrigger_times'][1] + 0.1
         metric, passed = qcmetrics.check_goCue_delays(self.data)
-        n = len(self.data["goCue_times"])
+        n = len(self.data['goCue_times'])
         expected = (n - 1) / n
-        self.assertEqual(np.nanmean(passed), expected, "failed to detect dodgy timestamp")
+        self.assertEqual(np.nanmean(passed), expected, 'failed to detect dodgy timestamp')
 
     def test_check_errorCue_delays(self):
         metric, passed = qcmetrics.check_errorCue_delays(self.data)
-        err_trial = ~self.data["correct"]
-        self.assertTrue(np.allclose(metric[err_trial], 1e-4), "failed to return correct metric")
+        err_trial = ~self.data['correct']
+        self.assertTrue(np.allclose(metric[err_trial], 1e-4), 'failed to return correct metric')
         # Set incorrect timestamp
         id = np.argmax(err_trial)
-        self.data["errorCue_times"][id] = self.data["errorCueTrigger_times"][id] + 0.1
+        self.data['errorCue_times'][id] = self.data['errorCueTrigger_times'][id] + 0.1
         metric, passed = qcmetrics.check_errorCue_delays(self.data)
         n = err_trial.sum()
         expected = (n - 1) / n
-        self.assertEqual(np.nanmean(passed), expected, "failed to detect dodgy timestamp")
+        self.assertEqual(np.nanmean(passed), expected, 'failed to detect dodgy timestamp')
 
     def test_check_stimOn_delays(self):
         metric, passed = qcmetrics.check_stimOn_delays(self.data)
-        self.assertTrue(np.allclose(metric, 1e-1), "failed to return correct metric")
+        self.assertTrue(np.allclose(metric, 1e-1), 'failed to return correct metric')
         # Set incorrect timestamp
-        self.data["stimOn_times"][-1] = self.data["stimOnTrigger_times"][-1] + 0.2
+        self.data['stimOn_times'][-1] = self.data['stimOnTrigger_times'][-1] + 0.2
         metric, passed = qcmetrics.check_stimOn_delays(self.data)
-        n = len(self.data["stimOn_times"])
+        n = len(self.data['stimOn_times'])
         expected = (n - 1) / n
-        self.assertEqual(np.nanmean(passed), expected, "failed to detect dodgy timestamp")
+        self.assertEqual(np.nanmean(passed), expected, 'failed to detect dodgy timestamp')
 
     def test_check_stimOff_delays(self):
         metric, passed = qcmetrics.check_stimOff_delays(self.data)
-        self.assertTrue(np.allclose(metric, 1e-4), "failed to return correct metric")
+        self.assertTrue(np.allclose(metric, 1e-4), 'failed to return correct metric')
         # Set incorrect timestamp
-        self.data["stimOff_times"][-1] = self.data["stimOffTrigger_times"][-1] + 0.2
+        self.data['stimOff_times'][-1] = self.data['stimOffTrigger_times'][-1] + 0.2
         metric, passed = qcmetrics.check_stimOff_delays(self.data)
-        n = len(self.data["stimOff_times"])
+        n = len(self.data['stimOff_times'])
         expected = (n - 1) / n
-        self.assertEqual(np.nanmean(passed), expected, "failed to detect dodgy timestamp")
+        self.assertEqual(np.nanmean(passed), expected, 'failed to detect dodgy timestamp')
 
     def test_check_stimFreeze_delays(self):
         metric, passed = qcmetrics.check_stimFreeze_delays(self.data)
-        self.assertTrue(np.allclose(metric, 1e-4), "failed to return correct metric")
+        self.assertTrue(np.allclose(metric, 1e-4), 'failed to return correct metric')
         # Set incorrect timestamp
-        self.data["stimFreeze_times"][-1] = self.data["stimFreezeTrigger_times"][-1] + 0.2
+        self.data['stimFreeze_times'][-1] = self.data['stimFreezeTrigger_times'][-1] + 0.2
         metric, passed = qcmetrics.check_stimFreeze_delays(self.data)
-        n = len(self.data["stimFreeze_times"])
+        n = len(self.data['stimFreeze_times'])
         expected = (n - 1) / n
-        self.assertEqual(np.nanmean(passed), expected, "failed to detect dodgy timestamp")
+        self.assertEqual(np.nanmean(passed), expected, 'failed to detect dodgy timestamp')
 
     def test_check_reward_volumes(self):
         metric, passed = qcmetrics.check_reward_volumes(self.data)
-        self.assertTrue(all(x in {0.0, 3.0} for x in metric), "failed to return correct metric")
+        self.assertTrue(all(x in {0.0, 3.0} for x in metric), 'failed to return correct metric')
         self.assertTrue(np.all(passed))
         # Set incorrect volume
-        id = np.array([np.argmax(self.data["correct"]), np.argmax(~self.data["correct"])])
-        self.data["rewardVolume"][id] = self.data["rewardVolume"][id] + 1
+        id = np.array([np.argmax(self.data['correct']), np.argmax(~self.data['correct'])])
+        self.data['rewardVolume'][id] = self.data['rewardVolume'][id] + 1
         metric, passed = qcmetrics.check_reward_volumes(self.data)
-        self.assertTrue(np.mean(passed) == 0.6, "failed to detect incorrect reward volumes")
+        self.assertTrue(np.mean(passed) == 0.6, 'failed to detect incorrect reward volumes')
 
     def test_check_reward_volume_set(self):
         metric, passed = qcmetrics.check_reward_volume_set(self.data)
-        self.assertTrue(all(x in {0.0, 3.0} for x in metric), "failed to return correct metric")
+        self.assertTrue(all(x in {0.0, 3.0} for x in metric), 'failed to return correct metric')
         self.assertTrue(passed)
         # Add a new volume to the set
-        id = np.argmax(self.data["correct"])
-        self.data["rewardVolume"][id] = 2.3
+        id = np.argmax(self.data['correct'])
+        self.data['rewardVolume'][id] = 2.3
         metric, passed = qcmetrics.check_reward_volume_set(self.data)
-        self.assertFalse(passed, "failed to detect incorrect reward volume set")
+        self.assertFalse(passed, 'failed to detect incorrect reward volume set')
         # Set 0 volumes to new value; set length still 2 but should fail anyway
-        self.data["rewardVolume"][~self.data["correct"]] = 2.3
+        self.data['rewardVolume'][~self.data['correct']] = 2.3
         metric, passed = qcmetrics.check_reward_volume_set(self.data)
-        self.assertFalse(passed, "failed to detect incorrect reward volume set")
+        self.assertFalse(passed, 'failed to detect incorrect reward volume set')
 
     def test_check_audio_pre_trial(self):
         # Create Sound sync fake data that is OK
         BNC2_OK = {
-            "times": self.data["goCue_times"] + 1e-1,
-            "polarities": np.array([1, -1, 1, -1, 1]),
+            'times': self.data['goCue_times'] + 1e-1,
+            'polarities': np.array([1, -1, 1, -1, 1]),
         }
         # Create Sound sync fake data that is NOT OK
         BNC2_NOK = {
-            "times": self.data["goCue_times"] - 1e-1,
-            "polarities": np.array([1, -1, 1, -1, 1]),
+            'times': self.data['goCue_times'] - 1e-1,
+            'polarities': np.array([1, -1, 1, -1, 1]),
         }
         metric, passed = qcmetrics.check_audio_pre_trial(self.data, audio=BNC2_OK)
         self.assertTrue(~np.all(metric))
@@ -512,7 +594,7 @@ class TestTaskMetrics(unittest.TestCase):
         _, passed = qcmetrics.check_detected_wheel_moves(self.data, min_qt=0.3)
         self.assertTrue(np.all(passed))
 
-    @unittest.skip("not implemented")
+    @unittest.skip('not implemented')
     def test_check_stimulus_move_before_goCue(self):
         pass  # TODO Nicco?
 
@@ -532,22 +614,22 @@ class TestTaskMetrics(unittest.TestCase):
         metric, passed = qcmetrics.check_iti_delays(self.data)
         # We want the metric to return positive values that are close to 0.1, given the test data
         self.assertTrue(np.allclose(metric[:-1], 1e-2, atol=0.001),
-                        "failed to return correct metric")
-        self.assertTrue(np.isnan(metric[-1]), "last trial should be NaN")
+                        'failed to return correct metric')
+        self.assertTrue(np.isnan(metric[-1]), 'last trial should be NaN')
         self.assertTrue(np.all(passed))
         # Mess up a trial
         id = 2
-        self.data["intervals"][id + 1, 0] += 0.5  # Next trial starts 0.5 sec later
+        self.data['intervals'][id + 1, 0] += 0.5  # Next trial starts 0.5 sec later
         metric, passed = qcmetrics.check_iti_delays(self.data)
-        n_trials = len(self.data["stimOff_times"]) - 1  # Last trial NaN here
+        n_trials = len(self.data['stimOff_times']) - 1  # Last trial NaN here
         expected = (n_trials - 1) / n_trials
         self.assertTrue(expected, np.nanmean(passed))
 
-    @unittest.skip("not implemented")
+    @unittest.skip('not implemented')
     def test_check_frame_frequency(self):
         pass  # TODO Miles
 
-    @unittest.skip("not implemented")
+    @unittest.skip('not implemented')
     def test_check_frame_updates(self):
         pass  # TODO Nicco?
 
@@ -582,24 +664,24 @@ class TestHabituationQC(unittest.TestCase):
         end_times = np.cumsum(trial_lengths) - 1e-2
 
         data = {
-            "phase": np.random.uniform(low=0, high=2 * np.pi, size=(n,)),
-            "stimOnTrigger_times": start_times + blank_length,
-            "intervals": np.c_[start_times, end_times],
-            "itiIn_times": end_times - iti_length,
-            "position": np.random.choice([-1, 1], n, replace=True) * 35,
-            "feedbackType": np.ones(n),
-            "feedback_times": end_times - 0.5,
-            "rewardVolume": np.ones(n) * 3.,
-            "stimOff_times": end_times + trigg_delay,
-            "stimOffTrigger_times": end_times
+            'phase': np.random.uniform(low=0, high=2 * np.pi, size=(n,)),
+            'stimOnTrigger_times': start_times + blank_length,
+            'intervals': np.c_[start_times, end_times],
+            'itiIn_times': end_times - iti_length,
+            'position': np.random.choice([-1, 1], n, replace=True) * 35,
+            'feedbackType': np.ones(n),
+            'feedback_times': end_times - 0.5,
+            'rewardVolume': np.ones(n) * 3.,
+            'stimOff_times': end_times + trigg_delay,
+            'stimOffTrigger_times': end_times
         }
 
-        data["stimOn_times"] = data["stimOnTrigger_times"] + trigg_delay
-        data["goCueTrigger_times"] = data["stimOnTrigger_times"]
-        data["goCue_times"] = data["goCueTrigger_times"] + trigg_delay
-        data["stimCenter_times"] = data["feedback_times"] - 0.5
-        data["stimCenterTrigger_times"] = data["stimCenter_times"] - trigg_delay
-        data["valveOpen_times"] = data["feedback_times"]
+        data['stimOn_times'] = data['stimOnTrigger_times'] + trigg_delay
+        data['goCueTrigger_times'] = data['stimOnTrigger_times']
+        data['goCue_times'] = data['goCueTrigger_times'] + trigg_delay
+        data['stimCenter_times'] = data['feedback_times'] - 0.5
+        data['stimCenterTrigger_times'] = data['stimCenter_times'] - trigg_delay
+        data['valveOpen_times'] = data['feedback_times']
 
         return data
 
@@ -609,7 +691,7 @@ class TestHabituationQC(unittest.TestCase):
         self.assertIsNotNone(self.qc.metrics)
         _, _, outcomes = self.qc.compute_session_status()
         if self.qc.passed['_task_habituation_time'] is None:
-            self.assertEqual(outcomes['_task_habituation_time'], 'NOT_SET')
+            self.assertEqual(outcomes['_task_habituation_time'], spec.QC.NOT_SET)
 
 
 if __name__ == '__main__':
