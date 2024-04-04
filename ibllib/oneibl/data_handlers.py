@@ -140,6 +140,8 @@ class ServerDataHandler(DataHandler):
         versions = super().uploadData(outputs, version)
         data_repo = get_local_data_repository(self.one.alyx)
         # If clobber = False, do not re-upload the outputs that have already been processed
+        if not isinstance(outputs, list):
+            outputs = [outputs]
         to_upload = list(filter(None if clobber else lambda x: x not in self.processed, outputs))
         records = register_dataset(to_upload, one=self.one, versions=versions, repository=data_repo, **kwargs) or []
         if kwargs.get('dry', False):
