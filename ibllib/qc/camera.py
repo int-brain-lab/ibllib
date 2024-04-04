@@ -46,7 +46,7 @@ from matplotlib.patches import Rectangle
 
 import one.alf.io as alfio
 from one.util import filter_datasets
-from one.alf.spec import is_session_path
+from one.alf import spec
 from one.alf.exceptions import ALFObjectNotFound
 from iblutil.util import Bunch
 from iblutil.numerical import within_ranges
@@ -132,7 +132,7 @@ class CameraQC(base.QC):
         :param one: An ONE instance for fetching and setting the QC on Alyx
         """
         # When an eid is provided, we will download the required data by default (if necessary)
-        download_data = not is_session_path(session_path_or_eid)
+        download_data = not spec.is_session_path(Path(session_path_or_eid))
         self.download_data = kwargs.pop('download_data', download_data)
         self.stream = kwargs.pop('stream', None)
         self.n_samples = kwargs.pop('n_samples', 100)
@@ -163,7 +163,7 @@ class CameraQC(base.QC):
 
         # QC outcomes map
         self.metrics = None
-        self.outcome = 'NOT_SET'
+        self.outcome = spec.QC.NOT_SET
 
         # Specify any checks to remove
         self.checks_to_remove = []
@@ -309,7 +309,7 @@ class CameraQC(base.QC):
                                                                   mask=np.s_[:, :, 0])
         except AssertionError:
             _log.error('Failed to read video file; setting outcome to CRITICAL')
-            self._outcome = 'CRITICAL'
+            self._outcome = spec.QC.CRITICAL
 
     @staticmethod
     def get_active_wheel_period(wheel, duration_range=(3., 20.), display=False):
@@ -481,10 +481,10 @@ class CameraQC(base.QC):
         if all(x is None for x in self.data.values()):
             self.load_data(**kwargs)
         if self.data['frame_samples'] is None or self.data['timestamps'] is None:
-            return 'NOT_SET', {}
+            return spec.QC.NOT_SET, {}
         if self.data['timestamps'].shape[0] == 0:
             _log.error(f'No timestamps for {self.label} camera; setting outcome to CRITICAL')
-            return 'CRITICAL', {}
+            return spec.QC.CRITICAL, {}
 
         def is_metric(x):
             return isfunction(x) and x.__name__.startswith('check_')
@@ -496,13 +496,12 @@ class CameraQC(base.QC):
         checks = self.remove_check(checks)
         self.metrics = {f'_{namespace}_' + k[6:]: fn(self) for k, fn in checks}
 
-        values = [x if isinstance(x, str) else x[0] for x in self.metrics.values()]
-        code = max(base.CRITERIA[x] for x in values)
-        outcome = next(k for k, v in base.CRITERIA.items() if v == code)
+        values = [x if isinstance(x, spec.QC) else x[0] for x in self.metrics.values()]
+        outcome = max(map(spec.QC.validate, values))
 
         if update:
             extended = {
-                k: 'NOT_SET' if v is None else v
+                k: spec.QC.NOT_SET if v is None else v
                 for k, v in self.metrics.items()
             }
             self.update_extended_qc(extended)
@@ -534,7 +533,7 @@ class CameraQC(base.QC):
         The sample frames with the lowest and highest mean luminance are shown.
         """
         if self.data['frame_samples'] is None:
-            return 'NOT_SET'
+            return spec.QC.NOT_SET
         if roi is True:
             _, h, w = self.data['frame_samples'].shape
             if self.label == 'body':  # Latter half
@@ -587,9 +586,9 @@ class CameraQC(base.QC):
     def check_file_headers(self):
         """Check reported frame rate matches FPGA frame rate"""
         if None in (self.data['video'], self.video_meta):
-            return 'NOT_SET'
+            return spec.QC.NOT_SET
         expected = self.video_meta[self.type][self.label]
-        return 'PASS' if self.data['video']['fps'] == expected['fps'] else 'FAIL'
+        return spec.QC.PASS if self.data['video']['fps'] == expected['fps'] else spec.QC.FAIL
 
     def check_framerate(self, threshold=1.):
         """Check camera times match specified frame rate for camera
@@ -598,15 +597,15 @@ class CameraQC(base.QC):
         frame rate.  NB: Does not take into account dropped frames.
         """
         if any(x is None for x in (self.data['timestamps'], self.video_meta)):
-            return 'NOT_SET'
+            return spec.QC.NOT_SET
         fps = self.video_meta[self.type][self.label]['fps']
         Fs = 1 / np.median(np.diff(self.data['timestamps']))  # Approx. frequency of camera
-        return 'PASS' if abs(Fs - fps) < threshold else 'FAIL', float(round(Fs, 3))
+        return spec.QC.PASS if abs(Fs - fps) < threshold else spec.QC.FAIL, float(round(Fs, 3))
 
     def check_pin_state(self, display=False):
         """Check the pin state reflects Bpod TTLs"""
         if not data_for_keys(('video', 'pin_state', 'audio'), self.data):
-            return 'NOT_SET'
+            return spec.QC.NOT_SET
         size_diff = int(self.data['pin_state'].shape[0] - self.data['video']['length'])
         # NB: The pin state can be high for 2 consecutive frames
         low2high = np.insert(np.diff(self.data['pin_state'][:, -1].astype(int)) == 1, 0, False)
@@ -637,14 +636,14 @@ class CameraQC(base.QC):
         :param threshold: The maximum allowable percentage of dropped frames
         """
         if not data_for_keys(('video', 'count'), self.data):
-            return 'NOT_SET'
+            return spec.QC.NOT_SET
         size_diff = int(self.data['count'].size - self.data['video']['length'])
         strict_increase = np.all(np.diff(self.data['count']) > 0)
         if not strict_increase:
             n_effected = np.sum(np.invert(strict_increase))
             _log.info(f'frame count not strictly increasing: '
                       f'{n_effected} frames effected ({n_effected / strict_increase.size:.2%})')
-            return 'CRITICAL'
+            return spec.QC.CRITICAL
         dropped = np.diff(self.data['count']).astype(int) - 1
         pct_dropped = (sum(dropped) / len(dropped) * 100)
         # Calculate overall outcome for this check
@@ -657,32 +656,32 @@ class CameraQC(base.QC):
     def check_timestamps(self):
         """Check that the camera.times array is reasonable"""
         if not data_for_keys(('timestamps', 'video'), self.data):
-            return 'NOT_SET'
+            return spec.QC.NOT_SET
         # Check number of timestamps matches video
         length_matches = self.data['timestamps'].size == self.data['video'].length
         # Check times are strictly increasing
         increasing = all(np.diff(self.data['timestamps']) > 0)
         # Check times do not contain nans
         nanless = not np.isnan(self.data['timestamps']).any()
-        return 'PASS' if increasing and length_matches and nanless else 'FAIL'
+        return spec.QC.PASS if increasing and length_matches and nanless else spec.QC.FAIL
 
     def check_camera_times(self):
         """Check that the number of raw camera timestamps matches the number of video frames"""
         if not data_for_keys(('bonsai_times', 'video'), self.data):
-            return 'NOT_SET'
+            return spec.QC.NOT_SET
         length_match = len(self.data['camera_times']) == self.data['video'].length
-        outcome = 'PASS' if length_match else 'WARNING'
+        outcome = spec.QC.PASS if length_match else spec.QC.WARNING
         # 1 / np.median(np.diff(self.data.camera_times))
         return outcome, len(self.data['camera_times']) - self.data['video'].length
 
     def check_resolution(self):
         """Check that the timestamps and video file resolution match what we expect"""
         if self.data['video'] is None:
-            return 'NOT_SET'
+            return spec.QC.NOT_SET
         actual = self.data['video']
         expected = self.video_meta[self.type][self.label]
         match = actual['width'] == expected['width'] and actual['height'] == expected['height']
-        return 'PASS' if match else 'FAIL'
+        return spec.QC.PASS if match else spec.QC.FAIL
 
     def check_wheel_alignment(self, tolerance=(1, 2), display=False):
         """Check wheel motion in video correlates with the rotary encoder signal
@@ -699,8 +698,8 @@ class CameraQC(base.QC):
 
         Returns
         -------
-        str
-            The outcome string, one of {'NOT_SET', 'FAIL', 'WARNING', 'PASS'}.
+        one.alf.spec.QC
+            The outcome, one of {'NOT_SET', 'FAIL', 'WARNING', 'PASS'}.
         int
             Frame offset, i.e. by how many frames the video was shifted to match the rotary encoder
             signal.  Negative values mean the video was shifted backwards with respect to the wheel
@@ -714,7 +713,7 @@ class CameraQC(base.QC):
         """
         wheel_present = data_for_keys(('position', 'timestamps', 'period'), self.data['wheel'])
         if not wheel_present or self.label == 'body':
-            return 'NOT_SET'
+            return spec.QC.NOT_SET
 
         # Check the selected wheel movement period occurred within camera timestamp time
         camera_times = self.data['timestamps']
@@ -727,10 +726,10 @@ class CameraQC(base.QC):
             ):
                 _log.warning('Unable to check wheel alignment: '
                              'chosen movement is not during video')
-                return 'NOT_SET'
+                return spec.QC.NOT_SET
             else:
                 # No overlap, return fail
-                return 'FAIL'
+                return spec.QC.FAIL
         aln = MotionAlignment(self.eid, self.one, self.log, session_path=self.session_path)
         aln.data = self.data.copy()
         aln.data['camera_times'] = {self.label: camera_times}
@@ -738,13 +737,13 @@ class CameraQC(base.QC):
         offset, *_ = aln.align_motion(period=self.data['wheel'].period,
                                       display=display, side=self.label)
         if offset is None:
-            return 'NOT_SET'
+            return spec.QC.NOT_SET
         if display:
             aln.plot_alignment()
 
         # Determine the outcome.  If there are two values for the tolerance, one is taken to be
         # a warning threshold, the other a failure threshold.
-        out_map = {0: 'WARNING', 1: 'WARNING', 2: 'PASS'}  # 0: FAIL -> WARNING Aug 2022
+        out_map = {0: spec.QC.WARNING, 1: spec.QC.WARNING, 2: spec.QC.PASS}  # 0: FAIL -> WARNING Aug 2022
         passed = np.abs(offset) <= np.sort(np.array(tolerance))
         return out_map[sum(passed)], int(offset)
 
@@ -770,7 +769,7 @@ class CameraQC(base.QC):
         :param pct_thresh: If true, the thresholds are treated as percentages
         """
         if not test and self.data['frame_samples'] is None:
-            return 'NOT_SET'
+            return spec.QC.NOT_SET
         refs = self.load_reference_frames(self.label)
         # ensure iterable
         pos_thresh = np.sort(np.array(pos_thresh))
@@ -888,7 +887,7 @@ class CameraQC(base.QC):
         """
         no_frames = self.data['frame_samples'] is None or len(self.data['frame_samples']) == 0
         if not test and no_frames:
-            return 'NOT_SET'
+            return spec.QC.NOT_SET
 
         if roi is False:
             top_left, roi, _ = self.find_face(test=test)  # (y1, y2), (x1, x2)
@@ -993,7 +992,7 @@ class CameraQC(base.QC):
                 f.suptitle('Discrete Fourier Transform')
                 plt.show()
         passes = np.all(lpc_var > threshold[0]) or np.all(filt_mean > threshold[1])
-        return 'PASS' if passes else 'FAIL'
+        return spec.QC.PASS if passes else spec.QC.FAIL
 
     def find_face(self, roi=None, test=False, metric=cv2.TM_CCOEFF_NORMED, refs=None):
         """Use template matching to find face location in frame
@@ -1231,9 +1230,9 @@ class CameraQCCamlog(CameraQC):
     def check_camera_times(self):
         """Check that the number of raw camera timestamps matches the number of video frames"""
         if not data_for_keys(('camera_times', 'video'), self.data):
-            return 'NOT_SET'
+            return spec.QC.NOT_SET
         length_match = len(self.data['camera_times']) == self.data['video'].length
-        outcome = 'PASS' if length_match else 'WARNING'
+        outcome = spec.QC.PASS if length_match else spec.QC.WARNING
         # 1 / np.median(np.diff(self.data.camera_times))
         return outcome, len(self.data['camera_times']) - self.data['video'].length
 
