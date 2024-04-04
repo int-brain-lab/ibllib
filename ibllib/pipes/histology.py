@@ -237,24 +237,22 @@ def register_chronic_track(chronic_id, picks=None, one=None, overwrite=False, ch
     :return:
     """
     assert one
-    brain_locations, insertion_histology = register_track(chronic_id, picks=picks, one=one, overwrite=overwrite,
-                                                          channels=channels, brain_atlas=brain_atlas,
-                                                          endpoint='chronic-insertions')
-
-    # Update all the associated probe insertions with the relevant QC and xyz_picks
     chronic = one.alyx.rest('chronic-insertions', 'list', id=chronic_id)[0]
     for probe_id in chronic['probe_insertion']:
         pid = probe_id['id']
-        if picks is None or picks.size == 0:
-            hist_qc = base.QC(pid, one=one, endpoint='insertions')
-            hist_qc.update_extended_qc({'tracing_exists': False})
-            hist_qc.update('CRITICAL', namespace='tracing')
-        else:
-            one.alyx.json_field_update(endpoint='insertions', uuid=pid, field_name='json',
-                                       data={'xyz_picks': np.int32(picks * 1e6).tolist()})
-            # Update the insertion qc to register tracing exits
-            hist_qc = base.QC(pid, one=one, endpoint='insertions')
-            hist_qc.update_extended_qc({'tracing_exists': True})
+        brain_locations, insertion_histology = register_track(pid, picks=picks, one=one, overwrite=overwrite,
+                                                              channels=channels, brain_atlas=brain_atlas)
+
+    if picks is None or picks.size == 0:
+        hist_qc = base.QC(chronic_id, one=one, endpoint='chronic-insertions')
+        hist_qc.update_extended_qc({'tracing_exists': False})
+        hist_qc.update('CRITICAL', namespace='tracing')
+    else:
+        one.alyx.json_field_update(endpoint='chronic-insertions', uuid=chronic_id, field_name='json',
+                                   data={'xyz_picks': np.int32(picks * 1e6).tolist()})
+        # Update the insertion qc to register tracing exits
+        hist_qc = base.QC(chronic_id, one=one, endpoint='chronic-insertions')
+        hist_qc.update_extended_qc({'tracing_exists': True})
 
     return brain_locations, insertion_histology
 
@@ -291,7 +289,14 @@ def register_track(probe_id, picks=None, one=None, overwrite=False, channels=Tru
         insertion_histology = None
         # Here need to change the track qc to critical and also extended qc to zero
     else:
-        brain_locations, insertion_histology = get_brain_regions(picks, brain_atlas=brain_atlas)
+        try:
+            eid, pname = one.pid2eid(probe_id)
+            chan_pos = one.load_dataset(eid, 'channels.localCoordinates.npy', collection=f'alf/{pname}/pykilosort')
+        except Exception:
+            chan_pos = None
+
+        brain_locations, insertion_histology = get_brain_regions(picks, channels_positions=chan_pos,
+                                                                 brain_atlas=brain_atlas)
         # 1) update the alyx models, first put the picked points in the insertion json
         one.alyx.json_field_update(endpoint=endpoint, uuid=probe_id, field_name='json',
                                    data={'xyz_picks': np.int32(picks * 1e6).tolist()})
@@ -391,8 +396,10 @@ def create_trajectory_dict(probe_id, insertion, provenance, endpoint='insertions
              }
     if endpoint == 'chronic-insertions':
         tdict['chronic_insertion'] = probe_id
+        tdict['probe_insertion'] = None
     else:
         tdict['probe_insertion'] = probe_id
+        tdict['chronic_insertion'] = None
 
     return tdict
 

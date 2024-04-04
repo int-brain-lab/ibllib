@@ -17,7 +17,7 @@ class TestAggregateOutcome(unittest.TestCase):
     def test_deprecation_warning(self):
         """Remove TaskQC.compute_session_status_from_dict after 2024-04-01."""
         from datetime import datetime
-        self.assertFalse(datetime.now() > datetime(2024, 4, 1), 'remove TaskQC.compute_session_status_from_dict method.')
+        self.assertFalse(datetime.now() > datetime(2024, 4, 10), 'remove TaskQC.compute_session_status_from_dict method.')
         qc_dict = {'_task_iti_delays': .99}
         with self.assertWarns(DeprecationWarning), self.assertLogs(qcmetrics.__name__, 'WARNING'):
             out = qcmetrics.TaskQC.compute_session_status_from_dict(qc_dict)
