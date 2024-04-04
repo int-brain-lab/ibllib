@@ -1,3 +1,13 @@
+## Release Note 2.4.0
+
+## features
+- Datasets no longer registered by default if protected, need to force registration
+- Tasks now allows datasets to be registered before qc computation
+- Histology channel upload now reads in channel map from data when available
+
+## bugfixes
+- PostDLC tasks looks in alf folder for lick datasets
+
 ## Release Notes 2.32
 
 ## features
