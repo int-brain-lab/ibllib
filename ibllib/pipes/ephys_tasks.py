@@ -11,6 +11,7 @@ import pandas as pd
 import spikeglx
 import neuropixel
 from ibldsp.utils import rms
+from ibldsp.waveform_extraction import extract_wfs_cbin
 import one.alf.io as alfio
 
 from ibllib.misc import check_nvidia_driver
@@ -679,6 +680,16 @@ class SpikeSorting(base_tasks.EphysTask):
                 tar_dir.mkdir(parents=True, exist_ok=True)
                 out = spikes.ks2_to_tar(ks2_dir, tar_dir, force=self.FORCE_RERUN)
                 out_files.extend(out)
+
+                # run waveform extraction
+                wf_npy_file = probe_out_path.joinpath("clusters.raw_waveforms.npy")
+                spike_times = np.load(probe_out_path.joinpath("spikes.samples.npy"))
+                spike_clusters = np.load(probe_out_path.joinpath("spikes.clusters.npy"))
+                cluster_channels = np.load(probe_out_path.joinpath("clusters.channels.npy"))
+                spike_channels = cluster_channels[spike_clusters]
+                extract_wfs_cbin(
+                    ap_file, wf_npy_file, spike_times, spike_clusters, spike_channels
+                )
 
                 if self.one:
                     eid = self.one.path2eid(self.session_path, query_type='remote')
