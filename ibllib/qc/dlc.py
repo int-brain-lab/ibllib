@@ -108,7 +108,7 @@ class DlcQC(base.QC):
         self.data['dlc_coords'] = dlc_coords
 
         # load stim on times
-        trial_path = next(alf_path.rglob(f'*trials.table*')).parent
+        trial_path = next(alf_path.rglob('*trials.table*')).parent
         self.data['stimOn_times'] = alfio.load_object(trial_path, 'trials', namespace='ibl')['stimOn_times']
 
         # load pupil diameters

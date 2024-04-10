@@ -431,7 +431,8 @@ class MotionAlignmentFullSession:
 
         alf_path = self.session_path.joinpath('alf')
         wheel_path = next(alf_path.rglob('*wheel.timestamps*')).parent
-        wheel = (fix_keys(alfio.load_object(wheel_path, 'wheel')) if location == 'SDSC' else alfio.load_object(wheel_path, 'wheel'))
+        wheel = (fix_keys(alfio.load_object(wheel_path, 'wheel')) if location == 'SDSC'
+                 else alfio.load_object(wheel_path, 'wheel'))
         self.wheel_timestamps = wheel.timestamps
         # Compute interpolated wheel position and wheel times
         wheel_pos, self.wheel_time = wh.interpolate_position(wheel.timestamps, wheel.position, freq=1000)
