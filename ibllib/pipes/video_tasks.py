@@ -506,7 +506,7 @@ class EphysPostDLC(base_tasks.VideoTask):
             if exist and overwrite:
                 _logger.warning('EphysPostDLC outputs exist and overwrite=True, overwriting existing outputs.')
             # Find all available DLC files
-            dlc_files = list(Path(self.session_path).joinpath('alf').glob('_ibl_*Camera.dlc.*'))
+            dlc_files = list(Path(self.session_path).joinpath('alf').rglob('_ibl_*Camera.dlc.*'))
             for dlc_file in dlc_files:
                 _logger.debug(dlc_file)
             output_files = []
@@ -521,7 +521,7 @@ class EphysPostDLC(base_tasks.VideoTask):
                     dlc_thresh = likelihood_threshold(dlc, 0.9)
                     # try to load respective camera times
                     try:
-                        dlc_t = np.load(next(Path(self.session_path).joinpath('alf').glob(f'_ibl_{cam}Camera.times.*npy')))
+                        dlc_t = np.load(next(Path(self.session_path).joinpath('alf').rglob(f'_ibl_{cam}Camera.times.*npy')))
                         times = True
                         if dlc_t.shape[0] == 0:
                             _logger.error(f'camera.times empty for {cam} camera. '

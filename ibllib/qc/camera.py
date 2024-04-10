@@ -1137,8 +1137,9 @@ class CameraQCCamlog(CameraQC):
         alf_path = self.session_path / 'alf'
         try:
             assert not extract_times
+            cam_path = next(alf_path.rglob(f'*{self.label}Camera.times*')).parent
             self.data['timestamps'] = alfio.load_object(
-                alf_path, f'{self.label}Camera', short_keys=True)['times']
+                cam_path, f'{self.label}Camera', short_keys=True)['times']
         except AssertionError:  # Re-extract
             kwargs = dict(video_path=self.video_path, labels=self.label)
             if self.sync == 'bpod':
@@ -1154,8 +1155,8 @@ class CameraQCCamlog(CameraQC):
         wheel_keys = ('timestamps', 'position')
         try:
             # glob in case wheel data are in sub-collections
-            alf_path = next(alf_path.rglob('*wheel.timestamps*')).parent
-            self.data['wheel'] = alfio.load_object(alf_path, 'wheel', short_keys=True)
+            wheel_path = next(alf_path.rglob('*wheel.timestamps*')).parent
+            self.data['wheel'] = alfio.load_object(wheel_path, 'wheel', short_keys=True)
         except ALFObjectNotFound:
             # Extract from raw data
             if self.sync != 'bpod':
