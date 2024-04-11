@@ -5,6 +5,8 @@ import logging
 import itertools
 
 from packaging import version
+from requests import HTTPError
+
 from one.alf.files import get_session_path, folder_parts, get_alf_path
 from one.registration import RegistrationClient, get_dataset_type
 from one.remote.globus import get_local_endpoint_id, get_lab_from_endpoint_id
@@ -81,17 +83,29 @@ def register_dataset(file_list, one=None, exists=False, versions=None, **kwargs)
     client = IBLRegistrationClient(one)
 
     # Check for protected datasets
+    def _get_protected(pr_status):
+        if isinstance(protected_status, list):
+            pr = any(d['status_code'] == 403 for d in pr_status)
+        else:
+            pr = protected_status['status_code'] == 403
+
+        return pr
+
     # Account for cases where we are connected to cortex lab database
     if one.alyx.base_url == 'https://alyx.cortexlab.net':
-        protected_status = IBLRegistrationClient(
-            ONE(base_url='https://alyx.internationalbrainlab.org', mode='remote')).check_protected_files(file_list)
+        try:
+            protected_status = IBLRegistrationClient(
+                ONE(base_url='https://alyx.internationalbrainlab.org', mode='remote')).check_protected_files(file_list)
+            protected = _get_protected(protected_status)
+        except HTTPError as err:
+            if "[Errno 500] /check-protected: 'A base session for" in str(err):
+                # If we get an error due to the session not existing, we take this to mean no datasets are protected
+                protected = False
+            else:
+                raise err
     else:
         protected_status = client.check_protected_files(file_list)
-
-    if isinstance(protected_status, list):
-        protected = any(d['status_code'] == 403 for d in protected_status)
-    else:
-        protected = protected_status['status_code'] == 403
+        protected = _get_protected(protected_status)
 
     # If we find a protected dataset, and we don't have a force=True flag, raise an error
     if protected and not kwargs.pop('force', False):
