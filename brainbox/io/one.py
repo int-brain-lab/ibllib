@@ -1079,6 +1079,8 @@ class SpikeSortingLoader:
         if self._sync is None:
             timestamps = self.one.load_dataset(
                 self.eid, dataset='_spikeglx_*.timestamps.npy', collection=f'raw_ephys_data/{self.pname}')
+            _ = self.one.load_dataset(  # this is not used here but we want to trigger the download for potential tasks
+                self.eid, dataset='_spikeglx_*.sync.npy', collection=f'raw_ephys_data/{self.pname}')
             try:
                 ap_meta = spikeglx.read_meta_data(self.one.load_dataset(
                     self.eid, dataset='_spikeglx_*.ap.meta', collection=f'raw_ephys_data/{self.pname}'))

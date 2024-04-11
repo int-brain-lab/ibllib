@@ -605,7 +605,6 @@ class SpikeSorting(base_tasks.EphysTask):
         if temp_dir.exists():  # hmmm this has to be decided, we may want to restart ?
             # But failed sessions may then clog the scratch dir and have users run out of space
             shutil.rmtree(temp_dir, ignore_errors=True)
-        log_file = temp_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log")
         _logger.info(f"job progress command: tail -f {temp_dir} *.log")
         temp_dir.mkdir(parents=True, exist_ok=True)
         check_nvidia_driver()
