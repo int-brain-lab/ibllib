@@ -93,9 +93,11 @@ class DlcQC(base.QC):
         alf_path = self.session_path / 'alf'
 
         # Load times
-        self.data['camera_times'] = alfio.load_object(alf_path, f'{self.side}Camera')['times']
+        cam_path = next(alf_path.rglob(f'*{self.side}Camera.times*')).parent
+        self.data['camera_times'] = alfio.load_object(cam_path, f'{self.side}Camera')['times']
         # Load dlc traces
-        dlc_df = alfio.load_object(alf_path, f'{self.side}Camera', namespace='ibl')['dlc']
+        dlc_path = next(alf_path.rglob(f'*{self.side}Camera.dlc*')).parent
+        dlc_df = alfio.load_object(dlc_path, f'{self.side}Camera', namespace='ibl')['dlc']
         targets = np.unique(['_'.join(col.split('_')[:-1]) for col in dlc_df.columns])
         # Set values to nan if likelihood is too low
         dlc_coords = {}
@@ -106,11 +108,13 @@ class DlcQC(base.QC):
         self.data['dlc_coords'] = dlc_coords
 
         # load stim on times
-        self.data['stimOn_times'] = alfio.load_object(alf_path, 'trials', namespace='ibl')['stimOn_times']
+        trial_path = next(alf_path.rglob('*trials.table*')).parent
+        self.data['stimOn_times'] = alfio.load_object(trial_path, 'trials', namespace='ibl')['stimOn_times']
 
         # load pupil diameters
         if self.side in ['left', 'right']:
-            features = alfio.load_object(alf_path, f'{self.side}Camera', namespace='ibl')['features']
+            feat_path = next(alf_path.rglob(f'*{self.side}Camera.features*')).parent
+            features = alfio.load_object(feat_path, f'{self.side}Camera', namespace='ibl')['features']
             self.data['pupilDiameter_raw'] = features['pupilDiameter_raw']
             self.data['pupilDiameter_smooth'] = features['pupilDiameter_smooth']
 

@@ -1,3 +1,13 @@
+## Release Note 2.34.0
+
+## features
+- Task assert_expected_input now take into account revisions
+- Camera qc and video motion now take into account dynamic pipeline folder
+
+## bugfixes
+- Typo in raw_ephys_data documentation
+- oneibl.register_datasets accounts for non existing sessions when checking protected dsets
+
 ## Release Note 2.33.0
 
 ## features

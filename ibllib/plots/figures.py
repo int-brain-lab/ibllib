@@ -783,19 +783,15 @@ def dlc_qc_plot(session_path, one=None, device_collection='raw_video_data',
     assert any(data[f'{cam}_times'] is not None for cam in cameras), "No camera times data could be loaded, aborting."
 
     # Load session level data
-    for alf_object in ['trials', 'wheel', 'licks']:
+    for alf_object, collection in zip(['trials', 'wheel', 'licks'], [trials_collection, trials_collection, 'alf']):
         try:
-            if alf_object == 'licks':
-                data[f'{alf_object}'] = alfio.load_object(session_path.joinpath('alf'),
-                                                          alf_object)  # load locally
-            else:
-                data[f'{alf_object}'] = alfio.load_object(session_path.joinpath(trials_collection), alf_object)  # load locally
+            data[f'{alf_object}'] = alfio.load_object(session_path.joinpath(collection), alf_object)  # load locally
             continue
         except ALFObjectNotFound:
             pass
         try:
             # then try from alyx
-            data[f'{alf_object}'] = one.load_object(one.path2eid(session_path), alf_object, collection=trials_collection)
+            data[f'{alf_object}'] = one.load_object(one.path2eid(session_path), alf_object, collection=collection)
         except ALFObjectNotFound:
             logger.warning(f"Could not load {alf_object} object, some plots have to be skipped.")
             data[f'{alf_object}'] = None
