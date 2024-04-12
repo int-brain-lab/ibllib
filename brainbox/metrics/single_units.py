@@ -1021,16 +1021,26 @@ def compute_labels(r, params=METRICS_PARAMS, return_details=False):
     :return: vector of proportion of qcs passed between 0 and 1, where 1 denotes an all pass
     """
     # right now the score is a value between 0 and 1 denoting the proportion of passing qcs
-    # we could eventually do a bitwise qc
     labels = np.c_[
         r.slidingRP_viol,
         r.noise_cutoff < params['noise_cutoff']['nc_threshold'],
         r.amp_median > params['med_amp_thresh_uv'] / 1e6,
     ]
+
+    # The first column takes binary values 000 or 001 to represent fail or pass,
+    # the second, 010 or 000, the third, 100 or 000 etc.
+    # The bitwise or "sum" produces 111 if all metrics pass, or 000 if all metrics fail
+    # All other permutations are also captured, i.e. 110 ==  000 || 010 || 100 means
+    # the second and third metrics passed but the first metric was a fail
+    n_criteria = labels.shape[1]
+    powers2 = np.array([2**i for i in range(n_criteria)]).T
     if not return_details:
-        return np.mean(labels, axis=1)
+        # note the cast to uint8 casts nan to 0
+        # a nan implies no metrics was computed which we mark as a failure here
+        return np.bitwise_or.reduce(powers2 * labels.astype(np.uint8), axis=1)
+
     column_names = ['slidingRP_viol', 'noise_cutoff', 'amp_median']
     qcdict = {}
     for c in np.arange(labels.shape[1]):
         qcdict[column_names[c]] = labels[:, c]
-    return np.mean(labels, axis=1), qcdict
+    return labels, qcdict
