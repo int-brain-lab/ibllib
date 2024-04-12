@@ -942,7 +942,11 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
         'presence_ratio',
         'presence_ratio_std',
         'slidingRP_viol',
-        'spike_count'
+        'spike_count',
+        'slidingRP_viol_forced',
+        'max_confidence',
+        'min_contamination',
+        'n_spikes_below2'
     ]
     if tbounds:
         ispi = between_sorted(spike_times, tbounds)
