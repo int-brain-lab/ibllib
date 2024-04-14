@@ -682,13 +682,12 @@ class SpikeSorting(base_tasks.EphysTask):
 
                 # run waveform extraction
                 _logger.info("Running waveform extraction")
-                wf_npy_file = probe_out_path.joinpath("clusters.raw_waveforms.npy")
                 spike_times = np.load(probe_out_path.joinpath("spikes.samples.npy"))
                 spike_clusters = np.load(probe_out_path.joinpath("spikes.clusters.npy"))
                 cluster_channels = np.load(probe_out_path.joinpath("clusters.channels.npy"))
                 spike_channels = cluster_channels[spike_clusters]
                 extract_wfs_cbin(
-                    ap_file, wf_npy_file, spike_times, spike_clusters, spike_channels
+                    ap_file, probe_out_path, spike_times, spike_clusters, spike_channels
                 )
 
                 if self.one:
