@@ -8,6 +8,9 @@
 - Typo in raw_ephys_data documentation
 - oneibl.register_datasets accounts for non existing sessions when checking protected dsets
 
+#### 2.34.1
+- Ensure mesoscope frame QC files are sorted before concatenating 
+
 ## Release Note 2.33.0
 
 ## features
