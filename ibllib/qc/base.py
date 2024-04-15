@@ -12,10 +12,12 @@ SIGN_OFF_CATEGORIES = {'neuropixel': ['raw', 'spike_sorting', 'alignment']}
 
 
 class QC:
-    """A base class for data quality control"""
+    """A base class for data quality control."""
 
     def __init__(self, endpoint_id, one=None, log=None, endpoint='sessions'):
         """
+        A base class for data quality control.
+
         :param endpoint_id: Eid for endpoint. If using sessions can also be a session path
         :param log: A logging.Logger instance, if None the 'ibllib' logger is used
         :param one: An ONE instance for fetching and setting the QC on Alyx
@@ -38,15 +40,17 @@ class QC:
 
     @abstractmethod
     def run(self):
-        """Run the QC tests and return the outcome
+        """Run the QC tests and return the outcome.
+
         :return: One of "CRITICAL", "FAIL", "WARNING" or "PASS"
         """
         pass
 
     @abstractmethod
     def load_data(self):
-        """Load the data required to compute the QC
-        Subclasses may implement this for loading raw data
+        """Load the data required to compute the QC.
+
+        Subclasses may implement this for loading raw data.
         """
         pass
 
@@ -85,7 +89,8 @@ class QC:
         return agg(map(spec.QC.validate, outcomes))
 
     def _set_eid_or_path(self, session_path_or_eid):
-        """Parse a given eID or session path
+        """Parse a given eID or session path.
+
         If a session UUID is given, resolves and stores the local path and vice versa
         :param session_path_or_eid: A session eid or path
         :return:
@@ -215,9 +220,7 @@ class QC:
         return out
 
     def compute_outcome_from_extended_qc(self) -> str:
-        """
-        Returns the session outcome computed from aggregating the extended QC
-        """
+        """Return the session outcome computed from aggregating the extended QC."""
         details = self.one.alyx.get(f'/{self.endpoint}/{self.eid}', clobber=True)
         extended_qc = details['json']['extended_qc'] if self.json else details['extended_qc']
         return self.overall_outcome(v for k, v in extended_qc.items() or {} if k[0] != '_')
@@ -225,6 +228,8 @@ class QC:
 
 def sign_off_dict(exp_dec, sign_off_categories=None):
     """
+    Create sign off dictionary.
+
     Creates a dict containing 'sign off' keys for each device and task protocol in the provided
     experiment description.
 
