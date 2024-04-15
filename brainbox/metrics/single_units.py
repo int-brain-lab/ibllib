@@ -1009,7 +1009,7 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
         r.missed_spikes_est[ic], _, _ = missed_spikes_est(amps, **params['missed_spikes_est'])
         # wonder if there is a need to low-cut this
         r.drift[ic] = np.sum(np.abs(np.diff(depths))) / (tmax - tmin) * 3600
-    r.label, r.bitwise_labels = compute_labels(r, return_bitwise=True)
+    r.label, r.bitwise_fail = compute_labels(r, return_bitwise=True)
     return r
 
 
@@ -1023,9 +1023,10 @@ def compute_labels(r, params=METRICS_PARAMS, return_bitwise=False):
     # right now the score is a value between 0 and 1 denoting the proportion of passing qcs,
     # where 1 means passing and 0 means failing
     labels = np.c_[
-        r['max_confidence'] >= params['RPmax_confidence'],
+        r['max_confidence'] >= params['RPmax_confidence'],  # this is the least significant bit
         r.noise_cutoff < params['noise_cutoff']['nc_threshold'],
         r.amp_median > params['med_amp_thresh_uv'] / 1e6,
+        # add a new metric here on higher significant bits
     ]
     # The first column takes binary values 001 or 000 to represent fail or pass,
     # the second, 010 or 000, the third, 100 or 000 etc.
