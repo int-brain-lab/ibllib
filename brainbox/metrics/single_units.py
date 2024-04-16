@@ -1039,6 +1039,6 @@ def compute_labels(r, params=METRICS_PARAMS, return_bitwise=False):
         # a nan implies no metrics was computed which we mark as a failure here
         n_criteria = labels.shape[1]
         bitwise = np.bitwise_or.reduce(2 ** np.arange(n_criteria) * (~ labels.astype(bool)).astype(np.uint8), axis=1)
-        return score, bitwise
+        return score, bitwise.astype(np.uint8)
     else:
         return score
