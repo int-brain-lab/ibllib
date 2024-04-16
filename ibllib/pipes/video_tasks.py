@@ -1,5 +1,6 @@
 import logging
 import subprocess
+import time
 import traceback
 from pathlib import Path
 
@@ -725,4 +726,3 @@ class LightningPose(base_tasks.VideoTask):
                 continue
 
         return actual_outputs
-
