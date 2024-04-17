@@ -696,7 +696,7 @@ class LightningPose(base_tasks.VideoTask):
                     self.status = -1
                     continue
                 t0 = time.time()
-                _logger.info(f'Running Ligthning Pose on {label}Camera.')
+                _logger.info(f'Running Lightning Pose on {label}Camera.')
                 command2run = f"{self.scripts.joinpath('run_litpose.sh')} {str(self.env)} {mp4_file} {overwrite}"
                 _logger.info(command2run)
                 process = subprocess.Popen(
