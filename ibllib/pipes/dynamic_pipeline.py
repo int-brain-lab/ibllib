@@ -474,6 +474,9 @@ def get_trials_tasks(session_path, one=None):
     # Check for an experiment.description file; ensure downloaded if possible
     if one and one.to_eid(session_path):  # to_eid returns None if session not registered
         one.load_datasets(session_path, ['_ibl_experiment.description'], download_only=True, assert_present=False)
+        # NB: meta files only required to build neuropixel tasks in make_pipeline
+        if meta_files := one.list_datasets(session_path, '*.ap.meta', collection='raw_ephys_data*'):
+            one.load_datasets(session_path, meta_files, download_only=True, assert_present=False)
     experiment_description = sess_params.read_params(session_path)
 
     # If experiment description file then use this to make the pipeline
