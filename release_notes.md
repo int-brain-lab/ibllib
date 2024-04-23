@@ -8,6 +8,11 @@
 - Typo in raw_ephys_data documentation
 - oneibl.register_datasets accounts for non existing sessions when checking protected dsets
 
+#### 2.34.1
+- Ensure mesoscope frame QC files are sorted before concatenating 
+- Look for SESSION_TEMPLATE_ID key of task settings for extraction of pre-generated choice world sequences
+- Download required ap.meta files when building pipeline for task_qc command
+
 ## Release Note 2.33.0
 
 ## features

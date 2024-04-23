@@ -14,7 +14,7 @@ from time import time
 
 from one.api import ONE
 from one.webclient import AlyxClient
-from one.util import filter_datasets
+from one.util import filter_datasets, ensure_list
 from one.alf.files import add_uuid_string, session_path_parts
 from ibllib.oneibl.registration import register_dataset, get_lab, get_local_data_repository
 from ibllib.oneibl.patcher import FTPPatcher, SDSCPatcher, SDSC_ROOT_PATH, SDSC_PATCH_PATH
@@ -140,8 +140,7 @@ class ServerDataHandler(DataHandler):
         versions = super().uploadData(outputs, version)
         data_repo = get_local_data_repository(self.one.alyx)
         # If clobber = False, do not re-upload the outputs that have already been processed
-        if not isinstance(outputs, list):
-            outputs = [outputs]
+        outputs = ensure_list(outputs)
         to_upload = list(filter(None if clobber else lambda x: x not in self.processed, outputs))
         records = register_dataset(to_upload, one=self.one, versions=versions, repository=data_repo, **kwargs) or []
         if kwargs.get('dry', False):

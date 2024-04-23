@@ -71,7 +71,8 @@ except ImportError:
 
 
 class CameraQC(base.QC):
-    """A class for computing camera QC metrics"""
+    """A class for computing camera QC metrics."""
+
     dstypes = [
         '_ibl_experiment.description',
         '_iblrig_Camera.frameData',  # Replaces the next 3 datasets
@@ -123,6 +124,8 @@ class CameraQC(base.QC):
 
     def __init__(self, session_path_or_eid, camera, **kwargs):
         """
+        Compute and view camera QC metrics.
+
         :param session_path_or_eid: A session id or path
         :param camera: The camera to run QC on, if None QC is run for all three cameras
         :param n_samples: The number of frames to sample for the position and brightness QC
@@ -173,6 +176,7 @@ class CameraQC(base.QC):
     def type(self):
         """
         Returns the camera type based on the protocol.
+
         :return: Returns either None, 'ephys' or 'training'
         """
         if not self._type:
@@ -181,7 +185,8 @@ class CameraQC(base.QC):
             return 'ephys' if 'ephys' in self._type else 'training'
 
     def load_data(self, download_data: bool = None, extract_times: bool = False, load_video: bool = True) -> None:
-        """Extract the data from raw data files
+        """Extract the data from raw data files.
+
         Extracts all the required task data from the raw data files.
 
         Data keys:
@@ -299,7 +304,11 @@ class CameraQC(base.QC):
             self.load_video_data()
 
     def load_video_data(self):
-        # Get basic properties of video
+        """Get basic properties of video.
+
+        Updates the `data` property with video metadata such as length and frame count, as well as
+        loading some frames to perform QC on.
+        """
         try:
             self.data['video'] = get_video_meta(self.video_path, one=self.one)
             # Sample some frames from the video file
@@ -314,8 +323,11 @@ class CameraQC(base.QC):
     @staticmethod
     def get_active_wheel_period(wheel, duration_range=(3., 20.), display=False):
         """
-        Attempts to find a period of movement where the wheel accelerates and decelerates for
-        the wheel motion alignment QC.
+        Find period of active wheel movement.
+
+        Attempts to find a period of movement where the wheel accelerates and decelerates for the
+        wheel motion alignment QC.
+
         :param wheel: A Bunch of wheel timestamps and position data
         :param duration_range: The candidates must be within min/max duration range
         :param display: If true, plot the selected wheel movement
@@ -340,13 +352,17 @@ class CameraQC(base.QC):
         return edges[i]
 
     def ensure_required_data(self):
-        """
-        Ensures the datasets required for QC are local.  If the download_data attribute is True,
-        any missing data are downloaded.  If all the data are not present locally at the end of
-        it an exception is raised.  If the stream attribute is True, the video file is not
-        required to be local, however it must be remotely accessible.
+        """Ensure the datasets required for QC are local.
+
+        If the download_data attribute is True, any missing data are downloaded.  If all the data
+        are not present locally at the end of it an exception is raised.  If the stream attribute
+        is True, the video file is not required to be local, however it must be remotely accessible.
         NB: Requires a valid instance of ONE and a valid session eid.
-        :return:
+
+        Raises
+        ------
+        AssertionError
+            The data requires for complete QC are not present.
         """
         assert self.one is not None, 'ONE required to download data'
 
@@ -443,14 +459,15 @@ class CameraQC(base.QC):
 
     def _update_meta_from_session_params(self, sess_params):
         """
-        Update the default expected video properties with those defined in the experiment
-        description file (if any).  This updates the `video_meta` property with the fps, width and
-        height for the type and camera label.
+        Update the default expected video properties.
+
+        Use properties defined in the experiment description file, if present.  This updates the
+        `video_meta` property with the fps, width and height for the type and camera label.
 
         Parameters
         ----------
         sess_params : dict
-            The loaded experiment.description file.
+            The loaded experiment description file.
         """
         try:
             assert sess_params
@@ -470,7 +487,8 @@ class CameraQC(base.QC):
 
     def run(self, update: bool = False, **kwargs) -> (str, dict):
         """
-        Run video QC checks and return outcome
+        Run video QC checks and return outcome.
+
         :param update: if True, updates the session QC fields on Alyx
         :param download_data: if True, downloads any missing data if required
         :param extract_times: if True, re-extracts the camera timestamps from the raw data
@@ -493,7 +511,7 @@ class CameraQC(base.QC):
         # print(classe)
 
         checks = getmembers(self.__class__, is_metric)
-        checks = self.remove_check(checks)
+        checks = self._remove_check(checks)
         self.metrics = {f'_{namespace}_' + k[6:]: fn(self) for k, fn in checks}
 
         values = [x if isinstance(x, spec.QC) else x[0] for x in self.metrics.values()]
@@ -508,7 +526,20 @@ class CameraQC(base.QC):
             self.update(outcome, namespace)
         return outcome, self.metrics
 
-    def remove_check(self, checks):
+    def _remove_check(self, checks):
+        """
+        Remove one or more check functions from QC checklist.
+
+        Parameters
+        ----------
+        checks : list of tuple
+            The complete list of check function name and handle.
+
+        Returns
+        -------
+        list of tuple
+            The list of check function name and handle, sans names in `checks_to_remove` property.
+        """
         if len(self.checks_to_remove) == 0:
             return checks
         else:
@@ -519,9 +550,10 @@ class CameraQC(base.QC):
             return checks
 
     def check_brightness(self, bounds=(40, 200), max_std=20, roi=True, display=False):
-        """Check that the video brightness is within a given range
+        """Check that the video brightness is within a given range.
+
         The mean brightness of each frame must be with the bounds provided, and the standard
-        deviation across samples frames should be less then the given value.  Assumes that the
+        deviation across samples frames should be less than the given value.  Assumes that the
         frame samples are 2D (no colour channels).
 
         :param bounds: For each frame, check that: bounds[0] < M < bounds[1],
@@ -584,14 +616,14 @@ class CameraQC(base.QC):
         return self.overall_outcome([warn_range, fail_range])
 
     def check_file_headers(self):
-        """Check reported frame rate matches FPGA frame rate"""
+        """Check reported frame rate matches FPGA frame rate."""
         if None in (self.data['video'], self.video_meta):
             return spec.QC.NOT_SET
         expected = self.video_meta[self.type][self.label]
         return spec.QC.PASS if self.data['video']['fps'] == expected['fps'] else spec.QC.FAIL
 
     def check_framerate(self, threshold=1.):
-        """Check camera times match specified frame rate for camera
+        """Check camera times match specified frame rate for camera.
 
         :param threshold: The maximum absolute difference between timestamp sample rate and video
         frame rate.  NB: Does not take into account dropped frames.
@@ -603,7 +635,7 @@ class CameraQC(base.QC):
         return spec.QC.PASS if abs(Fs - fps) < threshold else spec.QC.FAIL, float(round(Fs, 3))
 
     def check_pin_state(self, display=False):
-        """Check the pin state reflects Bpod TTLs"""
+        """Check the pin state reflects Bpod TTLs."""
         if not data_for_keys(('video', 'pin_state', 'audio'), self.data):
             return spec.QC.NOT_SET
         size_diff = int(self.data['pin_state'].shape[0] - self.data['video']['length'])
@@ -631,7 +663,7 @@ class CameraQC(base.QC):
         return outcome, ndiff_low2high, size_diff
 
     def check_dropped_frames(self, threshold=.1):
-        """Check how many frames were reported missing
+        """Check how many frames were reported missing.
 
         :param threshold: The maximum allowable percentage of dropped frames
         """
@@ -654,7 +686,7 @@ class CameraQC(base.QC):
         return outcome, int(sum(dropped)), size_diff
 
     def check_timestamps(self):
-        """Check that the camera.times array is reasonable"""
+        """Check that the camera.times array is reasonable."""
         if not data_for_keys(('timestamps', 'video'), self.data):
             return spec.QC.NOT_SET
         # Check number of timestamps matches video
@@ -666,7 +698,7 @@ class CameraQC(base.QC):
         return spec.QC.PASS if increasing and length_matches and nanless else spec.QC.FAIL
 
     def check_camera_times(self):
-        """Check that the number of raw camera timestamps matches the number of video frames"""
+        """Check that the number of raw camera timestamps matches the number of video frames."""
         if not data_for_keys(('bonsai_times', 'video'), self.data):
             return spec.QC.NOT_SET
         length_match = len(self.data['camera_times']) == self.data['video'].length
@@ -675,7 +707,7 @@ class CameraQC(base.QC):
         return outcome, len(self.data['camera_times']) - self.data['video'].length
 
     def check_resolution(self):
-        """Check that the timestamps and video file resolution match what we expect"""
+        """Check that the timestamps and video file resolution match what we expect."""
         if self.data['video'] is None:
             return spec.QC.NOT_SET
         actual = self.data['video']
@@ -684,7 +716,7 @@ class CameraQC(base.QC):
         return spec.QC.PASS if match else spec.QC.FAIL
 
     def check_wheel_alignment(self, tolerance=(1, 2), display=False):
-        """Check wheel motion in video correlates with the rotary encoder signal
+        """Check wheel motion in video correlates with the rotary encoder signal.
 
         Check is skipped for body camera videos as the wheel is often obstructed
 
@@ -750,7 +782,8 @@ class CameraQC(base.QC):
     def check_position(self, hist_thresh=(75, 80), pos_thresh=(10, 15),
                        metric=cv2.TM_CCOEFF_NORMED,
                        display=False, test=False, roi=None, pct_thresh=True):
-        """Check camera is positioned correctly
+        """Check camera is positioned correctly.
+
         For the template matching zero-normalized cross-correlation (default) should be more
         robust to exposure (which we're not checking here).  The L2 norm (TM_SQDIFF) should
         also work.
@@ -859,7 +892,8 @@ class CameraQC(base.QC):
 
     def check_focus(self, n=20, threshold=(100, 6),
                     roi=False, display=False, test=False, equalize=True):
-        """Check video is in focus
+        """Check video is in focus.
+
         Two methods are used here: Looking at the high frequencies with a DFT and
         applying a Laplacian HPF and looking at the variance.
 
@@ -873,17 +907,29 @@ class CameraQC(base.QC):
             - Focus check thrown off by brightness.  This may be fixed by equalizing the histogram
               (set equalize=True)
 
-        :param n: number of frames from frame_samples data to use in check.
-        :param threshold: the lower boundary for Laplacian variance and mean FFT filtered
-         brightness, respectively
-        :param roi: if False, the roi is determined via template matching for the face or body.
-        If None, some set ROIs for face and paws are used.  A list of slices may also be passed.
-        :param display: if true, the results are displayed
-        :param test: if true, a set of artificially blurred reference frames are used as the
-        input.  This can be used to selecting reasonable thresholds.
-        :param equalize: if true, the histograms of the frames are equalized, resulting in an
-        increased the global contrast and linear CDF.  This makes check robust to low light
-        conditions.
+        Parameters
+        ----------
+        n : int
+            Number of frames from frame_samples data to use in check.
+        threshold : tuple of float
+            The lower boundary for Laplacian variance and mean FFT filtered brightness,
+            respectively.
+        roi : bool, None, list of slice
+            If False, the roi is determined via template matching for the face or body.
+            If None, some set ROIs for face and paws are used.  A list of slices may also be passed.
+        display : bool
+            If true, the results are displayed.
+        test : bool
+            If true, a set of artificially blurred reference frames are used as the input. This can
+            be used to selecting reasonable thresholds.
+        equalize : bool
+            If true, the histograms of the frames are equalized, resulting in an increased the
+            global contrast and linear CDF.  This makes check robust to low light conditions.
+
+        Returns
+        -------
+        one.spec.QC
+            The QC outcome, either FAIL or PASS.
         """
         no_frames = self.data['frame_samples'] is None or len(self.data['frame_samples']) == 0
         if not test and no_frames:
@@ -995,7 +1041,8 @@ class CameraQC(base.QC):
         return spec.QC.PASS if passes else spec.QC.FAIL
 
     def find_face(self, roi=None, test=False, metric=cv2.TM_CCOEFF_NORMED, refs=None):
-        """Use template matching to find face location in frame
+        """Use template matching to find face location in frame.
+
         For the template matching zero-normalized cross-correlation (default) should be more
         robust to exposure (which we're not checking here).  The L2 norm (TM_SQDIFF) should
         also work.  That said, normalizing the histograms works best.
@@ -1028,7 +1075,7 @@ class CameraQC(base.QC):
 
     @staticmethod
     def load_reference_frames(side):
-        """Load some reference frames for a given video
+        """Load some reference frames for a given video.
 
         The reference frames are from sessions where the camera was well positioned. The
         frames are in qc/reference, one file per camera, only one channel per frame.  The
@@ -1043,7 +1090,7 @@ class CameraQC(base.QC):
 
     @staticmethod
     def imshow(frame, ax=None, title=None, **kwargs):
-        """plt.imshow with some convenient defaults for greyscale frames"""
+        """plt.imshow with some convenient defaults for greyscale frames."""
         h = ax or plt.gca()
         defaults = {
             'cmap': kwargs.pop('cmap', 'gray'),
@@ -1057,8 +1104,13 @@ class CameraQC(base.QC):
 
 
 class CameraQCCamlog(CameraQC):
-    """A class for computing camera QC metrics from camlog data. For this QC we expect the check_pin_state to be NOT_SET as we are
-    not using the GPIO for timestamp alignment"""
+    """
+    A class for computing camera QC metrics from camlog data.
+
+    For this QC we expect the check_pin_state to be NOT_SET as we are not using the GPIO for
+    timestamp alignment.
+    """
+
     dstypes = [
         '_iblrig_taskData.raw',
         '_iblrig_taskSettings.raw',
@@ -1076,13 +1128,19 @@ class CameraQCCamlog(CameraQC):
     ]
 
     def __init__(self, session_path_or_eid, camera, sync_collection='raw_sync_data', sync_type='nidq', **kwargs):
+        """Compute camera QC metrics from camlog data.
+
+        For this QC we expect the check_pin_state to be NOT_SET as we are not using the GPIO for
+        timestamp alignment.
+        """
         super().__init__(session_path_or_eid, camera, sync_collection=sync_collection, sync_type=sync_type, **kwargs)
         self._type = 'ephys'
         self.checks_to_remove = ['check_pin_state']
 
     def load_data(self, download_data: bool = None,
                   extract_times: bool = False, load_video: bool = True, **kwargs) -> None:
-        """Extract the data from raw data files
+        """Extract the data from raw data files.
+
         Extracts all the required task data from the raw data files.
 
         Data keys:
@@ -1178,13 +1236,12 @@ class CameraQCCamlog(CameraQC):
             self.load_video_data()
 
     def ensure_required_data(self):
-        """
-        Ensures the datasets required for QC are local.  If the download_data attribute is True,
-        any missing data are downloaded.  If all the data are not present locally at the end of
-        it an exception is raised.  If the stream attribute is True, the video file is not
-        required to be local, however it must be remotely accessible.
+        """Ensure the datasets required for QC are local.
+
+        If the download_data attribute is True, any missing data are downloaded.  If all the data
+        are not present locally at the end of it an exception is raised.  If the stream attribute
+        is True, the video file is not required to be local, however it must be remotely accessible.
         NB: Requires a valid instance of ONE and a valid session eid.
-        :return:
         """
         assert self.one is not None, 'ONE required to download data'
 
@@ -1229,7 +1286,7 @@ class CameraQCCamlog(CameraQC):
             assert all_present or not required, f'Dataset {dstype} not found'
 
     def check_camera_times(self):
-        """Check that the number of raw camera timestamps matches the number of video frames"""
+        """Check that the number of raw camera timestamps matches the number of video frames."""
         if not data_for_keys(('camera_times', 'video'), self.data):
             return spec.QC.NOT_SET
         length_match = len(self.data['camera_times']) == self.data['video'].length
@@ -1239,12 +1296,14 @@ class CameraQCCamlog(CameraQC):
 
 
 def data_for_keys(keys, data):
-    """Check keys exist in 'data' dict and contain values other than None"""
+    """Check keys exist in 'data' dict and contain values other than None."""
     return data is not None and all(k in data and data.get(k, None) is not None for k in keys)
 
 
 def get_task_collection(sess_params):
     """
+    Return the first non-passive task collection.
+
     Returns the first task collection from the experiment description whose task name does not
     contain 'passive', otherwise returns 'raw_behavior_data'.
 
@@ -1265,7 +1324,7 @@ def get_task_collection(sess_params):
 
 def get_video_collection(sess_params, label):
     """
-    Returns the collection containing the raw video data for a given camera.
+    Return the collection containing the raw video data for a given camera.
 
     Parameters
     ----------
@@ -1289,8 +1348,10 @@ def get_video_collection(sess_params, label):
 
 
 def run_all_qc(session, cameras=('left', 'right', 'body'), **kwargs):
-    """Run QC for all cameras
+    """Run QC for all cameras.
+
     Run the camera QC for left, right and body cameras.
+
     :param session: A session path or eid.
     :param update: If True, QC fields are updated on Alyx.
     :param cameras: A list of camera names to perform QC on.

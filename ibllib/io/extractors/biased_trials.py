@@ -45,9 +45,10 @@ class ProbaContrasts(BaseBpodTrialsExtractor):
 
     @staticmethod
     def get_pregenerated_events(bpod_trials, settings):
-        num = settings.get("PRELOADED_SESSION_NUM", None)
-        if num is None:
-            num = settings.get("PREGENERATED_SESSION_NUM", None)
+        for k in ['PRELOADED_SESSION_NUM', 'PREGENERATED_SESSION_NUM', 'SESSION_TEMPLATE_ID']:
+            num = settings.get(k, None)
+            if num is not None:
+                break
         if num is None:
             fn = settings.get('SESSION_LOADED_FILE_PATH', '')
             fn = PureWindowsPath(fn).name
