@@ -677,7 +677,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         check_nvidia_driver()
         command2run = f"{self.SHELL_SCRIPT} {ap_file} {temp_dir}"
         try:
-            import pykilosort
+            import pykilosort  # noqa: F401
             os.system(command2run)
         except ImportError:
             _logger.info(command2run)
