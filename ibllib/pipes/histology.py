@@ -278,8 +278,10 @@ def register_track(probe_id, picks=None, one=None, overwrite=False, channels=Tru
                  }
         if endpoint == 'chronic-insertions':
             tdict['chronic_insertion'] = probe_id
+            tdict['probe_insertion'] = None
         else:
             tdict['probe_insertion'] = probe_id
+            tdict['chronic_insertion'] = None
 
         brain_locations = None
         # Update the insertion qc to CRITICAL
