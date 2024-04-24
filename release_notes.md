@@ -1,5 +1,8 @@
 ## Develop
 
+## features
+- Adding LightningPose task
+
 ## bugfixes
 - SessionLoader can now handle trials that are not in the alf collection
 
