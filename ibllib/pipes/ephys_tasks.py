@@ -17,7 +17,8 @@ import one.alf.io as alfio
 from ibllib.misc import check_nvidia_driver
 from ibllib.pipes import base_tasks
 from ibllib.pipes.sync_tasks import SyncPulses
-from ibllib.ephys import ephysqc, spikes
+from ibllib.ephys import ephysqc
+import ibllib.ephys.spikes
 from ibllib.qc.alignment_qc import get_aligned_channels
 from ibllib.plots.figures import LfpPlots, ApPlots, BadChannelsAp
 from ibllib.plots.figures import SpikeSorting as SpikeSortingPlots
@@ -46,7 +47,7 @@ class EphysRegisterRaw(base_tasks.DynamicTask):
 
     def _run(self):
 
-        out_files = spikes.probes_description(self.session_path, self.one)
+        out_files = ibllib.ephys.spikes.probes_description(self.session_path, self.one)
 
         return out_files
 
@@ -489,7 +490,72 @@ class RawEphysQC(base_tasks.EphysTask):
         return qc_files
 
 
-class SpikeSorting(base_tasks.EphysTask):
+class CellQCMixin:
+    """
+    This mixin class is used to compute the cell QC metrics and update the json field of the probe insertion
+    The compute_cell_qc method is static and can be used independently.
+    """
+    @staticmethod
+    def compute_cell_qc(folder_alf_probe):
+        """
+        Computes the cell QC given an extracted probe alf path
+        :param folder_alf_probe: folder
+        :return:
+        """
+        # compute the straight qc
+        _logger.info(f"Computing cluster qc for {folder_alf_probe}")
+        spikes = alfio.load_object(folder_alf_probe, 'spikes')
+        clusters = alfio.load_object(folder_alf_probe, 'clusters')
+        df_units, drift = ephysqc.spike_sorting_metrics(
+            spikes.times, spikes.clusters, spikes.amps, spikes.depths,
+            cluster_ids=np.arange(clusters.channels.size))
+        # if the ks2 labels file exist, load them and add the column
+        file_labels = folder_alf_probe.joinpath('cluster_KSLabel.tsv')
+        if file_labels.exists():
+            ks2_labels = pd.read_csv(file_labels, sep='\t')
+            ks2_labels.rename(columns={'KSLabel': 'ks2_label'}, inplace=True)
+            df_units = pd.concat(
+                [df_units, ks2_labels['ks2_label'].reindex(df_units.index)], axis=1)
+        # save as parquet file
+        df_units.to_parquet(folder_alf_probe.joinpath("clusters.metrics.pqt"))
+        return folder_alf_probe.joinpath("clusters.metrics.pqt"), df_units, drift
+
+    def _label_probe_qc(self, folder_probe, df_units, drift):
+        """
+        Labels the json field of the alyx corresponding probe insertion
+        :param folder_probe:
+        :param df_units:
+        :param drift:
+        :return:
+        """
+        eid = self.one.path2eid(self.session_path, query_type='remote')
+        pdict = self.one.alyx.rest('insertions', 'list', session=eid, name=self.pname, no_cache=True)
+        if len(pdict) != 1:
+            _logger.warning(f'No probe found for probe name: {self.pname}')
+            return
+        isok = df_units['label'] == 1
+        qcdict = {'n_units': int(df_units.shape[0]),
+                  'n_units_qc_pass': int(np.sum(isok)),
+                  'firing_rate_max': np.max(df_units['firing_rate'][isok]),
+                  'firing_rate_median': np.median(df_units['firing_rate'][isok]),
+                  'amplitude_max_uV': np.max(df_units['amp_max'][isok]) * 1e6,
+                  'amplitude_median_uV': np.max(df_units['amp_median'][isok]) * 1e6,
+                  'drift_rms_um': rms(drift['drift_um']),
+                  }
+        file_wm = folder_probe.joinpath('_kilosort_whitening.matrix.npy')
+        if file_wm.exists():
+            wm = np.load(file_wm)
+            qcdict['whitening_matrix_conditioning'] = np.linalg.cond(wm)
+        # groom qc dict (this function will eventually go directly into the json field update)
+        for k in qcdict:
+            if isinstance(qcdict[k], np.int64):
+                qcdict[k] = int(qcdict[k])
+            elif isinstance(qcdict[k], float):
+                qcdict[k] = np.round(qcdict[k], 2)
+        self.one.alyx.json_field_update("insertions", pdict[0]["id"], "json", qcdict)
+
+
+class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
     """
     Pykilosort 2.5 pipeline
     """
@@ -549,8 +615,8 @@ class SpikeSorting(base_tasks.EphysTask):
             line = fid.readline()
         version = re.search('version (.*), output', line)
         version = version or re.search('version (.*)', line)  # old versions have output, new have a version line
-        version = re.sub('\\^[[0-9]+m', '', version.group(1))  # removes the coloring tags
-        return f"pykilosort_{version}"
+        version = version.group(1).replace('\x1b[0m', '')  # remove the color code at the end of the line
+        return version
 
     @staticmethod
     def _fetch_ks2_commit_hash(repo_path):
@@ -582,7 +648,7 @@ class SpikeSorting(base_tasks.EphysTask):
             log_file = sorter_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log")
             if log_file.exists():
                 run_version = self._fetch_pykilosort_run_version(log_file)
-                if packaging.version.parse(run_version) > packaging.version.parse('pykilosort_ibl_1.1.0'):
+                if packaging.version.parse(run_version) >= packaging.version.parse('1.6.0'):
                     _logger.info(f"Already ran: spike_sorting_{self.SPIKE_SORTER_NAME}.log"
                                  f" found in {sorter_dir}, skipping.")
                     return sorter_dir
@@ -641,84 +707,83 @@ class SpikeSorting(base_tasks.EphysTask):
         - Runs ks2 (skips if it already ran)
         - synchronize the spike sorting
         - output the probe description files
-        :param probes: (list of str) if provided, will only run spike sorting for specified probe names
+        - compute the waveforms
         :return: list of files to be registered on database
         """
         efiles = spikeglx.glob_ephys_files(self.session_path.joinpath(self.device_collection, self.pname))
         ap_files = [(ef.get("ap"), ef.get("label")) for ef in efiles if "ap" in ef.keys()]
+        assert len(ap_files) == 1, f"Several bin files found for the same probe {ap_files}"
+        ap_file, label = ap_files[0]
         out_files = []
-        for ap_file, label in ap_files:
-            try:
-                # if the file is part of  a sequence, handles the run accordingly
-                sequence_file = ap_file.parent.joinpath(ap_file.stem.replace('ap', 'sequence.json'))
-                # temporary just skips for now
-                if sequence_file.exists():
-                    continue
-                ks2_dir = self._run_pykilosort(ap_file)  # runs ks2, skips if it already ran
-                probe_out_path = self.session_path.joinpath("alf", label, self.SPIKE_SORTER_NAME)
-                shutil.rmtree(probe_out_path, ignore_errors=True)
-                probe_out_path.mkdir(parents=True, exist_ok=True)
-                spikes.ks2_to_alf(
-                    ks2_dir,
-                    bin_path=ap_file.parent,
-                    out_path=probe_out_path,
-                    bin_file=ap_file,
-                    ampfactor=self._sample2v(ap_file),
-                )
-                logfile = ks2_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log")
-                if logfile.exists():
-                    shutil.copyfile(logfile, probe_out_path.joinpath(f"_ibl_log.info_{self.SPIKE_SORTER_NAME}.log"))
-                # For now leave the syncing here
-                out, _ = spikes.sync_spike_sorting(ap_file=ap_file, out_path=probe_out_path)
-                out_files.extend(out)
-                # convert ks2_output into tar file and also register
-                # Make this in case spike sorting is in old raw_ephys_data folders, for new
-                # sessions it should already exist
-                tar_dir = self.session_path.joinpath(
-                    'spike_sorters', self.SPIKE_SORTER_NAME, label)
-                tar_dir.mkdir(parents=True, exist_ok=True)
-                out = spikes.ks2_to_tar(ks2_dir, tar_dir, force=self.FORCE_RERUN)
-                out_files.extend(out)
+        ks2_dir = self._run_pykilosort(ap_file)  # runs ks2, skips if it already ran
+        probe_out_path = self.session_path.joinpath("alf", label, self.SPIKE_SORTER_NAME)
+        shutil.rmtree(probe_out_path, ignore_errors=True)
+        probe_out_path.mkdir(parents=True, exist_ok=True)
+        ibllib.ephys.spikes.ks2_to_alf(
+            ks2_dir,
+            bin_path=ap_file.parent,
+            out_path=probe_out_path,
+            bin_file=ap_file,
+            ampfactor=self._sample2v(ap_file),
+        )
+        logfile = ks2_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log")
+        if logfile.exists():
+            shutil.copyfile(logfile, probe_out_path.joinpath(f"_ibl_log.info_{self.SPIKE_SORTER_NAME}.log"))
+        # Sync spike sorting with the main behaviour clock: the nidq for 3B+ and the main probe for 3A
+        out, _ = ibllib.ephys.spikes.sync_spike_sorting(ap_file=ap_file, out_path=probe_out_path)
+        out_files.extend(out)
+        # Now compute the unit metrics
+        self.compute_cell_qc(probe_out_path)
+        # convert ks2_output into tar file and also register
+        # Make this in case spike sorting is in old raw_ephys_data folders, for new
+        # sessions it should already exist
+        tar_dir = self.session_path.joinpath('spike_sorters', self.SPIKE_SORTER_NAME, label)
+        tar_dir.mkdir(parents=True, exist_ok=True)
+        out = ibllib.ephys.spikes.ks2_to_tar(ks2_dir, tar_dir, force=self.FORCE_RERUN)
+        out_files.extend(out)
+        # run waveform extraction
+        _logger.info("Running waveform extraction")
+        spikes = alfio.load_object(probe_out_path, 'spikes', attribute=['samples', 'clusters'])
+        clusters = alfio.load_object(probe_out_path, 'clusters', attribute=['channels'])
+        channels = alfio.load_object(probe_out_path, 'channels')
+        extract_wfs_cbin(
+            cbin_file=ap_file,
+            output_dir=probe_out_path,
+            spike_samples=spikes['samples'],
+            spike_clusters=spikes['clusters'],
+            spike_channels=clusters['channels'][spikes['clusters']],
+            h=None,  # todo the geometry needs to be set using the spikeglx object
+            channel_labels=channels['labels'],
+            max_wf=256,
+            trough_offset=42,
+            spike_length_samples=128,
+            chunksize_samples=int(3000),
+            n_jobs=None,
+        )
+        if self.one:
+            eid = self.one.path2eid(self.session_path, query_type='remote')
+            ins = self.one.alyx.rest('insertions', 'list', session=eid, name=label, query_type='remote')
+            if len(ins) != 0:
+                _logger.info("Creating SpikeSorting QC plots")
+                plot_task = ApPlots(ins[0]['id'], session_path=self.session_path, one=self.one)
+                _ = plot_task.run()
+                self.plot_tasks.append(plot_task)
 
-                # run waveform extraction
-                _logger.info("Running waveform extraction")
-                spike_times = np.load(probe_out_path.joinpath("spikes.samples.npy"))
-                spike_clusters = np.load(probe_out_path.joinpath("spikes.clusters.npy"))
-                cluster_channels = np.load(probe_out_path.joinpath("clusters.channels.npy"))
-                spike_channels = cluster_channels[spike_clusters]
-                extract_wfs_cbin(
-                    ap_file, probe_out_path, spike_times, spike_clusters, spike_channels
-                )
+                plot_task = SpikeSortingPlots(ins[0]['id'], session_path=self.session_path, one=self.one)
+                _ = plot_task.run(collection=str(probe_out_path.relative_to(self.session_path)))
+                self.plot_tasks.append(plot_task)
 
-                if self.one:
-                    eid = self.one.path2eid(self.session_path, query_type='remote')
-                    ins = self.one.alyx.rest('insertions', 'list', session=eid, name=label, query_type='remote')
-                    if len(ins) != 0:
-                        _logger.info("Creating SpikeSorting QC plots")
-                        plot_task = ApPlots(ins[0]['id'], session_path=self.session_path, one=self.one)
-                        _ = plot_task.run()
-                        self.plot_tasks.append(plot_task)
-
-                        plot_task = SpikeSortingPlots(ins[0]['id'], session_path=self.session_path, one=self.one)
-                        _ = plot_task.run(collection=str(probe_out_path.relative_to(self.session_path)))
-                        self.plot_tasks.append(plot_task)
-
-                        resolved = ins[0].get('json', {'temp': 0}).get('extended_qc', {'temp': 0}). \
-                            get('alignment_resolved', False)
-                        if resolved:
-                            chns = np.load(probe_out_path.joinpath('channels.localCoordinates.npy'))
-                            out = get_aligned_channels(ins[0], chns, one=self.one, save_dir=probe_out_path)
-                            out_files.extend(out)
-
-            except BaseException:
-                _logger.error(traceback.format_exc())
-                self.status = -1
-                continue
+                resolved = ins[0].get('json', {'temp': 0}).get('extended_qc', {'temp': 0}). \
+                    get('alignment_resolved', False)
+                if resolved:
+                    chns = np.load(probe_out_path.joinpath('channels.localCoordinates.npy'))
+                    out = get_aligned_channels(ins[0], chns, one=self.one, save_dir=probe_out_path)
+                    out_files.extend(out)
 
         return out_files
 
 
-class EphysCellsQc(base_tasks.EphysTask):
+class EphysCellsQc(base_tasks.EphysTask, CellQCMixin):
     priority = 90
     job_size = 'small'
 
@@ -734,64 +799,6 @@ class EphysCellsQc(base_tasks.EphysTask):
         }
         return signature
 
-    def _compute_cell_qc(self, folder_probe):
-        """
-        Computes the cell QC given an extracted probe alf path
-        :param folder_probe: folder
-        :return:
-        """
-        # compute the straight qc
-        _logger.info(f"Computing cluster qc for {folder_probe}")
-        spikes = alfio.load_object(folder_probe, 'spikes')
-        clusters = alfio.load_object(folder_probe, 'clusters')
-        df_units, drift = ephysqc.spike_sorting_metrics(
-            spikes.times, spikes.clusters, spikes.amps, spikes.depths,
-            cluster_ids=np.arange(clusters.channels.size))
-        # if the ks2 labels file exist, load them and add the column
-        file_labels = folder_probe.joinpath('cluster_KSLabel.tsv')
-        if file_labels.exists():
-            ks2_labels = pd.read_csv(file_labels, sep='\t')
-            ks2_labels.rename(columns={'KSLabel': 'ks2_label'}, inplace=True)
-            df_units = pd.concat(
-                [df_units, ks2_labels['ks2_label'].reindex(df_units.index)], axis=1)
-        # save as parquet file
-        df_units.to_parquet(folder_probe.joinpath("clusters.metrics.pqt"))
-        return folder_probe.joinpath("clusters.metrics.pqt"), df_units, drift
-
-    def _label_probe_qc(self, folder_probe, df_units, drift):
-        """
-        Labels the json field of the alyx corresponding probe insertion
-        :param folder_probe:
-        :param df_units:
-        :param drift:
-        :return:
-        """
-        eid = self.one.path2eid(self.session_path, query_type='remote')
-        pdict = self.one.alyx.rest('insertions', 'list', session=eid, name=self.pname, no_cache=True)
-        if len(pdict) != 1:
-            _logger.warning(f'No probe found for probe name: {self.pname}')
-            return
-        isok = df_units['label'] == 1
-        qcdict = {'n_units': int(df_units.shape[0]),
-                  'n_units_qc_pass': int(np.sum(isok)),
-                  'firing_rate_max': np.max(df_units['firing_rate'][isok]),
-                  'firing_rate_median': np.median(df_units['firing_rate'][isok]),
-                  'amplitude_max_uV': np.max(df_units['amp_max'][isok]) * 1e6,
-                  'amplitude_median_uV': np.max(df_units['amp_median'][isok]) * 1e6,
-                  'drift_rms_um': rms(drift['drift_um']),
-                  }
-        file_wm = folder_probe.joinpath('_kilosort_whitening.matrix.npy')
-        if file_wm.exists():
-            wm = np.load(file_wm)
-            qcdict['whitening_matrix_conditioning'] = np.linalg.cond(wm)
-        # groom qc dict (this function will eventually go directly into the json field update)
-        for k in qcdict:
-            if isinstance(qcdict[k], np.int64):
-                qcdict[k] = int(qcdict[k])
-            elif isinstance(qcdict[k], float):
-                qcdict[k] = np.round(qcdict[k], 2)
-        self.one.alyx.json_field_update("insertions", pdict[0]["id"], "json", qcdict)
-
     def _run(self):
         """
         Post spike-sorting quality control at the cluster level.
@@ -802,7 +809,7 @@ class EphysCellsQc(base_tasks.EphysTask):
         out_files = []
         for folder_probe in folder_probes:
             try:
-                qc_file, df_units, drift = self._compute_cell_qc(folder_probe)
+                qc_file, df_units, drift = self.compute_cell_qc(folder_probe)
                 out_files.append(qc_file)
                 self._label_probe_qc(folder_probe, df_units, drift)
             except Exception:
