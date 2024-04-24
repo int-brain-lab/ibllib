@@ -1,3 +1,8 @@
+## Develop
+
+## bugfixes
+- SessionLoader can now handle trials that are not in the alf collection
+
 ## Release Note 2.34.0
 
 ## features
