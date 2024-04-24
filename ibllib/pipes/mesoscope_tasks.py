@@ -578,7 +578,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         """ Bad frames """
         qc_paths = (self.session_path.joinpath(f[1], 'exptQC.mat')
                     for f in self.input_files if f[0] == 'exptQC.mat')
-        qc_paths = map(str, filter(Path.exists, qc_paths))
+        qc_paths = sorted(map(str, filter(Path.exists, qc_paths)))
         exptQC = [loadmat(p, squeeze_me=True, simplify_cells=True) for p in qc_paths]
         if len(exptQC) > 0:
             frameQC, frameQC_names, bad_frames = self._consolidate_exptQC(exptQC)

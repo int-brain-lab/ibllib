@@ -1,5 +1,6 @@
 import logging
 import subprocess
+import time
 import traceback
 from pathlib import Path
 
@@ -610,3 +611,118 @@ class EphysPostDLC(base_tasks.VideoTask):
                 self.status = -1
 
         return output_files
+
+
+class LightningPose(base_tasks.VideoTask):
+    # TODO: make one task per cam?
+    gpu = 1
+    io_charge = 100
+    level = 2
+    force = True
+    job_size = 'large'
+
+    env = Path.home().joinpath('Documents', 'PYTHON', 'envs', 'litpose', 'bin', 'activate')
+    scripts = Path.home().joinpath('Documents', 'PYTHON', 'iblscripts', 'deploy', 'serverpc', 'litpose')
+
+    @property
+    def signature(self):
+        signature = {
+            'input_files': [(f'_iblrig_{cam}Camera.raw.mp4', self.device_collection, True) for cam in self.cameras],
+            'output_files': [(f'_ibl_{cam}Camera.lightningPose.pqt', 'alf', True) for cam in self.cameras]
+        }
+
+        return signature
+
+    @staticmethod
+    def _video_intact(file_mp4):
+        """Checks that the downloaded video can be opened and is not empty"""
+        cap = cv2.VideoCapture(str(file_mp4))
+        frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+        intact = True if frame_count > 0 else False
+        cap.release()
+        return intact
+
+    def _check_env(self):
+        """Check that scripts are present, env can be activated and get iblvideo version"""
+        assert len(list(self.scripts.rglob('run_litpose.*'))) == 2, \
+            f'Scripts run_litpose.sh and run_litpose.py do not exist in {self.scripts}'
+        assert self.env.exists(), f"environment does not exist in assumed location {self.env}"
+        command2run = f"source {self.env}; python -c 'import iblvideo; print(iblvideo.__version__)'"
+        process = subprocess.Popen(
+            command2run,
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            executable="/bin/bash"
+        )
+        info, error = process.communicate()
+        if process.returncode != 0:
+            raise AssertionError(f"environment check failed\n{error.decode('utf-8')}")
+        version = info.decode("utf-8").strip().split('\n')[-1]
+        return version
+
+    def _run(self, overwrite=True, **kwargs):
+
+        # Gather video files
+        self.session_path = Path(self.session_path)
+        mp4_files = [
+            self.session_path.joinpath(self.device_collection, f'_iblrig_{cam}Camera.raw.mp4') for cam in self.cameras
+            if self.session_path.joinpath(self.device_collection, f'_iblrig_{cam}Camera.raw.mp4').exists()
+        ]
+
+        labels = [label_from_path(x) for x in mp4_files]
+        _logger.info(f'Running on {labels} videos')
+
+        # Check the environment
+        self.version = self._check_env()
+        _logger.info(f'iblvideo version {self.version}')
+
+        # If all results exist and overwrite is False, skip computation
+        expected_outputs_present, expected_outputs = self.assert_expected(self.output_files, silent=True)
+        if overwrite is False and expected_outputs_present is True:
+            actual_outputs = expected_outputs
+            return actual_outputs
+
+        # Else, loop over videos
+        actual_outputs = []
+        for label, mp4_file in zip(labels, mp4_files):
+            # Catch exceptions so that the other cams can still run but set status to Errored
+            try:
+                # Check that the GPU is (still) accessible
+                check_nvidia_driver()
+                # Check that the video can be loaded
+                if not self._video_intact(mp4_file):
+                    _logger.error(f"Corrupt raw video file {mp4_file}")
+                    self.status = -1
+                    continue
+                t0 = time.time()
+                _logger.info(f'Running Lightning Pose on {label}Camera.')
+                command2run = f"{self.scripts.joinpath('run_litpose.sh')} {str(self.env)} {mp4_file} {overwrite}"
+                _logger.info(command2run)
+                process = subprocess.Popen(
+                    command2run,
+                    shell=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    executable="/bin/bash",
+                )
+                info, error = process.communicate()
+                if process.returncode != 0:
+                    error_str = error.decode("utf-8").strip()
+                    _logger.error(f'Lightning pose failed for {label}Camera.\n\n'
+                                  f'++++++++ Output of subprocess for debugging ++++++++\n\n'
+                                  f'{error_str}\n'
+                                  f'++++++++++++++++++++++++++++++++++++++++++++\n')
+                    self.status = -1
+                    continue
+                else:
+                    _logger.info(f'{label} camera took {(time.time() - t0)} seconds')
+                    result = next(self.session_path.joinpath('alf').glob(f'_ibl_{label}Camera.lightningPose*.pqt'))
+                    actual_outputs.append(result)
+
+            except BaseException:
+                _logger.error(traceback.format_exc())
+                self.status = -1
+                continue
+
+        return actual_outputs

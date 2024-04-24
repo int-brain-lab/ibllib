@@ -12,8 +12,8 @@ from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
 
 from one.api import ONE, One
-from one.alf.files import get_alf_path
-from one.alf.exceptions import ALFObjectNotFound
+from one.alf.files import get_alf_path, full_path_parts
+from one.alf.exceptions import ALFObjectNotFound, ALFMultipleCollectionsFound
 from one.alf import cache
 import one.alf.io as alfio
 from neuropixel import TIP_SIZE_UM, trace_header
@@ -1324,18 +1324,48 @@ class SessionLoader:
                     _logger.warning(f"Could not load {row['name']} data.")
                     _logger.debug(e)
 
-    def load_trials(self):
+    def _find_behaviour_collection(self, obj):
+        """
+        Function to find the trial or wheel collection
+
+        Parameters
+        ----------
+        obj: str
+            Alf object to load, either 'trials' or 'wheel'
+        """
+        dataset = '_ibl_trials.table.pqt' if obj == 'trials' else '_ibl_wheel.position.npy'
+        dsets = self.one.list_datasets(self.eid, dataset)
+        if len(dsets) == 0:
+            return 'alf'
+        else:
+            collections = [full_path_parts(self.session_path.joinpath(d), as_dict=True)['collection'] for d in dsets]
+            if len(set(collections)) == 1:
+                return collections[0]
+            else:
+                _logger.error(f'Multiple collections found {collections}. Specify collection when loading, '
+                              f'e.g sl.load_{obj}(collection="{collections[0]}")')
+                raise ALFMultipleCollectionsFound
+
+    def load_trials(self, collection=None):
         """
         Function to load trials data into SessionLoader.trials
+
+        Parameters
+        ----------
+        collection: str
+            Alf collection of trials data
         """
+
+        if not collection:
+            collection = self._find_behaviour_collection('trials')
         # itiDuration frequently has a mismatched dimension, and we don't need it, exclude using regex
         self.one.wildcards = False
         self.trials = self.one.load_object(
-            self.eid, 'trials', collection='alf', attribute=r'(?!itiDuration).*').to_df()
+            self.eid, 'trials', collection=collection, attribute=r'(?!itiDuration).*').to_df()
         self.one.wildcards = True
         self.data_info.loc[self.data_info['name'] == 'trials', 'is_loaded'] = True
 
-    def load_wheel(self, fs=1000, corner_frequency=20, order=8):
+    def load_wheel(self, fs=1000, corner_frequency=20, order=8, collection=None):
         """
         Function to load wheel data (position, velocity, acceleration) into SessionLoader.wheel. The wheel position
         is first interpolated to a uniform sampling rate. Then velocity and acceleration are computed, during which
@@ -1349,8 +1379,12 @@ class SessionLoader:
             Corner frequency of Butterworth low-pass filter, default is 20
         order: int, float
             Order of Butterworth low_pass filter, default is 8
+        collection: str
+            Alf collection of wheel data
         """
-        wheel_raw = self.one.load_object(self.eid, 'wheel')
+        if not collection:
+            collection = self._find_behaviour_collection('wheel')
+        wheel_raw = self.one.load_object(self.eid, 'wheel', collection=collection)
         if wheel_raw['position'].shape[0] != wheel_raw['timestamps'].shape[0]:
             raise ValueError("Length mismatch between 'wheel.position' and 'wheel.timestamps")
         # resample the wheel position and compute velocity, acceleration
