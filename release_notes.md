@@ -1,10 +1,11 @@
-## Develop
+## Release Note 2.35.0
 
 ## features
 - Adding LightningPose task
 
 ## bugfixes
 - SessionLoader can now handle trials that are not in the alf collection
+- Extraction of trials from pre-generated sequences supports iblrigv8 keys
 
 ## Release Note 2.34.0
 
