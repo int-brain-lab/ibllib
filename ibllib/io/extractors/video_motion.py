@@ -15,7 +15,7 @@ import logging
 from pathlib import Path
 from joblib import Parallel, delayed, cpu_count
 
-from neurodsp.utils import WindowGenerator
+from ibldsp.utils import WindowGenerator
 from one.api import ONE
 import ibllib.io.video as vidio
 from iblutil.util import Bunch
@@ -111,10 +111,12 @@ class MotionAlignment:
             self.data.camera_times = {vidio.label_from_path(url): ts for ts, url in zip(cam.data, cam.url)}
         else:
             alf_path = self.session_path / 'alf'
-            self.data.wheel = alfio.load_object(alf_path, 'wheel', short_keys=True)
-            self.data.trials = alfio.load_object(alf_path, 'trials')
+            wheel_path = next(alf_path.rglob('*wheel.timestamps*')).parent
+            self.data.wheel = alfio.load_object(wheel_path, 'wheel', short_keys=True)
+            trials_path = next(alf_path.rglob('*trials.table*')).parent
+            self.data.trials = alfio.load_object(trials_path, 'trials')
             self.data.camera_times = {vidio.label_from_path(x): alfio.load_file_content(x) for x in
-                                      alf_path.glob('*Camera.times*')}
+                                      alf_path.rglob('*Camera.times*')}
         assert all(x is not None for x in self.data.values())
 
     def _set_eid_or_path(self, session_path_or_eid):
@@ -428,14 +430,16 @@ class MotionAlignmentFullSession:
             return ob
 
         alf_path = self.session_path.joinpath('alf')
-        wheel = (fix_keys(alfio.load_object(alf_path, 'wheel')) if location == 'SDSC' else alfio.load_object(alf_path, 'wheel'))
+        wheel_path = next(alf_path.rglob('*wheel.timestamps*')).parent
+        wheel = (fix_keys(alfio.load_object(wheel_path, 'wheel')) if location == 'SDSC'
+                 else alfio.load_object(wheel_path, 'wheel'))
         self.wheel_timestamps = wheel.timestamps
         # Compute interpolated wheel position and wheel times
         wheel_pos, self.wheel_time = wh.interpolate_position(wheel.timestamps, wheel.position, freq=1000)
         # Compute wheel velocity
         self.wheel_vel, _ = wh.velocity_filtered(wheel_pos, 1000)
         # Load in original camera times
-        self.camera_times = alfio.load_file_content(next(alf_path.glob(f'_ibl_{self.label}Camera.times*.npy')))
+        self.camera_times = alfio.load_file_content(next(alf_path.rglob(f'_ibl_{self.label}Camera.times*.npy')))
         self.camera_path = str(next(self.session_path.joinpath('raw_video_data').glob(f'_iblrig_{self.label}Camera.raw*.mp4')))
         self.camera_meta = vidio.get_video_meta(self.camera_path)
 
@@ -473,8 +477,8 @@ class MotionAlignmentFullSession:
         # We attempt to load in some behavior data (trials and dlc). This is only needed for the summary plots, having
         # trial aligned paw velocity (from the dlc) is a nice sanity check to make sure the alignment went well
         try:
-            self.trials = alfio.load_file_content(next(alf_path.glob('_ibl_trials.table*.pqt')))
-            self.dlc = alfio.load_file_content(next(alf_path.glob(f'_ibl_{self.label}Camera.dlc*.pqt')))
+            self.trials = alfio.load_file_content(next(alf_path.rglob('_ibl_trials.table*.pqt')))
+            self.dlc = alfio.load_file_content(next(alf_path.rglob(f'_ibl_{self.label}Camera.dlc*.pqt')))
             self.dlc = likelihood_threshold(self.dlc)
             self.behavior = True
         except (ALFObjectNotFound, StopIteration):

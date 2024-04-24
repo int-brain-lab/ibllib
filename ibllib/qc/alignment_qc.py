@@ -2,6 +2,8 @@ import logging
 
 import numpy as np
 from pathlib import Path
+from one.alf.spec import QC
+from datetime import date
 
 from neuropixel import trace_header
 import spikeglx
@@ -11,7 +13,6 @@ from ibllib.pipes import histology
 from ibllib.pipes.ephys_alignment import EphysAlignment
 from ibllib.qc import base
 from ibllib.oneibl.patcher import FTPPatcher
-from ibllib.qc.base import CRITERIA as CRITERIA_BASE
 
 _log = logging.getLogger(__name__)
 CRITERIA = {"PASS": 0.8}
@@ -166,7 +167,7 @@ class AlignmentQC(base.QC):
 
         return results
 
-    def resolve_manual(self, align_key, update=True, upload_alyx=True, upload_flatiron=True,
+    def resolve_manual(self, align_key, update=True, upload_alyx=True, upload_flatiron=False,
                        force=False):
         """
         Method to manually resolve the alignment of a probe insertion with a given alignment
@@ -193,6 +194,7 @@ class AlignmentQC(base.QC):
             results['alignment_resolved'] = True
             results['alignment_stored'] = align_key
             results['alignment_resolved_by'] = 'experimenter'
+            results['alignment_resolved_date'] = date.today().isoformat()
 
             if update:
                 self.update_extended_qc(results)
@@ -314,7 +316,7 @@ class AlignmentQC(base.QC):
                 ephys_traj = self.one.alyx.get(f'/trajectories?&probe_insertion={self.eid}'
                                                '&provenance=Ephys aligned histology track',
                                                clobber=True)
-                patch_dict = {'json': self.alignments}
+                patch_dict = {'probe_insertion': self.eid, 'json': self.alignments}
                 self.one.alyx.rest('trajectories', 'partial_update', id=ephys_traj[0]['id'],
                                    data=patch_dict)
 
@@ -383,7 +385,7 @@ class AlignmentQC(base.QC):
         outcomes = [align[2].split(':')[0] for key, align in self.alignments.items()
                     if len(align) == 3]
         if len(outcomes) > 0:
-            vals = [CRITERIA_BASE[out] for out in outcomes]
+            vals = list(map(QC.validate, outcomes))
             max_qc = np.argmax(vals)
             outcome = outcomes[max_qc]
             self.update(outcome, namespace='experimenter', override=override)

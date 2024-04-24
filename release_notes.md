@@ -1,3 +1,67 @@
+## Release Note 2.34.0
+
+## features
+- Task assert_expected_input now take into account revisions
+- Camera qc and video motion now take into account dynamic pipeline folder
+
+## bugfixes
+- Typo in raw_ephys_data documentation
+- oneibl.register_datasets accounts for non existing sessions when checking protected dsets
+
+#### 2.34.1
+- Ensure mesoscope frame QC files are sorted before concatenating 
+- Look for SESSION_TEMPLATE_ID key of task settings for extraction of pre-generated choice world sequences
+- Download required ap.meta files when building pipeline for task_qc command
+
+## Release Note 2.33.0
+
+## features
+- Datasets no longer registered by default if protected, need to force registration
+- Tasks now allows datasets to be registered before qc computation
+- Histology channel upload now reads in channel map from data when available
+
+## bugfixes
+- PostDLC tasks looks in alf folder for lick datasets
+
+## Release Notes 2.32
+
+## features
+- SDSC patcher automatically support revisions
+
+## other
+- Add extra key to alignment qc with manual resolution for channel upload
+
+#### 2.32.3
+- FpgaTrials supports alignment of Bpod datasets not part of trials object
+- Support chained protocols in BehaviourPlots task
+
+#### 2.32.4
+- Add support for variations of the biaseCW task in the json task description
+
+#### 2.32.5
+- Minor fixes to IBL registration client, including use of SESSION_END_TIME key
+
+## Release Notes 2.31
+
+### features
+- Training status uses new extractor map
+- Refactor neurodsp to ibldsp
+- ITI qc check for iblrig v8
+- Support habituationChoiceWorld extraction in iblrig v8.15.0
+
+### bugfixes
+- NP2 waveforms extracted with correct dtype
+- Sorted cluster ids in single unit metrics
+
+## Release Notes 2.30
+
+### features
+- Task QC viewer
+- Raw ephys data loading documentation
+
+### other
+- Pandas 3.0 support
+
 ## Release Notes 2.29
 
 ### features

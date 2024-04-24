@@ -14,7 +14,7 @@ from time import time
 
 from one.api import ONE
 from one.webclient import AlyxClient
-from one.util import filter_datasets
+from one.util import filter_datasets, ensure_list
 from one.alf.files import add_uuid_string, session_path_parts
 from ibllib.oneibl.registration import register_dataset, get_lab, get_local_data_repository
 from ibllib.oneibl.patcher import FTPPatcher, SDSCPatcher, SDSC_ROOT_PATH, SDSC_PATCH_PATH
@@ -34,16 +34,14 @@ class DataHandler(abc.ABC):
         self.session_path = session_path
         self.signature = signature
         self.one = one
+        self.processed = {}  # Map of filepaths and their processed records (e.g. upload receipts or Alyx records)
 
     def setUp(self):
         """Function to optionally overload to download required data to run task."""
         pass
 
     def getData(self, one=None):
-        """
-        Finds the datasets required for task based on input signatures
-        :return:
-        """
+        """Finds the datasets required for task based on input signatures."""
         if self.one is None and one is None:
             return
 
@@ -60,6 +58,22 @@ class DataHandler(abc.ABC):
             df = df.droplevel(level='eid')
         return df
 
+    def getOutputFiles(self):
+        assert self.session_path
+        from one.alf.io import iter_datasets
+        # Next convert datasets to frame
+        from one.alf.cache import DATASETS_COLUMNS, _get_dataset_info
+        # Create dataframe of all ALF datasets
+        dsets = iter_datasets(self.session_path)
+        records = [_get_dataset_info(self.session_path, dset, compute_hash=False) for dset in dsets]
+        df = pd.DataFrame(records, columns=DATASETS_COLUMNS)
+        from functools import partial
+        filt = partial(filter_datasets, df, wildcards=True, assert_unique=False)
+        # Filter outputs
+        dids = pd.concat(filt(filename=file[0], collection=file[1]).index for file in self.signature['output_files'])
+        present = df.loc[dids, :].copy()
+        return present
+
     def uploadData(self, outputs, version):
         """
         Function to optionally overload to upload and register data
@@ -75,10 +89,7 @@ class DataHandler(abc.ABC):
         return versions
 
     def cleanUp(self):
-        """
-        Function to optionally overload to cleanup files after running task
-        :return:
-        """
+        """Function to optionally overload to clean up files after running task."""
         pass
 
 
@@ -104,16 +115,46 @@ class ServerDataHandler(DataHandler):
         """
         super().__init__(session_path, signatures, one=one)
 
-    def uploadData(self, outputs, version, **kwargs):
+    def uploadData(self, outputs, version, clobber=False, **kwargs):
         """
-        Function to upload and register data of completed task
-        :param outputs: output files from task to register
-        :param version: ibllib version
-        :return: output info of registered datasets
+        Upload and/or register output data.
+
+        This is typically called by :meth:`ibllib.pipes.tasks.Task.register_datasets`.
+
+        Parameters
+        ----------
+        outputs : list of pathlib.Path
+            A set of ALF paths to register to Alyx.
+        version : str, list of str
+            The version of ibllib used to generate these output files.
+        clobber : bool
+            If True, re-upload outputs that have already been passed to this method.
+        kwargs
+            Optional keyword arguments for one.registration.RegistrationClient.register_files.
+
+        Returns
+        -------
+        list of dicts, dict
+            A list of newly created Alyx dataset records or the registration data if dry.
         """
         versions = super().uploadData(outputs, version)
         data_repo = get_local_data_repository(self.one.alyx)
-        return register_dataset(outputs, one=self.one, versions=versions, repository=data_repo, **kwargs)
+        # If clobber = False, do not re-upload the outputs that have already been processed
+        outputs = ensure_list(outputs)
+        to_upload = list(filter(None if clobber else lambda x: x not in self.processed, outputs))
+        records = register_dataset(to_upload, one=self.one, versions=versions, repository=data_repo, **kwargs) or []
+        if kwargs.get('dry', False):
+            return records
+        # Store processed outputs
+        self.processed.update({k: v for k, v in zip(to_upload, records) if v})
+        return [self.processed[x] for x in outputs if x in self.processed]
+
+    def cleanUp(self):
+        """Empties and returns the processed dataset mep."""
+        super().cleanUp()
+        processed = self.processed
+        self.processed = {}
+        return processed
 
 
 class ServerGlobusDataHandler(DataHandler):

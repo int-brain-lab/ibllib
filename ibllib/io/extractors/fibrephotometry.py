@@ -25,7 +25,7 @@ import one.alf.io as alfio
 from ibllib.io.extractors.base import BaseExtractor
 from ibllib.io.raw_daq_loaders import load_channels_tdms, load_raw_daq_tdms
 from ibllib.io.extractors.training_trials import GoCueTriggerTimes
-from neurodsp.utils import rises, sync_timestamps
+from ibldsp.utils import rises, sync_timestamps
 
 _logger = logging.getLogger(__name__)
 

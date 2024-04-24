@@ -95,7 +95,7 @@ TASK_STATUS_SET = {'Waiting', 'Held', 'Started', 'Errored', 'Empty', 'Complete',
 
 
 class Task(abc.ABC):
-    log = ''  # place holder to keep the log of the task for registration
+    log = ''  # placeholder to keep the log of the task for registration
     cpu = 1   # CPU resource
     gpu = 0   # GPU resources: as of now, either 0 or 1
     io_charge = 5  # integer percentage
@@ -103,7 +103,7 @@ class Task(abc.ABC):
     ram = 4  # RAM needed to run (GB)
     one = None  # one instance (optional)
     level = 0  # level in the pipeline hierarchy: level 0 means there is no parent task
-    outputs = None  # place holder for a list of Path containing output files
+    outputs = None  # placeholder for a list of Path containing output files
     time_elapsed_secs = None
     time_out_secs = 3600 * 2  # time-out after which a task is considered dead
     version = ibllib.__version__
@@ -245,16 +245,21 @@ class Task(abc.ABC):
         self.tearDown()
         return self.status
 
-    def register_datasets(self, one=None, **kwargs):
+    def register_datasets(self, **kwargs):
         """
-        Register output datasets form the task to Alyx
-        :param one:
-        :param jobid:
-        :param kwargs: directly passed to the register_dataset function
-        :return:
+        Register output datasets from the task to Alyx.
+
+        Parameters
+        ----------
+        kwargs
+            Directly passed to the `DataHandler.upload_data` method.
+
+        Returns
+        -------
+        list
+            The output of the `DataHandler.upload_data` method, e.g. a list of registered datasets.
         """
         _ = self.register_images()
-
         return self.data_handler.uploadData(self.outputs, self.version, **kwargs)
 
     def register_images(self, **kwargs):
@@ -382,6 +387,13 @@ class Task(abc.ABC):
         files = []
         for expected_file in expected_files:
             actual_files = list(Path(self.session_path).rglob(str(Path(*filter(None, reversed(expected_file[:2]))))))
+            # Account for revisions
+            if len(actual_files) == 0:
+                collection = expected_file[1] + '/#*' if expected_file[1] != '' else expected_file[1] + '#*'
+                expected_revision = (expected_file[0], collection, expected_file[2])
+                actual_files = list(
+                    Path(self.session_path).rglob(str(Path(*filter(None, reversed(expected_revision[:2]))))))
+
             if len(actual_files) == 0 and expected_file[2]:
                 everything_is_fine = False
                 if not silent:
@@ -737,7 +749,7 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
     # otherwise register data and set (provisional) status to Complete
     else:
         try:
-            kwargs = dict(one=one, max_md5_size=max_md5_size)
+            kwargs = dict(max_md5_size=max_md5_size)
             if location == 'server':
                 # Explicitly pass lab as lab cannot be inferred from path (which the registration client tries to do).
                 # To avoid making extra REST requests we can also set labs=None if using ONE v1.20.1.

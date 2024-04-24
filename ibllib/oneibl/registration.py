@@ -5,6 +5,8 @@ import logging
 import itertools
 
 from packaging import version
+from requests import HTTPError
+
 from one.alf.files import get_session_path, folder_parts, get_alf_path
 from one.registration import RegistrationClient, get_dataset_type
 from one.remote.globus import get_local_endpoint_id, get_lab_from_endpoint_id
@@ -12,6 +14,7 @@ from one.webclient import AlyxClient
 from one.converters import ConversionMixin
 import one.alf.exceptions as alferr
 from one.util import datasets2records, ensure_list
+from one.api import ONE
 
 import ibllib
 import ibllib.io.extractors.base
@@ -78,6 +81,37 @@ def register_dataset(file_list, one=None, exists=False, versions=None, **kwargs)
     assert all(Path(f).exists() for f in file_list)
 
     client = IBLRegistrationClient(one)
+
+    # Check for protected datasets
+    def _get_protected(pr_status):
+        if isinstance(protected_status, list):
+            pr = any(d['status_code'] == 403 for d in pr_status)
+        else:
+            pr = protected_status['status_code'] == 403
+
+        return pr
+
+    # Account for cases where we are connected to cortex lab database
+    if one.alyx.base_url == 'https://alyx.cortexlab.net':
+        try:
+            protected_status = IBLRegistrationClient(
+                ONE(base_url='https://alyx.internationalbrainlab.org', mode='remote')).check_protected_files(file_list)
+            protected = _get_protected(protected_status)
+        except HTTPError as err:
+            if "[Errno 500] /check-protected: 'A base session for" in str(err):
+                # If we get an error due to the session not existing, we take this to mean no datasets are protected
+                protected = False
+            else:
+                raise err
+    else:
+        protected_status = client.check_protected_files(file_list)
+        protected = _get_protected(protected_status)
+
+    # If we find a protected dataset, and we don't have a force=True flag, raise an error
+    if protected and not kwargs.pop('force', False):
+        raise FileExistsError('Protected datasets were found in the file list. To force the registration of datasets '
+                              'add the force=True argument.')
+
     # If the repository is specified then for the registration client we want server_only=True to
     # make sure we don't make any other repositories for the lab
     if kwargs.get('repository') and not kwargs.get('server_only', False):
@@ -221,7 +255,7 @@ class IBLRegistrationClient(RegistrationClient):
             # assert len({md['IBLRIG_VERSION_TAG'] for md in settings}) == 1
 
             users = []
-            for user in filter(None, map(lambda x: x.get('PYBPOD_CREATOR'), settings)):
+            for user in filter(lambda x: x and x[1], map(lambda x: x.get('PYBPOD_CREATOR'), settings)):
                 user = self.assert_exists(user[0], 'users')  # user is list of [username, uuid]
                 users.append(user['username'])
 
@@ -246,7 +280,7 @@ class IBLRegistrationClient(RegistrationClient):
             if poo_counts:
                 json_field['POOP_COUNT'] = int(sum(poo_counts))
 
-        if not session:  # Create session and weighings
+        if not len(session):  # Create session and weighings
             ses_ = {'subject': subject['nickname'],
                     'users': users or [subject['responsible_user']],
                     'location': settings[0]['PYBPOD_BOARD'],
@@ -273,9 +307,13 @@ class IBLRegistrationClient(RegistrationClient):
                 self.register_weight(subject['nickname'], md['SUBJECT_WEIGHT'],
                                      date_time=md['SESSION_DATETIME'], user=user)
         else:  # if session exists update a few key fields
-            data = {'procedures': procedures, 'projects': projects}
+            data = {'procedures': procedures, 'projects': projects,
+                    'n_correct_trials': n_correct_trials, 'n_trials': n_trials}
             if task_protocols:
                 data['task_protocol'] = '/'.join(task_protocols)
+            if end_time:
+                data['end_time'] = self.ensure_ISO8601(end_time)
+
             session = self.one.alyx.rest('sessions', 'partial_update', id=session_id[0], data=data)
             if json_field:
                 session['json'] = self.one.alyx.json_field_update('sessions', session['id'], data=json_field)
@@ -401,14 +439,16 @@ def _get_session_times(fn, md, ses_data):
     """
     if isinstance(md, dict):
         start_time = _start_time = isostr2date(md['SESSION_DATETIME'])
+        end_time = isostr2date(md['SESSION_END_TIME']) if md.get('SESSION_END_TIME') else None
     else:
         start_time = isostr2date(md[0]['SESSION_DATETIME'])
         _start_time = isostr2date(md[-1]['SESSION_DATETIME'])
+        end_time = isostr2date(md[-1]['SESSION_END_TIME']) if md[-1].get('SESSION_END_TIME') else None
         assert isinstance(ses_data, (list, tuple)) and len(ses_data) == len(md)
         assert len(md) == 1 or start_time < _start_time
         ses_data = ses_data[-1]
-    if not ses_data:
-        return start_time, None
+    if not ses_data or end_time is not None:
+        return start_time, end_time
     c = ses_duration_secs = 0
     for sd in reversed(ses_data):
         ses_duration_secs = (sd['behavior_data']['Trial end timestamp'] -

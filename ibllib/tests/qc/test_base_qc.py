@@ -3,6 +3,7 @@ from unittest import mock
 
 import numpy as np
 from one.api import ONE
+from one.alf import spec
 
 from ibllib.tests import TEST_DB
 from ibllib.qc.base import QC
@@ -59,24 +60,24 @@ class TestQC(unittest.TestCase):
     def test_update(self) -> None:
         """Test setting the QC field in Alyx"""
         # Fist check the default outcome
-        self.assertEqual(self.qc.outcome, 'NOT_SET', 'unexpected default QC outcome')
+        self.assertIs(self.qc.outcome, spec.QC.NOT_SET, 'unexpected default QC outcome')
 
         # Test setting outcome
         outcome = 'PASS'
         current = self.qc.update(outcome)
-        self.assertEqual(outcome, current, 'Failed to update QC field')
+        self.assertIs(spec.QC.PASS, current, 'Failed to update QC field')
         # Check that extended QC field was updated
         extended = one.alyx.get('/sessions/' + self.eid, clobber=True)['extended_qc']
         updated = 'experimenter' in extended and extended['experimenter'] == outcome
         self.assertTrue(updated, 'failed to update extended_qc field')
         # Check that outcome property is set
-        self.assertEqual(outcome, self.qc.outcome, 'Failed to update outcome attribute')
+        self.assertEqual(spec.QC.PASS, self.qc.outcome, 'Failed to update outcome attribute')
 
         # Test setting namespace
         outcome = 'fail'  # Check handling of lower case
         namespace = 'task'
         current = self.qc.update(outcome, namespace=namespace)
-        self.assertEqual(outcome.upper(), current, 'Failed to update QC field')
+        self.assertIs(spec.QC.FAIL, current, 'Failed to update QC field')
         extended = one.alyx.get('/sessions/' + self.eid, clobber=True)['extended_qc']
         updated = namespace in extended and extended[namespace] == outcome.upper()
         self.assertTrue(updated, 'failed to update extended_qc field')
@@ -85,7 +86,7 @@ class TestQC(unittest.TestCase):
         outcome = 'PASS'  # Check handling of lower case
         namespace = 'task'
         current = self.qc.update(outcome)
-        self.assertNotEqual(outcome, current, 'QC field updated with less severe outcome')
+        self.assertNotEqual(spec.QC.PASS, current, 'QC field updated with less severe outcome')
         extended = one.alyx.get('/sessions/' + self.eid, clobber=True)['extended_qc']
         updated = namespace in extended and extended[namespace] != outcome
         self.assertTrue(updated, 'failed to update extended_qc field')
@@ -94,7 +95,7 @@ class TestQC(unittest.TestCase):
         outcome = 'NOT_SET'  # Check handling of lower case
         namespace = 'task'
         current = self.qc.update(outcome, override=True, namespace=namespace)
-        self.assertEqual(outcome, current, 'QC field updated with less severe outcome')
+        self.assertEqual(spec.QC.NOT_SET, current, 'QC field updated with less severe outcome')
         extended = one.alyx.get('/sessions/' + self.eid, clobber=True)['extended_qc']
         updated = namespace in extended and extended[namespace] == outcome
         self.assertTrue(updated, 'failed to update extended_qc field')
@@ -114,26 +115,22 @@ class TestQC(unittest.TestCase):
         """Test for QC.outcome property setter."""
         qc = self.qc
         qc.outcome = 'Fail'
-        self.assertEqual(qc.outcome, 'FAIL')
+        self.assertIs(qc.outcome, spec.QC.FAIL)
         # Test setting invalid outcome
         with self.assertRaises(ValueError):
             qc.outcome = '%INVALID%'
         qc.outcome = 'PASS'
-        self.assertEqual(qc.outcome, 'FAIL')
+        self.assertIs(qc.outcome, spec.QC.FAIL)
 
         # Set remote session to 'PASS' and check object reflects this on init
         ses = one.alyx.rest('sessions', 'partial_update', id=self.eid, data={'qc': 'PASS'})
         assert ses['qc'] == 'PASS', 'failed to reset qc field for test'
         qc = QC(self.eid, one=one)
-        self.assertEqual(qc.outcome, 'PASS')
-
-    def test_code_to_outcome(self):
-        """Test for QC.code_to_outcome method."""
-        self.assertEqual(QC.code_to_outcome(3), 'FAIL')
+        self.assertIs(qc.outcome, spec.QC.PASS)
 
     def test_overall_outcome(self):
         """Test for QC.overall_outcome method."""
-        self.assertEqual(QC.overall_outcome(['PASS', 'NOT_SET', None, 'FAIL']), 'FAIL')
+        self.assertIs(QC.overall_outcome(['PASS', 'NOT_SET', None, 'FAIL']), spec.QC.FAIL)
 
     def test_compute_outcome_from_extended_qc(self):
         """Test for QC.compute_outcome_from_extended_qc method."""
@@ -141,9 +138,9 @@ class TestQC(unittest.TestCase):
                   'json': {'extended_qc': {'foo': 'PASS', 'bar': 'WARNING', '_baz_': 'CRITICAL'}}}
         with mock.patch.object(self.qc.one.alyx, 'get', return_value=detail):
             self.qc.json = False
-            self.assertEqual(self.qc.compute_outcome_from_extended_qc(), 'FAIL')
+            self.assertIs(self.qc.compute_outcome_from_extended_qc(), spec.QC.FAIL)
             self.qc.json = True
-            self.assertEqual(self.qc.compute_outcome_from_extended_qc(), 'WARNING')
+            self.assertIs(self.qc.compute_outcome_from_extended_qc(), spec.QC.WARNING)
 
     @classmethod
     def tearDownClass(cls):

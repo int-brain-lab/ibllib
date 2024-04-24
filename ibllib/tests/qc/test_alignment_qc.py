@@ -7,6 +7,7 @@ import numpy as np
 import copy
 import random
 import string
+from datetime import date
 
 from one.api import ONE
 from neuropixel import trace_header
@@ -185,6 +186,7 @@ class TestAlignmentQcExisting(unittest.TestCase):
                       self.alignments['2020-06-26T16:40:14_Karolina_Socha']}
         trajectory = copy.deepcopy(self.trajectory)
         trajectory.update({'json': alignments})
+        trajectory.update({'chronic_insertion': None})
         _ = one.alyx.rest('trajectories', 'create', data=trajectory)
         align_qc = AlignmentQC(self.probe_id, one=one, brain_atlas=brain_atlas, channels=False)
         align_qc.run(update=True, upload_alyx=True, upload_flatiron=False)
@@ -198,8 +200,8 @@ class TestAlignmentQcExisting(unittest.TestCase):
                       self.alignments['2020-06-26T16:40:14_Karolina_Socha'],
                       '2020-06-12T00:39:15_nate': self.alignments['2020-06-12T00:39:15_nate']}
         trajectory = copy.deepcopy(self.trajectory)
-        trajectory.update({'json': alignments})
-        traj = one.alyx.rest('trajectories', 'update', id=self.prev_traj_id, data=trajectory)
+        trajectory.update({'probe_insertion': self.probe_id, 'json': alignments})
+        traj = one.alyx.rest('trajectories', 'partial_update', id=self.prev_traj_id, data=trajectory)
         align_qc = AlignmentQC(self.probe_id, one=one, brain_atlas=brain_atlas, channels=False)
         align_qc.load_data(prev_alignments=traj['json'], xyz_picks=np.array(self.xyz_picks) / 1e6,
                            cluster_chns=self.cluster_chns, depths=SITES_COORDINATES[:, 1],
@@ -215,8 +217,8 @@ class TestAlignmentQcExisting(unittest.TestCase):
                       self.alignments['2020-06-19T10:52:36_noam.roth'],
                       '2020-06-12T00:39:15_nate': self.alignments['2020-06-12T00:39:15_nate']}
         trajectory = copy.deepcopy(self.trajectory)
-        trajectory.update({'json': alignments})
-        traj = one.alyx.rest('trajectories', 'update', id=self.prev_traj_id, data=trajectory)
+        trajectory.update({'probe_insertion': self.probe_id, 'json': alignments})
+        traj = one.alyx.rest('trajectories', 'partial_update', id=self.prev_traj_id, data=trajectory)
         self.assertEqual(self.prev_traj_id, traj['id'])
         align_qc = AlignmentQC(self.probe_id, one=one, brain_atlas=brain_atlas, channels=False)
         align_qc.load_data(cluster_chns=self.cluster_chns, depths=SITES_COORDINATES[:, 1],
@@ -229,8 +231,8 @@ class TestAlignmentQcExisting(unittest.TestCase):
     def _05_not_latest_alignments_agree(self):
         alignments = copy.deepcopy(self.alignments)
         trajectory = copy.deepcopy(self.trajectory)
-        trajectory.update({'json': alignments})
-        traj = one.alyx.rest('trajectories', 'update', id=self.prev_traj_id, data=trajectory)
+        trajectory.update({'probe_insertion': self.probe_id, 'json': alignments})
+        traj = one.alyx.rest('trajectories', 'partial_update', id=self.prev_traj_id, data=trajectory)
         self.assertEqual(self.prev_traj_id, traj['id'])
         align_qc = AlignmentQC(self.probe_id, one=one, brain_atlas=brain_atlas, channels=False)
         align_qc.load_data(prev_alignments=traj['json'], xyz_picks=np.array(self.xyz_picks) / 1e6,
@@ -276,6 +278,7 @@ class TestAlignmentQcManual(unittest.TestCase):
         cls.probe_id = probe_insertion['id']
         cls.trajectory = data['trajectory'].tolist()
         cls.trajectory.update({'probe_insertion': cls.probe_id})
+        cls.trajectory.update({'chronic_insertion': None})
         cls.trajectory.update({'json': cls.alignments})
         cls.traj = one.alyx.rest('trajectories', 'create', data=cls.trajectory)
 
@@ -322,7 +325,8 @@ class TestAlignmentQcManual(unittest.TestCase):
                 alignment_stored='2020-09-28T15:57:25_mayo',
                 alignment_count=3,
                 trajectory_created=False,
-                alignment_qc=0.604081)
+                alignment_qc=0.604081,
+                alignment_date=date.today().isoformat())
 
     def _03_manual_resolution_not_latest(self):
         align_qc = AlignmentQC(self.probe_id, one=one, brain_atlas=brain_atlas, channels=False)
@@ -338,7 +342,8 @@ class TestAlignmentQcManual(unittest.TestCase):
                 alignment_stored='2020-09-28T10:03:06_alejandro',
                 alignment_count=3,
                 trajectory_created=True,
-                alignment_qc=0.604081)
+                alignment_qc=0.604081,
+                alignment_date=date.today().isoformat())
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -347,7 +352,7 @@ class TestAlignmentQcManual(unittest.TestCase):
 
 
 def _verify(tc, alignment_resolved=None, alignment_count=None,
-            alignment_stored=None, trajectory_created=False, alignment_qc=None):
+            alignment_stored=None, trajectory_created=False, alignment_qc=None, alignment_date=None):
     """
     For a given test case with a `probe_id` attribute, check that Alyx returns insertion records
     that match the provided parameters.
@@ -382,6 +387,8 @@ def _verify(tc, alignment_resolved=None, alignment_count=None,
                             f'&probe_id={tc.probe_id}'
                             '&provenance=Ephys aligned histology track', clobber=True)
         tc.assertNotEqual(tc.prev_traj_id == traj[0]['id'], trajectory_created)
+    if alignment_date:
+        tc.assertEqual(insertion['json']['extended_qc']['alignment_resolved_date'], alignment_date)
 
 
 class TestUploadToFlatIron(unittest.TestCase):
@@ -410,6 +417,7 @@ class TestUploadToFlatIron(unittest.TestCase):
         cls.probe_name = probe_insertion['name']
         cls.trajectory = data['trajectory'].tolist()
         cls.trajectory.update({'probe_insertion': cls.probe_id})
+        cls.trajectory.update({'chronic_insertion': None})
         cls.trajectory.update({'json': cls.alignments})
         cls.traj = one.alyx.rest('trajectories', 'create', data=cls.trajectory)
 

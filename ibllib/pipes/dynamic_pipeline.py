@@ -2,6 +2,23 @@
 
 The principal function here is `make_pipeline` which reads an `_ibl_experiment.description.yaml`
 file and determines the set of tasks required to preprocess the session.
+
+In the experiment description file there is a 'tasks' key that defines each task protocol and the
+location of the raw data (i.e. task collection). The protocol subkey may contain an 'extractors'
+field that should contain a list of dynamic pipeline task class names for extracting the task data.
+These must be subclasses of the :class:`ibllib.pipes.base_tasks.DynamicTask` class. If the
+extractors key is absent or empty, the tasks are chosen based on the sync label and protocol name.
+
+NB: The standard behvaiour extraction task classes (e.g.
+:class:`ibllib.pipes.behaviour_tasks.ChoiceWorldTrialsBpod` and :class:`ibllib.pipes.behaviour_tasks.ChoiceWorldTrialsNidq`)
+handle the clock synchronization, behaviour plots and QC. This is typically independent of the Bpod
+trials extraction (i.e. extraction of trials data from the Bpod raw data, in Bpod time). The Bpod
+trials extractor class is determined by the :func:`ibllib.io.extractors.base.protocol2extractor`
+map. IBL protocols may be added to the ibllib.io.extractors.task_extractor_map.json file, while
+non-IBL ones should be in projects.base.task_extractor_map.json file located in the personal
+projects repo. The Bpod trials extractor class must be a subclass of the
+:class:`ibllib.io.extractors.base.BaseBpodTrialsExtractor` class, and located in either the
+personal projects repo or in :py:mod:`ibllib.io.extractors.bpod_trials` module.
 """
 import logging
 import re
@@ -198,10 +215,11 @@ def make_pipeline(session_path, **pkwargs):
                 for sync_option in ('nidq', 'bpod'):
                     if sync_option in extractor.lower() and not sync == sync_option:
                         raise ValueError(f'Extractor "{extractor}" and sync "{sync}" do not match')
+                # TODO Assert sync_label correct here (currently unused)
                 # Look for the extractor in the behavior extractors module
                 if hasattr(btasks, extractor):
                     task = getattr(btasks, extractor)
-                # This may happen that the extractor is tied to a specific sync task: look for TrialsChoiceWorldBpod for # example
+                # This may happen that the extractor is tied to a specific sync task: look for TrialsChoiceWorldBpod for example
                 elif hasattr(btasks, extractor + sync.capitalize()):
                     task = getattr(btasks, extractor + sync.capitalize())
                 else:
@@ -212,6 +230,8 @@ def make_pipeline(session_path, **pkwargs):
                     else:
                         raise NotImplementedError(
                             f'Extractor "{extractor}" not found in main IBL pipeline nor in personal projects')
+                _logger.debug('%s (protocol #%i, task #%i) = %s.%s',
+                              protocol, i, j, task.__module__, task.__name__)
                 # Rename the class to something more informative
                 task_name = f'{task.__name__}_{i:02}'
                 # For now we assume that the second task in the list is always the trials extractor, which is dependent
@@ -454,6 +474,9 @@ def get_trials_tasks(session_path, one=None):
     # Check for an experiment.description file; ensure downloaded if possible
     if one and one.to_eid(session_path):  # to_eid returns None if session not registered
         one.load_datasets(session_path, ['_ibl_experiment.description'], download_only=True, assert_present=False)
+        # NB: meta files only required to build neuropixel tasks in make_pipeline
+        if meta_files := one.list_datasets(session_path, '*.ap.meta', collection='raw_ephys_data*'):
+            one.load_datasets(session_path, meta_files, download_only=True, assert_present=False)
     experiment_description = sess_params.read_params(session_path)
 
     # If experiment description file then use this to make the pipeline
@@ -467,6 +490,8 @@ def get_trials_tasks(session_path, one=None):
             tasks.append(t)
     else:
         # Otherwise default to old way of doing things
+        if one and one.to_eid(session_path):
+            one.load_dataset(session_path, '_iblrig_taskSettings.raw', collection='raw_behavior_data', download_only=True)
         pipeline = get_pipeline(session_path)
         if pipeline == 'training':
             from ibllib.pipes.training_preprocessing import TrainingTrials

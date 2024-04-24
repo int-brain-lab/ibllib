@@ -88,7 +88,7 @@ def populate_raw_spikeglx(session_path,
     Touch file tree to emulate files saved by SpikeGLX
     :param session_path: The raw ephys data path to place files
     :param model: Probe model file structure ('3A' or '3B')
-    :param legacy: If true, the emulate older SpikeGLX version where all files are saved
+    :param legacy: If true, emulate older SpikeGLX version where all files are saved
     into a single folder
     :param user_label: User may input any name into SpikeGLX and filenames will include this
     :param n_probes: Number of probe datafiles to touch

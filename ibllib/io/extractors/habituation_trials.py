@@ -2,6 +2,8 @@
 import logging
 import numpy as np
 
+from packaging import version
+
 import ibllib.io.raw_data_loaders as raw
 from ibllib.io.extractors.base import BaseBpodTrialsExtractor, run_extractor_classes
 from ibllib.io.extractors.biased_trials import ContrastLR
@@ -26,10 +28,13 @@ class HabituationTrials(BaseBpodTrialsExtractor):
         """
         Extract the Bpod trial events.
 
-        The Bpod state machine for this task has extremely misleading names! The 'iti' state is
-        actually the delay between valve open and trial end (the stimulus is still present during
-        this period), and the 'trial_start' state is actually the ITI during which there is a 1s
-        Bpod TTL and gray screen period.
+        For iblrig versions < 8.13 the Bpod state machine for this task had extremely misleading names!
+        The 'iti' state was actually the delay between valve close and trial end (the stimulus is
+        still present during this period), and the 'trial_start' state is actually the ITI during
+        which there is a 1s Bpod TTL and gray screen period.
+
+        In version 8.13 and later, the 'iti' state was renamed to 'post_reward' and 'trial_start'
+        was renamed to 'iti'.
 
         Returns
         -------
@@ -57,12 +62,17 @@ class HabituationTrials(BaseBpodTrialsExtractor):
                                        bpod_trials=self.bpod_trials, settings=self.settings, task_collection=self.task_collection)
 
         """
-        The 'trial_start' state is in fact the 1s grey screen period, therefore the first timestamp
-        is really the end of the previous trial and also the stimOff trigger time. The second
-        timestamp is the true trial start time.
+        The 'trial_start'/'iti' state is in fact the 1s grey screen period, therefore the first
+        timestamp is really the end of the previous trial and also the stimOff trigger time. The
+        second timestamp is the true trial start time. This state was renamed in version 8.13.
         """
+        state_names = self.bpod_trials[0]['behavior_data']['States timestamps'].keys()
+        rig_version = version.parse(self.settings['IBLRIG_VERSION'])
+        legacy_state_machine = 'post_reward' not in state_names and 'trial_start' in state_names
+
+        key = 'iti' if (rig_version >= version.parse('8.13') and not legacy_state_machine) else 'trial_start'
         (_, *ends), starts = zip(*[
-            t['behavior_data']['States timestamps']['trial_start'][-1] for t in self.bpod_trials]
+            t['behavior_data']['States timestamps'][key][-1] for t in self.bpod_trials]
         )
 
         # StimOffTrigger times

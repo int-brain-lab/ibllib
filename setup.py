@@ -54,5 +54,13 @@ setup(
     include_package_data=True,
     # external packages as dependencies
     install_requires=require,
+    entry_points={
+        'console_scripts': [
+            'task_qc = ibllib.qc.task_qc_viewer.task_qc:qc_gui_cli',
+        ],
+    },
+    extras_require={
+        'wfield': ['wfield==0.3.7', 'labcams'],
+    },
     scripts=[],
 )

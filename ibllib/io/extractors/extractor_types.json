@@ -1,4 +1,7 @@
-{"ksocha_ephysOptoStimulation": "ephys_passive_opto",
+{"THIS FILE": "SHOULD NO LONGER BE USED!",
+ "SEE": "https://github.com/int-brain-lab/project_extraction?tab=readme-ov-file#project_extraction",
+ "********": "*******************************",
+ "ksocha_ephysOptoStimulation": "ephys_passive_opto",
  "ksocha_ephysOptoChoiceWorld": "ephys_biased_opto",
  "passiveChoiceWorld": "ephys_replay",
  "opto_ephysChoiceWorld": "ephys_biased_opto",
@@ -18,5 +21,6 @@
  "_trainingChoiceWorld": "training",
  "ephysMockChoiceWorld": "mock_ephys",
  "ephys_certification": "sync_ephys",
- "trainingPhaseChoiceWorld": "training"
+ "trainingPhaseChoiceWorld": "training",
+ "************": "*********************"
 }
