@@ -431,8 +431,11 @@ class SDSCDataHandler(DataHandler):
             file_uuid = add_uuid_string(file_path, uuid)
             file_link = SDSC_TMP.joinpath(file_path)
             file_link.parent.mkdir(exist_ok=True, parents=True)
-            file_link.symlink_to(
-                Path(self.SDSC_ROOT_PATH.joinpath(file_uuid)))
+            try:
+                file_link.symlink_to(
+                    Path(self.SDSC_ROOT_PATH.joinpath(file_uuid)))
+            except FileExistsError:
+                pass
 
         self.task.session_path = SDSC_TMP.joinpath(d['session_path'])
 
