@@ -19,13 +19,14 @@ import one.alf.io as alfio
 from neuropixel import TIP_SIZE_UM, trace_header
 import spikeglx
 
+import ibldsp.voltage
 from iblutil.util import Bunch
-from ibllib.io.extractors.training_wheel import extract_wheel_moves, extract_first_movement_times
 from iblatlas.atlas import AllenAtlas, BrainRegions
 from iblatlas import atlas
+from ibllib.io.extractors.training_wheel import extract_wheel_moves, extract_first_movement_times
 from ibllib.pipes import histology
 from ibllib.pipes.ephys_alignment import EphysAlignment
-from ibllib.plots import vertical_lines
+from ibllib.plots import vertical_lines, Density
 
 import brainbox.plot
 from brainbox.io.spikeglx import Streamer
@@ -1118,7 +1119,13 @@ class SpikeSortingLoader:
     def pid2ref(self):
         return f"{self.one.eid2ref(self.eid, as_dict=False)}_{self.pname}"
 
-    def raster(self, spikes, channels, save_dir=None, br=None, label='raster', time_series=None, **kwargs):
+    def _default_plot_title(self, spikes):
+        title = f"{self.pid2ref}, {self.pid} \n" \
+                f"{spikes['clusters'].size:_} spikes, {np.unique(spikes['clusters']).size:_} clusters"
+        return title
+
+    def raster(self, spikes, channels, save_dir=None, br=None, label='raster', time_series=None,
+               drift=None, title=None, **kwargs):
         """
         :param spikes: spikes dictionary or Bunch
         :param channels: channels dictionary or Bunch.
@@ -1140,9 +1147,9 @@ class SpikeSortingLoader:
             # set default raster plot parameters
             kwargs = {"t_bin": 0.007, "d_bin": 10, "vmax": 0.5}
         brainbox.plot.driftmap(spikes['times'], spikes['depths'], ax=axs[1, 0], **kwargs)
-        title_str = f"{self.pid2ref}, {self.pid} \n" \
-                    f"{spikes['clusters'].size:_} spikes, {np.unique(spikes['clusters']).size:_} clusters"
-        axs[0, 0].title.set_text(title_str)
+        if title is None:
+            title = self._default_plot_title(spikes)
+        axs[0, 0].title.set_text(title)
         for k, ts in time_series.items():
             vertical_lines(ts, ymin=0, ymax=3800, ax=axs[1, 0])
         if 'atlas_id' in channels:
@@ -1152,10 +1159,55 @@ class SpikeSortingLoader:
         axs[1, 0].set_xlim(spikes['times'][0], spikes['times'][-1])
         fig.tight_layout()
 
-        self.download_spike_sorting_object('drift', self.spike_sorter, missing='ignore')
-        if 'drift' in self.files:
-            drift = self._load_object(self.files['drift'], wildcards=self.one.wildcards)
+        if drift is None:
+            self.download_spike_sorting_object('drift', self.spike_sorter, missing='ignore')
+            if 'drift' in self.files:
+                drift = self._load_object(self.files['drift'], wildcards=self.one.wildcards)
+        if isinstance(drift, dict):
             axs[0, 0].plot(drift['times'], drift['um'], 'k', alpha=.5)
+            axs[0, 0].set(ylim=[-15, 15])
+
+        if save_dir is not None:
+            png_file = save_dir.joinpath(f"{self.pid}_{self.pid2ref}_{label}.png") if Path(save_dir).is_dir() else Path(save_dir)
+            fig.savefig(png_file)
+            plt.close(fig)
+            gc.collect()
+        else:
+            return fig, axs
+
+    def plot_rawdata_snippet(self, sr, spikes, clusters, t0,
+                             channels=None,
+                             br: BrainRegions = None,
+                             save_dir=None,
+                             label='raster',
+                             gain=-93,
+                             title=None):
+
+        # compute the raw data offset and destripe, we take 400ms around t0
+        first_sample, last_sample = (int((t0 - 0.2) * sr.fs), int((t0 + 0.2) * sr.fs))
+        raw = sr[first_sample:last_sample, :-sr.nsync].T
+        channel_labels = channels['labels'] if (channels is not None) and ('labels' in channels) else True
+        destriped = ibldsp.voltage.destripe(raw, sr.fs, channel_labels=channel_labels)
+        # filter out the spikes according to good/bad clusters and to the time slice
+        spike_sel = slice(*np.searchsorted(spikes['samples'], [first_sample, last_sample]))
+        ss = spikes['samples'][spike_sel]
+        sc = clusters['channels'][spikes['clusters'][spike_sel]]
+        sok = clusters['label'][spikes['clusters'][spike_sel]] == 1
+        if title is None:
+            title = self._default_plot_title(spikes)
+        # display the raw data snippet with spikes overlaid
+        fig, axs = plt.subplots(1, 2, gridspec_kw={'width_ratios': [.95, .05]}, figsize=(16, 9), sharex='col')
+        Density(destriped, fs=sr.fs, taxis=1, gain=gain, ax=axs[0], t0=t0 - 0.2, unit='s')
+        axs[0].scatter(ss[sok] / sr.fs, sc[sok], color="green", alpha=0.5)
+        axs[0].scatter(ss[~sok] / sr.fs, sc[~sok], color="red", alpha=0.5)
+        axs[0].set(title=title, xlim=[t0 - 0.035, t0 + 0.035])
+        # adds the channel locations if available
+        if (channels is not None) and ('atlas_id' in channels):
+            br = br or BrainRegions()
+            plot_brain_regions(channels['atlas_id'], channel_depths=channels['axial_um'],
+                               brain_regions=br, display=True, ax=axs[1], title=self.histology)
+        axs[1].get_yaxis().set_visible(False)
+        fig.tight_layout()
 
         if save_dir is not None:
             png_file = save_dir.joinpath(f"{self.pid}_{self.pid2ref}_{label}.png") if Path(save_dir).is_dir() else Path(save_dir)
