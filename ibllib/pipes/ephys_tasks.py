@@ -5,6 +5,7 @@ from pathlib import Path
 import subprocess
 import re
 import shutil
+import uuid
 
 import packaging.version
 import numpy as np
@@ -665,9 +666,10 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         # clean up and create directory, this also checks write permissions
         # temp_dir has the following shape: pykilosort/ZM_3003_2020-07-29_001_probe00
         # first makes sure the tmp dir is clean
-        shutil.rmtree(scratch_drive.joinpath(self.SPIKE_SORTER_NAME), ignore_errors=True)
+        spikesorter_dir = self.SPIKE_SORTER_NAME + f"_{uuid.uuid4().hex}"
+        shutil.rmtree(scratch_drive.joinpath(spikesorter_dir), ignore_errors=True)
         temp_dir = scratch_drive.joinpath(
-            self.SPIKE_SORTER_NAME, "_".join(list(self.session_path.parts[-3:]) + [label])
+            spikesorter_dir, "_".join(list(self.session_path.parts[-3:]) + [label])
         )
         if temp_dir.exists():  # hmmm this has to be decided, we may want to restart ?
             # But failed sessions may then clog the scratch dir and have users run out of space
