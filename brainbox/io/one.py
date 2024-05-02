@@ -2,9 +2,9 @@
 from dataclasses import dataclass, field
 import gc
 import logging
+import re
 import os
 from pathlib import Path
-
 
 import numpy as np
 import pandas as pd
@@ -964,7 +964,7 @@ class SpikeSortingLoader:
             return Streamer(pid=self.pid, one=self.one, typ=band, **kwargs)
         else:
             raw_data_files = self.download_raw_electrophysiology(band=band)
-            cbin_file = next(filter(lambda f: f.name.endswith(f'.{band}.cbin'), raw_data_files), None)
+            cbin_file = next(filter(lambda f: re.match(rf".*\.{band}\..*cbin", f.name), raw_data_files), None)
             if cbin_file is not None:
                 return spikeglx.Reader(cbin_file)
 
