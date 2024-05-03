@@ -1,7 +1,10 @@
-from one.api import ONE
-from ibllib.pipes.tasks import Task
 from pathlib import Path
+import numpy as np
 import shutil
+import spikeglx
+from one.api import ONE
+from ibllib.ephys.sync_probes import apply_sync
+from ibllib.pipes.tasks import Task
 
 
 class RegisterSpikeSortingSDSC(Task):
