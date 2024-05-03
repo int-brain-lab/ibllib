@@ -24,7 +24,7 @@ class RegisterSpikeSortingSDSC(Task):
 
     def _run(self):
 
-        out_path = self.session_path.joinpath('alf', self.pname, 'pykilosort', revision_label)
+        out_path = self.session_path.joinpath('alf', self.pname, 'pykilosort', self.revision_label)
 
         def _fs(meta_file):
             # gets sampling rate from data
@@ -39,5 +39,5 @@ class RegisterSpikeSortingSDSC(Task):
         interp_times = apply_sync(sync_file, spike_samples / _fs(meta_file), forward=True)
         np.save(st_file, interp_times)
 
-        out = list(self.session_path.joinpath('alf', self.pname, 'pykilosort', revision_label).glob('*'))
+        out = list(self.session_path.joinpath('alf', self.pname, 'pykilosort', self.revision_label).glob('*'))
         return out
