@@ -635,7 +635,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
             return ""
         return info.decode("utf-8").strip()
 
-    def _run_pykilosort(self, ap_file):
+    def _run_pykilosort(self, ap_file, low_memory=False):
         """
         Runs the ks2 matlab spike sorting for one probe dataset
         the raw spike sorting output is in session_path/spike_sorters/{self.SPIKE_SORTER_NAME}/probeXX folder
@@ -677,7 +677,12 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         _logger.info(f"job progress command: tail -f {temp_dir} *.log")
         temp_dir.mkdir(parents=True, exist_ok=True)
         check_nvidia_driver()
-        command2run = f"{self.SHELL_SCRIPT} {ap_file} {temp_dir}"
+
+        low_mem = ""
+        if low_memory:
+            low_mem = "--lowmemory"
+
+        command2run = f"{self.SHELL_SCRIPT} {ap_file} {temp_dir} {low_mem}"
         try:
             import pykilosort  # noqa: F401
             os.system(command2run)
@@ -708,7 +713,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
 
         return sorter_dir
 
-    def _run(self):
+    def _run(self, low_memory=False):
         """
         Multiple steps. For each probe:
         - Runs ks2 (skips if it already ran)
@@ -722,7 +727,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         assert len(ap_files) == 1, f"Several bin files found for the same probe {ap_files}"
         ap_file, label = ap_files[0]
         out_files = []
-        ks2_dir = self._run_pykilosort(ap_file)  # runs ks2, skips if it already ran
+        ks2_dir = self._run_pykilosort(ap_file, low_memory)  # runs ks2, skips if it already ran
         probe_out_path = self.session_path.joinpath("alf", label, self.SPIKE_SORTER_NAME)
         shutil.rmtree(probe_out_path, ignore_errors=True)
         probe_out_path.mkdir(parents=True, exist_ok=True)
