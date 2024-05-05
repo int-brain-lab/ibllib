@@ -460,7 +460,7 @@ class PopeyeDataHandler(SDSCDataHandler):
 
     def __init__(self, task, session_path, signatures, one=None):
         super().__init__(task, session_path, signatures, one=one)
-        self.SDSC_PATCH_PATH = Path("/mnt/sdceph/users/ibl/data/quarantine/tasks/")
+        self.SDSC_PATCH_PATH = os.getenv('SDSC_PATCH_PATH', Path("/mnt/sdceph/users/ibl/data/quarantine/tasks/"))
         self.SDSC_ROOT_PATH = Path("/mnt/sdceph/users/ibl/data")
 
     def uploadData(self, outputs, version, **kwargs):
