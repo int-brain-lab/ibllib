@@ -18,14 +18,15 @@ class RegisterSpikeSortingSDSC(Task):
         }
         return signature
 
-    def __init__(self, session_path, pname=None, **kwargs):
+    def __init__(self, session_path, pname=None, revision_label='#test#', **kwargs):
         super().__init__(session_path, **kwargs)
 
         self.pname = pname
+        self.revision_label = revision_label
 
-    def _run(self, revision_label):
+    def _run(self):
 
-        out_path = self.session_path.joinpath('alf', self.pname, 'pykilosort', revision_label)
+        out_path = self.session_path.joinpath('alf', self.pname, 'pykilosort', self.revision_label)
 
         def _fs(meta_file):
             # gets sampling rate from data
@@ -40,5 +41,5 @@ class RegisterSpikeSortingSDSC(Task):
         interp_times = apply_sync(sync_file, spike_samples / _fs(meta_file), forward=True)
         np.save(st_file, interp_times)
 
-        out = list(self.session_path.joinpath('alf', self.pname, 'pykilosort', revision_label).glob('*'))
+        out = list(self.session_path.joinpath('alf', self.pname, 'pykilosort', self.revision_label).glob('*'))
         return out
