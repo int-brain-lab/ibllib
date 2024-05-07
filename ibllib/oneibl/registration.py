@@ -10,7 +10,7 @@ from requests import HTTPError
 from one.alf.files import get_session_path, folder_parts, get_alf_path
 from one.registration import RegistrationClient, get_dataset_type
 from one.remote.globus import get_local_endpoint_id, get_lab_from_endpoint_id
-from one.webclient import AlyxClient
+from one.webclient import AlyxClient, no_cache
 from one.converters import ConversionMixin
 import one.alf.exceptions as alferr
 from one.util import datasets2records, ensure_list
@@ -219,10 +219,11 @@ class IBLRegistrationClient(RegistrationClient):
         subject = self.assert_exists(subject, 'subjects')
 
         # look for a session from the same subject, same number on the same day
-        session_id, session = self.one.search(subject=subject['nickname'],
-                                              date_range=date,
-                                              number=number,
-                                              details=True, query_type='remote')
+        with no_cache(self.one.alyx):
+            session_id, session = self.one.search(subject=subject['nickname'],
+                                                  date_range=date,
+                                                  number=number,
+                                                  details=True, query_type='remote')
         if collections is None:  # No task data
             assert len(session) != 0, 'no session on Alyx and no tasks in experiment description'
             # Fetch the full session JSON and assert that some basic information is present.
