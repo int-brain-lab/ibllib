@@ -417,7 +417,7 @@ class SDSCDataHandler(DataHandler):
     def __init__(self, task, session_path, signatures, one=None):
         super().__init__(session_path, signatures, one=one)
         self.task = task
-        self.SDSC_PATCH_PATH = SDSC_PATCH_PATH
+        self.SDSC_PATCH_PATH = Path(os.getenv('SDSC_PATCH_PATH', "/mnt/sdceph/users/ibl/data/quarantine/tasks/"))
         self.SDSC_ROOT_PATH = SDSC_ROOT_PATH
 
     def setUp(self):
