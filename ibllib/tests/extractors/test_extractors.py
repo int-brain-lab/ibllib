@@ -207,21 +207,21 @@ class TestExtractTrialData(unittest.TestCase):
             self.assertTrue(all(choice[trial_nogo]) == 0)
 
     def test_get_repNum(self):
-        # TODO: Test its sawtooth
         # TRAINING SESSIONS
         rn = training_trials.RepNum(
             self.training_lt5['path']).extract()[0]
         self.assertTrue(isinstance(rn, np.ndarray))
-        for i in range(3):
-            self.assertTrue(i in rn)
+        expected = [0, 1, 2, 0]
+        np.testing.assert_array_equal(rn, expected)
         # -- version >= 5.0.0
         rn = training_trials.RepNum(
             self.training_ge5['path']).extract()[0]
         self.assertTrue(isinstance(rn, np.ndarray))
-        for i in range(4):
-            self.assertTrue(i in rn)
 
-        # BIASED SESSIONS have no repeted trials
+        expected = [0, 0, 1, 2, 3, 0, 0, 0, 1, 2, 0, 1]
+        np.testing.assert_array_equal(rn, expected)
+
+        # BIASED SESSIONS have no repeated trials
 
     def test_get_rewardVolume(self):
         # TRAINING SESSIONS
@@ -243,7 +243,7 @@ class TestExtractTrialData(unittest.TestCase):
         rv = biased_trials.RewardVolume(
             self.biased_ge5['path']).extract()[0]
         self.assertTrue(isinstance(rv, np.ndarray))
-        # Test if all non zero rewards are of the same value
+        # Test if all non-zero rewards are of the same value
         self.assertTrue(all([x == max(rv) for x in rv if x != 0]))
 
     def test_get_feedback_times_ge5(self):

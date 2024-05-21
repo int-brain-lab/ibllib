@@ -10,6 +10,10 @@
 #### 2.35.1
 - Ensure no REST cache used when searching sessions in IBLRegistationClient
 
+#### 2.35.2
+- Flag to allow session registration without water administrations
+- Support extraction of repNum for advancedChoiceWorld
+
 ## Release Note 2.34.0
 
 ### features
