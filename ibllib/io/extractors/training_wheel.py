@@ -1,3 +1,4 @@
+"""Extractors for the wheel position, velocity, and detected movement."""
 import logging
 from collections.abc import Sized
 
@@ -323,16 +324,35 @@ def extract_wheel_moves(re_ts, re_pos, display=False):
 def extract_first_movement_times(wheel_moves, trials, min_qt=None):
     """
     Extracts the time of the first sufficiently large wheel movement for each trial.
+
     To be counted, the movement must occur between go cue / stim on and before feedback /
     response time.  The movement onset is sometimes just before the cue (occurring in the
     gap between quiescence end and cue start, or during the quiescence period but sub-
-    threshold).  The movement is sufficiently large if it is greater than or equal to THRESH
-    :param wheel_moves: dictionary of detected wheel movement onsets and peak amplitudes for
-    use in extracting each trial's time of first movement.
+    threshold).  The movement is sufficiently large if it is greater than or equal to THRESH.
+
+    :param wheel_moves:
     :param trials: dictionary of trial data
-    :param min_qt: the minimum quiescence period, if None a default is used
-    :return: numpy array of first movement times, bool array indicating whether movement
-    crossed response threshold, and array of indices for wheel_moves arrays
+    :param min_qt:
+    :return: numpy array of
+
+    Parameters
+    ----------
+    wheel_moves : dict
+        Dictionary of detected wheel movement onsets and peak amplitudes for use in extracting each
+        trial's time of first movement.
+    trials : dict
+        Dictionary of trial data.
+    min_qt : float
+        The minimum quiescence period in seconds, if None a default is used.
+
+    Returns
+    -------
+    numpy.array
+        First movement times.
+    numpy.array
+        Bool array indicating whether movement crossed response threshold.
+    numpy.array
+        Indices for wheel_moves arrays.
     """
     THRESH = .1  # peak amp should be at least .1 rad; ~1/3rd of the distance to threshold
     MIN_QT = .2  # default minimum enforced quiescence period
@@ -371,6 +391,8 @@ def extract_first_movement_times(wheel_moves, trials, min_qt=None):
 
 class Wheel(BaseBpodTrialsExtractor):
     """
+    Wheel extractor.
+
     Get wheel data from raw files and converts positions into radians mathematical convention
      (anti-clockwise = +) and timestamps into seconds relative to Bpod clock.
     **Optional:** saves _ibl_wheel.times.npy and _ibl_wheel.position.npy

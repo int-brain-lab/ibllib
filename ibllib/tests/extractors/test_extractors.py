@@ -237,14 +237,14 @@ class TestExtractTrialData(unittest.TestCase):
         rv = biased_trials.RewardVolume(
             self.biased_lt5['path']).extract()[0]
         self.assertTrue(isinstance(rv, np.ndarray))
-        # Test if all non zero rewards are of the same value
-        self.assertTrue(all([x == max(rv) for x in rv if x != 0]))
+        # Test if all non-zero rewards are of the same value
+        self.assertTrue(all(x == max(rv) for x in rv if x != 0))
         # -- version >= 5.0.0
         rv = biased_trials.RewardVolume(
             self.biased_ge5['path']).extract()[0]
         self.assertTrue(isinstance(rv, np.ndarray))
         # Test if all non-zero rewards are of the same value
-        self.assertTrue(all([x == max(rv) for x in rv if x != 0]))
+        self.assertTrue(all(x == max(rv) for x in rv if x != 0))
 
     def test_get_feedback_times_ge5(self):
         # TRAINING SESSIONS
