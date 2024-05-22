@@ -28,5 +28,5 @@ mtscomp>=1.0.1
 ONE-api~=2.7rc1
 phylib>=2.4
 psychofit
-slidingRP>=1.0.0  # steinmetz lab refractory period metrics
+slidingRP>=1.1.1  # steinmetz lab refractory period metrics
 pyqt5
