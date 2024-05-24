@@ -268,7 +268,12 @@ def make_pipeline(session_path, **pkwargs):
                     compute_status = False
                 else:
                     registration_class = btasks.TrialRegisterRaw
-                    behaviour_class = btasks.ChoiceWorldTrialsNidq
+                    if sync_args['sync_namespace'] == 'timeline':
+                        behaviour_class = btasks.ChoiceWorldTrialsTimeline
+                    elif sync_args['sync_namespace'] in ('spikeglx', None):
+                        behaviour_class = btasks.ChoiceWorldTrialsNidq
+                    else:
+                        raise NotImplementedError(f'No trials task available for sync namespace "{sync_args["sync_namespace"]}"')
                     compute_status = True
             else:
                 raise NotImplementedError
@@ -278,7 +283,7 @@ def make_pipeline(session_path, **pkwargs):
             tasks[f'Trials_{protocol}_{i:02}'] = type(f'Trials_{protocol}_{i:02}', (behaviour_class,), {})(
                 **kwargs, **sync_kwargs, **task_kwargs, parents=parents)
             if compute_status:
-                tasks[f"TrainingStatus_{protocol}_{i:02}"] = type(f'TrainingStatus_{protocol}_{i:02}', (
+                tasks[f'TrainingStatus_{protocol}_{i:02}'] = type(f'TrainingStatus_{protocol}_{i:02}', (
                     btasks.TrainingStatus,), {})(**kwargs, **task_kwargs, parents=[tasks[f'Trials_{protocol}_{i:02}']])
 
     # Ephys tasks
@@ -289,7 +294,10 @@ def make_pipeline(session_path, **pkwargs):
         all_probes = []
         register_tasks = []
         for pname, probe_info in devices['neuropixel'].items():
-            meta_file = spikeglx.glob_ephys_files(Path(session_path).joinpath(probe_info['collection']), ext='meta')
+            # Glob to support collections such as _00a, _00b. This doesn't fix the issue of NP2.4
+            # extractions, however.
+            probe_collection = next(session_path.glob(probe_info['collection'] + '*'))
+            meta_file = spikeglx.glob_ephys_files(probe_collection, ext='meta')
             meta_file = meta_file[0].get('ap')
             nptype = spikeglx._get_neuropixel_version_from_meta(spikeglx.read_meta_data(meta_file))
             nshanks = spikeglx._get_nshanks_from_meta(spikeglx.read_meta_data(meta_file))
@@ -482,12 +490,15 @@ def get_trials_tasks(session_path, one=None):
     # If experiment description file then use this to make the pipeline
     if experiment_description is not None:
         tasks = []
-        pipeline = make_pipeline(session_path, one=one)
-        trials_tasks = [t for t in pipeline.tasks if 'Trials' in t]
-        for task in trials_tasks:
-            t = pipeline.tasks.get(task)
-            t.__init__(session_path, **t.kwargs)
-            tasks.append(t)
+        try:
+            pipeline = make_pipeline(session_path, one=one)
+            trials_tasks = [t for t in pipeline.tasks if 'Trials' in t]
+            for task in trials_tasks:
+                t = pipeline.tasks.get(task)
+                t.__init__(session_path, **t.kwargs)
+                tasks.append(t)
+        except NotImplementedError as ex:
+            _logger.warning('Failed to get trials tasks: %s', ex)
     else:
         # Otherwise default to old way of doing things
         if one and one.to_eid(session_path):

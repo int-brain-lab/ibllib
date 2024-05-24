@@ -15,6 +15,9 @@
 - Support extraction of repNum for advancedChoiceWorld
 - Support matplotlib v3.9; min slidingRP version now 1.1.1
 
+#### 2.35.3
+- Use correct task for timeline acquisitions in make_pipeline
+
 ## Release Note 2.34.0
 
 ### features
