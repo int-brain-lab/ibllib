@@ -13,6 +13,7 @@ import string
 from uuid import uuid4
 
 from one.api import ONE
+from one.webclient import AlyxClient
 import iblutil.io.params as iopar
 from packaging.version import Version, InvalidVersion
 
@@ -24,6 +25,7 @@ from ibllib.tests import TEST_DB
 import ibllib.pipes.scan_fix_passive_files as fix
 from ibllib.pipes.base_tasks import RegisterRawDataTask
 from ibllib.pipes.ephys_preprocessing import SpikeSorting
+from ibllib.pipes import local_server
 
 
 class TestExtractors2Tasks(unittest.TestCase):
@@ -741,6 +743,38 @@ class TestSleeplessDecorator(unittest.TestCase):
         # Check if arguments are passed correctly
         result = decorated_func("test1", "test2")
         self.assertEqual(result, ("test1", "test2"))
+
+
+class TestLocalServer(unittest.TestCase):
+    """Test ibllib.pipes.local_server module."""
+
+    @mock.patch('ibllib.pipes.local_server.get_local_data_repository')
+    def test_task_queue(self, lab_repo_mock):
+        """Test ibllib.pipes.local_server.task_queue function."""
+        lab_repo_mock.return_value = 'foo_repo'
+        tasks = [
+            {'executable': 'ibllib.pipes.mesoscope_tasks.MesoscopePreprocess', 'priority': 80},
+            {'executable': 'ibllib.pipes.ephys_preprocessing.SpikeSorting', 'priority': SpikeSorting.priority},
+            {'executable': 'ibllib.pipes.base_tasks.RegisterRawDataTask', 'priority': RegisterRawDataTask.priority}
+        ]
+        alyx = mock.Mock(spec=AlyxClient)
+        alyx.rest.return_value = tasks
+        queue = local_server.task_queue(lab='foolab', alyx=alyx)
+        alyx.rest.assert_called()
+        self.assertEqual('Waiting', alyx.rest.call_args.kwargs.get('status'))
+        self.assertIn('foolab', alyx.rest.call_args.kwargs.get('django', ''))
+        self.assertIn('foo_repo', alyx.rest.call_args.kwargs.get('django', ''))
+        # Expect to return tasks in descending priority order, without mesoscope task (different env)
+        self.assertEqual([tasks[2], tasks[1]], queue)
+        # Expect only mesoscope task returned when relevant env passed
+        queue = local_server.task_queue(lab='foolab', alyx=alyx, env=('suite2p',))
+        self.assertEqual([tasks[0]], queue)
+        # Expect no tasks as mesoscope task is a large job
+        queue = local_server.task_queue(mode='small', lab='foolab', alyx=alyx, env=('suite2p',))
+        self.assertEqual([], queue)
+        # Expect only register task as it's the only small job
+        queue = local_server.task_queue(mode='small', lab='foolab', alyx=alyx)
+        self.assertEqual([tasks[2]], queue)
 
 
 if __name__ == '__main__':
