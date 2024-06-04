@@ -52,12 +52,11 @@ Running ephys QC, from local server PC (after ephys + bpod data have been copied
 """
 import logging
 import sys
-import warnings
 from packaging import version
 from pathlib import Path, PurePosixPath
 from datetime import datetime, timedelta
 from inspect import getmembers, isfunction
-from functools import reduce, wraps
+from functools import reduce
 from collections.abc import Sized
 
 import numpy as np
@@ -89,34 +88,6 @@ BWM_CRITERIA = {
     '_task_iti_delays': {'NOT_SET': 0},
     '_task_passed_trial_checks': {'NOT_SET': 0}
 }
-
-
-def _static_check(func):
-    """Log a warning when static method called with class instead of object.
-
-    The TaskQC 'criteria' attribute is now varies depending on the task version and may be changed
-    in subclasses depending on hardware and task protocol. Therefore the
-    TaskQC.compute_session_status_from_dict method should be called with an object instance in
-    order use the correct criteria.
-    """
-    @wraps(func)
-    def inner(*args, **kwargs):
-        warnings.warn('TaskQC.compute_session_status_from_dict is deprecated. '
-                      'Use ibllib.qc.task_metrics.compute_session_status_from_dict instead', DeprecationWarning)
-        if not args:  # allow function to raise on missing param
-            return compute_session_status_from_dict(*args, **kwargs)
-        if not isinstance(args[0], TaskQC):
-            _log.warning(
-                'Calling TaskQC.compute_session_status_from_dict as a static method yields inconsistent results.'
-            )
-            if len(args) == 1 and kwargs.get('criteria', None) is None:
-                kwargs['criteria'] = BWM_CRITERIA  # old behaviour
-        else:
-            if kwargs.get('criteria', None) is None and len(args) == 2:
-                kwargs['criteria'] = args[0].criteria  # ensure we use the obj's modified criteria
-            args = args[1:]
-        return compute_session_status_from_dict(*args, **kwargs)
-    return inner
 
 
 def compute_session_status_from_dict(results, criteria=None):
@@ -388,32 +359,6 @@ class TaskQC(base.QC):
             self.update_extended_qc(results)
             self.update(outcome, namespace)
         return outcome, results
-
-    @_static_check
-    @staticmethod
-    def compute_session_status_from_dict(results, criteria=None):
-        """
-        (DEPRECATED) Given a dictionary of results, computes the overall session QC for each key
-        and aggregates in a single value.
-
-        NB: Use :func:`ibllib.qc.task_metrics.compute_session_status_from_dict` instead and always
-        pass in the criteria.
-
-        Parameters
-        ----------
-        results : dict
-            A dictionary of QC keys containing (usually scalar) values.
-        criteria : dict
-            A dictionary of qc keys containing map of PASS, WARNING, FAIL thresholds.
-
-        Returns
-        -------
-        str
-            Overall session QC outcome as a string.
-        dict
-            A map of QC tests and their outcomes.
-        """
-        ...  # no longer called by decorator
 
     def compute_session_status(self):
         """

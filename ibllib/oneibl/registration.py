@@ -173,7 +173,7 @@ class IBLRegistrationClient(RegistrationClient):
     Object that keeps the ONE instance and provides method to create sessions and register data.
     """
 
-    def register_session(self, ses_path, file_list=True, projects=None, procedures=None):
+    def register_session(self, ses_path, file_list=True, projects=None, procedures=None, register_reward=True):
         """
         Register an IBL Bpod session in Alyx.
 
@@ -188,11 +188,16 @@ class IBLRegistrationClient(RegistrationClient):
             The project(s) to which the experiment belongs (optional).
         procedures : str, list
             An optional list of procedures, e.g. 'Behavior training/tasks'.
+        register_reward : bool
+            If true, register all water administrations in the settings files, if no admins already
+            present for this session.
 
         Returns
         -------
         dict
             An Alyx session record.
+        list of dict, None
+            Alyx file records (or None if file_list is False).
 
         Notes
         -----
@@ -321,7 +326,7 @@ class IBLRegistrationClient(RegistrationClient):
 
         _logger.info(session['url'] + ' ')
         # create associated water administration if not found
-        if not session['wateradmin_session_related'] and any(task_data):
+        if register_reward and not session['wateradmin_session_related'] and any(task_data):
             for md, d in filter(all, zip(settings, task_data)):
                 _, _end_time = _get_session_times(ses_path, md, d)
                 user = md.get('PYBPOD_CREATOR')
