@@ -30,40 +30,6 @@ def _create_test_qc_outcomes():
 
 class TestAggregateOutcome(unittest.TestCase):
 
-    def test_deprecation_warning(self):
-        """Remove TaskQC.compute_session_status_from_dict after 2024-06-01. Cherry pick commit
-        3cbbd1769e1ba82a51b09a992b2d5f4929f396b2 for removal of this test and applicable code"""
-        from datetime import datetime
-        self.assertFalse(datetime.now() > datetime(2024, 6, 1), 'remove TaskQC.compute_session_status_from_dict method.')
-        qc_dict = {'_task_iti_delays': .99}
-        with self.assertWarns(DeprecationWarning), self.assertLogs(qcmetrics.__name__, spec.QC.WARNING):
-            out = qcmetrics.TaskQC.compute_session_status_from_dict(qc_dict)
-            expected = (spec.QC.NOT_SET, {'_task_iti_delays': spec.QC.NOT_SET})
-            self.assertEqual(expected, out, 'failed to use BWM criteria')
-            # Should handle criteria as input, both as arg and kwarg
-            criteria = {'_task_iti_delays': {spec.QC.PASS: 0.9, spec.QC.FAIL: 0},
-                        'default': {spec.QC.PASS: 0.9, spec.QC.WARNING: 0.4}}
-            out = qcmetrics.TaskQC.compute_session_status_from_dict(qc_dict, criteria=criteria)
-            expected = (spec.QC.PASS, {'_task_iti_delays': spec.QC.PASS})
-            self.assertEqual(expected, out, 'failed to use BWM criteria')
-            out = qcmetrics.TaskQC.compute_session_status_from_dict(qc_dict, criteria)
-            self.assertEqual(expected, out, 'failed to use BWM criteria')
-            qc = qcmetrics.TaskQC('/foo/subject/2024-01-01/001', one=ONE(mode='local', **TEST_DB))
-        self.assertRaises(TypeError, qcmetrics.TaskQC.compute_session_status_from_dict)
-        if getattr(self, 'assertNoLogs', False) is False:
-            self.skipTest('Python < 3.10')  # py 3.8
-        with self.assertWarns(DeprecationWarning), self.assertNoLogs(qcmetrics.__name__, 'WARNING'):
-            out = qc.compute_session_status_from_dict(qc_dict)
-            expected = (spec.QC.NOT_SET, {'_task_iti_delays': spec.QC.NOT_SET})
-            self.assertEqual(expected, out, 'failed to use BWM criteria')
-            # Should handle criteria as input, both as arg and kwarg
-            criteria = {'_task_iti_delays': {spec.QC.PASS: 0.9, spec.QC.FAIL: 0}, 'default': {spec.QC.PASS: 0}}
-            out, _ = qc.compute_session_status_from_dict(qc_dict, criteria=criteria)
-            self.assertEqual(spec.QC.PASS, out)
-            out, _ = qc.compute_session_status_from_dict(qc_dict, criteria)
-            self.assertEqual(spec.QC.PASS, out)
-        self.assertRaises(TypeError, qc.compute_session_status_from_dict)
-
     def test_outcome_from_dict_default(self):
         # For a task that has no costume thresholds, default is 0.99 PASS and 0.9 WARNING and 0 FAIL,
         # np.nan and None return not set
