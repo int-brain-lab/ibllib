@@ -5,7 +5,6 @@ from pathlib import Path
 import subprocess
 import re
 import shutil
-import uuid
 
 import packaging.version
 import numpy as np
@@ -594,6 +593,11 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
 
     @staticmethod
     def _fetch_pykilosort_version(repo_path):
+        try:
+            import pykilosort
+            return f"pykilosort_{pykilosort.__version__}"
+        except ImportError:
+            _logger.info('Pykilosort not in environment, trying to locate the repository')
         init_file = Path(repo_path).joinpath('pykilosort', '__init__.py')
         version = SpikeSorting._fetch_ks2_commit_hash(repo_path)  # default
         try:
@@ -635,7 +639,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
             return ""
         return info.decode("utf-8").strip()
 
-    def _run_pykilosort(self, ap_file, low_memory=False):
+    def _run_pykilosort(self, ap_file):
         """
         Runs the ks2 matlab spike sorting for one probe dataset
         the raw spike sorting output is in session_path/spike_sorters/{self.SPIKE_SORTER_NAME}/probeXX folder
@@ -650,7 +654,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
             log_file = sorter_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log")
             if log_file.exists():
                 run_version = self._fetch_pykilosort_run_version(log_file)
-                if packaging.version.parse(run_version) >= packaging.version.parse('1.6.0'):
+                if packaging.version.parse(run_version) >= packaging.version.parse('1.7.0'):
                     _logger.info(f"Already ran: spike_sorting_{self.SPIKE_SORTER_NAME}.log"
                                  f" found in {sorter_dir}, skipping.")
                     return sorter_dir
@@ -663,30 +667,17 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         m = re.search(r"\=(.*?)(\#|\n)", line)[0]
         scratch_drive = Path(m[1:-1].strip())
         assert scratch_drive.exists()
-        # clean up and create directory, this also checks write permissions
-        # temp_dir has the following shape: pykilosort/ZM_3003_2020-07-29_001_probe00
-        # first makes sure the tmp dir is clean
-        spikesorter_dir = self.SPIKE_SORTER_NAME + f"_{uuid.uuid4().hex}"
-        shutil.rmtree(scratch_drive.joinpath(spikesorter_dir), ignore_errors=True)
-        temp_dir = scratch_drive.joinpath(
-            spikesorter_dir, "_".join(list(self.session_path.parts[-3:]) + [label])
-        )
-        if temp_dir.exists():  # hmmm this has to be decided, we may want to restart ?
-            # But failed sessions may then clog the scratch dir and have users run out of space
-            shutil.rmtree(temp_dir, ignore_errors=True)
+        spikesorter_dir = f"{self.version}_{'_'.join(list(self.session_path.parts[-3:]))}_{self.pname}"
+        temp_dir = scratch_drive.joinpath(spikesorter_dir)
         _logger.info(f"job progress command: tail -f {temp_dir} *.log")
         temp_dir.mkdir(parents=True, exist_ok=True)
         check_nvidia_driver()
-
-        low_mem = ""
-        if low_memory:
-            low_mem = "--lowmemory"
-
-        command2run = f"{self.SHELL_SCRIPT} {ap_file} {temp_dir} {low_mem}"
         try:
-            import pykilosort  # noqa: F401
-            os.system(command2run)
+            # if pykilosort is in the environment, use the installed version within the task
+            import pykilosort.ibl  # noqa
+            pykilosort.ibl.run_spike_sorting_ibl(bin_file=ap_file, scratch_dir=temp_dir)
         except ImportError:
+            command2run = f"{self.SHELL_SCRIPT} {ap_file} {temp_dir}"
             _logger.info(command2run)
             process = subprocess.Popen(
                 command2run,
@@ -713,7 +704,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
 
         return sorter_dir
 
-    def _run(self, low_memory=False):
+    def _run(self):
         """
         Multiple steps. For each probe:
         - Runs ks2 (skips if it already ran)
@@ -727,7 +718,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         assert len(ap_files) == 1, f"Several bin files found for the same probe {ap_files}"
         ap_file, label = ap_files[0]
         out_files = []
-        ks2_dir = self._run_pykilosort(ap_file, low_memory)  # runs ks2, skips if it already ran
+        ks2_dir = self._run_pykilosort(ap_file)  # runs ks2, skips if it already ran
         probe_out_path = self.session_path.joinpath("alf", label, self.SPIKE_SORTER_NAME)
         shutil.rmtree(probe_out_path, ignore_errors=True)
         probe_out_path.mkdir(parents=True, exist_ok=True)
