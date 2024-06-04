@@ -1,5 +1,6 @@
 import logging
 import numpy as np
+from itertools import accumulate
 from packaging import version
 from one.alf.io import AlfBunch
 
@@ -123,19 +124,16 @@ class RepNum(BaseBpodTrialsExtractor):
         def get_trial_repeat(trial):
             if 'debias_trial' in trial:
                 return trial['debias_trial']
-            else:
+            elif 'contrast' in trial and isinstance(trial['contrast'], dict):
                 return trial['contrast']['type'] == 'RepeatContrast'
+            else:
+                # For advanced choice world before version 8.19.0 there was no 'debias_trial' field
+                # and no debiasing protocol applied, so simply return False
+                assert self.settings['PYBPOD_PROTOCOL'].startswith('_iblrig_tasks_advancedChoiceWorld')
+                return False
 
-        trial_repeated = np.array(list(map(get_trial_repeat, self.bpod_trials))).astype(int)
-        repNum = trial_repeated.copy()
-        c = 0
-        for i in range(len(trial_repeated)):
-            if trial_repeated[i] == 0:
-                c = 0
-                repNum[i] = 0
-                continue
-            c += 1
-            repNum[i] = c
+        trial_repeated = np.fromiter(map(get_trial_repeat, self.bpod_trials), int)
+        repNum = np.fromiter(accumulate(trial_repeated, lambda x, y: x + y if y else 0), int)
         return repNum
 
 
@@ -163,7 +161,7 @@ class FeedbackTimes(BaseBpodTrialsExtractor):
     **Optional:** saves _ibl_trials.feedback_times.npy
 
     Gets reward  and error state init times vectors,
-    checks if theintersection of nans is empty, then
+    checks if the intersection of nans is empty, then
     merges the 2 vectors.
     """
     save_names = '_ibl_trials.feedback_times.npy'

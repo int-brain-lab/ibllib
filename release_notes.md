@@ -1,19 +1,27 @@
 ## Release Note 2.35.0
 
-## features
+### features
 - Adding LightningPose task
 
-## bugfixes
+### bugfixes
 - SessionLoader can now handle trials that are not in the alf collection
 - Extraction of trials from pre-generated sequences supports iblrigv8 keys
 
+#### 2.35.1
+- Ensure no REST cache used when searching sessions in IBLRegistationClient
+
+#### 2.35.2
+- Flag to allow session registration without water administrations
+- Support extraction of repNum for advancedChoiceWorld
+- Support matplotlib v3.9; min slidingRP version now 1.1.1
+
 ## Release Note 2.34.0
 
-## features
+### features
 - Task assert_expected_input now take into account revisions
 - Camera qc and video motion now take into account dynamic pipeline folder
 
-## bugfixes
+### bugfixes
 - Typo in raw_ephys_data documentation
 - oneibl.register_datasets accounts for non existing sessions when checking protected dsets
 
@@ -24,20 +32,20 @@
 
 ## Release Note 2.33.0
 
-## features
+### features
 - Datasets no longer registered by default if protected, need to force registration
 - Tasks now allows datasets to be registered before qc computation
 - Histology channel upload now reads in channel map from data when available
 
-## bugfixes
+### bugfixes
 - PostDLC tasks looks in alf folder for lick datasets
 
 ## Release Notes 2.32
 
-## features
+### features
 - SDSC patcher automatically support revisions
 
-## other
+### other
 - Add extra key to alignment qc with manual resolution for channel upload
 
 #### 2.32.3
