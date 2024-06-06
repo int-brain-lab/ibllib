@@ -5,7 +5,7 @@ Examples
 --------
 Upload manual curation results for a given session and probe
 
->>> mc = ManualCuration(eid, 'probe', 'mf', spike_sorter='pykilosort', one=one)
+>>> mc = ManualCuration(eid, 'probe00', 'mf', spike_sorter='pykilosort', one=one)
 >>> mc.process('/path_to_manually_curated_spike_cluster_file/spikes.clusters.npy')
 
 Notes
@@ -25,6 +25,7 @@ import tarfile
 from ibllib.ephys import ephysqc, spikes
 from ibllib.pipes.ephys_tasks import SpikeSorting
 import one.alf.io as alfio
+from one.alf import spec
 import phylib.io.alf
 
 _logger = logging.getLogger(__name__)
@@ -37,14 +38,27 @@ CLUSTER_FILES = [
     'clusters.peakToTrough.npy',
     'clusters.metrics.pqt',
     'clusters.waveforms.npy',
-    'clusters.waveformChannels.npy',
+    'clusters.waveformsChannels.npy',
     'spikes.clusters.npy'
+]
+
+ALF_SS_FILES = [
+    'spikes.times.npy',
+    'spikes.amps.npy',
+    'spikes.templates.npy',
+    'spikes.depths.npy',
+    'channels.localCoordinates.npy',
+    'channels.rawInd.npy',
+    'templates.waveforms.npy',
+    'templates.waveformsChannels.npy',
+    'clusters.peakToTrough.npy'
 ]
 
 
 class ManualCuration:
 
-    def __init__(self, eid, pname, namespace, spike_sorter='pykilosort', one=None):
+    def __init__(self, session_path_or_eid, pname, namespace, spike_sorter='pykilosort', one=None, conversion_path=None,
+                 out_path=None):
 
         """
         Class to extract and upload new cluster datasets following manual curation of spikesorting using Phy. During
@@ -65,18 +79,17 @@ class ManualCuration:
         This is because the template waveforms in the alf spikesorting output are sparse (only store top 32 channels) and
         scaled (whitened an scaled according to max template amplitude) compared to the waveforms in the tar spikesorting output.
 
-        The following datasets will therefore differ depending on which spikesorting output is used,
-        - clusters.peakToTrough.npy - can vary for all units, due to the peak to trough being computed prior to scaling
+        The datasets will therefore differ depending on which spikesorting output is used, here are a few explanations
+        - clusters.peakToTrough.npy - due to the peak to trough being computed prior to scaling
         (tar output) vs post scaling (alf output)
         - clusters.waveforms.npy - will be different for clusters that have been merged during the manual curation process, due to
         only having access to 32 channels and the waveforms already being scaled
         - clusters.waveformsChannels.npy - will be different for clusters that have been merged during the manual curation process
+        - clusters.amps.npy - due to the peak to trough being computed prior to scaling
+        (tar output) vs post scaling (alf output)
+        - clusters.channels.npy - derived from the clusters.waveforms.npy
+        - clusters.depths.npy - derived from clusters.channels.npy
 
-        The outputs for the following datasets should be the same regardless of which initial spikesorting output is used
-        - clusters.channels.npy
-        - clusters.amps.npy
-        - clusters.depths.npy
-        - clusters.metrics.pqt
 
         A namespace is inserted into the file name to differentiate the new datasets from the origial alf datasets, e,g
         _av_spikes.clusters.npy. The convention is that the namespace should be the initials of the user who performed the
@@ -84,8 +97,8 @@ class ManualCuration:
 
         Parameters
         ----------
-        eid : str
-            A session experiment id
+        session_path_or_eid: str or Path
+            A session experiment id or a session path
         pname : str
             A probe label, e.g 'probe00'
         namespace : str
@@ -97,18 +110,29 @@ class ManualCuration:
         """
 
         self.one = one
-        self.eid = eid
+
+        self.eid = None
+        if spec.is_uuid_string(str(session_path_or_eid)):
+            self.eid = session_path_or_eid
+            # Try to set session_path if data is found locally
+            self.session_path = self.one.eid2path(self.eid)
+        elif spec.is_session_path(session_path_or_eid):
+            self.session_path = Path(session_path_or_eid)
+            if self.one is not None:
+                self.eid = self.one.path2eid(self.session_path)
+                if not self.eid:
+                    self.log.warning('Failed to determine eID from session path')
+
         self.spike_sorter = spike_sorter
         self.pname = pname
         self.namespace = namespace
-        self.session_path = self.one.eid2path(self.eid)
         self.alf_collection = f'alf/{self.pname}/{self.spike_sorter}'
         self.bin_path = self.session_path.joinpath('raw_ephys_data', self.pname)
 
         # Location that acts as a temporary directory for extraction
-        self.conversion_path = self.session_path.joinpath('manual_curation', self.pname)
+        self.conversion_path = conversion_path or self.session_path.joinpath('manual_curation', self.pname)
         self.conversion_path.mkdir(exist_ok=True, parents=True)
-        self.out_path = self.conversion_path.joinpath('alf_curated')
+        self.out_path = out_path or self.conversion_path.joinpath('alf_curated')
         self.out_path.mkdir(exist_ok=True, parents=True)
 
         self.cluster_file = None
@@ -152,7 +176,8 @@ class ManualCuration:
             self.extract_from_alf_data()
 
         # Compute the new clusters metrics for the manually curated clusters
-        self.compute_cluster_metrics()
+
+        self.compute_cluster_metrics(ss_type)
 
         # Rename the files, add the user namespace to the beginning of each file
         files = self.rename_files()
@@ -244,19 +269,11 @@ class ManualCuration:
         """
 
         # Want to avoid re-downloading the spikes.clusters just in case
-        ss_alf_dsets = ['spikes.times.npy',
-                        'spikes.amplitudes.npy',
-                        'spikes.templates.npy',
-                        'spikes.depths.npy',
-                        'channels.localCoordinates.npy',
-                        'channels.rawInd.npy',
-                        'templates.waveforms.npy',
-                        'templates.waveformChannels.npy']
 
         ss_alf_output = self.conversion_path.joinpath('alf_ss')
         ss_alf_output.mkdir(exist_ok=True, parents=True)
 
-        ss_alf_files = self.one.load_datasets(self.eid, ss_alf_dsets, collection=self.alf_collection, download_only=True)
+        ss_alf_files = self.one.load_datasets(self.eid, ALF_SS_FILES, collection=self.alf_collection, download_only=True)
         for file in ss_alf_files:
             shutil.copy(file, ss_alf_output.joinpath(file.name))
 
@@ -347,11 +364,30 @@ class ManualCuration:
         np.save(ac.out_path.joinpath('clusters.waveforms'), m.sparse_clusters.data)
         np.save(ac.out_path.joinpath('clusters.waveformsChannels'), m.sparse_clusters.cols)
         _ = ac.make_cluster_depths()
+        self.adjust_cluster_peakToTrough(m.nan_idx)
 
-    def compute_cluster_metrics(self):
+        shutil.copy(self.cluster_file, self.out_path.joinpath('spikes.clusters.npy'))
+
+    def adjust_cluster_peakToTrough(self, nan_idx):
+
+        orig_file = np.load(self.conversion_path.joinpath('alf_ss', 'clusters.peakToTrough.npy'))
+        new_file = np.load(self.out_path.joinpath('clusters.peakToTrough.npy'))
+
+        new_file[0:len(orig_file)] = orig_file
+        new_file[nan_idx] = np.nan
+
+        np.save(self.out_path.joinpath('clusters.peakToTrough.npy'), new_file)
+
+    def compute_cluster_metrics(self, ss_type):
         """
         Computes the clusters metrics from the new clusters datasets
         """
+
+        # For alf we need to move the relevant spikes files to compute the metrics
+        if ss_type == 'alf_ss':
+            for file in [FF for FF in ALF_SS_FILES if 'spike' in FF]:
+                if not self.out_path.joinpath(file).exists():
+                    shutil.copy(self.conversion_path.joinpath('alf_ss', file), self.out_path.joinpath(file))
 
         spikes = alfio.load_object(self.out_path, 'spikes')
         clusters = alfio.load_object(self.out_path, 'clusters')
