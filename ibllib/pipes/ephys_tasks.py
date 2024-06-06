@@ -620,7 +620,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
             line = fid.readline()
         version = re.search('version (.*), output', line)
         version = version or re.search('version (.*)', line)  # old versions have output, new have a version line
-        version = version.group(1).replace('\x1b[0m', '')  # remove the color code at the end of the line
+        version = re.sub('\\^[[0-9]+m', '', version.group(1))  # removes the coloring tags
         return version
 
     @staticmethod
