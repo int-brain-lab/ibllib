@@ -42,7 +42,7 @@ def find_nearest(array, value):
 class MotionAlignment:
     roi = {'left': ((800, 1020), (233, 1096)), 'right': ((426, 510), (104, 545)), 'body': ((402, 481), (31, 103))}
 
-    def __init__(self, eid=None, one=None, log=logging.getLogger(__name__), **kwargs):
+    def __init__(self, eid=None, one=None, log=logging.getLogger(__name__), stream=False, **kwargs):
         self.one = one or ONE()
         self.eid = eid
         self.session_path = kwargs.pop('session_path', None) or self.one.eid2path(eid)
@@ -51,7 +51,10 @@ class MotionAlignment:
         self.trials = self.wheel = self.camera_times = None
         raw_cam_path = self.session_path.joinpath('raw_video_data')
         camera_path = list(raw_cam_path.glob('_iblrig_*Camera.raw.*'))
-        self.video_paths = {vidio.label_from_path(x): x for x in camera_path}
+        if stream:
+            self.video_paths = vidio.url_from_eid(self.eid)
+        else:
+            self.video_paths = {vidio.label_from_path(x): x for x in camera_path}
         self.data = Bunch()
         self.alignment = Bunch()
 
@@ -107,8 +110,8 @@ class MotionAlignment:
         if download:
             self.data.wheel = self.one.load_object(self.eid, 'wheel')
             self.data.trials = self.one.load_object(self.eid, 'trials')
-            cam = self.one.load(self.eid, ['camera.times'], dclass_output=True)
-            self.data.camera_times = {vidio.label_from_path(url): ts for ts, url in zip(cam.data, cam.url)}
+            cam, det = self.one.load_datasets(self.eid, ['*Camera.times*'])
+            self.data.camera_times = {vidio.label_from_path(d['rel_path']): ts for ts, d in zip(cam, det)}
         else:
             alf_path = self.session_path / 'alf'
             wheel_path = next(alf_path.rglob('*wheel.timestamps*')).parent
@@ -329,7 +332,7 @@ class MotionAlignment:
             data['im'].set_data(frame)
 
             mkr = find_nearest(wheel.timestamps[wheel_mask], t_x)
-            data['marker'].set_data(wheel.timestamps[wheel_mask][mkr], wheel.position[wheel_mask][mkr])
+            data['marker'].set_data([wheel.timestamps[wheel_mask][mkr]], [wheel.position[wheel_mask][mkr]])
 
             return data['im'], data['ln'], data['marker']
 

@@ -3,7 +3,8 @@ Computes properties of single-cells, e.g. the autocorrelation and firing rate.
 '''
 
 import numpy as np
-from scipy.signal import convolve, gaussian
+from scipy.signal import convolve
+from scipy.signal.windows import gaussian
 from iblutil.util import Bunch
 from brainbox.population.decode import xcorr
 
