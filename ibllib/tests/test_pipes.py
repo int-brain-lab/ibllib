@@ -702,7 +702,7 @@ class TestRegisterRawDataTask(unittest.TestCase):
         (folder := self.session_path.joinpath('snapshots')).mkdir()
         folder.joinpath('snap.PNG').touch()
         collection = 'raw_task_data'
-        for i, ext in enumerate(['tif', 'jpg']):
+        for i, ext in enumerate(['tif', 'jpg', 'gif']):
             (p := self.session_path.joinpath(f'{collection}_{i:02}', 'snapshots')).mkdir(parents=True)
             p.joinpath(f'snapshot.{ext}').touch()
         # Stuff with text note
@@ -713,15 +713,20 @@ class TestRegisterRawDataTask(unittest.TestCase):
             fp.write('bar')
 
         task = RegisterRawDataTask(self.session_path, one=self.one)
+        # Mock the _is_animated_gif function to return true for any GIF file
         with mock.patch.object(self.one.alyx, 'rest') as rest, \
-                mock.patch.object(self.one, 'path2eid', return_value=str(uuid4())):
+                mock.patch.object(self.one, 'path2eid', return_value=str(uuid4())), \
+                mock.patch.object(task, '_is_animated_gif', side_effect=lambda x: x.suffix == '.gif'):
             task.register_snapshots(collection=['', f'{collection}*'])
-            self.assertEqual(4, rest.call_count)
+            self.assertEqual(5, rest.call_count)
             files = []
             for args, kwargs in rest.call_args_list:
                 self.assertEqual(('notes', 'create'), args)
                 files.append(Path(kwargs['files']['image'].name).name)
-            expected = ('snap.PNG', 'pic.jpeg', 'snapshot.tif', 'snapshot.jpg')
+                width = kwargs['data'].get('width')
+                # Test that original size passed as width only for gif file
+                self.assertEqual('orig', width) if files[-1].endswith('gif') else self.assertIsNone(width)
+            expected = ('snap.PNG', 'pic.jpeg', 'snapshot.tif', 'snapshot.jpg', 'snapshot.gif')
             self.assertCountEqual(expected, files)
 
 
