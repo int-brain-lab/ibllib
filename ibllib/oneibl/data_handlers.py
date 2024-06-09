@@ -51,6 +51,8 @@ class DataHandler(abc.ABC):
         for file in self.signature['input_files']:
             dfs.append(filter_datasets(session_datasets, filename=file[0], collection=file[1],
                        wildcards=True, assert_unique=False))
+        if len(dfs) == 0:
+            return pd.DataFrame()
         df = pd.concat(dfs)
 
         # Some cases the eid is stored in the index. If so we drop this level
