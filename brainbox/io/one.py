@@ -1000,7 +1000,7 @@ class SpikeSortingLoader:
             self.histology = 'alf'
         return channels
 
-    def load_spike_sorting(self, spike_sorter='pykilosort', **kwargs):
+    def load_spike_sorting(self, spike_sorter='pykilosort', revision=None, enforce_version=True, **kwargs):
         """
         Loads spikes, clusters and channels
 
@@ -1014,18 +1014,31 @@ class SpikeSortingLoader:
         -   traced: the histology track has been recovered from microscopy, however the depths may not match, inaccurate data
 
         :param spike_sorter: (defaults to 'pykilosort')
-        :param dataset_types: list of extra dataset types
+        :param revision: for example "2024-05-06", (defaults to None):
+        :param enforce_version: if True, will raise an error if the spike sorting version and revision is not the expected one
+        :param dataset_types: list of extra dataset types, for example: ['spikes.samples', 'spikes.templates']
+        :param kwargs: additional arguments to be passed to one.api.One.load_object
         :return:
         """
         if len(self.collections) == 0:
             return {}, {}, {}
         self.files = {}
         self.spike_sorter = spike_sorter
-        self.download_spike_sorting(spike_sorter=spike_sorter, **kwargs)
-        channels = self.load_channels(spike_sorter=spike_sorter, **kwargs)
+        self.revision = revision
+        self.download_spike_sorting(spike_sorter=spike_sorter, revision=revision, **kwargs)
+        channels = self.load_channels(spike_sorter=spike_sorter, revision=revision, **kwargs)
         clusters = self._load_object(self.files['clusters'], wildcards=self.one.wildcards)
         spikes = self._load_object(self.files['spikes'], wildcards=self.one.wildcards)
 
+        if enforce_version:
+            for k in ['clusters', 'channels', 'spikes']:
+                for fn in self.files[k]:
+                    if self.spike_sorter:
+                        assert fn.relative_to(self.session_path).parts[2] == self.spike_sorter, \
+                            f"{self.files} does not match spike sorter: {self.spike_sorter}, you required strict version"
+                    if self.revision:
+                        assert fn.relative_to(self.session_path).parts[3] == f"#{self.revision}#", \
+                            f"{self.files} does not match revision: {self.revision}, you required strict revision"
         return spikes, clusters, channels
 
     @staticmethod
