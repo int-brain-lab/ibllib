@@ -673,7 +673,7 @@ def driftmap(ts, feat, ax=None, plot_style='bincount',
     else:
         # compute raster map as a function of site depth
         R, times, depths = bincount2D(
-            ts[iok], feat[iok], t_bin, d_bin, weights=weights)
+            ts[iok], feat[iok], t_bin, d_bin, weights=weights[iok] if weights is not None else None)
         # plot raster map
         ax.imshow(R, aspect='auto', cmap='binary', vmin=0, vmax=vmax or np.std(R) * 4,
                   extent=np.r_[times[[0, -1]], depths[[0, -1]]], origin='lower', **kwargs)

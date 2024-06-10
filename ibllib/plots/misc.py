@@ -74,7 +74,7 @@ def wiggle(w, fs=1, gain=0.71, color='k', ax=None, fill=True, linewidth=0.5, t0=
 
 
 class Density:
-    def __init__(self, w, fs=30_000, cmap='Greys_r', ax=None, taxis=0, title=None, gain=None, **kwargs):
+    def __init__(self, w, fs=30_000, cmap='Greys_r', ax=None, taxis=0, title=None, gain=None, t0=0, unit='ms', **kwargs):
         """
         Matplotlib display of traces as a density display using `imshow()`.
 
@@ -86,20 +86,23 @@ class Density:
         :param title: Title to display on plot. [default: `None`]
         :param gain: Gain in dB to display. Note: overrides `vmin` and `vmax` kwargs to `imshow()`.
             Default: [`None` (auto)]
+        :param t0: Time offset to display in seconds. [default: 0]
         :param kwargs: Key word arguments passed to `imshow()`
+        :param t_scalar: 1e3 for ms (default), 1 for s
         :return: None
         """
         w = w.reshape(w.shape[0], -1)
+        t_scalar = 1e3 if unit == 'ms' else 1
         if taxis == 0:
             nech, ntr = w.shape
-            tscale = np.array([0, nech - 1]) / fs * 1e3
-            extent = [-0.5, ntr - 0.5, tscale[1], tscale[0]]
-            xlabel, ylabel, origin = ('Trace', 'Time (ms)', 'upper')
+            tscale = np.array([0, nech - 1]) / fs * t_scalar
+            extent = [-0.5, ntr - 0.5, tscale[1] + t0 * t_scalar, tscale[0] + t0 * t_scalar]
+            xlabel, ylabel, origin = ('Trace', f'Time ({unit})', 'upper')
         elif taxis == 1:
             ntr, nech = w.shape
-            tscale = np.array([0, nech - 1]) / fs * 1e3
-            extent = [tscale[0], tscale[1], -0.5, ntr - 0.5]
-            ylabel, xlabel, origin = ('Trace', 'Time (ms)', 'lower')
+            tscale = np.array([0, nech - 1]) / fs * t_scalar
+            extent = [tscale[0] + t0 * t_scalar, tscale[1] + t0 * t_scalar, -0.5, ntr - 0.5]
+            ylabel, xlabel, origin = ('Trace', f'Time ({unit})', 'lower')
         if ax is None:
             self.figure, ax = plt.subplots()
         else:
