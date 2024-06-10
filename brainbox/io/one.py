@@ -917,16 +917,18 @@ class SpikeSortingLoader:
             if missing == 'raise':
                 raise e
 
-    def download_spike_sorting(self, **kwargs):
+    def download_spike_sorting(self, objects=None, **kwargs):
         """
         Downloads spikes, clusters and channels
         :param spike_sorter: (defaults to 'pykilosort')
         :param dataset_types: list of extra dataset types
+        :param objects: list of objects to download, defaults to ['spikes', 'clusters', 'channels']
         :return:
         """
-        for obj in ['spikes', 'clusters', 'channels']:
+        objects = ['spikes', 'clusters', 'channels'] if objects is None else objects
+        for obj in objects:
             self.download_spike_sorting_object(obj=obj, **kwargs)
-        self.spike_sorting_path = self.files['spikes'][0].parent
+        self.spike_sorting_path = self.files['clusters'][0].parent
 
     def download_raw_electrophysiology(self, band='ap'):
         """
@@ -1000,7 +1002,7 @@ class SpikeSortingLoader:
             self.histology = 'alf'
         return channels
 
-    def load_spike_sorting(self, spike_sorter='pykilosort', revision=None, enforce_version=True, **kwargs):
+    def load_spike_sorting(self, spike_sorter='pykilosort', revision=None, enforce_version=True, good_units=False, **kwargs):
         """
         Loads spikes, clusters and channels
 
@@ -1017,6 +1019,7 @@ class SpikeSortingLoader:
         :param revision: for example "2024-05-06", (defaults to None):
         :param enforce_version: if True, will raise an error if the spike sorting version and revision is not the expected one
         :param dataset_types: list of extra dataset types, for example: ['spikes.samples', 'spikes.templates']
+        :param good_units: False, if True will load only the good units, possibly by downloading a smaller spikes table
         :param kwargs: additional arguments to be passed to one.api.One.load_object
         :return:
         """
@@ -1025,21 +1028,31 @@ class SpikeSortingLoader:
         self.files = {}
         self.spike_sorter = spike_sorter
         self.revision = revision
-        self.download_spike_sorting(spike_sorter=spike_sorter, revision=revision, **kwargs)
+        objects = ['passingSpikes', 'clusters', 'channels'] if good_units else None
+        self.download_spike_sorting(spike_sorter=spike_sorter, revision=revision, objects=objects, **kwargs)
         channels = self.load_channels(spike_sorter=spike_sorter, revision=revision, **kwargs)
         clusters = self._load_object(self.files['clusters'], wildcards=self.one.wildcards)
-        spikes = self._load_object(self.files['spikes'], wildcards=self.one.wildcards)
-
+        if good_units:
+            spikes = self._load_object(self.files['passingSpikes'], wildcards=self.one.wildcards)
+        else:
+            spikes = self._load_object(self.files['spikes'], wildcards=self.one.wildcards)
         if enforce_version:
-            for k in ['clusters', 'channels', 'spikes']:
-                for fn in self.files[k]:
-                    if self.spike_sorter:
-                        assert fn.relative_to(self.session_path).parts[2] == self.spike_sorter, \
-                            f"{self.files} does not match spike sorter: {self.spike_sorter}, you required strict version"
-                    if self.revision:
-                        assert fn.relative_to(self.session_path).parts[3] == f"#{self.revision}#", \
-                            f"{self.files} does not match revision: {self.revision}, you required strict revision"
+            self._assert_version_consistency()
         return spikes, clusters, channels
+
+    def _assert_version_consistency(self):
+        """
+        Makes sure the state of the spike sorting object matches the files downloaded
+        :return: None
+        """
+        for k in ['spikes', 'clusters', 'channels', 'passingSpikes']:
+            for fn in self.files.get(k, []):
+                if self.spike_sorter:
+                    assert fn.relative_to(self.session_path).parts[2] == self.spike_sorter, \
+                        f"You required strict version {self.spike_sorter}, {fn} does not match"
+                if self.revision:
+                    assert fn.relative_to(self.session_path).parts[3] == f"#{self.revision}#", \
+                        f"You required strict revision {self.revision}, {fn} does not match"
 
     @staticmethod
     def compute_metrics(spikes, clusters=None):
