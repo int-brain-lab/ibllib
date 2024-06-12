@@ -40,6 +40,7 @@ _logger = logging.getLogger('ibllib')
 
 SPIKES_ATTRIBUTES = ['clusters', 'times', 'amps', 'depths']
 CLUSTERS_ATTRIBUTES = ['channels', 'depths', 'metrics', 'uuids']
+WAVEFORMS_ATTRIBUTES = ['templates']
 
 
 def load_lfp(eid, one=None, dataset_types=None, **kwargs):
@@ -851,14 +852,14 @@ class SpikeSortingLoader:
     @staticmethod
     def _get_attributes(dataset_types):
         """returns attributes to load for spikes and clusters objects"""
-        if dataset_types is None:
-            return SPIKES_ATTRIBUTES, CLUSTERS_ATTRIBUTES
-        else:
-            spike_attributes = [sp.split('.')[1] for sp in dataset_types if 'spikes.' in sp]
-            cluster_attributes = [cl.split('.')[1] for cl in dataset_types if 'clusters.' in cl]
-            spike_attributes = list(set(SPIKES_ATTRIBUTES + spike_attributes))
-            cluster_attributes = list(set(CLUSTERS_ATTRIBUTES + cluster_attributes))
-            return spike_attributes, cluster_attributes
+        dataset_types = [] if dataset_types is None else dataset_types
+        spike_attributes = [sp.split('.')[1] for sp in dataset_types if 'spikes.' in sp]
+        spike_attributes = list(set(SPIKES_ATTRIBUTES + spike_attributes))
+        cluster_attributes = [cl.split('.')[1] for cl in dataset_types if 'clusters.' in cl]
+        cluster_attributes = list(set(CLUSTERS_ATTRIBUTES + cluster_attributes))
+        waveform_attributes = [cl.split('.')[1] for cl in dataset_types if 'waveforms.' in cl]
+        waveform_attributes = list(set(WAVEFORMS_ATTRIBUTES + waveform_attributes))
+        return {'spikes': spike_attributes, 'clusters': cluster_attributes, 'waveforms': waveform_attributes}
 
     def _get_spike_sorting_collection(self, spike_sorter='pykilosort'):
         """
@@ -891,7 +892,7 @@ class SpikeSortingLoader:
         return dset[0]['version'] if len(dset) else 'unknown'
 
     def download_spike_sorting_object(self, obj, spike_sorter='pykilosort', dataset_types=None, collection=None,
-                                      missing='raise', **kwargs):
+                                      attribute=None, missing='raise', **kwargs):
         """
         Downloads an ALF object
         :param obj: object name, str between 'spikes', 'clusters' or 'channels'
@@ -899,6 +900,7 @@ class SpikeSortingLoader:
         :param dataset_types: list of extra dataset types, for example ['spikes.samples']
         :param collection: string specifiying the collection, for example 'alf/probe01/pykilosort'
         :param kwargs: additional arguments to be passed to one.api.One.load_object
+        :param attribute: list of attributes to load for the object
         :param missing: 'raise' (default) or 'ignore'
         :return:
         """
@@ -907,8 +909,7 @@ class SpikeSortingLoader:
         self.collection = self._get_spike_sorting_collection(spike_sorter=spike_sorter)
         collection = collection or self.collection
         _logger.debug(f"loading spike sorting object {obj} from {collection}")
-        spike_attributes, cluster_attributes = self._get_attributes(dataset_types)
-        attributes = {'spikes': spike_attributes, 'clusters': cluster_attributes}
+        attributes = self._get_attributes(dataset_types)
         try:
             self.files[obj] = self.one.load_object(
                 self.eid, obj=obj, attribute=attributes.get(obj, None),
