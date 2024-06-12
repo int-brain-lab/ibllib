@@ -1,3 +1,9 @@
+## Release Note 2.36.0
+
+### features
+- Adding spike sorting iblsort task
+
+
 ## Release Note 2.35.0
 
 ### features
