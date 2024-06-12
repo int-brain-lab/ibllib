@@ -9,6 +9,7 @@ import yaml
 import ibllib.tests
 import ibllib.pipes.dynamic_pipeline as dyn
 from ibllib.pipes.tasks import Pipeline, Task
+import ibllib.pipes.behavior_tasks as btasks
 from ibllib.pipes import ephys_preprocessing
 from ibllib.pipes import training_preprocessing
 from ibllib.io import session_params
@@ -65,6 +66,7 @@ class TestGetTrialsTasks(unittest.TestCase):
                            {'ephysChoiceWorld': {'task_collection': 'raw_task_data_00'}},
                            {'passiveChoiceWorld': {'task_collection': 'raw_task_data_01'}},
                        ]}
+        self.description = description
         with open(self.session_path_dynamic / '_ibl_experiment.description.yaml', 'w') as fp:
             yaml.safe_dump(description, fp)
 
@@ -87,7 +89,24 @@ class TestGetTrialsTasks(unittest.TestCase):
         one.alyx.cache_mode = None  # sneaky hack as this is checked by the pipeline somewhere
         tasks = dyn.get_trials_tasks(self.session_path_dynamic, one)
         self.assertEqual(2, len(tasks))
+        self.assertIsInstance(tasks[0], btasks.ChoiceWorldTrialsNidq)
         one.load_datasets.assert_called()  # check that description file is checked on disk
+
+        # A session with timeline acquisition
+        self.description['sync']['nidq']['acquisition_software'] = 'timeline'
+        with open(self.session_path_dynamic / '_ibl_experiment.description.yaml', 'w') as fp:
+            yaml.safe_dump(self.description, fp)
+        tasks = dyn.get_trials_tasks(self.session_path_dynamic, one)
+        self.assertIsInstance(tasks[0], btasks.ChoiceWorldTrialsTimeline)
+
+        # A session with an unknown sync namespace
+        self.description['sync']['nidq']['acquisition_software'] = 'notepad'
+        with open(self.session_path_dynamic / '_ibl_experiment.description.yaml', 'w') as fp:
+            yaml.safe_dump(self.description, fp)
+        with self.assertLogs(dyn.__name__, 'WARNING') as cm:
+            self.assertEqual([], dyn.get_trials_tasks(self.session_path_dynamic))
+        log_message = cm.records[0].getMessage()
+        self.assertIn('sync namespace "notepad"', log_message)
 
         # An ephys session
         tasks = dyn.get_trials_tasks(self.session_path_legacy)
