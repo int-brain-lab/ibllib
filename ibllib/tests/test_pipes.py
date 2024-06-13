@@ -697,6 +697,7 @@ class TestRegisterRawDataTask(unittest.TestCase):
         """Test upload of snapshots.
 
         Another test for this exists in ibllib.tests.test_base_tasks.TestRegisterRawDataTask.
+        This test does not work on real files and works without a test db.
         """
         # Add base dir snapshot
         (folder := self.session_path.joinpath('snapshots')).mkdir()
@@ -716,6 +717,7 @@ class TestRegisterRawDataTask(unittest.TestCase):
         # Mock the _is_animated_gif function to return true for any GIF file
         with mock.patch.object(self.one.alyx, 'rest') as rest, \
                 mock.patch.object(self.one, 'path2eid', return_value=str(uuid4())), \
+                mock.patch.object(task, '_save_as_png', side_effect=lambda x: x.with_suffix('.png').touch()), \
                 mock.patch.object(task, '_is_animated_gif', side_effect=lambda x: x.suffix == '.gif'):
             task.register_snapshots(collection=['', f'{collection}*'])
             self.assertEqual(5, rest.call_count)
@@ -726,7 +728,7 @@ class TestRegisterRawDataTask(unittest.TestCase):
                 width = kwargs['data'].get('width')
                 # Test that original size passed as width only for gif file
                 self.assertEqual('orig', width) if files[-1].endswith('gif') else self.assertIsNone(width)
-            expected = ('snap.PNG', 'pic.jpeg', 'snapshot.tif', 'snapshot.jpg', 'snapshot.gif')
+            expected = ('snap.PNG', 'pic.jpeg', 'snapshot.png', 'snapshot.jpg', 'snapshot.gif')
             self.assertCountEqual(expected, files)
 
 
