@@ -12,7 +12,7 @@ import random
 import string
 from uuid import uuid4
 
-from one.api import ONE
+from one.api import ONE, OneAlyx
 import iblutil.io.params as iopar
 from packaging.version import Version, InvalidVersion
 
@@ -20,10 +20,43 @@ import ibllib.io.extractors.base
 import ibllib.tests.fixtures.utils as fu
 from ibllib.pipes import misc
 from ibllib.pipes.misc import sleepless
+from ibllib.pipes import local_server
 from ibllib.tests import TEST_DB
 import ibllib.pipes.scan_fix_passive_files as fix
 from ibllib.pipes.base_tasks import RegisterRawDataTask
 from ibllib.pipes.ephys_preprocessing import SpikeSorting
+
+
+class TestLocalServer(unittest.TestCase):
+    """Tests for the ibllib.pipes.local_server module."""
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.tmpdir = Path(tmp.name)
+        self.addCleanup(tmp.cleanup)
+        raw_behaviour_data = fu.create_fake_raw_behavior_data_folder(self.tmpdir / 'subject/2020-01-01/001', task='ephys')
+        raw_behaviour_data.parent.joinpath('raw_session.flag').touch()
+        fu.populate_task_settings(raw_behaviour_data, patch={'PYBPOD_PROTOCOL': '_iblrig_ephysChoiceWorld5.2.1'})
+        raw_behaviour_data = fu.create_fake_raw_behavior_data_folder(self.tmpdir / 'subject/2020-01-01/002')
+        raw_behaviour_data.parent.joinpath('raw_session.flag').touch()
+        fu.populate_task_settings(raw_behaviour_data, patch={'PYBPOD_PROTOCOL': 'ephys_optoChoiceWorld6.0.1'})
+
+    @mock.patch('ibllib.pipes.local_server.IBLRegistrationClient')
+    @mock.patch('ibllib.pipes.local_server.make_pipeline')
+    def test_job_creator(self, pipeline_mock, _):
+        """Test the job_creator function.
+
+        This test was created after retiring the legacy pipeline. Here we test that an experiment
+        description file is created for each legacy session, followed by dynamic pipeline creation.
+        The second session tests the behaviour of a legacy pipeline with no corresponding experiment
+        description template.  For these sessions we will simply update acquisition_description_legacy_session
+        to add support.
+        """
+        one = mock.Mock(spec=OneAlyx)
+        with self.assertLogs(local_server.__name__, 'ERROR') as log:
+            pipes, _ = local_server.job_creator(self.tmpdir, one=one)
+        self.assertIn("KeyError: 'biased_opto'", log.records[0].getMessage())
+        self.assertEqual(len(pipes), 1)
+        pipeline_mock.assert_called_once()
 
 
 class TestExtractors2Tasks(unittest.TestCase):
@@ -31,7 +64,7 @@ class TestExtractors2Tasks(unittest.TestCase):
     def test_task_to_pipeline(self):
         dd = ibllib.io.extractors.base._get_task_types_json_config()
         types = list(set([dd[k] for k in dd]))
-        # makes sure that for every defined task type there is an acutal pipeline
+        # makes sure that for every defined task type there is an actual pipeline
         for type in types:
             assert ibllib.io.extractors.base._get_pipeline_from_task_type(type)
             print(type, ibllib.io.extractors.base._get_pipeline_from_task_type(type))
