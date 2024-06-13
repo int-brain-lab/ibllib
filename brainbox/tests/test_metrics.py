@@ -62,7 +62,9 @@ def test_clusters_metrics():
         assert np.allclose(dfm['drift'][idf], np.array(cid) * 100 * 4 * 3.6, rtol=1.1)
         assert np.allclose(dfm['firing_rate'][idf], frs, rtol=1.1)
         assert np.allclose(dfm['cluster_id'], target_cid)
-
+        # test expected bitwise qc values:
+        expected_labels = 1 - np.sum(np.unpackbits(dfm['bitwise_fail']).reshape(-1, 8), axis=1) / 3
+        assert np.allclose(dfm['label'], expected_labels)
     # check with missing clusters
     dfm = quick_unit_metrics(c, t, a, d, cluster_ids=np.arange(5), tbounds=[100, 900])
     idf, _ = ismember(np.arange(5), cid)
