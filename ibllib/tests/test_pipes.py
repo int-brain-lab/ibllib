@@ -715,9 +715,10 @@ class TestRegisterRawDataTask(unittest.TestCase):
 
         task = RegisterRawDataTask(self.session_path, one=self.one)
         # Mock the _is_animated_gif function to return true for any GIF file
+        as_png_side_effect = lambda x: x.with_suffix('.png').touch() or x.with_suffix('.png')  # noqa
         with mock.patch.object(self.one.alyx, 'rest') as rest, \
                 mock.patch.object(self.one, 'path2eid', return_value=str(uuid4())), \
-                mock.patch.object(task, '_save_as_png', side_effect=lambda x: x.with_suffix('.png').touch()), \
+                mock.patch.object(task, '_save_as_png', side_effect=as_png_side_effect), \
                 mock.patch.object(task, '_is_animated_gif', side_effect=lambda x: x.suffix == '.gif'):
             task.register_snapshots(collection=['', f'{collection}*'])
             self.assertEqual(5, rest.call_count)
