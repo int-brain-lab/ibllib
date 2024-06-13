@@ -11,6 +11,7 @@ from functools import partial
 import random
 import string
 from uuid import uuid4
+from datetime import datetime
 
 from one.api import ONE, OneAlyx
 import iblutil.io.params as iopar
@@ -57,6 +58,16 @@ class TestLocalServer(unittest.TestCase):
         self.assertIn("KeyError: 'biased_opto'", log.records[0].getMessage())
         self.assertEqual(len(pipes), 1)
         pipeline_mock.assert_called_once()
+
+        # In September 2024, the legacy pipeline will be removed. This entails removing the
+        # code in pipes.training_preprocessing and pipes.ephys_preprocessing, as well as the
+        # code in qc.task_extractors and the extract_all functions in the io.extractors modules.
+        # NB: some tasks such as ephys opto do not have experiment description templates and some
+        # legacy tasks are imported for use in the dynamic pipeline.
+        self.assertFalse(
+            datetime.today() > datetime(2024, 9, 1),
+            'Legacy pipeline code scheduled to be removed after 2024-09-01'
+        )
 
 
 class TestExtractors2Tasks(unittest.TestCase):
