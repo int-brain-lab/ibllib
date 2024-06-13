@@ -424,6 +424,8 @@ class Task(abc.ABC):
             dhandler = data_handlers.RemoteAwsDataHandler(self, self.session_path, self.signature, one=self.one)
         elif location == 'sdsc':
             dhandler = data_handlers.SDSCDataHandler(self, self.session_path, self.signature, one=self.one)
+        elif location == 'popeye':
+            dhandler = data_handlers.PopeyeDataHandler(self, self.session_path, self.signature, one=self.one)
         else:
             raise ValueError(f'Unknown location "{location}"')
         return dhandler
@@ -463,6 +465,8 @@ class Task(abc.ABC):
             return True
 
     def _creates_lock(self):
+        if self.location == "popeye":
+            return True
         if self.is_locked():
             return False
         else:

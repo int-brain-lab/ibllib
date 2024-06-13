@@ -51,6 +51,8 @@ class DataHandler(abc.ABC):
         for file in self.signature['input_files']:
             dfs.append(filter_datasets(session_datasets, filename=file[0], collection=file[1],
                        wildcards=True, assert_unique=False))
+        if len(dfs) == 0:
+            return pd.DataFrame()
         df = pd.concat(dfs)
 
         # Some cases the eid is stored in the index. If so we drop this level
@@ -413,23 +415,29 @@ class SDSCDataHandler(DataHandler):
     :param signature: input and output file signatures
     :param one: ONE instance
     """
+
     def __init__(self, task, session_path, signatures, one=None):
         super().__init__(session_path, signatures, one=one)
         self.task = task
+        self.SDSC_PATCH_PATH = SDSC_PATCH_PATH
+        self.SDSC_ROOT_PATH = SDSC_ROOT_PATH
 
     def setUp(self):
         """Function to create symlinks to necessary data to run tasks."""
         df = super().getData()
 
-        SDSC_TMP = Path(SDSC_PATCH_PATH.joinpath(self.task.__class__.__name__))
+        SDSC_TMP = Path(self.SDSC_PATCH_PATH.joinpath(self.task.__class__.__name__))
         for i, d in df.iterrows():
             file_path = Path(d['session_path']).joinpath(d['rel_path'])
             uuid = i
             file_uuid = add_uuid_string(file_path, uuid)
             file_link = SDSC_TMP.joinpath(file_path)
             file_link.parent.mkdir(exist_ok=True, parents=True)
-            file_link.symlink_to(
-                Path(SDSC_ROOT_PATH.joinpath(file_uuid)))
+            try:
+                file_link.symlink_to(
+                    Path(self.SDSC_ROOT_PATH.joinpath(file_uuid)))
+            except FileExistsError:
+                pass
 
         self.task.session_path = SDSC_TMP.joinpath(d['session_path'])
 
@@ -448,3 +456,20 @@ class SDSCDataHandler(DataHandler):
         """Function to clean up symlinks created to run task."""
         assert SDSC_PATCH_PATH.parts[0:4] == self.task.session_path.parts[0:4]
         shutil.rmtree(self.task.session_path)
+
+
+class PopeyeDataHandler(SDSCDataHandler):
+
+    def __init__(self, task, session_path, signatures, one=None):
+        super().__init__(task, session_path, signatures, one=one)
+        self.SDSC_PATCH_PATH = Path(os.getenv('SDSC_PATCH_PATH', "/mnt/sdceph/users/ibl/data/quarantine/tasks/"))
+        self.SDSC_ROOT_PATH = Path("/mnt/sdceph/users/ibl/data")
+
+    def uploadData(self, outputs, version, **kwargs):
+        raise NotImplementedError(
+            "Cannot register data from Popeye. Login as Datauser and use the RegisterSpikeSortingSDSC task."
+        )
+
+    def cleanUp(self):
+        """Symlinks are preserved until registration."""
+        pass

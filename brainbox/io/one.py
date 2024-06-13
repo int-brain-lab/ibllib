@@ -2,9 +2,9 @@
 from dataclasses import dataclass, field
 import gc
 import logging
+import re
 import os
 from pathlib import Path
-
 
 import numpy as np
 import pandas as pd
@@ -19,13 +19,14 @@ import one.alf.io as alfio
 from neuropixel import TIP_SIZE_UM, trace_header
 import spikeglx
 
+import ibldsp.voltage
 from iblutil.util import Bunch
-from ibllib.io.extractors.training_wheel import extract_wheel_moves, extract_first_movement_times
 from iblatlas.atlas import AllenAtlas, BrainRegions
 from iblatlas import atlas
+from ibllib.io.extractors.training_wheel import extract_wheel_moves, extract_first_movement_times
 from ibllib.pipes import histology
 from ibllib.pipes.ephys_alignment import EphysAlignment
-from ibllib.plots import vertical_lines
+from ibllib.plots import vertical_lines, Density
 
 import brainbox.plot
 from brainbox.io.spikeglx import Streamer
@@ -916,16 +917,18 @@ class SpikeSortingLoader:
             if missing == 'raise':
                 raise e
 
-    def download_spike_sorting(self, **kwargs):
+    def download_spike_sorting(self, objects=None, **kwargs):
         """
         Downloads spikes, clusters and channels
         :param spike_sorter: (defaults to 'pykilosort')
         :param dataset_types: list of extra dataset types
+        :param objects: list of objects to download, defaults to ['spikes', 'clusters', 'channels']
         :return:
         """
-        for obj in ['spikes', 'clusters', 'channels']:
+        objects = ['spikes', 'clusters', 'channels'] if objects is None else objects
+        for obj in objects:
             self.download_spike_sorting_object(obj=obj, **kwargs)
-        self.spike_sorting_path = self.files['spikes'][0].parent
+        self.spike_sorting_path = self.files['clusters'][0].parent
 
     def download_raw_electrophysiology(self, band='ap'):
         """
@@ -963,7 +966,7 @@ class SpikeSortingLoader:
             return Streamer(pid=self.pid, one=self.one, typ=band, **kwargs)
         else:
             raw_data_files = self.download_raw_electrophysiology(band=band)
-            cbin_file = next(filter(lambda f: f.name.endswith(f'.{band}.cbin'), raw_data_files), None)
+            cbin_file = next(filter(lambda f: re.match(rf".*\.{band}\..*cbin", f.name), raw_data_files), None)
             if cbin_file is not None:
                 return spikeglx.Reader(cbin_file)
 
@@ -999,7 +1002,7 @@ class SpikeSortingLoader:
             self.histology = 'alf'
         return channels
 
-    def load_spike_sorting(self, spike_sorter='pykilosort', **kwargs):
+    def load_spike_sorting(self, spike_sorter='pykilosort', revision=None, enforce_version=True, good_units=False, **kwargs):
         """
         Loads spikes, clusters and channels
 
@@ -1013,19 +1016,43 @@ class SpikeSortingLoader:
         -   traced: the histology track has been recovered from microscopy, however the depths may not match, inaccurate data
 
         :param spike_sorter: (defaults to 'pykilosort')
-        :param dataset_types: list of extra dataset types
+        :param revision: for example "2024-05-06", (defaults to None):
+        :param enforce_version: if True, will raise an error if the spike sorting version and revision is not the expected one
+        :param dataset_types: list of extra dataset types, for example: ['spikes.samples', 'spikes.templates']
+        :param good_units: False, if True will load only the good units, possibly by downloading a smaller spikes table
+        :param kwargs: additional arguments to be passed to one.api.One.load_object
         :return:
         """
         if len(self.collections) == 0:
             return {}, {}, {}
         self.files = {}
         self.spike_sorter = spike_sorter
-        self.download_spike_sorting(spike_sorter=spike_sorter, **kwargs)
-        channels = self.load_channels(spike_sorter=spike_sorter, **kwargs)
+        self.revision = revision
+        objects = ['passingSpikes', 'clusters', 'channels'] if good_units else None
+        self.download_spike_sorting(spike_sorter=spike_sorter, revision=revision, objects=objects, **kwargs)
+        channels = self.load_channels(spike_sorter=spike_sorter, revision=revision, **kwargs)
         clusters = self._load_object(self.files['clusters'], wildcards=self.one.wildcards)
-        spikes = self._load_object(self.files['spikes'], wildcards=self.one.wildcards)
-
+        if good_units:
+            spikes = self._load_object(self.files['passingSpikes'], wildcards=self.one.wildcards)
+        else:
+            spikes = self._load_object(self.files['spikes'], wildcards=self.one.wildcards)
+        if enforce_version:
+            self._assert_version_consistency()
         return spikes, clusters, channels
+
+    def _assert_version_consistency(self):
+        """
+        Makes sure the state of the spike sorting object matches the files downloaded
+        :return: None
+        """
+        for k in ['spikes', 'clusters', 'channels', 'passingSpikes']:
+            for fn in self.files.get(k, []):
+                if self.spike_sorter:
+                    assert fn.relative_to(self.session_path).parts[2] == self.spike_sorter, \
+                        f"You required strict version {self.spike_sorter}, {fn} does not match"
+                if self.revision:
+                    assert fn.relative_to(self.session_path).parts[3] == f"#{self.revision}#", \
+                        f"You required strict revision {self.revision}, {fn} does not match"
 
     @staticmethod
     def compute_metrics(spikes, clusters=None):
@@ -1079,6 +1106,8 @@ class SpikeSortingLoader:
         if self._sync is None:
             timestamps = self.one.load_dataset(
                 self.eid, dataset='_spikeglx_*.timestamps.npy', collection=f'raw_ephys_data/{self.pname}')
+            _ = self.one.load_dataset(  # this is not used here but we want to trigger the download for potential tasks
+                self.eid, dataset='_spikeglx_*.sync.npy', collection=f'raw_ephys_data/{self.pname}')
             try:
                 ap_meta = spikeglx.read_meta_data(self.one.load_dataset(
                     self.eid, dataset='_spikeglx_*.ap.meta', collection=f'raw_ephys_data/{self.pname}'))
@@ -1116,7 +1145,13 @@ class SpikeSortingLoader:
     def pid2ref(self):
         return f"{self.one.eid2ref(self.eid, as_dict=False)}_{self.pname}"
 
-    def raster(self, spikes, channels, save_dir=None, br=None, label='raster', time_series=None, **kwargs):
+    def _default_plot_title(self, spikes):
+        title = f"{self.pid2ref}, {self.pid} \n" \
+                f"{spikes['clusters'].size:_} spikes, {np.unique(spikes['clusters']).size:_} clusters"
+        return title
+
+    def raster(self, spikes, channels, save_dir=None, br=None, label='raster', time_series=None,
+               drift=None, title=None, **kwargs):
         """
         :param spikes: spikes dictionary or Bunch
         :param channels: channels dictionary or Bunch.
@@ -1138,9 +1173,9 @@ class SpikeSortingLoader:
             # set default raster plot parameters
             kwargs = {"t_bin": 0.007, "d_bin": 10, "vmax": 0.5}
         brainbox.plot.driftmap(spikes['times'], spikes['depths'], ax=axs[1, 0], **kwargs)
-        title_str = f"{self.pid2ref}, {self.pid} \n" \
-                    f"{spikes['clusters'].size:_} spikes, {np.unique(spikes['clusters']).size:_} clusters"
-        axs[0, 0].title.set_text(title_str)
+        if title is None:
+            title = self._default_plot_title(spikes)
+        axs[0, 0].title.set_text(title)
         for k, ts in time_series.items():
             vertical_lines(ts, ymin=0, ymax=3800, ax=axs[1, 0])
         if 'atlas_id' in channels:
@@ -1150,10 +1185,55 @@ class SpikeSortingLoader:
         axs[1, 0].set_xlim(spikes['times'][0], spikes['times'][-1])
         fig.tight_layout()
 
-        self.download_spike_sorting_object('drift', self.spike_sorter, missing='ignore')
-        if 'drift' in self.files:
-            drift = self._load_object(self.files['drift'], wildcards=self.one.wildcards)
+        if drift is None:
+            self.download_spike_sorting_object('drift', self.spike_sorter, missing='ignore')
+            if 'drift' in self.files:
+                drift = self._load_object(self.files['drift'], wildcards=self.one.wildcards)
+        if isinstance(drift, dict):
             axs[0, 0].plot(drift['times'], drift['um'], 'k', alpha=.5)
+            axs[0, 0].set(ylim=[-15, 15])
+
+        if save_dir is not None:
+            png_file = save_dir.joinpath(f"{self.pid}_{self.pid2ref}_{label}.png") if Path(save_dir).is_dir() else Path(save_dir)
+            fig.savefig(png_file)
+            plt.close(fig)
+            gc.collect()
+        else:
+            return fig, axs
+
+    def plot_rawdata_snippet(self, sr, spikes, clusters, t0,
+                             channels=None,
+                             br: BrainRegions = None,
+                             save_dir=None,
+                             label='raster',
+                             gain=-93,
+                             title=None):
+
+        # compute the raw data offset and destripe, we take 400ms around t0
+        first_sample, last_sample = (int((t0 - 0.2) * sr.fs), int((t0 + 0.2) * sr.fs))
+        raw = sr[first_sample:last_sample, :-sr.nsync].T
+        channel_labels = channels['labels'] if (channels is not None) and ('labels' in channels) else True
+        destriped = ibldsp.voltage.destripe(raw, sr.fs, channel_labels=channel_labels)
+        # filter out the spikes according to good/bad clusters and to the time slice
+        spike_sel = slice(*np.searchsorted(spikes['samples'], [first_sample, last_sample]))
+        ss = spikes['samples'][spike_sel]
+        sc = clusters['channels'][spikes['clusters'][spike_sel]]
+        sok = clusters['label'][spikes['clusters'][spike_sel]] == 1
+        if title is None:
+            title = self._default_plot_title(spikes)
+        # display the raw data snippet with spikes overlaid
+        fig, axs = plt.subplots(1, 2, gridspec_kw={'width_ratios': [.95, .05]}, figsize=(16, 9), sharex='col')
+        Density(destriped, fs=sr.fs, taxis=1, gain=gain, ax=axs[0], t0=t0 - 0.2, unit='s')
+        axs[0].scatter(ss[sok] / sr.fs, sc[sok], color="green", alpha=0.5)
+        axs[0].scatter(ss[~sok] / sr.fs, sc[~sok], color="red", alpha=0.5)
+        axs[0].set(title=title, xlim=[t0 - 0.035, t0 + 0.035])
+        # adds the channel locations if available
+        if (channels is not None) and ('atlas_id' in channels):
+            br = br or BrainRegions()
+            plot_brain_regions(channels['atlas_id'], channel_depths=channels['axial_um'],
+                               brain_regions=br, display=True, ax=axs[1], title=self.histology)
+        axs[1].get_yaxis().set_visible(False)
+        fig.tight_layout()
 
         if save_dir is not None:
             png_file = save_dir.joinpath(f"{self.pid}_{self.pid2ref}_{label}.png") if Path(save_dir).is_dir() else Path(save_dir)
