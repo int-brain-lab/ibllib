@@ -139,6 +139,34 @@ def get_acquisition_description(protocol):
     return acquisition_description
 
 
+def _sync_label(sync, acquisition_software=None, **_):
+    """
+    Returns the sync label based on the sync type and acquisition software.
+
+    The 'sync' usually refers to the DAQ type, e.g. 'nidq', 'tdms', 'bpod'.
+    The 'acquisition_software' refers to the software used to acquire the data, e.g.
+    for an NI DAQ, options include 'spikeglx' and 'timeline'.  Both of these affect
+    how the data are loaded and extracted, and therefore which tasks to use.
+
+    The naming convention here is not ideal, and may be changed in the future.
+
+    Parameters
+    ----------
+    sync : str
+        The sync type, e.g. 'nidq', 'tdms', 'bpod'.
+    acquisition_software : str
+        The acquisition software used to acquire the sync data.
+
+    Returns
+    -------
+    str
+        The sync label for determining the extractor tasks.
+    """
+    if sync == 'nidq' and acquisition_software == 'timeline':
+        return 'timeline'
+    return sync
+
+
 def make_pipeline(session_path, **pkwargs):
     """
     Creates a pipeline of extractor tasks from a session's experiment description file.
@@ -172,27 +200,28 @@ def make_pipeline(session_path, **pkwargs):
 
     # Syncing tasks
     (sync, sync_args), = acquisition_description['sync'].items()
+    sync_label = _sync_label(sync, **sync_args)  # get the format of the DAQ data. This informs the extractor task
     sync_args['sync_collection'] = sync_args.pop('collection')  # rename the key so it matches task run arguments
     sync_args['sync_ext'] = sync_args.pop('extension', None)
     sync_args['sync_namespace'] = sync_args.pop('acquisition_software', None)
     sync_kwargs = {'sync': sync, **sync_args}
     sync_tasks = []
-    if sync == 'nidq' and sync_args['sync_collection'] == 'raw_ephys_data':
+    if sync_label == 'nidq' and sync_args['sync_collection'] == 'raw_ephys_data':
         tasks['SyncRegisterRaw'] = type('SyncRegisterRaw', (etasks.EphysSyncRegisterRaw,), {})(**kwargs, **sync_kwargs)
         tasks[f'SyncPulses_{sync}'] = type(f'SyncPulses_{sync}', (etasks.EphysSyncPulses,), {})(
             **kwargs, **sync_kwargs, parents=[tasks['SyncRegisterRaw']])
         sync_tasks = [tasks[f'SyncPulses_{sync}']]
-    elif sync_args['sync_namespace'] == 'timeline':
+    elif sync_label == 'timeline':
         tasks['SyncRegisterRaw'] = type('SyncRegisterRaw', (stasks.SyncRegisterRaw,), {})(**kwargs, **sync_kwargs)
-    elif sync == 'nidq':
+    elif sync_label == 'nidq':
         tasks['SyncRegisterRaw'] = type('SyncRegisterRaw', (stasks.SyncMtscomp,), {})(**kwargs, **sync_kwargs)
         tasks[f'SyncPulses_{sync}'] = type(f'SyncPulses_{sync}', (stasks.SyncPulses,), {})(
             **kwargs, **sync_kwargs, parents=[tasks['SyncRegisterRaw']])
         sync_tasks = [tasks[f'SyncPulses_{sync}']]
-    elif sync == 'tdms':
+    elif sync_label == 'tdms':
         tasks['SyncRegisterRaw'] = type('SyncRegisterRaw', (stasks.SyncRegisterRaw,), {})(**kwargs, **sync_kwargs)
-    elif sync == 'bpod':
-        pass  # ATM we don't have anything for this not sure it will be needed in the future
+    elif sync_label == 'bpod':
+        pass  # ATM we don't have anything for this; it may not be needed in the future
 
     # Behavior tasks
     task_protocols = acquisition_description.get('tasks', [])
@@ -212,16 +241,16 @@ def make_pipeline(session_path, **pkwargs):
                 # Assume previous task in the list is parent
                 parents = [] if j == 0 else [tasks[task_name]]
                 # Make sure extractor and sync task don't collide
-                for sync_option in ('nidq', 'bpod'):
-                    if sync_option in extractor.lower() and not sync == sync_option:
-                        raise ValueError(f'Extractor "{extractor}" and sync "{sync}" do not match')
+                for sync_option in ('nidq', 'bpod', 'timeline'):
+                    if sync_option in extractor.lower() and not sync_label == sync_option:
+                        raise ValueError(f'Extractor "{extractor}" and sync "{sync_label}" do not match')
                 # TODO Assert sync_label correct here (currently unused)
                 # Look for the extractor in the behavior extractors module
                 if hasattr(btasks, extractor):
                     task = getattr(btasks, extractor)
                 # This may happen that the extractor is tied to a specific sync task: look for TrialsChoiceWorldBpod for example
-                elif hasattr(btasks, extractor + sync.capitalize()):
-                    task = getattr(btasks, extractor + sync.capitalize())
+                elif hasattr(btasks, extractor + sync_label.capitalize()):
+                    task = getattr(btasks, extractor + sync_label.capitalize())
                 else:
                     # lookup in the project extraction repo if we find an extractor class
                     import projects.extraction_tasks
@@ -252,26 +281,14 @@ def make_pipeline(session_path, **pkwargs):
                 registration_class = btasks.PassiveRegisterRaw
                 behaviour_class = btasks.PassiveTask
                 compute_status = False
-            elif sync_kwargs['sync'] == 'bpod':
-                if 'habituation' in protocol:
-                    registration_class = btasks.HabituationRegisterRaw
-                    behaviour_class = btasks.HabituationTrialsBpod
-                    compute_status = False
-                else:
-                    registration_class = btasks.TrialRegisterRaw
-                    behaviour_class = btasks.ChoiceWorldTrialsBpod
-                    compute_status = True
-            elif sync_kwargs['sync'] == 'nidq':
-                if 'habituation' in protocol:
-                    registration_class = btasks.HabituationRegisterRaw
-                    behaviour_class = btasks.HabituationTrialsNidq
-                    compute_status = False
-                else:
-                    registration_class = btasks.TrialRegisterRaw
-                    behaviour_class = btasks.ChoiceWorldTrialsNidq
-                    compute_status = True
+            elif 'habituation' in protocol:
+                registration_class = btasks.HabituationRegisterRaw
+                behaviour_class = getattr(btasks, 'HabituationTrials' + sync_label.capitalize())
+                compute_status = False
             else:
-                raise NotImplementedError
+                registration_class = btasks.TrialRegisterRaw
+                behaviour_class = getattr(btasks, 'ChoiceWorldTrials' + sync_label.capitalize())
+                compute_status = True
             tasks[f'RegisterRaw_{protocol}_{i:02}'] = type(f'RegisterRaw_{protocol}_{i:02}', (registration_class,), {})(
                 **kwargs, **task_kwargs)
             parents = [tasks[f'RegisterRaw_{protocol}_{i:02}']] + sync_tasks
