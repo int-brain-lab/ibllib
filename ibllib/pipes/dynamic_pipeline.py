@@ -279,7 +279,7 @@ def make_pipeline(session_path, **pkwargs):
             # -   choice_world_habituation
             if 'passiveChoiceWorld' in protocol:
                 registration_class = btasks.PassiveRegisterRaw
-                behaviour_class = btasks.PassiveTask
+                behaviour_class = getattr(btasks, 'PassiveTask' + sync_label.capitalize())
                 compute_status = False
             elif 'habituation' in protocol:
                 registration_class = btasks.HabituationRegisterRaw

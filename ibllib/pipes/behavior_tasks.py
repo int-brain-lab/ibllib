@@ -184,17 +184,17 @@ class PassiveRegisterRaw(base_tasks.RegisterRawDataTask, base_tasks.BehaviourTas
         signature = {
             'input_files': [],
             'output_files': [('_iblrig_taskSettings.raw.*', self.collection, True),
-                             ('_iblrig_encoderEvents.raw*', self.collection, True),
-                             ('_iblrig_encoderPositions.raw*', self.collection, True),
-                             ('_iblrig_encoderTrialInfo.raw*', self.collection, True),
-                             ('_iblrig_stimPositionScreen.raw*', self.collection, True),
-                             ('_iblrig_syncSquareUpdate.raw*', self.collection, True),
+                             ('_iblrig_encoderEvents.raw*', self.collection, False),
+                             ('_iblrig_encoderPositions.raw*', self.collection, False),
+                             ('_iblrig_encoderTrialInfo.raw*', self.collection, False),
+                             ('_iblrig_stimPositionScreen.raw*', self.collection, False),
+                             ('_iblrig_syncSquareUpdate.raw*', self.collection, False),
                              ('_iblrig_RFMapStim.raw*', self.collection, True)]
         }
         return signature
 
 
-class PassiveTask(base_tasks.BehaviourTask):
+class PassiveTaskNidq(base_tasks.BehaviourTask):
     priority = 90
     job_size = 'small'
 
