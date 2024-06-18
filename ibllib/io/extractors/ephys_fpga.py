@@ -923,22 +923,6 @@ class FpgaTrials(extractors_base.BaseExtractor):
         else:
             t_trial_start = fpga_events['intervals_0']
 
-        # Assign the FPGA events to individual trials
-        fpga_trials = {
-            'goCue_times': _assign_events_to_trial(t_trial_start, fpga_events['goCue_times'], take='first'),
-            'errorCue_times': _assign_events_to_trial(t_trial_start, fpga_events['errorCue_times']),
-            'valveOpen_times': _assign_events_to_trial(t_trial_start, fpga_events['valveOpen_times']),
-            'itiIn_times': _assign_events_to_trial(t_trial_start, fpga_events['itiIn_times']),
-            'stimFreeze_times': _assign_events_to_trial(t_trial_start, self.frame2ttl['times'], take=-2),
-            'stimOn_times': _assign_events_to_trial(t_trial_start, self.frame2ttl['times'], take='first'),
-            'stimOff_times': _assign_events_to_trial(t_trial_start, self.frame2ttl['times'])
-        }
-
-        # Feedback times are valve open on correct trials and error tone in on incorrect trials
-        fpga_trials['feedback_times'] = np.copy(fpga_trials['valveOpen_times'])
-        ind_err = np.isnan(fpga_trials['valveOpen_times'])
-        fpga_trials['feedback_times'][ind_err] = fpga_trials['errorCue_times'][ind_err]
-
         out = alfio.AlfBunch()
         # Add the Bpod trial events, converting the timestamp fields to FPGA time.
         # NB: The trial intervals are by default a Bpod rsync field.
@@ -947,6 +931,26 @@ class FpgaTrials(extractors_base.BaseExtractor):
             # Some personal projects may extract non-trials object datasets that may not have 1 event per trial
             idx = ibpod if self._is_trials_object_attribute(k) else np.arange(len(self.bpod_trials[k]), dtype=int)
             out[k] = self.bpod2fpga(self.bpod_trials[k][idx])
+
+        f2ttl_t = self.frame2ttl['times']
+        # Assign the FPGA events to individual trials
+        fpga_trials = {
+            'goCue_times': _assign_events_to_trial(t_trial_start, fpga_events['goCue_times'], take='first'),
+            'errorCue_times': _assign_events_to_trial(t_trial_start, fpga_events['errorCue_times']),
+            'valveOpen_times': _assign_events_to_trial(t_trial_start, fpga_events['valveOpen_times']),
+            'itiIn_times': _assign_events_to_trial(t_trial_start, fpga_events['itiIn_times']),
+            # f2ttl times are unreliable owing to calibration and Bonsai sync square update issues.
+            # Take the first event after the FPGA aligned stimulus trigger time.
+            'stimFreeze_times': _assign_events_to_trial(out['stimFreezeTriggerTimes'], f2ttl_t, take='first'),
+            'stimOn_times': _assign_events_to_trial(out['stimOnTriggerTimes'], f2ttl_t, take='first'),
+            'stimOff_times': _assign_events_to_trial(out['stimOffTriggerTimes'], f2ttl_t, take='first')
+        }
+
+        # Feedback times are valve open on correct trials and error tone in on incorrect trials
+        fpga_trials['feedback_times'] = np.copy(fpga_trials['valveOpen_times'])
+        ind_err = np.isnan(fpga_trials['valveOpen_times'])
+        fpga_trials['feedback_times'][ind_err] = fpga_trials['errorCue_times'][ind_err]
+
         out.update({k: fpga_trials[k][ifpga] for k in fpga_trials.keys()})
 
         if display:  # pragma: no cover
