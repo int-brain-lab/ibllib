@@ -5,7 +5,8 @@ from pathlib import Path
 from packaging import version
 from one.webclient import no_cache
 from iblutil.util import flatten
-from skimage.io import ImageCollection
+import matplotlib.image
+from skimage.io import ImageCollection, imread
 
 from ibllib.pipes.tasks import Task
 import ibllib.io.session_params as sess_params
@@ -435,6 +436,25 @@ class RegisterRawDataTask(DynamicTask):
         """
         return snapshot.suffix == '.gif' and len(ImageCollection(str(snapshot))) > 1
 
+    @staticmethod
+    def _save_as_png(snapshot: Path) -> Path:
+        """
+        Save an image to PNG format.
+
+        Parameters
+        ----------
+        snapshot : pathlib.Path
+            An image filepath to convert.
+
+        Returns
+        -------
+        pathlib.Path
+            The new PNG image filepath.
+        """
+        img = imread(snapshot, as_gray=True)
+        matplotlib.image.imsave(snapshot.with_suffix('.png'), img, cmap='gray')
+        return snapshot.with_suffix('.png')
+
     def register_snapshots(self, unlink=False, collection=None):
         """
         Register any photos in the snapshots folder to the session. Typically imaging users will
@@ -455,6 +475,12 @@ class RegisterRawDataTask(DynamicTask):
         -------
         list of dict
             The newly registered Alyx notes.
+
+        Notes
+        -----
+        - Animated GIF files are not resized and therefore may take up significant space on the database.
+        - TIFF files are converted to PNG format before upload. The original file is not replaced.
+        - JPEG and PNG files are resized by Alyx.
         """
         collection = getattr(self, 'device_collection', None) if collection is None else collection
         collection = collection or ''  # If not defined, use no collection
@@ -478,6 +504,11 @@ class RegisterRawDataTask(DynamicTask):
         notes = []
         exts = ('.jpg', '.jpeg', '.png', '.tif', '.tiff', '.gif')
         for snapshot in filter(lambda x: x.suffix.lower() in exts, snapshots_path.glob('*.*')):
+            if snapshot.suffix in ('.tif', '.tiff') and not snapshot.with_suffix('.png').exists():
+                _logger.debug('converting "%s" to png...', snapshot.relative_to(self.session_path))
+                snapshot = self._save_as_png(snapshot_tif := snapshot)
+                if unlink:
+                    snapshot_tif.unlink()
             _logger.debug('Uploading "%s"...', snapshot.relative_to(self.session_path))
             if snapshot.with_suffix('.txt').exists():
                 with open(snapshot.with_suffix('.txt'), 'r') as txt_file:
