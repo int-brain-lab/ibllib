@@ -8,7 +8,7 @@ import numpy as np
 
 from ibllib.pipes.ephys_preprocessing import EphysTrials
 from ibllib.pipes.training_preprocessing import TrainingTrials
-from ibllib.pipes.behavior_tasks import HabituationTrialsBpod, ChoiceWorldTrialsNidq, ChoiceWorldTrialsBpod, PassiveTask
+from ibllib.pipes.behavior_tasks import HabituationTrialsBpod, ChoiceWorldTrialsNidq, ChoiceWorldTrialsBpod, PassiveTaskNidq
 from ibllib.qc.task_qc_viewer.task_qc import get_bpod_trials_task, show_session_task_qc, QcFrame
 from ibllib.qc.task_metrics import TaskQC
 from ibllib.tests import TEST_DB
@@ -65,7 +65,7 @@ class TestTaskQC(unittest.TestCase):
         self.assertRaises(TypeError, show_session_task_qc, session_path, one=self.one, protocol_number=-2)
         self.assertRaises(ValueError, show_session_task_qc, session_path, one=self.one, protocol_number=1)
 
-        passive_task = PassiveTask('foo/bar', protocol='_iblrig_passiveChoiceWorld', protocol_number=0)
+        passive_task = PassiveTaskNidq('foo/bar', protocol='_iblrig_passiveChoiceWorld', protocol_number=0)
         trials_tasks_mock.return_value = [passive_task]
         self.assertRaises(ValueError, show_session_task_qc, session_path, one=self.one, protocol_number=0)
         self.assertRaises(ValueError, show_session_task_qc, session_path, one=self.one)
