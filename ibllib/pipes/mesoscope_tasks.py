@@ -625,10 +625,10 @@ class MesoscopeSync(base_tasks.MesoscopeTask):
                             (f'_{self.sync_namespace}_DAQdata.timestamps.npy', self.sync_collection, True),
                             (f'_{self.sync_namespace}_DAQdata.meta.json', self.sync_collection, True),
                             ('_ibl_rawImagingData.meta.json', self.device_collection, True),
-                            ('rawImagingData.times_scanImage.npy', self.device_collection, True),
+                            ('rawImagingData.times_scanImage.npy', self.device_collection, True, True),  # register raw
                             (f'_{self.sync_namespace}_softwareEvents.log.htsv', self.sync_collection, False), ],
             'output_files': [('mpci.times.npy', 'alf/mesoscope/FOV*', True),
-                             ('mpciStack.timeshift.npy', 'alf/mesoscope/FOV*', True), ]
+                             ('mpciStack.timeshift.npy', 'alf/mesoscope/FOV*', True),]
         }
         return signature
 
