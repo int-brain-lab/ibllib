@@ -174,6 +174,11 @@ class Task(abc.ABC):
             -1: Errored
             -2: Didn't run as a lock was encountered
             -3: Incomplete
+
+        Notes
+        -----
+        - The `run_alyx_task` will update the Alyx Task status depending on both status and outputs.
+          If Task.
         """
         # if task id of one properties are not available, local run only without alyx
         use_alyx = self.one is not None and self.taskid is not None
@@ -222,8 +227,13 @@ class Task(abc.ABC):
                         return self.status
                 outputs = self._run(**kwargs)
                 _logger.info(f'Job {self.__class__} complete')
-            if outputs is not None:
-                self.outputs.extend(ensure_list(outputs))
+            if outputs is None:
+                # If run method returns None and no raw input files were registered, self.outputs
+                # should be None, meaning task will have an 'Empty' status. If run method returns
+                # a list, the status will be 'Complete' regardless of whether there are output files.
+                self.outputs = outputs if not self.outputs else self.outputs  # ensure None if no inputs registered
+            else:
+                self.outputs.extend(ensure_list(outputs))  # Add output files to list of inputs to register
         except Exception:
             _logger.error(traceback.format_exc())
             _logger.info(f'Job {self.__class__} errored')
@@ -805,7 +815,7 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
     patch_data = {'time_elapsed_secs': task.time_elapsed_secs, 'log': task.log,
                   'version': task.version}
     # if there is no data to register, set status to Empty
-    if not task.outputs:
+    if task.outputs is None:  # NB: an empty list is still considered Complete.
         patch_data['status'] = 'Empty'
     # otherwise register data and set (provisional) status to Complete
     else:
