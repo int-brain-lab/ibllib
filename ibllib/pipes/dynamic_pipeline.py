@@ -285,10 +285,6 @@ def make_pipeline(session_path, **pkwargs):
                 registration_class = btasks.HabituationRegisterRaw
                 behaviour_class = getattr(btasks, 'HabituationTrials' + sync_label.capitalize())
                 compute_status = False
-            elif 'habituation' in protocol:
-                registration_class = btasks.HabituationRegisterRaw
-                behaviour_class = getattr(btasks, 'HabituationTrials' + sync_label.capitalize())
-                compute_status = False
             else:
                 registration_class = btasks.TrialRegisterRaw
                 behaviour_class = getattr(btasks, 'ChoiceWorldTrials' + sync_label.capitalize())
