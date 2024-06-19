@@ -134,3 +134,13 @@ class TestGetTrialsTasks(unittest.TestCase):
             # Should handle absent trials tasks
             pipeline.tasks.pop('FooBarTrials')
             self.assertEqual([], dyn.get_trials_tasks(self.session_path_legacy))
+
+
+class TestMisc(unittest.TestCase):
+    """Test miscellaneous functions in pipes.dynamic_pipeline."""
+    def test_sync_label(self):
+        """Test pipes.dynamic_pipeline._sync_label function."""
+        self.assertEqual('nidq', dyn._sync_label('nidq'))
+        self.assertEqual('timeline', dyn._sync_label('nidq', acquisition_software='timeline'))
+        self.assertEqual('nidq', dyn._sync_label('nidq', acquisition_software='spikeglx'))
+        self.assertEqual('tdms', dyn._sync_label('tdms'))

@@ -109,8 +109,9 @@ class Task(abc.ABC):
     time_out_secs = 3600 * 2  # time-out after which a task is considered dead
     version = ibllib.__version__
     signature = {'input_files': [], 'output_files': []}  # list of tuples (filename, collection, required_flag[, register])
-    force = False  # whether or not to re-download missing input files on local server if not present
+    force = False  # whether to re-download missing input files on local server if not present
     job_size = 'small'  # either 'small' or 'large', defines whether task should be run as part of the large or small job services
+    env = None  # the environment name within which to run the task (NB: the env is not activated automatically!)
 
     def __init__(self, session_path, parents=None, taskid=None, one=None,
                  machine=None, clobber=True, location='server', **kwargs):
@@ -579,7 +580,8 @@ class Pipeline(abc.ABC):
 
     def create_alyx_tasks(self, rerun__status__in=None, tasks_list=None):
         """
-        Instantiate the pipeline and create the tasks in Alyx, then create the jobs for the session
+        Instantiate the pipeline and create the tasks in Alyx, then create the jobs for the session.
+
         If the jobs already exist, they are left untouched. The re-run parameter will re-init the
         job by emptying the log and set the status to Waiting.
 
@@ -721,6 +723,24 @@ class Pipeline(abc.ABC):
         return self.__class__.__name__
 
 
+def str2class(task_executable: str):
+    """
+    Convert task name to class.
+
+    Parameters
+    ----------
+    task_executable : str
+        A Task class name, e.g. 'ibllib.pipes.behavior_tasks.TrialRegisterRaw'.
+
+    Returns
+    -------
+    class
+        The imported class.
+    """
+    strmodule, strclass = task_executable.rsplit('.', 1)
+    return getattr(importlib.import_module(strmodule), strclass)
+
+
 def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
                   max_md5_size=None, machine=None, clobber=True, location='server', mode='log'):
     """
@@ -753,8 +773,8 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
 
     Returns
     -------
-    Task
-        The instantiated task object that was run.
+    dict
+        The updated task dict.
     list of pathlib.Path
         A list of registered datasets.
     """
@@ -775,9 +795,7 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
                 tdict = one.alyx.rest('tasks', 'partial_update', id=tdict['id'], data={'status': 'Held'})
             return tdict, registered_dsets
     # creates the job from the module name in the database
-    exec_name = tdict['executable']
-    strmodule, strclass = exec_name.rsplit('.', 1)
-    classe = getattr(importlib.import_module(strmodule), strclass)
+    classe = str2class(tdict['executable'])
     tkwargs = tdict.get('arguments') or {}  # if the db field is null it returns None
     task = classe(session_path, one=one, taskid=tdict['id'], machine=machine, clobber=clobber,
                   location=location, **tkwargs)

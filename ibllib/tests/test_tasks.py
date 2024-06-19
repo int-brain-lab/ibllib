@@ -1,3 +1,4 @@
+"""Test ibllib.pipes.tasks module and Task class."""
 import shutil
 import tempfile
 import unittest
@@ -391,6 +392,16 @@ class TestTask(unittest.TestCase):
             files = task._input_files_to_register(assert_all_exist=False)
         self.assertEqual(files, expected[1:2])
         self.assertRaises(AssertionError, task._input_files_to_register, assert_all_exist=True)
+
+
+class TestMisc(unittest.TestCase):
+    """Tests for misc functions in ibllib.pipes.tasks module."""
+
+    def test_str2class(self):
+        """Test ibllib.pipes.tasks.str2class function."""
+        task_str = 'ibllib.pipes.base_tasks.ExperimentDescriptionRegisterRaw'
+        self.assertIs(ibllib.pipes.tasks.str2class(task_str), ExperimentDescriptionRegisterRaw)
+        self.assertRaises(AttributeError, ibllib.pipes.tasks.str2class, 'ibllib.pipes.base_tasks.Foo')
 
 
 if __name__ == '__main__':

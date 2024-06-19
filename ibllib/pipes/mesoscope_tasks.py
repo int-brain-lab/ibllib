@@ -198,6 +198,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
     priority = 80
     cpu = -1
     job_size = 'large'
+    env = 'suite2p'
 
     @property
     def signature(self):

@@ -53,7 +53,7 @@ class EphysPulses(tasks.Task):
     io_charge = 30  # this jobs reads raw ap files
     priority = 90  # a lot of jobs depend on this one
     level = 0  # this job doesn't depend on anything
-    force = False  # whether or not to force download of missing data on local server if outputs already exist
+    force = False  # whether to force download of missing data on local server if outputs already exist
     signature = {
         'input_files': [('*ap.meta', 'raw_ephys_data/probe*', True),
                         ('*ap.ch', 'raw_ephys_data/probe*', False),  # not necessary when we have .bin file

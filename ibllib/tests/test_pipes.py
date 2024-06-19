@@ -13,6 +13,7 @@ import string
 from uuid import uuid4
 
 from one.api import ONE
+from one.webclient import AlyxClient
 import iblutil.io.params as iopar
 from packaging.version import Version, InvalidVersion
 
@@ -24,6 +25,7 @@ from ibllib.tests import TEST_DB
 import ibllib.pipes.scan_fix_passive_files as fix
 from ibllib.pipes.base_tasks import RegisterRawDataTask
 from ibllib.pipes.ephys_preprocessing import SpikeSorting
+from ibllib.pipes import local_server
 
 
 class TestExtractors2Tasks(unittest.TestCase):
@@ -702,7 +704,7 @@ class TestRegisterRawDataTask(unittest.TestCase):
         (folder := self.session_path.joinpath('snapshots')).mkdir()
         folder.joinpath('snap.PNG').touch()
         collection = 'raw_task_data'
-        for i, ext in enumerate(['tif', 'jpg']):
+        for i, ext in enumerate(['tif', 'jpg', 'gif']):
             (p := self.session_path.joinpath(f'{collection}_{i:02}', 'snapshots')).mkdir(parents=True)
             p.joinpath(f'snapshot.{ext}').touch()
         # Stuff with text note
@@ -713,15 +715,20 @@ class TestRegisterRawDataTask(unittest.TestCase):
             fp.write('bar')
 
         task = RegisterRawDataTask(self.session_path, one=self.one)
+        # Mock the _is_animated_gif function to return true for any GIF file
         with mock.patch.object(self.one.alyx, 'rest') as rest, \
-                mock.patch.object(self.one, 'path2eid', return_value=str(uuid4())):
+                mock.patch.object(self.one, 'path2eid', return_value=str(uuid4())), \
+                mock.patch.object(task, '_is_animated_gif', side_effect=lambda x: x.suffix == '.gif'):
             task.register_snapshots(collection=['', f'{collection}*'])
-            self.assertEqual(4, rest.call_count)
+            self.assertEqual(5, rest.call_count)
             files = []
             for args, kwargs in rest.call_args_list:
                 self.assertEqual(('notes', 'create'), args)
                 files.append(Path(kwargs['files']['image'].name).name)
-            expected = ('snap.PNG', 'pic.jpeg', 'snapshot.tif', 'snapshot.jpg')
+                width = kwargs['data'].get('width')
+                # Test that original size passed as width only for gif file
+                self.assertEqual('orig', width) if files[-1].endswith('gif') else self.assertIsNone(width)
+            expected = ('snap.PNG', 'pic.jpeg', 'snapshot.tif', 'snapshot.jpg', 'snapshot.gif')
             self.assertCountEqual(expected, files)
 
 
@@ -741,6 +748,38 @@ class TestSleeplessDecorator(unittest.TestCase):
         # Check if arguments are passed correctly
         result = decorated_func("test1", "test2")
         self.assertEqual(result, ("test1", "test2"))
+
+
+class TestLocalServer(unittest.TestCase):
+    """Test ibllib.pipes.local_server module."""
+
+    @mock.patch('ibllib.pipes.local_server.get_local_data_repository')
+    def test_task_queue(self, lab_repo_mock):
+        """Test ibllib.pipes.local_server.task_queue function."""
+        lab_repo_mock.return_value = 'foo_repo'
+        tasks = [
+            {'executable': 'ibllib.pipes.mesoscope_tasks.MesoscopePreprocess', 'priority': 80},
+            {'executable': 'ibllib.pipes.ephys_preprocessing.SpikeSorting', 'priority': SpikeSorting.priority},
+            {'executable': 'ibllib.pipes.base_tasks.RegisterRawDataTask', 'priority': RegisterRawDataTask.priority}
+        ]
+        alyx = mock.Mock(spec=AlyxClient)
+        alyx.rest.return_value = tasks
+        queue = local_server.task_queue(lab='foolab', alyx=alyx)
+        alyx.rest.assert_called()
+        self.assertEqual('Waiting', alyx.rest.call_args.kwargs.get('status'))
+        self.assertIn('foolab', alyx.rest.call_args.kwargs.get('django', ''))
+        self.assertIn('foo_repo', alyx.rest.call_args.kwargs.get('django', ''))
+        # Expect to return tasks in descending priority order, without mesoscope task (different env)
+        self.assertEqual([tasks[2], tasks[1]], queue)
+        # Expect only mesoscope task returned when relevant env passed
+        queue = local_server.task_queue(lab='foolab', alyx=alyx, env=('suite2p',))
+        self.assertEqual([tasks[0]], queue)
+        # Expect no tasks as mesoscope task is a large job
+        queue = local_server.task_queue(mode='small', lab='foolab', alyx=alyx, env=('suite2p',))
+        self.assertEqual([], queue)
+        # Expect only register task as it's the only small job
+        queue = local_server.task_queue(mode='small', lab='foolab', alyx=alyx)
+        self.assertEqual([tasks[2]], queue)
 
 
 if __name__ == '__main__':
