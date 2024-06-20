@@ -177,8 +177,10 @@ class Task(abc.ABC):
 
         Notes
         -----
-        - The `run_alyx_task` will update the Alyx Task status depending on both status and outputs.
-          If Task.
+        - The `run_alyx_task` will update the Alyx Task status depending on both status and outputs
+          (i.e. the output of subclassed `_run` method):
+          Assuming a return value of 0... if Task.outputs is None, the status will be Empty;
+          if Task.outputs is a list (empty or otherwise), the status will be Complete.
         """
         # if task id of one properties are not available, local run only without alyx
         use_alyx = self.one is not None and self.taskid is not None
