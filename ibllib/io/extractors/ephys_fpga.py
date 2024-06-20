@@ -941,9 +941,9 @@ class FpgaTrials(extractors_base.BaseExtractor):
             'itiIn_times': _assign_events_to_trial(t_trial_start, fpga_events['itiIn_times']),
             # f2ttl times are unreliable owing to calibration and Bonsai sync square update issues.
             # Take the first event after the FPGA aligned stimulus trigger time.
-            'stimFreeze_times': _assign_events_to_trial(out['stimFreezeTriggerTimes'], f2ttl_t, take='first'),
-            'stimOn_times': _assign_events_to_trial(out['stimOnTriggerTimes'], f2ttl_t, take='first'),
-            'stimOff_times': _assign_events_to_trial(out['stimOffTriggerTimes'], f2ttl_t, take='first')
+            'stimFreeze_times': _assign_events_to_trial(out['stimFreezeTrigger_times'], f2ttl_t, take='first'),
+            'stimOn_times': _assign_events_to_trial(out['stimOnTrigger_times'], f2ttl_t, take='first'),
+            'stimOff_times': _assign_events_to_trial(out['stimOffTrigger_times'], f2ttl_t, take='first')
         }
 
         # Feedback times are valve open on correct trials and error tone in on incorrect trials

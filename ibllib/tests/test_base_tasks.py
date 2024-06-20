@@ -36,9 +36,9 @@ class TestRegisterRawDataTask(unittest.TestCase):
 
         # Add a couple of images
         cls.session_path.joinpath('snapshots').mkdir(parents=True)
-        for ext in ('.PNG', '.tif'):
+        for i, ext in enumerate(('.PNG', '.tif')):
             plt.imshow(np.random.random((7, 7)))
-            plt.savefig(cls.session_path.joinpath('snapshots', 'foo').with_suffix(ext))
+            plt.savefig(cls.session_path.joinpath('snapshots', f'foo_{i}').with_suffix(ext))
             plt.close()
 
     def test_register_snapshots(self):
@@ -46,7 +46,7 @@ class TestRegisterRawDataTask(unittest.TestCase):
 
         A more thorough test for this exists in ibllib.tests.test_pipes.TestRegisterRawDataTask.
         This test does not mock REST (and therefore requires a test database), while the other does.
-        This test could be removed as it's rather redundant.
+        This test also works on actual image data, testing the conversion from tif to png.
         """
         task = base_tasks.RegisterRawDataTask(self.session_path, one=self.one)
         notes = task.register_snapshots()
@@ -54,6 +54,7 @@ class TestRegisterRawDataTask(unittest.TestCase):
         self.assertTrue(self.session_path.joinpath('snapshots').exists())
         task.register_snapshots(unlink=True)
         self.assertFalse(self.session_path.joinpath('snapshots').exists())
+        self.assertTrue(all(n['image'].lower().endswith('.png') for n in notes), 'failed to convert tif to png')
 
     def test_rename_files(self):
         collection = 'raw_sync_data'
