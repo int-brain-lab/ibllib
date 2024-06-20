@@ -1,4 +1,4 @@
-"""Tests for ibllib.pipes.mesoscope_tasks"""
+"""Tests for ibllib.pipes.mesoscope_tasks."""
 import sys
 import unittest
 from unittest import mock
