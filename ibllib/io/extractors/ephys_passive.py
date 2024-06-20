@@ -86,7 +86,7 @@ def _load_passive_session_fixtures(session_path: str, task_collection: str = 'ra
     return fixture
 
 
-def _load_task_protocol(session_path: str, task_collection: str = 'raw_passive_data') -> str:
+def _load_task_version(session_path: str, task_collection: str = 'raw_passive_data') -> str:
     """Find the IBL rig version used for the session
 
     :param session_path: the path to a session
@@ -94,12 +94,29 @@ def _load_task_protocol(session_path: str, task_collection: str = 'raw_passive_d
     :return: ibl rig task protocol version
     :rtype: str
 
-    FIXME This function has a misleading name
     """
     settings = rawio.load_settings(session_path, task_collection=task_collection)
     ses_ver = settings["IBLRIG_VERSION"]
 
     return ses_ver
+
+
+def skip_task_replay(session_path: str, task_collection: str = 'raw_passive_data') -> bool:
+    """Find whether the task replay portion of the passive stimulus has been shown
+
+    :param session_path: the path to a session
+    :type session_path: str
+    :param task_collection: collection containing task data
+    :type task_collection: str
+    :return: whether or not the task replay has been run
+    :rtype: bool
+    """
+
+    settings = rawio.load_settings(session_path, task_collection=task_collection)
+    # Attempt to see if SKIP_EVENT_REPLAY is available, if not assume we do have task replay
+    skip_replay = settings.get('SKIP_EVENT_REPLAY', False)
+
+    return skip_replay
 
 
 def _load_passive_stim_meta() -> dict:
@@ -536,7 +553,7 @@ def extract_task_replay(
     bpod = ephys_fpga.get_sync_fronts(sync, sync_map["bpod"], tmin=treplay[0], tmax=treplay[1])
     passiveValve_intervals = _extract_passiveValve_intervals(bpod)
 
-    task_version = _load_task_protocol(session_path, task_collection)
+    task_version = _load_task_version(session_path, task_collection)
     audio = ephys_fpga.get_sync_fronts(sync, sync_map["audio"], tmin=treplay[0], tmax=treplay[1])
     passiveTone_intervals, passiveNoise_intervals = _extract_passiveAudio_intervals(audio, task_version)
 
@@ -588,7 +605,7 @@ def extract_replay_debug(
     passiveValve_intervals = _extract_passiveValve_intervals(bpod)
     plot_valve_times(passiveValve_intervals, ax=ax)
 
-    task_version = _load_task_protocol(session_path, task_collection)
+    task_version = _load_task_version(session_path, task_collection)
     audio = ephys_fpga.get_sync_fronts(sync, sync_map["audio"], tmin=treplay[0])
     passiveTone_intervals, passiveNoise_intervals = _extract_passiveAudio_intervals(audio, task_version)
     plot_audio_times(passiveTone_intervals, passiveNoise_intervals, ax=ax)
@@ -647,13 +664,19 @@ class PassiveChoiceWorld(BaseExtractor):
             log.error(f"Failed to extract RFMapping datasets: {e}")
             passiveRFM_times = None
 
-        try:
-            (passiveGabor_df, passiveStims_df,) = extract_task_replay(
-                self.session_path, sync_collection=sync_collection, task_collection=task_collection, sync=sync,
-                sync_map=sync_map, treplay=treplay)
-        except Exception as e:
-            log.error(f"Failed to extract task replay stimuli: {e}")
+        skip_replay = skip_task_replay(self.session_path, task_collection)
+        if not skip_replay:
+            try:
+                (passiveGabor_df, passiveStims_df,) = extract_task_replay(
+                    self.session_path, sync_collection=sync_collection, task_collection=task_collection, sync=sync,
+                    sync_map=sync_map, treplay=treplay)
+            except Exception as e:
+                log.error(f"Failed to extract task replay stimuli: {e}")
+                passiveGabor_df, passiveStims_df = (None, None)
+        else:
+            # If we don't have task replay then we set the treplay intervals to NaN in our passivePeriods_df dataset
             passiveGabor_df, passiveStims_df = (None, None)
+            passivePeriods_df.taskReplay = np.NAN
 
         if plot:
             f, ax = plt.subplots(1, 1)

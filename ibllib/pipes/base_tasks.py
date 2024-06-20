@@ -5,6 +5,8 @@ from pathlib import Path
 from packaging import version
 from one.webclient import no_cache
 from iblutil.util import flatten
+import matplotlib.image
+from skimage.io import ImageCollection, imread
 
 from ibllib.pipes.tasks import Task
 import ibllib.io.session_params as sess_params
@@ -411,6 +413,48 @@ class RegisterRawDataTask(DynamicTask):
             if symlink_old:
                 old_path.symlink_to(new_path)
 
+    @staticmethod
+    def _is_animated_gif(snapshot: Path) -> bool:
+        """
+        Test if image is an animated GIF file.
+
+        Parameters
+        ----------
+        snapshot : pathlib.Path
+            An image filepath to test.
+
+        Returns
+        -------
+        bool
+            True if image is an animated GIF.
+
+        Notes
+        -----
+        This could be achieved more succinctly with `from PIL import Image; Image.open(snapshot).is_animated`,
+        however despite being an indirect dependency, the Pillow library is not in the requirements,
+        whereas skimage is.
+        """
+        return snapshot.suffix == '.gif' and len(ImageCollection(str(snapshot))) > 1
+
+    @staticmethod
+    def _save_as_png(snapshot: Path) -> Path:
+        """
+        Save an image to PNG format.
+
+        Parameters
+        ----------
+        snapshot : pathlib.Path
+            An image filepath to convert.
+
+        Returns
+        -------
+        pathlib.Path
+            The new PNG image filepath.
+        """
+        img = imread(snapshot, as_gray=True)
+        matplotlib.image.imsave(snapshot.with_suffix('.png'), img, cmap='gray')
+        return snapshot.with_suffix('.png')
+
     def register_snapshots(self, unlink=False, collection=None):
         """
         Register any photos in the snapshots folder to the session. Typically imaging users will
@@ -431,6 +475,12 @@ class RegisterRawDataTask(DynamicTask):
         -------
         list of dict
             The newly registered Alyx notes.
+
+        Notes
+        -----
+        - Animated GIF files are not resized and therefore may take up significant space on the database.
+        - TIFF files are converted to PNG format before upload. The original file is not replaced.
+        - JPEG and PNG files are resized by Alyx.
         """
         collection = getattr(self, 'device_collection', None) if collection is None else collection
         collection = collection or ''  # If not defined, use no collection
@@ -438,7 +488,7 @@ class RegisterRawDataTask(DynamicTask):
             collection = [p.name for p in self.session_path.glob(collection)]
             # Check whether folders on disk contain '*'; this is to stop an infinite recursion
             assert not any('*' in c for c in collection), 'folders containing asterisks not supported'
-        # If more that one collection exists, register snapshots in each collection
+        # If more than one collection exists, register snapshots in each collection
         if collection and not isinstance(collection, str):
             return flatten(filter(None, [self.register_snapshots(unlink, c) for c in collection]))
         snapshots_path = self.session_path.joinpath(*filter(None, (collection, 'snapshots')))
@@ -452,14 +502,20 @@ class RegisterRawDataTask(DynamicTask):
         note = dict(user=self.one.alyx.user, content_type='session', object_id=eid, text='')
 
         notes = []
-        exts = ('.jpg', '.jpeg', '.png', '.tif', '.tiff')
+        exts = ('.jpg', '.jpeg', '.png', '.tif', '.tiff', '.gif')
         for snapshot in filter(lambda x: x.suffix.lower() in exts, snapshots_path.glob('*.*')):
+            if snapshot.suffix in ('.tif', '.tiff') and not snapshot.with_suffix('.png').exists():
+                _logger.debug('converting "%s" to png...', snapshot.relative_to(self.session_path))
+                snapshot = self._save_as_png(snapshot_tif := snapshot)
+                if unlink:
+                    snapshot_tif.unlink()
             _logger.debug('Uploading "%s"...', snapshot.relative_to(self.session_path))
             if snapshot.with_suffix('.txt').exists():
                 with open(snapshot.with_suffix('.txt'), 'r') as txt_file:
                     note['text'] = txt_file.read().strip()
             else:
                 note['text'] = ''
+            note['width'] = 'orig' if self._is_animated_gif(snapshot) else None
             with open(snapshot, 'rb') as img_file:
                 files = {'image': img_file}
                 notes.append(self.one.alyx.rest('notes', 'create', data=note, files=files))
