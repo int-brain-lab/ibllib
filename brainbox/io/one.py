@@ -129,6 +129,10 @@ def _channels_alf2bunch(channels, brain_regions=None):
         'axial_um': channels['localCoordinates'][:, 1],
         'lateral_um': channels['localCoordinates'][:, 0],
     }
+    # here if we have some extra keys, they will carry over to the next dictionary
+    for k in channels:
+        if k not in list(channels_.keys()) + ['mlapdv', 'brainLocationIds_ccf_2017', 'localCoordinates']:
+            channels_[k] = channels[k]
     if brain_regions:
         channels_['acronym'] = brain_regions.get(channels_['atlas_id'])['acronym']
     return channels_
@@ -987,11 +991,10 @@ class SpikeSortingLoader:
         """
         # we do not specify the spike sorter on purpose here: the electrode sites do not depend on the spike sorting
         self.download_spike_sorting_object(obj='electrodeSites', collection=f'alf/{self.pname}', missing='ignore')
-        if 'electrodeSites' in self.files:
-            channels = self._load_object(self.files['electrodeSites'], wildcards=self.one.wildcards)
-        else:  # otherwise, we try to load the channel object from the spike sorting folder - this may not contain histology
-            self.download_spike_sorting_object(obj='channels', **kwargs)
-            channels = self._load_object(self.files['channels'], wildcards=self.one.wildcards)
+        self.download_spike_sorting_object(obj='channels', missing='ignore', **kwargs)
+        channels = self._load_object(self.files['channels'], wildcards=self.one.wildcards)
+        if 'electrodeSites' in self.files:  # if common dict keys, electrodeSites prevails
+            channels = channels | self._load_object(self.files['electrodeSites'], wildcards=self.one.wildcards)
         if 'brainLocationIds_ccf_2017' not in channels:
             _logger.debug(f"loading channels from alyx for {self.files['channels']}")
             _channels, self.histology = _load_channel_locations_traj(
@@ -1001,7 +1004,7 @@ class SpikeSortingLoader:
         else:
             channels = _channels_alf2bunch(channels, brain_regions=self.atlas.regions)
             self.histology = 'alf'
-        return channels
+        return Bunch(channels)
 
     def load_spike_sorting(self, spike_sorter='pykilosort', revision=None, enforce_version=True, good_units=False, **kwargs):
         """
