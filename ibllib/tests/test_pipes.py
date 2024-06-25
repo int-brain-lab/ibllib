@@ -795,5 +795,64 @@ class TestSleeplessDecorator(unittest.TestCase):
         self.assertEqual(result, ("test1", "test2"))
 
 
+class TestLegacyDeprecations(unittest.TestCase):
+    """Assert removal of old code."""
+
+    def test_remove_legacy_pipeline(self):
+        """Remove old legacy pipeline code.
+
+        The following code is an incomplete list of modules and functions that should be removed:
+
+        - pipes.ephys_preprocessing
+        - pipes.training_preprocessing
+        - io.extractors.biased_trials.extract_all
+        - io.extractors.bpod_trials.extract_all
+        - io.extractors.base.get_session_extractor_type
+        - io.extractors.base.get_pipeline
+        - io.extractors.base._get_pipeline_from_task_type
+        - io.extractors.base._get_task_types_json_config
+        - io.extractors.extractor_types.json
+        - qc.task_extractors.TaskQCExtractor.extract_data
+
+        NB: some tasks in ephys_preprocessing and maybe training_preprocessing may be directly used
+        or subclassed by the dynamic pipeline. The TaskQCExtractor class could be removed entirely.
+        Instead, a function could exist to simply fetch the relevant data from the task's extractor
+        class.  Alos, there may be plenty of iblscripts CI tests to be removed.
+        """
+        self.assertTrue(datetime.today() < datetime(2024, 9, 1), 'remove legacy pipeline')
+
+    def test_remove_legacy_rig_code(self):
+        """Remove old legacy (v7) rig code.
+
+        The following code is an incomplete list of modules and functions that should be removed:
+
+        - pipes.transfer_rig_data
+        - pipes.misc.check_transfer
+        - pipes.misc.transfer_session_folders
+        - pipes.misc.copy_with_check
+        - pipes.misc.backup_session
+        - pipes.misc.transfer_folder
+        - pipes.misc.load_videopc_params
+        - pipes.misc.load_ephyspc_params
+        - pipes.misc.create_basic_transfer_params
+        - pipes.misc.create_videopc_params
+        - pipes.misc.create_ephyspc_params
+        - pipes.misc.rdiff_install
+        - pipes.misc.rsync_paths
+        - pipes.misc.confirm_ephys_remote_folder
+        - pipes.misc.create_ephys_flags
+        - pipes.misc.create_ephys_transfer_done_flag
+        - pipes.misc.create_video_transfer_done_flag
+        - pipes.misc.create_transfer_done_flag
+
+        pipes.misc.backup_session may be worth keeping and utilized by the iblrig code (arguably
+        useful on both rig and local server). The corresponding tests should also be removed.
+
+        In addition some iblscripts.deploy files should be removed, e.g. prepare_ephys_session,
+        prepare_video_session.
+        """
+        self.assertTrue(datetime.today() < datetime(2024, 10, 1), 'remove legacy rig code')
+
+
 if __name__ == '__main__':
     unittest.main(exit=False, verbosity=2)
