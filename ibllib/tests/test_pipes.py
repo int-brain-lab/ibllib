@@ -11,8 +11,9 @@ from functools import partial
 import random
 import string
 from uuid import uuid4
+from datetime import datetime
 
-from one.api import ONE
+from one.api import ONE, OneAlyx
 import iblutil.io.params as iopar
 from packaging.version import Version, InvalidVersion
 
@@ -20,10 +21,53 @@ import ibllib.io.extractors.base
 import ibllib.tests.fixtures.utils as fu
 from ibllib.pipes import misc
 from ibllib.pipes.misc import sleepless
+from ibllib.pipes import local_server
 from ibllib.tests import TEST_DB
 import ibllib.pipes.scan_fix_passive_files as fix
 from ibllib.pipes.base_tasks import RegisterRawDataTask
 from ibllib.pipes.ephys_preprocessing import SpikeSorting
+
+
+class TestLocalServer(unittest.TestCase):
+    """Tests for the ibllib.pipes.local_server module."""
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.tmpdir = Path(tmp.name)
+        self.addCleanup(tmp.cleanup)
+        raw_behaviour_data = fu.create_fake_raw_behavior_data_folder(self.tmpdir / 'subject/2020-01-01/001', task='ephys')
+        raw_behaviour_data.parent.joinpath('raw_session.flag').touch()
+        fu.populate_task_settings(raw_behaviour_data, patch={'PYBPOD_PROTOCOL': '_iblrig_ephysChoiceWorld5.2.1'})
+        raw_behaviour_data = fu.create_fake_raw_behavior_data_folder(self.tmpdir / 'subject/2020-01-01/002')
+        raw_behaviour_data.parent.joinpath('raw_session.flag').touch()
+        fu.populate_task_settings(raw_behaviour_data, patch={'PYBPOD_PROTOCOL': 'ephys_optoChoiceWorld6.0.1'})
+
+    @mock.patch('ibllib.pipes.local_server.IBLRegistrationClient')
+    @mock.patch('ibllib.pipes.local_server.make_pipeline')
+    def test_job_creator(self, pipeline_mock, _):
+        """Test the job_creator function.
+
+        This test was created after retiring the legacy pipeline. Here we test that an experiment
+        description file is created for each legacy session, followed by dynamic pipeline creation.
+        The second session tests the behaviour of a legacy pipeline with no corresponding experiment
+        description template.  For these sessions we will simply update acquisition_description_legacy_session
+        to add support.
+        """
+        one = mock.Mock(spec=OneAlyx)
+        with self.assertLogs(local_server.__name__, 'ERROR') as log:
+            pipes, _ = local_server.job_creator(self.tmpdir, one=one)
+        self.assertIn("KeyError: 'biased_opto'", log.records[0].getMessage())
+        self.assertEqual(len(pipes), 1)
+        pipeline_mock.assert_called_once()
+
+        # In September 2024, the legacy pipeline will be removed. This entails removing the
+        # code in pipes.training_preprocessing and pipes.ephys_preprocessing, as well as the
+        # code in qc.task_extractors and the extract_all functions in the io.extractors modules.
+        # NB: some tasks such as ephys opto do not have experiment description templates and some
+        # legacy tasks are imported for use in the dynamic pipeline.
+        self.assertFalse(
+            datetime.today() > datetime(2024, 9, 1),
+            'Legacy pipeline code scheduled to be removed after 2024-09-01'
+        )
 
 
 class TestExtractors2Tasks(unittest.TestCase):
@@ -31,7 +75,7 @@ class TestExtractors2Tasks(unittest.TestCase):
     def test_task_to_pipeline(self):
         dd = ibllib.io.extractors.base._get_task_types_json_config()
         types = list(set([dd[k] for k in dd]))
-        # makes sure that for every defined task type there is an acutal pipeline
+        # makes sure that for every defined task type there is an actual pipeline
         for type in types:
             assert ibllib.io.extractors.base._get_pipeline_from_task_type(type)
             print(type, ibllib.io.extractors.base._get_pipeline_from_task_type(type))
@@ -749,6 +793,65 @@ class TestSleeplessDecorator(unittest.TestCase):
         # Check if arguments are passed correctly
         result = decorated_func("test1", "test2")
         self.assertEqual(result, ("test1", "test2"))
+
+
+class TestLegacyDeprecations(unittest.TestCase):
+    """Assert removal of old code."""
+
+    def test_remove_legacy_pipeline(self):
+        """Remove old legacy pipeline code.
+
+        The following code is an incomplete list of modules and functions that should be removed:
+
+        - pipes.ephys_preprocessing
+        - pipes.training_preprocessing
+        - io.extractors.biased_trials.extract_all
+        - io.extractors.bpod_trials.extract_all
+        - io.extractors.base.get_session_extractor_type
+        - io.extractors.base.get_pipeline
+        - io.extractors.base._get_pipeline_from_task_type
+        - io.extractors.base._get_task_types_json_config
+        - io.extractors.extractor_types.json
+        - qc.task_extractors.TaskQCExtractor.extract_data
+
+        NB: some tasks in ephys_preprocessing and maybe training_preprocessing may be directly used
+        or subclassed by the dynamic pipeline. The TaskQCExtractor class could be removed entirely.
+        Instead, a function could exist to simply fetch the relevant data from the task's extractor
+        class.  Alos, there may be plenty of iblscripts CI tests to be removed.
+        """
+        self.assertTrue(datetime.today() < datetime(2024, 9, 1), 'remove legacy pipeline')
+
+    def test_remove_legacy_rig_code(self):
+        """Remove old legacy (v7) rig code.
+
+        The following code is an incomplete list of modules and functions that should be removed:
+
+        - pipes.transfer_rig_data
+        - pipes.misc.check_transfer
+        - pipes.misc.transfer_session_folders
+        - pipes.misc.copy_with_check
+        - pipes.misc.backup_session
+        - pipes.misc.transfer_folder
+        - pipes.misc.load_videopc_params
+        - pipes.misc.load_ephyspc_params
+        - pipes.misc.create_basic_transfer_params
+        - pipes.misc.create_videopc_params
+        - pipes.misc.create_ephyspc_params
+        - pipes.misc.rdiff_install
+        - pipes.misc.rsync_paths
+        - pipes.misc.confirm_ephys_remote_folder
+        - pipes.misc.create_ephys_flags
+        - pipes.misc.create_ephys_transfer_done_flag
+        - pipes.misc.create_video_transfer_done_flag
+        - pipes.misc.create_transfer_done_flag
+
+        pipes.misc.backup_session may be worth keeping and utilized by the iblrig code (arguably
+        useful on both rig and local server). The corresponding tests should also be removed.
+
+        In addition some iblscripts.deploy files should be removed, e.g. prepare_ephys_session,
+        prepare_video_session.
+        """
+        self.assertTrue(datetime.today() < datetime(2024, 10, 1), 'remove legacy rig code')
 
 
 if __name__ == '__main__':
