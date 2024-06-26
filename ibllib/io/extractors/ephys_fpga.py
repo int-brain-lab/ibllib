@@ -941,11 +941,16 @@ class FpgaTrials(extractors_base.BaseExtractor):
             'itiIn_times': _assign_events_to_trial(t_trial_start, fpga_events['itiIn_times']),
             # f2ttl times are unreliable owing to calibration and Bonsai sync square update issues.
             # Take the first event after the FPGA aligned stimulus trigger time.
-            'stimFreeze_times': _assign_events_to_trial(out['stimFreezeTrigger_times'], f2ttl_t, take='first'),
             'stimOn_times': _assign_events_to_trial(out['stimOnTrigger_times'], f2ttl_t, take='first'),
-            'stimOff_times': _assign_events_to_trial(out['stimOffTrigger_times'], f2ttl_t, take='first')
+            'stimOff_times': _assign_events_to_trial(out['stimOffTrigger_times'], f2ttl_t, take='first'),
+            'stimFreeze_times': np.full(len(ifpga), np.nan)
         }
-
+        # Stim freeze times are NaN for nogo trials, so use trial start for these times as
+        # _assign_events_to_trial requires ascending timestamps
+        stim_freeze = np.copy(out['stimFreezeTrigger_times'])
+        nogo = out['choice'] == 0
+        stim_freeze[nogo] = out['intervals'][nogo, 0]
+        fpga_trials['stimFreeze_times'][~nogo] = _assign_events_to_trial(stim_freeze, f2ttl_t, take='first')[~nogo]
         # Feedback times are valve open on correct trials and error tone in on incorrect trials
         fpga_trials['feedback_times'] = np.copy(fpga_trials['valveOpen_times'])
         ind_err = np.isnan(fpga_trials['valveOpen_times'])
