@@ -1,3 +1,9 @@
+## Release Note 2.36.0
+
+### features
+- Adding spike sorting iblsort task
+
+
 ## Release Note 2.35.0
 
 ### features
@@ -14,6 +20,9 @@
 - Flag to allow session registration without water administrations
 - Support extraction of repNum for advancedChoiceWorld
 - Support matplotlib v3.9; min slidingRP version now 1.1.1
+
+#### 2.35.3
+- Use correct task for timeline acquisitions in make_pipeline
 
 ## Release Note 2.34.0
 
