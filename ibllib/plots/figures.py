@@ -107,7 +107,7 @@ class BehaviourPlots(ReportSnapshot):
         self.one = one
         self.eid = eid
         self.session_path = session_path or self.one.eid2path(self.eid)
-        self.trials_collection = kwargs.pop('trials_collection', 'alf')
+        self.trials_collection = kwargs.pop('task_collection', 'alf')
         super(BehaviourPlots, self).__init__(self.session_path, self.eid, one=self.one,
                                              **kwargs)
         # Output directory should mirror trials collection, sans 'alf' part

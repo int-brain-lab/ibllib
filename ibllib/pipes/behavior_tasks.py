@@ -184,17 +184,17 @@ class PassiveRegisterRaw(base_tasks.RegisterRawDataTask, base_tasks.BehaviourTas
         signature = {
             'input_files': [],
             'output_files': [('_iblrig_taskSettings.raw.*', self.collection, True),
-                             ('_iblrig_encoderEvents.raw*', self.collection, True),
-                             ('_iblrig_encoderPositions.raw*', self.collection, True),
-                             ('_iblrig_encoderTrialInfo.raw*', self.collection, True),
-                             ('_iblrig_stimPositionScreen.raw*', self.collection, True),
-                             ('_iblrig_syncSquareUpdate.raw*', self.collection, True),
+                             ('_iblrig_encoderEvents.raw*', self.collection, False),
+                             ('_iblrig_encoderPositions.raw*', self.collection, False),
+                             ('_iblrig_encoderTrialInfo.raw*', self.collection, False),
+                             ('_iblrig_stimPositionScreen.raw*', self.collection, False),
+                             ('_iblrig_syncSquareUpdate.raw*', self.collection, False),
                              ('_iblrig_RFMapStim.raw*', self.collection, True)]
         }
         return signature
 
 
-class PassiveTask(base_tasks.BehaviourTask):
+class PassiveTaskNidq(base_tasks.BehaviourTask):
     priority = 90
     job_size = 'small'
 
@@ -208,10 +208,10 @@ class PassiveTask(base_tasks.BehaviourTask):
                             (f'_{self.sync_namespace}_sync.times.*', self.sync_collection, True),
                             ('*.wiring.json', self.sync_collection, False),
                             ('*.meta', self.sync_collection, False)],
-            'output_files': [('_ibl_passiveGabor.table.csv', self.output_collection, True),
+            'output_files': [('_ibl_passiveGabor.table.csv', self.output_collection, False),
                              ('_ibl_passivePeriods.intervalsTable.csv', self.output_collection, True),
                              ('_ibl_passiveRFM.times.npy', self.output_collection, True),
-                             ('_ibl_passiveStims.table.csv', self.output_collection, True)]
+                             ('_ibl_passiveStims.table.csv', self.output_collection, False)]
         }
         return signature
 
@@ -240,10 +240,10 @@ class PassiveTaskTimeline(base_tasks.BehaviourTask, base_tasks.MesoscopeTask):
                             (f'_{self.sync_namespace}_sync.channels.*', self.sync_collection, False),
                             (f'_{self.sync_namespace}_sync.polarities.*', self.sync_collection, False),
                             (f'_{self.sync_namespace}_sync.times.*', self.sync_collection, False)],
-            'output_files': [('_ibl_passiveGabor.table.csv', self.output_collection, True),
+            'output_files': [('_ibl_passiveGabor.table.csv', self.output_collection, False),
                              ('_ibl_passivePeriods.intervalsTable.csv', self.output_collection, True),
                              ('_ibl_passiveRFM.times.npy', self.output_collection, True),
-                             ('_ibl_passiveStims.table.csv', self.output_collection, True)]
+                             ('_ibl_passiveStims.table.csv', self.output_collection, False)]
         }
         return signature
 
