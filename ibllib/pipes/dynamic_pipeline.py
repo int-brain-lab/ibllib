@@ -162,9 +162,8 @@ def _sync_label(sync, acquisition_software=None, **_):
     str
         The sync label for determining the extractor tasks.
     """
-    if sync == 'nidq' and acquisition_software == 'timeline':
-        return 'timeline'
-    return sync
+
+    return acquisition_software if (sync == 'nidq' and acquisition_software != 'spikeglx') else sync
 
 
 def make_pipeline(session_path, **pkwargs):
@@ -279,7 +278,10 @@ def make_pipeline(session_path, **pkwargs):
             # -   choice_world_habituation
             if 'passiveChoiceWorld' in protocol:
                 registration_class = btasks.PassiveRegisterRaw
-                behaviour_class = getattr(btasks, 'PassiveTask' + sync_label.capitalize())
+                try:
+                    behaviour_class = getattr(btasks, 'PassiveTask' + sync_label.capitalize())
+                except AttributeError:
+                    raise NotImplementedError(f'No passive task available for sync namespace "{sync_label}"')
                 compute_status = False
             elif 'habituation' in protocol:
                 registration_class = btasks.HabituationRegisterRaw
@@ -287,7 +289,10 @@ def make_pipeline(session_path, **pkwargs):
                 compute_status = False
             else:
                 registration_class = btasks.TrialRegisterRaw
-                behaviour_class = getattr(btasks, 'ChoiceWorldTrials' + sync_label.capitalize())
+                try:
+                    behaviour_class = getattr(btasks, 'ChoiceWorldTrials' + sync_label.capitalize())
+                except AttributeError:
+                    raise NotImplementedError(f'No trials task available for sync namespace "{sync_label}"')
                 compute_status = True
             tasks[f'RegisterRaw_{protocol}_{i:02}'] = type(f'RegisterRaw_{protocol}_{i:02}', (registration_class,), {})(
                 **kwargs, **task_kwargs)
