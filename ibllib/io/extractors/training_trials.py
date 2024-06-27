@@ -646,18 +646,23 @@ class StimOnOffFreezeTimes(BaseBpodTrialsExtractor):
         stimOn_times = np.array([])
         stimOff_times = np.array([])
         stimFreeze_times = np.array([])
+        has_freeze = version.parse(self.settings.get('IBLRIG_VERSION', '0')) >= version.parse('6.2.5')
         for tr, on, freeze, off, c in zip(f2TTL, stimOnTrigger, stimFreezeTrigger, stimOffTrigger, choice):
             tr = np.array(tr)
             # stim on
-            idx, = np.where(np.logical_and(on < tr, tr < freeze))
+            lim = freeze if has_freeze else off
+            idx, = np.where(np.logical_and(on < tr, tr < lim))
             stimOn_times = np.append(stimOn_times, tr[idx[0]] if idx.size > 0 else np.nan)
-            # stim freeze
-            idx, = np.where(np.logical_and(freeze < tr, tr < off))
-            stimFreeze_times = np.append(stimFreeze_times, tr[idx[0]] if idx.size > 0 else np.nan)
             # stim off
             idx, = np.where(off < tr)
             stimOff_times = np.append(stimOff_times, tr[idx[0]] if idx.size > 0 else np.nan)
-
+            # stim freeze
+            if has_freeze:
+                idx, = np.where(np.logical_and(freeze < tr, tr < off))
+                stimFreeze_times = np.append(stimFreeze_times, tr[idx[0]] if idx.size > 0 else np.nan)
+            else:  # take last event before off trigger
+                idx, = np.where(tr <= off)
+                stimFreeze_times = np.append(stimFreeze_times, tr[idx[-1]] if idx.size > 0 else np.nan)
         # In no_go trials no stimFreeze happens just stim Off
         stimFreeze_times[choice == 0] = np.nan
 
