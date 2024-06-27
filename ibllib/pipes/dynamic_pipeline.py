@@ -163,7 +163,7 @@ def _sync_label(sync, acquisition_software=None, **_):
         The sync label for determining the extractor tasks.
     """
 
-    return acquisition_software if (sync == 'nidq' and acquisition_software != 'spikeglx') else sync
+    return acquisition_software if (sync == 'nidq' and acquisition_software not in ('spikeglx', None)) else sync
 
 
 def make_pipeline(session_path, **pkwargs):
