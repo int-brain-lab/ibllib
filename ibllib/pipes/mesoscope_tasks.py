@@ -193,7 +193,7 @@ class MesoscopeCompress(base_tasks.MesoscopeTask):
 
 
 class MesoscopePreprocess(base_tasks.MesoscopeTask):
-    """Run suite2p preprocessing on tif files"""
+    """Run suite2p preprocessing on tif files."""
 
     priority = 80
     cpu = -1
@@ -427,10 +427,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
 
         # Concatenate frames
         frameQC = np.concatenate([e['frameQC_frames'] for e in exptQC], axis=0)
-
-        # Transform to bad_frames as expected by suite2p
         bad_frames = np.where(frameQC != 0)[0]
-
         return frameQC, frameQC_names, bad_frames
 
     def get_default_tau(self):
@@ -556,7 +553,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         """ Metadata and parameters """
         # Load metadata and make sure all metadata is consistent across FOVs
         meta_files = sorted(self.session_path.glob(f'{self.device_collection}/*rawImagingData.meta.*'))
-        collections = set(f.parts[-2] for f in meta_files)
+        collections = sorted(set(f.parts[-2] for f in meta_files))
         # Check there is exactly 1 meta file per collection
         assert len(meta_files) == len(list(self.session_path.glob(self.device_collection))) == len(collections)
         rawImagingData = [mesoscope.patch_imaging_meta(alfio.load_file_content(filepath)) for filepath in meta_files]
@@ -577,19 +574,31 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         self.kwargs = {**self.kwargs, **db}
 
         """ Bad frames """
+        # exptQC.mat contains experimenter QC values that may not affect ROI detection (e.g. noises, pauses)
         qc_paths = (self.session_path.joinpath(f[1], 'exptQC.mat')
                     for f in self.input_files if f[0] == 'exptQC.mat')
         qc_paths = sorted(map(str, filter(Path.exists, qc_paths)))
         exptQC = [loadmat(p, squeeze_me=True, simplify_cells=True) for p in qc_paths]
         if len(exptQC) > 0:
-            frameQC, frameQC_names, bad_frames = self._consolidate_exptQC(exptQC)
+            frameQC, frameQC_names, _ = self._consolidate_exptQC(exptQC)
         else:
             _logger.warning('No frame QC (exptQC.mat) files found.')
-            frameQC, bad_frames = np.array([], dtype='u1'), np.array([], dtype='i8')
+            frameQC = np.array([], dtype='u1')
             frameQC_names = pd.DataFrame(columns=['qc_values', 'qc_labels'])
+
         # If applicable, save as bad_frames.npy in first raw_imaging_folder for suite2p
-        if len(bad_frames) > 0 and use_badframes is True:
-            np.save(Path(db['data_path'][0]).joinpath('bad_frames.npy'), bad_frames)
+        # badframes.mat contains QC values that do affect ROI detection (e.g. no PMT, lens artefacts)
+        badframes = np.array([], dtype='i8')
+        total_frames = 0
+        # Ensure all indices are relative to total cumulative frames
+        for m, collection in zip(rawImagingData, collections):
+            badframes_path = self.session_path.joinpath(collection, 'badframes.mat')
+            if badframes_path.exists():
+                raw_mat = loadmat(badframes_path, squeeze_me=True, simplify_cells=True)['badframes']
+                badframes = np.r_[badframes, raw_mat + total_frames]
+            total_frames += m['nFrames']
+        if len(badframes) > 0 and use_badframes is True:
+            np.save(Path(db['data_path'][0]).joinpath('bad_frames.npy'), badframes)
 
         """ Suite2p """
         # Create alf it is doesn't exist
