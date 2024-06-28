@@ -617,7 +617,10 @@ class StimOnTimes_deprecated(BaseBpodTrialsExtractor):
 
 class StimOnOffFreezeTimes(BaseBpodTrialsExtractor):
     """
-    Extracts stim on / off and freeze times from Bpod BNC1 detected fronts
+    Extracts stim on / off and freeze times from Bpod BNC1 detected fronts.
+
+    Each stimulus event is the first detected front of the BNC1 signal after the trigger state, but before the next
+    trigger state.
     """
     save_names = ('_ibl_trials.stimOn_times.npy', None, None)
     var_names = ('stimOn_times', 'stimOff_times', 'stimFreeze_times')
@@ -626,32 +629,42 @@ class StimOnOffFreezeTimes(BaseBpodTrialsExtractor):
         choice = Choice(self.session_path).extract(
             bpod_trials=self.bpod_trials, task_collection=self.task_collection, settings=self.settings, save=False
         )[0]
+        stimOnTrigger = StimOnTriggerTimes(self.session_path).extract(
+            bpod_trials=self.bpod_trials, task_collection=self.task_collection, settings=self.settings, save=False
+        )[0]
+        stimFreezeTrigger = StimFreezeTriggerTimes(self.session_path).extract(
+            bpod_trials=self.bpod_trials, task_collection=self.task_collection, settings=self.settings, save=False
+        )[0]
+        stimOffTrigger = StimOffTriggerTimes(self.session_path).extract(
+            bpod_trials=self.bpod_trials, task_collection=self.task_collection, settings=self.settings, save=False
+        )[0]
         f2TTL = [raw.get_port_events(tr, name='BNC1') for tr in self.bpod_trials]
+        assert stimOnTrigger.size == stimFreezeTrigger.size == stimOffTrigger.size == choice.size == len(f2TTL)
+        assert all(stimOnTrigger < np.nan_to_num(stimFreezeTrigger, nan=np.inf)) and \
+               all(np.nan_to_num(stimFreezeTrigger, nan=-np.inf) < stimOffTrigger)
 
         stimOn_times = np.array([])
         stimOff_times = np.array([])
         stimFreeze_times = np.array([])
-        for tr in f2TTL:
-            if tr and len(tr) == 2:
-                stimOn_times = np.append(stimOn_times, tr[0])
-                stimOff_times = np.append(stimOff_times, tr[-1])
-                stimFreeze_times = np.append(stimFreeze_times, np.nan)
-            elif tr and len(tr) >= 3:
-                stimOn_times = np.append(stimOn_times, tr[0])
-                stimOff_times = np.append(stimOff_times, tr[-1])
-                stimFreeze_times = np.append(stimFreeze_times, tr[-2])
+        has_freeze = version.parse(self.settings.get('IBLRIG_VERSION', '0')) >= version.parse('6.2.5')
+        for tr, on, freeze, off, c in zip(f2TTL, stimOnTrigger, stimFreezeTrigger, stimOffTrigger, choice):
+            tr = np.array(tr)
+            # stim on
+            lim = freeze if has_freeze else off
+            idx, = np.where(np.logical_and(on < tr, tr < lim))
+            stimOn_times = np.append(stimOn_times, tr[idx[0]] if idx.size > 0 else np.nan)
+            # stim off
+            idx, = np.where(off < tr)
+            stimOff_times = np.append(stimOff_times, tr[idx[0]] if idx.size > 0 else np.nan)
+            # stim freeze - take last event before off trigger
+            if has_freeze:
+                idx, = np.where(np.logical_and(freeze < tr, tr < off))
+                stimFreeze_times = np.append(stimFreeze_times, tr[idx[-1]] if idx.size > 0 else np.nan)
             else:
-                stimOn_times = np.append(stimOn_times, np.nan)
-                stimOff_times = np.append(stimOff_times, np.nan)
-                stimFreeze_times = np.append(stimFreeze_times, np.nan)
-
+                idx, = np.where(tr <= off)
+                stimFreeze_times = np.append(stimFreeze_times, tr[idx[-1]] if idx.size > 0 else np.nan)
         # In no_go trials no stimFreeze happens just stim Off
         stimFreeze_times[choice == 0] = np.nan
-        # Check for trigger times
-        # 2nd order criteria:
-        # stimOn -> Closest one to stimOnTrigger?
-        # stimOff -> Closest one to stimOffTrigger?
-        # stimFreeze -> Closest one to stimFreezeTrigger?
 
         return stimOn_times, stimOff_times, stimFreeze_times
 

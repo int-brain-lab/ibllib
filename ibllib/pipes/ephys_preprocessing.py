@@ -39,8 +39,8 @@ from ibllib.plots.figures import SpikeSorting as SpikeSortingPlots
 from ibllib.plots.snapshot import ReportSnapshot
 from brainbox.behavior.dlc import likelihood_threshold, get_licks, get_pupil_diameter, get_smooth_pupil_diameter
 
-_logger = logging.getLogger("ibllib")
-warnings.warn('`pipes.training_preprocessing` to be removed in favour of dynamic pipeline')
+_logger = logging.getLogger('ibllib')
+warnings.warn('`pipes.ephys_preprocessing` to be removed in favour of dynamic pipeline', FutureWarning)
 
 
 #  level 0
@@ -53,7 +53,7 @@ class EphysPulses(tasks.Task):
     io_charge = 30  # this jobs reads raw ap files
     priority = 90  # a lot of jobs depend on this one
     level = 0  # this job doesn't depend on anything
-    force = False  # whether or not to force download of missing data on local server if outputs already exist
+    force = False  # whether to force download of missing data on local server if outputs already exist
     signature = {
         'input_files': [('*ap.meta', 'raw_ephys_data/probe*', True),
                         ('*ap.ch', 'raw_ephys_data/probe*', False),  # not necessary when we have .bin file
@@ -219,7 +219,7 @@ class EphysAudio(tasks.Task):
 
 class SpikeSorting(tasks.Task):
     """
-    Pykilosort 2.5 pipeline
+    (DEPRECATED) Pykilosort 2.5 pipeline
     """
     gpu = 1
     io_charge = 100  # this jobs reads raw ap files
@@ -237,6 +237,12 @@ class SpikeSorting(tasks.Task):
         'input_files': [],  # see setUp method for declaration of inputs
         'output_files': []  # see setUp method for declaration of inputs
     }
+
+    def __init__(self, *args, **kwargs):
+        warnings.warn('`pipes.ephys_preprocessing.SpikeSorting` to be removed '
+                      'in favour of `pipes.ephys_tasks.SpikeSorting`',
+                      FutureWarning)
+        super().__init__(*args, **kwargs)
 
     @staticmethod
     def spike_sorting_signature(pname=None):

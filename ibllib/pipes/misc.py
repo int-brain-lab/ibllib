@@ -490,7 +490,7 @@ def create_basic_transfer_params(param_str='transfer_params', local_data_path=No
 def create_videopc_params(force=False, silent=False):
     """(DEPRECATED) This will be removed in favour of iblrigv8 functions."""
     url = 'https://github.com/int-brain-lab/iblrig/blob/videopc/docs/source/video.rst'
-    warnings.warn(f'create_videopc_params is deprecated, see {url}', DeprecationWarning)
+    warnings.warn(f'create_videopc_params is deprecated, see {url}', FutureWarning)
     if Path(params.getfile("videopc_params")).exists() and not force:
         print(f"{params.getfile('videopc_params')} exists already, exiting...")
         print(Path(params.getfile("videopc_params")).exists())

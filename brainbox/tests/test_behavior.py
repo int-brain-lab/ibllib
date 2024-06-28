@@ -124,6 +124,12 @@ class TestWheel(unittest.TestCase):
         with self.assertRaises(ValueError):
             wheel.get_movement_onset(intervals, np.random.permutation(self.trials['feedback_times']))
 
+    def test_velocity_deprecation(self):
+        """Ensure brainbox.behavior.wheel.velocity is removed."""
+        from datetime import datetime
+        self.assertTrue(datetime.today() < datetime(2024, 8, 1),
+                        'remove brainbox.behavior.wheel.velocity, velocity_smoothed and last_movement_onset')
+
 
 class TestTraining(unittest.TestCase):
     def setUp(self):
