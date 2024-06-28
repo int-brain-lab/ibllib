@@ -952,27 +952,34 @@ class FpgaTrials(extractors_base.BaseExtractor):
             'errorCue_times': _assign_events_to_trial(t_trial_start, fpga_events['errorCue_times']),
             'valveOpen_times': _assign_events_to_trial(t_trial_start, fpga_events['valveOpen_times']),
             'itiIn_times': _assign_events_to_trial(t_trial_start, fpga_events['itiIn_times']),
-            # f2ttl times are unreliable owing to calibration and Bonsai sync square update issues.
-            # Take the first event after the FPGA aligned stimulus trigger time.
-            'stimOn_times': _assign_events_to_trial(out['stimOnTrigger_times'], f2ttl_t, take='first', t_trial_end=t_trial_end),
-            'stimOff_times': _assign_events_to_trial(out['stimOffTrigger_times'], f2ttl_t, take='first', t_trial_end=t_trial_end),
-            'stimFreeze_times': np.full(len(ifpga), np.nan)
+            'stimOn_times': np.full_like(t_trial_start, np.nan),
+            'stimOff_times': np.full_like(t_trial_start, np.nan),
+            'stimFreeze_times': np.full_like(t_trial_start, np.nan)
         }
 
+        # f2ttl times are unreliable owing to calibration and Bonsai sync square update issues.
+        # Take the first event after the FPGA aligned stimulus trigger time.
+        fpga_trials['stimOn_times'][ibpod] = _assign_events_to_trial(
+            out['stimOnTrigger_times'], f2ttl_t, take='first', t_trial_end=out['stimOffTrigger_times'])
+        fpga_trials['stimOff_times'][ibpod] = _assign_events_to_trial(
+            out['stimOffTrigger_times'], f2ttl_t, take='first', t_trial_end=out['intervals'][:, 1])
+        # For stim freeze we take the last event before the stim off trigger time.
+        # To avoid assigning early events (e.g. for sessions where there are few flips due to
+        # mis-calibration), we discount events before stim freeze trigger times (or stim on trigger
+        # times for versions below 6.2.5). We take the last event rather than the first after stim
+        # freeze trigger because often there are multiple flips after the trigger, presumably
+        # before the stim actually stops.
         stim_freeze = np.copy(out['stimFreezeTrigger_times'])
-        nogo = out['choice'] == 0
-        # NB: versions below 6.2.5 have no trigger times
-        if np.isnan(stim_freeze).all():
-            # take second to last event
-            stim_freeze = _assign_events_to_trial(
-                t_trial_start[ifpga], f2ttl_t, take='last', t_trial_end=out['stimOffTrigger_times'])
-        else:
-            # Stim freeze times are NaN for nogo trials, so use trial start for these times as
-            # _assign_events_to_trial requires ascending timestamps
-            stim_freeze[nogo] = out['intervals'][nogo, 0]
-            # take first event after stim freeze trigger time
-            stim_freeze = _assign_events_to_trial(stim_freeze, f2ttl_t, take='first', t_trial_end=fpga_trials['stimOff_times'])
-        fpga_trials['stimFreeze_times'][~nogo] = stim_freeze[ifpga][~nogo]
+        go_trials = np.where(out['choice'] != 0)[0]
+        # NB: versions below 6.2.5 have no trigger times so use stim on trigger times
+        lims = np.copy(out['stimOnTrigger_times'])
+        if not np.isnan(stim_freeze).all():
+            # Stim freeze times are NaN for nogo trials, but for all others use stim freeze trigger
+            # times. _assign_events_to_trial requires ascending timestamps so no NaNs allowed.
+            lims[go_trials] = stim_freeze[go_trials]
+        # take last event after freeze/stim on trigger, before stim off trigger
+        stim_freeze = _assign_events_to_trial(lims, f2ttl_t, take='last', t_trial_end=out['stimOffTrigger_times'])
+        fpga_trials['stimFreeze_times'][go_trials] = stim_freeze[go_trials]
 
         # Feedback times are valve open on correct trials and error tone in on incorrect trials
         fpga_trials['feedback_times'] = np.copy(fpga_trials['valveOpen_times'])
@@ -982,8 +989,6 @@ class FpgaTrials(extractors_base.BaseExtractor):
         out.update({k: fpga_trials[k][ifpga] for k in fpga_trials.keys()})
 
         if display:  # pragma: no cover
-            import matplotlib
-            matplotlib.use('TkAgg')
             width = 0.5
             ymax = 5
             if isinstance(display, bool):

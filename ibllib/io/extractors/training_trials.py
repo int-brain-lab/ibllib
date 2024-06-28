@@ -656,11 +656,11 @@ class StimOnOffFreezeTimes(BaseBpodTrialsExtractor):
             # stim off
             idx, = np.where(off < tr)
             stimOff_times = np.append(stimOff_times, tr[idx[0]] if idx.size > 0 else np.nan)
-            # stim freeze
+            # stim freeze - take last event before off trigger
             if has_freeze:
                 idx, = np.where(np.logical_and(freeze < tr, tr < off))
-                stimFreeze_times = np.append(stimFreeze_times, tr[idx[0]] if idx.size > 0 else np.nan)
-            else:  # take last event before off trigger
+                stimFreeze_times = np.append(stimFreeze_times, tr[idx[-1]] if idx.size > 0 else np.nan)
+            else:
                 idx, = np.where(tr <= off)
                 stimFreeze_times = np.append(stimFreeze_times, tr[idx[-1]] if idx.size > 0 else np.nan)
         # In no_go trials no stimFreeze happens just stim Off
