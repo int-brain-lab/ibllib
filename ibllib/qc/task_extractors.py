@@ -151,7 +151,7 @@ class TaskQCExtractor:
         intervals_bpod to be assigned to the data attribute before calling this function.
         """
         warnings.warn('The TaskQCExtractor.extract_data will be removed in the future, '
-                      'use dynamic pipeline behaviour tasks instead.', DeprecationWarning)
+                      'use dynamic pipeline behaviour tasks instead.', FutureWarning)
         self.log.info(f'Extracting session: {self.session_path}')
 
         if not self.raw_data:

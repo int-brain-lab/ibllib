@@ -139,11 +139,11 @@ def bincount2D(x, y, xbin=0, ybin=0, xlim=None, ylim=None, weights=None):
     """
     for line in traceback.format_stack():
         print(line.strip())
-    warning_text = """Deprecation warning: bincount2D() is now a part of iblutil.
-                    brainbox.processing.bincount2D is deprecated and will be removed in
-                    future versions. Please replace imports with iblutil.numerical.bincount2D."""
+    warning_text = """Future warning: bincount2D() is now a part of iblutil.
+                    brainbox.processing.bincount2D will be removed in future versions.
+                    Please replace imports with iblutil.numerical.bincount2D."""
     _logger.warning(warning_text)
-    warnings.warn(warning_text, DeprecationWarning)
+    warnings.warn(warning_text, FutureWarning)
     return _bincount2D(x, y, xbin, ybin, xlim, ylim, weights)
 
 

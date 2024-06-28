@@ -232,7 +232,7 @@ def _rotary_encoder_positions_from_fronts(ta, pa, tb, pb, ticks=WHEEL_TICKS, rad
         return t, p
 
 
-def _assign_events_to_trial(t_trial_start, t_event, take='last'):
+def _assign_events_to_trial(t_trial_start, t_event, take='last', t_trial_end=None):
     """
     Assign events to a trial given trial start times and event times.
 
@@ -249,6 +249,8 @@ def _assign_events_to_trial(t_trial_start, t_event, take='last'):
         'first' takes first event > t_trial_start; 'last' takes last event < the next
         t_trial_start; an int defines the index to take for events within trial bounds. The index
         may be negative.
+    t_trial_end : numpy.array
+        Optional array of end times, used to bin edges for assigning values from `t_event`.
 
     Returns
     -------
@@ -269,8 +271,19 @@ def _assign_events_to_trial(t_trial_start, t_event, take='last'):
         assert np.all(np.diff(t_event) >= 0)
     except AssertionError:
         raise ValueError('Events vector is not sorted')
+
     # remove events that happened before the first trial start
-    t_event = t_event[t_event >= t_trial_start[0]]
+    remove = t_event < t_trial_start[0]
+    if t_trial_end is not None:
+        if not np.all(np.diff(t_trial_end) >= 0):
+            raise ValueError('Trial end vector not sorted')
+        if not np.all(t_trial_end[:-1] < t_trial_start[1:]):
+            raise ValueError('Trial end times must not overlap with trial start times')
+        # remove events between end and next start, and after last end
+        remove |= t_event > t_trial_end[-1]
+        for e, s in zip(t_trial_end[:-1], t_trial_start[1:]):
+            remove |= np.logical_and(s > t_event, t_event >= e)
+    t_event = t_event[~remove]
     ind = np.searchsorted(t_trial_start, t_event) - 1
     t_event_nans = np.zeros_like(t_trial_start) * np.nan
     # select first or last element matching each trial start
@@ -923,22 +936,6 @@ class FpgaTrials(extractors_base.BaseExtractor):
         else:
             t_trial_start = fpga_events['intervals_0']
 
-        # Assign the FPGA events to individual trials
-        fpga_trials = {
-            'goCue_times': _assign_events_to_trial(t_trial_start, fpga_events['goCue_times'], take='first'),
-            'errorCue_times': _assign_events_to_trial(t_trial_start, fpga_events['errorCue_times']),
-            'valveOpen_times': _assign_events_to_trial(t_trial_start, fpga_events['valveOpen_times']),
-            'itiIn_times': _assign_events_to_trial(t_trial_start, fpga_events['itiIn_times']),
-            'stimFreeze_times': _assign_events_to_trial(t_trial_start, self.frame2ttl['times'], take=-2),
-            'stimOn_times': _assign_events_to_trial(t_trial_start, self.frame2ttl['times'], take='first'),
-            'stimOff_times': _assign_events_to_trial(t_trial_start, self.frame2ttl['times'])
-        }
-
-        # Feedback times are valve open on correct trials and error tone in on incorrect trials
-        fpga_trials['feedback_times'] = np.copy(fpga_trials['valveOpen_times'])
-        ind_err = np.isnan(fpga_trials['valveOpen_times'])
-        fpga_trials['feedback_times'][ind_err] = fpga_trials['errorCue_times'][ind_err]
-
         out = alfio.AlfBunch()
         # Add the Bpod trial events, converting the timestamp fields to FPGA time.
         # NB: The trial intervals are by default a Bpod rsync field.
@@ -947,6 +944,48 @@ class FpgaTrials(extractors_base.BaseExtractor):
             # Some personal projects may extract non-trials object datasets that may not have 1 event per trial
             idx = ibpod if self._is_trials_object_attribute(k) else np.arange(len(self.bpod_trials[k]), dtype=int)
             out[k] = self.bpod2fpga(self.bpod_trials[k][idx])
+
+        f2ttl_t = self.frame2ttl['times']
+        # Assign the FPGA events to individual trials
+        fpga_trials = {
+            'goCue_times': _assign_events_to_trial(t_trial_start, fpga_events['goCue_times'], take='first'),
+            'errorCue_times': _assign_events_to_trial(t_trial_start, fpga_events['errorCue_times']),
+            'valveOpen_times': _assign_events_to_trial(t_trial_start, fpga_events['valveOpen_times']),
+            'itiIn_times': _assign_events_to_trial(t_trial_start, fpga_events['itiIn_times']),
+            'stimOn_times': np.full_like(t_trial_start, np.nan),
+            'stimOff_times': np.full_like(t_trial_start, np.nan),
+            'stimFreeze_times': np.full_like(t_trial_start, np.nan)
+        }
+
+        # f2ttl times are unreliable owing to calibration and Bonsai sync square update issues.
+        # Take the first event after the FPGA aligned stimulus trigger time.
+        fpga_trials['stimOn_times'][ibpod] = _assign_events_to_trial(
+            out['stimOnTrigger_times'], f2ttl_t, take='first', t_trial_end=out['stimOffTrigger_times'])
+        fpga_trials['stimOff_times'][ibpod] = _assign_events_to_trial(
+            out['stimOffTrigger_times'], f2ttl_t, take='first', t_trial_end=out['intervals'][:, 1])
+        # For stim freeze we take the last event before the stim off trigger time.
+        # To avoid assigning early events (e.g. for sessions where there are few flips due to
+        # mis-calibration), we discount events before stim freeze trigger times (or stim on trigger
+        # times for versions below 6.2.5). We take the last event rather than the first after stim
+        # freeze trigger because often there are multiple flips after the trigger, presumably
+        # before the stim actually stops.
+        stim_freeze = np.copy(out['stimFreezeTrigger_times'])
+        go_trials = np.where(out['choice'] != 0)[0]
+        # NB: versions below 6.2.5 have no trigger times so use stim on trigger times
+        lims = np.copy(out['stimOnTrigger_times'])
+        if not np.isnan(stim_freeze).all():
+            # Stim freeze times are NaN for nogo trials, but for all others use stim freeze trigger
+            # times. _assign_events_to_trial requires ascending timestamps so no NaNs allowed.
+            lims[go_trials] = stim_freeze[go_trials]
+        # take last event after freeze/stim on trigger, before stim off trigger
+        stim_freeze = _assign_events_to_trial(lims, f2ttl_t, take='last', t_trial_end=out['stimOffTrigger_times'])
+        fpga_trials['stimFreeze_times'][go_trials] = stim_freeze[go_trials]
+
+        # Feedback times are valve open on correct trials and error tone in on incorrect trials
+        fpga_trials['feedback_times'] = np.copy(fpga_trials['valveOpen_times'])
+        ind_err = np.isnan(fpga_trials['valveOpen_times'])
+        fpga_trials['feedback_times'][ind_err] = fpga_trials['errorCue_times'][ind_err]
+
         out.update({k: fpga_trials[k][ifpga] for k in fpga_trials.keys()})
 
         if display:  # pragma: no cover
@@ -963,11 +1002,18 @@ class FpgaTrials(extractors_base.BaseExtractor):
             color_map = TABLEAU_COLORS.keys()
             for (event_name, event_times), c in zip(fpga_events.items(), cycle(color_map)):
                 plots.vertical_lines(event_times, ymin=0, ymax=ymax, ax=ax, color=c, label=event_name, linewidth=width)
+            # Plot the stimulus events along with the trigger times
+            stim_events = filter(lambda t: 'stim' in t[0], fpga_trials.items())
+            for (event_name, event_times), c in zip(stim_events, cycle(color_map)):
+                plots.vertical_lines(
+                    event_times, ymin=0, ymax=ymax, ax=ax, color=c, label=event_name, linewidth=width, linestyle='--')
+                nm = event_name.replace('_times', 'Trigger_times')
+                plots.vertical_lines(
+                    out[nm], ymin=0, ymax=ymax, ax=ax, color=c, label=nm, linewidth=width, linestyle=':')
             ax.legend()
             ax.set_yticks([0, 1, 2, 3])
             ax.set_yticklabels(['', 'bpod', 'f2ttl', 'audio'])
             ax.set_ylim([0, 5])
-
         return out
 
     def get_wheel_positions(self, *args, **kwargs):

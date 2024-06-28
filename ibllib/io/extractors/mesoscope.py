@@ -235,7 +235,7 @@ class TimelineTrials(FpgaTrials):
         start_times = out['intervals'][:, 0]
         last_trial_end = out['intervals'][-1, 1]
 
-        def assign_to_trial(events, take='last'):
+        def assign_to_trial(events, take='last', starts=start_times, **kwargs):
             """Assign DAQ events to trials.
 
             Because we may not have trial start TTLs on the DAQ (because of the low sampling rate),
@@ -243,7 +243,7 @@ class TimelineTrials(FpgaTrials):
             ignores the last trial. This function trims the input array before assigning so that
             the last trial's events are correctly assigned.
             """
-            return _assign_events_to_trial(start_times, events[events <= last_trial_end], take)
+            return _assign_events_to_trial(starts, events[events <= last_trial_end], take, **kwargs)
         out['itiIn_times'] = assign_to_trial(fpga_events['itiIn_times'][ifpga])
 
         # Extract valve open times from the DAQ
@@ -272,10 +272,17 @@ class TimelineTrials(FpgaTrials):
             # Use the valve controller TTLs recorded on the Bpod channel as the reward time
             out['valveOpen_times'] = assign_to_trial(valve_driver_ttls[:, 0])
 
-        # Stimulus times extracted the same as usual
-        out['stimFreeze_times'] = assign_to_trial(self.frame2ttl['times'], take=-2)
-        out['stimOn_times'] = assign_to_trial(self.frame2ttl['times'], take='first')
-        out['stimOff_times'] = assign_to_trial(self.frame2ttl['times'])
+        # Stimulus times extracted based on trigger times
+        out['stimFreeze_times'] = assign_to_trial(
+            self.frame2ttl['times'], 'last',
+            starts=out['stimFreezeTrigger_times'], t_trial_end=out['stimOffTrigger_times'])
+        out['stimOn_times'] = assign_to_trial(
+            self.frame2ttl['times'], 'first',
+            starts=out['stimOnTrigger_times'], t_trial_end=out['stimFreezeTrigger_times'])
+        out['stimOff_times'] = assign_to_trial(
+            self.frame2ttl['times'], 'first',
+            starts=out['stimOffTrigger_times'], t_trial_end=out['intervals'][:, 1]
+        )
 
         # Audio times
         error_cue = fpga_events['errorTone_times']

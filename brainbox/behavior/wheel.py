@@ -88,8 +88,8 @@ def velocity(re_ts, re_pos):
     for line in traceback.format_stack():
         print(line.strip())
 
-    msg = 'brainbox.behavior.wheel.velocity has been deprecated. Use velocity_filtered instead.'
-    warnings.warn(msg, DeprecationWarning)
+    msg = 'brainbox.behavior.wheel.velocity will soon be removed. Use velocity_filtered instead.'
+    warnings.warn(msg, FutureWarning)
     logging.getLogger(__name__).warning(msg)
 
     dp = np.diff(re_pos)
@@ -153,8 +153,8 @@ def velocity_smoothed(pos, freq, smooth_size=0.03):
     for line in traceback.format_stack():
         print(line.strip())
 
-    msg = 'brainbox.behavior.wheel.velocity_smoothed has been deprecated. Use velocity_filtered instead.'
-    warnings.warn(msg, DeprecationWarning)
+    msg = 'brainbox.behavior.wheel.velocity_smoothed will be removed. Use velocity_filtered instead.'
+    warnings.warn(msg, FutureWarning)
     logging.getLogger(__name__).warning(msg)
 
     # Define our smoothing window with an area of 1 so the units won't be changed
@@ -188,7 +188,7 @@ def last_movement_onset(t, vel, event_time):
         print(line.strip())
 
     msg = 'brainbox.behavior.wheel.last_movement_onset has been deprecated. Use get_movement_onset instead.'
-    warnings.warn(msg, DeprecationWarning)
+    warnings.warn(msg, FutureWarning)
     logging.getLogger(__name__).warning(msg)
 
     # Look back from timestamp

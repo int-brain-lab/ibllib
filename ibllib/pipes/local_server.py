@@ -19,11 +19,10 @@ from one.webclient import AlyxClient
 from one.remote.globus import get_lab_from_endpoint_id, get_local_endpoint_id
 
 from ibllib import __version__ as ibllib_version
-from ibllib.io.extractors.base import get_pipeline, get_task_protocol, get_session_extractor_type
-from ibllib.pipes import training_preprocessing, ephys_preprocessing
-from ibllib.pipes.tasks import run_alyx_task, str2class
+from ibllib.io.extractors.base import get_pipeline, get_session_extractor_type
+from ibllib.pipes import tasks, training_preprocessing, ephys_preprocessing
 from ibllib.time import date2isostr
-from ibllib.oneibl.registration import IBLRegistrationClient, register_session_raw_data, get_lab
+from ibllib.oneibl.registration import IBLRegistrationClient
 from ibllib.oneibl.data_handlers import get_local_data_repository
 from ibllib.io.session_params import read_params
 from ibllib.pipes.dynamic_pipeline import make_pipeline, acquisition_description_legacy_session
@@ -89,7 +88,7 @@ def report_health(one):
         one.alyx.json_field_update(endpoint='data-repository', uuid=dr['name'], field_name='json', data=status)
 
 
-def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
+def job_creator(root_path, one=None, dry=False, rerun=False):
     """
     Create new sessions and pipelines.
 
@@ -109,8 +108,6 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
         If true, simply log the session_path(s) found, without registering anything.
     rerun : bool
         If true and session pipeline tasks already exist, set them all to waiting.
-    max_md5_size : int
-        (legacy sessions) The maximum file size to calculate the MD5 hash sum for.
 
     Returns
     -------
@@ -135,21 +132,11 @@ def job_creator(root_path, one=None, dry=False, rerun=False, max_md5_size=None):
             # if the subject doesn't exist in the database, skip
             rc.register_session(session_path, file_list=False)
 
-            # See if we need to create a dynamic pipeline
-            experiment_description_file = read_params(session_path)
-            if experiment_description_file is not None:
-                pipe = make_pipeline(session_path, one=one)
-            else:
+            # NB: all sessions now extracted using dynamic pipeline
+            if read_params(session_path) is None:
                 # Create legacy experiment description file
                 acquisition_description_legacy_session(session_path, save=True)
-                lab = get_lab(session_path, one.alyx)  # Can be set to None to do this Alyx-side if using ONE v1.20.1
-                _, dsets = register_session_raw_data(session_path, one=one, max_md5_size=max_md5_size, labs=lab)
-                if dsets:
-                    all_datasets.extend(dsets)
-                pipe = _get_pipeline_class(session_path, one)
-                if pipe is None:
-                    task_protocol = get_task_protocol(session_path)
-                    _logger.info(f'Session task protocol {task_protocol} has no matching pipeline pattern {session_path}')
+            pipe = make_pipeline(session_path, one=one)
             if rerun:
                 rerun__status__in = '__all__'
             else:
@@ -186,7 +173,7 @@ def task_queue(mode='all', lab=None, alyx=None, env=(None,)):
         A list of Alyx tasks associated with `lab` that have a 'Waiting' status.
     """
     def predicate(task):
-        classe = str2class(task['executable'])
+        classe = tasks.str2class(task['executable'])
         return (mode == 'all' or classe.job_size == mode) and classe.env in env
 
     alyx = alyx or AlyxClient(cache_rest=None)
@@ -201,9 +188,9 @@ def task_queue(mode='all', lab=None, alyx=None, env=(None,)):
     waiting_tasks = alyx.rest('tasks', 'list', status='Waiting',
                               django=f'session__lab__name__in,{lab},data_repository__name,{data_repo}', no_cache=True)
     # Filter tasks by size
-    tasks = filter(predicate, waiting_tasks)
+    filtered_tasks = filter(predicate, waiting_tasks)
     # Order tasks by priority
-    sorted_tasks = sorted(tasks, key=lambda d: d['priority'], reverse=True)
+    sorted_tasks = sorted(filtered_tasks, key=lambda d: d['priority'], reverse=True)
 
     return sorted_tasks
 
@@ -255,7 +242,7 @@ def tasks_runner(subjects_path, tasks_dict, one=None, dry=False, count=5, time_o
         if dry:
             print(session_path, tdict['name'])
         else:
-            task, dsets = run_alyx_task(tdict=tdict, session_path=session_path, one=one, **kwargs)
+            task, dsets = tasks.run_alyx_task(tdict=tdict, session_path=session_path, one=one, **kwargs)
             if dsets:
                 all_datasets.extend(dsets)
                 c += 1

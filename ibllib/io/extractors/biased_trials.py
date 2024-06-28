@@ -185,8 +185,17 @@ class EphysTrials(BaseBpodTrialsExtractor):
 
     def _extract(self, extractor_classes=None, **kwargs) -> dict:
         extractor_classes = extractor_classes or []
+
+        # For iblrig v8 we use the biased trials table instead. ContrastLeft, ContrastRight and ProbabilityLeft are
+        # filled from the values in the bpod data itself rather than using the pregenerated session number
+        iblrig_version = self.settings.get('IBLRIG_VERSION', self.settings.get('IBLRIG_VERSION_TAG', '0'))
+        if version.parse(iblrig_version) >= version.parse('8.0.0'):
+            TrialsTable = TrialsTableBiased
+        else:
+            TrialsTable = TrialsTableEphys
+
         base = [GoCueTriggerTimes, StimOnTriggerTimes, ItiInTimes, StimOffTriggerTimes, StimFreezeTriggerTimes,
-                ErrorCueTriggerTimes, TrialsTableEphys, IncludedTrials, PhasePosQuiescence]
+                ErrorCueTriggerTimes, TrialsTable, IncludedTrials, PhasePosQuiescence]
         # Get all detected TTLs. These are stored for QC purposes
         self.frame2ttl, self.audio = raw.load_bpod_fronts(self.session_path, data=self.bpod_trials)
         # Exclude from trials table
