@@ -103,11 +103,12 @@ class TestProcessing(unittest.TestCase):
         self.assertEqual(avg_val[2], 0.75)
         self.assertTrue(np.all(count == (40, 40, 50)))
 
+    def test_deprecations(self):
+        """Ensure removal of bincount2D function."""
+        from datetime import datetime
+        self.assertTrue(datetime.today() < datetime(2024, 8, 1), 'remove brainbox.processing.bincount2D')
 
-def test_get_unit_bunches():
-    pass
 
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     np.random.seed(0)
     unittest.main(exit=False)

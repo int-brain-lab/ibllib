@@ -40,7 +40,7 @@ from ibllib.plots.snapshot import ReportSnapshot
 from brainbox.behavior.dlc import likelihood_threshold, get_licks, get_pupil_diameter, get_smooth_pupil_diameter
 
 _logger = logging.getLogger('ibllib')
-warnings.warn('`pipes.ephys_preprocessing` to be removed in favour of dynamic pipeline', DeprecationWarning)
+warnings.warn('`pipes.ephys_preprocessing` to be removed in favour of dynamic pipeline', FutureWarning)
 
 
 #  level 0
@@ -241,7 +241,7 @@ class SpikeSorting(tasks.Task):
     def __init__(self, *args, **kwargs):
         warnings.warn('`pipes.ephys_preprocessing.SpikeSorting` to be removed '
                       'in favour of `pipes.ephys_tasks.SpikeSorting`',
-                      DeprecationWarning)
+                      FutureWarning)
         super().__init__(*args, **kwargs)
 
     @staticmethod
