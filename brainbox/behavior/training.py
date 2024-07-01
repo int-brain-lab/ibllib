@@ -6,6 +6,11 @@ Training.
 .. _Appendix 2: https://figshare.com/articles/preprint/A_standardized_and_reproducible_method_to_\
 measure_decision-making_in_mice_Appendix_2_IBL_protocol_for_mice_training/11634729
 
+For a detailed description of how to interpret RTs, see `this document`_ and the documentation on `working with wheel data`_.
+
+.. _this document: https://docs.google.com/document/d/1s1huCm6eap2cdI6e-3cEnMpH8fP7KvXd16h_350WCU8/edit
+.. _working with wheel data`: https://int-brain-lab.github.io/iblenv/notebooks_external/docs_wheel_moves.html#Finding-reaction-time-and-'determined'-movements
+
 Examples
 --------
 Plot the psychometric curve for a given session.
@@ -15,20 +20,20 @@ Plot the psychometric curve for a given session.
 
 Compute 'response times', defined as the duration of open-loop for each contrast.
 
->>> reaction_time, contrasts, n_contrasts = compute_reaction_time(trials)
+>>> response time, contrasts, n_contrasts = compute_reaction_time(trials)
 
-Compute 'reaction times', defined as the time between go cue and first detected movement.
-NB: These may be negative!
+Compute 'first movement onset', defined as the time between go cue and first detected movement.
+NB: These may be negative! See also [extract_first_movement_times](https://int-brain-lab.github.io/iblenv/_autosummary/ibllib.io.extractors.training_wheel.html#ibllib.io.extractors.training_wheel.extract_first_movement_times).
 
->>> reaction_time, contrasts, n_contrasts = compute_reaction_time(
+>>> first_movement, contrasts, n_contrasts = compute_reaction_time(
 ...     trials, stim_on_type='goCue_times', stim_off_type='firstMovement_times')
 
-Compute 'response times', defined as the time between first detected movement and response.
+Compute 'movement response durations', defined as the time between first detected movement and response.
 
->>> reaction_time, contrasts, n_contrasts = compute_reaction_time(
+>>> movement_response_duration, contrasts, n_contrasts = compute_reaction_time(
 ...     trials, stim_on_type='firstMovement_times', stim_off_type='response_times')
 
-Compute 'movement times', defined as the time between last detected movement and response threshold.
+Compute 'final movement duration', defined as the time between last detected movement and response threshold.
 
 >>> import brainbox.behavior.wheel as wh
 >>> wheel_moves = ONE().load_object(eid, 'wheeMoves')
@@ -713,7 +718,7 @@ def compute_median_reaction_time(trials, stim_on_type='stimOn_times', contrast=N
       the stimulus onset command), if available, or the 'goCue_times' (the time of the soundcard
       output TTL when the audio go cue is played) or the 'goCueTrigger_times' (the time of the
       audio go cue command).
-    - The response/reaction time here is defined as the time between stim on and feedback, i.e. the
+    - The response time here is defined as the time between stim on and feedback, i.e. the
       entire open-loop trial duration.
     """
     if signed_contrast is None:
@@ -765,7 +770,7 @@ def compute_reaction_time(trials, stim_on_type='stimOn_times', stim_off_type='re
     Returns
     -------
     numpy.array
-        The median response times for each unique signed contrast.
+        The median RTs for each unique signed contrast.
     numpy.array
         The set of unique signed contrasts.
     numpy.array
@@ -776,11 +781,11 @@ def compute_reaction_time(trials, stim_on_type='stimOn_times', stim_off_type='re
 
     Notes
     -----
-    - The response/reaction time by default is the time between stim on and response, i.e. the
+    - The response time by default is the time between stim on and response, i.e. the
       entire open-loop trial duration. One could use 'stimOn_times' and 'firstMovement_times' to
-      get the true reaction time, or 'firstMovement_times' and 'response_times' to get the true
-      response times, or calculate the last movement onset times and calculate the true movement
-      times.  See module examples for how to calculate this.
+      get the first movement onset time, or 'firstMovement_times' and 'response_times' to get the movement response duration,
+      or calculate the last movement onset times and calculate the true movement
+      times.  See module examples for how to calculate this, and [this document](https://docs.google.com/document/d/1s1huCm6eap2cdI6e-3cEnMpH8fP7KvXd16h_350WCU8/edit)
 
     See Also
     --------
@@ -796,7 +801,7 @@ def compute_reaction_time(trials, stim_on_type='stimOn_times', stim_off_type='re
         block_idx = trials.probabilityLeft == block
 
     contrasts, n_contrasts = np.unique(signed_contrast[block_idx], return_counts=True)
-    reaction_time = np.vectorize(lambda x: np.nanmedian((trials[stim_off_type] - trials[stim_on_type])
+    rt = np.vectorize(lambda x: np.nanmedian((trials[stim_off_type] - trials[stim_on_type])
                                                         [(x == signed_contrast) & block_idx]))(contrasts)
     if compute_ci:
         ci = np.full((contrasts.size, 2), np.nan)
@@ -806,9 +811,9 @@ def compute_reaction_time(trials, stim_on_type='stimOn_times', stim_off_type='re
             ci[i, 0] = bt.confidence_interval.low
             ci[i, 1] = bt.confidence_interval.high
 
-        return reaction_time, contrasts, n_contrasts, ci
+        return rt, contrasts, n_contrasts, ci
     else:
-        return reaction_time, contrasts, n_contrasts,
+        return rt, contrasts, n_contrasts,
 
 
 def criterion_1a(psych, n_trials, perf_easy):
@@ -1128,7 +1133,7 @@ def plot_reaction_time(trials, ax=None, title=None, plot_ci=False, ci_alpha=0.32
 
 def plot_reaction_time_over_trials(trials, stim_on_type='stimOn_times', ax=None, title=None, **kwargs):
     """
-    Function to plot reaction time with trial number a la datajoint webpage.
+    Function to plot RT with trial number a la datajoint webpage.
 
     Parameters
     ----------

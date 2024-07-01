@@ -548,7 +548,7 @@ def get_sess_dict(session_path, one, protocol, alf_collections=None, raw_collect
                 training.compute_psychometric(trials, block=0.8)
 
         sess_dict['performance_easy'] = training.compute_performance_easy(trials)
-        sess_dict['reaction_time'] = training.compute_median_reaction_time(trials)
+        sess_dict['response_time'] = training.compute_median_reaction_time(trials)
         sess_dict['n_trials'] = training.compute_n_trials(trials)
         sess_dict['sess_duration'], sess_dict['n_delay'], sess_dict['location'] = \
             compute_session_duration_delay_location(session_path, collections=raw_collections)
@@ -630,7 +630,7 @@ def get_training_info_for_session(session_paths, one, force=True):
         psychs['80'] = training.compute_psychometric(combined_trials, block=0.8)
 
         performance_easy = training.compute_performance_easy(combined_trials)
-        reaction_time = training.compute_median_reaction_time(combined_trials)
+        response_time = training.compute_median_response_time(combined_trials)
         n_trials = training.compute_n_trials(combined_trials)
 
         sess_duration = np.nansum([s['sess_duration'] for s in sess_dicts])
@@ -640,7 +640,7 @@ def get_training_info_for_session(session_paths, one, force=True):
             sess_dict['combined_performance'] = performance
             sess_dict['combined_contrasts'] = contrasts
             sess_dict['combined_performance_easy'] = performance_easy
-            sess_dict['combined_reaction_time'] = reaction_time
+            sess_dict['combined_response'] = response_time
             sess_dict['combined_n_trials'] = n_trials
             sess_dict['combined_sess_duration'] = sess_duration
             sess_dict['combined_n_delay'] = n_delay
@@ -665,7 +665,7 @@ def get_training_info_for_session(session_paths, one, force=True):
             sess_dict['combined_performance'] = sess_dict['performance']
             sess_dict['combined_contrasts'] = sess_dict['contrasts']
             sess_dict['combined_performance_easy'] = sess_dict['performance_easy']
-            sess_dict['combined_reaction_time'] = sess_dict['reaction_time']
+            sess_dict['combined_response_time'] = sess_dict['response_time']
             sess_dict['combined_n_trials'] = sess_dict['n_trials']
             sess_dict['combined_sess_duration'] = sess_dict['sess_duration']
             sess_dict['combined_n_delay'] = sess_dict['n_delay']
@@ -732,7 +732,7 @@ def plot_trial_count_and_session_duration(df, subject):
     return ax
 
 
-def plot_performance_easy_median_reaction_time(df, subject):
+def plot_performance_easy_median_response_time(df, subject):
     df = df.drop_duplicates('date').reset_index(drop=True)
 
     y1 = {'column': 'combined_performance_easy',
@@ -741,9 +741,9 @@ def plot_performance_easy_median_reaction_time(df, subject):
           'color': 'k',
           'join': True}
 
-    y2 = {'column': 'combined_reaction_time',
-          'title': 'Median reaction time (s)',
-          'lim': [0.1, np.nanmax([10, np.nanmax(df.combined_reaction_time.values)])],
+    y2 = {'column': 'combined_response_time',
+          'title': 'Median response time (s)',
+          'lim': [0.1, np.nanmax([10, np.nanmax(df.combined_response_time.values)])],
           'color': 'r',
           'log': True,
           'join': True}
@@ -989,7 +989,7 @@ def make_plots(session_path, one, df=None, save=False, upload=False, task_collec
         return
 
     ax1 = plot_trial_count_and_session_duration(df, subject)
-    ax2 = plot_performance_easy_median_reaction_time(df, subject)
+    ax2 = plot_performance_easy_median_response_time(df, subject)
     ax3 = plot_heatmap_performance_over_days(df, subject)
     ax4 = plot_fit_params(df, subject)
     ax5 = plot_psychometric_curve(df, subject, one)
@@ -1001,7 +1001,7 @@ def make_plots(session_path, one, df=None, save=False, upload=False, task_collec
         outputs.append(save_name)
         ax1.get_figure().savefig(save_name, bbox_inches='tight')
 
-        save_name = save_path.joinpath('subj_performance_easy_reaction_time.png')
+        save_name = save_path.joinpath('subj_performance_easy_response_time.png')
         outputs.append(save_name)
         ax2.get_figure().savefig(save_name, bbox_inches='tight')
 

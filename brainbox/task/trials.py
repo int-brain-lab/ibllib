@@ -12,7 +12,7 @@ def find_trial_ids(trials, side='all', choice='all', order='trial num', sort='id
     :param choice: trial choice, options are 'all', 'correct' or 'incorrect'
     :param contrast: contrast of stimulus, pass in list/tuple of all contrasts that want to be
     considered e.g [1, 0.5] would only look for trials with 100 % and 50 % contrast
-    :param order: how to order the trials, options are 'trial num' or 'reaction time'
+    :param order: how to order the trials, options are 'trial num' or 'response time'
     :param sort: how to sort the trials, options are 'side' (split left right trials), 'choice'
     (split correct incorrect trials), 'choice and side' (split left right and correct incorrect)
     :param event: trial event to align to (in order to remove nan trials for this event)
@@ -46,15 +46,15 @@ def find_trial_ids(trials, side='all', choice='all', order='trial num', sort='id
         np.bitwise_and(cont, np.bitwise_and(trials['feedbackType'][idx] == -1,
                                             np.isfinite(trials['contrastLeft'][idx]))))[0]
 
-    reaction_time = trials['response_times'][idx] - trials['goCue_times'][idx]
+    response_time = trials['response_times'][idx] - trials['goCue_times'][idx]
 
     def _order_by(_trials, order):
-        # Returns subset of trials either ordered by trial number or by reaction time
+        # Returns subset of trials either ordered by trial number or by RT
         sorted_trials = np.sort(_trials)
         if order == 'trial num':
             return sorted_trials
-        elif order == 'reaction time':
-            sorted_reaction = np.argsort(reaction_time[sorted_trials])
+        elif order == 'response time':
+            sorted_reaction = np.argsort(response_time[sorted_trials])
             return sorted_trials[sorted_reaction]
 
     dividers = []
@@ -218,7 +218,7 @@ def filter_correct_incorrect_left_right(trials, event_raster, event, contrast, o
     :param event: event to align to e.g 'goCue_times', 'stimOn_times'
     :param contrast: contrast of stimulus, pass in list/tuple of all contrasts that want to be
     considered e.g [1, 0.5] would only look for trials with 100 % and 50 % contrast
-    :param order: order to sort trials by either 'trial num' or 'reaction time'
+    :param order: order to sort trials by either 'trial num' or 'response time'
     :return:
     """
     trials_sorted, div = find_trial_ids(trials, sort='choice and side', event=event, order=order, contrast=contrast)
@@ -258,7 +258,7 @@ def filter_correct_incorrect(trials, event_raster, event, contrast, order='trial
     :param event: event to align to e.g 'goCue_times', 'stimOn_times'
     :param contrast: contrast of stimulus, pass in list/tuple of all contrasts that want to be
     considered e.g [1, 0.5] would only look for trials with 100 % and 50 % contrast
-    :param order: order to sort trials by either 'trial num' or 'reaction time'
+    :param order: order to sort trials by either 'trial num' or 'response time'
     :return:
     """
     trials_sorted, div = find_trial_ids(trials, sort='choice', event=event, order=order, contrast=contrast)
@@ -286,7 +286,7 @@ def filter_left_right(trials, event_raster, event, contrast, order='trial num'):
     :param event: event to align to e.g 'goCue_times', 'stimOn_times'
     :param contrast: contrast of stimulus, pass in list/tuple of all contrasts that want to be
     considered e.g [1, 0.5] would only look for trials with 100 % and 50 % contrast
-    :param order: order to sort trials by either 'trial num' or 'reaction time'
+    :param order: order to sort trials by either 'trial num' or 'response time'
     :return:
     """
     trials_sorted, div = find_trial_ids(trials, sort='side', event=event, order=order, contrast=contrast)
@@ -314,7 +314,7 @@ def filter_trials(trials, event_raster, event, contrast=(1, 0.5, 0.25, 0.125, 0.
     :param event: event to align to e.g 'goCue_times', 'stimOn_times'
     :param contrast: contrast of stimulus, pass in list/tuple of all contrasts that want to be
     considered e.g [1, 0.5] would only look for trials with 100 % and 50 % contrast
-    :param order: order to sort trials by either 'trial num' or 'reaction time'
+    :param order: order to sort trials by either 'trial num' or 'response time'
     :param sort: how to divide trials options are 'choice' (e.g correct vs incorrect), 'side'
     (e.g left vs right') and 'choice and side' (e.g correct vs incorrect and left vs right)
     :return:
