@@ -674,7 +674,7 @@ def load_passive_rfmap(eid, one=None):
 
 def load_wheel_reaction_times(eid, one=None):
     """
-    Return the calculated reaction times for session.  Reaction times are defined as the time
+    Return the calculated first movement onset time for a session.  These are are defined as the time
     between the go cue (onset tone) and the onset of the first substantial wheel movement.   A
     movement is considered sufficiently large if its peak amplitude is at least 1/3rd of the
     distance to threshold (~0.1 radians).
@@ -694,7 +694,7 @@ def load_wheel_reaction_times(eid, one=None):
     Returns
     ----------
     array-like
-        reaction times
+        first movement onset times
     """
     if one is None:
         one = ONE()
