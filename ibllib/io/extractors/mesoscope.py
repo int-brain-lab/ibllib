@@ -51,6 +51,7 @@ def patch_imaging_meta(meta: dict) -> dict:
         for fov in meta.get('FOV', []):
             if 'roiUuid' in fov:
                 fov['roiUUID'] = fov.pop('roiUuid')
+    assert 'nFrames' in meta, '"nFrames" key missing from meta data; rawImagingData.meta.json likely an old version'
     return meta
 
 

@@ -68,6 +68,7 @@ class TestMesoscopePreprocess(unittest.TestCase):
         }
 
         meta = {
+            'nFrames': 2000,
             'scanImageParams': {'hStackManager': {'zs': 320},
                                 'hRoiManager': {'scanVolumeRate': 6.8}},
             'FOV': [{'topLeftDeg': [-1, 1.3], 'topRightDeg': [3, 1.3], 'bottomLeftDeg': [-1, 5.2],
@@ -256,10 +257,10 @@ class TestImagingMeta(unittest.TestCase):
     """Test raw imaging metadata versioning."""
     def test_patch_imaging_meta(self):
         """Test for ibllib.io.extractors.mesoscope.patch_imaging_meta function."""
-        meta = {'version': '0.1.0', 'FOV': [{'roiUuid': None}, {'roiUUID': None}]}
+        meta = {'version': '0.1.0', 'nFrames': 2000, 'FOV': [{'roiUuid': None}, {'roiUUID': None}]}
         new_meta = mesoscope.patch_imaging_meta(meta)
         self.assertEqual(set(chain(*map(dict.keys, new_meta['FOV']))), {'roiUUID'})
-        meta = {'FOV': [
+        meta = {'nFrames': 2000, 'FOV': [
             dict.fromkeys(['topLeftDeg', 'topRightDeg', 'bottomLeftDeg', 'bottomRightDeg']),
             dict.fromkeys(['topLeftMM', 'topRightMM', 'bottomLeftMM', 'bottomRightMM'])
         ]}
