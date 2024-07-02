@@ -13,15 +13,15 @@ import string
 from uuid import uuid4
 from datetime import datetime
 
+from one.webclient import AlyxClient
 from one.api import ONE, OneAlyx
 import iblutil.io.params as iopar
 from packaging.version import Version, InvalidVersion
 
 import ibllib.io.extractors.base
 import ibllib.tests.fixtures.utils as fu
-from ibllib.pipes import misc
+from ibllib.pipes import misc, local_server
 from ibllib.pipes.misc import sleepless
-from ibllib.pipes import local_server
 from ibllib.tests import TEST_DB
 import ibllib.pipes.scan_fix_passive_files as fix
 from ibllib.pipes.base_tasks import RegisterRawDataTask
@@ -40,6 +40,34 @@ class TestLocalServer(unittest.TestCase):
         raw_behaviour_data = fu.create_fake_raw_behavior_data_folder(self.tmpdir / 'subject/2020-01-01/002')
         raw_behaviour_data.parent.joinpath('raw_session.flag').touch()
         fu.populate_task_settings(raw_behaviour_data, patch={'PYBPOD_PROTOCOL': 'ephys_optoChoiceWorld6.0.1'})
+
+    @mock.patch('ibllib.pipes.local_server.get_local_data_repository')
+    def test_task_queue(self, lab_repo_mock):
+        """Test ibllib.pipes.local_server.task_queue function."""
+        lab_repo_mock.return_value = 'foo_repo'
+        tasks = [
+            {'executable': 'ibllib.pipes.mesoscope_tasks.MesoscopePreprocess', 'priority': 80},
+            {'executable': 'ibllib.pipes.ephys_preprocessing.SpikeSorting', 'priority': SpikeSorting.priority},
+            {'executable': 'ibllib.pipes.base_tasks.RegisterRawDataTask', 'priority': RegisterRawDataTask.priority}
+        ]
+        alyx = mock.Mock(spec=AlyxClient)
+        alyx.rest.return_value = tasks
+        queue = local_server.task_queue(lab='foolab', alyx=alyx)
+        alyx.rest.assert_called()
+        self.assertEqual('Waiting', alyx.rest.call_args.kwargs.get('status'))
+        self.assertIn('foolab', alyx.rest.call_args.kwargs.get('django', ''))
+        self.assertIn('foo_repo', alyx.rest.call_args.kwargs.get('django', ''))
+        # Expect to return tasks in descending priority order, without mesoscope task (different env)
+        self.assertEqual([tasks[2], tasks[1]], queue)
+        # Expect only mesoscope task returned when relevant env passed
+        queue = local_server.task_queue(lab='foolab', alyx=alyx, env=('suite2p',))
+        self.assertEqual([tasks[0]], queue)
+        # Expect no tasks as mesoscope task is a large job
+        queue = local_server.task_queue(mode='small', lab='foolab', alyx=alyx, env=('suite2p',))
+        self.assertEqual([], queue)
+        # Expect only register task as it's the only small job
+        queue = local_server.task_queue(mode='small', lab='foolab', alyx=alyx)
+        self.assertEqual([tasks[2]], queue)
 
     @mock.patch('ibllib.pipes.local_server.IBLRegistrationClient')
     @mock.patch('ibllib.pipes.local_server.make_pipeline')

@@ -1,7 +1,6 @@
 from brainbox import processing, core
 import unittest
 import numpy as np
-import datetime
 
 
 class TestProcessing(unittest.TestCase):
@@ -63,15 +62,6 @@ class TestProcessing(unittest.TestCase):
         self.assertTrue(times2.min() >= resamp2.times.min())
         self.assertTrue(times2.max() <= resamp2.times.max())
 
-    def test_bincount2D_deprecation(self):
-        # Timer to remove bincount2D (now in iblutil)
-        # Once this test fails:
-        # - Remove the bincount2D method in processing.py
-        # - Remove the import from iblutil at the top of that file
-        # - Delete this test
-        if datetime.datetime.now() > datetime.datetime(2024, 6, 30):
-            raise NotImplementedError
-
     def test_compute_cluster_averag(self):
         # Create fake data for 3 clusters
         clust1 = np.ones(40)
@@ -102,11 +92,6 @@ class TestProcessing(unittest.TestCase):
         self.assertEqual(avg_val[1], 400)
         self.assertEqual(avg_val[2], 0.75)
         self.assertTrue(np.all(count == (40, 40, 50)))
-
-    def test_deprecations(self):
-        """Ensure removal of bincount2D function."""
-        from datetime import datetime
-        self.assertTrue(datetime.today() < datetime(2024, 8, 1), 'remove brainbox.processing.bincount2D')
 
 
 if __name__ == '__main__':

@@ -88,6 +88,7 @@ from ibllib.oneibl.registration import get_lab
 from iblutil.util import Bunch
 import one.params
 from one.api import ONE
+from one.util import ensure_list
 from one import webclient
 
 _logger = logging.getLogger(__name__)
@@ -107,9 +108,10 @@ class Task(abc.ABC):
     time_elapsed_secs = None
     time_out_secs = 3600 * 2  # time-out after which a task is considered dead
     version = ibllib.__version__
-    signature = {'input_files': [], 'output_files': []}  # list of tuples (filename, collection, required_flag)
-    force = False  # whether or not to re-download missing input files on local server if not present
+    signature = {'input_files': [], 'output_files': []}  # list of tuples (filename, collection, required_flag[, register])
+    force = False  # whether to re-download missing input files on local server if not present
     job_size = 'small'  # either 'small' or 'large', defines whether task should be run as part of the large or small job services
+    env = None  # the environment name within which to run the task (NB: the env is not activated automatically!)
 
     def __init__(self, session_path, parents=None, taskid=None, one=None,
                  machine=None, clobber=True, location='server', **kwargs):
@@ -172,6 +174,13 @@ class Task(abc.ABC):
             -1: Errored
             -2: Didn't run as a lock was encountered
             -3: Incomplete
+
+        Notes
+        -----
+        - The `run_alyx_task` will update the Alyx Task status depending on both status and outputs
+          (i.e. the output of subclassed `_run` method):
+          Assuming a return value of 0... if Task.outputs is None, the status will be Empty;
+          if Task.outputs is a list (empty or otherwise), the status will be Complete.
         """
         # if task id of one properties are not available, local run only without alyx
         use_alyx = self.one is not None and self.taskid is not None
@@ -200,12 +209,13 @@ class Task(abc.ABC):
         start_time = time.time()
         try:
             setup = self.setUp(**kwargs)
+            self.outputs = self._input_files_to_register()
             _logger.info(f'Setup value is: {setup}')
             self.status = 0
             if not setup:
                 # case where outputs are present but don't have input files locally to rerun task
                 # label task as complete
-                _, self.outputs = self.assert_expected_outputs()
+                _, outputs = self.assert_expected_outputs()
             else:
                 # run task
                 if self.gpu >= 1:
@@ -217,8 +227,15 @@ class Task(abc.ABC):
                         _logger.removeHandler(ch)
                         ch.close()
                         return self.status
-                self.outputs = self._run(**kwargs)
+                outputs = self._run(**kwargs)
                 _logger.info(f'Job {self.__class__} complete')
+            if outputs is None:
+                # If run method returns None and no raw input files were registered, self.outputs
+                # should be None, meaning task will have an 'Empty' status. If run method returns
+                # a list, the status will be 'Complete' regardless of whether there are output files.
+                self.outputs = outputs if not self.outputs else self.outputs  # ensure None if no inputs registered
+            else:
+                self.outputs.extend(ensure_list(outputs))  # Add output files to list of inputs to register
         except Exception:
             _logger.error(traceback.format_exc())
             _logger.info(f'Job {self.__class__} errored')
@@ -261,6 +278,41 @@ class Task(abc.ABC):
         """
         _ = self.register_images()
         return self.data_handler.uploadData(self.outputs, self.version, **kwargs)
+
+    def _input_files_to_register(self, assert_all_exist=False):
+        """
+        Return input datasets to be registered to Alyx.
+
+        These datasets are typically raw data files and are registered even if the task fails to complete.
+
+        Parameters
+        ----------
+        assert_all_exist
+            Raise AssertionError if not all required input datasets exist on disk.
+
+        Returns
+        -------
+        list of pathlib.Path
+            A list of input files to register.
+        """
+        try:
+            input_files = self.input_files
+        except AttributeError:
+            raise RuntimeError('Task.setUp must be run before calling this method.')
+        to_register, missing = [], []
+        for filename, collection, required, _ in filter(lambda f: len(f) > 3 and f[3], input_files):
+            filepath = self.session_path.joinpath(collection, filename)
+            if filepath.exists():
+                to_register.append(filepath)
+            elif required:
+                missing.append(filepath)
+        if any(missing):
+            missing_str = ', '.join(map(lambda x: x.relative_to(self.session_path).as_posix(), missing))
+            if assert_all_exist:
+                raise AssertionError(f'Missing required input files: {missing_str}')
+            else:
+                _logger.error(f'Missing required input files: {missing_str}')
+        return list(set(to_register) - set(missing))
 
     def register_images(self, **kwargs):
         """
@@ -540,7 +592,8 @@ class Pipeline(abc.ABC):
 
     def create_alyx_tasks(self, rerun__status__in=None, tasks_list=None):
         """
-        Instantiate the pipeline and create the tasks in Alyx, then create the jobs for the session
+        Instantiate the pipeline and create the tasks in Alyx, then create the jobs for the session.
+
         If the jobs already exist, they are left untouched. The re-run parameter will re-init the
         job by emptying the log and set the status to Waiting.
 
@@ -682,6 +735,24 @@ class Pipeline(abc.ABC):
         return self.__class__.__name__
 
 
+def str2class(task_executable: str):
+    """
+    Convert task name to class.
+
+    Parameters
+    ----------
+    task_executable : str
+        A Task class name, e.g. 'ibllib.pipes.behavior_tasks.TrialRegisterRaw'.
+
+    Returns
+    -------
+    class
+        The imported class.
+    """
+    strmodule, strclass = task_executable.rsplit('.', 1)
+    return getattr(importlib.import_module(strmodule), strclass)
+
+
 def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
                   max_md5_size=None, machine=None, clobber=True, location='server', mode='log'):
     """
@@ -714,8 +785,8 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
 
     Returns
     -------
-    Task
-        The instantiated task object that was run.
+    dict
+        The updated task dict.
     list of pathlib.Path
         A list of registered datasets.
     """
@@ -736,9 +807,7 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
                 tdict = one.alyx.rest('tasks', 'partial_update', id=tdict['id'], data={'status': 'Held'})
             return tdict, registered_dsets
     # creates the job from the module name in the database
-    exec_name = tdict['executable']
-    strmodule, strclass = exec_name.rsplit('.', 1)
-    classe = getattr(importlib.import_module(strmodule), strclass)
+    classe = str2class(tdict['executable'])
     tkwargs = tdict.get('arguments') or {}  # if the db field is null it returns None
     task = classe(session_path, one=one, taskid=tdict['id'], machine=machine, clobber=clobber,
                   location=location, **tkwargs)
@@ -748,7 +817,7 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
     patch_data = {'time_elapsed_secs': task.time_elapsed_secs, 'log': task.log,
                   'version': task.version}
     # if there is no data to register, set status to Empty
-    if task.outputs is None:
+    if task.outputs is None:  # NB: an empty list is still considered Complete.
         patch_data['status'] = 'Empty'
     # otherwise register data and set (provisional) status to Complete
     else:

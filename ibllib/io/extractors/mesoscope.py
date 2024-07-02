@@ -51,6 +51,7 @@ def patch_imaging_meta(meta: dict) -> dict:
         for fov in meta.get('FOV', []):
             if 'roiUuid' in fov:
                 fov['roiUUID'] = fov.pop('roiUuid')
+    assert 'nFrames' in meta, '"nFrames" key missing from meta data; rawImagingData.meta.json likely an old version'
     return meta
 
 
@@ -753,6 +754,15 @@ class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
         Calculate the time shifts for each field of view (FOV) and the relative offsets for each
         scan line.
 
+        For a 2 scan field, 2 depth recording (so 4 FOVs):
+
+        Frame 1, lines 1-512 correspond to FOV_00
+        Frame 1, lines 551-1062 correspond to FOV_01
+        Frame 2, lines 1-512 correspond to FOV_02
+        Frame 2, lines 551-1062 correspond to FOV_03
+        Frame 3, lines 1-512 correspond to FOV_00
+        ...
+
         Parameters
         ----------
         raw_imaging_meta : dict
@@ -772,26 +782,27 @@ class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
         FOVs = raw_imaging_meta['FOV']
 
         # Double-check meta extracted properly
-        raw_meta = raw_imaging_meta['rawScanImageMeta']
-        artist = raw_meta['Artist']
-        assert sum(x['enable'] for x in artist['RoiGroups']['imagingRoiGroup']['rois']) == len(FOVs)
-
+        # assert meta.FOV.Zs is ascending but use slice_id field. This may not be necessary but is expected.
+        slice_ids = np.array([fov['slice_id'] for fov in FOVs])
+        assert np.all(np.diff([x['Zs'] for x in FOVs]) >= 0), 'FOV depths not in ascending order'
+        assert np.all(np.diff(slice_ids) >= 0), 'slice IDs not ordered'
         # Number of scan lines per FOV, i.e. number of Y pixels / image height
         n_lines = np.array([x['nXnYnZ'][1] for x in FOVs])
-        n_valid_lines = np.sum(n_lines)  # Number of lines imaged excluding flybacks
-        # Number of lines during flyback
-        n_lines_per_gap = int((raw_meta['Height'] - n_valid_lines) / (len(FOVs) - 1))
-        # The start and end indices of each FOV in the raw images
-        fov_start_idx = np.insert(np.cumsum(n_lines[:-1] + n_lines_per_gap), 0, 0)
-        fov_end_idx = fov_start_idx + n_lines
+
+        # We get indices from MATLAB extracted metadata so below two lines are no longer needed
+        # n_valid_lines = np.sum(n_lines)  # Number of lines imaged excluding flybacks
+        # n_lines_per_gap = int((raw_meta['Height'] - n_valid_lines) / (len(FOVs) - 1))  # N lines during flyback
         line_period = raw_imaging_meta['scanImageParams']['hRoiManager']['linePeriod']
+        frame_time_shifts = slice_ids / raw_imaging_meta['scanImageParams']['hRoiManager']['scanFrameRate']
 
-        line_indices = []
-        fov_time_shifts = fov_start_idx * line_period
-        line_time_shifts = []
-
-        for ln, s, e in zip(n_lines, fov_start_idx, fov_end_idx):
-            line_indices.append(np.arange(s, e))
-            line_time_shifts.append(np.arange(0, ln) * line_period)
+        # Line indices are now extracted by the MATLAB function mesoscopeMetadataExtraction.m
+        # They are indexed from 1 so we subtract 1 to convert to zero-indexed
+        line_indices = [np.array(fov['lineIdx']) - 1 for fov in FOVs]  # Convert to zero-indexed from MATLAB 1-indexed
+        assert all(lns.size == n for lns, n in zip(line_indices, n_lines)), 'unexpected number of scan lines'
+        # The start indices of each FOV in the raw images
+        fov_start_idx = np.array([lns[0] for lns in line_indices])
+        roi_time_shifts = fov_start_idx * line_period   # The time offset for each FOV
+        fov_time_shifts = roi_time_shifts + frame_time_shifts
+        line_time_shifts = [(lns - ln0) * line_period for lns, ln0 in zip(line_indices, fov_start_idx)]
 
         return line_indices, fov_time_shifts, line_time_shifts
