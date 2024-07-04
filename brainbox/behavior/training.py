@@ -796,8 +796,11 @@ def compute_reaction_time(trials, stim_on_type='stimOn_times', stim_off_type='re
         block_idx = trials.probabilityLeft == block
 
     contrasts, n_contrasts = np.unique(signed_contrast[block_idx], return_counts=True)
-    reaction_time = np.vectorize(lambda x: np.nanmedian((trials[stim_off_type] - trials[stim_on_type])
-                                                        [(x == signed_contrast) & block_idx]))(contrasts)
+    reaction_time = np.vectorize(
+        lambda x: np.nanmedian((trials[stim_off_type] - trials[stim_on_type])[(x == signed_contrast) & block_idx]),
+        otypes=[float]
+    )(contrasts)
+
     if compute_ci:
         ci = np.full((contrasts.size, 2), np.nan)
         for i, x in enumerate(contrasts):

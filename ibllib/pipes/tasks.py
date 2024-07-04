@@ -441,11 +441,11 @@ class Task(abc.ABC):
             actual_files = list(Path(self.session_path).rglob(str(Path(*filter(None, reversed(expected_file[:2]))))))
             # Account for revisions
             if len(actual_files) == 0:
-                collection = expected_file[1] + '/#*' if expected_file[1] != '' else expected_file[1] + '#*'
+                collection = '/'.join(filter(None, (expected_file[1], '#*')))  # append pound with wildcard
                 expected_revision = (expected_file[0], collection, expected_file[2])
                 actual_files = list(
-                    Path(self.session_path).rglob(str(Path(*filter(None, reversed(expected_revision[:2]))))))
-
+                    Path(self.session_path).rglob(str(Path(*filter(None, reversed(expected_revision[:2])))))
+                )
             if len(actual_files) == 0 and expected_file[2]:
                 everything_is_fine = False
                 if not silent:
