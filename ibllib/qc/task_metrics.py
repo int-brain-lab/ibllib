@@ -679,12 +679,12 @@ def check_stimOff_itiIn_delays(data, **_):
     return metric, passed
 
 
-def check_iti_delays(data, **_):
+def check_iti_delays(data, subtract_pauses=False, **_):
     """
     Check the open-loop grey screen period is approximately 1 second.
 
     Check that the period of grey screen between stim off and the start of the next trial is
-    1s +/- 10%.
+    1s +/- 10%.  If the trial was paused during this time, the check will account for that
 
     Metric:
         M = stimOff (n) - trialStart (n+1) - 1.
@@ -695,16 +695,30 @@ def check_iti_delays(data, **_):
     Units:
         seconds [s]
 
-    :param data: dict of trial data with keys ('stimOff_times', 'intervals')
+    Parameters
+    ----------
+    data : dict
+        Trial data with keys ('stimOff_times', 'intervals', 'pause_duration').
+    subtract_pauses: bool
+        If True, account for experimenter-initiated pauses between trials; if False, trials where
+        the experimenter paused the task may fail this check.
+
+    Returns
+    -------
+    numpy.array
+        An array of metric values to threshold.
+    numpy.array
+        An array of boolean values, 1 per trial, where True means trial passes QC threshold.
     """
     # Initialize array the length of completed trials
     ITI = 1.
     metric = np.full(data['intervals'].shape[0], np.nan)
     passed = metric.copy()
+    pauses = (data['pause_duration'] if subtract_pauses else np.zeros_like(metric))[:-1]
     # Get the difference between stim off and the start of the next trial
     # Missing data are set to Inf, except for the last trial which is a NaN
     metric[:-1] = \
-        np.nan_to_num(data['intervals'][1:, 0] - data['stimOff_times'][:-1] - ITI, nan=np.inf)
+        np.nan_to_num(data['intervals'][1:, 0] - data['stimOff_times'][:-1] - ITI - pauses, nan=np.inf)
     passed[:-1] = np.abs(metric[:-1]) < (ITI / 10)  # Last trial is not counted
     assert data['intervals'].shape[0] == len(metric) == len(passed)
     return metric, passed
@@ -1409,7 +1423,7 @@ def check_stimulus_move_before_goCue(data, photodiode=None, **_):
     Parameters
     ----------
     data : dict
-        Dict of trial data with keys ('goCue_times', 'intervals', 'choice').
+        Trial data with keys ('goCue_times', 'intervals', 'choice').
     photodiode : dict
         The fronts from Bpod's BNC1 input or FPGA frame2ttl channel.
 

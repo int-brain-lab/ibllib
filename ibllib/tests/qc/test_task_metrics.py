@@ -155,14 +155,17 @@ class TestTaskMetrics(unittest.TestCase):
         correct[np.argmax(choice == 1)] = 0
         correct[np.argmax(choice == -1)] = 0
 
+        pauses = np.zeros(n, dtype=float)
+        # add a 5s pause on 3rd trial
+        pauses[2] = 5.
         quiescence_length = 0.2 + np.random.standard_exponential(size=(n,))
         iti_length = 1  # inter-trial interval
         # trial lengths include quiescence period, a couple small trigger delays and iti
         trial_lengths = quiescence_length + resp_feeback_delay + (trigg_delay * 4) + iti_length
         # add on 60s for nogos + feedback time (1 or 2s) + ~0.5s for other responses
         trial_lengths += (choice == 0) * 60 + (~correct + 1) + (choice != 0) * N(0.5)
-        start_times = np.concatenate(([0], np.cumsum(trial_lengths)[:-1]))
-        end_times = np.cumsum(trial_lengths) - 1e-2
+        start_times = (np.r_[0, np.cumsum(trial_lengths)] + np.r_[0, np.cumsum(pauses)])[:-1]
+        end_times = np.cumsum(trial_lengths) - 1e-2 + np.r_[0, np.cumsum(pauses)][:-1]
 
         data = {
             'phase': np.random.uniform(low=0, high=2 * np.pi, size=(n,)),
@@ -171,7 +174,8 @@ class TestTaskMetrics(unittest.TestCase):
             'correct': correct,
             'intervals': np.c_[start_times, end_times],
             'itiIn_times': end_times - iti_length + stimOff_itiIn_delay,
-            'position': np.ones_like(choice) * 35
+            'position': np.ones_like(choice) * 35,
+            'pause_duration': pauses
         }
 
         data['stimOnTrigger_times'] = start_times + data['quiescence'] + 1e-4
@@ -263,7 +267,7 @@ class TestTaskMetrics(unittest.TestCase):
                 assert t[0] > add_frag.last_samp[0]
                 movement_times.append(t[1])
                 add_frag(t, p)
-                # Fill in random movements between end of response and trial end
+                # Fill in random movements between end of response and trial
                 t, p = qt_wheel_fill(t[-1] + 0.01, trial_end, p_step=resolution)
                 add_frag(t, p)
 
@@ -578,16 +582,21 @@ class TestTaskMetrics(unittest.TestCase):
         self.assertEqual(0.75, np.nanmean(passed))
 
     def test_check_iti_delays(self):
-        metric, passed = qcmetrics.check_iti_delays(self.data)
+        metric, passed = qcmetrics.check_iti_delays(self.data, subtract_pauses=True)
         # We want the metric to return positive values that are close to 0.1, given the test data
         self.assertTrue(np.allclose(metric[:-1], 1e-2, atol=0.001),
                         'failed to return correct metric')
         self.assertTrue(np.isnan(metric[-1]), 'last trial should be NaN')
         self.assertTrue(np.all(passed))
+        # Paused trials should fail when subtract_pauses is False
+        pauses = self.data['pause_duration'][:-1]
+        metric, passed = qcmetrics.check_iti_delays(self.data, subtract_pauses=False)
+        self.assertTrue(np.allclose(metric[:-1], pauses + 1e-2, atol=0.001))
+        self.assertFalse(np.any(passed[:-1][pauses > 0]))
         # Mess up a trial
-        id = 2
+        id = 3
         self.data['intervals'][id + 1, 0] += 0.5  # Next trial starts 0.5 sec later
-        metric, passed = qcmetrics.check_iti_delays(self.data)
+        metric, passed = qcmetrics.check_iti_delays(self.data, subtract_pauses=True)
         n_trials = len(self.data['stimOff_times']) - 1  # Last trial NaN here
         expected = (n_trials - 1) / n_trials
         self.assertTrue(expected, np.nanmean(passed))
