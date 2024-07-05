@@ -619,7 +619,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
             line = fid.readline()
         version = re.search('version (.*), output', line)
         version = version or re.search('version (.*)', line)  # old versions have output, new have a version line
-        version = re.sub('\\^[[0-9]+m', '', version.group(1))  # removes the coloring tags
+        version = re.sub(r'\^\[{2}[0-9]+m', '', version.group(1))  # removes the coloring tags
         return version
 
     def _run_iblsort(self, ap_file):
