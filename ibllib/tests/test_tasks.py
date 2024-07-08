@@ -1,3 +1,5 @@
+"""Test ibllib.pipes.tasks module and Task class."""
+import sys
 import shutil
 import tempfile
 import unittest
@@ -112,6 +114,7 @@ class TaskGpuLock(ibllib.pipes.tasks.Task):
     def setUp(self):
         self.make_lock_file()
         self.data_handler = self.get_data_handler()
+        self.input_files = []
         return True
 
     def _run(self, overwrite=False):
@@ -354,6 +357,54 @@ class TestDynamicTask(unittest.TestCase):
         self.task.session_params = session_params.read_params(fixture)
         collection = self.task.get_device_collection(device)
         self.assertEqual('raw_ephys_data/probe00', collection)
+
+
+class TestTask(unittest.TestCase):
+    def setUp(self):
+        tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tmpdir.cleanup)
+        self.tmpdir = Path(tmpdir.name)
+        self.session_path = self.tmpdir.joinpath('subject', '1900-01-01', '001')
+        self.session_path.mkdir(parents=True)
+
+    def test_input_files_to_register(self):
+        """Test for Task._input_files_to_register method."""
+        task = Task00(self.session_path)
+        self.assertRaises(RuntimeError, task._input_files_to_register)
+        task.input_files = [('register.optional.ext', 'alf', False, True),
+                            ('register.optional_foo.ext', 'alf', False, True),
+                            ('register.required.ext', 'alf', True, True),
+                            ('ignore.required.ext', 'alf', True),
+                            ('ignore.optional.ext', 'alf', False)]
+        self.session_path.joinpath('alf').mkdir()
+        for f in task.input_files:
+            self.session_path.joinpath(f[1], f[0]).touch()
+        files = task._input_files_to_register(assert_all_exist=True)
+        expected = [self.session_path.joinpath('alf', 'register.required.ext'),
+                    self.session_path.joinpath('alf', 'register.optional.ext'),
+                    self.session_path.joinpath('alf', 'register.optional_foo.ext')]
+        self.assertCountEqual(files, expected)
+        expected[2].unlink()
+        # assertNoLogs added in py 3.10
+        if sys.version_info.minor >= 10:  # py3.10
+            with self.assertNoLogs(ibllib.pipes.tasks.__name__, level='ERROR'):
+                files = task._input_files_to_register(assert_all_exist=True)
+                self.assertCountEqual(files, expected[:2])
+        expected[0].unlink()
+        with self.assertLogs(ibllib.pipes.tasks.__name__, level='ERROR'):
+            files = task._input_files_to_register(assert_all_exist=False)
+        self.assertEqual(files, expected[1:2])
+        self.assertRaises(AssertionError, task._input_files_to_register, assert_all_exist=True)
+
+
+class TestMisc(unittest.TestCase):
+    """Tests for misc functions in ibllib.pipes.tasks module."""
+
+    def test_str2class(self):
+        """Test ibllib.pipes.tasks.str2class function."""
+        task_str = 'ibllib.pipes.base_tasks.ExperimentDescriptionRegisterRaw'
+        self.assertIs(ibllib.pipes.tasks.str2class(task_str), ExperimentDescriptionRegisterRaw)
+        self.assertRaises(AttributeError, ibllib.pipes.tasks.str2class, 'ibllib.pipes.base_tasks.Foo')
 
 
 if __name__ == '__main__':

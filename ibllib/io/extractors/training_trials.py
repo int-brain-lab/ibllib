@@ -617,7 +617,10 @@ class StimOnTimes_deprecated(BaseBpodTrialsExtractor):
 
 class StimOnOffFreezeTimes(BaseBpodTrialsExtractor):
     """
-    Extracts stim on / off and freeze times from Bpod BNC1 detected fronts
+    Extracts stim on / off and freeze times from Bpod BNC1 detected fronts.
+
+    Each stimulus event is the first detected front of the BNC1 signal after the trigger state, but before the next
+    trigger state.
     """
     save_names = ('_ibl_trials.stimOn_times.npy', None, None)
     var_names = ('stimOn_times', 'stimOff_times', 'stimFreeze_times')
@@ -626,38 +629,49 @@ class StimOnOffFreezeTimes(BaseBpodTrialsExtractor):
         choice = Choice(self.session_path).extract(
             bpod_trials=self.bpod_trials, task_collection=self.task_collection, settings=self.settings, save=False
         )[0]
+        stimOnTrigger = StimOnTriggerTimes(self.session_path).extract(
+            bpod_trials=self.bpod_trials, task_collection=self.task_collection, settings=self.settings, save=False
+        )[0]
+        stimFreezeTrigger = StimFreezeTriggerTimes(self.session_path).extract(
+            bpod_trials=self.bpod_trials, task_collection=self.task_collection, settings=self.settings, save=False
+        )[0]
+        stimOffTrigger = StimOffTriggerTimes(self.session_path).extract(
+            bpod_trials=self.bpod_trials, task_collection=self.task_collection, settings=self.settings, save=False
+        )[0]
         f2TTL = [raw.get_port_events(tr, name='BNC1') for tr in self.bpod_trials]
+        assert stimOnTrigger.size == stimFreezeTrigger.size == stimOffTrigger.size == choice.size == len(f2TTL)
+        assert all(stimOnTrigger < np.nan_to_num(stimFreezeTrigger, nan=np.inf)) and \
+               all(np.nan_to_num(stimFreezeTrigger, nan=-np.inf) < stimOffTrigger)
 
         stimOn_times = np.array([])
         stimOff_times = np.array([])
         stimFreeze_times = np.array([])
-        for tr in f2TTL:
-            if tr and len(tr) == 2:
-                stimOn_times = np.append(stimOn_times, tr[0])
-                stimOff_times = np.append(stimOff_times, tr[-1])
-                stimFreeze_times = np.append(stimFreeze_times, np.nan)
-            elif tr and len(tr) >= 3:
-                stimOn_times = np.append(stimOn_times, tr[0])
-                stimOff_times = np.append(stimOff_times, tr[-1])
-                stimFreeze_times = np.append(stimFreeze_times, tr[-2])
+        has_freeze = version.parse(self.settings.get('IBLRIG_VERSION', '0')) >= version.parse('6.2.5')
+        for tr, on, freeze, off, c in zip(f2TTL, stimOnTrigger, stimFreezeTrigger, stimOffTrigger, choice):
+            tr = np.array(tr)
+            # stim on
+            lim = freeze if has_freeze else off
+            idx, = np.where(np.logical_and(on < tr, tr < lim))
+            stimOn_times = np.append(stimOn_times, tr[idx[0]] if idx.size > 0 else np.nan)
+            # stim off
+            idx, = np.where(off < tr)
+            stimOff_times = np.append(stimOff_times, tr[idx[0]] if idx.size > 0 else np.nan)
+            # stim freeze - take last event before off trigger
+            if has_freeze:
+                idx, = np.where(np.logical_and(freeze < tr, tr < off))
+                stimFreeze_times = np.append(stimFreeze_times, tr[idx[-1]] if idx.size > 0 else np.nan)
             else:
-                stimOn_times = np.append(stimOn_times, np.nan)
-                stimOff_times = np.append(stimOff_times, np.nan)
-                stimFreeze_times = np.append(stimFreeze_times, np.nan)
-
+                idx, = np.where(tr <= off)
+                stimFreeze_times = np.append(stimFreeze_times, tr[idx[-1]] if idx.size > 0 else np.nan)
         # In no_go trials no stimFreeze happens just stim Off
         stimFreeze_times[choice == 0] = np.nan
-        # Check for trigger times
-        # 2nd order criteria:
-        # stimOn -> Closest one to stimOnTrigger?
-        # stimOff -> Closest one to stimOffTrigger?
-        # stimFreeze -> Closest one to stimFreezeTrigger?
 
         return stimOn_times, stimOff_times, stimFreeze_times
 
 
 class PhasePosQuiescence(BaseBpodTrialsExtractor):
-    """Extracts stimulus phase, position and quiescence from Bpod data.
+    """Extract stimulus phase, position and quiescence from Bpod data.
+
     For extraction of pre-generated events, use the ProbaContrasts extractor instead.
     """
     save_names = (None, None, '_ibl_trials.quiescencePeriod.npy')
@@ -668,6 +682,18 @@ class PhasePosQuiescence(BaseBpodTrialsExtractor):
         position = np.array([t['position'] for t in self.bpod_trials])
         quiescence = np.array([t['quiescent_period'] for t in self.bpod_trials])
         return phase, position, quiescence
+
+
+class PauseDuration(BaseBpodTrialsExtractor):
+    """Extract pause duration from raw trial data."""
+    save_names = None
+    var_names = 'pause_duration'
+
+    def _extract(self, **kwargs):
+        # pausing logic added in version 8.9.0
+        ver = version.parse(self.settings.get('IBLRIG_VERSION') or '0')
+        default = 0. if ver < version.parse('8.9.0') else np.nan
+        return np.fromiter((t.get('pause_duration', default) for t in self.bpod_trials), dtype=float)
 
 
 class TrialsTable(BaseBpodTrialsExtractor):
@@ -698,15 +724,15 @@ class TrialsTable(BaseBpodTrialsExtractor):
 class TrainingTrials(BaseBpodTrialsExtractor):
     save_names = ('_ibl_trials.repNum.npy', '_ibl_trials.goCueTrigger_times.npy', '_ibl_trials.stimOnTrigger_times.npy', None,
                   None, None, None, '_ibl_trials.table.pqt', None, None, '_ibl_wheel.timestamps.npy', '_ibl_wheel.position.npy',
-                  '_ibl_wheelMoves.intervals.npy', '_ibl_wheelMoves.peakAmplitude.npy', None, None, None, None, None)
+                  '_ibl_wheelMoves.intervals.npy', '_ibl_wheelMoves.peakAmplitude.npy', None, None, None, None, None, None)
     var_names = ('repNum', 'goCueTrigger_times', 'stimOnTrigger_times', 'itiIn_times', 'stimOffTrigger_times',
                  'stimFreezeTrigger_times', 'errorCueTrigger_times', 'table', 'stimOff_times', 'stimFreeze_times',
                  'wheel_timestamps', 'wheel_position', 'wheelMoves_intervals', 'wheelMoves_peakAmplitude',
-                 'peakVelocity_times', 'is_final_movement', 'phase', 'position', 'quiescence')
+                 'peakVelocity_times', 'is_final_movement', 'phase', 'position', 'quiescence', 'pause_duration')
 
     def _extract(self) -> dict:
         base = [RepNum, GoCueTriggerTimes, StimOnTriggerTimes, ItiInTimes, StimOffTriggerTimes, StimFreezeTriggerTimes,
-                ErrorCueTriggerTimes, TrialsTable, PhasePosQuiescence]
+                ErrorCueTriggerTimes, TrialsTable, PhasePosQuiescence, PauseDuration]
         out, _ = run_extractor_classes(
             base, session_path=self.session_path, bpod_trials=self.bpod_trials, settings=self.settings, save=False,
             task_collection=self.task_collection)

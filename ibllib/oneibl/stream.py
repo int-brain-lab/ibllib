@@ -15,7 +15,7 @@ class VideoStreamer(object):
         :returns cv2.VideoCapture object
         """
         import warnings
-        warnings.warn('Please use ibllib.io.video.VideoStreamer instead', DeprecationWarning)
+        warnings.warn('Please use ibllib.io.video.VideoStreamer instead', FutureWarning)
 
         # pop the data url from the dataset record if the input is a dictionary
         if isinstance(url_vid, dict):

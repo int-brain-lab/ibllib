@@ -152,7 +152,7 @@ def job_creator(root_path, one=None, dry=False, rerun=False):
     return pipes, all_datasets
 
 
-def task_queue(mode='all', lab=None, alyx=None):
+def task_queue(mode='all', lab=None, alyx=None, env=(None,)):
     """
     Query waiting jobs from the specified Lab
 
@@ -164,12 +164,18 @@ def task_queue(mode='all', lab=None, alyx=None):
         Lab name as per Alyx, otherwise try to infer from local Globus install.
     alyx : one.webclient.AlyxClient
         An Alyx instance.
+    env : list
+        One or more environments to filter by. See :prop:`ibllib.pipes.tasks.Task.env`.
 
     Returns
     -------
     list of dict
         A list of Alyx tasks associated with `lab` that have a 'Waiting' status.
     """
+    def predicate(task):
+        classe = tasks.str2class(task['executable'])
+        return (mode == 'all' or classe.job_size == mode) and classe.env in env
+
     alyx = alyx or AlyxClient(cache_rest=None)
     if lab is None:
         _logger.debug('Trying to infer lab from globus installation')
@@ -179,28 +185,12 @@ def task_queue(mode='all', lab=None, alyx=None):
         return  # if the lab is none, this will return empty tasks each time
     data_repo = get_local_data_repository(alyx)
     # Filter for tasks
-    tasks_all = alyx.rest('tasks', 'list', status='Waiting',
-                          django=f'session__lab__name__in,{lab},data_repository__name,{data_repo}', no_cache=True)
-    if mode == 'all':
-        waiting_tasks = tasks_all
-    else:
-        small_jobs = []
-        large_jobs = []
-        for t in tasks_all:
-            strmodule, strclass = t['executable'].rsplit('.', 1)
-            classe = getattr(importlib.import_module(strmodule), strclass)
-            job_size = classe.job_size
-            if job_size == 'small':
-                small_jobs.append(t)
-            else:
-                large_jobs.append(t)
-    if mode == 'small':
-        waiting_tasks = small_jobs
-    elif mode == 'large':
-        waiting_tasks = large_jobs
-
+    waiting_tasks = alyx.rest('tasks', 'list', status='Waiting',
+                              django=f'session__lab__name__in,{lab},data_repository__name,{data_repo}', no_cache=True)
+    # Filter tasks by size
+    filtered_tasks = filter(predicate, waiting_tasks)
     # Order tasks by priority
-    sorted_tasks = sorted(waiting_tasks, key=lambda d: d['priority'], reverse=True)
+    sorted_tasks = sorted(filtered_tasks, key=lambda d: d['priority'], reverse=True)
 
     return sorted_tasks
 
@@ -252,8 +242,7 @@ def tasks_runner(subjects_path, tasks_dict, one=None, dry=False, count=5, time_o
         if dry:
             print(session_path, tdict['name'])
         else:
-            task, dsets = tasks.run_alyx_task(tdict=tdict, session_path=session_path,
-                                              one=one, **kwargs)
+            task, dsets = tasks.run_alyx_task(tdict=tdict, session_path=session_path, one=one, **kwargs)
             if dsets:
                 all_datasets.extend(dsets)
                 c += 1

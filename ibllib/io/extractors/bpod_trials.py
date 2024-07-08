@@ -56,7 +56,7 @@ def extract_all(session_path, save=True, bpod_trials=None, settings=None,
     list of pathlib.Path
         The output files if save is true.
     """
-    warnings.warn('`extract_all` functions soon to be deprecated, use `bpod_trials.get_bpod_extractor` instead', FutureWarning)
+    warnings.warn('`extract_all` functions soon to be removed, use `bpod_trials.get_bpod_extractor` instead', FutureWarning)
     if not extractor_type:
         extractor_type = get_session_extractor_type(session_path, task_collection=task_collection)
     _logger.info(f'Extracting {session_path} as {extractor_type}')

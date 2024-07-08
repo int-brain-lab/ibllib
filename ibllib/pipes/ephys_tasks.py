@@ -566,17 +566,17 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
     force = True
 
     SHELL_SCRIPT = Path.home().joinpath(
-        "Documents/PYTHON/iblscripts/deploy/serverpc/kilosort2/run_pykilosort.sh"
+        "Documents/PYTHON/iblscripts/deploy/serverpc/iblsorter/run_iblsorter.sh"
     )
-    SPIKE_SORTER_NAME = 'pykilosort'
-    PYKILOSORT_REPO = Path.home().joinpath('Documents/PYTHON/SPIKE_SORTING/pykilosort')
+    SPIKE_SORTER_NAME = 'iblsorter'
+    PYKILOSORT_REPO = Path.home().joinpath('Documents/PYTHON/SPIKE_SORTING/ibl-sorter')
 
     @property
     def signature(self):
         signature = {
             'input_files': [('*ap.meta', f'{self.device_collection}/{self.pname}', True),
-                            ('*ap.cbin', f'{self.device_collection}/{self.pname}', True),
-                            ('*ap.ch', f'{self.device_collection}/{self.pname}', True),
+                            ('*ap.*bin', f'{self.device_collection}/{self.pname}', True),
+                            ('*ap.ch', f'{self.device_collection}/{self.pname}', False),
                             ('*sync.npy', f'{self.device_collection}/{self.pname}', True)],
             'output_files': [('spike_sorting_pykilosort.log', f'spike_sorters/pykilosort/{self.pname}', True),
                              ('_iblqc_ephysTimeRmsAP.rms.npy', f'{self.device_collection}/{self.pname}', True),
@@ -591,14 +591,13 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         return s2v["ap"][0]
 
     @staticmethod
-    def _fetch_pykilosort_version(repo_path):
+    def _fetch_iblsorter_version(repo_path):
         try:
-            import pykilosort
-            return f"pykilosort_{pykilosort.__version__}"
+            import iblsorter
+            return f"iblsorter_{iblsorter.__version__}"
         except ImportError:
-            _logger.info('Pykilosort not in environment, trying to locate the repository')
-        init_file = Path(repo_path).joinpath('pykilosort', '__init__.py')
-        version = SpikeSorting._fetch_ks2_commit_hash(repo_path)  # default
+            _logger.info('IBL-sorter not in environment, trying to locate the repository')
+        init_file = Path(repo_path).joinpath('ibl-sorter', '__init__.py')
         try:
             with open(init_file) as fid:
                 lines = fid.readlines()
@@ -607,10 +606,10 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
                         version = line.split('=')[-1].strip().replace('"', '').replace("'", '')
         except Exception:
             pass
-        return f"pykilosort_{version}"
+        return f"iblsorter_{version}"
 
     @staticmethod
-    def _fetch_pykilosort_run_version(log_file):
+    def _fetch_iblsorter_run_version(log_file):
         """
         Parse the following line (2 formats depending on version) from the log files to get the version
         '\x1b[0m15:39:37.919 [I] ibl:90               Starting Pykilosort version ibl_1.2.1, output in gnagga^[[0m\n'
@@ -620,39 +619,24 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
             line = fid.readline()
         version = re.search('version (.*), output', line)
         version = version or re.search('version (.*)', line)  # old versions have output, new have a version line
-        version = re.sub('\\^[[0-9]+m', '', version.group(1))  # removes the coloring tags
+        version = re.sub(r'\^\[{2}[0-9]+m', '', version.group(1))  # removes the coloring tags
         return version
 
-    @staticmethod
-    def _fetch_ks2_commit_hash(repo_path):
-        command2run = f"git --git-dir {repo_path}/.git rev-parse --verify HEAD"
-        process = subprocess.Popen(
-            command2run, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-        )
-        info, error = process.communicate()
-        if process.returncode != 0:
-            _logger.error(
-                f"Can't fetch pykilsort commit hash, will still attempt to run \n"
-                f"Error: {error.decode('utf-8')}"
-            )
-            return ""
-        return info.decode("utf-8").strip()
-
-    def _run_pykilosort(self, ap_file):
+    def _run_iblsort(self, ap_file):
         """
         Runs the ks2 matlab spike sorting for one probe dataset
         the raw spike sorting output is in session_path/spike_sorters/{self.SPIKE_SORTER_NAME}/probeXX folder
         (discontinued support for old spike sortings in the probe folder <1.5.5)
         :return: path of the folder containing ks2 spike sorting output
         """
-        self.version = self._fetch_pykilosort_version(self.PYKILOSORT_REPO)
+        self.version = self._fetch_iblsorter_version(self.PYKILOSORT_REPO)
         label = ap_file.parts[-2]  # this is usually the probe name
         sorter_dir = self.session_path.joinpath("spike_sorters", self.SPIKE_SORTER_NAME, label)
         self.FORCE_RERUN = False
         if not self.FORCE_RERUN:
             log_file = sorter_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log")
             if log_file.exists():
-                run_version = self._fetch_pykilosort_run_version(log_file)
+                run_version = self._fetch_iblsorter_run_version(log_file)
                 if packaging.version.parse(run_version) >= packaging.version.parse('1.7.0'):
                     _logger.info(f"Already ran: spike_sorting_{self.SPIKE_SORTER_NAME}.log"
                                  f" found in {sorter_dir}, skipping.")
@@ -673,8 +657,8 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         check_nvidia_driver()
         try:
             # if pykilosort is in the environment, use the installed version within the task
-            import pykilosort.ibl  # noqa
-            pykilosort.ibl.run_spike_sorting_ibl(bin_file=ap_file, scratch_dir=temp_dir)
+            import iblsorter.ibl  # noqa
+            iblsorter.ibl.run_spike_sorting_ibl(bin_file=ap_file, scratch_dir=temp_dir)
         except ImportError:
             command2run = f"{self.SHELL_SCRIPT} {ap_file} {temp_dir}"
             _logger.info(command2run)
@@ -717,7 +701,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         assert len(ap_files) == 1, f"Several bin files found for the same probe {ap_files}"
         ap_file, label = ap_files[0]
         out_files = []
-        ks2_dir = self._run_pykilosort(ap_file)  # runs ks2, skips if it already ran
+        ks2_dir = self._run_iblsort(ap_file)  # runs the sorter, skips if it already ran
         probe_out_path = self.session_path.joinpath("alf", label, self.SPIKE_SORTER_NAME)
         shutil.rmtree(probe_out_path, ignore_errors=True)
         probe_out_path.mkdir(parents=True, exist_ok=True)
