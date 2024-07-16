@@ -230,7 +230,7 @@ class TaskQC(base.QC):
         # Criteria (initialize as outcomes vary by class, task, and hardware)
         self.criteria = BWM_CRITERIA.copy()
 
-    def load_data(self, bpod_only=False, download_data=True):
+    def load_data(self, bpod_only=False, download_data=True, **kwargs):
         """Extract the data from raw data files.
 
         Extracts all the required task data from the raw data files.
@@ -244,7 +244,7 @@ class TaskQC(base.QC):
             if a session path was provided to the constructor.
         """
         self.extractor = TaskQCExtractor(
-            self.session_path, one=self.one, download_data=download_data, bpod_only=bpod_only)
+            self.session_path, one=self.one, download_data=download_data, bpod_only=bpod_only, **kwargs)
 
     def compute(self, **kwargs):
         """Compute and store the QC metrics.

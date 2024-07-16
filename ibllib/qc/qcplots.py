@@ -10,7 +10,8 @@ Example:
     plt.show()
 
 """
-from collections import Counter, Sized
+from collections import Counter
+from collections.abc import Iterable
 from pathlib import Path
 from datetime import datetime
 
@@ -57,7 +58,7 @@ def plot_results(qc_obj, save_path=None):
     # Plot failed trial level metrics
     def get_trial_level_failed(d):
         new_dict = {k[6:]: v for k, v in d.items()
-                    if outcomes[k] == 'FAIL' and isinstance(v, Sized) and len(v) == n_trials}
+                    if outcomes[k] == 40 and isinstance(v, Iterable) and len(v) == n_trials}
         return pd.DataFrame.from_dict(new_dict)
     sns.boxplot(data=get_trial_level_failed(qc_obj.metrics), orient='h', ax=ax0)
     ax0.set_yticklabels(ax0.get_yticklabels(), rotation=30, fontsize=8)
