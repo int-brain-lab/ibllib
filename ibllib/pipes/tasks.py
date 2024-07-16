@@ -222,7 +222,7 @@ class Task(abc.ABC):
                 if self.gpu >= 1:
                     if not self._creates_lock():
                         self.status = -2
-                        _logger.info(f'Job {self.__class__} exited as a lock was found')
+                        _logger.info(f'Job {self.__class__} exited as a lock was found at {self._lock_file_path()}')
                         new_log = log_capture_string.getvalue()
                         self.log = new_log if self.clobber else self.log + new_log
                         _logger.removeHandler(ch)
