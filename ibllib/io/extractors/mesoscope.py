@@ -274,12 +274,22 @@ class TimelineTrials(FpgaTrials):
             out['valveOpen_times'] = assign_to_trial(valve_driver_ttls[:, 0])
 
         # Stimulus times extracted based on trigger times
+        # When assigning events all start times must not be NaN so here we substitute freeze
+        # trigger times on nogo trials for stim on trigger times, then replace with NaN again
+        go_trials = np.where(out['choice'] != 0)[0]
+        lims = np.copy(out['stimOnTrigger_times'])
+        lims[go_trials] = out['stimFreezeTrigger_times'][go_trials]
         out['stimFreeze_times'] = assign_to_trial(
             self.frame2ttl['times'], 'last',
-            starts=out['stimFreezeTrigger_times'], t_trial_end=out['stimOffTrigger_times'])
+            starts=lims, t_trial_end=out['stimOffTrigger_times'])
+        out['stimFreeze_times'][out['choice'] == 0] = np.nan
+
+        # Here we do the same but use stim off trigger times
+        lims = np.copy(out['stimOffTrigger_times'])
+        lims[go_trials] = out['stimFreezeTrigger_times'][go_trials]
         out['stimOn_times'] = assign_to_trial(
             self.frame2ttl['times'], 'first',
-            starts=out['stimOnTrigger_times'], t_trial_end=out['stimFreezeTrigger_times'])
+            starts=out['stimOnTrigger_times'], t_trial_end=lims)
         out['stimOff_times'] = assign_to_trial(
             self.frame2ttl['times'], 'first',
             starts=out['stimOffTrigger_times'], t_trial_end=out['intervals'][:, 1]

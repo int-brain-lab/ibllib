@@ -1,4 +1,5 @@
 """Test ibllib.pipes.tasks module and Task class."""
+import sys
 import shutil
 import tempfile
 import unittest
@@ -384,9 +385,11 @@ class TestTask(unittest.TestCase):
                     self.session_path.joinpath('alf', 'register.optional_foo.ext')]
         self.assertCountEqual(files, expected)
         expected[2].unlink()
-        with self.assertNoLogs(ibllib.pipes.tasks.__name__, level='ERROR'):
-            files = task._input_files_to_register(assert_all_exist=True)
-            self.assertCountEqual(files, expected[:2])
+        # assertNoLogs added in py 3.10
+        if sys.version_info.minor >= 10:  # py3.10
+            with self.assertNoLogs(ibllib.pipes.tasks.__name__, level='ERROR'):
+                files = task._input_files_to_register(assert_all_exist=True)
+                self.assertCountEqual(files, expected[:2])
         expected[0].unlink()
         with self.assertLogs(ibllib.pipes.tasks.__name__, level='ERROR'):
             files = task._input_files_to_register(assert_all_exist=False)

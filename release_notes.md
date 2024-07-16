@@ -1,3 +1,16 @@
+## Release Note 2.38.0
+
+### features
+- Support running large pipeline jobs within multiple python environments
+- Extraction and QC of of task pause periods
+- Register animated GIF snapshots and tiff images
+- Load waveforms low level changes in spike sorting loader
+- Loading of additional channel object attributes (qc labels) in spike sorting loader
+- Stimulus times now extracted in a more robust manner
+
+### bugfixes
+- Fix in training plots when no trials in block
+
 ## Release Note 2.37.0
 
 ### features

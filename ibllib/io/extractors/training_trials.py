@@ -670,7 +670,8 @@ class StimOnOffFreezeTimes(BaseBpodTrialsExtractor):
 
 
 class PhasePosQuiescence(BaseBpodTrialsExtractor):
-    """Extracts stimulus phase, position and quiescence from Bpod data.
+    """Extract stimulus phase, position and quiescence from Bpod data.
+
     For extraction of pre-generated events, use the ProbaContrasts extractor instead.
     """
     save_names = (None, None, '_ibl_trials.quiescencePeriod.npy')
@@ -681,6 +682,18 @@ class PhasePosQuiescence(BaseBpodTrialsExtractor):
         position = np.array([t['position'] for t in self.bpod_trials])
         quiescence = np.array([t['quiescent_period'] for t in self.bpod_trials])
         return phase, position, quiescence
+
+
+class PauseDuration(BaseBpodTrialsExtractor):
+    """Extract pause duration from raw trial data."""
+    save_names = None
+    var_names = 'pause_duration'
+
+    def _extract(self, **kwargs):
+        # pausing logic added in version 8.9.0
+        ver = version.parse(self.settings.get('IBLRIG_VERSION') or '0')
+        default = 0. if ver < version.parse('8.9.0') else np.nan
+        return np.fromiter((t.get('pause_duration', default) for t in self.bpod_trials), dtype=float)
 
 
 class TrialsTable(BaseBpodTrialsExtractor):
@@ -711,15 +724,15 @@ class TrialsTable(BaseBpodTrialsExtractor):
 class TrainingTrials(BaseBpodTrialsExtractor):
     save_names = ('_ibl_trials.repNum.npy', '_ibl_trials.goCueTrigger_times.npy', '_ibl_trials.stimOnTrigger_times.npy', None,
                   None, None, None, '_ibl_trials.table.pqt', None, None, '_ibl_wheel.timestamps.npy', '_ibl_wheel.position.npy',
-                  '_ibl_wheelMoves.intervals.npy', '_ibl_wheelMoves.peakAmplitude.npy', None, None, None, None, None)
+                  '_ibl_wheelMoves.intervals.npy', '_ibl_wheelMoves.peakAmplitude.npy', None, None, None, None, None, None)
     var_names = ('repNum', 'goCueTrigger_times', 'stimOnTrigger_times', 'itiIn_times', 'stimOffTrigger_times',
                  'stimFreezeTrigger_times', 'errorCueTrigger_times', 'table', 'stimOff_times', 'stimFreeze_times',
                  'wheel_timestamps', 'wheel_position', 'wheelMoves_intervals', 'wheelMoves_peakAmplitude',
-                 'peakVelocity_times', 'is_final_movement', 'phase', 'position', 'quiescence')
+                 'peakVelocity_times', 'is_final_movement', 'phase', 'position', 'quiescence', 'pause_duration')
 
     def _extract(self) -> dict:
         base = [RepNum, GoCueTriggerTimes, StimOnTriggerTimes, ItiInTimes, StimOffTriggerTimes, StimFreezeTriggerTimes,
-                ErrorCueTriggerTimes, TrialsTable, PhasePosQuiescence]
+                ErrorCueTriggerTimes, TrialsTable, PhasePosQuiescence, PauseDuration]
         out, _ = run_extractor_classes(
             base, session_path=self.session_path, bpod_trials=self.bpod_trials, settings=self.settings, save=False,
             task_collection=self.task_collection)
