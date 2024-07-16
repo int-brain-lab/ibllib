@@ -4,8 +4,6 @@ These tasks are part of the old pipeline. This module has been replaced by the `
 and the dynamic pipeline.
 """
 import logging
-import re
-import shutil
 import subprocess
 from collections import OrderedDict
 import traceback
@@ -15,27 +13,25 @@ import warnings
 import cv2
 import numpy as np
 import pandas as pd
-import packaging.version
 
 import one.alf.io as alfio
 from ibldsp.utils import rms
 import spikeglx
 
 from ibllib.misc import check_nvidia_driver
-from ibllib.ephys import ephysqc, spikes, sync_probes
+from ibllib.ephys import ephysqc, sync_probes
 from ibllib.io import ffmpeg
 from ibllib.io.video import label_from_path, assert_valid_label
 from ibllib.io.extractors import ephys_fpga, ephys_passive, camera
 from ibllib.pipes import tasks, base_tasks
 import ibllib.pipes.training_preprocessing as tpp
 from ibllib.pipes.misc import create_alyx_probe_insertions
-from ibllib.qc.alignment_qc import get_aligned_channels
+from ibllib.pipes.ephys_tasks import SpikeSorting
 from ibllib.qc.task_extractors import TaskQCExtractor
 from ibllib.qc.task_metrics import TaskQC
 from ibllib.qc.camera import run_all_qc as run_camera_qc
 from ibllib.qc.dlc import DlcQC
-from ibllib.plots.figures import dlc_qc_plot, BehaviourPlots, LfpPlots, ApPlots, BadChannelsAp
-from ibllib.plots.figures import SpikeSorting as SpikeSortingPlots
+from ibllib.plots.figures import dlc_qc_plot, BehaviourPlots, LfpPlots, BadChannelsAp
 from ibllib.plots.snapshot import ReportSnapshot
 from brainbox.behavior.dlc import likelihood_threshold, get_licks, get_pupil_diameter, get_smooth_pupil_diameter
 
