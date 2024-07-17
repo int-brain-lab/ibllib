@@ -10,7 +10,8 @@ Example:
     plt.show()
 
 """
-from collections import Counter, Sized
+from collections import Counter
+from collections.abc import Sized
 from pathlib import Path
 from datetime import datetime
 
