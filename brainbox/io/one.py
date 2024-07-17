@@ -866,13 +866,18 @@ class SpikeSortingLoader:
         waveform_attributes = list(set(WAVEFORMS_ATTRIBUTES + waveform_attributes))
         return {'spikes': spike_attributes, 'clusters': cluster_attributes, 'waveforms': waveform_attributes}
 
-    def _get_spike_sorting_collection(self, spike_sorter='pykilosort'):
+    def _get_spike_sorting_collection(self, spike_sorter=None):
         """
         Filters a list or array of collections to get the relevant spike sorting dataset
         if there is a pykilosort, load it
         """
-        collection = next(filter(lambda c: c == f'alf/{self.pname}/{spike_sorter}', self.collections), None)
-        # otherwise, prefers the shortest
+        for sorter in list([spike_sorter, 'iblsorter', 'pykilosort']):
+            if sorter is None:
+                continue
+            collection = next(filter(lambda c: c == f'alf/{self.pname}/{sorter}', self.collections), None)
+            if collection is not None:
+                return collection
+        # if none is found amongst the defaults, prefers the shortest
         collection = collection or next(iter(sorted(filter(lambda c: f'alf/{self.pname}' in c, self.collections), key=len)), None)
         _logger.debug(f"selecting: {collection} to load amongst candidates: {self.collections}")
         return collection
