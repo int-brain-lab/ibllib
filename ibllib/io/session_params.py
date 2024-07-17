@@ -376,14 +376,14 @@ def get_task_protocol_number(sess_params, task_protocol=None):
         number that corresponds to the protocol, or None if protocol not present.
     """
     protocols = sess_params.get('tasks', [])
-    if task_protocol is not None:
-        task = next((x for x in protocols if task_protocol in x), None)
+    if task_protocol is None:  # Return set of all task numbers
+        numbers = (next(iter(x.values()), {}).get('protocol_number') for x in protocols)
+        numbers = list(map(int, filter(lambda x: x is not None, numbers)))
+        return (next(iter(numbers)) if len(numbers) == 1 else numbers) or None
+    else:
+        task = next((x for x in protocols if task_protocol in x), {})
         number = (task.get(task_protocol) or {}).get('protocol_number')
         return int(number) if isinstance(number, str) else number
-    else:  # Return set of all task numbers
-        numbers = list(filter(None, (next(iter(x.values()), {}).get('protocol_number') for x in protocols)))
-        numbers = [int(n) if isinstance(n, str) else n for n in numbers]
-        return (next(iter(numbers)) if len(numbers) == 1 else numbers) or None
 
 
 def get_collections(sess_params, flat=False):
