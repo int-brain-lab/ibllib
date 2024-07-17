@@ -2,53 +2,50 @@
 
 This module runs a list of quality control metrics on the behaviour data.
 
-NB: The QC should be loaded using :meth:`ibllib.pipes.base_tasks.BehaviourTask.run_qc` and not
-instantiated directly.
+.. warning::
+    The QC should be loaded using :meth:`ibllib.pipes.base_tasks.BehaviourTask.run_qc` and not
+    instantiated directly.
 
 Examples
 --------
 Running on a rig computer and updating QC fields in Alyx:
 
->>> from ibllib.qc.task_metrics import TaskQC
->>> TaskQC('path/to/session').run(update=True)
+>>> from ibllib.qc.task_qc_viewer.task_qc import get_bpod_trials_task, get_trials_tasks
+>>> tasks = get_trials_tasks(session_path, one=None)
+>>> task = get_bpod_trials_task(tasks[0])  # Ensure Bpod only on behaviour rig
+>>> qc = task.run_qc(update=True)
 
 Downloading the required data and inspecting the QC on a different computer:
 
->>> from ibllib.qc.task_metrics import TaskQC
->>> qc = TaskQC(eid)
+>>> from ibllib.pipes.dynamic_pipeline import get_trials_tasks
+>>> from one.api import ONE
+>>> task = get_trials_tasks(session_path, one=ONE())[0]  # get first task run
+>>> task.location = 'remote'
+>>> task.setUp()  # download required data
+>>> qc = task.run_qc(update=False)
 >>> outcome, results = qc.run()
 
 Inspecting individual test outcomes
 
->>> from ibllib.qc.task_metrics import TaskQC
->>> qc = TaskQC(eid)
->>> outcome, results, outcomes = qc.compute().compute_session_status()
+>>> outcome, results, outcomes = qc.compute_session_status()
 
 Running bpod QC on ephys session
 
->>> from ibllib.qc.task_metrics import TaskQC
->>> qc = TaskQC(eid)
->>> qc.load_data(bpod_only=True)  # Extract without FPGA
->>> bpod_qc = qc.run()
-
-Running bpod QC only, from training rig PC
-
->>> from ibllib.qc.task_metrics import TaskQC
->>> from ibllib.qc.qcplots import plot_results
->>> session_path = r'/home/nico/Downloads/FlatIron/mrsicflogellab/Subjects/SWC_023/2020-02-14/001'
->>> qc = TaskQC(session_path)
->>> qc.load_data(bpod_only=True, download_data=False)  # Extract without FPGA
->>> qc.run()
->>> plot_results(qc, save_path=session_path)
+>>> from ibllib.qc.task_qc_viewer.task_qc import get_bpod_trials_task, get_trials_tasks
+>>> from one.api import ONE
+>>> tasks = get_trials_tasks(session_path, one=ONE())
+>>> task = get_bpod_trials_task(tasks[0])  # Ensure Bpod only on behaviour rig
+>>> task.location = 'remote'
+>>> task.setUp()  # download required data
+>>> qc = task.run_qc(update=False)
+>>> outcome, results = qc.run()
 
 Running ephys QC, from local server PC (after ephys + bpod data have been copied to a same folder)
 
->>> from ibllib.qc.task_metrics import TaskQC
->>> from ibllib.qc.qcplots import plot_results
->>> session_path = r'/home/nico/Downloads/FlatIron/mrsicflogellab/Subjects/SWC_023/2020-02-14/001'
->>> qc = TaskQC(session_path)
->>> qc.run()
->>> plot_results(qc, save_path=session_path)
+>>> from ibllib.pipes.dynamic_pipeline import get_trials_tasks
+>>> task = get_trials_tasks(session_path, one=ONE())[0]  # get first task run
+>>> qc = task.run_qc(update=False)
+>>> outcome, results = qc.run()
 """
 import logging
 import sys
