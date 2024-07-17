@@ -738,12 +738,11 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
             spike_samples=spikes['samples'],
             spike_clusters=spikes['clusters'],
             spike_channels=clusters['channels'][spikes['clusters']],
-            h=None,  # todo the geometry needs to be set using the spikeglx object
             channel_labels=channels['labels'],
             max_wf=256,
             trough_offset=42,
             spike_length_samples=128,
-            chunksize_samples=int(3000),
+            chunksize_samples=int(30_000),
             n_jobs=None,
             wfs_dtype=np.float16,
             preprocessing_steps=["phase_shift",
