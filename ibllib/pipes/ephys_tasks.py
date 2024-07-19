@@ -649,7 +649,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         line = [line for line in lines if line.startswith("SCRATCH_DRIVE=")][0]
         m = re.search(r"\=(.*?)(\#|\n)", line)[0]
         scratch_drive = Path(m[1:-1].strip())
-        assert scratch_drive.exists()
+        assert scratch_drive.exists(), f"Scratch drive {scratch_drive} not found"
         spikesorter_dir = f"{self.version}_{'_'.join(list(self.session_path.parts[-3:]))}_{self.pname}"
         temp_dir = scratch_drive.joinpath(spikesorter_dir)
         _logger.info(f"job progress command: tail -f {temp_dir} *.log")
@@ -698,6 +698,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         """
         efiles = spikeglx.glob_ephys_files(self.session_path.joinpath(self.device_collection, self.pname))
         ap_files = [(ef.get("ap"), ef.get("label")) for ef in efiles if "ap" in ef.keys()]
+        assert len(ap_files) == 0, f"No ap file found for probe {self.session_path.joinpath(self.device_collection, self.pname)}"
         assert len(ap_files) == 1, f"Several bin files found for the same probe {ap_files}"
         ap_file, label = ap_files[0]
         out_files = []
@@ -733,7 +734,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         clusters = alfio.load_object(probe_out_path, 'clusters', attribute=['channels'])
         channels = alfio.load_object(probe_out_path, 'channels')
         extract_wfs_cbin(
-            cbin_file=ap_file,
+            bin_file=ap_file,
             output_dir=probe_out_path,
             spike_samples=spikes['samples'],
             spike_clusters=spikes['clusters'],
@@ -745,10 +746,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
             chunksize_samples=int(30_000),
             n_jobs=None,
             wfs_dtype=np.float16,
-            preprocessing_steps=["phase_shift",
-                                 "bad_channel_interpolation",
-                                 "butterworth",
-                                 "car"]
+            preprocess_steps=["phase_shift", "bad_channel_interpolation", "butterworth", "car"]
         )
         if self.one:
             eid = self.one.path2eid(self.session_path, query_type='remote')
