@@ -564,6 +564,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
     priority = 60
     job_size = 'large'
     force = True
+    env = 'iblsorter'
 
     SHELL_SCRIPT = Path.home().joinpath(
         "Documents/PYTHON/iblscripts/deploy/serverpc/iblsorter/sort_recording.sh"
