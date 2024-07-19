@@ -698,7 +698,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         """
         efiles = spikeglx.glob_ephys_files(self.session_path.joinpath(self.device_collection, self.pname))
         ap_files = [(ef.get("ap"), ef.get("label")) for ef in efiles if "ap" in ef.keys()]
-        assert len(ap_files) == 0, f"No ap file found for probe {self.session_path.joinpath(self.device_collection, self.pname)}"
+        assert len(ap_files) != 0, f"No ap file found for probe {self.session_path.joinpath(self.device_collection, self.pname)}"
         assert len(ap_files) == 1, f"Several bin files found for the same probe {ap_files}"
         ap_file, label = ap_files[0]
         out_files = []
