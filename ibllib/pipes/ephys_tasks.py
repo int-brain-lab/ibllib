@@ -769,39 +769,3 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
                     out_files.extend(out)
 
         return out_files
-
-
-class EphysCellsQc(base_tasks.EphysTask, CellQCMixin):
-    priority = 90
-    job_size = 'small'
-
-    @property
-    def signature(self):
-        signature = {
-            'input_files': [('spikes.times.npy', f'alf/{self.pname}*', True),
-                            ('spikes.clusters.npy', f'alf/{self.pname}*', True),
-                            ('spikes.amps.npy', f'alf/{self.pname}*', True),
-                            ('spikes.depths.npy', f'alf/{self.pname}*', True),
-                            ('clusters.channels.npy', f'alf/{self.pname}*', True)],
-            'output_files': [('clusters.metrics.pqt', f'alf/{self.pname}*', True)]
-        }
-        return signature
-
-    def _run(self):
-        """
-        Post spike-sorting quality control at the cluster level.
-        Outputs a QC table in the clusters ALF object and labels corresponding probes in Alyx
-        """
-        files_spikes = Path(self.session_path).joinpath('alf', self.pname).rglob('spikes.times.npy')
-        folder_probes = [f.parent for f in files_spikes]
-        out_files = []
-        for folder_probe in folder_probes:
-            try:
-                qc_file, df_units, drift = self.compute_cell_qc(folder_probe)
-                out_files.append(qc_file)
-                self._label_probe_qc(folder_probe, df_units, drift)
-            except Exception:
-                _logger.error(traceback.format_exc())
-                self.status = -1
-                continue
-        return out_files
