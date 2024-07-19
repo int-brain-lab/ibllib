@@ -494,8 +494,6 @@ def make_pipeline(session_path, **pkwargs):
 
             tasks[f'RawEphysQC_{pname}'] = type(f'RawEphysQC_{pname}', (etasks.RawEphysQC,), {})(
                 **kwargs, **ephys_kwargs, pname=pname, parents=register_task)
-            tasks[f'EphysCellQC_{pname}'] = type(f'EphysCellQC_{pname}', (etasks.EphysCellsQc,), {})(
-                **kwargs, **ephys_kwargs, pname=pname, parents=[tasks[f'Spikesorting_{pname}']])
 
     # Video tasks
     if 'cameras' in devices:
