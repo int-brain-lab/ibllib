@@ -182,8 +182,8 @@ class Patcher(abc.ABC):
         # first register the file
         if not isinstance(file_list, list):
             file_list = [Path(file_list)]
-        assert len(set([get_session_path(f) for f in file_list])) == 1
-        assert all([Path(f).exists() for f in file_list])
+        assert len(set(map(get_session_path, file_list))) == 1
+        assert all(Path(f).exists() for f in file_list)
         response = ensure_list(self.register_dataset(file_list, dry=dry, **kwargs))
         if dry:
             return
