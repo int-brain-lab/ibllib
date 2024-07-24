@@ -23,14 +23,13 @@ EGRESS
         - once copy is complete aggregate the qc from file.
 """
 import yaml
-import time
-from datetime import datetime
 import logging
 from pathlib import Path
 from copy import deepcopy
 
 from one.converters import ConversionMixin
 from iblutil.util import flatten
+from iblutil.io.params import FileLock
 from packaging import version
 
 import ibllib.pipes.misc as misc
@@ -204,9 +203,6 @@ def aggregate_device(file_device, file_acquisition_description, unlink=False):
         Device file contains a main 'sync' key that is already present in the main description
         file.  For an experiment only one main sync device is allowed.
     """
-    # if a lock file exists retries 5 times to see if it exists
-    attempts = 0
-    file_lock = file_acquisition_description.with_suffix('.lock')
     # reads in the partial device data
     data_device = read_params(file_device)
 
@@ -214,38 +210,19 @@ def aggregate_device(file_device, file_acquisition_description, unlink=False):
         _logger.warning('empty device file "%s"', file_device)
         return
 
-    while True:
-        if not file_lock.exists() or attempts >= 4:
-            break
-        _logger.info('file lock found, waiting 2 seconds %s', file_lock)
-        time.sleep(2)
-        attempts += 1
+    with FileLock(file_acquisition_description, log=_logger, timeout_action='delete'):
+        # if the acquisition description file already exists, read in the yaml content
+        if file_acquisition_description.exists():
+            acq_desc = read_params(file_acquisition_description)
+        else:
+            acq_desc = {}
 
-    # if the file still exists after 5 attempts, remove it as it's a job that went wrong
-    if file_lock.exists():
-        with open(file_lock, 'r') as fp:
-            _logger.debug('file lock contents: %s', yaml.safe_load(fp))
-        _logger.info('stale file lock found, deleting %s', file_lock)
-        file_lock.unlink()
+        # merge the dictionaries (NB: acq_desc modified in place)
+        acq_desc = merge_params(acq_desc, data_device)
 
-    # add in the lock file, add some meta data to ease debugging if one gets stuck
-    with open(file_lock, 'w') as fp:
-        yaml.safe_dump(dict(datetime=datetime.utcnow().isoformat(), file_device=str(file_device)), fp)
+        with open(file_acquisition_description, 'w') as fp:
+            yaml.safe_dump(acq_desc, fp)
 
-    # if the acquisition description file already exists, read in the yaml content
-    if file_acquisition_description.exists():
-        acq_desc = read_params(file_acquisition_description)
-    else:
-        acq_desc = {}
-
-    # merge the dictionaries (NB: acq_desc modified in place)
-    acq_desc = merge_params(acq_desc, data_device)
-
-    with open(file_acquisition_description, 'w') as fp:
-        yaml.safe_dump(acq_desc, fp)
-
-    # unlink the local file
-    file_lock.unlink()
     # delete the original file if necessary
     if unlink:
         file_device.unlink()
