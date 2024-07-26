@@ -598,7 +598,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
             return f"iblsorter_{iblsorter.__version__}"
         except ImportError:
             _logger.info('IBL-sorter not in environment, trying to locate the repository')
-        init_file = Path(repo_path).joinpath('ibl-sorter', '__init__.py')
+        init_file = Path(repo_path).joinpath('iblsorter', '__init__.py')
         try:
             with open(init_file) as fid:
                 lines = fid.readlines()
