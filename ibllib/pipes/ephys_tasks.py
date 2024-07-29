@@ -656,32 +656,27 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         _logger.info(f"job progress command: tail -f {temp_dir} *.log")
         temp_dir.mkdir(parents=True, exist_ok=True)
         check_nvidia_driver()
-        try:
-            # if pykilosort is in the environment, use the installed version within the task
-            import iblsorter.ibl  # noqa
-            iblsorter.ibl.run_spike_sorting_ibl(bin_file=ap_file, scratch_dir=temp_dir)
-        except ImportError:
-            command2run = f"{self.SHELL_SCRIPT} {ap_file} {temp_dir}"
-            _logger.info(command2run)
-            process = subprocess.Popen(
-                command2run,
-                shell=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                executable="/bin/bash",
-            )
-            info, error = process.communicate()
-            info_str = info.decode("utf-8").strip()
-            _logger.info(info_str)
-            if process.returncode != 0:
-                error_str = error.decode("utf-8").strip()
-                # try and get the kilosort log if any
-                for log_file in temp_dir.rglob('*_kilosort.log'):
-                    with open(log_file) as fid:
-                        log = fid.read()
-                        _logger.error(log)
-                    break
-                raise RuntimeError(f"{self.SPIKE_SORTER_NAME} {info_str}, {error_str}")
+        command2run = f"{self.SHELL_SCRIPT} {ap_file} {temp_dir}"
+        _logger.info(command2run)
+        process = subprocess.Popen(
+            command2run,
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            executable="/bin/bash",
+        )
+        info, error = process.communicate()
+        info_str = info.decode("utf-8").strip()
+        _logger.info(info_str)
+        if process.returncode != 0:
+            error_str = error.decode("utf-8").strip()
+            # try and get the kilosort log if any
+            for log_file in temp_dir.rglob('*_kilosort.log'):
+                with open(log_file) as fid:
+                    log = fid.read()
+                    _logger.error(log)
+                break
+            raise RuntimeError(f"{self.SPIKE_SORTER_NAME} {info_str}, {error_str}")
 
         shutil.copytree(temp_dir.joinpath('output'), sorter_dir, dirs_exist_ok=True)
         shutil.rmtree(temp_dir, ignore_errors=True)
