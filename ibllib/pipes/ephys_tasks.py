@@ -564,9 +564,10 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
     priority = 60
     job_size = 'large'
     force = True
+    env = 'iblsorter'
 
     SHELL_SCRIPT = Path.home().joinpath(
-        "Documents/PYTHON/iblscripts/deploy/serverpc/iblsorter/run_iblsorter.sh"
+        "Documents/PYTHON/iblscripts/deploy/serverpc/iblsorter/sort_recording.sh"
     )
     SPIKE_SORTER_NAME = 'iblsorter'
     PYKILOSORT_REPO = Path.home().joinpath('Documents/PYTHON/SPIKE_SORTING/ibl-sorter')
@@ -597,7 +598,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
             return f"iblsorter_{iblsorter.__version__}"
         except ImportError:
             _logger.info('IBL-sorter not in environment, trying to locate the repository')
-        init_file = Path(repo_path).joinpath('ibl-sorter', '__init__.py')
+        init_file = Path(repo_path).joinpath('iblsorter', '__init__.py')
         try:
             with open(init_file) as fid:
                 lines = fid.readlines()
@@ -649,7 +650,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         line = [line for line in lines if line.startswith("SCRATCH_DRIVE=")][0]
         m = re.search(r"\=(.*?)(\#|\n)", line)[0]
         scratch_drive = Path(m[1:-1].strip())
-        assert scratch_drive.exists()
+        assert scratch_drive.exists(), f"Scratch drive {scratch_drive} not found"
         spikesorter_dir = f"{self.version}_{'_'.join(list(self.session_path.parts[-3:]))}_{self.pname}"
         temp_dir = scratch_drive.joinpath(spikesorter_dir)
         _logger.info(f"job progress command: tail -f {temp_dir} *.log")
@@ -698,6 +699,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         """
         efiles = spikeglx.glob_ephys_files(self.session_path.joinpath(self.device_collection, self.pname))
         ap_files = [(ef.get("ap"), ef.get("label")) for ef in efiles if "ap" in ef.keys()]
+        assert len(ap_files) != 0, f"No ap file found for probe {self.session_path.joinpath(self.device_collection, self.pname)}"
         assert len(ap_files) == 1, f"Several bin files found for the same probe {ap_files}"
         ap_file, label = ap_files[0]
         out_files = []
@@ -733,23 +735,19 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         clusters = alfio.load_object(probe_out_path, 'clusters', attribute=['channels'])
         channels = alfio.load_object(probe_out_path, 'channels')
         extract_wfs_cbin(
-            cbin_file=ap_file,
+            bin_file=ap_file,
             output_dir=probe_out_path,
             spike_samples=spikes['samples'],
             spike_clusters=spikes['clusters'],
             spike_channels=clusters['channels'][spikes['clusters']],
-            h=None,  # todo the geometry needs to be set using the spikeglx object
             channel_labels=channels['labels'],
             max_wf=256,
             trough_offset=42,
             spike_length_samples=128,
-            chunksize_samples=int(3000),
+            chunksize_samples=int(30_000),
             n_jobs=None,
             wfs_dtype=np.float16,
-            preprocessing_steps=["phase_shift",
-                                 "bad_channel_interpolation",
-                                 "butterworth",
-                                 "car"]
+            preprocess_steps=["phase_shift", "bad_channel_interpolation", "butterworth", "car"]
         )
         if self.one:
             eid = self.one.path2eid(self.session_path, query_type='remote')
@@ -771,40 +769,4 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
                     out = get_aligned_channels(ins[0], chns, one=self.one, save_dir=probe_out_path)
                     out_files.extend(out)
 
-        return out_files
-
-
-class EphysCellsQc(base_tasks.EphysTask, CellQCMixin):
-    priority = 90
-    job_size = 'small'
-
-    @property
-    def signature(self):
-        signature = {
-            'input_files': [('spikes.times.npy', f'alf/{self.pname}*', True),
-                            ('spikes.clusters.npy', f'alf/{self.pname}*', True),
-                            ('spikes.amps.npy', f'alf/{self.pname}*', True),
-                            ('spikes.depths.npy', f'alf/{self.pname}*', True),
-                            ('clusters.channels.npy', f'alf/{self.pname}*', True)],
-            'output_files': [('clusters.metrics.pqt', f'alf/{self.pname}*', True)]
-        }
-        return signature
-
-    def _run(self):
-        """
-        Post spike-sorting quality control at the cluster level.
-        Outputs a QC table in the clusters ALF object and labels corresponding probes in Alyx
-        """
-        files_spikes = Path(self.session_path).joinpath('alf', self.pname).rglob('spikes.times.npy')
-        folder_probes = [f.parent for f in files_spikes]
-        out_files = []
-        for folder_probe in folder_probes:
-            try:
-                qc_file, df_units, drift = self.compute_cell_qc(folder_probe)
-                out_files.append(qc_file)
-                self._label_probe_qc(folder_probe, df_units, drift)
-            except Exception:
-                _logger.error(traceback.format_exc())
-                self.status = -1
-                continue
         return out_files
