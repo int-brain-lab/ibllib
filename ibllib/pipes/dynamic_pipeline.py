@@ -268,6 +268,8 @@ def _get_trials_tasks(session_path, acquisition_description=None, sync_tasks=Non
                     import projects.extraction_tasks
                     if hasattr(projects.extraction_tasks, extractor):
                         task = getattr(projects.extraction_tasks, extractor)
+                    elif hasattr(projects.extraction_tasks, extractor + sync_label.capitalize()):
+                        task = getattr(btasks, extractor + sync_label.capitalize())
                     else:
                         raise NotImplementedError(
                             f'Extractor "{extractor}" not found in main IBL pipeline nor in personal projects')

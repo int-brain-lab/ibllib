@@ -193,9 +193,7 @@ class Patcher(abc.ABC):
         return response
 
     def patch_datasets(self, file_list, **kwargs):
-        """
-        Same as create_dataset method but works with several sessions
-        """
+        """Same as create_dataset method but works with several sessions."""
         register_dict = {}
         # creates a dictionary of sessions with one file list per session
         for f in file_list:
