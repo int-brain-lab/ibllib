@@ -20,6 +20,7 @@ from neuropixel import TIP_SIZE_UM, trace_header
 import spikeglx
 
 import ibldsp.voltage
+from ibldsp.waveform_extraction import WaveformsLoader
 from iblutil.util import Bunch
 from iblatlas.atlas import AllenAtlas, BrainRegions
 from iblatlas import atlas
@@ -974,6 +975,21 @@ class SpikeSortingLoader:
             cbin_file = next(filter(lambda f: re.match(rf".*\.{band}\..*cbin", f.name), raw_data_files), None)
             if cbin_file is not None:
                 return spikeglx.Reader(cbin_file)
+
+    def download_raw_waveforms(self, **kwargs):
+        """
+        Downloads raw waveforms extracted from sorting to local disk.
+        """
+        _logger.debug(f"loading waveforms from {self.collection}")
+        return self.one.load_object(
+            self.eid, "waveforms",
+            attribute=["traces", "templates", "table", "channels"],
+            collection=self._get_spike_sorting_collection("pykilosort"), download_only=True, **kwargs
+        )
+
+    def raw_waveforms(self, **kwargs):
+        wf_paths = self.download_raw_waveforms(**kwargs)
+        return WaveformsLoader(wf_paths[0].parent, wfs_dtype=np.float16)
 
     def load_channels(self, **kwargs):
         """
