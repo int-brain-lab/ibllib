@@ -22,6 +22,7 @@ personal projects repo or in :py:mod:`ibllib.io.extractors.bpod_trials` module.
 """
 import logging
 import re
+from fnmatch import fnmatch
 from collections import OrderedDict
 from pathlib import Path
 from itertools import chain
@@ -342,6 +343,11 @@ def get_trials_tasks(session_path, one=None, bpod_only=False):
     list of pipes.tasks.Task
         A list of task objects for the provided session.
 
+    Examples
+    --------
+    Return the tasks for active choice world extraction
+
+    >>> tasks = list(filter(is_active_trials_task, get_trials_tasks(session_path)))
     """
     # Check for an experiment.description file; ensure downloaded if possible
     if one and one.to_eid(session_path):  # to_eid returns None if session not registered
@@ -355,6 +361,25 @@ def get_trials_tasks(session_path, one=None, bpod_only=False):
     except NotImplementedError as ex:
         _logger.warning('Failed to get trials tasks: %s', ex)
         return []
+
+
+def is_active_trials_task(task) -> bool:
+    """
+    Check if task is for active choice world extraction.
+
+    Parameters
+    ----------
+    task : ibllib.pipes.tasks.Task
+        A task instance to test.
+
+    Returns
+    -------
+    bool
+        True if the task name starts with 'Trials_' and outputs a trials.table dataset.
+    """
+    trials_task = task.name.lower().startswith('trials_')
+    output_names = [x[0] for x in task.signature.get('output_files', [])]
+    return trials_task and any(fnmatch('_ibl_trials.table.pqt', pat) for pat in output_names)
 
 
 def make_pipeline(session_path, **pkwargs):
