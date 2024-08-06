@@ -200,30 +200,78 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
     job_size = 'large'
     env = 'suite2p'
 
+    def __init__(self, *args, **kwargs):
+        self._teardown_files = []
+        super().__init__(*args, **kwargs)
+
+    def setUp(self, **kwargs):
+        """Set up task.
+
+        This will check the local filesystem for the raw tif files and if not present, will assume
+        they have been compressed and deleted, in which case the signature will be replaced with
+        the compressed input.
+        """
+        tif_sig = next((s for s in self.signature['input_files'] if '.tif' in s[0]), None)
+        if not tif_sig:
+            return
+        raw_tifs = any(Path(self.session_path).glob(str(Path(*filter(None, reversed(tif_sig[:2]))))))
+        if not raw_tifs:
+            self._signature['input_files'].remove(tif_sig)
+            self._signature['input_files'].append(('imaging.frames.tar.bz2', *tif_sig[1:]))
+        all_files_present = super().setUp(**kwargs)  # Ensure files present
+        if raw_tifs or not all_files_present:
+            return all_files_present
+        # Decompress imaging files
+        files = list(self.session_path.glob(f'{self.device_collection}/imaging.frames*.tar.bz2'))
+        if not (any(files) and all(map(Path.exists, files))):
+            return False
+        _logger.info('Decompressing %i file(s)', len(files))
+        for file in files:
+            cmd = 'tar -xvjf "{input}"'.format(input=file.name)
+            _logger.debug(cmd)
+            process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=file.parent)
+            _, stderr = process.communicate()  # b'x 2023-02-17_2_test_2P_00001_00001.tif\n'
+            assert process.returncode == 0
+            tifs = [file.parent.joinpath(x[2:]) for x in stderr.decode().splitlines() if x.startswith('x ')]
+            assert all(map(Path.exists, tifs))
+            self._teardown_files.extend(tifs)
+        return True
+
+    def tearDown(self):
+        """Tear down task.
+
+        This removes any decompressed tif files.
+        """
+        for file in self._teardown_files:
+            _logger.debug('Removing %s', file)
+            file.unlink()
+        return super().tearDown()
+
     @property
     def signature(self):
         # The number of in and outputs will be dependent on the number of input raw imaging folders and output FOVs
-        signature = {
-            'input_files': [('_ibl_rawImagingData.meta.json', self.device_collection, True),
-                            ('*.tif', self.device_collection, True),
-                            ('exptQC.mat', self.device_collection, False)],
-            'output_files': [('mpci.ROIActivityF.npy', 'alf/FOV*', True),
-                             ('mpci.ROINeuropilActivityF.npy', 'alf/FOV*', True),
-                             ('mpci.ROIActivityDeconvolved.npy', 'alf/FOV*', True),
-                             ('mpci.badFrames.npy', 'alf/FOV*', True),
-                             ('mpci.mpciFrameQC.npy', 'alf/FOV*', True),
-                             ('mpciFrameQC.names.tsv', 'alf/FOV*', True),
-                             ('mpciMeanImage.images.npy', 'alf/FOV*', True),
-                             ('mpciROIs.stackPos.npy', 'alf/FOV*', True),
-                             ('mpciROIs.mpciROITypes.npy', 'alf/FOV*', True),
-                             ('mpciROIs.cellClassifier.npy', 'alf/FOV*', True),
-                             ('mpciROIs.uuids.csv', 'alf/FOV*', True),
-                             ('mpciROITypes.names.tsv', 'alf/FOV*', True),
-                             ('mpciROIs.masks.npy', 'alf/FOV*', True),
-                             ('mpciROIs.neuropilMasks.npy', 'alf/FOV*', True),
-                             ('_suite2p_ROIData.raw.zip', self.device_collection, False)]
-        }
-        return signature
+        if not getattr(self, '_signature', None):
+            self._signature = {
+                'input_files': [('_ibl_rawImagingData.meta.json', self.device_collection, True),
+                                ('*.tif', self.device_collection, True),
+                                ('exptQC.mat', self.device_collection, False)],
+                'output_files': [('mpci.ROIActivityF.npy', 'alf/FOV*', True),
+                                 ('mpci.ROINeuropilActivityF.npy', 'alf/FOV*', True),
+                                 ('mpci.ROIActivityDeconvolved.npy', 'alf/FOV*', True),
+                                 ('mpci.badFrames.npy', 'alf/FOV*', True),
+                                 ('mpci.mpciFrameQC.npy', 'alf/FOV*', True),
+                                 ('mpciFrameQC.names.tsv', 'alf/FOV*', True),
+                                 ('mpciMeanImage.images.npy', 'alf/FOV*', True),
+                                 ('mpciROIs.stackPos.npy', 'alf/FOV*', True),
+                                 ('mpciROIs.mpciROITypes.npy', 'alf/FOV*', True),
+                                 ('mpciROIs.cellClassifier.npy', 'alf/FOV*', True),
+                                 ('mpciROIs.uuids.csv', 'alf/FOV*', True),
+                                 ('mpciROITypes.names.tsv', 'alf/FOV*', True),
+                                 ('mpciROIs.masks.npy', 'alf/FOV*', True),
+                                 ('mpciROIs.neuropilMasks.npy', 'alf/FOV*', True),
+                                 ('_suite2p_ROIData.raw.zip', self.device_collection, False)]
+            }
+        return self._signature
 
     @staticmethod
     def _masks2sparse(stat, ops):
@@ -465,7 +513,6 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         dict
             Inputs to suite2p run that deviate from default parameters.
         """
-
         # Computing dx and dy
         cXY = np.array([fov['Deg']['topLeft'] for fov in meta['FOV']])
         cXY -= np.min(cXY, axis=0)
@@ -523,8 +570,8 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
             'tau': self.get_default_tau(),  # deduce the GCamp used from Alyx mouse line (defaults to 1.5; that of GCaMP6s)
             'functional_chan': 1,  # for now, eventually find(ismember(meta.channelSaved == meta.channelID.green))
             'align_by_chan': 1,  # for now, eventually find(ismember(meta.channelSaved == meta.channelID.red))
-            'dx': dx,
-            'dy': dy
+            'dx': dx.tolist(),
+            'dy': dy.tolist()
         }
 
         return db

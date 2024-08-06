@@ -6,6 +6,7 @@ import tempfile
 import json
 from itertools import chain
 from pathlib import Path
+import subprocess
 
 from one.api import ONE
 import numpy as np
@@ -29,6 +30,10 @@ class TestMesoscopePreprocess(unittest.TestCase):
         self.img_path = self.session_path.joinpath('raw_imaging_data_00')
         self.img_path.mkdir(parents=True)
         self.task = MesoscopePreprocess(self.session_path, one=ONE(**TEST_DB))
+        self.img_path.joinpath('_ibl_rawImagingData.meta.json').touch()
+        self.tifs = [self.img_path.joinpath(f'2024-01-01_1_subject_00001_0000{i}.tif') for i in range(5)]
+        for file in self.tifs:
+            file.touch()
 
     def test_meta(self):
         """
@@ -76,7 +81,6 @@ class TestMesoscopePreprocess(unittest.TestCase):
         }
         with open(self.img_path.joinpath('_ibl_rawImagingData.meta.json'), 'w') as f:
             json.dump(meta, f)
-        self.img_path.joinpath('test.tif').touch()
         with mock.patch.object(self.task, 'get_default_tau', return_value=1.5):
             _ = self.task.run(run_suite2p=False, rename_files=False)
         self.assertEqual(self.task.status, 0)
@@ -100,6 +104,35 @@ class TestMesoscopePreprocess(unittest.TestCase):
             self.assertEqual(self.task.get_default_tau(), .7)
             subject_detail['genotype'].pop(1)
             self.assertEqual(self.task.get_default_tau(), 1.5)  # return the default value
+
+    def test_setup_uncompressed(self):
+        """Test set up behaviour when raw tifs present."""
+        self.task.setUp()
+        self.assertIn(('*.tif', self.task.device_collection, True), self.task.signature['input_files'])
+        self.assertNotIn(('imaging.frames.tar.bz2', self.task.device_collection, True), self.task.signature['input_files'])
+        self.task.tearDown()
+        self.assertTrue(all(map(Path.exists, self.tifs)))
+
+    def test_setup_compressed(self):
+        """Test set up behaviour when only compressed tifs present."""
+        # Make compressed file
+        outfile = self.img_path.joinpath('imaging.frames.tar.bz2')
+        cmd = 'tar -cjvf "{output}" "{input}"'.format(
+            output=outfile.relative_to(self.img_path),
+            input='" "'.join(str(x.relative_to(self.img_path)) for x in self.tifs))
+        process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=self.img_path)
+        info, error = process.communicate()  # b'2023-02-17_2_test_2P_00001_00001.tif\n'
+        assert process.returncode == 0, f'compression failed: {error.decode()}'
+        for file in self.tifs:
+            file.unlink()
+
+        self.task.setUp()
+        self.assertNotIn(('*.tif', self.task.device_collection, True), self.task.signature['input_files'])
+        self.assertIn(('imaging.frames.tar.bz2', self.task.device_collection, True), self.task.signature['input_files'])
+        self.assertTrue(all(map(Path.exists, self.tifs)))
+        self.assertTrue(self.img_path.joinpath('imaging.frames.tar.bz2').exists())
+        self.task.tearDown()
+        self.assertFalse(any(map(Path.exists, self.tifs)))
 
     def tearDown(self) -> None:
         self.td.cleanup()
