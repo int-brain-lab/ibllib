@@ -167,7 +167,7 @@ class BehaviourTask(DynamicTask):
 
         Numbering starts from 0. If the 'protocol_number' field is missing from the experiment
         description, None is returned. If `task_protocol` is None, the first protocol number if n
-        protocols == 1, otherwise returns None.
+        protocols == 1, otherwise raises an AssertionError.
 
         NB: :func:`ibllib.pipes.dynamic_pipeline.make_pipeline` will determine the protocol number
         from the order of the tasks in the experiment description if the task collection follows
@@ -189,8 +189,10 @@ class BehaviourTask(DynamicTask):
         """
         if number is None:  # Do not use "if not number" as that will return True if number is 0
             number = sess_params.get_task_protocol_number(self.session_params, task_protocol)
+        elif not isinstance(number, int):
+            number = int(number)
         # If inferring the number from the experiment description, assert only one returned (or something went wrong)
-        assert number is None or isinstance(number, int)
+        assert number is None or isinstance(number, int), 'ambiguous protocol number; no task protocol defined'
         return number
 
     @staticmethod

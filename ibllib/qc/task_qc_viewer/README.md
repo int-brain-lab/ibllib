@@ -5,13 +5,18 @@ alongside an interactive table.  The UUID is the session id.
 ## Usage: command line
 
 Launch the Viewer by typing `task_qc session-uuid` , example:
-```sh
+```shell
 task_qc c9fec76e-7a20-4da4-93ad-04510a89473b
 ```
 
 Or just using a local path (on a local server for example):
-```sh
+```shell
 task_qc /mnt/s0/Subjects/KS022/2019-12-10/001 --local
+```
+
+On behaviour rigs, use the Bpod only flag:
+```shell
+task_qc C:\iblrigv8_data\cortexlab\Subjects\KS022\2019-12-10\001 --local --bpod
 ```
 
 ## Usage: from ipython prompt

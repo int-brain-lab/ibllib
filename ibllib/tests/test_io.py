@@ -572,6 +572,16 @@ class TestSessionParams(unittest.TestCase):
         b['sync'] = {'foodaq': {'collection': 'raw_sync_data'}}
         self.assertRaises(AssertionError, session_params.merge_params, a, b)
 
+    def test_get_protocol_number(self):
+        """Test ibllib.io.session_params.get_task_protocol_number function."""
+        self.assertIsNone(session_params.get_task_protocol_number(self.fixture))
+        self.assertIsNone(session_params.get_task_protocol_number(self.fixture, 'passiveChoiceWorld'))
+        self.assertIsNone(session_params.get_task_protocol_number(self.fixture, 'fooChoiceWorld'))
+        for i, task in enumerate(self.fixture['tasks']):
+            next(iter(task.values()))['protocol_number'] = str(i)
+        self.assertEqual(0, session_params.get_task_protocol_number(self.fixture, 'passiveChoiceWorld'))
+        self.assertEqual([0, 1], session_params.get_task_protocol_number(self.fixture))
+
 
 class TestRawDaqLoaders(unittest.TestCase):
     """Tests for raw_daq_loaders module"""

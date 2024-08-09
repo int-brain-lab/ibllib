@@ -93,11 +93,8 @@ class TestTaskQC(unittest.TestCase):
         run_app_mock.assert_called_once()
 
         active_task.reset_mock(return_value=False)
-        with mock.patch('ibllib.qc.task_qc_viewer.task_qc.get_bpod_trials_task', return_value=active_task) as \
-                get_bpod_trials_task_mock:
-            show_session_task_qc(session_path, one=self.one, local=True, bpod_only=True)
-            # Should be called in bpod_only mode
-            get_bpod_trials_task_mock.assert_called_once_with(active_task)
+        trials_tasks_mock.reset_mock()
+        show_session_task_qc(session_path, one=self.one, local=True, bpod_only=True)
         # Should be called in local mode
         active_task.assert_expected_inputs.assert_called_once_with(raise_error=True)
 

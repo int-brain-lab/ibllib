@@ -20,8 +20,7 @@ class HabituationTrials(BaseBpodTrialsExtractor):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        exclude = ['itiIn_times', 'stimOffTrigger_times', 'stimCenter_times',
-                   'stimCenterTrigger_times', 'position', 'phase']
+        exclude = ['itiIn_times', 'stimCenter_times', 'stimCenterTrigger_times', 'position', 'phase']
         self.save_names = tuple(f'_ibl_trials.{x}.npy' if x not in exclude else None for x in self.var_names)
 
     def _extract(self) -> dict:

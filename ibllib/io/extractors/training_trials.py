@@ -456,6 +456,7 @@ class StimFreezeTriggerTimes(BaseBpodTrialsExtractor):
 
 class StimOffTriggerTimes(BaseBpodTrialsExtractor):
     var_names = 'stimOffTrigger_times'
+    save_names = '_ibl_trials.stimOnTrigger_times.npy'
 
     def _extract(self):
         if version.parse(self.settings["IBLRIG_VERSION"] or '100.0.0') >= version.parse("6.2.5"):
@@ -622,7 +623,7 @@ class StimOnOffFreezeTimes(BaseBpodTrialsExtractor):
     Each stimulus event is the first detected front of the BNC1 signal after the trigger state, but before the next
     trigger state.
     """
-    save_names = ('_ibl_trials.stimOn_times.npy', None, None)
+    save_names = ('_ibl_trials.stimOn_times.npy', '_ibl_trials.stimOff_times.npy', None)
     var_names = ('stimOn_times', 'stimOff_times', 'stimFreeze_times')
 
     def _extract(self):
@@ -723,7 +724,8 @@ class TrialsTable(BaseBpodTrialsExtractor):
 
 class TrainingTrials(BaseBpodTrialsExtractor):
     save_names = ('_ibl_trials.repNum.npy', '_ibl_trials.goCueTrigger_times.npy', '_ibl_trials.stimOnTrigger_times.npy', None,
-                  None, None, None, '_ibl_trials.table.pqt', None, None, '_ibl_wheel.timestamps.npy', '_ibl_wheel.position.npy',
+                  '_ibl_trials.stimOffTrigger_times.npy', None, None, '_ibl_trials.table.pqt', '_ibl_trials.stimOff_times.npy',
+                  None, '_ibl_wheel.timestamps.npy', '_ibl_wheel.position.npy',
                   '_ibl_wheelMoves.intervals.npy', '_ibl_wheelMoves.peakAmplitude.npy', None, None, None, None, None, None)
     var_names = ('repNum', 'goCueTrigger_times', 'stimOnTrigger_times', 'itiIn_times', 'stimOffTrigger_times',
                  'stimFreezeTrigger_times', 'errorCueTrigger_times', 'table', 'stimOff_times', 'stimFreeze_times',

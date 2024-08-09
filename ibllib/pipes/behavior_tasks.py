@@ -67,7 +67,8 @@ class HabituationTrialsBpod(base_tasks.BehaviourTask):
                 ('*trials.rewardVolume.npy', self.output_collection, True),
                 ('*trials.stimOff_times.npy', self.output_collection, True),
                 ('*trials.stimOn_times.npy', self.output_collection, True),
-                ('*trials.stimOnTrigger_times.npy', self.output_collection, True),
+                ('*trials.stimOffTrigger_times.npy', self.output_collection, False),
+                ('*trials.stimOnTrigger_times.npy', self.output_collection, False),
             ]
         }
         return signature
@@ -285,6 +286,7 @@ class ChoiceWorldTrialsBpod(base_tasks.BehaviourTask):
                 ('_iblrig_encoderPositions.raw*', self.collection, True)],
             'output_files': [
                 ('*trials.goCueTrigger_times.npy', self.output_collection, True),
+                ('*trials.stimOffTrigger_times.npy', self.output_collection, False),
                 ('*trials.stimOnTrigger_times.npy', self.output_collection, False),
                 ('*trials.table.pqt', self.output_collection, True),
                 ('*wheel.position.npy', self.output_collection, True),
@@ -386,6 +388,8 @@ class ChoiceWorldTrialsNidq(ChoiceWorldTrialsBpod):
                 ('*trials.goCueTrigger_times.npy', self.output_collection, True),
                 ('*trials.intervals_bpod.npy', self.output_collection, False),
                 ('*trials.stimOff_times.npy', self.output_collection, False),
+                ('*trials.stimOffTrigger_times.npy', self.output_collection, False),
+                ('*trials.stimOnTrigger_times.npy', self.output_collection, False),
                 ('*trials.table.pqt', self.output_collection, True),
                 ('*wheel.position.npy', self.output_collection, True),
                 ('*wheel.timestamps.npy', self.output_collection, True),

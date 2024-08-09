@@ -275,7 +275,7 @@ def get_task_protocol(session_path, task_collection='raw_behavior_data'):
 
 def get_task_extractor_type(task_name):
     """
-    Returns the task type string from the full pybpod task name.
+    (DEPRECATED) Returns the task type string from the full pybpod task name.
 
     Parameters
     ----------
@@ -312,7 +312,7 @@ def get_task_extractor_type(task_name):
 
 def get_session_extractor_type(session_path, task_collection='raw_behavior_data'):
     """
-    Infer trials extractor type from task settings.
+    (DEPRECATED) Infer trials extractor type from task settings.
 
     From a session path, loads the settings file, finds the task and checks if extractors exist.
     Examples include 'biased', 'habituation', 'training', 'ephys', 'mock_ephys', and 'sync_ephys'.
@@ -344,7 +344,7 @@ def get_session_extractor_type(session_path, task_collection='raw_behavior_data'
 
 def get_pipeline(session_path, task_collection='raw_behavior_data'):
     """
-    Get the pre-processing pipeline name from a session path.
+    (DEPRECATED) Get the pre-processing pipeline name from a session path.
 
     Note this is only suitable for legacy sessions, i.e. those without an experiment description
     file. This function will be removed in the future.
@@ -367,7 +367,7 @@ def get_pipeline(session_path, task_collection='raw_behavior_data'):
 
 def _get_pipeline_from_task_type(stype):
     """
-    Return the pipeline from the task type.
+    (DEPRECATED) Return the pipeline from the task type.
 
     Some task types directly define the pipeline. Note this is only suitable for legacy sessions,
     i.e. those without an experiment description file. This function will be removed in the future.

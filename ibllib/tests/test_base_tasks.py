@@ -125,10 +125,10 @@ class TestBehaviourTask(unittest.TestCase):
         ]}
         task = ChoiceWorldTrialsBpod('')
         self.assertIsNone(task.get_protocol_number())
-        self.assertRaises(AssertionError, task.get_protocol_number, number='foo')
+        self.assertRaises(ValueError, task.get_protocol_number, number='foo')
         self.assertEqual(1, task.get_protocol_number(number=1))
         task.session_params = params
-        self.assertEqual(1, task.get_protocol_number())
+        self.assertRaises(AssertionError, task.get_protocol_number)
         for i, proc in enumerate(('fooChoiceWorld', 'barChoiceWorld')):
             self.assertEqual(i, task.get_protocol_number(task_protocol=proc))
 
