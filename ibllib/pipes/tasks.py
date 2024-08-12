@@ -91,7 +91,6 @@ from one.api import ONE
 from one.util import ensure_list
 from one import webclient
 import one.alf.io as alfio
-import one.alf.files as alfiles
 
 _logger = logging.getLogger(__name__)
 TASK_STATUS_SET = {'Waiting', 'Held', 'Started', 'Errored', 'Empty', 'Complete', 'Incomplete', 'Abandoned'}
