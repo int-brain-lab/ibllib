@@ -590,14 +590,5 @@ class TestDataHandlers(unittest.TestCase):
         self.assertDictEqual(expected, handler.processed)
 
 
-class TestStream(unittest.TestCase):
-    """Test for oneibl.stream module."""
-
-    def test_deprecation(self):
-        """Ensure oneibl.stream module removed."""
-        from datetime import datetime
-        self.assertTrue(datetime.today() < datetime(2024, 8, 1), 'remove oneibl.stream module')
-
-
 if __name__ == '__main__':
     unittest.main()

@@ -277,7 +277,9 @@ def _get_trials_tasks(session_path, acquisition_description=None, sync_tasks=Non
                 _logger.debug('%s (protocol #%i, task #%i) = %s.%s',
                               protocol, i, j, task.__module__, task.__name__)
                 # Rename the class to something more informative
-                task_name = f'Trials_{task.__name__}_{i:02}'
+                task_name = f'{task.__name__}_{i:02}'
+                if not (task.__name__.startswith('TrainingStatus') or task.__name__.endswith('RegisterRaw')):
+                    task_name = f'Trials_{task_name}'
                 # For now we assume that the second task in the list is always the trials extractor, which is dependent
                 # on the sync task and sync arguments
                 if j == 1:
@@ -413,6 +415,7 @@ def make_pipeline(session_path, **pkwargs):
 
     # Syncing tasks
     (sync, sync_args), = acquisition_description['sync'].items()
+    sync_args = sync_args.copy()  # ensure acquisition_description unchanged
     sync_label = _sync_label(sync, **sync_args)  # get the format of the DAQ data. This informs the extractor task
     sync_args['sync_collection'] = sync_args.pop('collection')  # rename the key so it matches task run arguments
     sync_args['sync_ext'] = sync_args.pop('extension', None)

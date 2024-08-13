@@ -295,6 +295,8 @@ class Task(abc.ABC):
         -------
         list of pathlib.Path
             A list of input files to register.
+
+        # TODO This method currently does not support wildcards
         """
         try:
             input_files = self.input_files
