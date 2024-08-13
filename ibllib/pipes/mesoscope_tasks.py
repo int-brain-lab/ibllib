@@ -110,7 +110,7 @@ class MesoscopeCompress(base_tasks.MesoscopeTask):
         _logger.setLevel(self._log_level or logging.INFO)
         return super().tearDown()
 
-    def _run(self, remove_uncompressed=False, verify_output=True, clobber=False, **kwargs):
+    def _run(self, remove_uncompressed=True, verify_output=True, clobber=False, **kwargs):
         """
         Run tar compression on all tif files in the device collection.
 
