@@ -318,7 +318,8 @@ class ChoiceWorldTrialsBpod(base_tasks.BehaviourTask):
         return output_files
 
     def extract_behaviour(self, **kwargs):
-        self.extractor = get_bpod_extractor(self.session_path, task_collection=self.collection)
+        if not self.extractor:
+            self.extractor = get_bpod_extractor(self.session_path, task_collection=self.collection)
         _logger.info('Bpod trials extractor: %s.%s',
                      self.extractor.__module__, self.extractor.__class__.__name__)
         self.extractor.default_path = self.output_collection
