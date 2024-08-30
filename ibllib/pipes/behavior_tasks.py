@@ -379,9 +379,9 @@ class ChoiceWorldTrialsNidq(ChoiceWorldTrialsBpod):
                 ('_iblrig_taskSettings.raw.*', self.collection, True),
                 ('_iblrig_encoderEvents.raw*', self.collection, True),
                 ('_iblrig_encoderPositions.raw*', self.collection, True),
-                (f'_{self.sync_namespace}_sync.channels.npy', self.sync_collection, True),
-                (f'_{self.sync_namespace}_sync.polarities.npy', self.sync_collection, True),
-                (f'_{self.sync_namespace}_sync.times.npy', self.sync_collection, True),
+                (f'_{self.sync_namespace}_sync.channels*.npy', f'{self.sync_collection}*', True),
+                (f'_{self.sync_namespace}_sync.polarities*.npy', f'{self.sync_collection}*', True),
+                (f'_{self.sync_namespace}_sync.times*.npy', f'{self.sync_collection}*', True),
                 ('*wiring.json', self.sync_collection, False),
                 ('*.meta', self.sync_collection, True)],
             'output_files': [

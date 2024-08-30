@@ -11,11 +11,14 @@ import shutil
 import os
 import abc
 from time import time
+from functools import partial
 
 from one.api import ONE
 from one.webclient import AlyxClient
 from one.util import filter_datasets, ensure_list
+from one.alf.io import iter_datasets
 from one.alf.files import add_uuid_string, session_path_parts
+from one.alf.cache import DATASETS_COLUMNS, _get_dataset_info
 from ibllib.oneibl.registration import register_dataset, get_lab, get_local_data_repository
 from ibllib.oneibl.patcher import FTPPatcher, SDSCPatcher, SDSC_ROOT_PATH, SDSC_PATCH_PATH
 
@@ -62,14 +65,11 @@ class DataHandler(abc.ABC):
 
     def getOutputFiles(self):
         assert self.session_path
-        from one.alf.io import iter_datasets
         # Next convert datasets to frame
-        from one.alf.cache import DATASETS_COLUMNS, _get_dataset_info
         # Create dataframe of all ALF datasets
         dsets = iter_datasets(self.session_path)
         records = [_get_dataset_info(self.session_path, dset, compute_hash=False) for dset in dsets]
         df = pd.DataFrame(records, columns=DATASETS_COLUMNS)
-        from functools import partial
         filt = partial(filter_datasets, df, wildcards=True, assert_unique=False)
         # Filter outputs
         dids = pd.concat(filt(filename=file[0], collection=file[1]).index for file in self.signature['output_files'])
