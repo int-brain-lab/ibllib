@@ -19,6 +19,7 @@ import uuid
 from pathlib import Path
 from itertools import chain
 from collections import defaultdict, Counter
+from dataclasses import dataclass
 from fnmatch import fnmatch
 import enum
 import re
@@ -34,6 +35,8 @@ import one.alf.io as alfio
 from one.alf.spec import is_valid, to_alf
 from one.alf.files import filename_parts, session_path_parts
 import one.alf.exceptions as alferr
+import suite2p
+import suite2p.io
 
 from ibllib.pipes import base_tasks
 from ibllib.io.extractors import mesoscope
@@ -42,6 +45,24 @@ from iblatlas.atlas import ALLEN_CCF_LANDMARKS_MLAPDV_UM, MRITorontoAtlas
 
 _logger = logging.getLogger(__name__)
 Provenance = enum.Enum('Provenance', ['ESTIMATE', 'FUNCTIONAL', 'LANDMARK', 'HISTOLOGY'])  # py3.11 make StrEnum
+
+
+@dataclass
+class Suite2pOps:
+    """Suite2p Options.
+
+    All suite2p options are found here: https://suite2p.readthedocs.io/en/latest/settings.html
+    """
+    save_path0: str
+    """Root suite2p output path (see also `save_folder`)."""
+    save_folder: str = 'suite2p'
+    """Subfolder within save path, in which to write binary data (see `save_path0`)."""
+    do_registration: bool = True
+    """Whether to generate mean image and perform motion registration. A value greater than 1 forces re-registration."""
+    force_sktiff: bool = False
+    """If True, uses tifffile.TiffFile to read tiff data, otherwise uses ScanImageTiffReader when installed."""
+    batch_size: int = 500
+    """The number of images to load per batch when ingesting imaging data."""
 
 
 class MesoscopeRegisterSnapshots(base_tasks.MesoscopeTask, base_tasks.RegisterRawDataTask):
@@ -110,7 +131,7 @@ class MesoscopeCompress(base_tasks.MesoscopeTask):
         _logger.setLevel(self._log_level or logging.INFO)
         return super().tearDown()
 
-    def _run(self, remove_uncompressed=True, verify_output=True, clobber=False, **kwargs):
+    def _run(self, remove_uncompressed=False, verify_output=True, clobber=False, **kwargs):
         """
         Run tar compression on all tif files in the device collection.
 
@@ -403,9 +424,9 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         return list(suite2p_dir.parent.rglob('FOV*/*'))
 
     @staticmethod
-    def _check_meta_data(meta_data_all: list) -> dict:
+    def _consolidate_metadata(meta_data_all: list) -> dict:
         """
-        Check that the meta data is consistent across all raw imaging folders.
+        Check that the metadata is consistent across all raw imaging folders.
 
         Parameters
         ----------
@@ -499,7 +520,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         key = match.groups()[0] if match else 'default'
         return TAU_MAP.get(key, TAU_MAP['default'])
 
-    def _create_db(self, meta):
+    def _meta2ops(self, meta):
         """
         Create the ops dictionary for suite2p based on metadata.
 
@@ -595,8 +616,6 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         list of pathlib.Path
             All files created by the task.
         """
-        import suite2p
-
         """ Metadata and parameters """
         # Load metadata and make sure all metadata is consistent across FOVs
         meta_files = sorted(self.session_path.glob(f'{self.device_collection}/*rawImagingData.meta.*'))
@@ -605,13 +624,13 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         assert len(meta_files) == len(list(self.session_path.glob(self.device_collection))) == len(collections)
         rawImagingData = [mesoscope.patch_imaging_meta(alfio.load_file_content(filepath)) for filepath in meta_files]
         if len(rawImagingData) > 1:
-            meta = self._check_meta_data(rawImagingData)
+            meta = self._consolidate_metadata(rawImagingData)
         else:
             meta = rawImagingData[0]
         # Get default ops
         ops = suite2p.default_ops()
         # Create db which overwrites ops when passed to suite2p, with information from meta data and hardcoded
-        db = self._create_db(meta)
+        db = self._meta2ops(meta)
         # Anything can be overwritten by keyword arguments passed to the tasks run() method
         for k, v in kwargs.items():
             if k in ops.keys() or k in db.keys():
@@ -667,6 +686,121 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         # Only return output file that are in the signature (for registration)
         out_files = [f for f in out_files if f.name in [f[0] for f in self.output_files]]
         return out_files
+
+
+class MesoscopePreprocessNew(MesoscopePreprocess):
+
+    def load_meta_files(self):
+        """Load the extracted imaging metadata files.
+
+        Loads and consolidates the imaging data metadata from rawImagingData.meta.json files.
+        These files contain ScanImage metadata extracted from the raw tiff headers by the
+        function `mesoscopeMetadataExtraction.m` in iblscripts/deploy/mesoscope.
+
+        Returns
+        -------
+        dict
+            Single, consolidated dictionary containing metadata.
+        """
+        # Load metadata and make sure all metadata is consistent across FOVs
+        meta_files = sorted(self.session_path.glob(f'{self.device_collection}/*rawImagingData.meta.*'))
+        collections = sorted(set(f.parts[-2] for f in meta_files))
+        # Check there is exactly 1 meta file per collection
+        assert len(meta_files) == len(list(self.session_path.glob(self.device_collection))) == len(collections)
+        raw_meta = map(alfio.load_file_content, meta_files)
+        meta = list(map(mesoscope.patch_imaging_meta, raw_meta))
+        return self._consolidate_metadata(meta) if len(meta) > 1 else meta[0]
+
+    def _run(self, rename_files=True, use_badframes=True, clobber=False, **kwargs):
+        # Load and consolidate the image metadata from JSON files
+        metadata = self.load_meta_files()
+
+        # Create suite2p output folder in raw imaging data folder
+        raw_image_collections = sorted(self.session_path.glob(f'{self.device_collection}'))
+        root_save_path = raw_image_collections[0]  # where suite2p should save the binary data
+        save_folder = 'suite2p'  # save to raw_imaging_data_00/suite2p
+        (save_path := root_save_path.joinpath(save_folder)).mkdir(exist_ok=True)
+
+        # Check for previous intermediate files (+ delete some)
+        plane_folders = self._get_plane_paths(save_path)
+        if len(plane_folders) == 0 or clobber:
+            # Ingest tiff files
+            plane_folders, _ = self.bin_per_plane(metadata, save_folder=save_folder, save_path0=root_save_path)
+
+        # TODO Check for registration
+        for plane in plane_folders:
+            ops = np.load(plane.joinpath('ops.npy'), allow_pickle=True).item()
+            (ops['do_registration'], ops['reg_file'], ops['meanImg'])
+        # ops_paths = [os.path.join(f, "ops.npy") for f in plane_folders]
+
+    @staticmethod
+    def _get_plane_paths(path):
+        """Return list of sorted suite2p plane folder paths.
+
+        Parameters
+        ----------
+        path : pathlib.Path
+            The path containing plane folders.
+
+        Returns
+        -------
+        list of pathlib.Path
+            The plane folder paths, ordered by number.
+        """
+        pattern = re.compile(r'(?<=^plane)\d+$')
+        return sorted(path.glob('plane?*'), key=lambda x: int(pattern.search(x.name).group()))
+
+    def bin_per_plane(self, metadata, **kwargs):
+        """
+        Extracts a binary data file of imaging data per imaging plane.
+
+        Parameters
+        ----------
+        metadata : dict
+            A dictionary of extracted metadata.
+        save_path0 : str, pathlib.Path
+            The root path of the suite2p bin output.
+        save_folder : str
+            The subfolder within `save_path0` to save the suite2p bin output.
+        kwargs
+            Other optional arguments to overwrite the defaults for.
+
+        Returns
+        -------
+        list of pathlib.Path
+            Ordered list of output plane folders containing binary data and ops.
+        dict
+            Suite2p's modified options.
+        """
+        options = ('nplanes', 'data_path', 'save_path0', 'save_folder', 'fast_disk', 'batch_size',
+                   'nchannels', 'keep_movie_raw', 'look_one_level_down', 'lines', 'dx', 'dy', 'force_sktiff',
+                   'do_registration')
+        ops = self._meta2ops(metadata)
+        ops['force_sktiff'] = False
+        ops['do_registration'] = True
+        ops = {k: v for k, v in ops.items() if k in options}
+        ops.update(kwargs)
+        ops['save_path0'] = str(ops['save_path0'])  # Path objs must be str for suite2p
+
+        ret = suite2p.io.mesoscan_to_binary(ops.copy())
+
+        # Get ordered list of plane folders
+        out_path = Path(ret['save_path0'], ret['save_folder'])
+        assert out_path.exists()
+        planes = self._get_plane_paths(out_path)
+        assert len(planes) == ret['nplanes']
+
+        return planes, ret
+
+    def image_motion_registration(self, ops):
+        ops['do_registration'] = True
+        ops['roidetect'] = False
+        _ = suite2p.run_plane(ops)
+
+    def roi_detection(self, ops):
+        ops['do_registration'] = False
+        ops['roidetect'] = True
+        _ = suite2p.run_plane(ops)
 
 
 class MesoscopeSync(base_tasks.MesoscopeTask):
