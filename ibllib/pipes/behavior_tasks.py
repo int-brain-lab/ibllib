@@ -8,7 +8,7 @@ from one.alf.files import session_path_parts
 from one.api import ONE
 
 from ibllib.oneibl.registration import get_lab
-from ibllib.oneibl.data_handlers import ServerDataHandler
+from ibllib.oneibl.data_handlers import ServerDataHandler, ExpectedDataset
 from ibllib.pipes import base_tasks
 from ibllib.io.raw_data_loaders import load_settings, load_bpod_fronts
 from ibllib.qc.task_extractors import TaskQCExtractor
@@ -373,17 +373,32 @@ class ChoiceWorldTrialsNidq(ChoiceWorldTrialsBpod):
 
     @property
     def signature(self):
+        I = ExpectedDataset.input
+        ns = self.sync_namespace
+        # Neuropixels 3A sync data are kept in individual probe collections
+        v3A = (
+            I(f'_{ns}_sync.channels.probe??.npy', f'{self.sync_collection}/probe??', True, unique=False) &
+            I(f'_{ns}_sync.polarities.probe??.npy', f'{self.sync_collection}/probe??', True, unique=False) &
+            I(f'_{ns}_sync.times.probe??.npy', f'{self.sync_collection}/probe??', True, unique=False) &
+            I(f'_{ns}_*.ap.meta', f'{self.sync_collection}/probe??', True, unique=False) &
+            I(f'_{ns}_*wiring.json', f'{self.sync_collection}/probe??', False, unique=False)
+        )
+        # Neuropixels 3B sync data are kept in probe-independent datasets
+        v3B = (
+            I(f'_{ns}_sync.channels.npy', self.sync_collection, True) &
+            I(f'_{ns}_sync.polarities.npy', self.sync_collection, True) &
+            I(f'_{ns}_sync.times.npy', self.sync_collection, True) &
+            I(f'_{ns}_*.meta', self.sync_collection, True) &
+            I(f'_{ns}_*wiring.json', self.sync_collection, False)
+        )
         signature = {
             'input_files': [
                 ('_iblrig_taskData.raw.*', self.collection, True),
                 ('_iblrig_taskSettings.raw.*', self.collection, True),
                 ('_iblrig_encoderEvents.raw*', self.collection, True),
                 ('_iblrig_encoderPositions.raw*', self.collection, True),
-                (f'_{self.sync_namespace}_sync.channels*.npy', f'{self.sync_collection}*', True),
-                (f'_{self.sync_namespace}_sync.polarities*.npy', f'{self.sync_collection}*', True),
-                (f'_{self.sync_namespace}_sync.times*.npy', f'{self.sync_collection}*', True),
-                ('*wiring.json', self.sync_collection, False),
-                ('*.meta', self.sync_collection, True)],
+                v3B ^ v3A  # either 3B datasets XOR 3A datasets must be present
+            ],
             'output_files': [
                 ('*trials.goCueTrigger_times.npy', self.output_collection, True),
                 ('*trials.intervals_bpod.npy', self.output_collection, False),

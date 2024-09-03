@@ -6,24 +6,387 @@ specific data handlers, see :func:`ibllib.pipes.tasks`.
 """
 import logging
 import pandas as pd
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import shutil
 import os
 import abc
 from time import time
-from functools import partial
+from copy import copy
 
 from one.api import ONE
 from one.webclient import AlyxClient
 from one.util import filter_datasets, ensure_list
-from one.alf.io import iter_datasets
 from one.alf.files import add_uuid_string, session_path_parts
-from one.alf.cache import DATASETS_COLUMNS, _get_dataset_info
+from one.alf.cache import _make_datasets_df
+from iblutil.util import flatten
+
 from ibllib.oneibl.registration import register_dataset, get_lab, get_local_data_repository
 from ibllib.oneibl.patcher import FTPPatcher, SDSCPatcher, SDSC_ROOT_PATH, SDSC_PATCH_PATH
 
 
 _logger = logging.getLogger(__name__)
+
+
+class ExpectedDataset:
+    """An expected input or output dataset."""
+    inverted = False
+
+    def __init__(self, name, collection, register=None, revision=None, unique=True):
+        """
+        An expected input or output dataset.
+
+        NB: This should not be instantiated directly, but rather via the `input` or `output`
+        static method.
+
+        Parameters
+        ----------
+        name : str, None
+            A dataset name or glob pattern.
+        collection : str, None
+            An ALF collection or pattern.
+        register : bool
+            Whether to register the output file. Default is False for input files, True for output
+            files.
+        revision : str
+            An optional revision.
+        unique : bool
+            Whether identifier pattern is expected to match a single dataset or several.
+        """
+        if not (collection is None or isinstance(collection, str)):
+            collection = '/'.join(collection)
+        self._identifiers = (collection, revision, name)
+        self.register = register
+        self.inverted = False
+        self.operator = None
+        self.name = None
+        self.unique = unique
+
+    @property
+    def identifiers(self):
+        """tuple: the identifying parts of the dataset.
+
+        If no operator is applied, the identifiers are (collection, revision, name).
+        If an operator is applied, the identifiers are two instances of an ExpectedDataset.
+        """
+        return self._identifiers if self.operator is None else tuple(x.identifiers for x in self._identifiers)
+
+    @property
+    def glob_pattern(self):
+        """str, tuple of str: one or more glob patterns."""
+        if self.operator is None:
+            return str(PurePosixPath(*filter(None, self._identifiers)))
+        else:
+            return tuple(flatten(x.glob_pattern for x in self._identifiers))
+
+    def __repr__(self):
+        """Represent the dataset object as a string.
+
+        If the `name` property is not None, it is returned, otherwise the identifies are used to
+        format the name.
+        """
+        name = self.__class__.__name__
+        if self.name:
+            return f'<{name}({self.name})>'
+        if self.operator:
+            sym = {'or': '|', 'and': '&', 'xor': '^'}
+            patterns = [d.__repr__() for d in self._identifiers]
+            pattern = f'{sym[self.operator]:^3}'.join(patterns)
+            if self.inverted:
+                pattern = f'~({pattern})'
+        else:
+            pattern = ('~' if self.inverted else '') + self.glob_pattern
+        return f'<{name}({pattern})>'
+
+
+    def find(self, session_path):
+        """Find files on disk.
+
+        Uses glob patterns to find dataset(s) on disk.
+
+        Parameters
+        ----------
+        session_path : pathlib.Path, str
+            A session path within which to glob for the dataset(s).
+
+        Returns
+        -------
+        bool
+            True if the dataset is found on disk or is optional.
+        list of pathlib.Path
+            A list of matching dataset files.
+        """
+        session_path = Path(session_path)
+        ok, actual_files = False, []
+        if self.operator is None:
+            actual_files = list(session_path.rglob(self.glob_pattern))
+            # If no revision pattern provided and no files found, search for any revision
+            if self._identifiers[1] is None and not any(actual_files):
+                glob_pattern = str(PurePosixPath(self._identifiers[0], '#*#', self._identifiers[2]))
+                actual_files = list(session_path.rglob(glob_pattern))
+            ok = any(actual_files) != self.inverted
+        elif self.operator == 'and':
+            assert len(self._identifiers) == 2
+            _ok, _actual_files = zip(*map(lambda x: x.find(session_path), self._identifiers))
+            ok = all(_ok)
+            actual_files = flatten(_actual_files)
+        elif self.operator == 'or':
+            assert len(self._identifiers) == 2
+            for d in self._identifiers:
+                ok, actual_files = d.find(session_path)
+                if ok:
+                    break
+        elif self.operator == 'xor':
+            assert len(self._identifiers) == 2
+            _ok, _actual_files = zip(*map(lambda x: x.find(session_path), self._identifiers))
+            ok = sum(_ok) == 1  # and sum(map(bool, map(len, _actual_files))) == 1
+            # Return only those datasets that are complete if OK
+            actual_files = _actual_files[_ok.index(True)] if ok else flatten(_actual_files)
+        elif not isinstance(self.operator, str):
+            raise TypeError(f'Unrecognized operator type "{type(self.operator)}"')
+        else:
+            raise NotImplementedError(f'logical {self.operator.upper()} not implemented')
+
+        return ok, actual_files
+
+    def filter(self, session_datasets, **kwargs):
+        """Filter dataset frame by expected datasets.
+
+        Parameters
+        ----------
+        session_datasets : pandas.DataFrame
+            An data frame of session datasets.
+        kwargs
+            Extra arguments for `one.util.filter_datasets`, namely revision_last_before, qc, and
+            ignore_qc_not_set.
+
+        Returns
+        -------
+        bool
+            True if the required dataset(s) are present in the data frame.
+        pandas.DataFrame
+            A filtered data frame of containing the expected dataset(s).
+        """
+        # ok, datasets = False, session_datasets.iloc[0:0]
+        if self.operator is None:
+            collection, revision, file = self._identifiers
+            if self._identifiers[1] is not None:
+                raise NotImplementedError('revisions not yet supported')
+            datasets = filter_datasets(session_datasets, file, collection, wildcards=True, assert_unique=self.unique, **kwargs)
+            ok = datasets.empty == self.inverted
+        elif self.operator == 'or':
+            assert len(self._identifiers) == 2
+            for d in self._identifiers:
+                ok, datasets = d.filter(session_datasets, **kwargs)
+                if ok:
+                    break
+        elif self.operator == 'xor':
+            assert len(self._identifiers) == 2
+            _ok, _datasets = zip(*map(lambda x: x.filter(session_datasets, **kwargs), self._identifiers))
+            ok = sum(_ok) == 1
+            if ok:
+                # Return only those datasets that are complete.
+                datasets = _datasets[_ok.index(True)]
+            else:
+                datasets = pd.concat(_datasets)
+        elif self.operator == 'and':
+            assert len(self._identifiers) == 2
+            _ok, _datasets = zip(*map(lambda x: x.filter(session_datasets, **kwargs), self._identifiers))
+            ok = all(_ok)
+            datasets = pd.concat(_datasets)
+        elif not isinstance(self.operator, str):
+            raise TypeError(f'Unrecognized operator type "{type(self.operator)}"')
+        else:
+            raise NotImplementedError(f'logical {self.operator.upper()} not implemented')
+        return ok, datasets
+
+    def _apply_op(self, op, other):
+        """Apply an operation between two datasets."""
+        # Assert both instances of Input or both instances of Output
+        if not isinstance(other, (self.__class__, tuple)):
+            raise TypeError(f'logical operations not supported between objects of type '
+                            f'{self.__class__.__name__} and {other.__class__.__name__}')
+        # Assert operation supported
+        if op not in {'or', 'xor', 'and'}:
+            raise ValueError(op)
+        # Convert tuple to ExpectDataset instance
+        if isinstance(other, tuple):
+            D = (self.input if isinstance(self, Input) else self.output)
+            other = D(*other)
+        # Returned instance should only be optional if both datasets are optional
+        is_input = isinstance(self, Input)
+        if all(isinstance(x, OptionalDataset) for x in (self, other)):
+            D = OptionalInput if is_input else OptionalOutput
+        else:
+            D = Input if is_input else Output
+        # Instantiate 'empty' object
+        d = D(None, None)
+        d._identifiers = (self, other)
+        d.operator = op
+        return d
+
+    def __invert__(self):
+        """Assert dataset doesn't exist on disk."""
+        obj = copy(self)
+        obj.inverted = not self.inverted
+        return obj
+
+    def __or__(self, b):
+        """Assert either dataset exists or another does, or both exist."""
+        return self._apply_op('or', b)
+
+    def __xor__(self, b):
+        """Assert either dataset exists or another does, not both."""
+        return self._apply_op('xor', b)
+
+    def __and__(self, b):
+        """Assert that a second dataset exists together with the first."""
+        return self._apply_op('and', b)
+
+    @staticmethod
+    def input(name, collection, required=True, register=False, **kwargs):
+        """
+        Create an expected input dataset.
+
+        By default, expected input datasets are not automatically registered.
+
+        Parameters
+        ----------
+        name : str
+            A dataset name or glob pattern.
+        collection : str, None
+            An ALF collection or pattern.
+        required : bool
+            Whether file must always be present, or is an optional dataset. Default is True.
+        register : bool
+            Whether to register the output file. Default is False for input files, True for output
+            files.
+        revision : str
+            An optional revision.
+        unique : bool
+            Whether identifier pattern is expected to match a single dataset or several.
+
+        Returns
+        -------
+        Input, OptionalInput
+            An instance of an Input dataset if required is true, otherwise an OptionalInput.
+        """
+        Class = Input if required else OptionalInput
+        obj = Class(name, collection, register=register, **kwargs)
+        return obj
+
+    @staticmethod
+    def output(name, collection, required=True, register=True, **kwargs):
+        """
+        Create an expected output dataset.
+
+        By default, expected output datasets are automatically registered.
+
+        Parameters
+        ----------
+        name : str
+            A dataset name or glob pattern.
+        collection : str, None
+            An ALF collection or pattern.
+        required : bool
+            Whether file must always be present, or is an optional dataset. Default is True.
+        register : bool
+            Whether to register the output file. Default is False for input files, True for output
+            files.
+        revision : str
+            An optional revision.
+        unique : bool
+            Whether identifier pattern is expected to match a single dataset or several.
+
+        Returns
+        -------
+        Output, OptionalOutput
+            An instance of an Output dataset if required is true, otherwise an OptionalOutput.
+        """
+        Class = Output if required else OptionalOutput
+        obj = Class(name, collection, register=register, **kwargs)
+        return obj
+
+
+class OptionalDataset(ExpectedDataset):
+    """An expected dataset that is not strictly required."""
+
+    def find(self, session_path):
+        """Find files on disk.
+
+        Uses glob patterns to find dataset(s) on disk.
+
+        Parameters
+        ----------
+        session_path : pathlib.Path, str
+            A session path within which to glob for the dataset(s).
+
+        Returns
+        -------
+        True
+            Always True as dataset is optional.
+        list of pathlib.Path
+            A list of matching dataset files.
+        """
+        ok, actual_files = super().find(session_path)
+        return True, actual_files
+
+    def filter(self, session_datasets, **kwargs):
+        """Filter dataset frame by expected datasets.
+
+        Parameters
+        ----------
+        session_datasets : pandas.DataFrame
+            An data frame of session datasets.
+        kwargs
+            Extra arguments for `one.util.filter_datasets`, namely revision_last_before, qc,
+            ignore_qc_not_set, and assert_unique.
+
+        Returns
+        -------
+        True
+            Always True as dataset is optional.
+        pandas.DataFrame
+            A filtered data frame of containing the expected dataset(s).
+        """
+        ok, datasets = super().filter(session_datasets, **kwargs)
+        return True, datasets
+
+class Input(ExpectedDataset):
+    """An expected input dataset."""
+    pass
+
+class OptionalInput(Input, OptionalDataset):
+    """An optional expected input dataset."""
+    pass
+
+class Output(ExpectedDataset):
+    """An expected output dataset."""
+    pass
+
+class OptionalOutput(Output, OptionalDataset):
+    """An optional expected output dataset."""
+    pass
+
+
+def _parse_signature(signature):
+    """
+    Ensure all a signature's expected datasets are instances of ExpectedDataset.
+
+    Parameters
+    ----------
+    signature : Dict[str, list]
+        A dict with keys {'input_files', 'output_files'} containing lists of tuples and/or
+        ExpectedDataset instances.
+
+    Returns
+    -------
+    Dict[str, list of ExpectedDataset]
+        A dict containing all tuples converted to ExpectedDataset instances.
+    """
+    I, O = ExpectedDataset.input, ExpectedDataset.output
+    inputs = [i if isinstance(i, ExpectedDataset) else I(*i) for i in signature['input_files']]
+    outputs = [o if isinstance(o, ExpectedDataset) else O(*o) for o in signature['output_files']]
+    return {'input_files': inputs, 'output_files': outputs}
 
 
 class DataHandler(abc.ABC):
@@ -35,7 +398,7 @@ class DataHandler(abc.ABC):
         :param one: ONE instance
         """
         self.session_path = session_path
-        self.signature = signature
+        self.signature = _parse_signature(signature)
         self.one = one
         self.processed = {}  # Map of filepaths and their processed records (e.g. upload receipts or Alyx records)
 
@@ -50,10 +413,7 @@ class DataHandler(abc.ABC):
 
         one = one or self.one
         session_datasets = one.list_datasets(one.path2eid(self.session_path), details=True)
-        dfs = []
-        for file in self.signature['input_files']:
-            dfs.append(filter_datasets(session_datasets, filename=file[0], collection=file[1],
-                       wildcards=True, assert_unique=False))
+        dfs = [file.filter(session_datasets)[1] for file in self.signature['input_files']]
         if len(dfs) == 0:
             return pd.DataFrame()
         df = pd.concat(dfs)
@@ -64,17 +424,23 @@ class DataHandler(abc.ABC):
         return df
 
     def getOutputFiles(self):
+        """
+        Return a data frame of output datasets found on disk.
+
+        Returns
+        -------
+        pandas.DataFrame
+            A dataset data frame of datasets on disk that were specified in signature['output_files'].
+        """
         assert self.session_path
         # Next convert datasets to frame
         # Create dataframe of all ALF datasets
-        dsets = iter_datasets(self.session_path)
-        records = [_get_dataset_info(self.session_path, dset, compute_hash=False) for dset in dsets]
-        df = pd.DataFrame(records, columns=DATASETS_COLUMNS)
-        filt = partial(filter_datasets, df, wildcards=True, assert_unique=False)
+        df = _make_datasets_df(self.session_path, hash_files=False).set_index(['eid', 'id'])
         # Filter outputs
-        dids = pd.concat(filt(filename=file[0], collection=file[1]).index for file in self.signature['output_files'])
-        present = df.loc[dids, :].copy()
-        return present
+        if len(self.signature['output_files']) == 0:
+            return pd.DataFrame()
+        present = [file.filter(df)[1] for file in self.signature['output_files']]
+        return pd.concat(present).droplevel('eid')
 
     def uploadData(self, outputs, version):
         """

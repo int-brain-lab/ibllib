@@ -590,5 +590,127 @@ class TestDataHandlers(unittest.TestCase):
         self.assertDictEqual(expected, handler.processed)
 
 
+class TestExpectedDataset(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.tmp = Path(tmp.name)
+        self.session_path = self.tmp / 'subject' / '2020-01-01' / '001'
+        self.session_path.mkdir(parents=True)
+        self.img_path = self.session_path / 'raw_imaging_data_00'
+        self.img_path.mkdir()
+        for i in range(5):
+            self.img_path.joinpath(f'foo_{i:05}.tif').touch()
+        self.img_path.joinpath('imaging.frames.tar.bz2').touch()
+
+    def test_or(self):
+        I = handlers.ExpectedDataset.input
+        sig = I('*.tif', 'raw_imaging_data_[0-9]*') | I('imaging.frames.tar.bz2', 'raw_imaging_data_[0-9]*')
+        self.assertEqual('or', sig.operator)
+        ok, files = sig.find(self.session_path)
+        self.assertTrue(ok)
+        self.assertTrue(len(files) == 5)
+        self.assertEqual({'.tif'}, set(x.suffix for x in files))
+        for f in files:
+            f.unlink()
+        ok, files = sig.find(self.session_path)
+        self.assertTrue(ok)
+        self.assertTrue(len(files) == 1)
+        self.assertEqual('imaging.frames.tar.bz2', files[0].name)
+        files[0].unlink()
+        ok, files = sig.find(self.session_path)
+        self.assertFalse(ok)
+        self.assertEqual([], files)
+
+    def test_xor(self):
+        I = handlers.ExpectedDataset.input
+        sig = I('*.tif', 'raw_imaging_data_[0-9]*') ^ I('imaging.frames.tar.bz2', 'raw_imaging_data_[0-9]*')
+        self.assertEqual('xor', sig.operator)
+        ok, files = sig.find(self.session_path)
+        self.assertFalse(ok)
+        self.assertTrue(len(files) == 6)
+        self.assertEqual({'.tif', '.bz2'}, set(x.suffix for x in files))
+        for f in filter(lambda x: x.suffix == '.tif', files):
+            f.unlink()
+        ok, files = sig.find(self.session_path)
+        self.assertTrue(ok)
+        self.assertTrue(len(files) == 1)
+        self.assertEqual('imaging.frames.tar.bz2', files[0].name)
+        files[0].unlink()
+        ok, files = sig.find(self.session_path)
+        self.assertFalse(ok)
+        self.assertEqual([], files)
+
+    def test_filter(self):
+        """Test for ExpectedDataset.filter method.
+
+        This test can be extended to support AND operators e.g. (dset1 AND dset2) OR (dset2 AND dset3).
+        """
+        import pandas as pd
+        from uuid import uuid4
+        from one.util import QC_TYPE
+        I = handlers.ExpectedDataset.input
+        # Optional datasets 1
+        column_names = ['session_path', 'id', 'rel_path', 'file_size', 'hash', 'exists']
+        session_path = '/'.join(self.session_path.parts[-3:])
+        dsets = [
+            [session_path, uuid4(), f'raw_ephys_data/_spikeglx_sync.{attr}.npy', 1024, None, True]
+            for attr in ('channels', 'polarities', 'times')
+        ]
+        qc = pd.Categorical.from_codes(np.zeros(len(dsets), dtype=int), dtype=QC_TYPE)
+        df1 = pd.DataFrame(dsets, columns=column_names).set_index('id').sort_index().assign(qc=qc)
+        # Optional datasets 2
+        dsets = [
+            [session_path, uuid4(), f'raw_ephys_data/probe{p:02}/_spikeglx_sync.{attr}.probe{p:02}.npy', 1024, None, True]
+            for attr in ('channels', 'polarities', 'times') for p in range(2)
+        ]
+        qc = pd.Categorical.from_codes(np.zeros(len(dsets), dtype=int), dtype=QC_TYPE)
+        df2 = pd.DataFrame(dsets, columns=column_names).set_index('id').sort_index().assign(qc=qc)
+
+        # Test simple input (no op)
+        d = I('_*_sync.channels.npy', 'raw_ephys_data', True)
+        ok, filtered_df = d.filter(df1)
+        self.assertTrue(ok)
+        expected = df1.index[df1['rel_path'] == 'raw_ephys_data/_spikeglx_sync.channels.npy']
+        self.assertCountEqual(expected, filtered_df.index)
+
+        # Test inverted (assert absence)
+        d.inverted = True
+        ok, filtered_df = d.filter(df1)
+        self.assertFalse(ok)
+        expected = df1.index[df1['rel_path'] == 'raw_ephys_data/_spikeglx_sync.channels.npy']
+        self.assertCountEqual(expected, filtered_df.index)
+        ok, filtered_df = d.filter(df2)
+        self.assertTrue(ok)
+
+        # Test OR
+        d = (I('_spikeglx_sync.channels.npy', 'raw_ephys_data', True) |
+             I('_spikeglx_sync.channels.probe??.npy', 'raw_ephys_data/probe??', True))
+        merged = pd.concat([df1, df2])
+        ok, filtered_df = d.filter(merged)
+        self.assertTrue(ok)
+        self.assertCountEqual(expected, filtered_df.index)
+        ok, filtered_df = d.filter(df2, assert_unique=False)
+        self.assertTrue(ok)
+        expected = df2.index[df2['rel_path'].str.contains('channels')]
+        self.assertCountEqual(expected, filtered_df.index)
+
+        # Test XOR
+        d = (I('_spikeglx_sync.channels.npy', 'raw_ephys_data', True) ^
+             I('_spikeglx_sync.channels.probe??.npy', 'raw_ephys_data/probe??', True))
+        ok, filtered_df = d.filter(merged, assert_unique=False)
+        self.assertFalse(ok)
+        expected = merged.index[merged['rel_path'].str.contains('channels')]
+        self.assertCountEqual(expected, filtered_df.index)
+        ok, filtered_df = d.filter(df1)
+        self.assertTrue(ok)
+        expected = df1.index[df1['rel_path'] == 'raw_ephys_data/_spikeglx_sync.channels.npy']
+        self.assertCountEqual(expected, filtered_df.index)
+        ok, filtered_df = d.filter(df2, assert_unique=False)
+        self.assertTrue(ok)
+        expected = df2.index[df2['rel_path'].str.contains('channels')]
+        self.assertCountEqual(expected, filtered_df.index)
+
+
 if __name__ == '__main__':
     unittest.main()
