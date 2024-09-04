@@ -75,7 +75,7 @@ import logging
 import io
 import importlib
 import time
-from _collections import OrderedDict
+from collections import OrderedDict
 import traceback
 import json
 
@@ -298,24 +298,25 @@ class Task(abc.ABC):
 
         # TODO This method currently does not support wildcards
         """
+        I = data_handlers.ExpectedDataset.input
         try:
-            input_files = self.input_files
+            # Ensure all input files are ExpectedDataset instances
+            input_files = [I(*i) if isinstance(i, tuple) else i for i in self.input_files or []]
         except AttributeError:
             raise RuntimeError('Task.setUp must be run before calling this method.')
-        to_register, missing = [], []
-        for filename, collection, required, _ in filter(lambda f: len(f) > 3 and f[3], input_files):
-            filepath = self.session_path.joinpath(collection, filename)
-            if filepath.exists():
-                to_register.append(filepath)
-            elif required:
-                missing.append(filepath)
-        if any(missing):
-            missing_str = ', '.join(map(lambda x: x.relative_to(self.session_path).as_posix(), missing))
+        to_register, missing = [], set()
+        for dataset in input_files:
+            ok, filepaths, _missing = dataset.find_files(self.session_path, register=True)
+            to_register.extend(filepaths)
+            if not ok and _missing is not None:
+                missing.update(_missing) if isinstance(_missing, set) else missing.add(_missing)
+        if any(missing):  # NB: These are either glob patterns that have no matches or match files that should be absent
+            missing_str = ', '.join(missing)
             if assert_all_exist:
                 raise AssertionError(f'Missing required input files: {missing_str}')
             else:
                 _logger.error(f'Missing required input files: {missing_str}')
-        return list(set(to_register) - set(missing))
+        return to_register
 
     def register_images(self, **kwargs):
         """
