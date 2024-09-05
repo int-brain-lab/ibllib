@@ -36,6 +36,7 @@ from one.alf.files import filename_parts, session_path_parts
 import one.alf.exceptions as alferr
 
 from ibllib.pipes import base_tasks
+from ibllib.oneibl.data_handlers import ExpectedDataset, dataset_from_name
 from ibllib.io.extractors import mesoscope
 from iblatlas.atlas import ALLEN_CCF_LANDMARKS_MLAPDV_UM, MRITorontoAtlas
 
@@ -203,9 +204,11 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
     @property
     def signature(self):
         # The number of in and outputs will be dependent on the number of input raw imaging folders and output FOVs
+        I = ExpectedDataset.input
         signature = {
             'input_files': [('_ibl_rawImagingData.meta.json', self.device_collection, True),
-                            ('*.tif', self.device_collection, True),
+                            I('*.tif', self.device_collection, True) |
+                            I('imaging.frames.tar.bz2', 'raw_imaging_data_[0-9]*', True, unique=False),
                             ('exptQC.mat', self.device_collection, False)],
             'output_files': [('mpci.ROIActivityF.npy', 'alf/FOV*', True),
                              ('mpci.ROINeuropilActivityF.npy', 'alf/FOV*', True),
@@ -575,9 +578,9 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
 
         """ Bad frames """
         # exptQC.mat contains experimenter QC values that may not affect ROI detection (e.g. noises, pauses)
-        qc_paths = (self.session_path.joinpath(f[1], 'exptQC.mat')
-                    for f in self.input_files if f[0] == 'exptQC.mat')
-        qc_paths = sorted(map(str, filter(Path.exists, qc_paths)))
+        qc_datasets = dataset_from_name('exptQC.mat', self.input_files)
+        qc_paths = [next(self.session_path.glob(d.glob_pattern), None) for d in qc_datasets]
+        qc_paths = sorted(map(str, filter(None, qc_paths)))
         exptQC = [loadmat(p, squeeze_me=True, simplify_cells=True) for p in qc_paths]
         if len(exptQC) > 0:
             frameQC, frameQC_names, _ = self._consolidate_exptQC(exptQC)

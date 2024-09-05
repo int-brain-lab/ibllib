@@ -486,9 +486,9 @@ class Task(abc.ABC):
         everything_is_fine = True
         files = []
         for expected_file in expected_files:
-            ok, actual_files = expected_file.find(self.session_path)
+            ok, actual_files, missing = expected_file.find_files(self.session_path)
             if not ok and not silent:
-                _logger.error(f'Signature file expected {expected_file} not found')
+                _logger.error('Signature file expected %s not found', ', '.join(missing))
             elif len(actual_files) != 0:
                 files.append(actual_files[0])
             everything_is_fine &= ok

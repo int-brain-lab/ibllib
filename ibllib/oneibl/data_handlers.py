@@ -447,6 +447,70 @@ def _parse_signature(signature):
     return {'input_files': inputs, 'output_files': outputs}
 
 
+def dataset_from_name(name, datasets):
+    """
+    From a list of ExpectedDataset instances, return those that match a given name.
+
+    Parameters
+    ----------
+    name : str
+        The name of the dataset.
+    datasets : list of ExpectedDataset
+        A list of ExpectedDataset instances.
+
+    Returns
+    -------
+    list of ExpectedDataset
+        The ExpectedDataset instances that match the given name.
+
+    TODO Add tests
+    """
+    matches = []
+    for dataset in datasets:
+        if dataset.operator is None:
+            if dataset._identifiers[2] == name:
+                matches.append(dataset)
+        else:
+            matches.extend(dataset_from_name(name, dataset._identifiers))
+    return matches
+
+
+def update_collections(dataset, new_collection):
+    """
+    Update the collection of a dataset.
+
+    This updates all nested ExpectedDataset instances with the new collection and returns copies.
+
+    Parameters
+    ----------
+    dataset : ExpectedDataset
+        The dataset to update.
+    new_collection : str, list of str
+        The new collection or collections.
+
+    Returns
+    -------
+    ExpectedDataset
+        A copy of the dataset with the updated collection(s).
+
+    TODO Add tests
+    """
+    after = ensure_list(new_collection)
+    D = ExpectedDataset.input if isinstance(dataset, Input) else ExpectedDataset.output
+    if dataset.operator is None:
+        collection, revsion, name = dataset.identifiers
+        unique = not set(name).intersection('*[?')
+        register = dataset.register
+        updated = D(name, after[0], not isinstance(dataset, OptionalDataset), register, unique=unique)
+        if len(after) > 1:
+            for folder in after:
+                updated &= D(name, folder, not isinstance(dataset, OptionalDataset), register, unique=unique)
+    else:
+        updated = copy(dataset)
+        updated._identifiers = [update_collections(dd, new_collection) for dd in updated._identifiers]
+    return updated
+
+
 class DataHandler(abc.ABC):
     def __init__(self, session_path, signature, one=None):
         """
