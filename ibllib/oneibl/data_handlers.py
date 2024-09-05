@@ -50,16 +50,29 @@ class ExpectedDataset:
         revision : str
             An optional revision.
         unique : bool
-            Whether identifier pattern is expected to match a single dataset or several.
+            Whether identifier pattern is expected to match a single dataset or several.  NB: This currently does not
+            affect the output of `find_files`.
         """
         if not (collection is None or isinstance(collection, str)):
             collection = '/'.join(collection)
         self._identifiers = (collection, revision, name)
-        self.register = register
-        self.inverted = False
         self.operator = None
+        self._register = register or False
+        self.inverted = False
         self.name = None
         self.unique = unique
+
+    @property
+    def register(self):
+        """bool: whether to register the output file."""
+        return self._register
+
+    @register.setter
+    def register(self, value):
+        """bool: whether to register the output file."""
+        if self.operator is not None:
+            raise AttributeError('cannot set register attribute for operator datasets')
+        self._register = value
 
     @property
     def identifiers(self):
@@ -97,8 +110,7 @@ class ExpectedDataset:
             pattern = ('~' if self.inverted else '') + self.glob_pattern
         return f'<{name}({pattern})>'
 
-
-    def find(self, session_path):
+    def find_files(self, session_path, register=False):
         """Find files on disk.
 
         Uses glob patterns to find dataset(s) on disk.
@@ -107,6 +119,8 @@ class ExpectedDataset:
         ----------
         session_path : pathlib.Path, str
             A session path within which to glob for the dataset(s).
+        register : bool
+            Only return files intended to be registered.
 
         Returns
         -------
@@ -114,39 +128,65 @@ class ExpectedDataset:
             True if the dataset is found on disk or is optional.
         list of pathlib.Path
             A list of matching dataset files.
+        missing, None, str, set of str
+            One or more glob patterns that either didn't yield files (or did in the case of inverted datasets).
+
+        Notes
+        -----
+        - Currently if `unique` is true and multiple files are found, all files are returned without an exception raised
+          although this may change in the future.
+        - If `register` is false, all files are returned regardless of whether they are intended to be registered.
+        - If `inverted` is true, and files are found, the glob pattern is returned as missing.
+        - If XOR, returns all patterns if all are present when only one should be, otherwise returns all missing
+          patterns.
+        - Missing (or unexpectedly found) patterns are returned despite the dataset being optional.
         """
         session_path = Path(session_path)
-        ok, actual_files = False, []
+        ok, actual_files, missing = False, [], None
         if self.operator is None:
+            if register and not self.register:
+                return True, actual_files, missing
             actual_files = list(session_path.rglob(self.glob_pattern))
             # If no revision pattern provided and no files found, search for any revision
             if self._identifiers[1] is None and not any(actual_files):
                 glob_pattern = str(PurePosixPath(self._identifiers[0], '#*#', self._identifiers[2]))
                 actual_files = list(session_path.rglob(glob_pattern))
             ok = any(actual_files) != self.inverted
+            if not ok:
+                missing = self.glob_pattern
         elif self.operator == 'and':
             assert len(self._identifiers) == 2
-            _ok, _actual_files = zip(*map(lambda x: x.find(session_path), self._identifiers))
+            _ok, _actual_files, _missing = zip(*map(lambda x: x.find_files(session_path), self._identifiers))
             ok = all(_ok)
             actual_files = flatten(_actual_files)
+            missing = set(filter(None, flatten(_missing)))
         elif self.operator == 'or':
             assert len(self._identifiers) == 2
+            missing = set()
             for d in self._identifiers:
-                ok, actual_files = d.find(session_path)
+                ok, actual_files, _missing = d.find_files(session_path)
                 if ok:
                     break
+                if missing is not None:
+                    missing.update(_missing) if isinstance(_missing, set) else missing.add(_missing)
         elif self.operator == 'xor':
             assert len(self._identifiers) == 2
-            _ok, _actual_files = zip(*map(lambda x: x.find(session_path), self._identifiers))
+            _ok, _actual_files, _missing = zip(*map(lambda x: x.find_files(session_path), self._identifiers))
             ok = sum(_ok) == 1  # and sum(map(bool, map(len, _actual_files))) == 1
             # Return only those datasets that are complete if OK
             actual_files = _actual_files[_ok.index(True)] if ok else flatten(_actual_files)
+            if ok:
+                missing = set()
+            elif all(_ok):  # return all patterns if all present when only one should be, otherwise return all missing
+                missing = set(flatten(self.glob_pattern))
+            elif not any(_ok):  # return all missing glob patterns if none present
+                missing = set(filter(None, flatten(_missing)))
         elif not isinstance(self.operator, str):
             raise TypeError(f'Unrecognized operator type "{type(self.operator)}"')
         else:
             raise NotImplementedError(f'logical {self.operator.upper()} not implemented')
 
-        return ok, actual_files
+        return ok, actual_files, missing
 
     def filter(self, session_datasets, **kwargs):
         """Filter dataset frame by expected datasets.
@@ -310,7 +350,7 @@ class ExpectedDataset:
 class OptionalDataset(ExpectedDataset):
     """An expected dataset that is not strictly required."""
 
-    def find(self, session_path):
+    def find_files(self, session_path, register=False):
         """Find files on disk.
 
         Uses glob patterns to find dataset(s) on disk.
@@ -319,6 +359,8 @@ class OptionalDataset(ExpectedDataset):
         ----------
         session_path : pathlib.Path, str
             A session path within which to glob for the dataset(s).
+        register : bool
+            Only return files intended to be registered.
 
         Returns
         -------
@@ -326,9 +368,21 @@ class OptionalDataset(ExpectedDataset):
             Always True as dataset is optional.
         list of pathlib.Path
             A list of matching dataset files.
+        missing, None, str, set of str
+            One or more glob patterns that either didn't yield files (or did in the case of inverted datasets).
+
+        Notes
+        -----
+        - Currently if `unique` is true and multiple files are found, all files are returned without an exception raised
+          although this may change in the future.
+        - If `register` is false, all files are returned regardless of whether they are intended to be registered.
+        - If `inverted` is true, and files are found, the glob pattern is returned as missing.
+        - If XOR, returns all patterns if all are present when only one should be, otherwise returns all missing
+          patterns.
+        - Missing (or unexpectedly found) patterns are returned despite the dataset being optional.
         """
-        ok, actual_files = super().find(session_path)
-        return True, actual_files
+        ok, actual_files, missing = super().find_files(session_path, register=register)
+        return True, actual_files, missing
 
     def filter(self, session_datasets, **kwargs):
         """Filter dataset frame by expected datasets.
@@ -351,17 +405,21 @@ class OptionalDataset(ExpectedDataset):
         ok, datasets = super().filter(session_datasets, **kwargs)
         return True, datasets
 
+
 class Input(ExpectedDataset):
     """An expected input dataset."""
     pass
+
 
 class OptionalInput(Input, OptionalDataset):
     """An optional expected input dataset."""
     pass
 
+
 class Output(ExpectedDataset):
     """An expected output dataset."""
     pass
+
 
 class OptionalOutput(Output, OptionalDataset):
     """An optional expected output dataset."""
@@ -387,6 +445,70 @@ def _parse_signature(signature):
     inputs = [i if isinstance(i, ExpectedDataset) else I(*i) for i in signature['input_files']]
     outputs = [o if isinstance(o, ExpectedDataset) else O(*o) for o in signature['output_files']]
     return {'input_files': inputs, 'output_files': outputs}
+
+
+def dataset_from_name(name, datasets):
+    """
+    From a list of ExpectedDataset instances, return those that match a given name.
+
+    Parameters
+    ----------
+    name : str
+        The name of the dataset.
+    datasets : list of ExpectedDataset
+        A list of ExpectedDataset instances.
+
+    Returns
+    -------
+    list of ExpectedDataset
+        The ExpectedDataset instances that match the given name.
+
+    TODO Add tests
+    """
+    matches = []
+    for dataset in datasets:
+        if dataset.operator is None:
+            if dataset._identifiers[2] == name:
+                matches.append(dataset)
+        else:
+            matches.extend(dataset_from_name(name, dataset._identifiers))
+    return matches
+
+
+def update_collections(dataset, new_collection):
+    """
+    Update the collection of a dataset.
+
+    This updates all nested ExpectedDataset instances with the new collection and returns copies.
+
+    Parameters
+    ----------
+    dataset : ExpectedDataset
+        The dataset to update.
+    new_collection : str, list of str
+        The new collection or collections.
+
+    Returns
+    -------
+    ExpectedDataset
+        A copy of the dataset with the updated collection(s).
+
+    TODO Add tests
+    """
+    after = ensure_list(new_collection)
+    D = ExpectedDataset.input if isinstance(dataset, Input) else ExpectedDataset.output
+    if dataset.operator is None:
+        collection, revsion, name = dataset.identifiers
+        unique = not set(name).intersection('*[?')
+        register = dataset.register
+        updated = D(name, after[0], not isinstance(dataset, OptionalDataset), register, unique=unique)
+        if len(after) > 1:
+            for folder in after:
+                updated &= D(name, folder, not isinstance(dataset, OptionalDataset), register, unique=unique)
+    else:
+        updated = copy(dataset)
+        updated._identifiers = [update_collections(dd, new_collection) for dd in updated._identifiers]
+    return updated
 
 
 class DataHandler(abc.ABC):

@@ -8,13 +8,16 @@ import random
 import string
 import uuid
 from itertools import chain
+from uuid import uuid4
 
 from requests import HTTPError
 import numpy as np
+import pandas as pd
 
 from one.api import ONE
 from one.webclient import AlyxClient
 import one.alf.exceptions as alferr
+from one.util import QC_TYPE
 import iblutil.io.params as iopar
 
 from ibllib.oneibl import patcher, registration, data_handlers as handlers
@@ -574,52 +577,80 @@ class TestExpectedDataset(unittest.TestCase):
             self.img_path.joinpath(f'foo_{i:05}.tif').touch()
         self.img_path.joinpath('imaging.frames.tar.bz2').touch()
 
+    def test_and(self):
+        I = handlers.ExpectedDataset.input
+        sig = I('*.tif', 'raw_imaging_data_[0-9]*') & I('imaging.frames.tar.bz2', 'raw_imaging_data_[0-9]*')
+        self.assertEqual('and', sig.operator)
+        ok, files, missing = sig.find_files(self.session_path)
+        self.assertTrue(ok)
+        self.assertEqual(6, len(files))
+        self.assertEqual('foo_00000.tif', files[0].name)
+        self.assertEqual('imaging.frames.tar.bz2', files[-1].name)
+        self.assertEqual(set(), missing)
+        # Deleting one tif file shouldn't affect the signature
+        files[0].unlink()
+        ok, files, missing = sig.find_files(self.session_path)
+        self.assertTrue(ok)
+        self.assertTrue(len(files))
+        self.assertEqual('foo_00001.tif', files[0].name)
+        self.assertEqual(set(), missing)
+        # Deleting the tar file should make the signature fail
+        files[-1].unlink()
+        ok, files, missing = sig.find_files(self.session_path)
+        self.assertFalse(ok)
+        self.assertNotEqual('imaging.frames.tar.bz2', files[-1].name)
+        self.assertEqual({'raw_imaging_data_[0-9]*/imaging.frames.tar.bz2'}, missing)
+
     def test_or(self):
         I = handlers.ExpectedDataset.input
         sig = I('*.tif', 'raw_imaging_data_[0-9]*') | I('imaging.frames.tar.bz2', 'raw_imaging_data_[0-9]*')
         self.assertEqual('or', sig.operator)
-        ok, files = sig.find(self.session_path)
+        ok, files, missing = sig.find_files(self.session_path)
         self.assertTrue(ok)
-        self.assertTrue(len(files) == 5)
+        self.assertEqual(5, len(files))
         self.assertEqual({'.tif'}, set(x.suffix for x in files))
+        self.assertEqual(set(), missing)
         for f in files:
             f.unlink()
-        ok, files = sig.find(self.session_path)
+        ok, files, missing = sig.find_files(self.session_path)
         self.assertTrue(ok)
-        self.assertTrue(len(files) == 1)
+        self.assertEqual(1, len(files))
         self.assertEqual('imaging.frames.tar.bz2', files[0].name)
+        self.assertEqual({'raw_imaging_data_[0-9]*/*.tif'}, missing)
         files[0].unlink()
-        ok, files = sig.find(self.session_path)
+        ok, files, missing = sig.find_files(self.session_path)
         self.assertFalse(ok)
         self.assertEqual([], files)
+        self.assertEqual({'raw_imaging_data_[0-9]*/*.tif', 'raw_imaging_data_[0-9]*/imaging.frames.tar.bz2'}, missing)
 
     def test_xor(self):
         I = handlers.ExpectedDataset.input
         sig = I('*.tif', 'raw_imaging_data_[0-9]*') ^ I('imaging.frames.tar.bz2', 'raw_imaging_data_[0-9]*')
         self.assertEqual('xor', sig.operator)
-        ok, files = sig.find(self.session_path)
+        ok, files, missing = sig.find_files(self.session_path)
         self.assertFalse(ok)
-        self.assertTrue(len(files) == 6)
+        self.assertEqual(6, len(files))
         self.assertEqual({'.tif', '.bz2'}, set(x.suffix for x in files))
+        expected_missing = {'raw_imaging_data_[0-9]*/*.tif', 'raw_imaging_data_[0-9]*/imaging.frames.tar.bz2'}
+        self.assertEqual(expected_missing, missing)
         for f in filter(lambda x: x.suffix == '.tif', files):
             f.unlink()
-        ok, files = sig.find(self.session_path)
+        ok, files, missing = sig.find_files(self.session_path)
         self.assertTrue(ok)
-        self.assertTrue(len(files) == 1)
+        self.assertEqual(1, len(files))
         self.assertEqual('imaging.frames.tar.bz2', files[0].name)
+        self.assertEqual(set(), missing)
         files[0].unlink()
-        ok, files = sig.find(self.session_path)
+        ok, files, missing = sig.find_files(self.session_path)
         self.assertFalse(ok)
         self.assertEqual([], files)
+        self.assertEqual(expected_missing, missing)
 
     def test_filter(self):
         """Test for ExpectedDataset.filter method.
 
         This test can be extended to support AND operators e.g. (dset1 AND dset2) OR (dset2 AND dset3).
         """
-        import pandas as pd
-        from uuid import uuid4
-        from one.util import QC_TYPE
         I = handlers.ExpectedDataset.input
         # Optional datasets 1
         column_names = ['session_path', 'id', 'rel_path', 'file_size', 'hash', 'exists']
@@ -656,20 +687,20 @@ class TestExpectedDataset(unittest.TestCase):
 
         # Test OR
         d = (I('_spikeglx_sync.channels.npy', 'raw_ephys_data', True) |
-             I('_spikeglx_sync.channels.probe??.npy', 'raw_ephys_data/probe??', True))
+             I('_spikeglx_sync.channels.probe??.npy', 'raw_ephys_data/probe??', True, unique=False))
         merged = pd.concat([df1, df2])
         ok, filtered_df = d.filter(merged)
         self.assertTrue(ok)
         self.assertCountEqual(expected, filtered_df.index)
-        ok, filtered_df = d.filter(df2, assert_unique=False)
+        ok, filtered_df = d.filter(df2)
         self.assertTrue(ok)
         expected = df2.index[df2['rel_path'].str.contains('channels')]
         self.assertCountEqual(expected, filtered_df.index)
 
         # Test XOR
         d = (I('_spikeglx_sync.channels.npy', 'raw_ephys_data', True) ^
-             I('_spikeglx_sync.channels.probe??.npy', 'raw_ephys_data/probe??', True))
-        ok, filtered_df = d.filter(merged, assert_unique=False)
+             I('_spikeglx_sync.channels.probe??.npy', 'raw_ephys_data/probe??', True, unique=False))
+        ok, filtered_df = d.filter(merged)
         self.assertFalse(ok)
         expected = merged.index[merged['rel_path'].str.contains('channels')]
         self.assertCountEqual(expected, filtered_df.index)
@@ -677,7 +708,7 @@ class TestExpectedDataset(unittest.TestCase):
         self.assertTrue(ok)
         expected = df1.index[df1['rel_path'] == 'raw_ephys_data/_spikeglx_sync.channels.npy']
         self.assertCountEqual(expected, filtered_df.index)
-        ok, filtered_df = d.filter(df2, assert_unique=False)
+        ok, filtered_df = d.filter(df2)
         self.assertTrue(ok)
         expected = df2.index[df2['rel_path'].str.contains('channels')]
         self.assertCountEqual(expected, filtered_df.index)
