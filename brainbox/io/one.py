@@ -1334,6 +1334,7 @@ class SessionLoader:
     one: One = None
     session_path: Path = ''
     eid: str = ''
+    revision: str = ''
     data_info: pd.DataFrame = field(default_factory=pd.DataFrame, repr=False)
     trials: pd.DataFrame = field(default_factory=pd.DataFrame, repr=False)
     wheel: pd.DataFrame = field(default_factory=pd.DataFrame, repr=False)
@@ -1461,7 +1462,7 @@ class SessionLoader:
         # itiDuration frequently has a mismatched dimension, and we don't need it, exclude using regex
         self.one.wildcards = False
         self.trials = self.one.load_object(
-            self.eid, 'trials', collection=collection, attribute=r'(?!itiDuration).*').to_df()
+            self.eid, 'trials', collection=collection, attribute=r'(?!itiDuration).*', revision=self.revision or None).to_df()
         self.one.wildcards = True
         self.data_info.loc[self.data_info['name'] == 'trials', 'is_loaded'] = True
 
@@ -1484,7 +1485,7 @@ class SessionLoader:
         """
         if not collection:
             collection = self._find_behaviour_collection('wheel')
-        wheel_raw = self.one.load_object(self.eid, 'wheel', collection=collection)
+        wheel_raw = self.one.load_object(self.eid, 'wheel', collection=collection, revision=self.revision or None)
         if wheel_raw['position'].shape[0] != wheel_raw['timestamps'].shape[0]:
             raise ValueError("Length mismatch between 'wheel.position' and 'wheel.timestamps")
         # resample the wheel position and compute velocity, acceleration
@@ -1514,7 +1515,7 @@ class SessionLoader:
         # empty the dictionary so that if one loads only one view, after having loaded several, the others don't linger
         self.pose = {}
         for view in views:
-            pose_raw = self.one.load_object(self.eid, f'{view}Camera', attribute=['dlc', 'times'])
+            pose_raw = self.one.load_object(self.eid, f'{view}Camera', attribute=['dlc', 'times'], revision=self.revision or None)
             # Double check if video timestamps are correct length or can be fixed
             times_fixed, dlc = self._check_video_timestamps(view, pose_raw['times'], pose_raw['dlc'])
             self.pose[f'{view}Camera'] = likelihood_threshold(dlc, likelihood_thr)
@@ -1541,7 +1542,8 @@ class SessionLoader:
         # empty the dictionary so that if one loads only one view, after having loaded several, the others don't linger
         self.motion_energy = {}
         for view in views:
-            me_raw = self.one.load_object(self.eid, f'{view}Camera', attribute=['ROIMotionEnergy', 'times'])
+            me_raw = self.one.load_object(
+                self.eid, f'{view}Camera', attribute=['ROIMotionEnergy', 'times'], revision=self.revision or None)
             # Double check if video timestamps are correct length or can be fixed
             times_fixed, motion_energy = self._check_video_timestamps(
                 view, me_raw['times'], me_raw['ROIMotionEnergy'])
@@ -1566,7 +1568,7 @@ class SessionLoader:
             will be considered unusable and will be discarded.
         """
         # Try to load from features
-        feat_raw = self.one.load_object(self.eid, 'leftCamera', attribute=['times', 'features'])
+        feat_raw = self.one.load_object(self.eid, 'leftCamera', attribute=['times', 'features'], revision=self.revision or None)
         if 'features' in feat_raw.keys():
             times_fixed, feats = self._check_video_timestamps('left', feat_raw['times'], feat_raw['features'])
             self.pupil = feats.copy()

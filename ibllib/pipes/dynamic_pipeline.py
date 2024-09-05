@@ -22,6 +22,7 @@ personal projects repo or in :py:mod:`ibllib.io.extractors.bpod_trials` module.
 """
 import logging
 import re
+from fnmatch import fnmatch
 from collections import OrderedDict
 from pathlib import Path
 from itertools import chain
@@ -30,7 +31,7 @@ import yaml
 import spikeglx
 
 import ibllib.io.session_params as sess_params
-from ibllib.io.extractors.base import get_pipeline, get_session_extractor_type
+from ibllib.io.extractors.base import get_session_extractor_type
 import ibllib.pipes.tasks as mtasks
 import ibllib.pipes.base_tasks as bstasks
 import ibllib.pipes.widefield_tasks as wtasks
@@ -65,7 +66,10 @@ def acquisition_description_legacy_session(session_path, save=False):
     extractor_type = get_session_extractor_type(session_path)
     etype2protocol = dict(biased='choice_world_biased', habituation='choice_world_habituation',
                           training='choice_world_training', ephys='choice_world_recording')
-    dict_ad = get_acquisition_description(etype2protocol[extractor_type])
+    try:
+        dict_ad = get_acquisition_description(etype2protocol[extractor_type])
+    except KeyError:
+        raise ValueError(f'Unknown extractor type "{extractor_type}"')
     if save:
         sess_params.write_params(session_path=session_path, data=dict_ad)
     return dict_ad
@@ -133,7 +137,7 @@ def get_acquisition_description(protocol):
             raise ValueError(f'Unknown protocol "{protocol}"')
         acquisition_description['tasks'] = [{key: {
             'collection': 'raw_behavior_data',
-            'sync_label': 'bpod', 'main': True  # FIXME: What is purpose of main key?
+            'sync_label': 'bpod'
         }}]
     acquisition_description['version'] = '1.0.0'
     return acquisition_description
@@ -166,36 +170,63 @@ def _sync_label(sync, acquisition_software=None, **_):
     return acquisition_software if (sync == 'nidq' and acquisition_software not in ('spikeglx', None)) else sync
 
 
-def make_pipeline(session_path, **pkwargs):
+def _load_acquisition_description(session_path):
     """
-    Creates a pipeline of extractor tasks from a session's experiment description file.
+    Load a session's acquisition description.
+
+    Attempts to load from the session path and upon failure, attempts to generate one based on the
+    task protocol (this only works for legacy pipeline sessions).
 
     Parameters
     ----------
-    session_path : str, Path
-        The absolute session path, i.e. '/path/to/subject/yyyy-mm-dd/nnn'.
-    pkwargs
-        Optional arguments passed to the ibllib.pipes.tasks.Pipeline constructor.
+    session_path : str, pathlib.Path
+        A session path.
 
     Returns
     -------
-    ibllib.pipes.tasks.Pipeline
-        A task pipeline object.
+    dict
+        The acquisition description file.
     """
-    # NB: this pattern is a pattern for dynamic class creation
-    # tasks['SyncPulses'] = type('SyncPulses', (epp.EphysPulses,), {})(session_path=session_path)
-    if not session_path or not (session_path := Path(session_path)).exists():
-        raise ValueError('Session path does not exist')
-    tasks = OrderedDict()
     acquisition_description = sess_params.read_params(session_path)
     if not acquisition_description:
-        raise ValueError('Experiment description file not found or is empty')
-    devices = acquisition_description.get('devices', {})
-    kwargs = {'session_path': session_path, 'one': pkwargs.get('one')}
+        try:
+            # v7 sessions used a different folder name for task data;
+            # v8 sessions should always have a description file
+            assert session_path.joinpath('raw_behavior_data').exists()
+            acquisition_description = acquisition_description_legacy_session(session_path)
+            assert acquisition_description
+        except (AssertionError, ValueError):
+            raise ValueError('Experiment description file not found or is empty')
+    return acquisition_description
 
-    # Registers the experiment description file
-    tasks['ExperimentDescriptionRegisterRaw'] = type('ExperimentDescriptionRegisterRaw',
-                                                     (bstasks.ExperimentDescriptionRegisterRaw,), {})(**kwargs)
+
+def _get_trials_tasks(session_path, acquisition_description=None, sync_tasks=None, one=None):
+    """
+    Generate behaviour tasks from acquisition description.
+
+    This returns all behaviour related tasks including TrialsRegisterRaw and TrainingStatus objects.
+
+    Parameters
+    ----------
+    session_path : str, pathlib.Path
+        A session path.
+    acquisition_description : dict
+        An acquisition description.
+    sync_tasks : list
+        A list of sync tasks to use as behaviour task parents.
+    one : One
+        An instance of ONE to pass to each task.
+
+    Returns
+    -------
+    dict[str, ibllib.pipes.tasks.Task]
+        A map of Alyx task name to behaviour task object.
+    """
+    if not acquisition_description:
+        acquisition_description = _load_acquisition_description(session_path)
+    tasks = OrderedDict()
+    sync_tasks = sync_tasks or []
+    kwargs = {'session_path': session_path, 'one': one}
 
     # Syncing tasks
     (sync, sync_args), = acquisition_description['sync'].items()
@@ -204,23 +235,6 @@ def make_pipeline(session_path, **pkwargs):
     sync_args['sync_ext'] = sync_args.pop('extension', None)
     sync_args['sync_namespace'] = sync_args.pop('acquisition_software', None)
     sync_kwargs = {'sync': sync, **sync_args}
-    sync_tasks = []
-    if sync_label == 'nidq' and sync_args['sync_collection'] == 'raw_ephys_data':
-        tasks['SyncRegisterRaw'] = type('SyncRegisterRaw', (etasks.EphysSyncRegisterRaw,), {})(**kwargs, **sync_kwargs)
-        tasks[f'SyncPulses_{sync}'] = type(f'SyncPulses_{sync}', (etasks.EphysSyncPulses,), {})(
-            **kwargs, **sync_kwargs, parents=[tasks['SyncRegisterRaw']])
-        sync_tasks = [tasks[f'SyncPulses_{sync}']]
-    elif sync_label == 'timeline':
-        tasks['SyncRegisterRaw'] = type('SyncRegisterRaw', (stasks.SyncRegisterRaw,), {})(**kwargs, **sync_kwargs)
-    elif sync_label == 'nidq':
-        tasks['SyncRegisterRaw'] = type('SyncRegisterRaw', (stasks.SyncMtscomp,), {})(**kwargs, **sync_kwargs)
-        tasks[f'SyncPulses_{sync}'] = type(f'SyncPulses_{sync}', (stasks.SyncPulses,), {})(
-            **kwargs, **sync_kwargs, parents=[tasks['SyncRegisterRaw']])
-        sync_tasks = [tasks[f'SyncPulses_{sync}']]
-    elif sync_label == 'tdms':
-        tasks['SyncRegisterRaw'] = type('SyncRegisterRaw', (stasks.SyncRegisterRaw,), {})(**kwargs, **sync_kwargs)
-    elif sync_label == 'bpod':
-        pass  # ATM we don't have anything for this; it may not be needed in the future
 
     # Behavior tasks
     task_protocols = acquisition_description.get('tasks', [])
@@ -237,13 +251,13 @@ def make_pipeline(session_path, **pkwargs):
             extractors = (extractors,) if isinstance(extractors, str) else extractors
             task_name = None  # to avoid unbound variable issue in the first round
             for j, extractor in enumerate(extractors):
-                # Assume previous task in the list is parent
+                # Assume previous task in the list is a parent
                 parents = [] if j == 0 else [tasks[task_name]]
                 # Make sure extractor and sync task don't collide
                 for sync_option in ('nidq', 'bpod', 'timeline'):
                     if sync_option in extractor.lower() and not sync_label == sync_option:
                         raise ValueError(f'Extractor "{extractor}" and sync "{sync_label}" do not match')
-                # TODO Assert sync_label correct here (currently unused)
+
                 # Look for the extractor in the behavior extractors module
                 if hasattr(btasks, extractor):
                     task = getattr(btasks, extractor)
@@ -255,6 +269,8 @@ def make_pipeline(session_path, **pkwargs):
                     import projects.extraction_tasks
                     if hasattr(projects.extraction_tasks, extractor):
                         task = getattr(projects.extraction_tasks, extractor)
+                    elif hasattr(projects.extraction_tasks, extractor + sync_label.capitalize()):
+                        task = getattr(btasks, extractor + sync_label.capitalize())
                     else:
                         raise NotImplementedError(
                             f'Extractor "{extractor}" not found in main IBL pipeline nor in personal projects')
@@ -262,6 +278,8 @@ def make_pipeline(session_path, **pkwargs):
                               protocol, i, j, task.__module__, task.__name__)
                 # Rename the class to something more informative
                 task_name = f'{task.__name__}_{i:02}'
+                if not (task.__name__.startswith('TrainingStatus') or task.__name__.endswith('RegisterRaw')):
+                    task_name = f'Trials_{task_name}'
                 # For now we assume that the second task in the list is always the trials extractor, which is dependent
                 # on the sync task and sync arguments
                 if j == 1:
@@ -302,6 +320,129 @@ def make_pipeline(session_path, **pkwargs):
             if compute_status:
                 tasks[f'TrainingStatus_{protocol}_{i:02}'] = type(f'TrainingStatus_{protocol}_{i:02}', (
                     btasks.TrainingStatus,), {})(**kwargs, **task_kwargs, parents=[tasks[f'Trials_{protocol}_{i:02}']])
+    return tasks
+
+
+def get_trials_tasks(session_path, one=None, bpod_only=False):
+    """
+    Return a list of pipeline trials extractor task objects for a given session.
+
+    This function supports both legacy and dynamic pipeline sessions. Dynamic tasks are returned
+    for both recent and legacy sessions.  Only Trials tasks are returned, not the training status
+    or raw registration tasks.
+
+    Parameters
+    ----------
+    session_path : str, pathlib.Path
+        An absolute path to a session.
+    one : one.api.One
+        An ONE instance.
+    bpod_only : bool
+        If true, extract trials from Bpod clock instead of the main DAQ's.
+
+    Returns
+    -------
+    list of pipes.tasks.Task
+        A list of task objects for the provided session.
+
+    Examples
+    --------
+    Return the tasks for active choice world extraction
+
+    >>> tasks = list(filter(is_active_trials_task, get_trials_tasks(session_path)))
+    """
+    # Check for an experiment.description file; ensure downloaded if possible
+    if one and one.to_eid(session_path):  # to_eid returns None if session not registered
+        one.load_datasets(session_path, ['_ibl_experiment.description'], download_only=True, assert_present=False)
+    acquisition_description = _load_acquisition_description(session_path)
+    if bpod_only and acquisition_description:
+        acquisition_description['sync'] = {'bpod': {'collection': 'raw_task_data_*'}}
+    try:
+        trials_tasks = _get_trials_tasks(session_path, acquisition_description, one=one)
+        return [v for k, v in trials_tasks.items() if k.startswith('Trials_')]
+    except NotImplementedError as ex:
+        _logger.warning('Failed to get trials tasks: %s', ex)
+        return []
+
+
+def is_active_trials_task(task) -> bool:
+    """
+    Check if task is for active choice world extraction.
+
+    Parameters
+    ----------
+    task : ibllib.pipes.tasks.Task
+        A task instance to test.
+
+    Returns
+    -------
+    bool
+        True if the task name starts with 'Trials_' and outputs a trials.table dataset.
+    """
+    trials_task = task.name.lower().startswith('trials_')
+    output_names = [x[0] for x in task.signature.get('output_files', [])]
+    return trials_task and any(fnmatch('_ibl_trials.table.pqt', pat) for pat in output_names)
+
+
+def make_pipeline(session_path, **pkwargs):
+    """
+    Creates a pipeline of extractor tasks from a session's experiment description file.
+
+    Parameters
+    ----------
+    session_path : str, Path
+        The absolute session path, i.e. '/path/to/subject/yyyy-mm-dd/nnn'.
+    pkwargs
+        Optional arguments passed to the ibllib.pipes.tasks.Pipeline constructor.
+
+    Returns
+    -------
+    ibllib.pipes.tasks.Pipeline
+        A task pipeline object.
+    """
+    # NB: this pattern is a pattern for dynamic class creation
+    # tasks['SyncPulses'] = type('SyncPulses', (epp.EphysPulses,), {})(session_path=session_path)
+    if not session_path or not (session_path := Path(session_path)).exists():
+        raise ValueError('Session path does not exist')
+    tasks = OrderedDict()
+    acquisition_description = _load_acquisition_description(session_path)
+    devices = acquisition_description.get('devices', {})
+    kwargs = {'session_path': session_path, 'one': pkwargs.get('one')}
+
+    # Registers the experiment description file
+    tasks['ExperimentDescriptionRegisterRaw'] = type('ExperimentDescriptionRegisterRaw',
+                                                     (bstasks.ExperimentDescriptionRegisterRaw,), {})(**kwargs)
+
+    # Syncing tasks
+    (sync, sync_args), = acquisition_description['sync'].items()
+    sync_args = sync_args.copy()  # ensure acquisition_description unchanged
+    sync_label = _sync_label(sync, **sync_args)  # get the format of the DAQ data. This informs the extractor task
+    sync_args['sync_collection'] = sync_args.pop('collection')  # rename the key so it matches task run arguments
+    sync_args['sync_ext'] = sync_args.pop('extension', None)
+    sync_args['sync_namespace'] = sync_args.pop('acquisition_software', None)
+    sync_kwargs = {'sync': sync, **sync_args}
+    sync_tasks = []
+    if sync_label == 'nidq' and sync_args['sync_collection'] == 'raw_ephys_data':
+        tasks['SyncRegisterRaw'] = type('SyncRegisterRaw', (etasks.EphysSyncRegisterRaw,), {})(**kwargs, **sync_kwargs)
+        tasks[f'SyncPulses_{sync}'] = type(f'SyncPulses_{sync}', (etasks.EphysSyncPulses,), {})(
+            **kwargs, **sync_kwargs, parents=[tasks['SyncRegisterRaw']])
+        sync_tasks = [tasks[f'SyncPulses_{sync}']]
+    elif sync_label == 'timeline':
+        tasks['SyncRegisterRaw'] = type('SyncRegisterRaw', (stasks.SyncRegisterRaw,), {})(**kwargs, **sync_kwargs)
+    elif sync_label == 'nidq':
+        tasks['SyncRegisterRaw'] = type('SyncRegisterRaw', (stasks.SyncMtscomp,), {})(**kwargs, **sync_kwargs)
+        tasks[f'SyncPulses_{sync}'] = type(f'SyncPulses_{sync}', (stasks.SyncPulses,), {})(
+            **kwargs, **sync_kwargs, parents=[tasks['SyncRegisterRaw']])
+        sync_tasks = [tasks[f'SyncPulses_{sync}']]
+    elif sync_label == 'tdms':
+        tasks['SyncRegisterRaw'] = type('SyncRegisterRaw', (stasks.SyncRegisterRaw,), {})(**kwargs, **sync_kwargs)
+    elif sync_label == 'bpod':
+        pass  # ATM we don't have anything for this; it may not be needed in the future
+
+    # Behavior tasks
+    tasks.update(
+        _get_trials_tasks(session_path, acquisition_description, sync_tasks=sync_tasks, one=pkwargs.get('one'))
+    )
 
     # Ephys tasks
     if 'neuropixel' in devices:
@@ -475,73 +616,3 @@ def load_pipeline_dict(path):
         task_list = yaml.full_load(file)
 
     return task_list
-
-
-def get_trials_tasks(session_path, one=None):
-    """
-    Return a list of pipeline trials extractor task objects for a given session.
-
-    This function supports both legacy and dynamic pipeline sessions.
-
-    Parameters
-    ----------
-    session_path : str, pathlib.Path
-        An absolute path to a session.
-    one : one.api.One
-        An ONE instance.
-
-    Returns
-    -------
-    list of pipes.tasks.Task
-        A list of task objects for the provided session.
-
-    """
-    # Check for an experiment.description file; ensure downloaded if possible
-    if one and one.to_eid(session_path):  # to_eid returns None if session not registered
-        one.load_datasets(session_path, ['_ibl_experiment.description'], download_only=True, assert_present=False)
-        # NB: meta files only required to build neuropixel tasks in make_pipeline
-        if meta_files := one.list_datasets(session_path, '*.ap.meta', collection='raw_ephys_data*'):
-            one.load_datasets(session_path, meta_files, download_only=True, assert_present=False)
-    experiment_description = sess_params.read_params(session_path)
-
-    # If experiment description file then use this to make the pipeline
-    if experiment_description is not None:
-        tasks = []
-        try:
-            pipeline = make_pipeline(session_path, one=one)
-            trials_tasks = [t for t in pipeline.tasks if 'Trials' in t]
-            for task in trials_tasks:
-                t = pipeline.tasks.get(task)
-                t.__init__(session_path, **t.kwargs)
-                tasks.append(t)
-        except NotImplementedError as ex:
-            _logger.warning('Failed to get trials tasks: %s', ex)
-    else:
-        # Otherwise default to old way of doing things
-        if one and one.to_eid(session_path):
-            one.load_dataset(session_path, '_iblrig_taskSettings.raw', collection='raw_behavior_data', download_only=True)
-        pipeline = get_pipeline(session_path)
-        if pipeline == 'training':
-            from ibllib.pipes.training_preprocessing import TrainingTrials
-            tasks = [TrainingTrials(session_path, one=one)]
-        elif pipeline == 'ephys':
-            from ibllib.pipes.ephys_preprocessing import EphysTrials
-            tasks = [EphysTrials(session_path, one=one)]
-        else:
-            try:
-                # try to find a custom extractor in the personal projects extraction class
-                import projects.base
-                task_type = get_session_extractor_type(session_path)
-                assert (PipelineClass := projects.base.get_pipeline(task_type))
-                pipeline = PipelineClass(session_path, one=one)
-                trials_task_name = next((task for task in pipeline.tasks if 'Trials' in task), None)
-                assert trials_task_name, (f'No "Trials" tasks for custom pipeline '
-                                          f'"{pipeline.name}" with extractor type "{task_type}"')
-                task = pipeline.tasks.get(trials_task_name)
-                task(session_path)
-                tasks = [task]
-            except (ModuleNotFoundError, AssertionError) as ex:
-                _logger.warning('Failed to get trials tasks: %s', ex)
-                tasks = []
-
-    return tasks

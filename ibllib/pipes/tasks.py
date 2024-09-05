@@ -90,6 +90,7 @@ import one.params
 from one.api import ONE
 from one.util import ensure_list
 from one import webclient
+import one.alf.io as alfio
 
 _logger = logging.getLogger(__name__)
 TASK_STATUS_SET = {'Waiting', 'Held', 'Started', 'Errored', 'Empty', 'Complete', 'Incomplete', 'Abandoned'}
@@ -294,6 +295,8 @@ class Task(abc.ABC):
         -------
         list of pathlib.Path
             A list of input files to register.
+
+        # TODO This method currently does not support wildcards
         """
         try:
             input_files = self.input_files
@@ -422,9 +425,19 @@ class Task(abc.ABC):
 
     def assert_expected_inputs(self, raise_error=True):
         """
-        Before running a task, check that all the files necessary to run the task have been downloaded/ are on the local file
-        system already
-        :return:
+        Check that all the files necessary to run the task have been are present on disk.
+
+        Parameters
+        ----------
+        raise_error : bool
+            If true, raise FileNotFoundError if required files are missing.
+
+        Returns
+        -------
+        bool
+            True if all required files were found.
+        list of pathlib.Path
+            A list of file paths that exist on disk.
         """
         _logger.info('Checking input files')
         everything_is_fine, files = self.assert_expected(self.input_files)
@@ -432,9 +445,44 @@ class Task(abc.ABC):
         if not everything_is_fine and raise_error:
             raise FileNotFoundError('Missing inputs to run task')
 
+        # Check for duplicate datasets that may complicate extraction.
+        # Some sessions may contain revisions and without ONE it's difficult to determine which
+        # are the default datasets. Likewise SDSC may contain multiple datasets with different
+        # UUIDs in the name after patching data.
+        variant_datasets = alfio.find_variants(files, extra=False)
+        if any(map(len, variant_datasets.values())):
+            # Keep those with variants and make paths relative to session for logging purposes
+            to_frag = lambda x: x.relative_to(self.session_path).as_posix()  # noqa
+            ambiguous = {
+                to_frag(k): [to_frag(x) for x in v]
+                for k, v in variant_datasets.items() if any(v)}
+            _logger.error('Ambiguous input datasets found: %s', ambiguous)
+
+            if raise_error or self.location == 'sdsc':  # take no chances on SDSC
+                # This could be mitigated if loading with data OneSDSC
+                raise NotImplementedError(
+                    'Multiple variant datasets found. Loading for these is undefined.')
+
         return everything_is_fine, files
 
     def assert_expected(self, expected_files, silent=False):
+        """
+        Assert that expected files are present.
+
+        Parameters
+        ----------
+        expected_files : list of tuple
+            A list of expected files in the form (file_pattern_str, collection_str, required_bool).
+        silent : bool
+            If true, log an error if any required files are not found.
+
+        Returns
+        -------
+        bool
+            True if all required files were found.
+        list of pathlib.Path
+            A list of file paths that exist on disk.
+        """
         everything_is_fine = True
         files = []
         for expected_file in expected_files:
