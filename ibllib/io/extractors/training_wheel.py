@@ -6,7 +6,7 @@ import numpy as np
 from scipy import interpolate
 
 from ibldsp.utils import sync_timestamps
-from ibllib.io.extractors.base import BaseBpodTrialsExtractor, run_extractor_classes
+from ibllib.io.extractors.base import BaseBpodTrialsExtractor
 import ibllib.io.raw_data_loaders as raw
 from ibllib.misc import structarr
 import ibllib.exceptions as err
@@ -428,27 +428,3 @@ class Wheel(BaseBpodTrialsExtractor):
         output = (ts, pos, moves['intervals'], moves['peakAmplitude'],
                   moves['peakVelocity_times'], first_moves, is_final)
         return output
-
-
-def extract_all(session_path, bpod_trials=None, settings=None, save=False, task_collection='raw_behavior_data', save_path=None):
-    """Extract the wheel data.
-
-    NB: Wheel extraction is now called through ibllib.io.training_trials.extract_all
-
-    Parameters
-    ----------
-    session_path : str, pathlib.Path
-        The path to the session
-    save : bool
-        If true save the data files to ALF
-    bpod_trials : list of dicts
-        The Bpod trial dicts loaded from the _iblrig_taskData.raw dataset
-    settings : dict
-        The Bpod settings loaded from the _iblrig_taskSettings.raw dataset
-
-    Returns
-    -------
-    A list of extracted data and a list of file paths if save is True (otherwise None)
-    """
-    return run_extractor_classes(Wheel, save=save, session_path=session_path,
-                                 bpod_trials=bpod_trials, settings=settings, task_collection=task_collection, path_out=save_path)

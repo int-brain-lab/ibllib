@@ -51,10 +51,9 @@ from one.alf.exceptions import ALFObjectNotFound
 from iblutil.util import Bunch
 from iblutil.numerical import within_ranges
 
-from ibllib.io.extractors.camera import extract_camera_sync, extract_all
+from ibllib.io.extractors.camera import extract_camera_sync
 from ibllib.io.extractors import ephys_fpga, training_wheel, mesoscope
 from ibllib.io.extractors.video_motion import MotionAlignment
-from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.io import raw_data_loaders as raw
 from ibllib.io.raw_daq_loaders import load_timeline_sync_and_chmap
 from ibllib.io.session_params import read_params, get_sync, get_sync_namespace
@@ -187,7 +186,8 @@ class CameraQC(base.QC):
     def load_data(self, download_data: bool = None, extract_times: bool = False, load_video: bool = True) -> None:
         """Extract the data from raw data files.
 
-        Extracts all the required task data from the raw data files.
+        Extracts all the required task data from the raw data files. Missing data will raise an
+        AssertionError.
 
         Data keys:
             - count (int array): the sequential frame number (n, n+1, n+2...)
@@ -201,8 +201,6 @@ class CameraQC(base.QC):
             - video (Bunch): video meta data, including dimensions and FPS
             - frame_samples (h x w x n array): array of evenly sampled frames (1 colour channel)
 
-        :param download_data: if True, any missing raw data is downloaded via ONE.
-        Missing data will raise an AssertionError
         :param extract_times: if True, the camera.times are re-extracted from the raw data
         :param load_video: if True, calls the load_video_data method
         """

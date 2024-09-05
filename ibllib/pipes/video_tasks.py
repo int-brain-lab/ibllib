@@ -210,6 +210,7 @@ class VideoSyncQcBpod(base_tasks.VideoTask):
         self.collection = self.get_task_collection(kwargs.get('collection', None))
         # Task type (protocol)
         self.protocol = self.get_protocol(kwargs.get('protocol', None), task_collection=self.collection)
+        self.extractor = None
 
     @property
     def signature(self):
@@ -228,20 +229,26 @@ class VideoSyncQcBpod(base_tasks.VideoTask):
 
         return signature
 
-    def _run(self, **kwargs):
-
-        mp4_files = self.session_path.joinpath(self.device_collection).rglob('*.mp4')
+    def extract_camera(self, save=True):
+        mp4_files = list(self.session_path.joinpath(self.device_collection).rglob('*.mp4'))
         labels = [label_from_path(x) for x in mp4_files]
+        if labels != ['left']:
+            raise NotImplementedError('BpodCamera extraction currently only supports a left camera')
 
+        self.extractor = camera.CameraTimestampsBpod(self.session_path, task_collection=self.collection)
+        return self.extractor.extract(video_path=mp4_files[0], save=save)
+
+    def run_qc(self, camera_data=None, update=True):
+        if camera_data is None:
+            camera_data, _ = self.extract_camera(save=False)
+        raise NotImplementedError
+
+    def _run(self, update=True, **kwargs):
         # Video timestamps extraction
-        output_files = []
-        data, files = camera.extract_all(self.session_path, sync_type=self.sync, sync_collection=self.sync_collection,
-                                         save=True, labels=labels, task_collection=self.collection)
-        output_files.extend(files)
+        data, output_files = self.extract_camera(save=True)
 
         # Video QC
-        run_camera_qc(self.session_path, update=True, one=self.one, cameras=labels,
-                      sync_collection=self.sync_collection, sync_type=self.sync)
+        qc = self.run_qc(data, update=update)
 
         return output_files
 

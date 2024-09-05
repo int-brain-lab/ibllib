@@ -287,6 +287,48 @@ class VideoTask(DynamicTask):
         self.device_collection = self.get_device_collection('cameras', kwargs.get('device_collection', 'raw_video_data'))
         # self.collection = self.get_task_collection(kwargs.get('collection', None))
 
+    def extract_camera(self, save=True):
+        """Extract trials data.
+
+        This is an abstract method called by `_run` and `run_qc` methods.  Subclasses should return
+        the extracted trials data and a list of output files. This method should also save the
+        trials extractor object to the :prop:`extractor` property for use by `run_qc`.
+
+        Parameters
+        ----------
+        save : bool
+            Whether to save the extracted data as ALF datasets.
+
+        Returns
+        -------
+        dict
+            A dictionary of trials data.
+        list of pathlib.Path
+            A list of output file paths if save == true.
+        """
+        return None, None
+
+    def run_qc(self, camera_data=None, update=True):
+        """Run camera QC.
+
+        Subclass method should return the QC object. This just validates the trials_data is not
+        None.
+
+        Parameters
+        ----------
+        camera_data : dict
+            A dictionary of extracted trials data. The output of :meth:`extract_behaviour`.
+        update : bool
+            If true, update Alyx with the QC outcome.
+
+        Returns
+        -------
+        ibllib.qc.task_metrics.TaskQC
+            A TaskQC object replete with task data and computed metrics.
+        """
+        self._assert_trials_data(camera_data)
+        return None
+
 
 class AudioTask(DynamicTask):
 

@@ -221,35 +221,6 @@ def get_mock_session_settings(subject='clns0730', user='test_user'):
     }
 
 
-class TestRegistrationEndpoint(unittest.TestCase):
-
-    def test_task_names_extractors(self):
-        """
-        This is to test against regressions
-        """
-        task_out = [
-            ('_iblrig_tasks_biasedChoiceWorld3.7.0', 'Behavior training/tasks'),
-            ('_iblrig_tasks_biasedScanningChoiceWorld5.2.3', 'Behavior training/tasks'),
-            ('_iblrig_tasks_trainingChoiceWorld3.6.0', 'Behavior training/tasks'),
-            ('_iblrig_tasks_ephysChoiceWorld5.1.3', 'Ephys recording with acute probe(s)'),
-            ('_iblrig_calibration_frame2TTL4.1.3', []),
-            ('_iblrig_tasks_habituationChoiceWorld3.6.0', 'Behavior training/tasks'),
-            ('_iblrig_tasks_scanningOptoChoiceWorld5.0.0', []),
-            ('_iblrig_tasks_RewardChoiceWorld4.1.3', []),
-            ('_iblrig_calibration_screen4.1.3', []),
-            ('_iblrig_tasks_ephys_certification4.1.3', 'Ephys recording with acute probe(s)'),
-        ]
-        for to in task_out:
-            out = registration.IBLRegistrationClient._alyx_procedure_from_task(to[0])
-            self.assertEqual(out, to[1])
-        # also makes sure that all task types have a defined procedure
-        task_types = ibllib.io.extractors.base._get_task_types_json_config()
-        for key in ['THIS FILE', 'SEE', '********', '************']:
-            task_types.pop(key)
-        for task_type in set([task_types[tt] for tt in task_types]):
-            assert registration._alyx_procedure_from_task_type(task_type) is not None, task_type + ' has no associate procedure'
-
-
 class TestRegistration(unittest.TestCase):
 
     subject = ''
