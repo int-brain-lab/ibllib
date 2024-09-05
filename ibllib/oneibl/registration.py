@@ -276,7 +276,7 @@ class IBLRegistrationClient(RegistrationClient):
             projects = [projects] if isinstance(projects, str) else projects
 
             # unless specified label the session procedures with task protocol lookup
-            procedures = [procedures] if isinstance(procedures, str) else procedures
+            procedures = [procedures] if isinstance(procedures, str) else (procedures or [])
             json_fields_names = ['IS_MOCK', 'IBLRIG_VERSION']
             json_field = {k: settings[0].get(k) for k in json_fields_names}
             # The poo count field is only updated if the field is defined in at least one of the settings

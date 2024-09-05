@@ -390,7 +390,7 @@ class TestRegistration(unittest.TestCase):
     def test_registration_session(self):
         settings_file = self._write_settings_file()
         rc = registration.IBLRegistrationClient(one=self.one)
-        rc.register_session(str(self.session_path))
+        rc.register_session(str(self.session_path), procedures=['Ephys recording with acute probe(s)'])
         eid = self.one.search(subject=self.subject, date_range=['2018-04-01', '2018-04-01'],
                               query_type='remote')[0]
         datasets = self.one.alyx.rest('datasets', 'list', session=eid)
@@ -410,7 +410,7 @@ class TestRegistration(unittest.TestCase):
         eid = self.one.search(subject=self.subject, date_range=['2018-04-01', '2018-04-01'],
                               query_type='remote')[0]
         ses_info = self.one.alyx.rest('sessions', 'read', id=eid)
-        self.assertTrue(ses_info['procedures'] == ['Behavior training/tasks'])
+        self.assertTrue(ses_info['procedures'] == [])
         # re-register the session as unknown protocol, this time without removing session first
         self.settings['PYBPOD_PROTOCOL'] = 'gnagnagna'
         # also add an end time

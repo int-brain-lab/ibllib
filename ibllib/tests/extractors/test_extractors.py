@@ -13,6 +13,7 @@ import one.alf.io as alfio
 from ibllib.io.extractors import training_trials, biased_trials, camera
 from ibllib.io import raw_data_loaders as raw
 from ibllib.io.extractors.base import BaseExtractor
+from ibllib.pipes.dynamic_pipeline import get_trials_tasks
 
 
 def wheelMoves_fixture(func):
@@ -286,28 +287,6 @@ class TestExtractTrialData(unittest.TestCase):
             self.biased_ge5['path']).extract()[0]
         self.assertIsInstance(sott, np.ndarray)
 
-    def test_get_stimOn_times_lt5(self):
-        # TRAINING SESSIONS
-        st = training_trials.StimOnTimes_deprecated(
-            self.training_lt5['path']).extract()[0]
-        self.assertIsInstance(st, np.ndarray)
-
-        # BIASED SESSIONS
-        st = biased_trials.StimOnTimes_deprecated(
-            self.biased_lt5['path']).extract()[0]
-        self.assertIsInstance(st, np.ndarray)
-
-    def test_get_stimOn_times_ge5(self):
-        # TRAINING SESSIONS
-        st = training_trials.StimOnTimes_deprecated(
-            self.training_ge5['path']).extract()[0]
-        self.assertIsInstance(st, np.ndarray)
-
-        # BIASED SESSIONS
-        st = biased_trials.StimOnTimes_deprecated(
-            self.biased_ge5['path']).extract()[0]
-        self.assertIsInstance(st, np.ndarray)
-
     def test_stimOnOffFreeze_times(self):
         # TRAINING SESSIONS
         st = training_trials.StimOnOffFreezeTimes(
@@ -533,11 +512,14 @@ class TestExtractTrialData(unittest.TestCase):
     def test_size_outputs(self):
         # check the output dimensions
         # VERSION >= 5.0.0
-        from ibllib.io.extractors.bpod_trials import extract_all
-        extract_all(self.training_ge5['path'])
+        task, = get_trials_tasks(self.training_ge5['path'])
+        trials, _ = task.extract_behaviour(save=True)
+        # Load from file (returned `trials` above includes wheel data)
         trials = alfio.load_object(self.training_ge5['path'] / 'alf', object='trials')
         self.assertTrue(alfio.check_dimensions(trials) == 0)
-        extract_all(self.biased_ge5['path'])
+
+        task, = get_trials_tasks(self.biased_ge5['path'])
+        trials, _ = task.extract_behaviour(save=True)
         trials = alfio.load_object(self.biased_ge5['path'] / 'alf', object='trials')
         self.assertTrue(alfio.check_dimensions(trials) == 0)
         # VERSION < 5.0.0
@@ -549,12 +531,14 @@ class TestExtractTrialData(unittest.TestCase):
         function_name = 'ibllib.io.extractors.training_wheel.extract_wheel_moves'
         # Training
         with unittest.mock.patch(function_name, return_value=mock_data):
-            extract_all(self.training_lt5['path'])
+            task, = get_trials_tasks(self.training_lt5['path'])
+            trials, _ = task.extract_behaviour(save=True)
         trials = alfio.load_object(self.training_lt5['path'] / 'alf', object='trials')
         self.assertTrue(alfio.check_dimensions(trials) == 0)
         # Biased
         with unittest.mock.patch(function_name, return_value=mock_data):
-            extract_all(self.biased_lt5['path'])
+            task, = get_trials_tasks(self.biased_lt5['path'])
+            trials, _ = task.extract_behaviour(save=True)
         trials = alfio.load_object(self.biased_lt5['path'] / 'alf', object='trials')
         self.assertTrue(alfio.check_dimensions(trials) == 0)
 
