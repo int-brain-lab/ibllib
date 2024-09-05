@@ -13,7 +13,7 @@ from ibllib.pipes.tasks import Task
 import ibllib.io.session_params as sess_params
 from ibllib.qc.base import sign_off_dict, SIGN_OFF_CATEGORIES
 from ibllib.io.raw_daq_loaders import load_timeline_sync_and_chmap
-from ibllib.oneibl.data_handlers import update_collections
+from ibllib.oneibl.data_handlers import update_collections, ExpectedDataset
 
 _logger = logging.getLogger(__name__)
 
@@ -529,21 +529,10 @@ class RegisterRawDataTask(DynamicTask):
 
     def _run(self, **kwargs):
         self.rename_files(**kwargs)
-        out_files = []
-        n_required = 0
-        for file_sig in self.output_files:
-            file_name, collection, required = file_sig
-            n_required += required
-            file_path = self.session_path.joinpath(collection).glob(file_name)
-            file_path = next(file_path, None)
-            if not file_path and not required:
-                continue
-            elif not file_path and required:
-                _logger.error(f'expected {file_sig} missing')
-            else:
-                out_files.append(file_path)
-
-        if len(out_files) < n_required:
+        # FIXME Can be done with Task.assert_expected_outputs
+        ok, out_files, missing = map(flatten, zip(*map(lambda x: x.find_files(self.session_path), self.output_files)))
+        if not ok:
+            _logger.error(f'The following expected are missing: %s', ', '.join(missing))
             self.status = -1
 
         return out_files
