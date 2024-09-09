@@ -373,7 +373,7 @@ class TestTask(unittest.TestCase):
         """Test for Task._input_files_to_register method."""
         task = Task00(self.session_path)
         self.assertRaises(RuntimeError, task._input_files_to_register)
-        I = ExpectedDataset.input
+        I = ExpectedDataset.input  # noqa
         task.input_files = [I('register.optional.ext', 'alf', False, True),
                             I('register.optional_foo.ext', 'alf', False, True),
                             I('register.required.ext', 'alf', True, True),
@@ -404,7 +404,8 @@ class TestTask(unittest.TestCase):
                             I('baz.foo.npy', 'alf', True, True)]
         with self.assertLogs(ibllib.pipes.tasks.__name__, level='ERROR') as cm:
             self.assertFalse(task._input_files_to_register(assert_all_exist=False))
-            self.assertRegex(cm.output[-1], re.escape('alf/foo.bar.*, alf/bar.baz.npy, alf/baz.foo.npy'))
+            for f in ('alf/foo.bar.*', 'alf/bar.baz.npy', 'alf/baz.foo.npy'):
+                self.assertRegex(cm.output[-1], re.escape(f))
 
 
 class TestMisc(unittest.TestCase):

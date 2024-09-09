@@ -176,7 +176,7 @@ class EphysTrials(BaseBpodTrialsExtractor):
      - Contrast, phase, position, probabilityLeft and quiescence is extracted differently
     """
     save_names = ('_ibl_trials.goCueTrigger_times.npy', '_ibl_trials.stimOnTrigger_times.npy', None,
-                  '_ibl_trials.stimOffTrigger_times', None, None,
+                  '_ibl_trials.stimOffTrigger_times.npy', None, None,
                   '_ibl_trials.table.pqt', '_ibl_trials.stimOff_times.npy', None, '_ibl_wheel.timestamps.npy',
                   '_ibl_wheel.position.npy', '_ibl_wheelMoves.intervals.npy', '_ibl_wheelMoves.peakAmplitude.npy', None, None,
                   '_ibl_trials.included.npy', None, None, '_ibl_trials.quiescencePeriod.npy')

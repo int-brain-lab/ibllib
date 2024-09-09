@@ -96,8 +96,7 @@ class HabituationTrialsBpod(base_tasks.BehaviourTask):
 
         # Compile task data for QC
         qc = HabituationQC(self.session_path, one=self.one)
-        qc.extractor = TaskQCExtractor(self.session_path, lazy=True, sync_collection=self.sync_collection,
-                                       one=self.one, sync_type=self.sync, task_collection=self.collection)
+        qc.extractor = TaskQCExtractor(self.session_path)
 
         # Update extractor fields
         qc.extractor.data = qc.extractor.rename_data(trials_data.copy())
@@ -347,8 +346,7 @@ class ChoiceWorldTrialsBpod(base_tasks.BehaviourTask):
         trials_data = self._assert_trials_data(trials_data)  # validate trials data
 
         # Compile task data for QC
-        qc_extractor = TaskQCExtractor(self.session_path, lazy=True, sync_collection=self.sync_collection, one=self.one,
-                                       sync_type=self.sync, task_collection=self.collection)
+        qc_extractor = TaskQCExtractor(self.session_path)
         qc_extractor.data = qc_extractor.rename_data(trials_data)
         if not QC:
             QC = HabituationQC if type(self.extractor).__name__ == 'HabituationTrials' else TaskQC
@@ -373,7 +371,7 @@ class ChoiceWorldTrialsNidq(ChoiceWorldTrialsBpod):
 
     @property
     def signature(self):
-        I = ExpectedDataset.input
+        I = ExpectedDataset.input  # noqa
         ns = self.sync_namespace
         # Neuropixels 3A sync data are kept in individual probe collections
         v3A = (
@@ -456,8 +454,7 @@ class ChoiceWorldTrialsNidq(ChoiceWorldTrialsBpod):
         trials_data = self._assert_trials_data(trials_data)  # validate trials data
 
         # Compile task data for QC
-        qc_extractor = TaskQCExtractor(self.session_path, lazy=True, sync_collection=self.sync_collection, one=self.one,
-                                       sync_type=self.sync, task_collection=self.collection)
+        qc_extractor = TaskQCExtractor(self.session_path)
         qc_extractor.data = qc_extractor.rename_data(trials_data.copy())
         if not QC:
             QC = HabituationQC if type(self.extractor).__name__ == 'HabituationTrials' else TaskQC

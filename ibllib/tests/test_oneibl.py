@@ -578,7 +578,7 @@ class TestExpectedDataset(unittest.TestCase):
         self.img_path.joinpath('imaging.frames.tar.bz2').touch()
 
     def test_and(self):
-        I = handlers.ExpectedDataset.input
+        I = handlers.ExpectedDataset.input  # noqa
         sig = I('*.tif', 'raw_imaging_data_[0-9]*') & I('imaging.frames.tar.bz2', 'raw_imaging_data_[0-9]*')
         self.assertEqual('and', sig.operator)
         ok, files, missing = sig.find_files(self.session_path)
@@ -602,7 +602,7 @@ class TestExpectedDataset(unittest.TestCase):
         self.assertEqual({'raw_imaging_data_[0-9]*/imaging.frames.tar.bz2'}, missing)
 
     def test_or(self):
-        I = handlers.ExpectedDataset.input
+        I = handlers.ExpectedDataset.input  # noqa
         sig = I('*.tif', 'raw_imaging_data_[0-9]*') | I('imaging.frames.tar.bz2', 'raw_imaging_data_[0-9]*')
         self.assertEqual('or', sig.operator)
         ok, files, missing = sig.find_files(self.session_path)
@@ -624,7 +624,7 @@ class TestExpectedDataset(unittest.TestCase):
         self.assertEqual({'raw_imaging_data_[0-9]*/*.tif', 'raw_imaging_data_[0-9]*/imaging.frames.tar.bz2'}, missing)
 
     def test_xor(self):
-        I = handlers.ExpectedDataset.input
+        I = handlers.ExpectedDataset.input  # noqa
         sig = I('*.tif', 'raw_imaging_data_[0-9]*') ^ I('imaging.frames.tar.bz2', 'raw_imaging_data_[0-9]*')
         self.assertEqual('xor', sig.operator)
         ok, files, missing = sig.find_files(self.session_path)
@@ -651,7 +651,7 @@ class TestExpectedDataset(unittest.TestCase):
 
         This test can be extended to support AND operators e.g. (dset1 AND dset2) OR (dset2 AND dset3).
         """
-        I = handlers.ExpectedDataset.input
+        I = handlers.ExpectedDataset.input  # noqa
         # Optional datasets 1
         column_names = ['session_path', 'id', 'rel_path', 'file_size', 'hash', 'exists']
         session_path = '/'.join(self.session_path.parts[-3:])

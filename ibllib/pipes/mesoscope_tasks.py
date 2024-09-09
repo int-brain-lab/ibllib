@@ -17,8 +17,8 @@ import subprocess
 import shutil
 import uuid
 from pathlib import Path
-from itertools import chain
-from collections import defaultdict, Counter
+from itertools import chain, groupby
+from collections import Counter
 from fnmatch import fnmatch
 import enum
 import re
@@ -65,7 +65,7 @@ class MesoscopeRegisterSnapshots(base_tasks.MesoscopeTask, base_tasks.RegisterRa
     def __init__(self, session_path, **kwargs):
         super().__init__(session_path, **kwargs)
         self.device_collection = self.get_device_collection('mesoscope',
-                                                            kwargs.get('device_collection', 'raw_imaging_data_*'))
+                                                            kwargs.get('device_collection', 'raw_imaging_data_??'))
 
     def _run(self):
         """
@@ -129,17 +129,17 @@ class MesoscopeCompress(base_tasks.MesoscopeTask):
             Path to compressed tar file.
         """
         outfiles = []  # should be one per raw_imaging_data folder
-        input_files = defaultdict(list)
-        for file, in_dir, _ in self.input_files:
-            input_files[self.session_path.joinpath(in_dir)].append(file)
-
-        for in_dir, files in input_files.items():
-            outfile = in_dir / self.output_files[0][0]
+        assert not any(x.operator for x in self.input_files), 'input datasets should not be nested'
+        _, all_tifs, _ = zip(*(x.find_files(self.session_path) for x in self.input_files))
+        # A list of tifs, grouped by raw imaging data collection
+        input_files = groupby(chain.from_iterable(all_tifs), key=lambda x: x.parent)
+        *_, outfile_name = self.output_files[0].identifiers
+        for in_dir, infiles in input_files:
+            infiles = list(infiles)
+            outfile = in_dir / outfile_name
             if outfile.exists() and not clobber:
                 _logger.info('%s already exists; skipping...', outfile.relative_to(self.session_path))
                 continue
-            # glob for all input patterns
-            infiles = list(chain(*map(lambda x: in_dir.glob(x), files)))
             if not infiles:
                 _logger.info('No image files found in %s', in_dir.relative_to(self.session_path))
                 continue
@@ -204,11 +204,11 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
     @property
     def signature(self):
         # The number of in and outputs will be dependent on the number of input raw imaging folders and output FOVs
-        I = ExpectedDataset.input
+        I = ExpectedDataset.input  # noqa
         signature = {
             'input_files': [('_ibl_rawImagingData.meta.json', self.device_collection, True),
                             I('*.tif', self.device_collection, True) |
-                            I('imaging.frames.tar.bz2', 'raw_imaging_data_[0-9]*', True, unique=False),
+                            I('imaging.frames.tar.bz2', self.device_collection, True, unique=False),
                             ('exptQC.mat', self.device_collection, False)],
             'output_files': [('mpci.ROIActivityF.npy', 'alf/FOV*', True),
                              ('mpci.ROINeuropilActivityF.npy', 'alf/FOV*', True),

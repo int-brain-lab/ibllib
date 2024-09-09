@@ -13,7 +13,7 @@ from ibllib.pipes.tasks import Task
 import ibllib.io.session_params as sess_params
 from ibllib.qc.base import sign_off_dict, SIGN_OFF_CATEGORIES
 from ibllib.io.raw_daq_loaders import load_timeline_sync_and_chmap
-from ibllib.oneibl.data_handlers import update_collections, ExpectedDataset
+from ibllib.oneibl.data_handlers import update_collections
 
 _logger = logging.getLogger(__name__)
 
@@ -391,8 +391,8 @@ class MesoscopeTask(DynamicTask):
         super().get_signatures(**kwargs)  # Set inputs and outputs
         # For all inputs and outputs that are part of the device collection, expand to one file per folder
         # All others keep unchanged
-        self.input_files = [update_collections(x, raw_imaging_folders) for x in self.input_files]
-        self.output_files = [update_collections(x, raw_imaging_folders) for x in self.output_files]
+        self.input_files = [update_collections(x, raw_imaging_folders, self.device_collection) for x in self.input_files]
+        self.output_files = [update_collections(x, raw_imaging_folders, self.device_collection) for x in self.output_files]
 
     def load_sync(self):
         """
@@ -574,7 +574,7 @@ class RegisterRawDataTask(DynamicTask):
         # FIXME Can be done with Task.assert_expected_outputs
         ok, out_files, missing = map(flatten, zip(*map(lambda x: x.find_files(self.session_path), self.output_files)))
         if not ok:
-            _logger.error(f'The following expected are missing: %s', ', '.join(missing))
+            _logger.error('The following expected are missing: %s', ', '.join(missing))
             self.status = -1
 
         return out_files

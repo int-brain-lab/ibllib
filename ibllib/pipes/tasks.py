@@ -85,7 +85,7 @@ import ibllib
 from ibllib.oneibl import data_handlers
 from ibllib.oneibl.data_handlers import get_local_data_repository
 from ibllib.oneibl.registration import get_lab
-from iblutil.util import Bunch
+from iblutil.util import Bunch, flatten
 import one.params
 from one.api import ONE
 from one.util import ensure_list
@@ -298,7 +298,7 @@ class Task(abc.ABC):
 
         # TODO This method currently does not support wildcards
         """
-        I = data_handlers.ExpectedDataset.input
+        I = data_handlers.ExpectedDataset.input  # noqa
         try:
             # Ensure all input files are ExpectedDataset instances
             input_files = [I(*i) if isinstance(i, tuple) else i for i in self.input_files or []]
@@ -419,7 +419,7 @@ class Task(abc.ABC):
             for out in self.outputs:
                 _logger.error(f'{out}')
             if raise_error:
-                raise FileNotFoundError("Missing outputs after task completion")
+                raise FileNotFoundError('Missing outputs after task completion')
 
         return everything_is_fine, files
 
@@ -471,7 +471,7 @@ class Task(abc.ABC):
 
         Parameters
         ----------
-        expected_files : list of tuple
+        expected_files : list of ExpectedDataset
             A list of expected files in the form (file_pattern_str, collection_str, required_bool).
         silent : bool
             If true, log an error if any required files are not found.
@@ -483,15 +483,16 @@ class Task(abc.ABC):
         list of pathlib.Path
             A list of file paths that exist on disk.
         """
-        everything_is_fine = True
-        files = []
-        for expected_file in expected_files:
-            ok, actual_files, missing = expected_file.find_files(self.session_path)
-            if not ok and not silent:
-                _logger.error('Signature file expected %s not found', ', '.join(missing))
-            elif len(actual_files) != 0:
-                files.append(actual_files[0])
-            everything_is_fine &= ok
+        if not any(expected_files):
+            return True, []
+        ok, actual_files, missing = zip(*(x.find_files(self.session_path) for x in expected_files))
+        everything_is_fine = all(ok)
+        # For unknown reasons only the first file of each expected dataset was returned and this
+        # behaviour was preserved after refactoring the code
+        files = [file_list[0] for file_list in actual_files if len(file_list) > 0]
+        if not everything_is_fine and not silent:
+            for missing_pattern in filter(None, flatten(missing)):
+                _logger.error('Signature file pattern %s not found', missing_pattern)
 
         return everything_is_fine, files
 

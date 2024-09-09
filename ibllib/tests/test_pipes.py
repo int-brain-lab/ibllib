@@ -1,8 +1,4 @@
-import json
-import logging
-import os
 import shutil
-import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,7 +6,6 @@ from unittest import mock
 import random
 import string
 from uuid import uuid4
-from datetime import datetime
 
 from one.webclient import AlyxClient
 from one.api import ONE

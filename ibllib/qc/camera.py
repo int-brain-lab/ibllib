@@ -44,7 +44,6 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 
 import one.alf.io as alfio
-from one.util import filter_datasets
 from one.alf import spec
 from one.alf.exceptions import ALFObjectNotFound
 from iblutil.util import Bunch
@@ -183,7 +182,7 @@ class CameraQC(base.QC):
         """Extract the data from raw data files.
 
         Extracts all the required task data from the raw data files. Missing data will raise an
-        AssertionError.
+        AssertionError.  TODO This method could instead be moved to CameraExtractor classes.
 
         Data keys:
             - count (int array): the sequential frame number (n, n+1, n+2...)
@@ -246,12 +245,12 @@ class CameraQC(base.QC):
         except AssertionError:  # Re-extract
             kwargs = dict(video_path=self.video_path, save=False)
             if self.sync == 'bpod':
-                extractor = camio.CameraTimestampsBpod(self.session_path, task_collection=task_collection)
+                extractor = camio.CameraTimestampsBpod(self.session_path)
+                kwargs['task_collection'] = task_collection
             else:
                 kwargs.update(sync=sync, chmap=chmap)
                 extractor = camio.CameraTimestampsFPGA(self.label, self.session_path)
-            outputs, _ = extractor.extract(**kwargs)
-            self.data['timestamps'] = outputs[f'{self.label}_camera_timestamps']
+            self.data['timestamps'] = extractor.extract(**kwargs)[0]
         except ALFObjectNotFound:
             _log.warning('no camera.times ALF found for session')
 
@@ -1212,7 +1211,7 @@ def run_all_qc(session, cameras=('left', 'right', 'body'), **kwargs):
     camlog = kwargs.pop('camlog', False)
     CamQC = CameraQCCamlog if camlog else CameraQC
 
-    run_args = {k: kwargs.pop(k) for k in ('download_data', 'extract_times', 'update')
+    run_args = {k: kwargs.pop(k) for k in ('extract_times', 'update')
                 if k in kwargs.keys()}
     for camera in cameras:
         qc[camera] = CamQC(session, camera, **kwargs)

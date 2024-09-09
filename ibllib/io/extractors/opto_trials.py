@@ -1,7 +1,6 @@
 import logging
 import numpy as np
 
-from ibllib.io.extractors import biased_trials
 from ibllib.io.extractors.base import BaseBpodTrialsExtractor
 
 _logger = logging.getLogger(__name__)

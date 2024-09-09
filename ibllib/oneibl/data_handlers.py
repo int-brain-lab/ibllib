@@ -441,7 +441,7 @@ def _parse_signature(signature):
     Dict[str, list of ExpectedDataset]
         A dict containing all tuples converted to ExpectedDataset instances.
     """
-    I, O = ExpectedDataset.input, ExpectedDataset.output
+    I, O = ExpectedDataset.input, ExpectedDataset.output  # noqa
     inputs = [i if isinstance(i, ExpectedDataset) else I(*i) for i in signature['input_files']]
     outputs = [o if isinstance(o, ExpectedDataset) else O(*o) for o in signature['output_files']]
     return {'input_files': inputs, 'output_files': outputs}
@@ -475,7 +475,7 @@ def dataset_from_name(name, datasets):
     return matches
 
 
-def update_collections(dataset, new_collection):
+def update_collections(dataset, new_collection, substring=None):
     """
     Update the collection of a dataset.
 
@@ -487,6 +487,9 @@ def update_collections(dataset, new_collection):
         The dataset to update.
     new_collection : str, list of str
         The new collection or collections.
+    substring : str, optional
+        An optional substring in the collection to replace with new collection(s). If None, the
+        entire collection will be replaced.
 
     Returns
     -------
@@ -499,11 +502,13 @@ def update_collections(dataset, new_collection):
     D = ExpectedDataset.input if isinstance(dataset, Input) else ExpectedDataset.output
     if dataset.operator is None:
         collection, revsion, name = dataset.identifiers
+        if substring:
+            after = [collection.replace(substring, x) for x in after]
         unique = not set(name).intersection('*[?')
         register = dataset.register
         updated = D(name, after[0], not isinstance(dataset, OptionalDataset), register, unique=unique)
         if len(after) > 1:
-            for folder in after:
+            for folder in after[1:]:
                 updated &= D(name, folder, not isinstance(dataset, OptionalDataset), register, unique=unique)
     else:
         updated = copy(dataset)

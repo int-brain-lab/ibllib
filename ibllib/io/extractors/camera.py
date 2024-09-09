@@ -201,7 +201,7 @@ class CameraTimestampsCamlog(BaseExtractor):
             raw_ts = np.r_[raw_ts, np.array([raw_ts[-1] + med_time])]
 
         assert video_frames == raw_ts.size, f'dimension mismatch between video frames and TTL pulses for {self.label} camera' \
-                                            f'by {np.abs(video_frames - raw_ts.size)} frames'
+                                            f' by {np.abs(video_frames - raw_ts.size)} frames'
 
         return raw_ts
 

@@ -4,7 +4,6 @@ import numpy as np
 
 from one.alf.spec import is_session_path
 import one.alf.io as alfio
-from one.api import ONE
 
 
 _logger = logging.getLogger('ibllib')
@@ -21,34 +20,21 @@ REQUIRED_FIELDS = ['choice', 'contrastLeft', 'contrastRight', 'correct',
 
 
 class TaskQCExtractor:
-    def __init__(self, session_path, one=None, download_data=False, bpod_only=False,
-                 sync_collection=None, sync_type=None, task_collection=None):
+    def __init__(self, session_path):
         """
-        A class for extracting the task data required to perform task quality control.
+        A class for holding the task data required to perform task quality control.
         :param session_path: a valid session path
-        :param one: an instance of ONE, used to download the raw data if download_data is True
-        :param download_data: if True, any missing raw data is downloaded via ONE
-        :param bpod_only: extract from raw Bpod data only, even for FPGA sessions
         """
         if not is_session_path(session_path):
             raise ValueError('Invalid session path')
         self.session_path = session_path
-        self.one = one
         self.log = _logger
 
         self.data = None
         self.settings = None
         self.raw_data = None
         self.frame_ttls = self.audio_ttls = self.bpod_ttls = None
-        self.type = None
         self.wheel_encoding = None
-        self.bpod_only = bpod_only
-        self.sync_collection = sync_collection or 'raw_ephys_data'
-        self.sync_type = sync_type
-        self.task_collection = task_collection or 'raw_behavior_data'
-
-        if download_data:
-            self.one = one or ONE()
 
     @staticmethod
     def rename_data(data):
