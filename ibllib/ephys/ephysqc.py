@@ -205,41 +205,48 @@ class EphysQC(base.QC):
         return qc_files
 
 
-def rmsmap(sglx):
+def rmsmap(sglx, spectra=True, nmod=1):
     """
     Computes RMS map in time domain and spectra for each channel of Neuropixel probe
 
     :param sglx: Open spikeglx reader
+    :param spectra: Whether to compute the spectra
+    :param nmod: take every nmod windows, in cases where we don't want to compute over the whole signal
     :return: a dictionary with amplitudes in channeltime space, channelfrequency space, time
      and frequency scales
     """
     rms_win_length_samples = 2 ** np.ceil(np.log2(sglx.fs * RMS_WIN_LENGTH_SECS))
     # the window generator will generates window indices
     wingen = utils.WindowGenerator(ns=sglx.ns, nswin=rms_win_length_samples, overlap=0)
+    nwin = np.ceil(wingen.nwin / nmod).astype(int)
     # pre-allocate output dictionary of numpy arrays
-    win = {'TRMS': np.zeros((wingen.nwin, sglx.nc)),
-           'nsamples': np.zeros((wingen.nwin,)),
+    win = {'TRMS': np.zeros((nwin, sglx.nc)),
+           'nsamples': np.zeros((nwin,)),
            'fscale': fourier.fscale(WELCH_WIN_LENGTH_SAMPLES, 1 / sglx.fs, one_sided=True),
-           'tscale': wingen.tscale(fs=sglx.fs)}
+           'tscale': wingen.tscale(fs=sglx.fs)[::nmod]}
     win['spectral_density'] = np.zeros((len(win['fscale']), sglx.nc))
     # loop through the whole session
     with tqdm(total=wingen.nwin) as pbar:
-        for first, last in wingen.firstlast:
+        for iwindow, (first, last) in enumerate(wingen.firstlast):
+            if np.mod(iwindow, nmod) != 0:
+                continue
+
             D = sglx.read_samples(first_sample=first, last_sample=last)[0].transpose()
             # remove low frequency noise below 1 Hz
             D = fourier.hp(D, 1 / sglx.fs, [0, 1])
-            iw = wingen.iw
+            iw = np.floor(wingen.iw / nmod).astype(int)
             win['TRMS'][iw, :] = utils.rms(D)
             win['nsamples'][iw] = D.shape[1]
-            # the last window may be smaller than what is needed for welch
-            if last - first < WELCH_WIN_LENGTH_SAMPLES:
-                continue
-            # compute a smoothed spectrum using welch method
-            _, w = signal.welch(
-                D, fs=sglx.fs, window='hann', nperseg=WELCH_WIN_LENGTH_SAMPLES,
-                detrend='constant', return_onesided=True, scaling='density', axis=-1
-            )
-            win['spectral_density'] += w.T
+            if spectra:
+                # the last window may be smaller than what is needed for welch
+                if last - first < WELCH_WIN_LENGTH_SAMPLES:
+                    continue
+                # compute a smoothed spectrum using welch method
+                _, w = signal.welch(
+                    D, fs=sglx.fs, window='hann', nperseg=WELCH_WIN_LENGTH_SAMPLES,
+                    detrend='constant', return_onesided=True, scaling='density', axis=-1
+                )
+                win['spectral_density'] += w.T
             # print at least every 20 windows
             if (iw % min(20, max(int(np.floor(wingen.nwin / 75)), 1))) == 0:
                 pbar.update(iw)
@@ -247,7 +254,7 @@ def rmsmap(sglx):
     return win
 
 
-def extract_rmsmap(sglx, out_folder=None, overwrite=False):
+def extract_rmsmap(sglx, out_folder=None, overwrite=False, spectra=True, nmod=1):
     """
     Wrapper for rmsmap that outputs _ibl_ephysRmsMap and _ibl_ephysSpectra ALF files
 
@@ -255,7 +262,8 @@ def extract_rmsmap(sglx, out_folder=None, overwrite=False):
     :param out_folder: folder in which to store output ALF files. Default uses the folder in which
      the `fbin` file lives.
     :param overwrite: do not re-extract if all ALF files already exist
-    :param label: string or list of strings that will be appended to the filename before extension
+    :param spectra: Whether to compute the spectral density across the signal
+    :param nmod: take every nmod windows, in cases where we don't want to compute over the whole signal
     :return: None
     """
     if out_folder is None:
@@ -271,18 +279,19 @@ def extract_rmsmap(sglx, out_folder=None, overwrite=False):
         _logger.warning(f'RMS map already exists for .{sglx.type} data in {out_folder}, skipping. Use overwrite option.')
         return files_time + files_freq
     # crunch numbers
-    rms = rmsmap(sglx)
+    rms = rmsmap(sglx, spectra=spectra, nmod=nmod)
     # output ALF files, single precision with the optional label as suffix before extension
     if not out_folder.exists():
         out_folder.mkdir()
     tdict = {'rms': rms['TRMS'].astype(np.single), 'timestamps': rms['tscale'].astype(np.single)}
-    fdict = {'power': rms['spectral_density'].astype(np.single),
-             'freqs': rms['fscale'].astype(np.single)}
     out_time = alfio.save_object_npy(
         out_folder, object=alf_object_time, dico=tdict, namespace='iblqc')
-    out_freq = alfio.save_object_npy(
-        out_folder, object=alf_object_freq, dico=fdict, namespace='iblqc')
-    return out_time + out_freq
+    if spectra:
+        fdict = {'power': rms['spectral_density'].astype(np.single),
+                 'freqs': rms['fscale'].astype(np.single)}
+        out_freq = alfio.save_object_npy(
+            out_folder, object=alf_object_freq, dico=fdict, namespace='iblqc')
+    return out_time + out_freq if spectra else out_time
 
 
 def raw_qc_session(session_path, overwrite=False):

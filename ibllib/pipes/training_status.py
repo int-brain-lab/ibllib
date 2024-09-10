@@ -8,6 +8,7 @@ import pandas as pd
 from iblutil.numerical import ismember
 import one.alf.io as alfio
 from one.alf.exceptions import ALFObjectNotFound
+import one.alf.files as alfiles
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.lines import Line2D
@@ -214,7 +215,7 @@ def load_combined_trials(sess_paths, one, force=True):
     return training.concatenate_trials(trials_dict)
 
 
-def get_latest_training_information(sess_path, one):
+def get_latest_training_information(sess_path, one, save=True):
     """
     Extracts the latest training status.
 
@@ -261,7 +262,8 @@ def get_latest_training_information(sess_path, one):
     df = df.sort_values('date')
     df = df.reset_index(drop=True)
     # Save our dataframe
-    save_dataframe(df, subj_path)
+    if save:
+        save_dataframe(df, subj_path)
 
     # Now go through the backlog and compute the training status for sessions. If for example one was missing as it is cumulative
     # we need to go through and compute all the backlog
@@ -287,10 +289,10 @@ def get_latest_training_information(sess_path, one):
             if 'ready4ephysrig' not in tr_st:
                 sess = un_df.iloc[39].session_path
                 df.loc[df['session_path'] == sess, 'training_status'] = 'unbiasable'
+    if save:
+        save_dataframe(df, subj_path)
 
-    save_dataframe(df, subj_path)
-
-    if one.mode != 'local':
+    if one.mode != 'local' and save:
         upload_training_table_to_aws(lab, sub)
 
     return df
@@ -336,7 +338,7 @@ def compute_training_status(df, compute_date, one, force=True):
         The input data frame with a 'training_status' column populated for `compute_date`.
     """
 
-    # compute_date = str(one.path2ref(session_path)['date'])
+    # compute_date = str(alfiles.session_path_parts(session_path, as_dict=True)['date'])
     df_temp = df[df['date'] <= compute_date]
     df_temp = df_temp.drop_duplicates(subset=['session_path', 'task_protocol'])
     df_temp.sort_values('date')
@@ -486,7 +488,7 @@ def get_data_collection(session_path):
                 continue
             collections.append(collection)
     else:
-        settings = Path(session_path).rglob('_iblrig_taskSettings.raw.json')
+        settings = Path(session_path).rglob('_iblrig_taskSettings.raw*.json')
         for setting in settings:
             if setting.parent.name != 'raw_passive_data':
                 collections.append(setting.parent.name)
@@ -504,7 +506,7 @@ def get_data_collection(session_path):
 def get_sess_dict(session_path, one, protocol, alf_collections=None, raw_collections=None, force=True):
 
     sess_dict = {}
-    sess_dict['date'] = str(one.path2ref(session_path)['date'])
+    sess_dict['date'] = str(alfiles.session_path_parts(session_path, as_dict=True)['date'])
     sess_dict['session_path'] = str(session_path)
     sess_dict['task_protocol'] = protocol
 
