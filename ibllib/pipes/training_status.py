@@ -520,11 +520,11 @@ def get_sess_dict(session_path, one, protocol, alf_collections=None, raw_collect
         sess_dict['n_delay'] = np.nan
         sess_dict['location'] = np.nan
         sess_dict['training_status'] = 'habituation'
-        sess_dict['bias_50'], sess_dict['thres_50'], sess_dict['lapsehigh_50'], sess_dict['lapselow_50'] = \
+        sess_dict['bias_50'], sess_dict['thres_50'], sess_dict['lapselow_50'], sess_dict['lapsehigh_50'] = \
             (np.nan, np.nan, np.nan, np.nan)
-        sess_dict['bias_20'], sess_dict['thres_20'], sess_dict['lapsehigh_20'], sess_dict['lapselow_20'] = \
+        sess_dict['bias_20'], sess_dict['thres_20'], sess_dict['lapselow_20'], sess_dict['lapsehigh_20'] = \
             (np.nan, np.nan, np.nan, np.nan)
-        sess_dict['bias_80'], sess_dict['thres_80'], sess_dict['lapsehigh_80'], sess_dict['lapselow_80'] = \
+        sess_dict['bias_80'], sess_dict['thres_80'], sess_dict['lapselow_80'], sess_dict['lapsehigh_80'] = \
             (np.nan, np.nan, np.nan, np.nan)
 
     else:
@@ -535,18 +535,18 @@ def get_sess_dict(session_path, one, protocol, alf_collections=None, raw_collect
 
         sess_dict['performance'], sess_dict['contrasts'], _ = training.compute_performance(trials, prob_right=True)
         if sess_dict['task_protocol'] == 'training':
-            sess_dict['bias_50'], sess_dict['thres_50'], sess_dict['lapsehigh_50'], sess_dict['lapselow_50'] = \
+            sess_dict['bias_50'], sess_dict['thres_50'], sess_dict['lapselow_50'], sess_dict['lapsehigh_50'] = \
                 training.compute_psychometric(trials)
-            sess_dict['bias_20'], sess_dict['thres_20'], sess_dict['lapsehigh_20'], sess_dict['lapselow_20'] = \
+            sess_dict['bias_20'], sess_dict['thres_20'], sess_dict['lapselow_20'], sess_dict['lapsehigh_20'] = \
                 (np.nan, np.nan, np.nan, np.nan)
-            sess_dict['bias_80'], sess_dict['thres_80'], sess_dict['lapsehigh_80'], sess_dict['lapselow_80'] = \
+            sess_dict['bias_80'], sess_dict['thres_80'], sess_dict['lapselow_80'], sess_dict['lapsehigh_80'] = \
                 (np.nan, np.nan, np.nan, np.nan)
         else:
-            sess_dict['bias_50'], sess_dict['thres_50'], sess_dict['lapsehigh_50'], sess_dict['lapselow_50'] = \
+            sess_dict['bias_50'], sess_dict['thres_50'], sess_dict['lapselow_50'], sess_dict['lapsehigh_50'] = \
                 training.compute_psychometric(trials, block=0.5)
-            sess_dict['bias_20'], sess_dict['thres_20'], sess_dict['lapsehigh_20'], sess_dict['lapselow_20'] = \
+            sess_dict['bias_20'], sess_dict['thres_20'], sess_dict['lapselow_20'], sess_dict['lapsehigh_20'] = \
                 training.compute_psychometric(trials, block=0.2)
-            sess_dict['bias_80'], sess_dict['thres_80'], sess_dict['lapsehigh_80'], sess_dict['lapselow_80'] = \
+            sess_dict['bias_80'], sess_dict['thres_80'], sess_dict['lapselow_80'], sess_dict['lapsehigh_80'] = \
                 training.compute_psychometric(trials, block=0.8)
 
         sess_dict['performance_easy'] = training.compute_performance_easy(trials)
@@ -650,8 +650,8 @@ def get_training_info_for_session(session_paths, one, force=True):
             for bias in [50, 20, 80]:
                 sess_dict[f'combined_bias_{bias}'] = psychs[f'{bias}'][0]
                 sess_dict[f'combined_thres_{bias}'] = psychs[f'{bias}'][1]
-                sess_dict[f'combined_lapsehigh_{bias}'] = psychs[f'{bias}'][2]
-                sess_dict[f'combined_lapselow_{bias}'] = psychs[f'{bias}'][3]
+                sess_dict[f'combined_lapselow_{bias}'] = psychs[f'{bias}'][2]
+                sess_dict[f'combined_lapsehigh_{bias}'] = psychs[f'{bias}'][3]
 
             # Case where two sessions on same day with different number of contrasts! Oh boy
             if sess_dict['combined_performance'].size != sess_dict['performance'].size:
