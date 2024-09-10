@@ -1084,7 +1084,7 @@ class FpgaTrials(extractors_base.BaseExtractor):
         if audio_event_ttls is None:
             # For training/biased/ephys protocols, the ready tone should be below 110 ms. The error
             # tone should be between 400ms and 1200ms
-            audio_event_ttls = {'ready_tone': (0, 0.11), 'error_tone': (0.4, 1.2)}
+            audio_event_ttls = {'ready_tone': (0, 0.1101), 'error_tone': (0.4, 1.2)}
         audio_event_intervals = self._assign_events(audio['times'], audio['polarities'], audio_event_ttls, display=display)
 
         return audio, audio_event_intervals
