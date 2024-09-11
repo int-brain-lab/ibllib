@@ -721,7 +721,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         out, _ = ibllib.ephys.spikes.sync_spike_sorting(ap_file=ap_file, out_path=probe_out_path)
         out_files.extend(out)
         # Now compute the unit metrics
-        self.compute_cell_qc(probe_out_path)
+        _, df_units, drift = self.compute_cell_qc(probe_out_path)
         # convert ks2_output into tar file and also register
         # Make this in case spike sorting is in old raw_ephys_data folders, for new
         # sessions it should already exist
@@ -753,6 +753,8 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
             eid = self.one.path2eid(self.session_path, query_type='remote')
             ins = self.one.alyx.rest('insertions', 'list', session=eid, name=label, query_type='remote')
             if len(ins) != 0:
+                _logger.info("Populating probe insertion with qc")
+                self._label_probe_qc(probe_out_path, df_units, drift)
                 _logger.info("Creating SpikeSorting QC plots")
                 plot_task = ApPlots(ins[0]['id'], session_path=self.session_path, one=self.one)
                 _ = plot_task.run()
