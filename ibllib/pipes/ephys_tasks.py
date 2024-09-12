@@ -517,8 +517,22 @@ class CellQCMixin:
             df_units = pd.concat(
                 [df_units, ks2_labels['ks2_label'].reindex(df_units.index)], axis=1)
         # save as parquet file
-        df_units.to_parquet(folder_alf_probe.joinpath("clusters.metrics.pqt"))
-        return folder_alf_probe.joinpath("clusters.metrics.pqt"), df_units, drift
+        df_units.to_parquet(file_metrics := folder_alf_probe.joinpath("clusters.metrics.pqt"))
+
+        assert np.all((df_units['bitwise_fail'] == 0) == (df_units['label'] == 1))  # useless but sanity check for OW
+
+        cok = df_units['bitwise_fail'] == 0
+        sok = cok[spikes['clusters']].values
+        spikes['templates'] = spikes['templates'].astype(np.uint16)
+        spikes['clusters'] = spikes['clusters'].astype(np.uint16)
+        spikes['depths'] = spikes['depths'].astype(np.float32)
+        spikes['amps'] = spikes['amps'].astype(np.float32)
+        file_passing = folder_alf_probe.joinpath('passingSpikes.table.pqt')
+        df_spikes = pd.DataFrame(spikes)
+        df_spikes = df_spikes.iloc[sok, :].reset_index(drop=True)
+        df_spikes.to_parquet(file_passing)
+
+        return [file_metrics, file_passing], df_units, drift
 
     def _label_probe_qc(self, folder_probe, df_units, drift):
         """
@@ -565,23 +579,59 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
     job_size = 'large'
     force = True
     env = 'iblsorter'
-
+    _sortername = 'iblsorter'
     SHELL_SCRIPT = Path.home().joinpath(
-        "Documents/PYTHON/iblscripts/deploy/serverpc/iblsorter/sort_recording.sh"
+        f"Documents/PYTHON/iblscripts/deploy/serverpc/{_sortername}/sort_recording.sh"
     )
     SPIKE_SORTER_NAME = 'iblsorter'
-    PYKILOSORT_REPO = Path.home().joinpath('Documents/PYTHON/SPIKE_SORTING/ibl-sorter')
+    SORTER_REPOSITORY = Path.home().joinpath('Documents/PYTHON/SPIKE_SORTING/ibl-sorter')
 
     @property
     def signature(self):
         signature = {
-            'input_files': [('*ap.meta', f'{self.device_collection}/{self.pname}', True),
-                            ('*ap.*bin', f'{self.device_collection}/{self.pname}', True),
-                            ('*ap.ch', f'{self.device_collection}/{self.pname}', False),
-                            ('*sync.npy', f'{self.device_collection}/{self.pname}', True)],
-            'output_files': [('spike_sorting_pykilosort.log', f'spike_sorters/pykilosort/{self.pname}', True),
-                             ('_iblqc_ephysTimeRmsAP.rms.npy', f'{self.device_collection}/{self.pname}', True),
-                             ('_iblqc_ephysTimeRmsAP.timestamps.npy', f'{self.device_collection}/{self.pname}', True)]
+            'input_files': [
+                ('*ap.meta', f'{self.device_collection}/{self.pname}', True),
+                ('*ap.*bin', f'{self.device_collection}/{self.pname}', True),
+                ('*ap.ch', f'{self.device_collection}/{self.pname}', False),
+                ('*sync.npy', f'{self.device_collection}/{self.pname}', True)
+            ],
+            'output_files': [
+                # ./raw_ephys_data/probe00/
+                ('_iblqc_ephysTimeRmsAP.rms.npy', f'{self.device_collection}/{self.pname}/', True),
+                ('_iblqc_ephysTimeRmsAP.timestamps.npy', f'{self.device_collection}/{self.pname}/', True),
+                # ./spike_sorters/iblsorter/probe00
+                ('spike_sorting_pykilosort.log', f'spike_sorters/{self._sortername}/{self.pname}', True),
+                ('_kilosort_raw.output.tar', f'spike_sorters/{self._sortername}/{self.pname}/', True),
+                # ./alf/probe00/iblsorter
+                ('_kilosort_whitening.matrix.npy', f'alf/{self.pname}/{self._sortername}/', True),
+                ('_phy_spikes_subset.channels.npy', f'alf/{self.pname}/{self._sortername}/', True),
+                ('_phy_spikes_subset.spikes.npy', f'alf/{self.pname}/{self._sortername}/', True),
+                ('_phy_spikes_subset.waveforms.npy', f'alf/{self.pname}/{self._sortername}/', True),
+                ('channels.labels.npy', f'alf/{self.pname}/{self._sortername}/', True),
+                ('channels.localCoordinates.npy', f'alf/{self.pname}/{self._sortername}/', True),
+                ('channels.rawInd.npy', f'alf/{self.pname}/{self._sortername}/', True),
+                ('clusters.amps.npy', f'alf/{self.pname}/{self._sortername}/', True),
+                ('clusters.channels.npy', f'alf/{self.pname}/{self._sortername}/', True),
+                ('clusters.depths.npy', f'alf/{self.pname}/{self._sortername}/', True),
+                ('clusters.metrics.pqt', f'alf/{self.pname}/{self._sortername}/', True),
+                ('clusters.peakToTrough.npy', f'alf/{self.pname}/{self._sortername}/', True),
+                ('clusters.uuids.csv', f'alf/{self.pname}/{self._sortername}/', True),
+                ('clusters.waveforms.npy', f'alf/{self.pname}/{self._sortername}/', True),
+                ('clusters.waveformsChannels.npy', f'alf/{self.pname}/{self._sortername}/', True),
+                ('drift.times.npy', f'alf/{self.pname}/{self._sortername}/', True),
+                ('drift.um.npy', f'alf/{self.pname}/{self._sortername}/', True),
+                ('drift_depths.um.npy', f'alf/{self.pname}/{self._sortername}/', True),
+                ('passingSpikes.table.pqt', f'alf/{self.pname}/{self._sortername}/', True),
+                ('spikes.amps.npy', f'alf/{self.pname}/{self._sortername}/', True),
+                ('spikes.clusters.npy', f'alf/{self.pname}/{self._sortername}/', True),
+                ('spikes.depths.npy', f'alf/{self.pname}/{self._sortername}/', True),
+                ('spikes.samples.npy', f'alf/{self.pname}/{self._sortername}/', True),
+                ('spikes.templates.npy', f'alf/{self.pname}/{self._sortername}/', True),
+                ('spikes.times.npy', f'alf/{self.pname}/{self._sortername}/', True),
+                ('templates.amps.npy', f'alf/{self.pname}/{self._sortername}/', True),
+                ('templates.waveforms.npy', f'alf/{self.pname}/{self._sortername}/', True),
+                ('templates.waveformsChannels.npy', f'alf/{self.pname}/{self._sortername}/', True),
+            ],
         }
         return signature
 
@@ -630,7 +680,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         (discontinued support for old spike sortings in the probe folder <1.5.5)
         :return: path of the folder containing ks2 spike sorting output
         """
-        self.version = self._fetch_iblsorter_version(self.PYKILOSORT_REPO)
+        self.version = self._fetch_iblsorter_version(self.SORTER_REPOSITORY)
         label = ap_file.parts[-2]  # this is usually the probe name
         sorter_dir = self.session_path.joinpath("spike_sorters", self.SPIKE_SORTER_NAME, label)
         self.FORCE_RERUN = False
@@ -721,7 +771,9 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         out, _ = ibllib.ephys.spikes.sync_spike_sorting(ap_file=ap_file, out_path=probe_out_path)
         out_files.extend(out)
         # Now compute the unit metrics
-        _, df_units, drift = self.compute_cell_qc(probe_out_path)
+        files_qc, df_units, drift = self.compute_cell_qc(probe_out_path)
+        out_files.extend(files_qc)
+
         # convert ks2_output into tar file and also register
         # Make this in case spike sorting is in old raw_ephys_data folders, for new
         # sessions it should already exist
