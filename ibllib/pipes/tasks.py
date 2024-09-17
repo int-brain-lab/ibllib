@@ -372,21 +372,23 @@ class Task(abc.ABC):
             if not self.force:
                 self.data_handler = self.get_data_handler()
                 _logger.warning('Not all input files found locally: will still attempt to rerun task')
-                _logger.info('All output files found but input files required not available locally: task not rerun')
-                return False
+                # TODO in the future once we are sure that input output task signatures work properly should return False
+                # _logger.info('All output files found but input files required not available locally: task not rerun')
+                return True
             else:
                 # Attempts to download missing data using globus
                 _logger.info('Not all input files found locally: attempting to re-download required files')
                 self.data_handler = self.get_data_handler(location='serverglobus')
                 self.data_handler.setUp()
                 # Double check we now have the required files to run the task
-                self.assert_expected_inputs(raise_error=True)
+                # TODO in future should raise error if even after downloading don't have the correct files
+                self.assert_expected_inputs(raise_error=False)
                 return True
         else:
             self.data_handler = self.get_data_handler()
             self.data_handler.setUp()
             self.get_signatures(**kwargs)
-            self.assert_expected_inputs(raise_error=True)
+            self.assert_expected_inputs(raise_error=False)
             return True
 
     def tearDown(self):

@@ -663,7 +663,8 @@ class MesoscopeSync(base_tasks.MesoscopeTask):
             events = None
         if events is None or events.empty:
             _logger.debug('No software events found for session %s', self.session_path)
-        collections = set(collection for _, collection, _ in self.input_files
+        input_files = chain.from_iterable(map(lambda x: x.identifiers, self.input_files))
+        collections = set(collection for collection, *_ in input_files
                           if fnmatch(collection, self.device_collection))
         # Load first meta data file to determine the number of FOVs
         # Changing FOV between imaging bouts is not supported currently!
