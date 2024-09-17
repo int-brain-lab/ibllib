@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import traceback
 from pathlib import Path
@@ -355,9 +356,9 @@ class EphysSyncPulses(SyncPulses):
     @property
     def signature(self):
         signature = {
-            'input_files': [('*nidq.cbin', self.sync_collection, True),
+            'input_files': [('*nidq.cbin', self.sync_collection, False),
                             ('*nidq.ch', self.sync_collection, False),
-                            ('*nidq.meta', self.sync_collection, True),
+                            ('*nidq.meta', self.sync_collection, False),
                             ('*nidq.wiring.json', self.sync_collection, True)],
             'output_files': [('_spikeglx_sync.times.npy', self.sync_collection, True),
                              ('_spikeglx_sync.polarities.npy', self.sync_collection, True),
@@ -397,9 +398,14 @@ class EphysPulses(base_tasks.EphysTask):
                            [('*ap.cbin', f'{self.device_collection}/{pname}', True) for pname in self.pname] +
                            [('*ap.ch', f'{self.device_collection}/{pname}', True) for pname in self.pname] +
                            [('*ap.wiring.json', f'{self.device_collection}/{pname}', False) for pname in self.pname] +
-                           [('_spikeglx_sync.times.npy', self.sync_collection, True),
-                            ('_spikeglx_sync.polarities.npy', self.sync_collection, True),
-                            ('_spikeglx_sync.channels.npy', self.sync_collection, True)],
+                           [('_spikeglx_sync.times.*npy', f'{self.device_collection}/{pname}', False) for pname in self.pname] +
+                           [('_spikeglx_sync.polarities.*npy', f'{self.device_collection}/{pname}', False) for pname in self.pname] +
+                           [('_spikeglx_sync.channels.*npy', f'{self.device_collection}/{pname}', False) for pname in self.pname] +
+                           [('_spikeglx_sync.times.*npy', self.sync_collection, True),
+                            ('_spikeglx_sync.polarities.*npy', self.sync_collection, True),
+                            ('_spikeglx_sync.channels.*npy', self.sync_collection, True),
+                            ('*ap.meta', self.sync_collection, True)
+                            ],
             'output_files': [(f'_spikeglx_sync.times.{pname}.npy', f'{self.device_collection}/{pname}', True)
                              for pname in self.pname] +
                             [(f'_spikeglx_sync.polarities.{pname}.npy', f'{self.device_collection}/{pname}', True)
@@ -599,6 +605,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
                 # ./raw_ephys_data/probe00/
                 ('_iblqc_ephysTimeRmsAP.rms.npy', f'{self.device_collection}/{self.pname}/', True),
                 ('_iblqc_ephysTimeRmsAP.timestamps.npy', f'{self.device_collection}/{self.pname}/', True),
+                ('_iblqc_ephysSaturation.samples.npy', f'{self.device_collection}/{self.pname}/', True),
                 # ./spike_sorters/iblsorter/probe00
                 ('spike_sorting_pykilosort.log', f'spike_sorters/{self._sortername}/{self.pname}', True),
                 ('_kilosort_raw.output.tar', f'spike_sorters/{self._sortername}/{self.pname}/', True),
@@ -634,6 +641,26 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
             ],
         }
         return signature
+
+    @property
+    def _temporary_folder(self):
+        """
+        Constructs a path to a temporary folder for the spike sorting output and scratch files
+        This is usually on a high performance drive, and we should factor around 2.5 times the uncompressed raw recording size
+        For a scratch drive at /mnt/h0 we would have the following temp dir:
+        /mnt/h0/iblsorter_1.8.0_CSHL071_2020-10-04_001_probe01/
+        """
+        # get the scratch drive from the shell script
+        with open(self.SHELL_SCRIPT) as fid:
+            lines = fid.readlines()
+        line = [line for line in lines if line.startswith("SCRATCH_DRIVE=")][0]
+        m = re.search(r"\=(.*?)(\#|\n)", line)[0]
+        scratch_drive = Path(m[1:-1].strip())
+        assert scratch_drive.exists(), f"Scratch drive {scratch_drive} not found"
+        # get the version of the sorter
+        self.version = self._fetch_iblsorter_version(self.SORTER_REPOSITORY)
+        spikesorter_dir = f"{self.version}_{'_'.join(list(self.session_path.parts[-3:]))}_{self.pname}"
+        return scratch_drive.joinpath(spikesorter_dir)
 
     @staticmethod
     def _sample2v(ap_file):
@@ -680,9 +707,8 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         (discontinued support for old spike sortings in the probe folder <1.5.5)
         :return: path of the folder containing ks2 spike sorting output
         """
-        self.version = self._fetch_iblsorter_version(self.SORTER_REPOSITORY)
-        label = ap_file.parts[-2]  # this is usually the probe name
-        sorter_dir = self.session_path.joinpath("spike_sorters", self.SPIKE_SORTER_NAME, label)
+        sorter_dir = self.session_path.joinpath("spike_sorters", self.SPIKE_SORTER_NAME, self.pname)
+        temp_dir = self._temporary_folder
         self.FORCE_RERUN = False
         if not self.FORCE_RERUN:
             log_file = sorter_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log")
@@ -694,22 +720,13 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
                     return sorter_dir
                 else:
                     self.FORCE_RERUN = True
-        # get the scratch drive from the shell script
-        with open(self.SHELL_SCRIPT) as fid:
-            lines = fid.readlines()
-        line = [line for line in lines if line.startswith("SCRATCH_DRIVE=")][0]
-        m = re.search(r"\=(.*?)(\#|\n)", line)[0]
-        scratch_drive = Path(m[1:-1].strip())
-        assert scratch_drive.exists(), f"Scratch drive {scratch_drive} not found"
-        spikesorter_dir = f"{self.version}_{'_'.join(list(self.session_path.parts[-3:]))}_{self.pname}"
-        temp_dir = scratch_drive.joinpath(spikesorter_dir)
-        _logger.info(f"job progress command: tail -f {temp_dir} *.log")
+        _logger.info(f"job progress command: tail -f {self._temporary_folder} *.log")
         temp_dir.mkdir(parents=True, exist_ok=True)
         check_nvidia_driver()
         try:
             # if pykilosort is in the environment, use the installed version within the task
             import iblsorter.ibl  # noqa
-            iblsorter.ibl.run_spike_sorting_ibl(bin_file=ap_file, scratch_dir=temp_dir)
+            iblsorter.ibl.run_spike_sorting_ibl(bin_file=ap_file, scratch_dir=temp_dir, delete=False)
         except ImportError:
             command2run = f"{self.SHELL_SCRIPT} {ap_file} {temp_dir}"
             _logger.info(command2run)
@@ -732,10 +749,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
                         _logger.error(log)
                     break
                 raise RuntimeError(f"{self.SPIKE_SORTER_NAME} {info_str}, {error_str}")
-
         shutil.copytree(temp_dir.joinpath('output'), sorter_dir, dirs_exist_ok=True)
-        shutil.rmtree(temp_dir, ignore_errors=True)
-
         return sorter_dir
 
     def _run(self):
@@ -751,35 +765,44 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         ap_files = [(ef.get("ap"), ef.get("label")) for ef in efiles if "ap" in ef.keys()]
         assert len(ap_files) != 0, f"No ap file found for probe {self.session_path.joinpath(self.device_collection, self.pname)}"
         assert len(ap_files) == 1, f"Several bin files found for the same probe {ap_files}"
-        ap_file, label = ap_files[0]
+        ap_file_original, label = ap_files[0]
         out_files = []
-        ks2_dir = self._run_iblsort(ap_file)  # runs the sorter, skips if it already ran
+        sr = spikeglx.Reader(ap_file_original)
+        if sr.is_mtscomp:
+            ap_file = sr.decompress_to_scratch(scratch_dir=self._temporary_folder)
+        else:
+            ap_file = ap_file_original
+        sorter_dir = self._run_iblsort(ap_file)  # runs the sorter, skips if it already ran
+        # convert the data to ALF in the ./alf/probeXX/SPIKE_SORTER_NAME folder
         probe_out_path = self.session_path.joinpath("alf", label, self.SPIKE_SORTER_NAME)
         shutil.rmtree(probe_out_path, ignore_errors=True)
         probe_out_path.mkdir(parents=True, exist_ok=True)
         ibllib.ephys.spikes.ks2_to_alf(
-            ks2_dir,
+            sorter_dir,
             bin_path=ap_file.parent,
             out_path=probe_out_path,
             bin_file=ap_file,
             ampfactor=self._sample2v(ap_file),
         )
-        logfile = ks2_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log")
+        logfile = sorter_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log")
         if logfile.exists():
             shutil.copyfile(logfile, probe_out_path.joinpath(f"_ibl_log.info_{self.SPIKE_SORTER_NAME}.log"))
+        # recover the QC files from the spike sorting output
+        for file_qc in sorter_dir.rglob('_iblqc_*.npy'):
+            shutil.copy(file_qc, ap_file_original.parent.joinpath(file_qc.name))
+            out_files.append(ap_file_original.parent.joinpath(file_qc.name))
         # Sync spike sorting with the main behaviour clock: the nidq for 3B+ and the main probe for 3A
-        out, _ = ibllib.ephys.spikes.sync_spike_sorting(ap_file=ap_file, out_path=probe_out_path)
+        out, _ = ibllib.ephys.spikes.sync_spike_sorting(ap_file=ap_file_original, out_path=probe_out_path)
         out_files.extend(out)
         # Now compute the unit metrics
         files_qc, df_units, drift = self.compute_cell_qc(probe_out_path)
         out_files.extend(files_qc)
-
         # convert ks2_output into tar file and also register
         # Make this in case spike sorting is in old raw_ephys_data folders, for new
         # sessions it should already exist
         tar_dir = self.session_path.joinpath('spike_sorters', self.SPIKE_SORTER_NAME, label)
         tar_dir.mkdir(parents=True, exist_ok=True)
-        out = ibllib.ephys.spikes.ks2_to_tar(ks2_dir, tar_dir, force=self.FORCE_RERUN)
+        out = ibllib.ephys.spikes.ks2_to_tar(sorter_dir, tar_dir, force=self.FORCE_RERUN)
         out_files.extend(out)
         # run waveform extraction
         _logger.info("Running waveform extraction")
@@ -801,6 +824,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
             wfs_dtype=np.float16,
             preprocess_steps=["phase_shift", "bad_channel_interpolation", "butterworth", "car"]
         )
+        shutil.rmtree(self._temporary_folder)
         if self.one:
             eid = self.one.path2eid(self.session_path, query_type='remote')
             ins = self.one.alyx.rest('insertions', 'list', session=eid, name=label, query_type='remote')

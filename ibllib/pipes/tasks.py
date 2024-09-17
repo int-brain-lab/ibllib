@@ -423,7 +423,7 @@ class Task(abc.ABC):
 
         return everything_is_fine, files
 
-    def assert_expected_inputs(self, raise_error=True):
+    def assert_expected_inputs(self, raise_error=True, raise_ambiguous=False):
         """
         Check that all the files necessary to run the task have been are present on disk.
 
@@ -458,7 +458,7 @@ class Task(abc.ABC):
                 for k, v in variant_datasets.items() if any(v)}
             _logger.error('Ambiguous input datasets found: %s', ambiguous)
 
-            if raise_error or self.location == 'sdsc':  # take no chances on SDSC
+            if raise_ambiguous or self.location == 'sdsc':  # take no chances on SDSC
                 # This could be mitigated if loading with data OneSDSC
                 raise NotImplementedError(
                     'Multiple variant datasets found. Loading for these is undefined.')
