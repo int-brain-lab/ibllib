@@ -536,7 +536,7 @@ def make_pipeline(session_path, **pkwargs):
             # The PostDLC plots require a trials object for QC
             # Find the first task that outputs a trials.table dataset
             trials_task = (
-                t for t in tasks.values() if any('trials.table' in f for f in t.signature.get('output_files', []))
+                t for t in tasks.values() if any('trials.table' in f[0] for f in t.signature.get('output_files', []))
             )
             if trials_task := next(trials_task, None):
                 parents = [tasks['DLC'], tasks[f'VideoSyncQC_{sync}'], trials_task]
