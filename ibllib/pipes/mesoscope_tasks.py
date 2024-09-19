@@ -34,11 +34,12 @@ import one.alf.io as alfio
 from one.alf.spec import is_valid, to_alf
 from one.alf.files import filename_parts, session_path_parts
 import one.alf.exceptions as alferr
+from iblutil.util import flatten
+from iblatlas.atlas import ALLEN_CCF_LANDMARKS_MLAPDV_UM, MRITorontoAtlas
 
 from ibllib.pipes import base_tasks
 from ibllib.oneibl.data_handlers import ExpectedDataset, dataset_from_name
 from ibllib.io.extractors import mesoscope
-from iblatlas.atlas import ALLEN_CCF_LANDMARKS_MLAPDV_UM, MRITorontoAtlas
 
 
 _logger = logging.getLogger(__name__)
@@ -663,9 +664,8 @@ class MesoscopeSync(base_tasks.MesoscopeTask):
             events = None
         if events is None or events.empty:
             _logger.debug('No software events found for session %s', self.session_path)
-        input_files = chain.from_iterable(map(lambda x: x.identifiers, self.input_files))
-        collections = set(collection for collection, *_ in input_files
-                          if fnmatch(collection, self.device_collection))
+        all_collections = flatten(map(lambda x: x.identifiers, self.input_files))[::3]
+        collections = set(filter(lambda x: fnmatch(x, self.device_collection), all_collections))
         # Load first meta data file to determine the number of FOVs
         # Changing FOV between imaging bouts is not supported currently!
         self.rawImagingData = alfio.load_object(self.session_path / next(iter(collections)), 'rawImagingData')
@@ -750,6 +750,7 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
             for attr, arr, sfx in (('mlapdv', mean_image_mlapdv[i], suffix),
                                    ('brainLocationIds', mean_image_ids[i], ('ccf', '2017', suffix))):
                 mean_image_files.append(alf_path / to_alf('mpciMeanImage', attr, 'npy', timescale=sfx))
+                mean_image_files[-1].parent.mkdir(parents=True, exist_ok=True)
                 np.save(mean_image_files[-1], arr)
 
         # Extract ROI MLAPDV coordinates and brain location IDs
@@ -801,7 +802,7 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
             return
         surgery = surgeries[0]  # Check most recent surgery in list
         center = (meta['centerMM']['ML'], meta['centerMM']['AP'])
-        match = (k for k, v in surgery['json'].items() if
+        match = (k for k, v in (surgery['json'] or {}).items() if
                  str(k).startswith('craniotomy') and np.allclose(v['center'], center))
         if (key := next(match, None)) is None:
             _logger.error('Failed to update surgery JSON: no matching craniotomy found')

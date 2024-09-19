@@ -93,8 +93,8 @@ def register_dataset(file_list, one=None, exists=False, versions=None, **kwargs)
     # Account for cases where we are connected to cortex lab database
     if one.alyx.base_url == 'https://alyx.cortexlab.net':
         try:
-            protected_status = IBLRegistrationClient(
-                ONE(base_url='https://alyx.internationalbrainlab.org', mode='remote')).check_protected_files(file_list)
+            _one = ONE(base_url='https://alyx.internationalbrainlab.org', mode='remote', cache_rest=one.alyx.cache_mode)
+            protected_status = IBLRegistrationClient(_one).check_protected_files(file_list)
             protected = _get_protected(protected_status)
         except HTTPError as err:
             if "[Errno 500] /check-protected: 'A base session for" in str(err):

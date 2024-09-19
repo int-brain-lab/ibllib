@@ -146,11 +146,11 @@ class ExpectedDataset:
         if self.operator is None:
             if register and not self.register:
                 return True, actual_files, missing
-            actual_files = list(session_path.rglob(self.glob_pattern))
+            actual_files = sorted(session_path.rglob(self.glob_pattern))
             # If no revision pattern provided and no files found, search for any revision
             if self._identifiers[1] is None and not any(actual_files):
                 glob_pattern = str(PurePosixPath(self._identifiers[0], '#*#', self._identifiers[2]))
-                actual_files = list(session_path.rglob(glob_pattern))
+                actual_files = sorted(session_path.rglob(glob_pattern))
             ok = any(actual_files) != self.inverted
             if not ok:
                 missing = self.glob_pattern
@@ -682,8 +682,8 @@ class ServerGlobusDataHandler(DataHandler):
 
     def setUp(self):
         """Function to download necessary data to run tasks using globus-sdk."""
-        if self.lab == 'cortexlab':
-            df = super().getData(one=ONE(base_url='https://alyx.internationalbrainlab.org'))
+        if self.lab == 'cortexlab' and 'cortexlab' in self.one.alyx.base_url:
+            df = super().getData(one=ONE(base_url='https://alyx.internationalbrainlab.org', cache_rest=self.one.alyx.cache_mode))
         else:
             df = super().getData(one=self.one)
 
@@ -804,7 +804,7 @@ class RemoteAwsDataHandler(DataHandler):
         if self.lab == 'cortexlab' and 'cortexlab' in self.one.alyx.base_url:
             base_url = 'https://alyx.internationalbrainlab.org'
             _logger.warning('Changing Alyx client to %s', base_url)
-            ac = AlyxClient(base_url=base_url)
+            ac = AlyxClient(base_url=base_url, cache_rest=self.one.alyx.cache_mode)
         else:
             ac = self.one.alyx
         self.globus.add_endpoint(f'flatiron_{self.lab}', alyx=ac)

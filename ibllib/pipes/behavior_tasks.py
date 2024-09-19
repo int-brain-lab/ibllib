@@ -87,6 +87,10 @@ class HabituationTrialsBpod(base_tasks.BehaviourTask):
         return output_files
 
     def extract_behaviour(self, **kwargs):
+        settings = load_settings(self.session_path, self.collection)
+        if version.parse(settings['IBLRIG_VERSION'] or '100.0.0') < version.parse('5.0.0'):
+            _logger.error('No extraction of legacy habituation sessions')
+            return None, None
         self.extractor = get_bpod_extractor(self.session_path, task_collection=self.collection)
         self.extractor.default_path = self.output_collection
         return self.extractor.extract(task_collection=self.collection, **kwargs)
@@ -395,7 +399,7 @@ class ChoiceWorldTrialsNidq(ChoiceWorldTrialsBpod):
                 ('_iblrig_taskSettings.raw.*', self.collection, True),
                 ('_iblrig_encoderEvents.raw*', self.collection, True),
                 ('_iblrig_encoderPositions.raw*', self.collection, True),
-                v3B ^ v3A  # either 3B datasets XOR 3A datasets must be present
+                v3B | (~v3B & v3A)  # either 3B datasets OR 3A datasets must be present
             ],
             'output_files': [
                 ('*trials.goCueTrigger_times.npy', self.output_collection, True),
