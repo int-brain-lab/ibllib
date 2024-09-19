@@ -4,6 +4,7 @@ from pathlib import Path
 
 from packaging import version
 from one.webclient import no_cache
+from one.util import ensure_list
 from iblutil.util import flatten
 import matplotlib.image
 from skimage.io import ImageCollection, imread
@@ -12,6 +13,7 @@ from ibllib.pipes.tasks import Task
 import ibllib.io.session_params as sess_params
 from ibllib.qc.base import sign_off_dict, SIGN_OFF_CATEGORIES
 from ibllib.io.raw_daq_loaders import load_timeline_sync_and_chmap
+from ibllib.oneibl.data_handlers import update_collections
 
 _logger = logging.getLogger(__name__)
 
@@ -287,6 +289,48 @@ class VideoTask(DynamicTask):
         self.device_collection = self.get_device_collection('cameras', kwargs.get('device_collection', 'raw_video_data'))
         # self.collection = self.get_task_collection(kwargs.get('collection', None))
 
+    def extract_camera(self, save=True):
+        """Extract trials data.
+
+        This is an abstract method called by `_run` and `run_qc` methods.  Subclasses should return
+        the extracted trials data and a list of output files. This method should also save the
+        trials extractor object to the :prop:`extractor` property for use by `run_qc`.
+
+        Parameters
+        ----------
+        save : bool
+            Whether to save the extracted data as ALF datasets.
+
+        Returns
+        -------
+        dict
+            A dictionary of trials data.
+        list of pathlib.Path
+            A list of output file paths if save == true.
+        """
+        return None, None
+
+    def run_qc(self, camera_data=None, update=True):
+        """Run camera QC.
+
+        Subclass method should return the QC object. This just validates the trials_data is not
+        None.
+
+        Parameters
+        ----------
+        camera_data : dict
+            A dictionary of extracted trials data. The output of :meth:`extract_behaviour`.
+        update : bool
+            If true, update Alyx with the QC outcome.
+
+        Returns
+        -------
+        ibllib.qc.task_metrics.TaskQC
+            A TaskQC object replete with task data and computed metrics.
+        """
+        self._assert_trials_data(camera_data)
+        return None
+
 
 class AudioTask(DynamicTask):
 
@@ -344,12 +388,11 @@ class MesoscopeTask(DynamicTask):
         self.session_path = Path(self.session_path)
         # Glob for all device collection (raw imaging data) folders
         raw_imaging_folders = [p.name for p in self.session_path.glob(self.device_collection)]
+        super().get_signatures(**kwargs)  # Set inputs and outputs
         # For all inputs and outputs that are part of the device collection, expand to one file per folder
         # All others keep unchanged
-        self.input_files = [(sig[0], sig[1].replace(self.device_collection, folder), sig[2])
-                            for folder in raw_imaging_folders for sig in self.signature['input_files']]
-        self.output_files = [(sig[0], sig[1].replace(self.device_collection, folder), sig[2])
-                             for folder in raw_imaging_folders for sig in self.signature['output_files']]
+        self.input_files = [update_collections(x, raw_imaging_folders, self.device_collection) for x in self.input_files]
+        self.output_files = [update_collections(x, raw_imaging_folders, self.device_collection) for x in self.output_files]
 
     def load_sync(self):
         """
@@ -395,25 +438,22 @@ class RegisterRawDataTask(DynamicTask):
         assert len(self.input_files) == len(self.output_files)
 
         for before, after in zip(self.input_files, self.output_files):
-            old_file, old_collection, required = before
-            old_path = self.session_path.joinpath(old_collection).glob(old_file)
-            old_path = next(old_path, None)
-            # if the file doesn't exist and it is not required we are okay to continue
-            if not old_path:
-                if required:
-                    raise FileNotFoundError(str(old_file))
-                else:
+            ok, old_paths, missing = before.find_files(self.session_path)
+            if not old_paths:
+                if ok:  # if the file doesn't exist and it is not required we are okay to continue
                     continue
-
-            new_file, new_collection, _ = after
-            new_path = self.session_path.joinpath(new_collection, new_file)
-            if old_path == new_path:
-                continue
-            new_path.parent.mkdir(parents=True, exist_ok=True)
-            _logger.debug('%s -> %s', old_path.relative_to(self.session_path), new_path.relative_to(self.session_path))
-            old_path.replace(new_path)
-            if symlink_old:
-                old_path.symlink_to(new_path)
+                else:
+                    raise FileNotFoundError(f'file(s) {", ".join(missing)} not found')
+            new_paths = list(map(self.session_path.joinpath, ensure_list(after.glob_pattern)))
+            assert len(old_paths) == len(new_paths)
+            for old_path, new_path in zip(old_paths, new_paths):
+                if old_path == new_path:
+                    continue
+                new_path.parent.mkdir(parents=True, exist_ok=True)
+                _logger.debug('%s -> %s', old_path.relative_to(self.session_path), new_path.relative_to(self.session_path))
+                old_path.replace(new_path)
+                if symlink_old:
+                    old_path.symlink_to(new_path)
 
     @staticmethod
     def _is_animated_gif(snapshot: Path) -> bool:
@@ -531,21 +571,10 @@ class RegisterRawDataTask(DynamicTask):
 
     def _run(self, **kwargs):
         self.rename_files(**kwargs)
-        out_files = []
-        n_required = 0
-        for file_sig in self.output_files:
-            file_name, collection, required = file_sig
-            n_required += required
-            file_path = self.session_path.joinpath(collection).glob(file_name)
-            file_path = next(file_path, None)
-            if not file_path and not required:
-                continue
-            elif not file_path and required:
-                _logger.error(f'expected {file_sig} missing')
-            else:
-                out_files.append(file_path)
-
-        if len(out_files) < n_required:
+        # FIXME Can be done with Task.assert_expected_outputs
+        ok, out_files, missing = map(flatten, zip(*map(lambda x: x.find_files(self.session_path), self.output_files)))
+        if not ok:
+            _logger.error('The following expected are missing: %s', ', '.join(missing))
             self.status = -1
 
         return out_files

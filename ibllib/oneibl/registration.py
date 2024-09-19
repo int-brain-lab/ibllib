@@ -1,5 +1,4 @@
 from pathlib import Path
-import json
 import datetime
 import logging
 import itertools
@@ -94,8 +93,8 @@ def register_dataset(file_list, one=None, exists=False, versions=None, **kwargs)
     # Account for cases where we are connected to cortex lab database
     if one.alyx.base_url == 'https://alyx.cortexlab.net':
         try:
-            protected_status = IBLRegistrationClient(
-                ONE(base_url='https://alyx.internationalbrainlab.org', mode='remote')).check_protected_files(file_list)
+            _one = ONE(base_url='https://alyx.internationalbrainlab.org', mode='remote', cache_rest=one.alyx.cache_mode)
+            protected_status = IBLRegistrationClient(_one).check_protected_files(file_list)
             protected = _get_protected(protected_status)
         except HTTPError as err:
             if "[Errno 500] /check-protected: 'A base session for" in str(err):
@@ -277,8 +276,7 @@ class IBLRegistrationClient(RegistrationClient):
             projects = [projects] if isinstance(projects, str) else projects
 
             # unless specified label the session procedures with task protocol lookup
-            procedures = procedures or list(set(filter(None, map(self._alyx_procedure_from_task, task_protocols))))
-            procedures = [procedures] if isinstance(procedures, str) else procedures
+            procedures = [procedures] if isinstance(procedures, str) else (procedures or [])
             json_fields_names = ['IS_MOCK', 'IBLRIG_VERSION']
             json_field = {k: settings[0].get(k) for k in json_fields_names}
             # The poo count field is only updated if the field is defined in at least one of the settings
@@ -355,12 +353,6 @@ class IBLRegistrationClient(RegistrationClient):
             file_list = [file_list]
         return any(str(fil) in fn for fil in file_list)
 
-    @staticmethod
-    def _alyx_procedure_from_task(task_protocol):
-        task_type = ibllib.io.extractors.base.get_task_extractor_type(task_protocol)
-        procedure = _alyx_procedure_from_task_type(task_type)
-        return procedure or []
-
     def find_files(self, session_path):
         """Similar to base class method but further filters by name and extension.
 
@@ -385,30 +377,6 @@ class IBLRegistrationClient(RegistrationClient):
                 yield file
             except ValueError as ex:
                 _logger.error(ex)
-
-
-def _alyx_procedure_from_task_type(task_type):
-    lookup = {'biased': 'Behavior training/tasks',
-              'biased_opto': 'Behavior training/tasks',
-              'habituation': 'Behavior training/tasks',
-              'training': 'Behavior training/tasks',
-              'ephys': 'Ephys recording with acute probe(s)',
-              'ephys_biased_opto': 'Ephys recording with acute probe(s)',
-              'ephys_passive_opto': 'Ephys recording with acute probe(s)',
-              'ephys_replay': 'Ephys recording with acute probe(s)',
-              'ephys_training': 'Ephys recording with acute probe(s)',
-              'mock_ephys': 'Ephys recording with acute probe(s)',
-              'sync_ephys': 'Ephys recording with acute probe(s)'}
-    try:
-        # look if there are tasks in the personal projects repo with procedures
-        import projects.base
-        custom_tasks = Path(projects.base.__file__).parent.joinpath('task_type_procedures.json')
-        with open(custom_tasks) as fp:
-            lookup.update(json.load(fp))
-    except (ModuleNotFoundError, FileNotFoundError):
-        pass
-    if task_type in lookup:
-        return lookup[task_type]
 
 
 def rename_files_compatibility(ses_path, version_tag):

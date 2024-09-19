@@ -30,8 +30,8 @@ import yaml
 
 import spikeglx
 
+import ibllib.io.raw_data_loaders as rawio
 import ibllib.io.session_params as sess_params
-from ibllib.io.extractors.base import get_session_extractor_type
 import ibllib.pipes.tasks as mtasks
 import ibllib.pipes.base_tasks as bstasks
 import ibllib.pipes.widefield_tasks as wtasks
@@ -63,13 +63,9 @@ def acquisition_description_legacy_session(session_path, save=False):
     dict
         The legacy acquisition description.
     """
-    extractor_type = get_session_extractor_type(session_path)
-    etype2protocol = dict(biased='choice_world_biased', habituation='choice_world_habituation',
-                          training='choice_world_training', ephys='choice_world_recording')
-    try:
-        dict_ad = get_acquisition_description(etype2protocol[extractor_type])
-    except KeyError:
-        raise ValueError(f'Unknown extractor type "{extractor_type}"')
+    settings = rawio.load_settings(session_path)
+    protocol = settings.get('PYBPOD_PROTOCOL', 'UNKNOWN')
+    dict_ad = get_acquisition_description(protocol)
     if save:
         sess_params.write_params(session_path=session_path, data=dict_ad)
     return dict_ad
@@ -85,7 +81,7 @@ def get_acquisition_description(protocol):
     -   choice_world_passive
     That are part of the IBL pipeline
     """
-    if protocol == 'choice_world_recording':   # canonical ephys
+    if 'ephys' in protocol:   # canonical ephys
         devices = {
             'cameras': {
                 'right': {'collection': 'raw_video_data', 'sync_label': 'audio'},
@@ -127,11 +123,11 @@ def get_acquisition_description(protocol):
             'procedures': ['Behavior training/tasks'],
             'projects': ['ibl_neuropixel_brainwide_01']
         }
-        if protocol == 'choice_world_biased':
+        if 'biased' in protocol:
             key = 'biasedChoiceWorld'
-        elif protocol == 'choice_world_training':
+        elif 'training' in protocol:
             key = 'trainingChoiceWorld'
-        elif protocol == 'choice_world_habituation':
+        elif 'habituation' in protocol:
             key = 'habituationChoiceWorld'
         else:
             raise ValueError(f'Unknown protocol "{protocol}"')
