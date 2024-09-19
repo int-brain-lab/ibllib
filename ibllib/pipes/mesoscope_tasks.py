@@ -17,8 +17,8 @@ import subprocess
 import shutil
 import uuid
 from pathlib import Path
-from itertools import chain
-from collections import defaultdict, Counter
+from itertools import chain, groupby
+from collections import Counter
 from fnmatch import fnmatch
 import enum
 import re
@@ -34,10 +34,12 @@ import one.alf.io as alfio
 from one.alf.spec import is_valid, to_alf
 from one.alf.files import filename_parts, session_path_parts
 import one.alf.exceptions as alferr
+from iblutil.util import flatten
+from iblatlas.atlas import ALLEN_CCF_LANDMARKS_MLAPDV_UM, MRITorontoAtlas
 
 from ibllib.pipes import base_tasks
+from ibllib.oneibl.data_handlers import ExpectedDataset, dataset_from_name
 from ibllib.io.extractors import mesoscope
-from iblatlas.atlas import ALLEN_CCF_LANDMARKS_MLAPDV_UM, MRITorontoAtlas
 
 
 _logger = logging.getLogger(__name__)
@@ -64,7 +66,7 @@ class MesoscopeRegisterSnapshots(base_tasks.MesoscopeTask, base_tasks.RegisterRa
     def __init__(self, session_path, **kwargs):
         super().__init__(session_path, **kwargs)
         self.device_collection = self.get_device_collection('mesoscope',
-                                                            kwargs.get('device_collection', 'raw_imaging_data_*'))
+                                                            kwargs.get('device_collection', 'raw_imaging_data_??'))
 
     def _run(self):
         """
@@ -128,17 +130,17 @@ class MesoscopeCompress(base_tasks.MesoscopeTask):
             Path to compressed tar file.
         """
         outfiles = []  # should be one per raw_imaging_data folder
-        input_files = defaultdict(list)
-        for file, in_dir, _ in self.input_files:
-            input_files[self.session_path.joinpath(in_dir)].append(file)
-
-        for in_dir, files in input_files.items():
-            outfile = in_dir / self.output_files[0][0]
+        assert not any(x.operator for x in self.input_files), 'input datasets should not be nested'
+        _, all_tifs, _ = zip(*(x.find_files(self.session_path) for x in self.input_files))
+        # A list of tifs, grouped by raw imaging data collection
+        input_files = groupby(chain.from_iterable(all_tifs), key=lambda x: x.parent)
+        *_, outfile_name = self.output_files[0].identifiers
+        for in_dir, infiles in input_files:
+            infiles = list(infiles)
+            outfile = in_dir / outfile_name
             if outfile.exists() and not clobber:
                 _logger.info('%s already exists; skipping...', outfile.relative_to(self.session_path))
                 continue
-            # glob for all input patterns
-            infiles = list(chain(*map(lambda x: in_dir.glob(x), files)))
             if not infiles:
                 _logger.info('No image files found in %s', in_dir.relative_to(self.session_path))
                 continue
@@ -203,9 +205,11 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
     @property
     def signature(self):
         # The number of in and outputs will be dependent on the number of input raw imaging folders and output FOVs
+        I = ExpectedDataset.input  # noqa
         signature = {
             'input_files': [('_ibl_rawImagingData.meta.json', self.device_collection, True),
-                            ('*.tif', self.device_collection, True),
+                            I('*.tif', self.device_collection, True) |
+                            I('imaging.frames.tar.bz2', self.device_collection, True, unique=False),
                             ('exptQC.mat', self.device_collection, False)],
             'output_files': [('mpci.ROIActivityF.npy', 'alf/FOV*', True),
                              ('mpci.ROINeuropilActivityF.npy', 'alf/FOV*', True),
@@ -575,9 +579,9 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
 
         """ Bad frames """
         # exptQC.mat contains experimenter QC values that may not affect ROI detection (e.g. noises, pauses)
-        qc_paths = (self.session_path.joinpath(f[1], 'exptQC.mat')
-                    for f in self.input_files if f[0] == 'exptQC.mat')
-        qc_paths = sorted(map(str, filter(Path.exists, qc_paths)))
+        qc_datasets = dataset_from_name('exptQC.mat', self.input_files)
+        qc_paths = [next(self.session_path.glob(d.glob_pattern), None) for d in qc_datasets]
+        qc_paths = sorted(map(str, filter(None, qc_paths)))
         exptQC = [loadmat(p, squeeze_me=True, simplify_cells=True) for p in qc_paths]
         if len(exptQC) > 0:
             frameQC, frameQC_names, _ = self._consolidate_exptQC(exptQC)
@@ -660,8 +664,8 @@ class MesoscopeSync(base_tasks.MesoscopeTask):
             events = None
         if events is None or events.empty:
             _logger.debug('No software events found for session %s', self.session_path)
-        collections = set(collection for _, collection, _ in self.input_files
-                          if fnmatch(collection, self.device_collection))
+        all_collections = flatten(map(lambda x: x.identifiers, self.input_files))[::3]
+        collections = set(filter(lambda x: fnmatch(x, self.device_collection), all_collections))
         # Load first meta data file to determine the number of FOVs
         # Changing FOV between imaging bouts is not supported currently!
         self.rawImagingData = alfio.load_object(self.session_path / next(iter(collections)), 'rawImagingData')
@@ -746,6 +750,7 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
             for attr, arr, sfx in (('mlapdv', mean_image_mlapdv[i], suffix),
                                    ('brainLocationIds', mean_image_ids[i], ('ccf', '2017', suffix))):
                 mean_image_files.append(alf_path / to_alf('mpciMeanImage', attr, 'npy', timescale=sfx))
+                mean_image_files[-1].parent.mkdir(parents=True, exist_ok=True)
                 np.save(mean_image_files[-1], arr)
 
         # Extract ROI MLAPDV coordinates and brain location IDs
@@ -797,7 +802,7 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
             return
         surgery = surgeries[0]  # Check most recent surgery in list
         center = (meta['centerMM']['ML'], meta['centerMM']['AP'])
-        match = (k for k, v in surgery['json'].items() if
+        match = (k for k, v in (surgery['json'] or {}).items() if
                  str(k).startswith('craniotomy') and np.allclose(v['center'], center))
         if (key := next(match, None)) is None:
             _logger.error('Failed to update surgery JSON: no matching craniotomy found')
