@@ -1,7 +1,6 @@
 import logging
 import numpy as np
 
-from ibllib.io.extractors import biased_trials
 from ibllib.io.extractors.base import BaseBpodTrialsExtractor
 
 _logger = logging.getLogger(__name__)
@@ -48,14 +47,3 @@ class LaserBool(BaseBpodTrialsExtractor):
             self.save_names = (None, '_ibl_trials.laserProbability.npy')
             _logger.warning('No laser stimulation found in bpod data')
         return lstim, lprob
-
-
-def extract_all(*args, extra_classes=None, **kwargs):
-    """
-    Extracts the biased trials for a training session
-    """
-    if extra_classes is not None:
-        extra_classes.append(LaserBool)
-    else:
-        extra_classes = [LaserBool]
-    return biased_trials.extract_all(*args, **kwargs, extra_classes=extra_classes)

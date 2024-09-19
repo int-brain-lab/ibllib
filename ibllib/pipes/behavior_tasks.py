@@ -8,7 +8,7 @@ from one.alf.files import session_path_parts
 from one.api import ONE
 
 from ibllib.oneibl.registration import get_lab
-from ibllib.oneibl.data_handlers import ServerDataHandler
+from ibllib.oneibl.data_handlers import ServerDataHandler, ExpectedDataset
 from ibllib.pipes import base_tasks
 from ibllib.io.raw_data_loaders import load_settings, load_bpod_fronts
 from ibllib.qc.task_extractors import TaskQCExtractor
@@ -87,6 +87,10 @@ class HabituationTrialsBpod(base_tasks.BehaviourTask):
         return output_files
 
     def extract_behaviour(self, **kwargs):
+        settings = load_settings(self.session_path, self.collection)
+        if version.parse(settings['IBLRIG_VERSION'] or '100.0.0') < version.parse('5.0.0'):
+            _logger.error('No extraction of legacy habituation sessions')
+            return None, None
         self.extractor = get_bpod_extractor(self.session_path, task_collection=self.collection)
         self.extractor.default_path = self.output_collection
         return self.extractor.extract(task_collection=self.collection, **kwargs)
@@ -96,8 +100,7 @@ class HabituationTrialsBpod(base_tasks.BehaviourTask):
 
         # Compile task data for QC
         qc = HabituationQC(self.session_path, one=self.one)
-        qc.extractor = TaskQCExtractor(self.session_path, lazy=True, sync_collection=self.sync_collection,
-                                       one=self.one, sync_type=self.sync, task_collection=self.collection)
+        qc.extractor = TaskQCExtractor(self.session_path)
 
         # Update extractor fields
         qc.extractor.data = qc.extractor.rename_data(trials_data.copy())
@@ -347,8 +350,7 @@ class ChoiceWorldTrialsBpod(base_tasks.BehaviourTask):
         trials_data = self._assert_trials_data(trials_data)  # validate trials data
 
         # Compile task data for QC
-        qc_extractor = TaskQCExtractor(self.session_path, lazy=True, sync_collection=self.sync_collection, one=self.one,
-                                       sync_type=self.sync, task_collection=self.collection)
+        qc_extractor = TaskQCExtractor(self.session_path)
         qc_extractor.data = qc_extractor.rename_data(trials_data)
         if not QC:
             QC = HabituationQC if type(self.extractor).__name__ == 'HabituationTrials' else TaskQC
@@ -373,17 +375,32 @@ class ChoiceWorldTrialsNidq(ChoiceWorldTrialsBpod):
 
     @property
     def signature(self):
+        I = ExpectedDataset.input  # noqa
+        ns = self.sync_namespace
+        # Neuropixels 3A sync data are kept in individual probe collections
+        v3A = (
+            I(f'_{ns}_sync.channels.probe??.npy', f'{self.sync_collection}/probe??', True, unique=False) &
+            I(f'_{ns}_sync.polarities.probe??.npy', f'{self.sync_collection}/probe??', True, unique=False) &
+            I(f'_{ns}_sync.times.probe??.npy', f'{self.sync_collection}/probe??', True, unique=False) &
+            I(f'_{ns}_*.ap.meta', f'{self.sync_collection}/probe??', True, unique=False) &
+            I(f'_{ns}_*wiring.json', f'{self.sync_collection}/probe??', False, unique=False)
+        )
+        # Neuropixels 3B sync data are kept in probe-independent datasets
+        v3B = (
+            I(f'_{ns}_sync.channels.npy', self.sync_collection, True) &
+            I(f'_{ns}_sync.polarities.npy', self.sync_collection, True) &
+            I(f'_{ns}_sync.times.npy', self.sync_collection, True) &
+            I(f'_{ns}_*.meta', self.sync_collection, True) &
+            I(f'_{ns}_*wiring.json', self.sync_collection, False)
+        )
         signature = {
             'input_files': [
                 ('_iblrig_taskData.raw.*', self.collection, True),
                 ('_iblrig_taskSettings.raw.*', self.collection, True),
                 ('_iblrig_encoderEvents.raw*', self.collection, True),
                 ('_iblrig_encoderPositions.raw*', self.collection, True),
-                (f'_{self.sync_namespace}_sync.channels.npy', self.sync_collection, True),
-                (f'_{self.sync_namespace}_sync.polarities.npy', self.sync_collection, True),
-                (f'_{self.sync_namespace}_sync.times.npy', self.sync_collection, True),
-                ('*wiring.json', self.sync_collection, False),
-                ('*.meta', self.sync_collection, True)],
+                v3B | (~v3B & v3A)  # either 3B datasets OR 3A datasets must be present
+            ],
             'output_files': [
                 ('*trials.goCueTrigger_times.npy', self.output_collection, True),
                 ('*trials.intervals_bpod.npy', self.output_collection, False),
@@ -441,8 +458,7 @@ class ChoiceWorldTrialsNidq(ChoiceWorldTrialsBpod):
         trials_data = self._assert_trials_data(trials_data)  # validate trials data
 
         # Compile task data for QC
-        qc_extractor = TaskQCExtractor(self.session_path, lazy=True, sync_collection=self.sync_collection, one=self.one,
-                                       sync_type=self.sync, task_collection=self.collection)
+        qc_extractor = TaskQCExtractor(self.session_path)
         qc_extractor.data = qc_extractor.rename_data(trials_data.copy())
         if not QC:
             QC = HabituationQC if type(self.extractor).__name__ == 'HabituationTrials' else TaskQC
