@@ -23,7 +23,9 @@ EGRESS
         - once copy is complete aggregate the qc from file.
 """
 import yaml
+import uuid
 import logging
+import socket
 from pathlib import Path
 from copy import deepcopy
 
@@ -31,9 +33,6 @@ from one.converters import ConversionMixin
 from iblutil.util import flatten
 from iblutil.io.params import FileLock
 from packaging import version
-
-import ibllib.pipes.misc as misc
-
 
 _logger = logging.getLogger(__name__)
 SPEC_VERSION = '1.0.0'
@@ -353,14 +352,14 @@ def get_task_protocol_number(sess_params, task_protocol=None):
         number that corresponds to the protocol, or None if protocol not present.
     """
     protocols = sess_params.get('tasks', [])
-    if task_protocol is not None:
-        task = next((x for x in protocols if task_protocol in x), None)
+    if task_protocol is None:  # Return set of all task numbers
+        numbers = (next(iter(x.values()), {}).get('protocol_number') for x in protocols)
+        numbers = list(map(int, filter(lambda x: x is not None, numbers)))
+        return (next(iter(numbers)) if len(numbers) == 1 else numbers) or None
+    else:
+        task = next((x for x in protocols if task_protocol in x), {})
         number = (task.get(task_protocol) or {}).get('protocol_number')
         return int(number) if isinstance(number, str) else number
-    else:  # Return set of all task numbers
-        numbers = list(filter(None, (next(iter(x.values()), {}).get('protocol_number') for x in protocols)))
-        numbers = [int(n) if isinstance(n, str) else n for n in numbers]
-        return (next(iter(numbers)) if len(numbers) == 1 else numbers) or None
 
 
 def get_collections(sess_params, flat=False):
@@ -441,7 +440,7 @@ def get_remote_stub_name(session_path, device_id=None):
     >>> get_remote_stub_name(Path.home().joinpath('subject', '2020-01-01', '001'), 'host-123')
     Path.home() / 'subject/2020-01-01/001/_devices/2020-01-01_1_subject@host-123.yaml'
     """
-    device_id = device_id or misc.create_basic_transfer_params()['TRANSFER_LABEL']
+    device_id = device_id or f'{socket.gethostname()}_{uuid.getnode()}'
     exp_ref = '{date}_{sequence:d}_{subject:s}'.format(**ConversionMixin.path2ref(session_path))
     remote_filename = f'{exp_ref}@{device_id}.yaml'
     return session_path / '_devices' / remote_filename

@@ -51,6 +51,22 @@ def patch_imaging_meta(meta: dict) -> dict:
         for fov in meta.get('FOV', []):
             if 'roiUuid' in fov:
                 fov['roiUUID'] = fov.pop('roiUuid')
+    # 2024-09-17 Modified the 2 unit vectors for the positive ML axis and the positive AP axis,
+    # which then transform [X,Y] coordinates (in degrees) to [ML,AP] coordinates (in MM).
+    if ver < version.Version('0.1.5') and 'imageOrientation' in meta:
+        pos_ml, pos_ap = meta['imageOrientation']['positiveML'], meta['imageOrientation']['positiveAP']
+        center_ml, center_ap = meta['centerMM']['ML'], meta['centerMM']['AP']
+        res = meta['scanImageParams']['objectiveResolution']
+        # previously [[0, res/1000], [-res/1000, 0], [0, 0]]
+        TF = np.linalg.pinv(np.c_[np.vstack([pos_ml, pos_ap, [0, 0]]), [1, 1, 1]]) @ \
+            (np.array([[res / 1000, 0], [0, res / 1000], [0, 0]]) + np.array([center_ml, center_ap]))
+        TF = np.round(TF, 3)  # handle floating-point error by rounding
+        if not np.allclose(TF, meta['coordsTF']):
+            meta['coordsTF'] = TF.tolist()
+            centerDegXY = np.array([meta['centerDeg']['x'], meta['centerDeg']['y']])
+            for fov in meta.get('FOV', []):
+                fov['MM'] = {k: (np.r_[np.array(v) - centerDegXY, 1] @ TF).tolist() for k, v in fov['Deg'].items()}
+
     assert 'nFrames' in meta, '"nFrames" key missing from meta data; rawImagingData.meta.json likely an old version'
     return meta
 

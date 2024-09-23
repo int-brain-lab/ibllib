@@ -3,6 +3,7 @@ import subprocess
 import time
 import traceback
 from pathlib import Path
+from functools import partial
 
 import cv2
 import pandas as pd
@@ -13,7 +14,9 @@ from ibllib.io import ffmpeg, raw_daq_loaders
 from ibllib.pipes import base_tasks
 from ibllib.io.video import get_video_meta
 from ibllib.io.extractors import camera
-from ibllib.qc.camera import run_all_qc as run_camera_qc
+from ibllib.io.extractors.base import run_extractor_classes
+from ibllib.io.extractors.ephys_fpga import get_sync_and_chn_map
+from ibllib.qc.camera import run_all_qc as run_camera_qc, CameraQC
 from ibllib.misc import check_nvidia_driver
 from ibllib.io.video import label_from_path, assert_valid_label
 from ibllib.plots.snapshot import ReportSnapshot
@@ -177,21 +180,25 @@ class VideoSyncQcCamlog(base_tasks.VideoTask):
 
         return signature
 
-    def _run(self, qc=True, **kwargs):
+    def extract_camera(self, save=True):
+        extractor = [partial(camera.CameraTimestampsCamlog, label) for label in self.cameras or []]
+        kwargs = {'sync_type': self.sync, 'sync_collection': self.sync_collection, 'save': save}
+        kwargs['sync'], kwargs['chmap'] = get_sync_and_chn_map(self.session_path, self.sync_collection)
+        return run_extractor_classes(extractor, session_path=self.session_path, **kwargs)
 
-        mp4_files = self.session_path.joinpath(self.device_collection).rglob('*.mp4')
-        labels = [label_from_path(x) for x in mp4_files]
+    def run_qc(self, camera_data=None, update=True):
+        if camera_data is None:
+            camera_data, _ = self.extract_camera(save=False)
+        qc = run_camera_qc(
+            self.session_path, self.cameras, one=self.one, camlog=True, sync_collection=self.sync_collection, sync_type=self.sync)
+        return qc
 
+    def _run(self, update=True, **kwargs):
         # Video timestamps extraction
-        output_files = []
-        data, files = camera.extract_all(self.session_path, sync_type=self.sync, sync_collection=self.sync_collection,
-                                         save=True, labels=labels, camlog=True)
-        output_files.extend(files)
+        data, output_files = self.extract_camera(save=True)
 
         # Video QC
-        if qc:
-            run_camera_qc(self.session_path, update=True, one=self.one, cameras=labels, camlog=True,
-                          sync_collection=self.sync_collection, sync_type=self.sync)
+        self.run_qc(data, update=update)
 
         return output_files
 
@@ -210,6 +217,7 @@ class VideoSyncQcBpod(base_tasks.VideoTask):
         self.collection = self.get_task_collection(kwargs.get('collection', None))
         # Task type (protocol)
         self.protocol = self.get_protocol(kwargs.get('protocol', None), task_collection=self.collection)
+        self.extractor = None
 
     @property
     def signature(self):
@@ -228,20 +236,31 @@ class VideoSyncQcBpod(base_tasks.VideoTask):
 
         return signature
 
-    def _run(self, **kwargs):
+    def extract_camera(self, save=True):
+        mp4_files = filter(lambda x: label_from_path(x) in self.cameras or [],
+                           self.session_path.joinpath(self.device_collection).rglob('*.mp4'))
+        if self.cameras != ['left']:
+            raise NotImplementedError('Bpod Camera extraction currently only supports a left camera')
 
-        mp4_files = self.session_path.joinpath(self.device_collection).rglob('*.mp4')
-        labels = [label_from_path(x) for x in mp4_files]
+        self.extractor = camera.CameraTimestampsBpod(self.session_path)
+        return self.extractor.extract(video_path=next(mp4_files), save=save, task_collection=self.collection)
 
+    def run_qc(self, camera_data=None, update=True):
+        if self.cameras != ['left']:
+            raise NotImplementedError('Bpod camera currently only supports a left camera')
+        if camera_data is None:
+            camera_data, _ = self.extract_camera(save=False)
+        qc = CameraQC(
+            self.session_path, 'left', sync_type='bpod', sync_collection=self.collection, one=self.one)
+        qc.run(update=update)
+        return qc
+
+    def _run(self, update=True, **kwargs):
         # Video timestamps extraction
-        output_files = []
-        data, files = camera.extract_all(self.session_path, sync_type=self.sync, sync_collection=self.sync_collection,
-                                         save=True, labels=labels, task_collection=self.collection)
-        output_files.extend(files)
+        data, output_files = self.extract_camera(save=True)
 
         # Video QC
-        run_camera_qc(self.session_path, update=True, one=self.one, cameras=labels,
-                      sync_collection=self.sync_collection, sync_type=self.sync)
+        self.run_qc(data, update=update)
 
         return output_files
 
@@ -274,27 +293,30 @@ class VideoSyncQcNidq(base_tasks.VideoTask):
 
         return signature
 
-    def _run(self, **kwargs):
-
-        mp4_files = self.session_path.joinpath(self.device_collection).glob('*.mp4')
-        labels = [label_from_path(x) for x in mp4_files]
-        labels = [lab for lab in labels if lab in ('left', 'right', 'body', 'belly')]
-
-        kwargs = {}
+    def extract_camera(self, save=True):
+        extractor = [partial(camera.CameraTimestampsFPGA, label) for label in self.cameras or []]
+        kwargs = {'sync_type': self.sync, 'sync_collection': self.sync_collection, 'save': save}
         if self.sync_namespace == 'timeline':
             # Load sync from timeline file
             alf_path = self.session_path / self.sync_collection
             kwargs['sync'], kwargs['chmap'] = raw_daq_loaders.load_timeline_sync_and_chmap(alf_path)
+        else:
+            kwargs['sync'], kwargs['chmap'] = get_sync_and_chn_map(self.session_path, self.sync_collection)
+        return run_extractor_classes(extractor, session_path=self.session_path, **kwargs)
 
+    def run_qc(self, camera_data=None, update=True):
+        if camera_data is None:
+            camera_data, _ = self.extract_camera(save=False)
+        qc = run_camera_qc(
+            self.session_path, self.cameras, one=self.one, sync_collection=self.sync_collection, sync_type=self.sync)
+        return qc
+
+    def _run(self, update=True, **kwargs):
         # Video timestamps extraction
-        output_files = []
-        data, files = camera.extract_all(self.session_path, sync_type=self.sync, sync_collection=self.sync_collection,
-                                         save=True, labels=labels, **kwargs)
-        output_files.extend(files)
+        data, output_files = self.extract_camera(save=True)
 
         # Video QC
-        run_camera_qc(self.session_path, update=True, one=self.one, cameras=labels,
-                      sync_collection=self.sync_collection, sync_type=self.sync)
+        self.run_qc(data, update=update)
 
         return output_files
 

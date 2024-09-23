@@ -18,7 +18,6 @@ from ibllib.qc.task_qc_viewer import ViewEphysQC
 from ibllib.pipes.dynamic_pipeline import get_trials_tasks
 from ibllib.pipes.base_tasks import BehaviourTask
 from ibllib.pipes.behavior_tasks import HabituationTrialsBpod, ChoiceWorldTrialsBpod
-from ibllib.pipes.training_preprocessing import TrainingTrials
 
 EVENT_MAP = {'goCue_times': ['#2ca02c', 'solid'],  # green
              'goCueTrigger_times': ['#2ca02c', 'dotted'],  # green
@@ -201,16 +200,15 @@ def get_bpod_trials_task(task):
     ibllib.pipes.tasks.Task
         A Bpod choice world trials task instance.
     """
-    if isinstance(task, TrainingTrials) or task.__class__ in (ChoiceWorldTrialsBpod, HabituationTrialsBpod):
+    if task.__class__ in (ChoiceWorldTrialsBpod, HabituationTrialsBpod):
         pass  # do nothing; already Bpod only
-    elif isinstance(task, BehaviourTask):
+    else:
+        assert isinstance(task, BehaviourTask)
         # A dynamic pipeline task
         trials_class = HabituationTrialsBpod if 'habituation' in task.protocol else ChoiceWorldTrialsBpod
         task = trials_class(task.session_path,
                             collection=task.collection, protocol_number=task.protocol_number,
                             protocol=task.protocol, one=task.one)
-    else:  # A legacy pipeline task (should be EphysTrials as there are no other options)
-        task = TrainingTrials(task.session_path, one=task.one)
     return task
 
 
@@ -250,7 +248,8 @@ def show_session_task_qc(qc_or_session=None, bpod_only=False, local=False, one=N
             session_path = one.eid2path(eid)
         else:
             session_path = Path(qc_or_session)
-        tasks = get_trials_tasks(session_path, one=None if local else one)
+
+        tasks = get_trials_tasks(session_path, one=None if local else one, bpod_only=bpod_only)
         # Get the correct task and ensure not passive
         if protocol_number is None:
             if not (task := next((t for t in tasks if 'passive' not in t.name.lower()), None)):
@@ -263,10 +262,6 @@ def show_session_task_qc(qc_or_session=None, bpod_only=False, local=False, one=N
             task = tasks[protocol_number]
             if 'passive' in task.name.lower():
                 raise ValueError('QC display not supported for passive protocols')
-        # If Bpod only and not a dynamic pipeline Bpod behaviour task OR legacy TrainingTrials task
-        if bpod_only and 'bpod' not in task.name.lower():
-            # Use the dynamic pipeline Bpod behaviour task instead (should work with legacy pipeline too)
-            task = get_bpod_trials_task(task)
         _logger.debug('Using %s task', task.name)
         # Ensure required data are present
         task.location = 'server' if local else 'remote'  # affects whether missing data are downloaded

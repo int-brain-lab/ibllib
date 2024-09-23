@@ -20,8 +20,7 @@ class HabituationTrials(BaseBpodTrialsExtractor):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        exclude = ['itiIn_times', 'stimOffTrigger_times', 'stimCenter_times',
-                   'stimCenterTrigger_times', 'position', 'phase']
+        exclude = ['itiIn_times', 'stimCenter_times', 'stimCenterTrigger_times', 'position', 'phase']
         self.save_names = tuple(f'_ibl_trials.{x}.npy' if x not in exclude else None for x in self.var_names)
 
     def _extract(self) -> dict:
@@ -152,25 +151,3 @@ class HabituationTrials(BaseBpodTrialsExtractor):
 
         # Truncate arrays and return in correct order
         return {k: out[k][:n_trials] for k in self.var_names}
-
-
-def extract_all(session_path, save=False, bpod_trials=False, settings=False, task_collection='raw_behavior_data', save_path=None):
-    """Extract all datasets from habituationChoiceWorld
-    Note: only the datasets from the HabituationTrials extractor will be saved to disc.
-
-    :param session_path: The session path where the raw data are saved
-    :param save: If True, the datasets that are considered standard are saved to the session path
-    :param bpod_trials: The raw Bpod trial data
-    :param settings: The raw Bpod sessions
-    :returns: a dict of datasets and a corresponding list of file names
-    """
-    if not bpod_trials:
-        bpod_trials = raw.load_data(session_path, task_collection=task_collection)
-    if not settings:
-        settings = raw.load_settings(session_path, task_collection=task_collection)
-
-    # Standard datasets that may be saved as ALFs
-    params = dict(session_path=session_path, bpod_trials=bpod_trials, settings=settings, task_collection=task_collection,
-                  path_out=save_path)
-    out, fil = run_extractor_classes(HabituationTrials, save=save, **params)
-    return out, fil

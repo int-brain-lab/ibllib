@@ -8,10 +8,7 @@ import yaml
 
 import ibllib.tests
 import ibllib.pipes.dynamic_pipeline as dyn
-from ibllib.pipes.tasks import Pipeline, Task
 import ibllib.pipes.behavior_tasks as btasks
-from ibllib.pipes import ephys_preprocessing
-from ibllib.pipes import training_preprocessing
 from ibllib.io import session_params
 from ibllib.tests.fixtures.utils import populate_task_settings
 
@@ -110,8 +107,16 @@ class TestGetTrialsTasks(unittest.TestCase):
 
         # An ephys session
         tasks = dyn.get_trials_tasks(self.session_path_legacy)
+        self.assertEqual(2, len(tasks))
+        self.assertIsInstance(tasks[0], btasks.ChoiceWorldTrialsNidq)
+
+        # An ephys session with bpod_only flag
+        description = self.description
+        description['tasks'].pop()  # remove passiveChoiceWorld task for this test; no Bpod extractor for this protocol
+        with mock.patch('ibllib.pipes.dynamic_pipeline._load_acquisition_description', return_value=description):
+            tasks = dyn.get_trials_tasks(self.session_path_dynamic, bpod_only=True)
         self.assertEqual(1, len(tasks))
-        self.assertIsInstance(tasks[0], ephys_preprocessing.EphysTrials)
+        self.assertIsInstance(tasks[0], btasks.ChoiceWorldTrialsBpod)
 
         # A training session
         self.settings['PYBPOD_PROTOCOL'] = '_iblrig_tasks_trainingChoiceWorld'
@@ -119,7 +124,7 @@ class TestGetTrialsTasks(unittest.TestCase):
 
         tasks = dyn.get_trials_tasks(self.session_path_legacy, one=one)
         self.assertEqual(1, len(tasks))
-        self.assertIsInstance(tasks[0], training_preprocessing.TrainingTrials)
+        self.assertIsInstance(tasks[0], btasks.ChoiceWorldTrialsBpod)
         self.assertIs(tasks[0].one, one, 'failed to assign ONE instance to task')
 
         # A personal project
@@ -132,27 +137,7 @@ class TestGetTrialsTasks(unittest.TestCase):
         task_type_map = {'_misc_foobarChoiceWorld': 'foobar'}
         extractor_types_path = Path(m.base.__file__).parent.joinpath('extractor_types.json')
         populate_task_settings(extractor_types_path, task_type_map)
-        # Simulate the instantiation of the personal project module's pipeline class
-        pipeline = mock.Mock(spec=Pipeline)
-        pipeline.name = 'custom'
-        task_mock = mock.Mock(spec=Task)
-        pipeline.tasks = {'RegisterRaw': mock.MagicMock(), 'FooBarTrials': task_mock}
-        m.base.get_pipeline().return_value = pipeline
-        with mock.patch.dict('sys.modules', projects=m):
-            """For unknown reasons this method of mocking the personal projects repo (which is
-            imported within various functions) fails on the Github test builds. This we check
-            here and skip the rest of the test if patch didn't work."""
-            try:
-                import projects.base
-                assert isinstance(projects.base, mock.Mock)
-            except (AssertionError, ModuleNotFoundError):
-                self.skipTest('Failed to mock projects module import')
-            tasks = dyn.get_trials_tasks(self.session_path_legacy)
-            self.assertEqual(1, len(tasks))
-            task_mock.assert_called_once_with(self.session_path_legacy)
-            # Should handle absent trials tasks
-            pipeline.tasks.pop('FooBarTrials')
-            self.assertEqual([], dyn.get_trials_tasks(self.session_path_legacy))
+        self.assertRaises(ValueError, dyn.get_trials_tasks, self.session_path_legacy)
 
 
 class TestMisc(unittest.TestCase):
