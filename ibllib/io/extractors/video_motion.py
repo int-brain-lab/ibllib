@@ -466,12 +466,14 @@ class MotionAlignmentFullSession:
             # nans but if this is too many we reject the wheel alignment based on the qc
             self.ttl_times = self.ttls
             self.times = np.r_[self.ttl_times, np.full((np.abs(self.tdiff)), np.nan)]
+            self.camera_times = np.r_[self.camera_times, np.full((np.abs(self.tdiff)), np.nan)]
             self.short_flag = True
         elif self.tdiff > 0:
             # In this case there are more ttls than camera frames. This happens often, for now we remove the first
             # tdiff ttls from the ttls
             self.ttl_times = self.ttls[self.tdiff:]
             self.times = self.ttls[self.tdiff:]
+            self.camera_times = self.camera_times[self.tdiff:]
             self.short_flag = False
 
         # Compute the frame rate of the camera
