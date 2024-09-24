@@ -190,7 +190,8 @@ class VideoSyncQcCamlog(base_tasks.VideoTask):
         if camera_data is None:
             camera_data, _ = self.extract_camera(save=False)
         qc = run_camera_qc(
-            self.session_path, self.cameras, one=self.one, camlog=True, sync_collection=self.sync_collection, sync_type=self.sync)
+            self.session_path, self.cameras, one=self.one, camlog=True, sync_collection=self.sync_collection, sync_type=self.sync,
+            update=update)
         return qc
 
     def _run(self, update=True, **kwargs):
@@ -308,7 +309,8 @@ class VideoSyncQcNidq(base_tasks.VideoTask):
         if camera_data is None:
             camera_data, _ = self.extract_camera(save=False)
         qc = run_camera_qc(
-            self.session_path, self.cameras, one=self.one, sync_collection=self.sync_collection, sync_type=self.sync)
+            self.session_path, self.cameras, one=self.one, sync_collection=self.sync_collection, sync_type=self.sync,
+            update=update)
         return qc
 
     def _run(self, update=True, **kwargs):
