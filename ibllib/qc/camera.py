@@ -421,7 +421,7 @@ class CameraQC(base.QC):
 
         if update:
             extended = {
-                k: spec.QC.NOT_SET if v is None else v
+                k: spec.QC.NOT_SET.name if v is None else v.name
                 for k, v in self.metrics.items()
             }
             self.update_extended_qc(extended)
