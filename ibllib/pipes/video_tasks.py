@@ -349,7 +349,7 @@ class DLC(base_tasks.VideoTask):
             'input_files': [(f'_iblrig_{cam}Camera.raw.mp4', self.device_collection, True) for cam in self.cameras],
             'output_files': [(f'_ibl_{cam}Camera.dlc.pqt', 'alf', True) for cam in self.cameras] +
                             [(f'{cam}Camera.ROIMotionEnergy.npy', 'alf', True) for cam in self.cameras] +
-                            [(f'{cam}ROIMotionEnergy.position.npy', 'alf', True)for cam in self.cameras]
+                            [(f'{cam}ROIMotionEnergy.position.npy', 'alf', True) for cam in self.cameras]
         }
 
         return signature
@@ -524,7 +524,7 @@ class EphysPostDLC(base_tasks.VideoTask):
 
         """
         # Check if output files exist locally
-        exist, output_files = self.assert_expected(self.signature['output_files'], silent=True)
+        exist, output_files = self.assert_expected(self.output_files, silent=True)
         if exist and not overwrite:
             _logger.warning('EphysPostDLC outputs exist and overwrite=False, skipping computations of outputs.')
         else:
