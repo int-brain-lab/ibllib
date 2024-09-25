@@ -1,4 +1,5 @@
 """An interactive PyQT QC data frame."""
+
 import logging
 
 from PyQt5 import QtWidgets
@@ -14,26 +15,24 @@ _logger = logging.getLogger(__name__)
 
 
 class DataFrameTableModel(QAbstractTableModel):
-    DtypeRole = Qt.UserRole + 1000
-    ValueRole = Qt.UserRole + 1001
-
     def __init__(self, parent=None, dataFrame: pd.DataFrame = pd.DataFrame()):
         super(DataFrameTableModel, self).__init__(parent)
         self._dataframe = dataFrame
 
-    def setDataFrame(self, dataframe):
+    def setDataFrame(self, dataFrame: pd.DataFrame):
         self.beginResetModel()
-        self._dataframe = dataframe.copy()
+        self._dataframe = dataFrame.copy()
         self.endResetModel()
 
-    def dataFrame(self):
+    def dataFrame(self) -> pd.DataFrame:
         return self._dataframe
 
     dataFrame = pyqtProperty(pd.DataFrame, fget=dataFrame, fset=setDataFrame)
 
     @pyqtSlot(int, Qt.Orientation, result=str)
-    def headerData(self, section: int, orientation: Qt.Orientation,
-                   role: int = Qt.DisplayRole):
+    def headerData(
+        self, section: int, orientation: Qt.Orientation, role: int = Qt.DisplayRole
+    ):
         if role == Qt.DisplayRole:
             if orientation == Qt.Horizontal:
                 return self._dataframe.columns[section]
@@ -52,29 +51,18 @@ class DataFrameTableModel(QAbstractTableModel):
         return self._dataframe.columns.size
 
     def data(self, index, role=Qt.DisplayRole):
-        if (not index.isValid() or not (0 <= index.row() < self.rowCount() and
-                                        0 <= index.column() < self.columnCount())):
+        if not index.isValid():
             return QVariant()
         row = self._dataframe.index[index.row()]
         col = self._dataframe.columns[index.column()]
-        dt = self._dataframe[col].dtype
-
         val = self._dataframe.iloc[row][col]
         if role == Qt.DisplayRole:
+            if isinstance(val, np.generic):
+                return val.item()
             return str(val)
-        elif role == DataFrameTableModel.ValueRole:
-            return val
-        if role == DataFrameTableModel.DtypeRole:
-            return dt
+        # elif role == Qt.BackgroundRole:
+        #     return QBrush(Qt.red)
         return QVariant()
-
-    def roleNames(self):
-        roles = {
-            Qt.DisplayRole: b'display',
-            DataFrameTableModel.DtypeRole: b'dtype',
-            DataFrameTableModel.ValueRole: b'value'
-        }
-        return roles
 
     def sort(self, col, order):
         """
@@ -84,7 +72,7 @@ class DataFrameTableModel(QAbstractTableModel):
         :param order: the order to be sorted, 0 is descending; 1, ascending
         :return:
         """
-        if self._dataframe.empty:
+        if self.columnCount() == 0:
             return
         self.layoutAboutToBeChanged.emit()
         col_name = self._dataframe.columns.values[col]
@@ -95,7 +83,6 @@ class DataFrameTableModel(QAbstractTableModel):
 
 
 class PlotCanvas(FigureCanvasQTAgg):
-
     def __init__(self, parent=None, width=5, height=4, dpi=100, wheel=None):
         fig = Figure(figsize=(width, height), dpi=dpi)
 
@@ -103,13 +90,13 @@ class PlotCanvas(FigureCanvasQTAgg):
         self.setParent(parent)
 
         FigureCanvasQTAgg.setSizePolicy(
-            self,
-            QtWidgets.QSizePolicy.Expanding,
-            QtWidgets.QSizePolicy.Expanding)
+            self, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding
+        )
         FigureCanvasQTAgg.updateGeometry(self)
         if wheel:
             self.ax, self.ax2 = fig.subplots(
-                2, 1, gridspec_kw={'height_ratios': [2, 1]}, sharex=True)
+                2, 1, gridspec_kw={"height_ratios": [2, 1]}, sharex=True
+            )
         else:
             self.ax = fig.add_subplot(111)
         self.draw()
@@ -119,7 +106,7 @@ class PlotWindow(QtWidgets.QWidget):
     def __init__(self, parent=None, wheel=None):
         QtWidgets.QWidget.__init__(self, parent=None)
         self.canvas = PlotCanvas(wheel=wheel)
-        self.vbl = QtWidgets.QVBoxLayout()         # Set box for plotting
+        self.vbl = QtWidgets.QVBoxLayout()  # Set box for plotting
         self.vbl.addWidget(self.canvas)
         self.setLayout(self.vbl)
         self.vbl.addWidget(NavigationToolbar2QT(self.canvas, self))
@@ -137,6 +124,7 @@ class GraphWindow(QtWidgets.QWidget):
         self.tableView = QtWidgets.QTableView(self)
         self.tableView.setModel(self.tableModel)
         self.tableView.setSortingEnabled(True)
+        self.tableView.horizontalHeader().setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self.tableView.doubleClicked.connect(self.tv_double_clicked)
 
         vLayout = QtWidgets.QVBoxLayout(self)
@@ -154,7 +142,10 @@ class GraphWindow(QtWidgets.QWidget):
 
     def loadFile(self):
         fileName, _ = QtWidgets.QFileDialog.getOpenFileName(
-            self, "Open File", "", "CSV Files (*.csv)")
+            self, "Open File", "", "CSV Files (*.csv)"
+        )
+        if len(fileName) == 0:
+            return
         self.lineEditPath.setText(fileName)
         df = pd.read_csv(fileName)
         self.updateDataframe(df)
@@ -163,22 +154,21 @@ class GraphWindow(QtWidgets.QWidget):
         self.tableModel.setDataFrame(dataFrame)
 
     def tv_double_clicked(self):
-        df = self.tableView.model()._dataframe
         ind = self.tableView.currentIndex()
-        start = df.loc[ind.row()]['intervals_0']
-        finish = df.loc[ind.row()]['intervals_1']
-        dt = finish - start
+        data = self.tableModel.dataFrame.loc[ind.row()]
+        t0 = data["intervals_0"]
+        t1 = data["intervals_1"]
+        dt = t1 - t0
         if self.wheel:
-            idx = np.searchsorted(
-                self.wheel['re_ts'], np.array([start - dt / 10, finish + dt / 10]))
-            period = self.wheel['re_pos'][idx[0]:idx[1]]
+            idx = np.searchsorted(self.wheel["re_ts"], np.array([t0 - dt / 10, t1 + dt / 10]))
+            period = self.wheel["re_pos"][idx[0] : idx[1]]
             if period.size == 0:
-                _logger.warning('No wheel data during trial #%i', ind.row())
+                _logger.warning("No wheel data during trial #%i", ind.row())
             else:
                 min_val, max_val = np.min(period), np.max(period)
                 self.wplot.canvas.ax2.set_ylim(min_val - 1, max_val + 1)
-            self.wplot.canvas.ax2.set_xlim(start - dt / 10, finish + dt / 10)
-        self.wplot.canvas.ax.set_xlim(start - dt / 10, finish + dt / 10)
+            self.wplot.canvas.ax2.set_xlim(t0 - dt / 10, t1 + dt / 10)
+        self.wplot.canvas.ax.set_xlim(t0 - dt / 10, t1 + dt / 10)
 
         self.wplot.canvas.draw()
 
