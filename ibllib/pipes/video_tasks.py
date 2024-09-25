@@ -285,7 +285,7 @@ class VideoSyncQcNidq(base_tasks.VideoTask):
                            [(f'_{self.sync_namespace}_sync.channels.npy', self.sync_collection, True),
                             (f'_{self.sync_namespace}_sync.polarities.npy', self.sync_collection, True),
                             (f'_{self.sync_namespace}_sync.times.npy', self.sync_collection, True),
-                            ('*.wiring.json', self.sync_collection, True),
+                            (f'_{self.sync_namespace}_*.wiring.json', self.sync_collection, True),
                             ('*wheel.position.npy', 'alf', False),
                             ('*wheel.timestamps.npy', 'alf', False),
                             ('*experiment.description*', '', False)],
