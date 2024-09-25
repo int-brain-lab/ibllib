@@ -6,11 +6,11 @@ from PyQt5 import QtWidgets
 from PyQt5.QtCore import pyqtProperty, Qt, QVariant, QAbstractTableModel, QModelIndex, QObject
 from PyQt5.QtGui import QBrush, QColor
 import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import MinMaxScaler
 
 from ibllib.misc import qt
 
@@ -18,9 +18,9 @@ _logger = logging.getLogger(__name__)
 
 
 class DataFrameTableModel(QAbstractTableModel):
-    def __init__(self, parent: QObject = ..., dataFrame: pd.DataFrame = pd.DataFrame()):
+    def __init__(self, parent: QObject = ..., dataFrame: pd.DataFrame | None = None):
         super().__init__(parent)
-        self._dataframe = dataFrame
+        self._dataframe = pd.DataFrame() if dataFrame is None else dataFrame
 
     def setDataFrame(self, dataFrame: pd.DataFrame):
         self.beginResetModel()
@@ -73,54 +73,53 @@ class DataFrameTableModel(QAbstractTableModel):
 
 
 class ColoredDataFrameTableModel(DataFrameTableModel):
-    _colors: pd.DataFrame
-    _cmap = plt.get_cmap('plasma')
-    _alpha = 0.5
+    _rgba: np.ndarray
+    _cmap: ListedColormap
 
-    def __init__(self, parent: QObject = ..., dataFrame: pd.DataFrame = pd.DataFrame()):
+    def __init__(self, parent: QObject = ..., dataFrame: pd.DataFrame | None = None,
+                 colorMap: ListedColormap | None = None, alpha: float = 0.5):
         super().__init__(parent=parent, dataFrame=dataFrame)
-        self._setColors()
-        self.modelReset.connect(self._setColors)
-        self.dataChanged.connect(self._setColors)
-        self.layoutChanged.connect(self._setColors)
 
-    def _setColors(self):
-        vals = self._dataframe.copy()
-        if vals.empty:
-            self._colors = vals
+        self._alpha = alpha
+        if colorMap is None:
+            self._cmap = plt.get_cmap('plasma')
+            self._cmap.set_bad(color='w')
+        else:
+            self._cmap = colorMap
+
+        self._setRgba()
+        self.modelReset.connect(self._setRgba)
+        self.dataChanged.connect(self._setRgba)
+        self.layoutChanged.connect(self._setRgba)
+
+    def _setRgba(self):
+        values = self._dataframe.copy()
+        if values.empty:
+            self._rgba = values
             return
 
         # coerce non-bool / non-numeric values to numeric
-        for col in vals.select_dtypes(exclude=['bool', 'number']):
-            vals[col] = vals[col].to_numeric(errors='coerce')
+        cols = values.select_dtypes(exclude=['bool', 'number']).columns
+        values[cols] = values[cols].apply(pd.to_numeric, errors='coerce')
 
         # normalize numeric values
-        cols = vals.select_dtypes(include=['number']).columns
-        vals.replace([np.inf, -np.inf], np.nan, inplace=True)
-        vals[cols] = MinMaxScaler().fit_transform(vals[cols])
+        cols = values.select_dtypes(include=['number']).columns
+        values.replace([np.inf, -np.inf], np.nan, inplace=True)
+        values[cols] -= values[cols].min()
+        values[cols] /= values[cols].max()
 
         # convert boolean values
-        cols = vals.select_dtypes(include=['bool']).columns
-        vals[cols] = vals[cols].astype(float)
+        cols = values.select_dtypes(include=['bool']).columns
+        values[cols] = values[cols].astype(float)
 
-        # assign QColors
-        colors = vals.astype(object)
-        for col in vals.columns:
-            colors[col] = [QColor.fromRgb(*x) for x in self._cmap(vals[col], self._alpha, True)]
-
-        # NaNs should be white
-        nans = vals.isna()
-        colors[nans] = QColor('white')
-
-        self._colors = colors
+        # store color values to ndarray
+        self._rgba = self._cmap(values, self._alpha, True)
 
     def data(self, index, role=...):
         if not index.isValid():
             return QVariant()
         if role == Qt.BackgroundRole:
-            row = self._dataframe.index[index.row()]
-            col = self._dataframe.columns[index.column()]
-            return self._colors.iloc[row][col]
+            return QColor.fromRgb(*self._rgba[index.row(), index.column()])
         return super().data(index, role)
 
 
