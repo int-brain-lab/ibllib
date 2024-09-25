@@ -569,7 +569,8 @@ def get_protocol_period(session_path, protocol_number, bpod_sync):
     # Ensure that the number of detected spacers matched the number of expected tasks
     if acquisition_description := session_params.read_params(session_path):
         n_tasks = len(acquisition_description.get('tasks', []))
-        assert n_tasks == len(spacer_times), f'expected {n_tasks} spacers, found {len(spacer_times)}'
+        assert len(spacer_times) >= protocol_number, (f'expected {n_tasks} spacers, found only {len(spacer_times)} - '
+                                                      f'can not return protocol number {protocol_number}.')
         assert n_tasks > protocol_number >= 0, f'protocol number must be between 0 and {n_tasks}'
     else:
         assert protocol_number < len(spacer_times)
