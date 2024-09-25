@@ -140,7 +140,8 @@ class QcFrame:
             'ymin': 0,
             'ymax': 4,
             'linewidth': 2,
-            'ax': axes
+            'ax': axes,
+            'alpha': 0.5,
         }
 
         bnc1 = self.qc.extractor.frame_ttls
