@@ -3,7 +3,9 @@
 import logging
 
 from PyQt5 import QtWidgets
-from PyQt5.QtCore import pyqtProperty, Qt, QVariant, QAbstractTableModel, QModelIndex, pyqtSlot
+from PyQt5.QtCore import pyqtProperty, Qt, QVariant, QAbstractTableModel, QModelIndex, QObject
+from PyQt5.QtGui import QBrush, QColor
+import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
 import pandas as pd
@@ -15,8 +17,8 @@ _logger = logging.getLogger(__name__)
 
 
 class DataFrameTableModel(QAbstractTableModel):
-    def __init__(self, parent=None, dataFrame: pd.DataFrame = pd.DataFrame()):
-        super(DataFrameTableModel, self).__init__(parent)
+    def __init__(self, parent: QObject = ..., dataFrame: pd.DataFrame = pd.DataFrame()):
+        super().__init__(parent)
         self._dataframe = dataFrame
 
     def setDataFrame(self, dataFrame: pd.DataFrame):
@@ -29,10 +31,7 @@ class DataFrameTableModel(QAbstractTableModel):
 
     dataFrame = pyqtProperty(pd.DataFrame, fget=dataFrame, fset=setDataFrame)
 
-    @pyqtSlot(int, Qt.Orientation, result=str)
-    def headerData(
-        self, section: int, orientation: Qt.Orientation, role: int = Qt.DisplayRole
-    ):
+    def headerData(self, section: int, orientation: Qt.Orientation, role: int = ...):
         if role == Qt.DisplayRole:
             if orientation == Qt.Horizontal:
                 return self._dataframe.columns[section]
@@ -40,17 +39,17 @@ class DataFrameTableModel(QAbstractTableModel):
                 return str(self._dataframe.index[section])
         return QVariant()
 
-    def rowCount(self, parent=QModelIndex()):
-        if parent.isValid():
+    def rowCount(self, parent: QModelIndex = ...):
+        if isinstance(parent, QModelIndex) and parent.isValid():
             return 0
         return len(self._dataframe.index)
 
-    def columnCount(self, parent=QModelIndex()):
-        if parent.isValid():
+    def columnCount(self, parent: QModelIndex = ...):
+        if isinstance(parent, QModelIndex) and parent.isValid():
             return 0
         return self._dataframe.columns.size
 
-    def data(self, index, role=Qt.DisplayRole):
+    def data(self, index: QModelIndex, role: int = ...) -> QVariant:
         if not index.isValid():
             return QVariant()
         row = self._dataframe.index[index.row()]
@@ -59,27 +58,57 @@ class DataFrameTableModel(QAbstractTableModel):
         if role == Qt.DisplayRole:
             if isinstance(val, np.generic):
                 return val.item()
-            return str(val)
-        # elif role == Qt.BackgroundRole:
-        #     return QBrush(Qt.red)
+            return QVariant(str(val))
         return QVariant()
 
-    def sort(self, col, order):
-        """
-        Sort table by given column number.
-
-        :param col: the column number selected (between 0 and self._dataframe.columns.size)
-        :param order: the order to be sorted, 0 is descending; 1, ascending
-        :return:
-        """
+    def sort(self, column: int, order: Qt.SortOrder = ...):
         if self.columnCount() == 0:
             return
         self.layoutAboutToBeChanged.emit()
-        col_name = self._dataframe.columns.values[col]
-        # print('sorting by ' + col_name)
+        col_name = self._dataframe.columns.values[column]
         self._dataframe.sort_values(by=col_name, ascending=not order, inplace=True)
         self._dataframe.reset_index(inplace=True, drop=True)
         self.layoutChanged.emit()
+
+
+class ColoredDataFrameTableModel(DataFrameTableModel):
+    _colors: pd.DataFrame
+    _cmap = plt.get_cmap('plasma')
+    _alpha = 0.5
+
+    def __init__(self, parent: QObject = ..., dataFrame: pd.DataFrame = pd.DataFrame()):
+        super().__init__(parent=parent, dataFrame=dataFrame)
+        self._setColors()
+        self.modelReset.connect(self._setColors)
+        self.dataChanged.connect(self._setColors)
+        self.layoutChanged.connect(self._setColors)
+
+    def _setColors(self):
+        df = self._dataframe.copy()
+        df = df.replace([np.inf, -np.inf], np.nan)
+        for col in df.select_dtypes(include=['bool']):
+            df[col] = df[col].astype(float)
+        for col in df.select_dtypes(exclude=['bool']):
+            df[col] = pd.to_numeric(df[col], errors='coerce').astype(float)
+            if df[col].nunique() == 1:
+                df[col] = QColor.fromRgb(*self._cmap(0, self._alpha, True))
+            else:
+                df[col] = (df[col] - df[col].min()) / (df[col].max() - df[col].min())
+                df[col] = [QColor.fromRgb(*x) for x in self._cmap(df[col], self._alpha, True).tolist()]
+        self._colors = df
+
+    def data(self, index, role=...):
+        if not index.isValid():
+            return QVariant()
+        if role == Qt.BackgroundRole:
+            row = self._dataframe.index[index.row()]
+            col = self._dataframe.columns[index.column()]
+            val = self._dataframe.iloc[row][col]
+            if isinstance(val, (np.bool_, np.number)) and not np.isnan(val):
+                return self._colors.iloc[row][col]
+            else:
+                return QBrush(Qt.white)
+        return super().data(index, role)
 
 
 class PlotCanvas(FigureCanvasQTAgg):
@@ -120,7 +149,7 @@ class GraphWindow(QtWidgets.QWidget):
         self.pushButtonLoad = QtWidgets.QPushButton("Select File", self)
         self.pushButtonLoad.clicked.connect(self.loadFile)
 
-        self.tableModel = DataFrameTableModel(self)
+        self.tableModel = ColoredDataFrameTableModel(self)
         self.tableView = QtWidgets.QTableView(self)
         self.tableView.setModel(self.tableModel)
         self.tableView.setSortingEnabled(True)
