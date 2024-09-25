@@ -285,8 +285,11 @@ def show_session_task_qc(qc_or_session=None, bpod_only=False, local=False, one=N
                     trial_events=list(events),
                     color_map=cm,
                     linestyle=ls)
+
     # Update table and callbacks
-    w.update_df(qc.frame)
+    n_trials = qc.frame.shape[0]
+    df_trials = pd.DataFrame({k: v for k, v in task_qc.extractor.data.items() if v.size == n_trials})
+    w.updateDataframe(df_trials.merge(qc.frame, left_index=True, right_index=True))
     qt.run_app()
     return qc
 
