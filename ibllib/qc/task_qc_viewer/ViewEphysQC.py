@@ -103,10 +103,11 @@ class ColoredDataFrameTableModel(DataFrameTableModel):
         values[cols] = values[cols].apply(pd.to_numeric, errors='coerce')
 
         # normalize numeric values
-        cols = values.select_dtypes(include=['number']).columns
         values.replace([np.inf, -np.inf], np.nan, inplace=True)
+        cols = values.select_dtypes(include=['number']).columns
+        values[cols].astype(float)
         values[cols] -= values[cols].min()
-        values[cols] /= values[cols].max()
+        values[cols] = values[cols].div(values[cols].max()).replace(np.inf, 0, inplace=True)
 
         # convert boolean values
         cols = values.select_dtypes(include=['bool']).columns
