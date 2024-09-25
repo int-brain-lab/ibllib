@@ -10,6 +10,7 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
 import pandas as pd
 import numpy as np
+from sklearn.preprocessing import MinMaxScaler
 
 from ibllib.misc import qt
 
@@ -84,18 +85,34 @@ class ColoredDataFrameTableModel(DataFrameTableModel):
         self.layoutChanged.connect(self._setColors)
 
     def _setColors(self):
-        df = self._dataframe.copy()
-        df = df.replace([np.inf, -np.inf], np.nan)
-        for col in df.select_dtypes(include=['bool']):
-            df[col] = df[col].astype(float)
-        for col in df.select_dtypes(exclude=['bool']):
-            df[col] = pd.to_numeric(df[col], errors='coerce').astype(float)
-            if df[col].nunique() == 1:
-                df[col] = QColor.fromRgb(*self._cmap(0, self._alpha, True))
-            else:
-                df[col] = (df[col] - df[col].min()) / (df[col].max() - df[col].min())
-                df[col] = [QColor.fromRgb(*x) for x in self._cmap(df[col], self._alpha, True).tolist()]
-        self._colors = df
+        vals = self._dataframe.copy()
+        if vals.empty:
+            self._colors = vals
+            return
+
+        # coerce non-bool / non-numeric values to numeric
+        for col in vals.select_dtypes(exclude=['bool', 'number']):
+            vals[col] = vals[col].to_numeric(errors='coerce')
+
+        # normalize numeric values
+        cols = vals.select_dtypes(include=['number']).columns
+        vals.replace([np.inf, -np.inf], np.nan, inplace=True)
+        vals[cols] = MinMaxScaler().fit_transform(vals[cols])
+
+        # convert boolean values
+        cols = vals.select_dtypes(include=['bool']).columns
+        vals[cols] = vals[cols].astype(float)
+
+        # assign QColors
+        colors = vals.astype(object)
+        for col in vals.columns:
+            colors[col] = [QColor.fromRgb(*x) for x in self._cmap(vals[col], self._alpha, True)]
+
+        # NaNs should be white
+        nans = vals.isna()
+        colors[nans] = QColor('white')
+
+        self._colors = colors
 
     def data(self, index, role=...):
         if not index.isValid():
@@ -103,11 +120,7 @@ class ColoredDataFrameTableModel(DataFrameTableModel):
         if role == Qt.BackgroundRole:
             row = self._dataframe.index[index.row()]
             col = self._dataframe.columns[index.column()]
-            val = self._dataframe.iloc[row][col]
-            if isinstance(val, (np.bool_, np.number)) and not np.isnan(val):
-                return self._colors.iloc[row][col]
-            else:
-                return QBrush(Qt.white)
+            return self._colors.iloc[row][col]
         return super().data(index, role)
 
 
