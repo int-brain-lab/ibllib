@@ -1,7 +1,8 @@
 """An interactive PyQT QC data frame."""
 import logging
 
-from PyQt5 import QtCore, QtWidgets
+from PyQt5 import QtWidgets
+from PyQt5.QtCore import pyqtProperty, Qt, QVariant, QAbstractTableModel, QModelIndex, pyqtSlot
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
 import pandas as pd
@@ -12,13 +13,13 @@ from ibllib.misc import qt
 _logger = logging.getLogger(__name__)
 
 
-class DataFrameModel(QtCore.QAbstractTableModel):
-    DtypeRole = QtCore.Qt.UserRole + 1000
-    ValueRole = QtCore.Qt.UserRole + 1001
+class DataFrameTableModel(QAbstractTableModel):
+    DtypeRole = Qt.UserRole + 1000
+    ValueRole = Qt.UserRole + 1001
 
-    def __init__(self, df=pd.DataFrame(), parent=None):
-        super(DataFrameModel, self).__init__(parent)
-        self._dataframe = df
+    def __init__(self, parent=None, dataFrame: pd.DataFrame = pd.DataFrame()):
+        super(DataFrameTableModel, self).__init__(parent)
+        self._dataframe = dataFrame
 
     def setDataFrame(self, dataframe):
         self.beginResetModel()
@@ -28,50 +29,50 @@ class DataFrameModel(QtCore.QAbstractTableModel):
     def dataFrame(self):
         return self._dataframe
 
-    dataFrame = QtCore.pyqtProperty(pd.DataFrame, fget=dataFrame, fset=setDataFrame)
+    dataFrame = pyqtProperty(pd.DataFrame, fget=dataFrame, fset=setDataFrame)
 
-    @QtCore.pyqtSlot(int, QtCore.Qt.Orientation, result=str)
-    def headerData(self, section: int, orientation: QtCore.Qt.Orientation,
-                   role: int = QtCore.Qt.DisplayRole):
-        if role == QtCore.Qt.DisplayRole:
-            if orientation == QtCore.Qt.Horizontal:
+    @pyqtSlot(int, Qt.Orientation, result=str)
+    def headerData(self, section: int, orientation: Qt.Orientation,
+                   role: int = Qt.DisplayRole):
+        if role == Qt.DisplayRole:
+            if orientation == Qt.Horizontal:
                 return self._dataframe.columns[section]
             else:
                 return str(self._dataframe.index[section])
-        return QtCore.QVariant()
+        return QVariant()
 
-    def rowCount(self, parent=QtCore.QModelIndex()):
+    def rowCount(self, parent=QModelIndex()):
         if parent.isValid():
             return 0
         return len(self._dataframe.index)
 
-    def columnCount(self, parent=QtCore.QModelIndex()):
+    def columnCount(self, parent=QModelIndex()):
         if parent.isValid():
             return 0
         return self._dataframe.columns.size
 
-    def data(self, index, role=QtCore.Qt.DisplayRole):
+    def data(self, index, role=Qt.DisplayRole):
         if (not index.isValid() or not (0 <= index.row() < self.rowCount() and
                                         0 <= index.column() < self.columnCount())):
-            return QtCore.QVariant()
+            return QVariant()
         row = self._dataframe.index[index.row()]
         col = self._dataframe.columns[index.column()]
         dt = self._dataframe[col].dtype
 
         val = self._dataframe.iloc[row][col]
-        if role == QtCore.Qt.DisplayRole:
+        if role == Qt.DisplayRole:
             return str(val)
-        elif role == DataFrameModel.ValueRole:
+        elif role == DataFrameTableModel.ValueRole:
             return val
-        if role == DataFrameModel.DtypeRole:
+        if role == DataFrameTableModel.DtypeRole:
             return dt
-        return QtCore.QVariant()
+        return QVariant()
 
     def roleNames(self):
         roles = {
-            QtCore.Qt.DisplayRole: b'display',
-            DataFrameModel.DtypeRole: b'dtype',
-            DataFrameModel.ValueRole: b'value'
+            Qt.DisplayRole: b'display',
+            DataFrameTableModel.DtypeRole: b'dtype',
+            DataFrameTableModel.ValueRole: b'value'
         }
         return roles
 
@@ -83,6 +84,8 @@ class DataFrameModel(QtCore.QAbstractTableModel):
         :param order: the order to be sorted, 0 is descending; 1, ascending
         :return:
         """
+        if self._dataframe.empty:
+            return
         self.layoutAboutToBeChanged.emit()
         col_name = self._dataframe.columns.values[col]
         # print('sorting by ' + col_name)
@@ -125,37 +128,43 @@ class PlotWindow(QtWidgets.QWidget):
 class GraphWindow(QtWidgets.QWidget):
     def __init__(self, parent=None, wheel=None):
         QtWidgets.QWidget.__init__(self, parent=parent)
+        self.lineEditPath = QtWidgets.QLineEdit(self)
+
+        self.pushButtonLoad = QtWidgets.QPushButton("Select File", self)
+        self.pushButtonLoad.clicked.connect(self.loadFile)
+
+        self.tableModel = DataFrameTableModel(self)
+        self.tableView = QtWidgets.QTableView(self)
+        self.tableView.setModel(self.tableModel)
+        self.tableView.setSortingEnabled(True)
+        self.tableView.doubleClicked.connect(self.tv_double_clicked)
+
         vLayout = QtWidgets.QVBoxLayout(self)
         hLayout = QtWidgets.QHBoxLayout()
-        self.pathLE = QtWidgets.QLineEdit(self)
-        hLayout.addWidget(self.pathLE)
-        self.loadBtn = QtWidgets.QPushButton("Select File", self)
-        hLayout.addWidget(self.loadBtn)
+        hLayout.addWidget(self.lineEditPath)
+        hLayout.addWidget(self.pushButtonLoad)
         vLayout.addLayout(hLayout)
-        self.pandasTv = QtWidgets.QTableView(self)
-        vLayout.addWidget(self.pandasTv)
-        self.loadBtn.clicked.connect(self.load_file)
-        self.pandasTv.setSortingEnabled(True)
-        self.pandasTv.doubleClicked.connect(self.tv_double_clicked)
+        vLayout.addWidget(self.tableView)
+
         self.wplot = PlotWindow(wheel=wheel)
         self.wplot.show()
+        self.tableModel.dataChanged.connect(self.wplot.canvas.draw)
+
         self.wheel = wheel
 
-    def load_file(self):
+    def loadFile(self):
         fileName, _ = QtWidgets.QFileDialog.getOpenFileName(
             self, "Open File", "", "CSV Files (*.csv)")
-        self.pathLE.setText(fileName)
+        self.lineEditPath.setText(fileName)
         df = pd.read_csv(fileName)
-        self.update_df(df)
+        self.updateDataframe(df)
 
-    def update_df(self, df):
-        model = DataFrameModel(df)
-        self.pandasTv.setModel(model)
-        self.wplot.canvas.draw()
+    def updateDataframe(self, dataFrame: pd.DataFrame):
+        self.tableModel.setDataFrame(dataFrame)
 
     def tv_double_clicked(self):
-        df = self.pandasTv.model()._dataframe
-        ind = self.pandasTv.currentIndex()
+        df = self.tableView.model()._dataframe
+        ind = self.tableView.currentIndex()
         start = df.loc[ind.row()]['intervals_0']
         finish = df.loc[ind.row()]['intervals_1']
         dt = finish - start
@@ -179,6 +188,6 @@ def viewqc(qc=None, title=None, wheel=None):
     qcw = GraphWindow(wheel=wheel)
     qcw.setWindowTitle(title)
     if qc is not None:
-        qcw.update_df(qc)
+        qcw.updateDataframe(qc)
     qcw.show()
     return qcw
