@@ -6,7 +6,6 @@ from PyQt5 import QtWidgets
 from PyQt5.QtCore import pyqtProperty, Qt, QVariant, QAbstractTableModel, QModelIndex, QObject
 from PyQt5.QtGui import QBrush, QColor
 import matplotlib.pyplot as plt
-from PyQt5.QtWidgets import QStyledItemDelegate
 from matplotlib.colors import ListedColormap
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
@@ -64,9 +63,9 @@ class DataFrameTableModel(QAbstractTableModel):
     def sort(self, column: int, order: Qt.SortOrder = ...):
         if self.columnCount() == 0:
             return
-        columnName = self._dataframe.columns.values[column]
+        column = self._dataframe.columns[column]
         self.layoutAboutToBeChanged.emit()
-        self._dataframe.sort_values(by=columnName, ascending=not order, inplace=True)
+        self._dataframe.sort_values(by=column, ascending=not order, inplace=True)
         self.layoutChanged.emit()
 
 
@@ -156,7 +155,10 @@ class PlotWindow(QtWidgets.QWidget):
 class GraphWindow(QtWidgets.QWidget):
     def __init__(self, parent=None, wheel=None):
         QtWidgets.QWidget.__init__(self, parent=parent)
-        self.lineEditPath = QtWidgets.QLineEdit(self)
+
+        self.lineEditFilter = QtWidgets.QLineEdit(self)
+        self.lineEditFilter.setPlaceholderText('Filter columns by name')
+        self.lineEditFilter.textChanged.connect(self.changeFilter)
 
         self.pushButtonLoad = QtWidgets.QPushButton("Select File", self)
         self.pushButtonLoad.clicked.connect(self.loadFile)
@@ -167,12 +169,12 @@ class GraphWindow(QtWidgets.QWidget):
         self.tableView.setSortingEnabled(True)
         self.tableView.horizontalHeader().setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self.tableView.horizontalHeader().setSectionsMovable(True)
-        # self.tableView.verticalHeader().hide()
+        self.tableView.verticalHeader().hide()
         self.tableView.doubleClicked.connect(self.tv_double_clicked)
 
         vLayout = QtWidgets.QVBoxLayout(self)
         hLayout = QtWidgets.QHBoxLayout()
-        hLayout.addWidget(self.lineEditPath)
+        hLayout.addWidget(self.lineEditFilter)
         hLayout.addWidget(self.pushButtonLoad)
         vLayout.addLayout(hLayout)
         vLayout.addWidget(self.tableView)
@@ -183,13 +185,18 @@ class GraphWindow(QtWidgets.QWidget):
 
         self.wheel = wheel
 
+    def changeFilter(self, string: str):
+        headers = [self.tableModel.headerData(x, Qt.Horizontal, Qt.DisplayRole)
+                   for x in range(self.tableModel.columnCount())]
+        for idx, column in enumerate(headers):
+            self.tableView.setColumnHidden(idx, string.lower() not in column.lower())
+
     def loadFile(self):
         fileName, _ = QtWidgets.QFileDialog.getOpenFileName(
             self, "Open File", "", "CSV Files (*.csv)"
         )
         if len(fileName) == 0:
             return
-        self.lineEditPath.setText(fileName)
         df = pd.read_csv(fileName)
         self.updateDataframe(df)
 
