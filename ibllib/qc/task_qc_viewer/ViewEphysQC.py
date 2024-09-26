@@ -204,7 +204,7 @@ class GraphWindow(QtWidgets.QWidget):
         action.setChecked(idx in self._pinnedColumns)
         menu = QMenu(self)
         menu.addAction(action)
-        menu.exec(self.mapToParent(pos))
+        menu.exec(self.sender().mapToGlobal(pos))
 
     @pyqtSlot(bool)
     @pyqtSlot(bool, int)
