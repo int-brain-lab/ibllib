@@ -4,9 +4,8 @@ import logging
 
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import pyqtProperty, Qt, QVariant, QAbstractTableModel, QModelIndex, QObject
-from PyQt5.QtGui import QBrush, QColor
+from PyQt5.QtGui import QColor
 import matplotlib.pyplot as plt
-from PyQt5.QtWidgets import QTableView
 from matplotlib.colors import ListedColormap
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
@@ -17,8 +16,6 @@ from ibllib.misc import qt
 
 _logger = logging.getLogger(__name__)
 
-
-class FreezeTableView(QTableView)
 
 class DataFrameTableModel(QAbstractTableModel):
     def __init__(self, parent: QObject = ..., dataFrame: pd.DataFrame | None = None):
