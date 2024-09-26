@@ -6,6 +6,7 @@ from PyQt5 import QtWidgets
 from PyQt5.QtCore import pyqtProperty, Qt, QVariant, QAbstractTableModel, QModelIndex, QObject
 from PyQt5.QtGui import QBrush, QColor
 import matplotlib.pyplot as plt
+from PyQt5.QtWidgets import QTableView
 from matplotlib.colors import ListedColormap
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
@@ -16,6 +17,8 @@ from ibllib.misc import qt
 
 _logger = logging.getLogger(__name__)
 
+
+class FreezeTableView(QTableView)
 
 class DataFrameTableModel(QAbstractTableModel):
     def __init__(self, parent: QObject = ..., dataFrame: pd.DataFrame | None = None):
@@ -203,9 +206,8 @@ class GraphWindow(QtWidgets.QWidget):
     def updateDataframe(self, dataFrame: pd.DataFrame):
         self.tableModel.setDataFrame(dataFrame)
 
-    def tv_double_clicked(self):
-        ind = self.tableView.currentIndex()
-        data = self.tableModel.dataFrame.loc[ind.row()]
+    def tv_double_clicked(self, index: QModelIndex):
+        data = self.tableModel.dataFrame.iloc[index.row()]
         t0 = data["intervals_0"]
         t1 = data["intervals_1"]
         dt = t1 - t0
@@ -213,13 +215,13 @@ class GraphWindow(QtWidgets.QWidget):
             idx = np.searchsorted(self.wheel["re_ts"], np.array([t0 - dt / 10, t1 + dt / 10]))
             period = self.wheel["re_pos"][idx[0] : idx[1]]
             if period.size == 0:
-                _logger.warning("No wheel data during trial #%i", ind.row())
+                _logger.warning("No wheel data during trial #%i", index.row())
             else:
                 min_val, max_val = np.min(period), np.max(period)
                 self.wplot.canvas.ax2.set_ylim(min_val - 1, max_val + 1)
             self.wplot.canvas.ax2.set_xlim(t0 - dt / 10, t1 + dt / 10)
         self.wplot.canvas.ax.set_xlim(t0 - dt / 10, t1 + dt / 10)
-
+        self.wplot.setWindowTitle(f"Trial {data.get('trial_no', '?')}")
         self.wplot.canvas.draw()
 
 
