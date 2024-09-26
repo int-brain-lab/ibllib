@@ -6,6 +6,7 @@ from PyQt5 import QtWidgets
 from PyQt5.QtCore import pyqtProperty, Qt, QVariant, QAbstractTableModel, QModelIndex, QObject
 from PyQt5.QtGui import QBrush, QColor
 import matplotlib.pyplot as plt
+from PyQt5.QtWidgets import QStyledItemDelegate
 from matplotlib.colors import ListedColormap
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
@@ -33,7 +34,7 @@ class DataFrameTableModel(QAbstractTableModel):
     dataFrame = pyqtProperty(pd.DataFrame, fget=dataFrame, fset=setDataFrame)
 
     def headerData(self, section: int, orientation: Qt.Orientation, role: int = ...):
-        if role == Qt.DisplayRole:
+        if role in (Qt.DisplayRole, Qt.ToolTipRole):
             if orientation == Qt.Horizontal:
                 return self._dataframe.columns[section]
             else:
@@ -103,12 +104,11 @@ class ColoredDataFrameTableModel(DataFrameTableModel):
         df[cols] = df[cols].apply(pd.to_numeric, errors='coerce')
 
         # normalize numeric values, avoiding inf values and division by zero
-        num_cols = df.select_dtypes(include=['number']).columns
-        df[num_cols].replace([np.inf, -np.inf], np.nan)
-        mask = df[num_cols].nunique(dropna=True) == 1
-        cols = num_cols[mask]
-        df[cols] = df[cols].where(df[cols].isna(), other=0.0)
-        cols = num_cols[~mask]
+        cols = df.select_dtypes(include=['number']).columns
+        df[cols].replace([np.inf, -np.inf], np.nan)
+        m = df[cols].nunique() <= 1  # boolean mask for columns with only 1 unique value
+        df[cols[m]] = df[cols[m]].where(df[cols[m]].isna(), other=0.0)
+        cols = cols[~m]
         df[cols] = (df[cols] - df[cols].min()) / (df[cols].max() - df[cols].min())
 
         # convert boolean values
@@ -169,6 +169,8 @@ class GraphWindow(QtWidgets.QWidget):
         self.tableView.setModel(self.tableModel)
         self.tableView.setSortingEnabled(True)
         self.tableView.horizontalHeader().setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.tableView.horizontalHeader().setSectionsMovable(True)
+        self.tableView.verticalHeader().hide()
         self.tableView.doubleClicked.connect(self.tv_double_clicked)
 
         vLayout = QtWidgets.QVBoxLayout(self)
