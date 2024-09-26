@@ -59,7 +59,6 @@ import numpy as np
 from scipy.stats import chisquare
 
 from brainbox.behavior.wheel import cm_to_rad, traces_by_trial
-from ibllib.qc.task_extractors import TaskQCExtractor
 from ibllib.io.extractors import ephys_fpga
 from one.alf import spec
 from . import base
@@ -226,22 +225,6 @@ class TaskQC(base.QC):
         # Criteria (initialize as outcomes vary by class, task, and hardware)
         self.criteria = BWM_CRITERIA.copy()
 
-    def load_data(self, bpod_only=False, download_data=True):
-        """Extract the data from raw data files.
-
-        Extracts all the required task data from the raw data files.
-
-        Parameters
-        ----------
-        bpod_only : bool
-            If True no data is extracted from the FPGA for ephys sessions.
-        download_data : bool
-            If True, any missing raw data is downloaded via ONE. By default data are not downloaded
-            if a session path was provided to the constructor.
-        """
-        self.extractor = TaskQCExtractor(
-            self.session_path, one=self.one, download_data=download_data, bpod_only=bpod_only)
-
     def compute(self, **kwargs):
         """Compute and store the QC metrics.
 
@@ -252,13 +235,8 @@ class TaskQC(base.QC):
         ----------
         bpod_only : bool
             If True no data is extracted from the FPGA for ephys sessions.
-        download_data : bool
-            If True, any missing raw data is downloaded via ONE. By default data are not downloaded
-            if a session path was provided to the constructor.
         """
-        if self.extractor is None:
-            kwargs['download_data'] = kwargs.pop('download_data', self.download_data)
-            self.load_data(**kwargs)
+        assert self.extractor is not None
 
         ver = self.extractor.settings.get('IBLRIG_VERSION', '') or '0.0.0'
         if version.parse(ver) >= version.parse('8.0.0'):
@@ -357,9 +335,6 @@ class TaskQC(base.QC):
             The namespace of the QC fields in the Alyx JSON field.
         bpod_only : bool
             If True no data is extracted from the FPGA for ephys sessions.
-        download_data : bool
-            If True, any missing raw data is downloaded via ONE. By default data are not downloaded
-            if a session path was provided to the constructor.
 
         Returns
         -------
@@ -435,16 +410,13 @@ class TaskQC(base.QC):
 class HabituationQC(TaskQC):
     """Task QC for habituation choice world."""
 
-    def compute(self, download_data=None, **kwargs):
+    def compute(self, **kwargs):
         """Compute and store the QC metrics.
 
         Runs the QC on the session and stores a map of the metrics for each datapoint for each
         test, and a map of which datapoints passed for each test.
         """
-        if self.extractor is None:
-            # If download_data is None, decide based on whether eid or session path was provided
-            ensure_data = self.download_data if download_data is None else download_data
-            self.load_data(download_data=ensure_data, **kwargs)
+        assert self.extractor is not None
         self.log.info(f'Session {self.session_path}: Running QC on habituation data...')
 
         # Initialize checks

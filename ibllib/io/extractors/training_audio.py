@@ -27,7 +27,7 @@ READY_TONE_SPL = 85
 
 def detect_ready_tone(w, fs, ftone=FTONE, threshold=0.8):
     """
-    Detects a transient sinusoid signal in a time-serie
+    Detects a transient sinusoid signal in a time-series
     :param w: audio time seried
     :param fs: sampling frequency (Hz)
     :param ftone: frequency of the tone to detect

@@ -1,5 +1,6 @@
 """Test ibllib.pipes.tasks module and Task class."""
 import sys
+import re
 import shutil
 import tempfile
 import unittest
@@ -12,6 +13,7 @@ import ibllib.pipes.tasks
 from ibllib.pipes.base_tasks import ExperimentDescriptionRegisterRaw
 from ibllib.pipes.video_tasks import VideoConvert
 from ibllib.io import session_params
+from ibllib.oneibl.data_handlers import ExpectedDataset
 from one.api import ONE
 from one.webclient import no_cache
 from ibllib.tests import TEST_DB
@@ -371,14 +373,15 @@ class TestTask(unittest.TestCase):
         """Test for Task._input_files_to_register method."""
         task = Task00(self.session_path)
         self.assertRaises(RuntimeError, task._input_files_to_register)
-        task.input_files = [('register.optional.ext', 'alf', False, True),
-                            ('register.optional_foo.ext', 'alf', False, True),
-                            ('register.required.ext', 'alf', True, True),
-                            ('ignore.required.ext', 'alf', True),
-                            ('ignore.optional.ext', 'alf', False)]
+        I = ExpectedDataset.input  # noqa
+        task.input_files = [I('register.optional.ext', 'alf', False, True),
+                            I('register.optional_foo.ext', 'alf', False, True),
+                            I('register.required.ext', 'alf', True, True),
+                            I('ignore.required.ext', 'alf', True),
+                            I('ignore.optional.ext', 'alf', False)]
         self.session_path.joinpath('alf').mkdir()
         for f in task.input_files:
-            self.session_path.joinpath(f[1], f[0]).touch()
+            self.session_path.joinpath(f.glob_pattern).touch()
         files = task._input_files_to_register(assert_all_exist=True)
         expected = [self.session_path.joinpath('alf', 'register.required.ext'),
                     self.session_path.joinpath('alf', 'register.optional.ext'),
@@ -395,6 +398,14 @@ class TestTask(unittest.TestCase):
             files = task._input_files_to_register(assert_all_exist=False)
         self.assertEqual(files, expected[1:2])
         self.assertRaises(AssertionError, task._input_files_to_register, assert_all_exist=True)
+        # Test with wildcards
+        task.input_files = [I('foo.bar.*', 'alf', True, True),
+                            I('bar.baz.npy', 'alf', True, True) |
+                            I('baz.foo.npy', 'alf', True, True)]
+        with self.assertLogs(ibllib.pipes.tasks.__name__, level='ERROR') as cm:
+            self.assertFalse(task._input_files_to_register(assert_all_exist=False))
+            for f in ('alf/foo.bar.*', 'alf/bar.baz.npy', 'alf/baz.foo.npy'):
+                self.assertRegex(cm.output[-1], re.escape(f))
 
 
 class TestMisc(unittest.TestCase):
