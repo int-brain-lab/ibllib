@@ -93,28 +93,30 @@ class ColoredDataFrameTableModel(DataFrameTableModel):
         self.layoutChanged.connect(self._setRgba)
 
     def _setRgba(self):
-        values = self._dataframe.copy()
-        if values.empty:
-            self._rgba = values
+        df = self._dataframe.copy()
+        if df.empty:
+            self._rgba = df
             return
 
         # coerce non-bool / non-numeric values to numeric
-        cols = values.select_dtypes(exclude=['bool', 'number']).columns
-        values[cols] = values[cols].apply(pd.to_numeric, errors='coerce')
+        cols = df.select_dtypes(exclude=['bool', 'number']).columns
+        df[cols] = df[cols].apply(pd.to_numeric, errors='coerce')
 
-        # normalize numeric values
-        values.replace([np.inf, -np.inf], np.nan, inplace=True)
-        cols = values.select_dtypes(include=['number']).columns
-        values[cols].astype(float)
-        values[cols] -= values[cols].min()
-        values[cols] = values[cols].div(values[cols].max()).replace(np.inf, 0, inplace=True)
+        # normalize numeric values, avoiding inf values and division by zero
+        num_cols = df.select_dtypes(include=['number']).columns
+        df[num_cols].replace([np.inf, -np.inf], np.nan)
+        mask = df[num_cols].nunique(dropna=True) == 1
+        cols = num_cols[mask]
+        df[cols] = df[cols].where(df[cols].isna(), other=0.0)
+        cols = num_cols[~mask]
+        df[cols] = (df[cols] - df[cols].min()) / (df[cols].max() - df[cols].min())
 
         # convert boolean values
-        cols = values.select_dtypes(include=['bool']).columns
-        values[cols] = values[cols].astype(float)
+        cols = df.select_dtypes(include=['bool']).columns
+        df[cols] = df[cols].astype(float)
 
         # store color values to ndarray
-        self._rgba = self._cmap(values, self._alpha, True)
+        self._rgba = self._cmap(df, self._alpha, True)
 
     def data(self, index, role=...):
         if not index.isValid():
