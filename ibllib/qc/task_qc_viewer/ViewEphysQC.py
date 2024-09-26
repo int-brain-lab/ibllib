@@ -54,10 +54,8 @@ class DataFrameTableModel(QAbstractTableModel):
     def data(self, index: QModelIndex, role: int = ...) -> QVariant:
         if not index.isValid():
             return QVariant()
-        row = self._dataframe.index[index.row()]
-        col = self._dataframe.columns[index.column()]
-        val = self._dataframe.iloc[row][col]
         if role == Qt.DisplayRole:
+            val = self._dataframe.iloc[index.row()][index.column()]
             if isinstance(val, np.generic):
                 return val.item()
             return QVariant(str(val))
@@ -66,10 +64,9 @@ class DataFrameTableModel(QAbstractTableModel):
     def sort(self, column: int, order: Qt.SortOrder = ...):
         if self.columnCount() == 0:
             return
+        columnName = self._dataframe.columns.values[column]
         self.layoutAboutToBeChanged.emit()
-        col_name = self._dataframe.columns.values[column]
-        self._dataframe.sort_values(by=col_name, ascending=not order, inplace=True)
-        self._dataframe.reset_index(inplace=True, drop=True)
+        self._dataframe.sort_values(by=columnName, ascending=not order, inplace=True)
         self.layoutChanged.emit()
 
 
@@ -91,7 +88,6 @@ class ColoredDataFrameTableModel(DataFrameTableModel):
         self._setRgba()
         self.modelReset.connect(self._setRgba)
         self.dataChanged.connect(self._setRgba)
-        self.layoutChanged.connect(self._setRgba)
 
     def _setRgba(self):
         df = self._dataframe.copy()
@@ -122,7 +118,8 @@ class ColoredDataFrameTableModel(DataFrameTableModel):
         if not index.isValid():
             return QVariant()
         if role == Qt.BackgroundRole:
-            return QColor.fromRgb(*self._rgba[index.row(), index.column()])
+            row = self._dataframe.index[index.row()]
+            return QColor.fromRgb(*self._rgba[row][index.column()])
         return super().data(index, role)
 
 
@@ -170,7 +167,7 @@ class GraphWindow(QtWidgets.QWidget):
         self.tableView.setSortingEnabled(True)
         self.tableView.horizontalHeader().setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self.tableView.horizontalHeader().setSectionsMovable(True)
-        self.tableView.verticalHeader().hide()
+        # self.tableView.verticalHeader().hide()
         self.tableView.doubleClicked.connect(self.tv_double_clicked)
 
         vLayout = QtWidgets.QVBoxLayout(self)
