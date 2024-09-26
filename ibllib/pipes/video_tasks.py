@@ -507,8 +507,11 @@ class EphysPostDLC(base_tasks.VideoTask):
             # In particular the raw videos don't need to be downloaded as they can be streamed
                            [(f'_iblrig_{cam}Camera.raw.mp4', self.device_collection, True) for cam in self.cameras] +
                            [(f'{cam}ROIMotionEnergy.position.npy', 'alf', False) for cam in self.cameras] +
+                           [(f'{cam}Camera.ROIMotionEnergy.npy', 'alf', False) for cam in self.cameras] +
             # The trials table is used in the DLC QC, however this is not an essential dataset
-                           [('_ibl_trials.table.pqt', self.trials_collection, False)],
+                           [('_ibl_trials.table.pqt', self.trials_collection, False),
+                            ('_ibl_wheel.position.npy', self.trials_collection, False),
+                            ('_ibl_wheel.timestamps.npy', self.trials_collection, False)],
             'output_files': [(f'_ibl_{cam}Camera.features.pqt', 'alf', True) for cam in self.cameras] +
                             [('licks.times.npy', 'alf', True)]
         }
