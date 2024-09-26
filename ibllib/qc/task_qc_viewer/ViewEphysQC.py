@@ -3,9 +3,11 @@
 import logging
 
 from PyQt5 import QtWidgets
-from PyQt5.QtCore import pyqtProperty, Qt, QVariant, QAbstractTableModel, QModelIndex, QObject
+from PyQt5.QtCore import pyqtProperty, Qt, QVariant, QAbstractTableModel, QModelIndex, \
+    QObject, QPoint, pyqtSignal, pyqtSlot
 from PyQt5.QtGui import QColor
 import matplotlib.pyplot as plt
+from PyQt5.QtWidgets import QMenu, QAction, QHeaderView
 from matplotlib.colors import ListedColormap
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
@@ -153,8 +155,12 @@ class PlotWindow(QtWidgets.QWidget):
 
 
 class GraphWindow(QtWidgets.QWidget):
+    _pinnedColumns = []
+
     def __init__(self, parent=None, wheel=None):
         QtWidgets.QWidget.__init__(self, parent=parent)
+
+        self.columnPinned = pyqtSignal(int, bool)
 
         self.lineEditFilter = QtWidgets.QLineEdit(self)
         self.lineEditFilter.setPlaceholderText('Filter columns by name')
@@ -169,8 +175,14 @@ class GraphWindow(QtWidgets.QWidget):
         self.tableView.setSortingEnabled(True)
         self.tableView.horizontalHeader().setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self.tableView.horizontalHeader().setSectionsMovable(True)
-        self.tableView.verticalHeader().hide()
+        self.tableView.horizontalHeader().setContextMenuPolicy(Qt.CustomContextMenu)
+        self.tableView.horizontalHeader().customContextMenuRequested.connect(
+            self.contextMenu)
         self.tableView.doubleClicked.connect(self.tv_double_clicked)
+
+        self.pinAction = QAction('Pin column', self)
+        self.pinAction.setCheckable(True)
+        self.pinAction.toggled.connect(self.pinColumn)
 
         vLayout = QtWidgets.QVBoxLayout(self)
         hLayout = QtWidgets.QHBoxLayout()
@@ -185,11 +197,31 @@ class GraphWindow(QtWidgets.QWidget):
 
         self.wheel = wheel
 
+    def contextMenu(self, pos: QPoint):
+        idx = self.sender().logicalIndexAt(pos)
+        action = self.pinAction
+        action.setData(idx)
+        action.setChecked(idx in self._pinnedColumns)
+        menu = QMenu(self)
+        menu.addAction(action)
+        menu.exec(self.mapToParent(pos))
+
+    @pyqtSlot(bool)
+    @pyqtSlot(bool, int)
+    def pinColumn(self, pin: bool, idx: int | None = None):
+        idx = idx if idx is not None else self.sender().data()
+        if not pin and idx in self._pinnedColumns:
+            self._pinnedColumns.remove(idx)
+        if pin and idx not in self._pinnedColumns:
+            self._pinnedColumns.append(idx)
+        self.changeFilter(self.lineEditFilter.text())
+
     def changeFilter(self, string: str):
         headers = [self.tableModel.headerData(x, Qt.Horizontal, Qt.DisplayRole)
                    for x in range(self.tableModel.columnCount())]
         for idx, column in enumerate(headers):
-            self.tableView.setColumnHidden(idx, string.lower() not in column.lower())
+            self.tableView.setColumnHidden(idx, string.lower() not in column.lower()
+                                           and idx not in self._pinnedColumns)
 
     def loadFile(self):
         fileName, _ = QtWidgets.QFileDialog.getOpenFileName(
