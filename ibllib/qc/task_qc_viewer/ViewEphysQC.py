@@ -76,12 +76,12 @@ class ColoredDataFrameTableModel(DataFrameTableModel):
     _cmap: ListedColormap
 
     def __init__(self, parent: QObject = ..., dataFrame: pd.DataFrame | None = None,
-                 colorMap: ListedColormap | None = None, alpha: float = 0.5):
+                 colorMap: ListedColormap | None = None, alpha: float = 1):
         super().__init__(parent=parent, dataFrame=dataFrame)
 
         self._alpha = alpha
         if colorMap is None:
-            self._cmap = plt.get_cmap('plasma')
+            self._cmap = plt.get_cmap('spring')
             self._cmap.set_bad(color='w')
         else:
             self._cmap = colorMap
