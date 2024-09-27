@@ -5,10 +5,10 @@ import logging
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import pyqtProperty, Qt, QVariant, QAbstractTableModel, QModelIndex, \
     QObject, QPoint, pyqtSignal, pyqtSlot
-from PyQt5.QtGui import QColor
+from PyQt5.QtGui import QColor, QPalette
 import matplotlib.pyplot as plt
 from PyQt5.QtWidgets import QMenu, QAction, QHeaderView
-from matplotlib.colors import ListedColormap
+from matplotlib.colors import Colormap
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
 import pandas as pd
@@ -56,7 +56,7 @@ class DataFrameTableModel(QAbstractTableModel):
         if not index.isValid():
             return QVariant()
         if role == Qt.DisplayRole:
-            val = self._dataframe.iloc[index.row()][index.column()]
+            val = self._dataframe.iloc[index.row(), index.column()]
             if isinstance(val, np.generic):
                 return val.item()
             return QVariant(str(val))
@@ -72,23 +72,46 @@ class DataFrameTableModel(QAbstractTableModel):
 
 
 class ColoredDataFrameTableModel(DataFrameTableModel):
+    colormapChanged = pyqtSignal(Colormap)
+    alphaChanged = pyqtSignal(float)
     _rgba: np.ndarray
-    _cmap: ListedColormap
+    _cmap: Colormap
+    _alpha: int
 
     def __init__(self, parent: QObject = ..., dataFrame: pd.DataFrame | None = None,
-                 colorMap: ListedColormap | None = None, alpha: float = 1):
+                 colormap: Colormap | None = None, alpha: int = 255):
         super().__init__(parent=parent, dataFrame=dataFrame)
 
-        self._alpha = alpha
-        if colorMap is None:
-            self._cmap = plt.get_cmap('spring')
-            self._cmap.set_bad(color='w')
-        else:
-            self._cmap = colorMap
-
-        self._setRgba()
+        self.colormapChanged.connect(self._setRgba)
         self.modelReset.connect(self._setRgba)
         self.dataChanged.connect(self._setRgba)
+
+        if colormap is None:
+            colormap = plt.get_cmap('spring')
+            colormap.set_bad(color='w')
+        self.setColormap(colormap)
+        self.setAlpha(alpha)
+
+    @pyqtSlot(Colormap)
+    def setColormap(self, colormap: Colormap):
+        self._cmap = colormap
+        self.colormapChanged.emit(colormap)
+
+    def getColormap(self) -> Colormap:
+        return self._cmap
+
+    colormap = pyqtProperty(Colormap, fget=getColormap, fset=setColormap)
+
+    @pyqtSlot(int)
+    def setAlpha(self, alpha: int = 255):
+        _, self._alpha, _ = sorted([0, alpha, 255])
+        self.alphaChanged.emit(self._alpha)
+        self.layoutChanged.emit()
+
+    def getAlpha(self) -> int:
+        return self._alpha
+
+    alpha = pyqtProperty(int, fget=getAlpha, fset=setAlpha)
 
     def _setRgba(self):
         df = self._dataframe.copy()
@@ -112,15 +135,16 @@ class ColoredDataFrameTableModel(DataFrameTableModel):
         cols = df.select_dtypes(include=['bool']).columns
         df[cols] = df[cols].astype(float)
 
-        # store color values to ndarray
-        self._rgba = self._cmap(df, self._alpha, True)
+        # store color values to ndarray & emit signal
+        self._rgba = self._cmap(df, alpha=None, bytes=True)
+        self.layoutChanged.emit()
 
     def data(self, index, role=...):
         if not index.isValid():
             return QVariant()
         if role == Qt.BackgroundRole:
             row = self._dataframe.index[index.row()]
-            return QColor.fromRgb(*self._rgba[row][index.column()])
+            return QColor.fromRgb(*self._rgba[row][index.column()][:3], self._alpha)
         return super().data(index, role)
 
 
@@ -162,13 +186,10 @@ class GraphWindow(QtWidgets.QWidget):
 
         self.columnPinned = pyqtSignal(int, bool)
 
-        self.lineEditFilter = QtWidgets.QLineEdit(self)
-        self.lineEditFilter.setPlaceholderText('Filter columns by name')
-        self.lineEditFilter.textChanged.connect(self.changeFilter)
-
         self.pushButtonLoad = QtWidgets.QPushButton("Select File", self)
         self.pushButtonLoad.clicked.connect(self.loadFile)
 
+        # define table model & view
         self.tableModel = ColoredDataFrameTableModel(self)
         self.tableView = QtWidgets.QTableView(self)
         self.tableView.setModel(self.tableModel)
@@ -176,18 +197,42 @@ class GraphWindow(QtWidgets.QWidget):
         self.tableView.horizontalHeader().setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self.tableView.horizontalHeader().setSectionsMovable(True)
         self.tableView.horizontalHeader().setContextMenuPolicy(Qt.CustomContextMenu)
-        self.tableView.horizontalHeader().customContextMenuRequested.connect(
-            self.contextMenu)
+        self.tableView.horizontalHeader().customContextMenuRequested.connect(self.contextMenu)
         self.tableView.doubleClicked.connect(self.tv_double_clicked)
 
+        # define colors for highlighted cells
+        p = self.tableView.palette()
+        p.setColor(QPalette.Highlight, Qt.black)
+        p.setColor(QPalette.HighlightedText, Qt.white)
+        self.tableView.setPalette(p)
+
+        # QAction for pinning columns
         self.pinAction = QAction('Pin column', self)
         self.pinAction.setCheckable(True)
         self.pinAction.toggled.connect(self.pinColumn)
 
-        vLayout = QtWidgets.QVBoxLayout(self)
+        # Filter columns by name
+        self.lineEditFilter = QtWidgets.QLineEdit(self)
+        self.lineEditFilter.setPlaceholderText('Filter columns')
+        self.lineEditFilter.textChanged.connect(self.changeFilter)
+
+        # slider for alpha values
+        self.sliderAlpha = QtWidgets.QSlider(Qt.Horizontal, self)
+        self.sliderAlpha.setMinimum(0)
+        self.sliderAlpha.setMaximum(255)
+        self.sliderAlpha.setValue(self.tableModel.alpha)
+        self.sliderAlpha.valueChanged.connect(self.tableModel.setAlpha)
+
+        # Horizontal layout
         hLayout = QtWidgets.QHBoxLayout()
         hLayout.addWidget(self.lineEditFilter)
+        hLayout.addWidget(QtWidgets.QLabel('Alpha', self))
+        hLayout.addWidget(self.sliderAlpha)
+        hLayout.addStretch(1)
         hLayout.addWidget(self.pushButtonLoad)
+
+        # Vertical layout
+        vLayout = QtWidgets.QVBoxLayout(self)
         vLayout.addLayout(hLayout)
         vLayout.addWidget(self.tableView)
 
