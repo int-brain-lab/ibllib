@@ -224,7 +224,9 @@ class GraphWindow(QtWidgets.QWidget):
 
         # colormap picker
         self.comboboxColormap = QtWidgets.QComboBox(self)
-        self.comboboxColormap.addItems(['plasma', 'spring', 'summer', 'autumn', 'winter'])
+        colormaps = {self.tableModel.colormap.name, 'plasma', 'spring', 'summer', 'autumn', 'winter'}
+        self.comboboxColormap.addItems(colormaps)
+        self.comboboxColormap.setCurrentText(self.tableModel.colormap.name)
         self.comboboxColormap.currentTextChanged.connect(self.tableModel.setColormapByName)
 
         # slider for alpha values
