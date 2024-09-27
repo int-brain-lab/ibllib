@@ -10,7 +10,7 @@ from ibllib.io.extractors.training_wheel import Wheel
 
 
 _logger = logging.getLogger(__name__)
-__all__ = ['TrainingTrials', 'extract_all']
+__all__ = ['TrainingTrials']
 
 
 class FeedbackType(BaseBpodTrialsExtractor):
@@ -456,6 +456,7 @@ class StimFreezeTriggerTimes(BaseBpodTrialsExtractor):
 
 class StimOffTriggerTimes(BaseBpodTrialsExtractor):
     var_names = 'stimOffTrigger_times'
+    save_names = '_ibl_trials.stimOnTrigger_times.npy'
 
     def _extract(self):
         if version.parse(self.settings["IBLRIG_VERSION"] or '100.0.0') >= version.parse("6.2.5"):
@@ -622,7 +623,7 @@ class StimOnOffFreezeTimes(BaseBpodTrialsExtractor):
     Each stimulus event is the first detected front of the BNC1 signal after the trigger state, but before the next
     trigger state.
     """
-    save_names = ('_ibl_trials.stimOn_times.npy', None, None)
+    save_names = ('_ibl_trials.stimOn_times.npy', '_ibl_trials.stimOff_times.npy', None)
     var_names = ('stimOn_times', 'stimOff_times', 'stimFreeze_times')
 
     def _extract(self):
@@ -723,8 +724,10 @@ class TrialsTable(BaseBpodTrialsExtractor):
 
 class TrainingTrials(BaseBpodTrialsExtractor):
     save_names = ('_ibl_trials.repNum.npy', '_ibl_trials.goCueTrigger_times.npy', '_ibl_trials.stimOnTrigger_times.npy', None,
-                  None, None, None, '_ibl_trials.table.pqt', None, None, '_ibl_wheel.timestamps.npy', '_ibl_wheel.position.npy',
-                  '_ibl_wheelMoves.intervals.npy', '_ibl_wheelMoves.peakAmplitude.npy', None, None, None, None, None, None)
+                  '_ibl_trials.stimOffTrigger_times.npy', None, None, '_ibl_trials.table.pqt', '_ibl_trials.stimOff_times.npy',
+                  None, '_ibl_wheel.timestamps.npy', '_ibl_wheel.position.npy',
+                  '_ibl_wheelMoves.intervals.npy', '_ibl_wheelMoves.peakAmplitude.npy', None, None, None, None,
+                  '_ibl_trials.quiescencePeriod.npy', None)
     var_names = ('repNum', 'goCueTrigger_times', 'stimOnTrigger_times', 'itiIn_times', 'stimOffTrigger_times',
                  'stimFreezeTrigger_times', 'errorCueTrigger_times', 'table', 'stimOff_times', 'stimFreeze_times',
                  'wheel_timestamps', 'wheel_position', 'wheelMoves_intervals', 'wheelMoves_peakAmplitude',
@@ -737,45 +740,3 @@ class TrainingTrials(BaseBpodTrialsExtractor):
             base, session_path=self.session_path, bpod_trials=self.bpod_trials, settings=self.settings, save=False,
             task_collection=self.task_collection)
         return {k: out[k] for k in self.var_names}
-
-
-def extract_all(session_path, save=False, bpod_trials=None, settings=None, task_collection='raw_behavior_data', save_path=None):
-    """Extract trials and wheel data.
-
-    For task versions >= 5.0.0, outputs wheel data and trials.table dataset (+ some extra datasets)
-
-    Parameters
-    ----------
-    session_path : str, pathlib.Path
-        The path to the session
-    save : bool
-        If true save the data files to ALF
-    bpod_trials : list of dicts
-        The Bpod trial dicts loaded from the _iblrig_taskData.raw dataset
-    settings : dict
-        The Bpod settings loaded from the _iblrig_taskSettings.raw dataset
-
-    Returns
-    -------
-    A list of extracted data and a list of file paths if save is True (otherwise None)
-    """
-    if not bpod_trials:
-        bpod_trials = raw.load_data(session_path, task_collection=task_collection)
-    if not settings:
-        settings = raw.load_settings(session_path, task_collection=task_collection)
-    if settings is None or settings['IBLRIG_VERSION'] == '':
-        settings = {'IBLRIG_VERSION': '100.0.0'}
-
-    # Version check
-    if version.parse(settings['IBLRIG_VERSION']) >= version.parse('5.0.0'):
-        # We now extract a single trials table
-        base = [TrainingTrials]
-    else:
-        base = [
-            RepNum, GoCueTriggerTimes, Intervals, Wheel, FeedbackType, ContrastLR, ProbabilityLeft, Choice, IncludedTrials,
-            StimOnTimes_deprecated, RewardVolume, FeedbackTimes, ResponseTimes, GoCueTimes, PhasePosQuiescence
-        ]
-
-    out, fil = run_extractor_classes(base, save=save, session_path=session_path, bpod_trials=bpod_trials, settings=settings,
-                                     task_collection=task_collection, path_out=save_path)
-    return out, fil

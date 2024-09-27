@@ -1,10 +1,8 @@
 """Extraction tasks for fibrephotometry"""
 
 import logging
-from collections import OrderedDict
 
-from ibllib.pipes import tasks, base_tasks
-import ibllib.pipes.training_preprocessing as tpp
+from ibllib.pipes import base_tasks
 from ibllib.io.extractors.fibrephotometry import FibrePhotometry
 
 _logger = logging.getLogger('ibllib')
@@ -54,28 +52,3 @@ class FibrePhotometryPreprocess(base_tasks.DynamicTask):
         _, out_files = FibrePhotometry(self.session_path, collection=self.device_collection).extract(
             regions=self.regions, path_out=self.session_path.joinpath('alf', 'photometry'), save=True)
         return out_files
-
-
-# pipeline
-class FibrePhotometryExtractionPipeline(tasks.Pipeline):
-    """
-    This is a legacy pipeline not using the acquisition description file to acquire previous sessions at Princeton
-    """
-    label = __name__
-
-    def __init__(self, session_path=None, **kwargs):
-        # FIXME This should be agnostic to task protocol, for now let's assume it's only training
-        super().__init__(session_path, **kwargs)
-        tasks = OrderedDict()
-        self.session_path = session_path
-        # level 0
-        tasks['TrainingRegisterRaw'] = tpp.TrainingRegisterRaw(self.session_path)
-        tasks['TrainingTrials'] = tpp.TrainingTrials(self.session_path)
-        tasks['TrainingVideoCompress'] = tpp.TrainingVideoCompress(self.session_path)
-        tasks['TrainingAudio'] = tpp.TrainingAudio(self.session_path)
-        # level 1
-        tasks['BiasedFibrePhotometry'] = FibrePhotometryPreprocess(self.session_path, parents=[tasks['TrainingTrials']])
-        tasks['TrainingStatus'] = tpp.TrainingStatus(self.session_path, parents=[tasks['TrainingTrials']])
-        tasks['TrainingDLC'] = tpp.TrainingDLC(
-            self.session_path, parents=[tasks['TrainingVideoCompress']])
-        self.tasks = tasks
