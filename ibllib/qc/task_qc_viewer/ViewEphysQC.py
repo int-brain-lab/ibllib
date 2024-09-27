@@ -92,6 +92,12 @@ class ColoredDataFrameTableModel(DataFrameTableModel):
         self.setColormap(colormap)
         self.setAlpha(alpha)
 
+    @pyqtSlot(str)
+    def setColormapByName(self, colormapName: str):
+        colormap = plt.get_cmap(colormapName)
+        colormap.set_bad(color='w')
+        self.setColormap(colormap)
+
     @pyqtSlot(Colormap)
     def setColormap(self, colormap: Colormap):
         self._cmap = colormap
@@ -216,6 +222,11 @@ class GraphWindow(QtWidgets.QWidget):
         self.lineEditFilter.setPlaceholderText('Filter columns')
         self.lineEditFilter.textChanged.connect(self.changeFilter)
 
+        # colormap picker
+        self.comboboxColormap = QtWidgets.QComboBox(self)
+        self.comboboxColormap.addItems(['plasma', 'spring', 'summer', 'autumn', 'winter'])
+        self.comboboxColormap.currentTextChanged.connect(self.tableModel.setColormapByName)
+
         # slider for alpha values
         self.sliderAlpha = QtWidgets.QSlider(Qt.Horizontal, self)
         self.sliderAlpha.setMinimum(0)
@@ -226,6 +237,8 @@ class GraphWindow(QtWidgets.QWidget):
         # Horizontal layout
         hLayout = QtWidgets.QHBoxLayout()
         hLayout.addWidget(self.lineEditFilter)
+        hLayout.addWidget(QtWidgets.QLabel('Colormap', self))
+        hLayout.addWidget(self.comboboxColormap)
         hLayout.addWidget(QtWidgets.QLabel('Alpha', self))
         hLayout.addWidget(self.sliderAlpha)
         hLayout.addStretch(1)
