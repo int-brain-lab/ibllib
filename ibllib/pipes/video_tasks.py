@@ -190,7 +190,8 @@ class VideoSyncQcCamlog(base_tasks.VideoTask):
         if camera_data is None:
             camera_data, _ = self.extract_camera(save=False)
         qc = run_camera_qc(
-            self.session_path, self.cameras, one=self.one, camlog=True, sync_collection=self.sync_collection, sync_type=self.sync)
+            self.session_path, self.cameras, one=self.one, camlog=True, sync_collection=self.sync_collection, sync_type=self.sync,
+            update=update)
         return qc
 
     def _run(self, update=True, **kwargs):
@@ -284,7 +285,8 @@ class VideoSyncQcNidq(base_tasks.VideoTask):
                            [(f'_{self.sync_namespace}_sync.channels.npy', self.sync_collection, True),
                             (f'_{self.sync_namespace}_sync.polarities.npy', self.sync_collection, True),
                             (f'_{self.sync_namespace}_sync.times.npy', self.sync_collection, True),
-                            ('*.wiring.json', self.sync_collection, True),
+                            (f'_{self.sync_namespace}_*.wiring.json', self.sync_collection, False),
+                            (f'_{self.sync_namespace}_*.meta', self.sync_collection, True),
                             ('*wheel.position.npy', 'alf', False),
                             ('*wheel.timestamps.npy', 'alf', False),
                             ('*experiment.description*', '', False)],
@@ -308,7 +310,8 @@ class VideoSyncQcNidq(base_tasks.VideoTask):
         if camera_data is None:
             camera_data, _ = self.extract_camera(save=False)
         qc = run_camera_qc(
-            self.session_path, self.cameras, one=self.one, sync_collection=self.sync_collection, sync_type=self.sync)
+            self.session_path, self.cameras, one=self.one, sync_collection=self.sync_collection, sync_type=self.sync,
+            update=update)
         return qc
 
     def _run(self, update=True, **kwargs):
@@ -347,7 +350,7 @@ class DLC(base_tasks.VideoTask):
             'input_files': [(f'_iblrig_{cam}Camera.raw.mp4', self.device_collection, True) for cam in self.cameras],
             'output_files': [(f'_ibl_{cam}Camera.dlc.pqt', 'alf', True) for cam in self.cameras] +
                             [(f'{cam}Camera.ROIMotionEnergy.npy', 'alf', True) for cam in self.cameras] +
-                            [(f'{cam}ROIMotionEnergy.position.npy', 'alf', True)for cam in self.cameras]
+                            [(f'{cam}ROIMotionEnergy.position.npy', 'alf', True) for cam in self.cameras]
         }
 
         return signature
@@ -504,8 +507,11 @@ class EphysPostDLC(base_tasks.VideoTask):
             # In particular the raw videos don't need to be downloaded as they can be streamed
                            [(f'_iblrig_{cam}Camera.raw.mp4', self.device_collection, True) for cam in self.cameras] +
                            [(f'{cam}ROIMotionEnergy.position.npy', 'alf', False) for cam in self.cameras] +
+                           [(f'{cam}Camera.ROIMotionEnergy.npy', 'alf', False) for cam in self.cameras] +
             # The trials table is used in the DLC QC, however this is not an essential dataset
-                           [('_ibl_trials.table.pqt', self.trials_collection, False)],
+                           [('_ibl_trials.table.pqt', self.trials_collection, False),
+                            ('_ibl_wheel.position.npy', self.trials_collection, False),
+                            ('_ibl_wheel.timestamps.npy', self.trials_collection, False)],
             'output_files': [(f'_ibl_{cam}Camera.features.pqt', 'alf', True) for cam in self.cameras] +
                             [('licks.times.npy', 'alf', True)]
         }
@@ -522,7 +528,7 @@ class EphysPostDLC(base_tasks.VideoTask):
 
         """
         # Check if output files exist locally
-        exist, output_files = self.assert_expected(self.signature['output_files'], silent=True)
+        exist, output_files = self.assert_expected(self.output_files, silent=True)
         if exist and not overwrite:
             _logger.warning('EphysPostDLC outputs exist and overwrite=False, skipping computations of outputs.')
         else:
