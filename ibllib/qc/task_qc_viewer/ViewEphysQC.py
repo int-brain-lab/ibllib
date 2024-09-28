@@ -4,10 +4,10 @@ import logging
 
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import pyqtProperty, Qt, QVariant, QAbstractTableModel, QModelIndex, \
-    QObject, QPoint, pyqtSignal, pyqtSlot
+    QObject, QPoint, pyqtSignal, pyqtSlot, QCoreApplication, QSettings
 from PyQt5.QtGui import QColor, QPalette
 import matplotlib.pyplot as plt
-from PyQt5.QtWidgets import QMenu, QAction, QHeaderView
+from PyQt5.QtWidgets import QMenu, QAction
 from matplotlib.colors import Colormap
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
@@ -74,10 +74,11 @@ class DataFrameTableModel(QAbstractTableModel):
 class ColoredDataFrameTableModel(DataFrameTableModel):
     colormapChanged = pyqtSignal(Colormap)
     alphaChanged = pyqtSignal(float)
-    _normalizedData = pd.DataFrame
-    _rgba: np.ndarray
+    _normData = pd.DataFrame
+    _background: np.ndarray
     _cmap: Colormap
     _alpha: int
+    _foreground: np.ndarray
 
     def __init__(self, parent: QObject = ..., dataFrame: pd.DataFrame | None = None,
                  colormap: Colormap | None = None, alpha: int = 255):
@@ -85,10 +86,10 @@ class ColoredDataFrameTableModel(DataFrameTableModel):
 
         self.modelReset.connect(self._normalizeData)
         self.dataChanged.connect(self._normalizeData)
-        self.colormapChanged.connect(self._setRgba)
+        self.colormapChanged.connect(self._defineColors)
 
         if colormap is None:
-            colormap = plt.get_cmap('spring')
+            colormap = plt.get_cmap('plasma')
             colormap.set_bad(color='w')
         self.setColormap(colormap)
         self.setAlpha(alpha)
@@ -123,7 +124,7 @@ class ColoredDataFrameTableModel(DataFrameTableModel):
     def _normalizeData(self):
         df = self._dataframe.copy()
         if df.empty:
-            self._rgba = df
+            self._background = df
             return
 
         # coerce non-bool / non-numeric values to numeric
@@ -143,14 +144,17 @@ class ColoredDataFrameTableModel(DataFrameTableModel):
         df[cols] = df[cols].astype(float)
 
         # store as property & call _setRgba()
-        self._normalizedData = df
-        self._setRgba()
+        self._normData = df
+        self._defineColors()
 
-    def _setRgba(self):
-        if self._normalizedData.empty:
-            self._rgba = np.ndarray([])
+    def _defineColors(self):
+        if self._normData.empty:
+            self._background = np.ndarray([])
+            self._foreground = np.ndarray([])
         else:
-            self._rgba = self._cmap(self._normalizedData, alpha=None, bytes=True)
+            self._background = self._cmap(self._normData, alpha=None, bytes=True)[:, :, :3]
+            brightness = (self._background * np.array([[[0.21, 0.72, 0.07]]])).sum(axis=2)
+            self._foreground = 255 - brightness.astype(int)
         self.layoutChanged.emit()
 
     def data(self, index, role=...):
@@ -158,7 +162,11 @@ class ColoredDataFrameTableModel(DataFrameTableModel):
             return QVariant()
         if role == Qt.BackgroundRole:
             row = self._dataframe.index[index.row()]
-            return QColor.fromRgb(*self._rgba[row][index.column()][:3], self._alpha)
+            return QColor.fromRgb(*self._background[row][index.column()], self._alpha)
+        if role == Qt.ForegroundRole:
+            row = self._dataframe.index[index.row()]
+            val = self._foreground[row][index.column()] * self._alpha
+            return QColor('black') if val < 32512 else QColor('white')
         return super().data(index, role)
 
 
@@ -198,6 +206,9 @@ class GraphWindow(QtWidgets.QWidget):
     def __init__(self, parent=None, wheel=None):
         QtWidgets.QWidget.__init__(self, parent=parent)
 
+        # Store layout changes to QSettings
+        self.settings = QSettings()
+
         self.columnPinned = pyqtSignal(int, bool)
 
         self.pushButtonLoad = QtWidgets.QPushButton("Select File", self)
@@ -232,7 +243,7 @@ class GraphWindow(QtWidgets.QWidget):
 
         # colormap picker
         self.comboboxColormap = QtWidgets.QComboBox(self)
-        colormaps = {self.tableModel.colormap.name, 'plasma', 'spring', 'summer', 'autumn', 'winter'}
+        colormaps = sorted(list({self.tableModel.colormap.name, 'cividis', 'inferno', 'magma', 'plasma', 'viridis'}))
         self.comboboxColormap.addItems(colormaps)
         self.comboboxColormap.setCurrentText(self.tableModel.colormap.name)
         self.comboboxColormap.currentTextChanged.connect(self.tableModel.setColormapByName)
@@ -323,6 +334,9 @@ class GraphWindow(QtWidgets.QWidget):
 
 
 def viewqc(qc=None, title=None, wheel=None):
+    QCoreApplication.setOrganizationName('International Brain Laboratory')
+    QCoreApplication.setOrganizationDomain('internationalbrainlab.org')
+    QCoreApplication.setApplicationName('QC Viewer')
     qt.create_app()
     qcw = GraphWindow(wheel=wheel)
     qcw.setWindowTitle(title)
