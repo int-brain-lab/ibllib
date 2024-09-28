@@ -5,14 +5,13 @@ import logging
 from PyQt5 import QtWidgets
 from PyQt5.QtCore import pyqtProperty, Qt, QVariant, QAbstractTableModel, QModelIndex, \
     QObject, QPoint, pyqtSignal, pyqtSlot, QCoreApplication, QSettings
-from PyQt5.QtGui import QColor, QPalette
-import matplotlib.pyplot as plt
+from PyQt5.QtGui import QColor, QPalette, QShowEvent
 from PyQt5.QtWidgets import QMenu, QAction
-from matplotlib.colors import Colormap
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
 import pandas as pd
 import numpy as np
+from pyqtgraph import colormap, ColorMap
 
 from ibllib.misc import qt
 
@@ -72,43 +71,36 @@ class DataFrameTableModel(QAbstractTableModel):
 
 
 class ColoredDataFrameTableModel(DataFrameTableModel):
-    colormapChanged = pyqtSignal(Colormap)
-    alphaChanged = pyqtSignal(float)
+    colormapChanged = pyqtSignal(str)
+    alphaChanged = pyqtSignal(int)
     _normData = pd.DataFrame
     _background: np.ndarray
-    _cmap: Colormap
+    _cmap: ColorMap
     _alpha: int
     _foreground: np.ndarray
 
     def __init__(self, parent: QObject = ..., dataFrame: pd.DataFrame | None = None,
-                 colormap: Colormap | None = None, alpha: int = 255):
+                 colormap: str = 'plasma', alpha: int = 255):
         super().__init__(parent=parent, dataFrame=dataFrame)
-
         self.modelReset.connect(self._normalizeData)
         self.dataChanged.connect(self._normalizeData)
         self.colormapChanged.connect(self._defineColors)
-
-        if colormap is None:
-            colormap = plt.get_cmap('plasma')
-            colormap.set_bad(color='w')
         self.setColormap(colormap)
         self.setAlpha(alpha)
 
     @pyqtSlot(str)
-    def setColormapByName(self, colormapName: str):
-        colormap = plt.get_cmap(colormapName)
-        colormap.set_bad(color='w')
-        self.setColormap(colormap)
+    def setColormap(self, name: str):
+        for source in [None, 'matplotlib', 'colorcet']:
+            if name in colormap.listMaps(source):
+                self._cmap = colormap.get(name, source)
+                self.colormapChanged.emit(name)
+                return
+        _logger.warning(f'No such colormap: "{name}"')
 
-    @pyqtSlot(Colormap)
-    def setColormap(self, colormap: Colormap):
-        self._cmap = colormap
-        self.colormapChanged.emit(colormap)
+    def getColormap(self) -> str:
+        return self._cmap.name
 
-    def getColormap(self) -> Colormap:
-        return self._cmap
-
-    colormap = pyqtProperty(Colormap, fget=getColormap, fset=setColormap)
+    colormap = pyqtProperty(str, fget=getColormap, fset=setColormap)
 
     @pyqtSlot(int)
     def setAlpha(self, alpha: int = 255):
@@ -152,9 +144,10 @@ class ColoredDataFrameTableModel(DataFrameTableModel):
             self._background = np.ndarray([])
             self._foreground = np.ndarray([])
         else:
-            self._background = self._cmap(self._normData, alpha=None, bytes=True)[:, :, :3]
-            brightness = (self._background * np.array([[[0.21, 0.72, 0.07]]])).sum(axis=2)
-            self._foreground = 255 - brightness.astype(int)
+            m = np.isfinite(self._normData)  # binary mask for finite values
+            self._background = np.ones((*self._normData.shape, 3), dtype=int) * 255
+            self._background[m] = self._cmap.mapToByte(self._normData.values[m])[:, :3]
+            self._foreground = 255 - (self._background * np.array([[[0.21, 0.72, 0.07]]])).sum(axis=2).astype(int)
         self.layoutChanged.emit()
 
     def data(self, index, role=...):
@@ -162,7 +155,8 @@ class ColoredDataFrameTableModel(DataFrameTableModel):
             return QVariant()
         if role == Qt.BackgroundRole:
             row = self._dataframe.index[index.row()]
-            return QColor.fromRgb(*self._background[row][index.column()], self._alpha)
+            val = self._background[row][index.column()]
+            return QColor.fromRgb(*val, self._alpha)
         if role == Qt.ForegroundRole:
             row = self._dataframe.index[index.row()]
             val = self._foreground[row][index.column()] * self._alpha
@@ -243,10 +237,10 @@ class GraphWindow(QtWidgets.QWidget):
 
         # colormap picker
         self.comboboxColormap = QtWidgets.QComboBox(self)
-        colormaps = sorted(list({self.tableModel.colormap.name, 'cividis', 'inferno', 'magma', 'plasma', 'viridis'}))
-        self.comboboxColormap.addItems(colormaps)
-        self.comboboxColormap.setCurrentText(self.tableModel.colormap.name)
-        self.comboboxColormap.currentTextChanged.connect(self.tableModel.setColormapByName)
+        colormaps = {self.tableModel.colormap, 'inferno', 'magma', 'plasma'}
+        self.comboboxColormap.addItems(sorted(list(colormaps)))
+        self.comboboxColormap.setCurrentText(self.tableModel.colormap)
+        self.comboboxColormap.currentTextChanged.connect(self.tableModel.setColormap)
 
         # slider for alpha values
         self.sliderAlpha = QtWidgets.QSlider(Qt.Horizontal, self)
@@ -275,6 +269,10 @@ class GraphWindow(QtWidgets.QWidget):
         self.tableModel.dataChanged.connect(self.wplot.canvas.draw)
 
         self.wheel = wheel
+
+    def showEvent(self, a0: QShowEvent) -> None:
+        super().showEvent(a0)
+        self.activateWindow()
 
     def contextMenu(self, pos: QPoint):
         idx = self.sender().logicalIndexAt(pos)
