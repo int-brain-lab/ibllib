@@ -74,6 +74,7 @@ class DataFrameTableModel(QAbstractTableModel):
 class ColoredDataFrameTableModel(DataFrameTableModel):
     colormapChanged = pyqtSignal(Colormap)
     alphaChanged = pyqtSignal(float)
+    _normalizedData = pd.DataFrame
     _rgba: np.ndarray
     _cmap: Colormap
     _alpha: int
@@ -82,9 +83,9 @@ class ColoredDataFrameTableModel(DataFrameTableModel):
                  colormap: Colormap | None = None, alpha: int = 255):
         super().__init__(parent=parent, dataFrame=dataFrame)
 
+        self.modelReset.connect(self._normalizeData)
+        self.dataChanged.connect(self._normalizeData)
         self.colormapChanged.connect(self._setRgba)
-        self.modelReset.connect(self._setRgba)
-        self.dataChanged.connect(self._setRgba)
 
         if colormap is None:
             colormap = plt.get_cmap('spring')
@@ -119,7 +120,7 @@ class ColoredDataFrameTableModel(DataFrameTableModel):
 
     alpha = pyqtProperty(int, fget=getAlpha, fset=setAlpha)
 
-    def _setRgba(self):
+    def _normalizeData(self):
         df = self._dataframe.copy()
         if df.empty:
             self._rgba = df
@@ -141,8 +142,15 @@ class ColoredDataFrameTableModel(DataFrameTableModel):
         cols = df.select_dtypes(include=['bool']).columns
         df[cols] = df[cols].astype(float)
 
-        # store color values to ndarray & emit signal
-        self._rgba = self._cmap(df, alpha=None, bytes=True)
+        # store as property & call _setRgba()
+        self._normalizedData = df
+        self._setRgba()
+
+    def _setRgba(self):
+        if self._normalizedData.empty:
+            self._rgba = np.ndarray([])
+        else:
+            self._rgba = self._cmap(self._normalizedData, alpha=None, bytes=True)
         self.layoutChanged.emit()
 
     def data(self, index, role=...):
