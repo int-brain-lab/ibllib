@@ -73,11 +73,11 @@ class DataFrameTableModel(QAbstractTableModel):
 class ColoredDataFrameTableModel(DataFrameTableModel):
     colormapChanged = pyqtSignal(str)
     alphaChanged = pyqtSignal(int)
-    _normData = pd.DataFrame
+    _normData = pd.DataFrame()
     _background: np.ndarray
+    _foreground: np.ndarray
     _cmap: ColorMap
     _alpha: int
-    _foreground: np.ndarray
 
     def __init__(self, parent: QObject = ..., dataFrame: pd.DataFrame | None = None,
                  colormap: str = 'plasma', alpha: int = 255):
@@ -115,9 +115,6 @@ class ColoredDataFrameTableModel(DataFrameTableModel):
 
     def _normalizeData(self):
         df = self._dataframe.copy()
-        if df.empty:
-            self._background = df
-            return
 
         # coerce non-bool / non-numeric values to numeric
         cols = df.select_dtypes(exclude=['bool', 'number']).columns
@@ -135,14 +132,23 @@ class ColoredDataFrameTableModel(DataFrameTableModel):
         cols = df.select_dtypes(include=['bool']).columns
         df[cols] = df[cols].astype(float)
 
-        # store as property & call _setRgba()
+        # store as property & call _defineColors()
         self._normData = df
         self._defineColors()
 
     def _defineColors(self):
+        """
+        Define the background and foreground colors according to the table's data.
+
+        The background color is set to the colormap-mapped values of the normalized
+        data, and the foreground color is set to the inverse of the background's
+        approximated luminosity.
+
+        The `layoutChanged` signal is emitted after the colors are defined.
+        """
         if self._normData.empty:
-            self._background = np.ndarray([])
-            self._foreground = np.ndarray([])
+            self._background = np.zeros((0, 0, 3), dtype=int)
+            self._foreground = np.zeros((0, 0), dtype=int)
         else:
             m = np.isfinite(self._normData)  # binary mask for finite values
             self._background = np.ones((*self._normData.shape, 3), dtype=int) * 255
@@ -153,14 +159,15 @@ class ColoredDataFrameTableModel(DataFrameTableModel):
     def data(self, index, role=...):
         if not index.isValid():
             return QVariant()
-        if role == Qt.BackgroundRole:
+        if role in (Qt.BackgroundRole, Qt.ForegroundRole):
             row = self._dataframe.index[index.row()]
-            val = self._background[row][index.column()]
-            return QColor.fromRgb(*val, self._alpha)
-        if role == Qt.ForegroundRole:
-            row = self._dataframe.index[index.row()]
-            val = self._foreground[row][index.column()] * self._alpha
-            return QColor('black') if val < 32512 else QColor('white')
+            col = index.column()
+            if role == Qt.BackgroundRole:
+                val = self._background[row][col]
+                return QColor.fromRgb(*val, self._alpha)
+            if role == Qt.ForegroundRole:
+                val = self._foreground[row][col]
+                return QColor('black' if (val * self._alpha) < 32512 else 'white')
         return super().data(index, role)
 
 
@@ -234,6 +241,7 @@ class GraphWindow(QtWidgets.QWidget):
         self.lineEditFilter = QtWidgets.QLineEdit(self)
         self.lineEditFilter.setPlaceholderText('Filter columns')
         self.lineEditFilter.textChanged.connect(self.changeFilter)
+        self.lineEditFilter.setMinimumWidth(200)
 
         # colormap picker
         self.comboboxColormap = QtWidgets.QComboBox(self)
@@ -252,6 +260,7 @@ class GraphWindow(QtWidgets.QWidget):
         # Horizontal layout
         hLayout = QtWidgets.QHBoxLayout()
         hLayout.addWidget(self.lineEditFilter)
+        hLayout.addSpacing(50)
         hLayout.addWidget(QtWidgets.QLabel('Colormap', self))
         hLayout.addWidget(self.comboboxColormap)
         hLayout.addWidget(QtWidgets.QLabel('Alpha', self))
@@ -263,6 +272,8 @@ class GraphWindow(QtWidgets.QWidget):
         vLayout = QtWidgets.QVBoxLayout(self)
         vLayout.addLayout(hLayout)
         vLayout.addWidget(self.tableView)
+
+        self.setMinimumSize(500, 400)
 
         self.wplot = PlotWindow(wheel=wheel)
         self.wplot.show()
@@ -294,11 +305,13 @@ class GraphWindow(QtWidgets.QWidget):
         self.changeFilter(self.lineEditFilter.text())
 
     def changeFilter(self, string: str):
-        headers = [self.tableModel.headerData(x, Qt.Horizontal, Qt.DisplayRole)
+        headers = [self.tableModel.headerData(x, Qt.Horizontal, Qt.DisplayRole).lower()
                    for x in range(self.tableModel.columnCount())]
+        tokens = [y.lower() for y in (x.strip() for x in string.split(',')) if len(y)]
+        showAll = len(tokens) == 0
         for idx, column in enumerate(headers):
-            self.tableView.setColumnHidden(idx, string.lower() not in column.lower()
-                                           and idx not in self._pinnedColumns)
+            show = showAll or any((t in column for t in tokens)) or idx in self._pinnedColumns
+            self.tableView.setColumnHidden(idx, not show)
 
     def loadFile(self):
         fileName, _ = QtWidgets.QFileDialog.getOpenFileName(
