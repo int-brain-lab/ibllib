@@ -420,10 +420,15 @@ class CameraQC(base.QC):
         outcome = max(map(spec.QC.validate, values))
 
         if update:
-            extended = {
-                k: spec.QC.NOT_SET if v is None else v
-                for k, v in self.metrics.items()
-            }
+            extended = dict()
+            for k, v in self.metrics.items():
+                if v is None:
+                    extended[k] = spec.QC.NOT_SET.name
+                elif isinstance(v, tuple):
+                    extended[k] = tuple(i.name if isinstance(i, spec.QC) else i for i in v)
+                else:
+                    extended[k] = v.name
+
             self.update_extended_qc(extended)
             self.update(outcome, namespace)
         return outcome, self.metrics
