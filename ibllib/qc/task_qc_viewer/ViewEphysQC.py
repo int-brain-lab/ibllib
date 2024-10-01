@@ -3,172 +3,18 @@
 import logging
 
 from PyQt5 import QtWidgets
-from PyQt5.QtCore import pyqtProperty, Qt, QVariant, QAbstractTableModel, QModelIndex, \
-    QObject, QPoint, pyqtSignal, pyqtSlot, QCoreApplication, QSettings
-from PyQt5.QtGui import QColor, QPalette, QShowEvent
+from PyQt5.QtCore import Qt, QModelIndex, QPoint, pyqtSignal, pyqtSlot, QCoreApplication, QSettings
+from PyQt5.QtGui import QPalette, QShowEvent
 from PyQt5.QtWidgets import QMenu, QAction
+from iblqt.core import ColoredDataFrameTableModel
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg, NavigationToolbar2QT
 import pandas as pd
 import numpy as np
-from pyqtgraph import colormap, ColorMap
 
 from ibllib.misc import qt
 
 _logger = logging.getLogger(__name__)
-
-
-class DataFrameTableModel(QAbstractTableModel):
-    def __init__(self, parent: QObject = ..., dataFrame: pd.DataFrame | None = None):
-        super().__init__(parent)
-        self._dataframe = pd.DataFrame() if dataFrame is None else dataFrame
-
-    def setDataFrame(self, dataFrame: pd.DataFrame):
-        self.beginResetModel()
-        self._dataframe = dataFrame.copy()
-        self.endResetModel()
-
-    def dataFrame(self) -> pd.DataFrame:
-        return self._dataframe
-
-    dataFrame = pyqtProperty(pd.DataFrame, fget=dataFrame, fset=setDataFrame)
-
-    def headerData(self, section: int, orientation: Qt.Orientation, role: int = ...):
-        if role in (Qt.DisplayRole, Qt.ToolTipRole):
-            if orientation == Qt.Horizontal:
-                return self._dataframe.columns[section]
-            else:
-                return str(self._dataframe.index[section])
-        return QVariant()
-
-    def rowCount(self, parent: QModelIndex = ...):
-        if isinstance(parent, QModelIndex) and parent.isValid():
-            return 0
-        return len(self._dataframe.index)
-
-    def columnCount(self, parent: QModelIndex = ...):
-        if isinstance(parent, QModelIndex) and parent.isValid():
-            return 0
-        return self._dataframe.columns.size
-
-    def data(self, index: QModelIndex, role: int = ...) -> QVariant:
-        if not index.isValid():
-            return QVariant()
-        if role == Qt.DisplayRole:
-            val = self._dataframe.iloc[index.row(), index.column()]
-            if isinstance(val, np.generic):
-                return val.item()
-            return QVariant(str(val))
-        return QVariant()
-
-    def sort(self, column: int, order: Qt.SortOrder = ...):
-        if self.columnCount() == 0:
-            return
-        column = self._dataframe.columns[column]
-        self.layoutAboutToBeChanged.emit()
-        self._dataframe.sort_values(by=column, ascending=not order, inplace=True)
-        self.layoutChanged.emit()
-
-
-class ColoredDataFrameTableModel(DataFrameTableModel):
-    colormapChanged = pyqtSignal(str)
-    alphaChanged = pyqtSignal(int)
-    _normData = pd.DataFrame()
-    _background: np.ndarray
-    _foreground: np.ndarray
-    _cmap: ColorMap
-    _alpha: int
-
-    def __init__(self, parent: QObject = ..., dataFrame: pd.DataFrame | None = None,
-                 colormap: str = 'plasma', alpha: int = 255):
-        super().__init__(parent=parent, dataFrame=dataFrame)
-        self.modelReset.connect(self._normalizeData)
-        self.dataChanged.connect(self._normalizeData)
-        self.colormapChanged.connect(self._defineColors)
-        self.setColormap(colormap)
-        self.setAlpha(alpha)
-
-    @pyqtSlot(str)
-    def setColormap(self, name: str):
-        for source in [None, 'matplotlib', 'colorcet']:
-            if name in colormap.listMaps(source):
-                self._cmap = colormap.get(name, source)
-                self.colormapChanged.emit(name)
-                return
-        _logger.warning(f'No such colormap: "{name}"')
-
-    def getColormap(self) -> str:
-        return self._cmap.name
-
-    colormap = pyqtProperty(str, fget=getColormap, fset=setColormap)
-
-    @pyqtSlot(int)
-    def setAlpha(self, alpha: int = 255):
-        _, self._alpha, _ = sorted([0, alpha, 255])
-        self.alphaChanged.emit(self._alpha)
-        self.layoutChanged.emit()
-
-    def getAlpha(self) -> int:
-        return self._alpha
-
-    alpha = pyqtProperty(int, fget=getAlpha, fset=setAlpha)
-
-    def _normalizeData(self):
-        df = self._dataframe.copy()
-
-        # coerce non-bool / non-numeric values to numeric
-        cols = df.select_dtypes(exclude=['bool', 'number']).columns
-        df[cols] = df[cols].apply(pd.to_numeric, errors='coerce')
-
-        # normalize numeric values, avoiding inf values and division by zero
-        cols = df.select_dtypes(include=['number']).columns
-        df[cols].replace([np.inf, -np.inf], np.nan)
-        m = df[cols].nunique() <= 1  # boolean mask for columns with only 1 unique value
-        df[cols[m]] = df[cols[m]].where(df[cols[m]].isna(), other=0.0)
-        cols = cols[~m]
-        df[cols] = (df[cols] - df[cols].min()) / (df[cols].max() - df[cols].min())
-
-        # convert boolean values
-        cols = df.select_dtypes(include=['bool']).columns
-        df[cols] = df[cols].astype(float)
-
-        # store as property & call _defineColors()
-        self._normData = df
-        self._defineColors()
-
-    def _defineColors(self):
-        """
-        Define the background and foreground colors according to the table's data.
-
-        The background color is set to the colormap-mapped values of the normalized
-        data, and the foreground color is set to the inverse of the background's
-        approximated luminosity.
-
-        The `layoutChanged` signal is emitted after the colors are defined.
-        """
-        if self._normData.empty:
-            self._background = np.zeros((0, 0, 3), dtype=int)
-            self._foreground = np.zeros((0, 0), dtype=int)
-        else:
-            m = np.isfinite(self._normData)  # binary mask for finite values
-            self._background = np.ones((*self._normData.shape, 3), dtype=int) * 255
-            self._background[m] = self._cmap.mapToByte(self._normData.values[m])[:, :3]
-            self._foreground = 255 - (self._background * np.array([[[0.21, 0.72, 0.07]]])).sum(axis=2).astype(int)
-        self.layoutChanged.emit()
-
-    def data(self, index, role=...):
-        if not index.isValid():
-            return QVariant()
-        if role in (Qt.BackgroundRole, Qt.ForegroundRole):
-            row = self._dataframe.index[index.row()]
-            col = index.column()
-            if role == Qt.BackgroundRole:
-                val = self._background[row][col]
-                return QColor.fromRgb(*val, self._alpha)
-            if role == Qt.ForegroundRole:
-                val = self._foreground[row][col]
-                return QColor('black' if (val * self._alpha) < 32512 else 'white')
-        return super().data(index, role)
 
 
 class PlotCanvas(FigureCanvasQTAgg):
@@ -245,7 +91,7 @@ class GraphWindow(QtWidgets.QWidget):
 
         # colormap picker
         self.comboboxColormap = QtWidgets.QComboBox(self)
-        colormaps = {self.tableModel.colormap, 'inferno', 'magma', 'plasma'}
+        colormaps = {self.tableModel.colormap, 'inferno', 'magma', 'plasma', 'summer'}
         self.comboboxColormap.addItems(sorted(list(colormaps)))
         self.comboboxColormap.setCurrentText(self.tableModel.colormap)
         self.comboboxColormap.currentTextChanged.connect(self.tableModel.setColormap)
@@ -305,7 +151,7 @@ class GraphWindow(QtWidgets.QWidget):
         self.changeFilter(self.lineEditFilter.text())
 
     def changeFilter(self, string: str):
-        headers = [self.tableModel.headerData(x, Qt.Horizontal, Qt.DisplayRole).lower()
+        headers = [self.tableModel.headerData(x, Qt.Horizontal, Qt.DisplayRole).value().lower()
                    for x in range(self.tableModel.columnCount())]
         tokens = [y.lower() for y in (x.strip() for x in string.split(',')) if len(y)]
         showAll = len(tokens) == 0
