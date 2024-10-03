@@ -345,15 +345,25 @@ class Task(abc.ABC):
 
     @abc.abstractmethod
     def _run(self, overwrite=False):
-        """
-        This is the method to implement
-        :param overwrite: (bool) if the output already exists,
-        :return: out_files: files to be registered. Could be a list of files (pathlib.Path),
-        a single file (pathlib.Path) an empty list [] or None.
-        Within the pipeline, there is a distinction between a job that returns an empty list
-         and a job that returns None. If the function returns None, the job will be labeled as
-          "empty" status in the database, otherwise, the job has an expected behaviour of not
-          returning any dataset.
+        """Execute main task code.
+
+        This method contains a task's principal data processing code and should implemented
+        by each subclass.
+
+        Parameters
+        ----------
+        overwrite : bool
+            When false (default), the task may re-use any intermediate data from a previous run.
+            When true, the task will disregard or delete any intermediate files before running.
+
+        Returns
+        -------
+        pathlib.Path, list of pathlib.Path, None
+            One or more files to be registered, or an empty list if no files are registered.
+            Within the pipeline, there is a distinction between a job that returns an empty list
+            and a job that returns None. If the function returns None, the job will be labeled as
+            "empty" status in the database, otherwise, the job has an expected behaviour of not
+            returning any dataset.
         """
 
     def setUp(self, **kwargs):

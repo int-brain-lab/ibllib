@@ -19,7 +19,6 @@ import uuid
 from pathlib import Path
 from itertools import chain, groupby
 from collections import Counter
-from dataclasses import dataclass
 from fnmatch import fnmatch
 import enum
 import re
@@ -32,7 +31,7 @@ import sparse
 from scipy.io import loadmat
 from scipy.interpolate import interpn
 import one.alf.io as alfio
-from one.alf.spec import is_valid, to_alf
+from one.alf.spec import to_alf
 from one.alf.files import filename_parts, session_path_parts
 import one.alf.exceptions as alferr
 import suite2p
@@ -47,24 +46,6 @@ from ibllib.io.extractors import mesoscope
 
 _logger = logging.getLogger(__name__)
 Provenance = enum.Enum('Provenance', ['ESTIMATE', 'FUNCTIONAL', 'LANDMARK', 'HISTOLOGY'])  # py3.11 make StrEnum
-
-
-@dataclass
-class Suite2pOps:
-    """Suite2p Options.
-
-    All suite2p options are found here: https://suite2p.readthedocs.io/en/latest/settings.html
-    """
-    save_path0: str
-    """Root suite2p output path (see also `save_folder`)."""
-    save_folder: str = 'suite2p'
-    """Subfolder within save path, in which to write binary data (see `save_path0`)."""
-    do_registration: bool = True
-    """Whether to generate mean image and perform motion registration. A value greater than 1 forces re-registration."""
-    force_sktiff: bool = False
-    """If True, uses tifffile.TiffFile to read tiff data, otherwise uses ScanImageTiffReader when installed."""
-    batch_size: int = 500
-    """The number of images to load per batch when ingesting imaging data."""
 
 
 class MesoscopeRegisterSnapshots(base_tasks.MesoscopeTask, base_tasks.RegisterRawDataTask):
@@ -225,6 +206,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
 
     def __init__(self, *args, **kwargs):
         self._teardown_files = []
+        self.overwrite = False
         super().__init__(*args, **kwargs)
 
     def setUp(self, **kwargs):
@@ -233,21 +215,27 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         This will check the local filesystem for the raw tif files and if not present, will assume
         they have been compressed and deleted, in which case the signature will be replaced with
         the compressed input.
+
+        Note: this will not work correctly if only some collections have compressed tifs.
         """
-        tif_sig = next((s for s in self.signature['input_files'] if '.tif' in s[0]), None)
-        if not tif_sig:
-            return
-        raw_tifs = any(Path(self.session_path).glob(str(Path(*filter(None, reversed(tif_sig[:2]))))))
-        if not raw_tifs:
-            self._signature['input_files'].remove(tif_sig)
-            self._signature['input_files'].append(('imaging.frames.tar.bz2', *tif_sig[1:]))
+        self.overwrite = kwargs.get('overwrite', False)
         all_files_present = super().setUp(**kwargs)  # Ensure files present
-        if raw_tifs or not all_files_present:
-            return all_files_present
+        bin_sig = dataset_from_name('data.bin', self.input_files)
+        if not self.clobber and all(x.find_files(self.session_path)[0] for x in bin_sig):
+            return all_files_present  # We have local bin files; no need to extract tifs
+        tif_sig = dataset_from_name('*.tif', self.input_files)
+        if not tif_sig:
+            return all_files_present  # No tifs in the signature; just return
+        tif_sig = tif_sig[0]
+        tifs_present, *_ = tif_sig.find_files(self.session_path)
+        if tifs_present or not all_files_present:
+            return all_files_present  # Tifs present on disk; no need to decompress
         # Decompress imaging files
-        files = list(self.session_path.glob(f'{self.device_collection}/imaging.frames*.tar.bz2'))
-        if not (any(files) and all(map(Path.exists, files))):
-            return False
+        tif_sigs = dataset_from_name('imaging.frames.tar.bz2', self.input_files)
+        present, files, _ = zip(*(x.find_files(self.session_path) for x in tif_sigs))
+        if not all(present):
+            return False  # Compressed files missing; return
+        files = flatten(files)
         _logger.info('Decompressing %i file(s)', len(files))
         for file in files:
             cmd = 'tar -xvjf "{input}"'.format(input=file.name)
@@ -258,7 +246,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
             tifs = [file.parent.joinpath(x[2:]) for x in stderr.decode().splitlines() if x.startswith('x ')]
             assert all(map(Path.exists, tifs))
             self._teardown_files.extend(tifs)
-        return True
+        return all_files_present
 
     def tearDown(self):
         """Tear down task.
@@ -295,6 +283,12 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                              ('mpciROIs.neuropilMasks.npy', 'alf/FOV*', True),
                              ('_suite2p_ROIData.raw.zip', self.device_collection, False)]
         }
+        if not self.overwrite:  # If not forcing re-registration, check whether bin files already exist on disk
+            # Including the data.bin in the expected signature ensures raw data files are not needlessly re-downloaded
+            # and/or uncompressed during task setup as the local data.bin may be used instead
+            registered_bin = I('data.bin', 'raw_bin_files/plane*', True, unique=False)
+            signature['input_files'][1] = registered_bin | signature['input_files'][1]
+
         return signature
 
     @staticmethod
@@ -339,9 +333,12 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         """
         Convert suite2p output files to ALF datasets.
 
+        This also moves any data.bin and ops.npy files to raw_bin_files for quicker re-runs.
+
         Parameters
         ----------
         suite2p_dir : pathlib.Path
+            The location of the suite2p output (typically session_path/suite2p).
         rename_dict : dict or None
             The suite2p output filenames and the corresponding ALF name. NB: These files are saved
             after transposition. Default is None, i.e. using the default mapping hardcoded in the function below.
@@ -357,74 +354,83 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                 'spks.npy': 'mpci.ROIActivityDeconvolved.npy',
                 'Fneu.npy': 'mpci.ROINeuropilActivityF.npy'
             }
-        # Rename the outputs, first the subdirectories
         for plane_dir in suite2p_dir.iterdir():
             # ignore the combined dir
-            if plane_dir.name != 'combined':
-                n = int(plane_dir.name.split('plane')[1])
-                fov_dir = plane_dir.parent.joinpath(f'FOV_{n:02}')
-                if fov_dir.exists():
-                    shutil.rmtree(str(fov_dir), ignore_errors=False, onerror=None)
-                plane_dir.rename(fov_dir)
-        # Now rename the content of the new directories and move them out of suite2p
-        for fov_dir in suite2p_dir.iterdir():
-            # Compress suite2p output files
-            target = suite2p_dir.parent.joinpath(fov_dir.name)
-            target.mkdir(exist_ok=True)
-            # Move bin file out of the way first
-            if fov_dir.joinpath('data.bin').exists():
-                dst = self.session_path.joinpath('raw_bin_files', fov_dir.name, 'data.bin')
+            if plane_dir.name == 'combined':
+                continue
+            # Move bin file out of the way
+            if plane_dir.joinpath('data.bin').exists():
+                dst = self.session_path.joinpath('raw_bin_files', plane_dir.name, 'data.bin')
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 _logger.debug('Moving bin file to %s', dst.relative_to(self.session_path))
-                fov_dir.joinpath('data.bin').replace(dst)
-            # Set logger to warning for the moment to not clutter the logs
+                plane_dir.joinpath('data.bin').replace(dst)
+                # copy ops file for lazy re-runs
+                shutil.copy(plane_dir.joinpath('ops.npy'), dst.with_name('ops.npy'))
+            # Archive the raw suite2p output before renaming
+            n = int(plane_dir.name.split('plane')[1])
+            fov_dir = self.session_path.joinpath('alf', f'FOV_{n:02}')
+            if fov_dir.exists():
+                _logger.debug('Removing old folder %s', fov_dir.relative_to(self.session_path))
+                shutil.rmtree(str(fov_dir), ignore_errors=False, onerror=None)
             prev_level = _logger.level
             _logger.setLevel(logging.WARNING)
-            shutil.make_archive(str(target / '_suite2p_ROIData.raw'), 'zip', fov_dir, logger=_logger)
+            shutil.make_archive(str(fov_dir / '_suite2p_ROIData.raw'), 'zip', plane_dir, logger=_logger)
             _logger.setLevel(prev_level)
-            if fov_dir != 'combined':
-                # save frameQC in each dir (for now, maybe there will be fov specific frame QC eventually)
-                if frameQC is not None and len(frameQC) > 0:
-                    np.save(fov_dir.joinpath('mpci.mpciFrameQC.npy'), frameQC)
-                    frameQC_names.to_csv(fov_dir.joinpath('mpciFrameQC.names.tsv'), sep='\t', index=False)
-
-                # extract some other data from suite2p outputs
-                ops = np.load(fov_dir.joinpath('ops.npy'), allow_pickle=True).item()
-                stat = np.load(fov_dir.joinpath('stat.npy'), allow_pickle=True)
-                iscell = np.load(fov_dir.joinpath('iscell.npy'))
-
-                # Save suite2p ROI activity outputs in transposed from (n_frames, n_ROI)
-                for k, v in rename_dict.items():
-                    np.save(fov_dir.joinpath(v), np.load(fov_dir.joinpath(k)).T)
-                    # fov_dir.joinpath(k).unlink()  # Keep original files for suite2P GUI
-                np.save(fov_dir.joinpath('mpci.badFrames.npy'), np.asarray(ops['badframes'], dtype=bool))
-                np.save(fov_dir.joinpath('mpciMeanImage.images.npy'), np.asarray(ops['meanImg'], dtype=float))
-                np.save(fov_dir.joinpath('mpciROIs.stackPos.npy'), np.asarray([(*s['med'], 0) for s in stat], dtype=int))
-                np.save(fov_dir.joinpath('mpciROIs.cellClassifier.npy'), np.asarray(iscell[:, 1], dtype=float))
-                np.save(fov_dir.joinpath('mpciROIs.mpciROITypes.npy'), np.asarray(iscell[:, 0], dtype=np.int16))
-                # clusters uuids
-                uuid_list = ['uuids'] + list(map(str, [uuid.uuid4() for _ in range(len(iscell))]))
-                with open(fov_dir.joinpath('mpciROIs.uuids.csv'), 'w+') as fid:
-                    fid.write('\n'.join(uuid_list))
-
-                pd.DataFrame([(0, 'no cell'), (1, 'cell')], columns=['roi_values', 'roi_labels']
-                             ).to_csv(fov_dir.joinpath('mpciROITypes.names.tsv'), sep='\t', index=False)
-                # ROI and neuropil masks
-                roi_mask, pil_mask = self._masks2sparse(stat, ops)
-                with open(fov_dir.joinpath('mpciROIs.masks.sparse_npz'), 'wb') as fp:
-                    sparse.save_npz(fp, roi_mask)
-                with open(fov_dir.joinpath('mpciROIs.neuropilMasks.sparse_npz'), 'wb') as fp:
-                    sparse.save_npz(fp, pil_mask)
-                # move folders out of suite2p dir
-                # We overwrite existing files
-                for file in filter(lambda x: is_valid(x.name), fov_dir.iterdir()):
-                    target_file = target.joinpath(file.name)
-                    if target_file.exists():
-                        target_file.unlink()
-                    file.rename(target_file)
+            # save frameQC in each dir (for now, maybe there will be fov specific frame QC eventually)
+            if frameQC is not None and len(frameQC) > 0:
+                np.save(fov_dir.joinpath('mpci.mpciFrameQC.npy'), frameQC)
+                frameQC_names.to_csv(fov_dir.joinpath('mpciFrameQC.names.tsv'), sep='\t', index=False)
+            # extract some other data from suite2p outputs
+            ops = np.load(plane_dir.joinpath('ops.npy'), allow_pickle=True).item()
+            stat = np.load(plane_dir.joinpath('stat.npy'), allow_pickle=True)
+            iscell = np.load(plane_dir.joinpath('iscell.npy'))
+            # Save suite2p ROI activity outputs in transposed from (n_frames, n_ROI)
+            for k, v in rename_dict.items():
+                np.save(fov_dir.joinpath(v), np.load(plane_dir.joinpath(k)).T)
+            np.save(fov_dir.joinpath('mpci.badFrames.npy'), np.asarray(ops['badframes'], dtype=bool))
+            np.save(fov_dir.joinpath('mpciMeanImage.images.npy'), np.asarray(ops['meanImg'], dtype=float))
+            np.save(fov_dir.joinpath('mpciROIs.stackPos.npy'), np.asarray([(*s['med'], 0) for s in stat], dtype=int))
+            np.save(fov_dir.joinpath('mpciROIs.cellClassifier.npy'), np.asarray(iscell[:, 1], dtype=float))
+            np.save(fov_dir.joinpath('mpciROIs.mpciROITypes.npy'), np.asarray(iscell[:, 0], dtype=np.int16))
+            # clusters uuids
+            uuid_list = ['uuids'] + list(map(str, [uuid.uuid4() for _ in range(len(iscell))]))
+            with open(fov_dir.joinpath('mpciROIs.uuids.csv'), 'w+') as fid:
+                fid.write('\n'.join(uuid_list))
+            (pd.DataFrame([(0, 'no cell'), (1, 'cell')], columns=['roi_values', 'roi_labels'])
+             .to_csv(fov_dir.joinpath('mpciROITypes.names.tsv'), sep='\t', index=False))
+            # ROI and neuropil masks
+            roi_mask, pil_mask = self._masks2sparse(stat, ops)
+            with open(fov_dir.joinpath('mpciROIs.masks.sparse_npz'), 'wb') as fp:
+                sparse.save_npz(fp, roi_mask)
+            with open(fov_dir.joinpath('mpciROIs.neuropilMasks.sparse_npz'), 'wb') as fp:
+                sparse.save_npz(fp, pil_mask)
+        # Remove old suite2p files
         shutil.rmtree(str(suite2p_dir), ignore_errors=False, onerror=None)
         # Collect all files in those directories
-        return list(suite2p_dir.parent.rglob('FOV*/*'))
+        return sorted(self.session_path.joinpath('alf').rglob('FOV_??/*.*.*'))
+
+    def load_meta_files(self):
+        """Load the extracted imaging metadata files.
+
+        Loads and consolidates the imaging data metadata from rawImagingData.meta.json files.
+        These files contain ScanImage metadata extracted from the raw tiff headers by the
+        function `mesoscopeMetadataExtraction.m` in iblscripts/deploy/mesoscope.
+
+        Returns
+        -------
+        dict
+            Single, consolidated dictionary containing metadata.
+        list of dict
+            The meta data for each individual imaging bout.
+        """
+        # Load metadata and make sure all metadata is consistent across FOVs
+        meta_files = sorted(self.session_path.glob(f'{self.device_collection}/*rawImagingData.meta.*'))
+        collections = sorted(set(f.parts[-2] for f in meta_files))
+        # Check there is exactly 1 meta file per collection
+        assert len(meta_files) == len(list(self.session_path.glob(self.device_collection))) == len(collections)
+        raw_meta = map(alfio.load_file_content, meta_files)
+        all_meta = list(map(mesoscope.patch_imaging_meta, raw_meta))
+        return self._consolidate_metadata(all_meta) if len(all_meta) > 1 else all_meta[0], all_meta
 
     @staticmethod
     def _consolidate_metadata(meta_data_all: list) -> dict:
@@ -451,7 +457,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
             return ka == kb and all(a[key] == b[key] for key in ka)
 
         # Compare each dict with the first one in the list
-        for i, meta in enumerate(meta_data_all[1:]):
+        for meta in meta_data_all[1:]:
             if meta != meta_data_all[0]:  # compare entire object first
                 for k, v in meta_data_all[0].items():  # check key by key
                     if not (equal_dicts(v, meta[k], ignore_sub[k])  # compare sub-dicts...
@@ -568,7 +574,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
 
         db = {
             'data_path': sorted(map(str, self.session_path.glob(f'{self.device_collection}'))),
-            'save_path0': str(self.session_path.joinpath('alf')),
+            'save_path0': str(self.session_path),
             'fast_disk': '',  # TODO
             'look_one_level_down': False,  # don't look in the children folders as that is where the reference data is
             'num_workers': self.cpu,  # this selects number of cores to parallelize over for the registration step
@@ -599,142 +605,6 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         }
 
         return db
-
-    def _run(self, run_suite2p=True, rename_files=True, use_badframes=True, **kwargs):
-        """
-        Process inputs, run suite2p and make outputs alf compatible.
-
-        Parameters
-        ----------
-        run_suite2p: bool
-            Whether to run suite2p, default is True.
-        rename_files: bool
-            Whether to rename and reorganize the suite2p outputs to be alf compatible. Defaults is True.
-        use_badframes: bool
-            Whether to exclude bad frames indicated by the experimenter in exptQC.mat. Default is currently False
-            due to bug in suite2p. Change this in the future.
-
-        Returns
-        -------
-        list of pathlib.Path
-            All files created by the task.
-        """
-        """ Metadata and parameters """
-        # Load metadata and make sure all metadata is consistent across FOVs
-        meta_files = sorted(self.session_path.glob(f'{self.device_collection}/*rawImagingData.meta.*'))
-        collections = sorted(set(f.parts[-2] for f in meta_files))
-        # Check there is exactly 1 meta file per collection
-        assert len(meta_files) == len(list(self.session_path.glob(self.device_collection))) == len(collections)
-        rawImagingData = [mesoscope.patch_imaging_meta(alfio.load_file_content(filepath)) for filepath in meta_files]
-        if len(rawImagingData) > 1:
-            meta = self._consolidate_metadata(rawImagingData)
-        else:
-            meta = rawImagingData[0]
-        # Get default ops
-        ops = suite2p.default_ops()
-        # Create db which overwrites ops when passed to suite2p, with information from meta data and hardcoded
-        db = self._meta2ops(meta)
-        # Anything can be overwritten by keyword arguments passed to the tasks run() method
-        for k, v in kwargs.items():
-            if k in ops.keys() or k in db.keys():
-                # db overwrites ops when passed to run_s2p, so we only need to update / add it here
-                db[k] = v
-        # Update the task kwargs attribute as it will be stored in the arguments json field in alyx
-        self.kwargs = {**self.kwargs, **db}
-
-        """ Bad frames """
-        # exptQC.mat contains experimenter QC values that may not affect ROI detection (e.g. noises, pauses)
-        qc_datasets = dataset_from_name('exptQC.mat', self.input_files)
-        qc_paths = [next(self.session_path.glob(d.glob_pattern), None) for d in qc_datasets]
-        qc_paths = sorted(map(str, filter(None, qc_paths)))
-        exptQC = [loadmat(p, squeeze_me=True, simplify_cells=True) for p in qc_paths]
-        if len(exptQC) > 0:
-            frameQC, frameQC_names, _ = self._consolidate_exptQC(exptQC)
-        else:
-            _logger.warning('No frame QC (exptQC.mat) files found.')
-            frameQC = np.array([], dtype='u1')
-            frameQC_names = pd.DataFrame(columns=['qc_values', 'qc_labels'])
-
-        # If applicable, save as bad_frames.npy in first raw_imaging_folder for suite2p
-        # badframes.mat contains QC values that do affect ROI detection (e.g. no PMT, lens artefacts)
-        badframes = np.array([], dtype='i8')
-        total_frames = 0
-        # Ensure all indices are relative to total cumulative frames
-        for m, collection in zip(rawImagingData, collections):
-            badframes_path = self.session_path.joinpath(collection, 'badframes.mat')
-            if badframes_path.exists():
-                raw_mat = loadmat(badframes_path, squeeze_me=True, simplify_cells=True)['badframes']
-                badframes = np.r_[badframes, raw_mat + total_frames]
-            total_frames += m['nFrames']
-        if len(badframes) > 0 and use_badframes is True:
-            np.save(Path(db['data_path'][0]).joinpath('bad_frames.npy'), badframes)
-
-        """ Suite2p """
-        # Create alf it is doesn't exist
-        self.session_path.joinpath('alf').mkdir(exist_ok=True)
-        # Remove existing suite2p dir if it exists
-        suite2p_dir = Path(db['save_path0']).joinpath('suite2p')
-        if suite2p_dir.exists():
-            shutil.rmtree(str(suite2p_dir), ignore_errors=True, onerror=None)
-        # Run suite2p
-        if run_suite2p:
-            _ = suite2p.run_s2p(ops=ops, db=db)
-
-        """ Outputs """
-        # Save and rename other outputs
-        if rename_files:
-            out_files = self._rename_outputs(suite2p_dir, frameQC_names, frameQC)
-        else:
-            out_files = list(Path(db['save_path0']).joinpath('suite2p').rglob('*'))
-        # Only return output file that are in the signature (for registration)
-        out_files = [f for f in out_files if f.name in [f[0] for f in self.output_files]]
-        return out_files
-
-
-class MesoscopePreprocessNew(MesoscopePreprocess):
-
-    def load_meta_files(self):
-        """Load the extracted imaging metadata files.
-
-        Loads and consolidates the imaging data metadata from rawImagingData.meta.json files.
-        These files contain ScanImage metadata extracted from the raw tiff headers by the
-        function `mesoscopeMetadataExtraction.m` in iblscripts/deploy/mesoscope.
-
-        Returns
-        -------
-        dict
-            Single, consolidated dictionary containing metadata.
-        """
-        # Load metadata and make sure all metadata is consistent across FOVs
-        meta_files = sorted(self.session_path.glob(f'{self.device_collection}/*rawImagingData.meta.*'))
-        collections = sorted(set(f.parts[-2] for f in meta_files))
-        # Check there is exactly 1 meta file per collection
-        assert len(meta_files) == len(list(self.session_path.glob(self.device_collection))) == len(collections)
-        raw_meta = map(alfio.load_file_content, meta_files)
-        meta = list(map(mesoscope.patch_imaging_meta, raw_meta))
-        return self._consolidate_metadata(meta) if len(meta) > 1 else meta[0]
-
-    def _run(self, rename_files=True, use_badframes=True, clobber=False, **kwargs):
-        # Load and consolidate the image metadata from JSON files
-        metadata = self.load_meta_files()
-
-        # Create suite2p output folder in raw imaging data folder
-        raw_image_collections = sorted(self.session_path.glob(f'{self.device_collection}'))
-        root_save_path = raw_image_collections[0]  # where suite2p should save the binary data
-        save_folder = 'suite2p'  # save to raw_imaging_data_00/suite2p
-        (save_path := root_save_path.joinpath(save_folder)).mkdir(exist_ok=True)
-
-        # Check for previous intermediate files (+ delete some)
-        plane_folders = self._get_plane_paths(save_path)
-        if len(plane_folders) == 0 or clobber:
-            # Ingest tiff files
-            plane_folders, _ = self.bin_per_plane(metadata, save_folder=save_folder, save_path0=root_save_path)
-
-        # TODO Check for registration
-        for plane in plane_folders:
-            ops = np.load(plane.joinpath('ops.npy'), allow_pickle=True).item()
-            (ops['do_registration'], ops['reg_file'], ops['meanImg'])
-        # ops_paths = [os.path.join(f, "ops.npy") for f in plane_folders]
 
     @staticmethod
     def _get_plane_paths(path):
@@ -784,6 +654,8 @@ class MesoscopePreprocessNew(MesoscopePreprocess):
         ops = {k: v for k, v in ops.items() if k in options}
         ops.update(kwargs)
         ops['save_path0'] = str(ops['save_path0'])  # Path objs must be str for suite2p
+        # Update the task kwargs attribute as it will be stored in the arguments json field in alyx
+        self.kwargs = ops.copy()
 
         ret = suite2p.io.mesoscan_to_binary(ops.copy())
 
@@ -796,14 +668,153 @@ class MesoscopePreprocessNew(MesoscopePreprocess):
         return planes, ret
 
     def image_motion_registration(self, ops):
+        """Perform motion registration.
+
+        Parameters
+        ----------
+        ops : dict
+            A dict of suite2p options.
+
+        Returns
+        -------
+        dict
+            A dictionary of registration metrics: "regDX" is nPC x 3, where X[:,0]
+            is rigid, X[:,1] is average nonrigid, X[:,2] is max nonrigid shifts;
+            "regPC" is average of top and bottom frames for each PC; "tPC" is PC
+            across time frames; "reg_metrics_avg" is the average of "regDX";
+            "reg_metrics_max" is the maximum of "regDX".
+
+        """
         ops['do_registration'] = True
+        ops['do_regmetrics'] = True
         ops['roidetect'] = False
-        _ = suite2p.run_plane(ops)
+        ret = suite2p.run_plane(ops)
+        metrics = {k: ret.get(k, None) for k in ('regDX', 'regPC', 'tPC')}
+        has_metrics = ops['do_regmetrics'] and metrics['regDX'] is not None
+        metrics['reg_metrics_avg'] = np.mean(metrics['regDX'], axis=0) if has_metrics else None
+        metrics['reg_metrics_max'] = np.max(metrics['regDX'], axis=0) if has_metrics else None
+        return metrics
 
     def roi_detection(self, ops):
+        """Perform ROI detection.
+
+        Parameters
+        ----------
+        ops : dict
+            A dict of suite2p options.
+
+        Returns
+        -------
+        dict
+            An updated copy of the ops after running ROI detection.
+        """
         ops['do_registration'] = False
         ops['roidetect'] = True
-        _ = suite2p.run_plane(ops)
+        ret = suite2p.run_plane(ops)
+        return ret
+
+    def _run(self, rename_files=True, use_badframes=True, **kwargs):
+        """
+        Process inputs, run suite2p and make outputs alf compatible.
+
+        The suite2p processing takes place in a 'suite2p' folder within the session path. After running,
+        the data.bin files are moved to 'raw_bin_files' and the rest of the folder is zipped up and moved
+        to 'alf/
+
+        Parameters
+        ----------
+        rename_files: bool
+            Whether to rename and reorganize the suite2p outputs to be alf compatible. Defaults is True.
+        use_badframes: bool
+            Whether to exclude bad frames indicated by the experimenter in badframes.mat.
+        overwrite : bool
+            Whether to re-perform extraction and motion registration.
+
+        Returns
+        -------
+        list of pathlib.Path
+            All files created by the task.
+
+        """
+
+        """ Metadata and parameters """
+        overwrite = kwargs.pop('overwrite', self.overwrite)
+        # Load and consolidate the image metadata from JSON files
+        metadata, all_meta = self.load_meta_files()
+
+        # Create suite2p output folder in raw imaging data folder
+        raw_image_collections = sorted(self.session_path.glob(f'{self.device_collection}'))
+        save_path = self.session_path.joinpath(save_folder := 'suite2p')
+
+        # Check for previous intermediate files
+        plane_folders = self._get_plane_paths(save_path)
+        if len(plane_folders) == 0 and self.session_path.joinpath('raw_bin_files').exists():
+            self.session_path.joinpath('raw_bin_files').replace(save_path)
+            plane_folders = self._get_plane_paths(save_path)
+        if len(plane_folders) == 0 or overwrite:
+            _logger.info('Extracting tif data per plane')
+            # Ingest tiff files
+            plane_folders, _ = self.bin_per_plane(metadata, save_folder=save_folder, save_path0=self.session_path)
+
+        """ Bad frames """
+        # exptQC.mat contains experimenter QC values that may not affect ROI detection (e.g. noises, pauses)
+        qc_datasets = dataset_from_name('exptQC.mat', self.input_files)
+        qc_paths = [next(self.session_path.glob(d.glob_pattern), None) for d in qc_datasets]
+        qc_paths = sorted(map(str, filter(None, qc_paths)))
+        exptQC = [loadmat(p, squeeze_me=True, simplify_cells=True) for p in qc_paths]
+        if len(exptQC) > 0:
+            frameQC, frameQC_names, _ = self._consolidate_exptQC(exptQC)
+        else:
+            _logger.warning('No frame QC (exptQC.mat) files found.')
+            frameQC = np.array([], dtype='u1')
+            frameQC_names = pd.DataFrame(columns=['qc_values', 'qc_labels'])
+
+        # If applicable, save as bad_frames.npy in first raw_imaging_folder for suite2p
+        # badframes.mat contains QC values that do affect ROI detection (e.g. no PMT, lens artefacts)
+        badframes = np.array([], dtype='i8')
+        total_frames = 0
+        # Ensure all indices are relative to total cumulative frames
+        for m, collection in zip(all_meta, raw_image_collections):
+            badframes_path = self.session_path.joinpath(collection, 'badframes.mat')
+            if badframes_path.exists():
+                raw_mat = loadmat(badframes_path, squeeze_me=True, simplify_cells=True)['badframes']
+                badframes = np.r_[badframes, raw_mat + total_frames]
+            total_frames += m['nFrames']
+        if len(badframes) > 0 and use_badframes is True:
+            # The badframes array should always be a subset of the frameQC array
+            assert np.max(badframes) < frameQC.size and np.all(frameQC[badframes])
+            np.save(raw_image_collections[0].joinpath('bad_frames.npy'), badframes)
+
+        """ Suite2p """
+        # Create alf if is doesn't exist
+        self.session_path.joinpath('alf').mkdir(exist_ok=True)
+
+        # Perform registration
+        _logger.info('Performing registration')
+        for plane in plane_folders:
+            ops = np.load(plane.joinpath('ops.npy'), allow_pickle=True).item()
+            ops.update(kwargs)
+            # (ops['do_registration'], ops['reg_file'], ops['meanImg'])
+            _ = self.image_motion_registration(ops)
+            # TODO Handle metrics and QC here
+
+        # ROI detection
+        _logger.info('Performing ROI detection')
+        for plane in plane_folders:
+            ops = np.load(plane.joinpath('ops.npy'), allow_pickle=True).item()
+            ops.update(kwargs)
+            self.roi_detection(ops)
+
+        """ Outputs """
+        # Save and rename other outputs
+        if rename_files:
+            self._rename_outputs(save_path, frameQC_names, frameQC)
+            # Only return output file that are in the signature (for registration)
+            out_files = chain.from_iterable(map(lambda x: x.find_files(self.session_path)[1], self.output_files))
+        else:
+            out_files = save_path.rglob('*')
+
+        return list(out_files)
 
 
 class MesoscopeSync(base_tasks.MesoscopeTask):
