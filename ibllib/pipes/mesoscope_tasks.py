@@ -238,10 +238,11 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         for file in files:
             cmd = 'tar -xvjf "{input}"'.format(input=file.name)
             _logger.debug(cmd)
-            process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=file.parent)
-            _, stderr = process.communicate()  # b'x 2023-02-17_2_test_2P_00001_00001.tif\n'
-            assert process.returncode == 0
-            tifs = [file.parent.joinpath(x[2:]) for x in stderr.decode().splitlines() if x.startswith('x ')]
+            process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=file.parent)
+            stdout, _ = process.communicate()  # b'x 2023-02-17_2_test_2P_00001_00001.tif\n'
+            _logger.debug(stdout.decode())
+            tifs = [file.parent.joinpath(x.split()[-1]) for x in stdout.decode().splitlines() if x.endswith('.tif')]
+            assert process.returncode == 0 and len(tifs) > 0
             assert all(map(Path.exists, tifs))
             self._teardown_files.extend(tifs)
         return all_files_present
