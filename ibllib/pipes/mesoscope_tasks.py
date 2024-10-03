@@ -34,8 +34,6 @@ import one.alf.io as alfio
 from one.alf.spec import to_alf
 from one.alf.files import filename_parts, session_path_parts
 import one.alf.exceptions as alferr
-import suite2p
-import suite2p.io
 from iblutil.util import flatten
 from iblatlas.atlas import ALLEN_CCF_LANDMARKS_MLAPDV_UM, MRITorontoAtlas
 
@@ -645,6 +643,8 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         dict
             Suite2p's modified options.
         """
+        import suite2p.io
+
         options = ('nplanes', 'data_path', 'save_path0', 'save_folder', 'fast_disk', 'batch_size',
                    'nchannels', 'keep_movie_raw', 'look_one_level_down', 'lines', 'dx', 'dy', 'force_sktiff',
                    'do_registration')
@@ -685,6 +685,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
             "reg_metrics_max" is the maximum of "regDX".
 
         """
+        import suite2p
         ops['do_registration'] = True
         ops['do_regmetrics'] = True
         ops['roidetect'] = False
@@ -708,6 +709,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         dict
             An updated copy of the ops after running ROI detection.
         """
+        import suite2p
         ops['do_registration'] = False
         ops['roidetect'] = True
         ret = suite2p.run_plane(ops)
