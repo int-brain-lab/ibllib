@@ -112,7 +112,7 @@ class MesoscopeCompress(base_tasks.MesoscopeTask):
         _logger.setLevel(self._log_level or logging.INFO)
         return super().tearDown()
 
-    def _run(self, remove_uncompressed=False, verify_output=True, clobber=False, **kwargs):
+    def _run(self, remove_uncompressed=False, verify_output=True, overwrite=False, **kwargs):
         """
         Run tar compression on all tif files in the device collection.
 
@@ -138,7 +138,7 @@ class MesoscopeCompress(base_tasks.MesoscopeTask):
         for in_dir, infiles in input_files:
             infiles = list(infiles)
             outfile = in_dir / outfile_name
-            if outfile.exists() and not clobber:
+            if outfile.exists() and not overwrite:
                 _logger.info('%s already exists; skipping...', outfile.relative_to(self.session_path))
                 continue
             if not infiles:
@@ -219,7 +219,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         self.overwrite = kwargs.get('overwrite', False)
         all_files_present = super().setUp(**kwargs)  # Ensure files present
         bin_sig = dataset_from_name('data.bin', self.input_files)
-        if not self.clobber and all(x.find_files(self.session_path)[0] for x in bin_sig):
+        if not self.overwrite and all(x.find_files(self.session_path)[0] for x in bin_sig):
             return all_files_present  # We have local bin files; no need to extract tifs
         tif_sig = dataset_from_name('*.tif', self.input_files)
         if not tif_sig:
