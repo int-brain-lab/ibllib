@@ -7,7 +7,7 @@ from uuid import uuid4
 import numpy as np
 
 from iblutil.util import Bunch
-from one.api import ONE
+from one.api import ONEITI
 from one.alf import spec
 from ibllib.tests import TEST_DB
 from ibllib.qc import task_metrics as qcmetrics
@@ -162,7 +162,7 @@ class TestTaskMetrics(unittest.TestCase):
         iti_length = .5  # inter-trial interval
         # trial lengths include quiescence period, a couple small trigger delays and iti
         trial_lengths = quiescence_length + resp_feeback_delay + (trigg_delay * 4) + iti_length
-        # add on 60s for nogos + feedback time (1 or 2s) + ~0.5s for other responses
+        # add on 60 + 2s for nogos + feedback time (1 or 2s) + ~0.5s for other responses
         trial_lengths += (choice == 0) * 60 + (~correct + 1) + (choice != 0) * N(0.5)
         start_times = (np.r_[0, np.cumsum(trial_lengths)] + np.r_[0, np.cumsum(pauses)])[:-1]
         end_times = np.cumsum(trial_lengths) - 1e-2 + np.r_[0, np.cumsum(pauses)][:-1]
@@ -193,8 +193,8 @@ class TestTaskMetrics(unittest.TestCase):
         outcome = data['feedbackType'].copy()
         outcome[data['choice'] == 0] = 0
         data['outcome'] = outcome
-        # Delay of 1 second if correct, 2 seconds if incorrect
-        data['stimOffTrigger_times'] = data['feedback_times'] + (~correct + 1)
+        # Delay of 1 second if correct, 2 seconds if incorrect, and stim off before feedback for nogo
+        data['stimOffTrigger_times'] = data['feedback_times'] + (~correct + 1) - (choice == 0) * 2
         data['stimOff_times'] = data['stimOffTrigger_times'] + trigg_delay
         # Error tone times nan on incorrect trials
         outcome_times = np.vectorize(lambda x, y: x + 1e-2 if y else np.nan)
@@ -202,7 +202,6 @@ class TestTaskMetrics(unittest.TestCase):
         data['errorCue_times'] = data['errorCueTrigger_times'] + trigg_delay
         data['valveOpen_times'] = outcome_times(data['feedback_times'], data['correct'])
         data['rewardVolume'] = ~np.isnan(data['valveOpen_times']) * 3.0
-
         return data
 
     @staticmethod

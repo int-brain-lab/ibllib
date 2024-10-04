@@ -678,16 +678,20 @@ def check_iti_delays(data, subtract_pauses=False, **_):
     numpy.array
         An array of boolean values, 1 per trial, where True means trial passes QC threshold.
     """
-    # Initialize array the length of completed trials
-    ITI = .5
+    # todo the 2 followint parameters should be read from the task parameters
+    ITI_DELAY_SECS = .5
+    FEEDBACK_NOGO_DELAY_SECS = 2
     metric = np.full(data['intervals'].shape[0], np.nan)
     passed = metric.copy()
     pauses = (data['pause_duration'] if subtract_pauses else np.zeros_like(metric))[:-1]
     # Get the difference between stim off and the start of the next trial
     # Missing data are set to Inf, except for the last trial which is a NaN
-    metric[:-1] = \
-        np.nan_to_num(data['intervals'][1:, 0] - data['stimOff_times'][:-1] - ITI - pauses, nan=np.inf)
-    passed[:-1] = np.abs(metric[:-1]) < (ITI / 10)  # Last trial is not counted
+    metric[:-1] = np.nan_to_num(
+        data['intervals'][1:, 0] - data['stimOff_times'][:-1] - ITI_DELAY_SECS - pauses,
+        nan=np.inf
+    )
+    metric[data['choice'] == 0] = metric[data['choice'] == 0] - FEEDBACK_NOGO_DELAY_SECS
+    passed[:-1] = np.abs(metric[:-1]) < (ITI_DELAY_SECS / 10)  # Last trial is not counted
     assert data['intervals'].shape[0] == len(metric) == len(passed)
     return metric, passed
 
