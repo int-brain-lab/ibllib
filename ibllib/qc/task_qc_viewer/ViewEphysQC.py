@@ -192,8 +192,8 @@ class GraphWindow(QtWidgets.QWidget):
         self._pinnedColumns = []
 
         # try to identify and sort columns containing timestamps
-        col_names = df.columns
-        df_interp = df.replace([-np.inf, np.inf], np.nan)
+        col_names = df.select_dtypes('number').columns
+        df_interp = df[col_names].replace([-np.inf, np.inf], np.nan)
         df_interp = df_interp.interpolate(limit_direction='both')
         cols_mono = col_names[[df_interp[c].is_monotonic_increasing for c in col_names]]
         cols_mono = [c for c in cols_mono if df[c].nunique() > 1]
@@ -202,8 +202,12 @@ class GraphWindow(QtWidgets.QWidget):
             df.insert(idx, col_name, df.pop(col_name))
 
         # columns containing boolean values are sorted to the end
-        cols_bool = list(df.select_dtypes('bool').columns)
-        cols_pass = [cols_bool.pop(i) for i, c in enumerate(cols_bool) if 'pass' in c]
+        # of those, columns containing 'pass' in their title will be sorted by number of False values
+        col_names = df.columns
+        cols_bool = list(df.select_dtypes(['bool', 'boolean']).columns)
+        cols_pass = [c for c in cols_bool if 'pass' in c]
+        cols_bool = [c for c in cols_bool if c not in cols_pass]  # I know. Friday evening, brain is fried ... sorry.
+        cols_pass = list((~df[cols_pass]).sum().sort_values().keys())
         cols_bool += cols_pass
         for col_name in cols_bool:
             df = df.join(df.pop(col_name))
