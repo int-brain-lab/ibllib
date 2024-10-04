@@ -9,7 +9,6 @@ import yaml
 import ibllib.tests
 import ibllib.pipes.dynamic_pipeline as dyn
 import ibllib.pipes.behavior_tasks as btasks
-from ibllib.io import session_params
 from ibllib.tests.fixtures.utils import populate_task_settings
 
 
