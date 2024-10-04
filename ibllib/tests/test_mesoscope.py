@@ -6,6 +6,7 @@ import tempfile
 import json
 from itertools import chain
 from pathlib import Path
+import subprocess
 from copy import deepcopy
 
 from one.api import ONE
@@ -30,6 +31,10 @@ class TestMesoscopePreprocess(unittest.TestCase):
         self.img_path = self.session_path.joinpath('raw_imaging_data_00')
         self.img_path.mkdir(parents=True)
         self.task = MesoscopePreprocess(self.session_path, one=ONE(**TEST_DB))
+        self.img_path.joinpath('_ibl_rawImagingData.meta.json').touch()
+        self.tifs = [self.img_path.joinpath(f'2024-01-01_1_subject_00001_0000{i}.tif') for i in range(5)]
+        for file in self.tifs:
+            file.touch()
 
     def test_meta(self):
         """
@@ -38,7 +43,7 @@ class TestMesoscopePreprocess(unittest.TestCase):
         """
         expected = {
             'data_path': [str(self.img_path)],
-            'save_path0': str(self.session_path.joinpath('alf')),
+            'save_path0': str(self.session_path),
             'fast_disk': '',
             'look_one_level_down': False,
             'num_workers': -1,
@@ -77,20 +82,10 @@ class TestMesoscopePreprocess(unittest.TestCase):
         }
         with open(self.img_path.joinpath('_ibl_rawImagingData.meta.json'), 'w') as f:
             json.dump(meta, f)
-        self.img_path.joinpath('test.tif').touch()
         with mock.patch.object(self.task, 'get_default_tau', return_value=1.5):
-            _ = self.task.run(run_suite2p=False, rename_files=False)
-        self.assertEqual(self.task.status, 0)
-        self.assertDictEqual(self.task.kwargs, expected)
-        # {k: v for k, v in self.task.kwargs.items() if expected[k] != v}
-        # Now overwrite a specific option with task.run kwarg
-        with mock.patch.object(self.task, 'get_default_tau', return_value=1.5):
-            _ = self.task.run(run_suite2p=False, rename_files=False, nchannels=2, delete_bin=True)
-        self.assertEqual(self.task.status, 0)
-        self.assertEqual(self.task.kwargs['nchannels'], 2)
-        self.assertEqual(self.task.kwargs['delete_bin'], True)
-        with open(self.img_path.joinpath('_ibl_rawImagingData.meta.json'), 'w') as f:
-            json.dump({}, f)
+            metadata, _ = self.task.load_meta_files()
+            ops = self.task._meta2ops(metadata)
+        self.assertDictEqual(ops, expected)
 
     def test_get_default_tau(self):
         """Test for MesoscopePreprocess.get_default_tau method."""
@@ -101,6 +96,42 @@ class TestMesoscopePreprocess(unittest.TestCase):
             self.assertEqual(self.task.get_default_tau(), .7)
             subject_detail['genotype'].pop(1)
             self.assertEqual(self.task.get_default_tau(), 1.5)  # return the default value
+
+    def test_setup_uncompressed(self):
+        """Test set up behaviour when raw tifs present."""
+        # Test signature when clobber = True
+        self.task.overwrite = True
+        raw = self.task.signature['input_files'][1]
+        self.assertEqual(2, len(raw.identifiers))
+        self.assertEqual('*.tif', raw.identifiers[0][-1])
+        # When clobber is False, a data.bin datasets are included as input
+        self.task.overwrite = False
+        raw = self.task.signature['input_files'][1]
+        self.assertEqual(3, len(raw.identifiers))
+        self.assertEqual('data.bin', raw.identifiers[0][-1])
+        # After setup and teardown the tif files should not have been removed
+        self.task.setUp()
+        self.task.tearDown()
+        self.assertTrue(all(map(Path.exists, self.tifs)), 'tifs unexpectedly removed')
+
+    def test_setup_compressed(self):
+        """Test set up behaviour when only compressed tifs present."""
+        # Make compressed file
+        outfile = self.img_path.joinpath('imaging.frames.tar.bz2')
+        cmd = 'tar -cjvf "{output}" "{input}"'.format(
+            output=outfile.relative_to(self.img_path),
+            input='" "'.join(str(x.relative_to(self.img_path)) for x in self.tifs))
+        process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=self.img_path)
+        info, error = process.communicate()  # b'2023-02-17_2_test_2P_00001_00001.tif\n'
+        assert process.returncode == 0, f'compression failed: {error.decode()}'
+        for file in self.tifs:
+            file.unlink()
+
+        self.task.setUp()
+        self.assertTrue(all(map(Path.exists, self.tifs)))
+        self.assertTrue(self.img_path.joinpath('imaging.frames.tar.bz2').exists())
+        self.task.tearDown()
+        self.assertFalse(any(map(Path.exists, self.tifs)))
 
     def tearDown(self) -> None:
         self.td.cleanup()

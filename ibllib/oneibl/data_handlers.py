@@ -79,9 +79,16 @@ class ExpectedDataset:
         """tuple: the identifying parts of the dataset.
 
         If no operator is applied, the identifiers are (collection, revision, name).
-        If an operator is applied, the identifiers are two instances of an ExpectedDataset.
+        If an operator is applied, a tuple of 3-element tuples is returned.
         """
-        return self._identifiers if self.operator is None else tuple(x.identifiers for x in self._identifiers)
+        if self.operator is None:
+            return self._identifiers
+        # Flatten nested identifiers into tuple of 3-element tuples
+        identifiers = []
+        for x in self._identifiers:
+            add = identifiers.extend if x.operator else identifiers.append
+            add(x.identifiers)
+        return tuple(identifiers)
 
     @property
     def glob_pattern(self):
@@ -463,7 +470,6 @@ def dataset_from_name(name, datasets):
     list of ExpectedDataset
         The ExpectedDataset instances that match the given name.
 
-    TODO Add tests
     """
     matches = []
     for dataset in datasets:
@@ -475,7 +481,7 @@ def dataset_from_name(name, datasets):
     return matches
 
 
-def update_collections(dataset, new_collection, substring=None):
+def update_collections(dataset, new_collection, substring=None, unique=None):
     """
     Update the collection of a dataset.
 
@@ -496,23 +502,28 @@ def update_collections(dataset, new_collection, substring=None):
     ExpectedDataset
         A copy of the dataset with the updated collection(s).
 
-    TODO Add tests
     """
     after = ensure_list(new_collection)
     D = ExpectedDataset.input if isinstance(dataset, Input) else ExpectedDataset.output
     if dataset.operator is None:
-        collection, revsion, name = dataset.identifiers
+        collection, revision, name = dataset.identifiers
+        if revision is not None:
+            raise NotImplementedError
         if substring:
-            after = [collection.replace(substring, x) for x in after]
-        unique = not set(name).intersection('*[?')
+            after = [(collection or '').replace(substring, x) or None for x in after]
+        if unique is None:
+            unique = [not set(name + (x or '')).intersection('*[?') for x in after]
+        else:
+            unique = [unique] * len(after)
         register = dataset.register
-        updated = D(name, after[0], not isinstance(dataset, OptionalDataset), register, unique=unique)
+        updated = D(name, after[0], not isinstance(dataset, OptionalDataset), register, unique=unique[0])
         if len(after) > 1:
-            for folder in after[1:]:
-                updated &= D(name, folder, not isinstance(dataset, OptionalDataset), register, unique=unique)
+            for folder, unq in zip(after[1:], unique[1:]):
+                updated &= D(name, folder, not isinstance(dataset, OptionalDataset), register, unique=unq)
     else:
         updated = copy(dataset)
-        updated._identifiers = [update_collections(dd, new_collection) for dd in updated._identifiers]
+        updated._identifiers = [update_collections(dd, new_collection, substring, unique)
+                                for dd in updated._identifiers]
     return updated
 
 

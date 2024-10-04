@@ -239,6 +239,7 @@ class IBLRegistrationClient(RegistrationClient):
             task_protocols = task_data = settings = []
             json_field = None
             users = session_details['users']
+            n_trials, n_correct_trials = 0
         else:  # Get session info from task data
             collections = ensure_list(collections)
             # read meta data from the rig for the session from the task settings file
