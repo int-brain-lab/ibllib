@@ -140,6 +140,7 @@ class TestMesoscopePreprocess(unittest.TestCase):
         and it's return value is returned.
         """
         run_plane_mock = sys.modules['suite2p'].run_plane
+        run_plane_mock.reset_mock()
         run_plane_mock.return_value = {'foo': 'bar'}
         ret = self.task.roi_detection({'do_registration': True, 'bar': 'baz'})
         self.assertEqual(ret, {'foo': 'bar'}, 'failed to return suite2p function return value')
@@ -148,6 +149,7 @@ class TestMesoscopePreprocess(unittest.TestCase):
     def test_image_motion_registration(self):
         """Test image_motion_registration method."""
         motion_reg_mock = sys.modules['suite2p'].run_plane
+        motion_reg_mock.reset_mock()
         ops = {'foo': 'bar'}
         ret = {'regDX': np.array([2, 3, 4]), 'regPC': np.array([4, 5, 6]), 'tPC': 5}
         motion_reg_mock.return_value = ret
