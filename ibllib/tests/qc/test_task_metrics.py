@@ -7,7 +7,7 @@ from uuid import uuid4
 import numpy as np
 
 from iblutil.util import Bunch
-from one.api import ONEITI
+from one.api import ONE
 from one.alf import spec
 from ibllib.tests import TEST_DB
 from ibllib.qc import task_metrics as qcmetrics
@@ -193,7 +193,7 @@ class TestTaskMetrics(unittest.TestCase):
         outcome = data['feedbackType'].copy()
         outcome[data['choice'] == 0] = 0
         data['outcome'] = outcome
-        # Delay of 1 second if correct, 2 seconds if incorrect, and stim off before feedback for nogo
+        # Delay of 1 second if correct, 2 seconds if incorrect, and stim off at feedback for nogo
         data['stimOffTrigger_times'] = data['feedback_times'] + (~correct + 1) - (choice == 0) * 2
         data['stimOff_times'] = data['stimOffTrigger_times'] + trigg_delay
         # Error tone times nan on incorrect trials
