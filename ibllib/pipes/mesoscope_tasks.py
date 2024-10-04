@@ -357,12 +357,14 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
             # ignore the combined dir
             if plane_dir.name == 'combined':
                 continue
-            # Move bin file out of the way
-            if plane_dir.joinpath('data.bin').exists():
-                dst = self.session_path.joinpath('raw_bin_files', plane_dir.name, 'data.bin')
-                dst.parent.mkdir(parents=True, exist_ok=True)
-                _logger.debug('Moving bin file to %s', dst.relative_to(self.session_path))
-                plane_dir.joinpath('data.bin').replace(dst)
+            # Move bin file(s) out of the way
+            bin_files = list(plane_dir.rglob('data*.bin'))  # e.g. data.bin, data_raw.bin, data_chan2_raw.bin
+            if any(bin_files):
+                (bin_files_dir := self.session_path.joinpath('raw_bin_files', plane_dir.name)).mkdir(parents=True, exist_ok=True)
+                _logger.debug('Moving bin file(s) to %s', bin_files_dir.relative_to(self.session_path))
+                for bin_file in bin_files:
+                    dst = bin_files_dir.joinpath(bin_file.name)
+                    bin_file.replace(dst)
                 # copy ops file for lazy re-runs
                 shutil.copy(plane_dir.joinpath('ops.npy'), dst.with_name('ops.npy'))
             # Archive the raw suite2p output before renaming
@@ -815,7 +817,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
             # Only return output file that are in the signature (for registration)
             out_files = chain.from_iterable(map(lambda x: x.find_files(self.session_path)[1], self.output_files))
         else:
-            out_files = save_path.rglob('*')
+            out_files = save_path.rglob('*.*')
 
         return list(out_files)
 
