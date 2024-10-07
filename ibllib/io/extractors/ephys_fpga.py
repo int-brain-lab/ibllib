@@ -569,7 +569,8 @@ def get_protocol_period(session_path, protocol_number, bpod_sync):
     # Ensure that the number of detected spacers matched the number of expected tasks
     if acquisition_description := session_params.read_params(session_path):
         n_tasks = len(acquisition_description.get('tasks', []))
-        assert n_tasks == len(spacer_times), f'expected {n_tasks} spacers, found {len(spacer_times)}'
+        assert len(spacer_times) >= protocol_number, (f'expected {n_tasks} spacers, found only {len(spacer_times)} - '
+                                                      f'can not return protocol number {protocol_number}.')
         assert n_tasks > protocol_number >= 0, f'protocol number must be between 0 and {n_tasks}'
     else:
         assert protocol_number < len(spacer_times)
@@ -935,6 +936,7 @@ class FpgaTrials(extractors_base.BaseExtractor):
             t_trial_start = np.sort(np.r_[fpga_events['intervals_0'][:, 0], missing_bpod])
         else:
             t_trial_start = fpga_events['intervals_0']
+        t_trial_start = t_trial_start[ifpga]
 
         out = alfio.AlfBunch()
         # Add the Bpod trial events, converting the timestamp fields to FPGA time.
@@ -959,9 +961,9 @@ class FpgaTrials(extractors_base.BaseExtractor):
 
         # f2ttl times are unreliable owing to calibration and Bonsai sync square update issues.
         # Take the first event after the FPGA aligned stimulus trigger time.
-        fpga_trials['stimOn_times'][ibpod] = _assign_events_to_trial(
+        fpga_trials['stimOn_times'] = _assign_events_to_trial(
             out['stimOnTrigger_times'], f2ttl_t, take='first', t_trial_end=out['stimOffTrigger_times'])
-        fpga_trials['stimOff_times'][ibpod] = _assign_events_to_trial(
+        fpga_trials['stimOff_times'] = _assign_events_to_trial(
             out['stimOffTrigger_times'], f2ttl_t, take='first', t_trial_end=out['intervals'][:, 1])
         # For stim freeze we take the last event before the stim off trigger time.
         # To avoid assigning early events (e.g. for sessions where there are few flips due to
@@ -980,13 +982,12 @@ class FpgaTrials(extractors_base.BaseExtractor):
         # take last event after freeze/stim on trigger, before stim off trigger
         stim_freeze = _assign_events_to_trial(lims, f2ttl_t, take='last', t_trial_end=out['stimOffTrigger_times'])
         fpga_trials['stimFreeze_times'][go_trials] = stim_freeze[go_trials]
-
         # Feedback times are valve open on correct trials and error tone in on incorrect trials
         fpga_trials['feedback_times'] = np.copy(fpga_trials['valveOpen_times'])
         ind_err = np.isnan(fpga_trials['valveOpen_times'])
         fpga_trials['feedback_times'][ind_err] = fpga_trials['errorCue_times'][ind_err]
 
-        out.update({k: fpga_trials[k][ifpga] for k in fpga_trials.keys()})
+        out.update({k: fpga_trials[k] for k in fpga_trials.keys()})
 
         if display:  # pragma: no cover
             width = 0.5
