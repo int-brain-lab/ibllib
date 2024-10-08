@@ -127,9 +127,10 @@ class RepNum(BaseBpodTrialsExtractor):
             elif 'contrast' in trial and isinstance(trial['contrast'], dict):
                 return trial['contrast']['type'] == 'RepeatContrast'
             else:
-                # For advanced choice world before version 8.19.0 there was no 'debias_trial' field
+                # For advanced choice world and its subclasses before version 8.19.0 there was no 'debias_trial' field
                 # and no debiasing protocol applied, so simply return False
-                assert self.settings['PYBPOD_PROTOCOL'].startswith('_iblrig_tasks_advancedChoiceWorld')
+                assert (self.settings['PYBPOD_PROTOCOL'].startswith('_iblrig_tasks_advancedChoiceWorld') or
+                        self.settings['PYBPOD_PROTOCOL'].startswith('ccu_neuromodulatorChoiceWorld'))
                 return False
 
         trial_repeated = np.fromiter(map(get_trial_repeat, self.bpod_trials), int)
