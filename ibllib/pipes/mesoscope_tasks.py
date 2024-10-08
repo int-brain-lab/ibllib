@@ -53,13 +53,12 @@ class MesoscopeRegisterSnapshots(base_tasks.MesoscopeTask, base_tasks.RegisterRa
 
     @property
     def signature(self):
+        I = ExpectedDataset.input  # noqa
         signature = {
-            'input_files': [('referenceImage.raw.tif', f'{self.device_collection}/reference', False),
-                            ('referenceImage.stack.tif', f'{self.device_collection}/reference', False),
-                            ('referenceImage.meta.json', f'{self.device_collection}/reference', False)],
-            'output_files': [('referenceImage.raw.tif', f'{self.device_collection}/reference', False),
-                             ('referenceImage.stack.tif', f'{self.device_collection}/reference', False),
-                             ('referenceImage.meta.json', f'{self.device_collection}/reference', False)]
+            'input_files': [I('referenceImage.raw.tif', f'{self.device_collection}/reference', False, register=True),
+                            I('referenceImage.stack.tif', f'{self.device_collection}/reference', False, register=True),
+                            I('referenceImage.meta.json', f'{self.device_collection}/reference', False, register=True)],
+            'output_files': []
         }
         return signature
 
@@ -77,8 +76,8 @@ class MesoscopeRegisterSnapshots(base_tasks.MesoscopeTask, base_tasks.RegisterRa
         list of pathlib.Path containing renamed reference image.
         """
         # Assert that only one tif file exists per collection
-        file, collection, _ = self.signature['input_files'][0]
-        reference_images = list(self.session_path.rglob(f'{collection}/{file}'))
+        dsets = dataset_from_name('referenceImage.raw.tif', self.input_files)
+        reference_images = list(chain.from_iterable(map(lambda x: x.find_files(self.session_path)[1], dsets)))
         assert len(set(x.parent for x in reference_images)) == len(reference_images)
         # Rename the reference images
         out_files = super()._run()
