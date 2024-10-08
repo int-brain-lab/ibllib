@@ -571,6 +571,9 @@ class RegisterRawDataTask(DynamicTask):
 
     def _run(self, **kwargs):
         self.rename_files(**kwargs)
+        if not self.output_files:
+            return []
+
         # FIXME Can be done with Task.assert_expected_outputs
         ok, out_files, missing = map(flatten, zip(*map(lambda x: x.find_files(self.session_path), self.output_files)))
         if not ok:
