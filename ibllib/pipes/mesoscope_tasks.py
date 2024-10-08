@@ -353,12 +353,9 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                 'spks.npy': 'mpci.ROIActivityDeconvolved.npy',
                 'Fneu.npy': 'mpci.ROINeuropilActivityF.npy'
             }
-        for plane_dir in suite2p_dir.iterdir():
-            # ignore the combined dir
-            if plane_dir.name == 'combined':
-                continue
+        for plane_dir in self._get_plane_paths(suite2p_dir):
             # Move bin file(s) out of the way
-            bin_files = list(plane_dir.rglob('data*.bin'))  # e.g. data.bin, data_raw.bin, data_chan2_raw.bin
+            bin_files = list(plane_dir.glob('data*.bin'))  # e.g. data.bin, data_raw.bin, data_chan2_raw.bin
             if any(bin_files):
                 (bin_files_dir := self.session_path.joinpath('raw_bin_files', plane_dir.name)).mkdir(parents=True, exist_ok=True)
                 _logger.debug('Moving bin file(s) to %s', bin_files_dir.relative_to(self.session_path))
@@ -366,7 +363,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                     dst = bin_files_dir.joinpath(bin_file.name)
                     bin_file.replace(dst)
                 # copy ops file for lazy re-runs
-                shutil.copy(plane_dir.joinpath('ops.npy'), dst.with_name('ops.npy'))
+                shutil.copy(plane_dir.joinpath('ops.npy'), bin_files_dir.joinpath('ops.npy'))
             # Archive the raw suite2p output before renaming
             n = int(plane_dir.name.split('plane')[1])
             fov_dir = self.session_path.joinpath('alf', f'FOV_{n:02}')
