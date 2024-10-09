@@ -466,7 +466,7 @@ class TestSessionParams(unittest.TestCase):
             file_device = self.devices_path.joinpath(f'{label}.yaml')
             session_params.write_yaml(file_device, data)
 
-    @patch(session_params.__name__ + '.time.sleep')
+    @patch('iblutil.io.params.time.sleep')
     def test_aggregate(self, sleep_mock):
         """A test for both aggregate_device and merge_params."""
         fullfile = self.devices_path.parent.joinpath('_ibl_experiment.description.yaml')
@@ -571,6 +571,16 @@ class TestSessionParams(unittest.TestCase):
         # Test assertion on duplicate sync
         b['sync'] = {'foodaq': {'collection': 'raw_sync_data'}}
         self.assertRaises(AssertionError, session_params.merge_params, a, b)
+
+    def test_get_protocol_number(self):
+        """Test ibllib.io.session_params.get_task_protocol_number function."""
+        self.assertIsNone(session_params.get_task_protocol_number(self.fixture))
+        self.assertIsNone(session_params.get_task_protocol_number(self.fixture, 'passiveChoiceWorld'))
+        self.assertIsNone(session_params.get_task_protocol_number(self.fixture, 'fooChoiceWorld'))
+        for i, task in enumerate(self.fixture['tasks']):
+            next(iter(task.values()))['protocol_number'] = str(i)
+        self.assertEqual(0, session_params.get_task_protocol_number(self.fixture, 'passiveChoiceWorld'))
+        self.assertEqual([0, 1], session_params.get_task_protocol_number(self.fixture))
 
 
 class TestRawDaqLoaders(unittest.TestCase):

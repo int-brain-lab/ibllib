@@ -19,8 +19,7 @@ from one.webclient import AlyxClient
 from one.remote.globus import get_lab_from_endpoint_id, get_local_endpoint_id
 
 from ibllib import __version__ as ibllib_version
-from ibllib.io.extractors.base import get_pipeline, get_session_extractor_type
-from ibllib.pipes import tasks, training_preprocessing, ephys_preprocessing
+from ibllib.pipes import tasks
 from ibllib.time import date2isostr
 from ibllib.oneibl.registration import IBLRegistrationClient
 from ibllib.oneibl.data_handlers import get_local_data_repository
@@ -31,21 +30,6 @@ _logger = logging.getLogger(__name__)
 LARGE_TASKS = [
     'EphysVideoCompress', 'TrainingVideoCompress', 'SpikeSorting', 'EphysDLC', 'MesoscopePreprocess'
 ]
-
-
-def _get_pipeline_class(session_path, one):
-    pipeline = get_pipeline(session_path)
-    if pipeline == 'training':
-        PipelineClass = training_preprocessing.TrainingExtractionPipeline
-    elif pipeline == 'ephys':
-        PipelineClass = ephys_preprocessing.EphysExtractionPipeline
-    else:
-        # try and look if there is a custom extractor in the personal projects extraction class
-        import projects.base
-        task_type = get_session_extractor_type(session_path)
-        PipelineClass = projects.base.get_pipeline(task_type)
-    _logger.info(f"Using {PipelineClass} pipeline for {session_path}")
-    return PipelineClass(session_path=session_path, one=one)
 
 
 def _run_command(cmd):
@@ -71,7 +55,7 @@ def _get_volume_usage(vol, label=''):
     return {f"{label}_{k}": d[k] for k in d}
 
 
-def report_health(one):
+def report_health(alyx):
     """
     Get a few indicators and label the json field of the corresponding lab with them.
     """
@@ -82,10 +66,10 @@ def report_health(one):
     status.update(_get_volume_usage('/mnt/s0/Data', 'raid'))
     status.update(_get_volume_usage('/', 'system'))
 
-    data_repos = one.alyx.rest('data-repository', 'list', globus_endpoint_id=get_local_endpoint_id())
+    data_repos = alyx.rest('data-repository', 'list', globus_endpoint_id=get_local_endpoint_id())
 
     for dr in data_repos:
-        one.alyx.json_field_update(endpoint='data-repository', uuid=dr['name'], field_name='json', data=status)
+        alyx.json_field_update(endpoint='data-repository', uuid=dr['name'], field_name='json', data=status)
 
 
 def job_creator(root_path, one=None, dry=False, rerun=False):

@@ -9,6 +9,7 @@ import numpy as np
 from one.api import ONE
 from one.registration import RegistrationClient
 
+from ibllib.oneibl.data_handlers import ExpectedDataset
 from ibllib.pipes import base_tasks
 from ibllib.pipes.behavior_tasks import ChoiceWorldTrialsBpod
 from ibllib.tests import TEST_DB
@@ -61,8 +62,9 @@ class TestRegisterRawDataTask(unittest.TestCase):
         task = base_tasks.RegisterRawDataTask(self.session_path, one=self.one)
         task.input_files = task.output_files = []
         task.rename_files()  # Returns without raising
-        task.input_files = [('foo.*', collection, True), ]
-        task.output_files = [('_ns_DAQdata.raw.bar', collection, True), ]
+        I = ExpectedDataset.input  # noqa
+        task.input_files = [I('foo.*', collection, True), ]
+        task.output_files = [I('_ns_DAQdata.raw.bar', collection, True), ]
         self.session_path.joinpath(collection).mkdir()
         self.session_path.joinpath(collection, 'foo.bar').touch()
         task.rename_files()
@@ -71,7 +73,7 @@ class TestRegisterRawDataTask(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             task.rename_files()
         # Check asserts number of inputs == number of outputs
-        task.output_files.append(('_ns_DAQdata.baz.bar', collection, True),)
+        task.output_files.append(I('_ns_DAQdata.baz.bar', collection, True),)
         with self.assertRaises(AssertionError):
             task.rename_files()
 
@@ -125,10 +127,10 @@ class TestBehaviourTask(unittest.TestCase):
         ]}
         task = ChoiceWorldTrialsBpod('')
         self.assertIsNone(task.get_protocol_number())
-        self.assertRaises(AssertionError, task.get_protocol_number, number='foo')
+        self.assertRaises(ValueError, task.get_protocol_number, number='foo')
         self.assertEqual(1, task.get_protocol_number(number=1))
         task.session_params = params
-        self.assertEqual(1, task.get_protocol_number())
+        self.assertRaises(AssertionError, task.get_protocol_number)
         for i, proc in enumerate(('fooChoiceWorld', 'barChoiceWorld')):
             self.assertEqual(i, task.get_protocol_number(task_protocol=proc))
 

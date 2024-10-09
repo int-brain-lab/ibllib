@@ -75,7 +75,7 @@ import logging
 import io
 import importlib
 import time
-from _collections import OrderedDict
+from collections import OrderedDict
 import traceback
 import json
 
@@ -85,11 +85,12 @@ import ibllib
 from ibllib.oneibl import data_handlers
 from ibllib.oneibl.data_handlers import get_local_data_repository
 from ibllib.oneibl.registration import get_lab
-from iblutil.util import Bunch
+from iblutil.util import Bunch, flatten
 import one.params
 from one.api import ONE
 from one.util import ensure_list
 from one import webclient
+import one.alf.io as alfio
 
 _logger = logging.getLogger(__name__)
 TASK_STATUS_SET = {'Waiting', 'Held', 'Started', 'Errored', 'Empty', 'Complete', 'Incomplete', 'Abandoned'}
@@ -294,25 +295,28 @@ class Task(abc.ABC):
         -------
         list of pathlib.Path
             A list of input files to register.
+
+        # TODO This method currently does not support wildcards
         """
+        I = data_handlers.ExpectedDataset.input  # noqa
         try:
-            input_files = self.input_files
+            # Ensure all input files are ExpectedDataset instances
+            input_files = [I(*i) if isinstance(i, tuple) else i for i in self.input_files or []]
         except AttributeError:
             raise RuntimeError('Task.setUp must be run before calling this method.')
-        to_register, missing = [], []
-        for filename, collection, required, _ in filter(lambda f: len(f) > 3 and f[3], input_files):
-            filepath = self.session_path.joinpath(collection, filename)
-            if filepath.exists():
-                to_register.append(filepath)
-            elif required:
-                missing.append(filepath)
-        if any(missing):
-            missing_str = ', '.join(map(lambda x: x.relative_to(self.session_path).as_posix(), missing))
+        to_register, missing = [], set()
+        for dataset in input_files:
+            ok, filepaths, _missing = dataset.find_files(self.session_path, register=True)
+            to_register.extend(filepaths)
+            if not ok and _missing is not None:
+                missing.update(_missing) if isinstance(_missing, set) else missing.add(_missing)
+        if any(missing):  # NB: These are either glob patterns that have no matches or match files that should be absent
+            missing_str = ', '.join(missing)
             if assert_all_exist:
                 raise AssertionError(f'Missing required input files: {missing_str}')
             else:
                 _logger.error(f'Missing required input files: {missing_str}')
-        return list(set(to_register) - set(missing))
+        return to_register
 
     def register_images(self, **kwargs):
         """
@@ -335,20 +339,31 @@ class Task(abc.ABC):
         This is the default but should be overwritten for each task
         :return:
         """
-        self.input_files = self.signature['input_files']
-        self.output_files = self.signature['output_files']
+        signature = data_handlers._parse_signature(self.signature)
+        self.input_files = signature['input_files']
+        self.output_files = signature['output_files']
 
     @abc.abstractmethod
     def _run(self, overwrite=False):
-        """
-        This is the method to implement
-        :param overwrite: (bool) if the output already exists,
-        :return: out_files: files to be registered. Could be a list of files (pathlib.Path),
-        a single file (pathlib.Path) an empty list [] or None.
-        Within the pipeline, there is a distinction between a job that returns an empty list
-         and a job that returns None. If the function returns None, the job will be labeled as
-          "empty" status in the database, otherwise, the job has an expected behaviour of not
-          returning any dataset.
+        """Execute main task code.
+
+        This method contains a task's principal data processing code and should implemented
+        by each subclass.
+
+        Parameters
+        ----------
+        overwrite : bool
+            When false (default), the task may re-use any intermediate data from a previous run.
+            When true, the task will disregard or delete any intermediate files before running.
+
+        Returns
+        -------
+        pathlib.Path, list of pathlib.Path, None
+            One or more files to be registered, or an empty list if no files are registered.
+            Within the pipeline, there is a distinction between a job that returns an empty list
+            and a job that returns None. If the function returns None, the job will be labeled as
+            "empty" status in the database, otherwise, the job has an expected behaviour of not
+            returning any dataset.
         """
 
     def setUp(self, **kwargs):
@@ -383,7 +398,7 @@ class Task(abc.ABC):
             self.data_handler = self.get_data_handler()
             self.data_handler.setUp()
             self.get_signatures(**kwargs)
-            self.assert_expected_inputs()
+            self.assert_expected_inputs(raise_error=False)
             return True
 
     def tearDown(self):
@@ -416,15 +431,25 @@ class Task(abc.ABC):
             for out in self.outputs:
                 _logger.error(f'{out}')
             if raise_error:
-                raise FileNotFoundError("Missing outputs after task completion")
+                raise FileNotFoundError('Missing outputs after task completion')
 
         return everything_is_fine, files
 
     def assert_expected_inputs(self, raise_error=True):
         """
-        Before running a task, check that all the files necessary to run the task have been downloaded/ are on the local file
-        system already
-        :return:
+        Check that all the files necessary to run the task have been are present on disk.
+
+        Parameters
+        ----------
+        raise_error : bool
+            If true, raise FileNotFoundError if required files are missing.
+
+        Returns
+        -------
+        bool
+            True if all required files were found.
+        list of pathlib.Path
+            A list of file paths that exist on disk.
         """
         _logger.info('Checking input files')
         everything_is_fine, files = self.assert_expected(self.input_files)
@@ -432,27 +457,54 @@ class Task(abc.ABC):
         if not everything_is_fine and raise_error:
             raise FileNotFoundError('Missing inputs to run task')
 
+        # Check for duplicate datasets that may complicate extraction.
+        # Some sessions may contain revisions and without ONE it's difficult to determine which
+        # are the default datasets. Likewise SDSC may contain multiple datasets with different
+        # UUIDs in the name after patching data.
+        variant_datasets = alfio.find_variants(files, extra=False)
+        if any(map(len, variant_datasets.values())):
+            # Keep those with variants and make paths relative to session for logging purposes
+            to_frag = lambda x: x.relative_to(self.session_path).as_posix()  # noqa
+            ambiguous = {
+                to_frag(k): [to_frag(x) for x in v]
+                for k, v in variant_datasets.items() if any(v)}
+            _logger.error('Ambiguous input datasets found: %s', ambiguous)
+
+            if raise_error or self.location == 'sdsc':  # take no chances on SDSC
+                # This could be mitigated if loading with data OneSDSC
+                raise NotImplementedError(
+                    'Multiple variant datasets found. Loading for these is undefined.')
+
         return everything_is_fine, files
 
     def assert_expected(self, expected_files, silent=False):
-        everything_is_fine = True
-        files = []
-        for expected_file in expected_files:
-            actual_files = list(Path(self.session_path).rglob(str(Path(*filter(None, reversed(expected_file[:2]))))))
-            # Account for revisions
-            if len(actual_files) == 0:
-                collection = '/'.join(filter(None, (expected_file[1], '#*')))  # append pound with wildcard
-                expected_revision = (expected_file[0], collection, expected_file[2])
-                actual_files = list(
-                    Path(self.session_path).rglob(str(Path(*filter(None, reversed(expected_revision[:2])))))
-                )
-            if len(actual_files) == 0 and expected_file[2]:
-                everything_is_fine = False
-                if not silent:
-                    _logger.error(f'Signature file expected {expected_file} not found')
-            else:
-                if len(actual_files) != 0:
-                    files.append(actual_files[0])
+        """
+        Assert that expected files are present.
+
+        Parameters
+        ----------
+        expected_files : list of ExpectedDataset
+            A list of expected files in the form (file_pattern_str, collection_str, required_bool).
+        silent : bool
+            If true, log an error if any required files are not found.
+
+        Returns
+        -------
+        bool
+            True if all required files were found.
+        list of pathlib.Path
+            A list of file paths that exist on disk.
+        """
+        if not any(expected_files):
+            return True, []
+        ok, actual_files, missing = zip(*(x.find_files(self.session_path) for x in expected_files))
+        everything_is_fine = all(ok)
+        # For unknown reasons only the first file of each expected dataset was returned and this
+        # behaviour was preserved after refactoring the code
+        files = [file_list[0] for file_list in actual_files if len(file_list) > 0]
+        if not everything_is_fine and not silent:
+            for missing_pattern in filter(None, flatten(missing)):
+                _logger.error('Signature file pattern %s not found', missing_pattern)
 
         return everything_is_fine, files
 

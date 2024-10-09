@@ -745,6 +745,11 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
             spike_length_samples=128,
             chunksize_samples=int(3000),
             n_jobs=None,
+            wfs_dtype=np.float16,
+            preprocessing_steps=["phase_shift",
+                                 "bad_channel_interpolation",
+                                 "butterworth",
+                                 "car"]
         )
         if self.one:
             eid = self.one.path2eid(self.session_path, query_type='remote')

@@ -1,3 +1,15 @@
+## Release Note 2.39.0
+
+### features
+- register inputs without rename in registerSnapshots
+- iterate only plane folders in Suite2P
+- removed old pipeline
+
+### bugfixes
+- NeuromodulatorCW is a subclass of Advanced CW regarding debiasing
+- Behaviour QC: StimFreeze QC due to indexing errors, ITI duration and negative feedback delay for nogo trials
+- Camera QC fixes
+
 ## Release Note 2.38.0
 
 ### features

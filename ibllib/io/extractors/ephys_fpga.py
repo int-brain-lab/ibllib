@@ -35,7 +35,6 @@ from itertools import cycle
 from pathlib import Path
 import uuid
 import re
-import warnings
 from functools import partial
 
 import matplotlib.pyplot as plt
@@ -52,7 +51,7 @@ from iblutil.spacer import Spacer
 
 import ibllib.exceptions as err
 from ibllib.io import raw_data_loaders as raw, session_params
-from ibllib.io.extractors.bpod_trials import extract_all as bpod_extract_all
+from ibllib.io.extractors.bpod_trials import get_bpod_extractor
 import ibllib.io.extractors.base as extractors_base
 from ibllib.io.extractors.training_wheel import extract_wheel_moves
 from ibllib import plots
@@ -570,7 +569,8 @@ def get_protocol_period(session_path, protocol_number, bpod_sync):
     # Ensure that the number of detected spacers matched the number of expected tasks
     if acquisition_description := session_params.read_params(session_path):
         n_tasks = len(acquisition_description.get('tasks', []))
-        assert n_tasks == len(spacer_times), f'expected {n_tasks} spacers, found {len(spacer_times)}'
+        assert len(spacer_times) >= protocol_number, (f'expected {n_tasks} spacers, found only {len(spacer_times)} - '
+                                                      f'can not return protocol number {protocol_number}.')
         assert n_tasks > protocol_number >= 0, f'protocol number must be between 0 and {n_tasks}'
     else:
         assert protocol_number < len(spacer_times)
@@ -580,7 +580,8 @@ def get_protocol_period(session_path, protocol_number, bpod_sync):
 
 
 class FpgaTrials(extractors_base.BaseExtractor):
-    save_names = ('_ibl_trials.goCueTrigger_times.npy', None, None, None, None, None, None, None,
+    save_names = ('_ibl_trials.goCueTrigger_times.npy', '_ibl_trials.stimOnTrigger_times.npy',
+                  '_ibl_trials.stimOffTrigger_times.npy', None, None, None, None, None,
                   '_ibl_trials.stimOff_times.npy', None, None, None, '_ibl_trials.quiescencePeriod.npy',
                   '_ibl_trials.table.pqt', '_ibl_wheel.timestamps.npy',
                   '_ibl_wheel.position.npy', '_ibl_wheelMoves.intervals.npy',
@@ -757,9 +758,9 @@ class FpgaTrials(extractors_base.BaseExtractor):
             chmap = chmap or _chmap
 
         if not self.bpod_trials:  # extract the behaviour data from bpod
-            self.bpod_trials, *_ = bpod_extract_all(
-                session_path=self.session_path, task_collection=task_collection, save=False,
-                extractor_type=kwargs.get('extractor_type'))
+            self.extractor = get_bpod_extractor(self.session_path, task_collection=task_collection)
+            _logger.info('Bpod trials extractor: %s.%s', self.extractor.__module__, self.extractor.__class__.__name__)
+            self.bpod_trials, *_ = self.extractor.extract(task_collection=task_collection, save=False, **kwargs)
 
         # Explode trials table df
         if 'table' in self.var_names:
@@ -935,6 +936,7 @@ class FpgaTrials(extractors_base.BaseExtractor):
             t_trial_start = np.sort(np.r_[fpga_events['intervals_0'][:, 0], missing_bpod])
         else:
             t_trial_start = fpga_events['intervals_0']
+        t_trial_start = t_trial_start[ifpga]
 
         out = alfio.AlfBunch()
         # Add the Bpod trial events, converting the timestamp fields to FPGA time.
@@ -959,9 +961,9 @@ class FpgaTrials(extractors_base.BaseExtractor):
 
         # f2ttl times are unreliable owing to calibration and Bonsai sync square update issues.
         # Take the first event after the FPGA aligned stimulus trigger time.
-        fpga_trials['stimOn_times'][ibpod] = _assign_events_to_trial(
+        fpga_trials['stimOn_times'] = _assign_events_to_trial(
             out['stimOnTrigger_times'], f2ttl_t, take='first', t_trial_end=out['stimOffTrigger_times'])
-        fpga_trials['stimOff_times'][ibpod] = _assign_events_to_trial(
+        fpga_trials['stimOff_times'] = _assign_events_to_trial(
             out['stimOffTrigger_times'], f2ttl_t, take='first', t_trial_end=out['intervals'][:, 1])
         # For stim freeze we take the last event before the stim off trigger time.
         # To avoid assigning early events (e.g. for sessions where there are few flips due to
@@ -980,13 +982,12 @@ class FpgaTrials(extractors_base.BaseExtractor):
         # take last event after freeze/stim on trigger, before stim off trigger
         stim_freeze = _assign_events_to_trial(lims, f2ttl_t, take='last', t_trial_end=out['stimOffTrigger_times'])
         fpga_trials['stimFreeze_times'][go_trials] = stim_freeze[go_trials]
-
         # Feedback times are valve open on correct trials and error tone in on incorrect trials
         fpga_trials['feedback_times'] = np.copy(fpga_trials['valveOpen_times'])
         ind_err = np.isnan(fpga_trials['valveOpen_times'])
         fpga_trials['feedback_times'][ind_err] = fpga_trials['errorCue_times'][ind_err]
 
-        out.update({k: fpga_trials[k][ifpga] for k in fpga_trials.keys()})
+        out.update({k: fpga_trials[k] for k in fpga_trials.keys()})
 
         if display:  # pragma: no cover
             width = 0.5
@@ -1083,7 +1084,7 @@ class FpgaTrials(extractors_base.BaseExtractor):
         if audio_event_ttls is None:
             # For training/biased/ephys protocols, the ready tone should be below 110 ms. The error
             # tone should be between 400ms and 1200ms
-            audio_event_ttls = {'ready_tone': (0, 0.11), 'error_tone': (0.4, 1.2)}
+            audio_event_ttls = {'ready_tone': (0, 0.1101), 'error_tone': (0.4, 1.2)}
         audio_event_intervals = self._assign_events(audio['times'], audio['polarities'], audio_event_ttls, display=display)
 
         return audio, audio_event_intervals
@@ -1507,70 +1508,6 @@ class FpgaTrialsHabituation(FpgaTrials):
             ax.set_ylim([0, 4])
 
         return out
-
-
-def extract_all(session_path, sync_collection='raw_ephys_data', save=True, save_path=None,
-                task_collection='raw_behavior_data', protocol_number=None, **kwargs):
-    """
-    For the IBL ephys task, reads ephys binary file and extract:
-        -   sync
-        -   wheel
-        -   behaviour
-
-    These `extract_all` functions should be deprecated as they make assumptions about hardware
-    parameters.  Additionally the FpgaTrials class now automatically loads DAQ sync files, extracts
-    the Bpod trials, and returns a dict instead of a tuple. Therefore this function is entirely
-    redundant. See the examples for the correct way to extract NI DAQ behaviour sessions.
-
-    Parameters
-    ----------
-    session_path : str, pathlib.Path
-        The absolute session path, i.e. '/path/to/subject/yyyy-mm-dd/nnn'.
-    sync_collection : str
-        The session subdirectory where the sync data are located.
-    save : bool
-        If true, save the extracted files to save_path.
-    task_collection : str
-        The location of the behaviour protocol data.
-    save_path : str, pathlib.Path
-        The save location of the extracted files, defaults to the alf directory of the session path.
-    protocol_number : int
-        The order that the protocol was run in.
-    **kwargs
-        Optional extractor keyword arguments.
-
-    Returns
-    -------
-    list
-        The extracted data.
-    list of pathlib.Path, None
-        If save is True, a list of file paths to the extracted data.
-    """
-    warnings.warn(
-        'ibllib.io.extractors.ephys_fpga.extract_all will be removed in future versions; '
-        'use FpgaTrials instead. For reliable extraction, use the dynamic pipeline behaviour tasks.',
-        FutureWarning)
-    return_extractor = kwargs.pop('return_extractor', False)
-    # Extract Bpod trials
-    bpod_raw = raw.load_data(session_path, task_collection=task_collection)
-    assert bpod_raw is not None, 'No task trials data in raw_behavior_data - Exit'
-    bpod_trials, bpod_wheel, *_ = bpod_extract_all(
-        session_path=session_path, bpod_trials=bpod_raw, task_collection=task_collection,
-        save=False, extractor_type=kwargs.get('extractor_type'))
-
-    # Sync Bpod trials to FPGA
-    sync, chmap = get_sync_and_chn_map(session_path, sync_collection)
-    # sync, chmap = get_main_probe_sync(session_path, bin_exists=bin_exists)
-    trials = FpgaTrials(session_path, bpod_trials={**bpod_trials, **bpod_wheel})  # py3.9 -> |
-    outputs, files = trials.extract(
-        save=save, sync=sync, chmap=chmap, path_out=save_path,
-        task_collection=task_collection, protocol_number=protocol_number, **kwargs)
-    if not isinstance(outputs, dict):
-        outputs = {k: v for k, v in zip(trials.var_names, outputs)}
-    if return_extractor:
-        return outputs, files, trials
-    else:
-        return outputs, files
 
 
 def get_sync_and_chn_map(session_path, sync_collection):

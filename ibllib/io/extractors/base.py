@@ -208,39 +208,6 @@ def run_extractor_classes(classes, session_path=None, **kwargs):
     return outputs, files
 
 
-def _get_task_types_json_config():
-    """
-    Return the extractor types map.
-
-    This function is only used for legacy sessions, i.e. those without an experiment description
-    file and will be removed in favor of :func:`_get_task_extractor_map`, which directly returns
-    the Bpod extractor class name. The experiment description file cuts out the need for pipeline
-    name identifiers.
-
-    Returns
-    -------
-    Dict[str, str]
-        A map of task protocol to task extractor identifier, e.g. 'ephys', 'habituation', etc.
-
-    See Also
-    --------
-    _get_task_extractor_map - returns a map of task protocol to Bpod trials extractor class name.
-    """
-    with open(Path(__file__).parent.joinpath('extractor_types.json')) as fp:
-        task_types = json.load(fp)
-    try:
-        # look if there are custom extractor types in the personal projects repo
-        import projects.base
-        custom_extractors = Path(projects.base.__file__).parent.joinpath('extractor_types.json')
-        _logger.debug('Loading extractor types from %s', custom_extractors)
-        with open(custom_extractors) as fp:
-            custom_task_types = json.load(fp)
-        task_types.update(custom_task_types)
-    except (ModuleNotFoundError, FileNotFoundError):
-        pass
-    return task_types
-
-
 def get_task_protocol(session_path, task_collection='raw_behavior_data'):
     """
     Return the task protocol name from task settings.
@@ -273,125 +240,6 @@ def get_task_protocol(session_path, task_collection='raw_behavior_data'):
         return
 
 
-def get_task_extractor_type(task_name):
-    """
-    Returns the task type string from the full pybpod task name.
-
-    Parameters
-    ----------
-    task_name : str
-        The complete task protocol name from the PYBPOD_PROTOCOL field of the task settings.
-
-    Returns
-    -------
-    str
-        The extractor type identifier. Examples include 'biased', 'habituation', 'training',
-        'ephys', 'mock_ephys' and 'sync_ephys'.
-
-    Examples
-    --------
-    >>> get_task_extractor_type('_iblrig_tasks_biasedChoiceWorld3.7.0')
-    'biased'
-
-    >>> get_task_extractor_type('_iblrig_tasks_trainingChoiceWorld3.6.0')
-    'training'
-    """
-    if isinstance(task_name, Path):
-        task_name = get_task_protocol(task_name)
-        if task_name is None:
-            return
-    task_types = _get_task_types_json_config()
-
-    task_type = task_types.get(task_name, None)
-    if task_type is None:  # Try lazy matching of name
-        task_type = next((task_types[tt] for tt in task_types if tt in task_name), None)
-    if task_type is None:
-        _logger.warning(f'No extractor type found for {task_name}')
-    return task_type
-
-
-def get_session_extractor_type(session_path, task_collection='raw_behavior_data'):
-    """
-    Infer trials extractor type from task settings.
-
-    From a session path, loads the settings file, finds the task and checks if extractors exist.
-    Examples include 'biased', 'habituation', 'training', 'ephys', 'mock_ephys', and 'sync_ephys'.
-    Note this should only be used for legacy sessions, i.e. those without an experiment description
-    file.
-
-    Parameters
-    ----------
-    session_path : str, pathlib.Path
-        The session path for which to determine the pipeline.
-    task_collection : str
-        The session path directory containing the raw task data.
-
-    Returns
-    -------
-    str or False
-        The task extractor type, e.g. 'biased', 'habituation', 'ephys', or False if unknown.
-    """
-    task_protocol = get_task_protocol(session_path, task_collection=task_collection)
-    if task_protocol is None:
-        _logger.error(f'ABORT: No task protocol found in "{task_collection}" folder {session_path}')
-        return False
-    extractor_type = get_task_extractor_type(task_protocol)
-    if extractor_type:
-        return extractor_type
-    else:
-        return False
-
-
-def get_pipeline(session_path, task_collection='raw_behavior_data'):
-    """
-    Get the pre-processing pipeline name from a session path.
-
-    Note this is only suitable for legacy sessions, i.e. those without an experiment description
-    file. This function will be removed in the future.
-
-    Parameters
-    ----------
-    session_path : str, pathlib.Path
-        The session path for which to determine the pipeline.
-    task_collection : str
-        The session path directory containing the raw task data.
-
-    Returns
-    -------
-    str
-        The pipeline name inferred from the extractor type, e.g. 'ephys', 'training', 'widefield'.
-    """
-    stype = get_session_extractor_type(session_path, task_collection=task_collection)
-    return _get_pipeline_from_task_type(stype)
-
-
-def _get_pipeline_from_task_type(stype):
-    """
-    Return the pipeline from the task type.
-
-    Some task types directly define the pipeline. Note this is only suitable for legacy sessions,
-    i.e. those without an experiment description file. This function will be removed in the future.
-
-    Parameters
-    ----------
-    stype : str
-        The session type or task extractor type, e.g. 'habituation', 'ephys', etc.
-
-    Returns
-    -------
-    str
-        A task pipeline identifier.
-    """
-    if stype in ['ephys_biased_opto', 'ephys', 'ephys_training', 'mock_ephys', 'sync_ephys']:
-        return 'ephys'
-    elif stype in ['habituation', 'training', 'biased', 'biased_opto']:
-        return 'training'
-    elif isinstance(stype, str) and 'widefield' in stype:
-        return 'widefield'
-    else:
-        return stype or ''
-
-
 def _get_task_extractor_map():
     """
     Load the task protocol extractor map.
@@ -406,8 +254,8 @@ def _get_task_extractor_map():
         task_extractors = json.load(fp)
     try:
         # look if there are custom extractor types in the personal projects repo
-        import projects.base
-        custom_extractors = Path(projects.base.__file__).parent.joinpath(FILENAME)
+        import projects
+        custom_extractors = Path(projects.__file__).parent.joinpath(FILENAME)
         with open(custom_extractors, 'r') as fp:
             custom_task_types = json.load(fp)
         task_extractors.update(custom_task_types)

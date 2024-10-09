@@ -8,13 +8,16 @@ import random
 import string
 import uuid
 from itertools import chain
+from uuid import uuid4
 
 from requests import HTTPError
 import numpy as np
+import pandas as pd
 
 from one.api import ONE
 from one.webclient import AlyxClient
 import one.alf.exceptions as alferr
+from one.util import QC_TYPE
 import iblutil.io.params as iopar
 
 from ibllib.oneibl import patcher, registration, data_handlers as handlers
@@ -221,35 +224,6 @@ def get_mock_session_settings(subject='clns0730', user='test_user'):
     }
 
 
-class TestRegistrationEndpoint(unittest.TestCase):
-
-    def test_task_names_extractors(self):
-        """
-        This is to test against regressions
-        """
-        task_out = [
-            ('_iblrig_tasks_biasedChoiceWorld3.7.0', 'Behavior training/tasks'),
-            ('_iblrig_tasks_biasedScanningChoiceWorld5.2.3', 'Behavior training/tasks'),
-            ('_iblrig_tasks_trainingChoiceWorld3.6.0', 'Behavior training/tasks'),
-            ('_iblrig_tasks_ephysChoiceWorld5.1.3', 'Ephys recording with acute probe(s)'),
-            ('_iblrig_calibration_frame2TTL4.1.3', []),
-            ('_iblrig_tasks_habituationChoiceWorld3.6.0', 'Behavior training/tasks'),
-            ('_iblrig_tasks_scanningOptoChoiceWorld5.0.0', []),
-            ('_iblrig_tasks_RewardChoiceWorld4.1.3', []),
-            ('_iblrig_calibration_screen4.1.3', []),
-            ('_iblrig_tasks_ephys_certification4.1.3', 'Ephys recording with acute probe(s)'),
-        ]
-        for to in task_out:
-            out = registration.IBLRegistrationClient._alyx_procedure_from_task(to[0])
-            self.assertEqual(out, to[1])
-        # also makes sure that all task types have a defined procedure
-        task_types = ibllib.io.extractors.base._get_task_types_json_config()
-        for key in ['THIS FILE', 'SEE', '********', '************']:
-            task_types.pop(key)
-        for task_type in set([task_types[tt] for tt in task_types]):
-            assert registration._alyx_procedure_from_task_type(task_type) is not None, task_type + ' has no associate procedure'
-
-
 class TestRegistration(unittest.TestCase):
 
     subject = ''
@@ -416,7 +390,7 @@ class TestRegistration(unittest.TestCase):
     def test_registration_session(self):
         settings_file = self._write_settings_file()
         rc = registration.IBLRegistrationClient(one=self.one)
-        rc.register_session(str(self.session_path))
+        rc.register_session(str(self.session_path), procedures=['Ephys recording with acute probe(s)'])
         eid = self.one.search(subject=self.subject, date_range=['2018-04-01', '2018-04-01'],
                               query_type='remote')[0]
         datasets = self.one.alyx.rest('datasets', 'list', session=eid)
@@ -436,7 +410,7 @@ class TestRegistration(unittest.TestCase):
         eid = self.one.search(subject=self.subject, date_range=['2018-04-01', '2018-04-01'],
                               query_type='remote')[0]
         ses_info = self.one.alyx.rest('sessions', 'read', id=eid)
-        self.assertTrue(ses_info['procedures'] == ['Behavior training/tasks'])
+        self.assertTrue(ses_info['procedures'] == [])
         # re-register the session as unknown protocol, this time without removing session first
         self.settings['PYBPOD_PROTOCOL'] = 'gnagnagna'
         # also add an end time
@@ -589,14 +563,232 @@ class TestDataHandlers(unittest.TestCase):
         self.assertEqual(4, len(out))
         self.assertDictEqual(expected, handler.processed)
 
+    def test_dataset_from_name(self):
+        """Test dataset_from_name function."""
+        I = handlers.ExpectedDataset.input  # noqa
+        dA = I('foo.bar.*', 'alf', True)
+        dB = I('bar.baz.*', 'alf', True)
+        input_files = [I('obj.attr.ext', 'collection', True), dA | dB]
+        dsets = handlers.dataset_from_name('obj.attr.ext', input_files)
+        self.assertEqual(input_files[0:1], dsets)
+        dsets = handlers.dataset_from_name('bar.baz.*', input_files)
+        self.assertEqual([dB], dsets)
+        dsets = handlers.dataset_from_name('foo.baz.ext', input_files)
+        self.assertEqual([], dsets)
 
-class TestStream(unittest.TestCase):
-    """Test for oneibl.stream module."""
+    def test_update_collections(self):
+        """Test update_collections function."""
+        I = handlers.ExpectedDataset.input  # noqa
+        dataset = I('foo.bar.ext', 'alf/probe??', True, unique=False)
+        dset = handlers.update_collections(dataset, 'alf/probe00')
+        self.assertIsNot(dset, dataset)
+        self.assertEqual('alf/probe00', dset.identifiers[0])
+        self.assertEqual(dataset.register, dset.register)
+        self.assertTrue(dset.unique)
+        # Check replacing with non-unique collection
+        dset = handlers.update_collections(dataset, 'probe??')
+        self.assertFalse(dset.unique)
+        self.assertEqual('probe??', dset.identifiers[0])
+        # Check replacing with multiple collections
+        collections = ['alf/probe00', 'alf/probe01']
+        dset = handlers.update_collections(dataset, collections)
+        self.assertIsInstance(dset, handlers.Input)
+        self.assertEqual('and', dset.operator)
+        self.assertCountEqual(collections, [x[0] for x in dset.identifiers])
+        # Check with register values and compound datasets
+        dataset = (I('foo.bar.*', 'alf/probe??', True, unique=False) |
+                   I('baz.bar.*', 'alf/probe??', False, True, unique=False))
+        dset = handlers.update_collections(dataset, collections)
+        self.assertIsInstance(dset, handlers.Input)
+        self.assertEqual('or', dset.operator)
+        for d in dset._identifiers:
+            self.assertIsInstance(d, handlers.Input)
+            self.assertEqual('and', d.operator)
+            self.assertCountEqual(collections, [x[0] for x in d.identifiers])
+            self.assertFalse(any(dd.unique for dd in d._identifiers))
+        # Check behaviour with unique and substring args
+        dset = handlers.update_collections(
+            dataset, ['probe00', 'probe01'], substring='probe??', unique=True)
+        for d in dset._identifiers:
+            self.assertCountEqual(collections, [x[0] for x in d.identifiers])
+            self.assertTrue(all(dd.unique for dd in d._identifiers))
+        # Check behaviour with None collections and optional dataset
+        dataset = (I('foo.bar.*', 'alf/probe00', True, unique=False) |
+                   I('baz.bar.*', None, False, True, unique=False))
+        dset = handlers.update_collections(dataset, 'foo', substring='alf')
+        expected_types = (handlers.Input, handlers.OptionalInput)
+        expected_collections = ('foo/probe00', None)
+        for d, typ, col in zip(dset._identifiers, expected_types, expected_collections):
+            self.assertIsInstance(d, typ)
+            self.assertEqual(col, d.identifiers[0])
+        # Check with revisions
+        dataset = I(None, None, True)
+        dataset._identifiers = ('alf', '#2020-01-01#', 'foo.bar.ext')
+        self.assertRaises(NotImplementedError, handlers.update_collections, dataset, None)
 
-    def test_deprecation(self):
-        """Ensure oneibl.stream module removed."""
-        from datetime import datetime
-        self.assertTrue(datetime.today() < datetime(2024, 8, 1), 'remove oneibl.stream module')
+
+class TestExpectedDataset(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.tmp = Path(tmp.name)
+        self.session_path = self.tmp / 'subject' / '2020-01-01' / '001'
+        self.session_path.mkdir(parents=True)
+        self.img_path = self.session_path / 'raw_imaging_data_00'
+        self.img_path.mkdir()
+        for i in range(5):
+            self.img_path.joinpath(f'foo_{i:05}.tif').touch()
+        self.img_path.joinpath('imaging.frames.tar.bz2').touch()
+
+    def test_and(self):
+        I = handlers.ExpectedDataset.input  # noqa
+        sig = I('*.tif', 'raw_imaging_data_[0-9]*') & I('imaging.frames.tar.bz2', 'raw_imaging_data_[0-9]*')
+        self.assertEqual('and', sig.operator)
+        ok, files, missing = sig.find_files(self.session_path)
+        self.assertTrue(ok)
+        self.assertEqual(6, len(files))
+        self.assertEqual('foo_00000.tif', files[0].name)
+        self.assertEqual('imaging.frames.tar.bz2', files[-1].name)
+        self.assertEqual(set(), missing)
+        # Deleting one tif file shouldn't affect the signature
+        files[0].unlink()
+        ok, files, missing = sig.find_files(self.session_path)
+        self.assertTrue(ok)
+        self.assertTrue(len(files))
+        self.assertEqual('foo_00001.tif', files[0].name)
+        self.assertEqual(set(), missing)
+        # Deleting the tar file should make the signature fail
+        files[-1].unlink()
+        ok, files, missing = sig.find_files(self.session_path)
+        self.assertFalse(ok)
+        self.assertNotEqual('imaging.frames.tar.bz2', files[-1].name)
+        self.assertEqual({'raw_imaging_data_[0-9]*/imaging.frames.tar.bz2'}, missing)
+
+    def test_or(self):
+        I = handlers.ExpectedDataset.input  # noqa
+        sig = I('*.tif', 'raw_imaging_data_[0-9]*') | I('imaging.frames.tar.bz2', 'raw_imaging_data_[0-9]*')
+        self.assertEqual('or', sig.operator)
+        ok, files, missing = sig.find_files(self.session_path)
+        self.assertTrue(ok)
+        self.assertEqual(5, len(files))
+        self.assertEqual({'.tif'}, set(x.suffix for x in files))
+        self.assertEqual(set(), missing)
+        for f in files:
+            f.unlink()
+        ok, files, missing = sig.find_files(self.session_path)
+        self.assertTrue(ok)
+        self.assertEqual(1, len(files))
+        self.assertEqual('imaging.frames.tar.bz2', files[0].name)
+        self.assertEqual({'raw_imaging_data_[0-9]*/*.tif'}, missing)
+        files[0].unlink()
+        ok, files, missing = sig.find_files(self.session_path)
+        self.assertFalse(ok)
+        self.assertEqual([], files)
+        self.assertEqual({'raw_imaging_data_[0-9]*/*.tif', 'raw_imaging_data_[0-9]*/imaging.frames.tar.bz2'}, missing)
+
+    def test_xor(self):
+        I = handlers.ExpectedDataset.input  # noqa
+        sig = I('*.tif', 'raw_imaging_data_[0-9]*') ^ I('imaging.frames.tar.bz2', 'raw_imaging_data_[0-9]*')
+        self.assertEqual('xor', sig.operator)
+        ok, files, missing = sig.find_files(self.session_path)
+        self.assertFalse(ok)
+        self.assertEqual(6, len(files))
+        self.assertEqual({'.tif', '.bz2'}, set(x.suffix for x in files))
+        expected_missing = {'raw_imaging_data_[0-9]*/*.tif', 'raw_imaging_data_[0-9]*/imaging.frames.tar.bz2'}
+        self.assertEqual(expected_missing, missing)
+        for f in filter(lambda x: x.suffix == '.tif', files):
+            f.unlink()
+        ok, files, missing = sig.find_files(self.session_path)
+        self.assertTrue(ok)
+        self.assertEqual(1, len(files))
+        self.assertEqual('imaging.frames.tar.bz2', files[0].name)
+        self.assertEqual(set(), missing)
+        files[0].unlink()
+        ok, files, missing = sig.find_files(self.session_path)
+        self.assertFalse(ok)
+        self.assertEqual([], files)
+        self.assertEqual(expected_missing, missing)
+
+    def test_filter(self):
+        """Test for ExpectedDataset.filter method.
+
+        This test can be extended to support AND operators e.g. (dset1 AND dset2) OR (dset2 AND dset3).
+        """
+        I = handlers.ExpectedDataset.input  # noqa
+        # Optional datasets 1
+        column_names = ['session_path', 'id', 'rel_path', 'file_size', 'hash', 'exists']
+        session_path = '/'.join(self.session_path.parts[-3:])
+        dsets = [
+            [session_path, uuid4(), f'raw_ephys_data/_spikeglx_sync.{attr}.npy', 1024, None, True]
+            for attr in ('channels', 'polarities', 'times')
+        ]
+        qc = pd.Categorical.from_codes(np.zeros(len(dsets), dtype=int), dtype=QC_TYPE)
+        df1 = pd.DataFrame(dsets, columns=column_names).set_index('id').sort_index().assign(qc=qc)
+        # Optional datasets 2
+        dsets = [
+            [session_path, uuid4(), f'raw_ephys_data/probe{p:02}/_spikeglx_sync.{attr}.probe{p:02}.npy', 1024, None, True]
+            for attr in ('channels', 'polarities', 'times') for p in range(2)
+        ]
+        qc = pd.Categorical.from_codes(np.zeros(len(dsets), dtype=int), dtype=QC_TYPE)
+        df2 = pd.DataFrame(dsets, columns=column_names).set_index('id').sort_index().assign(qc=qc)
+
+        # Test simple input (no op)
+        d = I('_*_sync.channels.npy', 'raw_ephys_data', True)
+        ok, filtered_df = d.filter(df1)
+        self.assertTrue(ok)
+        expected = df1.index[df1['rel_path'] == 'raw_ephys_data/_spikeglx_sync.channels.npy']
+        self.assertCountEqual(expected, filtered_df.index)
+
+        # Test inverted (assert absence)
+        d.inverted = True
+        ok, filtered_df = d.filter(df1)
+        self.assertFalse(ok)
+        expected = df1.index[df1['rel_path'] == 'raw_ephys_data/_spikeglx_sync.channels.npy']
+        self.assertCountEqual(expected, filtered_df.index)
+        ok, filtered_df = d.filter(df2)
+        self.assertTrue(ok)
+
+        # Test OR
+        d = (I('_spikeglx_sync.channels.npy', 'raw_ephys_data', True) |
+             I('_spikeglx_sync.channels.probe??.npy', 'raw_ephys_data/probe??', True, unique=False))
+        merged = pd.concat([df1, df2])
+        ok, filtered_df = d.filter(merged)
+        self.assertTrue(ok)
+        self.assertCountEqual(expected, filtered_df.index)
+        ok, filtered_df = d.filter(df2)
+        self.assertTrue(ok)
+        expected = df2.index[df2['rel_path'].str.contains('channels')]
+        self.assertCountEqual(expected, filtered_df.index)
+
+        # Test XOR
+        d = (I('_spikeglx_sync.channels.npy', 'raw_ephys_data', True) ^
+             I('_spikeglx_sync.channels.probe??.npy', 'raw_ephys_data/probe??', True, unique=False))
+        ok, filtered_df = d.filter(merged)
+        self.assertFalse(ok)
+        expected = merged.index[merged['rel_path'].str.contains('channels')]
+        self.assertCountEqual(expected, filtered_df.index)
+        ok, filtered_df = d.filter(df1)
+        self.assertTrue(ok)
+        expected = df1.index[df1['rel_path'] == 'raw_ephys_data/_spikeglx_sync.channels.npy']
+        self.assertCountEqual(expected, filtered_df.index)
+        ok, filtered_df = d.filter(df2)
+        self.assertTrue(ok)
+        expected = df2.index[df2['rel_path'].str.contains('channels')]
+        self.assertCountEqual(expected, filtered_df.index)
+
+    def test_identifiers(self):
+        """Test identifiers property getter."""
+        I = handlers.ExpectedDataset.input  # noqa
+        dataset = I('foo.bar.baz', 'collection', True)
+        self.assertEqual(('collection', None, 'foo.bar.baz'), dataset.identifiers)
+        # Ensure that nested identifiers are returned as flat tuple of tuples
+        dataset = (I('dataset_a', None, True, unique=False) |
+                   I('dataset_b', 'foo', True) |
+                   I('dataset_c', None, True, unique=False))
+        self.assertEqual(3, len(dataset.identifiers))
+        self.assertEqual({3}, set(map(len, dataset.identifiers)))
+        expected = ((None, None, 'dataset_a'), ('foo', None, 'dataset_b'), (None, None, 'dataset_c'))
+        self.assertEqual(expected, dataset.identifiers)
 
 
 if __name__ == '__main__':

@@ -17,7 +17,7 @@ class TestExtractorMaps(unittest.TestCase):
         self.custom_extractors_path = Path(tmp.name).joinpath('task_extractor_map.json')
         self.custom_extractors = {'fooChoiceWorld': 'Bar'}
         self.projects = MagicMock()
-        self.projects.base.__file__ = str(self.custom_extractors_path.with_name('__init__.py'))
+        self.projects.__file__ = str(self.custom_extractors_path.with_name('__init__.py'))
         with open(self.custom_extractors_path, 'w') as fp:
             json.dump(self.custom_extractors, fp)
 

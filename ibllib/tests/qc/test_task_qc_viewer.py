@@ -6,8 +6,6 @@ from unittest import mock
 from one.api import ONE
 import numpy as np
 
-from ibllib.pipes.ephys_preprocessing import EphysTrials
-from ibllib.pipes.training_preprocessing import TrainingTrials
 from ibllib.pipes.behavior_tasks import HabituationTrialsBpod, ChoiceWorldTrialsNidq, ChoiceWorldTrialsBpod, PassiveTaskNidq
 from ibllib.qc.task_qc_viewer.task_qc import get_bpod_trials_task, show_session_task_qc, QcFrame
 from ibllib.qc.task_metrics import TaskQC
@@ -33,10 +31,6 @@ class TestTaskQC(unittest.TestCase):
 
     def test_get_bpod_trials_task(self):
         """Test get_bpod_trials_task function."""
-        task = TrainingTrials('foo/bar', one=self.one)
-        bpod_task = get_bpod_trials_task(task)
-        self.assertIs(task, bpod_task)
-
         task = HabituationTrialsBpod('foo/bar', one=self.one,
                                      protocol_number=0, protocol='habituationChoiceWorld', collection='raw_task_data_00')
         bpod_task = get_bpod_trials_task(task)
@@ -50,10 +44,6 @@ class TestTaskQC(unittest.TestCase):
         self.assertEqual(bpod_task.protocol, 'ephysChoiceWorld')
         self.assertEqual(bpod_task.collection, 'raw_task_data_02')
         self.assertIs(bpod_task.one, self.one)
-
-        task = EphysTrials('foo/bar', one=self.one)
-        bpod_task = get_bpod_trials_task(task)
-        self.assertIsInstance(bpod_task, TrainingTrials)
 
     @mock.patch('ibllib.qc.task_qc_viewer.task_qc.qt.run_app')
     @mock.patch('ibllib.qc.task_qc_viewer.task_qc.get_trials_tasks')
@@ -93,11 +83,8 @@ class TestTaskQC(unittest.TestCase):
         run_app_mock.assert_called_once()
 
         active_task.reset_mock(return_value=False)
-        with mock.patch('ibllib.qc.task_qc_viewer.task_qc.get_bpod_trials_task', return_value=active_task) as \
-                get_bpod_trials_task_mock:
-            show_session_task_qc(session_path, one=self.one, local=True, bpod_only=True)
-            # Should be called in bpod_only mode
-            get_bpod_trials_task_mock.assert_called_once_with(active_task)
+        trials_tasks_mock.reset_mock()
+        show_session_task_qc(session_path, one=self.one, local=True, bpod_only=True)
         # Should be called in local mode
         active_task.assert_expected_inputs.assert_called_once_with(raise_error=True)
 
