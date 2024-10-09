@@ -171,7 +171,7 @@ class GraphWindow(QtWidgets.QWidget):
 
     def changeFilter(self, string: str):
         headers = [
-            self.tableModel.headerData(x, Qt.Horizontal, Qt.DisplayRole).value().lower()
+            self.tableModel.headerData(x, Qt.Horizontal, Qt.DisplayRole).lower()
             for x in range(self.tableModel.columnCount())
         ]
         tokens = [y.lower() for y in (x.strip() for x in string.split(',')) if len(y)]
