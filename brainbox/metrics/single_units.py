@@ -990,7 +990,7 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
     r.slidingRP_viol_forced[ir] = srp['value_forced']
     r.max_confidence[ir] = srp['max_confidence']
     r.min_contamination[ir] = srp['min_contamination']
-    r.n_spikes_below2 = srp['n_spikes_below2']
+    r.n_spikes_below2[ir] = srp['n_spikes_below2']
 
     # loop over each cluster to compute the rest of the metrics
     for ic in np.arange(nclust):
