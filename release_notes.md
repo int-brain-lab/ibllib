@@ -10,6 +10,9 @@
 - Behaviour QC: StimFreeze QC due to indexing errors, ITI duration and negative feedback delay for nogo trials
 - Camera QC fixes
 
+#### 2.39.1
+- Bugfix: brainbox.metrics.single_unit.quick_unit_metrics fix for indexing of n_spike_below2
+
 ## Release Note 2.38.0
 
 ### features
