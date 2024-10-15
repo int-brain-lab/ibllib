@@ -4,8 +4,7 @@ from pathlib import Path
 
 from packaging import version
 from one.webclient import no_cache
-from one.util import ensure_list
-from iblutil.util import flatten
+from iblutil.util import flatten, ensure_list
 import matplotlib.image
 from skimage.io import ImageCollection, imread
 
@@ -551,7 +550,7 @@ class RegisterRawDataTask(DynamicTask):
                 snapshot = self._save_as_png(snapshot_tif := snapshot)
                 if unlink:
                     snapshot_tif.unlink()
-            _logger.debug('Uploading "%s"...', snapshot.relative_to(self.session_path))
+            _logger.info('Uploading "%s"...', snapshot.relative_to(self.session_path))
             if snapshot.with_suffix('.txt').exists():
                 with open(snapshot.with_suffix('.txt'), 'r') as txt_file:
                     note['text'] = txt_file.read().strip()

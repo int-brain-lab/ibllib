@@ -4,8 +4,8 @@ import logging
 import numpy as np
 from scipy.signal import find_peaks
 import one.alf.io as alfio
-from one.util import ensure_list
 from one.alf.files import session_path_parts
+from iblutil.util import ensure_list
 import matplotlib.pyplot as plt
 from packaging import version
 

@@ -85,10 +85,9 @@ import ibllib
 from ibllib.oneibl import data_handlers
 from ibllib.oneibl.data_handlers import get_local_data_repository
 from ibllib.oneibl.registration import get_lab
-from iblutil.util import Bunch, flatten
+from iblutil.util import Bunch, flatten, ensure_list
 import one.params
 from one.api import ONE
-from one.util import ensure_list
 from one import webclient
 import one.alf.io as alfio
 
