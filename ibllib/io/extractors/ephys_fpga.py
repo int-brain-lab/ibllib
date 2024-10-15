@@ -502,7 +502,7 @@ def get_wheel_positions(sync, chmap, tmin=None, tmax=None):
         A dictionary with keys ('timestamps', 'position'), containing the wheel event timestamps and
         position in radians
     Bunch
-        A dictionary of detected movement times with keys ('intervals', 'peakAmplitude', 'peakVelocity_times').
+        A dictionary of detected movement times with keys ('intervals', 'peakAmplitude', 'wheelMoves_peakVelocity_times').
     """
     ts, pos = extract_wheel_sync(sync=sync, chmap=chmap, tmin=tmin, tmax=tmax)
     moves = Bunch(extract_wheel_moves(ts, pos))
