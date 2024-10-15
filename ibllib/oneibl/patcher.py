@@ -33,6 +33,7 @@ import shutil
 
 import globus_sdk
 import iblutil.io.params as iopar
+from iblutil.util import ensure_list
 from one.alf.files import get_session_path, add_uuid_string
 from one.alf.spec import is_uuid_string, is_uuid
 from one import params
@@ -40,7 +41,6 @@ from one.webclient import AlyxClient
 from one.converters import path_from_dataset
 from one.remote import globus
 from one.remote.aws import url2uri
-from one.util import ensure_list
 
 from ibllib.oneibl.registration import register_dataset
 
