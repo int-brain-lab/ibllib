@@ -317,7 +317,7 @@ def extract_wheel_moves(re_ts, re_pos, display=False):
 
     # Put into dict
     wheel_moves = {
-        'intervals': np.c_[on, off], 'peakAmplitude': amp, 'peakVelocity_times': peak_vel}
+        'intervals': np.c_[on, off], 'peakAmplitude': amp, 'wheelMoves_peakVelocity_times': peak_vel}
     return wheel_moves
 
 
@@ -407,9 +407,9 @@ class Wheel(BaseBpodTrialsExtractor):
     save_names = ('_ibl_wheel.timestamps.npy', '_ibl_wheel.position.npy',
                   '_ibl_wheelMoves.intervals.npy', '_ibl_wheelMoves.peakAmplitude.npy', None,
                   '_ibl_trials.firstMovement_times.npy', None)
-    var_names = ('wheel_timestamps', 'wheel_position', 'wheelMoves_intervals',
-                 'wheelMoves_peakAmplitude', 'peakVelocity_times', 'firstMovement_times',
-                 'is_final_movement')
+    var_names = ('wheel_timestamps', 'wheel_position',
+                 'wheelMoves_intervals', 'wheelMoves_peakAmplitude', 'wheelMoves_peakVelocity_times',
+                 'firstMovement_times', 'is_final_movement')
 
     def _extract(self):
         ts, pos = get_wheel_position(self.session_path, self.bpod_trials, task_collection=self.task_collection)
@@ -426,5 +426,5 @@ class Wheel(BaseBpodTrialsExtractor):
 
         first_moves, is_final, _ = extract_first_movement_times(moves, trials, min_qt=min_qt)
         output = (ts, pos, moves['intervals'], moves['peakAmplitude'],
-                  moves['peakVelocity_times'], first_moves, is_final)
+                  moves['wheelMoves_peakVelocity_times'], first_moves, is_final)
         return output
