@@ -127,9 +127,10 @@ class RepNum(BaseBpodTrialsExtractor):
             elif 'contrast' in trial and isinstance(trial['contrast'], dict):
                 return trial['contrast']['type'] == 'RepeatContrast'
             else:
-                # For advanced choice world before version 8.19.0 there was no 'debias_trial' field
+                # For advanced choice world and its subclasses before version 8.19.0 there was no 'debias_trial' field
                 # and no debiasing protocol applied, so simply return False
-                assert self.settings['PYBPOD_PROTOCOL'].startswith('_iblrig_tasks_advancedChoiceWorld')
+                assert (self.settings['PYBPOD_PROTOCOL'].startswith('_iblrig_tasks_advancedChoiceWorld') or
+                        self.settings['PYBPOD_PROTOCOL'].startswith('ccu_neuromodulatorChoiceWorld'))
                 return False
 
         trial_repeated = np.fromiter(map(get_trial_repeat, self.bpod_trials), int)
@@ -708,7 +709,7 @@ class TrialsTable(BaseBpodTrialsExtractor):
     save_names = ('_ibl_trials.table.pqt', None, None, '_ibl_wheel.timestamps.npy', '_ibl_wheel.position.npy',
                   '_ibl_wheelMoves.intervals.npy', '_ibl_wheelMoves.peakAmplitude.npy', None, None)
     var_names = ('table', 'stimOff_times', 'stimFreeze_times', 'wheel_timestamps', 'wheel_position', 'wheelMoves_intervals',
-                 'wheelMoves_peakAmplitude', 'peakVelocity_times', 'is_final_movement')
+                 'wheelMoves_peakAmplitude', 'wheelMoves_peakVelocity_times', 'is_final_movement')
 
     def _extract(self, extractor_classes=None, **kwargs):
         base = [Intervals, GoCueTimes, ResponseTimes, Choice, StimOnOffFreezeTimes, ContrastLR, FeedbackTimes, FeedbackType,
@@ -731,7 +732,7 @@ class TrainingTrials(BaseBpodTrialsExtractor):
     var_names = ('repNum', 'goCueTrigger_times', 'stimOnTrigger_times', 'itiIn_times', 'stimOffTrigger_times',
                  'stimFreezeTrigger_times', 'errorCueTrigger_times', 'table', 'stimOff_times', 'stimFreeze_times',
                  'wheel_timestamps', 'wheel_position', 'wheelMoves_intervals', 'wheelMoves_peakAmplitude',
-                 'peakVelocity_times', 'is_final_movement', 'phase', 'position', 'quiescence', 'pause_duration')
+                 'wheelMoves_peakVelocity_times', 'is_final_movement', 'phase', 'position', 'quiescence', 'pause_duration')
 
     def _extract(self) -> dict:
         base = [RepNum, GoCueTriggerTimes, StimOnTriggerTimes, ItiInTimes, StimOffTriggerTimes, StimFreezeTriggerTimes,

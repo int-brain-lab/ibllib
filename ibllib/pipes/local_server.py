@@ -55,7 +55,7 @@ def _get_volume_usage(vol, label=''):
     return {f"{label}_{k}": d[k] for k in d}
 
 
-def report_health(one):
+def report_health(alyx):
     """
     Get a few indicators and label the json field of the corresponding lab with them.
     """
@@ -66,10 +66,10 @@ def report_health(one):
     status.update(_get_volume_usage('/mnt/s0/Data', 'raid'))
     status.update(_get_volume_usage('/', 'system'))
 
-    data_repos = one.alyx.rest('data-repository', 'list', globus_endpoint_id=get_local_endpoint_id())
+    data_repos = alyx.rest('data-repository', 'list', globus_endpoint_id=get_local_endpoint_id())
 
     for dr in data_repos:
-        one.alyx.json_field_update(endpoint='data-repository', uuid=dr['name'], field_name='json', data=status)
+        alyx.json_field_update(endpoint='data-repository', uuid=dr['name'], field_name='json', data=status)
 
 
 def job_creator(root_path, one=None, dry=False, rerun=False):

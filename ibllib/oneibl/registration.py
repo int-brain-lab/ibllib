@@ -12,8 +12,9 @@ from one.remote.globus import get_local_endpoint_id, get_lab_from_endpoint_id
 from one.webclient import AlyxClient, no_cache
 from one.converters import ConversionMixin
 import one.alf.exceptions as alferr
-from one.util import datasets2records, ensure_list
 from one.api import ONE
+from one.util import datasets2records
+from iblutil.util import ensure_list
 
 import ibllib
 import ibllib.io.extractors.base
@@ -239,6 +240,7 @@ class IBLRegistrationClient(RegistrationClient):
             task_protocols = task_data = settings = []
             json_field = None
             users = session_details['users']
+            n_trials, n_correct_trials = 0
         else:  # Get session info from task data
             collections = ensure_list(collections)
             # read meta data from the rig for the session from the task settings file

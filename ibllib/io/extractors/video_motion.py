@@ -442,7 +442,6 @@ class MotionAlignmentFullSession:
         # Compute wheel velocity
         self.wheel_vel, _ = wh.velocity_filtered(wheel_pos, 1000)
         # Load in original camera times
-        self.camera_times = alfio.load_file_content(next(alf_path.rglob(f'_ibl_{self.label}Camera.times*.npy')))
         self.camera_path = str(next(self.session_path.joinpath('raw_video_data').glob(f'_iblrig_{self.label}Camera.raw*.mp4')))
         self.camera_meta = vidio.get_video_meta(self.camera_path)
 
@@ -461,17 +460,25 @@ class MotionAlignmentFullSession:
         # Check if the ttl and video sizes match up
         self.tdiff = self.ttls.size - self.camera_meta['length']
 
+        # Load in original camera times if available otherwise set to ttls
+        camera_times = next(alf_path.rglob(f'_ibl_{self.label}Camera.times*.npy'), None)
+        self.camera_times = alfio.load_file_content(camera_times) if camera_times else self.ttls
+
         if self.tdiff < 0:
             # In this case there are fewer ttls than camera frames. This is not ideal, for now we pad the ttls with
             # nans but if this is too many we reject the wheel alignment based on the qc
             self.ttl_times = self.ttls
             self.times = np.r_[self.ttl_times, np.full((np.abs(self.tdiff)), np.nan)]
+            if self.camera_times.size != self.camera_meta['length']:
+                self.camera_times = np.r_[self.camera_times, np.full((np.abs(self.tdiff)), np.nan)]
             self.short_flag = True
         elif self.tdiff > 0:
             # In this case there are more ttls than camera frames. This happens often, for now we remove the first
             # tdiff ttls from the ttls
             self.ttl_times = self.ttls[self.tdiff:]
             self.times = self.ttls[self.tdiff:]
+            if self.camera_times.size != self.camera_meta['length']:
+                self.camera_times = self.camera_times[self.tdiff:]
             self.short_flag = False
 
         # Compute the frame rate of the camera

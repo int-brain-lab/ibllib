@@ -121,6 +121,12 @@ def populate_raw_spikeglx(session_path,
                     my_run_g0_t0.nidq.bin
                     my_run_g0_t0.nidq.meta
 
+        populate_raw_spikeglx('3B_folder', model='3B', n_probes=0)
+        3B_folder
+            └───my_run_g0_t0
+                    my_run_g0_t0.nidq.bin
+                    my_run_g0_t0.nidq.meta
+
     See also: http://billkarsh.github.io/SpikeGLX/help/parsing/
     """
     for i in range(n_probes):
@@ -133,6 +139,13 @@ def populate_raw_spikeglx(session_path,
                 root.joinpath(filename).touch()
             if model == '3B':
                 root.joinpath(f'{label}_g0_t0.nidq.{ext}').touch()
+    if n_probes == 0:
+        if model != '3B':
+            raise NotImplementedError
+        root = session_path.joinpath(f'{user_label}_g0_t0')
+        root.mkdir(exist_ok=True, parents=True)
+        for ext in ('meta', 'bin'):
+            root.joinpath(f'{user_label}_g0_t0.nidq.{ext}').touch()
 
 
 def create_fake_raw_video_data_folder(session_path, populate=True, write_pars_stub=False):

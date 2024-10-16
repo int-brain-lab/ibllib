@@ -420,10 +420,15 @@ class CameraQC(base.QC):
         outcome = max(map(spec.QC.validate, values))
 
         if update:
-            extended = {
-                k: spec.QC.NOT_SET if v is None else v
-                for k, v in self.metrics.items()
-            }
+            extended = dict()
+            for k, v in self.metrics.items():
+                if v is None:
+                    extended[k] = spec.QC.NOT_SET.name
+                elif isinstance(v, tuple):
+                    extended[k] = tuple(i.name if isinstance(i, spec.QC) else i for i in v)
+                else:
+                    extended[k] = v.name
+
             self.update_extended_qc(extended)
             self.update(outcome, namespace)
         return outcome, self.metrics
@@ -574,9 +579,9 @@ class CameraQC(base.QC):
         size_diff = int(self.data['count'].size - self.data['video']['length'])
         strict_increase = np.all(np.diff(self.data['count']) > 0)
         if not strict_increase:
-            n_effected = np.sum(np.invert(strict_increase))
+            n_affected = np.sum(np.invert(strict_increase))
             _log.info(f'frame count not strictly increasing: '
-                      f'{n_effected} frames effected ({n_effected / strict_increase.size:.2%})')
+                      f'{n_affected} frames affected ({n_affected / strict_increase.size:.2%})')
             return spec.QC.CRITICAL
         dropped = np.diff(self.data['count']).astype(int) - 1
         pct_dropped = (sum(dropped) / len(dropped) * 100)

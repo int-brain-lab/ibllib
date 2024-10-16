@@ -97,7 +97,7 @@ class TrialsTableBiased(BaseBpodTrialsExtractor):
     save_names = ('_ibl_trials.table.pqt', None, None, '_ibl_wheel.timestamps.npy', '_ibl_wheel.position.npy',
                   '_ibl_wheelMoves.intervals.npy', '_ibl_wheelMoves.peakAmplitude.npy', None, None)
     var_names = ('table', 'stimOff_times', 'stimFreeze_times', 'wheel_timestamps', 'wheel_position', 'wheelMoves_intervals',
-                 'wheelMoves_peakAmplitude', 'peakVelocity_times', 'is_final_movement')
+                 'wheelMoves_peakAmplitude', 'wheelMoves_peakVelocity_times', 'is_final_movement')
 
     def _extract(self, extractor_classes=None, **kwargs):
         extractor_classes = extractor_classes or []
@@ -125,7 +125,7 @@ class TrialsTableEphys(BaseBpodTrialsExtractor):
                   '_ibl_wheelMoves.intervals.npy', '_ibl_wheelMoves.peakAmplitude.npy', None,
                   None, None, None, '_ibl_trials.quiescencePeriod.npy')
     var_names = ('table', 'stimOff_times', 'stimFreeze_times', 'wheel_timestamps', 'wheel_position', 'wheelMoves_intervals',
-                 'wheelMoves_peakAmplitude', 'peakVelocity_times', 'is_final_movement',
+                 'wheelMoves_peakAmplitude', 'wheelMoves_peakVelocity_times', 'is_final_movement',
                  'phase', 'position', 'quiescence')
 
     def _extract(self, extractor_classes=None, **kwargs):
@@ -152,12 +152,12 @@ class BiasedTrials(BaseBpodTrialsExtractor):
     save_names = ('_ibl_trials.goCueTrigger_times.npy', '_ibl_trials.stimOnTrigger_times.npy', None,
                   '_ibl_trials.stimOffTrigger_times.npy', None, None, '_ibl_trials.table.pqt',
                   '_ibl_trials.stimOff_times.npy', None, '_ibl_wheel.timestamps.npy', '_ibl_wheel.position.npy',
-                  '_ibl_wheelMoves.intervals.npy', '_ibl_wheelMoves.peakAmplitude.npy', None, None, '_ibl_trials.included.npy',
-                  None, None, '_ibl_trials.quiescencePeriod.npy')
+                  '_ibl_wheelMoves.intervals.npy', '_ibl_wheelMoves.peakAmplitude.npy', None, None,
+                  '_ibl_trials.included.npy', None, None, '_ibl_trials.quiescencePeriod.npy')
     var_names = ('goCueTrigger_times', 'stimOnTrigger_times', 'itiIn_times', 'stimOffTrigger_times', 'stimFreezeTrigger_times',
                  'errorCueTrigger_times', 'table', 'stimOff_times', 'stimFreeze_times', 'wheel_timestamps', 'wheel_position',
-                 'wheelMoves_intervals', 'wheelMoves_peakAmplitude', 'peakVelocity_times', 'is_final_movement', 'included',
-                 'phase', 'position', 'quiescence')
+                 'wheelMoves_intervals', 'wheelMoves_peakAmplitude', 'wheelMoves_peakVelocity_times', 'is_final_movement',
+                 'included', 'phase', 'position', 'quiescence')
 
     def _extract(self, extractor_classes=None, **kwargs) -> dict:
         extractor_classes = extractor_classes or []
@@ -182,8 +182,8 @@ class EphysTrials(BaseBpodTrialsExtractor):
                   '_ibl_trials.included.npy', None, None, '_ibl_trials.quiescencePeriod.npy')
     var_names = ('goCueTrigger_times', 'stimOnTrigger_times', 'itiIn_times', 'stimOffTrigger_times', 'stimFreezeTrigger_times',
                  'errorCueTrigger_times', 'table', 'stimOff_times', 'stimFreeze_times', 'wheel_timestamps', 'wheel_position',
-                 'wheelMoves_intervals', 'wheelMoves_peakAmplitude', 'peakVelocity_times', 'is_final_movement', 'included',
-                 'phase', 'position', 'quiescence')
+                 'wheelMoves_intervals', 'wheelMoves_peakAmplitude', 'wheelMoves_peakVelocity_times', 'is_final_movement',
+                 'included', 'phase', 'position', 'quiescence')
 
     def _extract(self, extractor_classes=None, **kwargs) -> dict:
         extractor_classes = extractor_classes or []
