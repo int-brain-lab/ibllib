@@ -824,7 +824,8 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
             wfs_dtype=np.float16,
             preprocess_steps=["phase_shift", "bad_channel_interpolation", "butterworth", "car"]
         )
-        shutil.rmtree(self._temporary_folder)
+        _logger.info(f"Cleaning up temporary folder {self._temporary_folder}")
+        shutil.rmtree(self._temporary_folder, ignore_errors=True)
         if self.one:
             eid = self.one.path2eid(self.session_path, query_type='remote')
             ins = self.one.alyx.rest('insertions', 'list', session=eid, name=label, query_type='remote')
