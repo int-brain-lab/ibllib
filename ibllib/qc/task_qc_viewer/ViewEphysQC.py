@@ -229,7 +229,7 @@ class GraphWindow(QtWidgets.QWidget):
         dt = t1 - t0
         if self.wheel:
             idx = np.searchsorted(self.wheel['re_ts'], np.array([t0 - dt / 10, t1 + dt / 10]))
-            period = self.wheel['re_pos'][idx[0]:idx[1]]
+            period = self.wheel['re_pos'][idx[0] : idx[1]]
             if period.size == 0:
                 _logger.warning('No wheel data during trial #%i', index.row())
             else:
