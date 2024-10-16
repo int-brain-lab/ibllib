@@ -330,11 +330,6 @@ def extract_first_movement_times(wheel_moves, trials, min_qt=None):
     gap between quiescence end and cue start, or during the quiescence period but sub-
     threshold).  The movement is sufficiently large if it is greater than or equal to THRESH.
 
-    :param wheel_moves:
-    :param trials: dictionary of trial data
-    :param min_qt:
-    :return: numpy array of
-
     Parameters
     ----------
     wheel_moves : dict
@@ -407,9 +402,9 @@ class Wheel(BaseBpodTrialsExtractor):
     save_names = ('_ibl_wheel.timestamps.npy', '_ibl_wheel.position.npy',
                   '_ibl_wheelMoves.intervals.npy', '_ibl_wheelMoves.peakAmplitude.npy', None,
                   '_ibl_trials.firstMovement_times.npy', None)
-    var_names = ('wheel_timestamps', 'wheel_position', 'wheelMoves_intervals',
-                 'wheelMoves_peakAmplitude', 'peakVelocity_times', 'firstMovement_times',
-                 'is_final_movement')
+    var_names = ('wheel_timestamps', 'wheel_position',
+                 'wheelMoves_intervals', 'wheelMoves_peakAmplitude', 'wheelMoves_peakVelocity_times',
+                 'firstMovement_times', 'is_final_movement')
 
     def _extract(self):
         ts, pos = get_wheel_position(self.session_path, self.bpod_trials, task_collection=self.task_collection)
@@ -425,6 +420,5 @@ class Wheel(BaseBpodTrialsExtractor):
         min_qt = self.settings.get('QUIESCENT_PERIOD', None)
 
         first_moves, is_final, _ = extract_first_movement_times(moves, trials, min_qt=min_qt)
-        output = (ts, pos, moves['intervals'], moves['peakAmplitude'],
-                  moves['peakVelocity_times'], first_moves, is_final)
+        output = (ts, pos, moves['intervals'], moves['peakAmplitude'], moves['peakVelocity_times'], first_moves, is_final)
         return output

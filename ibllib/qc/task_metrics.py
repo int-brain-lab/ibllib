@@ -65,6 +65,9 @@ from . import base
 
 _log = logging.getLogger(__name__)
 
+# todo the 2 followint parameters should be read from the task parameters for each session
+ITI_DELAY_SECS = .5
+FEEDBACK_NOGO_DELAY_SECS = 2
 
 BWM_CRITERIA = {
     'default': {'PASS': 0.99, 'WARNING': 0.90, 'FAIL': 0},  # Note: WARNING was 0.95 prior to Aug 2022
@@ -647,7 +650,8 @@ def check_stimOff_itiIn_delays(data, **_):
     return metric, passed
 
 
-def check_iti_delays(data, subtract_pauses=False, **_):
+def check_iti_delays(data, subtract_pauses=False, iti_delay_secs=ITI_DELAY_SECS,
+                     feedback_nogo_delay_secs=FEEDBACK_NOGO_DELAY_SECS, **_):
     """
     Check the open-loop grey screen period is approximately 1 second.
 
@@ -678,16 +682,17 @@ def check_iti_delays(data, subtract_pauses=False, **_):
     numpy.array
         An array of boolean values, 1 per trial, where True means trial passes QC threshold.
     """
-    # Initialize array the length of completed trials
-    ITI = 1.
     metric = np.full(data['intervals'].shape[0], np.nan)
     passed = metric.copy()
     pauses = (data['pause_duration'] if subtract_pauses else np.zeros_like(metric))[:-1]
     # Get the difference between stim off and the start of the next trial
     # Missing data are set to Inf, except for the last trial which is a NaN
-    metric[:-1] = \
-        np.nan_to_num(data['intervals'][1:, 0] - data['stimOff_times'][:-1] - ITI - pauses, nan=np.inf)
-    passed[:-1] = np.abs(metric[:-1]) < (ITI / 10)  # Last trial is not counted
+    metric[:-1] = np.nan_to_num(
+        data['intervals'][1:, 0] - data['stimOff_times'][:-1] - iti_delay_secs - pauses,
+        nan=np.inf
+    )
+    metric[data['choice'] == 0] = metric[data['choice'] == 0] - feedback_nogo_delay_secs
+    passed[:-1] = np.abs(metric[:-1]) < (iti_delay_secs / 10)  # Last trial is not counted
     assert data['intervals'].shape[0] == len(metric) == len(passed)
     return metric, passed
 
@@ -720,7 +725,7 @@ def check_positive_feedback_stimOff_delays(data, **_):
     return metric, passed
 
 
-def check_negative_feedback_stimOff_delays(data, **_):
+def check_negative_feedback_stimOff_delays(data, feedback_nogo_delay_secs=FEEDBACK_NOGO_DELAY_SECS, **_):
     """
     Check the stimulus offset occurs approximately 2 seconds after negative feedback delivery.
 
@@ -739,6 +744,8 @@ def check_negative_feedback_stimOff_delays(data, **_):
     :param data: dict of trial data with keys ('stimOff_times', 'errorCue_times', 'intervals')
     """
     metric = np.nan_to_num(data['stimOff_times'] - data['errorCue_times'] - 2, nan=np.inf)
+    # for the nogo trials, the feedback is the same as the stimOff
+    metric[data['choice'] == 0] = metric[data['choice'] == 0] + feedback_nogo_delay_secs
     # Apply criteria
     passed = (np.abs(metric) < 0.15).astype(float)
     # Remove none negative feedback trials
@@ -1104,9 +1111,8 @@ def check_n_trial_events(data, **_):
     # test errorCueTrigger_times separately
     # stimFreeze_times fails often due to TTL flicker
     exclude = ['camera_timestamps', 'errorCueTrigger_times', 'errorCue_times',
-               'firstMovement_times', 'peakVelocity_times', 'valveOpen_times',
-               'wheel_moves_peak_amplitude', 'wheel_moves_intervals', 'wheel_timestamps',
-               'wheel_intervals', 'stimFreeze_times']
+               'wheelMoves_peakVelocity_times', 'valveOpen_times', 'wheelMoves_peakAmplitude',
+               'wheelMoves_intervals', 'wheel_timestamps', 'stimFreeze_times']
     events = [k for k in data.keys() if k.endswith('_times') and k not in exclude]
     metric = np.zeros(data['intervals'].shape[0], dtype=bool)
 

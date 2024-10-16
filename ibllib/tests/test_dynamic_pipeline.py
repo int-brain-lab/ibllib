@@ -9,17 +9,7 @@ import yaml
 import ibllib.tests
 import ibllib.pipes.dynamic_pipeline as dyn
 import ibllib.pipes.behavior_tasks as btasks
-from ibllib.io import session_params
 from ibllib.tests.fixtures.utils import populate_task_settings
-
-
-def test_read_write_params_yaml():
-    ad = dyn.get_acquisition_description('choice_world_recording')
-    with tempfile.TemporaryDirectory() as td:
-        session_path = Path(td)
-        session_params.write_params(session_path, ad)
-        add = session_params.read_params(session_path)
-    assert ad == add
 
 
 class TestCreateLegacyAcqusitionDescriptions(unittest.TestCase):

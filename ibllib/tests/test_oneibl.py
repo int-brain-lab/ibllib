@@ -563,6 +563,69 @@ class TestDataHandlers(unittest.TestCase):
         self.assertEqual(4, len(out))
         self.assertDictEqual(expected, handler.processed)
 
+    def test_dataset_from_name(self):
+        """Test dataset_from_name function."""
+        I = handlers.ExpectedDataset.input  # noqa
+        dA = I('foo.bar.*', 'alf', True)
+        dB = I('bar.baz.*', 'alf', True)
+        input_files = [I('obj.attr.ext', 'collection', True), dA | dB]
+        dsets = handlers.dataset_from_name('obj.attr.ext', input_files)
+        self.assertEqual(input_files[0:1], dsets)
+        dsets = handlers.dataset_from_name('bar.baz.*', input_files)
+        self.assertEqual([dB], dsets)
+        dsets = handlers.dataset_from_name('foo.baz.ext', input_files)
+        self.assertEqual([], dsets)
+
+    def test_update_collections(self):
+        """Test update_collections function."""
+        I = handlers.ExpectedDataset.input  # noqa
+        dataset = I('foo.bar.ext', 'alf/probe??', True, unique=False)
+        dset = handlers.update_collections(dataset, 'alf/probe00')
+        self.assertIsNot(dset, dataset)
+        self.assertEqual('alf/probe00', dset.identifiers[0])
+        self.assertEqual(dataset.register, dset.register)
+        self.assertTrue(dset.unique)
+        # Check replacing with non-unique collection
+        dset = handlers.update_collections(dataset, 'probe??')
+        self.assertFalse(dset.unique)
+        self.assertEqual('probe??', dset.identifiers[0])
+        # Check replacing with multiple collections
+        collections = ['alf/probe00', 'alf/probe01']
+        dset = handlers.update_collections(dataset, collections)
+        self.assertIsInstance(dset, handlers.Input)
+        self.assertEqual('and', dset.operator)
+        self.assertCountEqual(collections, [x[0] for x in dset.identifiers])
+        # Check with register values and compound datasets
+        dataset = (I('foo.bar.*', 'alf/probe??', True, unique=False) |
+                   I('baz.bar.*', 'alf/probe??', False, True, unique=False))
+        dset = handlers.update_collections(dataset, collections)
+        self.assertIsInstance(dset, handlers.Input)
+        self.assertEqual('or', dset.operator)
+        for d in dset._identifiers:
+            self.assertIsInstance(d, handlers.Input)
+            self.assertEqual('and', d.operator)
+            self.assertCountEqual(collections, [x[0] for x in d.identifiers])
+            self.assertFalse(any(dd.unique for dd in d._identifiers))
+        # Check behaviour with unique and substring args
+        dset = handlers.update_collections(
+            dataset, ['probe00', 'probe01'], substring='probe??', unique=True)
+        for d in dset._identifiers:
+            self.assertCountEqual(collections, [x[0] for x in d.identifiers])
+            self.assertTrue(all(dd.unique for dd in d._identifiers))
+        # Check behaviour with None collections and optional dataset
+        dataset = (I('foo.bar.*', 'alf/probe00', True, unique=False) |
+                   I('baz.bar.*', None, False, True, unique=False))
+        dset = handlers.update_collections(dataset, 'foo', substring='alf')
+        expected_types = (handlers.Input, handlers.OptionalInput)
+        expected_collections = ('foo/probe00', None)
+        for d, typ, col in zip(dset._identifiers, expected_types, expected_collections):
+            self.assertIsInstance(d, typ)
+            self.assertEqual(col, d.identifiers[0])
+        # Check with revisions
+        dataset = I(None, None, True)
+        dataset._identifiers = ('alf', '#2020-01-01#', 'foo.bar.ext')
+        self.assertRaises(NotImplementedError, handlers.update_collections, dataset, None)
+
 
 class TestExpectedDataset(unittest.TestCase):
     def setUp(self):
@@ -712,6 +775,20 @@ class TestExpectedDataset(unittest.TestCase):
         self.assertTrue(ok)
         expected = df2.index[df2['rel_path'].str.contains('channels')]
         self.assertCountEqual(expected, filtered_df.index)
+
+    def test_identifiers(self):
+        """Test identifiers property getter."""
+        I = handlers.ExpectedDataset.input  # noqa
+        dataset = I('foo.bar.baz', 'collection', True)
+        self.assertEqual(('collection', None, 'foo.bar.baz'), dataset.identifiers)
+        # Ensure that nested identifiers are returned as flat tuple of tuples
+        dataset = (I('dataset_a', None, True, unique=False) |
+                   I('dataset_b', 'foo', True) |
+                   I('dataset_c', None, True, unique=False))
+        self.assertEqual(3, len(dataset.identifiers))
+        self.assertEqual({3}, set(map(len, dataset.identifiers)))
+        expected = ((None, None, 'dataset_a'), ('foo', None, 'dataset_b'), (None, None, 'dataset_c'))
+        self.assertEqual(expected, dataset.identifiers)
 
 
 if __name__ == '__main__':

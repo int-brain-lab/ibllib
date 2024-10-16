@@ -24,7 +24,7 @@ tqdm>=4.32.1
 # ibl libraries
 iblatlas>=0.5.3
 ibl-neuropixel>=1.0.1
-iblutil>=1.11.0
+iblutil>=1.13.0
 mtscomp>=1.0.1
 ONE-api~=2.9.rc0
 phylib>=2.6.0
