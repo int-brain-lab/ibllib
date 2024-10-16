@@ -682,6 +682,7 @@ def check_iti_delays(data, subtract_pauses=False, iti_delay_secs=ITI_DELAY_SECS,
     numpy.array
         An array of boolean values, 1 per trial, where True means trial passes QC threshold.
     """
+    # Initialize array the length of completed trials
     metric = np.full(data['intervals'].shape[0], np.nan)
     passed = metric.copy()
     pauses = (data['pause_duration'] if subtract_pauses else np.zeros_like(metric))[:-1]
