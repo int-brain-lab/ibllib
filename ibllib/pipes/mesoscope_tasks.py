@@ -489,8 +489,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
 
         # Merge and make sure same indexes have same names across all files
         frameQC_names_list = [e['frameQC_names'] for e in exptQC]
-        frameQC_names_list = [{k: i for i, k in enumerate(ensure_list(f)) if any(k)}
-                              for f in frameQC_names_list]
+        frameQC_names_list = [{k: i for i, k in enumerate(ensure_list(f))} for f in frameQC_names_list]
         frameQC_names = {k: v for d in frameQC_names_list for k, v in d.items()}
         for d in frameQC_names_list:
             for k, v in d.items():

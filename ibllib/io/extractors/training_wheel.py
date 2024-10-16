@@ -317,7 +317,7 @@ def extract_wheel_moves(re_ts, re_pos, display=False):
 
     # Put into dict
     wheel_moves = {
-        'intervals': np.c_[on, off], 'peakAmplitude': amp, 'wheelMoves_peakVelocity_times': peak_vel}
+        'intervals': np.c_[on, off], 'peakAmplitude': amp, 'peakVelocity_times': peak_vel}
     return wheel_moves
 
 
@@ -329,11 +329,6 @@ def extract_first_movement_times(wheel_moves, trials, min_qt=None):
     response time.  The movement onset is sometimes just before the cue (occurring in the
     gap between quiescence end and cue start, or during the quiescence period but sub-
     threshold).  The movement is sufficiently large if it is greater than or equal to THRESH.
-
-    :param wheel_moves:
-    :param trials: dictionary of trial data
-    :param min_qt:
-    :return: numpy array of
 
     Parameters
     ----------
@@ -425,6 +420,5 @@ class Wheel(BaseBpodTrialsExtractor):
         min_qt = self.settings.get('QUIESCENT_PERIOD', None)
 
         first_moves, is_final, _ = extract_first_movement_times(moves, trials, min_qt=min_qt)
-        output = (ts, pos, moves['intervals'], moves['peakAmplitude'],
-                  moves['wheelMoves_peakVelocity_times'], first_moves, is_final)
+        output = (ts, pos, moves['intervals'], moves['peakAmplitude'], moves['peakVelocity_times'], first_moves, is_final)
         return output

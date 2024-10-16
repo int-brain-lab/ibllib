@@ -117,8 +117,6 @@ class TestMesoscopePreprocess(unittest.TestCase):
         expected = ['ok', 'PMT off', 'galvos fault', 'high signal']
         self.assertCountEqual(expected, frameQC_names['qc_labels'])
 
-        # Check with empty array (happens sometimes when converting .mat to .npy)
-        exptQC[1]['frameQC_names'] = np.r_[exptQC[1]['frameQC_names'], np.array([], dtype='<U1')]
         # Check with single str instead of array
         exptQC[1]['frameQC_names'] = 'ok'
         frameQC, frameQC_names, bad_frames = self.task._consolidate_exptQC(exptQC)

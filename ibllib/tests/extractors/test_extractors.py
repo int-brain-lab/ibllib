@@ -527,7 +527,7 @@ class TestExtractTrialData(unittest.TestCase):
         mock_data = {
             'intervals': np.array([[0, 1], ]),
             'peakAmplitude': np.array([1, 1]),
-            'wheelMoves_peakVelocity_times': np.array([1, 1])}
+            'peakVelocity_times': np.array([1, 1])}
         function_name = 'ibllib.io.extractors.training_wheel.extract_wheel_moves'
         # Training
         with unittest.mock.patch(function_name, return_value=mock_data):

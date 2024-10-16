@@ -15,7 +15,7 @@ REQUIRED_FIELDS = ['choice', 'contrastLeft', 'contrastRight', 'correct',
                    'response_times', 'rewardVolume', 'stimFreezeTrigger_times',
                    'stimFreeze_times', 'stimOffTrigger_times', 'stimOff_times',
                    'stimOnTrigger_times', 'stimOn_times', 'valveOpen_times',
-                   'wheel_moves_intervals', 'wheel_moves_peak_amplitude',
+                   'wheelMoves_intervals', 'wheelMoves_peakAmplitude', 'wheelMoves_peakVelocity_times',
                    'wheel_position', 'wheel_timestamps']
 
 
@@ -56,14 +56,10 @@ class TaskQCExtractor:
         if 'valveOpen_times' not in data:
             data['valveOpen_times'] = data['feedback_times'].copy()
             data['valveOpen_times'][~correct] = np.nan
-        if 'wheel_moves_intervals' not in data and 'wheelMoves_intervals' in data:
-            data['wheel_moves_intervals'] = data.pop('wheelMoves_intervals')
-        if 'wheel_moves_peak_amplitude' not in data and 'wheelMoves_peakAmplitude' in data:
-            data['wheel_moves_peak_amplitude'] = data.pop('wheelMoves_peakAmplitude')
         data['correct'] = correct
         diff_fields = list(set(REQUIRED_FIELDS).difference(set(data.keys())))
         for miss_field in diff_fields:
-            data[miss_field] = data['feedback_times'] * np.nan
+            data[miss_field] = None if miss_field.startswith('wheel') else data['feedback_times'] * np.nan
         if len(diff_fields):
             _logger.warning(f'QC extractor, missing fields filled with NaNs: {diff_fields}')
         return data

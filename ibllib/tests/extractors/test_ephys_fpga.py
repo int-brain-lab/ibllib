@@ -455,7 +455,7 @@ class TestWheelMovesExtraction(unittest.TestCase):
         n = 56  # expected number of movements
         self.assertTupleEqual(wheel_moves['intervals'].shape, (n, 2), 'failed to return the correct number of intervals')
         self.assertEqual(wheel_moves['peakAmplitude'].size, n)
-        self.assertEqual(wheel_moves['wheelMoves_peakVelocity_times'].size, n)
+        self.assertEqual(wheel_moves['peakVelocity_times'].size, n)
 
         # Check the first 3 intervals
         ints = np.array([[24.78462599, 25.22562599], [29.58762599, 31.15062599], [31.64262599, 31.81662599]])
@@ -468,7 +468,7 @@ class TestWheelMovesExtraction(unittest.TestCase):
         self.assertIsNone(np.testing.assert_allclose(actual, expected), 'unexpected amplitudes')
 
         # Check peak velocities
-        actual = wheel_moves['wheelMoves_peakVelocity_times'][-3:]
+        actual = wheel_moves['peakVelocity_times'][-3:]
         expected = [175.13662599, 176.65762599, 178.57262599]
         self.assertIsNone(np.testing.assert_allclose(actual, expected), 'peak times')
 
