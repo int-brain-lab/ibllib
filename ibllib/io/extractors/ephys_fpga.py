@@ -502,7 +502,7 @@ def get_wheel_positions(sync, chmap, tmin=None, tmax=None):
         A dictionary with keys ('timestamps', 'position'), containing the wheel event timestamps and
         position in radians
     Bunch
-        A dictionary of detected movement times with keys ('intervals', 'peakAmplitude', 'wheelMoves_peakVelocity_times').
+        A dictionary of detected movement times with keys ('intervals', 'peakAmplitude', 'peakVelocity_times').
     """
     ts, pos = extract_wheel_sync(sync=sync, chmap=chmap, tmin=tmin, tmax=tmax)
     moves = Bunch(extract_wheel_moves(ts, pos))
@@ -585,13 +585,13 @@ class FpgaTrials(extractors_base.BaseExtractor):
                   '_ibl_trials.stimOff_times.npy', None, None, None, '_ibl_trials.quiescencePeriod.npy',
                   '_ibl_trials.table.pqt', '_ibl_wheel.timestamps.npy',
                   '_ibl_wheel.position.npy', '_ibl_wheelMoves.intervals.npy',
-                  '_ibl_wheelMoves.peakAmplitude.npy')
+                  '_ibl_wheelMoves.peakAmplitude.npy', None)
     var_names = ('goCueTrigger_times', 'stimOnTrigger_times',
                  'stimOffTrigger_times', 'stimFreezeTrigger_times', 'errorCueTrigger_times',
                  'errorCue_times', 'itiIn_times', 'stimFreeze_times', 'stimOff_times',
                  'valveOpen_times', 'phase', 'position', 'quiescence', 'table',
                  'wheel_timestamps', 'wheel_position',
-                 'wheelMoves_intervals', 'wheelMoves_peakAmplitude')
+                 'wheelMoves_intervals', 'wheelMoves_peakAmplitude', 'wheelMoves_peakVelocity_times')
 
     bpod_rsync_fields = ('intervals', 'response_times', 'goCueTrigger_times',
                          'stimOnTrigger_times', 'stimOffTrigger_times',
