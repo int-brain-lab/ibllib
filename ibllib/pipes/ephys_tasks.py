@@ -1,4 +1,3 @@
-import hashlib
 import logging
 import traceback
 from pathlib import Path
@@ -394,18 +393,19 @@ class EphysPulses(base_tasks.EphysTask):
     @property
     def signature(self):
         signature = {
-            'input_files': [('*ap.meta', f'{self.device_collection}/{pname}', True) for pname in self.pname] +
-                           [('*ap.cbin', f'{self.device_collection}/{pname}', True) for pname in self.pname] +
-                           [('*ap.ch', f'{self.device_collection}/{pname}', True) for pname in self.pname] +
-                           [('*ap.wiring.json', f'{self.device_collection}/{pname}', False) for pname in self.pname] +
-                           [('_spikeglx_sync.times.*npy', f'{self.device_collection}/{pname}', False) for pname in self.pname] +
-                           [('_spikeglx_sync.polarities.*npy', f'{self.device_collection}/{pname}', False) for pname in self.pname] +
-                           [('_spikeglx_sync.channels.*npy', f'{self.device_collection}/{pname}', False) for pname in self.pname] +
-                           [('_spikeglx_sync.times.*npy', self.sync_collection, True),
-                            ('_spikeglx_sync.polarities.*npy', self.sync_collection, True),
-                            ('_spikeglx_sync.channels.*npy', self.sync_collection, True),
-                            ('*ap.meta', self.sync_collection, True)
-                            ],
+            'input_files':
+                [('*ap.meta', f'{self.device_collection}/{pname}', True) for pname in self.pname] +
+                [('*ap.cbin', f'{self.device_collection}/{pname}', True) for pname in self.pname] +
+                [('*ap.ch', f'{self.device_collection}/{pname}', True) for pname in self.pname] +
+                [('*ap.wiring.json', f'{self.device_collection}/{pname}', False) for pname in self.pname] +
+                [('_spikeglx_sync.times.*npy', f'{self.device_collection}/{pname}', False) for pname in self.pname] +
+                [('_spikeglx_sync.polarities.*npy', f'{self.device_collection}/{pname}', False) for pname in self.pname] +
+                [('_spikeglx_sync.channels.*npy', f'{self.device_collection}/{pname}', False) for pname in self.pname] +
+                [('_spikeglx_sync.times.*npy', self.sync_collection, True),
+                 ('_spikeglx_sync.polarities.*npy', self.sync_collection, True),
+                 ('_spikeglx_sync.channels.*npy', self.sync_collection, True),
+                 ('*ap.meta', self.sync_collection, True)
+                 ],
             'output_files': [(f'_spikeglx_sync.times.{pname}.npy', f'{self.device_collection}/{pname}', True)
                              for pname in self.pname] +
                             [(f'_spikeglx_sync.polarities.{pname}.npy', f'{self.device_collection}/{pname}', True)
@@ -765,13 +765,8 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         ap_files = [(ef.get("ap"), ef.get("label")) for ef in efiles if "ap" in ef.keys()]
         assert len(ap_files) != 0, f"No ap file found for probe {self.session_path.joinpath(self.device_collection, self.pname)}"
         assert len(ap_files) == 1, f"Several bin files found for the same probe {ap_files}"
-        ap_file_original, label = ap_files[0]
+        ap_file, label = ap_files[0]
         out_files = []
-        sr = spikeglx.Reader(ap_file_original)
-        if sr.is_mtscomp:
-            ap_file = sr.decompress_to_scratch(scratch_dir=self._temporary_folder)
-        else:
-            ap_file = ap_file_original
         sorter_dir = self._run_iblsort(ap_file)  # runs the sorter, skips if it already ran
         # convert the data to ALF in the ./alf/probeXX/SPIKE_SORTER_NAME folder
         probe_out_path = self.session_path.joinpath("alf", label, self.SPIKE_SORTER_NAME)
@@ -789,10 +784,10 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
             shutil.copyfile(logfile, probe_out_path.joinpath(f"_ibl_log.info_{self.SPIKE_SORTER_NAME}.log"))
         # recover the QC files from the spike sorting output
         for file_qc in sorter_dir.rglob('_iblqc_*.npy'):
-            shutil.copy(file_qc, ap_file_original.parent.joinpath(file_qc.name))
-            out_files.append(ap_file_original.parent.joinpath(file_qc.name))
+            shutil.copy(file_qc, ap_file.parent.joinpath(file_qc.name))
+            out_files.append(ap_file.parent.joinpath(file_qc.name))
         # Sync spike sorting with the main behaviour clock: the nidq for 3B+ and the main probe for 3A
-        out, _ = ibllib.ephys.spikes.sync_spike_sorting(ap_file=ap_file_original, out_path=probe_out_path)
+        out, _ = ibllib.ephys.spikes.sync_spike_sorting(ap_file=ap_file, out_path=probe_out_path)
         out_files.extend(out)
         # Now compute the unit metrics
         files_qc, df_units, drift = self.compute_cell_qc(probe_out_path)
@@ -822,7 +817,8 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
             chunksize_samples=int(30_000),
             n_jobs=None,
             wfs_dtype=np.float16,
-            preprocess_steps=["phase_shift", "bad_channel_interpolation", "butterworth", "car"]
+            preprocess_steps=["phase_shift", "bad_channel_interpolation", "butterworth", "car"],
+            scratch_dir=self._temporary_folder,
         )
         _logger.info(f"Cleaning up temporary folder {self._temporary_folder}")
         shutil.rmtree(self._temporary_folder, ignore_errors=True)
