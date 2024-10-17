@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 
 import one.alf.io as alfio
+from ibllib.io.extractors.bpod_trials import get_bpod_extractor
 from ibllib.io.extractors import training_trials, biased_trials, camera
 from ibllib.io import raw_data_loaders as raw
 from ibllib.io.extractors.base import BaseExtractor
@@ -751,6 +752,18 @@ class TestCameraExtractors(unittest.TestCase):
         # Check input validation
         with self.assertRaises(ValueError):
             camera.attribute_times(tsa, tsb, injective=False, take='closest')
+
+
+class TestGetBpodExtractor(unittest.TestCase):
+
+    def test_get_bpod_extractor(self):
+        with self.assertRaises(ValueError):
+            get_bpod_extractor('', protocol='sdf', task_collection='raw_behavior_data')
+        extractor = get_bpod_extractor(
+            '', protocol='_trainingChoiceWorld',
+            task_collection='raw_behavior_data'
+        )
+        self.assertTrue(isinstance(extractor, BaseExtractor))
 
 
 if __name__ == '__main__':
