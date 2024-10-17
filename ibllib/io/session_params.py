@@ -27,6 +27,7 @@ import uuid
 import logging
 import socket
 from pathlib import Path
+from itertools import chain
 from copy import deepcopy
 
 from one.converters import ConversionMixin
@@ -77,6 +78,9 @@ def _patch_file(data: dict) -> dict:
             if 'tasks' in data and isinstance(data['tasks'], dict):
                 data['tasks'] = [{k: v} for k, v in data['tasks'].copy().items()]
         data['version'] = SPEC_VERSION
+        # Ensure all items in tasks list are single value dicts
+        if 'tasks' in data:
+            data['tasks'] = [{k: v} for k, v in chain.from_iterable(map(dict.items, data['tasks']))]
     return data
 
 
@@ -168,8 +172,19 @@ def merge_params(a, b, copy=False):
             assert k not in a or a[k] == b[k], 'multiple sync fields defined'
         if isinstance(b[k], list):
             prev = list(a.get(k, []))
-            # For procedures and projects, remove duplicates
-            to_add = b[k] if k == 'tasks' else set(b[k]) - set(prev)
+            if k == 'tasks':
+                # For tasks, keep order and skip duplicates
+                # Assert tasks is a list of single value dicts
+                assert set(map(len, prev)) == {1} and set(map(len, b[k])) == {1}
+                # Convert protocol -> dict map to hashable tuple of protocol + sorted key value pairs
+                to_hashable = lambda itm: (itm[0], *chain.from_iterable(sorted(itm[1].items())))  # noqa
+                # Get the set of previous tasks
+                prev_tasks = set(map(to_hashable, chain.from_iterable(map(dict.items, prev))))
+                tasks = chain.from_iterable(map(dict.items, b[k]))
+                to_add = [dict([itm]) for itm in tasks if to_hashable(itm) not in prev_tasks]
+            else:
+                # For procedures and projects, remove duplicates
+                to_add = set(b[k]) - set(prev)
             a[k] = prev + list(to_add)
         elif isinstance(b[k], dict):
             a[k] = {**a.get(k, {}), **b[k]}
