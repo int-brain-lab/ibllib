@@ -6,7 +6,7 @@ i.e. habituation, training or biased.
 import logging
 import importlib
 
-from ibllib.io.extractors.base import get_bpod_extractor_class, protocol2extractor
+from ibllib.io.extractors.base import get_bpod_extractor_class, protocol2extractor, BaseExtractor
 from ibllib.io.extractors.habituation_trials import HabituationTrials
 from ibllib.io.extractors.training_trials import TrainingTrials
 from ibllib.io.extractors.biased_trials import BiasedTrials, EphysTrials
@@ -39,20 +39,25 @@ def get_bpod_extractor(session_path, protocol=None, task_collection='raw_behavio
         'BiasedTrials': BiasedTrials,
         'EphysTrials': EphysTrials
     }
+
     if protocol:
-        class_name = protocol2extractor(protocol)
+        extractor_class_name = protocol2extractor(protocol)
     else:
-        class_name = get_bpod_extractor_class(session_path, task_collection=task_collection)
-    if class_name in builtins:
-        return builtins[class_name](session_path)
+        extractor_class_name = get_bpod_extractor_class(session_path, task_collection=task_collection)
+    if extractor_class_name in builtins:
+        return builtins[extractor_class_name](session_path)
 
     # look if there are custom extractor types in the personal projects repo
-    if not class_name.startswith('projects.'):
-        class_name = 'projects.' + class_name
-    module, class_name = class_name.rsplit('.', 1)
+    if not extractor_class_name.startswith('projects.'):
+        extractor_class_name = 'projects.' + extractor_class_name
+    module, extractor_class_name = extractor_class_name.rsplit('.', 1)
     mdl = importlib.import_module(module)
-    extractor_class = getattr(mdl, class_name, None)
+    extractor_class = getattr(mdl, extractor_class_name, None)
     if extractor_class:
-        return extractor_class(session_path)
+        my_extractor = extractor_class(session_path)
+        if not isinstance(my_extractor, BaseExtractor):
+            raise ValueError(
+                f"{my_extractor} should be an Extractor class inheriting from ibllib.io.extractors.base.BaseExtractor")
+        return my_extractor
     else:
-        raise ValueError(f'extractor {class_name} not found')
+        raise ValueError(f'extractor {extractor_class_name} not found')
