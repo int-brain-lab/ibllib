@@ -175,7 +175,7 @@ def merge_params(a, b, copy=False):
             if k == 'tasks':
                 # For tasks, keep order and skip duplicates
                 # Assert tasks is a list of single value dicts
-                assert set(map(len, prev)) == {1} and set(map(len, b[k])) == {1}
+                assert (not prev or set(map(len, prev)) == {1}) and set(map(len, b[k])) == {1}
                 # Convert protocol -> dict map to hashable tuple of protocol + sorted key value pairs
                 to_hashable = lambda itm: (itm[0], *chain.from_iterable(sorted(itm[1].items())))  # noqa
                 # Get the set of previous tasks
