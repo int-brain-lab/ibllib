@@ -102,30 +102,26 @@ class TestMesoscopePreprocess(unittest.TestCase):
         exptQC = [
             {'frameQC_names': np.array(['ok', 'PMT off', 'galvos fault', 'high signal'], dtype=object),
              'frameQC_frames': np.array([0, 0, 0, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 4])},
-            {'frameQC_names': np.array(['ok', 'PMT off', 'galvos fault', 'high signal'], dtype=object),
-             'frameQC_frames': np.zeros(50, dtype=int)}
+            {'frameQC_names': np.array(['ok', 'PMT off', 'foo', 'galvos fault', np.array([])], dtype=object),
+             'frameQC_frames': np.array([0, 0, 1, 1, 2, 2, 2, 2, 3, 4])},
+            {'frameQC_names': 'ok',  # check with single str instead of array
+             'frameQC_frames': np.array([0, 0])}
         ]
 
         # Check concatinates frame QC arrays
-        frameQC, frameQC_names, bad_frames = self.task._consolidate_exptQC(exptQC)
-        expected_frames = np.r_[exptQC[0]['frameQC_frames'], exptQC[1]['frameQC_frames']]
-        np.testing.assert_array_equal(expected_frames, frameQC)
-        expected = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+        frame_qc, frame_qc_names, bad_frames = self.task._consolidate_exptQC(exptQC)
+        # Check frame_qc array
+        expected_frames = [
+            0, 0, 0, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 5, 0, 0, 1, 1, 4, 4, 4, 4, 2, 5, 0, 0]
+        np.testing.assert_array_equal(expected_frames, frame_qc)
+        # Check bad_frames array
+        expected = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 18, 19, 20, 21, 22, 23, 24, 25]
         np.testing.assert_array_equal(expected, bad_frames)
-        self.assertCountEqual(['qc_values', 'qc_labels'], frameQC_names.columns)
-        self.assertCountEqual(range(4), frameQC_names['qc_values'])
-        expected = ['ok', 'PMT off', 'galvos fault', 'high signal']
-        self.assertCountEqual(expected, frameQC_names['qc_labels'])
-
-        # Check with single str instead of array
-        exptQC[1]['frameQC_names'] = 'ok'
-        frameQC, frameQC_names, bad_frames = self.task._consolidate_exptQC(exptQC)
-        self.assertCountEqual(expected, frameQC_names['qc_labels'])
-        np.testing.assert_array_equal(expected_frames, frameQC)
-        # Check with inconsistent enumerations
-        exptQC[0]['frameQC_names'] = expected
-        exptQC[1]['frameQC_names'] = [*expected[-2:], *expected[:-2]]
-        self.assertRaises(IOError, self.task._consolidate_exptQC, exptQC)
+        # Check frame_qc_names data frame
+        self.assertCountEqual(['qc_values', 'qc_labels'], frame_qc_names.columns)
+        self.assertEqual(list(range(6)), frame_qc_names['qc_values'].tolist())
+        expected = ['ok', 'PMT off', 'galvos fault', 'high signal', 'foo', 'unknown']
+        self.assertCountEqual(expected, frame_qc_names['qc_labels'].tolist())
 
     def test_setup_uncompressed(self):
         """Test set up behaviour when raw tifs present."""
