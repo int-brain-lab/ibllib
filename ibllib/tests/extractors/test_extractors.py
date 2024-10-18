@@ -3,7 +3,7 @@ import functools
 import shutil
 import tempfile
 import unittest
-import unittest.mock
+from unittest.mock import patch, Mock, MagicMock
 from pathlib import Path
 
 import numpy as np
@@ -531,13 +531,13 @@ class TestExtractTrialData(unittest.TestCase):
             'peakVelocity_times': np.array([1, 1])}
         function_name = 'ibllib.io.extractors.training_wheel.extract_wheel_moves'
         # Training
-        with unittest.mock.patch(function_name, return_value=mock_data):
+        with patch(function_name, return_value=mock_data):
             task, = get_trials_tasks(self.training_lt5['path'])
             trials, _ = task.extract_behaviour(save=True)
         trials = alfio.load_object(self.training_lt5['path'] / 'alf', object='trials')
         self.assertTrue(alfio.check_dimensions(trials) == 0)
         # Biased
-        with unittest.mock.patch(function_name, return_value=mock_data):
+        with patch(function_name, return_value=mock_data):
             task, = get_trials_tasks(self.biased_lt5['path'])
             trials, _ = task.extract_behaviour(save=True)
         trials = alfio.load_object(self.biased_lt5['path'] / 'alf', object='trials')
@@ -767,19 +767,19 @@ class TestGetBpodExtractor(unittest.TestCase):
         )
         self.assertTrue(isinstance(extractor, BaseExtractor))
 
-    def test_get_bpod_custom_extractor(self, **kwargs):
+    def test_get_bpod_custom_extractor(self):
         # here we'll mock a custom module with a custom extractor
-        class DummyExtractor(BaseExtractor):
-            def _extract(self):
-                pass
-
-        class DummyModule():
-            toto = DummyExtractor
-
-        with unittest.mock.patch('importlib.import_module', return_value=DummyModule):
-            with unittest.mock.patch('ibllib.io.extractors.bpod_trials.get_bpod_extractor_class', return_value='project.toto'):
-                a = get_bpod_extractor('')
-        self.assertTrue(isinstance(a, DummyExtractor))
+        DummyModule = MagicMock()
+        DummyExtractor = Mock(spec_set=BaseExtractor)
+        DummyModule.toto.return_value = DummyExtractor
+        base_module = 'ibllib.io.extractors.bpod_trials'
+        with patch(f'{base_module}.get_bpod_extractor_class', return_value='toto'), \
+                patch(f'{base_module}.importlib.import_module', return_value=DummyModule) as import_mock:
+            self.assertIs(get_bpod_extractor(''), DummyExtractor)
+            import_mock.assert_called_with('projects')
+            # Check raises when imported class not an extractor
+            DummyModule.toto.return_value = MagicMock(spec=dict)
+            self.assertRaisesRegex(ValueError, 'should be an Extractor class', get_bpod_extractor, '')
 
 
 if __name__ == '__main__':

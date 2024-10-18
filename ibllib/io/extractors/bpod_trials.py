@@ -3,7 +3,6 @@
 This module will extract the Bpod trials and wheel data based on the task protocol,
 i.e. habituation, training or biased.
 """
-import logging
 import importlib
 
 from ibllib.io.extractors.base import get_bpod_extractor_class, protocol2extractor, BaseExtractor
@@ -11,8 +10,6 @@ from ibllib.io.extractors.habituation_trials import HabituationTrials
 from ibllib.io.extractors.training_trials import TrainingTrials
 from ibllib.io.extractors.biased_trials import BiasedTrials, EphysTrials
 from ibllib.io.extractors.base import BaseBpodTrialsExtractor
-
-_logger = logging.getLogger(__name__)
 
 
 def get_bpod_extractor(session_path, protocol=None, task_collection='raw_behavior_data') -> BaseBpodTrialsExtractor:
