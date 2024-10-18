@@ -221,7 +221,7 @@ class Task(abc.ABC):
                 if self.gpu >= 1:
                     if not self._creates_lock():
                         self.status = -2
-                        _logger.info(f'Job {self.__class__} exited as a lock was found')
+                        _logger.info(f'Job {self.__class__} exited as a lock was found at {self._lock_file_path()}')
                         new_log = log_capture_string.getvalue()
                         self.log = new_log if self.clobber else self.log + new_log
                         _logger.removeHandler(ch)
@@ -434,7 +434,7 @@ class Task(abc.ABC):
 
         return everything_is_fine, files
 
-    def assert_expected_inputs(self, raise_error=True):
+    def assert_expected_inputs(self, raise_error=True, raise_ambiguous=False):
         """
         Check that all the files necessary to run the task have been are present on disk.
 
@@ -469,7 +469,7 @@ class Task(abc.ABC):
                 for k, v in variant_datasets.items() if any(v)}
             _logger.error('Ambiguous input datasets found: %s', ambiguous)
 
-            if raise_error or self.location == 'sdsc':  # take no chances on SDSC
+            if raise_ambiguous or self.location == 'sdsc':  # take no chances on SDSC
                 # This could be mitigated if loading with data OneSDSC
                 raise NotImplementedError(
                     'Multiple variant datasets found. Loading for these is undefined.')
