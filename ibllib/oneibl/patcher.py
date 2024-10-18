@@ -633,3 +633,52 @@ class SDSCPatcher(Patcher):
     def _rm(self, flatiron_path, dry=True):
         raise PermissionError("This Patcher does not have admin permissions to remove data "
                               "from the FlatIron server")
+
+
+class S3Patcher(Patcher):
+
+    def __init__(self, one=None):
+        assert one
+        super().__init__(one=one)
+        self.s3_repo = self.s3_path = 's3_patcher'
+
+        # Instantiate boto connection
+        # self.s3, self.bucket = get_s3_from_alyx(self.one.alyx, repo_name=self.s3_repo)
+
+    def check_datasets(self, file_list):
+        # Here we want to check if the datasets exist, if they do we don't want to patch unless we force.
+        exists = []
+        for file in file_list:
+            collection = full_path_parts(file, as_dict=True)['collection']
+            dset = self.one.alyx.rest('datasets', 'list', session=self.one.path2eid(file), name=file.name,
+                                      collection=collection)
+            if len(dset) > 0:
+                exists.append(file)
+
+        return exists
+
+    def patch_dataset(self, file_list, dry=False, ftp=False, **kwargs):
+
+        exists = self.check_datasets(file_list)
+        if len(exists) > 0:
+            # log a warning here that the files already exist, must force
+            return
+
+        response = super().patch_dataset(file_list, dry=dry, repository=self.s3_repo, ftp=False, **kwargs)
+        # need to patch the file records to be consistent
+        for ds in response:
+            frs = ds['file_records']
+            fr_server = next(filter(lambda fr: 'flatiron' in fr['data_repository'], frs))
+            # Update the flatiron file record to be false
+            self.one.alyx.rest('files', 'partial_update', id=fr_server['id'],
+                               data={'exists': False})
+    def _scp(self, local_path, remote_path, dry=True):
+
+        aws_remote_path = Path(self.s3_path).joinpath(remote_path.relative_to(FLATIRON_MOUNT))
+        # TODO logging to track the progress of uploading the file
+        #self.s3.Bucket(self.bucket).upload_file(str(PurePosixPath(local_path)), str(PurePosixPath(aws_remote_path)))
+
+        return 0, ''
+
+    def _rm(self, *args, **kwargs):
+        raise PermissionError("This Patcher does not have admin permissions to remove data.")
