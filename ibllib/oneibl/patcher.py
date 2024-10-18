@@ -34,13 +34,13 @@ import shutil
 import globus_sdk
 import iblutil.io.params as iopar
 from iblutil.util import ensure_list
-from one.alf.files import get_session_path, add_uuid_string
+from one.alf.files import get_session_path, add_uuid_string, full_path_parts
 from one.alf.spec import is_uuid_string, is_uuid
 from one import params
 from one.webclient import AlyxClient
 from one.converters import path_from_dataset
 from one.remote import globus
-from one.remote.aws import url2uri
+from one.remote.aws import url2uri, get_s3_from_alyx
 
 from ibllib.oneibl.registration import register_dataset
 
@@ -640,10 +640,11 @@ class S3Patcher(Patcher):
     def __init__(self, one=None):
         assert one
         super().__init__(one=one)
-        self.s3_repo = self.s3_path = 's3_patcher'
+        self.s3_repo = 's3_patcher'
+        self.s3_path = 'patcher'
 
         # Instantiate boto connection
-        # self.s3, self.bucket = get_s3_from_alyx(self.one.alyx, repo_name=self.s3_repo)
+        self.s3, self.bucket = get_s3_from_alyx(self.one.alyx, repo_name=self.s3_repo)
 
     def check_datasets(self, file_list):
         # Here we want to check if the datasets exist, if they do we don't want to patch unless we force.
@@ -657,26 +658,28 @@ class S3Patcher(Patcher):
 
         return exists
 
-    def patch_dataset(self, file_list, dry=False, ftp=False, **kwargs):
+    def patch_dataset(self, file_list, dry=False, ftp=False, force=False, **kwargs):
 
         exists = self.check_datasets(file_list)
-        if len(exists) > 0:
-            # log a warning here that the files already exist, must force
+        if len(exists) > 0 and not force:
+            _logger.error(f'Files: {", ".join([f.name for f in file_list])} already exist, to force set force=True')
             return
 
         response = super().patch_dataset(file_list, dry=dry, repository=self.s3_repo, ftp=False, **kwargs)
-        # need to patch the file records to be consistent
+        # TODO in an ideal case the flatiron filerecord won't be altered when we register this dataset. This requires
+        # changing the the alyx.data.register_view
         for ds in response:
             frs = ds['file_records']
             fr_server = next(filter(lambda fr: 'flatiron' in fr['data_repository'], frs))
             # Update the flatiron file record to be false
             self.one.alyx.rest('files', 'partial_update', id=fr_server['id'],
                                data={'exists': False})
+
     def _scp(self, local_path, remote_path, dry=True):
 
         aws_remote_path = Path(self.s3_path).joinpath(remote_path.relative_to(FLATIRON_MOUNT))
-        # TODO logging to track the progress of uploading the file
-        #self.s3.Bucket(self.bucket).upload_file(str(PurePosixPath(local_path)), str(PurePosixPath(aws_remote_path)))
+        _logger.info(f'Transferring file {local_path} to {aws_remote_path}')
+        self.s3.Bucket(self.bucket).upload_file(str(PurePosixPath(local_path)), str(PurePosixPath(aws_remote_path)))
 
         return 0, ''
 

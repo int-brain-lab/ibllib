@@ -528,6 +528,8 @@ class Task(abc.ABC):
             dhandler = data_handlers.SDSCDataHandler(self, self.session_path, self.signature, one=self.one)
         elif location == 'popeye':
             dhandler = data_handlers.PopeyeDataHandler(self, self.session_path, self.signature, one=self.one)
+        elif location == 'ec2':
+            dhandler = data_handlers.RemoteEC2DataHandler(self, self.session_path, self.signature, one=self.one)
         else:
             raise ValueError(f'Unknown location "{location}"')
         return dhandler

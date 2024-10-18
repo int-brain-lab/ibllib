@@ -21,7 +21,7 @@ from one.alf.cache import _make_datasets_df
 from iblutil.util import flatten, ensure_list
 
 from ibllib.oneibl.registration import register_dataset, get_lab, get_local_data_repository
-from ibllib.oneibl.patcher import FTPPatcher, SDSCPatcher, SDSC_ROOT_PATH, SDSC_PATCH_PATH
+from ibllib.oneibl.patcher import FTPPatcher, SDSCPatcher, SDSC_ROOT_PATH, SDSC_PATCH_PATH, S3Patcher
 
 
 _logger = logging.getLogger(__name__)
@@ -747,7 +747,7 @@ class ServerGlobusDataHandler(DataHandler):
             os.unlink(file)
 
 
-class RemoteHttpDataHandler(DataHandler):
+class RemoteEC2DataHandler(DataHandler):
     def __init__(self, session_path, signature, one=None):
         """
         Data handler for running tasks on remote compute node. Will download missing data via http using ONE
@@ -774,9 +774,9 @@ class RemoteHttpDataHandler(DataHandler):
         :return: output info of registered datasets
         """
         versions = super().uploadData(outputs, version)
-        ftp_patcher = FTPPatcher(one=self.one)
-        return ftp_patcher.create_dataset(path=outputs, created_by=self.one.alyx.user,
-                                          versions=versions, **kwargs)
+        s3_patcher = S3Patcher(one=self.one)
+        return s3_patcher.patch_dataset(outputs, created_by=self.one.alyx.user,
+                                        versions=versions, **kwargs)
 
 
 class RemoteAwsDataHandler(DataHandler):
