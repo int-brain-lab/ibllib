@@ -757,13 +757,29 @@ class TestCameraExtractors(unittest.TestCase):
 class TestGetBpodExtractor(unittest.TestCase):
 
     def test_get_bpod_extractor(self):
+        # un-existing extractor should raise a value error
         with self.assertRaises(ValueError):
             get_bpod_extractor('', protocol='sdf', task_collection='raw_behavior_data')
+        # in this case this returns an ibllib.io.extractors.training_trials.TrainingTrials instance
         extractor = get_bpod_extractor(
             '', protocol='_trainingChoiceWorld',
             task_collection='raw_behavior_data'
         )
         self.assertTrue(isinstance(extractor, BaseExtractor))
+
+    def test_get_bpod_custom_extractor(self, **kwargs):
+        # here we'll mock a custom module with a custom extractor
+        class DummyExtractor(BaseExtractor):
+            def _extract(self):
+                pass
+
+        class DummyModule():
+            toto = DummyExtractor
+
+        with unittest.mock.patch('importlib.import_module', return_value=DummyModule):
+            with unittest.mock.patch('ibllib.io.extractors.bpod_trials.get_bpod_extractor_class', return_value='project.toto'):
+                a = get_bpod_extractor('')
+        self.assertTrue(isinstance(a, DummyExtractor))
 
 
 if __name__ == '__main__':
