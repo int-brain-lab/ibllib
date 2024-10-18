@@ -1111,9 +1111,8 @@ def check_n_trial_events(data, **_):
     # test errorCueTrigger_times separately
     # stimFreeze_times fails often due to TTL flicker
     exclude = ['camera_timestamps', 'errorCueTrigger_times', 'errorCue_times',
-               'firstMovement_times', 'peakVelocity_times', 'valveOpen_times',
-               'wheel_moves_peak_amplitude', 'wheel_moves_intervals', 'wheel_timestamps',
-               'wheel_intervals', 'stimFreeze_times']
+               'wheelMoves_peakVelocity_times', 'valveOpen_times', 'wheelMoves_peakAmplitude',
+               'wheelMoves_intervals', 'wheel_timestamps', 'stimFreeze_times']
     events = [k for k in data.keys() if k.endswith('_times') and k not in exclude]
     metric = np.zeros(data['intervals'].shape[0], dtype=bool)
 

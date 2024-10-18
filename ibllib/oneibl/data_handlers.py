@@ -15,10 +15,10 @@ from copy import copy
 
 from one.api import ONE
 from one.webclient import AlyxClient
-from one.util import filter_datasets, ensure_list
+from one.util import filter_datasets
 from one.alf.files import add_uuid_string, session_path_parts
 from one.alf.cache import _make_datasets_df
-from iblutil.util import flatten
+from iblutil.util import flatten, ensure_list
 
 from ibllib.oneibl.registration import register_dataset, get_lab, get_local_data_repository
 from ibllib.oneibl.patcher import FTPPatcher, SDSCPatcher, SDSC_ROOT_PATH, SDSC_PATCH_PATH

@@ -97,6 +97,36 @@ class TestMesoscopePreprocess(unittest.TestCase):
             subject_detail['genotype'].pop(1)
             self.assertEqual(self.task.get_default_tau(), 1.5)  # return the default value
 
+    def test_consolidate_exptQC(self):
+        """Test for MesoscopePreprocess._consolidate_exptQC method."""
+        exptQC = [
+            {'frameQC_names': np.array(['ok', 'PMT off', 'galvos fault', 'high signal'], dtype=object),
+             'frameQC_frames': np.array([0, 0, 0, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 4])},
+            {'frameQC_names': np.array(['ok', 'PMT off', 'galvos fault', 'high signal'], dtype=object),
+             'frameQC_frames': np.zeros(50, dtype=int)}
+        ]
+
+        # Check concatinates frame QC arrays
+        frameQC, frameQC_names, bad_frames = self.task._consolidate_exptQC(exptQC)
+        expected_frames = np.r_[exptQC[0]['frameQC_frames'], exptQC[1]['frameQC_frames']]
+        np.testing.assert_array_equal(expected_frames, frameQC)
+        expected = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+        np.testing.assert_array_equal(expected, bad_frames)
+        self.assertCountEqual(['qc_values', 'qc_labels'], frameQC_names.columns)
+        self.assertCountEqual(range(4), frameQC_names['qc_values'])
+        expected = ['ok', 'PMT off', 'galvos fault', 'high signal']
+        self.assertCountEqual(expected, frameQC_names['qc_labels'])
+
+        # Check with single str instead of array
+        exptQC[1]['frameQC_names'] = 'ok'
+        frameQC, frameQC_names, bad_frames = self.task._consolidate_exptQC(exptQC)
+        self.assertCountEqual(expected, frameQC_names['qc_labels'])
+        np.testing.assert_array_equal(expected_frames, frameQC)
+        # Check with inconsistent enumerations
+        exptQC[0]['frameQC_names'] = expected
+        exptQC[1]['frameQC_names'] = [*expected[-2:], *expected[:-2]]
+        self.assertRaises(IOError, self.task._consolidate_exptQC, exptQC)
+
     def test_setup_uncompressed(self):
         """Test set up behaviour when raw tifs present."""
         # Test signature when clobber = True

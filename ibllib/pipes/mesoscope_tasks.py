@@ -34,7 +34,7 @@ import one.alf.io as alfio
 from one.alf.spec import to_alf
 from one.alf.files import filename_parts, session_path_parts
 import one.alf.exceptions as alferr
-from iblutil.util import flatten
+from iblutil.util import flatten, ensure_list
 from iblatlas.atlas import ALLEN_CCF_LANDMARKS_MLAPDV_UM, MRITorontoAtlas
 
 from ibllib.pipes import base_tasks
@@ -489,8 +489,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
 
         # Merge and make sure same indexes have same names across all files
         frameQC_names_list = [e['frameQC_names'] for e in exptQC]
-        frameQC_names_list = [{f: 0} if isinstance(f, str) else {f[i]: i for i in range(len(f))}
-                              for f in frameQC_names_list]
+        frameQC_names_list = [{k: i for i, k in enumerate(ensure_list(f))} for f in frameQC_names_list]
         frameQC_names = {k: v for d in frameQC_names_list for k, v in d.items()}
         for d in frameQC_names_list:
             for k, v in d.items():

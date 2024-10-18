@@ -680,7 +680,7 @@ class TestCameraExtractors(unittest.TestCase):
             gpio['indices'][i + 1] = np.where(ts > rise + pulse_width)[0][0]
 
         gpio_, audio_, ts_ = camera.groom_pin_state(gpio, audio, ts)
-        self.assertEqual(audio, audio_, 'Audio dict shouldn\'t be effected')
+        self.assertEqual(audio, audio_, 'Audio dict shouldn\'t be affected')
         np.testing.assert_array_almost_equal(ts_[:4], [40., 40.016667, 40.033333, 40.05])
 
         # Broken TTLs + extra TTL
