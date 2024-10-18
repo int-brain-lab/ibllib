@@ -12,6 +12,10 @@
 
 #### 2.39.1
 - Bugfix: brainbox.metrics.single_unit.quick_unit_metrics fix for indexing of n_spike_below2
+- 
+#### 2.39.2
+- Bugfix: routing of protocol to extractor through the project repository checks that the
+target is indeed an extractor class.
 
 ## Release Note 2.38.0
 
