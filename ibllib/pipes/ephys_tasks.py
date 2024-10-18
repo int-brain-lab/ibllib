@@ -782,7 +782,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         logfile = sorter_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log")
         if logfile.exists():
             shutil.copyfile(logfile, probe_out_path.joinpath(f"_ibl_log.info_{self.SPIKE_SORTER_NAME}.log"))
-        # recover the QC files from the spike sorting output
+        # recover the QC files from the spike sorting output and copy them
         for file_qc in sorter_dir.rglob('_iblqc_*.npy'):
             shutil.copy(file_qc, ap_file.parent.joinpath(file_qc.name))
             out_files.append(ap_file.parent.joinpath(file_qc.name))
