@@ -153,15 +153,9 @@ class TestPipelineAlyx(unittest.TestCase):
 
     def setUp(self) -> None:
         self.td = tempfile.TemporaryDirectory()
-        # ses = one.alyx.rest('sessions', 'list', subject=ses_dict['subject'],
-        #                     date_range=[ses_dict['start_time'][:10]] * 2,
-        #                     number=ses_dict['number'],
-        #                     no_cache=True)
-        # if len(ses):
-        #     one.alyx.rest('sessions', 'delete', ses[0]['url'][-36:])
-        # randomise number
-        ses_dict['number'] = np.random.randint(1, 30)
-        ses = one.alyx.rest('sessions', 'create', data=ses_dict)
+        self.ses_dict = ses_dict.copy()
+        self.ses_dict['number'] = np.random.randint(1, 999)
+        ses = one.alyx.rest('sessions', 'create', data=self.ses_dict)
         session_path = Path(self.td.name).joinpath(
             ses['subject'], ses['start_time'][:10], str(ses['number']).zfill(3))
         session_path.joinpath('alf').mkdir(exist_ok=True, parents=True)
