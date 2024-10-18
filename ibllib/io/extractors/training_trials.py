@@ -32,7 +32,7 @@ class FeedbackType(BaseBpodTrialsExtractor):
         feedbackType = np.zeros(len(self.bpod_trials), np.int64)
         for i, t in enumerate(self.bpod_trials):
             state_names = ['correct', 'error', 'no_go', 'omit_correct', 'omit_error', 'omit_no_go']
-            outcome = {sn: ~np.isnan(t['behavior_data']['States timestamps'].get(sn, [[np.NaN]])[0][0]) for sn in state_names}
+            outcome = {sn: ~np.isnan(t['behavior_data']['States timestamps'].get(sn, [[np.nan]])[0][0]) for sn in state_names}
             assert np.sum(list(outcome.values())) == 1
             outcome = next(k for k in outcome if outcome[k])
             if outcome == 'correct':

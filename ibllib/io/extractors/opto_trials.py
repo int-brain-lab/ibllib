@@ -16,8 +16,8 @@ class LaserBool(BaseBpodTrialsExtractor):
     def _extract(self, **kwargs):
         _logger.info('Extracting laser datasets')
         # reference pybpod implementation
-        lstim = np.array([float(t.get('laser_stimulation', np.NaN)) for t in self.bpod_trials])
-        lprob = np.array([float(t.get('laser_probability', np.NaN)) for t in self.bpod_trials])
+        lstim = np.array([float(t.get('laser_stimulation', np.nan)) for t in self.bpod_trials])
+        lprob = np.array([float(t.get('laser_probability', np.nan)) for t in self.bpod_trials])
 
         # Karolina's choice world legacy implementation - from Slack message:
         # it is possible that some versions I have used:
@@ -30,9 +30,9 @@ class LaserBool(BaseBpodTrialsExtractor):
         # laserOFF_trials=(optoOUT ==0);
         if 'PROBABILITY_OPTO' in self.settings.keys() and np.all(np.isnan(lstim)):
             lprob = np.zeros_like(lprob) + self.settings['PROBABILITY_OPTO']
-            lstim = np.array([float(t.get('opto_ON_time', np.NaN)) for t in self.bpod_trials])
+            lstim = np.array([float(t.get('opto_ON_time', np.nan)) for t in self.bpod_trials])
             if np.all(np.isnan(lstim)):
-                lstim = np.array([float(t.get('optoOUT', np.NaN)) for t in self.bpod_trials])
+                lstim = np.array([float(t.get('optoOUT', np.nan)) for t in self.bpod_trials])
                 lstim[lstim == 255] = 1
             else:
                 lstim[~np.isnan(lstim)] = 1
