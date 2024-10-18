@@ -225,7 +225,7 @@ class FibrePhotometry(BaseExtractor):
         regions = regions or [k for k in fp_data['raw'].keys() if 'Region' in k]
         out_df = fp_data['raw'].filter(items=regions, axis=1).sort_index(axis=1)
         out_df['times'] = ts
-        out_df['wavelength'] = np.NaN
+        out_df['wavelength'] = np.nan
         out_df['name'] = ''
         out_df['color'] = ''
         # Extract channel index
