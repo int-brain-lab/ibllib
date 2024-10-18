@@ -607,7 +607,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
                 ('_iblqc_ephysTimeRmsAP.timestamps.npy', f'{self.device_collection}/{self.pname}/', True),
                 ('_iblqc_ephysSaturation.samples.npy', f'{self.device_collection}/{self.pname}/', True),
                 # ./spike_sorters/iblsorter/probe00
-                ('spike_sorting_pykilosort.log', f'spike_sorters/{self._sortername}/{self.pname}', True),
+                ('spike_sorting_iblsorter.log', f'spike_sorters/{self._sortername}/{self.pname}', True),
                 ('_kilosort_raw.output.tar', f'spike_sorters/{self._sortername}/{self.pname}/', True),
                 # ./alf/probe00/iblsorter
                 ('_kilosort_whitening.matrix.npy', f'alf/{self.pname}/{self._sortername}/', True),
@@ -697,7 +697,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
             line = fid.readline()
         version = re.search('version (.*), output', line)
         version = version or re.search('version (.*)', line)  # old versions have output, new have a version line
-        version = re.sub(r'\^\[{2}[0-9]+m', '', version.group(1))  # removes the coloring tags
+        version = re.sub(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])', '', version.group(1))
         return version
 
     def _run_iblsort(self, ap_file):
@@ -783,8 +783,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         if logfile.exists():
             shutil.copyfile(logfile, probe_out_path.joinpath(f"_ibl_log.info_{self.SPIKE_SORTER_NAME}.log"))
         # recover the QC files from the spike sorting output and copy them
-        for file_qc in sorter_dir.rglob('_iblqc_*.npy'):
-            shutil.copy(file_qc, ap_file.parent.joinpath(file_qc.name))
+        for file_qc in ap_file.parent.glob('_iblqc_*.npy'):
             out_files.append(ap_file.parent.joinpath(file_qc.name))
         # Sync spike sorting with the main behaviour clock: the nidq for 3B+ and the main probe for 3A
         out, _ = ibllib.ephys.spikes.sync_spike_sorting(ap_file=ap_file, out_path=probe_out_path)
