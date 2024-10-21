@@ -652,7 +652,7 @@ class S3Patcher(Patcher):
         for file in file_list:
             collection = full_path_parts(file, as_dict=True)['collection']
             dset = self.one.alyx.rest('datasets', 'list', session=self.one.path2eid(file), name=file.name,
-                                      collection=collection)
+                                      collection=collection, clobber=True)
             if len(dset) > 0:
                 exists.append(file)
 
