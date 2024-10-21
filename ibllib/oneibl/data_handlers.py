@@ -779,6 +779,38 @@ class RemoteEC2DataHandler(DataHandler):
                                         versions=versions, **kwargs)
 
 
+class RemoteHttpDataHandler(DataHandler):
+    def __init__(self, session_path, signature, one=None):
+        """
+        Data handler for running tasks on remote compute node. Will download missing data via http using ONE
+
+        :param session_path: path to session
+        :param signature: input and output file signatures
+        :param one: ONE instance
+        """
+        super().__init__(session_path, signature, one=one)
+
+    def setUp(self):
+        """
+        Function to download necessary data to run tasks using ONE
+        :return:
+        """
+        df = super().getData()
+        self.one._check_filesystem(df)
+
+    def uploadData(self, outputs, version, **kwargs):
+        """
+        Function to upload and register data of completed task via FTP patcher
+        :param outputs: output files from task to register
+        :param version: ibllib version
+        :return: output info of registered datasets
+        """
+        versions = super().uploadData(outputs, version)
+        ftp_patcher = FTPPatcher(one=self.one)
+        return ftp_patcher.create_dataset(path=outputs, created_by=self.one.alyx.user,
+                                          versions=versions, **kwargs)
+
+
 class RemoteAwsDataHandler(DataHandler):
     def __init__(self, task, session_path, signature, one=None):
         """
