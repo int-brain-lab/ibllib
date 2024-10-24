@@ -47,7 +47,7 @@ def sync(ses_path, **kwargs):
         return version3B(ses_path, **kwargs)
 
 
-def version3A(ses_path, display=True, type='smooth', tol=2.1):
+def version3A(ses_path, display=True, type='smooth', tol=2.1, probe_names=None):
     """
     From a session path with _spikeglx_sync arrays extracted, locate ephys files for 3A and
      outputs one sync.timestamps.probeN.npy file per acquired probe. By convention the reference
