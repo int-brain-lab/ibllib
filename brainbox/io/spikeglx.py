@@ -128,8 +128,7 @@ class Streamer(spikeglx.Reader):
         self.file_chunks = self.one.load_dataset(self.eid, f'*.{typ}.ch', collection=f"*{self.pname}")
         meta_file = self.one.load_dataset(self.eid, f'*.{typ}.meta', collection=f"*{self.pname}")
         cbin_rec = self.one.list_datasets(self.eid, collection=f"*{self.pname}", filename=f'*{typ}.*bin', details=True)
-        cbin_rec.index = cbin_rec.index.map(lambda x: (self.eid, x))
-        self.url_cbin = self.one.record2url(cbin_rec)[0]
+        self.url_cbin = self.one.record2url(cbin_rec, eid=self.eid)[0]
         with open(self.file_chunks, 'r') as f:
             self.chunks = json.load(f)
             self.chunks['chunk_bounds'] = np.array(self.chunks['chunk_bounds'])
