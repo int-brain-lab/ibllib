@@ -768,7 +768,7 @@ class RemoteEC2DataHandler(DataHandler):
 
     def uploadData(self, outputs, version, **kwargs):
         """
-        Function to upload and register data of completed task via FTP patcher
+        Function to upload and register data of completed task via S3 patcher
         :param outputs: output files from task to register
         :param version: ibllib version
         :return: output info of registered datasets

@@ -643,7 +643,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         return signature
 
     @property
-    def _temporary_folder(self):
+    def scratch_folder_run(self):
         """
         Constructs a path to a temporary folder for the spike sorting output and scratch files
         This is usually on a high performance drive, and we should factor around 2.5 times the uncompressed raw recording size
@@ -651,11 +651,14 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         /mnt/h0/iblsorter_1.8.0_CSHL071_2020-10-04_001_probe01/
         """
         # get the scratch drive from the shell script
-        with open(self.SHELL_SCRIPT) as fid:
-            lines = fid.readlines()
-        line = [line for line in lines if line.startswith("SCRATCH_DRIVE=")][0]
-        m = re.search(r"\=(.*?)(\#|\n)", line)[0]
-        scratch_drive = Path(m[1:-1].strip())
+        if self.scratch_folder is None:
+            with open(self.SHELL_SCRIPT) as fid:
+                lines = fid.readlines()
+            line = [line for line in lines if line.startswith("SCRATCH_DRIVE=")][0]
+            m = re.search(r"\=(.*?)(\#|\n)", line)[0]
+            scratch_drive = Path(m[1:-1].strip())
+        else:
+            scratch_drive = self.scratch_folder
         assert scratch_drive.exists(), f"Scratch drive {scratch_drive} not found"
         # get the version of the sorter
         self.version = self._fetch_iblsorter_version(self.SORTER_REPOSITORY)
@@ -708,7 +711,6 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         :return: path of the folder containing ks2 spike sorting output
         """
         sorter_dir = self.session_path.joinpath("spike_sorters", self.SPIKE_SORTER_NAME, self.pname)
-        temp_dir = self._temporary_folder
         self.FORCE_RERUN = False
         if not self.FORCE_RERUN:
             log_file = sorter_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log")
@@ -720,15 +722,15 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
                     return sorter_dir
                 else:
                     self.FORCE_RERUN = True
-        _logger.info(f"job progress command: tail -f {self._temporary_folder} *.log")
-        temp_dir.mkdir(parents=True, exist_ok=True)
+        _logger.info(f"job progress command: tail -f {self.scratch_folder_run} *.log")
+        self.scratch_folder_run.mkdir(parents=True, exist_ok=True)
         check_nvidia_driver()
         try:
             # if pykilosort is in the environment, use the installed version within the task
             import iblsorter.ibl  # noqa
-            iblsorter.ibl.run_spike_sorting_ibl(bin_file=ap_file, scratch_dir=temp_dir, delete=False)
+            iblsorter.ibl.run_spike_sorting_ibl(bin_file=ap_file, scratch_dir=self.scratch_folder_run, delete=False)
         except ImportError:
-            command2run = f"{self.SHELL_SCRIPT} {ap_file} {temp_dir}"
+            command2run = f"{self.SHELL_SCRIPT} {ap_file} {self.scratch_folder_run}"
             _logger.info(command2run)
             process = subprocess.Popen(
                 command2run,
@@ -743,13 +745,13 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
             if process.returncode != 0:
                 error_str = error.decode("utf-8").strip()
                 # try and get the kilosort log if any
-                for log_file in temp_dir.rglob('*_kilosort.log'):
+                for log_file in self.scratch_folder_run.rglob('*_kilosort.log'):
                     with open(log_file) as fid:
                         log = fid.read()
                         _logger.error(log)
                     break
                 raise RuntimeError(f"{self.SPIKE_SORTER_NAME} {info_str}, {error_str}")
-        shutil.copytree(temp_dir.joinpath('output'), sorter_dir, dirs_exist_ok=True)
+        shutil.copytree(self.scratch_folder_run.joinpath('output'), sorter_dir, dirs_exist_ok=True)
         return sorter_dir
 
     def _run(self):
@@ -817,10 +819,10 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
             n_jobs=None,
             wfs_dtype=np.float16,
             preprocess_steps=["phase_shift", "bad_channel_interpolation", "butterworth", "car"],
-            scratch_dir=self._temporary_folder,
+            scratch_dir=self.scratch_folder_run,
         )
-        _logger.info(f"Cleaning up temporary folder {self._temporary_folder}")
-        shutil.rmtree(self._temporary_folder, ignore_errors=True)
+        _logger.info(f"Cleaning up temporary folder {self.scratch_folder_run}")
+        shutil.rmtree(self.scratch_folder_run, ignore_errors=True)
         if self.one:
             eid = self.one.path2eid(self.session_path, query_type='remote')
             ins = self.one.alyx.rest('insertions', 'list', session=eid, name=label, query_type='remote')

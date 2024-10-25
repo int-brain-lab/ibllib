@@ -114,7 +114,7 @@ class Task(abc.ABC):
     env = None  # the environment name within which to run the task (NB: the env is not activated automatically!)
 
     def __init__(self, session_path, parents=None, taskid=None, one=None,
-                 machine=None, clobber=True, location='server', **kwargs):
+                 machine=None, clobber=True, location='server', scratch_folder=None, **kwargs):
         """
         Base task class
         :param session_path: session path
@@ -125,7 +125,8 @@ class Task(abc.ABC):
         :param clobber: whether or not to overwrite log on rerun
         :param location: location where task is run. Options are 'server' (lab local servers'), 'remote' (remote compute node,
         data required for task downloaded via one), 'AWS' (remote compute node, data required for task downloaded via AWS),
-        or 'SDSC' (SDSC flatiron compute node) # TODO 'Globus' (remote compute node, data required for task downloaded via Globus)
+        or 'SDSC' (SDSC flatiron compute node)
+        :param scratch_folder: optional: Path where to write intermediate temporary data
         :param args: running arguments
         """
         self.taskid = taskid
@@ -141,6 +142,7 @@ class Task(abc.ABC):
         self.clobber = clobber
         self.location = location
         self.plot_tasks = []  # Plotting task/ tasks to create plot outputs during the task
+        self.scratch_folder = scratch_folder
         self.kwargs = kwargs
 
     @property
