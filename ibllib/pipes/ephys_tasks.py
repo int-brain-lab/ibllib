@@ -785,8 +785,9 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         if logfile.exists():
             shutil.copyfile(logfile, probe_out_path.joinpath(f"_ibl_log.info_{self.SPIKE_SORTER_NAME}.log"))
         # recover the QC files from the spike sorting output and copy them
-        for file_qc in ap_file.parent.glob('_iblqc_*.npy'):
-            out_files.append(ap_file.parent.joinpath(file_qc.name))
+        for file_qc in sorter_dir.glob('_iblqc_*.npy'):
+            shutil.move(file_qc, file_qc_out := ap_file.parent.joinpath(file_qc.name))
+            out_files.append(file_qc_out)
         # Sync spike sorting with the main behaviour clock: the nidq for 3B+ and the main probe for 3A
         out, _ = ibllib.ephys.spikes.sync_spike_sorting(ap_file=ap_file, out_path=probe_out_path)
         out_files.extend(out)
