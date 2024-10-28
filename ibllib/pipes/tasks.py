@@ -85,10 +85,9 @@ import ibllib
 from ibllib.oneibl import data_handlers
 from ibllib.oneibl.data_handlers import get_local_data_repository
 from ibllib.oneibl.registration import get_lab
-from iblutil.util import Bunch, flatten
+from iblutil.util import Bunch, flatten, ensure_list
 import one.params
 from one.api import ONE
-from one.util import ensure_list
 from one import webclient
 import one.alf.io as alfio
 
@@ -115,7 +114,7 @@ class Task(abc.ABC):
     env = None  # the environment name within which to run the task (NB: the env is not activated automatically!)
 
     def __init__(self, session_path, parents=None, taskid=None, one=None,
-                 machine=None, clobber=True, location='server', **kwargs):
+                 machine=None, clobber=True, location='server', scratch_folder=None, **kwargs):
         """
         Base task class
         :param session_path: session path
@@ -126,7 +125,8 @@ class Task(abc.ABC):
         :param clobber: whether or not to overwrite log on rerun
         :param location: location where task is run. Options are 'server' (lab local servers'), 'remote' (remote compute node,
         data required for task downloaded via one), 'AWS' (remote compute node, data required for task downloaded via AWS),
-        or 'SDSC' (SDSC flatiron compute node) # TODO 'Globus' (remote compute node, data required for task downloaded via Globus)
+        or 'SDSC' (SDSC flatiron compute node)
+        :param scratch_folder: optional: Path where to write intermediate temporary data
         :param args: running arguments
         """
         self.taskid = taskid
@@ -142,6 +142,7 @@ class Task(abc.ABC):
         self.clobber = clobber
         self.location = location
         self.plot_tasks = []  # Plotting task/ tasks to create plot outputs during the task
+        self.scratch_folder = scratch_folder
         self.kwargs = kwargs
 
     @property
@@ -222,7 +223,7 @@ class Task(abc.ABC):
                 if self.gpu >= 1:
                     if not self._creates_lock():
                         self.status = -2
-                        _logger.info(f'Job {self.__class__} exited as a lock was found')
+                        _logger.info(f'Job {self.__class__} exited as a lock was found at {self._lock_file_path()}')
                         new_log = log_capture_string.getvalue()
                         self.log = new_log if self.clobber else self.log + new_log
                         _logger.removeHandler(ch)
@@ -435,7 +436,7 @@ class Task(abc.ABC):
 
         return everything_is_fine, files
 
-    def assert_expected_inputs(self, raise_error=True):
+    def assert_expected_inputs(self, raise_error=True, raise_ambiguous=False):
         """
         Check that all the files necessary to run the task have been are present on disk.
 
@@ -470,7 +471,7 @@ class Task(abc.ABC):
                 for k, v in variant_datasets.items() if any(v)}
             _logger.error('Ambiguous input datasets found: %s', ambiguous)
 
-            if raise_error or self.location == 'sdsc':  # take no chances on SDSC
+            if raise_ambiguous or self.location == 'sdsc':  # take no chances on SDSC
                 # This could be mitigated if loading with data OneSDSC
                 raise NotImplementedError(
                     'Multiple variant datasets found. Loading for these is undefined.')
@@ -529,6 +530,8 @@ class Task(abc.ABC):
             dhandler = data_handlers.SDSCDataHandler(self, self.session_path, self.signature, one=self.one)
         elif location == 'popeye':
             dhandler = data_handlers.PopeyeDataHandler(self, self.session_path, self.signature, one=self.one)
+        elif location == 'ec2':
+            dhandler = data_handlers.RemoteEC2DataHandler(self.session_path, self.signature, one=self.one)
         else:
             raise ValueError(f'Unknown location "{location}"')
         return dhandler

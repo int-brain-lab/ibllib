@@ -1,3 +1,9 @@
+## Release Note 2.40.0
+
+### features
+- iblsorter >= 1.9 sorting tasks with waveform extraction and channel sorting 
+- s3 patcher prototype
+
 ## Release Note 2.39.0
 
 ### features
@@ -12,6 +18,10 @@
 
 #### 2.39.1
 - Bugfix: brainbox.metrics.single_unit.quick_unit_metrics fix for indexing of n_spike_below2
+- 
+#### 2.39.2
+- Bugfix: routing of protocol to extractor through the project repository checks that the
+target is indeed an extractor class.
 
 ## Release Note 2.38.0
 

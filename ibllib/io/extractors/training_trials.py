@@ -32,7 +32,7 @@ class FeedbackType(BaseBpodTrialsExtractor):
         feedbackType = np.zeros(len(self.bpod_trials), np.int64)
         for i, t in enumerate(self.bpod_trials):
             state_names = ['correct', 'error', 'no_go', 'omit_correct', 'omit_error', 'omit_no_go']
-            outcome = {sn: ~np.isnan(t['behavior_data']['States timestamps'].get(sn, [[np.NaN]])[0][0]) for sn in state_names}
+            outcome = {sn: ~np.isnan(t['behavior_data']['States timestamps'].get(sn, [[np.nan]])[0][0]) for sn in state_names}
             assert np.sum(list(outcome.values())) == 1
             outcome = next(k for k in outcome if outcome[k])
             if outcome == 'correct':
@@ -709,7 +709,7 @@ class TrialsTable(BaseBpodTrialsExtractor):
     save_names = ('_ibl_trials.table.pqt', None, None, '_ibl_wheel.timestamps.npy', '_ibl_wheel.position.npy',
                   '_ibl_wheelMoves.intervals.npy', '_ibl_wheelMoves.peakAmplitude.npy', None, None)
     var_names = ('table', 'stimOff_times', 'stimFreeze_times', 'wheel_timestamps', 'wheel_position', 'wheelMoves_intervals',
-                 'wheelMoves_peakAmplitude', 'peakVelocity_times', 'is_final_movement')
+                 'wheelMoves_peakAmplitude', 'wheelMoves_peakVelocity_times', 'is_final_movement')
 
     def _extract(self, extractor_classes=None, **kwargs):
         base = [Intervals, GoCueTimes, ResponseTimes, Choice, StimOnOffFreezeTimes, ContrastLR, FeedbackTimes, FeedbackType,
@@ -732,7 +732,7 @@ class TrainingTrials(BaseBpodTrialsExtractor):
     var_names = ('repNum', 'goCueTrigger_times', 'stimOnTrigger_times', 'itiIn_times', 'stimOffTrigger_times',
                  'stimFreezeTrigger_times', 'errorCueTrigger_times', 'table', 'stimOff_times', 'stimFreeze_times',
                  'wheel_timestamps', 'wheel_position', 'wheelMoves_intervals', 'wheelMoves_peakAmplitude',
-                 'peakVelocity_times', 'is_final_movement', 'phase', 'position', 'quiescence', 'pause_duration')
+                 'wheelMoves_peakVelocity_times', 'is_final_movement', 'phase', 'position', 'quiescence', 'pause_duration')
 
     def _extract(self) -> dict:
         base = [RepNum, GoCueTriggerTimes, StimOnTriggerTimes, ItiInTimes, StimOffTriggerTimes, StimFreezeTriggerTimes,

@@ -38,8 +38,8 @@ class TestLocalServer(unittest.TestCase):
         lab_repo_mock.return_value = 'foo_repo'
         tasks = [
             {'executable': 'ibllib.pipes.mesoscope_tasks.MesoscopePreprocess', 'priority': 80},
-            {'executable': 'ibllib.pipes.ephys_tasks.SpikeSorting', 'priority': SpikeSorting.priority},
-            {'executable': 'ibllib.pipes.base_tasks.RegisterRawDataTask', 'priority': RegisterRawDataTask.priority}
+            {'executable': 'ibllib.pipes.ephys_tasks.SpikeSorting', 'priority': SpikeSorting.priority},  # 60
+            {'executable': 'ibllib.pipes.base_tasks.RegisterRawDataTask', 'priority': RegisterRawDataTask.priority}  # 100
         ]
         alyx = mock.Mock(spec=AlyxClient)
         alyx.rest.return_value = tasks
@@ -49,10 +49,10 @@ class TestLocalServer(unittest.TestCase):
         self.assertIn('foolab', alyx.rest.call_args.kwargs.get('django', ''))
         self.assertIn('foo_repo', alyx.rest.call_args.kwargs.get('django', ''))
         # Expect to return tasks in descending priority order, without mesoscope task (different env)
-        self.assertEqual([tasks[2], tasks[1]], queue)
+        self.assertEqual([tasks[2]], queue)
         # Expect only mesoscope task returned when relevant env passed
-        queue = local_server.task_queue(lab='foolab', alyx=alyx, env=('suite2p',))
-        self.assertEqual([tasks[0]], queue)
+        queue = local_server.task_queue(lab='foolab', alyx=alyx, env=('suite2p', 'iblsorter'))
+        self.assertEqual([tasks[0], tasks[1]], queue)
         # Expect no tasks as mesoscope task is a large job
         queue = local_server.task_queue(mode='small', lab='foolab', alyx=alyx, env=('suite2p',))
         self.assertEqual([], queue)

@@ -97,6 +97,32 @@ class TestMesoscopePreprocess(unittest.TestCase):
             subject_detail['genotype'].pop(1)
             self.assertEqual(self.task.get_default_tau(), 1.5)  # return the default value
 
+    def test_consolidate_exptQC(self):
+        """Test for MesoscopePreprocess._consolidate_exptQC method."""
+        exptQC = [
+            {'frameQC_names': np.array(['ok', 'PMT off', 'galvos fault', 'high signal'], dtype=object),
+             'frameQC_frames': np.array([0, 0, 0, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 4])},
+            {'frameQC_names': np.array(['ok', 'PMT off', 'foo', 'galvos fault', np.array([])], dtype=object),
+             'frameQC_frames': np.array([0, 0, 1, 1, 2, 2, 2, 2, 3, 4])},
+            {'frameQC_names': 'ok',  # check with single str instead of array
+             'frameQC_frames': np.array([0, 0])}
+        ]
+
+        # Check concatinates frame QC arrays
+        frame_qc, frame_qc_names, bad_frames = self.task._consolidate_exptQC(exptQC)
+        # Check frame_qc array
+        expected_frames = [
+            0, 0, 0, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 5, 0, 0, 1, 1, 4, 4, 4, 4, 2, 5, 0, 0]
+        np.testing.assert_array_equal(expected_frames, frame_qc)
+        # Check bad_frames array
+        expected = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 18, 19, 20, 21, 22, 23, 24, 25]
+        np.testing.assert_array_equal(expected, bad_frames)
+        # Check frame_qc_names data frame
+        self.assertCountEqual(['qc_values', 'qc_labels'], frame_qc_names.columns)
+        self.assertEqual(list(range(6)), frame_qc_names['qc_values'].tolist())
+        expected = ['ok', 'PMT off', 'galvos fault', 'high signal', 'foo', 'unknown']
+        self.assertCountEqual(expected, frame_qc_names['qc_labels'].tolist())
+
     def test_setup_uncompressed(self):
         """Test set up behaviour when raw tifs present."""
         # Test signature when clobber = True

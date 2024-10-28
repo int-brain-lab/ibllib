@@ -3,13 +3,14 @@ import functools
 import shutil
 import tempfile
 import unittest
-import unittest.mock
+from unittest.mock import patch, Mock, MagicMock
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
 import one.alf.io as alfio
+from ibllib.io.extractors.bpod_trials import get_bpod_extractor
 from ibllib.io.extractors import training_trials, biased_trials, camera
 from ibllib.io import raw_data_loaders as raw
 from ibllib.io.extractors.base import BaseExtractor
@@ -530,13 +531,13 @@ class TestExtractTrialData(unittest.TestCase):
             'peakVelocity_times': np.array([1, 1])}
         function_name = 'ibllib.io.extractors.training_wheel.extract_wheel_moves'
         # Training
-        with unittest.mock.patch(function_name, return_value=mock_data):
+        with patch(function_name, return_value=mock_data):
             task, = get_trials_tasks(self.training_lt5['path'])
             trials, _ = task.extract_behaviour(save=True)
         trials = alfio.load_object(self.training_lt5['path'] / 'alf', object='trials')
         self.assertTrue(alfio.check_dimensions(trials) == 0)
         # Biased
-        with unittest.mock.patch(function_name, return_value=mock_data):
+        with patch(function_name, return_value=mock_data):
             task, = get_trials_tasks(self.biased_lt5['path'])
             trials, _ = task.extract_behaviour(save=True)
         trials = alfio.load_object(self.biased_lt5['path'] / 'alf', object='trials')
@@ -679,7 +680,7 @@ class TestCameraExtractors(unittest.TestCase):
             gpio['indices'][i + 1] = np.where(ts > rise + pulse_width)[0][0]
 
         gpio_, audio_, ts_ = camera.groom_pin_state(gpio, audio, ts)
-        self.assertEqual(audio, audio_, 'Audio dict shouldn\'t be effected')
+        self.assertEqual(audio, audio_, 'Audio dict shouldn\'t be affected')
         np.testing.assert_array_almost_equal(ts_[:4], [40., 40.016667, 40.033333, 40.05])
 
         # Broken TTLs + extra TTL
@@ -751,6 +752,34 @@ class TestCameraExtractors(unittest.TestCase):
         # Check input validation
         with self.assertRaises(ValueError):
             camera.attribute_times(tsa, tsb, injective=False, take='closest')
+
+
+class TestGetBpodExtractor(unittest.TestCase):
+
+    def test_get_bpod_extractor(self):
+        # un-existing extractor should raise a value error
+        with self.assertRaises(ValueError):
+            get_bpod_extractor('', protocol='sdf', task_collection='raw_behavior_data')
+        # in this case this returns an ibllib.io.extractors.training_trials.TrainingTrials instance
+        extractor = get_bpod_extractor(
+            '', protocol='_trainingChoiceWorld',
+            task_collection='raw_behavior_data'
+        )
+        self.assertTrue(isinstance(extractor, BaseExtractor))
+
+    def test_get_bpod_custom_extractor(self):
+        # here we'll mock a custom module with a custom extractor
+        DummyModule = MagicMock()
+        DummyExtractor = Mock(spec_set=BaseExtractor)
+        DummyModule.toto.return_value = DummyExtractor
+        base_module = 'ibllib.io.extractors.bpod_trials'
+        with patch(f'{base_module}.get_bpod_extractor_class', return_value='toto'), \
+                patch(f'{base_module}.importlib.import_module', return_value=DummyModule) as import_mock:
+            self.assertIs(get_bpod_extractor(''), DummyExtractor)
+            import_mock.assert_called_with('projects')
+            # Check raises when imported class not an extractor
+            DummyModule.toto.return_value = MagicMock(spec=dict)
+            self.assertRaisesRegex(ValueError, 'should be an Extractor class', get_bpod_extractor, '')
 
 
 if __name__ == '__main__':
