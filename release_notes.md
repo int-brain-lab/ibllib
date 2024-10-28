@@ -1,3 +1,9 @@
+## Release Note 2.40.0
+
+### features
+- iblsorter >= 1.9 sorting tasks with waveform extraction and channel sorting 
+- s3 patcher prototype
+
 ## Release Note 2.39.0
 
 ### features
