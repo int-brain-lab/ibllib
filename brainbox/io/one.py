@@ -1029,7 +1029,7 @@ class SpikeSortingLoader:
             self.histology = 'alf'
         return Bunch(channels)
 
-    def load_spike_sorting(self, spike_sorter='iblsorter', revision=None, enforce_version=True, good_units=False, **kwargs):
+    def load_spike_sorting(self, spike_sorter='iblsorter', revision=None, enforce_version=False, good_units=False, **kwargs):
         """
         Loads spikes, clusters and channels
 
