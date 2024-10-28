@@ -866,13 +866,21 @@ class SpikeSortingLoader:
         waveform_attributes = list(set(WAVEFORMS_ATTRIBUTES + waveform_attributes))
         return {'spikes': spike_attributes, 'clusters': cluster_attributes, 'waveforms': waveform_attributes}
 
-    def _get_spike_sorting_collection(self, spike_sorter='pykilosort'):
+    def _get_spike_sorting_collection(self, spike_sorter=None):
         """
         Filters a list or array of collections to get the relevant spike sorting dataset
         if there is a pykilosort, load it
         """
-        collection = next(filter(lambda c: c == f'alf/{self.pname}/{spike_sorter}', self.collections), None)
-        # otherwise, prefers the shortest
+        for sorter in list([spike_sorter, 'iblsorter', 'pykilosort']):
+            if sorter is None:
+                continue
+            if sorter == "":
+                collection = next(filter(lambda c: c == f'alf/{self.pname}', self.collections), None)
+            else:
+                collection = next(filter(lambda c: c == f'alf/{self.pname}/{sorter}', self.collections), None)
+            if collection is not None:
+                return collection
+        # if none is found amongst the defaults, prefers the shortest
         collection = collection or next(iter(sorted(filter(lambda c: f'alf/{self.pname}' in c, self.collections), key=len)), None)
         _logger.debug(f"selecting: {collection} to load amongst candidates: {self.collections}")
         return collection
@@ -982,14 +990,13 @@ class SpikeSortingLoader:
         """
         _logger.debug(f"loading waveforms from {self.collection}")
         return self.one.load_object(
-            self.eid, "waveforms",
-            attribute=["traces", "templates", "table", "channels"],
+            id=self.eid, obj="waveforms", attribute=["traces", "templates", "table", "channels"],
             collection=self._get_spike_sorting_collection("pykilosort"), download_only=True, **kwargs
         )
 
     def raw_waveforms(self, **kwargs):
         wf_paths = self.download_raw_waveforms(**kwargs)
-        return WaveformsLoader(wf_paths[0].parent, wfs_dtype=np.float16)
+        return WaveformsLoader(wf_paths[0].parent)
 
     def load_channels(self, **kwargs):
         """
@@ -1022,7 +1029,7 @@ class SpikeSortingLoader:
             self.histology = 'alf'
         return Bunch(channels)
 
-    def load_spike_sorting(self, spike_sorter='pykilosort', revision=None, enforce_version=True, good_units=False, **kwargs):
+    def load_spike_sorting(self, spike_sorter='iblsorter', revision=None, enforce_version=False, good_units=False, **kwargs):
         """
         Loads spikes, clusters and channels
 
