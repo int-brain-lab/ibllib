@@ -6,7 +6,7 @@ import itertools
 from packaging import version
 from requests import HTTPError
 
-from one.alf.files import get_session_path, folder_parts, get_alf_path
+from one.alf.path import get_session_path, folder_parts, get_alf_path
 from one.registration import RegistrationClient, get_dataset_type
 from one.remote.globus import get_local_endpoint_id, get_lab_from_endpoint_id
 from one.webclient import AlyxClient, no_cache

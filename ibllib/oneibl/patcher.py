@@ -34,7 +34,7 @@ import shutil
 import globus_sdk
 import iblutil.io.params as iopar
 from iblutil.util import ensure_list
-from one.alf.files import get_session_path, add_uuid_string, full_path_parts
+from one.alf.path import get_session_path, add_uuid_string, full_path_parts
 from one.alf.spec import is_uuid_string, is_uuid
 from one import params
 from one.webclient import AlyxClient

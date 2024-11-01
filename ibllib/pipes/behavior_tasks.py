@@ -4,7 +4,7 @@ import traceback
 
 from packaging import version
 import one.alf.io as alfio
-from one.alf.files import session_path_parts
+from one.alf.path import session_path_parts
 from one.api import ONE
 
 from ibllib.oneibl.registration import get_lab

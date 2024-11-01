@@ -7,7 +7,7 @@ import string
 import random
 
 import numpy as np
-from one.alf.files import remove_uuid_string
+from one.alf.path import remove_uuid_string
 
 import spikeglx
 

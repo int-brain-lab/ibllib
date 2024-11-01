@@ -45,7 +45,7 @@ from packaging import version
 import spikeglx
 import ibldsp.utils
 import one.alf.io as alfio
-from one.alf.files import filename_parts
+from one.alf.path import filename_parts
 from iblutil.util import Bunch
 from iblutil.spacer import Spacer
 

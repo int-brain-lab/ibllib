@@ -5,7 +5,7 @@ import shutil
 import tarfile
 
 import numpy as np
-from one.alf.files import get_session_path
+from one.alf.path import get_session_path
 import spikeglx
 
 from iblutil.util import Bunch
