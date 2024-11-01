@@ -135,7 +135,7 @@ def read_params(path) -> dict:
 
     """
     if (path := Path(path)).is_dir():
-        yaml_file = next(path.glob('_ibl_experiment.description*'), None)
+        yaml_file = next(path.glob('_ibl_experiment.description*.yaml'), None)
     else:
         yaml_file = path if path.exists() else None
     if not yaml_file:
@@ -165,6 +165,11 @@ def merge_params(a, b, copy=False):
     dict
         A merged dictionary consisting of fields from `a` and `b`.
     """
+    def to_hashable(dict_item):
+        """Convert protocol -> dict map to hashable tuple of protocol + sorted key value pairs."""
+        hashable = (dict_item[0], *chain.from_iterable(sorted(dict_item[1].items())))
+        return tuple(tuple(x) if isinstance(x, list) else x for x in hashable)
+
     if copy:
         a = deepcopy(a)
     for k in b:
@@ -176,8 +181,6 @@ def merge_params(a, b, copy=False):
                 # For tasks, keep order and skip duplicates
                 # Assert tasks is a list of single value dicts
                 assert (not prev or set(map(len, prev)) == {1}) and set(map(len, b[k])) == {1}
-                # Convert protocol -> dict map to hashable tuple of protocol + sorted key value pairs
-                to_hashable = lambda itm: (itm[0], *chain.from_iterable(sorted(itm[1].items())))  # noqa
                 # Get the set of previous tasks
                 prev_tasks = set(map(to_hashable, chain.from_iterable(map(dict.items, prev))))
                 tasks = chain.from_iterable(map(dict.items, b[k]))
