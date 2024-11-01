@@ -589,6 +589,12 @@ class TestSessionParams(unittest.TestCase):
         # Test assertion on duplicate sync
         b['sync'] = {'foodaq': {'collection': 'raw_sync_data'}}
         self.assertRaises(AssertionError, session_params.merge_params, a, b)
+        # Test how it handles the extractors key, which is an unhashable list
+        f = {'tasks': [{'fooChoiceWorld': {'collection': 'bar', 'sync_label': 'bpod', 'extractors': ['a', 'b']}}]}
+        g = session_params.merge_params(a, f, copy=True)
+        self.assertCountEqual(['devices', 'procedures', 'projects', 'sync', 'tasks', 'version'], g.keys())
+        self.assertEqual(4, len(g['tasks']))
+        self.assertDictEqual(f['tasks'][0], g['tasks'][-1])
 
     def test_get_protocol_number(self):
         """Test ibllib.io.session_params.get_task_protocol_number function."""

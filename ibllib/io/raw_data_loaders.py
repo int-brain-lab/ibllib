@@ -200,6 +200,7 @@ def load_embedded_frame_data(session_path, label: str, raw=False):
     """
     Load the embedded frame count and GPIO for a given session.  If the file doesn't exist,
     or is empty, None values are returned.
+
     :param session_path: Absolute path of session folder
     :param label: The specific video to load, one of ('left', 'right', 'body')
     :param raw: If True the raw data are returned without preprocessing, otherwise frame count is
