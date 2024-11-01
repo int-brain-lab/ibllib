@@ -82,7 +82,7 @@ class TestUserPmtSess(unittest.TestCase):
 
         note = one.alyx.rest('notes', 'list', django=f'object_id,{eid}', no_cache=True)
         self.assertEqual(len(note), 1)
-        self.assertNotEquals(original_note_id, note[0]['id'])
+        self.assertNotEqual(original_note_id, note[0]['id'])
 
     def test_guiinput_ins(self):
         eid = self.ins_id  # probe id
