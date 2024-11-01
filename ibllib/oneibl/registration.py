@@ -10,10 +10,9 @@ from one.alf.path import get_session_path, folder_parts, get_alf_path
 from one.registration import RegistrationClient, get_dataset_type
 from one.remote.globus import get_local_endpoint_id, get_lab_from_endpoint_id
 from one.webclient import AlyxClient, no_cache
-from one.converters import ConversionMixin
+from one.converters import ConversionMixin, datasets2records
 import one.alf.exceptions as alferr
 from one.api import ONE
-from one.util import datasets2records
 from iblutil.util import ensure_list
 
 import ibllib
