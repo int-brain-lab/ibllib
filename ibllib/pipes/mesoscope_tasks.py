@@ -32,7 +32,7 @@ from scipy.io import loadmat
 from scipy.interpolate import interpn
 import one.alf.io as alfio
 from one.alf.spec import to_alf
-from one.alf.files import filename_parts, session_path_parts
+from one.alf.path import filename_parts, session_path_parts
 import one.alf.exceptions as alferr
 from iblutil.util import flatten, ensure_list
 from iblatlas.atlas import ALLEN_CCF_LANDMARKS_MLAPDV_UM, MRITorontoAtlas

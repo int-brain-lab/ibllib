@@ -8,7 +8,7 @@ import pandas as pd
 from iblutil.numerical import ismember
 import one.alf.io as alfio
 from one.alf.exceptions import ALFObjectNotFound
-import one.alf.files as alfiles
+import one.alf.path as alfiles
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.lines import Line2D

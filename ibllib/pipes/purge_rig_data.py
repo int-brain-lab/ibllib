@@ -13,7 +13,7 @@ import argparse
 from pathlib import Path
 
 from one.api import ONE
-from one.alf.files import get_session_path
+from one.alf.path import get_session_path
 
 
 def session_name(path) -> str:

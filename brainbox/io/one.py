@@ -12,7 +12,7 @@ from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
 
 from one.api import ONE, One
-from one.alf.files import get_alf_path, full_path_parts
+from one.alf.path import get_alf_path, full_path_parts
 from one.alf.exceptions import ALFObjectNotFound, ALFMultipleCollectionsFound
 from one.alf import cache
 import one.alf.io as alfio
@@ -1078,7 +1078,7 @@ class SpikeSortingLoader:
                     assert fn.relative_to(self.session_path).parts[2] == self.spike_sorter, \
                         f"You required strict version {self.spike_sorter}, {fn} does not match"
                 if self.revision:
-                    assert fn.relative_to(self.session_path).parts[3] == f"#{self.revision}#", \
+                    assert full_path_parts(fn)[5] == self.revision, \
                         f"You required strict revision {self.revision}, {fn} does not match"
 
     @staticmethod

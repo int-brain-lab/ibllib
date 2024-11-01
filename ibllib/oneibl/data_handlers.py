@@ -16,7 +16,7 @@ from copy import copy
 from one.api import ONE
 from one.webclient import AlyxClient
 from one.util import filter_datasets
-from one.alf.files import add_uuid_string, session_path_parts
+from one.alf.path import add_uuid_string, session_path_parts
 from one.alf.cache import _make_datasets_df
 from iblutil.util import flatten, ensure_list
 
