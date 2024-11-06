@@ -388,6 +388,7 @@ class TestRegistration(unittest.TestCase):
         self.assertFalse(flag_file.exists())
 
     def test_registration_session(self):
+        """Test IBLRegistrationClient.register_session method."""
         settings_file = self._write_settings_file()
         rc = registration.IBLRegistrationClient(one=self.one)
         rc.register_session(str(self.session_path), procedures=['Ephys recording with acute probe(s)'])
@@ -427,8 +428,52 @@ class TestRegistration(unittest.TestCase):
         self.assertEqual(self.settings['SESSION_END_TIME'], ses_info['end_time'])
         self.one.alyx.rest('sessions', 'delete', id=eid)
 
+    def test_registration_session_passive(self):
+        """Test IBLRegistrationClient.register_session method when there is no iblrig bpod data.
+
+        For truly passive sessions there is no Bpod data (no raw_behavior_data or raw_task_data folders).
+        In this situation the must already be a session on Alyx manually created by the experimenter,
+        which needs to contain the start time, location, lab, and user data.
+        """
+        rc = registration.IBLRegistrationClient(one=self.one)
+        experiment_description = {
+            'procedures': ['Ephys recording with acute probe(s)'],
+            'sync': {'nidq': {'collection': 'raw_ephys_data'}}}
+        session_params.write_params(self.session_path, experiment_description)
+        # Should fail because the session doesn't exist on Alyx
+        self.assertRaises(AssertionError, rc.register_session, self.session_path)
+        # Create the session
+        ses_ = {
+            'subject': self.subject, 'users': [self.one.alyx.user],
+            'type': 'Experiment', 'number': int(self.session_path.name),
+            'start_time': rc.ensure_ISO8601(self.session_path.parts[-2]),
+            'n_correct_trials': 100, 'n_trials': 200
+        }
+        session = self.one.alyx.rest('sessions', 'create', data=ses_)
+        # Should fail because the session lacks critical information
+        self.assertRaisesRegex(
+            AssertionError, 'missing session information: location', rc.register_session, self.session_path)
+        session = self.one.alyx.rest(
+            'sessions', 'partial_update', id=session['url'][-36:], data={'location': self.settings['PYBPOD_BOARD']})
+        # Should now register
+        ses, dsets = rc.register_session(self.session_path)
+        # Check that session was updated, namely the n trials and procedures
+        self.assertEqual(session['url'], ses['url'])
+        self.assertTrue(ses['n_correct_trials'] == ses['n_trials'] == 0)
+        self.assertEqual(experiment_description['procedures'], ses['procedures'])
+        self.assertEqual(5, len(dsets))
+        registered = [d['file_records'][0]['relative_path'] for d in dsets]
+        expected = [
+            f'{self.subject}/2018-04-01/002/_ibl_experiment.description.yaml',
+            f'{self.subject}/2018-04-01/002/alf/spikes.amps.npy',
+            f'{self.subject}/2018-04-01/002/alf/spikes.times.npy',
+            f'{self.subject}/2018-04-01/002/alf/#{self.revision}#/spikes.amps.npy',
+            f'{self.subject}/2018-04-01/002/alf/#{self.revision}#/spikes.times.npy'
+        ]
+        self.assertCountEqual(expected, registered)
+
     def test_register_chained_session(self):
-        """Tests for registering a session with chained (multiple) protocols"""
+        """Tests for registering a session with chained (multiple) protocols."""
         behaviour_paths = [self.session_path.joinpath(f'raw_task_data_{i:02}') for i in range(2)]
         for p in behaviour_paths:
             p.mkdir()
@@ -459,6 +504,7 @@ class TestRegistration(unittest.TestCase):
         rc = registration.IBLRegistrationClient(one=self.one)
         session, recs = rc.register_session(self.session_path)
 
+        self.assertEqual(7, len(recs))
         ses_info = self.one.alyx.rest('sessions', 'read', id=session['id'])
         self.assertCountEqual(experiment_description['procedures'], ses_info['procedures'])
         self.assertCountEqual(experiment_description['projects'], ses_info['projects'])

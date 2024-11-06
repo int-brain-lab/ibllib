@@ -23,7 +23,8 @@ from ibllib.io import session_params
 
 _logger = logging.getLogger(__name__)
 EXCLUDED_EXTENSIONS = ['.flag', '.error', '.avi']
-REGISTRATION_GLOB_PATTERNS = ['alf/**/*.*',
+REGISTRATION_GLOB_PATTERNS = ['_ibl_experiment.description.yaml',
+                              'alf/**/*.*.*',
                               'raw_behavior_data/**/_iblrig_*.*',
                               'raw_task_data_*/**/_iblrig_*.*',
                               'raw_passive_data/**/_iblrig_*.*',
@@ -237,9 +238,9 @@ class IBLRegistrationClient(RegistrationClient):
             missing = [k for k in required if not session_details[k]]
             assert not any(missing), 'missing session information: ' + ', '.join(missing)
             task_protocols = task_data = settings = []
-            json_field = None
+            json_field = end_time = None
             users = session_details['users']
-            n_trials, n_correct_trials = 0
+            n_trials = n_correct_trials = 0
         else:  # Get session info from task data
             collections = ensure_list(collections)
             # read meta data from the rig for the session from the task settings file
