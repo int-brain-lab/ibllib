@@ -16,7 +16,7 @@ from copy import copy
 from one.api import ONE
 from one.webclient import AlyxClient
 from one.util import filter_datasets
-from one.alf.path import add_uuid_string, session_path_parts
+from one.alf.path import add_uuid_string, session_path_parts, get_alf_path
 from one.alf.cache import _make_datasets_df
 from iblutil.util import flatten, ensure_list
 
@@ -540,26 +540,30 @@ class DataHandler(abc.ABC):
         self.one = one
         self.processed = {}  # Map of filepaths and their processed records (e.g. upload receipts or Alyx records)
 
-    def setUp(self):
+    def setUp(self, **kwargs):
         """Function to optionally overload to download required data to run task."""
         pass
 
     def getData(self, one=None):
-        """Finds the datasets required for task based on input signatures."""
+        """Finds the datasets required for task based on input signatures.
+
+        Parameters
+        ----------
+        one : one.api.One, optional
+            An instance of ONE to use.
+
+        Returns
+        -------
+        pandas.DataFrame, None
+            A data frame of required datasets. An empty frame is returned if no registered datasets are required,
+            while None is returned if no instance of ONE is set.
+        """
         if self.one is None and one is None:
             return
-
         one = one or self.one
         session_datasets = one.list_datasets(one.path2eid(self.session_path), details=True)
         dfs = [file.filter(session_datasets)[1] for file in self.signature['input_files']]
-        if len(dfs) == 0:
-            return pd.DataFrame()
-        df = pd.concat(dfs)
-
-        # Some cases the eid is stored in the index. If so we drop this level
-        if 'eid' in df.index.names:
-            df = df.droplevel(level='eid')
-        return df
+        return one._cache.datasets.iloc[0:0] if len(dfs) == 0 else pd.concat(dfs)
 
     def getOutputFiles(self):
         """
@@ -594,7 +598,7 @@ class DataHandler(abc.ABC):
 
         return versions
 
-    def cleanUp(self):
+    def cleanUp(self, **kwargs):
         """Function to optionally overload to clean up files after running task."""
         pass
 
@@ -655,7 +659,7 @@ class ServerDataHandler(DataHandler):
         self.processed.update({k: v for k, v in zip(to_upload, records) if v})
         return [self.processed[x] for x in outputs if x in self.processed]
 
-    def cleanUp(self):
+    def cleanUp(self, **_):
         """Empties and returns the processed dataset mep."""
         super().cleanUp()
         processed = self.processed
@@ -691,7 +695,7 @@ class ServerGlobusDataHandler(DataHandler):
 
         self.local_paths = []
 
-    def setUp(self):
+    def setUp(self, **_):
         """Function to download necessary data to run tasks using globus-sdk."""
         if self.lab == 'cortexlab' and 'cortexlab' in self.one.alyx.base_url:
             df = super().getData(one=ONE(base_url='https://alyx.internationalbrainlab.org', cache_rest=self.one.alyx.cache_mode))
@@ -709,9 +713,7 @@ class ServerGlobusDataHandler(DataHandler):
             _logger.warning('Space left on server is < 500GB, won\'t re-download new data')
             return
 
-        rel_sess_path = '/'.join(df.iloc[0]['session_path'].split('/')[-3:])
-        assert rel_sess_path.split('/')[0] == self.one.path2ref(self.session_path)['subject']
-
+        rel_sess_path = '/'.join(self.session_path.parts[-3:])
         target_paths = []
         source_paths = []
         for i, d in df.iterrows():
@@ -741,7 +743,7 @@ class ServerGlobusDataHandler(DataHandler):
         data_repo = get_local_data_repository(self.one.alyx)
         return register_dataset(outputs, one=self.one, versions=versions, repository=data_repo, **kwargs)
 
-    def cleanUp(self):
+    def cleanUp(self, **_):
         """Clean up, remove the files that were downloaded from Globus once task has completed."""
         for file in self.local_paths:
             os.unlink(file)
@@ -758,7 +760,7 @@ class RemoteEC2DataHandler(DataHandler):
         """
         super().__init__(session_path, signature, one=one)
 
-    def setUp(self):
+    def setUp(self, **_):
         """
         Function to download necessary data to run tasks using ONE
         :return:
@@ -790,7 +792,7 @@ class RemoteHttpDataHandler(DataHandler):
         """
         super().__init__(session_path, signature, one=one)
 
-    def setUp(self):
+    def setUp(self, **_):
         """
         Function to download necessary data to run tasks using ONE
         :return:
@@ -812,7 +814,7 @@ class RemoteHttpDataHandler(DataHandler):
 
 
 class RemoteAwsDataHandler(DataHandler):
-    def __init__(self, task, session_path, signature, one=None):
+    def __init__(self, session_path, signature, one=None):
         """
         Data handler for running tasks on remote compute node.
 
@@ -824,11 +826,9 @@ class RemoteAwsDataHandler(DataHandler):
         :param one: ONE instance
         """
         super().__init__(session_path, signature, one=one)
-        self.task = task
-
         self.local_paths = []
 
-    def setUp(self):
+    def setUp(self, **_):
         """Function to download necessary data to run tasks using AWS boto3."""
         df = super().getData()
         self.local_paths = self.one._download_aws(map(lambda x: x[1], df.iterrows()))
@@ -907,9 +907,9 @@ class RemoteAwsDataHandler(DataHandler):
         # return ftp_patcher.create_dataset(path=outputs, created_by=self.one.alyx.user,
         #                                   versions=versions, **kwargs)
 
-    def cleanUp(self):
+    def cleanUp(self, task):
         """Clean up, remove the files that were downloaded from globus once task has completed."""
-        if self.task.status == 0:
+        if task.status == 0:
             for file in self.local_paths:
                 os.unlink(file)
 
@@ -925,7 +925,7 @@ class RemoteGlobusDataHandler(DataHandler):
     def __init__(self, session_path, signature, one=None):
         super().__init__(session_path, signature, one=one)
 
-    def setUp(self):
+    def setUp(self, **_):
         """Function to download necessary data to run tasks using globus."""
         # TODO
         pass
@@ -952,30 +952,29 @@ class SDSCDataHandler(DataHandler):
     :param one: ONE instance
     """
 
-    def __init__(self, task, session_path, signatures, one=None):
+    def __init__(self, session_path, signatures, one=None):
         super().__init__(session_path, signatures, one=one)
-        self.task = task
-        self.SDSC_PATCH_PATH = SDSC_PATCH_PATH
-        self.SDSC_ROOT_PATH = SDSC_ROOT_PATH
+        self.patch_path = os.getenv('SDSC_PATCH_PATH', SDSC_PATCH_PATH)
+        self.root_path = SDSC_ROOT_PATH
 
-    def setUp(self):
+    def setUp(self, task):
         """Function to create symlinks to necessary data to run tasks."""
         df = super().getData()
 
-        SDSC_TMP = Path(self.SDSC_PATCH_PATH.joinpath(self.task.__class__.__name__))
-        for i, d in df.iterrows():
-            file_path = Path(d['session_path']).joinpath(d['rel_path'])
-            uuid = i
+        SDSC_TMP = Path(self.patch_path.joinpath(task.__class__.__name__))
+        session_path = Path(get_alf_path(self.session_path))
+        for uuid, d in df.iterrows():
+            file_path = session_path / d['rel_path']
             file_uuid = add_uuid_string(file_path, uuid)
             file_link = SDSC_TMP.joinpath(file_path)
             file_link.parent.mkdir(exist_ok=True, parents=True)
             try:
                 file_link.symlink_to(
-                    Path(self.SDSC_ROOT_PATH.joinpath(file_uuid)))
+                    Path(self.root_path.joinpath(file_uuid)))
             except FileExistsError:
                 pass
 
-        self.task.session_path = SDSC_TMP.joinpath(d['session_path'])
+        task.session_path = SDSC_TMP.joinpath(session_path)
 
     def uploadData(self, outputs, version, **kwargs):
         """
@@ -988,24 +987,24 @@ class SDSCDataHandler(DataHandler):
         sdsc_patcher = SDSCPatcher(one=self.one)
         return sdsc_patcher.patch_datasets(outputs, dry=False, versions=versions, **kwargs)
 
-    def cleanUp(self):
+    def cleanUp(self, task):
         """Function to clean up symlinks created to run task."""
-        assert SDSC_PATCH_PATH.parts[0:4] == self.task.session_path.parts[0:4]
-        shutil.rmtree(self.task.session_path)
+        assert self.patch_path.parts[0:4] == task.session_path.parts[0:4]
+        shutil.rmtree(task.session_path)
 
 
 class PopeyeDataHandler(SDSCDataHandler):
 
-    def __init__(self, task, session_path, signatures, one=None):
-        super().__init__(task, session_path, signatures, one=one)
-        self.SDSC_PATCH_PATH = Path(os.getenv('SDSC_PATCH_PATH', "/mnt/sdceph/users/ibl/data/quarantine/tasks/"))
-        self.SDSC_ROOT_PATH = Path("/mnt/sdceph/users/ibl/data")
+    def __init__(self, session_path, signatures, one=None):
+        super().__init__(session_path, signatures, one=one)
+        self.patch_path = Path(os.getenv('SDSC_PATCH_PATH', "/mnt/sdceph/users/ibl/data/quarantine/tasks/"))
+        self.root_path = Path("/mnt/sdceph/users/ibl/data")
 
     def uploadData(self, outputs, version, **kwargs):
         raise NotImplementedError(
             "Cannot register data from Popeye. Login as Datauser and use the RegisterSpikeSortingSDSC task."
         )
 
-    def cleanUp(self):
+    def cleanUp(self, **_):
         """Symlinks are preserved until registration."""
         pass
