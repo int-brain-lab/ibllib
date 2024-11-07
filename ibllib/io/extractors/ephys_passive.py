@@ -426,10 +426,10 @@ def _extract_passiveAudio_intervals(audio: dict, rig_version: str) -> Tuple[np.a
         noiseOff_times = soundOff_times[diff > 0.3]
 
         # append with nans
-        toneOn_times = np.r_[toneOn_times, np.full((NTONES - len(toneOn_times)), np.NAN)]
-        toneOff_times = np.r_[toneOff_times, np.full((NTONES - len(toneOff_times)), np.NAN)]
-        noiseOn_times = np.r_[noiseOn_times, np.full((NNOISES - len(noiseOn_times)), np.NAN)]
-        noiseOff_times = np.r_[noiseOff_times, np.full((NNOISES - len(noiseOff_times)), np.NAN)]
+        toneOn_times = np.r_[toneOn_times, np.full((NTONES - len(toneOn_times)), np.nan)]
+        toneOff_times = np.r_[toneOff_times, np.full((NTONES - len(toneOff_times)), np.nan)]
+        noiseOn_times = np.r_[noiseOn_times, np.full((NNOISES - len(noiseOn_times)), np.nan)]
+        noiseOff_times = np.r_[noiseOff_times, np.full((NNOISES - len(noiseOff_times)), np.nan)]
 
     else:
         # Get all sound onsets and offsets
@@ -676,7 +676,7 @@ class PassiveChoiceWorld(BaseExtractor):
         else:
             # If we don't have task replay then we set the treplay intervals to NaN in our passivePeriods_df dataset
             passiveGabor_df, passiveStims_df = (None, None)
-            passivePeriods_df.taskReplay = np.NAN
+            passivePeriods_df.taskReplay = np.nan
 
         if plot:
             f, ax = plt.subplots(1, 1)
