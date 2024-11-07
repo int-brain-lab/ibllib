@@ -22,6 +22,7 @@ import iblutil.io.params as iopar
 
 from ibllib.oneibl import patcher, registration, data_handlers as handlers
 import ibllib.io.extractors.base
+from ibllib.pipes.behavior_tasks import ChoiceWorldTrialsBpod
 from ibllib.tests import TEST_DB
 from ibllib.io import session_params
 
@@ -609,6 +610,24 @@ class TestDataHandlers(unittest.TestCase):
         self.assertEqual(4, len(out))
         self.assertDictEqual(expected, handler.processed)
 
+    def test_getData(self):
+        """Test for DataHandler.getData method."""
+        one = ONE(**TEST_DB, mode='auto')
+        session_path = Path('KS005/2019-04-01/001')
+        task = ChoiceWorldTrialsBpod(session_path, one=one, collection='raw_behavior_data')
+        task.get_signatures()
+        handler = handlers.ServerDataHandler(session_path, task.signature, one=one)
+        # Check getData returns data frame of signature inputs
+        df = handler.getData()
+        self.assertIsInstance(df, pd.DataFrame)
+        self.assertEqual(len(task.input_files), len(df))
+        # Check with no ONE
+        handler.one = None
+        self.assertIsNone(handler.getData())
+        # Check when no inputs
+        handler.signature['input_files'] = []
+        self.assertTrue(handler.getData(one=one).empty)
+
     def test_dataset_from_name(self):
         """Test dataset_from_name function."""
         I = handlers.ExpectedDataset.input  # noqa
@@ -671,6 +690,50 @@ class TestDataHandlers(unittest.TestCase):
         dataset = I(None, None, True)
         dataset._identifiers = ('alf', '#2020-01-01#', 'foo.bar.ext')
         self.assertRaises(NotImplementedError, handlers.update_collections, dataset, None)
+
+
+class TestSDSCDataHandler(unittest.TestCase):
+    """Test for SDSCDataHandler class."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.one = ONE(**TEST_DB, mode='auto')
+        self.patch_path = Path(tmp.name, 'patch')
+        self.root_path = Path(tmp.name, 'root')
+        self.root_path.mkdir(), self.patch_path.mkdir()
+        self.session_path = self.root_path.joinpath('KS005/2019-04-01/001')
+
+    def test_handler(self):
+        """Test for SDSCDataHandler.setUp and cleanUp methods."""
+        # Create a task in order to check how the signature files are symlinked by handler
+        task = ChoiceWorldTrialsBpod(self.session_path, one=self.one, collection='raw_behavior_data')
+        task.get_signatures()
+        handler = handlers.SDSCDataHandler(self.session_path, task.signature, self.one)
+        handler.patch_path = self.patch_path
+        handler.root_path = self.root_path
+        # Add some files on disk to check they are symlinked by setUp method
+        for uid, rel_path in handler.getData().rel_path.items():
+            filepath = self.session_path.joinpath(rel_path)
+            filepath.parent.mkdir(exist_ok=True, parents=True)
+            filepath.with_stem(f'{filepath.stem}.{uid}').touch()
+        # Check setUp does the symlinks and updates the task session path
+        handler.setUp(task=task)
+        expected = self.patch_path.joinpath('ChoiceWorldTrialsBpod', *self.session_path.parts[-3:])
+        self.assertEqual(expected, task.session_path, 'failed to update task session path')
+        linked = list(expected.glob('raw_behavior_data/*.*.*'))
+        self.assertTrue(all(f.is_symlink for f in linked), 'failed to sym link input files')
+        self.assertEqual(len(task.input_files), len(linked), 'unexpected number of linked patch files')
+        # Check all links to root session
+        self.assertTrue(all(f.resolve().is_relative_to(self.session_path) for f in linked))
+        # Check sym link doesn't contain UUID
+        self.assertTrue(len(linked[0].resolve().stem.split('.')[-1]) == 36, 'source path missing UUID')
+        self.assertFalse(len(linked[0].stem.split('.')[-1]) == 36, 'symlink contains UUID')
+        # Check cleanUp removes links
+        handler.cleanUp(task=task)
+        self.assertFalse(any(map(Path.exists, linked)))
+        # Check no root files were deleted
+        self.assertEqual(len(task.input_files), len(list(self.session_path.glob('raw_behavior_data/*.*.*'))))
 
 
 class TestExpectedDataset(unittest.TestCase):

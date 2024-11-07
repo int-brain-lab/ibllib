@@ -390,14 +390,14 @@ class Task(abc.ABC):
                 # Attempts to download missing data using globus
                 _logger.info('Not all input files found locally: attempting to re-download required files')
                 self.data_handler = self.get_data_handler(location='serverglobus')
-                self.data_handler.setUp()
+                self.data_handler.setUp(task=self)
                 # Double check we now have the required files to run the task
                 # TODO in future should raise error if even after downloading don't have the correct files
                 self.assert_expected_inputs(raise_error=False)
                 return True
         else:
             self.data_handler = self.get_data_handler()
-            self.data_handler.setUp()
+            self.data_handler.setUp(task=self)
             self.get_signatures(**kwargs)
             self.assert_expected_inputs(raise_error=False)
             return True
@@ -416,7 +416,7 @@ class Task(abc.ABC):
         Function to optionally overload to clean up
         :return:
         """
-        self.data_handler.cleanUp()
+        self.data_handler.cleanUp(task=self)
 
     def assert_expected_outputs(self, raise_error=True):
         """
@@ -525,11 +525,11 @@ class Task(abc.ABC):
         elif location == 'remote':
             dhandler = data_handlers.RemoteHttpDataHandler(self.session_path, self.signature, one=self.one)
         elif location == 'aws':
-            dhandler = data_handlers.RemoteAwsDataHandler(self, self.session_path, self.signature, one=self.one)
+            dhandler = data_handlers.RemoteAwsDataHandler(self.session_path, self.signature, one=self.one)
         elif location == 'sdsc':
-            dhandler = data_handlers.SDSCDataHandler(self, self.session_path, self.signature, one=self.one)
+            dhandler = data_handlers.SDSCDataHandler(self.session_path, self.signature, one=self.one)
         elif location == 'popeye':
-            dhandler = data_handlers.PopeyeDataHandler(self, self.session_path, self.signature, one=self.one)
+            dhandler = data_handlers.PopeyeDataHandler(self.session_path, self.signature, one=self.one)
         elif location == 'ec2':
             dhandler = data_handlers.RemoteEC2DataHandler(self.session_path, self.signature, one=self.one)
         else:
