@@ -303,14 +303,13 @@ class CameraTimestampsBpod(BaseBpodTrialsExtractor):
         n_frames = 0
         n_out_of_sync = 0
         missed_trials = []
-        for ind in np.arange(ntrials):
+        for ind in range(ntrials):
             # get upgoing and downgoing fronts
-            pin = np.array(self.bpod_trials[ind]['behavior_data']
-                           ['Events timestamps'].get('Port1In'))
-            pout = np.array(self.bpod_trials[ind]['behavior_data']
-                            ['Events timestamps'].get('Port1Out'))
+            events = self.bpod_trials[ind]['behavior_data']['Events timestamps']
+            pin = np.array(events.get('Port1In') or [np.nan])
+            pout = np.array(events.get('Port1Out') or [np.nan])
             # some trials at startup may not have the camera working, discard
-            if np.all(pin) is None:
+            if np.isnan(pin).all():
                 missed_trials.append(ind)
                 continue
             # if the trial starts in the middle of a square, discard the first downgoing front
