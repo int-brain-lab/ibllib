@@ -725,7 +725,8 @@ class TestSDSCDataHandler(unittest.TestCase):
         self.assertTrue(all(f.is_symlink for f in linked), 'failed to sym link input files')
         self.assertEqual(len(task.input_files), len(linked), 'unexpected number of linked patch files')
         # Check all links to root session
-        self.assertTrue(all(f.resolve().is_relative_to(self.session_path) for f in linked))
+        session_path = self.session_path.resolve()  # NB: GitHub CI uses linked temp dir so we resolve here
+        self.assertTrue(all(f.resolve().is_relative_to(session_path) for f in linked))
         # Check sym link doesn't contain UUID
         self.assertTrue(len(linked[0].resolve().stem.split('.')[-1]) == 36, 'source path missing UUID')
         self.assertFalse(len(linked[0].stem.split('.')[-1]) == 36, 'symlink contains UUID')
