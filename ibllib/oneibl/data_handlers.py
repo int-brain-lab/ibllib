@@ -45,7 +45,7 @@ class ExpectedDataset:
         collection : str, None
             An ALF collection or pattern.
         register : bool
-            Whether to register the output file. Default is False for input files, True for output
+            Whether to register the file. Default is False for input files, True for output
             files.
         revision : str
             An optional revision.
@@ -305,7 +305,7 @@ class ExpectedDataset:
         required : bool
             Whether file must always be present, or is an optional dataset. Default is True.
         register : bool
-            Whether to register the output file. Default is False for input files, True for output
+            Whether to register the input file. Default is False for input files, True for output
             files.
         revision : str
             An optional revision.
