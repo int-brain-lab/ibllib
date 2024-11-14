@@ -17,6 +17,8 @@ import importlib.metadata
 from one.api import ONE
 from one.webclient import AlyxClient
 from one.remote.globus import get_lab_from_endpoint_id, get_local_endpoint_id
+from one.alf.spec import is_session_path
+from one.alf.path import session_path_parts
 
 from ibllib import __version__ as ibllib_version
 from ibllib.pipes import tasks
@@ -104,11 +106,15 @@ def job_creator(root_path, one=None, dry=False, rerun=False):
     if not one:
         one = ONE(cache_rest=None)
     rc = IBLRegistrationClient(one=one)
-    flag_files = list(Path(root_path).glob('**/raw_session.flag'))
+    flag_files = Path(root_path).glob('*/????-??-??/*/raw_session.flag')
+    flag_files = filter(lambda x: is_session_path(x.parent), flag_files)
     pipes = []
     all_datasets = []
     for flag_file in flag_files:
         session_path = flag_file.parent
+        if session_path_parts(session_path)[1] in ('test', 'test_subject'):
+            _logger.debug('skipping test session %s', session_path)
+            continue
         _logger.info(f'creating session for {session_path}')
         if dry:
             continue
