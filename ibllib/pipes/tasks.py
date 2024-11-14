@@ -78,6 +78,7 @@ import time
 from collections import OrderedDict
 import traceback
 import json
+from typing import List, Dict
 
 from graphviz import Digraph
 
@@ -108,7 +109,6 @@ class Task(abc.ABC):
     time_elapsed_secs = None
     time_out_secs = 3600 * 2  # time-out after which a task is considered dead
     version = ibllib.__version__
-    signature = {'input_files': [], 'output_files': []}  # list of tuples (filename, collection, required_flag[, register])
     force = False  # whether to re-download missing input files on local server if not present
     job_size = 'small'  # either 'small' or 'large', defines whether task should be run as part of the large or small job services
     env = None  # the environment name within which to run the task (NB: the env is not activated automatically!)
@@ -144,6 +144,31 @@ class Task(abc.ABC):
         self.plot_tasks = []  # Plotting task/ tasks to create plot outputs during the task
         self.scratch_folder = scratch_folder
         self.kwargs = kwargs
+
+    @property
+    def signature(self) -> Dict[str, List]:
+        """
+        The signature of the task specifies inputs and outputs for the given task.
+        For some tasks it is dynamic and calculated. The legacy code specifies those as tuples.
+        The preferred way is to use the ExpectedDataset input and output constructors.
+
+            I = ExpectedDataset.input
+            O = ExpectedDataset.output
+            signature = {
+                'input_files': [
+                    I(name='extract.me.npy', collection='raw_data', required=True, register=False, unique=False),
+                ],
+                'output_files': [
+                    O(name='look.atme.npy', collection='shiny_data', required=True, register=True, unique=False)
+            ]}
+            is equivalent to:
+            signature = {
+                'input_files': [('extract.me.npy', 'raw_data', True, True)],
+                'output_files': [('look.atme.npy', 'shiny_data', True)],
+                }
+        :return:
+        """
+        return {'input_files': [], 'output_files': []}
 
     @property
     def name(self):
