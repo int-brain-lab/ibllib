@@ -7,6 +7,9 @@
 #### 2.40.1
 - Bugfix: ibllib.io.sess_params.merge_params supports tasks extractors key
 
+#### 2.40.2
+- Bugfix: badframes array dtype change int8 -> uint32
+
 ## Release Note 2.39.0
 
 ### features
@@ -21,7 +24,7 @@
 
 #### 2.39.1
 - Bugfix: brainbox.metrics.single_unit.quick_unit_metrics fix for indexing of n_spike_below2
--
+
 #### 2.39.2
 - Bugfix: routing of protocol to extractor through the project repository checks that the
 target is indeed an extractor class.
