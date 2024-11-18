@@ -1,3 +1,14 @@
+## Release Note 3.0.0
+
+### features
+- Support for py3.8 and 3.9 dropped
+- JobCreator Alyx task
+- Photometry sync task
+- Remove deprecated code, incl. iblatlas and brainbox/quality
+- Bugfix: badframes array dtype change int8 -> uint32
+- Brain wide map release information
+- Limited Numpy 2.0 and ONE 3.0 support
+
 ## Release Note 2.40.0
 
 ### features
@@ -6,9 +17,6 @@
 
 #### 2.40.1
 - Bugfix: ibllib.io.sess_params.merge_params supports tasks extractors key
-
-#### 2.40.2
-- Bugfix: badframes array dtype change int8 -> uint32
 
 ## Release Note 2.39.0
 
