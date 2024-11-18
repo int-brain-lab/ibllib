@@ -115,7 +115,7 @@ class Patcher(abc.ABC):
         assert is_uuid_string(dset_id)
         # If the revision is not None then we need to add the revision into the path. Note the moving of the file
         # is handled by one registration client
-        if revision is not None and f'#{revision}' not in str(path):
+        if revision and f'#{revision}' not in str(path):
             path = path.parent.joinpath(f'#{revision}#', path.name)
         assert path.exists()
         dset = self.one.alyx.rest('datasets', 'read', id=dset_id)
