@@ -790,7 +790,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
 
         # If applicable, save as bad_frames.npy in first raw_imaging_folder for suite2p
         # badframes.mat contains QC values that do affect ROI detection (e.g. no PMT, lens artefacts)
-        badframes = np.array([], dtype='i8')
+        badframes = np.array([], dtype='uint32')
         total_frames = 0
         # Ensure all indices are relative to total cumulative frames
         for m, collection in zip(all_meta, raw_image_collections):
