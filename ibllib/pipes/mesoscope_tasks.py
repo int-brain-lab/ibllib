@@ -796,8 +796,8 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         for m, collection in zip(all_meta, raw_image_collections):
             badframes_path = self.session_path.joinpath(collection, 'badframes.mat')
             if badframes_path.exists():
-                raw_mat = loadmat(badframes_path, squeeze_me=True, simplify_cells=True)['badframes']
-                badframes = np.r_[badframes, raw_mat + total_frames]
+                raw_mat = loadmat(badframes_path, squeeze_me=True, simplify_cells=True)
+                badframes = np.r_[badframes, raw_mat['badframes'].astype('uint32') + total_frames]
             total_frames += m['nFrames']
         if len(badframes) > 0 and use_badframes is True:
             # The badframes array should always be a subset of the frameQC array
