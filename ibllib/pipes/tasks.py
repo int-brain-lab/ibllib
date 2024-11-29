@@ -131,17 +131,6 @@ class Task(abc.ABC):
         :param args: running arguments
         """
         self.on_error = on_error
-        self.log = ''  # placeholder to keep the log of the task for registration
-        self.cpu = kwargs.get('cpu', 1)
-        self.gpu = kwargs.get('gpu', 0)
-        self.io_charge = kwargs.get('io_charge', 5)
-        self.priority = kwargs.get('priority', 30)
-        self.ram = kwargs.get('ram', 4)
-        self.level = 0  # level in the pipeline hierarchy: level 0 means there is no parent task
-        self.outputs = []  # placeholder for a list of Path containing output files
-        self.time_elapsed_secs = None
-        self.time_out_secs = 3600 * 2  # time-out after which a task is considered dead
-        self.version = ibllib.__version__
         self.taskid = taskid
         self.one = one
         self.session_path = session_path
