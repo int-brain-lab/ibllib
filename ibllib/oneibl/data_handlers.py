@@ -563,7 +563,7 @@ class DataHandler(abc.ABC):
         one = one or self.one
         session_datasets = one.list_datasets(one.path2eid(self.session_path), details=True)
         dfs = [file.filter(session_datasets)[1] for file in self.signature['input_files']]
-        return one._cache.datasets.iloc[0:0] if len(dfs) == 0 else pd.concat(dfs)
+        return one._cache.datasets.iloc[0:0] if len(dfs) == 0 else pd.concat(dfs).drop_duplicates()
 
     def getOutputFiles(self):
         """
