@@ -265,13 +265,13 @@ def get_sessions(subj, date=None, one=None):
     if not np.any(np.array(task_protocol) == 'training'):
         ephys_sess = one.alyx.rest('sessions', 'list', subject=subj,
                                    date_range=[sess_dates[-1], sess_dates[0]],
-                                   django='json__PYBPOD_BOARD__icontains,ephys')
+                                   django='location__name__icontains,ephys')
         if len(ephys_sess) > 0:
             ephys_sess_dates = [sess['start_time'][:10] for sess in ephys_sess]
 
             n_delay = len(one.alyx.rest('sessions', 'list', subject=subj,
                                         date_range=[sess_dates[-1], sess_dates[0]],
-                                        django='json__SESSION_START_DELAY_SEC__gte,900'))
+                                        django='json__SESSION_DELAY_START__gte,900'))
         else:
             ephys_sess_dates = []
             n_delay = 0
