@@ -116,7 +116,7 @@ def load_existing_dataframe(subj_path):
         return None
 
 
-def load_trials(sess_path, one, collections=None, force=True, mode='raise'):
+def load_trials(sess_path, one, collections=None, force=True, mode='warn'):
     """
     Load trials data for session. First attempts to load from local session path, if this fails will attempt to download via ONE,
     if this also fails, will then attempt to re-extract locally
