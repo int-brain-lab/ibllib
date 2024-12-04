@@ -18,6 +18,9 @@
 #### 2.40.1
 - Bugfix: ibllib.io.sess_params.merge_params supports tasks extractors key
 
+#### 2.40.2
+- Bugfix: badframes array dtype change int8 -> uint32
+
 ## Release Note 2.39.0
 
 ### features

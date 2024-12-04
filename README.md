@@ -14,7 +14,7 @@ The library is currently 2 main modules:
 ## Requirements
 **OS**: Only tested on Linux. Windows and Mac may work, but are not supported.
 
-**Python Module**: Python 3.10 or higher
+**Python Module**: Python 3.10 or higher, Python 3.12 recommended
 
 ## Installation, documentation and examples
 https://docs.internationalbrainlab.org
