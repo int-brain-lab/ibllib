@@ -6,7 +6,7 @@ from setuptools import find_packages, setup
 CURRENT_DIRECTORY = Path(__file__).parent.absolute()
 
 CURRENT_PYTHON = sys.version_info[:2]
-REQUIRED_PYTHON = (3, 8)
+REQUIRED_PYTHON = (3, 10)
 VER_ERR_MSG = """
 ==========================
 Unsupported Python version
