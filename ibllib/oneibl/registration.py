@@ -221,6 +221,13 @@ class IBLRegistrationClient(RegistrationClient):
             procedures = list({*experiment_description_file.get('procedures', []), *(procedures or [])})
             collections = session_params.get_task_collection(experiment_description_file)
 
+        # Read narrative.txt
+        if (narrative_file := ses_path.joinpath('narrative.txt')).exists():
+            with narrative_file.open('r') as f:
+                narrative = f.read()
+        else:
+            narrative = ''
+
         # query Alyx endpoints for subject, error if not found
         subject = self.assert_exists(subject, 'subjects')
 
@@ -301,6 +308,7 @@ class IBLRegistrationClient(RegistrationClient):
                     'end_time': self.ensure_ISO8601(end_time) if end_time else None,
                     'n_correct_trials': n_correct_trials,
                     'n_trials': n_trials,
+                    'narrative': narrative,
                     'json': json_field
                     }
             session = self.one.alyx.rest('sessions', 'create', data=ses_)
@@ -316,6 +324,8 @@ class IBLRegistrationClient(RegistrationClient):
         else:  # if session exists update a few key fields
             data = {'procedures': procedures, 'projects': projects,
                     'n_correct_trials': n_correct_trials, 'n_trials': n_trials}
+            if len(narrative) > 0:
+                data['narrative'] = narrative
             if task_protocols:
                 data['task_protocol'] = '/'.join(task_protocols)
             if end_time:
