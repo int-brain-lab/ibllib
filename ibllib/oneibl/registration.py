@@ -226,7 +226,7 @@ class IBLRegistrationClient(RegistrationClient):
             with narrative_file.open('r') as f:
                 narrative = f.read()
         else:
-            narrative = '' 
+            narrative = ''
 
         # query Alyx endpoints for subject, error if not found
         subject = self.assert_exists(subject, 'subjects')
