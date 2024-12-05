@@ -1,3 +1,8 @@
+## Release Note 3.1.0
+
+### features
+- Add narrative during registration of Bpod session
+
 ## Release Note 3.0.0
 
 ### features
