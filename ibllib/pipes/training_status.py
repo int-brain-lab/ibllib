@@ -966,7 +966,7 @@ def plot_over_days(df, subject, y1, y2=None, ax=None, legend=True, title=True, t
                       box.width, box.height * 0.9])
     if legend:
         ax1.legend(loc='upper center', bbox_to_anchor=(0.5, -0.1),
-                   fancybox=True, shadow=True, ncol=5, fc='white')
+                   fancybox=True, shadow=True, ncol=5, facecolor='white')
 
     return ax1
 
