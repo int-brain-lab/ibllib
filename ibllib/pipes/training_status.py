@@ -769,7 +769,9 @@ def display_info(df, axs):
     _, info, criteria, _ = compute_training_status(df, compute_date, None, force=False, populate=False)
 
     def _array_to_string(vals):
-        if isinstance(vals, (str, bool, int)):
+        if isinstance(vals, (str, bool, int, float)):
+            if isinstance(vals, float):
+                vals = np.round(vals, 3)
             return f'{vals}'
 
         str_vals = ''
@@ -782,21 +784,31 @@ def display_info(df, axs):
     pos = np.arange(len(criteria))[::-1] * 0.1
     for i, (k, v) in enumerate(info.items()):
         str_v = _array_to_string(v)
-        text = axs[0].text(0, pos[i], k.capitalize(), color='k', fontsize=7, transform=axs[0].transAxes)
+        text = axs[0].text(0, pos[i], k.capitalize(), color='k', weight='bold', fontsize=8, transform=axs[0].transAxes)
         axs[0].annotate(':  ' + str_v, xycoords=text, xy=(1, 0), verticalalignment="bottom",
                         color='k', fontsize=7)
 
     pos = np.arange(len(criteria))[::-1] * 0.1
+    crit_val = criteria.pop('Criteria')
+    c = 'g' if crit_val['pass'] else 'r'
+    str_v = _array_to_string(crit_val['val'])
+    text = axs[1].text(0, pos[0], 'Criteria', color='k', weight='bold', fontsize=8, transform=axs[1].transAxes)
+    axs[1].annotate(':  ' + str_v, xycoords=text, xy=(1, 0), verticalalignment="bottom",
+                    color=c, fontsize=7)
+    pos = pos[1:]
+
     for i, (k, v) in enumerate(criteria.items()):
         c = 'g' if v['pass'] else 'r'
         str_v = _array_to_string(v['val'])
-        text = axs[1].text(0, pos[i], k.capitalize(), color='k', fontsize=7, transform=axs[1].transAxes)
+        text = axs[1].text(0, pos[i], k.capitalize(), color='k', weight='bold', fontsize=8, transform=axs[1].transAxes)
         axs[1].annotate(':  ' + str_v, xycoords=text, xy=(1, 0), verticalalignment="bottom",
                         color=c, fontsize=7)
 
+    axs[0].set_axis_off()
+    axs[1].set_axis_off()
+
 def plot_fit_params(df, subject):
-    fig, axs = plt.subplots(2, 3, figsize=(12, 6))
-    axs = axs.ravel()
+    fig, axs = plt.subplots(2, 3, figsize=(12, 6), gridspec_kw={'width_ratios': [2, 2, 1]})
 
     display_info(df, axs=[axs[0, 2], axs[1, 2]])
 
@@ -875,12 +887,14 @@ def plot_fit_params(df, subject):
 
     fig.suptitle(f'{subject} {df.iloc[-1]["date"]}: {df.iloc[-1]["training_status"]}')
     lines, labels = axs[1, 1].get_legend_handles_labels()
-    fig.legend(lines, labels, loc='upper center', bbox_to_anchor=(0.5, 0.1), fancybox=True, shadow=True, ncol=5)
+    fig.legend(lines, labels, loc='upper center', bbox_to_anchor=(0.5, 0.1), facecolor='w', fancybox=True, shadow=True,
+               ncol=5)
 
     legend_elements = [Line2D([0], [0], marker='o', color='w', label='p=0.5', markerfacecolor=cmap[1], markersize=8),
                        Line2D([0], [0], marker='o', color='w', label='p=0.2', markerfacecolor=cmap[0], markersize=8),
                        Line2D([0], [0], marker='o', color='w', label='p=0.8', markerfacecolor=cmap[2], markersize=8)]
-    legend2 = plt.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(1.1, -0.2), fancybox=True, shadow=True)
+    legend2 = plt.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(1.1, -0.2), fancybox=True,
+                         shadow=True, facecolor='w')
     fig.add_artist(legend2)
 
     return axs
@@ -952,7 +966,7 @@ def plot_over_days(df, subject, y1, y2=None, ax=None, legend=True, title=True, t
                       box.width, box.height * 0.9])
     if legend:
         ax1.legend(loc='upper center', bbox_to_anchor=(0.5, -0.1),
-                   fancybox=True, shadow=True, ncol=5)
+                   fancybox=True, shadow=True, ncol=5, fc='white')
 
     return ax1
 

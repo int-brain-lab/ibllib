@@ -869,13 +869,13 @@ def criterion_1a(psych, n_trials, perf_easy, signed_contrast):
     """
 
     criteria = Bunch()
-    criteria['ZeroContrast'] = {'val': signed_contrast, 'pass': np.any(signed_contrast == 0)}
+    criteria['Zero_contrast'] = {'val': signed_contrast, 'pass': np.any(signed_contrast == 0)}
     criteria['LapseLow_50'] = {'val': psych[2], 'pass': psych[2] < 0.2 }
     criteria['LapseHigh_50'] = {'val': psych[3], 'pass': psych[3] < 0.2}
     criteria['Bias'] = {'val': psych[0], 'pass': abs(psych[0]) < 16}
     criteria['Threshold'] = {'val': psych[1], 'pass': psych[1] < 19}
-    criteria['NTrials'] = {'val': n_trials, 'pass': np.all(n_trials > 200)}
-    criteria['PerfEasy'] = {'val': perf_easy, 'pass': np.all(perf_easy > 0.8)}
+    criteria['N_trials'] = {'val': n_trials, 'pass': np.all(n_trials > 200)}
+    criteria['Perf_easy'] = {'val': perf_easy, 'pass': np.all(perf_easy > 0.8)}
 
     passing = np.all([v['pass'] for k, v in criteria.items()])
 
@@ -929,14 +929,14 @@ def criterion_1b(psych, n_trials, perf_easy, rt, signed_contrast):
     """
 
     criteria = Bunch()
-    criteria['ZeroContrast'] = {'val': signed_contrast, 'pass': np.any(signed_contrast == 0)}
+    criteria['Zero_contrast'] = {'val': signed_contrast, 'pass': np.any(signed_contrast == 0)}
     criteria['LapseLow_50'] = {'val': psych[2], 'pass': psych[2] < 0.1}
     criteria['LapseHigh_50'] = {'val': psych[3], 'pass': psych[3] < 0.1}
     criteria['Bias'] = {'val': psych[0], 'pass': abs(psych[0]) < 10}
     criteria['Threshold'] = {'val': psych[1], 'pass': psych[1] < 20}
-    criteria['NTrials'] = {'val': n_trials, 'pass': np.all(n_trials > 400)}
-    criteria['PerfEasy'] = {'val': perf_easy, 'pass': np.all(perf_easy > 0.9)}
-    criteria['ReactionTime'] = {'val': rt, 'pass': rt < 2}
+    criteria['N_trials'] = {'val': n_trials, 'pass': np.all(n_trials > 400)}
+    criteria['Perf_tasy'] = {'val': perf_easy, 'pass': np.all(perf_easy > 0.9)}
+    criteria['Reaction_time'] = {'val': rt, 'pass': rt < 2}
 
     passing = np.all([v['pass'] for k, v in criteria.items()])
 
@@ -985,10 +985,10 @@ def criterion_ephys(psych_20, psych_80, n_trials, perf_easy, rt):
     criteria['LapseHigh_80'] = {'val': psych_80[3], 'pass': psych_80[3] < 0.1}
     criteria['LapseLow_20'] = {'val': psych_20[2], 'pass': psych_20[2] < 0.1}
     criteria['LapseHigh_20'] = {'val': psych_20[3], 'pass': psych_20[3] < 0.1}
-    criteria['BiasShift'] = {'val': psych_80[0] - psych_20[0], 'pass': psych_80[0] - psych_20[0] > 5}
-    criteria['NTrials'] = {'val': n_trials, 'pass': np.all(n_trials > 400)}
-    criteria['PerfEasy'] = {'val': perf_easy, 'pass': np.all(perf_easy > 0.9)}
-    criteria['ReactionTime'] = {'val': rt, 'pass': rt < 2}
+    criteria['Bias_shift'] = {'val': psych_80[0] - psych_20[0], 'pass': psych_80[0] - psych_20[0] > 5}
+    criteria['N_trials'] = {'val': n_trials, 'pass': np.all(n_trials > 400)}
+    criteria['Perf_easy'] = {'val': perf_easy, 'pass': np.all(perf_easy > 0.9)}
+    criteria['Reaction_time'] = {'val': rt, 'pass': rt < 2}
 
     passing = np.all([v['pass'] for k, v in criteria.items()])
 
@@ -1024,9 +1024,9 @@ def criterion_delay(n_ephys, n_trials, perf_easy):
     """
 
     criteria = Bunch()
-    criteria['NEphys'] = {'val': n_ephys, 'pass': n_ephys > 0}
-    criteria['NTrials'] = {'val': n_trials, 'pass': np.any(n_trials > 400)}
-    criteria['PerfEasy'] = {'val': perf_easy, 'pass': np.any(perf_easy > 0.9)}
+    criteria['N_ephys'] = {'val': n_ephys, 'pass': n_ephys > 0}
+    criteria['N_trials'] = {'val': n_trials, 'pass': np.any(n_trials > 400)}
+    criteria['Perf_easy'] = {'val': perf_easy, 'pass': np.any(perf_easy > 0.9)}
 
     passing = np.all([v['pass'] for k, v in criteria.items()])
 
@@ -1074,8 +1074,8 @@ def criteria_recording(n_ephys, delay, psych_20, psych_80, n_trials, perf_easy, 
     """
 
     _, criteria = criterion_ephys(psych_20, psych_80, n_trials, perf_easy, rt)
-    criteria['NEphys'] = {'val': n_ephys, 'pass': n_ephys >= 3}
-    criteria['NDelay'] = {'val': delay, 'pass': delay > 0}
+    criteria['N_ephys'] = {'val': n_ephys, 'pass': n_ephys >= 3}
+    criteria['N_delay'] = {'val': delay, 'pass': delay > 0}
 
     passing = np.all([v['pass'] for k, v in criteria.items()])
 
