@@ -1068,7 +1068,7 @@ def make_plots(session_path, one, df=None, save=False, upload=False, task_collec
 
         save_name = save_path.joinpath('subj_psychometric_fit_params.png')
         outputs.append(save_name)
-        ax4[0].get_figure().savefig(save_name, bbox_inches='tight')
+        ax4[0, 0].get_figure().savefig(save_name, bbox_inches='tight')
 
         save_name = save_path.joinpath('subj_psychometric_curve.png')
         outputs.append(save_name)
