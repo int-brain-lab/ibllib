@@ -318,7 +318,7 @@ def get_training_status(trials, task_protocol, ephys_sess_dates, n_delay):
 
     # Case when all sessions are trainingChoiceWorld
     if np.all(np.array(task_protocol) == 'training'):
-        signed_contrast = get_signed_contrast(trials_all)
+        signed_contrast = np.unique(get_signed_contrast(trials_all))
         (info.perf_easy, info.n_trials,
          info.psych, info.rt) = compute_training_info(trials, trials_all)
 
