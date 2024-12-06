@@ -386,8 +386,7 @@ def compute_training_status(df, compute_date, one, force=True, populate=True):
             ephys_sessions.append(df_date.iloc[-1]['date'])
 
     n_status = np.max([-2, -1 * len(status)])
-    #training_status, info, criteria = training.get_training_status(trials, protocol, ephys_sessions, n_delay)
-    training_status, info, criteria = get_training_status(trials, protocol, ephys_sessions, n_delay)
+    training_status, info, criteria = training.get_training_status(trials, protocol, ephys_sessions, n_delay)
     training_status = pass_through_training_hierachy(training_status, status[n_status])
     if populate:
         df.loc[df['date'] == compute_date, 'training_status'] = training_status
