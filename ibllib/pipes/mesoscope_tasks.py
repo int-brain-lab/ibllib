@@ -27,6 +27,7 @@ import time
 import numba as nb
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 import sparse
 from scipy.io import loadmat
 from scipy.interpolate import interpn
@@ -907,6 +908,18 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
         }
         return signature
 
+    def load_meta(self):
+        """Loads the meta data.
+        
+        Returns
+        -------
+        dict
+            The imaging meta data.
+        """
+        (filename, collection, _), *_ = self.signature['input_files']
+        meta_files = sorted(self.session_path.glob(f'{collection}/{filename}'))
+        return mesoscope.patch_imaging_meta(alfio.load_file_content(meta_files[0]) or {})
+
     def _run(self, *args, provenance=Provenance.ESTIMATE, **kwargs):
         """
         Register fields of view (FOV) to Alyx and extract the coordinates and IDs of each ROI.
@@ -937,9 +950,7 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
         - This task modifies the first meta JSON file.  All meta files are registered by this task.
         """
         # Load necessary data
-        (filename, collection, _), *_ = self.signature['input_files']
-        meta_files = sorted(self.session_path.glob(f'{collection}/{filename}'))
-        meta = mesoscope.patch_imaging_meta(alfio.load_file_content(meta_files[0]) or {})
+        meta = self.load_meta()
         nFOV = len(meta.get('FOV', []))
 
         suffix = None if provenance is Provenance.HISTOLOGY else provenance.name.lower()
@@ -1350,6 +1361,185 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
             mlapdv[i] = MLAPDV
             location_id[i] = annotation
         return mlapdv, location_id
+
+    def reproject(self, points):
+        """TODO Document and rename.
+        
+        This method will estimate position based on a plane drawn from experimenter defined points at the brain's surface.
+        For this a JSON of selected points is required as well as the reference image and its meta file.
+
+        Parameters
+        ----------
+        points : dict
+            A dictionary of points selected by the experimenter.  Expected format:
+            {'points': [{'stack_idx': int, 'coords': [int, int]}, ...], 'range': [int, int]}.	
+
+        Assumptions: all on the same X plane, all the same width
+        """
+        stack, ref_meta = self._load_reference_stack()
+        xy_res = np.array([
+            ref_meta['rawScanImageMeta']['XResolution'],
+            ref_meta['rawScanImageMeta']['YResolution']
+        ])
+        if ref_meta['rawScanImageMeta']['ResolutionUnit'].casefold() == 'centimeter':
+            px_per_um = xy_res * 1e-4
+            um_per_px = 1 / px_per_um
+        else:
+            raise NotImplementedError('Reference image resolution unit must be in centimeters')
+        # these can not be used because they seem to refer to the raw acquisition and not the stack
+        # ref_meta["rawScanImageMeta"]["Height"], ref_meta["rawScanImageMeta"]["Width"]
+
+        # need to get the image shape from the .stack and not the .raw
+        ref_stack_n_px = np.flip(np.array(stack.shape[1:]))  # in (x, y)
+        ref_stack_size_um = ref_stack_n_px / px_per_um
+        # known: the point in the image in pixel coordinates and mlap space
+        center = ref_meta['centerMM']
+        img_center_offset = um_per_px * (ref_stack_n_px / 2)  # top left -> centre in um
+        # TODO verify x, y offset in mm xy
+        positive_mlap = np.c_[ref_meta['imageOrientation']['positiveML'],
+                              ref_meta['imageOrientation']['positiveAP']]
+        if not np.all(np.logical_xor(*positive_mlap)):
+            raise NotImplementedError('ML and AP must be orthogonal')
+        # if positive_mlap[0][1]:
+        #     # ML is 2nd dimension; for plotting let's transpose the image
+        #     stack = stack.transpose(0, 2, 1)
+        # ml_offset = np.sum(offset*positive_mlap[0])
+        # ap_offset = np.sum(offset*positive_mlap[1])
+        # positive_mlap = np.array([[0, -1], [1, 0]])
+        craniotomy_center_offset = np.array([center['x'], center['y']]) * 1e3  # um from center
+        center_offset = img_center_offset - craniotomy_center_offset
+        mlap = np.array([center['ML'], center['AP']]) * 1e3  # um from bregma
+        mlap_xy = mlap * positive_mlap
+        # mlap_offset = (mlap * positive_mlap) - (center_offset * positive_mlap)
+        mlap_offset = np.abs(center_offset * positive_mlap) - (mlap * positive_mlap)
+        # mlap_offset = np.sum(mlap - positive_mlap * center_offset, axis=0)
+        # Plot each point
+        def px2um(px, i=None):
+            m = um_per_px if i is None else um_per_px[i]
+            offset = mlap_offset if i is None else mlap_offset[:, i]
+            # return np.array(px) * m - np.sum(offset)
+            return np.sum(offset) - np.array(px) * m
+
+        def um2px(um, i=None):
+            m = px_per_um if i is None else px_per_um[i]
+            offset = mlap_offset if i is None else mlap_offset[:, i]
+            # return np.array(um) * m - np.sum(offset)
+            return np.sum(offset) - np.array(um) * m
+
+        for i, point in enumerate(points['points']):
+            # Convert the point to pixels
+            x, y = np.array(point['coords']) * ref_stack_n_px
+            fig, ax = plt.subplots()
+            ax.matshow(stack[point['stack_idx'], :, :], cmap='gray')
+            ax.set_xlabel('n px'), ax.set_ylabel('n px')
+            ax.xaxis.set_label_position('top')
+
+            secax_x = ax.secondary_xaxis('bottom', functions=(lambda x: px2um(x, i=0), lambda x: um2px(x, i=0)))
+            secax_x.set_xlabel(('ML' if positive_mlap[0][0] else 'AP') + ' / um')
+            secax_x.xaxis.set_tick_params(rotation=70)
+            secax_y = ax.secondary_yaxis('right', functions=(lambda x: px2um(x, i=1), lambda x: um2px(x, i=1)))
+            secax_y.set_ylabel(('ML' if positive_mlap[0][1] else 'AP') + ' / um')
+            secax_y.yaxis.set_tick_params(rotation=70)
+
+            # Plot bregma
+            ax.axhline(um2px([0], i=1), lw=1, color='red', alpha=0.5)
+            ax.axvline(um2px([0], i=0), lw=1, color='red', alpha=0.5)
+
+            # Plot the point
+            # the crosshair
+            ax.plot([x - 24, x + 24], [y, y], lw=2, alpha=0.7, color='r')
+            ax.plot([x, x], [y - 24, y + 24], lw=2, alpha=0.7, color='r')
+            fig.canvas.manager.set_window_title(f'Point {i} - stack #{point["stack_idx"]}')
+
+        plt.show(block=True)
+
+        # the image
+        # a, b = np.percentile(ref_img[point['stack_idx']], (0.5, 99.5))  # What's this for?
+        # kwargs = dict(extent=extent, cmap='gray', vmin=a, vmax=b)
+        # ax.matshow(ref_img[point['stack_idx'], :, :], **kwargs)
+        # # ax.set_aspect('equal')
+
+        # # the center dot
+        # ax.plot(
+        #     brain_surface_mlapdv[i, 1],
+        #     brain_surface_mlapdv[i, 0],
+        #     '.',
+        #     color='r',
+        #     markersize=10,
+        # )
+
+        # ax.set_aspect('equal')
+        # # Bregma
+        # ax.axhline(0, lw=1, color='red', alpha=0.5)
+        # ax.axvline(0, lw=1, color='red', alpha=0.5)
+        # ax.xaxis.set_label_position('top')
+
+        # ax.set_ylabel('ML')
+        # ax.set_xlabel('AP')
+
+        # # the crosshair
+        # ax.plot(
+        #     [
+        #         brain_surface_mlapdv[i, 1] - 24 * um_per_px[1],
+        #         brain_surface_mlapdv[i, 1] + 24 * um_per_px[1],
+        #     ],
+        #     [brain_surface_mlapdv[i, 0], brain_surface_mlapdv[i, 0]],
+        #     lw=2,
+        #     alpha=0.7,
+        #     color='r',
+        # )
+        # ax.plot(
+        #     [brain_surface_mlapdv[i, 1], brain_surface_mlapdv[i, 1]],
+        #     [
+        #         brain_surface_mlapdv[i, 0] - 24 * um_per_px[0],
+        #         brain_surface_mlapdv[i, 0] + 24 * um_per_px[0],
+        #     ],
+        #     lw=2,
+        #     alpha=0.7,
+        #     color='r',
+        # )
+
+
+        # # extend the crosshair
+        # ax.axhline(y=brain_surface_mlapdv[i, 0],
+        #     lw=1,
+        #     alpha=0.7,
+        #     color='b',
+        #     linestyle=':'
+        # )
+        # ax.axvline(
+        #     x=brain_surface_mlapdv[i, 1],
+        #     lw=1,
+        #     alpha=0.7,
+        #     color='b',
+        #     linestyle=':'
+        # )
+
+        # secax = ax.secondary_xaxis('top', functions=(deg2rad, rad2deg))
+        # secax.set_xlabel('')
+        # plt.show()
+
+
+        
+    
+    def _load_reference_stack(self):
+        """Load the referenceImage.stack.tif file and its metadata.
+        
+        Returns
+        -------
+        numpy.array
+            The reference image stack array of size (nZ, nY, nX).
+        dict
+            The reference image stack meta data.
+        """
+        import tifffile
+        try:
+            stack_path = next(self.session_path.glob('raw_imaging_data_??/reference/referenceImage.stack.tif'))
+        except StopIteration:
+            raise FileNotFoundError('Reference stack not found')
+        meta_path = stack_path.with_name('referenceImage.meta.json')
+        meta = mesoscope.patch_imaging_meta(alfio.load_file_content(meta_path) or {})
+        return tifffile.imread(stack_path), meta
 
 
 def surface_normal(triangle):
