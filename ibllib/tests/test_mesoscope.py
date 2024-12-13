@@ -288,6 +288,38 @@ class TestMesoscopeFOV(unittest.TestCase):
             # ONE function is cached so we must reset the mode for other tests
             one.mode = 'auto'
 
+    def test_reproject(self):
+        """Test for MesoscopeFOV.reproject method."""
+        task = MesoscopeFOV('/foo/bar/subject/2020-01-01/001')
+        # Start with very simple dummy data
+        stack = np.ones((3, 100, 50))
+        raw_meta = {'ResolutionUnit': 'Centimeter', 'XResolution': 1000, 'YResolution': 1000}
+        ref_meta = {
+            'centerMM': {'ML': 0., 'AP': 0., 'x': 0., 'y': 0.},
+            'centerDeg': {'x': 0., 'y': 0., 'x': 0., 'y': 0.},
+            'imageOrientation': {'positiveML': [1, 0], 'positiveAP': [0, 1]},
+            'rawScanImageMeta': raw_meta,
+            'scanImageParams': {'hStackManager': {'zs': [-100, -50, 0]}}
+        }
+        points = {'range': [0, 2], 'points': [
+            {'coords': [0, 0], 'stack_idx': 0},
+            {'coords': [1, 0], 'stack_idx': 0},
+            {'coords': [0.5, 1], 'stack_idx': 0},
+        ]}
+        ### Samuel's data
+        import tifffile
+        one = ONE()
+        ref_img_path = one.eid2path('SP058/2024-08-01/001').joinpath('raw_imaging_data_02/reference/referenceImage.stack.tif')
+        stack = tifffile.imread(ref_img_path)
+        ref_meta_path = ref_img_path.parent.joinpath('referenceImage.meta.json')
+        with open(ref_meta_path, "r") as fH:
+            ref_meta = json.load(fH)
+        with open(ref_meta_path.parent.joinpath('referenceImage.points.json'), "r") as fH:
+            points = json.load(fH)
+
+        with mock.patch.object(task, '_load_reference_stack', return_value=(stack, ref_meta)):
+            task.reproject(points)
+
 
 class TestRegisterFOV(unittest.TestCase):
     """Test for MesoscopeFOV.register_fov method."""
