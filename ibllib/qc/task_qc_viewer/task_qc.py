@@ -241,7 +241,8 @@ def show_session_task_qc(qc_or_session=None, bpod_only=False, local=False, one=N
     if isinstance(qc_or_session, QcFrame):
         qc = qc_or_session
     elif isinstance(qc_or_session, TaskQC):
-        qc = QcFrame(qc_or_session)
+        task_qc = qc_or_session
+        qc = QcFrame(task_qc)
     else:  # assumed to be eid or session path
         one = one or ONE(mode='local' if local else 'auto')
         if not is_session_path(Path(qc_or_session)):
