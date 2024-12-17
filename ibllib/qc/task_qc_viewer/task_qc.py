@@ -288,14 +288,17 @@ def show_session_task_qc(qc_or_session=None, bpod_only=False, local=False, one=N
 
     # Update table and callbacks
     n_trials = qc.frame.shape[0]
-    df_trials = pd.DataFrame({
-        k: v for k, v in task_qc.extractor.data.items()
-        if v.size == n_trials and not k.startswith('wheel')
-    })
+    if 'task_qc' in locals():
+        df_trials = pd.DataFrame({
+            k: v for k, v in task_qc.extractor.data.items()
+            if v.size == n_trials and not k.startswith('wheel')
+        })
+        df = df_trials.merge(qc.frame, left_index=True, right_index=True)
+    else:
+        df = qc.frame
     df_pass = pd.DataFrame({k: v for k, v in qc.qc.passed.items() if isinstance(v, np.ndarray) and v.size == n_trials})
     df_pass.drop('_task_passed_trial_checks', axis=1, errors='ignore', inplace=True)
     df_pass.rename(columns=lambda x: x.replace('_task', 'passed'), inplace=True)
-    df = df_trials.merge(qc.frame, left_index=True, right_index=True)
     df = df.merge(df_pass.astype('boolean'), left_index=True, right_index=True)
     w.updateDataframe(df)
     qt.run_app()
