@@ -31,3 +31,4 @@ phylib>=2.6.0
 psychofit
 slidingRP>=1.1.1  # steinmetz lab refractory period metrics
 pyqt5
+ibl-style
