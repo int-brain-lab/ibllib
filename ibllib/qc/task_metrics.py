@@ -512,7 +512,7 @@ class HabituationQC(TaskQC):
         iti = (np.roll(data['stimOn_times'], -1) - data['stimOff_times'])[:-1]
         metric = np.r_[np.nan_to_num(iti, nan=np.inf), np.nan] - 1.
         passed[check] = np.abs(metric) <= 0.1
-        passed[check][-1] = np.NaN
+        passed[check][-1] = np.nan
         metrics[check] = metric
 
         # Checks common to training QC

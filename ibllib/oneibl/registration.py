@@ -6,7 +6,7 @@ import itertools
 from packaging import version
 from requests import HTTPError
 
-from one.alf.files import get_session_path, folder_parts, get_alf_path
+from one.alf.path import get_session_path, folder_parts, get_alf_path
 from one.registration import RegistrationClient, get_dataset_type
 from one.remote.globus import get_local_endpoint_id, get_lab_from_endpoint_id
 from one.webclient import AlyxClient, no_cache
@@ -24,7 +24,8 @@ from ibllib.io import session_params
 
 _logger = logging.getLogger(__name__)
 EXCLUDED_EXTENSIONS = ['.flag', '.error', '.avi']
-REGISTRATION_GLOB_PATTERNS = ['alf/**/*.*',
+REGISTRATION_GLOB_PATTERNS = ['_ibl_experiment.description.yaml',
+                              'alf/**/*.*.*',
                               'raw_behavior_data/**/_iblrig_*.*',
                               'raw_task_data_*/**/_iblrig_*.*',
                               'raw_passive_data/**/_iblrig_*.*',
@@ -220,6 +221,13 @@ class IBLRegistrationClient(RegistrationClient):
             procedures = list({*experiment_description_file.get('procedures', []), *(procedures or [])})
             collections = session_params.get_task_collection(experiment_description_file)
 
+        # Read narrative.txt
+        if (narrative_file := ses_path.joinpath('narrative.txt')).exists():
+            with narrative_file.open('r') as f:
+                narrative = f.read()
+        else:
+            narrative = ''
+
         # query Alyx endpoints for subject, error if not found
         subject = self.assert_exists(subject, 'subjects')
 
@@ -238,9 +246,9 @@ class IBLRegistrationClient(RegistrationClient):
             missing = [k for k in required if not session_details[k]]
             assert not any(missing), 'missing session information: ' + ', '.join(missing)
             task_protocols = task_data = settings = []
-            json_field = None
+            json_field = end_time = None
             users = session_details['users']
-            n_trials, n_correct_trials = 0
+            n_trials = n_correct_trials = 0
         else:  # Get session info from task data
             collections = ensure_list(collections)
             # read meta data from the rig for the session from the task settings file
@@ -285,6 +293,11 @@ class IBLRegistrationClient(RegistrationClient):
             poo_counts = [md.get('POOP_COUNT') for md in settings if md.get('POOP_COUNT') is not None]
             if poo_counts:
                 json_field['POOP_COUNT'] = int(sum(poo_counts))
+            # Get the session start delay if available, needed for the training status
+            session_delay = [md.get('SESSION_DELAY_START') for md in settings
+                             if md.get('SESSION_DELAY_START') is not None]
+            if session_delay:
+                json_field['SESSION_DELAY_START'] = int(sum(session_delay))
 
         if not len(session):  # Create session and weighings
             ses_ = {'subject': subject['nickname'],
@@ -300,6 +313,7 @@ class IBLRegistrationClient(RegistrationClient):
                     'end_time': self.ensure_ISO8601(end_time) if end_time else None,
                     'n_correct_trials': n_correct_trials,
                     'n_trials': n_trials,
+                    'narrative': narrative,
                     'json': json_field
                     }
             session = self.one.alyx.rest('sessions', 'create', data=ses_)
@@ -315,6 +329,8 @@ class IBLRegistrationClient(RegistrationClient):
         else:  # if session exists update a few key fields
             data = {'procedures': procedures, 'projects': projects,
                     'n_correct_trials': n_correct_trials, 'n_trials': n_trials}
+            if len(narrative) > 0:
+                data['narrative'] = narrative
             if task_protocols:
                 data['task_protocol'] = '/'.join(task_protocols)
             if end_time:

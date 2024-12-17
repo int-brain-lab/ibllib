@@ -1,3 +1,31 @@
+## Release Note 3.1.0
+
+### features
+- Add narrative during registration of Bpod session
+
+## Release Note 3.0.0
+
+### features
+- Support for py3.8 and 3.9 dropped
+- JobCreator Alyx task
+- Photometry sync task
+- Remove deprecated code, incl. iblatlas and brainbox/quality
+- Bugfix: badframes array dtype change int8 -> uint32
+- Brain wide map release information
+- Limited Numpy 2.0 and ONE 3.0 support
+
+## Release Note 2.40.0
+
+### features
+- iblsorter >= 1.9 sorting tasks with waveform extraction and channel sorting
+- s3 patcher prototype
+
+#### 2.40.1
+- Bugfix: ibllib.io.sess_params.merge_params supports tasks extractors key
+
+#### 2.40.2
+- Bugfix: badframes array dtype change int8 -> uint32
+
 ## Release Note 2.39.0
 
 ### features
@@ -12,6 +40,10 @@
 
 #### 2.39.1
 - Bugfix: brainbox.metrics.single_unit.quick_unit_metrics fix for indexing of n_spike_below2
+
+#### 2.39.2
+- Bugfix: routing of protocol to extractor through the project repository checks that the
+target is indeed an extractor class.
 
 ## Release Note 2.38.0
 
@@ -71,7 +103,7 @@
 - oneibl.register_datasets accounts for non existing sessions when checking protected dsets
 
 #### 2.34.1
-- Ensure mesoscope frame QC files are sorted before concatenating 
+- Ensure mesoscope frame QC files are sorted before concatenating
 - Look for SESSION_TEMPLATE_ID key of task settings for extraction of pre-generated choice world sequences
 - Download required ap.meta files when building pipeline for task_qc command
 
@@ -135,7 +167,7 @@
 - Added ibllib.pipes.dynamic_pipeline.get_trials_tasks function
 
 ### bugfixes
-- Fix ibllib.io.extractors.ephys_fpga.extract_all for python 3.8 
+- Fix ibllib.io.extractors.ephys_fpga.extract_all for python 3.8
 
 ### other
 - Change behavior qc to pass if number of trials > 400 (from start) can be found for which easy trial performance > 0.9
@@ -188,7 +220,7 @@
 ### features
 - Training status pipeline now compatible with dynamic pipeline
 - Dynamic DLC task using description file
-- Full photometry lookup table 
+- Full photometry lookup table
 
 ### bugfixes
 - fix for untrainable, unbiasable don't repopulate if already exists
@@ -203,7 +235,7 @@
 - split swanson areas
 ### bugfixes
 - trainig plots
-- fix datahandler on SDSC for ONEv2 
+- fix datahandler on SDSC for ONEv2
 
 ### Release Notes 2.23.0 2023-05-19
 - quiescence period extraction
@@ -217,7 +249,7 @@
 ### Release Notes 2.22.2 2023-05-03
 ### bugfixes
 - training plots
-- 
+-
 ### features
 - can change download path for atlas
 ### Release Notes 2.22.1 2023-05-02
@@ -321,7 +353,7 @@
 
 ### Release Notes 2.17.0 2022-10-04
 - units quality metrics use latest algorithms for refractory period violations and noise cut-off
- 
+
 ## Release Notes 2.16
 ### Release Notes 2.16.1 2022-09-28
 ### bugfixes
@@ -340,7 +372,7 @@
 - SessionLoader error handling and bug fix
 
 ### Release Notes 2.15.2 - 2022-09-22
-- extraction pipeline: fix unpacking of empty arguments field from alyx dict that prevents running task 
+- extraction pipeline: fix unpacking of empty arguments field from alyx dict that prevents running task
 
 ### Release Notes 2.15.1 - 2022-09-21
 - atlas: gene-expression backend and MRI Toronto atlas stretch and squeeze factors (Dan/Olivier)
@@ -354,7 +386,7 @@
 - new modalities:
   - photometry extraction (Mainen lab)
   - widefield extraction (Churchland lab)
-  
+
 #### bugfixes
 - Spike sorting task: parse new pykilosort log format
 - Session loader
@@ -429,7 +461,7 @@
 
 ### Release Notes 2.10.6 2022-03-15
 - Allow parent tasks to be 'Incomplete' to run task on local server
-- Change one base_rul for dlc_qc_plot on cortexlab 
+- Change one base_rul for dlc_qc_plot on cortexlab
 
 ### Release Notes 2.10.5 2022-03-11
 - Fix moot release accident
@@ -470,7 +502,7 @@
 
 ### Release Notes 2.9.0 2022-01-24
 - Adding EphysDLC task in ephys_preprocessing pipeline
-- NOTE: requires DLC environment to be set up on local servers! 
+- NOTE: requires DLC environment to be set up on local servers!
 - Fixes to EphysPostDLC dlc_qc_plot
 
 ## Release Notes 2.8

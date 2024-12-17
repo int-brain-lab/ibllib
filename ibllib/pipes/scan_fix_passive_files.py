@@ -7,7 +7,7 @@ import logging
 import shutil
 from pathlib import Path, PureWindowsPath
 
-from one.alf.files import get_session_path
+from one.alf.path import get_session_path
 
 log = logging.getLogger("ibllib")
 

@@ -41,8 +41,7 @@ import ibllib.pipes.behavior_tasks as btasks
 import ibllib.pipes.video_tasks as vtasks
 import ibllib.pipes.ephys_tasks as etasks
 import ibllib.pipes.audio_tasks as atasks
-import ibllib.pipes.photometry_tasks as ptasks
-# from ibllib.pipes.photometry_tasks import FibrePhotometryPreprocess, FibrePhotometryRegisterRaw
+import ibllib.pipes.neurophotometrics as ptasks
 
 _logger = logging.getLogger(__name__)
 
@@ -490,8 +489,6 @@ def make_pipeline(session_path, **pkwargs):
 
             tasks[f'RawEphysQC_{pname}'] = type(f'RawEphysQC_{pname}', (etasks.RawEphysQC,), {})(
                 **kwargs, **ephys_kwargs, pname=pname, parents=register_task)
-            tasks[f'EphysCellQC_{pname}'] = type(f'EphysCellQC_{pname}', (etasks.EphysCellsQc,), {})(
-                **kwargs, **ephys_kwargs, pname=pname, parents=[tasks[f'Spikesorting_{pname}']])
 
     # Video tasks
     if 'cameras' in devices:
@@ -584,14 +581,12 @@ def make_pipeline(session_path, **pkwargs):
         tasks['MesoscopeCompress'] = type('MesoscopeCompress', (mscope_tasks.MesoscopeCompress,), {})(
             **kwargs, **mscope_kwargs, parents=[tasks['MesoscopePreprocess']])
 
-    if 'photometry' in devices:
-        # {'collection': 'raw_photometry_data', 'sync_label': 'frame_trigger', 'regions': ['Region1G', 'Region3G']}
-        photometry_kwargs = devices['photometry']
-        tasks['FibrePhotometryRegisterRaw'] = type('FibrePhotometryRegisterRaw', (
-            ptasks.FibrePhotometryRegisterRaw,), {})(**kwargs, **photometry_kwargs)
-        tasks['FibrePhotometryPreprocess'] = type('FibrePhotometryPreprocess', (
-            ptasks.FibrePhotometryPreprocess,), {})(**kwargs, **photometry_kwargs, **sync_kwargs,
-                                                    parents=[tasks['FibrePhotometryRegisterRaw']] + sync_tasks)
+    if 'neurophotometrics' in devices:
+        # {'collection': 'raw_photometry_data', 'datetime': '2024-09-18T16:43:55.207000',
+        #   'fibers': {'G0': {'location': 'NBM'}, 'G1': {'location': 'SI'}}, 'sync_channel': 1}
+        photometry_kwargs = devices['neurophotometrics']
+        tasks['FibrePhotometrySync'] = type('FibrePhotometrySync', (
+            ptasks.FibrePhotometrySync,), {})(**kwargs, **photometry_kwargs)
 
     p = mtasks.Pipeline(session_path=session_path, **pkwargs)
     p.tasks = tasks

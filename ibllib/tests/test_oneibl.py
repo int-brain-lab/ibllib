@@ -22,6 +22,7 @@ import iblutil.io.params as iopar
 
 from ibllib.oneibl import patcher, registration, data_handlers as handlers
 import ibllib.io.extractors.base
+from ibllib.pipes.behavior_tasks import ChoiceWorldTrialsBpod
 from ibllib.tests import TEST_DB
 from ibllib.io import session_params
 
@@ -388,6 +389,7 @@ class TestRegistration(unittest.TestCase):
         self.assertFalse(flag_file.exists())
 
     def test_registration_session(self):
+        """Test IBLRegistrationClient.register_session method."""
         settings_file = self._write_settings_file()
         rc = registration.IBLRegistrationClient(one=self.one)
         rc.register_session(str(self.session_path), procedures=['Ephys recording with acute probe(s)'])
@@ -427,8 +429,52 @@ class TestRegistration(unittest.TestCase):
         self.assertEqual(self.settings['SESSION_END_TIME'], ses_info['end_time'])
         self.one.alyx.rest('sessions', 'delete', id=eid)
 
+    def test_registration_session_passive(self):
+        """Test IBLRegistrationClient.register_session method when there is no iblrig bpod data.
+
+        For truly passive sessions there is no Bpod data (no raw_behavior_data or raw_task_data folders).
+        In this situation the must already be a session on Alyx manually created by the experimenter,
+        which needs to contain the start time, location, lab, and user data.
+        """
+        rc = registration.IBLRegistrationClient(one=self.one)
+        experiment_description = {
+            'procedures': ['Ephys recording with acute probe(s)'],
+            'sync': {'nidq': {'collection': 'raw_ephys_data'}}}
+        session_params.write_params(self.session_path, experiment_description)
+        # Should fail because the session doesn't exist on Alyx
+        self.assertRaises(AssertionError, rc.register_session, self.session_path)
+        # Create the session
+        ses_ = {
+            'subject': self.subject, 'users': [self.one.alyx.user],
+            'type': 'Experiment', 'number': int(self.session_path.name),
+            'start_time': rc.ensure_ISO8601(self.session_path.parts[-2]),
+            'n_correct_trials': 100, 'n_trials': 200
+        }
+        session = self.one.alyx.rest('sessions', 'create', data=ses_)
+        # Should fail because the session lacks critical information
+        self.assertRaisesRegex(
+            AssertionError, 'missing session information: location', rc.register_session, self.session_path)
+        session = self.one.alyx.rest(
+            'sessions', 'partial_update', id=session['url'][-36:], data={'location': self.settings['PYBPOD_BOARD']})
+        # Should now register
+        ses, dsets = rc.register_session(self.session_path)
+        # Check that session was updated, namely the n trials and procedures
+        self.assertEqual(session['url'], ses['url'])
+        self.assertTrue(ses['n_correct_trials'] == ses['n_trials'] == 0)
+        self.assertEqual(experiment_description['procedures'], ses['procedures'])
+        self.assertEqual(5, len(dsets))
+        registered = [d['file_records'][0]['relative_path'] for d in dsets]
+        expected = [
+            f'{self.subject}/2018-04-01/002/_ibl_experiment.description.yaml',
+            f'{self.subject}/2018-04-01/002/alf/spikes.amps.npy',
+            f'{self.subject}/2018-04-01/002/alf/spikes.times.npy',
+            f'{self.subject}/2018-04-01/002/alf/#{self.revision}#/spikes.amps.npy',
+            f'{self.subject}/2018-04-01/002/alf/#{self.revision}#/spikes.times.npy'
+        ]
+        self.assertCountEqual(expected, registered)
+
     def test_register_chained_session(self):
-        """Tests for registering a session with chained (multiple) protocols"""
+        """Tests for registering a session with chained (multiple) protocols."""
         behaviour_paths = [self.session_path.joinpath(f'raw_task_data_{i:02}') for i in range(2)]
         for p in behaviour_paths:
             p.mkdir()
@@ -459,6 +505,7 @@ class TestRegistration(unittest.TestCase):
         rc = registration.IBLRegistrationClient(one=self.one)
         session, recs = rc.register_session(self.session_path)
 
+        self.assertEqual(7, len(recs))
         ses_info = self.one.alyx.rest('sessions', 'read', id=session['id'])
         self.assertCountEqual(experiment_description['procedures'], ses_info['procedures'])
         self.assertCountEqual(experiment_description['projects'], ses_info['projects'])
@@ -563,6 +610,24 @@ class TestDataHandlers(unittest.TestCase):
         self.assertEqual(4, len(out))
         self.assertDictEqual(expected, handler.processed)
 
+    def test_getData(self):
+        """Test for DataHandler.getData method."""
+        one = ONE(**TEST_DB, mode='auto')
+        session_path = Path('KS005/2019-04-01/001')
+        task = ChoiceWorldTrialsBpod(session_path, one=one, collection='raw_behavior_data')
+        task.get_signatures()
+        handler = handlers.ServerDataHandler(session_path, task.signature, one=one)
+        # Check getData returns data frame of signature inputs
+        df = handler.getData()
+        self.assertIsInstance(df, pd.DataFrame)
+        self.assertEqual(len(task.input_files), len(df))
+        # Check with no ONE
+        handler.one = None
+        self.assertIsNone(handler.getData())
+        # Check when no inputs
+        handler.signature['input_files'] = []
+        self.assertTrue(handler.getData(one=one).empty)
+
     def test_dataset_from_name(self):
         """Test dataset_from_name function."""
         I = handlers.ExpectedDataset.input  # noqa
@@ -625,6 +690,51 @@ class TestDataHandlers(unittest.TestCase):
         dataset = I(None, None, True)
         dataset._identifiers = ('alf', '#2020-01-01#', 'foo.bar.ext')
         self.assertRaises(NotImplementedError, handlers.update_collections, dataset, None)
+
+
+class TestSDSCDataHandler(unittest.TestCase):
+    """Test for SDSCDataHandler class."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.one = ONE(**TEST_DB, mode='auto')
+        self.patch_path = Path(tmp.name, 'patch')
+        self.root_path = Path(tmp.name, 'root')
+        self.root_path.mkdir(), self.patch_path.mkdir()
+        self.session_path = self.root_path.joinpath('KS005/2019-04-01/001')
+
+    def test_handler(self):
+        """Test for SDSCDataHandler.setUp and cleanUp methods."""
+        # Create a task in order to check how the signature files are symlinked by handler
+        task = ChoiceWorldTrialsBpod(self.session_path, one=self.one, collection='raw_behavior_data')
+        task.get_signatures()
+        handler = handlers.SDSCDataHandler(self.session_path, task.signature, self.one)
+        handler.patch_path = self.patch_path
+        handler.root_path = self.root_path
+        # Add some files on disk to check they are symlinked by setUp method
+        for uid, rel_path in handler.getData().rel_path.items():
+            filepath = self.session_path.joinpath(rel_path)
+            filepath.parent.mkdir(exist_ok=True, parents=True)
+            filepath.with_stem(f'{filepath.stem}.{uid}').touch()
+        # Check setUp does the symlinks and updates the task session path
+        handler.setUp(task=task)
+        expected = self.patch_path.joinpath('ChoiceWorldTrialsBpod', *self.session_path.parts[-3:])
+        self.assertEqual(expected, task.session_path, 'failed to update task session path')
+        linked = list(expected.glob('raw_behavior_data/*.*.*'))
+        self.assertTrue(all(f.is_symlink for f in linked), 'failed to sym link input files')
+        self.assertEqual(len(task.input_files), len(linked), 'unexpected number of linked patch files')
+        # Check all links to root session
+        session_path = self.session_path.resolve()  # NB: GitHub CI uses linked temp dir so we resolve here
+        self.assertTrue(all(f.resolve().is_relative_to(session_path) for f in linked))
+        # Check sym link doesn't contain UUID
+        self.assertTrue(len(linked[0].resolve().stem.split('.')[-1]) == 36, 'source path missing UUID')
+        self.assertFalse(len(linked[0].stem.split('.')[-1]) == 36, 'symlink contains UUID')
+        # Check cleanUp removes links
+        handler.cleanUp(task=task)
+        self.assertFalse(any(map(Path.exists, linked)))
+        # Check no root files were deleted
+        self.assertEqual(len(task.input_files), len(list(self.session_path.glob('raw_behavior_data/*.*.*'))))
 
 
 class TestExpectedDataset(unittest.TestCase):

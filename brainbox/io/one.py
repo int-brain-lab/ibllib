@@ -12,7 +12,7 @@ from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
 
 from one.api import ONE, One
-from one.alf.files import get_alf_path, full_path_parts
+from one.alf.path import get_alf_path, full_path_parts
 from one.alf.exceptions import ALFObjectNotFound, ALFMultipleCollectionsFound
 from one.alf import cache
 import one.alf.io as alfio
@@ -866,13 +866,21 @@ class SpikeSortingLoader:
         waveform_attributes = list(set(WAVEFORMS_ATTRIBUTES + waveform_attributes))
         return {'spikes': spike_attributes, 'clusters': cluster_attributes, 'waveforms': waveform_attributes}
 
-    def _get_spike_sorting_collection(self, spike_sorter='pykilosort'):
+    def _get_spike_sorting_collection(self, spike_sorter=None):
         """
         Filters a list or array of collections to get the relevant spike sorting dataset
         if there is a pykilosort, load it
         """
-        collection = next(filter(lambda c: c == f'alf/{self.pname}/{spike_sorter}', self.collections), None)
-        # otherwise, prefers the shortest
+        for sorter in list([spike_sorter, 'iblsorter', 'pykilosort']):
+            if sorter is None:
+                continue
+            if sorter == "":
+                collection = next(filter(lambda c: c == f'alf/{self.pname}', self.collections), None)
+            else:
+                collection = next(filter(lambda c: c == f'alf/{self.pname}/{sorter}', self.collections), None)
+            if collection is not None:
+                return collection
+        # if none is found amongst the defaults, prefers the shortest
         collection = collection or next(iter(sorted(filter(lambda c: f'alf/{self.pname}' in c, self.collections), key=len)), None)
         _logger.debug(f"selecting: {collection} to load amongst candidates: {self.collections}")
         return collection
@@ -982,14 +990,13 @@ class SpikeSortingLoader:
         """
         _logger.debug(f"loading waveforms from {self.collection}")
         return self.one.load_object(
-            self.eid, "waveforms",
-            attribute=["traces", "templates", "table", "channels"],
+            id=self.eid, obj="waveforms", attribute=["traces", "templates", "table", "channels"],
             collection=self._get_spike_sorting_collection("pykilosort"), download_only=True, **kwargs
         )
 
     def raw_waveforms(self, **kwargs):
         wf_paths = self.download_raw_waveforms(**kwargs)
-        return WaveformsLoader(wf_paths[0].parent, wfs_dtype=np.float16)
+        return WaveformsLoader(wf_paths[0].parent)
 
     def load_channels(self, **kwargs):
         """
@@ -1010,7 +1017,10 @@ class SpikeSortingLoader:
         self.download_spike_sorting_object(obj='channels', missing='ignore', **kwargs)
         channels = self._load_object(self.files['channels'], wildcards=self.one.wildcards)
         if 'electrodeSites' in self.files:  # if common dict keys, electrodeSites prevails
-            channels = channels | self._load_object(self.files['electrodeSites'], wildcards=self.one.wildcards)
+            esites = channels | self._load_object(self.files['electrodeSites'], wildcards=self.one.wildcards)
+            if alfio.check_dimensions(esites) != 0:
+                esites = self._load_object(self.files['electrodeSites'], wildcards=self.one.wildcards)
+                esites['rawInd'] = np.arange(esites[list(esites.keys())[0]].shape[0])
         if 'brainLocationIds_ccf_2017' not in channels:
             _logger.debug(f"loading channels from alyx for {self.files['channels']}")
             _channels, self.histology = _load_channel_locations_traj(
@@ -1022,7 +1032,7 @@ class SpikeSortingLoader:
             self.histology = 'alf'
         return Bunch(channels)
 
-    def load_spike_sorting(self, spike_sorter='pykilosort', revision=None, enforce_version=True, good_units=False, **kwargs):
+    def load_spike_sorting(self, spike_sorter='iblsorter', revision=None, enforce_version=False, good_units=False, **kwargs):
         """
         Loads spikes, clusters and channels
 
@@ -1071,7 +1081,7 @@ class SpikeSortingLoader:
                     assert fn.relative_to(self.session_path).parts[2] == self.spike_sorter, \
                         f"You required strict version {self.spike_sorter}, {fn} does not match"
                 if self.revision:
-                    assert fn.relative_to(self.session_path).parts[3] == f"#{self.revision}#", \
+                    assert full_path_parts(fn)[5] == self.revision, \
                         f"You required strict revision {self.revision}, {fn} does not match"
 
     @staticmethod

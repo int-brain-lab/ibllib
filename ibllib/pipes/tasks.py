@@ -78,6 +78,7 @@ import time
 from collections import OrderedDict
 import traceback
 import json
+from typing import List, Dict
 
 from graphviz import Digraph
 
@@ -108,13 +109,13 @@ class Task(abc.ABC):
     time_elapsed_secs = None
     time_out_secs = 3600 * 2  # time-out after which a task is considered dead
     version = ibllib.__version__
-    signature = {'input_files': [], 'output_files': []}  # list of tuples (filename, collection, required_flag[, register])
     force = False  # whether to re-download missing input files on local server if not present
     job_size = 'small'  # either 'small' or 'large', defines whether task should be run as part of the large or small job services
     env = None  # the environment name within which to run the task (NB: the env is not activated automatically!)
+    on_error = 'continue'  # whether to raise an exception on error ('raise') or report the error and continue ('continue')
 
     def __init__(self, session_path, parents=None, taskid=None, one=None,
-                 machine=None, clobber=True, location='server', **kwargs):
+                 machine=None, clobber=True, location='server', scratch_folder=None, on_error='continue', **kwargs):
         """
         Base task class
         :param session_path: session path
@@ -125,9 +126,11 @@ class Task(abc.ABC):
         :param clobber: whether or not to overwrite log on rerun
         :param location: location where task is run. Options are 'server' (lab local servers'), 'remote' (remote compute node,
         data required for task downloaded via one), 'AWS' (remote compute node, data required for task downloaded via AWS),
-        or 'SDSC' (SDSC flatiron compute node) # TODO 'Globus' (remote compute node, data required for task downloaded via Globus)
+        or 'SDSC' (SDSC flatiron compute node)
+        :param scratch_folder: optional: Path where to write intermediate temporary data
         :param args: running arguments
         """
+        self.on_error = on_error
         self.taskid = taskid
         self.one = one
         self.session_path = session_path
@@ -141,7 +144,33 @@ class Task(abc.ABC):
         self.clobber = clobber
         self.location = location
         self.plot_tasks = []  # Plotting task/ tasks to create plot outputs during the task
+        self.scratch_folder = scratch_folder
         self.kwargs = kwargs
+
+    @property
+    def signature(self) -> Dict[str, List]:
+        """
+        The signature of the task specifies inputs and outputs for the given task.
+        For some tasks it is dynamic and calculated. The legacy code specifies those as tuples.
+        The preferred way is to use the ExpectedDataset input and output constructors.
+
+            I = ExpectedDataset.input
+            O = ExpectedDataset.output
+            signature = {
+                'input_files': [
+                    I(name='extract.me.npy', collection='raw_data', required=True, register=False, unique=False),
+                ],
+                'output_files': [
+                    O(name='look.atme.npy', collection='shiny_data', required=True, register=True, unique=False)
+            ]}
+            is equivalent to:
+            signature = {
+                'input_files': [('extract.me.npy', 'raw_data', True, True)],
+                'output_files': [('look.atme.npy', 'shiny_data', True)],
+                }
+        :return:
+        """
+        return {'input_files': [], 'output_files': []}
 
     @property
     def name(self):
@@ -221,7 +250,7 @@ class Task(abc.ABC):
                 if self.gpu >= 1:
                     if not self._creates_lock():
                         self.status = -2
-                        _logger.info(f'Job {self.__class__} exited as a lock was found')
+                        _logger.info(f'Job {self.__class__} exited as a lock was found at {self._lock_file_path()}')
                         new_log = log_capture_string.getvalue()
                         self.log = new_log if self.clobber else self.log + new_log
                         _logger.removeHandler(ch)
@@ -236,10 +265,12 @@ class Task(abc.ABC):
                 self.outputs = outputs if not self.outputs else self.outputs  # ensure None if no inputs registered
             else:
                 self.outputs.extend(ensure_list(outputs))  # Add output files to list of inputs to register
-        except Exception:
+        except Exception as e:
             _logger.error(traceback.format_exc())
             _logger.info(f'Job {self.__class__} errored')
             self.status = -1
+            if self.on_error == 'raise':
+                raise e
 
         self.time_elapsed_secs = time.time() - start_time
         # log the outputs
@@ -388,14 +419,14 @@ class Task(abc.ABC):
                 # Attempts to download missing data using globus
                 _logger.info('Not all input files found locally: attempting to re-download required files')
                 self.data_handler = self.get_data_handler(location='serverglobus')
-                self.data_handler.setUp()
+                self.data_handler.setUp(task=self)
                 # Double check we now have the required files to run the task
                 # TODO in future should raise error if even after downloading don't have the correct files
                 self.assert_expected_inputs(raise_error=False)
                 return True
         else:
             self.data_handler = self.get_data_handler()
-            self.data_handler.setUp()
+            self.data_handler.setUp(task=self)
             self.get_signatures(**kwargs)
             self.assert_expected_inputs(raise_error=False)
             return True
@@ -414,7 +445,7 @@ class Task(abc.ABC):
         Function to optionally overload to clean up
         :return:
         """
-        self.data_handler.cleanUp()
+        self.data_handler.cleanUp(task=self)
 
     def assert_expected_outputs(self, raise_error=True):
         """
@@ -434,7 +465,7 @@ class Task(abc.ABC):
 
         return everything_is_fine, files
 
-    def assert_expected_inputs(self, raise_error=True):
+    def assert_expected_inputs(self, raise_error=True, raise_ambiguous=False):
         """
         Check that all the files necessary to run the task have been are present on disk.
 
@@ -469,7 +500,7 @@ class Task(abc.ABC):
                 for k, v in variant_datasets.items() if any(v)}
             _logger.error('Ambiguous input datasets found: %s', ambiguous)
 
-            if raise_error or self.location == 'sdsc':  # take no chances on SDSC
+            if raise_ambiguous or self.location == 'sdsc':  # take no chances on SDSC
                 # This could be mitigated if loading with data OneSDSC
                 raise NotImplementedError(
                     'Multiple variant datasets found. Loading for these is undefined.')
@@ -523,11 +554,13 @@ class Task(abc.ABC):
         elif location == 'remote':
             dhandler = data_handlers.RemoteHttpDataHandler(self.session_path, self.signature, one=self.one)
         elif location == 'aws':
-            dhandler = data_handlers.RemoteAwsDataHandler(self, self.session_path, self.signature, one=self.one)
+            dhandler = data_handlers.RemoteAwsDataHandler(self.session_path, self.signature, one=self.one)
         elif location == 'sdsc':
-            dhandler = data_handlers.SDSCDataHandler(self, self.session_path, self.signature, one=self.one)
+            dhandler = data_handlers.SDSCDataHandler(self.session_path, self.signature, one=self.one)
         elif location == 'popeye':
-            dhandler = data_handlers.PopeyeDataHandler(self, self.session_path, self.signature, one=self.one)
+            dhandler = data_handlers.PopeyeDataHandler(self.session_path, self.signature, one=self.one)
+        elif location == 'ec2':
+            dhandler = data_handlers.RemoteEC2DataHandler(self.session_path, self.signature, one=self.one)
         else:
             raise ValueError(f'Unknown location "{location}"')
         return dhandler

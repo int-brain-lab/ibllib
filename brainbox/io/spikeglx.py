@@ -7,7 +7,7 @@ import string
 import random
 
 import numpy as np
-from one.alf.files import remove_uuid_string
+from one.alf.path import remove_uuid_string
 
 import spikeglx
 
@@ -128,6 +128,7 @@ class Streamer(spikeglx.Reader):
         self.file_chunks = self.one.load_dataset(self.eid, f'*.{typ}.ch', collection=f"*{self.pname}")
         meta_file = self.one.load_dataset(self.eid, f'*.{typ}.meta', collection=f"*{self.pname}")
         cbin_rec = self.one.list_datasets(self.eid, collection=f"*{self.pname}", filename=f'*{typ}.*bin', details=True)
+        cbin_rec.index = cbin_rec.index.map(lambda x: (self.eid, x))
         self.url_cbin = self.one.record2url(cbin_rec)[0]
         with open(self.file_chunks, 'r') as f:
             self.chunks = json.load(f)

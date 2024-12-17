@@ -85,7 +85,7 @@ class QC:
         one.alf.spec.QC
             The overall outcome.
         """
-        outcomes = filter(lambda x: x not in (None, np.NaN), outcomes)
+        outcomes = filter(lambda x: x not in (None, np.nan), outcomes)
         return agg(map(spec.QC.validate, outcomes))
 
     def _set_eid_or_path(self, session_path_or_eid):
