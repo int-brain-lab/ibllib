@@ -116,7 +116,7 @@ def load_existing_dataframe(subj_path):
         return None
 
 
-def load_trials(sess_path, one, collections=None, force=True, mode='warn'):
+def load_trials(sess_path, one, collections=None, force=True, mode='raise'):
     """
     Load trials data for session. First attempts to load from local session path, if this fails will attempt to download via ONE,
     if this also fails, will then attempt to re-extract locally
@@ -208,9 +208,11 @@ def load_combined_trials(sess_paths, one, force=True):
     """
     trials_dict = {}
     for sess_path in sess_paths:
-        trials = load_trials(Path(sess_path), one, force=force)
+        trials = load_trials(Path(sess_path), one, force=force, mode='warn')
         if trials is not None:
-            trials_dict[Path(sess_path).stem] = load_trials(Path(sess_path), one, force=force)
+            trials_dict[Path(sess_path).stem] = load_trials(Path(sess_path), one, force=force, mode='warn'
+
+                                                            )
 
     return training.concatenate_trials(trials_dict)
 
@@ -442,12 +444,13 @@ def compute_session_duration_delay_location(sess_path, collections=None, **kwarg
         try:
             start_time, end_time = _get_session_times(sess_path, md, sess_data)
             session_duration = session_duration + int((end_time - start_time).total_seconds() / 60)
-            session_delay = session_delay + md.get('SESSION_DELAY_START', 0)
+            session_delay = session_delay + md.get('SESSION_DELAY_START',
+                                                   md.get('SESSION_START_DELAY_SEC', 0))
         except Exception:
             session_duration = session_duration + 0
             session_delay = session_delay + 0
 
-        if 'ephys' in md.get('RIG_NAME', None):
+        if 'ephys' in md.get('RIG_NAME', md.get('PYBPOD_BOARD', None)):
             session_location = 'ephys_rig'
         else:
             session_location = 'training_rig'
@@ -806,6 +809,7 @@ def display_info(df, axs):
     axs[0].set_axis_off()
     axs[1].set_axis_off()
 
+
 def plot_fit_params(df, subject):
     fig, axs = plt.subplots(2, 3, figsize=(12, 6), gridspec_kw={'width_ratios': [2, 2, 1]})
 
@@ -902,7 +906,7 @@ def plot_fit_params(df, subject):
 def plot_psychometric_curve(df, subject, one):
     df = df.drop_duplicates('date').reset_index(drop=True)
     sess_path = Path(df.iloc[-1]["session_path"])
-    trials = load_trials(sess_path, one)
+    trials = load_trials(sess_path, one, mode='warn')
 
     fig, ax1 = plt.subplots(figsize=(8, 6))
 

@@ -870,7 +870,7 @@ def criterion_1a(psych, n_trials, perf_easy, signed_contrast):
 
     criteria = Bunch()
     criteria['Zero_contrast'] = {'val': signed_contrast, 'pass': np.any(signed_contrast == 0)}
-    criteria['LapseLow_50'] = {'val': psych[2], 'pass': psych[2] < 0.2 }
+    criteria['LapseLow_50'] = {'val': psych[2], 'pass': psych[2] < 0.2}
     criteria['LapseHigh_50'] = {'val': psych[3], 'pass': psych[3] < 0.2}
     criteria['Bias'] = {'val': psych[0], 'pass': abs(psych[0]) < 16}
     criteria['Threshold'] = {'val': psych[1], 'pass': psych[1] < 19}
