@@ -1,3 +1,12 @@
+## Release Note 3.2.0
+
+### features
+- Add session delay info during registration of Bpod session
+- Add detailed criteria info to behaviour plots
+
+### Bugfixes
+- Read in updated json keys from task settings to establish ready4recording
+
 ## Release Note 3.1.0
 
 ### features
