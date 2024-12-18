@@ -762,7 +762,7 @@ class LightningPose(base_tasks.VideoTask):
                 # Run motion energy
                 # ---------------------------
                 t1 = time.time()
-                _logger.info(f'Computing motion energy for {cam}Camera')
+                _logger.info(f'Computing motion energy for {label}Camera')
                 command2run = f"{self.scripts.joinpath('run_motion.sh')} {str(self.env)} {mp4_file} {result}"
                 _logger.info(command2run)
                 process = subprocess.Popen(
@@ -778,7 +778,7 @@ class LightningPose(base_tasks.VideoTask):
                 if process.returncode != 0:
                     error_str = error.decode('utf-8').strip()
                     _logger.error(
-                        f'Motion energy failed for {cam}Camera.\n\n'
+                        f'Motion energy failed for {label}Camera.\n\n'
                         f'++++++++ Output of subprocess for debugging ++++++++\n\n'
                         f'{error_str}\n'
                         f'++++++++++++++++++++++++++++++++++++++++++++\n'
@@ -788,9 +788,9 @@ class LightningPose(base_tasks.VideoTask):
                 else:
                     _logger.info(f'{label} camera took {(time.time() - t1)} seconds')
                     actual_outputs.append(next(self.session_path.joinpath('alf').glob(
-                        f'{cam}Camera.ROIMotionEnergy*.npy')))
+                        f'{label}Camera.ROIMotionEnergy*.npy')))
                     actual_outputs.append(next(self.session_path.joinpath('alf').glob(
-                        f'{cam}ROIMotionEnergy.position*.npy')))
+                        f'{label}ROIMotionEnergy.position*.npy')))
 
             except BaseException:
                 _logger.error(traceback.format_exc())
