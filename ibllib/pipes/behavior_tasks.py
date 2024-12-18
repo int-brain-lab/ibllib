@@ -20,7 +20,7 @@ from ibllib.io.extractors.mesoscope import TimelineTrials
 from ibllib.pipes import training_status
 from ibllib.plots.figures import BehaviourPlots
 
-_logger = logging.getLogger('ibllib')
+_logger = logging.getLogger(__name__)
 
 
 class HabituationRegisterRaw(base_tasks.RegisterRawDataTask, base_tasks.BehaviourTask):

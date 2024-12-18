@@ -293,6 +293,11 @@ class IBLRegistrationClient(RegistrationClient):
             poo_counts = [md.get('POOP_COUNT') for md in settings if md.get('POOP_COUNT') is not None]
             if poo_counts:
                 json_field['POOP_COUNT'] = int(sum(poo_counts))
+            # Get the session start delay if available, needed for the training status
+            session_delay = [md.get('SESSION_DELAY_START') for md in settings
+                             if md.get('SESSION_DELAY_START') is not None]
+            if session_delay:
+                json_field['SESSION_DELAY_START'] = int(sum(session_delay))
 
         if not len(session):  # Create session and weighings
             ses_ = {'subject': subject['nickname'],
