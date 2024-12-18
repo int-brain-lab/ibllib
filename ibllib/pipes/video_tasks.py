@@ -797,7 +797,7 @@ class LightningPose(base_tasks.VideoTask):
 
         # catch here if there are no raw videos present
         if len(actual_outputs) == 0:
-            _logger.info(f'Did not find any videos for this session')
+            _logger.info('Did not find any videos for this session')
             actual_outputs = None
             self.status = -1
 
