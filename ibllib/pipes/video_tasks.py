@@ -773,8 +773,6 @@ class LightningPose(base_tasks.VideoTask):
                     executable='/bin/bash',
                 )
                 info, error = process.communicate()
-                # info_str = info.decode('utf-8').strip()
-                # _logger.info(info_str)
                 if process.returncode != 0:
                     error_str = error.decode('utf-8').strip()
                     _logger.error(
