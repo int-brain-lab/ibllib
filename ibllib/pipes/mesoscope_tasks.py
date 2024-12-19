@@ -503,7 +503,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         qc_labels = ['ok']
         frame_qc = []
         for e in exptQC:
-            assert e.keys() >= set(['frameQC_names', 'frameQC_frames'])
+            assert e.keys() >= {'frameQC_names', 'frameQC_frames'}
             # Initialize an NaN array the same size of frameQC_frames to fill with new enum values
             frames = np.full(e['frameQC_frames'].shape, fill_value=np.nan)
             # May be numpy array of str or a single str, in both cases we cast to list of str
