@@ -607,9 +607,9 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
                 ('_iblqc_ephysTimeRmsAP.timestamps.npy', f'{self.device_collection}/{self.pname}/', True),
                 ('_iblqc_ephysSaturation.samples.npy', f'{self.device_collection}/{self.pname}/', True),
                 # ./spike_sorters/iblsorter/{self.pname}
-                (f'_ibl_log.info_{self.SPIKE_SORTER_NAME}.log', f'spike_sorters/{self._sortername}/{self.pname}', True),
                 ('_kilosort_raw.output.tar', f'spike_sorters/{self._sortername}/{self.pname}/', True),
                 # ./alf/{self.pname}/iblsorter
+                (f'_ibl_log.info_{self.SPIKE_SORTER_NAME}.log', f'alf/{self.pname}/{self._sortername}', True),
                 ('_kilosort_whitening.matrix.npy', f'alf/{self.pname}/{self._sortername}/', True),
                 ('_phy_spikes_subset.channels.npy', f'alf/{self.pname}/{self._sortername}/', True),
                 ('_phy_spikes_subset.spikes.npy', f'alf/{self.pname}/{self._sortername}/', True),
