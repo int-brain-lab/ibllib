@@ -602,14 +602,14 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
                 ('*sync.npy', f'{self.device_collection}/{self.pname}', True)
             ],
             'output_files': [
-                # ./raw_ephys_data/probe00/
+                # ./raw_ephys_data/{self.pname}/
                 ('_iblqc_ephysTimeRmsAP.rms.npy', f'{self.device_collection}/{self.pname}/', True),
                 ('_iblqc_ephysTimeRmsAP.timestamps.npy', f'{self.device_collection}/{self.pname}/', True),
                 ('_iblqc_ephysSaturation.samples.npy', f'{self.device_collection}/{self.pname}/', True),
-                # ./spike_sorters/iblsorter/probe00
-                ('spike_sorting_iblsorter.log', f'spike_sorters/{self._sortername}/{self.pname}', True),
+                # ./spike_sorters/iblsorter/{self.pname}
+                (f'_ibl_log.info_{self.SPIKE_SORTER_NAME}.log', f'spike_sorters/{self._sortername}/{self.pname}', True),
                 ('_kilosort_raw.output.tar', f'spike_sorters/{self._sortername}/{self.pname}/', True),
-                # ./alf/probe00/iblsorter
+                # ./alf/{self.pname}/iblsorter
                 ('_kilosort_whitening.matrix.npy', f'alf/{self.pname}/{self._sortername}/', True),
                 ('_phy_spikes_subset.channels.npy', f'alf/{self.pname}/{self._sortername}/', True),
                 ('_phy_spikes_subset.spikes.npy', f'alf/{self.pname}/{self._sortername}/', True),
@@ -713,11 +713,11 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         sorter_dir = self.session_path.joinpath("spike_sorters", self.SPIKE_SORTER_NAME, self.pname)
         self.FORCE_RERUN = False
         if not self.FORCE_RERUN:
-            log_file = sorter_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log")
+            log_file = sorter_dir.joinpath(f"_ibl_log.info_{self.SPIKE_SORTER_NAME}.log")
             if log_file.exists():
                 run_version = self._fetch_iblsorter_run_version(log_file)
                 if packaging.version.parse(run_version) >= packaging.version.parse('1.7.0'):
-                    _logger.info(f"Already ran: spike_sorting_{self.SPIKE_SORTER_NAME}.log"
+                    _logger.info(f"Already ran: {log_file}"
                                  f" found in {sorter_dir}, skipping.")
                     return sorter_dir
                 else:
