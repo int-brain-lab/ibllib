@@ -785,7 +785,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
             bin_file=ap_file,
             ampfactor=self._sample2v(ap_file),
         )
-        logfile = sorter_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log")
+        logfile = sorter_dir.joinpath(f"_ibl_log.info_{self.SPIKE_SORTER_NAME}.log")
         if logfile.exists():
             shutil.copyfile(logfile, probe_out_path.joinpath(f"_ibl_log.info_{self.SPIKE_SORTER_NAME}.log"))
         # recover the QC files from the spike sorting output and copy them
