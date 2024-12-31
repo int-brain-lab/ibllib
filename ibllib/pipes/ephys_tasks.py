@@ -806,6 +806,8 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         out = ibllib.ephys.spikes.ks2_to_tar(sorter_dir, tar_dir, force=self.FORCE_RERUN)
         out_files.extend(out)
         # run waveform extraction
+        _logger.info(f"Cleaning up temporary folder {self.scratch_folder_run}")
+        shutil.rmtree(self.scratch_folder_run, ignore_errors=True)
         _logger.info("Running waveform extraction")
         spikes = alfio.load_object(probe_out_path, 'spikes', attribute=['samples', 'clusters'])
         clusters = alfio.load_object(probe_out_path, 'clusters', attribute=['channels'])
