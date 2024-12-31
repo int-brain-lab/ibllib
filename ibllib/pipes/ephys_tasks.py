@@ -638,6 +638,10 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
                 ('templates.amps.npy', f'alf/{self.pname}/{self._sortername}/', True),
                 ('templates.waveforms.npy', f'alf/{self.pname}/{self._sortername}/', True),
                 ('templates.waveformsChannels.npy', f'alf/{self.pname}/{self._sortername}/', True),
+                ('waveforms.channels.npz', f'alf/{self.pname}/{self._sortername}/', True),
+                ('waveforms.table.pqt', f'alf/{self.pname}/{self._sortername}/', True),
+                ('waveforms.templates.npy', f'alf/{self.pname}/{self._sortername}/', True),
+                ('waveforms.traces.npy', f'alf/{self.pname}/{self._sortername}/', True),
             ],
         }
         return signature
