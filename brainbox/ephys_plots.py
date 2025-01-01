@@ -441,7 +441,7 @@ def plot_brain_regions(channel_ids, channel_depths=None, brain_regions=None, dis
             ax.bar(x=0.5, height=height, color=color, bottom=reg[0], **kwargs)
         ax.spines['top'].set_visible(False)
         ax.spines['bottom'].set_visible(False)
-        if not label is None:
+        if label is not None:
             if label == 'right':
                 ax.yaxis.tick_right()
             ax.set_yticks(region_labels[:, 0].astype(int))
