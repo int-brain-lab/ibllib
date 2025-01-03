@@ -813,7 +813,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         spikes = alfio.load_object(probe_out_path, 'spikes', attribute=['samples', 'clusters'])
         clusters = alfio.load_object(probe_out_path, 'clusters', attribute=['channels'])
         channels = alfio.load_object(probe_out_path, 'channels')
-        extract_wfs_cbin(
+        _output_waveform_files = extract_wfs_cbin(
             bin_file=ap_file,
             output_dir=probe_out_path,
             spike_samples=spikes['samples'],
@@ -829,6 +829,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
             preprocess_steps=["phase_shift", "bad_channel_interpolation", "butterworth", "car"],
             scratch_dir=self.scratch_folder_run,
         )
+        out_files.extend(_output_waveform_files)
         _logger.info(f"Cleaning up temporary folder {self.scratch_folder_run}")
         shutil.rmtree(self.scratch_folder_run, ignore_errors=True)
         if self.one:
@@ -852,5 +853,5 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
                     chns = np.load(probe_out_path.joinpath('channels.localCoordinates.npy'))
                     out = get_aligned_channels(ins[0], chns, one=self.one, save_dir=probe_out_path)
                     out_files.extend(out)
-
+            self.assert_expected_outputs()
         return out_files
