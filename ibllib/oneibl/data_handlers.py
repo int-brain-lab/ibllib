@@ -766,7 +766,7 @@ class RemoteEC2DataHandler(DataHandler):
         :return:
         """
         df = super().getData()
-        self.one._check_filesystem(df)
+        self.one._check_filesystem(df, check_hash=False)
 
     def uploadData(self, outputs, version, **kwargs):
         """
