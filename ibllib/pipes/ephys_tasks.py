@@ -1,9 +1,9 @@
 import logging
-import traceback
 from pathlib import Path
-import subprocess
 import re
 import shutil
+import subprocess
+import traceback
 
 import packaging.version
 import numpy as np
@@ -13,6 +13,7 @@ import neuropixel
 from ibldsp.utils import rms
 from ibldsp.waveform_extraction import extract_wfs_cbin
 import one.alf.io as alfio
+import iblutil.util
 
 from ibllib.misc import check_nvidia_driver
 from ibllib.pipes import base_tasks
@@ -714,6 +715,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         (discontinued support for old spike sortings in the probe folder <1.5.5)
         :return: path of the folder containing ks2 spike sorting output
         """
+        iblutil.util.setup_logger('iblsorter', level='INFO')
         sorter_dir = self.session_path.joinpath("spike_sorters", self.SPIKE_SORTER_NAME, self.pname)
         self.FORCE_RERUN = False
         if not self.FORCE_RERUN:
@@ -726,7 +728,6 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
                     return sorter_dir
                 else:
                     self.FORCE_RERUN = True
-        _logger.info(f"job progress command: tail -f {self.scratch_folder_run} *.log")
         self.scratch_folder_run.mkdir(parents=True, exist_ok=True)
         check_nvidia_driver()
         try:
