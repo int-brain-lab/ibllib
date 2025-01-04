@@ -853,5 +853,5 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
                     chns = np.load(probe_out_path.joinpath('channels.localCoordinates.npy'))
                     out = get_aligned_channels(ins[0], chns, one=self.one, save_dir=probe_out_path)
                     out_files.extend(out)
-            self.assert_expected_outputs()
-        return out_files
+        self.assert_expected_outputs()
+        return sorted(list(set(out_files)))
