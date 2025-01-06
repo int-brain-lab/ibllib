@@ -1,9 +1,9 @@
 import logging
-import traceback
 from pathlib import Path
-import subprocess
 import re
 import shutil
+import subprocess
+import traceback
 
 import packaging.version
 import numpy as np
@@ -13,6 +13,7 @@ import neuropixel
 from ibldsp.utils import rms
 from ibldsp.waveform_extraction import extract_wfs_cbin
 import one.alf.io as alfio
+import iblutil.util
 
 from ibllib.misc import check_nvidia_driver
 from ibllib.pipes import base_tasks
@@ -602,14 +603,14 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
                 ('*sync.npy', f'{self.device_collection}/{self.pname}', True)
             ],
             'output_files': [
-                # ./raw_ephys_data/probe00/
+                # ./raw_ephys_data/{self.pname}/
                 ('_iblqc_ephysTimeRmsAP.rms.npy', f'{self.device_collection}/{self.pname}/', True),
                 ('_iblqc_ephysTimeRmsAP.timestamps.npy', f'{self.device_collection}/{self.pname}/', True),
                 ('_iblqc_ephysSaturation.samples.npy', f'{self.device_collection}/{self.pname}/', True),
-                # ./spike_sorters/iblsorter/probe00
-                ('spike_sorting_iblsorter.log', f'spike_sorters/{self._sortername}/{self.pname}', True),
+                # ./spike_sorters/iblsorter/{self.pname}
                 ('_kilosort_raw.output.tar', f'spike_sorters/{self._sortername}/{self.pname}/', True),
-                # ./alf/probe00/iblsorter
+                # ./alf/{self.pname}/iblsorter
+                (f'_ibl_log.info_{self.SPIKE_SORTER_NAME}.log', f'alf/{self.pname}/{self._sortername}', True),
                 ('_kilosort_whitening.matrix.npy', f'alf/{self.pname}/{self._sortername}/', True),
                 ('_phy_spikes_subset.channels.npy', f'alf/{self.pname}/{self._sortername}/', True),
                 ('_phy_spikes_subset.spikes.npy', f'alf/{self.pname}/{self._sortername}/', True),
@@ -638,6 +639,10 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
                 ('templates.amps.npy', f'alf/{self.pname}/{self._sortername}/', True),
                 ('templates.waveforms.npy', f'alf/{self.pname}/{self._sortername}/', True),
                 ('templates.waveformsChannels.npy', f'alf/{self.pname}/{self._sortername}/', True),
+                ('waveforms.channels.npz', f'alf/{self.pname}/{self._sortername}/', True),
+                ('waveforms.table.pqt', f'alf/{self.pname}/{self._sortername}/', True),
+                ('waveforms.templates.npy', f'alf/{self.pname}/{self._sortername}/', True),
+                ('waveforms.traces.npy', f'alf/{self.pname}/{self._sortername}/', True),
             ],
         }
         return signature
@@ -710,19 +715,19 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         (discontinued support for old spike sortings in the probe folder <1.5.5)
         :return: path of the folder containing ks2 spike sorting output
         """
+        iblutil.util.setup_logger('iblsorter', level='INFO')
         sorter_dir = self.session_path.joinpath("spike_sorters", self.SPIKE_SORTER_NAME, self.pname)
         self.FORCE_RERUN = False
         if not self.FORCE_RERUN:
-            log_file = sorter_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log")
+            log_file = sorter_dir.joinpath(f"_ibl_log.info_{self.SPIKE_SORTER_NAME}.log")
             if log_file.exists():
                 run_version = self._fetch_iblsorter_run_version(log_file)
                 if packaging.version.parse(run_version) >= packaging.version.parse('1.7.0'):
-                    _logger.info(f"Already ran: spike_sorting_{self.SPIKE_SORTER_NAME}.log"
+                    _logger.info(f"Already ran: {log_file}"
                                  f" found in {sorter_dir}, skipping.")
                     return sorter_dir
                 else:
                     self.FORCE_RERUN = True
-        _logger.info(f"job progress command: tail -f {self.scratch_folder_run} *.log")
         self.scratch_folder_run.mkdir(parents=True, exist_ok=True)
         check_nvidia_driver()
         try:
@@ -781,7 +786,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
             bin_file=ap_file,
             ampfactor=self._sample2v(ap_file),
         )
-        logfile = sorter_dir.joinpath(f"spike_sorting_{self.SPIKE_SORTER_NAME}.log")
+        logfile = sorter_dir.joinpath(f"_ibl_log.info_{self.SPIKE_SORTER_NAME}.log")
         if logfile.exists():
             shutil.copyfile(logfile, probe_out_path.joinpath(f"_ibl_log.info_{self.SPIKE_SORTER_NAME}.log"))
         # recover the QC files from the spike sorting output and copy them
@@ -802,11 +807,13 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         out = ibllib.ephys.spikes.ks2_to_tar(sorter_dir, tar_dir, force=self.FORCE_RERUN)
         out_files.extend(out)
         # run waveform extraction
+        _logger.info(f"Cleaning up temporary folder {self.scratch_folder_run}")
+        shutil.rmtree(self.scratch_folder_run, ignore_errors=True)
         _logger.info("Running waveform extraction")
         spikes = alfio.load_object(probe_out_path, 'spikes', attribute=['samples', 'clusters'])
         clusters = alfio.load_object(probe_out_path, 'clusters', attribute=['channels'])
         channels = alfio.load_object(probe_out_path, 'channels')
-        extract_wfs_cbin(
+        _output_waveform_files = extract_wfs_cbin(
             bin_file=ap_file,
             output_dir=probe_out_path,
             spike_samples=spikes['samples'],
@@ -822,6 +829,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
             preprocess_steps=["phase_shift", "bad_channel_interpolation", "butterworth", "car"],
             scratch_dir=self.scratch_folder_run,
         )
+        out_files.extend(_output_waveform_files)
         _logger.info(f"Cleaning up temporary folder {self.scratch_folder_run}")
         shutil.rmtree(self.scratch_folder_run, ignore_errors=True)
         if self.one:
@@ -845,5 +853,5 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
                     chns = np.load(probe_out_path.joinpath('channels.localCoordinates.npy'))
                     out = get_aligned_channels(ins[0], chns, one=self.one, save_dir=probe_out_path)
                     out_files.extend(out)
-
-        return out_files
+        self.assert_expected_outputs()
+        return sorted(list(set(out_files)))
