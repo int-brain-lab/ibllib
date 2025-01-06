@@ -8,6 +8,7 @@ import scipy.signal
 from one.api import ONE
 import neuropixel
 from ibldsp import voltage
+import ibldsp.utils
 
 from ibllib.ephys import ephysqc, spikes
 from ibllib.tests import TEST_DB
@@ -59,7 +60,7 @@ def synthetic_with_bad_channels():
     st = st[st < ns].astype(np.int32)
     stripes = np.zeros(ns)
     stripes[st] = 1
-    stripes = scipy.signal.convolve(stripes, scipy.signal.ricker(1200, 40), 'same') * 1e-6 * 2500
+    stripes = scipy.signal.convolve(stripes, ibldsp.utils.ricker(1200, 40), 'same') * 1e-6 * 2500
 
     data = data + stripes[:, np.newaxis]
     noise = np.random.randn(*data.shape) * 1e-6 * 10
