@@ -649,8 +649,9 @@ class LightningPose(base_tasks.VideoTask):
     level = 2
     force = True
     job_size = 'large'
+    env = 'litpose'
 
-    env = Path.home().joinpath('Documents', 'PYTHON', 'envs', 'litpose', 'bin', 'activate')
+    lpenv = Path.home().joinpath('Documents', 'PYTHON', 'envs', 'litpose', 'bin', 'activate')
     scripts = Path.home().joinpath('Documents', 'PYTHON', 'iblscripts', 'deploy', 'serverpc', 'litpose')
 
     @property
@@ -677,8 +678,8 @@ class LightningPose(base_tasks.VideoTask):
         """Check that scripts are present, env can be activated and get iblvideo version"""
         assert len(list(self.scripts.rglob('run_litpose.*'))) == 2, \
             f'Scripts run_litpose.sh and run_litpose.py do not exist in {self.scripts}'
-        assert self.env.exists(), f"environment does not exist in assumed location {self.env}"
-        command2run = f"source {self.env}; python -c 'import iblvideo; print(iblvideo.__version__)'"
+        assert self.lpenv.exists(), f"environment does not exist in assumed location {self.lpenv}"
+        command2run = f"source {self.lpenv}; python -c 'import iblvideo; print(iblvideo.__version__)'"
         process = subprocess.Popen(
             command2run,
             shell=True,
@@ -732,7 +733,7 @@ class LightningPose(base_tasks.VideoTask):
                 # ---------------------------
                 t0 = time.time()
                 _logger.info(f'Running Lightning Pose on {label}Camera.')
-                command2run = f"{self.scripts.joinpath('run_litpose.sh')} {str(self.env)} {mp4_file} {overwrite}"
+                command2run = f"{self.scripts.joinpath('run_litpose.sh')} {str(self.lpenv)} {mp4_file} {overwrite}"
                 _logger.info(command2run)
                 process = subprocess.Popen(
                     command2run,
@@ -763,7 +764,7 @@ class LightningPose(base_tasks.VideoTask):
                 # ---------------------------
                 t1 = time.time()
                 _logger.info(f'Computing motion energy for {label}Camera')
-                command2run = f"{self.scripts.joinpath('run_motion.sh')} {str(self.env)} {mp4_file} {result}"
+                command2run = f"{self.scripts.joinpath('run_motion.sh')} {str(self.lpenv)} {mp4_file} {result}"
                 _logger.info(command2run)
                 process = subprocess.Popen(
                     command2run,
