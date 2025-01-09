@@ -17,8 +17,7 @@ The library is currently 2 main modules:
 **Python Module**: Python 3.10 or higher, Python 3.12 recommended
 
 ## Installation, documentation and examples
-https://docs.internationalbrainlab.org
-
+https://int-brain-lab.github.io/iblenv/notebooks_external/data_download.html
 
 ## Contribution and development practices
 See https://int-brain-lab.github.io/iblenv/07_contribution.html
