@@ -119,7 +119,7 @@ class Streamer(spikeglx.Reader):
     sr = Streamer(pid=pid, one=one)
     raw_voltage = sr[int(t0 * sr.fs):int((t0 + nsecs) * sr.fs), :]
     """
-def __init__(self, pid, one, typ='ap', cache_folder=None, remove_cached=False):
+    def __init__(self, pid, one, typ='ap', cache_folder=None, remove_cached=False):
         self.target_dir = None  # last chunk directory download or read
         self.one = one
         self.pid = pid
