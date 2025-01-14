@@ -289,6 +289,10 @@ class IBLRegistrationClient(RegistrationClient):
             procedures = [procedures] if isinstance(procedures, str) else (procedures or [])
             json_fields_names = ['IS_MOCK', 'IBLRIG_VERSION']
             json_field = {k: settings[0].get(k) for k in json_fields_names}
+            for field in ('PROJECT_EXTRACTION_VERSION', 'TASK_VERSION'):
+                if value := settings[0].get(field):
+                    # Add these fields only if they exist and are not None
+                    json_field[field] = value
             # The poo count field is only updated if the field is defined in at least one of the settings
             poo_counts = [md.get('POOP_COUNT') for md in settings if md.get('POOP_COUNT') is not None]
             if poo_counts:
