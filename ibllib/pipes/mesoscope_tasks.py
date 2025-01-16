@@ -664,7 +664,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
 
         options = ('nplanes', 'data_path', 'save_path0', 'save_folder', 'fast_disk', 'batch_size',
                    'nchannels', 'keep_movie_raw', 'look_one_level_down', 'lines', 'dx', 'dy', 'force_sktiff',
-                   'do_registration')
+                   'do_registration', 'slices')
         ops = self._meta2ops(metadata)
         ops['force_sktiff'] = False
         ops['do_registration'] = True
