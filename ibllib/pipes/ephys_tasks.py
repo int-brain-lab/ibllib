@@ -702,11 +702,16 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         '\x1b[0m15:39:37.919 [I] ibl:90               Starting Pykilosort version ibl_1.3.0^[[0m\n'
         """
         with open(log_file) as fid:
-            line = fid.readline()
-        version = re.search('version (.*), output', line)
-        version = version or re.search('version (.*)', line)  # old versions have output, new have a version line
-        version = re.sub(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])', '', version.group(1))
-        return version
+            for m in range(50):
+                line = fid.readline()
+                print(line.strip())
+                version = re.search('version (.*)', line)
+                if not line or version:
+                    break
+        if version is not None:
+            version = re.sub(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])', '', version.group(1))
+            version = version.replace(',', ' ').split(' ')[0]  # breaks the string after the first space
+            return version
 
     def _run_iblsort(self, ap_file):
         """
