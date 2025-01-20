@@ -813,7 +813,10 @@ def display_info(df, axs):
 def plot_fit_params(df, subject):
     fig, axs = plt.subplots(2, 3, figsize=(12, 6), gridspec_kw={'width_ratios': [2, 2, 1]})
 
-    display_info(df, axs=[axs[0, 2], axs[1, 2]])
+    try:
+        display_info(df, axs=[axs[0, 2], axs[1, 2]])
+    except ValueError:
+        print('Could not evaluate detailed training status information')
 
     df = df.drop_duplicates('date').reset_index(drop=True)
 
