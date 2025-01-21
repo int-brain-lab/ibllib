@@ -439,20 +439,22 @@ def plot_brain_regions(channel_ids, channel_depths=None, brain_regions=None, dis
             bar_kwargs.update(**kwargs)
             color = col / 255
             ax.bar(x=0.5, height=height, color=color, bottom=reg[0], **kwargs)
-        if label == 'right':
-            ax.yaxis.tick_right()
-        ax.set_yticks(region_labels[:, 0].astype(int))
-        ax.yaxis.set_tick_params(labelsize=8)
-        ax.set_ylim(np.nanmin(channel_depths), np.nanmax(channel_depths))
-        ax.get_xaxis().set_visible(False)
-        ax.set_yticklabels(region_labels[:, 1])
-        if label == 'right':
-            ax.yaxis.tick_right()
-            ax.spines['left'].set_visible(False)
-        else:
-            ax.spines['right'].set_visible(False)
         ax.spines['top'].set_visible(False)
         ax.spines['bottom'].set_visible(False)
+        if label is not None:
+            if label == 'right':
+                ax.yaxis.tick_right()
+            ax.set_yticks(region_labels[:, 0].astype(int))
+            ax.yaxis.set_tick_params(labelsize=8)
+            ax.set_ylim(np.nanmin(channel_depths), np.nanmax(channel_depths))
+            ax.get_xaxis().set_visible(False)
+            ax.set_yticklabels(region_labels[:, 1])
+            if label == 'right':
+                ax.yaxis.tick_right()
+                ax.spines['left'].set_visible(False)
+            else:
+                ax.spines['right'].set_visible(False)
+
         if title:
             ax.set_title(title)
 

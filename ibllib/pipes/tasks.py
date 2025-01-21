@@ -255,6 +255,8 @@ class Task(abc.ABC):
                         self.log = new_log if self.clobber else self.log + new_log
                         _logger.removeHandler(ch)
                         ch.close()
+                        if self.on_error == 'raise':
+                            raise FileExistsError(f'Job {self.__class__} exited as a lock was found at {self._lock_file_path()}')
                         return self.status
                 outputs = self._run(**kwargs)
                 _logger.info(f'Job {self.__class__} complete')
