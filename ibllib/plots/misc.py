@@ -314,7 +314,7 @@ def starplot(labels, radii, ticks=None, ax=None, ylim=None, color=None, title=No
         # Draw ylabels
         ax.set_rlabel_position(0)
         if ylim is None:
-            ylim = (np.min(radii), np.max(radii))
+            ylim = (0, np.max(radii))
         if ticks is None:
             ticks = np.linspace(ylim[0], ylim[1], 5)
         plt.yticks(ticks, [f'{t:2.2f}' for t in ticks], color="grey", size=7)
