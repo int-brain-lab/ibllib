@@ -15,7 +15,7 @@ import ibllib.plots.misc
 from ibllib.tests import TEST_DB
 from ibllib.tests.fixtures.utils import register_new_session
 from ibllib.plots.snapshot import Snapshot
-from ibllib.plots.figures import dlc_qc_plot
+from ibllib.plots.figures import dlc_qc_plot, lp_qc_plot
 
 
 WIDTH, HEIGHT = 1000, 100
