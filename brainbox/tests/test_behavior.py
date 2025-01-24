@@ -1,6 +1,7 @@
 from pathlib import Path
 import unittest
 from unittest import mock
+from functools import partial
 import numpy as np
 import pickle
 import copy
@@ -250,7 +251,10 @@ class TestTraining(unittest.TestCase):
             'ready4ephysrig': ['2019-04-10', 'abf5109c-d780-44c8-9561-83e857c7bc01'],
             'ready4recording': ['2019-04-11', '7dc3c44b-225f-4083-be3d-07b8562885f4']
         }
-        with mock.patch.object(one.alyx, 'rest', return_value={'json': {'trained_criteria': status_map}}):
+        
+        # Mock output of subjects read endpoint only
+        side_effect = partial(self._rest_mock, one.alyx.rest, {'json': {'trained_criteria': status_map}})
+        with mock.patch.object(one.alyx, 'rest', side_effect=side_effect):
             eid, n_sessions, n_days = train.query_criterion(subject, 'in_training', one=one)
             self.assertEqual('01390fcc-4f86-4707-8a3b-4d9309feb0a1', eid)
             self.assertEqual(1, n_sessions)
@@ -267,3 +271,24 @@ class TestTraining(unittest.TestCase):
             self.assertIsNone(n_sessions)
             self.assertIsNone(n_days)
             self.assertRaises(ValueError, train.query_criterion, subject, 'foobar', one=one)
+
+    def _rest_mock(self, alyx_rest, return_value, *args, **kwargs):
+        """Mock return value of AlyxClient.rest function depending on input.
+        
+        If using the subjects endpoint, return `return_value`. Otherwise, calls the original method.
+
+        Parameters
+        ----------
+        alyx_rest : function
+            one.webclient.AlyxClient.rest method.
+        return_value : any
+            The mock data to return.
+
+        Returns
+        -------
+        dict, list
+            Either `return_value` or the original method output.
+        """
+        if args[0] == 'subjects':
+            return return_value
+        return alyx_rest(*args, **kwargs)
