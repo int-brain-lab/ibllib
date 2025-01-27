@@ -277,9 +277,9 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                              ('mpciROIs.cellClassifier.npy', 'alf/FOV*', True),
                              ('mpciROIs.uuids.csv', 'alf/FOV*', True),
                              ('mpciROITypes.names.tsv', 'alf/FOV*', True),
-                             ('mpciROIs.masks.npy', 'alf/FOV*', True),
-                             ('mpciROIs.neuropilMasks.npy', 'alf/FOV*', True),
-                             ('_suite2p_ROIData.raw.zip', self.device_collection, False)]
+                             ('mpciROIs.masks.sparse_npz', 'alf/FOV*', True),
+                             ('mpciROIs.neuropilMasks.sparse_npz', 'alf/FOV*', True),
+                             ('_suite2p_ROIData.raw.zip', 'alf/FOV*', False)]
         }
         if not self.overwrite:  # If not forcing re-registration, check whether bin files already exist on disk
             # Including the data.bin in the expected signature ensures raw data files are not needlessly re-downloaded
