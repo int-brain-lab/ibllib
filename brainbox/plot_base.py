@@ -640,7 +640,7 @@ def scatter_xyc_plot(x, y, c, cmap=None, clim=None, rgb=False):
     data.set_clim(clim=clim)
     if rgb:
         norm = matplotlib.colors.Normalize(vmin=data.clim[0], vmax=data.clim[1], clip=True)
-        mapper = cm.ScalarMappable(norm=norm, cmap=cm.get_cmap(cmap))
+        mapper = cm.ScalarMappable(norm=norm, cmap=plt.get_cmap(cmap))
         cluster_color = np.array([mapper.to_rgba(col) for col in c])
         data.set_color(color=cluster_color)
 

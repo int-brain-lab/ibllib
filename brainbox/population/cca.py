@@ -1,11 +1,14 @@
 import numpy as np
 import matplotlib.pylab as plt
+from scipy.signal.windows import gaussian
+from scipy.signal import convolve
+from sklearn.decomposition import PCA
+
 from iblutil.numerical import bincount2D
 
 
 def _smooth(data, sd):
-    from scipy.signal import gaussian
-    from scipy.signal import convolve
+
     n_bins = data.shape[0]
     w = n_bins - 1 if n_bins % 2 == 0 else n_bins
     window = gaussian(w, std=sd)
@@ -15,7 +18,6 @@ def _smooth(data, sd):
 
 
 def _pca(data, n_pcs):
-    from sklearn.decomposition import PCA
     pca = PCA(n_components=n_pcs)
     pca.fit(data)
     data_pc = pca.transform(data)

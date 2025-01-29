@@ -3,16 +3,18 @@ import functools
 import shutil
 import tempfile
 import unittest
-import unittest.mock
+from unittest.mock import patch, Mock, MagicMock
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
 import one.alf.io as alfio
+from ibllib.io.extractors.bpod_trials import get_bpod_extractor
 from ibllib.io.extractors import training_trials, biased_trials, camera
 from ibllib.io import raw_data_loaders as raw
 from ibllib.io.extractors.base import BaseExtractor
+from ibllib.pipes.dynamic_pipeline import get_trials_tasks
 
 
 def wheelMoves_fixture(func):
@@ -54,7 +56,7 @@ class TestExtractTrialData(unittest.TestCase):
         self.training_ge5['ntrials'] = len(raw.load_data(self.training_ge5['path']))
         self.biased_ge5['ntrials'] = len(raw.load_data(self.biased_ge5['path']))
         self.ephys['ntrials'] = len(raw.load_data(self.ephys['path']))
-        # turn off logging for unit testing as we will purposedly go into warning/error cases
+        # turn off logging for unit testing as we will purposely go into warning/error cases
         self.wheel_ge5_path = self.main_path / 'data' / 'wheel_ge5'
         self.wheel_lt5_path = self.main_path / 'data' / 'wheel_lt5'
         # Save some dummy wheel moves data for trial firstMovement_times extraction
@@ -121,16 +123,16 @@ class TestExtractTrialData(unittest.TestCase):
         # TRAINING SESSIONS
         pl = training_trials.ProbabilityLeft(
             self.training_lt5['path']).extract()[0]
-        self.assertTrue(isinstance(pl, np.ndarray))
+        self.assertIsInstance(pl, np.ndarray)
         # -- version >= 5.0.0
         pl = training_trials.ProbabilityLeft(
             self.training_ge5['path']).extract()[0]
-        self.assertTrue(isinstance(pl, np.ndarray))
+        self.assertIsInstance(pl, np.ndarray)
 
         # BIASED SESSIONS
         pl = biased_trials.ProbabilityLeft(
             self.biased_lt5['path']).extract()[0]
-        self.assertTrue(isinstance(pl, np.ndarray))
+        self.assertIsInstance(pl, np.ndarray)
         # Test if only probs that are in prob set
         md = raw.load_settings(self.biased_lt5['path'])
         if md:
@@ -140,7 +142,7 @@ class TestExtractTrialData(unittest.TestCase):
         # -- version >= 5.0.0
         pl = biased_trials.ProbabilityLeft(
             self.biased_ge5['path']).extract()[0]
-        self.assertTrue(isinstance(pl, np.ndarray))
+        self.assertIsInstance(pl, np.ndarray)
         # Test if only probs that are in prob set
         md = raw.load_settings(self.biased_ge5['path'])
         probs = md['BLOCK_PROBABILITY_SET']
@@ -167,7 +169,7 @@ class TestExtractTrialData(unittest.TestCase):
         # TRAINING SESSIONS
         choice = training_trials.Choice(
             session_path=self.training_lt5['path']).extract(save=False)[0]
-        self.assertTrue(isinstance(choice, np.ndarray))
+        self.assertIsInstance(choice, np.ndarray)
         data = raw.load_data(self.training_lt5['path'])
         trial_nogo = np.array(
             [~np.isnan(t['behavior_data']['States timestamps']['no_go'][0][0])
@@ -177,7 +179,7 @@ class TestExtractTrialData(unittest.TestCase):
         # -- version >= 5.0.0
         choice = training_trials.Choice(
             session_path=self.training_ge5['path']).extract(save=False)[0]
-        self.assertTrue(isinstance(choice, np.ndarray))
+        self.assertIsInstance(choice, np.ndarray)
         data = raw.load_data(self.training_ge5['path'])
         trial_nogo = np.array(
             [~np.isnan(t['behavior_data']['States timestamps']['no_go'][0][0])
@@ -188,7 +190,7 @@ class TestExtractTrialData(unittest.TestCase):
         # BIASED SESSIONS
         choice = biased_trials.Choice(
             session_path=self.biased_lt5['path']).extract(save=False)[0]
-        self.assertTrue(isinstance(choice, np.ndarray))
+        self.assertIsInstance(choice, np.ndarray)
         data = raw.load_data(self.biased_lt5['path'])
         trial_nogo = np.array(
             [~np.isnan(t['behavior_data']['States timestamps']['no_go'][0][0])
@@ -198,7 +200,7 @@ class TestExtractTrialData(unittest.TestCase):
         # -- version >= 5.0.0
         choice = biased_trials.Choice(
             session_path=self.biased_ge5['path']).extract(save=False)[0]
-        self.assertTrue(isinstance(choice, np.ndarray))
+        self.assertIsInstance(choice, np.ndarray)
         data = raw.load_data(self.biased_ge5['path'])
         trial_nogo = np.array(
             [~np.isnan(t['behavior_data']['States timestamps']['no_go'][0][0])
@@ -207,215 +209,193 @@ class TestExtractTrialData(unittest.TestCase):
             self.assertTrue(all(choice[trial_nogo]) == 0)
 
     def test_get_repNum(self):
-        # TODO: Test its sawtooth
         # TRAINING SESSIONS
         rn = training_trials.RepNum(
             self.training_lt5['path']).extract()[0]
-        self.assertTrue(isinstance(rn, np.ndarray))
-        for i in range(3):
-            self.assertTrue(i in rn)
+        self.assertIsInstance(rn, np.ndarray)
+        expected = [0, 1, 2, 0]
+        np.testing.assert_array_equal(rn, expected)
         # -- version >= 5.0.0
         rn = training_trials.RepNum(
             self.training_ge5['path']).extract()[0]
-        self.assertTrue(isinstance(rn, np.ndarray))
-        for i in range(4):
-            self.assertTrue(i in rn)
+        self.assertIsInstance(rn, np.ndarray)
 
-        # BIASED SESSIONS have no repeted trials
+        expected = [0, 0, 1, 2, 3, 0, 0, 0, 1, 2, 0, 1]
+        np.testing.assert_array_equal(rn, expected)
+
+        # BIASED SESSIONS have no repeated trials
 
     def test_get_rewardVolume(self):
         # TRAINING SESSIONS
         rv = training_trials.RewardVolume(
             self.training_lt5['path']).extract()[0]
-        self.assertTrue(isinstance(rv, np.ndarray))
+        self.assertIsInstance(rv, np.ndarray)
         # -- version >= 5.0.0
         rv = training_trials.RewardVolume(
             self.training_ge5['path']).extract()[0]
-        self.assertTrue(isinstance(rv, np.ndarray))
+        self.assertIsInstance(rv, np.ndarray)
 
         # BIASED SESSIONS
         rv = biased_trials.RewardVolume(
             self.biased_lt5['path']).extract()[0]
-        self.assertTrue(isinstance(rv, np.ndarray))
-        # Test if all non zero rewards are of the same value
-        self.assertTrue(all([x == max(rv) for x in rv if x != 0]))
+        self.assertIsInstance(rv, np.ndarray)
+        # Test if all non-zero rewards are of the same value
+        self.assertTrue(all(x == max(rv) for x in rv if x != 0))
         # -- version >= 5.0.0
         rv = biased_trials.RewardVolume(
             self.biased_ge5['path']).extract()[0]
-        self.assertTrue(isinstance(rv, np.ndarray))
-        # Test if all non zero rewards are of the same value
-        self.assertTrue(all([x == max(rv) for x in rv if x != 0]))
+        self.assertIsInstance(rv, np.ndarray)
+        # Test if all non-zero rewards are of the same value
+        self.assertTrue(all(x == max(rv) for x in rv if x != 0))
 
     def test_get_feedback_times_ge5(self):
         # TRAINING SESSIONS
         ft = training_trials.FeedbackTimes(
             self.training_ge5['path']).extract()[0]
-        self.assertTrue(isinstance(ft, np.ndarray))
+        self.assertIsInstance(ft, np.ndarray)
 
         # BIASED SESSIONS
         ft = biased_trials.FeedbackTimes(
             self.biased_ge5['path']).extract()[0]
-        self.assertTrue(isinstance(ft, np.ndarray))
+        self.assertIsInstance(ft, np.ndarray)
 
     def test_get_feedback_times_lt5(self):
         # TRAINING SESSIONS
         ft = training_trials.FeedbackTimes(
             self.training_lt5['path']).extract()[0]
-        self.assertTrue(isinstance(ft, np.ndarray))
+        self.assertIsInstance(ft, np.ndarray)
 
         # BIASED SESSIONS
         ft = biased_trials.FeedbackTimes(
             self.biased_lt5['path']).extract()[0]
-        self.assertTrue(isinstance(ft, np.ndarray))
+        self.assertIsInstance(ft, np.ndarray)
 
     def test_get_stimOnTrigger_times(self):
         # TRAINING SESSIONS
         sott = training_trials.StimOnTriggerTimes(
             self.training_lt5['path']).extract()[0]
-        self.assertTrue(isinstance(sott, np.ndarray))
+        self.assertIsInstance(sott, np.ndarray)
         # -- version >= 5.0.0
         sott = training_trials.StimOnTriggerTimes(
             self.training_ge5['path']).extract()[0]
-        self.assertTrue(isinstance(sott, np.ndarray))
+        self.assertIsInstance(sott, np.ndarray)
         # BIASED SESSIONS
         sott = biased_trials.StimOnTriggerTimes(
             self.biased_lt5['path']).extract()[0]
-        self.assertTrue(isinstance(sott, np.ndarray))
+        self.assertIsInstance(sott, np.ndarray)
         # -- version >= 5.0.0
         sott = biased_trials.StimOnTriggerTimes(
             self.biased_ge5['path']).extract()[0]
-        self.assertTrue(isinstance(sott, np.ndarray))
-
-    def test_get_stimOn_times_lt5(self):
-        # TRAINING SESSIONS
-        st = training_trials.StimOnTimes_deprecated(
-            self.training_lt5['path']).extract()[0]
-        self.assertTrue(isinstance(st, np.ndarray))
-
-        # BIASED SESSIONS
-        st = biased_trials.StimOnTimes_deprecated(
-            self.biased_lt5['path']).extract()[0]
-        self.assertTrue(isinstance(st, np.ndarray))
-
-    def test_get_stimOn_times_ge5(self):
-        # TRAINING SESSIONS
-        st = training_trials.StimOnTimes_deprecated(
-            self.training_ge5['path']).extract()[0]
-        self.assertTrue(isinstance(st, np.ndarray))
-
-        # BIASED SESSIONS
-        st = biased_trials.StimOnTimes_deprecated(
-            self.biased_ge5['path']).extract()[0]
-        self.assertTrue(isinstance(st, np.ndarray))
+        self.assertIsInstance(sott, np.ndarray)
 
     def test_stimOnOffFreeze_times(self):
         # TRAINING SESSIONS
         st = training_trials.StimOnOffFreezeTimes(
             self.training_lt5['path']).extract()[0]
-        self.assertTrue(isinstance(st[0], np.ndarray))
+        self.assertIsInstance(st[0], np.ndarray)
 
         # BIASED SESSIONS
         st = biased_trials.StimOnOffFreezeTimes(
             self.biased_lt5['path']).extract()[0]
-        self.assertTrue(isinstance(st[0], np.ndarray))
+        self.assertIsInstance(st[0], np.ndarray)
 
         # TRAINING SESSIONS
         st = training_trials.StimOnOffFreezeTimes(
             self.training_ge5['path']).extract()[0]
-        self.assertTrue(isinstance(st[0], np.ndarray))
+        self.assertIsInstance(st[0], np.ndarray)
 
         # BIASED SESSIONS
         st = biased_trials.StimOnOffFreezeTimes(
             self.biased_ge5['path']).extract()[0]
-        self.assertTrue(isinstance(st[0], np.ndarray))
+        self.assertIsInstance(st[0], np.ndarray)
 
     def test_get_intervals(self):
         # TRAINING SESSIONS
         di = training_trials.Intervals(
             self.training_lt5['path']).extract()[0]
-        self.assertTrue(isinstance(di, np.ndarray))
+        self.assertIsInstance(di, np.ndarray)
         self.assertFalse(np.isnan(di).all())
         # -- version >= 5.0.0
         di = training_trials.Intervals(
             self.training_ge5['path']).extract()[0]
-        self.assertTrue(isinstance(di, np.ndarray))
+        self.assertIsInstance(di, np.ndarray)
         self.assertFalse(np.isnan(di).all())
 
         # BIASED SESSIONS
         di = biased_trials.Intervals(
             self.training_lt5['path']).extract()[0]
-        self.assertTrue(isinstance(di, np.ndarray))
+        self.assertIsInstance(di, np.ndarray)
         self.assertFalse(np.isnan(di).all())
         # -- version >= 5.0.0
         di = biased_trials.Intervals(
             self.training_ge5['path']).extract()[0]
-        self.assertTrue(isinstance(di, np.ndarray))
+        self.assertIsInstance(di, np.ndarray)
         self.assertFalse(np.isnan(di).all())
 
     def test_get_response_times(self):
         # TRAINING SESSIONS
         rt = training_trials.ResponseTimes(
             self.training_lt5['path']).extract()[0]
-        self.assertTrue(isinstance(rt, np.ndarray))
+        self.assertIsInstance(rt, np.ndarray)
         # -- version >= 5.0.0
         rt = training_trials.ResponseTimes(
             self.training_ge5['path']).extract()[0]
-        self.assertTrue(isinstance(rt, np.ndarray))
+        self.assertIsInstance(rt, np.ndarray)
 
         # BIASED SESSIONS
         rt = biased_trials.ResponseTimes(
             self.biased_lt5['path']).extract()[0]
-        self.assertTrue(isinstance(rt, np.ndarray))
+        self.assertIsInstance(rt, np.ndarray)
         # -- version >= 5.0.0
         rt = biased_trials.ResponseTimes(
             self.biased_ge5['path']).extract()[0]
-        self.assertTrue(isinstance(rt, np.ndarray))
+        self.assertIsInstance(rt, np.ndarray)
 
     def test_get_goCueTrigger_times(self):
         # TRAINING SESSIONS
         data = raw.load_data(self.training_lt5['path'])
         gct = np.array([tr['behavior_data']['States timestamps']
                         ['closed_loop'][0][0] for tr in data])
-        self.assertTrue(isinstance(gct, np.ndarray))
+        self.assertIsInstance(gct, np.ndarray)
         # -- version >= 5.0.0
         gct = training_trials.GoCueTriggerTimes(
             self.training_ge5['path']).extract()[0]
-        self.assertTrue(isinstance(gct, np.ndarray))
+        self.assertIsInstance(gct, np.ndarray)
 
         # BIASED SESSIONS
         data = raw.load_data(self.biased_lt5['path'])
         gct = np.array([tr['behavior_data']['States timestamps']
                         ['closed_loop'][0][0] for tr in data])
-        self.assertTrue(isinstance(gct, np.ndarray))
+        self.assertIsInstance(gct, np.ndarray)
         # -- version >= 5.0.0
         gct = biased_trials.GoCueTriggerTimes(
             self.biased_ge5['path']).extract()[0]
-        self.assertTrue(isinstance(gct, np.ndarray))
+        self.assertIsInstance(gct, np.ndarray)
 
     def test_get_goCueOnset_times(self):
         # TRAINING SESSIONS
         gcot = training_trials.GoCueTimes(
             self.training_lt5['path']).extract()[0]
-        self.assertTrue(isinstance(gcot, np.ndarray))
+        self.assertIsInstance(gcot, np.ndarray)
         self.assertTrue(np.all(np.isnan(gcot)))
         self.assertTrue(gcot.size != 0 or gcot.size == 4)
         # -- version >= 5.0.0
         gcot = training_trials.GoCueTimes(
             self.training_ge5['path']).extract()[0]
-        self.assertTrue(isinstance(gcot, np.ndarray))
+        self.assertIsInstance(gcot, np.ndarray)
         self.assertFalse(np.any(np.isnan(gcot)))
         self.assertTrue(gcot.size != 0 or gcot.size == 12)
 
         # BIASED SESSIONS
         gcot = biased_trials.GoCueTimes(
             self.biased_lt5['path']).extract()[0]
-        self.assertTrue(isinstance(gcot, np.ndarray))
+        self.assertIsInstance(gcot, np.ndarray)
         self.assertFalse(np.any(np.isnan(gcot)))
         self.assertTrue(gcot.size != 0 or gcot.size == 4)
         # -- version >= 5.0.0
         gcot = biased_trials.GoCueTimes(
             self.biased_ge5['path']).extract()[0]
-        self.assertTrue(isinstance(gcot, np.ndarray))
+        self.assertIsInstance(gcot, np.ndarray)
         self.assertFalse(np.any(np.isnan(gcot)))
         self.assertTrue(gcot.size != 0 or gcot.size == 8)
 
@@ -423,68 +403,57 @@ class TestExtractTrialData(unittest.TestCase):
         # TRAINING SESSIONS
         it = training_trials.IncludedTrials(
             self.training_lt5['path']).extract()[0]
-        self.assertTrue(isinstance(it, np.ndarray))
+        self.assertIsInstance(it, np.ndarray)
         # BIASED SESSIONS
         it = biased_trials.IncludedTrials(
             self.biased_lt5['path']).extract()[0]
-        self.assertTrue(isinstance(it, np.ndarray))
+        self.assertIsInstance(it, np.ndarray)
 
     def test_get_included_trials_ge5(self):
         # TRAINING SESSIONS
         it = training_trials.IncludedTrials(
             self.training_ge5['path']).extract()[0]
-        self.assertTrue(isinstance(it, np.ndarray))
+        self.assertIsInstance(it, np.ndarray)
         # BIASED SESSIONS
         it = biased_trials.IncludedTrials(
             self.biased_ge5['path']).extract()[0]
-        self.assertTrue(isinstance(it, np.ndarray))
+        self.assertIsInstance(it, np.ndarray)
 
     def test_get_included_trials(self):
         # TRAINING SESSIONS
         it = training_trials.IncludedTrials(
             self.training_lt5['path']).extract(settings={'IBLRIG_VERSION': '4.9.9'})[0]
-        self.assertTrue(isinstance(it, np.ndarray))
+        self.assertIsInstance(it, np.ndarray)
         # -- version >= 5.0.0
         it = training_trials.IncludedTrials(
             self.training_ge5['path']).extract()[0]
-        self.assertTrue(isinstance(it, np.ndarray))
+        self.assertIsInstance(it, np.ndarray)
 
         # BIASED SESSIONS
         it = biased_trials.IncludedTrials(
             self.biased_lt5['path']).extract(settings={'IBLRIG_VERSION': '4.9.9'})[0]
-        self.assertTrue(isinstance(it, np.ndarray))
+        self.assertIsInstance(it, np.ndarray)
         # -- version >= 5.0.0
         it = biased_trials.IncludedTrials(
             self.biased_ge5['path']).extract()[0]
-        self.assertTrue(isinstance(it, np.ndarray))
+        self.assertIsInstance(it, np.ndarray)
 
-    @wheelMoves_fixture
-    def test_extract_all(self):
-        # TRAINING SESSIONS
-        # Expect an error raised because no wheel moves were present in test data
-        with self.assertRaises(ValueError) as ex:
-            training_trials.extract_all(
-                self.training_lt5['path'], settings={'IBLRIG_VERSION': '4.9.9'}, save=True)
-            self.assertIn('_ibl_wheelMoves.intervals.npy appears to be empty', str(ex.exception))
-        # -- version >= 5.0.0
-        out, files = training_trials.extract_all(self.training_ge5['path'], save=True)
-        self.assertEqual(19, len(out))
-        self.assertTrue(all(map(Path.exists, files)))
+    def test_get_pause_duration(self):
+        """Test for extraction of pause periods."""
+        extractor = training_trials.PauseDuration(self.biased_ge5['path'])
+        pp = extractor.extract()[0]
+        self.assertIsInstance(pp, np.ndarray)
+        # For sessions pre-pause implementation we expect zeros
+        np.testing.assert_array_equal(pp, np.zeros(self.biased_ge5['ntrials'], dtype=float))
 
-        # BIASED SESSIONS
-        # The new trials extractor additionally extracts the wheel data and this fails for the < 5.0
-        # test data so we will stub the wheel extractor
-        with unittest.mock.patch('ibllib.io.extractors.biased_trials.Wheel') as Wheel:
-            Wheel.var_names = tuple()
-            Wheel().extract.return_value = ({}, [])
-            out, files = biased_trials.extract_all(
-                self.biased_lt5['path'], settings={'IBLRIG_VERSION': '4.9.9'}, save=True)
-            self.assertEqual(15, len(out))
-            self.assertTrue(all(map(Path.exists, files)))
-        # -- version >= 5.0.0
-        out, files = biased_trials.extract_all(self.biased_ge5['path'], save=True)
-        self.assertEqual(19, len(out))
-        self.assertTrue(all(map(Path.exists, files)))
+        # For v8.9.0 and later it should return duration or NaN
+        for i, trial in enumerate(extractor.bpod_trials):
+            trial.update({'pause_duration': i})
+        pp = extractor.extract(bpod_trials=extractor.bpod_trials, settings={'IBLRIG_VERSION': '8.9.0'})[0]
+        np.testing.assert_array_equal(pp, np.arange(self.biased_ge5['ntrials']))
+        extractor.bpod_trials[5].pop('pause_duration')
+        pp = extractor.extract(bpod_trials=extractor.bpod_trials, settings={'IBLRIG_VERSION': '8.9.0'})[0]
+        self.assertTrue(np.isnan(pp[5]))
 
     def test_encoder_positions_clock_reset(self):
         # TRAINING SESSIONS
@@ -544,11 +513,14 @@ class TestExtractTrialData(unittest.TestCase):
     def test_size_outputs(self):
         # check the output dimensions
         # VERSION >= 5.0.0
-        from ibllib.io.extractors.bpod_trials import extract_all
-        extract_all(self.training_ge5['path'])
+        task, = get_trials_tasks(self.training_ge5['path'])
+        trials, _ = task.extract_behaviour(save=True)
+        # Load from file (returned `trials` above includes wheel data)
         trials = alfio.load_object(self.training_ge5['path'] / 'alf', object='trials')
         self.assertTrue(alfio.check_dimensions(trials) == 0)
-        extract_all(self.biased_ge5['path'])
+
+        task, = get_trials_tasks(self.biased_ge5['path'])
+        trials, _ = task.extract_behaviour(save=True)
         trials = alfio.load_object(self.biased_ge5['path'] / 'alf', object='trials')
         self.assertTrue(alfio.check_dimensions(trials) == 0)
         # VERSION < 5.0.0
@@ -559,13 +531,15 @@ class TestExtractTrialData(unittest.TestCase):
             'peakVelocity_times': np.array([1, 1])}
         function_name = 'ibllib.io.extractors.training_wheel.extract_wheel_moves'
         # Training
-        with unittest.mock.patch(function_name, return_value=mock_data):
-            extract_all(self.training_lt5['path'])
+        with patch(function_name, return_value=mock_data):
+            task, = get_trials_tasks(self.training_lt5['path'])
+            trials, _ = task.extract_behaviour(save=True)
         trials = alfio.load_object(self.training_lt5['path'] / 'alf', object='trials')
         self.assertTrue(alfio.check_dimensions(trials) == 0)
         # Biased
-        with unittest.mock.patch(function_name, return_value=mock_data):
-            extract_all(self.biased_lt5['path'])
+        with patch(function_name, return_value=mock_data):
+            task, = get_trials_tasks(self.biased_lt5['path'])
+            trials, _ = task.extract_behaviour(save=True)
         trials = alfio.load_object(self.biased_lt5['path'] / 'alf', object='trials')
         self.assertTrue(alfio.check_dimensions(trials) == 0)
 
@@ -706,7 +680,7 @@ class TestCameraExtractors(unittest.TestCase):
             gpio['indices'][i + 1] = np.where(ts > rise + pulse_width)[0][0]
 
         gpio_, audio_, ts_ = camera.groom_pin_state(gpio, audio, ts)
-        self.assertEqual(audio, audio_, 'Audio dict shouldn\'t be effected')
+        self.assertEqual(audio, audio_, 'Audio dict shouldn\'t be affected')
         np.testing.assert_array_almost_equal(ts_[:4], [40., 40.016667, 40.033333, 40.05])
 
         # Broken TTLs + extra TTL
@@ -778,6 +752,34 @@ class TestCameraExtractors(unittest.TestCase):
         # Check input validation
         with self.assertRaises(ValueError):
             camera.attribute_times(tsa, tsb, injective=False, take='closest')
+
+
+class TestGetBpodExtractor(unittest.TestCase):
+
+    def test_get_bpod_extractor(self):
+        # un-existing extractor should raise a value error
+        with self.assertRaises(ValueError):
+            get_bpod_extractor('', protocol='sdf', task_collection='raw_behavior_data')
+        # in this case this returns an ibllib.io.extractors.training_trials.TrainingTrials instance
+        extractor = get_bpod_extractor(
+            '', protocol='_trainingChoiceWorld',
+            task_collection='raw_behavior_data'
+        )
+        self.assertTrue(isinstance(extractor, BaseExtractor))
+
+    def test_get_bpod_custom_extractor(self):
+        # here we'll mock a custom module with a custom extractor
+        DummyModule = MagicMock()
+        DummyExtractor = Mock(spec_set=BaseExtractor)
+        DummyModule.toto.return_value = DummyExtractor
+        base_module = 'ibllib.io.extractors.bpod_trials'
+        with patch(f'{base_module}.get_bpod_extractor_class', return_value='toto'), \
+                patch(f'{base_module}.importlib.import_module', return_value=DummyModule) as import_mock:
+            self.assertIs(get_bpod_extractor(''), DummyExtractor)
+            import_mock.assert_called_with('projects')
+            # Check raises when imported class not an extractor
+            DummyModule.toto.return_value = MagicMock(spec=dict)
+            self.assertRaisesRegex(ValueError, 'should be an Extractor class', get_bpod_extractor, '')
 
 
 if __name__ == '__main__':

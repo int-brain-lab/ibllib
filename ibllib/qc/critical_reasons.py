@@ -1,20 +1,20 @@
 """
-Prompt experimenter for reason for marking session/insertion as CRITICAL
+Methods for adding QC sign-off notes to Alyx.
+
+Includes a GUI to prompt experimenter for reason for marking session/insertion as CRITICAL.
 Choices are listed in the global variables. Multiple reasons can be selected.
-Places info in Alyx session note in a format that is machine retrievable (text->json)
+Places info in Alyx session note in a format that is machine retrievable (text->json).
 """
 import abc
 import logging
 import json
-import warnings
 from datetime import datetime
-from one.api import OneAlyx
 from one.webclient import AlyxClient
 
 _logger = logging.getLogger('ibllib')
 
 
-def main_gui(uuid, reasons_selected, one=None, alyx=None):
+def main_gui(uuid, reasons_selected, alyx=None):
     """
     Main function to call to input a reason for marking an insertion as CRITICAL from the alignment GUI.
 
@@ -26,16 +26,11 @@ def main_gui(uuid, reasons_selected, one=None, alyx=None):
         An insertion ID.
     reasons_selected : list of str
         A subset of REASONS_INS_CRIT_GUI.
-    one : one.api.OneAlyx
-        (DEPRECATED) An instance of ONE. NB: Pass in an instance of AlyxClient instead.
     alyx : one.webclient.AlyxClient
         An AlyxClient instance.
     """
     # hit the database to check if uuid is insertion uuid
-    if alyx is None and one is not None:
-        # Deprecate ONE in future because instantiating it takes longer and is unnecessary
-        warnings.warn('In future please pass in an AlyxClient instance (i.e. `one.alyx`)', FutureWarning)
-        alyx = one if isinstance(one, AlyxClient) else one.alyx
+    alyx = alyx or AlyxClient()
     ins_list = alyx.rest('insertions', 'list', id=uuid, no_cache=True)
     if len(ins_list) != 1:
         raise ValueError(f'N={len(ins_list)} insertion found, expected N=1. Check uuid provided.')
@@ -51,7 +46,7 @@ def main_gui(uuid, reasons_selected, one=None, alyx=None):
     note._upload_note(overwrite=True)
 
 
-def main(uuid, one=None, alyx=None):
+def main(uuid, alyx=None):
     """
     Main function to call to input a reason for marking a session/insertion as CRITICAL programmatically.
 
@@ -65,8 +60,6 @@ def main(uuid, one=None, alyx=None):
     ----------
     uuid : uuid.UUID, str
         An experiment UUID or an insertion UUID.
-    one : one.api.OneAlyx
-        (DEPRECATED) An instance of ONE. NB: Pass in an instance of AlyxClient instead.
     alyx : one.webclient.AlyxClient
         An AlyxClient instance.
 
@@ -86,12 +79,7 @@ def main(uuid, one=None, alyx=None):
     >>> test_json_read = json.loads(notes[0]['text'])
 
     """
-    if alyx is None and one is not None:
-        # Deprecate ONE in future because instantiating it takes longer and is unnecessary
-        warnings.warn('In future please pass in an AlyxClient instance (i.e. `one.alyx`)', FutureWarning)
-        alyx = one if isinstance(one, AlyxClient) else one.alyx
-    if not alyx:
-        alyx = AlyxClient()
+    alyx = alyx or AlyxClient()
     # ask reasons for selection of critical status
 
     # hit the database to know if uuid is insertion or session uuid
@@ -144,10 +132,6 @@ class Note(abc.ABC):
             The Alyx model name of the UUID.
         """
         self.uuid = uuid
-        if isinstance(alyx, OneAlyx):
-            # Deprecate ONE in future because instantiating it takes longer and is unnecessary
-            warnings.warn('In future please pass in an AlyxClient instance (i.e. `one.alyx`)', FutureWarning)
-            alyx = alyx.alyx
         self.alyx = alyx
         self.selected_reasons = []
         self.other_reason = []

@@ -42,11 +42,12 @@ METRICS_PARAMS = {
     'missed_spikes_est': dict(spks_per_bin=10, sigma=4, min_num_bins=50),
     'acceptable_contamination': 0.1,
     'bin_size': 0.25,
-    'med_amp_thresh_uv': 50,
+    'med_amp_thresh_uv': 50,  # units below this threshold are considered noise
     'min_isi': 0.0001,
     'presence_window': 10,
     'refractory_period': 0.0015,
     'RPslide_thresh': 0.1,
+    'RPmax_confidence': 90,  # a unit needs to pass with at least this confidence percentage (0 - 100)
 }
 
 
@@ -942,7 +943,11 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
         'presence_ratio',
         'presence_ratio_std',
         'slidingRP_viol',
-        'spike_count'
+        'spike_count',
+        'slidingRP_viol_forced',
+        'max_confidence',
+        'min_contamination',
+        'n_spikes_below2'
     ]
     if tbounds:
         ispi = between_sorted(spike_times, tbounds)
@@ -980,8 +985,12 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
     r.amp_median[ir] = np.array(10 ** (camp['log_amps'].median() / 20))
     r.amp_std_dB[ir] = np.array(camp['log_amps'].std())
     srp = metrics.slidingRP_all(spikeTimes=spike_times, spikeClusters=spike_clusters,
-                                **{'sampleRate': 30000, 'binSizeCorr': 1 / 30000})
+                                sampleRate=30000, binSizeCorr=1 / 30000)
     r.slidingRP_viol[ir] = srp['value']
+    r.slidingRP_viol_forced[ir] = srp['value_forced']
+    r.max_confidence[ir] = srp['max_confidence']
+    r.min_contamination[ir] = srp['min_contamination']
+    r.n_spikes_below2[ir] = srp['n_spikes_below2']
 
     # loop over each cluster to compute the rest of the metrics
     for ic in np.arange(nclust):
@@ -1000,29 +1009,36 @@ def quick_unit_metrics(spike_clusters, spike_times, spike_amps, spike_depths,
         r.missed_spikes_est[ic], _, _ = missed_spikes_est(amps, **params['missed_spikes_est'])
         # wonder if there is a need to low-cut this
         r.drift[ic] = np.sum(np.abs(np.diff(depths))) / (tmax - tmin) * 3600
-
-    r.label = compute_labels(r)
+    r.label, r.bitwise_fail = compute_labels(r, return_bitwise=True)
     return r
 
 
-def compute_labels(r, params=METRICS_PARAMS, return_details=False):
+def compute_labels(r, params=METRICS_PARAMS, return_bitwise=False):
     """
-    From a dataframe or a dictionary of unit metrics, compute a lablel
+    From a dataframe or a dictionary of unit metrics, compute a label
     :param r: dictionary or pandas dataframe containing unit qcs
-    :param return_details: False (returns a full dictionary of metrics)
+    :param return_bitwise: True (returns a full dictionary of metrics)
     :return: vector of proportion of qcs passed between 0 and 1, where 1 denotes an all pass
     """
-    # right now the score is a value between 0 and 1 denoting the proportion of passing qcs
-    # we could eventually do a bitwise qc
+    # right now the score is a value between 0 and 1 denoting the proportion of passing qcs,
+    # where 1 means passing and 0 means failing
     labels = np.c_[
-        r.slidingRP_viol,
+        r['max_confidence'] >= params['RPmax_confidence'],  # this is the least significant bit
         r.noise_cutoff < params['noise_cutoff']['nc_threshold'],
         r.amp_median > params['med_amp_thresh_uv'] / 1e6,
+        # add a new metric here on higher significant bits
     ]
-    if not return_details:
-        return np.mean(labels, axis=1)
-    column_names = ['slidingRP_viol', 'noise_cutoff', 'amp_median']
-    qcdict = {}
-    for c in np.arange(labels.shape[1]):
-        qcdict[column_names[c]] = labels[:, c]
-    return np.mean(labels, axis=1), qcdict
+    # The first column takes binary values 001 or 000 to represent fail or pass,
+    # the second, 010 or 000, the third, 100 or 000 etc.
+    # The bitwise or "sum" produces 111 if all metrics fail, or 000 if all metrics pass
+    # All other permutations are also captured, i.e. 110 ==  000 || 010 || 100 means
+    # the second and third metrics failed and the first metric was a pass
+    score = np.mean(labels, axis=1)
+    if return_bitwise:
+        # note the cast to uint8 casts nan to 0
+        # a nan implies no metrics was computed which we mark as a failure here
+        n_criteria = labels.shape[1]
+        bitwise = np.bitwise_or.reduce(2 ** np.arange(n_criteria) * (~ labels.astype(bool)).astype(np.uint8), axis=1)
+        return score, bitwise.astype(np.uint8)
+    else:
+        return score

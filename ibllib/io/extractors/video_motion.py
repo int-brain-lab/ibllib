@@ -42,7 +42,7 @@ def find_nearest(array, value):
 class MotionAlignment:
     roi = {'left': ((800, 1020), (233, 1096)), 'right': ((426, 510), (104, 545)), 'body': ((402, 481), (31, 103))}
 
-    def __init__(self, eid=None, one=None, log=logging.getLogger(__name__), **kwargs):
+    def __init__(self, eid=None, one=None, log=logging.getLogger(__name__), stream=False, **kwargs):
         self.one = one or ONE()
         self.eid = eid
         self.session_path = kwargs.pop('session_path', None) or self.one.eid2path(eid)
@@ -51,7 +51,10 @@ class MotionAlignment:
         self.trials = self.wheel = self.camera_times = None
         raw_cam_path = self.session_path.joinpath('raw_video_data')
         camera_path = list(raw_cam_path.glob('_iblrig_*Camera.raw.*'))
-        self.video_paths = {vidio.label_from_path(x): x for x in camera_path}
+        if stream:
+            self.video_paths = vidio.url_from_eid(self.eid)
+        else:
+            self.video_paths = {vidio.label_from_path(x): x for x in camera_path}
         self.data = Bunch()
         self.alignment = Bunch()
 
@@ -107,8 +110,8 @@ class MotionAlignment:
         if download:
             self.data.wheel = self.one.load_object(self.eid, 'wheel')
             self.data.trials = self.one.load_object(self.eid, 'trials')
-            cam = self.one.load(self.eid, ['camera.times'], dclass_output=True)
-            self.data.camera_times = {vidio.label_from_path(url): ts for ts, url in zip(cam.data, cam.url)}
+            cam, det = self.one.load_datasets(self.eid, ['*Camera.times*'])
+            self.data.camera_times = {vidio.label_from_path(d['rel_path']): ts for ts, d in zip(cam, det)}
         else:
             alf_path = self.session_path / 'alf'
             wheel_path = next(alf_path.rglob('*wheel.timestamps*')).parent
@@ -329,7 +332,7 @@ class MotionAlignment:
             data['im'].set_data(frame)
 
             mkr = find_nearest(wheel.timestamps[wheel_mask], t_x)
-            data['marker'].set_data(wheel.timestamps[wheel_mask][mkr], wheel.position[wheel_mask][mkr])
+            data['marker'].set_data([wheel.timestamps[wheel_mask][mkr]], [wheel.position[wheel_mask][mkr]])
 
             return data['im'], data['ln'], data['marker']
 
@@ -439,7 +442,6 @@ class MotionAlignmentFullSession:
         # Compute wheel velocity
         self.wheel_vel, _ = wh.velocity_filtered(wheel_pos, 1000)
         # Load in original camera times
-        self.camera_times = alfio.load_file_content(next(alf_path.rglob(f'_ibl_{self.label}Camera.times*.npy')))
         self.camera_path = str(next(self.session_path.joinpath('raw_video_data').glob(f'_iblrig_{self.label}Camera.raw*.mp4')))
         self.camera_meta = vidio.get_video_meta(self.camera_path)
 
@@ -458,17 +460,25 @@ class MotionAlignmentFullSession:
         # Check if the ttl and video sizes match up
         self.tdiff = self.ttls.size - self.camera_meta['length']
 
+        # Load in original camera times if available otherwise set to ttls
+        camera_times = next(alf_path.rglob(f'_ibl_{self.label}Camera.times*.npy'), None)
+        self.camera_times = alfio.load_file_content(camera_times) if camera_times else self.ttls
+
         if self.tdiff < 0:
             # In this case there are fewer ttls than camera frames. This is not ideal, for now we pad the ttls with
             # nans but if this is too many we reject the wheel alignment based on the qc
             self.ttl_times = self.ttls
             self.times = np.r_[self.ttl_times, np.full((np.abs(self.tdiff)), np.nan)]
+            if self.camera_times.size != self.camera_meta['length']:
+                self.camera_times = np.r_[self.camera_times, np.full((np.abs(self.tdiff)), np.nan)]
             self.short_flag = True
         elif self.tdiff > 0:
             # In this case there are more ttls than camera frames. This happens often, for now we remove the first
             # tdiff ttls from the ttls
             self.ttl_times = self.ttls[self.tdiff:]
             self.times = self.ttls[self.tdiff:]
+            if self.camera_times.size != self.camera_meta['length']:
+                self.camera_times = self.camera_times[self.tdiff:]
             self.short_flag = False
 
         # Compute the frame rate of the camera

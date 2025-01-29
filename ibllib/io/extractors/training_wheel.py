@@ -1,3 +1,4 @@
+"""Extractors for the wheel position, velocity, and detected movement."""
 import logging
 from collections.abc import Sized
 
@@ -5,7 +6,7 @@ import numpy as np
 from scipy import interpolate
 
 from ibldsp.utils import sync_timestamps
-from ibllib.io.extractors.base import BaseBpodTrialsExtractor, run_extractor_classes
+from ibllib.io.extractors.base import BaseBpodTrialsExtractor
 import ibllib.io.raw_data_loaders as raw
 from ibllib.misc import structarr
 import ibllib.exceptions as err
@@ -323,16 +324,30 @@ def extract_wheel_moves(re_ts, re_pos, display=False):
 def extract_first_movement_times(wheel_moves, trials, min_qt=None):
     """
     Extracts the time of the first sufficiently large wheel movement for each trial.
+
     To be counted, the movement must occur between go cue / stim on and before feedback /
     response time.  The movement onset is sometimes just before the cue (occurring in the
     gap between quiescence end and cue start, or during the quiescence period but sub-
-    threshold).  The movement is sufficiently large if it is greater than or equal to THRESH
-    :param wheel_moves: dictionary of detected wheel movement onsets and peak amplitudes for
-    use in extracting each trial's time of first movement.
-    :param trials: dictionary of trial data
-    :param min_qt: the minimum quiescence period, if None a default is used
-    :return: numpy array of first movement times, bool array indicating whether movement
-    crossed response threshold, and array of indices for wheel_moves arrays
+    threshold).  The movement is sufficiently large if it is greater than or equal to THRESH.
+
+    Parameters
+    ----------
+    wheel_moves : dict
+        Dictionary of detected wheel movement onsets and peak amplitudes for use in extracting each
+        trial's time of first movement.
+    trials : dict
+        Dictionary of trial data.
+    min_qt : float
+        The minimum quiescence period in seconds, if None a default is used.
+
+    Returns
+    -------
+    numpy.array
+        First movement times.
+    numpy.array
+        Bool array indicating whether movement crossed response threshold.
+    numpy.array
+        Indices for wheel_moves arrays.
     """
     THRESH = .1  # peak amp should be at least .1 rad; ~1/3rd of the distance to threshold
     MIN_QT = .2  # default minimum enforced quiescence period
@@ -371,6 +386,8 @@ def extract_first_movement_times(wheel_moves, trials, min_qt=None):
 
 class Wheel(BaseBpodTrialsExtractor):
     """
+    Wheel extractor.
+
     Get wheel data from raw files and converts positions into radians mathematical convention
      (anti-clockwise = +) and timestamps into seconds relative to Bpod clock.
     **Optional:** saves _ibl_wheel.times.npy and _ibl_wheel.position.npy
@@ -385,9 +402,9 @@ class Wheel(BaseBpodTrialsExtractor):
     save_names = ('_ibl_wheel.timestamps.npy', '_ibl_wheel.position.npy',
                   '_ibl_wheelMoves.intervals.npy', '_ibl_wheelMoves.peakAmplitude.npy', None,
                   '_ibl_trials.firstMovement_times.npy', None)
-    var_names = ('wheel_timestamps', 'wheel_position', 'wheelMoves_intervals',
-                 'wheelMoves_peakAmplitude', 'peakVelocity_times', 'firstMovement_times',
-                 'is_final_movement')
+    var_names = ('wheel_timestamps', 'wheel_position',
+                 'wheelMoves_intervals', 'wheelMoves_peakAmplitude', 'wheelMoves_peakVelocity_times',
+                 'firstMovement_times', 'is_final_movement')
 
     def _extract(self):
         ts, pos = get_wheel_position(self.session_path, self.bpod_trials, task_collection=self.task_collection)
@@ -403,30 +420,5 @@ class Wheel(BaseBpodTrialsExtractor):
         min_qt = self.settings.get('QUIESCENT_PERIOD', None)
 
         first_moves, is_final, _ = extract_first_movement_times(moves, trials, min_qt=min_qt)
-        output = (ts, pos, moves['intervals'], moves['peakAmplitude'],
-                  moves['peakVelocity_times'], first_moves, is_final)
+        output = (ts, pos, moves['intervals'], moves['peakAmplitude'], moves['peakVelocity_times'], first_moves, is_final)
         return output
-
-
-def extract_all(session_path, bpod_trials=None, settings=None, save=False, task_collection='raw_behavior_data', save_path=None):
-    """Extract the wheel data.
-
-    NB: Wheel extraction is now called through ibllib.io.training_trials.extract_all
-
-    Parameters
-    ----------
-    session_path : str, pathlib.Path
-        The path to the session
-    save : bool
-        If true save the data files to ALF
-    bpod_trials : list of dicts
-        The Bpod trial dicts loaded from the _iblrig_taskData.raw dataset
-    settings : dict
-        The Bpod settings loaded from the _iblrig_taskSettings.raw dataset
-
-    Returns
-    -------
-    A list of extracted data and a list of file paths if save is True (otherwise None)
-    """
-    return run_extractor_classes(Wheel, save=save, session_path=session_path,
-                                 bpod_trials=bpod_trials, settings=settings, task_collection=task_collection, path_out=save_path)

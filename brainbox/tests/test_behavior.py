@@ -177,58 +177,65 @@ class TestTraining(unittest.TestCase):
         trials, task_protocol = self._get_trials(
             sess_dates=['2020-08-25', '2020-08-24', '2020-08-21'])
         assert (np.all(np.array(task_protocol) == 'training'))
-        status, info = train.get_training_status(
+        status, info, crit = train.get_training_status(
             trials, task_protocol, ephys_sess_dates=[], n_delay=0)
         assert (status == 'in training')
+        assert (crit['Criteria']['val'] == 'trained_1a')
 
     def test_trained_1a(self):
         trials, task_protocol = self._get_trials(
             sess_dates=['2020-08-26', '2020-08-25', '2020-08-24'])
         assert (np.all(np.array(task_protocol) == 'training'))
-        status, info = train.get_training_status(trials, task_protocol, ephys_sess_dates=[],
-                                                 n_delay=0)
+        status, info, crit = train.get_training_status(trials, task_protocol, ephys_sess_dates=[],
+                                                       n_delay=0)
         assert (status == 'trained 1a')
+        assert (crit['Criteria']['val'] == 'trained_1b')
 
     def test_trained_1b(self):
         trials, task_protocol = self._get_trials(
             sess_dates=['2020-08-27', '2020-08-26', '2020-08-25'])
         assert (np.all(np.array(task_protocol) == 'training'))
-        status, info = train.get_training_status(trials, task_protocol, ephys_sess_dates=[],
-                                                 n_delay=0)
+        status, info, crit = train.get_training_status(trials, task_protocol, ephys_sess_dates=[],
+                                                       n_delay=0)
         self.assertEqual(status, 'trained 1b')
+        assert (crit['Criteria']['val'] == 'ready4ephysrig')
 
     def test_training_to_bias(self):
         trials, task_protocol = self._get_trials(
             sess_dates=['2020-08-31', '2020-08-28', '2020-08-27'])
         assert (~np.all(np.array(task_protocol) == 'training') and
                 np.any(np.array(task_protocol) == 'training'))
-        status, info = train.get_training_status(trials, task_protocol, ephys_sess_dates=[],
-                                                 n_delay=0)
+        status, info, crit = train.get_training_status(trials, task_protocol, ephys_sess_dates=[],
+                                                       n_delay=0)
         assert (status == 'trained 1b')
+        assert (crit['Criteria']['val'] == 'ready4ephysrig')
 
     def test_ready4ephys(self):
         sess_dates = ['2020-09-01', '2020-08-31', '2020-08-28']
         trials, task_protocol = self._get_trials(sess_dates=sess_dates)
         assert (np.all(np.array(task_protocol) == 'biased'))
-        status, info = train.get_training_status(trials, task_protocol, ephys_sess_dates=[],
-                                                 n_delay=0)
+        status, info, crit = train.get_training_status(trials, task_protocol, ephys_sess_dates=[],
+                                                       n_delay=0)
         assert (status == 'ready4ephysrig')
+        assert (crit['Criteria']['val'] == 'ready4delay')
 
     def test_ready4delay(self):
         sess_dates = ['2020-09-03', '2020-09-02', '2020-08-31']
         trials, task_protocol = self._get_trials(sess_dates=sess_dates)
         assert (np.all(np.array(task_protocol) == 'biased'))
-        status, info = train.get_training_status(trials, task_protocol,
-                                                 ephys_sess_dates=['2020-09-03'], n_delay=0)
+        status, info, crit = train.get_training_status(trials, task_protocol,
+                                                       ephys_sess_dates=['2020-09-03'], n_delay=0)
         assert (status == 'ready4delay')
+        assert (crit['Criteria']['val'] == 'ready4recording')
 
     def test_ready4recording(self):
         sess_dates = ['2020-09-01', '2020-08-31', '2020-08-28']
         trials, task_protocol = self._get_trials(sess_dates=sess_dates)
         assert (np.all(np.array(task_protocol) == 'biased'))
-        status, info = train.get_training_status(trials, task_protocol,
-                                                 ephys_sess_dates=sess_dates, n_delay=1)
+        status, info, crit = train.get_training_status(trials, task_protocol,
+                                                       ephys_sess_dates=sess_dates, n_delay=1)
         assert (status == 'ready4recording')
+        assert (crit['Criteria']['val'] == 'ready4recording')
 
     def test_query_criterion(self):
         """Test for brainbox.behavior.training.query_criterion function."""

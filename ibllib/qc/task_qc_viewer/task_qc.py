@@ -18,7 +18,6 @@ from ibllib.qc.task_qc_viewer import ViewEphysQC
 from ibllib.pipes.dynamic_pipeline import get_trials_tasks
 from ibllib.pipes.base_tasks import BehaviourTask
 from ibllib.pipes.behavior_tasks import HabituationTrialsBpod, ChoiceWorldTrialsBpod
-from ibllib.pipes.training_preprocessing import TrainingTrials
 
 EVENT_MAP = {'goCue_times': ['#2ca02c', 'solid'],  # green
              'goCueTrigger_times': ['#2ca02c', 'dotted'],  # green
@@ -141,7 +140,8 @@ class QcFrame:
             'ymin': 0,
             'ymax': 4,
             'linewidth': 2,
-            'ax': axes
+            'ax': axes,
+            'alpha': 0.5,
         }
 
         bnc1 = self.qc.extractor.frame_ttls
@@ -201,16 +201,15 @@ def get_bpod_trials_task(task):
     ibllib.pipes.tasks.Task
         A Bpod choice world trials task instance.
     """
-    if isinstance(task, TrainingTrials) or task.__class__ in (ChoiceWorldTrialsBpod, HabituationTrialsBpod):
+    if task.__class__ in (ChoiceWorldTrialsBpod, HabituationTrialsBpod):
         pass  # do nothing; already Bpod only
-    elif isinstance(task, BehaviourTask):
+    else:
+        assert isinstance(task, BehaviourTask)
         # A dynamic pipeline task
         trials_class = HabituationTrialsBpod if 'habituation' in task.protocol else ChoiceWorldTrialsBpod
         task = trials_class(task.session_path,
                             collection=task.collection, protocol_number=task.protocol_number,
                             protocol=task.protocol, one=task.one)
-    else:  # A legacy pipeline task (should be EphysTrials as there are no other options)
-        task = TrainingTrials(task.session_path, one=task.one)
     return task
 
 
@@ -242,7 +241,8 @@ def show_session_task_qc(qc_or_session=None, bpod_only=False, local=False, one=N
     if isinstance(qc_or_session, QcFrame):
         qc = qc_or_session
     elif isinstance(qc_or_session, TaskQC):
-        qc = QcFrame(qc_or_session)
+        task_qc = qc_or_session
+        qc = QcFrame(task_qc)
     else:  # assumed to be eid or session path
         one = one or ONE(mode='local' if local else 'auto')
         if not is_session_path(Path(qc_or_session)):
@@ -250,7 +250,8 @@ def show_session_task_qc(qc_or_session=None, bpod_only=False, local=False, one=N
             session_path = one.eid2path(eid)
         else:
             session_path = Path(qc_or_session)
-        tasks = get_trials_tasks(session_path, one=None if local else one)
+
+        tasks = get_trials_tasks(session_path, one=None if local else one, bpod_only=bpod_only)
         # Get the correct task and ensure not passive
         if protocol_number is None:
             if not (task := next((t for t in tasks if 'passive' not in t.name.lower()), None)):
@@ -263,10 +264,6 @@ def show_session_task_qc(qc_or_session=None, bpod_only=False, local=False, one=N
             task = tasks[protocol_number]
             if 'passive' in task.name.lower():
                 raise ValueError('QC display not supported for passive protocols')
-        # If Bpod only and not a dynamic pipeline Bpod behaviour task OR legacy TrainingTrials task
-        if bpod_only and 'bpod' not in task.name.lower():
-            # Use the dynamic pipeline Bpod behaviour task instead (should work with legacy pipeline too)
-            task = get_bpod_trials_task(task)
         _logger.debug('Using %s task', task.name)
         # Ensure required data are present
         task.location = 'server' if local else 'remote'  # affects whether missing data are downloaded
@@ -289,8 +286,22 @@ def show_session_task_qc(qc_or_session=None, bpod_only=False, local=False, one=N
                     trial_events=list(events),
                     color_map=cm,
                     linestyle=ls)
+
     # Update table and callbacks
-    w.update_df(qc.frame)
+    n_trials = qc.frame.shape[0]
+    if 'task_qc' in locals():
+        df_trials = pd.DataFrame({
+            k: v for k, v in task_qc.extractor.data.items()
+            if v.size == n_trials and not k.startswith('wheel')
+        })
+        df = df_trials.merge(qc.frame, left_index=True, right_index=True)
+    else:
+        df = qc.frame
+    df_pass = pd.DataFrame({k: v for k, v in qc.qc.passed.items() if isinstance(v, np.ndarray) and v.size == n_trials})
+    df_pass.drop('_task_passed_trial_checks', axis=1, errors='ignore', inplace=True)
+    df_pass.rename(columns=lambda x: x.replace('_task', 'passed'), inplace=True)
+    df = df.merge(df_pass.astype('boolean'), left_index=True, right_index=True)
+    w.updateDataframe(df)
     qt.run_app()
     return qc
 

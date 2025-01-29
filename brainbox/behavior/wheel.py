@@ -1,10 +1,6 @@
 """
 Set of functions to handle wheel data.
 """
-import logging
-import warnings
-import traceback
-
 import numpy as np
 from numpy import pi
 from iblutil.numerical import between_sorted
@@ -68,42 +64,6 @@ def interpolate_position(re_ts, re_pos, freq=1000, kind='linear', fill_gaps=None
     return yinterp, t
 
 
-def velocity(re_ts, re_pos):
-    """
-    (DEPRECATED) Compute wheel velocity from non-uniformly sampled wheel data. Returns the velocity
-    at the same samples locations as the position through interpolation.
-
-    Parameters
-    ----------
-    re_ts : array_like
-        Array of timestamps
-    re_pos: array_like
-        Array of unwrapped wheel positions
-
-    Returns
-    -------
-    np.ndarray
-        numpy array of velocities
-    """
-    for line in traceback.format_stack():
-        print(line.strip())
-
-    msg = 'brainbox.behavior.wheel.velocity has been deprecated. Use velocity_filtered instead.'
-    warnings.warn(msg, DeprecationWarning)
-    logging.getLogger(__name__).warning(msg)
-
-    dp = np.diff(re_pos)
-    dt = np.diff(re_ts)
-    # Compute raw velocity
-    vel = dp / dt
-    # Compute velocity time scale
-    tv = re_ts[:-1] + dt / 2
-    # interpolate over original time scale
-    if tv.size > 1:
-        ifcn = interpolate.interp1d(tv, vel, fill_value="extrapolate")
-        return ifcn(re_ts)
-
-
 def velocity_filtered(pos, fs, corner_frequency=20, order=8):
     """
     Compute wheel velocity from uniformly sampled wheel data.
@@ -128,83 +88,6 @@ def velocity_filtered(pos, fs, corner_frequency=20, order=8):
     vel = np.insert(np.diff(scipy.signal.sosfiltfilt(sos, pos)), 0, 0) * fs
     acc = np.insert(np.diff(vel), 0, 0) * fs
     return vel, acc
-
-
-def velocity_smoothed(pos, freq, smooth_size=0.03):
-    """
-    (DEPRECATED) Compute wheel velocity from uniformly sampled wheel data.
-
-    Parameters
-    ----------
-    pos : array_like
-        Array of wheel positions
-    smooth_size : float
-        Size of Gaussian smoothing window in seconds
-    freq : float
-        Sampling frequency of the data
-
-    Returns
-    -------
-    vel : np.ndarray
-        Array of velocity values
-    acc : np.ndarray
-        Array of acceleration values
-    """
-    for line in traceback.format_stack():
-        print(line.strip())
-
-    msg = 'brainbox.behavior.wheel.velocity_smoothed has been deprecated. Use velocity_filtered instead.'
-    warnings.warn(msg, DeprecationWarning)
-    logging.getLogger(__name__).warning(msg)
-
-    # Define our smoothing window with an area of 1 so the units won't be changed
-    std_samps = np.round(smooth_size * freq)  # Standard deviation relative to sampling frequency
-    N = std_samps * 6  # Number of points in the Gaussian covering +/-3 standard deviations
-    gauss_std = (N - 1) / 6
-    win = scipy.signal.windows.gaussian(N, gauss_std)
-    win = win / win.sum()  # Normalize amplitude
-
-    # Convolve and multiply by sampling frequency to restore original units
-    vel = np.insert(scipy.signal.convolve(np.diff(pos), win, mode='same'), 0, 0) * freq
-    acc = np.insert(scipy.signal.convolve(np.diff(vel), win, mode='same'), 0, 0) * freq
-
-    return vel, acc
-
-
-def last_movement_onset(t, vel, event_time):
-    """
-    (DEPRECATED) Find the time at which movement started, given an event timestamp that occurred during the
-    movement.
-
-    Movement start is defined as the first sample after the velocity has been zero for at least 50ms.
-    Wheel inputs should be evenly sampled.
-
-    :param t: numpy array of wheel timestamps in seconds
-    :param vel: numpy array of wheel velocities
-    :param event_time: timestamp anywhere during movement of interest, e.g. peak velocity
-    :return: timestamp of movement onset
-    """
-    for line in traceback.format_stack():
-        print(line.strip())
-
-    msg = 'brainbox.behavior.wheel.last_movement_onset has been deprecated. Use get_movement_onset instead.'
-    warnings.warn(msg, DeprecationWarning)
-    logging.getLogger(__name__).warning(msg)
-
-    # Look back from timestamp
-    threshold = 50e-3
-    mask = t < event_time
-    times = t[mask]
-    vel = vel[mask]
-    t = None  # Initialize
-    for i, t in enumerate(times[::-1]):
-        i = times.size - i
-        idx = np.min(np.where((t - times) < threshold))
-        if np.max(np.abs(vel[idx:i])) < 0.5:
-            break
-
-    # Return timestamp
-    return t
 
 
 def get_movement_onset(intervals, event_times):

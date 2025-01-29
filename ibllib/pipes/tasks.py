@@ -75,9 +75,10 @@ import logging
 import io
 import importlib
 import time
-from _collections import OrderedDict
+from collections import OrderedDict
 import traceback
 import json
+from typing import List, Dict
 
 from graphviz import Digraph
 
@@ -85,10 +86,11 @@ import ibllib
 from ibllib.oneibl import data_handlers
 from ibllib.oneibl.data_handlers import get_local_data_repository
 from ibllib.oneibl.registration import get_lab
-from iblutil.util import Bunch
+from iblutil.util import Bunch, flatten, ensure_list
 import one.params
 from one.api import ONE
 from one import webclient
+import one.alf.io as alfio
 
 _logger = logging.getLogger(__name__)
 TASK_STATUS_SET = {'Waiting', 'Held', 'Started', 'Errored', 'Empty', 'Complete', 'Incomplete', 'Abandoned'}
@@ -107,12 +109,13 @@ class Task(abc.ABC):
     time_elapsed_secs = None
     time_out_secs = 3600 * 2  # time-out after which a task is considered dead
     version = ibllib.__version__
-    signature = {'input_files': [], 'output_files': []}  # list of tuples (filename, collection, required_flag)
-    force = False  # whether or not to re-download missing input files on local server if not present
+    force = False  # whether to re-download missing input files on local server if not present
     job_size = 'small'  # either 'small' or 'large', defines whether task should be run as part of the large or small job services
+    env = None  # the environment name within which to run the task (NB: the env is not activated automatically!)
+    on_error = 'continue'  # whether to raise an exception on error ('raise') or report the error and continue ('continue')
 
     def __init__(self, session_path, parents=None, taskid=None, one=None,
-                 machine=None, clobber=True, location='server', **kwargs):
+                 machine=None, clobber=True, location='server', scratch_folder=None, on_error='continue', **kwargs):
         """
         Base task class
         :param session_path: session path
@@ -123,9 +126,11 @@ class Task(abc.ABC):
         :param clobber: whether or not to overwrite log on rerun
         :param location: location where task is run. Options are 'server' (lab local servers'), 'remote' (remote compute node,
         data required for task downloaded via one), 'AWS' (remote compute node, data required for task downloaded via AWS),
-        or 'SDSC' (SDSC flatiron compute node) # TODO 'Globus' (remote compute node, data required for task downloaded via Globus)
+        or 'SDSC' (SDSC flatiron compute node)
+        :param scratch_folder: optional: Path where to write intermediate temporary data
         :param args: running arguments
         """
+        self.on_error = on_error
         self.taskid = taskid
         self.one = one
         self.session_path = session_path
@@ -139,7 +144,33 @@ class Task(abc.ABC):
         self.clobber = clobber
         self.location = location
         self.plot_tasks = []  # Plotting task/ tasks to create plot outputs during the task
+        self.scratch_folder = scratch_folder
         self.kwargs = kwargs
+
+    @property
+    def signature(self) -> Dict[str, List]:
+        """
+        The signature of the task specifies inputs and outputs for the given task.
+        For some tasks it is dynamic and calculated. The legacy code specifies those as tuples.
+        The preferred way is to use the ExpectedDataset input and output constructors.
+
+            I = ExpectedDataset.input
+            O = ExpectedDataset.output
+            signature = {
+                'input_files': [
+                    I(name='extract.me.npy', collection='raw_data', required=True, register=False, unique=False),
+                ],
+                'output_files': [
+                    O(name='look.atme.npy', collection='shiny_data', required=True, register=True, unique=False)
+            ]}
+            is equivalent to:
+            signature = {
+                'input_files': [('extract.me.npy', 'raw_data', True, True)],
+                'output_files': [('look.atme.npy', 'shiny_data', True)],
+                }
+        :return:
+        """
+        return {'input_files': [], 'output_files': []}
 
     @property
     def name(self):
@@ -172,6 +203,13 @@ class Task(abc.ABC):
             -1: Errored
             -2: Didn't run as a lock was encountered
             -3: Incomplete
+
+        Notes
+        -----
+        - The `run_alyx_task` will update the Alyx Task status depending on both status and outputs
+          (i.e. the output of subclassed `_run` method):
+          Assuming a return value of 0... if Task.outputs is None, the status will be Empty;
+          if Task.outputs is a list (empty or otherwise), the status will be Complete.
         """
         # if task id of one properties are not available, local run only without alyx
         use_alyx = self.one is not None and self.taskid is not None
@@ -200,29 +238,41 @@ class Task(abc.ABC):
         start_time = time.time()
         try:
             setup = self.setUp(**kwargs)
+            self.outputs = self._input_files_to_register()
             _logger.info(f'Setup value is: {setup}')
             self.status = 0
             if not setup:
                 # case where outputs are present but don't have input files locally to rerun task
                 # label task as complete
-                _, self.outputs = self.assert_expected_outputs()
+                _, outputs = self.assert_expected_outputs()
             else:
                 # run task
                 if self.gpu >= 1:
                     if not self._creates_lock():
                         self.status = -2
-                        _logger.info(f'Job {self.__class__} exited as a lock was found')
+                        _logger.info(f'Job {self.__class__} exited as a lock was found at {self._lock_file_path()}')
                         new_log = log_capture_string.getvalue()
                         self.log = new_log if self.clobber else self.log + new_log
                         _logger.removeHandler(ch)
                         ch.close()
+                        if self.on_error == 'raise':
+                            raise FileExistsError(f'Job {self.__class__} exited as a lock was found at {self._lock_file_path()}')
                         return self.status
-                self.outputs = self._run(**kwargs)
+                outputs = self._run(**kwargs)
                 _logger.info(f'Job {self.__class__} complete')
-        except Exception:
+            if outputs is None:
+                # If run method returns None and no raw input files were registered, self.outputs
+                # should be None, meaning task will have an 'Empty' status. If run method returns
+                # a list, the status will be 'Complete' regardless of whether there are output files.
+                self.outputs = outputs if not self.outputs else self.outputs  # ensure None if no inputs registered
+            else:
+                self.outputs.extend(ensure_list(outputs))  # Add output files to list of inputs to register
+        except Exception as e:
             _logger.error(traceback.format_exc())
             _logger.info(f'Job {self.__class__} errored')
             self.status = -1
+            if self.on_error == 'raise':
+                raise e
 
         self.time_elapsed_secs = time.time() - start_time
         # log the outputs
@@ -262,6 +312,44 @@ class Task(abc.ABC):
         _ = self.register_images()
         return self.data_handler.uploadData(self.outputs, self.version, **kwargs)
 
+    def _input_files_to_register(self, assert_all_exist=False):
+        """
+        Return input datasets to be registered to Alyx.
+
+        These datasets are typically raw data files and are registered even if the task fails to complete.
+
+        Parameters
+        ----------
+        assert_all_exist
+            Raise AssertionError if not all required input datasets exist on disk.
+
+        Returns
+        -------
+        list of pathlib.Path
+            A list of input files to register.
+
+        # TODO This method currently does not support wildcards
+        """
+        I = data_handlers.ExpectedDataset.input  # noqa
+        try:
+            # Ensure all input files are ExpectedDataset instances
+            input_files = [I(*i) if isinstance(i, tuple) else i for i in self.input_files or []]
+        except AttributeError:
+            raise RuntimeError('Task.setUp must be run before calling this method.')
+        to_register, missing = [], set()
+        for dataset in input_files:
+            ok, filepaths, _missing = dataset.find_files(self.session_path, register=True)
+            to_register.extend(filepaths)
+            if not ok and _missing is not None:
+                missing.update(_missing) if isinstance(_missing, set) else missing.add(_missing)
+        if any(missing):  # NB: These are either glob patterns that have no matches or match files that should be absent
+            missing_str = ', '.join(missing)
+            if assert_all_exist:
+                raise AssertionError(f'Missing required input files: {missing_str}')
+            else:
+                _logger.error(f'Missing required input files: {missing_str}')
+        return to_register
+
     def register_images(self, **kwargs):
         """
         Registers images to alyx database
@@ -283,20 +371,31 @@ class Task(abc.ABC):
         This is the default but should be overwritten for each task
         :return:
         """
-        self.input_files = self.signature['input_files']
-        self.output_files = self.signature['output_files']
+        signature = data_handlers._parse_signature(self.signature)
+        self.input_files = signature['input_files']
+        self.output_files = signature['output_files']
 
     @abc.abstractmethod
     def _run(self, overwrite=False):
-        """
-        This is the method to implement
-        :param overwrite: (bool) if the output already exists,
-        :return: out_files: files to be registered. Could be a list of files (pathlib.Path),
-        a single file (pathlib.Path) an empty list [] or None.
-        Within the pipeline, there is a distinction between a job that returns an empty list
-         and a job that returns None. If the function returns None, the job will be labeled as
-          "empty" status in the database, otherwise, the job has an expected behaviour of not
-          returning any dataset.
+        """Execute main task code.
+
+        This method contains a task's principal data processing code and should implemented
+        by each subclass.
+
+        Parameters
+        ----------
+        overwrite : bool
+            When false (default), the task may re-use any intermediate data from a previous run.
+            When true, the task will disregard or delete any intermediate files before running.
+
+        Returns
+        -------
+        pathlib.Path, list of pathlib.Path, None
+            One or more files to be registered, or an empty list if no files are registered.
+            Within the pipeline, there is a distinction between a job that returns an empty list
+            and a job that returns None. If the function returns None, the job will be labeled as
+            "empty" status in the database, otherwise, the job has an expected behaviour of not
+            returning any dataset.
         """
 
     def setUp(self, **kwargs):
@@ -322,16 +421,16 @@ class Task(abc.ABC):
                 # Attempts to download missing data using globus
                 _logger.info('Not all input files found locally: attempting to re-download required files')
                 self.data_handler = self.get_data_handler(location='serverglobus')
-                self.data_handler.setUp()
+                self.data_handler.setUp(task=self)
                 # Double check we now have the required files to run the task
                 # TODO in future should raise error if even after downloading don't have the correct files
                 self.assert_expected_inputs(raise_error=False)
                 return True
         else:
             self.data_handler = self.get_data_handler()
-            self.data_handler.setUp()
+            self.data_handler.setUp(task=self)
             self.get_signatures(**kwargs)
-            self.assert_expected_inputs()
+            self.assert_expected_inputs(raise_error=False)
             return True
 
     def tearDown(self):
@@ -348,7 +447,7 @@ class Task(abc.ABC):
         Function to optionally overload to clean up
         :return:
         """
-        self.data_handler.cleanUp()
+        self.data_handler.cleanUp(task=self)
 
     def assert_expected_outputs(self, raise_error=True):
         """
@@ -364,15 +463,25 @@ class Task(abc.ABC):
             for out in self.outputs:
                 _logger.error(f'{out}')
             if raise_error:
-                raise FileNotFoundError("Missing outputs after task completion")
+                raise FileNotFoundError('Missing outputs after task completion')
 
         return everything_is_fine, files
 
-    def assert_expected_inputs(self, raise_error=True):
+    def assert_expected_inputs(self, raise_error=True, raise_ambiguous=False):
         """
-        Before running a task, check that all the files necessary to run the task have been downloaded/ are on the local file
-        system already
-        :return:
+        Check that all the files necessary to run the task have been are present on disk.
+
+        Parameters
+        ----------
+        raise_error : bool
+            If true, raise FileNotFoundError if required files are missing.
+
+        Returns
+        -------
+        bool
+            True if all required files were found.
+        list of pathlib.Path
+            A list of file paths that exist on disk.
         """
         _logger.info('Checking input files')
         everything_is_fine, files = self.assert_expected(self.input_files)
@@ -380,27 +489,54 @@ class Task(abc.ABC):
         if not everything_is_fine and raise_error:
             raise FileNotFoundError('Missing inputs to run task')
 
+        # Check for duplicate datasets that may complicate extraction.
+        # Some sessions may contain revisions and without ONE it's difficult to determine which
+        # are the default datasets. Likewise SDSC may contain multiple datasets with different
+        # UUIDs in the name after patching data.
+        variant_datasets = alfio.find_variants(files, extra=False)
+        if any(map(len, variant_datasets.values())):
+            # Keep those with variants and make paths relative to session for logging purposes
+            to_frag = lambda x: x.relative_to(self.session_path).as_posix()  # noqa
+            ambiguous = {
+                to_frag(k): [to_frag(x) for x in v]
+                for k, v in variant_datasets.items() if any(v)}
+            _logger.error('Ambiguous input datasets found: %s', ambiguous)
+
+            if raise_ambiguous or self.location == 'sdsc':  # take no chances on SDSC
+                # This could be mitigated if loading with data OneSDSC
+                raise NotImplementedError(
+                    'Multiple variant datasets found. Loading for these is undefined.')
+
         return everything_is_fine, files
 
     def assert_expected(self, expected_files, silent=False):
-        everything_is_fine = True
-        files = []
-        for expected_file in expected_files:
-            actual_files = list(Path(self.session_path).rglob(str(Path(*filter(None, reversed(expected_file[:2]))))))
-            # Account for revisions
-            if len(actual_files) == 0:
-                collection = expected_file[1] + '/#*' if expected_file[1] != '' else expected_file[1] + '#*'
-                expected_revision = (expected_file[0], collection, expected_file[2])
-                actual_files = list(
-                    Path(self.session_path).rglob(str(Path(*filter(None, reversed(expected_revision[:2]))))))
+        """
+        Assert that expected files are present.
 
-            if len(actual_files) == 0 and expected_file[2]:
-                everything_is_fine = False
-                if not silent:
-                    _logger.error(f'Signature file expected {expected_file} not found')
-            else:
-                if len(actual_files) != 0:
-                    files.append(actual_files[0])
+        Parameters
+        ----------
+        expected_files : list of ExpectedDataset
+            A list of expected files in the form (file_pattern_str, collection_str, required_bool).
+        silent : bool
+            If true, log an error if any required files are not found.
+
+        Returns
+        -------
+        bool
+            True if all required files were found.
+        list of pathlib.Path
+            A list of file paths that exist on disk.
+        """
+        if not any(expected_files):
+            return True, []
+        ok, actual_files, missing = zip(*(x.find_files(self.session_path) for x in expected_files))
+        everything_is_fine = all(ok)
+        # For unknown reasons only the first file of each expected dataset was returned and this
+        # behaviour was preserved after refactoring the code
+        files = [file_list[0] for file_list in actual_files if len(file_list) > 0]
+        if not everything_is_fine and not silent:
+            for missing_pattern in filter(None, flatten(missing)):
+                _logger.error('Signature file pattern %s not found', missing_pattern)
 
         return everything_is_fine, files
 
@@ -420,9 +556,13 @@ class Task(abc.ABC):
         elif location == 'remote':
             dhandler = data_handlers.RemoteHttpDataHandler(self.session_path, self.signature, one=self.one)
         elif location == 'aws':
-            dhandler = data_handlers.RemoteAwsDataHandler(self, self.session_path, self.signature, one=self.one)
+            dhandler = data_handlers.RemoteAwsDataHandler(self.session_path, self.signature, one=self.one)
         elif location == 'sdsc':
-            dhandler = data_handlers.SDSCDataHandler(self, self.session_path, self.signature, one=self.one)
+            dhandler = data_handlers.SDSCDataHandler(self.session_path, self.signature, one=self.one)
+        elif location == 'popeye':
+            dhandler = data_handlers.PopeyeDataHandler(self.session_path, self.signature, one=self.one)
+        elif location == 'ec2':
+            dhandler = data_handlers.RemoteEC2DataHandler(self.session_path, self.signature, one=self.one)
         else:
             raise ValueError(f'Unknown location "{location}"')
         return dhandler
@@ -462,6 +602,8 @@ class Task(abc.ABC):
             return True
 
     def _creates_lock(self):
+        if self.location == "popeye":
+            return True
         if self.is_locked():
             return False
         else:
@@ -536,7 +678,8 @@ class Pipeline(abc.ABC):
 
     def create_alyx_tasks(self, rerun__status__in=None, tasks_list=None):
         """
-        Instantiate the pipeline and create the tasks in Alyx, then create the jobs for the session
+        Instantiate the pipeline and create the tasks in Alyx, then create the jobs for the session.
+
         If the jobs already exist, they are left untouched. The re-run parameter will re-init the
         job by emptying the log and set the status to Waiting.
 
@@ -678,6 +821,24 @@ class Pipeline(abc.ABC):
         return self.__class__.__name__
 
 
+def str2class(task_executable: str):
+    """
+    Convert task name to class.
+
+    Parameters
+    ----------
+    task_executable : str
+        A Task class name, e.g. 'ibllib.pipes.behavior_tasks.TrialRegisterRaw'.
+
+    Returns
+    -------
+    class
+        The imported class.
+    """
+    strmodule, strclass = task_executable.rsplit('.', 1)
+    return getattr(importlib.import_module(strmodule), strclass)
+
+
 def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
                   max_md5_size=None, machine=None, clobber=True, location='server', mode='log'):
     """
@@ -710,8 +871,8 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
 
     Returns
     -------
-    Task
-        The instantiated task object that was run.
+    dict
+        The updated task dict.
     list of pathlib.Path
         A list of registered datasets.
     """
@@ -732,9 +893,7 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
                 tdict = one.alyx.rest('tasks', 'partial_update', id=tdict['id'], data={'status': 'Held'})
             return tdict, registered_dsets
     # creates the job from the module name in the database
-    exec_name = tdict['executable']
-    strmodule, strclass = exec_name.rsplit('.', 1)
-    classe = getattr(importlib.import_module(strmodule), strclass)
+    classe = str2class(tdict['executable'])
     tkwargs = tdict.get('arguments') or {}  # if the db field is null it returns None
     task = classe(session_path, one=one, taskid=tdict['id'], machine=machine, clobber=clobber,
                   location=location, **tkwargs)
@@ -744,7 +903,7 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
     patch_data = {'time_elapsed_secs': task.time_elapsed_secs, 'log': task.log,
                   'version': task.version}
     # if there is no data to register, set status to Empty
-    if task.outputs is None:
+    if task.outputs is None:  # NB: an empty list is still considered Complete.
         patch_data['status'] = 'Empty'
     # otherwise register data and set (provisional) status to Complete
     else:

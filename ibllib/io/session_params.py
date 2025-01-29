@@ -23,18 +23,17 @@ EGRESS
         - once copy is complete aggregate the qc from file.
 """
 import yaml
-import time
-from datetime import datetime
+import uuid
 import logging
+import socket
 from pathlib import Path
+from itertools import chain
 from copy import deepcopy
 
 from one.converters import ConversionMixin
 from iblutil.util import flatten
+from iblutil.io.params import FileLock
 from packaging import version
-
-import ibllib.pipes.misc as misc
-
 
 _logger = logging.getLogger(__name__)
 SPEC_VERSION = '1.0.0'
@@ -79,6 +78,9 @@ def _patch_file(data: dict) -> dict:
             if 'tasks' in data and isinstance(data['tasks'], dict):
                 data['tasks'] = [{k: v} for k, v in data['tasks'].copy().items()]
         data['version'] = SPEC_VERSION
+        # Ensure all items in tasks list are single value dicts
+        if 'tasks' in data:
+            data['tasks'] = [{k: v} for k, v in chain.from_iterable(map(dict.items, data['tasks']))]
     return data
 
 
@@ -133,7 +135,7 @@ def read_params(path) -> dict:
 
     """
     if (path := Path(path)).is_dir():
-        yaml_file = next(path.glob('_ibl_experiment.description*'), None)
+        yaml_file = next(path.glob('_ibl_experiment.description*.yaml'), None)
     else:
         yaml_file = path if path.exists() else None
     if not yaml_file:
@@ -163,6 +165,11 @@ def merge_params(a, b, copy=False):
     dict
         A merged dictionary consisting of fields from `a` and `b`.
     """
+    def to_hashable(dict_item):
+        """Convert protocol -> dict map to hashable tuple of protocol + sorted key value pairs."""
+        hashable = (dict_item[0], *chain.from_iterable(sorted(dict_item[1].items())))
+        return tuple(tuple(x) if isinstance(x, list) else x for x in hashable)
+
     if copy:
         a = deepcopy(a)
     for k in b:
@@ -170,8 +177,17 @@ def merge_params(a, b, copy=False):
             assert k not in a or a[k] == b[k], 'multiple sync fields defined'
         if isinstance(b[k], list):
             prev = list(a.get(k, []))
-            # For procedures and projects, remove duplicates
-            to_add = b[k] if k == 'tasks' else set(b[k]) - set(prev)
+            if k == 'tasks':
+                # For tasks, keep order and skip duplicates
+                # Assert tasks is a list of single value dicts
+                assert (not prev or set(map(len, prev)) == {1}) and set(map(len, b[k])) == {1}
+                # Get the set of previous tasks
+                prev_tasks = set(map(to_hashable, chain.from_iterable(map(dict.items, prev))))
+                tasks = chain.from_iterable(map(dict.items, b[k]))
+                to_add = [dict([itm]) for itm in tasks if to_hashable(itm) not in prev_tasks]
+            else:
+                # For procedures and projects, remove duplicates
+                to_add = set(b[k]) - set(prev)
             a[k] = prev + list(to_add)
         elif isinstance(b[k], dict):
             a[k] = {**a.get(k, {}), **b[k]}
@@ -204,9 +220,6 @@ def aggregate_device(file_device, file_acquisition_description, unlink=False):
         Device file contains a main 'sync' key that is already present in the main description
         file.  For an experiment only one main sync device is allowed.
     """
-    # if a lock file exists retries 5 times to see if it exists
-    attempts = 0
-    file_lock = file_acquisition_description.with_suffix('.lock')
     # reads in the partial device data
     data_device = read_params(file_device)
 
@@ -214,38 +227,19 @@ def aggregate_device(file_device, file_acquisition_description, unlink=False):
         _logger.warning('empty device file "%s"', file_device)
         return
 
-    while True:
-        if not file_lock.exists() or attempts >= 4:
-            break
-        _logger.info('file lock found, waiting 2 seconds %s', file_lock)
-        time.sleep(2)
-        attempts += 1
+    with FileLock(file_acquisition_description, log=_logger, timeout_action='delete'):
+        # if the acquisition description file already exists, read in the yaml content
+        if file_acquisition_description.exists():
+            acq_desc = read_params(file_acquisition_description)
+        else:
+            acq_desc = {}
 
-    # if the file still exists after 5 attempts, remove it as it's a job that went wrong
-    if file_lock.exists():
-        with open(file_lock, 'r') as fp:
-            _logger.debug('file lock contents: %s', yaml.safe_load(fp))
-        _logger.info('stale file lock found, deleting %s', file_lock)
-        file_lock.unlink()
+        # merge the dictionaries (NB: acq_desc modified in place)
+        acq_desc = merge_params(acq_desc, data_device)
 
-    # add in the lock file, add some meta data to ease debugging if one gets stuck
-    with open(file_lock, 'w') as fp:
-        yaml.safe_dump(dict(datetime=datetime.utcnow().isoformat(), file_device=str(file_device)), fp)
+        with open(file_acquisition_description, 'w') as fp:
+            yaml.safe_dump(acq_desc, fp)
 
-    # if the acquisition description file already exists, read in the yaml content
-    if file_acquisition_description.exists():
-        acq_desc = read_params(file_acquisition_description)
-    else:
-        acq_desc = {}
-
-    # merge the dictionaries (NB: acq_desc modified in place)
-    acq_desc = merge_params(acq_desc, data_device)
-
-    with open(file_acquisition_description, 'w') as fp:
-        yaml.safe_dump(acq_desc, fp)
-
-    # unlink the local file
-    file_lock.unlink()
     # delete the original file if necessary
     if unlink:
         file_device.unlink()
@@ -376,14 +370,14 @@ def get_task_protocol_number(sess_params, task_protocol=None):
         number that corresponds to the protocol, or None if protocol not present.
     """
     protocols = sess_params.get('tasks', [])
-    if task_protocol is not None:
-        task = next((x for x in protocols if task_protocol in x), None)
+    if task_protocol is None:  # Return set of all task numbers
+        numbers = (next(iter(x.values()), {}).get('protocol_number') for x in protocols)
+        numbers = list(map(int, filter(lambda x: x is not None, numbers)))
+        return (next(iter(numbers)) if len(numbers) == 1 else numbers) or None
+    else:
+        task = next((x for x in protocols if task_protocol in x), {})
         number = (task.get(task_protocol) or {}).get('protocol_number')
         return int(number) if isinstance(number, str) else number
-    else:  # Return set of all task numbers
-        numbers = list(filter(None, (next(iter(x.values()), {}).get('protocol_number') for x in protocols)))
-        numbers = [int(n) if isinstance(n, str) else n for n in numbers]
-        return (next(iter(numbers)) if len(numbers) == 1 else numbers) or None
 
 
 def get_collections(sess_params, flat=False):
@@ -464,7 +458,7 @@ def get_remote_stub_name(session_path, device_id=None):
     >>> get_remote_stub_name(Path.home().joinpath('subject', '2020-01-01', '001'), 'host-123')
     Path.home() / 'subject/2020-01-01/001/_devices/2020-01-01_1_subject@host-123.yaml'
     """
-    device_id = device_id or misc.create_basic_transfer_params()['TRANSFER_LABEL']
+    device_id = device_id or f'{socket.gethostname()}_{uuid.getnode()}'
     exp_ref = '{date}_{sequence:d}_{subject:s}'.format(**ConversionMixin.path2ref(session_path))
     remote_filename = f'{exp_ref}@{device_id}.yaml'
     return session_path / '_devices' / remote_filename

@@ -1,17 +1,16 @@
-'''
-Processes data from one form into another, e.g. taking spike times and binning them into
-non-overlapping bins and convolving spike times with a gaussian kernel.
-'''
+"""Process data from one form into another.
+
+For example, taking spike times and binning them into non-overlapping bins and convolving spike
+times with a gaussian kernel.
+"""
 
 import numpy as np
 import pandas as pd
 from scipy import interpolate, sparse
 from brainbox import core
-from iblutil.numerical import bincount2D as _bincount2D
+from iblutil.numerical import bincount2D
 from iblutil.util import Bunch
 import logging
-import warnings
-import traceback
 
 _logger = logging.getLogger(__name__)
 
@@ -118,35 +117,6 @@ def sync(dt, times=None, values=None, timeseries=None, offsets=None, interp='zer
     return syncd
 
 
-def bincount2D(x, y, xbin=0, ybin=0, xlim=None, ylim=None, weights=None):
-    """
-    Computes a 2D histogram by aggregating values in a 2D array.
-
-    :param x: values to bin along the 2nd dimension (c-contiguous)
-    :param y: values to bin along the 1st dimension
-    :param xbin:
-        scalar: bin size along 2nd dimension
-        0: aggregate according to unique values
-        array: aggregate according to exact values (count reduce operation)
-    :param ybin:
-        scalar: bin size along 1st dimension
-        0: aggregate according to unique values
-        array: aggregate according to exact values (count reduce operation)
-    :param xlim: (optional) 2 values (array or list) that restrict range along 2nd dimension
-    :param ylim: (optional) 2 values (array or list) that restrict range along 1st dimension
-    :param weights: (optional) defaults to None, weights to apply to each value for aggregation
-    :return: 3 numpy arrays MAP [ny,nx] image, xscale [nx], yscale [ny]
-    """
-    for line in traceback.format_stack():
-        print(line.strip())
-    warning_text = """Deprecation warning: bincount2D() is now a part of iblutil.
-                    brainbox.processing.bincount2D is deprecated and will be removed in
-                    future versions. Please replace imports with iblutil.numerical.bincount2D."""
-    _logger.warning(warning_text)
-    warnings.warn(warning_text, DeprecationWarning)
-    return _bincount2D(x, y, xbin, ybin, xlim, ylim, weights)
-
-
 def compute_cluster_average(spike_clusters, spike_var):
     """
     Quickish way to compute the average of some quantity across spikes in each cluster given
@@ -197,7 +167,7 @@ def bin_spikes(spikes, binsize, interval_indices=False):
 
 
 def get_units_bunch(spks_b, *args):
-    '''
+    """
     Returns a bunch, where the bunch keys are keys from `spks` with labels of spike information
     (e.g. unit IDs, times, features, etc.), and the values for each key are arrays with values for
     each unit: these arrays are ordered and can be indexed by unit id.
@@ -223,18 +193,18 @@ def get_units_bunch(spks_b, *args):
     --------
     1) Create a units bunch given a spikes bunch, and get the amps for unit #4 from the units
     bunch.
-        >>> import brainbox as bb
-        >>> import alf.io as aio
+        >>> from brainbox import processing
+        >>> import one.alf.io as alfio
         >>> import ibllib.ephys.spikes as e_spks
         (*Note, if there is no 'alf' directory, make 'alf' directory from 'ks2' output directory):
         >>> e_spks.ks2_to_alf(path_to_ks_out, path_to_alf_out)
-        >>> spks_b = aio.load_object(path_to_alf_out, 'spikes')
-        >>> units_b = bb.processing.get_units_bunch(spks_b)
+        >>> spks_b = alfio.load_object(path_to_alf_out, 'spikes')
+        >>> units_b = processing.get_units_bunch(spks_b)
         # Get amplitudes for unit 4.
         >>> amps = units_b['amps']['4']
 
     TODO add computation time estimate?
-    '''
+    """
 
     # Initialize `units`
     units_b = Bunch()
@@ -261,7 +231,7 @@ def get_units_bunch(spks_b, *args):
 
 
 def filter_units(units_b, t, **kwargs):
-    '''
+    """
     Filters units according to some parameters. **kwargs are the keyword parameters used to filter
     the units.
 
@@ -299,24 +269,24 @@ def filter_units(units_b, t, **kwargs):
     Examples
     --------
     1) Filter units according to the default parameters.
-        >>> import brainbox as bb
-        >>> import alf.io as aio
+        >>> from brainbox import processing
+        >>> import one.alf.io as alfio
         >>> import ibllib.ephys.spikes as e_spks
         (*Note, if there is no 'alf' directory, make 'alf' directory from 'ks2' output directory):
         >>> e_spks.ks2_to_alf(path_to_ks_out, path_to_alf_out)
         # Get a spikes bunch, units bunch, and filter the units.
-        >>> spks_b = aio.load_object(path_to_alf_out, 'spikes')
-        >>> units_b = bb.processing.get_units_bunch(spks_b, ['times', 'amps', 'clusters'])
+        >>> spks_b = alfio.load_object(path_to_alf_out, 'spikes')
+        >>> units_b = processing.get_units_bunch(spks_b, ['times', 'amps', 'clusters'])
         >>> T = spks_b['times'][-1] - spks_b['times'][0]
-        >>> filtered_units = bb.processing.filter_units(units_b, T)
+        >>> filtered_units = processing.filter_units(units_b, T)
 
     2) Filter units with no minimum amplitude, a minimum firing rate of 1 Hz, and a max false
     positive rate of 0.2, given a refractory period of 2 ms.
-        >>> filtered_units  = bb.processing.filter_units(units_b, T, min_amp=0, min_fr=1)
+        >>> filtered_units  = processing.filter_units(units_b, T, min_amp=0, min_fr=1)
 
     TODO: `units_b` input arg could eventually be replaced by `clstrs_b` if the required metrics
           are in `clstrs_b['metrics']`
-    '''
+    """
 
     # Set params
     params = {'min_amp': 50e-6, 'min_fr': 0.5, 'max_fpr': 0.2, 'rp': 0.002}  # defaults

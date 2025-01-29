@@ -41,20 +41,17 @@ import copy
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
-import pandas as pd
 from matplotlib.patches import Rectangle
 
 import one.alf.io as alfio
-from one.util import filter_datasets
 from one.alf import spec
 from one.alf.exceptions import ALFObjectNotFound
 from iblutil.util import Bunch
 from iblutil.numerical import within_ranges
 
-from ibllib.io.extractors.camera import extract_camera_sync, extract_all
+import ibllib.io.extractors.camera as camio
 from ibllib.io.extractors import ephys_fpga, training_wheel, mesoscope
 from ibllib.io.extractors.video_motion import MotionAlignment
-from ibllib.io.extractors.base import get_session_extractor_type
 from ibllib.io import raw_data_loaders as raw
 from ibllib.io.raw_daq_loaders import load_timeline_sync_and_chmap
 from ibllib.io.session_params import read_params, get_sync, get_sync_namespace
@@ -134,9 +131,6 @@ class CameraQC(base.QC):
         :param log: A logging.Logger instance, if None the 'ibllib' logger is used
         :param one: An ONE instance for fetching and setting the QC on Alyx
         """
-        # When an eid is provided, we will download the required data by default (if necessary)
-        download_data = not spec.is_session_path(Path(session_path_or_eid))
-        self.download_data = kwargs.pop('download_data', download_data)
         self.stream = kwargs.pop('stream', None)
         self.n_samples = kwargs.pop('n_samples', 100)
         self.sync_collection = kwargs.pop('sync_collection', None)
@@ -184,10 +178,11 @@ class CameraQC(base.QC):
         else:
             return 'ephys' if 'ephys' in self._type else 'training'
 
-    def load_data(self, download_data: bool = None, extract_times: bool = False, load_video: bool = True) -> None:
+    def load_data(self, extract_times: bool = False, load_video: bool = True) -> None:
         """Extract the data from raw data files.
 
-        Extracts all the required task data from the raw data files.
+        Extracts all the required task data from the raw data files. Missing data will raise an
+        AssertionError.  TODO This method could instead be moved to CameraExtractor classes.
 
         Data keys:
             - count (int array): the sequential frame number (n, n+1, n+2...)
@@ -201,16 +196,10 @@ class CameraQC(base.QC):
             - video (Bunch): video meta data, including dimensions and FPS
             - frame_samples (h x w x n array): array of evenly sampled frames (1 colour channel)
 
-        :param download_data: if True, any missing raw data is downloaded via ONE.
-        Missing data will raise an AssertionError
         :param extract_times: if True, the camera.times are re-extracted from the raw data
         :param load_video: if True, calls the load_video_data method
         """
         assert self.session_path, 'no session path set'
-        if download_data is not None:
-            self.download_data = download_data
-        if self.download_data and self.eid and self.one and not self.one.offline:
-            self.ensure_required_data()
         _log.info('Gathering data for QC')
 
         # Get frame count and pin state
@@ -222,13 +211,10 @@ class CameraQC(base.QC):
         task_collection = get_task_collection(sess_params)
         ns = get_sync_namespace(sess_params)
         self._set_sync(sess_params)
-        if not self.sync:
-            if not self.type:
-                self._type = get_session_extractor_type(self.session_path, task_collection)
-            self.sync = 'nidq' if 'ephys' in self.type else 'bpod'
         self._update_meta_from_session_params(sess_params)
 
         # Load the audio and raw FPGA times
+        sync = chmap = None
         if self.sync != 'bpod' and self.sync is not None:
             self.sync_collection = self.sync_collection or 'raw_ephys_data'
             ns = ns or 'spikeglx'
@@ -241,7 +227,7 @@ class CameraQC(base.QC):
             audio_ttls = ephys_fpga.get_sync_fronts(sync, chmap['audio'])
             self.data['audio'] = audio_ttls['times']  # Get rises
             # Load raw FPGA times
-            cam_ts = extract_camera_sync(sync, chmap)
+            cam_ts = camio.extract_camera_sync(sync, chmap)
             self.data['fpga_times'] = cam_ts[self.label]
         else:
             self.sync_collection = self.sync_collection or task_collection
@@ -257,12 +243,14 @@ class CameraQC(base.QC):
             self.data['timestamps'] = alfio.load_object(
                 alf_path, f'{self.label}Camera', short_keys=True)['times']
         except AssertionError:  # Re-extract
-            kwargs = dict(video_path=self.video_path, labels=self.label)
-            if self.sync != 'bpod' and self.sync is not None:
-                kwargs = {**kwargs, 'sync': sync, 'chmap': chmap}  # noqa
-            outputs, _ = extract_all(self.session_path, self.sync, save=False,
-                                     sync_collection=self.sync_collection, **kwargs)
-            self.data['timestamps'] = outputs[f'{self.label}_camera_timestamps']
+            kwargs = dict(video_path=self.video_path, save=False)
+            if self.sync == 'bpod':
+                extractor = camio.CameraTimestampsBpod(self.session_path)
+                kwargs['task_collection'] = task_collection
+            else:
+                kwargs.update(sync=sync, chmap=chmap)
+                extractor = camio.CameraTimestampsFPGA(self.label, self.session_path)
+            self.data['timestamps'] = extractor.extract(**kwargs)[0]
         except ALFObjectNotFound:
             _log.warning('no camera.times ALF found for session')
 
@@ -351,92 +339,6 @@ class CameraQC(base.QC):
             ax1.plot(ts[mask], acc[mask])
         return edges[i]
 
-    def ensure_required_data(self):
-        """Ensure the datasets required for QC are local.
-
-        If the download_data attribute is True, any missing data are downloaded.  If all the data
-        are not present locally at the end of it an exception is raised.  If the stream attribute
-        is True, the video file is not required to be local, however it must be remotely accessible.
-        NB: Requires a valid instance of ONE and a valid session eid.
-
-        Raises
-        ------
-        AssertionError
-            The data requires for complete QC are not present.
-        """
-        assert self.one is not None, 'ONE required to download data'
-
-        sess_params = {}
-        if self.download_data:
-            dset = self.one.list_datasets(self.session_path, '*experiment.description*', details=True)
-            if self.one._check_filesystem(dset):
-                sess_params = read_params(self.session_path) or {}
-        else:
-            sess_params = read_params(self.session_path) or {}
-        self._set_sync(sess_params)
-
-        # Get extractor type
-        is_ephys = 'ephys' in (self.type or self.one.get_details(self.eid)['task_protocol'])
-        self.sync = self.sync or ('nidq' if is_ephys else 'bpod')
-
-        is_fpga = 'bpod' not in self.sync
-
-        # dataset collections outside this list are ignored (e.g. probe00, raw_passive_data)
-        collections = (
-            'alf', '', get_task_collection(sess_params), get_video_collection(sess_params, self.label)
-        )
-        dtypes = self.dstypes + self.dstypes_fpga if is_fpga else self.dstypes
-        assert_unique = True
-        # Check we have raw ephys data for session
-        if is_ephys:
-            if len(self.one.list_datasets(self.eid, collection='raw_ephys_data')) == 0:
-                # Assert 3A probe model; if so download all probe data
-                det = self.one.get_details(self.eid, full=True)
-                probe_model = next(x['model'] for x in det['probe_insertion'])
-                assert probe_model == '3A', 'raw ephys data missing'
-                collections += (self.sync_collection or 'raw_ephys_data',)
-                if sess_params:
-                    probes = sess_params.get('devices', {}).get('neuropixel', {})
-                    probes = set(x.get('collection') for x in chain(*map(dict.values, probes)))
-                    collections += tuple(probes)
-                else:
-                    collections += ('raw_ephys_data/probe00', 'raw_ephys_data/probe01')
-                assert_unique = False
-            else:
-                # 3B probes have data in root collection
-                collections += ('raw_ephys_data',)
-        for dstype in dtypes:
-            datasets = self.one.type2datasets(self.eid, dstype, details=True)
-            if 'camera' in dstype.lower():  # Download individual camera file
-                datasets = filter_datasets(datasets, filename=f'.*{self.label}.*')
-            else:  # Ignore probe datasets, etc.
-                _datasets = filter_datasets(datasets, collection=collections, assert_unique=assert_unique)
-                if '' in collections:  # Must be handled as a separate query
-                    datasets = filter_datasets(datasets, collection='', assert_unique=assert_unique)
-                    datasets = pd.concat([datasets, _datasets]).sort_index()
-                else:
-                    datasets = _datasets
-
-            if any(x.endswith('.mp4') for x in datasets.rel_path) and self.stream:
-                names = [x.split('/')[-1] for x in self.one.list_datasets(self.eid, details=False)]
-                assert f'_iblrig_{self.label}Camera.raw.mp4' in names, 'No remote video file found'
-                continue
-            optional = ('camera.times', '_iblrig_Camera.raw', 'wheel.position', 'wheel.timestamps',
-                        '_iblrig_Camera.timestamps', '_iblrig_Camera.frame_counter', '_iblrig_Camera.GPIO',
-                        '_iblrig_Camera.frameData', '_ibl_experiment.description')
-            present = (
-                self.one._check_filesystem(datasets)
-                if self.download_data
-                else (next(self.session_path.rglob(d), None) for d in datasets['rel_path'])
-            )
-
-            required = (dstype not in optional)
-            all_present = not datasets.empty and all(present)
-            assert all_present or not required, f'Dataset {dstype} not found'
-
-        if not self.type and self.sync != 'nidq':
-            self._type = get_session_extractor_type(self.session_path)
-
     def _set_sync(self, session_params=False):
         """Set the sync and sync_collection attributes if not already set.
 
@@ -518,10 +420,15 @@ class CameraQC(base.QC):
         outcome = max(map(spec.QC.validate, values))
 
         if update:
-            extended = {
-                k: spec.QC.NOT_SET if v is None else v
-                for k, v in self.metrics.items()
-            }
+            extended = dict()
+            for k, v in self.metrics.items():
+                if v is None:
+                    extended[k] = spec.QC.NOT_SET.name
+                elif isinstance(v, tuple):
+                    extended[k] = tuple(i.name if isinstance(i, spec.QC) else i for i in v)
+                else:
+                    extended[k] = v.name
+
             self.update_extended_qc(extended)
             self.update(outcome, namespace)
         return outcome, self.metrics
@@ -672,9 +579,9 @@ class CameraQC(base.QC):
         size_diff = int(self.data['count'].size - self.data['video']['length'])
         strict_increase = np.all(np.diff(self.data['count']) > 0)
         if not strict_increase:
-            n_effected = np.sum(np.invert(strict_increase))
+            n_affected = np.sum(np.invert(strict_increase))
             _log.info(f'frame count not strictly increasing: '
-                      f'{n_effected} frames effected ({n_effected / strict_increase.size:.2%})')
+                      f'{n_affected} frames affected ({n_affected / strict_increase.size:.2%})')
             return spec.QC.CRITICAL
         dropped = np.diff(self.data['count']).astype(int) - 1
         pct_dropped = (sum(dropped) / len(dropped) * 100)
@@ -1137,8 +1044,7 @@ class CameraQCCamlog(CameraQC):
         self._type = 'ephys'
         self.checks_to_remove = ['check_pin_state']
 
-    def load_data(self, download_data: bool = None,
-                  extract_times: bool = False, load_video: bool = True, **kwargs) -> None:
+    def load_data(self, extract_times: bool = False, load_video: bool = True, **kwargs) -> None:
         """Extract the data from raw data files.
 
         Extracts all the required task data from the raw data files.
@@ -1155,16 +1061,11 @@ class CameraQCCamlog(CameraQC):
             - video (Bunch): video meta data, including dimensions and FPS
             - frame_samples (h x w x n array): array of evenly sampled frames (1 colour channel)
 
-        :param download_data: if True, any missing raw data is downloaded via ONE.
         Missing data will raise an AssertionError
         :param extract_times: if True, the camera.times are re-extracted from the raw data
         :param load_video: if True, calls the load_video_data method
         """
         assert self.session_path, 'no session path set'
-        if download_data is not None:
-            self.download_data = download_data
-        if self.download_data and self.eid and self.one and not self.one.offline:
-            self.ensure_required_data()
         _log.info('Gathering data for QC')
 
         # If there is an experiment description and there are video parameters
@@ -1179,12 +1080,13 @@ class CameraQCCamlog(CameraQC):
         self.data['count'] = log.frame_id.values
 
         # Load the audio and raw FPGA times
+        sync = chmap = None
         if self.sync != 'bpod' and self.sync is not None:
             sync, chmap = ephys_fpga.get_sync_and_chn_map(self.session_path, self.sync_collection)
             audio_ttls = ephys_fpga.get_sync_fronts(sync, chmap['audio'])
             self.data['audio'] = audio_ttls['times']  # Get rises
             # Load raw FPGA times
-            cam_ts = extract_camera_sync(sync, chmap)
+            cam_ts = camio.extract_camera_sync(sync, chmap)
             self.data['fpga_times'] = cam_ts[self.label]
         else:
             bpod_data = raw.load_data(self.session_path, task_collection=task_collection)
@@ -1199,12 +1101,13 @@ class CameraQCCamlog(CameraQC):
             self.data['timestamps'] = alfio.load_object(
                 cam_path, f'{self.label}Camera', short_keys=True)['times']
         except AssertionError:  # Re-extract
-            kwargs = dict(video_path=self.video_path, labels=self.label)
+            kwargs = dict(video_path=self.video_path, save=False)
             if self.sync == 'bpod':
-                kwargs = {**kwargs, 'task_collection': task_collection}
+                extractor = camio.CameraTimestampsBpod(self.session_path, task_collection=task_collection)
             else:
-                kwargs = {**kwargs, 'sync': sync, 'chmap': chmap}  # noqa
-            outputs, _ = extract_all(self.session_path, self.sync, save=False, camlog=True, **kwargs)
+                kwargs.update(sync=sync, chmap=chmap)
+                extractor = camio.CameraTimestampsCamlog(self.label, self.session_path)
+            outputs, _ = extractor.extract(**kwargs)
             self.data['timestamps'] = outputs[f'{self.label}_camera_timestamps']
         except ALFObjectNotFound:
             _log.warning('no camera.times ALF found for session')
@@ -1234,56 +1137,6 @@ class CameraQCCamlog(CameraQC):
         if load_video:
             _log.info('Inspecting video file...')
             self.load_video_data()
-
-    def ensure_required_data(self):
-        """Ensure the datasets required for QC are local.
-
-        If the download_data attribute is True, any missing data are downloaded.  If all the data
-        are not present locally at the end of it an exception is raised.  If the stream attribute
-        is True, the video file is not required to be local, however it must be remotely accessible.
-        NB: Requires a valid instance of ONE and a valid session eid.
-        """
-        assert self.one is not None, 'ONE required to download data'
-
-        sess_params = {}
-        if self.download_data:
-            dset = self.one.list_datasets(self.session_path, '*experiment.description*', details=True)
-            if self.one._check_filesystem(dset):
-                sess_params = read_params(self.session_path) or {}
-        else:
-            sess_params = read_params(self.session_path) or {}
-        self._set_sync(sess_params)
-
-        # dataset collections outside this list are ignored (e.g. probe00, raw_passive_data)
-        collections = (
-            'alf', self.sync_collection, get_task_collection(sess_params),
-            get_video_collection(sess_params, self.label))
-
-        # Get extractor type
-        dtypes = self.dstypes + self.dstypes_fpga
-        assert_unique = True
-
-        for dstype in dtypes:
-            datasets = self.one.type2datasets(self.eid, dstype, details=True)
-            if 'camera' in dstype.lower():  # Download individual camera file
-                datasets = filter_datasets(datasets, filename=f'.*{self.label}.*')
-            else:  # Ignore probe datasets, etc.
-                datasets = filter_datasets(datasets, collection=collections,
-                                           assert_unique=assert_unique)
-            if any(x.endswith('.mp4') for x in datasets.rel_path) and self.stream:
-                names = [x.split('/')[-1] for x in self.one.list_datasets(self.eid, details=False)]
-                assert f'_iblrig_{self.label}Camera.raw.mp4' in names, 'No remote video file found'
-                continue
-            optional = ('camera.times', '_iblrig_Camera.raw', 'wheel.position', 'wheel.timestamps')
-            present = (
-                self.one._check_filesystem(datasets)
-                if self.download_data
-                else (next(self.session_path.rglob(d), None) for d in datasets['rel_path'])
-            )
-
-            required = (dstype not in optional)
-            all_present = not datasets.empty and all(present)
-            assert all_present or not required, f'Dataset {dstype} not found'
 
     def check_camera_times(self):
         """Check that the number of raw camera timestamps matches the number of video frames."""
@@ -1363,7 +1216,7 @@ def run_all_qc(session, cameras=('left', 'right', 'body'), **kwargs):
     camlog = kwargs.pop('camlog', False)
     CamQC = CameraQCCamlog if camlog else CameraQC
 
-    run_args = {k: kwargs.pop(k) for k in ('download_data', 'extract_times', 'update')
+    run_args = {k: kwargs.pop(k) for k in ('extract_times', 'update')
                 if k in kwargs.keys()}
     for camera in cameras:
         qc[camera] = CamQC(session, camera, **kwargs)

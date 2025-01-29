@@ -9,6 +9,7 @@ import numpy as np
 from one.api import ONE
 from one.registration import RegistrationClient
 
+from ibllib.oneibl.data_handlers import ExpectedDataset
 from ibllib.pipes import base_tasks
 from ibllib.pipes.behavior_tasks import ChoiceWorldTrialsBpod
 from ibllib.tests import TEST_DB
@@ -36,9 +37,9 @@ class TestRegisterRawDataTask(unittest.TestCase):
 
         # Add a couple of images
         cls.session_path.joinpath('snapshots').mkdir(parents=True)
-        for ext in ('.PNG', '.tif'):
+        for i, ext in enumerate(('.PNG', '.tif')):
             plt.imshow(np.random.random((7, 7)))
-            plt.savefig(cls.session_path.joinpath('snapshots', 'foo').with_suffix(ext))
+            plt.savefig(cls.session_path.joinpath('snapshots', f'foo_{i}').with_suffix(ext))
             plt.close()
 
     def test_register_snapshots(self):
@@ -46,7 +47,7 @@ class TestRegisterRawDataTask(unittest.TestCase):
 
         A more thorough test for this exists in ibllib.tests.test_pipes.TestRegisterRawDataTask.
         This test does not mock REST (and therefore requires a test database), while the other does.
-        This test could be removed as it's rather redundant.
+        This test also works on actual image data, testing the conversion from tif to png.
         """
         task = base_tasks.RegisterRawDataTask(self.session_path, one=self.one)
         notes = task.register_snapshots()
@@ -54,14 +55,16 @@ class TestRegisterRawDataTask(unittest.TestCase):
         self.assertTrue(self.session_path.joinpath('snapshots').exists())
         task.register_snapshots(unlink=True)
         self.assertFalse(self.session_path.joinpath('snapshots').exists())
+        self.assertTrue(all(n['image'].lower().endswith('.png') for n in notes), 'failed to convert tif to png')
 
     def test_rename_files(self):
         collection = 'raw_sync_data'
         task = base_tasks.RegisterRawDataTask(self.session_path, one=self.one)
         task.input_files = task.output_files = []
         task.rename_files()  # Returns without raising
-        task.input_files = [('foo.*', collection, True), ]
-        task.output_files = [('_ns_DAQdata.raw.bar', collection, True), ]
+        I = ExpectedDataset.input  # noqa
+        task.input_files = [I('foo.*', collection, True), ]
+        task.output_files = [I('_ns_DAQdata.raw.bar', collection, True), ]
         self.session_path.joinpath(collection).mkdir()
         self.session_path.joinpath(collection, 'foo.bar').touch()
         task.rename_files()
@@ -70,7 +73,7 @@ class TestRegisterRawDataTask(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             task.rename_files()
         # Check asserts number of inputs == number of outputs
-        task.output_files.append(('_ns_DAQdata.baz.bar', collection, True),)
+        task.output_files.append(I('_ns_DAQdata.baz.bar', collection, True),)
         with self.assertRaises(AssertionError):
             task.rename_files()
 
@@ -124,10 +127,10 @@ class TestBehaviourTask(unittest.TestCase):
         ]}
         task = ChoiceWorldTrialsBpod('')
         self.assertIsNone(task.get_protocol_number())
-        self.assertRaises(AssertionError, task.get_protocol_number, number='foo')
+        self.assertRaises(ValueError, task.get_protocol_number, number='foo')
         self.assertEqual(1, task.get_protocol_number(number=1))
         task.session_params = params
-        self.assertEqual(1, task.get_protocol_number())
+        self.assertRaises(AssertionError, task.get_protocol_number)
         for i, proc in enumerate(('fooChoiceWorld', 'barChoiceWorld')):
             self.assertEqual(i, task.get_protocol_number(task_protocol=proc))
 

@@ -7,7 +7,7 @@ import logging
 import shutil
 from pathlib import Path, PureWindowsPath
 
-from one.alf.files import get_session_path
+from one.alf.path import get_session_path
 
 log = logging.getLogger("ibllib")
 
@@ -68,7 +68,7 @@ def move_rename_pairs(from_to_pairs):
     for i, (src, dst) in enumerate(from_to_pairs):
         src = Path(src)
         dst = Path(dst)
-        log.info(f"Moving {i+1} of {len(from_to_pairs)}: \n{src}\n--> {dst}")
+        log.info(f"Moving {i + 1} of {len(from_to_pairs)}: \n{src}\n--> {dst}")
         try:
             shutil.move(str(src / "raw_behavior_data"), str(dst / "raw_passive_data"))
             ffile = src.joinpath("passive_data_for_ephys.flag")

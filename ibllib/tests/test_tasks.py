@@ -1,3 +1,6 @@
+"""Test ibllib.pipes.tasks module and Task class."""
+import sys
+import re
 import shutil
 import tempfile
 import unittest
@@ -10,6 +13,7 @@ import ibllib.pipes.tasks
 from ibllib.pipes.base_tasks import ExperimentDescriptionRegisterRaw
 from ibllib.pipes.video_tasks import VideoConvert
 from ibllib.io import session_params
+from ibllib.oneibl.data_handlers import ExpectedDataset
 from one.api import ONE
 from one.webclient import no_cache
 from ibllib.tests import TEST_DB
@@ -112,6 +116,7 @@ class TaskGpuLock(ibllib.pipes.tasks.Task):
     def setUp(self):
         self.make_lock_file()
         self.data_handler = self.get_data_handler()
+        self.input_files = []
         return True
 
     def _run(self, overwrite=False):
@@ -148,15 +153,9 @@ class TestPipelineAlyx(unittest.TestCase):
 
     def setUp(self) -> None:
         self.td = tempfile.TemporaryDirectory()
-        # ses = one.alyx.rest('sessions', 'list', subject=ses_dict['subject'],
-        #                     date_range=[ses_dict['start_time'][:10]] * 2,
-        #                     number=ses_dict['number'],
-        #                     no_cache=True)
-        # if len(ses):
-        #     one.alyx.rest('sessions', 'delete', ses[0]['url'][-36:])
-        # randomise number
-        ses_dict['number'] = np.random.randint(1, 30)
-        ses = one.alyx.rest('sessions', 'create', data=ses_dict)
+        self.ses_dict = ses_dict.copy()
+        self.ses_dict['number'] = np.random.randint(1, 999)
+        ses = one.alyx.rest('sessions', 'create', data=self.ses_dict)
         session_path = Path(self.td.name).joinpath(
             ses['subject'], ses['start_time'][:10], str(ses['number']).zfill(3))
         session_path.joinpath('alf').mkdir(exist_ok=True, parents=True)
@@ -354,6 +353,63 @@ class TestDynamicTask(unittest.TestCase):
         self.task.session_params = session_params.read_params(fixture)
         collection = self.task.get_device_collection(device)
         self.assertEqual('raw_ephys_data/probe00', collection)
+
+
+class TestTask(unittest.TestCase):
+    def setUp(self):
+        tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tmpdir.cleanup)
+        self.tmpdir = Path(tmpdir.name)
+        self.session_path = self.tmpdir.joinpath('subject', '1900-01-01', '001')
+        self.session_path.mkdir(parents=True)
+
+    def test_input_files_to_register(self):
+        """Test for Task._input_files_to_register method."""
+        task = Task00(self.session_path)
+        self.assertRaises(RuntimeError, task._input_files_to_register)
+        I = ExpectedDataset.input  # noqa
+        task.input_files = [I('register.optional.ext', 'alf', False, True),
+                            I('register.optional_foo.ext', 'alf', False, True),
+                            I('register.required.ext', 'alf', True, True),
+                            I('ignore.required.ext', 'alf', True),
+                            I('ignore.optional.ext', 'alf', False)]
+        self.session_path.joinpath('alf').mkdir()
+        for f in task.input_files:
+            self.session_path.joinpath(f.glob_pattern).touch()
+        files = task._input_files_to_register(assert_all_exist=True)
+        expected = [self.session_path.joinpath('alf', 'register.required.ext'),
+                    self.session_path.joinpath('alf', 'register.optional.ext'),
+                    self.session_path.joinpath('alf', 'register.optional_foo.ext')]
+        self.assertCountEqual(files, expected)
+        expected[2].unlink()
+        # assertNoLogs added in py 3.10
+        if sys.version_info.minor >= 10:  # py3.10
+            with self.assertNoLogs(ibllib.pipes.tasks.__name__, level='ERROR'):
+                files = task._input_files_to_register(assert_all_exist=True)
+                self.assertCountEqual(files, expected[:2])
+        expected[0].unlink()
+        with self.assertLogs(ibllib.pipes.tasks.__name__, level='ERROR'):
+            files = task._input_files_to_register(assert_all_exist=False)
+        self.assertEqual(files, expected[1:2])
+        self.assertRaises(AssertionError, task._input_files_to_register, assert_all_exist=True)
+        # Test with wildcards
+        task.input_files = [I('foo.bar.*', 'alf', True, True),
+                            I('bar.baz.npy', 'alf', True, True) |
+                            I('baz.foo.npy', 'alf', True, True)]
+        with self.assertLogs(ibllib.pipes.tasks.__name__, level='ERROR') as cm:
+            self.assertFalse(task._input_files_to_register(assert_all_exist=False))
+            for f in ('alf/foo.bar.*', 'alf/bar.baz.npy', 'alf/baz.foo.npy'):
+                self.assertRegex(cm.output[-1], re.escape(f))
+
+
+class TestMisc(unittest.TestCase):
+    """Tests for misc functions in ibllib.pipes.tasks module."""
+
+    def test_str2class(self):
+        """Test ibllib.pipes.tasks.str2class function."""
+        task_str = 'ibllib.pipes.base_tasks.ExperimentDescriptionRegisterRaw'
+        self.assertIs(ibllib.pipes.tasks.str2class(task_str), ExperimentDescriptionRegisterRaw)
+        self.assertRaises(AttributeError, ibllib.pipes.tasks.str2class, 'ibllib.pipes.base_tasks.Foo')
 
 
 if __name__ == '__main__':

@@ -2,9 +2,9 @@
 from dataclasses import dataclass, field
 import gc
 import logging
+import re
 import os
 from pathlib import Path
-
 
 import numpy as np
 import pandas as pd
@@ -12,20 +12,22 @@ from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
 
 from one.api import ONE, One
-from one.alf.files import get_alf_path, full_path_parts
+from one.alf.path import get_alf_path, full_path_parts
 from one.alf.exceptions import ALFObjectNotFound, ALFMultipleCollectionsFound
 from one.alf import cache
 import one.alf.io as alfio
 from neuropixel import TIP_SIZE_UM, trace_header
 import spikeglx
 
+import ibldsp.voltage
+from ibldsp.waveform_extraction import WaveformsLoader
 from iblutil.util import Bunch
-from ibllib.io.extractors.training_wheel import extract_wheel_moves, extract_first_movement_times
 from iblatlas.atlas import AllenAtlas, BrainRegions
 from iblatlas import atlas
+from ibllib.io.extractors.training_wheel import extract_wheel_moves, extract_first_movement_times
 from ibllib.pipes import histology
 from ibllib.pipes.ephys_alignment import EphysAlignment
-from ibllib.plots import vertical_lines
+from ibllib.plots import vertical_lines, Density
 
 import brainbox.plot
 from brainbox.io.spikeglx import Streamer
@@ -39,6 +41,7 @@ _logger = logging.getLogger('ibllib')
 
 SPIKES_ATTRIBUTES = ['clusters', 'times', 'amps', 'depths']
 CLUSTERS_ATTRIBUTES = ['channels', 'depths', 'metrics', 'uuids']
+WAVEFORMS_ATTRIBUTES = ['templates']
 
 
 def load_lfp(eid, one=None, dataset_types=None, **kwargs):
@@ -127,6 +130,10 @@ def _channels_alf2bunch(channels, brain_regions=None):
         'axial_um': channels['localCoordinates'][:, 1],
         'lateral_um': channels['localCoordinates'][:, 0],
     }
+    # here if we have some extra keys, they will carry over to the next dictionary
+    for k in channels:
+        if k not in list(channels_.keys()) + ['mlapdv', 'brainLocationIds_ccf_2017', 'localCoordinates']:
+            channels_[k] = channels[k]
     if brain_regions:
         channels_['acronym'] = brain_regions.get(channels_['atlas_id'])['acronym']
     return channels_
@@ -850,22 +857,30 @@ class SpikeSortingLoader:
     @staticmethod
     def _get_attributes(dataset_types):
         """returns attributes to load for spikes and clusters objects"""
-        if dataset_types is None:
-            return SPIKES_ATTRIBUTES, CLUSTERS_ATTRIBUTES
-        else:
-            spike_attributes = [sp.split('.')[1] for sp in dataset_types if 'spikes.' in sp]
-            cluster_attributes = [cl.split('.')[1] for cl in dataset_types if 'clusters.' in cl]
-            spike_attributes = list(set(SPIKES_ATTRIBUTES + spike_attributes))
-            cluster_attributes = list(set(CLUSTERS_ATTRIBUTES + cluster_attributes))
-            return spike_attributes, cluster_attributes
+        dataset_types = [] if dataset_types is None else dataset_types
+        spike_attributes = [sp.split('.')[1] for sp in dataset_types if 'spikes.' in sp]
+        spike_attributes = list(set(SPIKES_ATTRIBUTES + spike_attributes))
+        cluster_attributes = [cl.split('.')[1] for cl in dataset_types if 'clusters.' in cl]
+        cluster_attributes = list(set(CLUSTERS_ATTRIBUTES + cluster_attributes))
+        waveform_attributes = [cl.split('.')[1] for cl in dataset_types if 'waveforms.' in cl]
+        waveform_attributes = list(set(WAVEFORMS_ATTRIBUTES + waveform_attributes))
+        return {'spikes': spike_attributes, 'clusters': cluster_attributes, 'waveforms': waveform_attributes}
 
-    def _get_spike_sorting_collection(self, spike_sorter='pykilosort'):
+    def _get_spike_sorting_collection(self, spike_sorter=None):
         """
         Filters a list or array of collections to get the relevant spike sorting dataset
         if there is a pykilosort, load it
         """
-        collection = next(filter(lambda c: c == f'alf/{self.pname}/{spike_sorter}', self.collections), None)
-        # otherwise, prefers the shortest
+        for sorter in list([spike_sorter, 'iblsorter', 'pykilosort']):
+            if sorter is None:
+                continue
+            if sorter == "":
+                collection = next(filter(lambda c: c == f'alf/{self.pname}', self.collections), None)
+            else:
+                collection = next(filter(lambda c: c == f'alf/{self.pname}/{sorter}', self.collections), None)
+            if collection is not None:
+                return collection
+        # if none is found amongst the defaults, prefers the shortest
         collection = collection or next(iter(sorted(filter(lambda c: f'alf/{self.pname}' in c, self.collections), key=len)), None)
         _logger.debug(f"selecting: {collection} to load amongst candidates: {self.collections}")
         return collection
@@ -884,13 +899,14 @@ class SpikeSortingLoader:
         self.download_spike_sorting_object(obj, *args, **kwargs)
         return self._load_object(self.files[obj])
 
-    def get_version(self, spike_sorter='pykilosort'):
+    def get_version(self, spike_sorter=None):
+        spike_sorter = (spike_sorter or self.spike_sorter) or 'iblsorter'
         collection = self._get_spike_sorting_collection(spike_sorter=spike_sorter)
         dset = self.one.alyx.rest('datasets', 'list', session=self.eid, collection=collection, name='spikes.times.npy')
         return dset[0]['version'] if len(dset) else 'unknown'
 
-    def download_spike_sorting_object(self, obj, spike_sorter='pykilosort', dataset_types=None, collection=None,
-                                      missing='raise', **kwargs):
+    def download_spike_sorting_object(self, obj, spike_sorter=None, dataset_types=None, collection=None,
+                                      attribute=None, missing='raise', **kwargs):
         """
         Downloads an ALF object
         :param obj: object name, str between 'spikes', 'clusters' or 'channels'
@@ -898,16 +914,17 @@ class SpikeSortingLoader:
         :param dataset_types: list of extra dataset types, for example ['spikes.samples']
         :param collection: string specifiying the collection, for example 'alf/probe01/pykilosort'
         :param kwargs: additional arguments to be passed to one.api.One.load_object
+        :param attribute: list of attributes to load for the object
         :param missing: 'raise' (default) or 'ignore'
         :return:
         """
+        spike_sorter = (spike_sorter or self.spike_sorter) or 'iblsorter'
         if len(self.collections) == 0:
             return {}, {}, {}
         self.collection = self._get_spike_sorting_collection(spike_sorter=spike_sorter)
         collection = collection or self.collection
         _logger.debug(f"loading spike sorting object {obj} from {collection}")
-        spike_attributes, cluster_attributes = self._get_attributes(dataset_types)
-        attributes = {'spikes': spike_attributes, 'clusters': cluster_attributes}
+        attributes = self._get_attributes(dataset_types)
         try:
             self.files[obj] = self.one.load_object(
                 self.eid, obj=obj, attribute=attributes.get(obj, None),
@@ -916,16 +933,18 @@ class SpikeSortingLoader:
             if missing == 'raise':
                 raise e
 
-    def download_spike_sorting(self, **kwargs):
+    def download_spike_sorting(self, objects=None, **kwargs):
         """
         Downloads spikes, clusters and channels
         :param spike_sorter: (defaults to 'pykilosort')
         :param dataset_types: list of extra dataset types
+        :param objects: list of objects to download, defaults to ['spikes', 'clusters', 'channels']
         :return:
         """
-        for obj in ['spikes', 'clusters', 'channels']:
+        objects = ['spikes', 'clusters', 'channels'] if objects is None else objects
+        for obj in objects:
             self.download_spike_sorting_object(obj=obj, **kwargs)
-        self.spike_sorting_path = self.files['spikes'][0].parent
+        self.spike_sorting_path = self.files['clusters'][0].parent
 
     def download_raw_electrophysiology(self, band='ap'):
         """
@@ -963,9 +982,23 @@ class SpikeSortingLoader:
             return Streamer(pid=self.pid, one=self.one, typ=band, **kwargs)
         else:
             raw_data_files = self.download_raw_electrophysiology(band=band)
-            cbin_file = next(filter(lambda f: f.name.endswith(f'.{band}.cbin'), raw_data_files), None)
+            cbin_file = next(filter(lambda f: re.match(rf".*\.{band}\..*cbin", f.name), raw_data_files), None)
             if cbin_file is not None:
                 return spikeglx.Reader(cbin_file)
+
+    def download_raw_waveforms(self, **kwargs):
+        """
+        Downloads raw waveforms extracted from sorting to local disk.
+        """
+        _logger.debug(f"loading waveforms from {self.collection}")
+        return self.one.load_object(
+            id=self.eid, obj="waveforms", attribute=["traces", "templates", "table", "channels"],
+            collection=self._get_spike_sorting_collection("pykilosort"), download_only=True, **kwargs
+        )
+
+    def raw_waveforms(self, **kwargs):
+        wf_paths = self.download_raw_waveforms(**kwargs)
+        return WaveformsLoader(wf_paths[0].parent)
 
     def load_channels(self, **kwargs):
         """
@@ -983,11 +1016,13 @@ class SpikeSortingLoader:
         """
         # we do not specify the spike sorter on purpose here: the electrode sites do not depend on the spike sorting
         self.download_spike_sorting_object(obj='electrodeSites', collection=f'alf/{self.pname}', missing='ignore')
-        if 'electrodeSites' in self.files:
-            channels = self._load_object(self.files['electrodeSites'], wildcards=self.one.wildcards)
-        else:  # otherwise, we try to load the channel object from the spike sorting folder - this may not contain histology
-            self.download_spike_sorting_object(obj='channels', **kwargs)
-            channels = self._load_object(self.files['channels'], wildcards=self.one.wildcards)
+        self.download_spike_sorting_object(obj='channels', missing='ignore', **kwargs)
+        channels = self._load_object(self.files['channels'], wildcards=self.one.wildcards)
+        if 'electrodeSites' in self.files:  # if common dict keys, electrodeSites prevails
+            esites = channels | self._load_object(self.files['electrodeSites'], wildcards=self.one.wildcards)
+            if alfio.check_dimensions(esites) != 0:
+                esites = self._load_object(self.files['electrodeSites'], wildcards=self.one.wildcards)
+                esites['rawInd'] = np.arange(esites[list(esites.keys())[0]].shape[0])
         if 'brainLocationIds_ccf_2017' not in channels:
             _logger.debug(f"loading channels from alyx for {self.files['channels']}")
             _channels, self.histology = _load_channel_locations_traj(
@@ -997,9 +1032,9 @@ class SpikeSortingLoader:
         else:
             channels = _channels_alf2bunch(channels, brain_regions=self.atlas.regions)
             self.histology = 'alf'
-        return channels
+        return Bunch(channels)
 
-    def load_spike_sorting(self, spike_sorter='pykilosort', **kwargs):
+    def load_spike_sorting(self, spike_sorter='iblsorter', revision=None, enforce_version=False, good_units=False, **kwargs):
         """
         Loads spikes, clusters and channels
 
@@ -1013,19 +1048,43 @@ class SpikeSortingLoader:
         -   traced: the histology track has been recovered from microscopy, however the depths may not match, inaccurate data
 
         :param spike_sorter: (defaults to 'pykilosort')
-        :param dataset_types: list of extra dataset types
+        :param revision: for example "2024-05-06", (defaults to None):
+        :param enforce_version: if True, will raise an error if the spike sorting version and revision is not the expected one
+        :param dataset_types: list of extra dataset types, for example: ['spikes.samples', 'spikes.templates']
+        :param good_units: False, if True will load only the good units, possibly by downloading a smaller spikes table
+        :param kwargs: additional arguments to be passed to one.api.One.load_object
         :return:
         """
         if len(self.collections) == 0:
             return {}, {}, {}
         self.files = {}
         self.spike_sorter = spike_sorter
-        self.download_spike_sorting(spike_sorter=spike_sorter, **kwargs)
-        channels = self.load_channels(spike_sorter=spike_sorter, **kwargs)
+        self.revision = revision
+        objects = ['passingSpikes', 'clusters', 'channels'] if good_units else None
+        self.download_spike_sorting(spike_sorter=spike_sorter, revision=revision, objects=objects, **kwargs)
+        channels = self.load_channels(spike_sorter=spike_sorter, revision=revision, **kwargs)
         clusters = self._load_object(self.files['clusters'], wildcards=self.one.wildcards)
-        spikes = self._load_object(self.files['spikes'], wildcards=self.one.wildcards)
-
+        if good_units:
+            spikes = self._load_object(self.files['passingSpikes'], wildcards=self.one.wildcards)
+        else:
+            spikes = self._load_object(self.files['spikes'], wildcards=self.one.wildcards)
+        if enforce_version:
+            self._assert_version_consistency()
         return spikes, clusters, channels
+
+    def _assert_version_consistency(self):
+        """
+        Makes sure the state of the spike sorting object matches the files downloaded
+        :return: None
+        """
+        for k in ['spikes', 'clusters', 'channels', 'passingSpikes']:
+            for fn in self.files.get(k, []):
+                if self.spike_sorter:
+                    assert fn.relative_to(self.session_path).parts[2] == self.spike_sorter, \
+                        f"You required strict version {self.spike_sorter}, {fn} does not match"
+                if self.revision:
+                    assert full_path_parts(fn)[5] == self.revision, \
+                        f"You required strict revision {self.revision}, {fn} does not match"
 
     @staticmethod
     def compute_metrics(spikes, clusters=None):
@@ -1079,6 +1138,8 @@ class SpikeSortingLoader:
         if self._sync is None:
             timestamps = self.one.load_dataset(
                 self.eid, dataset='_spikeglx_*.timestamps.npy', collection=f'raw_ephys_data/{self.pname}')
+            _ = self.one.load_dataset(  # this is not used here but we want to trigger the download for potential tasks
+                self.eid, dataset='_spikeglx_*.sync.npy', collection=f'raw_ephys_data/{self.pname}')
             try:
                 ap_meta = spikeglx.read_meta_data(self.one.load_dataset(
                     self.eid, dataset='_spikeglx_*.ap.meta', collection=f'raw_ephys_data/{self.pname}'))
@@ -1116,7 +1177,13 @@ class SpikeSortingLoader:
     def pid2ref(self):
         return f"{self.one.eid2ref(self.eid, as_dict=False)}_{self.pname}"
 
-    def raster(self, spikes, channels, save_dir=None, br=None, label='raster', time_series=None, **kwargs):
+    def _default_plot_title(self, spikes):
+        title = f"{self.pid2ref}, {self.pid} \n" \
+                f"{spikes['clusters'].size:_} spikes, {np.unique(spikes['clusters']).size:_} clusters"
+        return title
+
+    def raster(self, spikes, channels, save_dir=None, br=None, label='raster', time_series=None,
+               drift=None, title=None, **kwargs):
         """
         :param spikes: spikes dictionary or Bunch
         :param channels: channels dictionary or Bunch.
@@ -1138,9 +1205,9 @@ class SpikeSortingLoader:
             # set default raster plot parameters
             kwargs = {"t_bin": 0.007, "d_bin": 10, "vmax": 0.5}
         brainbox.plot.driftmap(spikes['times'], spikes['depths'], ax=axs[1, 0], **kwargs)
-        title_str = f"{self.pid2ref}, {self.pid} \n" \
-                    f"{spikes['clusters'].size:_} spikes, {np.unique(spikes['clusters']).size:_} clusters"
-        axs[0, 0].title.set_text(title_str)
+        if title is None:
+            title = self._default_plot_title(spikes)
+        axs[0, 0].title.set_text(title)
         for k, ts in time_series.items():
             vertical_lines(ts, ymin=0, ymax=3800, ax=axs[1, 0])
         if 'atlas_id' in channels:
@@ -1150,10 +1217,55 @@ class SpikeSortingLoader:
         axs[1, 0].set_xlim(spikes['times'][0], spikes['times'][-1])
         fig.tight_layout()
 
-        self.download_spike_sorting_object('drift', self.spike_sorter, missing='ignore')
-        if 'drift' in self.files:
-            drift = self._load_object(self.files['drift'], wildcards=self.one.wildcards)
+        if drift is None:
+            self.download_spike_sorting_object('drift', self.spike_sorter, missing='ignore')
+            if 'drift' in self.files:
+                drift = self._load_object(self.files['drift'], wildcards=self.one.wildcards)
+        if isinstance(drift, dict):
             axs[0, 0].plot(drift['times'], drift['um'], 'k', alpha=.5)
+            axs[0, 0].set(ylim=[-15, 15])
+
+        if save_dir is not None:
+            png_file = save_dir.joinpath(f"{self.pid}_{self.pid2ref}_{label}.png") if Path(save_dir).is_dir() else Path(save_dir)
+            fig.savefig(png_file)
+            plt.close(fig)
+            gc.collect()
+        else:
+            return fig, axs
+
+    def plot_rawdata_snippet(self, sr, spikes, clusters, t0,
+                             channels=None,
+                             br: BrainRegions = None,
+                             save_dir=None,
+                             label='raster',
+                             gain=-93,
+                             title=None):
+
+        # compute the raw data offset and destripe, we take 400ms around t0
+        first_sample, last_sample = (int((t0 - 0.2) * sr.fs), int((t0 + 0.2) * sr.fs))
+        raw = sr[first_sample:last_sample, :-sr.nsync].T
+        channel_labels = channels['labels'] if (channels is not None) and ('labels' in channels) else True
+        destriped = ibldsp.voltage.destripe(raw, sr.fs, channel_labels=channel_labels)
+        # filter out the spikes according to good/bad clusters and to the time slice
+        spike_sel = slice(*np.searchsorted(spikes['samples'], [first_sample, last_sample]))
+        ss = spikes['samples'][spike_sel]
+        sc = clusters['channels'][spikes['clusters'][spike_sel]]
+        sok = clusters['label'][spikes['clusters'][spike_sel]] == 1
+        if title is None:
+            title = self._default_plot_title(spikes)
+        # display the raw data snippet with spikes overlaid
+        fig, axs = plt.subplots(1, 2, gridspec_kw={'width_ratios': [.95, .05]}, figsize=(16, 9), sharex='col')
+        Density(destriped, fs=sr.fs, taxis=1, gain=gain, ax=axs[0], t0=t0 - 0.2, unit='s')
+        axs[0].scatter(ss[sok] / sr.fs, sc[sok], color="green", alpha=0.5)
+        axs[0].scatter(ss[~sok] / sr.fs, sc[~sok], color="red", alpha=0.5)
+        axs[0].set(title=title, xlim=[t0 - 0.035, t0 + 0.035])
+        # adds the channel locations if available
+        if (channels is not None) and ('atlas_id' in channels):
+            br = br or BrainRegions()
+            plot_brain_regions(channels['atlas_id'], channel_depths=channels['axial_um'],
+                               brain_regions=br, display=True, ax=axs[1], title=self.histology)
+        axs[1].get_yaxis().set_visible(False)
+        fig.tight_layout()
 
         if save_dir is not None:
             png_file = save_dir.joinpath(f"{self.pid}_{self.pid2ref}_{label}.png") if Path(save_dir).is_dir() else Path(save_dir)
@@ -1234,6 +1346,7 @@ class SessionLoader:
     one: One = None
     session_path: Path = ''
     eid: str = ''
+    revision: str = ''
     data_info: pd.DataFrame = field(default_factory=pd.DataFrame, repr=False)
     trials: pd.DataFrame = field(default_factory=pd.DataFrame, repr=False)
     wheel: pd.DataFrame = field(default_factory=pd.DataFrame, repr=False)
@@ -1361,7 +1474,7 @@ class SessionLoader:
         # itiDuration frequently has a mismatched dimension, and we don't need it, exclude using regex
         self.one.wildcards = False
         self.trials = self.one.load_object(
-            self.eid, 'trials', collection=collection, attribute=r'(?!itiDuration).*').to_df()
+            self.eid, 'trials', collection=collection, attribute=r'(?!itiDuration).*', revision=self.revision or None).to_df()
         self.one.wildcards = True
         self.data_info.loc[self.data_info['name'] == 'trials', 'is_loaded'] = True
 
@@ -1384,7 +1497,7 @@ class SessionLoader:
         """
         if not collection:
             collection = self._find_behaviour_collection('wheel')
-        wheel_raw = self.one.load_object(self.eid, 'wheel', collection=collection)
+        wheel_raw = self.one.load_object(self.eid, 'wheel', collection=collection, revision=self.revision or None)
         if wheel_raw['position'].shape[0] != wheel_raw['timestamps'].shape[0]:
             raise ValueError("Length mismatch between 'wheel.position' and 'wheel.timestamps")
         # resample the wheel position and compute velocity, acceleration
@@ -1414,7 +1527,7 @@ class SessionLoader:
         # empty the dictionary so that if one loads only one view, after having loaded several, the others don't linger
         self.pose = {}
         for view in views:
-            pose_raw = self.one.load_object(self.eid, f'{view}Camera', attribute=['dlc', 'times'])
+            pose_raw = self.one.load_object(self.eid, f'{view}Camera', attribute=['dlc', 'times'], revision=self.revision or None)
             # Double check if video timestamps are correct length or can be fixed
             times_fixed, dlc = self._check_video_timestamps(view, pose_raw['times'], pose_raw['dlc'])
             self.pose[f'{view}Camera'] = likelihood_threshold(dlc, likelihood_thr)
@@ -1441,7 +1554,8 @@ class SessionLoader:
         # empty the dictionary so that if one loads only one view, after having loaded several, the others don't linger
         self.motion_energy = {}
         for view in views:
-            me_raw = self.one.load_object(self.eid, f'{view}Camera', attribute=['ROIMotionEnergy', 'times'])
+            me_raw = self.one.load_object(
+                self.eid, f'{view}Camera', attribute=['ROIMotionEnergy', 'times'], revision=self.revision or None)
             # Double check if video timestamps are correct length or can be fixed
             times_fixed, motion_energy = self._check_video_timestamps(
                 view, me_raw['times'], me_raw['ROIMotionEnergy'])
@@ -1466,7 +1580,7 @@ class SessionLoader:
             will be considered unusable and will be discarded.
         """
         # Try to load from features
-        feat_raw = self.one.load_object(self.eid, 'leftCamera', attribute=['times', 'features'])
+        feat_raw = self.one.load_object(self.eid, 'leftCamera', attribute=['times', 'features'], revision=self.revision or None)
         if 'features' in feat_raw.keys():
             times_fixed, feats = self._check_video_timestamps('left', feat_raw['times'], feat_raw['features'])
             self.pupil = feats.copy()

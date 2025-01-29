@@ -10,7 +10,6 @@ Pipeline:
     4. Preprocessing run to produce
 """
 import logging
-from pathlib import Path
 
 from ibllib.io.extractors.widefield import Widefield as WidefieldExtractor
 from ibllib.pipes import base_tasks
@@ -64,12 +63,10 @@ class WidefieldCompress(base_tasks.WidefieldTask):
 
     def _run(self, remove_uncompressed=False, verify_output=True, **kwargs):
         # Find raw data dat file
-        filename, collection, _ = self.input_files[0]
-        filepath = next(self.session_path.rglob(str(Path(collection).joinpath(filename))))
+        filepath = next(self.session_path.rglob(self.input_files[0].glob_pattern))
 
         # Construct filename for compressed video
-        out_name, out_collection, _ = self.output_files[0]
-        output_file = self.session_path.joinpath(out_collection, out_name)
+        output_file = self.session_path.joinpath(self.output_files[0].glob_pattern)
         # Compress to mov
         stack = labcams.io.mmap_dat(str(filepath))
         labcams.io.stack_to_mj2_lossless(stack, str(output_file), rate=30)

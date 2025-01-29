@@ -33,14 +33,14 @@ import shutil
 
 import globus_sdk
 import iblutil.io.params as iopar
-from one.alf.files import get_session_path, add_uuid_string
+from iblutil.util import ensure_list
+from one.alf.path import get_session_path, add_uuid_string, full_path_parts
 from one.alf.spec import is_uuid_string, is_uuid
 from one import params
 from one.webclient import AlyxClient
 from one.converters import path_from_dataset
 from one.remote import globus
-from one.remote.aws import url2uri
-from one.util import ensure_list
+from one.remote.aws import url2uri, get_s3_from_alyx
 
 from ibllib.oneibl.registration import register_dataset
 
@@ -115,7 +115,7 @@ class Patcher(abc.ABC):
         assert is_uuid_string(dset_id)
         # If the revision is not None then we need to add the revision into the path. Note the moving of the file
         # is handled by one registration client
-        if revision is not None and f'#{revision}' not in str(path):
+        if revision and f'#{revision}' not in str(path):
             path = path.parent.joinpath(f'#{revision}#', path.name)
         assert path.exists()
         dset = self.one.alyx.rest('datasets', 'read', id=dset_id)
@@ -182,20 +182,21 @@ class Patcher(abc.ABC):
         # first register the file
         if not isinstance(file_list, list):
             file_list = [Path(file_list)]
-        assert len(set([get_session_path(f) for f in file_list])) == 1
-        assert all([Path(f).exists() for f in file_list])
+        assert len(set(map(get_session_path, file_list))) == 1
+        assert all(Path(f).exists() for f in file_list)
         response = ensure_list(self.register_dataset(file_list, dry=dry, **kwargs))
         if dry:
             return
         # from the dataset info, set flatIron flag to exists=True
         for p, d in zip(file_list, response):
-            self._patch_dataset(p, dset_id=d['id'], revision=d['revision'], dry=dry, ftp=ftp)
+            try:
+                self._patch_dataset(p, dset_id=d['id'], revision=d['revision'], dry=dry, ftp=ftp)
+            except Exception as e:
+                raise Exception(f'Error registering file {p}') from e
         return response
 
     def patch_datasets(self, file_list, **kwargs):
-        """
-        Same as create_dataset method but works with several sessions
-        """
+        """Same as create_dataset method but works with several sessions."""
         register_dict = {}
         # creates a dictionary of sessions with one file list per session
         for f in file_list:
@@ -635,3 +636,55 @@ class SDSCPatcher(Patcher):
     def _rm(self, flatiron_path, dry=True):
         raise PermissionError("This Patcher does not have admin permissions to remove data "
                               "from the FlatIron server")
+
+
+class S3Patcher(Patcher):
+
+    def __init__(self, one=None):
+        assert one
+        super().__init__(one=one)
+        self.s3_repo = 's3_patcher'
+        self.s3_path = 'patcher'
+
+        # Instantiate boto connection
+        self.s3, self.bucket = get_s3_from_alyx(self.one.alyx, repo_name=self.s3_repo)
+
+    def check_datasets(self, file_list):
+        # Here we want to check if the datasets exist, if they do we don't want to patch unless we force.
+        exists = []
+        for file in file_list:
+            collection = full_path_parts(file, as_dict=True)['collection']
+            dset = self.one.alyx.rest('datasets', 'list', session=self.one.path2eid(file), name=file.name,
+                                      collection=collection, clobber=True)
+            if len(dset) > 0:
+                exists.append(file)
+
+        return exists
+
+    def patch_dataset(self, file_list, dry=False, ftp=False, force=False, **kwargs):
+
+        exists = self.check_datasets(file_list)
+        if len(exists) > 0 and not force:
+            _logger.error(f'Files: {", ".join([f.name for f in file_list])} already exist, to force set force=True')
+            return
+
+        response = super().patch_dataset(file_list, dry=dry, repository=self.s3_repo, ftp=False, **kwargs)
+        # TODO in an ideal case the flatiron filerecord won't be altered when we register this dataset. This requires
+        # changing the the alyx.data.register_view
+        for ds in response:
+            frs = ds['file_records']
+            fr_server = next(filter(lambda fr: 'flatiron' in fr['data_repository'], frs))
+            # Update the flatiron file record to be false
+            self.one.alyx.rest('files', 'partial_update', id=fr_server['id'],
+                               data={'exists': False})
+
+    def _scp(self, local_path, remote_path, dry=True):
+
+        aws_remote_path = Path(self.s3_path).joinpath(remote_path.relative_to(FLATIRON_MOUNT))
+        _logger.info(f'Transferring file {local_path} to {aws_remote_path}')
+        self.s3.Bucket(self.bucket).upload_file(str(PurePosixPath(local_path)), str(PurePosixPath(aws_remote_path)))
+
+        return 0, ''
+
+    def _rm(self, *args, **kwargs):
+        raise PermissionError("This Patcher does not have admin permissions to remove data.")

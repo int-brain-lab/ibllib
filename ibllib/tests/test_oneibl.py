@@ -8,17 +8,21 @@ import random
 import string
 import uuid
 from itertools import chain
+from uuid import uuid4
 
 from requests import HTTPError
 import numpy as np
+import pandas as pd
 
 from one.api import ONE
 from one.webclient import AlyxClient
 import one.alf.exceptions as alferr
+from one.util import QC_TYPE
 import iblutil.io.params as iopar
 
 from ibllib.oneibl import patcher, registration, data_handlers as handlers
 import ibllib.io.extractors.base
+from ibllib.pipes.behavior_tasks import ChoiceWorldTrialsBpod
 from ibllib.tests import TEST_DB
 from ibllib.io import session_params
 
@@ -221,35 +225,6 @@ def get_mock_session_settings(subject='clns0730', user='test_user'):
     }
 
 
-class TestRegistrationEndpoint(unittest.TestCase):
-
-    def test_task_names_extractors(self):
-        """
-        This is to test against regressions
-        """
-        task_out = [
-            ('_iblrig_tasks_biasedChoiceWorld3.7.0', 'Behavior training/tasks'),
-            ('_iblrig_tasks_biasedScanningChoiceWorld5.2.3', 'Behavior training/tasks'),
-            ('_iblrig_tasks_trainingChoiceWorld3.6.0', 'Behavior training/tasks'),
-            ('_iblrig_tasks_ephysChoiceWorld5.1.3', 'Ephys recording with acute probe(s)'),
-            ('_iblrig_calibration_frame2TTL4.1.3', []),
-            ('_iblrig_tasks_habituationChoiceWorld3.6.0', 'Behavior training/tasks'),
-            ('_iblrig_tasks_scanningOptoChoiceWorld5.0.0', []),
-            ('_iblrig_tasks_RewardChoiceWorld4.1.3', []),
-            ('_iblrig_calibration_screen4.1.3', []),
-            ('_iblrig_tasks_ephys_certification4.1.3', 'Ephys recording with acute probe(s)'),
-        ]
-        for to in task_out:
-            out = registration.IBLRegistrationClient._alyx_procedure_from_task(to[0])
-            self.assertEqual(out, to[1])
-        # also makes sure that all task types have a defined procedure
-        task_types = ibllib.io.extractors.base._get_task_types_json_config()
-        for key in ['THIS FILE', 'SEE', '********', '************']:
-            task_types.pop(key)
-        for task_type in set([task_types[tt] for tt in task_types]):
-            assert registration._alyx_procedure_from_task_type(task_type) is not None, task_type + ' has no associate procedure'
-
-
 class TestRegistration(unittest.TestCase):
 
     subject = ''
@@ -414,9 +389,10 @@ class TestRegistration(unittest.TestCase):
         self.assertFalse(flag_file.exists())
 
     def test_registration_session(self):
+        """Test IBLRegistrationClient.register_session method."""
         settings_file = self._write_settings_file()
         rc = registration.IBLRegistrationClient(one=self.one)
-        rc.register_session(str(self.session_path))
+        rc.register_session(str(self.session_path), procedures=['Ephys recording with acute probe(s)'])
         eid = self.one.search(subject=self.subject, date_range=['2018-04-01', '2018-04-01'],
                               query_type='remote')[0]
         datasets = self.one.alyx.rest('datasets', 'list', session=eid)
@@ -436,7 +412,7 @@ class TestRegistration(unittest.TestCase):
         eid = self.one.search(subject=self.subject, date_range=['2018-04-01', '2018-04-01'],
                               query_type='remote')[0]
         ses_info = self.one.alyx.rest('sessions', 'read', id=eid)
-        self.assertTrue(ses_info['procedures'] == ['Behavior training/tasks'])
+        self.assertTrue(ses_info['procedures'] == [])
         # re-register the session as unknown protocol, this time without removing session first
         self.settings['PYBPOD_PROTOCOL'] = 'gnagnagna'
         # also add an end time
@@ -453,8 +429,52 @@ class TestRegistration(unittest.TestCase):
         self.assertEqual(self.settings['SESSION_END_TIME'], ses_info['end_time'])
         self.one.alyx.rest('sessions', 'delete', id=eid)
 
+    def test_registration_session_passive(self):
+        """Test IBLRegistrationClient.register_session method when there is no iblrig bpod data.
+
+        For truly passive sessions there is no Bpod data (no raw_behavior_data or raw_task_data folders).
+        In this situation the must already be a session on Alyx manually created by the experimenter,
+        which needs to contain the start time, location, lab, and user data.
+        """
+        rc = registration.IBLRegistrationClient(one=self.one)
+        experiment_description = {
+            'procedures': ['Ephys recording with acute probe(s)'],
+            'sync': {'nidq': {'collection': 'raw_ephys_data'}}}
+        session_params.write_params(self.session_path, experiment_description)
+        # Should fail because the session doesn't exist on Alyx
+        self.assertRaises(AssertionError, rc.register_session, self.session_path)
+        # Create the session
+        ses_ = {
+            'subject': self.subject, 'users': [self.one.alyx.user],
+            'type': 'Experiment', 'number': int(self.session_path.name),
+            'start_time': rc.ensure_ISO8601(self.session_path.parts[-2]),
+            'n_correct_trials': 100, 'n_trials': 200
+        }
+        session = self.one.alyx.rest('sessions', 'create', data=ses_)
+        # Should fail because the session lacks critical information
+        self.assertRaisesRegex(
+            AssertionError, 'missing session information: location', rc.register_session, self.session_path)
+        session = self.one.alyx.rest(
+            'sessions', 'partial_update', id=session['url'][-36:], data={'location': self.settings['PYBPOD_BOARD']})
+        # Should now register
+        ses, dsets = rc.register_session(self.session_path)
+        # Check that session was updated, namely the n trials and procedures
+        self.assertEqual(session['url'], ses['url'])
+        self.assertTrue(ses['n_correct_trials'] == ses['n_trials'] == 0)
+        self.assertEqual(experiment_description['procedures'], ses['procedures'])
+        self.assertEqual(5, len(dsets))
+        registered = [d['file_records'][0]['relative_path'] for d in dsets]
+        expected = [
+            f'{self.subject}/2018-04-01/002/_ibl_experiment.description.yaml',
+            f'{self.subject}/2018-04-01/002/alf/spikes.amps.npy',
+            f'{self.subject}/2018-04-01/002/alf/spikes.times.npy',
+            f'{self.subject}/2018-04-01/002/alf/#{self.revision}#/spikes.amps.npy',
+            f'{self.subject}/2018-04-01/002/alf/#{self.revision}#/spikes.times.npy'
+        ]
+        self.assertCountEqual(expected, registered)
+
     def test_register_chained_session(self):
-        """Tests for registering a session with chained (multiple) protocols"""
+        """Tests for registering a session with chained (multiple) protocols."""
         behaviour_paths = [self.session_path.joinpath(f'raw_task_data_{i:02}') for i in range(2)]
         for p in behaviour_paths:
             p.mkdir()
@@ -485,6 +505,7 @@ class TestRegistration(unittest.TestCase):
         rc = registration.IBLRegistrationClient(one=self.one)
         session, recs = rc.register_session(self.session_path)
 
+        self.assertEqual(7, len(recs))
         ses_info = self.one.alyx.rest('sessions', 'read', id=session['id'])
         self.assertCountEqual(experiment_description['procedures'], ses_info['procedures'])
         self.assertCountEqual(experiment_description['projects'], ses_info['projects'])
@@ -588,6 +609,296 @@ class TestDataHandlers(unittest.TestCase):
         self.assertEqual(files, register_dataset_mock.call_args.args[0], 'failed to re-register files')
         self.assertEqual(4, len(out))
         self.assertDictEqual(expected, handler.processed)
+
+    def test_getData(self):
+        """Test for DataHandler.getData method."""
+        one = ONE(**TEST_DB, mode='auto')
+        session_path = Path('KS005/2019-04-01/001')
+        task = ChoiceWorldTrialsBpod(session_path, one=one, collection='raw_behavior_data')
+        task.get_signatures()
+        handler = handlers.ServerDataHandler(session_path, task.signature, one=one)
+        # Check getData returns data frame of signature inputs
+        df = handler.getData()
+        self.assertIsInstance(df, pd.DataFrame)
+        self.assertEqual(len(task.input_files), len(df))
+        # Check with no ONE
+        handler.one = None
+        self.assertIsNone(handler.getData())
+        # Check when no inputs
+        handler.signature['input_files'] = []
+        self.assertTrue(handler.getData(one=one).empty)
+
+    def test_dataset_from_name(self):
+        """Test dataset_from_name function."""
+        I = handlers.ExpectedDataset.input  # noqa
+        dA = I('foo.bar.*', 'alf', True)
+        dB = I('bar.baz.*', 'alf', True)
+        input_files = [I('obj.attr.ext', 'collection', True), dA | dB]
+        dsets = handlers.dataset_from_name('obj.attr.ext', input_files)
+        self.assertEqual(input_files[0:1], dsets)
+        dsets = handlers.dataset_from_name('bar.baz.*', input_files)
+        self.assertEqual([dB], dsets)
+        dsets = handlers.dataset_from_name('foo.baz.ext', input_files)
+        self.assertEqual([], dsets)
+
+    def test_update_collections(self):
+        """Test update_collections function."""
+        I = handlers.ExpectedDataset.input  # noqa
+        dataset = I('foo.bar.ext', 'alf/probe??', True, unique=False)
+        dset = handlers.update_collections(dataset, 'alf/probe00')
+        self.assertIsNot(dset, dataset)
+        self.assertEqual('alf/probe00', dset.identifiers[0])
+        self.assertEqual(dataset.register, dset.register)
+        self.assertTrue(dset.unique)
+        # Check replacing with non-unique collection
+        dset = handlers.update_collections(dataset, 'probe??')
+        self.assertFalse(dset.unique)
+        self.assertEqual('probe??', dset.identifiers[0])
+        # Check replacing with multiple collections
+        collections = ['alf/probe00', 'alf/probe01']
+        dset = handlers.update_collections(dataset, collections)
+        self.assertIsInstance(dset, handlers.Input)
+        self.assertEqual('and', dset.operator)
+        self.assertCountEqual(collections, [x[0] for x in dset.identifiers])
+        # Check with register values and compound datasets
+        dataset = (I('foo.bar.*', 'alf/probe??', True, unique=False) |
+                   I('baz.bar.*', 'alf/probe??', False, True, unique=False))
+        dset = handlers.update_collections(dataset, collections)
+        self.assertIsInstance(dset, handlers.Input)
+        self.assertEqual('or', dset.operator)
+        for d in dset._identifiers:
+            self.assertIsInstance(d, handlers.Input)
+            self.assertEqual('and', d.operator)
+            self.assertCountEqual(collections, [x[0] for x in d.identifiers])
+            self.assertFalse(any(dd.unique for dd in d._identifiers))
+        # Check behaviour with unique and substring args
+        dset = handlers.update_collections(
+            dataset, ['probe00', 'probe01'], substring='probe??', unique=True)
+        for d in dset._identifiers:
+            self.assertCountEqual(collections, [x[0] for x in d.identifiers])
+            self.assertTrue(all(dd.unique for dd in d._identifiers))
+        # Check behaviour with None collections and optional dataset
+        dataset = (I('foo.bar.*', 'alf/probe00', True, unique=False) |
+                   I('baz.bar.*', None, False, True, unique=False))
+        dset = handlers.update_collections(dataset, 'foo', substring='alf')
+        expected_types = (handlers.Input, handlers.OptionalInput)
+        expected_collections = ('foo/probe00', None)
+        for d, typ, col in zip(dset._identifiers, expected_types, expected_collections):
+            self.assertIsInstance(d, typ)
+            self.assertEqual(col, d.identifiers[0])
+        # Check with revisions
+        dataset = I(None, None, True)
+        dataset._identifiers = ('alf', '#2020-01-01#', 'foo.bar.ext')
+        self.assertRaises(NotImplementedError, handlers.update_collections, dataset, None)
+
+
+class TestSDSCDataHandler(unittest.TestCase):
+    """Test for SDSCDataHandler class."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.one = ONE(**TEST_DB, mode='auto')
+        self.patch_path = Path(tmp.name, 'patch')
+        self.root_path = Path(tmp.name, 'root')
+        self.root_path.mkdir(), self.patch_path.mkdir()
+        self.session_path = self.root_path.joinpath('KS005/2019-04-01/001')
+
+    def test_handler(self):
+        """Test for SDSCDataHandler.setUp and cleanUp methods."""
+        # Create a task in order to check how the signature files are symlinked by handler
+        task = ChoiceWorldTrialsBpod(self.session_path, one=self.one, collection='raw_behavior_data')
+        task.get_signatures()
+        handler = handlers.SDSCDataHandler(self.session_path, task.signature, self.one)
+        handler.patch_path = self.patch_path
+        handler.root_path = self.root_path
+        # Add some files on disk to check they are symlinked by setUp method
+        for uid, rel_path in handler.getData().rel_path.items():
+            filepath = self.session_path.joinpath(rel_path)
+            filepath.parent.mkdir(exist_ok=True, parents=True)
+            filepath.with_stem(f'{filepath.stem}.{uid}').touch()
+        # Check setUp does the symlinks and updates the task session path
+        handler.setUp(task=task)
+        expected = self.patch_path.joinpath('ChoiceWorldTrialsBpod', *self.session_path.parts[-3:])
+        self.assertEqual(expected, task.session_path, 'failed to update task session path')
+        linked = list(expected.glob('raw_behavior_data/*.*.*'))
+        self.assertTrue(all(f.is_symlink for f in linked), 'failed to sym link input files')
+        self.assertEqual(len(task.input_files), len(linked), 'unexpected number of linked patch files')
+        # Check all links to root session
+        session_path = self.session_path.resolve()  # NB: GitHub CI uses linked temp dir so we resolve here
+        self.assertTrue(all(f.resolve().is_relative_to(session_path) for f in linked))
+        # Check sym link doesn't contain UUID
+        self.assertTrue(len(linked[0].resolve().stem.split('.')[-1]) == 36, 'source path missing UUID')
+        self.assertFalse(len(linked[0].stem.split('.')[-1]) == 36, 'symlink contains UUID')
+        # Check cleanUp removes links
+        handler.cleanUp(task=task)
+        self.assertFalse(any(map(Path.exists, linked)))
+        # Check no root files were deleted
+        self.assertEqual(len(task.input_files), len(list(self.session_path.glob('raw_behavior_data/*.*.*'))))
+
+
+class TestExpectedDataset(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.tmp = Path(tmp.name)
+        self.session_path = self.tmp / 'subject' / '2020-01-01' / '001'
+        self.session_path.mkdir(parents=True)
+        self.img_path = self.session_path / 'raw_imaging_data_00'
+        self.img_path.mkdir()
+        for i in range(5):
+            self.img_path.joinpath(f'foo_{i:05}.tif').touch()
+        self.img_path.joinpath('imaging.frames.tar.bz2').touch()
+
+    def test_and(self):
+        I = handlers.ExpectedDataset.input  # noqa
+        sig = I('*.tif', 'raw_imaging_data_[0-9]*') & I('imaging.frames.tar.bz2', 'raw_imaging_data_[0-9]*')
+        self.assertEqual('and', sig.operator)
+        ok, files, missing = sig.find_files(self.session_path)
+        self.assertTrue(ok)
+        self.assertEqual(6, len(files))
+        self.assertEqual('foo_00000.tif', files[0].name)
+        self.assertEqual('imaging.frames.tar.bz2', files[-1].name)
+        self.assertEqual(set(), missing)
+        # Deleting one tif file shouldn't affect the signature
+        files[0].unlink()
+        ok, files, missing = sig.find_files(self.session_path)
+        self.assertTrue(ok)
+        self.assertTrue(len(files))
+        self.assertEqual('foo_00001.tif', files[0].name)
+        self.assertEqual(set(), missing)
+        # Deleting the tar file should make the signature fail
+        files[-1].unlink()
+        ok, files, missing = sig.find_files(self.session_path)
+        self.assertFalse(ok)
+        self.assertNotEqual('imaging.frames.tar.bz2', files[-1].name)
+        self.assertEqual({'raw_imaging_data_[0-9]*/imaging.frames.tar.bz2'}, missing)
+
+    def test_or(self):
+        I = handlers.ExpectedDataset.input  # noqa
+        sig = I('*.tif', 'raw_imaging_data_[0-9]*') | I('imaging.frames.tar.bz2', 'raw_imaging_data_[0-9]*')
+        self.assertEqual('or', sig.operator)
+        ok, files, missing = sig.find_files(self.session_path)
+        self.assertTrue(ok)
+        self.assertEqual(5, len(files))
+        self.assertEqual({'.tif'}, set(x.suffix for x in files))
+        self.assertEqual(set(), missing)
+        for f in files:
+            f.unlink()
+        ok, files, missing = sig.find_files(self.session_path)
+        self.assertTrue(ok)
+        self.assertEqual(1, len(files))
+        self.assertEqual('imaging.frames.tar.bz2', files[0].name)
+        self.assertEqual({'raw_imaging_data_[0-9]*/*.tif'}, missing)
+        files[0].unlink()
+        ok, files, missing = sig.find_files(self.session_path)
+        self.assertFalse(ok)
+        self.assertEqual([], files)
+        self.assertEqual({'raw_imaging_data_[0-9]*/*.tif', 'raw_imaging_data_[0-9]*/imaging.frames.tar.bz2'}, missing)
+
+    def test_xor(self):
+        I = handlers.ExpectedDataset.input  # noqa
+        sig = I('*.tif', 'raw_imaging_data_[0-9]*') ^ I('imaging.frames.tar.bz2', 'raw_imaging_data_[0-9]*')
+        self.assertEqual('xor', sig.operator)
+        ok, files, missing = sig.find_files(self.session_path)
+        self.assertFalse(ok)
+        self.assertEqual(6, len(files))
+        self.assertEqual({'.tif', '.bz2'}, set(x.suffix for x in files))
+        expected_missing = {'raw_imaging_data_[0-9]*/*.tif', 'raw_imaging_data_[0-9]*/imaging.frames.tar.bz2'}
+        self.assertEqual(expected_missing, missing)
+        for f in filter(lambda x: x.suffix == '.tif', files):
+            f.unlink()
+        ok, files, missing = sig.find_files(self.session_path)
+        self.assertTrue(ok)
+        self.assertEqual(1, len(files))
+        self.assertEqual('imaging.frames.tar.bz2', files[0].name)
+        self.assertEqual(set(), missing)
+        files[0].unlink()
+        ok, files, missing = sig.find_files(self.session_path)
+        self.assertFalse(ok)
+        self.assertEqual([], files)
+        self.assertEqual(expected_missing, missing)
+
+    def test_filter(self):
+        """Test for ExpectedDataset.filter method.
+
+        This test can be extended to support AND operators e.g. (dset1 AND dset2) OR (dset2 AND dset3).
+        """
+        I = handlers.ExpectedDataset.input  # noqa
+        # Optional datasets 1
+        column_names = ['session_path', 'id', 'rel_path', 'file_size', 'hash', 'exists']
+        session_path = '/'.join(self.session_path.parts[-3:])
+        dsets = [
+            [session_path, uuid4(), f'raw_ephys_data/_spikeglx_sync.{attr}.npy', 1024, None, True]
+            for attr in ('channels', 'polarities', 'times')
+        ]
+        qc = pd.Categorical.from_codes(np.zeros(len(dsets), dtype=int), dtype=QC_TYPE)
+        df1 = pd.DataFrame(dsets, columns=column_names).set_index('id').sort_index().assign(qc=qc)
+        # Optional datasets 2
+        dsets = [
+            [session_path, uuid4(), f'raw_ephys_data/probe{p:02}/_spikeglx_sync.{attr}.probe{p:02}.npy', 1024, None, True]
+            for attr in ('channels', 'polarities', 'times') for p in range(2)
+        ]
+        qc = pd.Categorical.from_codes(np.zeros(len(dsets), dtype=int), dtype=QC_TYPE)
+        df2 = pd.DataFrame(dsets, columns=column_names).set_index('id').sort_index().assign(qc=qc)
+
+        # Test simple input (no op)
+        d = I('_*_sync.channels.npy', 'raw_ephys_data', True)
+        ok, filtered_df = d.filter(df1)
+        self.assertTrue(ok)
+        expected = df1.index[df1['rel_path'] == 'raw_ephys_data/_spikeglx_sync.channels.npy']
+        self.assertCountEqual(expected, filtered_df.index)
+
+        # Test inverted (assert absence)
+        d.inverted = True
+        ok, filtered_df = d.filter(df1)
+        self.assertFalse(ok)
+        expected = df1.index[df1['rel_path'] == 'raw_ephys_data/_spikeglx_sync.channels.npy']
+        self.assertCountEqual(expected, filtered_df.index)
+        ok, filtered_df = d.filter(df2)
+        self.assertTrue(ok)
+
+        # Test OR
+        d = (I('_spikeglx_sync.channels.npy', 'raw_ephys_data', True) |
+             I('_spikeglx_sync.channels.probe??.npy', 'raw_ephys_data/probe??', True, unique=False))
+        merged = pd.concat([df1, df2])
+        ok, filtered_df = d.filter(merged)
+        self.assertTrue(ok)
+        self.assertCountEqual(expected, filtered_df.index)
+        ok, filtered_df = d.filter(df2)
+        self.assertTrue(ok)
+        expected = df2.index[df2['rel_path'].str.contains('channels')]
+        self.assertCountEqual(expected, filtered_df.index)
+
+        # Test XOR
+        d = (I('_spikeglx_sync.channels.npy', 'raw_ephys_data', True) ^
+             I('_spikeglx_sync.channels.probe??.npy', 'raw_ephys_data/probe??', True, unique=False))
+        ok, filtered_df = d.filter(merged)
+        self.assertFalse(ok)
+        expected = merged.index[merged['rel_path'].str.contains('channels')]
+        self.assertCountEqual(expected, filtered_df.index)
+        ok, filtered_df = d.filter(df1)
+        self.assertTrue(ok)
+        expected = df1.index[df1['rel_path'] == 'raw_ephys_data/_spikeglx_sync.channels.npy']
+        self.assertCountEqual(expected, filtered_df.index)
+        ok, filtered_df = d.filter(df2)
+        self.assertTrue(ok)
+        expected = df2.index[df2['rel_path'].str.contains('channels')]
+        self.assertCountEqual(expected, filtered_df.index)
+
+    def test_identifiers(self):
+        """Test identifiers property getter."""
+        I = handlers.ExpectedDataset.input  # noqa
+        dataset = I('foo.bar.baz', 'collection', True)
+        self.assertEqual(('collection', None, 'foo.bar.baz'), dataset.identifiers)
+        # Ensure that nested identifiers are returned as flat tuple of tuples
+        dataset = (I('dataset_a', None, True, unique=False) |
+                   I('dataset_b', 'foo', True) |
+                   I('dataset_c', None, True, unique=False))
+        self.assertEqual(3, len(dataset.identifiers))
+        self.assertEqual({3}, set(map(len, dataset.identifiers)))
+        expected = ((None, None, 'dataset_a'), ('foo', None, 'dataset_b'), (None, None, 'dataset_c'))
+        self.assertEqual(expected, dataset.identifiers)
 
 
 if __name__ == '__main__':

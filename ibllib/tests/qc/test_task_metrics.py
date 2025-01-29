@@ -30,40 +30,6 @@ def _create_test_qc_outcomes():
 
 class TestAggregateOutcome(unittest.TestCase):
 
-    def test_deprecation_warning(self):
-        """Remove TaskQC.compute_session_status_from_dict after 2024-06-01. Cherry pick commit
-        3cbbd1769e1ba82a51b09a992b2d5f4929f396b2 for removal of this test and applicable code"""
-        from datetime import datetime
-        self.assertFalse(datetime.now() > datetime(2024, 6, 1), 'remove TaskQC.compute_session_status_from_dict method.')
-        qc_dict = {'_task_iti_delays': .99}
-        with self.assertWarns(DeprecationWarning), self.assertLogs(qcmetrics.__name__, spec.QC.WARNING):
-            out = qcmetrics.TaskQC.compute_session_status_from_dict(qc_dict)
-            expected = (spec.QC.NOT_SET, {'_task_iti_delays': spec.QC.NOT_SET})
-            self.assertEqual(expected, out, 'failed to use BWM criteria')
-            # Should handle criteria as input, both as arg and kwarg
-            criteria = {'_task_iti_delays': {spec.QC.PASS: 0.9, spec.QC.FAIL: 0},
-                        'default': {spec.QC.PASS: 0.9, spec.QC.WARNING: 0.4}}
-            out = qcmetrics.TaskQC.compute_session_status_from_dict(qc_dict, criteria=criteria)
-            expected = (spec.QC.PASS, {'_task_iti_delays': spec.QC.PASS})
-            self.assertEqual(expected, out, 'failed to use BWM criteria')
-            out = qcmetrics.TaskQC.compute_session_status_from_dict(qc_dict, criteria)
-            self.assertEqual(expected, out, 'failed to use BWM criteria')
-            qc = qcmetrics.TaskQC('/foo/subject/2024-01-01/001', one=ONE(mode='local', **TEST_DB))
-        self.assertRaises(TypeError, qcmetrics.TaskQC.compute_session_status_from_dict)
-        if getattr(self, 'assertNoLogs', False) is False:
-            self.skipTest('Python < 3.10')  # py 3.8
-        with self.assertWarns(DeprecationWarning), self.assertNoLogs(qcmetrics.__name__, 'WARNING'):
-            out = qc.compute_session_status_from_dict(qc_dict)
-            expected = (spec.QC.NOT_SET, {'_task_iti_delays': spec.QC.NOT_SET})
-            self.assertEqual(expected, out, 'failed to use BWM criteria')
-            # Should handle criteria as input, both as arg and kwarg
-            criteria = {'_task_iti_delays': {spec.QC.PASS: 0.9, spec.QC.FAIL: 0}, 'default': {spec.QC.PASS: 0}}
-            out, _ = qc.compute_session_status_from_dict(qc_dict, criteria=criteria)
-            self.assertEqual(spec.QC.PASS, out)
-            out, _ = qc.compute_session_status_from_dict(qc_dict, criteria)
-            self.assertEqual(spec.QC.PASS, out)
-        self.assertRaises(TypeError, qc.compute_session_status_from_dict)
-
     def test_outcome_from_dict_default(self):
         # For a task that has no costume thresholds, default is 0.99 PASS and 0.9 WARNING and 0 FAIL,
         # np.nan and None return not set
@@ -189,14 +155,17 @@ class TestTaskMetrics(unittest.TestCase):
         correct[np.argmax(choice == 1)] = 0
         correct[np.argmax(choice == -1)] = 0
 
+        pauses = np.zeros(n, dtype=float)
+        # add a 5s pause on 3rd trial
+        pauses[2] = 5.
         quiescence_length = 0.2 + np.random.standard_exponential(size=(n,))
-        iti_length = 1  # inter-trial interval
+        iti_length = .5  # inter-trial interval
         # trial lengths include quiescence period, a couple small trigger delays and iti
         trial_lengths = quiescence_length + resp_feeback_delay + (trigg_delay * 4) + iti_length
-        # add on 60s for nogos + feedback time (1 or 2s) + ~0.5s for other responses
+        # add on 60 + 2s for nogos + feedback time (1 or 2s) + ~0.5s for other responses
         trial_lengths += (choice == 0) * 60 + (~correct + 1) + (choice != 0) * N(0.5)
-        start_times = np.concatenate(([0], np.cumsum(trial_lengths)[:-1]))
-        end_times = np.cumsum(trial_lengths) - 1e-2
+        start_times = (np.r_[0, np.cumsum(trial_lengths)] + np.r_[0, np.cumsum(pauses)])[:-1]
+        end_times = np.cumsum(trial_lengths) - 1e-2 + np.r_[0, np.cumsum(pauses)][:-1]
 
         data = {
             'phase': np.random.uniform(low=0, high=2 * np.pi, size=(n,)),
@@ -205,7 +174,8 @@ class TestTaskMetrics(unittest.TestCase):
             'correct': correct,
             'intervals': np.c_[start_times, end_times],
             'itiIn_times': end_times - iti_length + stimOff_itiIn_delay,
-            'position': np.ones_like(choice) * 35
+            'position': np.ones_like(choice) * 35,
+            'pause_duration': pauses
         }
 
         data['stimOnTrigger_times'] = start_times + data['quiescence'] + 1e-4
@@ -223,8 +193,8 @@ class TestTaskMetrics(unittest.TestCase):
         outcome = data['feedbackType'].copy()
         outcome[data['choice'] == 0] = 0
         data['outcome'] = outcome
-        # Delay of 1 second if correct, 2 seconds if incorrect
-        data['stimOffTrigger_times'] = data['feedback_times'] + (~correct + 1)
+        # Delay of 1 second if correct, 2 seconds if incorrect, and stim off at feedback for nogo
+        data['stimOffTrigger_times'] = data['feedback_times'] + (~correct + 1) - (choice == 0) * 2
         data['stimOff_times'] = data['stimOffTrigger_times'] + trigg_delay
         # Error tone times nan on incorrect trials
         outcome_times = np.vectorize(lambda x, y: x + 1e-2 if y else np.nan)
@@ -232,7 +202,6 @@ class TestTaskMetrics(unittest.TestCase):
         data['errorCue_times'] = data['errorCueTrigger_times'] + trigg_delay
         data['valveOpen_times'] = outcome_times(data['feedback_times'], data['correct'])
         data['rewardVolume'] = ~np.isnan(data['valveOpen_times']) * 3.0
-
         return data
 
     @staticmethod
@@ -297,7 +266,7 @@ class TestTaskMetrics(unittest.TestCase):
                 assert t[0] > add_frag.last_samp[0]
                 movement_times.append(t[1])
                 add_frag(t, p)
-                # Fill in random movements between end of response and trial end
+                # Fill in random movements between end of response and trial
                 t, p = qt_wheel_fill(t[-1] + 0.01, trial_end, p_step=resolution)
                 add_frag(t, p)
 
@@ -612,16 +581,21 @@ class TestTaskMetrics(unittest.TestCase):
         self.assertEqual(0.75, np.nanmean(passed))
 
     def test_check_iti_delays(self):
-        metric, passed = qcmetrics.check_iti_delays(self.data)
+        metric, passed = qcmetrics.check_iti_delays(self.data, subtract_pauses=True)
         # We want the metric to return positive values that are close to 0.1, given the test data
         self.assertTrue(np.allclose(metric[:-1], 1e-2, atol=0.001),
                         'failed to return correct metric')
         self.assertTrue(np.isnan(metric[-1]), 'last trial should be NaN')
         self.assertTrue(np.all(passed))
+        # Paused trials should fail when subtract_pauses is False
+        pauses = self.data['pause_duration'][:-1]
+        metric, passed = qcmetrics.check_iti_delays(self.data, subtract_pauses=False)
+        self.assertTrue(np.allclose(metric[:-1], pauses + 1e-2, atol=0.001))
+        self.assertFalse(np.any(passed[:-1][pauses > 0]))
         # Mess up a trial
-        id = 2
+        id = 3
         self.data['intervals'][id + 1, 0] += 0.5  # Next trial starts 0.5 sec later
-        metric, passed = qcmetrics.check_iti_delays(self.data)
+        metric, passed = qcmetrics.check_iti_delays(self.data, subtract_pauses=True)
         n_trials = len(self.data['stimOff_times']) - 1  # Last trial NaN here
         expected = (n_trials - 1) / n_trials
         self.assertTrue(expected, np.nanmean(passed))

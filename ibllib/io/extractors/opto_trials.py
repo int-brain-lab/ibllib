@@ -1,7 +1,6 @@
 import logging
 import numpy as np
 
-from ibllib.io.extractors import biased_trials
 from ibllib.io.extractors.base import BaseBpodTrialsExtractor
 
 _logger = logging.getLogger(__name__)
@@ -17,8 +16,8 @@ class LaserBool(BaseBpodTrialsExtractor):
     def _extract(self, **kwargs):
         _logger.info('Extracting laser datasets')
         # reference pybpod implementation
-        lstim = np.array([float(t.get('laser_stimulation', np.NaN)) for t in self.bpod_trials])
-        lprob = np.array([float(t.get('laser_probability', np.NaN)) for t in self.bpod_trials])
+        lstim = np.array([float(t.get('laser_stimulation', np.nan)) for t in self.bpod_trials])
+        lprob = np.array([float(t.get('laser_probability', np.nan)) for t in self.bpod_trials])
 
         # Karolina's choice world legacy implementation - from Slack message:
         # it is possible that some versions I have used:
@@ -31,9 +30,9 @@ class LaserBool(BaseBpodTrialsExtractor):
         # laserOFF_trials=(optoOUT ==0);
         if 'PROBABILITY_OPTO' in self.settings.keys() and np.all(np.isnan(lstim)):
             lprob = np.zeros_like(lprob) + self.settings['PROBABILITY_OPTO']
-            lstim = np.array([float(t.get('opto_ON_time', np.NaN)) for t in self.bpod_trials])
+            lstim = np.array([float(t.get('opto_ON_time', np.nan)) for t in self.bpod_trials])
             if np.all(np.isnan(lstim)):
-                lstim = np.array([float(t.get('optoOUT', np.NaN)) for t in self.bpod_trials])
+                lstim = np.array([float(t.get('optoOUT', np.nan)) for t in self.bpod_trials])
                 lstim[lstim == 255] = 1
             else:
                 lstim[~np.isnan(lstim)] = 1
@@ -48,14 +47,3 @@ class LaserBool(BaseBpodTrialsExtractor):
             self.save_names = (None, '_ibl_trials.laserProbability.npy')
             _logger.warning('No laser stimulation found in bpod data')
         return lstim, lprob
-
-
-def extract_all(*args, extra_classes=None, **kwargs):
-    """
-    Extracts the biased trials for a training session
-    """
-    if extra_classes is not None:
-        extra_classes.append(LaserBool)
-    else:
-        extra_classes = [LaserBool]
-    return biased_trials.extract_all(*args, **kwargs, extra_classes=extra_classes)

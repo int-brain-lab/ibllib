@@ -8,6 +8,7 @@ import pandas as pd
 from iblutil.numerical import ismember
 import one.alf.io as alfio
 from one.alf.exceptions import ALFObjectNotFound
+import one.alf.path as alfiles
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.lines import Line2D
@@ -17,7 +18,7 @@ from botocore.exceptions import ProfileNotFound, ClientError
 
 from ibllib.io.raw_data_loaders import load_bpod
 from ibllib.oneibl.registration import _get_session_times
-from ibllib.io.extractors.base import get_session_extractor_type, get_bpod_extractor_class
+from ibllib.io.extractors.base import get_bpod_extractor_class
 from ibllib.io.session_params import read_params
 from ibllib.io.extractors.bpod_trials import get_bpod_extractor
 from ibllib.plots.snapshot import ReportSnapshot
@@ -207,14 +208,16 @@ def load_combined_trials(sess_paths, one, force=True):
     """
     trials_dict = {}
     for sess_path in sess_paths:
-        trials = load_trials(Path(sess_path), one, force=force)
+        trials = load_trials(Path(sess_path), one, force=force, mode='warn')
         if trials is not None:
-            trials_dict[Path(sess_path).stem] = load_trials(Path(sess_path), one, force=force)
+            trials_dict[Path(sess_path).stem] = load_trials(Path(sess_path), one, force=force, mode='warn'
+
+                                                            )
 
     return training.concatenate_trials(trials_dict)
 
 
-def get_latest_training_information(sess_path, one):
+def get_latest_training_information(sess_path, one, save=True):
     """
     Extracts the latest training status.
 
@@ -261,14 +264,15 @@ def get_latest_training_information(sess_path, one):
     df = df.sort_values('date')
     df = df.reset_index(drop=True)
     # Save our dataframe
-    save_dataframe(df, subj_path)
+    if save:
+        save_dataframe(df, subj_path)
 
     # Now go through the backlog and compute the training status for sessions. If for example one was missing as it is cumulative
     # we need to go through and compute all the backlog
     # Find the earliest date in missing dates that we need to recompute the training status for
     missing_status = find_earliest_recompute_date(df.drop_duplicates('date').reset_index(drop=True))
     for date in missing_status:
-        df = compute_training_status(df, date, one)
+        df, _, _, _ = compute_training_status(df, date, one)
 
     df_lim = df.drop_duplicates(subset='session_path', keep='first')
 
@@ -287,10 +291,10 @@ def get_latest_training_information(sess_path, one):
             if 'ready4ephysrig' not in tr_st:
                 sess = un_df.iloc[39].session_path
                 df.loc[df['session_path'] == sess, 'training_status'] = 'unbiasable'
+    if save:
+        save_dataframe(df, subj_path)
 
-    save_dataframe(df, subj_path)
-
-    if one.mode != 'local':
+    if one.mode != 'local' and save:
         upload_training_table_to_aws(lab, sub)
 
     return df
@@ -312,7 +316,7 @@ def find_earliest_recompute_date(df):
     return df[first_index:].date.values
 
 
-def compute_training_status(df, compute_date, one, force=True):
+def compute_training_status(df, compute_date, one, force=True, populate=True):
     """
     Compute the training status for compute date based on training from that session and two previous days.
 
@@ -329,14 +333,22 @@ def compute_training_status(df, compute_date, one, force=True):
         An instance of ONE for loading trials data.
     force : bool
         When true and if the session trials can't be found, will attempt to re-extract from disk.
+    populate : bool
+        Whether to update the training data frame with the new training status value
 
     Returns
     -------
     pandas.DataFrame
-        The input data frame with a 'training_status' column populated for `compute_date`.
+        The input data frame with a 'training_status' column populated for `compute_date` if populate=True
+    Bunch
+        Bunch containing information fit parameters information for the combined sessions
+    Bunch
+        Bunch cotaining the training status criteria information
+    str
+        The training status
     """
 
-    # compute_date = str(one.path2ref(session_path)['date'])
+    # compute_date = str(alfiles.session_path_parts(session_path, as_dict=True)['date'])
     df_temp = df[df['date'] <= compute_date]
     df_temp = df_temp.drop_duplicates(subset=['session_path', 'task_protocol'])
     df_temp.sort_values('date')
@@ -376,11 +388,12 @@ def compute_training_status(df, compute_date, one, force=True):
             ephys_sessions.append(df_date.iloc[-1]['date'])
 
     n_status = np.max([-2, -1 * len(status)])
-    training_status, _ = training.get_training_status(trials, protocol, ephys_sessions, n_delay)
+    training_status, info, criteria = training.get_training_status(trials, protocol, ephys_sessions, n_delay)
     training_status = pass_through_training_hierachy(training_status, status[n_status])
-    df.loc[df['date'] == compute_date, 'training_status'] = training_status
+    if populate:
+        df.loc[df['date'] == compute_date, 'training_status'] = training_status
 
-    return df
+    return df, info, criteria, training_status
 
 
 def pass_through_training_hierachy(status_new, status_old):
@@ -431,12 +444,13 @@ def compute_session_duration_delay_location(sess_path, collections=None, **kwarg
         try:
             start_time, end_time = _get_session_times(sess_path, md, sess_data)
             session_duration = session_duration + int((end_time - start_time).total_seconds() / 60)
-            session_delay = session_delay + md.get('SESSION_START_DELAY_SEC', 0)
+            session_delay = session_delay + md.get('SESSION_DELAY_START',
+                                                   md.get('SESSION_START_DELAY_SEC', 0))
         except Exception:
             session_duration = session_duration + 0
             session_delay = session_delay + 0
 
-        if 'ephys' in md.get('PYBPOD_BOARD', None):
+        if 'ephys' in md.get('RIG_NAME', md.get('PYBPOD_BOARD', None)):
             session_location = 'ephys_rig'
         else:
             session_location = 'training_rig'
@@ -486,7 +500,7 @@ def get_data_collection(session_path):
                 continue
             collections.append(collection)
     else:
-        settings = Path(session_path).rglob('_iblrig_taskSettings.raw.json')
+        settings = Path(session_path).rglob('_iblrig_taskSettings.raw*.json')
         for setting in settings:
             if setting.parent.name != 'raw_passive_data':
                 collections.append(setting.parent.name)
@@ -504,7 +518,7 @@ def get_data_collection(session_path):
 def get_sess_dict(session_path, one, protocol, alf_collections=None, raw_collections=None, force=True):
 
     sess_dict = {}
-    sess_dict['date'] = str(one.path2ref(session_path)['date'])
+    sess_dict['date'] = str(alfiles.session_path_parts(session_path, as_dict=True)['date'])
     sess_dict['session_path'] = str(session_path)
     sess_dict['task_protocol'] = protocol
 
@@ -518,11 +532,11 @@ def get_sess_dict(session_path, one, protocol, alf_collections=None, raw_collect
         sess_dict['n_delay'] = np.nan
         sess_dict['location'] = np.nan
         sess_dict['training_status'] = 'habituation'
-        sess_dict['bias_50'], sess_dict['thres_50'], sess_dict['lapsehigh_50'], sess_dict['lapselow_50'] = \
+        sess_dict['bias_50'], sess_dict['thres_50'], sess_dict['lapselow_50'], sess_dict['lapsehigh_50'] = \
             (np.nan, np.nan, np.nan, np.nan)
-        sess_dict['bias_20'], sess_dict['thres_20'], sess_dict['lapsehigh_20'], sess_dict['lapselow_20'] = \
+        sess_dict['bias_20'], sess_dict['thres_20'], sess_dict['lapselow_20'], sess_dict['lapsehigh_20'] = \
             (np.nan, np.nan, np.nan, np.nan)
-        sess_dict['bias_80'], sess_dict['thres_80'], sess_dict['lapsehigh_80'], sess_dict['lapselow_80'] = \
+        sess_dict['bias_80'], sess_dict['thres_80'], sess_dict['lapselow_80'], sess_dict['lapsehigh_80'] = \
             (np.nan, np.nan, np.nan, np.nan)
 
     else:
@@ -533,18 +547,18 @@ def get_sess_dict(session_path, one, protocol, alf_collections=None, raw_collect
 
         sess_dict['performance'], sess_dict['contrasts'], _ = training.compute_performance(trials, prob_right=True)
         if sess_dict['task_protocol'] == 'training':
-            sess_dict['bias_50'], sess_dict['thres_50'], sess_dict['lapsehigh_50'], sess_dict['lapselow_50'] = \
+            sess_dict['bias_50'], sess_dict['thres_50'], sess_dict['lapselow_50'], sess_dict['lapsehigh_50'] = \
                 training.compute_psychometric(trials)
-            sess_dict['bias_20'], sess_dict['thres_20'], sess_dict['lapsehigh_20'], sess_dict['lapselow_20'] = \
+            sess_dict['bias_20'], sess_dict['thres_20'], sess_dict['lapselow_20'], sess_dict['lapsehigh_20'] = \
                 (np.nan, np.nan, np.nan, np.nan)
-            sess_dict['bias_80'], sess_dict['thres_80'], sess_dict['lapsehigh_80'], sess_dict['lapselow_80'] = \
+            sess_dict['bias_80'], sess_dict['thres_80'], sess_dict['lapselow_80'], sess_dict['lapsehigh_80'] = \
                 (np.nan, np.nan, np.nan, np.nan)
         else:
-            sess_dict['bias_50'], sess_dict['thres_50'], sess_dict['lapsehigh_50'], sess_dict['lapselow_50'] = \
+            sess_dict['bias_50'], sess_dict['thres_50'], sess_dict['lapselow_50'], sess_dict['lapsehigh_50'] = \
                 training.compute_psychometric(trials, block=0.5)
-            sess_dict['bias_20'], sess_dict['thres_20'], sess_dict['lapsehigh_20'], sess_dict['lapselow_20'] = \
+            sess_dict['bias_20'], sess_dict['thres_20'], sess_dict['lapselow_20'], sess_dict['lapsehigh_20'] = \
                 training.compute_psychometric(trials, block=0.2)
-            sess_dict['bias_80'], sess_dict['thres_80'], sess_dict['lapsehigh_80'], sess_dict['lapselow_80'] = \
+            sess_dict['bias_80'], sess_dict['thres_80'], sess_dict['lapselow_80'], sess_dict['lapsehigh_80'] = \
                 training.compute_psychometric(trials, block=0.8)
 
         sess_dict['performance_easy'] = training.compute_performance_easy(trials)
@@ -587,9 +601,9 @@ def get_training_info_for_session(session_paths, one, force=True):
             try:
                 prot = get_bpod_extractor_class(session_path, task_collection=c)
                 prot = prot[:-6].lower()
-            except Exception:
-                prot = get_session_extractor_type(session_path, task_collection=c)
-            protocols.append(prot)
+                protocols.append(prot)
+            except ValueError:
+                continue
 
         un_protocols = np.unique(protocols)
         # Example, training, training, biased - training would be combined, biased not
@@ -648,8 +662,8 @@ def get_training_info_for_session(session_paths, one, force=True):
             for bias in [50, 20, 80]:
                 sess_dict[f'combined_bias_{bias}'] = psychs[f'{bias}'][0]
                 sess_dict[f'combined_thres_{bias}'] = psychs[f'{bias}'][1]
-                sess_dict[f'combined_lapsehigh_{bias}'] = psychs[f'{bias}'][2]
-                sess_dict[f'combined_lapselow_{bias}'] = psychs[f'{bias}'][3]
+                sess_dict[f'combined_lapselow_{bias}'] = psychs[f'{bias}'][2]
+                sess_dict[f'combined_lapsehigh_{bias}'] = psychs[f'{bias}'][3]
 
             # Case where two sessions on same day with different number of contrasts! Oh boy
             if sess_dict['combined_performance'].size != sess_dict['performance'].size:
@@ -752,9 +766,54 @@ def plot_performance_easy_median_reaction_time(df, subject):
     return ax
 
 
+def display_info(df, axs):
+    compute_date = df['date'].values[-1]
+    _, info, criteria, _ = compute_training_status(df, compute_date, None, force=False, populate=False)
+
+    def _array_to_string(vals):
+        if isinstance(vals, (str, bool, int, float)):
+            if isinstance(vals, float):
+                vals = np.round(vals, 3)
+            return f'{vals}'
+
+        str_vals = ''
+        for v in vals:
+            if isinstance(v, float):
+                v = np.round(v, 3)
+            str_vals += f'{v}, '
+        return str_vals[:-2]
+
+    pos = np.arange(len(criteria))[::-1] * 0.1
+    for i, (k, v) in enumerate(info.items()):
+        str_v = _array_to_string(v)
+        text = axs[0].text(0, pos[i], k.capitalize(), color='k', weight='bold', fontsize=8, transform=axs[0].transAxes)
+        axs[0].annotate(':  ' + str_v, xycoords=text, xy=(1, 0), verticalalignment="bottom",
+                        color='k', fontsize=7)
+
+    pos = np.arange(len(criteria))[::-1] * 0.1
+    crit_val = criteria.pop('Criteria')
+    c = 'g' if crit_val['pass'] else 'r'
+    str_v = _array_to_string(crit_val['val'])
+    text = axs[1].text(0, pos[0], 'Criteria', color='k', weight='bold', fontsize=8, transform=axs[1].transAxes)
+    axs[1].annotate(':  ' + str_v, xycoords=text, xy=(1, 0), verticalalignment="bottom",
+                    color=c, fontsize=7)
+    pos = pos[1:]
+
+    for i, (k, v) in enumerate(criteria.items()):
+        c = 'g' if v['pass'] else 'r'
+        str_v = _array_to_string(v['val'])
+        text = axs[1].text(0, pos[i], k.capitalize(), color='k', weight='bold', fontsize=8, transform=axs[1].transAxes)
+        axs[1].annotate(':  ' + str_v, xycoords=text, xy=(1, 0), verticalalignment="bottom",
+                        color=c, fontsize=7)
+
+    axs[0].set_axis_off()
+    axs[1].set_axis_off()
+
+
 def plot_fit_params(df, subject):
-    fig, axs = plt.subplots(2, 2, figsize=(12, 6))
-    axs = axs.ravel()
+    fig, axs = plt.subplots(2, 3, figsize=(12, 6), gridspec_kw={'width_ratios': [2, 2, 1]})
+
+    display_info(df, axs=[axs[0, 2], axs[1, 2]])
 
     df = df.drop_duplicates('date').reset_index(drop=True)
 
@@ -778,11 +837,11 @@ def plot_fit_params(df, subject):
            'color': cmap[0],
            'join': False}
 
-    plot_over_days(df, subject, y50, ax=axs[0], legend=False, title=False)
-    plot_over_days(df, subject, y80, ax=axs[0], legend=False, title=False)
-    plot_over_days(df, subject, y20, ax=axs[0], legend=False, title=False)
-    axs[0].axhline(16, linewidth=2, linestyle='--', color='k')
-    axs[0].axhline(-16, linewidth=2, linestyle='--', color='k')
+    plot_over_days(df, subject, y50, ax=axs[0, 0], legend=False, title=False)
+    plot_over_days(df, subject, y80, ax=axs[0, 0], legend=False, title=False)
+    plot_over_days(df, subject, y20, ax=axs[0, 0], legend=False, title=False)
+    axs[0, 0].axhline(16, linewidth=2, linestyle='--', color='k')
+    axs[0, 0].axhline(-16, linewidth=2, linestyle='--', color='k')
 
     y50['column'] = 'combined_thres_50'
     y50['title'] = 'Threshold'
@@ -794,10 +853,10 @@ def plot_fit_params(df, subject):
     y20['title'] = 'Threshold'
     y80['lim'] = [0, 100]
 
-    plot_over_days(df, subject, y50, ax=axs[1], legend=False, title=False)
-    plot_over_days(df, subject, y80, ax=axs[1], legend=False, title=False)
-    plot_over_days(df, subject, y20, ax=axs[1], legend=False, title=False)
-    axs[1].axhline(19, linewidth=2, linestyle='--', color='k')
+    plot_over_days(df, subject, y50, ax=axs[0, 1], legend=False, title=False)
+    plot_over_days(df, subject, y80, ax=axs[0, 1], legend=False, title=False)
+    plot_over_days(df, subject, y20, ax=axs[0, 1], legend=False, title=False)
+    axs[0, 1].axhline(19, linewidth=2, linestyle='--', color='k')
 
     y50['column'] = 'combined_lapselow_50'
     y50['title'] = 'Lapse Low'
@@ -809,10 +868,10 @@ def plot_fit_params(df, subject):
     y20['title'] = 'Lapse Low'
     y20['lim'] = [0, 1]
 
-    plot_over_days(df, subject, y50, ax=axs[2], legend=False, title=False)
-    plot_over_days(df, subject, y80, ax=axs[2], legend=False, title=False)
-    plot_over_days(df, subject, y20, ax=axs[2], legend=False, title=False)
-    axs[2].axhline(0.2, linewidth=2, linestyle='--', color='k')
+    plot_over_days(df, subject, y50, ax=axs[1, 0], legend=False, title=False)
+    plot_over_days(df, subject, y80, ax=axs[1, 0], legend=False, title=False)
+    plot_over_days(df, subject, y20, ax=axs[1, 0], legend=False, title=False)
+    axs[1, 0].axhline(0.2, linewidth=2, linestyle='--', color='k')
 
     y50['column'] = 'combined_lapsehigh_50'
     y50['title'] = 'Lapse High'
@@ -824,19 +883,21 @@ def plot_fit_params(df, subject):
     y20['title'] = 'Lapse High'
     y20['lim'] = [0, 1]
 
-    plot_over_days(df, subject, y50, ax=axs[3], legend=False, title=False, training_lines=True)
-    plot_over_days(df, subject, y80, ax=axs[3], legend=False, title=False, training_lines=False)
-    plot_over_days(df, subject, y20, ax=axs[3], legend=False, title=False, training_lines=False)
-    axs[3].axhline(0.2, linewidth=2, linestyle='--', color='k')
+    plot_over_days(df, subject, y50, ax=axs[1, 1], legend=False, title=False, training_lines=True)
+    plot_over_days(df, subject, y80, ax=axs[1, 1], legend=False, title=False, training_lines=False)
+    plot_over_days(df, subject, y20, ax=axs[1, 1], legend=False, title=False, training_lines=False)
+    axs[1, 1].axhline(0.2, linewidth=2, linestyle='--', color='k')
 
     fig.suptitle(f'{subject} {df.iloc[-1]["date"]}: {df.iloc[-1]["training_status"]}')
-    lines, labels = axs[3].get_legend_handles_labels()
-    fig.legend(lines, labels, loc='upper center', bbox_to_anchor=(0.5, 0.1), fancybox=True, shadow=True, ncol=5)
+    lines, labels = axs[1, 1].get_legend_handles_labels()
+    fig.legend(lines, labels, loc='upper center', bbox_to_anchor=(0.5, 0.1), facecolor='w', fancybox=True, shadow=True,
+               ncol=5)
 
     legend_elements = [Line2D([0], [0], marker='o', color='w', label='p=0.5', markerfacecolor=cmap[1], markersize=8),
                        Line2D([0], [0], marker='o', color='w', label='p=0.2', markerfacecolor=cmap[0], markersize=8),
                        Line2D([0], [0], marker='o', color='w', label='p=0.8', markerfacecolor=cmap[2], markersize=8)]
-    legend2 = plt.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(1.1, -0.2), fancybox=True, shadow=True)
+    legend2 = plt.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(1.1, -0.2), fancybox=True,
+                         shadow=True, facecolor='w')
     fig.add_artist(legend2)
 
     return axs
@@ -845,7 +906,7 @@ def plot_fit_params(df, subject):
 def plot_psychometric_curve(df, subject, one):
     df = df.drop_duplicates('date').reset_index(drop=True)
     sess_path = Path(df.iloc[-1]["session_path"])
-    trials = load_trials(sess_path, one)
+    trials = load_trials(sess_path, one, mode='warn')
 
     fig, ax1 = plt.subplots(figsize=(8, 6))
 
@@ -908,7 +969,7 @@ def plot_over_days(df, subject, y1, y2=None, ax=None, legend=True, title=True, t
                       box.width, box.height * 0.9])
     if legend:
         ax1.legend(loc='upper center', bbox_to_anchor=(0.5, -0.1),
-                   fancybox=True, shadow=True, ncol=5)
+                   fancybox=True, shadow=True, ncol=5, facecolor='white')
 
     return ax1
 
@@ -1011,7 +1072,7 @@ def make_plots(session_path, one, df=None, save=False, upload=False, task_collec
 
         save_name = save_path.joinpath('subj_psychometric_fit_params.png')
         outputs.append(save_name)
-        ax4[0].get_figure().savefig(save_name, bbox_inches='tight')
+        ax4[0, 0].get_figure().savefig(save_name, bbox_inches='tight')
 
         save_name = save_path.joinpath('subj_psychometric_curve.png')
         outputs.append(save_name)

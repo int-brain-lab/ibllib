@@ -3,7 +3,6 @@
 This module handles extraction of camera timestamps for both Bpod and DAQ.
 """
 import logging
-from functools import partial
 
 import cv2
 import numpy as np
@@ -14,15 +13,12 @@ import ibldsp.utils as dsp
 from ibllib.plots import squares, vertical_lines
 from ibllib.io.video import assert_valid_label, VideoStreamer
 from iblutil.numerical import within_ranges
-from ibllib.io.extractors.base import get_session_extractor_type
-from ibllib.io.extractors.ephys_fpga import get_sync_fronts, get_sync_and_chn_map
+from ibllib.io.extractors.ephys_fpga import get_sync_fronts
 import ibllib.io.raw_data_loaders as raw
 import ibllib.io.extractors.video_motion as vmotion
 from ibllib.io.extractors.base import (
     BaseBpodTrialsExtractor,
     BaseExtractor,
-    run_extractor_classes,
-    _get_task_types_json_config
 )
 
 _logger = logging.getLogger(__name__)
@@ -205,7 +201,7 @@ class CameraTimestampsCamlog(BaseExtractor):
             raw_ts = np.r_[raw_ts, np.array([raw_ts[-1] + med_time])]
 
         assert video_frames == raw_ts.size, f'dimension mismatch between video frames and TTL pulses for {self.label} camera' \
-                                            f'by {np.abs(video_frames - raw_ts.size)} frames'
+                                            f' by {np.abs(video_frames - raw_ts.size)} frames'
 
         return raw_ts
 
@@ -307,14 +303,13 @@ class CameraTimestampsBpod(BaseBpodTrialsExtractor):
         n_frames = 0
         n_out_of_sync = 0
         missed_trials = []
-        for ind in np.arange(ntrials):
+        for ind in range(ntrials):
             # get upgoing and downgoing fronts
-            pin = np.array(self.bpod_trials[ind]['behavior_data']
-                           ['Events timestamps'].get('Port1In'))
-            pout = np.array(self.bpod_trials[ind]['behavior_data']
-                            ['Events timestamps'].get('Port1Out'))
+            events = self.bpod_trials[ind]['behavior_data']['Events timestamps']
+            pin = np.array(events.get('Port1In') or [np.nan])
+            pout = np.array(events.get('Port1Out') or [np.nan])
             # some trials at startup may not have the camera working, discard
-            if np.all(pin) is None:
+            if np.isnan(pin).all():
                 missed_trials.append(ind)
                 continue
             # if the trial starts in the middle of a square, discard the first downgoing front
@@ -746,62 +741,3 @@ def groom_pin_state(gpio, ttl, ts, tolerance=2., display=False, take='first', mi
         plt.show()
 
     return gpio, ttl_, fcn_a2b(ts)
-
-
-def extract_all(session_path, sync_type=None, save=True, **kwargs):
-    """
-    For the IBL ephys task, reads ephys binary file and extract:
-        -   video time stamps
-    :param session_type: the session type to extract, i.e. 'ephys', 'training' or 'biased'. If
-    None the session type is inferred from the settings file.
-    :param save: Bool, defaults to False
-    :param kwargs: parameters to pass to the extractor
-    :return: outputs, files
-
-    Parameters
-    ----------
-    session_path : str, pathlib.Path
-        The session path, e.g. '/path/to/subject/yyyy-mm-dd/001'.
-    sync_type : str
-        The sync label from the experiment description file.
-    sync_collection : str
-        The subdirectory containing the sync files.
-    save : bool
-        If True, save the camera timestamp files to disk.
-    session_type : str
-        (DEPRECATED) The session type, e.g. 'ephys'.
-    **kwargs
-        Extra keyword args to pass to the camera extractor classes.
-
-    Returns
-    -------
-    list of numpy.array
-        List of extracted output data, i.e. the camera times.
-    list of pathlib.Path
-        The paths of the extracted data, if save = True
-    """
-
-    sync_collection = kwargs.get('sync_collection', 'raw_ephys_data')
-    camlog = kwargs.get('camlog', False)
-
-    if not sync_type:  # infer from session type
-        session_type = kwargs.get('session_type') or get_session_extractor_type(session_path)
-        if not session_type or session_type not in _get_task_types_json_config().values():
-            raise ValueError(f"Session type {session_type} has no matching extractor")
-        else:
-            sync_type = 'nidq' if session_type == 'ephys' else 'bpod'
-
-    if sync_type == 'nidq':
-        labels = assert_valid_label(kwargs.pop('labels', ('left', 'right', 'body')))
-        labels = (labels,) if isinstance(labels, str) else labels  # Ensure list/tuple
-        CamExtractor = CameraTimestampsCamlog if camlog else CameraTimestampsFPGA
-        extractor = [partial(CamExtractor, label) for label in labels]
-        if 'sync' not in kwargs:
-            kwargs['sync'], kwargs['chmap'] = get_sync_and_chn_map(session_path, sync_collection)
-    else:  # assume Bpod otherwise
-        assert kwargs.pop('labels', 'left'), 'only left camera is currently supported'
-        extractor = CameraTimestampsBpod
-
-    outputs, files = run_extractor_classes(
-        extractor, session_path=session_path, save=save, **kwargs)
-    return outputs, files

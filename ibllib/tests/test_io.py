@@ -466,7 +466,7 @@ class TestSessionParams(unittest.TestCase):
             file_device = self.devices_path.joinpath(f'{label}.yaml')
             session_params.write_yaml(file_device, data)
 
-    @patch(session_params.__name__ + '.time.sleep')
+    @patch('iblutil.io.params.time.sleep')
     def test_aggregate(self, sleep_mock):
         """A test for both aggregate_device and merge_params."""
         fullfile = self.devices_path.parent.joinpath('_ibl_experiment.description.yaml')
@@ -527,10 +527,22 @@ class TestSessionParams(unittest.TestCase):
         self.assertCountEqual(self.fixture.keys(), data_keys)
 
     def test_patch_data(self):
+        """Test for session_params._patch_file function."""
         with patch(session_params.__name__ + '.SPEC_VERSION', '1.0.0'), \
                 self.assertLogs(session_params.__name__, logging.WARNING):
             data = session_params._patch_file({'version': '1.1.0'})
         self.assertEqual(data, {'version': '1.0.0'})
+        # Check tasks dicts separated into lists
+        unpatched = {'version': '0.0.1', 'tasks': {
+            'fooChoiceWorld': {1: '1'}, 'barChoiceWorld': {2: '2'}}}
+        data = session_params._patch_file(unpatched)
+        self.assertIsInstance(data['tasks'], list)
+        self.assertEqual([['fooChoiceWorld'], ['barChoiceWorld']], list(map(list, data['tasks'])))
+        # Check patching list of dicts with some containing more than 1 key
+        unpatched = {'tasks': [{'foo': {1: '1'}}, {'bar': {2: '2'}, 'baz': {3: '3'}}]}
+        data = session_params._patch_file(unpatched)
+        self.assertEqual(3, len(data['tasks']))
+        self.assertEqual([['foo'], ['bar'], ['baz']], list(map(list, data['tasks'])))
 
     def test_get_collections(self):
         collections = session_params.get_collections(self.fixture)
@@ -561,16 +573,38 @@ class TestSessionParams(unittest.TestCase):
         b = {'procedures': ['Imaging', 'Injection'], 'tasks': [{'fooChoiceWorld': {'collection': 'bar'}}]}
         c = session_params.merge_params(a, b, copy=True)
         self.assertCountEqual(['Imaging', 'Behavior training/tasks', 'Injection'], c['procedures'])
-        self.assertCountEqual(['passiveChoiceWorld', 'ephysChoiceWorld', 'fooChoiceWorld'], (list(x)[0] for x in c['tasks']))
+        self.assertEqual(['passiveChoiceWorld', 'ephysChoiceWorld', 'fooChoiceWorld'], [list(x)[0] for x in c['tasks']])
         # Ensure a and b not modified
         self.assertNotEqual(set(c['procedures']), set(a['procedures']))
         self.assertNotEqual(set(a['procedures']), set(b['procedures']))
+        # Test duplicate tasks skipped while order kept constant
+        d = {'tasks': [a['tasks'][1], {'ephysChoiceWorld': {'collection': 'raw_task_data_02', 'sync_label': 'nidq'}}]}
+        e = session_params.merge_params(c, d, copy=True)
+        expected = ['passiveChoiceWorld', 'ephysChoiceWorld', 'fooChoiceWorld', 'ephysChoiceWorld']
+        self.assertEqual(expected, [list(x)[0] for x in e['tasks']])
+        self.assertDictEqual({'collection': 'raw_task_data_02', 'sync_label': 'nidq'}, e['tasks'][-1]['ephysChoiceWorld'])
         # Test without copy
         session_params.merge_params(a, b, copy=False)
         self.assertCountEqual(['Imaging', 'Behavior training/tasks', 'Injection'], a['procedures'])
         # Test assertion on duplicate sync
         b['sync'] = {'foodaq': {'collection': 'raw_sync_data'}}
         self.assertRaises(AssertionError, session_params.merge_params, a, b)
+        # Test how it handles the extractors key, which is an unhashable list
+        f = {'tasks': [{'fooChoiceWorld': {'collection': 'bar', 'sync_label': 'bpod', 'extractors': ['a', 'b']}}]}
+        g = session_params.merge_params(a, f, copy=True)
+        self.assertCountEqual(['devices', 'procedures', 'projects', 'sync', 'tasks', 'version'], g.keys())
+        self.assertEqual(4, len(g['tasks']))
+        self.assertDictEqual(f['tasks'][0], g['tasks'][-1])
+
+    def test_get_protocol_number(self):
+        """Test ibllib.io.session_params.get_task_protocol_number function."""
+        self.assertIsNone(session_params.get_task_protocol_number(self.fixture))
+        self.assertIsNone(session_params.get_task_protocol_number(self.fixture, 'passiveChoiceWorld'))
+        self.assertIsNone(session_params.get_task_protocol_number(self.fixture, 'fooChoiceWorld'))
+        for i, task in enumerate(self.fixture['tasks']):
+            next(iter(task.values()))['protocol_number'] = str(i)
+        self.assertEqual(0, session_params.get_task_protocol_number(self.fixture, 'passiveChoiceWorld'))
+        self.assertEqual([0, 1], session_params.get_task_protocol_number(self.fixture))
 
 
 class TestRawDaqLoaders(unittest.TestCase):

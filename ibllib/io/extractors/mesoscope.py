@@ -4,8 +4,8 @@ import logging
 import numpy as np
 from scipy.signal import find_peaks
 import one.alf.io as alfio
-from one.util import ensure_list
-from one.alf.files import session_path_parts
+from one.alf.path import session_path_parts
+from iblutil.util import ensure_list
 import matplotlib.pyplot as plt
 from packaging import version
 
@@ -51,6 +51,23 @@ def patch_imaging_meta(meta: dict) -> dict:
         for fov in meta.get('FOV', []):
             if 'roiUuid' in fov:
                 fov['roiUUID'] = fov.pop('roiUuid')
+    # 2024-09-17 Modified the 2 unit vectors for the positive ML axis and the positive AP axis,
+    # which then transform [X,Y] coordinates (in degrees) to [ML,AP] coordinates (in MM).
+    if ver < version.Version('0.1.5') and 'imageOrientation' in meta:
+        pos_ml, pos_ap = meta['imageOrientation']['positiveML'], meta['imageOrientation']['positiveAP']
+        center_ml, center_ap = meta['centerMM']['ML'], meta['centerMM']['AP']
+        res = meta['scanImageParams']['objectiveResolution']
+        # previously [[0, res/1000], [-res/1000, 0], [0, 0]]
+        TF = np.linalg.pinv(np.c_[np.vstack([pos_ml, pos_ap, [0, 0]]), [1, 1, 1]]) @ \
+            (np.array([[res / 1000, 0], [0, res / 1000], [0, 0]]) + np.array([center_ml, center_ap]))
+        TF = np.round(TF, 3)  # handle floating-point error by rounding
+        if not np.allclose(TF, meta['coordsTF']):
+            meta['coordsTF'] = TF.tolist()
+            centerDegXY = np.array([meta['centerDeg']['x'], meta['centerDeg']['y']])
+            for fov in meta.get('FOV', []):
+                fov['MM'] = {k: (np.r_[np.array(v) - centerDegXY, 1] @ TF).tolist() for k, v in fov['Deg'].items()}
+
+    assert 'nFrames' in meta, '"nFrames" key missing from meta data; rawImagingData.meta.json likely an old version'
     return meta
 
 
@@ -235,7 +252,7 @@ class TimelineTrials(FpgaTrials):
         start_times = out['intervals'][:, 0]
         last_trial_end = out['intervals'][-1, 1]
 
-        def assign_to_trial(events, take='last'):
+        def assign_to_trial(events, take='last', starts=start_times, **kwargs):
             """Assign DAQ events to trials.
 
             Because we may not have trial start TTLs on the DAQ (because of the low sampling rate),
@@ -243,7 +260,7 @@ class TimelineTrials(FpgaTrials):
             ignores the last trial. This function trims the input array before assigning so that
             the last trial's events are correctly assigned.
             """
-            return _assign_events_to_trial(start_times, events[events <= last_trial_end], take)
+            return _assign_events_to_trial(starts, events[events <= last_trial_end], take, **kwargs)
         out['itiIn_times'] = assign_to_trial(fpga_events['itiIn_times'][ifpga])
 
         # Extract valve open times from the DAQ
@@ -272,10 +289,27 @@ class TimelineTrials(FpgaTrials):
             # Use the valve controller TTLs recorded on the Bpod channel as the reward time
             out['valveOpen_times'] = assign_to_trial(valve_driver_ttls[:, 0])
 
-        # Stimulus times extracted the same as usual
-        out['stimFreeze_times'] = assign_to_trial(self.frame2ttl['times'], take=-2)
-        out['stimOn_times'] = assign_to_trial(self.frame2ttl['times'], take='first')
-        out['stimOff_times'] = assign_to_trial(self.frame2ttl['times'])
+        # Stimulus times extracted based on trigger times
+        # When assigning events all start times must not be NaN so here we substitute freeze
+        # trigger times on nogo trials for stim on trigger times, then replace with NaN again
+        go_trials = np.where(out['choice'] != 0)[0]
+        lims = np.copy(out['stimOnTrigger_times'])
+        lims[go_trials] = out['stimFreezeTrigger_times'][go_trials]
+        out['stimFreeze_times'] = assign_to_trial(
+            self.frame2ttl['times'], 'last',
+            starts=lims, t_trial_end=out['stimOffTrigger_times'])
+        out['stimFreeze_times'][out['choice'] == 0] = np.nan
+
+        # Here we do the same but use stim off trigger times
+        lims = np.copy(out['stimOffTrigger_times'])
+        lims[go_trials] = out['stimFreezeTrigger_times'][go_trials]
+        out['stimOn_times'] = assign_to_trial(
+            self.frame2ttl['times'], 'first',
+            starts=out['stimOnTrigger_times'], t_trial_end=lims)
+        out['stimOff_times'] = assign_to_trial(
+            self.frame2ttl['times'], 'first',
+            starts=out['stimOffTrigger_times'], t_trial_end=out['intervals'][:, 1]
+        )
 
         # Audio times
         error_cue = fpga_events['errorTone_times']
@@ -746,6 +780,15 @@ class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
         Calculate the time shifts for each field of view (FOV) and the relative offsets for each
         scan line.
 
+        For a 2 scan field, 2 depth recording (so 4 FOVs):
+
+        Frame 1, lines 1-512 correspond to FOV_00
+        Frame 1, lines 551-1062 correspond to FOV_01
+        Frame 2, lines 1-512 correspond to FOV_02
+        Frame 2, lines 551-1062 correspond to FOV_03
+        Frame 3, lines 1-512 correspond to FOV_00
+        ...
+
         Parameters
         ----------
         raw_imaging_meta : dict
@@ -765,26 +808,27 @@ class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
         FOVs = raw_imaging_meta['FOV']
 
         # Double-check meta extracted properly
-        raw_meta = raw_imaging_meta['rawScanImageMeta']
-        artist = raw_meta['Artist']
-        assert sum(x['enable'] for x in artist['RoiGroups']['imagingRoiGroup']['rois']) == len(FOVs)
-
+        # assert meta.FOV.Zs is ascending but use slice_id field. This may not be necessary but is expected.
+        slice_ids = np.array([fov['slice_id'] for fov in FOVs])
+        assert np.all(np.diff([x['Zs'] for x in FOVs]) >= 0), 'FOV depths not in ascending order'
+        assert np.all(np.diff(slice_ids) >= 0), 'slice IDs not ordered'
         # Number of scan lines per FOV, i.e. number of Y pixels / image height
         n_lines = np.array([x['nXnYnZ'][1] for x in FOVs])
-        n_valid_lines = np.sum(n_lines)  # Number of lines imaged excluding flybacks
-        # Number of lines during flyback
-        n_lines_per_gap = int((raw_meta['Height'] - n_valid_lines) / (len(FOVs) - 1))
-        # The start and end indices of each FOV in the raw images
-        fov_start_idx = np.insert(np.cumsum(n_lines[:-1] + n_lines_per_gap), 0, 0)
-        fov_end_idx = fov_start_idx + n_lines
+
+        # We get indices from MATLAB extracted metadata so below two lines are no longer needed
+        # n_valid_lines = np.sum(n_lines)  # Number of lines imaged excluding flybacks
+        # n_lines_per_gap = int((raw_meta['Height'] - n_valid_lines) / (len(FOVs) - 1))  # N lines during flyback
         line_period = raw_imaging_meta['scanImageParams']['hRoiManager']['linePeriod']
+        frame_time_shifts = slice_ids / raw_imaging_meta['scanImageParams']['hRoiManager']['scanFrameRate']
 
-        line_indices = []
-        fov_time_shifts = fov_start_idx * line_period
-        line_time_shifts = []
-
-        for ln, s, e in zip(n_lines, fov_start_idx, fov_end_idx):
-            line_indices.append(np.arange(s, e))
-            line_time_shifts.append(np.arange(0, ln) * line_period)
+        # Line indices are now extracted by the MATLAB function mesoscopeMetadataExtraction.m
+        # They are indexed from 1 so we subtract 1 to convert to zero-indexed
+        line_indices = [np.array(fov['lineIdx']) - 1 for fov in FOVs]  # Convert to zero-indexed from MATLAB 1-indexed
+        assert all(lns.size == n for lns, n in zip(line_indices, n_lines)), 'unexpected number of scan lines'
+        # The start indices of each FOV in the raw images
+        fov_start_idx = np.array([lns[0] for lns in line_indices])
+        roi_time_shifts = fov_start_idx * line_period   # The time offset for each FOV
+        fov_time_shifts = roi_time_shifts + frame_time_shifts
+        line_time_shifts = [(lns - ln0) * line_period for lns, ln0 in zip(line_indices, fov_start_idx)]
 
         return line_indices, fov_time_shifts, line_time_shifts

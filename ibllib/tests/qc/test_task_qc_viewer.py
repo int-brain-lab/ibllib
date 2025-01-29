@@ -6,9 +6,7 @@ from unittest import mock
 from one.api import ONE
 import numpy as np
 
-from ibllib.pipes.ephys_preprocessing import EphysTrials
-from ibllib.pipes.training_preprocessing import TrainingTrials
-from ibllib.pipes.behavior_tasks import HabituationTrialsBpod, ChoiceWorldTrialsNidq, ChoiceWorldTrialsBpod, PassiveTask
+from ibllib.pipes.behavior_tasks import HabituationTrialsBpod, ChoiceWorldTrialsNidq, ChoiceWorldTrialsBpod, PassiveTaskNidq
 from ibllib.qc.task_qc_viewer.task_qc import get_bpod_trials_task, show_session_task_qc, QcFrame
 from ibllib.qc.task_metrics import TaskQC
 from ibllib.tests import TEST_DB
@@ -33,10 +31,6 @@ class TestTaskQC(unittest.TestCase):
 
     def test_get_bpod_trials_task(self):
         """Test get_bpod_trials_task function."""
-        task = TrainingTrials('foo/bar', one=self.one)
-        bpod_task = get_bpod_trials_task(task)
-        self.assertIs(task, bpod_task)
-
         task = HabituationTrialsBpod('foo/bar', one=self.one,
                                      protocol_number=0, protocol='habituationChoiceWorld', collection='raw_task_data_00')
         bpod_task = get_bpod_trials_task(task)
@@ -51,10 +45,6 @@ class TestTaskQC(unittest.TestCase):
         self.assertEqual(bpod_task.collection, 'raw_task_data_02')
         self.assertIs(bpod_task.one, self.one)
 
-        task = EphysTrials('foo/bar', one=self.one)
-        bpod_task = get_bpod_trials_task(task)
-        self.assertIsInstance(bpod_task, TrainingTrials)
-
     @mock.patch('ibllib.qc.task_qc_viewer.task_qc.qt.run_app')
     @mock.patch('ibllib.qc.task_qc_viewer.task_qc.get_trials_tasks')
     def test_show_session_task_qc(self, trials_tasks_mock, run_app_mock):
@@ -65,7 +55,7 @@ class TestTaskQC(unittest.TestCase):
         self.assertRaises(TypeError, show_session_task_qc, session_path, one=self.one, protocol_number=-2)
         self.assertRaises(ValueError, show_session_task_qc, session_path, one=self.one, protocol_number=1)
 
-        passive_task = PassiveTask('foo/bar', protocol='_iblrig_passiveChoiceWorld', protocol_number=0)
+        passive_task = PassiveTaskNidq('foo/bar', protocol='_iblrig_passiveChoiceWorld', protocol_number=0)
         trials_tasks_mock.return_value = [passive_task]
         self.assertRaises(ValueError, show_session_task_qc, session_path, one=self.one, protocol_number=0)
         self.assertRaises(ValueError, show_session_task_qc, session_path, one=self.one)
@@ -76,6 +66,7 @@ class TestTaskQC(unittest.TestCase):
         qc_mock.compute_session_status.return_value = ('Fail', qc_mock.metrics, {'foo': 'FAIL'})
         qc_mock.extractor.data = {'intervals': np.array([[0, 1]])}
         qc_mock.extractor.frame_ttls = qc_mock.extractor.audio_ttls = qc_mock.extractor.bpod_ttls = mock.MagicMock()
+        qc_mock.passed = dict()
 
         active_task = mock.Mock(spec=ChoiceWorldTrialsNidq, unsafe=True)
         active_task.run_qc.return_value = qc_mock
@@ -93,11 +84,8 @@ class TestTaskQC(unittest.TestCase):
         run_app_mock.assert_called_once()
 
         active_task.reset_mock(return_value=False)
-        with mock.patch('ibllib.qc.task_qc_viewer.task_qc.get_bpod_trials_task', return_value=active_task) as \
-                get_bpod_trials_task_mock:
-            show_session_task_qc(session_path, one=self.one, local=True, bpod_only=True)
-            # Should be called in bpod_only mode
-            get_bpod_trials_task_mock.assert_called_once_with(active_task)
+        trials_tasks_mock.reset_mock()
+        show_session_task_qc(session_path, one=self.one, local=True, bpod_only=True)
         # Should be called in local mode
         active_task.assert_expected_inputs.assert_called_once_with(raise_error=True)
 

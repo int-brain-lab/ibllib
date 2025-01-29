@@ -18,6 +18,7 @@ from one.api import ONE
 import one.alf.io as alfio
 from one.alf.exceptions import ALFObjectNotFound
 from ibllib.io.video import get_video_frame, url_from_eid
+from ibllib.oneibl.data_handlers import ExpectedDataset
 import spikeglx
 import neuropixel
 from brainbox.plot import driftmap
@@ -107,7 +108,7 @@ class BehaviourPlots(ReportSnapshot):
         self.one = one
         self.eid = eid
         self.session_path = session_path or self.one.eid2path(self.eid)
-        self.trials_collection = kwargs.pop('trials_collection', 'alf')
+        self.trials_collection = kwargs.pop('task_collection', 'alf')
         super(BehaviourPlots, self).__init__(self.session_path, self.eid, one=self.one,
                                              **kwargs)
         # Output directory should mirror trials collection, sans 'alf' part
@@ -387,7 +388,6 @@ class SpikeSorting(ReportSnapshotProbe):
     def get_signatures(self, **kwargs):
         files_spikes = Path(self.session_path).joinpath('alf').rglob('spikes.times.npy')
         folder_probes = [f.parent for f in files_spikes]
-
         full_input_files = []
         for sig in self.signature['input_files']:
             for folder in folder_probes:
@@ -396,8 +396,9 @@ class SpikeSorting(ReportSnapshotProbe):
             self.input_files = full_input_files
         else:
             self.input_files = self.signature['input_files']
-
         self.output_files = self.signature['output_files']
+        self.input_files = [ExpectedDataset.input(*i) for i in self.input_files]
+        self.output_files = [ExpectedDataset.output(*i) for i in self.output_files]
 
 
 class BadChannelsAp(ReportSnapshotProbe):
@@ -643,7 +644,7 @@ def raw_destripe(raw, fs, t0, i_plt, n_plt,
         fig, axs = plt.subplots(nrows=1, ncols=n_plt, figsize=(14, 5), gridspec_kw={'width_ratios': 4 * n_plt})
 
     if i_plt > len(axs) - 1:  # Error
-        raise ValueError(f'The given increment of subplot ({i_plt+1}) '
+        raise ValueError(f'The given increment of subplot ({i_plt + 1}) '
                          f'is larger than the total number of subplots ({len(axs)})')
 
     [nc, ns] = raw.shape

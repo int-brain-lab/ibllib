@@ -1,4 +1,4 @@
-"""Tests for ibllib.pipes.mesoscope_tasks"""
+"""Tests for ibllib.pipes.mesoscope_tasks."""
 import sys
 import unittest
 from unittest import mock
@@ -6,6 +6,8 @@ import tempfile
 import json
 from itertools import chain
 from pathlib import Path
+import subprocess
+from copy import deepcopy
 
 from one.api import ONE
 import numpy as np
@@ -29,6 +31,10 @@ class TestMesoscopePreprocess(unittest.TestCase):
         self.img_path = self.session_path.joinpath('raw_imaging_data_00')
         self.img_path.mkdir(parents=True)
         self.task = MesoscopePreprocess(self.session_path, one=ONE(**TEST_DB))
+        self.img_path.joinpath('_ibl_rawImagingData.meta.json').touch()
+        self.tifs = [self.img_path.joinpath(f'2024-01-01_1_subject_00001_0000{i}.tif') for i in range(5)]
+        for file in self.tifs:
+            file.touch()
 
     def test_meta(self):
         """
@@ -37,7 +43,7 @@ class TestMesoscopePreprocess(unittest.TestCase):
         """
         expected = {
             'data_path': [str(self.img_path)],
-            'save_path0': str(self.session_path.joinpath('alf')),
+            'save_path0': str(self.session_path),
             'fast_disk': '',
             'look_one_level_down': False,
             'num_workers': -1,
@@ -68,6 +74,7 @@ class TestMesoscopePreprocess(unittest.TestCase):
         }
 
         meta = {
+            'nFrames': 2000,
             'scanImageParams': {'hStackManager': {'zs': 320},
                                 'hRoiManager': {'scanVolumeRate': 6.8}},
             'FOV': [{'topLeftDeg': [-1, 1.3], 'topRightDeg': [3, 1.3], 'bottomLeftDeg': [-1, 5.2],
@@ -75,20 +82,10 @@ class TestMesoscopePreprocess(unittest.TestCase):
         }
         with open(self.img_path.joinpath('_ibl_rawImagingData.meta.json'), 'w') as f:
             json.dump(meta, f)
-        self.img_path.joinpath('test.tif').touch()
         with mock.patch.object(self.task, 'get_default_tau', return_value=1.5):
-            _ = self.task.run(run_suite2p=False, rename_files=False)
-        self.assertEqual(self.task.status, 0)
-        self.assertDictEqual(self.task.kwargs, expected)
-        # {k: v for k, v in self.task.kwargs.items() if expected[k] != v}
-        # Now overwrite a specific option with task.run kwarg
-        with mock.patch.object(self.task, 'get_default_tau', return_value=1.5):
-            _ = self.task.run(run_suite2p=False, rename_files=False, nchannels=2, delete_bin=True)
-        self.assertEqual(self.task.status, 0)
-        self.assertEqual(self.task.kwargs['nchannels'], 2)
-        self.assertEqual(self.task.kwargs['delete_bin'], True)
-        with open(self.img_path.joinpath('_ibl_rawImagingData.meta.json'), 'w') as f:
-            json.dump({}, f)
+            metadata, _ = self.task.load_meta_files()
+            ops = self.task._meta2ops(metadata)
+        self.assertDictEqual(ops, expected)
 
     def test_get_default_tau(self):
         """Test for MesoscopePreprocess.get_default_tau method."""
@@ -99,6 +96,110 @@ class TestMesoscopePreprocess(unittest.TestCase):
             self.assertEqual(self.task.get_default_tau(), .7)
             subject_detail['genotype'].pop(1)
             self.assertEqual(self.task.get_default_tau(), 1.5)  # return the default value
+
+    def test_consolidate_exptQC(self):
+        """Test for MesoscopePreprocess._consolidate_exptQC method."""
+        exptQC = [
+            {'frameQC_names': np.array(['ok', 'PMT off', 'galvos fault', 'high signal'], dtype=object),
+             'frameQC_frames': np.array([0, 0, 0, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 4])},
+            {'frameQC_names': np.array(['ok', 'PMT off', 'foo', 'galvos fault', np.array([])], dtype=object),
+             'frameQC_frames': np.array([0, 0, 1, 1, 2, 2, 2, 2, 3, 4])},
+            {'frameQC_names': 'ok',  # check with single str instead of array
+             'frameQC_frames': np.array([0, 0])}
+        ]
+
+        # Check concatinates frame QC arrays
+        frame_qc, frame_qc_names, bad_frames = self.task._consolidate_exptQC(exptQC)
+        # Check frame_qc array
+        expected_frames = [
+            0, 0, 0, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 5, 0, 0, 1, 1, 4, 4, 4, 4, 2, 5, 0, 0]
+        np.testing.assert_array_equal(expected_frames, frame_qc)
+        # Check bad_frames array
+        expected = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 18, 19, 20, 21, 22, 23, 24, 25]
+        np.testing.assert_array_equal(expected, bad_frames)
+        # Check frame_qc_names data frame
+        self.assertCountEqual(['qc_values', 'qc_labels'], frame_qc_names.columns)
+        self.assertEqual(list(range(6)), frame_qc_names['qc_values'].tolist())
+        expected = ['ok', 'PMT off', 'galvos fault', 'high signal', 'foo', 'unknown']
+        self.assertCountEqual(expected, frame_qc_names['qc_labels'].tolist())
+
+    def test_setup_uncompressed(self):
+        """Test set up behaviour when raw tifs present."""
+        # Test signature when clobber = True
+        self.task.overwrite = True
+        raw = self.task.signature['input_files'][1]
+        self.assertEqual(2, len(raw.identifiers))
+        self.assertEqual('*.tif', raw.identifiers[0][-1])
+        # When clobber is False, a data.bin datasets are included as input
+        self.task.overwrite = False
+        raw = self.task.signature['input_files'][1]
+        self.assertEqual(3, len(raw.identifiers))
+        self.assertEqual('data.bin', raw.identifiers[0][-1])
+        # After setup and teardown the tif files should not have been removed
+        self.task.setUp()
+        self.task.tearDown()
+        self.assertTrue(all(map(Path.exists, self.tifs)), 'tifs unexpectedly removed')
+
+    def test_setup_compressed(self):
+        """Test set up behaviour when only compressed tifs present."""
+        # Make compressed file
+        outfile = self.img_path.joinpath('imaging.frames.tar.bz2')
+        cmd = 'tar -cjvf "{output}" "{input}"'.format(
+            output=outfile.relative_to(self.img_path),
+            input='" "'.join(str(x.relative_to(self.img_path)) for x in self.tifs))
+        process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=self.img_path)
+        info, error = process.communicate()  # b'2023-02-17_2_test_2P_00001_00001.tif\n'
+        assert process.returncode == 0, f'compression failed: {error.decode()}'
+        for file in self.tifs:
+            file.unlink()
+
+        self.task.setUp()
+        self.assertTrue(all(map(Path.exists, self.tifs)))
+        self.assertTrue(self.img_path.joinpath('imaging.frames.tar.bz2').exists())
+        self.task.tearDown()
+        self.assertFalse(any(map(Path.exists, self.tifs)))
+
+    def test_roi_detection(self):
+        """Test roi_detection method.
+
+        This simply tests that the input ops are modified and that suite2p is called
+        and it's return value is returned.
+        """
+        run_plane_mock = sys.modules['suite2p'].run_plane
+        run_plane_mock.reset_mock()
+        run_plane_mock.return_value = {'foo': 'bar'}
+        ret = self.task.roi_detection({'do_registration': True, 'bar': 'baz'})
+        self.assertEqual(ret, {'foo': 'bar'}, 'failed to return suite2p function return value')
+        run_plane_mock.assert_called_once_with({'do_registration': False, 'bar': 'baz', 'roidetect': True})
+
+    def test_image_motion_registration(self):
+        """Test image_motion_registration method."""
+        motion_reg_mock = sys.modules['suite2p'].run_plane
+        motion_reg_mock.reset_mock()
+        ops = {'foo': 'bar'}
+        ret = {'regDX': np.array([2, 3, 4]), 'regPC': np.array([4, 5, 6]), 'tPC': 5}
+        motion_reg_mock.return_value = ret
+        metrics = self.task.image_motion_registration(ops)
+        expected = ('regDX', 'regPC', 'tPC', 'reg_metrics_avg', 'reg_metrics_max')
+        self.assertCountEqual(expected, metrics.keys())
+        self.assertEqual(3, metrics['reg_metrics_avg'])
+        self.assertEqual(4, metrics['reg_metrics_max'])
+        motion_reg_mock.assert_called_once_with(
+            {'foo': 'bar', 'do_registration': True, 'do_regmetrics': True, 'roidetect': False})
+
+    def test_get_plane_paths(self):
+        """Test _get_plane_paths method."""
+        path = self.session_path.joinpath('suite2p')
+        self.assertEqual([], self.task._get_plane_paths(path))
+        path.mkdir()
+        for i in range(13):
+            path.joinpath(f'plane{i}').mkdir()
+        plane_paths = self.task._get_plane_paths(path)
+        self.assertEqual(13, len(plane_paths))
+        self.assertTrue(all(isinstance(x, Path) for x in plane_paths))
+        expected = ['plane9', 'plane10', 'plane11', 'plane12']
+        actual = [str(p.relative_to(path)) for p in plane_paths[-4:]]
+        self.assertEqual(expected, actual, 'failed to nat sort')
 
     def tearDown(self) -> None:
         self.td.cleanup()
@@ -254,17 +355,55 @@ class TestRegisterFOV(unittest.TestCase):
 
 class TestImagingMeta(unittest.TestCase):
     """Test raw imaging metadata versioning."""
+
+    @staticmethod
+    def _fov_deg(old=False):
+        if old:
+            old_fov_keys = ['topLeftDeg', 'topRightDeg', 'bottomLeftDeg', 'bottomRightDeg']
+            return {k: v for v, k in enumerate(old_fov_keys)}
+        else:
+            new_fov_keys = ['topLeft', 'topRight', 'bottomLeft', 'bottomRight']
+            return {'Deg': {k: v for v, k in enumerate(new_fov_keys)}}
+
     def test_patch_imaging_meta(self):
         """Test for ibllib.io.extractors.mesoscope.patch_imaging_meta function."""
-        meta = {'version': '0.1.0', 'FOV': [{'roiUuid': None}, {'roiUUID': None}]}
+        # Some params that were always defined
+        base = {
+            'centerMM': {'ML': 3, 'AP': -5}, 'centerDeg': {'x': 90, 'y': 180},
+            'imageOrientation': {'positiveML': [0, -1], 'positiveAP': [-1, 0]},
+            'scanImageParams': {'objectiveResolution': 150},
+            'coordsTF': [[0.15, 0.], [0., -0.15], [2.7, -2.6]]
+        }
+        # Test roiUuid -> roiUUID
+        meta = {
+            'version': '0.1.0', 'nFrames': 2000, 'FOV': [
+                {'roiUuid': None, **self._fov_deg(False)},
+                {'roiUUID': None, **self._fov_deg(False)}], **base
+        }
         new_meta = mesoscope.patch_imaging_meta(meta)
-        self.assertEqual(set(chain(*map(dict.keys, new_meta['FOV']))), {'roiUUID'})
-        meta = {'FOV': [
-            dict.fromkeys(['topLeftDeg', 'topRightDeg', 'bottomLeftDeg', 'bottomRightDeg']),
-            dict.fromkeys(['topLeftMM', 'topRightMM', 'bottomLeftMM', 'bottomRightMM'])
-        ]}
+        self.assertEqual(set(chain(*map(dict.keys, new_meta['FOV']))), {'roiUUID', 'Deg', 'MM'})
+        # Test topLeftDeg -> Deg.topLeft, etc.
+        meta = {'nFrames': 2000, 'FOV': [self._fov_deg(True), self._fov_deg(True)], **base}
         new_meta = mesoscope.patch_imaging_meta(meta)
         self.assertIn('channelSaved', new_meta)
         self.assertCountEqual(new_meta['FOV'][0], ('Deg', 'MM'))
         expected = ('topLeft', 'topRight', 'bottomLeft', 'bottomRight')
         self.assertCountEqual(new_meta['FOV'][0]['MM'], expected)
+        # Check coordsTF and Deg field updated
+        self.assertIsInstance(new_meta['coordsTF'], list)
+        expected = np.array([[-0., -0.15], [-0.15, 0.], [3., -5.]])
+        np.testing.assert_array_equal(expected, new_meta['coordsTF'])
+        expected = np.array([[30., 8.5], [29.85, 8.35], [29.7, 8.2], [29.55, 8.05]])
+        actual = np.r_[[np.round(np.array(x), 3) for x in new_meta['FOV'][0]['MM'].values()]]
+        np.testing.assert_array_equal(expected, actual)
+        # Patch should not happen if coordTF unchanged
+        meta = deepcopy(new_meta)
+        meta['FOV'][0]['MM']['topLeft'] = [0, 0]
+        new_meta = mesoscope.patch_imaging_meta(meta)
+        self.assertEqual(meta['FOV'][0]['MM']['topLeft'], new_meta['FOV'][0]['MM']['topLeft'])
+        # And if version is new enough
+        meta['version'] = '1.5.0'
+        expected = [[0., -20.], [0., -0.30], [3.0, 4.6]]
+        meta['coordsTF'] = expected
+        new_meta = mesoscope.patch_imaging_meta(meta)
+        self.assertEqual(expected, new_meta['coordsTF'])
