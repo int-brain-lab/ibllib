@@ -13,7 +13,10 @@ from one.webclient import AlyxClient, no_cache
 from one.converters import ConversionMixin
 import one.alf.exceptions as alferr
 from one.api import ONE
-from one.util import datasets2records
+try:
+    from one.util import datasets2records
+except ImportError:
+    from one.converters import datasets2records
 from iblutil.util import ensure_list
 
 import ibllib
