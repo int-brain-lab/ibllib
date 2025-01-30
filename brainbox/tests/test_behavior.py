@@ -251,7 +251,7 @@ class TestTraining(unittest.TestCase):
             'ready4ephysrig': ['2019-04-10', 'abf5109c-d780-44c8-9561-83e857c7bc01'],
             'ready4recording': ['2019-04-11', '7dc3c44b-225f-4083-be3d-07b8562885f4']
         }
-        
+
         # Mock output of subjects read endpoint only
         side_effect = partial(self._rest_mock, one.alyx.rest, {'json': {'trained_criteria': status_map}})
         with mock.patch.object(one.alyx, 'rest', side_effect=side_effect):
@@ -274,7 +274,7 @@ class TestTraining(unittest.TestCase):
 
     def _rest_mock(self, alyx_rest, return_value, *args, **kwargs):
         """Mock return value of AlyxClient.rest function depending on input.
-        
+
         If using the subjects endpoint, return `return_value`. Otherwise, calls the original method.
 
         Parameters

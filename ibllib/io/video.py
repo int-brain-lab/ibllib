@@ -151,7 +151,7 @@ def get_video_meta(video_path, one=None):
 
 
 def url_from_eid(eid, label=None, one=None):
-    """Return the video URL(s) for a given eid.    
+    """Return the video URL(s) for a given eid.
 
     Parameters
     ----------
