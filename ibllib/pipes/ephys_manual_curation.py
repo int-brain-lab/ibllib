@@ -121,7 +121,7 @@ class ManualCuration:
             if self.one is not None:
                 self.eid = self.one.path2eid(self.session_path)
                 if not self.eid:
-                    self.log.warning('Failed to determine eID from session path')
+                    _logger.warning('Failed to determine eID from session path')
 
         self.spike_sorter = spike_sorter
         self.pname = pname
@@ -160,7 +160,7 @@ class ManualCuration:
 
         # Double check that the manually curated clusters is not the same as the original clusters file, if it is
         # no manual creation has taken place so there is no need to proceed
-        cluster_check = self.check_clusters()
+        cluster_check = self.check_cluster_file()
         if not cluster_check:
             # If the cluster check fails, return, we don't proceed
             return
@@ -189,7 +189,7 @@ class ManualCuration:
         self.cleanup()
 
         # Register and upload the files
-        self.upload_files(files)
+        self.upload_data(files)
 
     def check_cluster_file(self):
         """
@@ -243,8 +243,8 @@ class ManualCuration:
             If the tar spikesorting is available returns string `tar_ss`, if not available returns None
         """
 
-        ss_tar_collection = f'spikesorters/{self.spike_sorter}/{self.pname}'
-        ss_tar_fname = '_kilosort_output.raw.tar'
+        ss_tar_collection = f'spike_sorters/{self.spike_sorter}/{self.pname}'
+        ss_tar_fname = '_kilosort_raw.output.tar'
         ss_tar_dset = self.one.list_datasets(self.eid, ss_tar_fname, collection=ss_tar_collection)
         if len(ss_tar_dset) >= 1:
             ss_tar_output = self.conversion_path.joinpath('tar_ss')
@@ -273,7 +273,7 @@ class ManualCuration:
         ss_alf_output = self.conversion_path.joinpath('alf_ss')
         ss_alf_output.mkdir(exist_ok=True, parents=True)
 
-        ss_alf_files = self.one.load_datasets(self.eid, ALF_SS_FILES, collection=self.alf_collection, download_only=True)
+        ss_alf_files, _ = self.one.load_datasets(self.eid, ALF_SS_FILES, collections=self.alf_collection, download_only=True)
         for file in ss_alf_files:
             shutil.copy(file, ss_alf_output.joinpath(file.name))
 
@@ -467,4 +467,4 @@ class ManualCuration:
         # Remove all the subfolders in the temporary directory
         shutil.rmtree(self.conversion_path)
         # Remove the empty temporary directory
-        self.conversion_path.unlink()
+        shutil.rmtree(self.conversion_path.parent)
