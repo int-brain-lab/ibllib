@@ -918,7 +918,8 @@ class SpikeSortingLoader:
         :param missing: 'raise' (default) or 'ignore'
         :return:
         """
-        spike_sorter = (spike_sorter or self.spike_sorter) or 'iblsorter'
+        if spike_sorter is None:
+            spike_sorter = self.spike_sorter if self.spike_sorter is not None else 'iblsorter'
         if len(self.collections) == 0:
             return {}, {}, {}
         self.collection = self._get_spike_sorting_collection(spike_sorter=spike_sorter)
