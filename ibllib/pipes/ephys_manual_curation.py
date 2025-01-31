@@ -23,6 +23,7 @@ import shutil
 import tarfile
 
 from ibllib.ephys import ephysqc, spikes
+from ibllib.ephys.spikes import ks2_to_alf
 from ibllib.pipes.ephys_tasks import SpikeSorting
 import one.alf.io as alfio
 from one.alf import spec
@@ -338,7 +339,7 @@ class ManualCuration:
         # Move the new spike cluster file to correct location
         shutil.copy(self.cluster_file, self.conversion_path.joinpath('tar_ss', 'spike_clusters.npy'))
 
-        spikes.ks2_to_alf(
+        ks2_to_alf(
             self.conversion_path.joinpath('tar_ss'),
             bin_path=self.bin_path,
             out_path=self.out_path,
