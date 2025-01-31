@@ -151,12 +151,26 @@ def get_video_meta(video_path, one=None):
 
 
 def url_from_eid(eid, label=None, one=None):
-    """Return the video URL(s) for a given eid
+    """Return the video URL(s) for a given eid.
 
-    :param eid: The session id
-    :param label: The video label (e.g. 'body') or a tuple thereof
-    :param one: An instance of ONE
-    :return: The URL string if the label is a string, otherwise a dict of urls with labels as keys
+    Parameters
+    ----------
+    eid : UUID, str
+        The session ID.
+    label : str, tuple of str
+        The video label (e.g. 'body') or a tuple thereof.
+    one : one.api.One
+        An instance of ONE.
+
+    Returns
+    -------
+    str, dict of str
+        The URL string if the label is a string, otherwise a dict of urls with labels as keys.
+
+    Raises
+    ------
+    ValueError
+        Video label is unreckognized.  See `VIDEO_LABELS` for valid labels.
     """
     valid_labels = VIDEO_LABELS
     if not (label is None or np.isin(label, valid_labels).all()):

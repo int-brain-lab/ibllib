@@ -16,12 +16,11 @@ class TestQC(unittest.TestCase):
     """Test base QC class."""
 
     eid = None
-    """str: An experiment UUID to use for updating QC fields."""
+    """UUID: An experiment UUID to use for updating QC fields."""
 
     @classmethod
     def setUpClass(cls):
-        _, eid = register_new_session(one, subject='ZM_1150')
-        cls.eid = str(eid)
+        _, cls.eid = register_new_session(one, subject='ZM_1150')
 
     def setUp(self) -> None:
         ses = one.alyx.rest('sessions', 'partial_update', id=self.eid, data={'qc': 'NOT_SET'})
@@ -67,7 +66,7 @@ class TestQC(unittest.TestCase):
         current = self.qc.update(outcome)
         self.assertIs(spec.QC.PASS, current, 'Failed to update QC field')
         # Check that extended QC field was updated
-        extended = one.alyx.get('/sessions/' + self.eid, clobber=True)['extended_qc']
+        extended = one.alyx.get('/sessions/' + str(self.eid), clobber=True)['extended_qc']
         updated = 'experimenter' in extended and extended['experimenter'] == outcome
         self.assertTrue(updated, 'failed to update extended_qc field')
         # Check that outcome property is set
@@ -78,7 +77,7 @@ class TestQC(unittest.TestCase):
         namespace = 'task'
         current = self.qc.update(outcome, namespace=namespace)
         self.assertIs(spec.QC.FAIL, current, 'Failed to update QC field')
-        extended = one.alyx.get('/sessions/' + self.eid, clobber=True)['extended_qc']
+        extended = one.alyx.get('/sessions/' + str(self.eid), clobber=True)['extended_qc']
         updated = namespace in extended and extended[namespace] == outcome.upper()
         self.assertTrue(updated, 'failed to update extended_qc field')
 
@@ -87,7 +86,7 @@ class TestQC(unittest.TestCase):
         namespace = 'task'
         current = self.qc.update(outcome)
         self.assertNotEqual(spec.QC.PASS, current, 'QC field updated with less severe outcome')
-        extended = one.alyx.get('/sessions/' + self.eid, clobber=True)['extended_qc']
+        extended = one.alyx.get('/sessions/' + str(self.eid), clobber=True)['extended_qc']
         updated = namespace in extended and extended[namespace] != outcome
         self.assertTrue(updated, 'failed to update extended_qc field')
 
@@ -96,7 +95,7 @@ class TestQC(unittest.TestCase):
         namespace = 'task'
         current = self.qc.update(outcome, override=True, namespace=namespace)
         self.assertEqual(spec.QC.NOT_SET, current, 'QC field updated with less severe outcome')
-        extended = one.alyx.get('/sessions/' + self.eid, clobber=True)['extended_qc']
+        extended = one.alyx.get('/sessions/' + str(self.eid), clobber=True)['extended_qc']
         updated = namespace in extended and extended[namespace] == outcome
         self.assertTrue(updated, 'failed to update extended_qc field')
 
