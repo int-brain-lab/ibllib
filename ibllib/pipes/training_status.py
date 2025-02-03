@@ -783,7 +783,7 @@ def display_info(df, axs):
             str_vals += f'{v}, '
         return str_vals[:-2]
 
-    pos = np.arange(len(criteria))[::-1] * 0.1
+    pos = np.arange(len(info))[::-1] * 0.1
     for i, (k, v) in enumerate(info.items()):
         str_v = _array_to_string(v)
         text = axs[0].text(0, pos[i], k.capitalize(), color='k', weight='bold', fontsize=8, transform=axs[0].transAxes)
