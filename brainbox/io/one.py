@@ -1510,7 +1510,7 @@ class SessionLoader:
         self.wheel = self.wheel.apply(np.float32)
         self.data_info.loc[self.data_info['name'] == 'wheel', 'is_loaded'] = True
 
-    def load_pose(self, likelihood_thr=0.9, views=['left', 'right', 'body']):
+    def load_pose(self, likelihood_thr=0.9, views=['left', 'right', 'body'], tracker='dlc'):
         """
         Function to load the pose estimation results (DLC) into SessionLoader.pose. SessionLoader.pose is a
         dictionary where keys are the names of the cameras for which pose data is loaded, and values are pandas
@@ -1524,13 +1524,16 @@ class SessionLoader:
             likelihood_thr=1. Default is 0.9
         views: list
             List of camera views for which to try and load data. Possible options are {'left', 'right', 'body'}
+        tracker : str
+            Tracking algorithm to load pose estimates from. Possible options are {'dlc', 'lightningPose'}
         """
         # empty the dictionary so that if one loads only one view, after having loaded several, the others don't linger
+        tracker = 'lightningPose' if tracker in ['lp', 'litpose'] else tracker
         self.pose = {}
         for view in views:
-            pose_raw = self.one.load_object(self.eid, f'{view}Camera', attribute=['dlc', 'times'], revision=self.revision or None)
+            pose_raw = self.one.load_object(self.eid, f'{view}Camera', attribute=[tracker, 'times'], revision=self.revision or None)
             # Double check if video timestamps are correct length or can be fixed
-            times_fixed, dlc = self._check_video_timestamps(view, pose_raw['times'], pose_raw['dlc'])
+            times_fixed, dlc = self._check_video_timestamps(view, pose_raw['times'], pose_raw[tracker])
             self.pose[f'{view}Camera'] = likelihood_threshold(dlc, likelihood_thr)
             self.pose[f'{view}Camera'].insert(0, 'times', times_fixed)
             self.data_info.loc[self.data_info['name'] == 'pose', 'is_loaded'] = True
