@@ -318,7 +318,7 @@ class TestMesoscopeFOV(unittest.TestCase):
             points = json.load(fH)
 
         with mock.patch.object(task, '_load_reference_stack', return_value=(stack, ref_meta)):
-            task.reproject(points)
+            task.reproject(points, display=True)
 
 
 class TestRegisterFOV(unittest.TestCase):

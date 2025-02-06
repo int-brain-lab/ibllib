@@ -1384,6 +1384,7 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
             ref_meta['rawScanImageMeta']['YResolution']
         ])
         if ref_meta['rawScanImageMeta']['ResolutionUnit'].casefold() == 'centimeter':
+            # NB: these values are (x, y) in um and shouldn't be used with mlap coordinates without rotation
             px_per_um = xy_res * 1e-4
             um_per_px = 1 / px_per_um
         else:
@@ -1398,39 +1399,20 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
         # An array of the positive ML and AP directions in (x, y) pixel space
         rotation_matrix = np.c_[ref_meta['imageOrientation']['positiveML'],
                                 ref_meta['imageOrientation']['positiveAP']]
-        if not np.all(np.logical_xor(*rotation_matrix)):
-            raise NotImplementedError('ML and AP must be orthogonal')
-        # if positive_mlap[0][1]:
-        #     # ML is 2nd dimension; for plotting let's transpose the image
-        #     stack = stack.transpose(0, 2, 1)
-        # ml_offset = np.sum(offset*positive_mlap[0])
-        # ap_offset = np.sum(offset*positive_mlap[1])
-        # positive_mlap = np.array([[0, -1], [1, 0]])
         craniotomy_center_offset = np.array([center['x'], center['y']]) * 1e3  # um from center
         mlap = np.array([center['ML'], center['AP']]) * 1e3  # um from bregma
 
         # Where is bregma in pixel space?
         # ml is along the y axis, and is positive, so longditudinal fissure is at a large +ve y value
-        # ref_stack_n_px[1]/2 = 270 px, which is mlap[0] = 2700 um from bregma, so absolute bregma ml
-        # distance is mlap[0] * px_per_um[1] = 270 so bregma is at 270 + 270 = 540 px
+        # ref_stack_n_px[1]/2 = 270 px, which is mlap[0] = 2600 um from bregma, so absolute bregma ml
+        # distance is mlap[0] * px_per_um[1] = 260 so bregma is at 260 + 270 = 530 px
         #
-        # ap is along the x axis, and is negative, so the top of the brain is at a large -ve x value
-        # ref_stack_n_px[0]/2 = 245 px, which is mlap[1] = -2600 um from bregma, so absolute bregma ap
-        # distance is mlap[1] * px_per_um[0] = 260 so bregma is at -260 - 245 = -15 px
+        # ap is along the x axis, and is negative, so the back of the brain is at a large -ve x value
+        # ref_stack_n_px[0]/2 = 245 px, which is mlap[1] = -2000 um from bregma, so absolute bregma ap
+        # distance is mlap[1] * px_per_um[0] = 200 so bregma is at 245 - 200  = 45 px
 
         def px2um(px):
-            """Map pixel (x, y) coordinates to MLAP coordinates.
-
-            Parameters:
-            pixel_coords (tuple): (x, y) coordinates of the pixel.
-            craniotomy_mlap (tuple): (ml, ap) coordinates of the craniotomy in mlap space.
-            craniotomy_pixel (tuple): (x, y) coordinates of the craniotomy in pixel space.
-            orientation_vector (tuple): (ml_vector, ap_vector) defining the direction of ml and ap with respect to x and y.
-            scaling_factor (float): Scaling factor to convert pixel distances to mlap units.
-
-            Returns:
-            tuple: (ml, ap) coordinates in mlap space.
-            """
+            """Map pixel (x, y) coordinates to MLAP coordinates."""
             # Calculate the pixel offset from the image center
             image_center_px = ref_stack_n_px / 2
             craniotomy_pixel = image_center_px - (craniotomy_center_offset / um_per_px)
@@ -1440,7 +1422,8 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
             pixel_offset_um = pixel_offset * um_per_px
 
             # Rotate the pixel offset using the orientation vector
-            rotated_offset = np.dot(rotation_matrix, pixel_offset_um)
+            inv_rotation_matrix = np.linalg.inv(rotation_matrix)
+            rotated_offset = np.dot(pixel_offset_um, inv_rotation_matrix)
 
             # Translate the rotated coordinates to the mlap space using the craniotomy coordinates
             mlap_coords = mlap + rotated_offset
@@ -1451,25 +1434,35 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
             """Maps mlap coordinates to pixel space."""
             # Calculate the mlap offset from the craniotomy coordinates
             mlap_offset = np.array(um) - np.array(mlap)
+            # Rotate the mlap offset using the orientation vector
+            rotated_offset_xy = np.dot(mlap_offset, rotation_matrix)
 
             # Apply the scaling factor to convert mlap distances to pixel units
-            mlap_offset_px = mlap_offset / um_per_px
-
-            # Rotate the mlap offset using the inverse orientation vector
-            inv_rotation_matrix = np.linalg.inv(rotation_matrix)
-            rotated_offset_px = np.dot(inv_rotation_matrix, mlap_offset_px)
+            rotated_offset_px = rotated_offset_xy / um_per_px
 
             # Translate the rotated coordinates to the pixel space using the craniotomy pixel coordinates
             image_center_px = ref_stack_n_px / 2
             craniotomy_pixel = image_center_px - (craniotomy_center_offset / um_per_px)
             return craniotomy_pixel + rotated_offset_px
 
+
         # Sanity checks
-        bregma_px = np.array([-15, 540])  # (x, y) coordinates of bregma in pixel space
+        bregma_px = np.array([45, 530])  # (x, y) coordinates of bregma in pixel space
         craniotomy_px = um2px(mlap)
         np.testing.assert_array_equal(um2px(mlap), ref_stack_n_px / 2)
         np.testing.assert_array_equal(px2um(craniotomy_px), mlap)
-        np.testing.assert_array_equal(um2px(np.array([0, 0])).astype(int), bregma_px)
+        np.testing.assert_array_equal(np.round(um2px([0, 0])).astype(int), bregma_px)
+        np.testing.assert_array_equal(px2um(um2px([0, 0])), [0, 0])
+
+        # Check works with multiple points
+        bregma_um = np.zeros((3, 2))
+        np.testing.assert_array_equal(np.round(um2px(bregma_um)), np.tile(bregma_px, (3, 1)))
+        np.testing.assert_array_equal(px2um(np.tile(craniotomy_px, (3, 1))), np.tile(mlap, (3, 1)))
+
+        # TODO All px
+        x1, x2 = np.meshgrid(np.arange(ref_stack_n_px[0]), np.arange(ref_stack_n_px[1]))
+        xy_coords = np.array((x1, x2)).T.reshape(-1, 2)
+        px2um(xy_coords)
 
         if display:  # pragma: no cover
             for i, point in enumerate(points['points']):
@@ -1506,7 +1499,7 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
                 # # secax_y.yaxis.set_tick_params(rotation=70)
 
                 fig.canvas.manager.set_window_title(f'Point {i} - stack #{point["stack_idx"]}')
-                plt.show()
+            plt.show()
 
     def _load_reference_stack(self):
         """Load the referenceImage.stack.tif file and its metadata.
