@@ -9,7 +9,7 @@ import cv2
 import pandas as pd
 import numpy as np
 
-from ibllib.qc.dlc import DlcQC
+from ibllib.qc.dlc import DlcQC, LpQC
 from ibllib.io import ffmpeg, raw_daq_loaders
 from ibllib.pipes import base_tasks
 from ibllib.io.video import get_video_meta
@@ -20,7 +20,7 @@ from ibllib.qc.camera import run_all_qc as run_camera_qc, CameraQC
 from ibllib.misc import check_nvidia_driver
 from ibllib.io.video import label_from_path, assert_valid_label
 from ibllib.plots.snapshot import ReportSnapshot
-from ibllib.plots.figures import dlc_qc_plot
+from ibllib.plots.figures import dlc_qc_plot, lp_qc_plot
 from brainbox.behavior.dlc import likelihood_threshold, get_licks, get_pupil_diameter, get_smooth_pupil_diameter
 
 _logger = logging.getLogger('ibllib')
@@ -803,3 +803,158 @@ class LightningPose(base_tasks.VideoTask):
             self.status = -1
 
         return actual_outputs
+
+
+class PostLP(base_tasks.VideoTask):
+    """
+    The PostLP task takes LP traces as input and computes useful quantities, as well as qc.
+
+    This can be run on a single camera view or multiple camera views.
+    """
+    io_charge = 90
+    level = 3
+    force = True
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.trials_collection = kwargs.get('trials_collection', 'alf')
+
+    @property
+    def signature(self):
+        return {
+            'input_files': [(f'_ibl_{cam}Camera.lightningPose.pqt', 'alf', True) for cam in self.cameras] +
+                           [(f'_ibl_{cam}Camera.times.npy', 'alf', True) for cam in self.cameras] +
+            # the following are required for the LP plot only
+            # they are not strictly required, some plots just might be skipped
+            # In particular the raw videos don't need to be downloaded as they can be streamed
+                           # [(f'_iblrig_{cam}Camera.raw.mp4', self.device_collection, True) for cam in self.cameras] +
+                           [(f'{cam}ROIMotionEnergy.position.npy', 'alf', False) for cam in self.cameras] +
+                           [(f'{cam}Camera.ROIMotionEnergy.npy', 'alf', False) for cam in self.cameras] +
+            # The trials table is used in the LP QC, however this is not an essential dataset
+                           [('_ibl_trials.table.pqt', self.trials_collection, False),
+                            ('_ibl_wheel.position.npy', self.trials_collection, False),
+                            ('_ibl_wheel.timestamps.npy', self.trials_collection, False)],
+            'output_files': [(f'_ibl_{cam}Camera.features.pqt', 'alf', True) for cam in self.cameras] +
+                            [('licks.times.npy', 'alf', True)]
+        }
+
+    def _run(self, overwrite=True, run_qc=True, plot_qc=True):
+        """
+        Run the PostLP task. Returns a list of file locations for the output files in signature. The created plot
+        (lp_qc_plot.png) is not returned, but saved in session_path/snapshots and uploaded to Alyx as a note.
+
+        :param overwrite: bool, whether to recompute existing output files (default is False).
+                          Note that the lp_qc_plot will be (re-)computed even if overwrite = False
+        :param run_qc: bool, whether to run the LP QC (default is True)
+        :param plot_qc: book, whether to create the lp_qc_plot (default is True)
+
+        """
+        # Check if output files exist locally
+        exist, output_files = self.assert_expected(self.output_files, silent=True)
+        if exist and not overwrite:
+            _logger.warning('PostLP outputs exist and overwrite=False, skipping computations of outputs.')
+        else:
+            if exist and overwrite:
+                _logger.warning('PostLP outputs exist and overwrite=True, overwriting existing outputs.')
+
+            combined_licks = []
+            output_files = []
+            for cam in self.cameras:
+                pose_file = self.session_path.joinpath('alf', f'_ibl_{cam}Camera.lightningPose.pqt')
+                _logger.info(f'Running on {cam} video')
+                _logger.debug(pose_file)
+
+                # Catch unforeseen exceptions and move on to next cam
+                try:
+                    # load pose traces and camera times
+                    pose = pd.read_parquet(pose_file)
+                    pose_thresh = likelihood_threshold(pose, 0.9)
+                    # try to load respective camera times
+                    try:
+                        pose_t = np.load(next(Path(self.session_path).joinpath('alf').rglob(f'_ibl_{cam}Camera.times.*npy')))
+                        times = True
+                        if pose_t.shape[0] == 0:
+                            _logger.error(f'camera.times empty for {cam} camera. '
+                                          f'Computations using camera.times will be skipped')
+                            self.status = -1
+                            times = False
+                        elif pose_t.shape[0] < len(pose_thresh):
+                            _logger.error(f'Camera times shorter than LP traces for {cam} camera. '
+                                          f'Computations using camera.times will be skipped')
+                            self.status = -1
+                            times = 'short'
+                    except StopIteration:
+                        self.status = -1
+                        times = False
+                        _logger.error(f'No camera.times for {cam} camera. '
+                                      f'Computations using camera.times will be skipped')
+                    # These features are only computed from left and right cam
+                    if cam in ('left', 'right'):
+                        features = pd.DataFrame()
+                        # If camera times are available, get the lick time stamps for combined array
+                        if times is True:
+                            _logger.info(f'Computing lick times for {cam} camera.')
+                            combined_licks.append(get_licks(pose_thresh, pose_t))
+                        elif times is False:
+                            _logger.warning(f'Skipping lick times for {cam} camera as no camera.times available')
+                        elif times == 'short':
+                            _logger.warning(f'Skipping lick times for {cam} camera as camera.times are too short')
+                        # Compute pupil diameter, raw and smoothed
+                        _logger.info(f'Computing raw pupil diameter for {cam} camera.')
+                        # use ensemble median for "raw" diameter; use standard outputs (eks) for "smooth" diameter
+                        pupil_df_raw = pd.DataFrame()
+                        for point in ['top', 'bottom', 'left', 'right']:
+                            for coord in ['x', 'y']:
+                                pupil_df_raw[f'pupil_{point}_r_{coord}'] = pose_thresh[f'pupil_{point}_r_{coord}_ens_median']
+                        features['pupilDiameter_raw'] = get_pupil_diameter(pupil_df_raw)
+                        _logger.info(f'Computing smooth pupil diameter for {cam} camera.')
+                        features['pupilDiameter_smooth'] = get_pupil_diameter(pose_thresh)
+                        # Save to parquet
+                        features_file = Path(self.session_path).joinpath('alf', f'_ibl_{cam}Camera.features.pqt')
+                        features.to_parquet(features_file)
+                        output_files.append(features_file)
+
+                    # For all cams, compute LP QC if times available
+                    if run_qc is True and times in [True, 'short']:
+                        # Setting download_data to False because at this point the data should be there
+                        qc = LpQC(self.session_path, side=cam, one=self.one, download_data=False)
+                        qc.run(update=True)
+                    else:
+                        if times is False:
+                            _logger.warning(f'Skipping QC for {cam} camera as no camera.times available')
+                        if not run_qc:
+                            _logger.warning(f'Skipping QC for {cam} camera as run_qc=False')
+
+                except Exception:
+                    _logger.error(traceback.format_exc())
+                    self.status = -1
+                    continue
+
+            # Combined lick times
+            if len(combined_licks) > 0:
+                lick_times_file = Path(self.session_path).joinpath('alf', 'licks.times.npy')
+                np.save(lick_times_file, sorted(np.concatenate(combined_licks)))
+                output_files.append(lick_times_file)
+            else:
+                _logger.warning('No lick times computed for this session.')
+
+        if plot_qc:
+            _logger.info('Creating LP QC plot')
+            try:
+                session_id = self.one.path2eid(self.session_path)
+                fig_path = self.session_path.joinpath('snapshot', 'lp_qc_plot.png')
+                if not fig_path.parent.exists():
+                    fig_path.parent.mkdir(parents=True, exist_ok=True)
+                fig = lp_qc_plot(self.session_path, one=self.one, cameras=self.cameras, device_collection=self.device_collection,
+                                 trials_collection=self.trials_collection)
+                fig.savefig(fig_path)
+                fig.clf()
+                snp = ReportSnapshot(self.session_path, session_id, one=self.one)
+                snp.outputs = [fig_path]
+                snp.register_images(widths=['orig'], function=str(dlc_qc_plot.__module__) + '.' + str(dlc_qc_plot.__name__))
+            except Exception:
+                _logger.error('Could not create and/or upload LP QC Plot')
+                _logger.error(traceback.format_exc())
+                self.status = -1
+
+        return output_files

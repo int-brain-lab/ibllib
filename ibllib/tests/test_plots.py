@@ -169,6 +169,24 @@ class TestDlcQcPlot(unittest.TestCase):
         #     self.assertEqual(im.size, (1700, 1000))
 
 
+class TestLpQcPlot(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp_dir = tempfile.TemporaryDirectory()
+        cls.one = ONE(**TEST_DB)
+
+    @classmethod
+    def tearDownClass(cls):
+        # Clean up tmp dir
+        cls.tmp_dir.cleanup()
+
+    def test_without_inputs(self):
+        eid = '3473f9d2-aa5d-41a6-9048-c65d0b7ab97c'
+        with self.assertRaises(AssertionError):
+            lp_qc_plot(self.one.eid2path(eid), self.one)
+
+
 class TestMiscPlot(unittest.TestCase):
 
     def test_star_plot(self):
