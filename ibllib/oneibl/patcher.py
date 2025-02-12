@@ -189,7 +189,10 @@ class Patcher(abc.ABC):
             return
         # from the dataset info, set flatIron flag to exists=True
         for p, d in zip(file_list, response):
-            self._patch_dataset(p, dset_id=d['id'], revision=d['revision'], dry=dry, ftp=ftp)
+            try:
+                self._patch_dataset(p, dset_id=d['id'], revision=d['revision'], dry=dry, ftp=ftp)
+            except Exception as e:
+                raise Exception(f'Error registering file {p}') from e
         return response
 
     def patch_datasets(self, file_list, **kwargs):

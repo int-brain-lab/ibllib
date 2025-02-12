@@ -899,12 +899,13 @@ class SpikeSortingLoader:
         self.download_spike_sorting_object(obj, *args, **kwargs)
         return self._load_object(self.files[obj])
 
-    def get_version(self, spike_sorter='pykilosort'):
+    def get_version(self, spike_sorter=None):
+        spike_sorter = (spike_sorter or self.spike_sorter) or 'iblsorter'
         collection = self._get_spike_sorting_collection(spike_sorter=spike_sorter)
         dset = self.one.alyx.rest('datasets', 'list', session=self.eid, collection=collection, name='spikes.times.npy')
         return dset[0]['version'] if len(dset) else 'unknown'
 
-    def download_spike_sorting_object(self, obj, spike_sorter='pykilosort', dataset_types=None, collection=None,
+    def download_spike_sorting_object(self, obj, spike_sorter=None, dataset_types=None, collection=None,
                                       attribute=None, missing='raise', **kwargs):
         """
         Downloads an ALF object
@@ -917,6 +918,8 @@ class SpikeSortingLoader:
         :param missing: 'raise' (default) or 'ignore'
         :return:
         """
+        if spike_sorter is None:
+            spike_sorter = self.spike_sorter if self.spike_sorter is not None else 'iblsorter'
         if len(self.collections) == 0:
             return {}, {}, {}
         self.collection = self._get_spike_sorting_collection(spike_sorter=spike_sorter)

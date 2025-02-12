@@ -1,3 +1,15 @@
+## Release Note 3.2.0
+
+### features
+- Add session delay info during registration of Bpod session
+- Add detailed criteria info to behaviour plots
+- Add column filtering, sorting and color-coding of values to metrics table of
+  task_qc_viewer
+
+### Bugfixes
+- Read in updated json keys from task settings to establish ready4recording
+- Handle extraction of sessions with dud spacers
+
 ## Release Note 3.1.0
 
 ### features

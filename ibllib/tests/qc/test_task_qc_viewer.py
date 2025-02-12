@@ -66,6 +66,7 @@ class TestTaskQC(unittest.TestCase):
         qc_mock.compute_session_status.return_value = ('Fail', qc_mock.metrics, {'foo': 'FAIL'})
         qc_mock.extractor.data = {'intervals': np.array([[0, 1]])}
         qc_mock.extractor.frame_ttls = qc_mock.extractor.audio_ttls = qc_mock.extractor.bpod_ttls = mock.MagicMock()
+        qc_mock.passed = dict()
 
         active_task = mock.Mock(spec=ChoiceWorldTrialsNidq, unsafe=True)
         active_task.run_qc.return_value = qc_mock

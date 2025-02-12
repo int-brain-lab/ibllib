@@ -1135,7 +1135,7 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
             assert set(fov.keys()) >= {'MLAPDV', 'nXnYnZ', 'roiUUID'}
             # Field of view
             alyx_FOV = {
-                'session': self.session_path.as_posix() if dry else self.path2eid(),
+                'session': self.session_path.as_posix() if dry else str(self.path2eid()),
                 'imaging_type': 'mesoscope', 'name': f'FOV_{i:02}',
                 'stack': stack_ids.get(fov['roiUUID'])
             }

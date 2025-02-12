@@ -1,6 +1,7 @@
 from pathlib import Path
 import unittest
 from unittest import mock
+from functools import partial
 import numpy as np
 import pickle
 import copy
@@ -177,58 +178,65 @@ class TestTraining(unittest.TestCase):
         trials, task_protocol = self._get_trials(
             sess_dates=['2020-08-25', '2020-08-24', '2020-08-21'])
         assert (np.all(np.array(task_protocol) == 'training'))
-        status, info = train.get_training_status(
+        status, info, crit = train.get_training_status(
             trials, task_protocol, ephys_sess_dates=[], n_delay=0)
         assert (status == 'in training')
+        assert (crit['Criteria']['val'] == 'trained_1a')
 
     def test_trained_1a(self):
         trials, task_protocol = self._get_trials(
             sess_dates=['2020-08-26', '2020-08-25', '2020-08-24'])
         assert (np.all(np.array(task_protocol) == 'training'))
-        status, info = train.get_training_status(trials, task_protocol, ephys_sess_dates=[],
-                                                 n_delay=0)
+        status, info, crit = train.get_training_status(trials, task_protocol, ephys_sess_dates=[],
+                                                       n_delay=0)
         assert (status == 'trained 1a')
+        assert (crit['Criteria']['val'] == 'trained_1b')
 
     def test_trained_1b(self):
         trials, task_protocol = self._get_trials(
             sess_dates=['2020-08-27', '2020-08-26', '2020-08-25'])
         assert (np.all(np.array(task_protocol) == 'training'))
-        status, info = train.get_training_status(trials, task_protocol, ephys_sess_dates=[],
-                                                 n_delay=0)
+        status, info, crit = train.get_training_status(trials, task_protocol, ephys_sess_dates=[],
+                                                       n_delay=0)
         self.assertEqual(status, 'trained 1b')
+        assert (crit['Criteria']['val'] == 'ready4ephysrig')
 
     def test_training_to_bias(self):
         trials, task_protocol = self._get_trials(
             sess_dates=['2020-08-31', '2020-08-28', '2020-08-27'])
         assert (~np.all(np.array(task_protocol) == 'training') and
                 np.any(np.array(task_protocol) == 'training'))
-        status, info = train.get_training_status(trials, task_protocol, ephys_sess_dates=[],
-                                                 n_delay=0)
+        status, info, crit = train.get_training_status(trials, task_protocol, ephys_sess_dates=[],
+                                                       n_delay=0)
         assert (status == 'trained 1b')
+        assert (crit['Criteria']['val'] == 'ready4ephysrig')
 
     def test_ready4ephys(self):
         sess_dates = ['2020-09-01', '2020-08-31', '2020-08-28']
         trials, task_protocol = self._get_trials(sess_dates=sess_dates)
         assert (np.all(np.array(task_protocol) == 'biased'))
-        status, info = train.get_training_status(trials, task_protocol, ephys_sess_dates=[],
-                                                 n_delay=0)
+        status, info, crit = train.get_training_status(trials, task_protocol, ephys_sess_dates=[],
+                                                       n_delay=0)
         assert (status == 'ready4ephysrig')
+        assert (crit['Criteria']['val'] == 'ready4delay')
 
     def test_ready4delay(self):
         sess_dates = ['2020-09-03', '2020-09-02', '2020-08-31']
         trials, task_protocol = self._get_trials(sess_dates=sess_dates)
         assert (np.all(np.array(task_protocol) == 'biased'))
-        status, info = train.get_training_status(trials, task_protocol,
-                                                 ephys_sess_dates=['2020-09-03'], n_delay=0)
+        status, info, crit = train.get_training_status(trials, task_protocol,
+                                                       ephys_sess_dates=['2020-09-03'], n_delay=0)
         assert (status == 'ready4delay')
+        assert (crit['Criteria']['val'] == 'ready4recording')
 
     def test_ready4recording(self):
         sess_dates = ['2020-09-01', '2020-08-31', '2020-08-28']
         trials, task_protocol = self._get_trials(sess_dates=sess_dates)
         assert (np.all(np.array(task_protocol) == 'biased'))
-        status, info = train.get_training_status(trials, task_protocol,
-                                                 ephys_sess_dates=sess_dates, n_delay=1)
+        status, info, crit = train.get_training_status(trials, task_protocol,
+                                                       ephys_sess_dates=sess_dates, n_delay=1)
         assert (status == 'ready4recording')
+        assert (crit['Criteria']['val'] == 'ready4recording')
 
     def test_query_criterion(self):
         """Test for brainbox.behavior.training.query_criterion function."""
@@ -243,7 +251,10 @@ class TestTraining(unittest.TestCase):
             'ready4ephysrig': ['2019-04-10', 'abf5109c-d780-44c8-9561-83e857c7bc01'],
             'ready4recording': ['2019-04-11', '7dc3c44b-225f-4083-be3d-07b8562885f4']
         }
-        with mock.patch.object(one.alyx, 'rest', return_value={'json': {'trained_criteria': status_map}}):
+
+        # Mock output of subjects read endpoint only
+        side_effect = partial(self._rest_mock, one.alyx.rest, {'json': {'trained_criteria': status_map}})
+        with mock.patch.object(one.alyx, 'rest', side_effect=side_effect):
             eid, n_sessions, n_days = train.query_criterion(subject, 'in_training', one=one)
             self.assertEqual('01390fcc-4f86-4707-8a3b-4d9309feb0a1', eid)
             self.assertEqual(1, n_sessions)
@@ -260,3 +271,24 @@ class TestTraining(unittest.TestCase):
             self.assertIsNone(n_sessions)
             self.assertIsNone(n_days)
             self.assertRaises(ValueError, train.query_criterion, subject, 'foobar', one=one)
+
+    def _rest_mock(self, alyx_rest, return_value, *args, **kwargs):
+        """Mock return value of AlyxClient.rest function depending on input.
+
+        If using the subjects endpoint, return `return_value`. Otherwise, calls the original method.
+
+        Parameters
+        ----------
+        alyx_rest : function
+            one.webclient.AlyxClient.rest method.
+        return_value : any
+            The mock data to return.
+
+        Returns
+        -------
+        dict, list
+            Either `return_value` or the original method output.
+        """
+        if args[0] == 'subjects':
+            return return_value
+        return alyx_rest(*args, **kwargs)

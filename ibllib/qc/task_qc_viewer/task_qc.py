@@ -140,7 +140,8 @@ class QcFrame:
             'ymin': 0,
             'ymax': 4,
             'linewidth': 2,
-            'ax': axes
+            'ax': axes,
+            'alpha': 0.5,
         }
 
         bnc1 = self.qc.extractor.frame_ttls
@@ -240,9 +241,10 @@ def show_session_task_qc(qc_or_session=None, bpod_only=False, local=False, one=N
     if isinstance(qc_or_session, QcFrame):
         qc = qc_or_session
     elif isinstance(qc_or_session, TaskQC):
-        qc = QcFrame(qc_or_session)
+        task_qc = qc_or_session
+        qc = QcFrame(task_qc)
     else:  # assumed to be eid or session path
-        one = one or ONE(mode='local' if local else 'auto')
+        one = one or ONE(mode='local' if local else 'remote')
         if not is_session_path(Path(qc_or_session)):
             eid = one.to_eid(qc_or_session)
             session_path = one.eid2path(eid)
@@ -284,8 +286,22 @@ def show_session_task_qc(qc_or_session=None, bpod_only=False, local=False, one=N
                     trial_events=list(events),
                     color_map=cm,
                     linestyle=ls)
+
     # Update table and callbacks
-    w.update_df(qc.frame)
+    n_trials = qc.frame.shape[0]
+    if 'task_qc' in locals():
+        df_trials = pd.DataFrame({
+            k: v for k, v in task_qc.extractor.data.items()
+            if v.size == n_trials and not k.startswith('wheel')
+        })
+        df = df_trials.merge(qc.frame, left_index=True, right_index=True)
+    else:
+        df = qc.frame
+    df_pass = pd.DataFrame({k: v for k, v in qc.qc.passed.items() if isinstance(v, np.ndarray) and v.size == n_trials})
+    df_pass.drop('_task_passed_trial_checks', axis=1, errors='ignore', inplace=True)
+    df_pass.rename(columns=lambda x: x.replace('_task', 'passed'), inplace=True)
+    df = df.merge(df_pass.astype('boolean'), left_index=True, right_index=True)
+    w.updateDataframe(df)
     qt.run_app()
     return qc
 
