@@ -358,6 +358,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                 'spks.npy': 'mpci.ROIActivityDeconvolved.npy',
                 'Fneu.npy': 'mpci.ROINeuropilActivityF.npy'
             }
+        fov_dsets = [d[0] for d in self.signature['output_files'] if d[1].startswith('alf/FOV')]
         for plane_dir in self._get_plane_paths(suite2p_dir):
             # Move bin file(s) out of the way
             bin_files = list(plane_dir.glob('data*.bin'))  # e.g. data.bin, data_raw.bin, data_chan2_raw.bin
@@ -373,8 +374,12 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
             n = int(plane_dir.name.split('plane')[1])
             fov_dir = self.session_path.joinpath('alf', f'FOV_{n:02}')
             if fov_dir.exists():
-                _logger.debug('Removing old folder %s', fov_dir.relative_to(self.session_path))
-                shutil.rmtree(str(fov_dir), ignore_errors=False, onerror=None)
+                for f in filter(Path.exists, map(fov_dir.joinpath, fov_dsets)):
+                    _logger.debug('Removing old file %s', f.relative_to(self.session_path))
+                    f.unlink()
+                if not any(fov_dir.iterdir()):
+                    _logger.debug('Removing old folder %s', fov_dir.relative_to(self.session_path))
+                    fov_dir.rmdir()
             prev_level = _logger.level
             _logger.setLevel(logging.WARNING)
             shutil.make_archive(str(fov_dir / '_suite2p_ROIData.raw'), 'zip', plane_dir, logger=_logger)
@@ -410,7 +415,8 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         # Remove old suite2p files
         shutil.rmtree(str(suite2p_dir), ignore_errors=False, onerror=None)
         # Collect all files in those directories
-        return sorted(self.session_path.joinpath('alf').rglob('FOV_??/*.*.*'))
+        datasets = self.session_path.joinpath('alf').rglob('FOV_??/*.*.*')
+        return sorted(x for x in datasets if x.name in fov_dsets)
 
     def load_meta_files(self):
         """Load the extracted imaging metadata files.
@@ -767,7 +773,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         # Load and consolidate the image metadata from JSON files
         metadata, all_meta = self.load_meta_files()
 
-        # Create suite2p output folder in raw imaging data folder
+        # Create suite2p output folder in root session path
         raw_image_collections = sorted(self.session_path.glob(f'{self.device_collection}'))
         save_path = self.session_path.joinpath(save_folder := 'suite2p')
 
