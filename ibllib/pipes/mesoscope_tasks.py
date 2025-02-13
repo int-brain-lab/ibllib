@@ -129,14 +129,20 @@ class MesoscopeCompress(base_tasks.MesoscopeTask):
             Path to compressed tar file.
         """
         outfiles = []  # should be one per raw_imaging_data folder
-        assert not any(x.operator for x in self.input_files), 'input datasets should not be nested'
         _, all_tifs, _ = zip(*(x.find_files(self.session_path) for x in self.input_files))
+        if self.input_files[0].operator:  # multiple device collections
+            output_identifiers = self.output_files[0].identifiers
+            # Check that the number of input ollections and output files match
+            assert len(self.input_files[0].identifiers) == len(output_identifiers)
+        else:
+            output_identifiers = [self.output_files[0].identifiers]
+            assert self.output_files[0].operator is None, 'only one output file expected'
+
         # A list of tifs, grouped by raw imaging data collection
         input_files = groupby(chain.from_iterable(all_tifs), key=lambda x: x.parent)
-        *_, outfile_name = self.output_files[0].identifiers
-        for in_dir, infiles in input_files:
+        for (in_dir, infiles), out_id in zip(input_files, output_identifiers):
             infiles = list(infiles)
-            outfile = in_dir / outfile_name
+            outfile = self.session_path.joinpath(*filter(None, out_id))
             if outfile.exists() and not overwrite:
                 _logger.info('%s already exists; skipping...', outfile.relative_to(self.session_path))
                 continue
@@ -851,8 +857,8 @@ class MesoscopeSync(base_tasks.MesoscopeTask):
                             ('_ibl_rawImagingData.meta.json', self.device_collection, True),
                             ('rawImagingData.times_scanImage.npy', self.device_collection, True, True),  # register raw
                             (f'_{self.sync_namespace}_softwareEvents.log.htsv', self.sync_collection, False), ],
-            'output_files': [('mpci.times.npy', 'alf/mesoscope/FOV*', True),
-                             ('mpciStack.timeshift.npy', 'alf/mesoscope/FOV*', True),]
+            'output_files': [('mpci.times.npy', 'alf/FOV*', True),
+                             ('mpciStack.timeshift.npy', 'alf/FOV*', True),]
         }
         return signature
 
