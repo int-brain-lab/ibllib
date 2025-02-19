@@ -579,7 +579,7 @@ class DataHandler(abc.ABC):
         dfs = [file.filter(session_datasets)[1] for file in self.signature['input_files']]
         return one._cache.datasets.iloc[0:0] if len(dfs) == 0 else pd.concat(dfs).drop_duplicates()
 
-    def getOutputFiles(self):
+    def getOutputFiles(self, session_path=None):
         """
         Return a data frame of output datasets found on disk.
 
@@ -588,10 +588,11 @@ class DataHandler(abc.ABC):
         pandas.DataFrame
             A dataset data frame of datasets on disk that were specified in signature['output_files'].
         """
-        assert self.session_path
+        session_path = self.session_path if session_path is None else session_path
+        assert session_path
         # Next convert datasets to frame
         # Create dataframe of all ALF datasets
-        df = _make_datasets_df(self.session_path, hash_files=False).set_index(['eid', 'id'])
+        df = _make_datasets_df(session_path, hash_files=False).set_index(['eid', 'id'])
         # Filter outputs
         if len(self.signature['output_files']) == 0:
             return pd.DataFrame()
@@ -774,13 +775,13 @@ class RemoteEC2DataHandler(DataHandler):
         """
         super().__init__(session_path, signature, one=one)
 
-    def setUp(self, **_):
+    def setUp(self, check_hash=True, **_):
         """
         Function to download necessary data to run tasks using ONE
         :return:
         """
         df = super().getData()
-        self.one._check_filesystem(df, check_hash=False)
+        self.one._check_filesystem(df, check_hash=check_hash)
 
     def uploadData(self, outputs, version, **kwargs):
         """
@@ -971,7 +972,7 @@ class SDSCDataHandler(DataHandler):
         self.patch_path = os.getenv('SDSC_PATCH_PATH', SDSC_PATCH_PATH)
         self.root_path = SDSC_ROOT_PATH
 
-    def setUp(self, task):
+    def setUp(self, task, **_):
         """Function to create symlinks to necessary data to run tasks."""
         df = super().getData()
 
@@ -987,8 +988,9 @@ class SDSCDataHandler(DataHandler):
                     Path(self.root_path.joinpath(file_uuid)))
             except FileExistsError:
                 pass
-
         task.session_path = SDSC_TMP.joinpath(session_path)
+        assert self.getOutputFiles(session_path=task.session_path).shape[0] == 0, (
+            "On SDSC patcher, input files output files should be distinct from input files to avoid overwriting")
 
     def uploadData(self, outputs, version, **kwargs):
         """

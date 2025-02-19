@@ -675,11 +675,11 @@ class S3Patcher(Patcher):
 
         return exists
 
-    def patch_dataset(self, file_list, dry=False, ftp=False, force=False, **kwargs):
+    def patch_dataset(self, file_list, dry=False, ftp=False, clobber=False, **kwargs):
 
         exists = self.check_datasets(file_list)
-        if len(exists) > 0 and not force:
-            _logger.error(f'Files: {", ".join([f.name for f in file_list])} already exist, to force set force=True')
+        if len(exists) > 0 and not clobber:
+            _logger.error(f'Files: {", ".join([f.name for f in file_list])} already exist, to overwrite set clobber=True')
             return
 
         response = super().patch_dataset(file_list, dry=dry, repository=self.s3_repo, ftp=False, **kwargs)

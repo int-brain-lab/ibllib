@@ -377,7 +377,7 @@ class Task(abc.ABC):
         self.output_files = signature['output_files']
 
     @abc.abstractmethod
-    def _run(self, overwrite=False):
+    def _run(self, overwrite=False, **kwargs):
         """Execute main task code.
 
         This method contains a task's principal data processing code and should implemented
@@ -422,14 +422,14 @@ class Task(abc.ABC):
                 # Attempts to download missing data using globus
                 _logger.info('Not all input files found locally: attempting to re-download required files')
                 self.data_handler = self.get_data_handler(location='serverglobus')
-                self.data_handler.setUp(task=self)
+                self.data_handler.setUp(task=self, **kwargs)
                 # Double check we now have the required files to run the task
                 # TODO in future should raise error if even after downloading don't have the correct files
                 self.assert_expected_inputs(raise_error=False)
                 return True
         else:
             self.data_handler = self.get_data_handler()
-            self.data_handler.setUp(task=self)
+            self.data_handler.setUp(task=self, **kwargs)
             self.get_signatures(**kwargs)
             self.assert_expected_inputs(raise_error=False)
             return True

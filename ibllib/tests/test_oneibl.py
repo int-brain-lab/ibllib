@@ -24,6 +24,7 @@ from iblutil.util import Bunch
 from ibllib.oneibl import patcher, registration, data_handlers as handlers
 import ibllib.io.extractors.base
 from ibllib.pipes.behavior_tasks import ChoiceWorldTrialsBpod
+from ibllib.pipes.tasks import Task
 from ibllib.tests import TEST_DB
 from ibllib.io import session_params
 
@@ -823,6 +824,28 @@ class TestSDSCDataHandler(unittest.TestCase):
         self.root_path = Path(tmp.name, 'root')
         self.root_path.mkdir(), self.patch_path.mkdir()
         self.session_path = self.root_path.joinpath('KS005/2019-04-01/001')
+
+    def test_handler_overwrite(self):
+
+        class DummyTask(Task):
+            signature = {
+                'input_files': [('_iblrig_taskSettings.raw.json', 'raw_behavior_data', True)],
+                'output_files': [('_iblrig_taskSettings.raw.json', 'raw_behavior_data', True)]
+            }
+
+            def _run(self):
+                pass
+
+        with mock.patch('ibllib.oneibl.data_handlers.SDSC_ROOT_PATH', self.root_path), \
+             mock.patch('ibllib.oneibl.data_handlers.SDSC_PATCH_PATH', self.patch_path):
+            task = DummyTask(self.session_path, one=self.one, collection='raw_behavior_data', location='SDSC', on_error='raise')
+            # Add some files on disk to check they are symlinked by setUp method
+            for uid, rel_path in task.get_data_handler().getData().rel_path.items():
+                filepath = self.session_path.joinpath(rel_path)
+                filepath.parent.mkdir(exist_ok=True, parents=True)
+                filepath.with_stem(f'{filepath.stem}.{uid}').touch()
+            with self.assertRaises(AssertionError):
+                task.run()
 
     def test_handler(self):
         """Test for SDSCDataHandler.setUp and cleanUp methods."""
