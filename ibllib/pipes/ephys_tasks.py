@@ -608,7 +608,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
                 # ./spike_sorters/iblsorter/{self.pname}
                 ('_kilosort_raw.output.tar', f'spike_sorters/{self._sortername}/{self.pname}/', True),
                 # ./alf/{self.pname}/iblsorter
-                (f'_ibl_log.info_{self.SPIKE_SORTER_NAME}.log', f'alf/{self.pname}/{self._sortername}', True),
+                (f'_ibl_log.info_{self.SPIKE_SORTER_NAME}.log', f'alf/{self.pname}/{self._sortername}/', True),
                 ('_kilosort_whitening.matrix.npy', f'alf/{self.pname}/{self._sortername}/', True),
                 ('_phy_spikes_subset.channels.npy', f'alf/{self.pname}/{self._sortername}/', True),
                 ('_phy_spikes_subset.spikes.npy', f'alf/{self.pname}/{self._sortername}/', True),
@@ -816,7 +816,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         spikes = alfio.load_object(probe_out_path, 'spikes', attribute=['samples', 'clusters'])
         clusters = alfio.load_object(probe_out_path, 'clusters', attribute=['channels'])
         channels = alfio.load_object(probe_out_path, 'channels')
-        extract_wfs_cbin(
+        _output_waveform_files = extract_wfs_cbin(
             bin_file=ap_file,
             output_dir=probe_out_path,
             spike_samples=spikes['samples'],
@@ -832,8 +832,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
             preprocess_steps=["phase_shift", "bad_channel_interpolation", "butterworth", "car"],
             scratch_dir=self.scratch_folder_run,
         )
-        wf_files = list(probe_out_path.glob('waveforms.*'))
-        out_files.extend(wf_files)
+        out_files.extend(_output_waveform_files)
         _logger.info(f"Cleaning up temporary folder {self.scratch_folder_run}")
         shutil.rmtree(self.scratch_folder_run, ignore_errors=True)
         if self.one:
