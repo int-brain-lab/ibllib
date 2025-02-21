@@ -399,13 +399,9 @@ class EphysPulses(base_tasks.EphysTask):
                 [('*ap.cbin', f'{self.device_collection}/{pname}', True) for pname in self.pname] +
                 [('*ap.ch', f'{self.device_collection}/{pname}', True) for pname in self.pname] +
                 [('*ap.wiring.json', f'{self.device_collection}/{pname}', False) for pname in self.pname] +
-                [('_spikeglx_sync.times.*npy', f'{self.device_collection}/{pname}', False) for pname in self.pname] +
-                [('_spikeglx_sync.polarities.*npy', f'{self.device_collection}/{pname}', False) for pname in self.pname] +
-                [('_spikeglx_sync.channels.*npy', f'{self.device_collection}/{pname}', False) for pname in self.pname] +
                 [('_spikeglx_sync.times.*npy', self.sync_collection, True),
                  ('_spikeglx_sync.polarities.*npy', self.sync_collection, True),
                  ('_spikeglx_sync.channels.*npy', self.sync_collection, True),
-                 ('*ap.meta', self.sync_collection, True)
                  ],
             'output_files': [(f'_spikeglx_sync.times.{pname}.npy', f'{self.device_collection}/{pname}', True)
                              for pname in self.pname] +
@@ -569,6 +565,8 @@ class CellQCMixin:
             qcdict['whitening_matrix_conditioning'] = np.linalg.cond(wm)
         # groom qc dict (this function will eventually go directly into the json field update)
         for k in qcdict:
+            if np.isnan(qcdict[k]):
+                qcdict[k] = None
             if isinstance(qcdict[k], np.int64):
                 qcdict[k] = int(qcdict[k])
             elif isinstance(qcdict[k], float):
@@ -818,7 +816,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         spikes = alfio.load_object(probe_out_path, 'spikes', attribute=['samples', 'clusters'])
         clusters = alfio.load_object(probe_out_path, 'clusters', attribute=['channels'])
         channels = alfio.load_object(probe_out_path, 'channels')
-        _output_waveform_files = extract_wfs_cbin(
+        extract_wfs_cbin(
             bin_file=ap_file,
             output_dir=probe_out_path,
             spike_samples=spikes['samples'],
@@ -834,7 +832,8 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
             preprocess_steps=["phase_shift", "bad_channel_interpolation", "butterworth", "car"],
             scratch_dir=self.scratch_folder_run,
         )
-        out_files.extend(_output_waveform_files)
+        wf_files = list(probe_out_path.glob('waveforms.*'))
+        out_files.extend(wf_files)
         _logger.info(f"Cleaning up temporary folder {self.scratch_folder_run}")
         shutil.rmtree(self.scratch_folder_run, ignore_errors=True)
         if self.one:
