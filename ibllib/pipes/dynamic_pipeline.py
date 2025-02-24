@@ -582,8 +582,6 @@ def make_pipeline(session_path, **pkwargs):
             **kwargs, **mscope_kwargs, parents=[tasks['MesoscopePreprocess']])
 
     if 'neurophotometrics' in devices:
-        # {'collection': 'raw_photometry_data', 'datetime': '2024-09-18T16:43:55.207000',
-        #   'fibers': {'G0': {'location': 'NBM'}, 'G1': {'location': 'SI'}}, 'sync_channel': 1}
         photometry_kwargs = devices['neurophotometrics']
         tasks['FibrePhotometrySync'] = type('FibrePhotometrySync', (
             ptasks.FibrePhotometrySync,), {})(**kwargs, **photometry_kwargs)

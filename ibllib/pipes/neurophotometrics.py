@@ -64,7 +64,7 @@ class FibrePhotometrySync(base_tasks.DynamicTask):
             tbpod.append(
                 np.array(
                     [
-                        bd['States timestamps'][sname][0][0] + bd['Trial start timestamp']
+                        bd['States timestamps'][sname][0][0] + bd['Trial start timestamp'] - bpod_data[0]['Bpod start timestamp']
                         for bd in bpod_data
                         if sname in bd['States timestamps']
                     ]
@@ -108,6 +108,7 @@ class FibrePhotometrySync(base_tasks.DynamicTask):
         out_df = fpio.from_raw_neurophotometrics_file_to_ibl_df(
             folder_raw_photometry.joinpath('_neurophotometrics_fpData.raw.pqt')
         )
+        out_df['times'] = fcn_nph_to_bpod_times(out_df['times'])
 
         # 3) label the brain regions
         rois = []
