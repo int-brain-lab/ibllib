@@ -378,7 +378,7 @@ def get_training_status(trials, task_protocol, ephys_sess_dates, n_delay):
                                         ephys_sess_dates])
             n_ephys_trials = np.array([compute_n_trials(trials[k]) for k in ephys_sess_dates])
 
-            pass_criteria, criteria = criterion_delay(n_ephys, n_ephys_trials, perf_ephys_easy)
+            pass_criteria, criteria = criterion_delay(n_ephys_trials, perf_ephys_easy, n_ephys=n_ephys)
 
             if pass_criteria:
                 status = 'ready4delay'
@@ -997,7 +997,7 @@ def criterion_ephys(psych_20, psych_80, n_trials, perf_easy, rt):
     return passing, criteria
 
 
-def criterion_delay(n_ephys, n_trials, perf_easy):
+def criterion_delay(n_trials, perf_easy, n_ephys=1):
     """
     Returns bool indicating whether criteria for 'ready4delay' is met.
 
