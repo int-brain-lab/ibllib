@@ -48,7 +48,7 @@ class FibrePhotometrySync(base_tasks.DynamicTask):
         :return: interpolation function that outputs bpod timestamsp from neurophotometrics timestamps
         """
         folder_raw_photometry = self.session_path.joinpath(self.device_collection)
-        df_digital_inputs = fpio.read_digital_inputs_csv(folder_raw_photometry / '_neurophotometrics_fpData.digitalIntputs.pqt')
+        df_digital_inputs = fpio.read_digital_inputs_file(folder_raw_photometry / '_neurophotometrics_fpData.digitalIntputs.pqt')
         # normally we should disregard the states and use the sync label. But bpod doesn't log TTL outs,
         # only the states. This will change in the future but for now we are stuck with this.
         if 'habituation' in self.task_protocol:
