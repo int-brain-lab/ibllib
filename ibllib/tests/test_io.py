@@ -370,7 +370,9 @@ class TestsMisc(unittest.TestCase):
 class TestVideo(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls.one = ONE(**TEST_DB)
+        cls.one = ONE(**TEST_DB, mode='local')
+        if cls.one._cache.sessions.empty:
+            cls.one.load_cache()
         if 'public' in cls.one.alyx._par.HTTP_DATA_SERVER:
             cls.one.alyx._par = cls.one.alyx._par.set(
                 'HTTP_DATA_SERVER', cls.one.alyx._par.HTTP_DATA_SERVER.rsplit('/', 1)[0])
@@ -398,7 +400,7 @@ class TestVideo(unittest.TestCase):
         self.assertIsNone(label)
 
     def test_url_from_eid(self):
-        assert self.one.mode != 'remote'
+        self.one.mode = 'local'
         actual = video.url_from_eid(self.eid, 'left', self.one)
         self.assertEqual(self.url, actual)
         actual = video.url_from_eid(self.eid, one=self.one)
@@ -410,10 +412,12 @@ class TestVideo(unittest.TestCase):
 
         # Test remote mode
         old_mode = self.one.mode
-        self.one.mode = 'remote'
-        actual = video.url_from_eid(self.eid, label='left', one=self.one)
-        self.assertEqual(self.url, actual)
-        self.one.mode = old_mode
+        try:
+            self.one.mode = 'remote'
+            actual = video.url_from_eid(self.eid, label='left', one=self.one)
+            self.assertEqual(self.url, actual)
+        finally:
+            self.one.mode = old_mode
 
         # Test arg checks
         with self.assertRaises(ValueError):

@@ -6,6 +6,7 @@ import abc
 import numpy as np
 
 from one.api import ONE
+from one.alf.spec import is_uuid
 from ibllib.pipes import tasks
 from one.alf.exceptions import ALFObjectNotFound
 from neuropixel import trace_header, TIP_SIZE_UM
@@ -177,6 +178,8 @@ class Snapshot:
 
     def __init__(self, object_id, content_type='session', one=None):
         self.one = one or ONE()
+        if not is_uuid(object_id, versions=(4,)):
+            raise ValueError('Expected `object_id` to be a UUIDv4 object')
         self.object_id = object_id
         self.content_type = content_type
         self.images = []
@@ -217,13 +220,14 @@ class Snapshot:
         # the protocol is not compatible with byte streaming and json, so serialize the json object here
         # Make sure that user is logged in, if not, try to log in
         assert self.one.alyx.is_logged_in, 'No Alyx user is logged in, try running one.alyx.authenticate() first'
+        object_id = str(self.object_id)  # ensure not UUID object
         note = {
-            'user': self.one.alyx.user, 'content_type': self.content_type, 'object_id': self.object_id,
+            'user': self.one.alyx.user, 'content_type': self.content_type, 'object_id': object_id,
             'text': text, 'width': width, 'json': json.dumps(json_field)}
-        _logger.info(f'Registering image to {self.content_type} with id {self.object_id}')
+        _logger.info(f'Registering image to {self.content_type} with id {object_id}')
         # to make sure an eventual note gets deleted with the image call the delete REST endpoint first
         current_note = self.one.alyx.rest('notes', 'list',
-                                          django=f"object_id,{self.object_id},text,{text},json__name,{text}",
+                                          django=f"object_id,{object_id},text,{text},json__name,{text}",
                                           no_cache=True)
         if len(current_note) == 1:
             self.one.alyx.rest('notes', 'delete', id=current_note[0]['id'])
@@ -235,7 +239,7 @@ class Snapshot:
             return note_db
         except requests.HTTPError as e:
             if 'matching query does not exist' in str(e):
-                _logger.error(f'The object_id {self.object_id} does not match an object of type {self.content_type}')
+                _logger.error(f'The object_id {object_id} does not match an object of type {self.content_type}')
                 _logger.debug(traceback.format_exc())
             else:
                 raise e
