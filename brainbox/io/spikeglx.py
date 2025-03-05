@@ -8,6 +8,7 @@ import random
 
 import numpy as np
 from one.alf.path import remove_uuid_string
+from one.alf.spec import is_uuid_string
 
 import spikeglx
 
@@ -126,14 +127,24 @@ class Streamer(spikeglx.Reader):
         self.remove_cached = remove_cached
         self.eid, self.pname = self.one.pid2eid(pid)
         self.file_chunks = self.one.load_dataset(self.eid, f'*.{typ}.ch', collection=f"*{self.pname}")
+        sglx_file = self.one.list_datasets(self.eid, f'*.{typ}.cbin', collection=f"*{self.pname}")
+        assert len(sglx_file) == 1
+        sglx_file = sglx_file[0]
         meta_file = self.one.load_dataset(self.eid, f'*.{typ}.meta', collection=f"*{self.pname}")
+        # check if an uuid is part of meta_file, and if so, add the corresponding uuid to the sglx_file
+        if is_uuid_string(meta_file.name.split('.')[-2]):
+            parts = Path(sglx_file).name.split('.')
+            parts.insert(-1, '*')
+            pattern = '.'.join(parts)
+            sglx_file = list(meta_file.parent.glob(pattern))[0]
+        sglx_file = self.one.eid2path(self.eid) / sglx_file
         cbin_rec = self.one.list_datasets(self.eid, collection=f"*{self.pname}", filename=f'*{typ}.*bin', details=True)
         cbin_rec.index = cbin_rec.index.map(lambda x: (self.eid, x))
         self.url_cbin = self.one.record2url(cbin_rec)[0]
         with open(self.file_chunks, 'r') as f:
             self.chunks = json.load(f)
             self.chunks['chunk_bounds'] = np.array(self.chunks['chunk_bounds'])
-        super(Streamer, self).__init__(meta_file, ignore_warnings=True)
+        super(Streamer, self).__init__(sglx_file=sglx_file, meta_file=meta_file, ignore_warnings=True)
 
     def read(self, nsel=slice(0, 10000), csel=slice(None), sync=True, volts=True):
         """
