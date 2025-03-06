@@ -73,7 +73,7 @@ class FibrePhotometrySync(base_tasks.DynamicTask):
         tbpod = np.sort(np.concatenate(tbpod))
         tbpod = tbpod[~np.isnan(tbpod)]
         # we get the timestamps for the photometry data
-        sync_channel = self.session_params['neurophotometrics']['sync_channel']
+        sync_channel = self.session_params['devices']['neurophotometrics']['sync_channel']
         tph = df_digital_inputs['SystemTimestamp'].values[df_digital_inputs['Channel'] == sync_channel]
         tph = tph[15:]  # TODO: we may want to detect the spacers before removing it, especially for successive sessions
         # sync the behaviour events to the photometry timestamps
@@ -112,7 +112,7 @@ class FibrePhotometrySync(base_tasks.DynamicTask):
 
         # 3) label the brain regions
         rois = []
-        for k, v in self.session_params['neurophotometrics']['fibers'].items():
+        for k, v in self.session_params['devices']['neurophotometrics']['fibers'].items():
             rois.append({'ROI': k, 'fiber': f'fiber_{v["location"]}', 'brain_region': v['location']})
         df_rois = pd.DataFrame(rois).set_index('ROI')
 
