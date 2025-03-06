@@ -806,8 +806,13 @@ class FpgaTrials(extractors_base.BaseExtractor):
                 fcn, *_ = ibldsp.utils.sync_timestamps(bpod_start, t_trial_start)
                 buffer = 2.5  # the number of seconds to include before/after task
                 start, end = fcn(self.bpod_trials['intervals'].flat[[0, -1]])
-                tmin = min(sync['times'][0], start - buffer)
-                tmax = max(sync['times'][-1], end + buffer)
+                # NB: The following was added by k1o0 in commit b31d14e5113180b50621c985b2f230ba84da1dd3
+                # however it is not clear why this was necessary and it appears to defeat the purpose of
+                # removing the passive protocol part from the final trial extraction in ephysChoiceWorld.
+                #   tmin = min(sync['times'][0], start - buffer)
+                #   tmax = max(sync['times'][-1], end + buffer)
+                tmin = start - buffer
+                tmax = end + buffer
             else:  # This type of alignment fails for some sessions, e.g. mesoscope
                 tmin = tmax = None
 
@@ -934,22 +939,50 @@ class FpgaTrials(extractors_base.BaseExtractor):
         # Sync the Bpod clock to the DAQ.
         # NB: The Bpod extractor typically drops the final, incomplete, trial. Hence there is
         # usually at least one extra FPGA event. This shouldn't affect the sync. The final trial is
-        # dropped after assigning the FPGA events, using the `ifpga` index. Doing this after
+        # dropped after assigning the FPGA events, using the `ibpod` index. Doing this after
         # assigning the FPGA trial events ensures the last trial has the correct timestamps.
         self.bpod2fpga, drift_ppm, ibpod, ifpga = self.sync_bpod_clock(self.bpod_trials, fpga_events, self.sync_field)
 
-        if np.any(np.diff(ibpod) != 1) and self.sync_field == 'intervals_0':
+        bpod_start = self.bpod2fpga(self.bpod_trials['intervals'][:, 0])
+        missing_bpod_idx = np.setxor1d(ibpod, np.arange(len(bpod_start)))
+        if missing_bpod_idx.size > 0 and self.sync_field == 'intervals_0':
             # One issue is that sometimes pulses may not have been detected, in this case
             # add the events that have not been detected and re-extract the behaviour sync.
             # This is only really relevant for the Bpod interval events as the other TTLs are
             # from devices where a missing TTL likely means the Bpod event was truly absent.
             _logger.warning('Missing Bpod TTLs; reassigning events using aligned Bpod start times')
-            bpod_start = self.bpod_trials['intervals'][:, 0]
-            missing_bpod = self.bpod2fpga(bpod_start[np.setxor1d(ibpod, np.arange(len(bpod_start)))])
-            t_trial_start = np.sort(np.r_[fpga_events['intervals_0'][:, 0], missing_bpod])
+            missing_bpod = bpod_start[missing_bpod_idx]
+            # Another complication: if the first trial start is missing on the FPGA, the second
+            # trial start is assumed to be the first and is mis-assigned to another trial event
+            # (i.e. valve open). This is done because the first Bpod pulse is irregularly long.
+            # See `FpgaTrials.get_bpod_event_times` for details.
+
+            # If first trial start is missing first detected FPGA event doesn't match any Bpod
+            # starts then it's probably a mis-assigned valve or trial end event.
+            i1 = np.any(missing_bpod_idx == 0) and not np.any(np.isclose(fpga_events['intervals_0'][0], bpod_start))
+            # skip mis-assigned first FPGA trial start
+            t_trial_start = np.sort(np.r_[fpga_events['intervals_0'][int(i1):], missing_bpod])
+            ibpod = np.sort(np.r_[ibpod, missing_bpod_idx])
+            if i1:
+                # The first trial start is actually the first valve open here
+                first_on, first_off = bpod_event_intervals['trial_start'][0, :]
+                bpod_valve_open = self.bpod2fpga(self.bpod_trials['feedback_times'][self.bpod_trials['feedbackType'] == 1])
+                if np.any(np.isclose(first_on, bpod_valve_open)):
+                    # Probably assigned to the valve open
+                    _logger.debug('Re-reassigning first valve open event. TTL length = %.3g ms', first_off - first_on)
+                    fpga_events['valveOpen_times'] = np.sort(np.r_[first_on, fpga_events['valveOpen_times']])
+                    fpga_events['valveClose_times'] = np.sort(np.r_[first_off, fpga_events['valveClose_times']])
+                elif np.any(np.isclose(first_on, self.bpod2fpga(self.bpod_trials['itiIn_times']))):
+                    # Probably assigned to the trial end
+                    _logger.debug('Re-reassigning first trial end event. TTL length = %.3g ms', first_off - first_on)
+                    fpga_events['itiIn_times'] = np.sort(np.r_[first_on, fpga_events['itiIn_times']])
+                    fpga_events['intervals_1'] = np.sort(np.r_[first_off, fpga_events['intervals_1']])
+                else:
+                    _logger.warning('Unable to reassign first trial start event. TTL length = %.3g ms', first_off - first_on)
+                # Bpod trial_start event intervals are not used but for consistency we'll update them here anyway
+                bpod_event_intervals['trial_start'] = bpod_event_intervals['trial_start'][1:, :]
         else:
             t_trial_start = fpga_events['intervals_0']
-        t_trial_start = t_trial_start[ifpga]
 
         out = alfio.AlfBunch()
         # Add the Bpod trial events, converting the timestamp fields to FPGA time.
@@ -1000,10 +1033,12 @@ class FpgaTrials(extractors_base.BaseExtractor):
         ind_err = np.isnan(fpga_trials['valveOpen_times'])
         fpga_trials['feedback_times'][ind_err] = fpga_trials['errorCue_times'][ind_err]
 
-        out.update({k: fpga_trials[k] for k in fpga_trials.keys()})
+        # Use ibpod to discard the final trial if it is incomplete
+        # ibpod should be indices of all Bpod trials, even those that were not detected on the FPGA
+        out.update({k: fpga_trials[k][ibpod] for k in fpga_trials.keys()})
 
         if display:  # pragma: no cover
-            width = 0.5
+            width = 2
             ymax = 5
             if isinstance(display, bool):
                 plt.figure('Bpod FPGA Sync')

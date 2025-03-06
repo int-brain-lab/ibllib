@@ -91,6 +91,7 @@ import one.params
 from one.api import ONE
 from one import webclient
 import one.alf.io as alfio
+from one.alf.path import ALFPath
 
 _logger = logging.getLogger(__name__)
 TASK_STATUS_SET = {'Waiting', 'Held', 'Started', 'Errored', 'Empty', 'Complete', 'Incomplete', 'Abandoned'}
@@ -255,6 +256,8 @@ class Task(abc.ABC):
                         self.log = new_log if self.clobber else self.log + new_log
                         _logger.removeHandler(ch)
                         ch.close()
+                        if self.on_error == 'raise':
+                            raise FileExistsError(f'Job {self.__class__} exited as a lock was found at {self._lock_file_path()}')
                         return self.status
                 outputs = self._run(**kwargs)
                 _logger.info(f'Job {self.__class__} complete')
@@ -491,10 +494,13 @@ class Task(abc.ABC):
         # Some sessions may contain revisions and without ONE it's difficult to determine which
         # are the default datasets. Likewise SDSC may contain multiple datasets with different
         # UUIDs in the name after patching data.
-        variant_datasets = alfio.find_variants(files, extra=False)
+        valid_alf_files = filter(ALFPath.is_valid_alf, files)
+        variant_datasets = alfio.find_variants(valid_alf_files, extra=False)
+        if len(variant_datasets) < len(files):
+            _logger.warning('Some files are not ALF datasets and will not be checked for ambiguity')
         if any(map(len, variant_datasets.values())):
             # Keep those with variants and make paths relative to session for logging purposes
-            to_frag = lambda x: x.relative_to(self.session_path).as_posix()  # noqa
+            to_frag = lambda x: x.relative_to_session().as_posix()  # noqa
             ambiguous = {
                 to_frag(k): [to_frag(x) for x in v]
                 for k, v in variant_datasets.items() if any(v)}
@@ -694,9 +700,7 @@ class Pipeline(abc.ABC):
         list
             List of Alyx task dictionaries (existing and/or created).
         """
-        rerun__status__in = ([rerun__status__in]
-                             if isinstance(rerun__status__in, str)
-                             else rerun__status__in or [])
+        rerun__status__in = ensure_list(rerun__status__in)
         if '__all__' in rerun__status__in:
             rerun__status__in = [x for x in TASK_STATUS_SET if x != 'Abandoned']
         assert self.eid

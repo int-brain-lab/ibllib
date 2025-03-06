@@ -643,20 +643,24 @@ class EphysPostDLC(base_tasks.VideoTask):
 
 class LightningPose(base_tasks.VideoTask):
     # TODO: make one task per cam?
+    # TODO: separate pose and motion energy
     gpu = 1
     io_charge = 100
     level = 2
     force = True
     job_size = 'large'
+    env = 'litpose'
 
-    env = Path.home().joinpath('Documents', 'PYTHON', 'envs', 'litpose', 'bin', 'activate')
+    lpenv = Path.home().joinpath('Documents', 'PYTHON', 'envs', 'litpose', 'bin', 'activate')
     scripts = Path.home().joinpath('Documents', 'PYTHON', 'iblscripts', 'deploy', 'serverpc', 'litpose')
 
     @property
     def signature(self):
         signature = {
             'input_files': [(f'_iblrig_{cam}Camera.raw.mp4', self.device_collection, True) for cam in self.cameras],
-            'output_files': [(f'_ibl_{cam}Camera.lightningPose.pqt', 'alf', True) for cam in self.cameras]
+            'output_files': [(f'_ibl_{cam}Camera.lightningPose.pqt', 'alf', True) for cam in self.cameras] +
+                            [(f'{cam}Camera.ROIMotionEnergy.npy', 'alf', True) for cam in self.cameras] +
+                            [(f'{cam}ROIMotionEnergy.position.npy', 'alf', True) for cam in self.cameras]
         }
 
         return signature
@@ -674,8 +678,8 @@ class LightningPose(base_tasks.VideoTask):
         """Check that scripts are present, env can be activated and get iblvideo version"""
         assert len(list(self.scripts.rglob('run_litpose.*'))) == 2, \
             f'Scripts run_litpose.sh and run_litpose.py do not exist in {self.scripts}'
-        assert self.env.exists(), f"environment does not exist in assumed location {self.env}"
-        command2run = f"source {self.env}; python -c 'import iblvideo; print(iblvideo.__version__)'"
+        assert self.lpenv.exists(), f"environment does not exist in assumed location {self.lpenv}"
+        command2run = f"source {self.lpenv}; python -c 'import iblvideo; print(iblvideo.__version__)'"
         process = subprocess.Popen(
             command2run,
             shell=True,
@@ -723,9 +727,13 @@ class LightningPose(base_tasks.VideoTask):
                     _logger.error(f"Corrupt raw video file {mp4_file}")
                     self.status = -1
                     continue
+
+                # ---------------------------
+                # Run pose estimation
+                # ---------------------------
                 t0 = time.time()
                 _logger.info(f'Running Lightning Pose on {label}Camera.')
-                command2run = f"{self.scripts.joinpath('run_litpose.sh')} {str(self.env)} {mp4_file} {overwrite}"
+                command2run = f"{self.scripts.joinpath('run_litpose.sh')} {str(self.lpenv)} {mp4_file} {overwrite}"
                 _logger.info(command2run)
                 process = subprocess.Popen(
                     command2run,
@@ -737,20 +745,61 @@ class LightningPose(base_tasks.VideoTask):
                 info, error = process.communicate()
                 if process.returncode != 0:
                     error_str = error.decode("utf-8").strip()
-                    _logger.error(f'Lightning pose failed for {label}Camera.\n\n'
-                                  f'++++++++ Output of subprocess for debugging ++++++++\n\n'
-                                  f'{error_str}\n'
-                                  f'++++++++++++++++++++++++++++++++++++++++++++\n')
+                    _logger.error(
+                        f'Lightning pose failed for {label}Camera.\n\n'
+                        f'++++++++ Output of subprocess for debugging ++++++++\n\n'
+                        f'{error_str}\n'
+                        f'++++++++++++++++++++++++++++++++++++++++++++\n'
+                    )
                     self.status = -1
+                    # We don't run motion energy, or add any files if LP failed to run
                     continue
                 else:
                     _logger.info(f'{label} camera took {(time.time() - t0)} seconds')
                     result = next(self.session_path.joinpath('alf').glob(f'_ibl_{label}Camera.lightningPose*.pqt'))
                     actual_outputs.append(result)
 
+                # ---------------------------
+                # Run motion energy
+                # ---------------------------
+                t1 = time.time()
+                _logger.info(f'Computing motion energy for {label}Camera')
+                command2run = f"{self.scripts.joinpath('run_motion.sh')} {str(self.lpenv)} {mp4_file} {result}"
+                _logger.info(command2run)
+                process = subprocess.Popen(
+                    command2run,
+                    shell=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    executable='/bin/bash',
+                )
+                info, error = process.communicate()
+                if process.returncode != 0:
+                    error_str = error.decode('utf-8').strip()
+                    _logger.error(
+                        f'Motion energy failed for {label}Camera.\n\n'
+                        f'++++++++ Output of subprocess for debugging ++++++++\n\n'
+                        f'{error_str}\n'
+                        f'++++++++++++++++++++++++++++++++++++++++++++\n'
+                    )
+                    self.status = -1
+                    continue
+                else:
+                    _logger.info(f'{label} camera took {(time.time() - t1)} seconds')
+                    actual_outputs.append(next(self.session_path.joinpath('alf').glob(
+                        f'{label}Camera.ROIMotionEnergy*.npy')))
+                    actual_outputs.append(next(self.session_path.joinpath('alf').glob(
+                        f'{label}ROIMotionEnergy.position*.npy')))
+
             except BaseException:
                 _logger.error(traceback.format_exc())
                 self.status = -1
                 continue
+
+        # catch here if there are no raw videos present
+        if len(actual_outputs) == 0:
+            _logger.info('Did not find any videos for this session')
+            actual_outputs = None
+            self.status = -1
 
         return actual_outputs

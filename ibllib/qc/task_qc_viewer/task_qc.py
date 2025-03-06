@@ -244,7 +244,7 @@ def show_session_task_qc(qc_or_session=None, bpod_only=False, local=False, one=N
         task_qc = qc_or_session
         qc = QcFrame(task_qc)
     else:  # assumed to be eid or session path
-        one = one or ONE(mode='local' if local else 'auto')
+        one = one or ONE(mode='local' if local else 'remote')
         if not is_session_path(Path(qc_or_session)):
             eid = one.to_eid(qc_or_session)
             session_path = one.eid2path(eid)

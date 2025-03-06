@@ -644,7 +644,7 @@ def raw_destripe(raw, fs, t0, i_plt, n_plt,
         fig, axs = plt.subplots(nrows=1, ncols=n_plt, figsize=(14, 5), gridspec_kw={'width_ratios': 4 * n_plt})
 
     if i_plt > len(axs) - 1:  # Error
-        raise ValueError(f'The given increment of subplot ({i_plt+1}) '
+        raise ValueError(f'The given increment of subplot ({i_plt + 1}) '
                          f'is larger than the total number of subplots ({len(axs)})')
 
     [nc, ns] = raw.shape

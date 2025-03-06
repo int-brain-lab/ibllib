@@ -378,7 +378,7 @@ def get_training_status(trials, task_protocol, ephys_sess_dates, n_delay):
                                         ephys_sess_dates])
             n_ephys_trials = np.array([compute_n_trials(trials[k]) for k in ephys_sess_dates])
 
-            pass_criteria, criteria = criterion_delay(n_ephys, n_ephys_trials, perf_ephys_easy)
+            pass_criteria, criteria = criterion_delay(n_ephys_trials, perf_ephys_easy, n_ephys=n_ephys)
 
             if pass_criteria:
                 status = 'ready4delay'
@@ -430,24 +430,24 @@ def display_status(subj, sess_dates, status, perf_easy=None, n_trials=None, psyc
               f"{sess_dates[2]}]")
     elif psych_20 is None:
         print(f"\n{subj} : {status} \nSession dates={[x for x in sess_dates]}, "
-              f"Perf easy={[np.around(pe,2) for pe in perf_easy]}, "
+              f"Perf easy={[np.around(pe, 2) for pe in perf_easy]}, "
               f"N trials={[nt for nt in n_trials]} "
               f"\nPsych fit over last 3 sessions: "
-              f"bias={np.around(psych[0],2)}, thres={np.around(psych[1],2)}, "
-              f"lapse_low={np.around(psych[2],2)}, lapse_high={np.around(psych[3],2)} "
+              f"bias={np.around(psych[0], 2)}, thres={np.around(psych[1], 2)}, "
+              f"lapse_low={np.around(psych[2], 2)}, lapse_high={np.around(psych[3], 2)} "
               f"\nMedian reaction time at 0 contrast over last 3 sessions = "
-              f"{np.around(rt,2)}")
+              f"{np.around(rt, 2)}")
 
     else:
         print(f"\n{subj} : {status} \nSession dates={[x for x in sess_dates]}, "
-              f"Perf easy={[np.around(pe,2) for pe in perf_easy]}, "
+              f"Perf easy={[np.around(pe, 2) for pe in perf_easy]}, "
               f"N trials={[nt for nt in n_trials]} "
               f"\nPsych fit over last 3 sessions (20): "
-              f"bias={np.around(psych_20[0],2)}, thres={np.around(psych_20[1],2)}, "
-              f"lapse_low={np.around(psych_20[2],2)}, lapse_high={np.around(psych_20[3],2)} "
-              f"\nPsych fit over last 3 sessions (80): bias={np.around(psych_80[0],2)}, "
-              f"thres={np.around(psych_80[1],2)}, lapse_low={np.around(psych_80[2],2)}, "
-              f"lapse_high={np.around(psych_80[3],2)} "
+              f"bias={np.around(psych_20[0], 2)}, thres={np.around(psych_20[1], 2)}, "
+              f"lapse_low={np.around(psych_20[2], 2)}, lapse_high={np.around(psych_20[3], 2)} "
+              f"\nPsych fit over last 3 sessions (80): bias={np.around(psych_80[0], 2)}, "
+              f"thres={np.around(psych_80[1], 2)}, lapse_low={np.around(psych_80[2], 2)}, "
+              f"lapse_high={np.around(psych_80[3], 2)} "
               f"\nMedian reaction time at 0 contrast over last 3 sessions = "
               f"{np.around(rt, 2)}")
 
@@ -997,7 +997,7 @@ def criterion_ephys(psych_20, psych_80, n_trials, perf_easy, rt):
     return passing, criteria
 
 
-def criterion_delay(n_ephys, n_trials, perf_easy):
+def criterion_delay(n_trials, perf_easy, n_ephys=1):
     """
     Returns bool indicating whether criteria for 'ready4delay' is met.
 

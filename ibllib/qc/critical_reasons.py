@@ -10,6 +10,7 @@ import logging
 import json
 from datetime import datetime
 from one.webclient import AlyxClient
+from one.alf.spec import is_uuid
 
 _logger = logging.getLogger('ibllib')
 
@@ -83,8 +84,8 @@ def main(uuid, alyx=None):
     # ask reasons for selection of critical status
 
     # hit the database to know if uuid is insertion or session uuid
-    sess_list = alyx.get('/sessions?&django=pk,' + uuid, clobber=True)
-    ins_list = alyx.get('/insertions?&django=pk,' + uuid, clobber=True)
+    sess_list = alyx.get('/sessions?&django=pk,' + str(uuid), clobber=True)
+    ins_list = alyx.get('/insertions?&django=pk,' + str(uuid), clobber=True)
 
     if len(sess_list) > 0 and len(ins_list) == 0:  # session
         note = CriticalSessionNote(uuid, alyx)
@@ -131,6 +132,8 @@ class Note(abc.ABC):
         content_type : str
             The Alyx model name of the UUID.
         """
+        if not is_uuid(uuid, versions=(4,)):
+            raise ValueError('Expected `uuid` to be a UUIDv4 object')
         self.uuid = uuid
         self.alyx = alyx
         self.selected_reasons = []
@@ -237,7 +240,8 @@ class Note(abc.ABC):
             self._delete_note(note['id'])
 
     def _check_existing_note(self):
-        notes = self.alyx.rest('notes', 'list', django=f'text__icontains,{self.note_title},object_id,{self.uuid}', no_cache=True)
+        query = f'text__icontains,{self.note_title},object_id,{str(self.uuid)}'
+        notes = self.alyx.rest('notes', 'list', django=query, no_cache=True)
         if len(notes) == 0:
             return False, None
         else:

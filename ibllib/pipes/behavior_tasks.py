@@ -423,7 +423,7 @@ class ChoiceWorldTrialsNidq(ChoiceWorldTrialsBpod):
         from brainbox.behavior import training
 
         trials = alfio.load_object(self.session_path.joinpath(self.output_collection), 'trials').to_df()
-        good_enough = training.criterion_delay(
+        good_enough, _ = training.criterion_delay(
             n_trials=trials.shape[0],
             perf_easy=training.compute_performance_easy(trials),
         )
@@ -431,7 +431,7 @@ class ChoiceWorldTrialsNidq(ChoiceWorldTrialsBpod):
             n_trials = trials.shape[0]
             while not good_enough and n_trials > 400:
                 n_trials -= 1
-                good_enough = training.criterion_delay(
+                good_enough, _ = training.criterion_delay(
                     n_trials=n_trials,
                     perf_easy=training.compute_performance_easy(trials[:n_trials]),
                 )

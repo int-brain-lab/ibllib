@@ -17,7 +17,7 @@ import pandas as pd
 from one.api import ONE
 from one.webclient import AlyxClient
 import one.alf.exceptions as alferr
-from one.util import QC_TYPE
+from one.alf.cache import QC_TYPE
 import iblutil.io.params as iopar
 
 from ibllib.oneibl import patcher, registration, data_handlers as handlers
@@ -612,7 +612,7 @@ class TestDataHandlers(unittest.TestCase):
 
     def test_getData(self):
         """Test for DataHandler.getData method."""
-        one = ONE(**TEST_DB, mode='auto')
+        one = ONE(**TEST_DB, mode='remote')
         session_path = Path('KS005/2019-04-01/001')
         task = ChoiceWorldTrialsBpod(session_path, one=one, collection='raw_behavior_data')
         task.get_signatures()
@@ -698,7 +698,7 @@ class TestSDSCDataHandler(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
-        self.one = ONE(**TEST_DB, mode='auto')
+        self.one = ONE(**TEST_DB, mode='remote')
         self.patch_path = Path(tmp.name, 'patch')
         self.root_path = Path(tmp.name, 'root')
         self.root_path.mkdir(), self.patch_path.mkdir()

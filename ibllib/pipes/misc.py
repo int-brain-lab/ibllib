@@ -74,7 +74,7 @@ def create_alyx_probe_insertions(
     for plabel in labels:
         insdict = {"session": eid, "name": plabel, "model": pmodel, "json": qc_dict}
         # search for the corresponding insertion in Alyx
-        alyx_insertion = one.alyx.get(f'/insertions?&session={eid}&name={plabel}', clobber=True)
+        alyx_insertion = one.alyx.get(f'/insertions?&session={str(eid)}&name={plabel}', clobber=True)
         # if it doesn't exist, create it
         if len(alyx_insertion) == 0:
             alyx_insertion = one.alyx.rest("insertions", "create", data=insdict)

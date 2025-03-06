@@ -8,6 +8,7 @@ from itertools import chain
 from pathlib import Path
 import subprocess
 from copy import deepcopy
+import uuid
 
 from one.api import ONE
 import numpy as np
@@ -286,7 +287,7 @@ class TestMesoscopeFOV(unittest.TestCase):
                 task.update_surgery_json(meta, normal_vector)
         finally:
             # ONE function is cached so we must reset the mode for other tests
-            one.mode = 'auto'
+            one.mode = 'remote'
 
 
 class TestRegisterFOV(unittest.TestCase):
@@ -311,17 +312,19 @@ class TestRegisterFOV(unittest.TestCase):
                   'bottomLeft': [2317.3, -2181.4, -466.3], 'bottomRight': [2862.7, -2206.9, -679.4],
                   'center': [2596.1, -1900.5, -588.6]}
         meta = {'FOV': [{'MLAPDV': mlapdv, 'nXnYnZ': [512, 512, 1], 'roiUUID': 0}]}
-        with unittest.mock.patch.object(task.one.alyx, 'rest') as mock_rest:
+        eid = uuid.uuid4()
+        with unittest.mock.patch.object(task.one.alyx, 'rest') as mock_rest, \
+                unittest.mock.patch.object(task.one, 'path2eid', return_value=eid):
             task.register_fov(meta, 'estimate')
         calls = mock_rest.call_args_list
-        self.assertEqual(3, len(calls))
+        self.assertEqual(2, len(calls))
 
-        args, kwargs = calls[1]
+        args, kwargs = calls[0]
         self.assertEqual(('fields-of-view', 'create'), args)
-        expected = {'data': {'session': None, 'imaging_type': 'mesoscope', 'name': 'FOV_00', 'stack': None}}
+        expected = {'data': {'session': str(eid), 'imaging_type': 'mesoscope', 'name': 'FOV_00', 'stack': None}}
         self.assertEqual(expected, kwargs)
 
-        args, kwargs = calls[2]
+        args, kwargs = calls[1]
         self.assertEqual(('fov-location', 'create'), args)
         expected = ['field_of_view', 'default_provenance', 'coordinate_system', 'n_xyz', 'provenance', 'x', 'y', 'z',
                     'brain_region']
@@ -350,7 +353,7 @@ class TestRegisterFOV(unittest.TestCase):
         The ONE function is cached and therefore the One object persists beyond this test.
         Here we return the mode back to the default after testing behaviour in offline mode.
         """
-        self.one.mode = 'auto'
+        self.one.mode = 'remote'
 
 
 class TestImagingMeta(unittest.TestCase):
