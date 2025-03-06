@@ -760,6 +760,10 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
             Whether to exclude bad frames indicated by the experimenter in badframes.mat.
         overwrite : bool
             Whether to re-perform extraction and motion registration.
+        do_registration : bool
+            Whether to perform motion registration.
+        roidetect : bool
+            Whether to perform ROI detection.
 
         Returns
         -------
@@ -821,20 +825,22 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         self.session_path.joinpath('alf').mkdir(exist_ok=True)
 
         # Perform registration
-        _logger.info('Performing registration')
-        for plane in plane_folders:
-            ops = np.load(plane.joinpath('ops.npy'), allow_pickle=True).item()
-            ops.update(kwargs)
-            # (ops['do_registration'], ops['reg_file'], ops['meanImg'])
-            _ = self.image_motion_registration(ops)
-            # TODO Handle metrics and QC here
+        if kwargs.get('do_registration', True):
+            _logger.info('Performing registration')
+            for plane in plane_folders:
+                ops = np.load(plane.joinpath('ops.npy'), allow_pickle=True).item()
+                ops.update(kwargs)
+                # (ops['do_registration'], ops['reg_file'], ops['meanImg'])
+                _ = self.image_motion_registration(ops)
+                # TODO Handle metrics and QC here
 
         # ROI detection
-        _logger.info('Performing ROI detection')
-        for plane in plane_folders:
-            ops = np.load(plane.joinpath('ops.npy'), allow_pickle=True).item()
-            ops.update(kwargs)
-            self.roi_detection(ops)
+        if kwargs.get('roidetect', True):
+            _logger.info('Performing ROI detection')
+            for plane in plane_folders:
+                ops = np.load(plane.joinpath('ops.npy'), allow_pickle=True).item()
+                ops.update(kwargs)
+                self.roi_detection(ops)
 
         """ Outputs """
         # Save and rename other outputs
@@ -856,13 +862,14 @@ class MesoscopeSync(base_tasks.MesoscopeTask):
 
     @property
     def signature(self):
+        I = ExpectedDataset.input  # noqa
         signature = {
-            'input_files': [(f'_{self.sync_namespace}_DAQdata.raw.npy', self.sync_collection, True),
-                            (f'_{self.sync_namespace}_DAQdata.timestamps.npy', self.sync_collection, True),
-                            (f'_{self.sync_namespace}_DAQdata.meta.json', self.sync_collection, True),
-                            ('_ibl_rawImagingData.meta.json', self.device_collection, True),
-                            ('rawImagingData.times_scanImage.npy', self.device_collection, True, True),  # register raw
-                            (f'_{self.sync_namespace}_softwareEvents.log.htsv', self.sync_collection, False), ],
+            'input_files': [I(f'_{self.sync_namespace}_DAQdata.raw.npy', self.sync_collection, True),
+                            I(f'_{self.sync_namespace}_DAQdata.timestamps.npy', self.sync_collection, True),
+                            I(f'_{self.sync_namespace}_DAQdata.meta.json', self.sync_collection, True),
+                            I('_ibl_rawImagingData.meta.json', self.device_collection, True, unique=False),
+                            I('rawImagingData.times_scanImage.npy', self.device_collection, True, True, unique=False),
+                            I(f'_{self.sync_namespace}_softwareEvents.log.htsv', self.sync_collection, False), ],
             'output_files': [('mpci.times.npy', 'alf/FOV*', True),
                              ('mpciStack.timeshift.npy', 'alf/FOV*', True),]
         }
