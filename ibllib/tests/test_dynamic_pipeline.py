@@ -3,6 +3,7 @@ from pathlib import Path
 import unittest
 from unittest import mock
 from itertools import chain
+from copy import deepcopy
 
 import yaml
 
@@ -78,6 +79,20 @@ class TestGetTrialsTasks(unittest.TestCase):
         self.assertEqual(2, len(tasks))
         self.assertIsInstance(tasks[0], btasks.ChoiceWorldTrialsNidq)
         one.load_datasets.assert_called()  # check that description file is checked on disk
+
+        # A session where protocol number is specified
+        description = deepcopy(self.description)
+        description['tasks'][1]['passiveChoiceWorld']['protocol_number'] = 2
+        fcn_to_patch = 'ibllib.pipes.dynamic_pipeline._load_acquisition_description'
+        with mock.patch(fcn_to_patch, return_value=description), self.assertLogs(dyn.__name__, 'WARNING') as cm:
+            tasks = dyn.get_trials_tasks(self.session_path_dynamic)
+        self.assertEqual(2, tasks[1].protocol_number)
+        self.assertRegex(cm.records[0].getMessage(), 'Number in collection name does not match task order')
+        # If protocol number is not unique, an assertion error should be raised
+        description = deepcopy(self.description)
+        description['tasks'][1]['passiveChoiceWorld']['protocol_number'] = 0
+        with mock.patch(fcn_to_patch, return_value=description):
+            self.assertRaises(AssertionError, dyn.get_trials_tasks, self.session_path_dynamic)
 
         # A session with timeline acquisition
         self.description['sync']['nidq']['acquisition_software'] = 'timeline'
