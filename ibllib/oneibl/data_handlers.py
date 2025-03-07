@@ -201,7 +201,7 @@ class ExpectedDataset:
         Parameters
         ----------
         session_datasets : pandas.DataFrame
-            An data frame of session datasets.
+            A data frame of session datasets.
         kwargs
             Extra arguments for `one.util.filter_datasets`, namely revision_last_before, qc, and
             ignore_qc_not_set.
@@ -766,7 +766,7 @@ class RemoteEC2DataHandler(DataHandler):
         :return:
         """
         df = super().getData()
-        self.one._check_filesystem(df)
+        self.one._check_filesystem(df, check_hash=False)
 
     def uploadData(self, outputs, version, **kwargs):
         """

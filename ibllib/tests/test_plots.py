@@ -1,18 +1,22 @@
-import unittest
+from pathlib import Path
 import tempfile
+import unittest
 import uuid
 
-from pathlib import Path
+import matplotlib.pyplot as plt
+import numpy as np
 from PIL import Image
 from urllib.parse import urlparse
 
 from one.api import ONE
 from one.webclient import http_download_file
 
+import ibllib.plots.misc
 from ibllib.tests import TEST_DB
 from ibllib.tests.fixtures.utils import register_new_session
 from ibllib.plots.snapshot import Snapshot
 from ibllib.plots.figures import dlc_qc_plot
+
 
 WIDTH, HEIGHT = 1000, 100
 
@@ -163,3 +167,19 @@ class TestDlcQcPlot(unittest.TestCase):
         # fig.savefig(fig_path)
         # with Image.open(fig_path) as im:
         #     self.assertEqual(im.size, (1700, 1000))
+
+
+class TestMiscPlot(unittest.TestCase):
+
+    def test_star_plot(self):
+        r = np.random.rand(6)
+        ax = ibllib.plots.misc.starplot(['a', 'b', 'c', 'd', 'e', 'f'], r, ylim=[0, 1])
+        r = np.random.rand(6)
+        ibllib.plots.misc.starplot(['a', 'b', 'c', 'd', 'e', 'f'], r, ax=ax, color='r')
+        plt.close('all')
+
+    def test_wiggle(self):
+        w = np.random.rand(500, 40) - 0.5
+        ibllib.plots.misc.wiggle(w, fs=30000)
+        ibllib.plots.misc.Traces(w, fs=30000, color='r')
+        plt.close('all')
