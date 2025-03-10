@@ -10,13 +10,9 @@ from one.alf.path import get_session_path, folder_parts, get_alf_path
 from one.registration import RegistrationClient, get_dataset_type
 from one.remote.globus import get_local_endpoint_id, get_lab_from_endpoint_id
 from one.webclient import AlyxClient, no_cache
-from one.converters import ConversionMixin
+from one.converters import ConversionMixin, datasets2records
 import one.alf.exceptions as alferr
 from one.api import ONE
-try:
-    from one.util import datasets2records
-except ImportError:
-    from one.converters import datasets2records
 from iblutil.util import ensure_list
 
 import ibllib
@@ -249,13 +245,13 @@ class IBLRegistrationClient(RegistrationClient):
             missing = [k for k in required if not session_details[k]]
             assert not any(missing), 'missing session information: ' + ', '.join(missing)
             task_protocols = task_data = settings = []
-            json_field = end_time = None
+            json_field = start_time = end_time = None
             users = session_details['users']
             n_trials = n_correct_trials = 0
         else:  # Get session info from task data
-            collections = ensure_list(collections)
+            collections = sorted(ensure_list(collections))
             # read meta data from the rig for the session from the task settings file
-            task_data = (raw.load_bpod(ses_path, collection) for collection in sorted(collections))
+            task_data = (raw.load_bpod(ses_path, collection) for collection in collections)
             # Filter collections where settings file was not found
             if not (task_data := list(zip(*filter(lambda x: x[0] is not None, task_data)))):
                 raise ValueError(f'_iblrig_taskSettings.raw.json not found in {ses_path} Abort.')
@@ -292,6 +288,10 @@ class IBLRegistrationClient(RegistrationClient):
             procedures = [procedures] if isinstance(procedures, str) else (procedures or [])
             json_fields_names = ['IS_MOCK', 'IBLRIG_VERSION']
             json_field = {k: settings[0].get(k) for k in json_fields_names}
+            for field in ('PROJECT_EXTRACTION_VERSION', 'TASK_VERSION'):
+                if value := settings[0].get(field):
+                    # Add these fields only if they exist and are not None
+                    json_field[field] = value
             # The poo count field is only updated if the field is defined in at least one of the settings
             poo_counts = [md.get('POOP_COUNT') for md in settings if md.get('POOP_COUNT') is not None]
             if poo_counts:
@@ -338,6 +338,8 @@ class IBLRegistrationClient(RegistrationClient):
                 data['task_protocol'] = '/'.join(task_protocols)
             if end_time:
                 data['end_time'] = self.ensure_ISO8601(end_time)
+            if start_time:
+                data['start_time'] = self.ensure_ISO8601(start_time)
 
             session = self.one.alyx.rest('sessions', 'partial_update', id=session_id[0], data=data)
             if json_field:

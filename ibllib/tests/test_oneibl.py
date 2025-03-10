@@ -527,7 +527,7 @@ class TestRegistration(unittest.TestCase):
     def tearDown(self) -> None:
         self.td.cleanup()
         self.one.alyx.rest('revisions', 'delete', id=self.rev['name'])
-        self.one.alyx.rest('tags', 'delete', id=self.tag['id'])
+        self.one.alyx.rest('tags', 'delete', id=self.tag['name'])
         today_revision = self.one.alyx.rest('revisions', 'list', id=self.today_revision)
         today_rev = [rev for rev in today_revision if self.today_revision in rev['name']]
         for rev in today_rev:

@@ -129,14 +129,20 @@ class MesoscopeCompress(base_tasks.MesoscopeTask):
             Path to compressed tar file.
         """
         outfiles = []  # should be one per raw_imaging_data folder
-        assert not any(x.operator for x in self.input_files), 'input datasets should not be nested'
         _, all_tifs, _ = zip(*(x.find_files(self.session_path) for x in self.input_files))
+        if self.input_files[0].operator:  # multiple device collections
+            output_identifiers = self.output_files[0].identifiers
+            # Check that the number of input ollections and output files match
+            assert len(self.input_files[0].identifiers) == len(output_identifiers)
+        else:
+            output_identifiers = [self.output_files[0].identifiers]
+            assert self.output_files[0].operator is None, 'only one output file expected'
+
         # A list of tifs, grouped by raw imaging data collection
         input_files = groupby(chain.from_iterable(all_tifs), key=lambda x: x.parent)
-        *_, outfile_name = self.output_files[0].identifiers
-        for in_dir, infiles in input_files:
+        for (in_dir, infiles), out_id in zip(input_files, output_identifiers):
             infiles = list(infiles)
-            outfile = in_dir / outfile_name
+            outfile = self.session_path.joinpath(*filter(None, out_id))
             if outfile.exists() and not overwrite:
                 _logger.info('%s already exists; skipping...', outfile.relative_to(self.session_path))
                 continue
@@ -277,9 +283,9 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                              ('mpciROIs.cellClassifier.npy', 'alf/FOV*', True),
                              ('mpciROIs.uuids.csv', 'alf/FOV*', True),
                              ('mpciROITypes.names.tsv', 'alf/FOV*', True),
-                             ('mpciROIs.masks.npy', 'alf/FOV*', True),
-                             ('mpciROIs.neuropilMasks.npy', 'alf/FOV*', True),
-                             ('_suite2p_ROIData.raw.zip', self.device_collection, False)]
+                             ('mpciROIs.masks.sparse_npz', 'alf/FOV*', True),
+                             ('mpciROIs.neuropilMasks.sparse_npz', 'alf/FOV*', True),
+                             ('_suite2p_ROIData.raw.zip', 'alf/FOV*', False)]
         }
         if not self.overwrite:  # If not forcing re-registration, check whether bin files already exist on disk
             # Including the data.bin in the expected signature ensures raw data files are not needlessly re-downloaded
@@ -352,6 +358,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                 'spks.npy': 'mpci.ROIActivityDeconvolved.npy',
                 'Fneu.npy': 'mpci.ROINeuropilActivityF.npy'
             }
+        fov_dsets = [d[0] for d in self.signature['output_files'] if d[1].startswith('alf/FOV')]
         for plane_dir in self._get_plane_paths(suite2p_dir):
             # Move bin file(s) out of the way
             bin_files = list(plane_dir.glob('data*.bin'))  # e.g. data.bin, data_raw.bin, data_chan2_raw.bin
@@ -367,8 +374,12 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
             n = int(plane_dir.name.split('plane')[1])
             fov_dir = self.session_path.joinpath('alf', f'FOV_{n:02}')
             if fov_dir.exists():
-                _logger.debug('Removing old folder %s', fov_dir.relative_to(self.session_path))
-                shutil.rmtree(str(fov_dir), ignore_errors=False, onerror=None)
+                for f in filter(Path.exists, map(fov_dir.joinpath, fov_dsets)):
+                    _logger.debug('Removing old file %s', f.relative_to(self.session_path))
+                    f.unlink()
+                if not any(fov_dir.iterdir()):
+                    _logger.debug('Removing old folder %s', fov_dir.relative_to(self.session_path))
+                    fov_dir.rmdir()
             prev_level = _logger.level
             _logger.setLevel(logging.WARNING)
             shutil.make_archive(str(fov_dir / '_suite2p_ROIData.raw'), 'zip', plane_dir, logger=_logger)
@@ -404,7 +415,8 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         # Remove old suite2p files
         shutil.rmtree(str(suite2p_dir), ignore_errors=False, onerror=None)
         # Collect all files in those directories
-        return sorted(self.session_path.joinpath('alf').rglob('FOV_??/*.*.*'))
+        datasets = self.session_path.joinpath('alf').rglob('FOV_??/*.*.*')
+        return sorted(x for x in datasets if x.name in fov_dsets)
 
     def load_meta_files(self):
         """Load the extracted imaging metadata files.
@@ -664,7 +676,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
 
         options = ('nplanes', 'data_path', 'save_path0', 'save_folder', 'fast_disk', 'batch_size',
                    'nchannels', 'keep_movie_raw', 'look_one_level_down', 'lines', 'dx', 'dy', 'force_sktiff',
-                   'do_registration')
+                   'do_registration', 'slices')
         ops = self._meta2ops(metadata)
         ops['force_sktiff'] = False
         ops['do_registration'] = True
@@ -748,6 +760,10 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
             Whether to exclude bad frames indicated by the experimenter in badframes.mat.
         overwrite : bool
             Whether to re-perform extraction and motion registration.
+        do_registration : bool
+            Whether to perform motion registration.
+        roidetect : bool
+            Whether to perform ROI detection.
 
         Returns
         -------
@@ -761,7 +777,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         # Load and consolidate the image metadata from JSON files
         metadata, all_meta = self.load_meta_files()
 
-        # Create suite2p output folder in raw imaging data folder
+        # Create suite2p output folder in root session path
         raw_image_collections = sorted(self.session_path.glob(f'{self.device_collection}'))
         save_path = self.session_path.joinpath(save_folder := 'suite2p')
 
@@ -809,20 +825,22 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         self.session_path.joinpath('alf').mkdir(exist_ok=True)
 
         # Perform registration
-        _logger.info('Performing registration')
-        for plane in plane_folders:
-            ops = np.load(plane.joinpath('ops.npy'), allow_pickle=True).item()
-            ops.update(kwargs)
-            # (ops['do_registration'], ops['reg_file'], ops['meanImg'])
-            _ = self.image_motion_registration(ops)
-            # TODO Handle metrics and QC here
+        if kwargs.get('do_registration', True):
+            _logger.info('Performing registration')
+            for plane in plane_folders:
+                ops = np.load(plane.joinpath('ops.npy'), allow_pickle=True).item()
+                ops.update(kwargs)
+                # (ops['do_registration'], ops['reg_file'], ops['meanImg'])
+                _ = self.image_motion_registration(ops)
+                # TODO Handle metrics and QC here
 
         # ROI detection
-        _logger.info('Performing ROI detection')
-        for plane in plane_folders:
-            ops = np.load(plane.joinpath('ops.npy'), allow_pickle=True).item()
-            ops.update(kwargs)
-            self.roi_detection(ops)
+        if kwargs.get('roidetect', True):
+            _logger.info('Performing ROI detection')
+            for plane in plane_folders:
+                ops = np.load(plane.joinpath('ops.npy'), allow_pickle=True).item()
+                ops.update(kwargs)
+                self.roi_detection(ops)
 
         """ Outputs """
         # Save and rename other outputs
@@ -844,15 +862,16 @@ class MesoscopeSync(base_tasks.MesoscopeTask):
 
     @property
     def signature(self):
+        I = ExpectedDataset.input  # noqa
         signature = {
-            'input_files': [(f'_{self.sync_namespace}_DAQdata.raw.npy', self.sync_collection, True),
-                            (f'_{self.sync_namespace}_DAQdata.timestamps.npy', self.sync_collection, True),
-                            (f'_{self.sync_namespace}_DAQdata.meta.json', self.sync_collection, True),
-                            ('_ibl_rawImagingData.meta.json', self.device_collection, True),
-                            ('rawImagingData.times_scanImage.npy', self.device_collection, True, True),  # register raw
-                            (f'_{self.sync_namespace}_softwareEvents.log.htsv', self.sync_collection, False), ],
-            'output_files': [('mpci.times.npy', 'alf/mesoscope/FOV*', True),
-                             ('mpciStack.timeshift.npy', 'alf/mesoscope/FOV*', True),]
+            'input_files': [I(f'_{self.sync_namespace}_DAQdata.raw.npy', self.sync_collection, True),
+                            I(f'_{self.sync_namespace}_DAQdata.timestamps.npy', self.sync_collection, True),
+                            I(f'_{self.sync_namespace}_DAQdata.meta.json', self.sync_collection, True),
+                            I('_ibl_rawImagingData.meta.json', self.device_collection, True, unique=False),
+                            I('rawImagingData.times_scanImage.npy', self.device_collection, True, True, unique=False),
+                            I(f'_{self.sync_namespace}_softwareEvents.log.htsv', self.sync_collection, False), ],
+            'output_files': [('mpci.times.npy', 'alf/FOV*', True),
+                             ('mpciStack.timeshift.npy', 'alf/FOV*', True),]
         }
         return signature
 
