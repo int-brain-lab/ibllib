@@ -110,13 +110,12 @@ class Task(abc.ABC):
     time_elapsed_secs = None
     time_out_secs = 3600 * 2  # time-out after which a task is considered dead
     version = ibllib.__version__
-    force = False  # whether to re-download missing input files on local server if not present
     job_size = 'small'  # either 'small' or 'large', defines whether task should be run as part of the large or small job services
     env = None  # the environment name within which to run the task (NB: the env is not activated automatically!)
     on_error = 'continue'  # whether to raise an exception on error ('raise') or report the error and continue ('continue')
 
     def __init__(self, session_path, parents=None, taskid=None, one=None,
-                 machine=None, clobber=True, location='server', scratch_folder=None, on_error='continue', **kwargs):
+                 machine=None, clobber=True, location='server', scratch_folder=None, on_error='continue', force=False, **kwargs):
         """
         Base task class
         :param session_path: session path
@@ -129,6 +128,7 @@ class Task(abc.ABC):
         data required for task downloaded via one), 'AWS' (remote compute node, data required for task downloaded via AWS),
         or 'SDSC' (SDSC flatiron compute node)
         :param scratch_folder: optional: Path where to write intermediate temporary data
+        :param force: whether to re-download missing input files on local server if not present
         :param args: running arguments
         """
         self.on_error = on_error
@@ -144,6 +144,7 @@ class Task(abc.ABC):
         self.machine = machine
         self.clobber = clobber
         self.location = location
+        self.force = force
         self.plot_tasks = []  # Plotting task/ tasks to create plot outputs during the task
         self.scratch_folder = scratch_folder
         self.kwargs = kwargs
