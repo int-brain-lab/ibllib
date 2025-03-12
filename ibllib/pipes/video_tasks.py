@@ -252,7 +252,8 @@ class VideoSyncQcBpod(base_tasks.VideoTask):
         if camera_data is None:
             camera_data, _ = self.extract_camera(save=False)
         qc = CameraQC(
-            self.session_path, 'left', sync_type='bpod', sync_collection=self.collection, one=self.one)
+            self.session_path, 'left', sync_type='bpod', sync_collection=self.collection, one=self.one,
+            protocol=self.protocol)
         qc.run(update=update)
         return qc
 
