@@ -232,15 +232,21 @@ def _get_trials_tasks(session_path, acquisition_description=None, sync_tasks=Non
     sync_kwargs = {'sync': sync, **sync_args}
 
     # Behavior tasks
+    protocol_numbers = set()
     task_protocols = acquisition_description.get('tasks', [])
     for i, (protocol, task_info) in enumerate(chain(*map(dict.items, task_protocols))):
         collection = task_info.get('collection', f'raw_task_data_{i:02}')
         task_kwargs = {'protocol': protocol, 'collection': collection}
-        # For now the order of protocols in the list will take precedence. If collections are numbered,
-        # check that the numbers match the order.  This may change in the future.
+        # The order of protocols in the list will take precedence unless protocol_number is present.
+        # If collections are numbered, check that the numbers match the order.
+        n = i
         if re.match(r'^raw_task_data_\d{2}$', collection):
-            task_kwargs['protocol_number'] = i
-            if int(collection.split('_')[-1]) != i:
+            # Protocol number may be overridden by the protocol_number key
+            if task_info.get('protocol_number') is not None:
+                n = task_info['protocol_number']
+            task_kwargs['protocol_number'] = n
+            assert not (n in protocol_numbers or protocol_numbers.add(n)), 'protocol numbers must be unique'
+            if int(collection.split('_')[-1]) != n:
                 _logger.warning('Number in collection name does not match task order')
         if extractors := task_info.get('extractors', False):
             extractors = (extractors,) if isinstance(extractors, str) else extractors
