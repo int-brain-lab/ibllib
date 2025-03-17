@@ -673,7 +673,8 @@ class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
             assert len(fov_time_shifts) == self.n_FOVs, f'unexpected number of FOVs for {collection}'
             ts = frame_times[np.logical_and(frame_times >= tmin, frame_times <= tmax)]
             assert ts.size >= imaging_data[
-                'times_scanImage'].size, f"fewer DAQ timestamps for {collection} than expected: DAQ/frames = {ts.size}/{imaging_data['times_scanImage'].size}"
+                'times_scanImage'].size, (f"fewer DAQ timestamps for {collection} than expected: "
+                                          f"DAQ/frames = {ts.size}/{imaging_data['times_scanImage'].size}")
             if ts.size > imaging_data['times_scanImage'].size:
                 _logger.warning(
                     'More DAQ frame times detected for %s than were found in the raw image data.\n'
