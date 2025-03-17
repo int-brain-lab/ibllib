@@ -1,5 +1,6 @@
 """Mesoscope (timeline) data extraction."""
 import logging
+from itertools import chain
 
 import numpy as np
 from scipy.signal import find_peaks
@@ -625,7 +626,7 @@ class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
         self.var_names = [f'{x}_{y.lower()}' for x in self.var_names for y in fov]
         self.save_names = [f'{y}/{x}' for x in self.save_names for y in fov]
 
-    def _extract(self, sync=None, chmap=None, device_collection='raw_imaging_data', events=None):
+    def _extract(self, sync=None, chmap=None, device_collection='raw_imaging_data', events=None, use_volume_counter=False):
         """
         Extract the frame timestamps for each individual field of view (FOV) and the time offsets
         for each line scan.
@@ -635,6 +636,10 @@ class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
         number of frame timestamps extracted from the image file headers (found in the
         rawImagingData.times file).  The field of view (FOV) shifts are then applied to these
         timestamps for each field of view and provided together with the line shifts.
+
+        Note that for single plane sessions, the 'neural_frames' and 'volume_counter' channels are
+        identical. For multi-depth sessions, 'neural_frames' contains the frame times for each
+        depth acquired.
 
         Parameters
         ----------
@@ -649,14 +654,22 @@ class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
         events : pandas.DataFrame
             A table of software events, with columns {'time_timeline' 'name_timeline',
             'event_timeline'}.
+        use_volume_counter : bool
+            If True, use the 'volume_counter' channel to extract the frame times. On the scale of
+            calcium dynamics, it shouldn't matter whether we read specifically the timing of each
+            slice, or assume that they are equally spaced between the volume_counter pulses. But
+            in cases where each depth doesn't have the same nr of FOVs / scanlines, some depths
+            will be faster than others, so it would be better to read out the neural frames for
+            the purpose of computing the correct timeshifts per line.  This can be set to True
+            for legacy extractions.
 
         Returns
         -------
         list of numpy.array
             A list of timestamps for each FOV and the time offsets for each line scan.
         """
+        volume_times = sync['times'][sync['channels'] == chmap['volume_counter']]
         frame_times = sync['times'][sync['channels'] == chmap['neural_frames']]
-
         # imaging_start_time = datetime.datetime(*map(round, self.rawImagingData.meta['acquisitionStartTime']))
         if isinstance(device_collection, str):
             device_collection = [device_collection]
@@ -671,9 +684,11 @@ class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
             # Calculate line shifts
             _, fov_time_shifts, line_time_shifts = self.get_timeshifts(imaging_data['meta'])
             assert len(fov_time_shifts) == self.n_FOVs, f'unexpected number of FOVs for {collection}'
+            vts = volume_times[np.logical_and(volume_times >= tmin, volume_times <= tmax)]
             ts = frame_times[np.logical_and(frame_times >= tmin, frame_times <= tmax)]
-            assert ts.size >= imaging_data[
-                'times_scanImage'].size, f"fewer DAQ timestamps for {collection} than expected: DAQ/frames = {ts.size}/{imaging_data['times_scanImage'].size}"
+            assert ts.size >= imaging_data['times_scanImage'].size, \
+                (f'fewer DAQ timestamps for {collection} than expected: '
+                 f'DAQ/frames = {ts.size}/{imaging_data["times_scanImage"].size}')
             if ts.size > imaging_data['times_scanImage'].size:
                 _logger.warning(
                     'More DAQ frame times detected for %s than were found in the raw image data.\n'
@@ -682,8 +697,32 @@ class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
                     'when image data is corrupt, or when frames are not written to file.',
                     collection, ts.size, imaging_data['times_scanImage'].size)
                 _logger.info('Dropping last %i frame times for %s', ts.size - imaging_data['times_scanImage'].size, collection)
+                vts = vts[vts < ts[imaging_data['times_scanImage'].size]]
                 ts = ts[:imaging_data['times_scanImage'].size]
-            fov_times.append([ts + offset for offset in fov_time_shifts])
+
+            # A 'slice_id' is a ScanImage 'ROI', comprising a collection of 'scanfields' a.k.a. slices at different depths
+            # The total number of 'scanfields' == len(imaging_data['meta']['FOV'])
+            slice_ids = np.array([x['slice_id'] for x in imaging_data['meta']['FOV']])
+            unique_areas, slice_counts = np.unique(slice_ids, return_counts=True)
+            n_unique_areas = len(unique_areas)
+
+            if use_volume_counter:
+                # This is the simple, less accurate way of extrating imaging times
+                fov_times.append([vts + offset for offset in fov_time_shifts])
+            else:
+                if len(np.unique(slice_counts)) != 1:
+                    # A different number of depths per FOV may no longer be an issue with this new method
+                    # of extracting imaging times, but the below assertion is kept as it's not tested and
+                    # not implemented for a different number of scanlines per FOV
+                    _logger.warning(
+                        'different number of slices per area (i.e. scanfields per ROI) (%s).',
+                        ' vs '.join(map(str, slice_counts)))
+                # This gets the imaging times for each FOV, respecting the order of the scanfields in multidepth imaging
+                fov_times.append(list(chain.from_iterable(
+                    [ts[i::n_unique_areas][:vts.size] + offset for offset in fov_time_shifts[:n_depths]]
+                    for i, n_depths in enumerate(slice_counts)
+                )))
+
             if not line_shifts:
                 line_shifts = line_time_shifts
             else:  # The line shifts should be the same across all imaging bouts
@@ -692,7 +731,7 @@ class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
         # Concatenate imaging timestamps across all bouts for each field of view
         fov_times = list(map(np.concatenate, zip(*fov_times)))
         n_fov_times, = set(map(len, fov_times))
-        if n_fov_times != frame_times.size:
+        if n_fov_times != volume_times.size:
             # This may happen if an experimenter deletes a raw_imaging_data folder
             _logger.debug('FOV timestamps length does not match neural frame count; imaging bout(s) likely missing')
         return fov_times + line_shifts
@@ -781,7 +820,7 @@ class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
         Calculate the time shifts for each field of view (FOV) and the relative offsets for each
         scan line.
 
-        For a 2 scan field, 2 depth recording (so 4 FOVs):
+        For a 2 area (i.e. 'ROI'), 2 depth recording (so 4 FOVs):
 
         Frame 1, lines 1-512 correspond to FOV_00
         Frame 1, lines 551-1062 correspond to FOV_01
@@ -789,6 +828,13 @@ class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
         Frame 2, lines 551-1062 correspond to FOV_03
         Frame 3, lines 1-512 correspond to FOV_00
         ...
+
+        All areas are acquired for each depth such that...
+
+        FOV_00 = area 1, depth 1
+        FOV_01 = area 2, depth 1
+        FOV_02 = area 1, depth 2
+        FOV_03 = area 2, depth 2
 
         Parameters
         ----------

@@ -875,7 +875,7 @@ class MesoscopeSync(base_tasks.MesoscopeTask):
         }
         return signature
 
-    def _run(self):
+    def _run(self, **kwargs):
         """
         Extract the imaging times for all FOVs.
 
@@ -901,9 +901,10 @@ class MesoscopeSync(base_tasks.MesoscopeTask):
         self.rawImagingData['meta'] = mesoscope.patch_imaging_meta(self.rawImagingData['meta'])
         n_FOVs = len(self.rawImagingData['meta']['FOV'])
         sync, chmap = self.load_sync()  # Extract sync data from raw DAQ data
+        legacy = kwargs.get('legacy', False)  # this option may be removed in the future once fully tested
         mesosync = mesoscope.MesoscopeSyncTimeline(self.session_path, n_FOVs)
         _, out_files = mesosync.extract(
-            save=True, sync=sync, chmap=chmap, device_collection=collections, events=events)
+            save=True, sync=sync, chmap=chmap, device_collection=collections, events=events, use_volume_counter=legacy)
         return out_files
 
 
