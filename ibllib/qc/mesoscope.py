@@ -10,6 +10,7 @@ from pathlib import Path
 
 import numpy as np
 import scipy.stats
+from one.alf.spec import is_uuid
 
 from . import base
 
@@ -127,11 +128,27 @@ class TestQM(unittest.TestCase):
         self.assertCountEqual(expected, fov_metrics.dtype.names)
         self.assertTrue(all(fov_metrics[x].size == F.shape[1] for x in expected))
 
+    def test_qc_class(self):
+        ...
+
 
 class MesoscopeQC(base.QC):
-    """A class for computing camera QC metrics."""
+    """A class for computing mesoscope QC FOV metrics."""
 
-    def run(self, update: bool = False, **kwargs) -> (str, dict):
+    def _confirm_endpoint_id(self, endpoint_id):
+        """Confirm the endpoint ID and set the name attribute.
+
+        If the endpoint ID is a UUID, the name attribute is set to the name of the FOV from Alyx.
+        Otherwise the name attribute is set to the endpoint ID (assumed to be either FOV_XX or planeX).
+        """
+        if not is_uuid(endpoint_id, versions=(4,)):
+            self.log.debug('Offline mode; skipping endpoint_id check')
+            self.name = endpoint_id
+            return
+        super()._confirm_endpoint_id(endpoint_id)
+        self.name = self.one.alyx.rest('field-of-views', 'read', id=endpoint_id)['name']
+
+    def run(self, update: bool = False, **kwargs):
         """
         Run mesoscope QC checks and return outcome.
 
@@ -147,16 +164,11 @@ class MesoscopeQC(base.QC):
         dict
             A map of checks and their outcomes.
         """
-        _log.info(f'Computing QC outcome for session {self.eid}')
+        _log.info(f'Computing QC outcome for FOV {self.eid}')
 
         namespace = 'mesoscope'
-        if all(x is None for x in self.data.values()):
+        if not getattr(self, 'data', {}):
             self.load_data(**kwargs)
-        if self.data['frame_samples'] is None or self.data['timestamps'] is None:
-            return 'NOT_SET', {}
-        if self.data['timestamps'].shape[0] == 0:
-            _log.error(f'No timestamps for {self.label} camera; setting outcome to CRITICAL')
-            return 'CRITICAL', {}
 
         def is_metric(x):
             return isfunction(x) and x.__name__.startswith('check_')
@@ -177,8 +189,73 @@ class MesoscopeQC(base.QC):
             self.update(outcome, namespace)
         return outcome, self.metrics
 
-    def check_data_lengths(self, **kwargs):
-        return 'NOT_SET'
+    def load_data(self):
+        """Load the data required for QC checks."""
+        self.data = {}
+        if self.name.startswith('FOV_'):
+            # Load mpci objects
+            alf_path = self.session_path.joinpath('alf', self.eid)
+            self.data['F'] = np.load(alf_path.joinpath('mpci.ROIActivityF.npy')).T
+            self.data['Fneu'] = np.load(alf_path.joinpath('mpci.ROINeuropilActivityF.npy')).T
+            self.data['iscell'] = np.load(alf_path.joinpath('mpciROIs.mpciROITypes.npy'))
+            self.data['badframes'] = np.load(alf_path.joinpath('mpci.badFrames.npy'))
+            s2pdata = np.load(alf_path.joinpath('_suite2p_ROIData.raw.zip'), allow_pickle=True)  # lazy load from zip
+            self.data['ops'] = s2pdata['ops'].item()
+            self.data['times'] = np.load(alf_path.joinpath('mpci.times.npy'))
+        elif self.name.startswith('plane'):
+            # Load suite2p objects
+            alf_path = self.session_path.joinpath('suite2p', self.eid)
+            self.data['F'] = np.load(alf_path.joinpath('F.npy'))
+            self.data['Fneu'] = np.load(alf_path.joinpath('Fneu.npy'))
+            self.data['iscell'] = np.load(alf_path.joinpath('iscell.npy'))
+            self.data['badframes'] = np.load(alf_path.joinpath('mpci.badFrames.npy.npy'))
+            self.data['ops'] = np.load(alf_path.joinpath('ops.npy'), allow_pickle=True).item()
+            self.data['times'] = None
+        else:
+            raise ValueError(f'Invalid session identifier: {self.eid}')
+
+    def check_neural_quality(self, **kwargs):
+        """Check the neural quality metrics."""
+        neural_metrics, fov_metrics = get_neural_quality_metrics(**self.data, **kwargs)
+        # TODO Apply thresholds
+        raise NotImplementedError
+
+    @staticmethod
+    def qc_session(eid, one=None, **kwargs):
+        """Run mesoscope QC checks on a session.
+
+        This instantiates a MesoscopeQC object and runs the checks for each FOV in the session.
+        It's not ideal to have one QC object per FOV - this could also be a single class that updates
+        both the session endpoint and the FOV endpoints.
+
+        The QC may be run on a local session before the suite2p outputs have been renamed to ALF format,
+        however to update the FOV endpoint, this relies on the MesoscopeFOV task having been run, and for the
+        data, the MesoscopePreprocess task.
+        """
+        session_qc = base.QC(eid, one=one)
+        one = session_qc.one
+        remote = session_qc.one and not session_qc.one.offline
+        if remote:
+            collections = session_qc.one.list_collections(eid, collection='alf/FOV_??')
+            collections = sorted(map(session_qc.session_path.joinpath, collections))
+            FOVs = one.alyx.rest('fields-of-view', 'list', session=session_qc.eid)
+            for collection in collections:
+                endpoint_id = next((x['id'] for x in FOVs if x['name'] == collection.name), None)
+                if not endpoint_id:
+                    _log.warning(f'No Alyx record for FOV {collection.name}')
+                    continue
+                qc = MesoscopeQC(endpoint_id, one=one, endpoint='fields-of-view')
+                qc.session_path = session_qc.session_path
+                outcomes, extended = qc.run(update=False)
+        else:
+            collections = sorted(session_qc.session_path.glob('alf/FOV_??'))
+            if not collections:
+                collections = sorted(session_qc.session_path.glob('suite2p/plane*'))
+            for collection in collections:
+                qc = MesoscopeQC(collection.name, one=one, endpoint='fields-of-view')
+                qc.session_path = session_qc.session_path
+                outcomes, extended = qc.run(update=False)
+                # TODO Log or store outcomes for each FOV
 
 
 if __name__ == '__main__':
