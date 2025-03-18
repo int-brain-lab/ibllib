@@ -30,6 +30,7 @@ import pandas as pd
 import sparse
 from scipy.io import loadmat
 from scipy.interpolate import interpn
+from one.webclient import AlyxClient
 import one.alf.io as alfio
 from one.alf.spec import to_alf
 from one.alf.path import filename_parts, session_path_parts
@@ -1370,6 +1371,239 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
             mlapdv[i] = MLAPDV
             location_id[i] = annotation
         return mlapdv, location_id
+
+
+class MesoscopeFOVHistology(MesoscopeFOV):
+    """Create FOV location objects in Alyx from histology data"""
+
+    @property
+    def signature(self):
+        I = ExpectedDataset.input  # noqa
+        signature = {
+            'input_files': [('_ibl_rawImagingData.meta.json', self.device_collection, True),
+                            ('mpciROIs.stackPos.npy', 'alf/FOV*', True),
+                            I('referenceImage.points.json', self.device_collection, True),
+                            I('referenceImage.stack.tif', f'{self.device_collection}/reference', True)],
+            'output_files': [('mpciMeanImage.brainLocationIds*.npy', 'alf/FOV_*', True),
+                             ('mpciMeanImage.mlapdv*.npy', 'alf/FOV_*', True),
+                             ('mpciROIs.mlapdv*.npy', 'alf/FOV_*', True),
+                             ('mpciROIs.brainLocationIds*.npy', 'alf/FOV_*', True),
+                             ('_ibl_rawImagingData.meta.json', self.device_collection, True)]
+        }
+        return signature
+
+    def _run(self, *args, **kwargs):
+        """
+        Register fields of view locations to Alyx and extract the coordinates and IDs of each ROI
+        using histology alignment data
+
+        Steps:
+            1. Save the mpciMeanImage.brainLocationIds and mlapdv datasets.
+            2. Use mean image coordinates and ROI stack position datasets to extract brain location
+             of each ROI.
+            3. Register the updated FOV locations on alyx with Histology provenance
+            4. Register the referenceImage.points file and add this info to the session json
+
+        Returns
+        -------
+        list
+            The newly created files to be registered
+
+        Notes
+        -----
+        - This task modifies the first meta JSON file.  All meta files are registered by this task.
+        """
+        # Questions:
+        # Do X Y Z change?
+        # Do we need to update the _ibl_rawImagingData.meta.json
+
+        # Make sure we have an online version of ONE
+        assert self.one and not self.one.offline
+
+        self.root_path = Path('/mnt/s0/Data/Subjects')
+        # Find the reference session used for histology alignment
+        self.reference_eid = kwargs.pop('reference_eid')  # TODO error handling
+        reference_path = self.root_path.joinpath(*self.one.eid2path(self.reference_eid).parts[-3:])
+
+        # Get info for the current session being processed
+        self.eid = self.one.path2eid(self.session_path)
+        info = self.one.eid2ref(self.eid, as_dict=True)
+        self.subject = info['subject']
+        self.lab = info['lab']
+
+        # If the file doesn't already exist locally download the registered_mlapdv.npy file
+        self.histology_file = self.root_path.joinpath(f'{self.subject}/registered_mlapdv.npy')
+        if not self.histology_file.exists():
+            # Download the file using globus
+            self.download_histology_file()
+
+        assert self.histology_file.exists(), f'Could not find registered_mlapdv.npy file for subject {self.subject}'
+
+        # Find the refereanceImage.points.json for the session. This is generated using the mesoscope stack gui
+        file_exists, self.gui_file, _ = dataset_from_name(
+            'referenceImage.points.json', self.input_files).find_files(self.session_path)
+        assert file_exists, f'Could not find referenceImage.points.json file for session {self.session_path}'
+
+        # Load in the referenceImage.stack for the reference stack used during the histology registration
+        self.reference_stack = self.load_reference_image_stack(session_path=reference_path)
+        # Load in the referenceImage.stack for the current session
+        self.session_stack = self.load_reference_image_stack()
+
+        outfiles = super()._run(*args, provenance=Provenance.HISTOLOGY, **kwargs)
+
+        # Also want to register the reference imaging points to alyx in the session json and register this file
+        self.register_user_points()
+        outfiles.append(self.gui_file)
+
+        return outfiles
+
+    def register_user_points(self):
+        """
+        Upload the user chosen referenceImage.points file and to the session json
+        :return:
+        """
+
+        with open(self.gui_file) as js:
+            reference_points = json.load(js)
+
+        # TODO confirm the key for the data
+        self.one.alyx.json_field_update(endpoint='sessions', uuid=self.eid, field_name='json',
+                                        data={'reference_image_points': reference_points})
+        return
+
+    def download_histology_file(self):
+        """
+        Download the registered_mlapdv.npy file from the histology folder on flatiron and store locally in
+        the subject folder
+        :return:
+        """
+        from one.remote.globus import Globus  # noqa
+        globus = Globus(client_name='server', headless=True)
+
+        if self.lab == 'cortexlab':
+            ac = AlyxClient(base_url='https://alyx.internationalbrainlab.org', cache_rest=None)
+            globus.add_endpoint(f'flatiron_{self.lab}', label=f'histology_{self.lab}', alyx=ac,
+                                root_path=f'/histology/{self.lab}/Subjects')
+        else:
+            globus.add_endpoint(f'flatiron_{self.lab}', label=f'histology_{self.lab}', alyx=self.one.alyx,
+                                root_path=f'/histology/{self.lab}/Subjects')
+
+        file = f'{self.subject}/registered_mlapdv.npy'
+        globus.mv(f'histology_{self.lab}', 'local', [file], [file])
+
+    def load_reference_image_stack(self, session_path=None):
+        sess_path = session_path or self.session_path
+        file_exists, reference_stack, _ = dataset_from_name(
+            'referenceImage.stack.tif', self.input_files).find_files(sess_path)
+        assert file_exists, f'Could not find referenceImage.stack.tif for session {sess_path}'
+
+        return reference_stack
+
+    def align_to_reference(self):
+        """
+        Placeholder for code that will align the reference stacks
+        :return:
+        """
+
+        return
+
+    def project_mlapdv(self, meta, atlas=None):
+        """
+        Placeholder for mlapdv re-projection code
+
+        Parameters
+        ----------
+        meta : dict
+            The raw imaging data meta file, containing coordinates for the centre of each field of
+            view.
+        atlas : ibllib.atlas.Atlas
+            An atlas instance.
+
+        Returns
+        -------
+        dict
+            A map of FOV number (int) to mean image MLAPDV coordinates as a 2D numpy array.
+        dict
+            A map of FOV number (int) to mean image brain location IDs as a 2D numpy int array.
+        """
+
+        # If the session being processed is not the session that was used during the histology alignment then
+        # we need to align this sessions reference stack to the reference stack of the session used during the
+        # histology alignment
+        if self.reference_eid != self.eid:
+            self.align_to_reference()
+
+        # Placeholder for mlapdv re-projection code using the values stored in the
+        mlapdv = dict()
+        location_id = dict()
+
+        return mlapdv, location_id
+
+    def register_fov(self, meta: dict, suffix: str = None) -> (list, list):
+        """
+        Create FOV locations on Alyx with histology provenance
+
+        Assumes field of view recorded perpendicular to objective.
+        Assumes field of view is plane (negligible volume).
+
+        Required Alyx fixtures:
+            - experiments.ImagingType(name='mesoscope')
+            - experiments.CoordinateSystem(name='IBL-Allen')
+
+        Parameters
+        ----------
+        meta : dict
+            The raw imaging meta data from _ibl_rawImagingData.meta.json.
+        suffix : str
+            The file attribute suffixes to load from the mpciMeanImage object. Either 'estimate' or
+            None. No suffix means the FOV location provenance will be H (Histology).
+
+        Returns
+        -------
+        list of dict
+            A list registered of field of view entries from Alyx.
+        """
+        dry = self.one is None or self.one.offline
+        alyx_fovs = []
+
+        for i, fov in enumerate(meta.get('FOV', [])):
+            assert set(fov.keys()) >= {'MLAPDV', 'nXnYnZ', 'roiUUID'}
+
+            fov_name = f'FOV_{i:02}'
+            alyx_FOV = self.one.alyx.rest('fields-of-view', 'list', name=f'FOV_{i:02}', session=self.eid)
+            assert len(alyx_FOV) == 1, f'No field of view object found on alyc for {fov_name}'
+            alyx_FOV = alyx_FOV[0]
+
+            alyx_fovs.append(alyx_FOV)
+
+            # Field of view location
+            data = {'field_of_view': alyx_FOV['id'],
+                    'default_provenance': True,
+                    'coordinate_system': 'IBL-Allen',
+                    'n_xyz': fov['nXnYnZ'],
+                    'provenance': 'Histology'}
+
+            # Convert coordinates to 4 x 3 array (n corners by n dimensions)
+            # x1 = top left ml, y1 = top left ap, y2 = top right ap, etc.
+            coords = [fov['MLAPDV'][key] for key in ('topLeft', 'topRight', 'bottomLeft', 'bottomRight')]
+            coords = np.vstack(coords).T
+            data.update({k: arr.tolist() for k, arr in zip('xyz', coords)})
+
+            # Load MLAPDV + brain location ID maps of pixels
+            filename = 'mpciMeanImage.brainLocationIds_ccf_2017' + (f'_{suffix}' if suffix else '') + '.npy'
+            filepath = self.session_path.joinpath('alf', f'FOV_{i:02}', filename)
+            mean_image_ids = alfio.load_file_content(filepath)
+
+            data['brain_region'] = np.unique(mean_image_ids).astype(int).tolist()
+
+            if dry:
+                print(data)
+                alyx_FOV['location'] = []
+                alyx_FOV['location'].append(data)
+            else:
+                alyx_fovs[-1]['location'].append(self.one.alyx.rest('fov-location', 'create', data=data))
+
+        return alyx_fovs
 
 
 def surface_normal(triangle):
