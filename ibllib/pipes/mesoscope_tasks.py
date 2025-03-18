@@ -39,7 +39,7 @@ from iblutil.util import flatten, ensure_list
 from iblatlas.atlas import ALLEN_CCF_LANDMARKS_MLAPDV_UM, MRITorontoAtlas
 
 from ibllib.pipes import base_tasks
-from ibllib.oneibl.data_handlers import ExpectedDataset, dataset_from_name
+from ibllib.oneibl.data_handlers import ExpectedDataset, dataset_from_name, update_collections, _parse_signature
 from ibllib.io.extractors import mesoscope
 
 
@@ -1382,7 +1382,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
         signature = {
             'input_files': [('_ibl_rawImagingData.meta.json', self.device_collection, True),
                             ('mpciROIs.stackPos.npy', 'alf/FOV*', True),
-                            I('referenceImage.points.json', self.device_collection, True),
+                            I('referenceImage.points.json', f'{self.device_collection}/reference', True),
                             I('referenceImage.stack.tif', f'{self.device_collection}/reference', True)],
             'output_files': [('mpciMeanImage.brainLocationIds*.npy', 'alf/FOV_*', True),
                              ('mpciMeanImage.mlapdv*.npy', 'alf/FOV_*', True),
@@ -1423,7 +1423,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
         self.root_path = Path('/mnt/s0/Data/Subjects')
         # Find the reference session used for histology alignment
         self.reference_eid = kwargs.pop('reference_eid')  # TODO error handling
-        reference_path = self.root_path.joinpath(*self.one.eid2path(self.reference_eid).parts[-3:])
+        self.reference_path = self.root_path.joinpath(*self.one.eid2path(self.reference_eid).parts[-3:])
 
         # Get info for the current session being processed
         self.eid = self.one.path2eid(self.session_path)
@@ -1440,14 +1440,12 @@ class MesoscopeFOVHistology(MesoscopeFOV):
         assert self.histology_file.exists(), f'Could not find registered_mlapdv.npy file for subject {self.subject}'
 
         # Find the refereanceImage.points.json for the session. This is generated using the mesoscope stack gui
-        file_exists, self.gui_file, _ = dataset_from_name(
-            'referenceImage.points.json', self.input_files).find_files(self.session_path)
-        assert file_exists, f'Could not find referenceImage.points.json file for session {self.session_path}'
+        self.gui_file = self.load_file('referenceImage.points.json')
 
         # Load in the referenceImage.stack for the reference stack used during the histology registration
-        self.reference_stack = self.load_reference_image_stack(session_path=reference_path)
+        self.reference_stack = self.load_reference_image_stack()
         # Load in the referenceImage.stack for the current session
-        self.session_stack = self.load_reference_image_stack()
+        self.session_stack = self.load_file('referenceImage.stack.tif')
 
         outfiles = super()._run(*args, provenance=Provenance.HISTOLOGY, **kwargs)
 
@@ -1491,13 +1489,27 @@ class MesoscopeFOVHistology(MesoscopeFOV):
         file = f'{self.subject}/registered_mlapdv.npy'
         globus.mv(f'histology_{self.lab}', 'local', [file], [file])
 
-    def load_reference_image_stack(self, session_path=None):
-        sess_path = session_path or self.session_path
-        file_exists, reference_stack, _ = dataset_from_name(
-            'referenceImage.stack.tif', self.input_files).find_files(sess_path)
-        assert file_exists, f'Could not find referenceImage.stack.tif for session {sess_path}'
+    def load_file(self, filename, input_files=None, session_path=None):
+        input_files = input_files or self.input_files
+        session_path = session_path or self.session_path
 
-        return reference_stack
+        dsets = dataset_from_name(filename, input_files)
+        file = list(chain.from_iterable(map(lambda x: x.find_files(session_path)[1], dsets)))
+        assert len(file) == 1, f'Could not find/ multiple {filename} for session {session_path}'
+
+        return file[0]
+
+    def load_reference_image_stack(self):
+        I = ExpectedDataset.input # noqa
+        raw_imaging_folders = [p.name for p in self.reference_path.glob(self.device_collection)]
+        signature = _parse_signature({
+            'input_files': [I('referenceImage.stack.tif', f'{self.device_collection}/reference', True)],
+            'output_files': []}
+        )
+
+        input_files = [update_collections(x, raw_imaging_folders, self.device_collection) for x in signature['input_files']]
+
+        return self.load_file('referenceImage.stack.tif', input_files, self.reference_path)
 
     def align_to_reference(self):
         """
