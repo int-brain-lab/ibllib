@@ -328,7 +328,7 @@ class VideoSyncQcNidq(base_tasks.VideoTask):
 class DLC(base_tasks.VideoTask):
     """
     This task relies on a correctly installed dlc environment as per
-    https://docs.google.com/document/d/1g0scP6_3EmaXCU4SsDNZWwDTaD9MG0es_grLA-d0gh0/edit#
+    https://github.com/int-brain-lab/iblvideo#installing-dlc-locally-on-an-ibl-server---tensorflow-2120
 
     If your environment is set up otherwise, make sure that you set the respective attributes:
     t = EphysDLC(session_path)
@@ -341,6 +341,7 @@ class DLC(base_tasks.VideoTask):
     level = 2
     force = True
     job_size = 'large'
+    env = 'dlc'
 
     dlcenv = Path.home().joinpath('Documents', 'PYTHON', 'envs', 'dlcenv', 'bin', 'activate')
     scripts = Path.home().joinpath('Documents', 'PYTHON', 'iblscripts', 'deploy', 'serverpc', 'dlc')
