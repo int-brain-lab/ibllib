@@ -655,15 +655,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         For a scratch drive at /mnt/h0 we would have the following temp dir:
         /mnt/h0/iblsorter_1.8.0_CSHL071_2020-10-04_001_probe01/
         """
-        # get the scratch drive from the shell script
-        if self.scratch_folder is None:
-            with open(self.SHELL_SCRIPT) as fid:
-                lines = fid.readlines()
-            line = [line for line in lines if line.startswith("SCRATCH_DRIVE=")][0]
-            m = re.search(r"\=(.*?)(\#|\n)", line)[0]
-            scratch_drive = Path(m[1:-1].strip())
-        else:
-            scratch_drive = self.scratch_folder
+        scratch_drive = self.scratch_folder if self.scratch_folder else Path('/scratch')
         assert scratch_drive.exists(), f"Scratch drive {scratch_drive} not found"
         # get the version of the sorter
         self.version = self._fetch_iblsorter_version(self.SORTER_REPOSITORY)
