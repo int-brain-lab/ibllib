@@ -13,7 +13,7 @@ from neuropixel import trace_header, TIP_SIZE_UM
 
 from ibllib import __version__ as ibllib_version
 from ibllib.pipes.ephys_alignment import EphysAlignment
-from ibllib.pipes.histology import interpolate_along_track
+import ibllib.pipes.histology as hist
 from iblatlas.atlas import AllenAtlas
 
 _logger = logging.getLogger(__name__)
@@ -156,7 +156,7 @@ class ReportSnapshotProbe(ReportSnapshot):
 
             if self.hist_lookup[self.histology_status] == 1:
                 xyz = xyz[np.argsort(xyz[:, 2]), :]
-                electrodes['mlapdv'] = interpolate_along_track(xyz, (depths + TIP_SIZE_UM) / 1e6)
+                electrodes['mlapdv'] = hist.interpolate_along_track(xyz, (depths + TIP_SIZE_UM) / 1e6)
                 electrodes['atlas_id'] = self.brain_atlas.regions.get(self.brain_atlas.get_labels(electrodes['mlapdv']))['id']
 
         return electrodes
