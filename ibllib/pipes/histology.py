@@ -4,6 +4,7 @@ import logging
 import matplotlib.pyplot as plt
 import numpy as np
 from one.api import ONE
+from one.remote.globus import Globus
 import one.alf.io as alfio
 
 from neuropixel import TIP_SIZE_UM, trace_header
@@ -13,6 +14,8 @@ from ibllib.qc import base
 
 from ibldsp.utils import fcn_cosine
 
+from ibllib.pipes.mesoscope_tasks import MesoscopeFOVHistology
+from ibllib.pipes.tasks import Pipeline
 
 _logger = logging.getLogger(__name__)
 
@@ -716,3 +719,80 @@ def coverage_grid(xyz_channels, spacing=500, ba=None):
     bc = atlas.BrainCoordinates(nxyz=nxyz, xyz0=- bc.i2xyz(iorigin), dxyz=dxyz)
 
     return r, bc
+
+
+def upload_mesoscope_registration_data(file, reference_eid, one=None, data_repo='cortex_lab_2_SR'):
+    """
+    Upload the mesoscope registered coordinate data to flatiron and create the relevant MesoscopeHistologyFOV tasks
+    on alyx
+
+    Must have a globus setup with the clientnname 'server'. This can be setup using the following code and following
+    the instructions given (ask dev for globus client id and authentication)
+    from one.remote.globus import Globus
+    globus = Globus.setup(client_name='server')
+
+    If making tasks for cortexlab must also have Alyx setup to connect to https://alyx.cortexlab.net
+
+    Parameters
+    ----------
+    file : Path
+        The path to the local file to upload. Expect it to be in the following
+        format full_path_to_file/{subject}/registered_mlapdv.npy
+    reference_eid : str session UUID (eid)
+        The session UUID (eid) for the session that was used to perform the histology alignment
+    one: ONE or None
+        An ONE instance
+    data_repo: str
+        The name of the data repository to create the associated tasks.
+    """
+
+    one = one or ONE()
+
+    assert file.exists(), 'Could not find specified file locally'
+
+    assert file.name == 'registered_mlapdv.npy', 'File is named incorrectly, it should be named: registered_mlapdv.npy'
+
+    subject = file.parts[-2]
+    subj = one.alyx.rest('subjects', 'list', nickname=subject)
+    assert len(subj) == 1, f'Could not find {subject} on alyx, are you sure the file is named correctly?'
+    lab = subj[0]['lab']
+
+    ref_sess = one.search(id=reference_eid)
+    assert len(ref_sess) == 1, (f'Could not find session with eid {reference_eid} on alyx, '
+                                f'are you sure this is the correct session?')
+
+    globus = Globus(client_name='server', headless=True)
+    globus.add_endpoint(f'flatiron_{lab}', label=f'histology_{lab}', alyx=one.alyx,
+                        root_path=f'/histology/{lab}')
+
+    local_filename = [str(file.relative_to(Path(globus.endpoints['local']['root_path'])))]
+    globus_filename = [f'{subject}/registered_mlapdv.npy']
+
+    globus.mv('local', f'histology_{lab}', local_filename, globus_filename)
+
+    # Find all the imaging sessions associated with this subject
+    imaging_sessions = one.alyx.rest('sessions', 'list', subject=subject, datasets='_ibl_rawImagingData.meta.json')
+    # Get the eids
+    eids = [img['id'] for img in imaging_sessions]
+
+    mscope_kwargs = {
+        'sync_label': 'chrono',
+        'device_collection': 'raw_imaging_data*',
+        'reference_session': reference_eid
+    }
+
+    if lab == 'cortexlab':
+        one_tasks = ONE(base_url='https://alyx.cortexlab.net')
+    else:
+        one_tasks = one
+
+    for eid in eids:
+        session_path = one.eid2path(eid)
+        kwargs = {'session_path': session_path}
+        tasks = dict()
+        tasks['MesoscopeFOVHistology'] = (
+            type('MesoscopeFOVHistology', (MesoscopeFOVHistology,), {})(**kwargs, **mscope_kwargs, parents=[]))
+        p = Pipeline(eid=eid, one=one_tasks)
+        p.data_repo = data_repo
+        p.tasks = tasks
+        p.create_alyx_tasks()
