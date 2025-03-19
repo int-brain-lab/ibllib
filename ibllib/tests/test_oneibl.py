@@ -226,29 +226,32 @@ class TestIBLGlobusPatcher(_GlobusPatcherTest):
         self.globus_patcher.client.reset_mock()
         self.globus_sdk_mock.reset_mock()
         with mock.patch.object(self.one.alyx, 'rest', side_effect=self._alyx_patch) as alyx_mock, \
-                mock.patch('ibllib.oneibl.patcher.Popen') as proc_mock, self.assertLogs(patcher.__name__, level='ERROR') as log:
+                mock.patch('ibllib.oneibl.patcher.Popen') as proc_mock:
             line = mock.MagicMock()
             line.decode.return_value = '...'
             proc_mock().wait.return_value = 0
             proc_mock().stdout.readline.side_effect = (line,)
             proc_mock.reset_mock()  # reset call count
-            # Test dry
-            task_ids, deleted = self.globus_patcher.delete_dataset(self.dset, dry=True)
+            # Test dry + with debug log level (should add no-progress flag to aws command)
+            with self.assertLogs(patcher.__name__, level='DEBUG') as log:
+                task_ids, deleted = self.globus_patcher.delete_dataset(self.dset, dry=True)
             self.assertEqual([], task_ids)
             self.assertCountEqual(['mainen_lab_SR', 'aws_mainenlab'], deleted)
-            self.assertFalse(any(args == ('datasets', 'delete') for args, kwargs in alyx_mock.call_args_list))
+            self.assertFalse(any(args == ('datasets', 'delete') for args, _ in alyx_mock.call_args_list))
             self.globus_sdk_mock.DeleteData.assert_not_called()
-            expected = ['aws', 's3', 'rm', 's3://bucket' + s3_fr['data_url'][31:],
-                        '--profile', 'ibladmin', '--dryrun', '--only-show-errors']
+            expected = [
+                'aws', 's3', 'rm', 's3://bucket' + s3_fr['data_url'][31:], '--profile', 'ibladmin', '--dryrun', '--no-progress'
+            ]
             proc_mock.assert_called_once_with(expected, stdout=-1, stderr=-2)
 
-            # Test not dry
-            task_ids, deleted = self.globus_patcher.delete_dataset(self.dset, dry=False)
+            # Test not dry + with higher log level (should add only-show-errors flag to aws command)
+            with self.assertLogs(patcher.__name__, level='ERROR') as log:
+                task_ids, deleted = self.globus_patcher.delete_dataset(self.dset, dry=False)
             # Should log failure due to missing endpoint ID in Alyx
             self.assertEqual('Unable to delete from flatiron_mainenlab', log.records[-1].getMessage())
             alyx_mock.assert_called_with('datasets', 'delete', id=did)
             self.globus_sdk_mock.DeleteData.assert_called_once()
-            expected = ['aws', 's3', 'rm', 's3://bucket' + s3_fr['data_url'][31:], '--profile', 'ibladmin', '--only-show-errors']
+            expected = [*expected[:-2], '--only-show-errors']
             proc_mock.assert_called_with(expected, stdout=-1, stderr=-2)
 
     def _alyx_patch(self, endpoint, action, **kwargs):
