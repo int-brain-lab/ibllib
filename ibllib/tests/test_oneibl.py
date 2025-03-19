@@ -19,6 +19,7 @@ from one.webclient import AlyxClient
 import one.alf.exceptions as alferr
 from one.alf.cache import QC_TYPE
 import iblutil.io.params as iopar
+from iblutil.util import Bunch
 
 from ibllib.oneibl import patcher, registration, data_handlers as handlers
 import ibllib.io.extractors.base
@@ -84,11 +85,12 @@ class TestFTPPatcher(unittest.TestCase):
         return FTP_pars[next(k for k in FTP_pars.keys() if k in prompt.replace(',', '').split())]
 
 
-class TestGlobusPatcher(unittest.TestCase):
-    """Tests for the ibllib.oneibl.patcher.GlobusPatcher class."""
-
+class _GlobusPatcherTest(unittest.TestCase):
     globus_sdk_mock = None
     """unittest.mock._patch: Mock object for globus_sdk package."""
+
+    patcher_class = None
+    """object: The patcher class to instantiate during setup."""
 
     @mock.patch('one.remote.globus._setup')
     def setUp(self, _) -> None:
@@ -107,12 +109,21 @@ class TestGlobusPatcher(unittest.TestCase):
             'expires_at_seconds': datetime.datetime.now().timestamp() + 60**2
         })
         # Mock the globus SDK so that no actual tasks are submitted
-        self.globus_sdk_mock = mock.patch('one.remote.globus.globus_sdk')
-        self.globus_sdk_mock.start()
-        self.addCleanup(self.globus_sdk_mock.stop)
+        globus_sdk_mock = mock.patch('one.remote.globus.globus_sdk')
+        self.globus_sdk_mock = globus_sdk_mock.start()
+        self.addCleanup(globus_sdk_mock.stop)
         self.one = ONE(**TEST_DB)
+
+
+class TestGlobusPatcher(_GlobusPatcherTest):
+    """Tests for the ibllib.oneibl.patcher.GlobusPatcher class."""
+
+    patcher_class = patcher.GlobusPatcher
+
+    def setUp(self) -> None:
+        super().setUp()
         with mock.patch('one.remote.globus.load_client_params', return_value=self.pars):
-            self.globus_patcher = patcher.GlobusPatcher(one=self.one)
+            self.globus_patcher = self.patcher_class(one=self.one)
 
     def test_patch_datasets(self):
         """Tests for GlobusPatcher.patch_datasets and GlobusPatcher.launch_transfers methods."""
@@ -161,6 +172,95 @@ class TestGlobusPatcher(unittest.TestCase):
         self.globus_patcher.client.get_task.return_value = {'completion_time': 0, 'fatal_error': None}
         self.globus_patcher.launch_transfers(local_servers=True)
         self.globus_patcher.client.submit_transfer.assert_called()
+
+
+class TestIBLGlobusPatcher(_GlobusPatcherTest):
+    """Tests for the ibllib.oneibl.patcher.IBLGlobusPatcher class."""
+
+    patcher_class = patcher.IBLGlobusPatcher
+
+    def setUp(self) -> None:
+        super().setUp()
+        with mock.patch('one.remote.globus.load_client_params', return_value=self.pars):
+            self.globus_patcher = self.patcher_class(alyx=self.one.alyx)
+
+    def test_delete_datasets(self):
+        """Tests for IBLGlobusPatcher.delete_datasets method."""
+        # The following dataset should have two file records, a flatiron one that exists and an SR one that doesn't
+        did = '80fabd30-9dc8-4778-b349-d175af63e1bd'
+        self.dset = self.one.alyx.rest('datasets', 'read', id=did)
+        assert len(self.dset['file_records']) == 2, 'expected two file records for this test dataset'
+
+        # Some Globus endpoint IDs to return with Alyx REST mock
+        self.endpoint_ids = {name: str(uuid4()) for name in ('mainen_lab_SR', 'flatiron_mainenlab')}
+
+        task_id = uuid4()
+        self.globus_patcher.client.submit_delete.return_value = Bunch(data={'task_id': str(task_id)})
+
+        # TEST 1: Test delete of flatiron dataset with UUID
+        with mock.patch.object(self.one.alyx, 'rest', side_effect=self._alyx_patch) as alyx_mock:
+            task_ids, deleted = self.globus_patcher.delete_dataset(did)
+            alyx_mock.assert_called_with('datasets', 'delete', id=did)
+            self.globus_sdk_mock.DeleteData.assert_called_once()
+        self.assertEqual(task_ids, [task_id])
+        self.assertCountEqual(deleted, ['flatiron_mainenlab'])
+        expected = [PurePosixPath(f'ZFM-01935/2021-02-05/001/alf/_ibl_wheelMoves.intervals.{did}.npy')]
+        self.assertEqual(expected, deleted['flatiron_mainenlab'])
+
+        # TEST 2: Test deleting with dataset record dict, an existing SR and AWS file record, and missing globus ID for flatiron
+        for fr in self.dset['file_records']:
+            if fr['data_repository'] == 'mainen_lab_SR':
+                fr['exists'] = True  # False -> True
+            elif fr['data_repository'] == 'flatiron_mainenlab':
+                # Add an AWS file record
+                s3_fr = fr.copy()
+                s3_fr['data_repository'] = 'aws_mainenlab'
+                s3_fr['data_repository_path'] = 'data' + s3_fr['data_repository_path']
+                relative_path = '/'.join(Path(s3_fr['data_url']).parts[4:])
+                s3_fr['data_url'] = (
+                    'https://bucket.s3.amazonaws.com/' + s3_fr['data_repository_path'] + relative_path)
+                self.dset['file_records'].append(s3_fr)
+        # Also make the flatiron endpoint ID None
+        del self.endpoint_ids['flatiron_mainenlab']
+        # Reset mock calls
+        self.globus_patcher.client.reset_mock()
+        self.globus_sdk_mock.reset_mock()
+        with mock.patch.object(self.one.alyx, 'rest', side_effect=self._alyx_patch) as alyx_mock, \
+                mock.patch('ibllib.oneibl.patcher.Popen') as proc_mock, self.assertLogs(patcher.__name__, level='ERROR') as log:
+            line = mock.MagicMock()
+            line.decode.return_value = '...'
+            proc_mock().wait.return_value = 0
+            proc_mock().stdout.readline.side_effect = (line,)
+            proc_mock.reset_mock()  # reset call count
+            # Test dry
+            task_ids, deleted = self.globus_patcher.delete_dataset(self.dset, dry=True)
+            self.assertEqual([], task_ids)
+            self.assertCountEqual(['mainen_lab_SR', 'aws_mainenlab'], deleted)
+            self.assertFalse(any(args == ('datasets', 'delete') for args, kwargs in alyx_mock.call_args_list))
+            self.globus_sdk_mock.DeleteData.assert_not_called()
+            expected = ['aws', 's3', 'rm', 's3://bucket' + s3_fr['data_url'][31:],
+                        '--profile', 'ibladmin', '--dryrun', '--only-show-errors']
+            proc_mock.assert_called_once_with(expected, stdout=-1, stderr=-2)
+
+            # Test not dry
+            task_ids, deleted = self.globus_patcher.delete_dataset(self.dset, dry=False)
+            # Should log failure due to missing endpoint ID in Alyx
+            self.assertEqual('Unable to delete from flatiron_mainenlab', log.records[-1].getMessage())
+            alyx_mock.assert_called_with('datasets', 'delete', id=did)
+            self.globus_sdk_mock.DeleteData.assert_called_once()
+            expected = ['aws', 's3', 'rm', 's3://bucket' + s3_fr['data_url'][31:], '--profile', 'ibladmin', '--only-show-errors']
+            proc_mock.assert_called_with(expected, stdout=-1, stderr=-2)
+
+    def _alyx_patch(self, endpoint, action, **kwargs):
+        """Patch the AlyxClient to return the given dataset."""
+        if endpoint == 'datasets' and action == 'read':
+            self.assertEqual(kwargs['id'], self.dset['url'][-36:])
+            return self.dset
+        if endpoint == 'data-repository' and action == 'read':
+            fr = next(fr for fr in self.dset['file_records'] if fr['data_repository'] == kwargs['id'])
+            return {'name': fr['data_repository'], 'globus_path': fr['data_repository_path'],
+                    'repository_type': 'Fileserver', 'globus_is_personal': fr['data_url'] is None,
+                    'globus_endpoint_id': self.endpoint_ids.get(fr['data_repository'])}
 
 
 class TestAlyx2Path(unittest.TestCase):
