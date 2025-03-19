@@ -41,6 +41,7 @@ from iblatlas.atlas import ALLEN_CCF_LANDMARKS_MLAPDV_UM, MRITorontoAtlas
 from ibllib.pipes import base_tasks
 from ibllib.oneibl.data_handlers import ExpectedDataset, dataset_from_name, update_collections, _parse_signature
 from ibllib.io.extractors import mesoscope
+from ibllib.oneibl.registration import get_lab
 
 
 _logger = logging.getLogger(__name__)
@@ -1422,14 +1423,14 @@ class MesoscopeFOVHistology(MesoscopeFOV):
 
         self.root_path = Path('/mnt/s0/Data/Subjects')
         # Find the reference session used for histology alignment
-        self.reference_eid = kwargs.pop('reference_eid')  # TODO error handling
-        self.reference_path = self.root_path.joinpath(*self.one.eid2path(self.reference_eid).parts[-3:])
+        assert self.reference_session
+        self.reference_path = self.root_path.joinpath(*self.one.eid2path(self.reference_session).parts[-3:])
 
         # Get info for the current session being processed
         self.eid = self.one.path2eid(self.session_path)
         info = self.one.eid2ref(self.eid, as_dict=True)
         self.subject = info['subject']
-        self.lab = info['lab']
+        self.lab = get_lab(self.session_path, alyx=self.one.alyx)
 
         # If the file doesn't already exist locally download the registered_mlapdv.npy file
         self.histology_file = self.root_path.joinpath(f'{self.subject}/registered_mlapdv.npy')
@@ -1458,7 +1459,6 @@ class MesoscopeFOVHistology(MesoscopeFOV):
     def register_user_points(self):
         """
         Upload the user chosen referenceImage.points file and to the session json
-        :return:
         """
 
         with open(self.gui_file) as js:
@@ -1467,13 +1467,11 @@ class MesoscopeFOVHistology(MesoscopeFOV):
         # TODO confirm the key for the data
         self.one.alyx.json_field_update(endpoint='sessions', uuid=self.eid, field_name='json',
                                         data={'reference_image_points': reference_points})
-        return
 
     def download_histology_file(self):
         """
         Download the registered_mlapdv.npy file from the histology folder on flatiron and store locally in
         the subject folder
-        :return:
         """
         from one.remote.globus import Globus  # noqa
         globus = Globus(client_name='server', headless=True)
@@ -1481,15 +1479,32 @@ class MesoscopeFOVHistology(MesoscopeFOV):
         if self.lab == 'cortexlab':
             ac = AlyxClient(base_url='https://alyx.internationalbrainlab.org', cache_rest=None)
             globus.add_endpoint(f'flatiron_{self.lab}', label=f'histology_{self.lab}', alyx=ac,
-                                root_path=f'/histology/{self.lab}/Subjects')
+                                root_path=f'/histology/{self.lab}')
         else:
             globus.add_endpoint(f'flatiron_{self.lab}', label=f'histology_{self.lab}', alyx=self.one.alyx,
-                                root_path=f'/histology/{self.lab}/Subjects')
+                                root_path=f'/histology/{self.lab}')
 
         file = f'{self.subject}/registered_mlapdv.npy'
         globus.mv(f'histology_{self.lab}', 'local', [file], [file])
 
     def load_file(self, filename, input_files=None, session_path=None):
+        """
+        Load file with filename from local server
+
+        Parameters
+        ----------
+        filename : str
+            The alf file name to load
+        input_files : list or None
+            A list of files to match to available in the session path. If None uses input files of task
+        session_path : Path or None
+            Session path for which to look for files. If None uses session of task
+
+        Returns
+        -------
+        Path
+            The local path to the file with the matching filename
+        """
         input_files = input_files or self.input_files
         session_path = session_path or self.session_path
 
@@ -1500,6 +1515,14 @@ class MesoscopeFOVHistology(MesoscopeFOV):
         return file[0]
 
     def load_reference_image_stack(self):
+        """
+        Load reference image stack for the session used as the reference for histology alignment
+
+        Returns
+        -------
+        Path
+            The local path to the reference image stack for the reference session
+        """
         I = ExpectedDataset.input # noqa
         raw_imaging_folders = [p.name for p in self.reference_path.glob(self.device_collection)]
         signature = _parse_signature({
@@ -1514,7 +1537,11 @@ class MesoscopeFOVHistology(MesoscopeFOV):
     def align_to_reference(self):
         """
         Placeholder for code that will align the reference stacks
-        :return:
+        Parameters
+        ----------
+
+        Returns
+        -------
         """
 
         return
@@ -1542,7 +1569,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
         # If the session being processed is not the session that was used during the histology alignment then
         # we need to align this sessions reference stack to the reference stack of the session used during the
         # histology alignment
-        if self.reference_eid != self.eid:
+        if self.reference_session != self.eid:
             self.align_to_reference()
 
         # Placeholder for mlapdv re-projection code using the values stored in the

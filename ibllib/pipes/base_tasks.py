@@ -376,6 +376,7 @@ class MesoscopeTask(DynamicTask):
 
         self.device_collection = self.get_device_collection(
             'mesoscope', kwargs.get('device_collection', 'raw_imaging_data_[0-9]*'))
+        self.reference_session = kwargs.get('reference_session', None)
 
     def get_signatures(self, **kwargs):
         """
