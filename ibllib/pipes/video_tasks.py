@@ -387,14 +387,19 @@ class DLC(base_tasks.VideoTask):
         cap.release()
         return intact
 
-    def run_dlc(self, file_mp4, cam, overwrite):
+    def _run_dlc(self, file_mp4, cam, overwrite):
         try:
+            import iblvideo
             from iblvideo import download_weights
             from iblvideo.choiceworld import dlc
+            self.version = iblvideo.__version__
+            _logger.info(f'iblvideo version {self.version}')
             path_dlc = download_weights()
             dlc_result, _ = dlc(file_mp4, path_dlc=path_dlc, force=overwrite)
             return 0
         except ImportError:
+            self.version = self._check_dlcenv()
+            _logger.info(f'iblvideo version {self.version}')
             command2run = f"{self.scripts.joinpath('run_dlc.sh')} {str(self.dlcenv)} {file_mp4} {overwrite}"
             _logger.info(command2run)
             process = subprocess.Popen(
@@ -453,8 +458,6 @@ class DLC(base_tasks.VideoTask):
                         self.status = -1
                         continue
                     # Check that dlc environment is ok, shell scripts exists, and get iblvideo version, GPU addressable
-                    self.version = self._check_dlcenv()
-                    _logger.info(f'iblvideo version {self.version}')
                     check_nvidia_driver()
 
                     _logger.info(f'Running DLC on {cam}Camera.')
