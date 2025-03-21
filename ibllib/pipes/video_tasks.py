@@ -387,6 +387,38 @@ class DLC(base_tasks.VideoTask):
         cap.release()
         return intact
 
+    def run_dlc(self, file_mp4, cam, overwrite):
+        try:
+            from iblvideo import download_weights
+            from iblvideo.choiceworld import dlc
+            path_dlc = download_weights()
+            dlc_result, _ = dlc(file_mp4, path_dlc=path_dlc, force=overwrite)
+            return 0
+        except ImportError:
+            command2run = f"{self.scripts.joinpath('run_dlc.sh')} {str(self.dlcenv)} {file_mp4} {overwrite}"
+            _logger.info(command2run)
+            process = subprocess.Popen(
+                command2run,
+                shell=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                executable='/bin/bash',
+            )
+            info, error = process.communicate()
+            # info_str = info.decode("utf-8").strip()
+            # _logger.info(info_str)
+            if process.returncode != 0:
+                error_str = error.decode('utf-8').strip()
+                _logger.error(f'DLC failed for {cam}Camera.\n\n'
+                              f'++++++++ Output of subprocess for debugging ++++++++\n\n'
+                              f'{error_str}\n'
+                              f'++++++++++++++++++++++++++++++++++++++++++++\n')
+            return process.returncode
+        except Exception as e:
+            _logger.error(f'An error occurred while running DLC for {cam}Camera: {e}')
+            _logger.error(traceback.format_exc())
+            return -1
+
     def _run(self, cams=None, overwrite=False):
         # Check that the cams are valid for DLC, remove the ones that aren't
         candidate_cams = cams or self.cameras
@@ -426,27 +458,11 @@ class DLC(base_tasks.VideoTask):
                     check_nvidia_driver()
 
                     _logger.info(f'Running DLC on {cam}Camera.')
-                    command2run = f"{self.scripts.joinpath('run_dlc.sh')} {str(self.dlcenv)} {file_mp4} {overwrite}"
-                    _logger.info(command2run)
-                    process = subprocess.Popen(
-                        command2run,
-                        shell=True,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
-                        executable='/bin/bash',
-                    )
-                    info, error = process.communicate()
-                    # info_str = info.decode("utf-8").strip()
-                    # _logger.info(info_str)
-                    if process.returncode != 0:
-                        error_str = error.decode('utf-8').strip()
-                        _logger.error(f'DLC failed for {cam}Camera.\n\n'
-                                      f'++++++++ Output of subprocess for debugging ++++++++\n\n'
-                                      f'{error_str}\n'
-                                      f'++++++++++++++++++++++++++++++++++++++++++++\n')
+                    return_code = self._run_dlc(file_mp4, cam, overwrite)
+                    if return_code != 0:
                         self.status = -1
-                        # We dont' run motion energy, or add any files if dlc failed to run
                         continue
+
                     dlc_result = next(self.session_path.joinpath('alf').glob(f'_ibl_{cam}Camera.dlc*.pqt'))
                     actual_outputs.append(dlc_result)
 
