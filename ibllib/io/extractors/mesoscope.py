@@ -11,10 +11,11 @@ import matplotlib.pyplot as plt
 from packaging import version
 
 from ibllib.plots.misc import squares, vertical_lines
-from ibllib.io.raw_daq_loaders import (extract_sync_timeline, timeline_get_channel,
-                                       correct_counter_discontinuities, load_timeline_sync_and_chmap)
+from ibllib.io.raw_daq_loaders import (
+    extract_sync_timeline, timeline_get_channel, correct_counter_discontinuities, load_timeline_sync_and_chmap)
 import ibllib.io.extractors.base as extractors_base
-from ibllib.io.extractors.ephys_fpga import FpgaTrials, WHEEL_TICKS, WHEEL_RADIUS_CM, _assign_events_to_trial
+from ibllib.io.extractors.ephys_fpga import (
+    FpgaTrials, FpgaTrialsHabituation, WHEEL_TICKS, WHEEL_RADIUS_CM, _assign_events_to_trial)
 from ibllib.io.extractors.training_wheel import extract_wheel_moves
 from ibllib.io.extractors.camera import attribute_times
 from brainbox.behavior.wheel import velocity_filtered
@@ -157,7 +158,7 @@ class TimelineTrials(FpgaTrials):
         return sync, chmap
 
     def _extract(self, sync=None, chmap=None, sync_collection='raw_sync_data', **kwargs) -> dict:
-        trials = super()._extract(sync, chmap, sync_collection='raw_sync_data', **kwargs)
+        trials = super()._extract(sync, chmap, sync_collection=sync_collection, **kwargs)
         if kwargs.get('display', False):
             plot_timeline(self.timeline, channels=chmap.keys(), raw=True)
         return trials
@@ -267,7 +268,8 @@ class TimelineTrials(FpgaTrials):
         # Extract valve open times from the DAQ
         valve_driver_ttls = bpod_event_intervals['valve_open']
         correct = self.bpod_trials['feedbackType'] == 1
-        # If there is a reward_valve channel, the valve has
+        # If there is a reward_valve channel, the voltage across the valve has been recorded and
+        # should give a more accurate readout of the valve's activity.
         if any(ch['name'] == 'reward_valve' for ch in self.timeline['meta']['inputs']):
             # TODO Let's look at the expected open length based on calibration and reward volume
             # import scipy.interpolate
@@ -598,6 +600,63 @@ class TimelineTrials(FpgaTrials):
             ax[1].legend()
 
         return t_ready_tone_in, t_error_tone_in
+
+
+class TimelineTrialsHabituation(FpgaTrialsHabituation, TimelineTrials):
+    """Habituation trials extraction from Timeline DAQ data."""
+
+    sync_field = 'intervals_0'
+
+    def build_trials(self, sync=None, chmap=None, **kwargs):
+        """
+        Extract task related event times from the sync.
+
+        The valve used at the mesoscope has a way to record the raw voltage across the solenoid,
+        giving a more accurate readout of the valve's activity. If the reward_valve channel is
+        present on the DAQ, this is used to extract the valve open times.
+
+        Parameters
+        ----------
+        sync : dict
+            'polarities' of fronts detected on sync trace for all 16 chans and their 'times'
+        chmap : dict
+            Map of channel names and their corresponding index.  Default to constant.
+
+        Returns
+        -------
+        dict
+            A map of trial event timestamps.
+        """
+        out = super().build_trials(sync, chmap, **kwargs)
+
+        start_times = out['intervals'][:, 0]
+        last_trial_end = out['intervals'][-1, 1]
+
+        # Extract valve open times from the DAQ
+        _, bpod_event_intervals = self.get_bpod_event_times(sync, chmap, **kwargs)
+        bpod_feedback_times = self.bpod2fpga(self.bpod_trials['feedback_times'])
+        valve_driver_ttls = bpod_event_intervals['valve_open']
+        # If there is a reward_valve channel, the voltage across the valve has been recorded and
+        # should give a more accurate readout of the valve's activity.
+        if any(ch['name'] == 'reward_valve' for ch in self.timeline['meta']['inputs']):
+            # Use the driver TTLs to find the valve open times that correspond to the valve opening
+            valve_intervals, valve_open_times = self.get_valve_open_times(driver_ttls=valve_driver_ttls)
+            if valve_open_times.size != start_times.size:
+                _logger.warning(
+                    'Number of valve open times does not equal number of correct trials (%i != %i)',
+                    valve_open_times.size, start_times.size)
+        else:
+            # Use the valve controller TTLs recorded on the Bpod channel as the reward time
+            valve_open_times = valve_driver_ttls[:, 0]
+        # there may be an extra last trial that's not in the Bpod intervals as the extractor ignores the last trial
+        valve_open_times = valve_open_times[valve_open_times <= last_trial_end]
+        out['valveOpen_times'] = _assign_events_to_trial(
+            bpod_feedback_times, valve_open_times, take='first', t_trial_end=out['intervals'][:, 1])
+
+        # Feedback times
+        out['feedback_times'] = np.copy(out['valveOpen_times'])
+
+        return out
 
 
 class MesoscopeSyncTimeline(extractors_base.BaseExtractor):

@@ -458,14 +458,14 @@ class HabituationQC(TaskQC):
                 sessions = sessions[1:]
             metric = ([0, data['intervals'][-1, 1] - data['intervals'][0, 0]] +
                       [(datetime.fromisoformat(x['end_time']) -
-                        datetime.fromisoformat(x['start_time'])).total_seconds() / 60
+                        datetime.fromisoformat(x['start_time'])).total_seconds()
                        for x in [self.one.alyx.get(s['url']) for s in sessions]])
 
             # The duration from raw trial data
             # duration = map(float, self.extractor.raw_data[-1]['elapsed_time'].split(':'))
             # duration = timedelta(**dict(zip(('hours', 'minutes', 'seconds'),
-            #                                 duration))).total_seconds() / 60
-            metrics[check] = np.array(metric)
+            #                                 duration))).total_seconds()
+            metrics[check] = np.array(metric) / 60
             passed[check] = np.diff(metric) >= 12
 
         # Check event orders: trial_start < stim on < stim center < feedback < stim off
@@ -515,9 +515,19 @@ class HabituationQC(TaskQC):
         passed[check][-1] = np.nan
         metrics[check] = metric
 
+        # Check stim on go cue delay
+        # Unlike in ChoiceWorld, the go cue is in a race condition with the stimulus onset and
+        # therefore usually presents slightly before the stimulus. For now we will keep the QC
+        # thresholds the same as in ChoiceWorld which means this will always fail
+        check = prefix + 'stimOn_goCue_delays'
+        # If either are NaN, the result will be Inf to ensure that it crosses the failure threshold.
+        threshold = 0.01 if audio_output.lower() == 'harp' else 0.053
+        metric = np.nan_to_num(data['goCue_times'] - data['stimOn_times'], nan=np.inf)
+        passed[check] = np.abs(metric) < threshold
+        metrics[check] = metric
+
         # Checks common to training QC
-        checks = [check_goCue_delays, check_stimOn_goCue_delays,
-                  check_stimOn_delays, check_stimOff_delays]
+        checks = [check_goCue_delays, check_stimOn_delays, check_stimOff_delays]
         for fcn in checks:
             check = prefix + fcn.__name__[6:]
             metrics[check], passed[check] = fcn(data, audio_output=audio_output)
