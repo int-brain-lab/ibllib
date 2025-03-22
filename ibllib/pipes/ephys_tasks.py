@@ -124,7 +124,7 @@ class EphysCompressNP1(base_tasks.EphysTask):
     priority = 90
     cpu = 2
     io_charge = 100  # this jobs reads raw ap files
-    job_size = 'small'
+    job_size = 'large'
 
     @property
     def signature(self):
