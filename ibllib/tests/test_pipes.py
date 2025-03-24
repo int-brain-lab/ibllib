@@ -314,6 +314,27 @@ class TestRegisterRawDataTask(unittest.TestCase):
             expected = ('snap.PNG', 'pic.jpeg', 'snapshot.png', 'snapshot.jpg', 'snapshot.gif')
             self.assertCountEqual(expected, files)
 
+    def test_online_validation(self):
+        """Test ONE validation and AlyxClient authentication."""
+        # Test that the constructor raises an error if ONE is offline
+        self.assertRaises(AssertionError, RegisterRawDataTask, self.session_path)
+        alyx = self.one.alyx
+        try:
+            self.one._web_client = None
+            with self.assertRaises(AssertionError) as e:
+                RegisterRawDataTask(self.session_path, one=self.one)
+        finally:
+            self.one._web_client = alyx
+        self.assertEqual(str(e.exception), 'RegisterRawDataTask requires an online ONE instance')
+
+        # Test that the constructor authenticates the AlyxClient
+        assert alyx.silent is True, 'AlyxClient must be silent for this test'  # ensures no user prompt
+        alyx.user = None  # should restore Alyx user
+        assert self.one.alyx.is_logged_in is False
+        RegisterRawDataTask(self.session_path, one=self.one)
+        self.assertTrue(alyx.is_logged_in)
+        self.assertTrue(alyx.user)
+
 
 class TestSleeplessDecorator(unittest.TestCase):
 
