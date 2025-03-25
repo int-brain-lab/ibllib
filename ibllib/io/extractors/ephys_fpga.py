@@ -1466,8 +1466,8 @@ class FpgaTrialsHabituation(FpgaTrials):
             (pretrial, _) = sorted(pretrial, key=lambda x: x[1])[0]  # take the earliest event
             dt = np.diff(bpod_event_intervals[pretrial][0, :]) * 1e3  # record TTL length to log
             _logger.debug('Reassigning first %s to trial_start. TTL length = %.3g ms', pretrial, dt)
-            bpod_event_intervals['trial_start'] = np.r_[
-                bpod_event_intervals[pretrial][0:1, :], bpod_event_intervals['trial_start']
+            bpod_event_intervals['trial_iti'] = np.r_[
+                bpod_event_intervals[pretrial][0:1, :], bpod_event_intervals['trial_iti']
             ]
             bpod_event_intervals[pretrial] = bpod_event_intervals[pretrial][1:, :]
 
