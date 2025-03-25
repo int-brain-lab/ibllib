@@ -106,8 +106,8 @@ class QcFrame:
         return self.qc.extractor.data['intervals'].shape[0]
 
     def get_wheel_data(self):
-        return {'re_pos': self.qc.extractor.data.get('wheel_position', np.array([])),
-                're_ts': self.qc.extractor.data.get('wheel_timestamps', np.array([]))}
+        return {'re_pos': self.qc.extractor.data.get('wheel_position') or np.array([]),
+                're_ts': self.qc.extractor.data.get('wheel_timestamps') or np.array([])}
 
     def create_plots(self, axes,
                      wheel_axes=None, trial_events=None, color_map=None, linestyle=None):
@@ -280,9 +280,11 @@ def show_session_task_qc(qc_or_session=None, bpod_only=False, local=False, one=N
         events = map(lambda x: x.replace('stimFreeze', 'stimCenter'), events)
 
     # Run QC and plot
-    w = ViewEphysQC.viewqc(wheel=qc.get_wheel_data())
+    wheel_data = qc.get_wheel_data()
+    w = ViewEphysQC.viewqc(wheel=wheel_data if wheel_data['re_pos'].size else None)
+
     qc.create_plots(w.wplot.canvas.ax,
-                    wheel_axes=w.wplot.canvas.ax2,
+                    wheel_axes=getattr(w.wplot.canvas, 'ax2', None),
                     trial_events=list(events),
                     color_map=cm,
                     linestyle=ls)
@@ -292,7 +294,7 @@ def show_session_task_qc(qc_or_session=None, bpod_only=False, local=False, one=N
     if 'task_qc' in locals():
         df_trials = pd.DataFrame({
             k: v for k, v in task_qc.extractor.data.items()
-            if v.size == n_trials and not k.startswith('wheel')
+            if not k.startswith('wheel') and v.size == n_trials
         })
         df = df_trials.merge(qc.frame, left_index=True, right_index=True)
     else:
