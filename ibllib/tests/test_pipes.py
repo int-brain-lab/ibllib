@@ -317,12 +317,14 @@ class TestRegisterRawDataTask(unittest.TestCase):
     def test_online_validation(self):
         """Test ONE validation and AlyxClient authentication."""
         # Test that the constructor raises an error if ONE is offline
-        self.assertRaises(AssertionError, RegisterRawDataTask, self.session_path)
+        task = RegisterRawDataTask(self.session_path)
+        self.assertRaises(AssertionError, task.register_snapshots)
         alyx = self.one.alyx
         try:
             self.one._web_client = None
+            task.one = self.one
             with self.assertRaises(AssertionError) as e:
-                RegisterRawDataTask(self.session_path, one=self.one)
+                task.register_snapshots()
         finally:
             self.one._web_client = alyx
         self.assertEqual(str(e.exception), 'RegisterRawDataTask requires an online ONE instance')
@@ -331,7 +333,7 @@ class TestRegisterRawDataTask(unittest.TestCase):
         assert alyx.silent is True, 'AlyxClient must be silent for this test'  # ensures no user prompt
         alyx.user = None  # should restore Alyx user
         assert self.one.alyx.is_logged_in is False
-        RegisterRawDataTask(self.session_path, one=self.one)
+        task.register_snapshots()
         self.assertTrue(alyx.is_logged_in)
         self.assertTrue(alyx.user)
 

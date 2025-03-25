@@ -427,16 +427,6 @@ class RegisterRawDataTask(DynamicTask):
     priority = 100
     job_size = 'small'
 
-    def __init__(self, session_path, **kwargs):
-        super().__init__(session_path, **kwargs)
-
-        assert self.one and not self.one.offline, f'{self.__class__.__name__} requires an online ONE instance'
-        if not self.one.alyx.is_logged_in:
-            # Register snapshot requires the user field to be set, which may happen before a REST
-            # query is made. To avoid the user field being None, we authenticate here.  If the
-            # token is cached this will simply set the user and token properties.
-            self.one.alyx.authenticate()
-
     def rename_files(self, symlink_old=False):
 
         # If either no inputs or no outputs are given, we don't do any renaming
@@ -533,6 +523,13 @@ class RegisterRawDataTask(DynamicTask):
         - TIFF files are converted to PNG format before upload. The original file is not replaced.
         - JPEG and PNG files are resized by Alyx.
         """
+        assert self.one and not self.one.offline, f'{self.__class__.__name__} requires an online ONE instance'
+        if not self.one.alyx.is_logged_in:
+            # Register snapshot requires the user field to be set, which may happen before a REST
+            # query is made. To avoid the user field being None, we authenticate here.  If the
+            # token is cached this will simply set the user and token properties.
+            self.one.alyx.authenticate()
+
         collection = getattr(self, 'device_collection', None) if collection is None else collection
         collection = collection or ''  # If not defined, use no collection
         if collection and '*' in collection:
