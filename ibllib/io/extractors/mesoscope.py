@@ -16,7 +16,7 @@ from ibllib.io.raw_daq_loaders import (extract_sync_timeline, timeline_get_chann
 import ibllib.io.extractors.base as extractors_base
 from ibllib.io.extractors.ephys_fpga import FpgaTrials, WHEEL_TICKS, WHEEL_RADIUS_CM, _assign_events_to_trial
 from ibllib.io.extractors.training_wheel import extract_wheel_moves
-from ibllib.io.extractors.camera import attribute_times
+import ibllib.io.extractors as camera
 from brainbox.behavior.wheel import velocity_filtered
 
 _logger = logging.getLogger(__name__)
@@ -349,7 +349,7 @@ class TimelineTrials(FpgaTrials):
 
             # Get the timestamps of the first HIGH after the trigger times (allow up to 200ms after).
             # Indices of ups directly following a go trigger, or -1 if none found (or trigger NaN)
-            idx = attribute_times(ups, go_trig, tol=0.2, take='after')
+            idx = camera.attribute_times(ups, go_trig, tol=0.2, take='after')
             # Trial indices that didn't have detected goCue and now has been assigned an `ups` index
             assigned = np.where(idx != -1 & missing)[0]  # ignore unassigned
             _go_cue[assigned] = ups[idx[assigned]]
@@ -361,7 +361,7 @@ class TimelineTrials(FpgaTrials):
 
             # For those trials where go cue was merged with the error cue and therefore mis-assigned,
             # we must re-assign the error cue times as the first HIGH after the error trigger.
-            idx = attribute_times(ups, err_trig, tol=0.2, take='after')
+            idx = camera.attribute_times(ups, err_trig, tol=0.2, take='after')
             assigned = np.where(idx != -1 & missing)[0]  # ignore unassigned
             error_cue[assigned] = ups[idx[assigned]]
             out['goCue_times'] = _go_cue
@@ -528,7 +528,7 @@ class TimelineTrials(FpgaTrials):
         # The closing of the valve is noisy. Keep only the falls that occur immediately after a Bpod TTL
         if driver_ttls is not None:
             # Returns an array of open_times indices, one for each driver TTL
-            ind = attribute_times(intervals[:, 0], driver_ttls[:, 0], tol=.1, take='after')
+            ind = camera.attribute_times(intervals[:, 0], driver_ttls[:, 0], tol=.1, take='after')
             open_times = intervals[ind[ind >= 0], 0]
             # TODO Log any > 40ms? Difficult to report missing valve times because of calibration
 
