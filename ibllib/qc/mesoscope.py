@@ -4,12 +4,15 @@ This module runs a list of quality control metrics on the extracted imaging and 
 data.
 """
 import logging
+from collections import defaultdict
 from inspect import getmembers, isfunction
 import unittest
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+from functools import wraps
 
 import numpy as np
 import scipy.stats
+from one.alf import spec
 from one.alf.spec import is_uuid
 
 from . import base
@@ -66,7 +69,7 @@ def get_neural_quality_metrics(F, Fneu, badframes=None, iscell=None, F0_percenti
         _log.warning('Assuming frame rate of %.2f Hz', frame_rate)
     if badframes is None:
         badframes = np.zeros(F.shape[0], dtype=bool)
-    elif not isinstance(badframes, np.array):
+    elif not isinstance(badframes, np.ndarray):
         raise TypeError(f'expected `badframes` to by numpy array, got `{type(badframes)}` instead')
     if iscell is None:
         iscell = np.ones(F.shape[0], dtype=bool)
@@ -128,8 +131,21 @@ class TestQM(unittest.TestCase):
         self.assertCountEqual(expected, fov_metrics.dtype.names)
         self.assertTrue(all(fov_metrics[x].size == F.shape[1] for x in expected))
 
-    def test_qc_class(self):
-        ...
+
+def return_qc_datasets(datasets):
+    """
+    Decorator that allows a function to return a predefined list of dataset names
+    when the `only_dsets` keyword argument is set to True.
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            only_dsets = kwargs.pop('only_dsets', False)
+            if only_dsets:
+                return datasets
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator
 
 
 class MesoscopeQC(base.QC):
@@ -139,11 +155,12 @@ class MesoscopeQC(base.QC):
         """Confirm the endpoint ID and set the name attribute.
 
         If the endpoint ID is a UUID, the name attribute is set to the name of the FOV from Alyx.
-        Otherwise the name attribute is set to the endpoint ID (assumed to be either FOV_XX or planeX).
+        Otherwise, the name attribute is set to the endpoint ID (assumed to be either FOV_XX or planeX).
         """
         if not is_uuid(endpoint_id, versions=(4,)):
             self.log.debug('Offline mode; skipping endpoint_id check')
             self.name = endpoint_id
+            self.eid = None
             return
         super()._confirm_endpoint_id(endpoint_id)
         self.name = self.one.alyx.rest('field-of-views', 'read', id=endpoint_id)['name']
@@ -163,6 +180,8 @@ class MesoscopeQC(base.QC):
             The overall outcome.
         dict
             A map of checks and their outcomes.
+        dict
+            A dict of datasets and their outcomes
         """
         _log.info(f'Computing QC outcome for FOV {self.eid}')
 
@@ -174,11 +193,21 @@ class MesoscopeQC(base.QC):
             return isfunction(x) and x.__name__.startswith('check_')
 
         checks = getmembers(self.__class__, is_metric)
-        self.metrics = {f'_{namespace}_' + k[6:]: fn(self) for k, fn in checks}
 
-        values = [x if isinstance(x, str) else x[0] for x in self.metrics.values()]
-        code = max(base.CRITERIA[x] for x in values)
-        outcome = next(k for k, v in base.CRITERIA.items() if v == code)
+        self.metrics = {f'_{namespace}_' + k[6:]: fn(self) for k, fn in checks}
+        self.datasets = {f'_{namespace}_' + k[6:]: fn(self, only_dsets=True) for k, fn in checks}
+
+        values = [x if isinstance(x, spec.QC) else x[0] for x in self.metrics.values()]
+        outcome = self.overall_outcome(values)
+
+        # For each dataset get a list of qc values from relevant qc tests
+        datasets = defaultdict(list)
+        for check, dsets in self.datasets.items():
+            qc_val = self.metrics[check] if isinstance(self.metrics[check], spec.QC) else self.metrics[check][0]
+            for dset in dsets:
+                datasets[dset].append(qc_val)
+        # Compute the final qc for each dataset, takes the worst value
+        dataset_qc = {k: self.overall_outcome(v) for k, v in datasets.items()}
 
         if update:
             extended = {
@@ -187,16 +216,17 @@ class MesoscopeQC(base.QC):
             }
             self.update_extended_qc(extended)
             self.update(outcome, namespace)
-        return outcome, self.metrics
+
+        return outcome, self.metrics, dataset_qc
 
     def load_data(self):
         """Load the data required for QC checks."""
         self.data = {}
         if self.name.startswith('FOV_'):
             # Load mpci objects
-            alf_path = self.session_path.joinpath('alf', self.eid)
-            self.data['F'] = np.load(alf_path.joinpath('mpci.ROIActivityF.npy')).T
-            self.data['Fneu'] = np.load(alf_path.joinpath('mpci.ROINeuropilActivityF.npy')).T
+            alf_path = self.session_path.joinpath('alf', self.name)
+            self.data['F'] = np.load(alf_path.joinpath('mpci.ROIActivityF.npy'))
+            self.data['Fneu'] = np.load(alf_path.joinpath('mpci.ROINeuropilActivityF.npy'))
             self.data['iscell'] = np.load(alf_path.joinpath('mpciROIs.mpciROITypes.npy'))
             self.data['badframes'] = np.load(alf_path.joinpath('mpci.badFrames.npy'))
             s2pdata = np.load(alf_path.joinpath('_suite2p_ROIData.raw.zip'), allow_pickle=True)  # lazy load from zip
@@ -204,7 +234,7 @@ class MesoscopeQC(base.QC):
             self.data['times'] = np.load(alf_path.joinpath('mpci.times.npy'))
         elif self.name.startswith('plane'):
             # Load suite2p objects
-            alf_path = self.session_path.joinpath('suite2p', self.eid)
+            alf_path = self.session_path.joinpath('suite2p', self.name)
             self.data['F'] = np.load(alf_path.joinpath('F.npy'))
             self.data['Fneu'] = np.load(alf_path.joinpath('Fneu.npy'))
             self.data['iscell'] = np.load(alf_path.joinpath('iscell.npy'))
@@ -214,11 +244,26 @@ class MesoscopeQC(base.QC):
         else:
             raise ValueError(f'Invalid session identifier: {self.eid}')
 
+    @return_qc_datasets(['mpci.ROIActivityF.npy', 'mpci.ROINeuropilActivityF.npy', 'mpciROIs.mpciROITypes.npy',
+                         'mpci.times.npy'])
     def check_neural_quality(self, **kwargs):
         """Check the neural quality metrics."""
         neural_metrics, fov_metrics = get_neural_quality_metrics(**self.data, **kwargs)
+
         # TODO Apply thresholds
-        raise NotImplementedError
+        return spec.QC.WARNING, neural_metrics  # Don't return fov_metric as this is one per cell which is large
+        # raise NotImplementedError
+
+    @return_qc_datasets(['mpci.times.npy'])
+    def check_timestamps_consistency(self, **kwargs):
+        """Check the timestamps are the same length as the fluorescence data"""
+
+        if self.data['times'] is None:
+            return spec.QC.NOT_SET
+
+        metrics = spec.QC.PASS if self.data['times'].size == self.data['F'].shape[0] else spec.QC.FAIL
+
+        return metrics
 
     @staticmethod
     def qc_session(eid, one=None, **kwargs):
@@ -232,9 +277,11 @@ class MesoscopeQC(base.QC):
         however to update the FOV endpoint, this relies on the MesoscopeFOV task having been run, and for the
         data, the MesoscopePreprocess task.
         """
+        update = kwargs.pop('update', False)
         session_qc = base.QC(eid, one=one)
         one = session_qc.one
         remote = session_qc.one and not session_qc.one.offline
+        fov_qcs = dict()
         if remote:
             collections = session_qc.one.list_collections(eid, collection='alf/FOV_??')
             collections = sorted(map(session_qc.session_path.joinpath, collections))
@@ -246,7 +293,7 @@ class MesoscopeQC(base.QC):
                     continue
                 qc = MesoscopeQC(endpoint_id, one=one, endpoint='fields-of-view')
                 qc.session_path = session_qc.session_path
-                outcomes, extended = qc.run(update=False)
+                fov_qcs[f'alf/{collection.name}'] = qc.run(update=update)
         else:
             collections = sorted(session_qc.session_path.glob('alf/FOV_??'))
             if not collections:
@@ -254,8 +301,106 @@ class MesoscopeQC(base.QC):
             for collection in collections:
                 qc = MesoscopeQC(collection.name, one=one, endpoint='fields-of-view')
                 qc.session_path = session_qc.session_path
-                outcomes, extended = qc.run(update=False)
-                # TODO Log or store outcomes for each FOV
+                fov_qcs[f'alf/{collection.name}'] = qc.run(update=update)
+
+        # TODO Log or store outcomes for each FOV
+        return fov_qcs
+
+
+def update_dataset_qc_for_session(eid, qc, registered_datasets, one, override=False):
+    """
+    Update QC values for individual datasets associated to a session
+
+    Parameters
+    ----------
+    eid: str or UUID
+        The session identifier
+    qc : dict
+        Output from running MesoscopeQC.qc_session
+    registered_datasets : list of dict
+        A list of Alyx dataset records.
+    one : one.api.OneAlyx
+        An online instance of ONE.
+    override : bool
+        If True the QC field is updated even if new value is better than previous.
+
+    Returns
+    -------
+    dict of lists
+        For each collection in the qc returns a list of associated datasets that had their qc updated
+    """
+    datasets = {}
+    for collection in qc.keys():
+        reg_dsets = [d for d in registered_datasets if d['collection'] == collection]
+        dsets = update_dataset_qc_for_collection(eid, collection, qc[collection][3], reg_dsets, one, override=override)
+        datasets[collection] = dsets
+
+    return datasets
+
+
+def update_dataset_qc_for_collection(eid, collection, dataset_qc, registered_datasets, one, override=False):
+    """
+    Update QC values for individual datasets associated to a collection (normally 'alf/FOV_??')
+
+    Parameters
+    ----------
+    eid: str or UUID
+        The session identifier
+    collection: str
+        Collection that the datasets belong to. Assumes the collection is the same for all datasets provided in
+        registered_datasets and dataset_qc.
+    dataset_qc : dict
+        A dictionary containing dataset name as keys and the associated qc as values
+    registered_datasets : list of dict
+        A list of Alyx dataset records.
+    one : one.api.OneAlyx
+        An online instance of ONE.
+    override : bool
+        If True the QC field is updated even if new value is better than previous.
+
+    Returns
+    -------
+    list of dict
+        The list of datasets with qcs updated with the 'qc' fields updated.
+    """
+
+    datasets = registered_datasets.copy()
+
+    # Create map of dataset name, sans extension, to dataset id
+    stem2id = {PurePosixPath(dset['name']).stem: dset.get('id') for dset in registered_datasets}
+    # Ensure dataset stems are unique
+    assert len(stem2id) == len(registered_datasets), 'ambiguous dataset names'
+
+    # If the dataset that we are updating is not part of the registered datasets we need to fetch the dataset info
+    extra_dsets = [k for k in dataset_qc if PurePosixPath(k).stem not in stem2id.keys()]
+    for extra in extra_dsets:
+        dset = one.alyx.rest('datasets', 'list', session=eid, name=extra, collection=collection)
+        if len(dset) == 0:
+            # If the dataset doesn't exist we continue
+            _log.debug('dataset %s not registered, skipping', extra)
+            continue
+        if len(dset) > 0:
+            # If multiple datasets find the default dataset
+            dset = next(d for d in dset if d['default_dataset'])
+
+        dset['id'] = dset['url'][-36:]
+        stem2id[PurePosixPath(dset['name']).stem] = dset['id']
+
+        datasets.append(dset)
+
+    # Work over map of dataset name to outcome and update the dataset qc
+    for name, outcome in dataset_qc.items():
+        # Check if dataset was registered to Alyx
+        if not (did := stem2id.get(PurePosixPath(name).stem)):
+            _log.debug('dataset %s not registered, skipping', name)
+            continue
+        # Update the dataset QC value on Alyx
+        if outcome > spec.QC.NOT_SET or override:
+            dset_qc = base.QC(did, one=one, log=_log, endpoint='datasets')
+            dset = next(x for x in datasets if did == x.get('id'))
+            dset['qc'] = dset_qc.update(outcome, namespace='', override=override).name
+
+    return datasets
 
 
 if __name__ == '__main__':

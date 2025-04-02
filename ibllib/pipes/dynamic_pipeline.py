@@ -586,6 +586,9 @@ def make_pipeline(session_path, **pkwargs):
             **kwargs, **mscope_kwargs, **sync_kwargs)
         tasks['MesoscopeCompress'] = type('MesoscopeCompress', (mscope_tasks.MesoscopeCompress,), {})(
             **kwargs, **mscope_kwargs, parents=[tasks['MesoscopePreprocess']])
+        # TODO update with relevant parent dependencies once QC finalised
+        tasks['MesoscopeQC'] = type('MesoscopeCompress', (mscope_tasks.MesoscopeQC,), {})(
+            **kwargs, **mscope_kwargs, parents=[tasks['MesoscopePreprocess'], tasks['MesoscopeSync']])
 
     if 'neurophotometrics' in devices:
         # {'collection': 'raw_photometry_data', 'datetime': '2024-09-18T16:43:55.207000',
