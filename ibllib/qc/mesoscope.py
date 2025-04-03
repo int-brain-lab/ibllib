@@ -251,8 +251,7 @@ class MesoscopeQC(base.QC):
         neural_metrics, fov_metrics = get_neural_quality_metrics(**self.data, **kwargs)
 
         # TODO Apply thresholds
-        return spec.QC.WARNING, neural_metrics  # Don't return fov_metric as this is one per cell which is large
-        # raise NotImplementedError
+        return spec.QC.NOT_SET, neural_metrics  # Don't return fov_metric as this is one per cell which is large
 
     @return_qc_datasets(['mpci.times.npy'])
     def check_timestamps_consistency(self, **kwargs):

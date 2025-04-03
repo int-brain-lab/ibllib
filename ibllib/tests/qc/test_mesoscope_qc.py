@@ -43,7 +43,7 @@ class TestMesoscopeQC(unittest.TestCase):
         self.assertEqual(len(dsets), 4)
         # TODO update datasets as necessary with checks
         for name in ['mpci.ROIActivityF.npy', 'mpci.ROINeuropilActivityF.npy', 'mpciROIs.mpciROITypes.npy']:
-            self.assertEqual(dsets.get(name), spec.QC.WARNING)
+            self.assertEqual(dsets.get(name), spec.QC.NOT_SET)
 
         # Make sure for the mpci.times we get the worst of the qc values available
         self.assertEqual(dsets['mpci.times.npy'], spec.QC.FAIL)
