@@ -386,6 +386,7 @@ class IBLGlobusPatcher(Patcher, globus.Globus):
     """
     def __init__(self, alyx=None, client_name='default'):
         """
+        A Globus patcher for IBL data.
 
         Parameters
         ----------
@@ -395,7 +396,7 @@ class IBLGlobusPatcher(Patcher, globus.Globus):
             The Globus client name.
         """
         self.alyx = alyx or AlyxClient()
-        globus.Globus.__init__(client_name=client_name)  # NB we don't init Patcher as we're not using ONE
+        globus.Globus.__init__(self, client_name=client_name)  # NB we don't init Patcher as we're not using ONE
 
     def delete_dataset(self, dataset, dry=False):
         """
@@ -473,6 +474,18 @@ class IBLGlobusPatcher(Patcher, globus.Globus):
         # Delete the dataset from Alyx
         self.alyx.rest('datasets', 'delete', id=did)
         return task_ids, files_by_repo
+
+    def _rm(self):
+        raise NotImplementedError('Use delete_dataset instead')
+
+    def _scp(self):
+        raise NotImplementedError('Use transfer_data instead')
+
+    def patch_dataset(self):
+        raise NotImplementedError
+
+    def patch_datasets(self):
+        raise NotImplementedError
 
 
 class SSHPatcher(Patcher):
