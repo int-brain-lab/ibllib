@@ -358,25 +358,41 @@ class DLC(base_tasks.VideoTask):
         return signature
 
     def _check_dlcenv(self):
-        """Check that scripts are present, dlcenv can be activated and get iblvideo version"""
-        assert len(list(self.scripts.rglob('run_dlc.*'))) == 2, \
-            f'Scripts run_dlc.sh and run_dlc.py do not exist in {self.scripts}'
-        assert len(list(self.scripts.rglob('run_motion.*'))) == 2, \
-            f'Scripts run_motion.sh and run_motion.py do not exist in {self.scripts}'
-        assert self.dlcenv.exists(), f'DLC environment does not exist in assumed location {self.dlcenv}'
-        command2run = f"source {self.dlcenv}; python -c 'import iblvideo; print(iblvideo.__version__)'"
-        process = subprocess.Popen(
-            command2run,
-            shell=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            executable='/bin/bash'
-        )
-        info, error = process.communicate()
-        if process.returncode != 0:
-            raise AssertionError(f"DLC environment check failed\n{error.decode('utf-8')}")
-        version = info.decode('utf-8').strip().split('\n')[-1]
-        return version
+        """
+        Check DLC environment and return iblvideo version.
+
+        Attempts to import iblvideo directly. If unsuccessful, checks for necessary
+        scripts and environment, then retrieves version via subprocess.
+
+        Returns:
+            tuple: (version: str, needs_subprocess: bool)
+        """
+        try:
+            import iblvideo
+            version = iblvideo.__version__
+            needs_subprocess = False
+            _logger.info(f'Current environment contains iblvideo version {self.version}')
+        except ImportError:
+            # Check that scripts are present, dlcenv can be activated and get iblvideo version
+            assert len(list(self.scripts.rglob('run_dlc.*'))) == 2, \
+                f'Scripts run_dlc.sh and run_dlc.py do not exist in {self.scripts}'
+            assert len(list(self.scripts.rglob('run_motion.*'))) == 2, \
+                f'Scripts run_motion.sh and run_motion.py do not exist in {self.scripts}'
+            assert self.dlcenv.exists(), f'DLC environment does not exist in assumed location {self.dlcenv}'
+            command2run = f"source {self.dlcenv}; python -c 'import iblvideo; print(iblvideo.__version__)'"
+            process = subprocess.Popen(
+                command2run,
+                shell=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                executable='/bin/bash'
+            )
+            info, error = process.communicate()
+            if process.returncode != 0:
+                raise AssertionError(f"DLC environment check failed\n{error.decode('utf-8')}")
+            version = info.decode('utf-8').strip().split('\n')[-1]
+            needs_subprocess = True
+        return version, needs_subprocess
 
     @staticmethod
     def _video_intact(file_mp4):
@@ -387,20 +403,44 @@ class DLC(base_tasks.VideoTask):
         cap.release()
         return intact
 
-    def _run_dlc(self, file_mp4, cam, overwrite):
+    def _run_dlc(self, file_mp4, cam, overwrite, flag_subprocess=True):
         try:
-            import iblvideo
-            from iblvideo import download_weights
-            from iblvideo.choiceworld import dlc
-            self.version = iblvideo.__version__
-            _logger.info(f'iblvideo version {self.version}')
-            path_dlc = download_weights()
-            dlc_result, _ = dlc(file_mp4, path_dlc=path_dlc, force=overwrite)
-            return 0
-        except ImportError:
-            self.version = self._check_dlcenv()
-            _logger.info(f'iblvideo version {self.version}')
-            command2run = f"{self.scripts.joinpath('run_dlc.sh')} {str(self.dlcenv)} {file_mp4} {overwrite}"
+            if flag_subprocess:
+                _logger.info(f'iblvideo version {self.version}')
+                command2run = f"{self.scripts.joinpath('run_dlc.sh')} {str(self.dlcenv)} {file_mp4} {overwrite}"
+                _logger.info(command2run)
+                process = subprocess.Popen(
+                    command2run,
+                    shell=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    executable='/bin/bash',
+                )
+                info, error = process.communicate()
+                # info_str = info.decode("utf-8").strip()
+                # _logger.info(info_str)
+                if process.returncode != 0:
+                    error_str = error.decode('utf-8').strip()
+                    _logger.error(f'DLC failed for {cam}Camera.\n\n'
+                                  f'++++++++ Output of subprocess for debugging ++++++++\n\n'
+                                  f'{error_str}\n'
+                                  f'++++++++++++++++++++++++++++++++++++++++++++\n')
+                return process.returncode
+                pass
+            else:
+                from iblvideo import download_weights
+                from iblvideo.choiceworld import dlc
+                path_dlc = download_weights()
+                dlc_result, _ = dlc(file_mp4, path_dlc=path_dlc, force=overwrite)
+                return 0
+        except Exception as e:
+            _logger.error(f'An error occurred while running DLC for {cam}Camera: {e}')
+            _logger.error(traceback.format_exc())
+            return -1
+
+    def _run_motion_energy(self, file_mp4, dlc_result, flag_subprocess=True):
+        if flag_subprocess:
+            command2run = f"{self.scripts.joinpath('run_motion.sh')} {str(self.dlcenv)} {file_mp4} {dlc_result}"
             _logger.info(command2run)
             process = subprocess.Popen(
                 command2run,
@@ -410,19 +450,27 @@ class DLC(base_tasks.VideoTask):
                 executable='/bin/bash',
             )
             info, error = process.communicate()
-            # info_str = info.decode("utf-8").strip()
+            # info_str = info.decode('utf-8').strip()
             # _logger.info(info_str)
             if process.returncode != 0:
                 error_str = error.decode('utf-8').strip()
-                _logger.error(f'DLC failed for {cam}Camera.\n\n'
+                _logger.error(f'Motion energy failed for {file_mp4}.\n\n'
                               f'++++++++ Output of subprocess for debugging ++++++++\n\n'
                               f'{error_str}\n'
                               f'++++++++++++++++++++++++++++++++++++++++++++\n')
-            return process.returncode
-        except Exception as e:
-            _logger.error(f'An error occurred while running DLC for {cam}Camera: {e}')
-            _logger.error(traceback.format_exc())
-            return -1
+            return_code = process.returncode
+        else:  # runs the motion energy calculation in the current environment
+            try:
+                from iblvideo.motion_energy import motion_energy
+                _ = motion_energy(file_mp4, dlc_result)
+                return_code = 0
+            except Exception:
+                _logger.error(f'Motion energy failed for {file_mp4}.\n\n'
+                              f'++++++++ Output of subprocess for debugging ++++++++\n\n'
+                              f'{traceback.format_exc()}\n'
+                              f'++++++++++++++++++++++++++++++++++++++++++++\n')
+                return_code = -1
+        return return_code
 
     def _run(self, cams=None, overwrite=False):
         # Check that the cams are valid for DLC, remove the ones that aren't
@@ -457,43 +505,31 @@ class DLC(base_tasks.VideoTask):
                         _logger.error(f'Corrupt raw video file {file_mp4}')
                         self.status = -1
                         continue
+
                     # Check that dlc environment is ok, shell scripts exists, and get iblvideo version, GPU addressable
                     check_nvidia_driver()
+                    self.version, flag_subprocess = self._check_dlcenv()
 
+                    # Step 1: Run DLC for this camera
                     _logger.info(f'Running DLC on {cam}Camera.')
-                    return_code = self._run_dlc(file_mp4, cam, overwrite)
+                    return_code = self._run_dlc(file_mp4, cam, overwrite, flag_subprocess=flag_subprocess)
                     if return_code != 0:
                         self.status = -1
                         continue
-
                     dlc_result = next(self.session_path.joinpath('alf').glob(f'_ibl_{cam}Camera.dlc*.pqt'))
                     actual_outputs.append(dlc_result)
 
+                    # Step 2: Compute Motion Energy for this camera
                     _logger.info(f'Computing motion energy for {cam}Camera')
-                    command2run = f"{self.scripts.joinpath('run_motion.sh')} {str(self.dlcenv)} {file_mp4} {dlc_result}"
-                    _logger.info(command2run)
-                    process = subprocess.Popen(
-                        command2run,
-                        shell=True,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
-                        executable='/bin/bash',
-                    )
-                    info, error = process.communicate()
-                    # info_str = info.decode('utf-8').strip()
-                    # _logger.info(info_str)
-                    if process.returncode != 0:
-                        error_str = error.decode('utf-8').strip()
-                        _logger.error(f'Motion energy failed for {cam}Camera.\n\n'
-                                      f'++++++++ Output of subprocess for debugging ++++++++\n\n'
-                                      f'{error_str}\n'
-                                      f'++++++++++++++++++++++++++++++++++++++++++++\n')
+                    return_code = self._run_motion_energy(self, file_mp4, dlc_result, flag_subprocess=flag_subprocess)
+                    if return_code != 0:
                         self.status = -1
                         continue
                     actual_outputs.append(next(self.session_path.joinpath('alf').glob(
                         f'{cam}Camera.ROIMotionEnergy*.npy')))
                     actual_outputs.append(next(self.session_path.joinpath('alf').glob(
                         f'{cam}ROIMotionEnergy.position*.npy')))
+
             except Exception:
                 _logger.error(traceback.format_exc())
                 self.status = -1
