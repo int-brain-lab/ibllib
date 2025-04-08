@@ -854,6 +854,7 @@ class TestExpectedDataset(unittest.TestCase):
         self.img_path.joinpath('imaging.frames.tar.bz2').touch()
 
     def test_and(self):
+        """Test for ExpectedDataset input with AND operator."""
         I = handlers.ExpectedDataset.input  # noqa
         sig = I('*.tif', 'raw_imaging_data_[0-9]*') & I('imaging.frames.tar.bz2', 'raw_imaging_data_[0-9]*')
         self.assertEqual('and', sig.operator)
@@ -863,6 +864,16 @@ class TestExpectedDataset(unittest.TestCase):
         self.assertEqual('foo_00000.tif', files[0].name)
         self.assertEqual('imaging.frames.tar.bz2', files[-1].name)
         self.assertEqual(set(), missing)
+        # Check with register arg
+        ok, _files, missing = sig.find_files(self.session_path, register=True)
+        self.assertTrue(ok)
+        self.assertEqual([], _files)
+        self.assertEqual(set(), missing)
+        sig._identifiers[1].register = True
+        ok, _files, missing = sig.find_files(self.session_path, register=True)
+        self.assertTrue(ok)
+        self.assertEqual(1, len(_files))
+        self.assertEqual('imaging.frames.tar.bz2', _files[0].name)
         # Deleting one tif file shouldn't affect the signature
         files[0].unlink()
         ok, files, missing = sig.find_files(self.session_path)
@@ -878,6 +889,7 @@ class TestExpectedDataset(unittest.TestCase):
         self.assertEqual({'raw_imaging_data_[0-9]*/imaging.frames.tar.bz2'}, missing)
 
     def test_or(self):
+        """Test for ExpectedDataset input with OR operator."""
         I = handlers.ExpectedDataset.input  # noqa
         sig = I('*.tif', 'raw_imaging_data_[0-9]*') | I('imaging.frames.tar.bz2', 'raw_imaging_data_[0-9]*')
         self.assertEqual('or', sig.operator)
@@ -885,6 +897,17 @@ class TestExpectedDataset(unittest.TestCase):
         self.assertTrue(ok)
         self.assertEqual(5, len(files))
         self.assertEqual({'.tif'}, set(x.suffix for x in files))
+        self.assertEqual(set(), missing)
+        # Test with register filter
+        ok, _files, missing = sig.find_files(self.session_path, register=True)
+        self.assertTrue(ok)
+        self.assertEqual([], _files)
+        self.assertEqual(set(), missing)
+        sig._identifiers[1].register = True
+        ok, _files, missing = sig.find_files(self.session_path, register=True)
+        self.assertTrue(ok)
+        # NB: Although 2nd file has register=True, the first is present so nothing is returned here
+        self.assertEqual([], _files)
         self.assertEqual(set(), missing)
         for f in files:
             f.unlink()
@@ -900,6 +923,7 @@ class TestExpectedDataset(unittest.TestCase):
         self.assertEqual({'raw_imaging_data_[0-9]*/*.tif', 'raw_imaging_data_[0-9]*/imaging.frames.tar.bz2'}, missing)
 
     def test_xor(self):
+        """Test for ExpectedDataset input with XOR operator."""
         I = handlers.ExpectedDataset.input  # noqa
         sig = I('*.tif', 'raw_imaging_data_[0-9]*') ^ I('imaging.frames.tar.bz2', 'raw_imaging_data_[0-9]*')
         self.assertEqual('xor', sig.operator)
@@ -909,6 +933,17 @@ class TestExpectedDataset(unittest.TestCase):
         self.assertEqual({'.tif', '.bz2'}, set(x.suffix for x in files))
         expected_missing = {'raw_imaging_data_[0-9]*/*.tif', 'raw_imaging_data_[0-9]*/imaging.frames.tar.bz2'}
         self.assertEqual(expected_missing, missing)
+        # Test register kwarg
+        ok, _files, missing = sig.find_files(self.session_path, register=True)
+        self.assertFalse(ok)
+        self.assertEqual([], _files)
+        self.assertEqual(expected_missing, missing)
+        sig._identifiers[1].register = True
+        ok, _files, _ = sig.find_files(self.session_path, register=True)
+        self.assertFalse(ok)
+        self.assertEqual(1, len(_files))
+        self.assertEqual('imaging.frames.tar.bz2', _files[0].name)
+        # Remove first expected dataset(s)
         for f in filter(lambda x: x.suffix == '.tif', files):
             f.unlink()
         ok, files, missing = sig.find_files(self.session_path)
