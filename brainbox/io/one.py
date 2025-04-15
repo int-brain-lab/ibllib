@@ -1020,10 +1020,10 @@ class SpikeSortingLoader:
         self.download_spike_sorting_object(obj='channels', missing='ignore', **kwargs)
         channels = self._load_object(self.files['channels'], wildcards=self.one.wildcards)
         if 'electrodeSites' in self.files:  # if common dict keys, electrodeSites prevails
-            esites = channels | self._load_object(self.files['electrodeSites'], wildcards=self.one.wildcards)
-            if alfio.check_dimensions(esites) != 0:
-                esites = self._load_object(self.files['electrodeSites'], wildcards=self.one.wildcards)
-                esites['rawInd'] = np.arange(esites[list(esites.keys())[0]].shape[0])
+            channels = channels | self._load_object(self.files['electrodeSites'], wildcards=self.one.wildcards)
+            if alfio.check_dimensions(channels) != 0:
+                channels = self._load_object(self.files['electrodeSites'], wildcards=self.one.wildcards)
+                channels['rawInd'] = np.arange(channels[list(channels.keys())[0]].shape[0])
         if 'brainLocationIds_ccf_2017' not in channels:
             _logger.debug(f"loading channels from alyx for {self.files['channels']}")
             _channels, self.histology = _load_channel_locations_traj(
