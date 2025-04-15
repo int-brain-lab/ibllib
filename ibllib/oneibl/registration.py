@@ -16,7 +16,6 @@ from one.api import ONE
 from iblutil.util import ensure_list
 
 import ibllib
-import ibllib.io.extractors.base
 from ibllib.time import isostr2date
 import ibllib.io.raw_data_loaders as raw
 from ibllib.io import session_params

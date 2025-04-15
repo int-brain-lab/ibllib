@@ -41,4 +41,5 @@ def require_qt(func):
 @require_qt
 def run_app():  # pragma: no cover
     """Run the Qt application."""
+    global QT_APP  # noqa F841
     return QT_APP.exit(QT_APP.exec_())
