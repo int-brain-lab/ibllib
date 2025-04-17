@@ -1,3 +1,8 @@
+## Release Note 3.3.1
+
+### Bugfixes
+- SpikeSortingLoader: returns channels from 'electrodeSites' if available (it always was the intention...)
+
 ## Release Note 3.3.0
 
 ### features
