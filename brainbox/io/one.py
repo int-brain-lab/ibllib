@@ -5,6 +5,7 @@ import logging
 import re
 import os
 from pathlib import Path
+from collections import defaultdict
 
 import numpy as np
 import pandas as pd
@@ -12,7 +13,7 @@ from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
 
 from one.api import ONE, One
-from one.alf.path import get_alf_path, full_path_parts
+from one.alf.path import get_alf_path, full_path_parts, filename_parts
 from one.alf.exceptions import ALFObjectNotFound, ALFMultipleCollectionsFound
 from one.alf import cache
 import one.alf.io as alfio
@@ -193,9 +194,9 @@ def _load_spike_sorting(eid, one=None, collection=None, revision=None, return_ch
     for pname in pnames:
         probe_collection = _get_spike_sorting_collection(collections, pname)
         spikes[pname] = one.load_object(eid, collection=probe_collection, obj='spikes',
-                                        attribute=spike_attributes)
+                                        attribute=spike_attributes, namespace='')
         clusters[pname] = one.load_object(eid, collection=probe_collection, obj='clusters',
-                                          attribute=cluster_attributes)
+                                          attribute=cluster_attributes, namespace='')
     if return_channels:
         channels = _load_channels_locations_from_disk(
             eid, collection=collection, one=one, revision=revision, brain_regions=brain_regions)
@@ -1020,10 +1021,10 @@ class SpikeSortingLoader:
         self.download_spike_sorting_object(obj='channels', missing='ignore', **kwargs)
         channels = self._load_object(self.files['channels'], wildcards=self.one.wildcards)
         if 'electrodeSites' in self.files:  # if common dict keys, electrodeSites prevails
-            esites = channels | self._load_object(self.files['electrodeSites'], wildcards=self.one.wildcards)
-            if alfio.check_dimensions(esites) != 0:
-                esites = self._load_object(self.files['electrodeSites'], wildcards=self.one.wildcards)
-                esites['rawInd'] = np.arange(esites[list(esites.keys())[0]].shape[0])
+            channels = channels | self._load_object(self.files['electrodeSites'], wildcards=self.one.wildcards)
+            if alfio.check_dimensions(channels) != 0:
+                channels = self._load_object(self.files['electrodeSites'], wildcards=self.one.wildcards)
+                channels['rawInd'] = np.arange(channels[list(channels.keys())[0]].shape[0])
         if 'brainLocationIds_ccf_2017' not in channels:
             _logger.debug(f"loading channels from alyx for {self.files['channels']}")
             _channels, self.histology = _load_channel_locations_traj(
@@ -1035,7 +1036,31 @@ class SpikeSortingLoader:
             self.histology = 'alf'
         return Bunch(channels)
 
-    def load_spike_sorting(self, spike_sorter='iblsorter', revision=None, enforce_version=False, good_units=False, **kwargs):
+    @staticmethod
+    def filter_files_by_namespace(all_files, namespace):
+
+        # Create dict for each file with available namespaces, no namespce is stored under the key None
+        namespace_files = defaultdict(dict)
+        available_namespaces = []
+        for file in all_files:
+            fparts = filename_parts(file.name, as_dict=True)
+            fname = f"{fparts['object']}.{fparts['attribute']}"
+            nspace = fparts['namespace']
+            available_namespaces.append(nspace)
+            namespace_files[fname][nspace] = file
+
+        if namespace not in set(available_namespaces):
+            _logger.info(f'Could not find manual curation results for {namespace}, returning default'
+                         f' non manually curated spikesorting data')
+
+        # Return the files with the chosen namespace.
+        files = [f.get(namespace, f.get(None, None)) for f in namespace_files.values()]
+        # remove any None files
+        files = [f for f in files if f]
+        return files
+
+    def load_spike_sorting(self, spike_sorter='iblsorter', revision=None, enforce_version=False, good_units=False,
+                           namespace=None, **kwargs):
         """
         Loads spikes, clusters and channels
 
@@ -1053,6 +1078,8 @@ class SpikeSortingLoader:
         :param enforce_version: if True, will raise an error if the spike sorting version and revision is not the expected one
         :param dataset_types: list of extra dataset types, for example: ['spikes.samples', 'spikes.templates']
         :param good_units: False, if True will load only the good units, possibly by downloading a smaller spikes table
+        :param namespace: None, if given will load the manually curated spikesorting with the given namespace,
+                         e.g to load '_av_.clusters.depths use namespace='av'
         :param kwargs: additional arguments to be passed to one.api.One.load_object
         :return:
         """
@@ -1061,13 +1088,21 @@ class SpikeSortingLoader:
         self.files = {}
         self.spike_sorter = spike_sorter
         self.revision = revision
+
+        if good_units and namespace is not None:
+            _logger.info('Good units table does not exist for manually curated spike sorting. Pass in namespace with'
+                         'good_units=False and filter the spikes post hoc by the good clusters.')
+            return [None] * 3
         objects = ['passingSpikes', 'clusters', 'channels'] if good_units else None
         self.download_spike_sorting(spike_sorter=spike_sorter, revision=revision, objects=objects, **kwargs)
         channels = self.load_channels(spike_sorter=spike_sorter, revision=revision, **kwargs)
+        self.files['clusters'] = self.filter_files_by_namespace(self.files['clusters'], namespace)
         clusters = self._load_object(self.files['clusters'], wildcards=self.one.wildcards)
+
         if good_units:
             spikes = self._load_object(self.files['passingSpikes'], wildcards=self.one.wildcards)
         else:
+            self.files['spikes'] = self.filter_files_by_namespace(self.files['spikes'], namespace)
             spikes = self._load_object(self.files['spikes'], wildcards=self.one.wildcards)
         if enforce_version:
             self._assert_version_consistency()
