@@ -204,7 +204,7 @@ def tasks_runner(subjects_path, tasks_dict, one=None, dry=False, count=5, time_o
     time_out : float, optional
         The time in seconds to run tasks before exiting. If set this will run tasks until the
         timeout has elapsed.  NB: Only checks between tasks and will not interrupt a running task.
-    **kwargs
+    kwargs
         See ibllib.pipes.tasks.run_alyx_task.
 
     Returns

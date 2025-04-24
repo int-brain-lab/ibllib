@@ -1,3 +1,25 @@
+## Release Note 3.3.1
+
+### Bugfixes
+- SpikeSortingLoader: returns channels from 'electrodeSites' if available (it always was the intention...)
+
+## Release Note 3.3.0
+
+### features
+
+- ONE 3
+- Handle extraction of sessions where first Bpod trial missed on FPGA
+- Support for multi depth sessions by passing slices kwarg to suite2p fork
+- Selectively remove old FOV datasets in MesoscopePreprocess
+- Added starplot function
+- Improvements to LightningPose and SpikeSorting tasks
+
+### Bugfixes
+
+- Add back PROJECT_EXTRACTION_VERSION and TASK_VERSION to session JSON
+- Fix error in MesoscopeCompress when compressing multiply imaging bouts
+- Fix error in MesoscopeSync.setUp with remote location
+
 ## Release Note 3.2.0
 
 ### features
