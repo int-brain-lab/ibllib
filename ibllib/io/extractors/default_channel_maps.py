@@ -62,7 +62,8 @@ DEFAULT_MAPS = {
                       'audio': 4,
                       'bpod': 5,
                       'rotary_encoder': 6,
-                      'neural_frames': 7}
+                      'neural_frames': 7,
+                      'volume_counter': 8}
          }
 }
 
