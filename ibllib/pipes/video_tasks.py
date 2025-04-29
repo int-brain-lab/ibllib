@@ -429,7 +429,7 @@ class DLC(base_tasks.VideoTask):
                 pass
             else:
                 from iblvideo import download_weights
-                from iblvideo.choiceworld import dlc
+                from iblvideo.pose_dlc import dlc
                 path_dlc = download_weights()
                 dlc_result, _ = dlc(file_mp4, path_dlc=path_dlc, force=overwrite)
                 return 0
