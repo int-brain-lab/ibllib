@@ -666,7 +666,7 @@ class FpgaTrials(extractors_base.BaseExtractor):
                     self.bpod_rsync_fields += tuple(self._time_fields(table_keys))
         elif bpod_rsync_fields:
             self.bpod_rsync_fields = bpod_rsync_fields
-        excluded = (*self.bpod_rsync_fields, 'table')
+        excluded = (*self.bpod_rsync_fields, 'table', 'wheel_position', 'wheelMoves_peakAmplitude')
         if bpod_fields:
             assert not set(self.bpod_fields).intersection(excluded), 'bpod_fields must not also be bpod_rsync_fields'
             self.bpod_fields = bpod_fields
