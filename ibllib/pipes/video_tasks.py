@@ -521,7 +521,7 @@ class DLC(base_tasks.VideoTask):
 
                     # Step 2: Compute Motion Energy for this camera
                     _logger.info(f'Computing motion energy for {cam}Camera')
-                    return_code = self._run_motion_energy(self, file_mp4, dlc_result, flag_subprocess=flag_subprocess)
+                    return_code = self._run_motion_energy(file_mp4, dlc_result, flag_subprocess=flag_subprocess)
                     if return_code != 0:
                         self.status = -1
                         continue
@@ -529,7 +529,6 @@ class DLC(base_tasks.VideoTask):
                         f'{cam}Camera.ROIMotionEnergy*.npy')))
                     actual_outputs.append(next(self.session_path.joinpath('alf').glob(
                         f'{cam}ROIMotionEnergy.position*.npy')))
-
             except Exception:
                 _logger.error(traceback.format_exc())
                 self.status = -1
