@@ -10,21 +10,180 @@ from ibllib.pipes import base_tasks
 from iblutil.io import jsonable
 import iblphotometry.io as fpio
 
+from abc import abstractmethod
+import iblphotometry
+
 _logger = logging.getLogger('ibllib')
 
+"""
+Neurophotometrics FP3002 specific information.
+The light source map refers to the available LEDs on the system.
+The flags refers to the byte encoding of led states in the system.
+"""
 
-class FibrePhotometrySync(base_tasks.DynamicTask):
+LIGHT_SOURCE_MAP = {
+    'color': ['None', 'Violet', 'Blue', 'Green'],
+    'wavelength': [0, 415, 470, 560],
+    'name': ['None', 'Isosbestic', 'GCaMP', 'RCaMP'],
+}
+
+LED_STATES = {
+    'Condition': {
+        0: 'No additional signal',
+        1: 'Output 1 signal HIGH',
+        2: 'Output 0 signal HIGH',
+        3: 'Stimulation ON',
+        4: 'GPIO Line 2 HIGH',
+        5: 'GPIO Line 3 HIGH',
+        6: 'Input 1 HIGH',
+        7: 'Input 0 HIGH',
+        8: 'Output 0 signal HIGH + Stimulation',
+        9: 'Output 0 signal HIGH + Input 0 signal HIGH',
+        10: 'Input 0 signal HIGH + Stimulation',
+        11: 'Output 0 HIGH + Input 0 HIGH + Stimulation',
+    },
+    'No LED ON': {0: 0, 1: 8, 2: 16, 3: 32, 4: 64, 5: 128, 6: 256, 7: 512, 8: 48, 9: 528, 10: 544, 11: 560},
+    'L415': {0: 1, 1: 9, 2: 17, 3: 33, 4: 65, 5: 129, 6: 257, 7: 513, 8: 49, 9: 529, 10: 545, 11: 561},
+    'L470': {0: 2, 1: 10, 2: 18, 3: 34, 4: 66, 5: 130, 6: 258, 7: 514, 8: 50, 9: 530, 10: 546, 11: 562},
+    'L560': {0: 4, 1: 12, 2: 20, 3: 36, 4: 68, 5: 132, 6: 260, 7: 516, 8: 52, 9: 532, 10: 548, 11: 564},
+}
+
+
+# def _channel_meta(light_source_map=None):
+#     """
+#     Return table of light source wavelengths and corresponding colour labels.
+
+#     Parameters
+#     ----------
+#     light_source_map : dict
+#         An optional map of light source wavelengths (nm) used and their corresponding colour name.
+
+#     Returns
+#     -------
+#     pandas.DataFrame
+#         A sorted table of wavelength and colour name.
+#     """
+#     light_source_map = light_source_map or LIGHT_SOURCE_MAP
+#     meta = pd.DataFrame.from_dict(light_source_map)
+#     meta.index.rename('channel_id', inplace=True)
+#     return meta
+
+
+class FibrePhotometryBaseSync(base_tasks.DynamicTask):
     priority = 90
     job_size = 'small'
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.device_collection = self.get_device_collection('neurophotometrics', device_collection='raw_photometry_data')
+        self.kwargs = kwargs
+
         # we will work with the first protocol here
         for task in self.session_params['tasks']:
             self.task_protocol = next(k for k in task)
             self.task_collection = ibllib.io.session_params.get_task_collection(self.session_params, self.task_protocol)
             break
+
+    def _get_bpod_timestamps(self):
+        if 'habituation' in self.task_protocol:
+            sync_states_names = ['iti', 'reward']
+        else:
+            sync_states_names = ['trial_start', 'reward', 'exit_state']
+
+        # read in the raw behaviour data for syncing
+        file_jsonable = self.session_path.joinpath(self.task_collection, '_iblrig_taskData.raw.jsonable')
+        _, bpod_data = jsonable.load_task_jsonable(file_jsonable)
+
+        # we get the timestamps of the states from the bpod data
+        timestamps_bpod = []
+        for sync_name in sync_states_names:
+            timestamps_bpod.append(
+                np.array(
+                    [
+                        data['States timestamps'][sync_name][0][0] + data['Trial start timestamp']
+                        for data in bpod_data
+                        if sync_name in data['States timestamps']
+                    ]
+                )
+            )
+        timestamps_bpod = np.sort(np.concatenate(timestamps_bpod))
+        timestamps_bpod = timestamps_bpod[~np.isnan(timestamps_bpod)]
+        return timestamps_bpod, bpod_data
+
+    @abstractmethod
+    def _get_neurophotometrics_timestamps(self): ...
+
+    def _get_sync_function(self):
+        """
+        Perform the linear clock correction between bpod and neurophotometrics timestamps.
+        :return: interpolation function that outputs bpod timestamsp from neurophotometrics timestamps
+        """
+
+        # get the timestamps
+        timestamps_bpod, bpod_data = self._get_bpod_timestamps(self.task_protocol)
+        timestamps_nph = self._get_neurophotometrics_timestamps()
+
+        # sync the behaviour events to the photometry timestamps
+        sync_nph_to_bpod_fcn, drift_ppm, ix_nph, ix_bpod = ibldsp.utils.sync_timestamps(
+            timestamps_nph, timestamps_bpod, return_indices=True, linear=True
+        )
+        # TODO log drift
+
+        # then we check the alignment, should be less than the camera sampling rate
+        tcheck = sync_nph_to_bpod_fcn(timestamps_nph[ix_nph]) - timestamps_bpod[ix_bpod]
+        _logger.info(
+            f'sync: n trials {len(bpod_data)}, n bpod sync {len(timestamps_bpod)}, n photometry {len(timestamps_nph)}, n match {len(ix_nph)}'
+        )
+        # FIXME the framerate here is hardcoded, infer it instead!
+        assert np.all(np.abs(tcheck) < 1 / 60), 'Sync issue detected, residual above 1/60s'
+        assert len(ix_nph) / len(timestamps_bpod) > 0.95, 'Sync issue detected, less than 95% of the bpod events matched'
+        valid_bounds = [bpod_data[0]['Trial start timestamp'] - 2, bpod_data[-1]['Trial end timestamp'] + 2]
+
+        return sync_nph_to_bpod_fcn, valid_bounds
+
+    def load_data(self):
+        raw_photometry_folder = self.session_path / self.device_collection
+        raw_neurophotometrics_df = pd.read_parquet(raw_photometry_folder / '_neurophotometrics_fpData.raw.pqt')
+        ibl_df = iblphotometry.io.from_raw_neurophotometrics_df_to_ibl_df(
+            raw_neurophotometrics_df,
+            rois=self.kwargs['fibers'],
+        )
+        return ibl_df
+
+    def _run(self, **kwargs):
+        """ """
+        # 1) load photometry data
+        # note: when loading daq based syncing, the SystemTimestamp column
+        ibl_df = self.load_data()
+
+        # 2) get the synchronization function
+        sync_nph_to_bpod_fcn, valid_bounds = self._get_sync_function()
+        ibl_df['valid'] = np.logical_and(ibl_df['times'] >= valid_bounds[0], ibl_df['times'] <= valid_bounds[1])
+
+        # 3) apply synchronization
+        # for bpod based syncing, we can directly transform the timestamps that are
+        # stored with the samples
+        ibl_df['times'] = sync_nph_to_bpod_fcn(ibl_df['SystemTimestamp'])
+
+        # 4) write to disk
+        output_folder = self.session_path.joinpath('alf', 'photometry')
+        output_folder.mkdir(parents=True, exist_ok=True)
+
+        # writing the synced photometry signal
+        ibl_df_outpath = output_folder / 'photometry.signal.pqt'
+        ibl_df.to_parquet(ibl_df_outpath)
+
+        # writing the locations
+        rois = list(self.kwargs['fibers'].keys())
+        locations_df = pd.DataFrame(rois).set_index('ROI')
+        locations_df_outpath = output_folder / 'photometryROI.locations.pqt'
+        locations_df.to_parquet(locations_df_outpath)
+        return ibl_df, locations_df
+
+
+class FibrePhotometryBpodSync(FibrePhotometryBaseSync):
+    priority = 90
+    job_size = 'small'
 
     @property
     def signature(self):
@@ -42,83 +201,75 @@ class FibrePhotometrySync(base_tasks.DynamicTask):
         }
         return signature
 
-    def _sync_bpod_neurophotometrics(self):
-        """
-        Perform the linear clock correction between bpod and neurophotometrics timestamps.
-        :return: interpolation function that outputs bpod timestamsp from neurophotometrics timestamps
-        """
-        folder_raw_photometry = self.session_path.joinpath(self.device_collection)
-        df_digital_inputs = fpio.read_digital_inputs_file(folder_raw_photometry / '_neurophotometrics_fpData.digitalIntputs.pqt')
-        # normally we should disregard the states and use the sync label. But bpod doesn't log TTL outs,
-        # only the states. This will change in the future but for now we are stuck with this.
-        if 'habituation' in self.task_protocol:
-            sync_states_names = ['iti', 'reward']
-        else:
-            sync_states_names = ['trial_start', 'reward', 'exit_state']
-        # read in the raw behaviour data for syncing
-        file_jsonable = self.session_path.joinpath(self.task_collection, '_iblrig_taskData.raw.jsonable')
-        trials_table, bpod_data = jsonable.load_task_jsonable(file_jsonable)
-        # we get the timestamps of the states from the bpod data
-        tbpod = []
-        for sname in sync_states_names:
-            tbpod.append(
-                np.array(
-                    [
-                        bd['States timestamps'][sname][0][0] + bd['Trial start timestamp'] - bpod_data[0]['Bpod start timestamp']
-                        for bd in bpod_data
-                        if sname in bd['States timestamps']
-                    ]
-                )
-            )
-        tbpod = np.sort(np.concatenate(tbpod))
-        tbpod = tbpod[~np.isnan(tbpod)]
-        # we get the timestamps for the photometry data
-        sync_channel = self.session_params['devices']['neurophotometrics']['sync_channel']
-        tph = df_digital_inputs['SystemTimestamp'].values[df_digital_inputs['Channel'] == sync_channel]
-        tph = tph[15:]  # TODO: we may want to detect the spacers before removing it, especially for successive sessions
-        # sync the behaviour events to the photometry timestamps
-        fcn_nph_to_bpod_times, drift_ppm, iph, ibpod = ibldsp.utils.sync_timestamps(tph, tbpod, return_indices=True, linear=True)
-        # then we check the alignment, should be less than the screen refresh rate
-        tcheck = fcn_nph_to_bpod_times(tph[iph]) - tbpod[ibpod]
-        _logger.info(f'sync: n trials {len(bpod_data)}, n bpod sync {len(tbpod)}, n photometry {len(tph)}, n match {len(iph)}')
-        assert np.all(np.abs(tcheck) < 1 / 60), 'Sync issue detected, residual above 1/60s'
-        assert len(iph) / len(tbpod) > 0.95, 'Sync issue detected, less than 95% of the bpod events matched'
-        valid_bounds = [bpod_data[0]['Trial start timestamp'] - 2, bpod_data[-1]['Trial end timestamp'] + 2]
-        return fcn_nph_to_bpod_times, valid_bounds
+    def _get_neurophotometrics_timestamps(self):
+        # we get the timestamps for the photometry data by loading from the digital inputs file
+        raw_photometry_folder = self.session_path / self.device_collection
+        digital_inputs_df = pd.read_parquet(raw_photometry_folder / '_neurophotometrics_fpData.digitalIntputs.pqt')
+        timestamps_nph = digital_inputs_df['SystemTimestamp'].values[digital_inputs_df['Channel'] == self.kwargs['sync_channel']]
+        timestamps_nph = timestamps_nph[
+            15:
+        ]  # TODO: we may want to detect the spacers before removing it, especially for successive sessions
+        return timestamps_nph
 
-    def _run(self, **kwargs):
-        """
-        Extract photometry data from the raw neurophotometrics data in parquet
-        The extraction has 3 main steps:
-        1. Synchronise the bpod and neurophotometrics timestamps.
-        2. Extract the photometry data from the raw neurophotometrics data.
-        3. Label the fibers correspondance with brain regions in a small table
-        :param kwargs:
-        :return:
-        """
-        # 1) sync: we check the synchronisation, right now we only have bpod but soon the daq will be used
-        match list(self.session_params['sync'].keys())[0]:
-            case 'bpod':
-                fcn_nph_to_bpod_times, valid_bounds = self._sync_bpod_neurophotometrics()
-            case _:
-                raise NotImplementedError('Syncing with daq is not supported yet.')
 
-        # 2) reformat the raw data with wavelengths and meta-data
-        folder_raw_photometry = self.session_path.joinpath(self.device_collection)
-        out_df = fpio.from_raw_neurophotometrics_file_to_ibl_df(
-            folder_raw_photometry.joinpath('_neurophotometrics_fpData.raw.pqt')
-        )
-        out_df['times'] = fcn_nph_to_bpod_times(out_df['times'])
+class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
+    """
+    DAQ syncing outline
 
-        # 3) label the brain regions
-        rois = []
-        for k, v in self.session_params['devices']['neurophotometrics']['fibers'].items():
-            rois.append({'ROI': k, 'fiber': f'fiber_{v["location"]}', 'brain_region': v['location']})
-        df_rois = pd.DataFrame(rois).set_index('ROI')
+    bpod stores it's own timestamps - "timestamps_bpod"
+    DAQ receives TTL sync from each bpod - "daq_bpod_sync"
+    DAQ receives Frame clock from FP3002 - "daq_nph_frameclock"
+    NPH stores system timestamps at each sample time - "nph_frameclock"
 
-        # 4) to finish we write the dataframes to disk
-        out_path = self.session_path.joinpath('alf', 'photometry')
-        out_path.mkdir(parents=True, exist_ok=True)
-        out_df.to_parquet(file_signal := out_path.joinpath('photometry.signal.pqt'))
-        df_rois.to_parquet(file_locations := out_path.joinpath('photometryROI.locations.pqt'))
-        return file_signal, file_locations
+
+
+    2 step sync
+     - NPH time to DAQ time (on the basis of frame clock) m1, b1 = linreg(nph_frameclock, daq_frameclock)
+     - DAQ time to BPOD time m2, b2 = linreg(daq_bpod_sync, bpod_sync)
+
+    transfrom from NPH to BPOD
+    m1 * nph_frameclock + b1
+    """
+
+    priority = 90
+    job_size = 'small'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.sync_kwargs = kwargs['sync']['daqami']
+        # grab the sync relevant things here
+
+    @property
+    def signature(self):
+        signature = {
+            'input_files': [
+                ('_neurophotometrics_fpData.raw.pqt', self.device_collection, True, True),
+                ('_iblrig_taskData.raw.jsonable', self.task_collection, True, True),
+                ('_neurophotometrics_fpData.channels.csv', self.device_collection, True, True),
+                # TODO input here - the sync data fils in the self.sync_collection
+            ],
+            'output_files': [
+                ('photometry.signal.pqt', 'alf/photometry', True),
+                ('photometryROI.locations.pqt', 'alf/photometry', True),
+            ],
+        }
+        return signature
+
+    def load_data(self):
+        ibl_df = super().load_data()
+        # load here the daqami timestamps
+        # and put them in the ibl_df
+        return ibl_df
+
+    def _get_neurophotometrics_timestamps(self):
+        # get the sync data
+        # FIXME replace me with the actual filename
+        bin_filepath = self.session_path / self.sync_kwargs['collection'] / 'the_sync_file.bin'
+
+        # read bin file
+        # and extract from it
+        # daq_nph_frameclock
+        # daq_bpod_sync
+
+        timestamps_nph = None
+        return timestamps_nph
