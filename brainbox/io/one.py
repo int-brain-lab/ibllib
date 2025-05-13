@@ -808,6 +808,7 @@ class SpikeSortingLoader:
     spike_sorter: str = 'pykilosort'
     spike_sorting_path: Path = None
     _sync: dict = None
+    revision: str = None
 
     def __post_init__(self):
         # pid gets precedence
@@ -886,7 +887,7 @@ class SpikeSortingLoader:
         _logger.debug(f"selecting: {collection} to load amongst candidates: {self.collections}")
         return collection
 
-    def load_spike_sorting_object(self, obj, *args, **kwargs):
+    def load_spike_sorting_object(self, obj, *args, revision=None, **kwargs):
         """
         Loads an ALF object
         :param obj: object name, str between 'spikes', 'clusters' or 'channels'
@@ -895,8 +896,10 @@ class SpikeSortingLoader:
         :param collection: string specifiying the collection, for example 'alf/probe01/pykilosort'
         :param kwargs: additional arguments to be passed to one.api.One.load_object
         :param missing: 'raise' (default) or 'ignore'
+        :param revision: the dataset revision to load
         :return:
         """
+        revision = revision if revision is not None else self.revision
         self.download_spike_sorting_object(obj, *args, **kwargs)
         return self._load_object(self.files[obj])
 
@@ -907,7 +910,7 @@ class SpikeSortingLoader:
         return dset[0]['version'] if len(dset) else 'unknown'
 
     def download_spike_sorting_object(self, obj, spike_sorter=None, dataset_types=None, collection=None,
-                                      attribute=None, missing='raise', **kwargs):
+                                      attribute=None, missing='raise', revision=None, **kwargs):
         """
         Downloads an ALF object
         :param obj: object name, str between 'spikes', 'clusters' or 'channels'
@@ -917,8 +920,10 @@ class SpikeSortingLoader:
         :param kwargs: additional arguments to be passed to one.api.One.load_object
         :param attribute: list of attributes to load for the object
         :param missing: 'raise' (default) or 'ignore'
+        :param revision: the dataset revision to load
         :return:
         """
+        revision = revision if revision is not None else self.revision
         if spike_sorter is None:
             spike_sorter = self.spike_sorter if self.spike_sorter is not None else 'iblsorter'
         if len(self.collections) == 0:
@@ -1170,12 +1175,13 @@ class SpikeSortingLoader:
         webclient = getattr(self.one, '_web_client', None)
         return webclient.rel_path2url(get_alf_path(self.session_path)) if webclient else None
 
-    def _get_probe_info(self):
+    def _get_probe_info(self, revision=None):
+        revision = revision if revision is not None else self.revision
         if self._sync is None:
             timestamps = self.one.load_dataset(
-                self.eid, dataset='_spikeglx_*.timestamps.npy', collection=f'raw_ephys_data/{self.pname}')
+                self.eid, dataset='_spikeglx_*.timestamps.npy', collection=f'raw_ephys_data/{self.pname}', revision=revision)
             _ = self.one.load_dataset(  # this is not used here but we want to trigger the download for potential tasks
-                self.eid, dataset='_spikeglx_*.sync.npy', collection=f'raw_ephys_data/{self.pname}')
+                self.eid, dataset='_spikeglx_*.sync.npy', collection=f'raw_ephys_data/{self.pname}', revision=revision)
             try:
                 ap_meta = spikeglx.read_meta_data(self.one.load_dataset(
                     self.eid, dataset='_spikeglx_*.ap.meta', collection=f'raw_ephys_data/{self.pname}'))
