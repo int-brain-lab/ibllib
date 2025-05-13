@@ -8,6 +8,9 @@ from ibllib.pipes import base_tasks
 from iblutil.io import jsonable
 import iblphotometry.io as fpio
 
+from ibldsp.utils import rises
+from nptdms import TdmsFile
+
 from abc import abstractmethod
 import iblphotometry
 
@@ -58,7 +61,11 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
         return timestamps_bpod, bpod_data
 
     @abstractmethod
-    def _get_neurophotometrics_timestamps(self): ...
+    def _get_neurophotometrics_timestamps(self):
+        # this function needs to be implemented in the derived classes:
+        # for bpod based syncing, the timestamps are in the digial inputs file
+        # for daq based syncing, the timestamps are extracted from the tdms file
+        ...
 
     def _get_sync_function(self):
         """
@@ -153,36 +160,23 @@ class FibrePhotometryBpodSync(FibrePhotometryBaseSync):
         raw_photometry_folder = self.session_path / self.device_collection
         digital_inputs_df = pd.read_parquet(raw_photometry_folder / '_neurophotometrics_fpData.digitalIntputs.pqt')
         timestamps_nph = digital_inputs_df['SystemTimestamp'].values[digital_inputs_df['Channel'] == self.kwargs['sync_channel']]
-        timestamps_nph = timestamps_nph[
-            15:
-        ]  # TODO: we may want to detect the spacers before removing it, especially for successive sessions
+
+        # simple spacer removal, TODO replace this with something more robust
+        # detect spacer / remove spacer methods
+        timestamps_nph = timestamps_nph[15:]
         return timestamps_nph
 
 
 class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
-    """
-    DAQ syncing outline
-
-    bpod stores it's own timestamps - "timestamps_bpod"
-    DAQ receives TTL sync from each bpod - "daq_bpod_sync"
-    DAQ receives Frame clock from FP3002 - "daq_nph_frameclock"
-    NPH stores system timestamps at each sample time - "nph_frameclock"
-
-    2 step sync
-     - NPH time to DAQ time (on the basis of frame clock) m1, b1 = linreg(nph_frameclock, daq_frameclock)
-     - DAQ time to BPOD time m2, b2 = linreg(daq_bpod_sync, bpod_sync)
-
-    transfrom from NPH to BPOD
-    m1 * nph_frameclock + b1
-    """
+    """ """
 
     priority = 90
     job_size = 'small'
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.sync_kwargs = kwargs['sync']['daqami']
-        # grab the sync relevant things here
+        self.sync_kwargs = kwargs['daqami']
+        self.sync_channel = kwargs['sync_channel']
 
     @property
     def signature(self):
@@ -191,7 +185,7 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
                 ('_neurophotometrics_fpData.raw.pqt', self.device_collection, True, True),
                 ('_iblrig_taskData.raw.jsonable', self.task_collection, True, True),
                 ('_neurophotometrics_fpData.channels.csv', self.device_collection, True, True),
-                # TODO input here - the sync data fils in the self.sync_collection
+                ('_mcc_DAQdata.raw.tdms', self.sync_kwargs['collection'], True, True),
             ],
             'output_files': [
                 ('photometry.signal.pqt', 'alf/photometry', True),
@@ -200,21 +194,41 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
         }
         return signature
 
+    def _load_and_parse_tdms(self):
+        # loads the tdms file data, and detects the risind edges
+        # this probably could use some dsp, potentially trend removal
+        tdms_filepath = self.session_path / self.sync_kwargs['collection'] / '_mcc_DAQdata.raw.tdms'
+        tdms_df = TdmsFile.read(tdms_filepath).as_dataframe()
+        tdms_df.columns = [col[-4:-1] for col in tdms_df.columns]  # hardcoded renaming
+
+        timestamps = {}
+        for col in tdms_df.columns:
+            timestamps[col] = rises(tdms_df[col]) / self.sync_kwargs['sampling_rate']
+
+        return timestamps
+
     def load_data(self):
+        # the point of this functions is to overwrite the SystemTimestamp column
+        # in the ibl_df with the values from the DAQ clock
+        # then syncing will work the same as for the bpod based syncing
+
         ibl_df = super().load_data()
-        # load here the daqami timestamps
-        # and put them in the ibl_df
+
+        self.timestamps = self._load_and_parse_tdms()
+        frame_timestamps = self.timestamps[f'AI{self.sync_kwargs["frameclock_channel"]}']
+
+        # and put them in the ibl_df SystemTimestamp column
+        ibl_df['SystemTimestamp'] = frame_timestamps
         return ibl_df
 
     def _get_neurophotometrics_timestamps(self):
-        # get the sync data
-        # FIXME replace me with the actual filename
-        bin_filepath = self.session_path / self.sync_kwargs['collection'] / 'the_sync_file.bin'
+        # get the sync channel
+        sync_colname = f'AI{self.sync_kwargs[""]}'
 
-        # read bin file
-        # and extract from it
-        # daq_nph_frameclock
-        # daq_bpod_sync
+        # and the corresponding timestamps
+        timestamps_nph = self.timestamps[sync_colname]
 
-        timestamps_nph = None
+        # simple spacer removal, TODO replace this with something more robust
+        # detect spacer / remove spacer methods
+        timestamps_nph = timestamps_nph[15:]
         return timestamps_nph

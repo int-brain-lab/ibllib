@@ -605,15 +605,19 @@ def make_pipeline(session_path, **pkwargs):
         )
 
     if 'neurophotometrics' in devices:
-        # note devices['neurophotometrics'] is the acquisition_description
+        # note: devices['neurophotometrics'] is the acquisition_description
         sync_mode = devices['neurophotometrics'].get('sync_mode', 'bpod')  # default to bpod for downward compatibility
         match sync_mode:
             case 'bpod':
+                # for synchronization with the BNC inputs of the neurophotometrics receiving the sync pulses
+                # from the individual bpods
                 tasks['FibrePhotometryBpodSync'] = type('FibrePhotometryBpodSync', (ptasks.FibrePhotometryBpodSync,), {})(
                     **devices['neurophotometrics'],
                     **kwargs,
                 )
             case 'daqami':
+                # for synchronization with the DAQami receiving the sync pulses from the individual bpods
+                # as well as the frame clock from the FP3002
                 tasks['FibrePhotometryDAQSync'] = type('FibrePhotometryDAQSync', (ptasks.FibrePhotometryDAQSync,), {})(
                     **devices['neurophotometrics'],
                     **acquisition_description['sync'],
