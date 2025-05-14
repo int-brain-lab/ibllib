@@ -1,12 +1,12 @@
 import logging
 import numpy as np
 import pandas as pd
+from typing import Tuple
 
 import ibldsp.utils
 import ibllib.io.session_params
 from ibllib.pipes import base_tasks
 from iblutil.io import jsonable
-import iblphotometry.io as fpio
 
 from ibldsp.utils import rises
 from nptdms import TdmsFile
@@ -25,7 +25,7 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.device_collection = self.get_device_collection('neurophotometrics', device_collection='raw_photometry_data')
+        self.photometry_collection = kwargs['collection']  # raw_photometry_data
         self.kwargs = kwargs
 
         # we will work with the first protocol here
@@ -34,7 +34,8 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
             self.task_collection = ibllib.io.session_params.get_task_collection(self.session_params, self.task_protocol)
             break
 
-    def _get_bpod_timestamps(self):
+    def _get_bpod_timestamps(self) -> Tuple[np.ndarray, list]:
+        # the timestamps for syncing, in the time of the bpod
         if 'habituation' in self.task_protocol:
             sync_states_names = ['iti', 'reward']
         else:
@@ -61,17 +62,14 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
         return timestamps_bpod, bpod_data
 
     @abstractmethod
-    def _get_neurophotometrics_timestamps(self):
+    def _get_neurophotometrics_timestamps(self) -> np.ndarray:
         # this function needs to be implemented in the derived classes:
         # for bpod based syncing, the timestamps are in the digial inputs file
         # for daq based syncing, the timestamps are extracted from the tdms file
         ...
 
-    def _get_sync_function(self):
-        """
-        Perform the linear clock correction between bpod and neurophotometrics timestamps.
-        :return: interpolation function that outputs bpod timestamsp from neurophotometrics timestamps
-        """
+    def _get_sync_function(self) -> Tuple[callable, list]:
+        # returns the synchronization function
 
         # get the timestamps
         timestamps_bpod, bpod_data = self._get_bpod_timestamps(self.task_protocol)
@@ -95,8 +93,9 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
 
         return sync_nph_to_bpod_fcn, valid_bounds
 
-    def load_data(self):
-        raw_photometry_folder = self.session_path / self.device_collection
+    def load_data(self) -> pd.DataFrame:
+        # loads the raw photometry data
+        raw_photometry_folder = self.session_path / self.photometry_collection
         raw_neurophotometrics_df = pd.read_parquet(raw_photometry_folder / '_neurophotometrics_fpData.raw.pqt')
         ibl_df = iblphotometry.io.from_raw_neurophotometrics_df_to_ibl_df(
             raw_neurophotometrics_df,
@@ -104,10 +103,10 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
         )
         return ibl_df
 
-    def _run(self, **kwargs):
-        """ """
+    def _run(self, **kwargs) -> Tuple[pd.DataFrame, pd.DataFrame]:
         # 1) load photometry data
         # note: when loading daq based syncing, the SystemTimestamp column
+        # will be overridden with the timestamps from the tdms file
         ibl_df = self.load_data()
 
         # 2) get the synchronization function
@@ -115,8 +114,6 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
         ibl_df['valid'] = np.logical_and(ibl_df['times'] >= valid_bounds[0], ibl_df['times'] <= valid_bounds[1])
 
         # 3) apply synchronization
-        # for bpod based syncing, we can directly transform the timestamps that are
-        # stored with the samples
         ibl_df['times'] = sync_nph_to_bpod_fcn(ibl_df['SystemTimestamp'])
 
         # 4) write to disk
@@ -143,10 +140,10 @@ class FibrePhotometryBpodSync(FibrePhotometryBaseSync):
     def signature(self):
         signature = {
             'input_files': [
-                ('_neurophotometrics_fpData.raw.pqt', self.device_collection, True, True),
+                ('_neurophotometrics_fpData.raw.pqt', self.photometry_collection, True, True),
                 ('_iblrig_taskData.raw.jsonable', self.task_collection, True, True),
-                ('_neurophotometrics_fpData.channels.csv', self.device_collection, True, True),
-                ('_neurophotometrics_fpData.digitalIntputs.pqt', self.device_collection, True),
+                ('_neurophotometrics_fpData.channels.csv', self.photometry_collection, True, True),
+                ('_neurophotometrics_fpData.digitalIntputs.pqt', self.photometry_collection, True),
             ],
             'output_files': [
                 ('photometry.signal.pqt', 'alf/photometry', True),
@@ -155,9 +152,9 @@ class FibrePhotometryBpodSync(FibrePhotometryBaseSync):
         }
         return signature
 
-    def _get_neurophotometrics_timestamps(self):
-        # we get the timestamps for the photometry data by loading from the digital inputs file
-        raw_photometry_folder = self.session_path / self.device_collection
+    def _get_neurophotometrics_timestamps(self) -> np.ndarray:
+        # for bpod based syncing, the timestamps for syncing are in the digital inputs file
+        raw_photometry_folder = self.session_path / self.photometry_collection
         digital_inputs_df = pd.read_parquet(raw_photometry_folder / '_neurophotometrics_fpData.digitalIntputs.pqt')
         timestamps_nph = digital_inputs_df['SystemTimestamp'].values[digital_inputs_df['Channel'] == self.kwargs['sync_channel']]
 
@@ -168,8 +165,6 @@ class FibrePhotometryBpodSync(FibrePhotometryBaseSync):
 
 
 class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
-    """ """
-
     priority = 90
     job_size = 'small'
 
@@ -182,9 +177,9 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
     def signature(self):
         signature = {
             'input_files': [
-                ('_neurophotometrics_fpData.raw.pqt', self.device_collection, True, True),
+                ('_neurophotometrics_fpData.raw.pqt', self.photometry_collection, True, True),
                 ('_iblrig_taskData.raw.jsonable', self.task_collection, True, True),
-                ('_neurophotometrics_fpData.channels.csv', self.device_collection, True, True),
+                ('_neurophotometrics_fpData.channels.csv', self.photometry_collection, True, True),
                 ('_mcc_DAQdata.raw.tdms', self.sync_kwargs['collection'], True, True),
             ],
             'output_files': [
@@ -194,9 +189,9 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
         }
         return signature
 
-    def _load_and_parse_tdms(self):
-        # loads the tdms file data, and detects the risind edges
-        # this probably could use some dsp, potentially trend removal
+    def _load_and_parse_tdms(self) -> dict:
+        # loads the tdms file data, and detects the rising edges
+        # this probably could use some dsp
         tdms_filepath = self.session_path / self.sync_kwargs['collection'] / '_mcc_DAQdata.raw.tdms'
         tdms_df = TdmsFile.read(tdms_filepath).as_dataframe()
         tdms_df.columns = [col[-4:-1] for col in tdms_df.columns]  # hardcoded renaming
@@ -207,7 +202,7 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
 
         return timestamps
 
-    def load_data(self):
+    def load_data(self) -> pd.DataFrame:
         # the point of this functions is to overwrite the SystemTimestamp column
         # in the ibl_df with the values from the DAQ clock
         # then syncing will work the same as for the bpod based syncing
@@ -221,7 +216,7 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
         ibl_df['SystemTimestamp'] = frame_timestamps
         return ibl_df
 
-    def _get_neurophotometrics_timestamps(self):
+    def _get_neurophotometrics_timestamps(self) -> np.ndarray:
         # get the sync channel
         sync_colname = f'AI{self.sync_kwargs[""]}'
 
