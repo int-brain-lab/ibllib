@@ -620,7 +620,6 @@ def make_pipeline(session_path, **pkwargs):
                 # as well as the frame clock from the FP3002
                 tasks['FibrePhotometryDAQSync'] = type('FibrePhotometryDAQSync', (ptasks.FibrePhotometryDAQSync,), {})(
                     **devices['neurophotometrics'],
-                    **acquisition_description['sync'],
                     **kwargs,
                 )
 
