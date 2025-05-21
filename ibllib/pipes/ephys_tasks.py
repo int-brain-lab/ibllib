@@ -1,8 +1,10 @@
+import importlib
 import logging
 from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 import traceback
 
 import packaging.version
@@ -727,11 +729,11 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
                     self.FORCE_RERUN = True
         self.scratch_folder_run.mkdir(parents=True, exist_ok=True)
         check_nvidia_driver()
-        try:
-            # if pykilosort is in the environment, use the installed version within the task
+        # this is the best way I found to check if iblsorter is installed and available without a try block
+        if 'iblsorter' in sys.modules and importlib.util.find_spec('iblsorter.ibl') is not None:
             import iblsorter.ibl  # noqa
             iblsorter.ibl.run_spike_sorting_ibl(bin_file=ap_file, scratch_dir=self.scratch_folder_run, delete=False)
-        except ImportError:
+        else:
             command2run = f"{self.SHELL_SCRIPT} {ap_file} {self.scratch_folder_run}"
             _logger.info(command2run)
             process = subprocess.Popen(
