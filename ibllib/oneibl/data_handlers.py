@@ -461,8 +461,8 @@ def dataset_from_name(name, datasets):
 
     Parameters
     ----------
-    name : str
-        The name of the dataset.
+    name : str, function
+        The name of the dataset or a function to match the dataset name.
     datasets : list of ExpectedDataset
         A list of ExpectedDataset instances.
 
@@ -475,8 +475,12 @@ def dataset_from_name(name, datasets):
     matches = []
     for dataset in datasets:
         if dataset.operator is None:
-            if dataset._identifiers[2] == name:
-                matches.append(dataset)
+            if isinstance(name, str):
+                if dataset._identifiers[2] == name:
+                    matches.append(dataset)
+            else:
+                if name(dataset._identifiers[2]):
+                    matches.append(dataset)
         else:
             matches.extend(dataset_from_name(name, dataset._identifiers))
     return matches
@@ -843,7 +847,7 @@ class RemoteAwsDataHandler(DataHandler):
         """
         # Set up Globus
         from one.remote.globus import Globus # noqa
-        self.globus = Globus(client_name='server', headless=True)
+        self.globus = Globus(client_name=kwargs.pop('client_name', 'server'), headless=True)
         self.lab = session_path_parts(self.session_path, as_dict=True)['lab']
         if self.lab == 'cortexlab' and 'cortexlab' in self.one.alyx.base_url:
             base_url = 'https://alyx.internationalbrainlab.org'
