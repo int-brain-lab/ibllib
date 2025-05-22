@@ -743,6 +743,9 @@ class TestDataHandlers(unittest.TestCase):
         self.assertEqual([dB], dsets)
         dsets = handlers.dataset_from_name('foo.baz.ext', input_files)
         self.assertEqual([], dsets)
+        # Test match function
+        dsets = handlers.dataset_from_name(lambda x: 'baz' in x, input_files)
+        self.assertEqual([dB], dsets)
 
     def test_update_collections(self):
         """Test update_collections function."""
