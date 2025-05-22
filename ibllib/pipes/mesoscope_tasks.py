@@ -145,35 +145,36 @@ class MesoscopeCompress(base_tasks.MesoscopeTask):
             outfile = self.session_path.joinpath(*filter(None, out_id))
             if outfile.exists() and not overwrite:
                 _logger.info('%s already exists; skipping...', outfile.relative_to(self.session_path))
-                continue
-            if not infiles:
-                _logger.info('No image files found in %s', in_dir.relative_to(self.session_path))
-                continue
+                outfiles.append(outfile)
+            else:
+                if not infiles:
+                    _logger.info('No image files found in %s', in_dir.relative_to(self.session_path))
+                    continue
 
-            _logger.debug(
-                'Input files:\n\t%s', '\n\t'.join(map(Path.as_posix, (x.relative_to(self.session_path) for x in infiles)))
-            )
+                _logger.debug(
+                    'Input files:\n\t%s', '\n\t'.join(map(Path.as_posix, (x.relative_to(self.session_path) for x in infiles)))
+                )
 
-            uncompressed_size = sum(x.stat().st_size for x in infiles)
-            _logger.info('Compressing %i file(s)', len(infiles))
-            cmd = 'tar -cjvf "{output}" "{input}"'.format(
-                output=outfile.relative_to(in_dir), input='" "'.join(str(x.relative_to(in_dir)) for x in infiles))
-            _logger.debug(cmd)
-            process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=in_dir)
-            info, error = process.communicate()  # b'2023-02-17_2_test_2P_00001_00001.tif\n'
-            _logger.debug(info.decode())
-            assert process.returncode == 0, f'compression failed: {error.decode()}'
+                uncompressed_size = sum(x.stat().st_size for x in infiles)
+                _logger.info('Compressing %i file(s)', len(infiles))
+                cmd = 'tar -cjvf "{output}" "{input}"'.format(
+                    output=outfile.relative_to(in_dir), input='" "'.join(str(x.relative_to(in_dir)) for x in infiles))
+                _logger.debug(cmd)
+                process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=in_dir)
+                info, error = process.communicate()  # b'2023-02-17_2_test_2P_00001_00001.tif\n'
+                _logger.debug(info.decode())
+                assert process.returncode == 0, f'compression failed: {error.decode()}'
 
-            # Check the output
-            assert outfile.exists(), 'output file missing'
-            outfiles.append(outfile)
-            compressed_size = outfile.stat().st_size
-            min_size = kwargs.pop('verify_min_size', 1024)
-            assert compressed_size > int(min_size), f'Compressed file < {min_size / 1024:.0f}KB'
-            _logger.info('Compression ratio = %.3f, saving %.2f pct (%.2f MB)',
-                         uncompressed_size / compressed_size,
-                         round((1 - (compressed_size / uncompressed_size)) * 10000) / 100,
-                         (uncompressed_size - compressed_size) / 1024 / 1024)
+                # Check the output
+                assert outfile.exists(), 'output file missing'
+                outfiles.append(outfile)
+                compressed_size = outfile.stat().st_size
+                min_size = kwargs.pop('verify_min_size', 1024)
+                assert compressed_size > int(min_size), f'Compressed file < {min_size / 1024:.0f}KB'
+                _logger.info('Compression ratio = %.3f, saving %.2f pct (%.2f MB)',
+                             uncompressed_size / compressed_size,
+                             round((1 - (compressed_size / uncompressed_size)) * 10000) / 100,
+                             (uncompressed_size - compressed_size) / 1024 / 1024)
 
             if verify_output:
                 # Test bzip
