@@ -240,7 +240,7 @@ class TestIBLGlobusPatcher(_GlobusPatcherTest):
             self.assertFalse(any(args == ('datasets', 'delete') for args, _ in alyx_mock.call_args_list))
             self.globus_sdk_mock.DeleteData.assert_not_called()
             expected = [
-                'aws', 's3', 'rm', 's3://bucket' + s3_fr['data_url'][31:], '--profile', 'ibladmin', '--dryrun', '--no-progress'
+                'aws', 's3', 'rm', 's3://bucket' + s3_fr['data_url'][31:], '--profile', 'ibladmin', '--dryrun'
             ]
             proc_mock.assert_called_once_with(expected, stdout=-1, stderr=-2)
 
@@ -251,7 +251,7 @@ class TestIBLGlobusPatcher(_GlobusPatcherTest):
             self.assertEqual('Unable to delete from flatiron_mainenlab', log.records[-1].getMessage())
             alyx_mock.assert_called_with('datasets', 'delete', id=did)
             self.globus_sdk_mock.DeleteData.assert_called_once()
-            expected = [*expected[:-2], '--only-show-errors']
+            expected = [*expected[:-1], '--only-show-errors']
             proc_mock.assert_called_with(expected, stdout=-1, stderr=-2)
 
     def _alyx_patch(self, endpoint, action, **kwargs):
@@ -796,6 +796,20 @@ class TestDataHandlers(unittest.TestCase):
         dataset = I(None, None, True)
         dataset._identifiers = ('alf', '#2020-01-01#', 'foo.bar.ext')
         self.assertRaises(NotImplementedError, handlers.update_collections, dataset, None)
+        # Check exact match kwarg
+        dataset = I('foo.*', 'bar', True, unique=False) | I('bar.*', 'bar', True, unique=False)
+        dataset |= (I('foo.bar.ext', 'alf/probe??', True, unique=False) | I('baz.bar.ext', 'alf/probe??', True, unique=True))
+        dset = handlers.update_collections(dataset, ['alf/probe00', 'alf/probe01'], substring='alf/probe??', exact_match=True)
+        # The first two datasets should not be updated
+        self.assertEqual(dset.identifiers[:2], dset._identifiers[0].identifiers)
+        # The rest should be an AND of alf/probe00 and alf/probe01 for both OR datasets
+        self.assertEqual('or', dset._identifiers[1].operator)
+        self.assertEqual('and', dset._identifiers[1]._identifiers[0].operator)
+        self.assertEqual('and', dset._identifiers[1]._identifiers[1].operator)
+        expected = (
+            ('alf/probe00', None, 'foo.bar.ext'), ('alf/probe01', None, 'foo.bar.ext'),
+            ('alf/probe00', None, 'baz.bar.ext'), ('alf/probe01', None, 'baz.bar.ext'))
+        self.assertEqual(expected, dset.identifiers[2:])
 
 
 class TestSDSCDataHandler(unittest.TestCase):

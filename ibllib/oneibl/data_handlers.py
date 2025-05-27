@@ -486,7 +486,7 @@ def dataset_from_name(name, datasets):
     return matches
 
 
-def update_collections(dataset, new_collection, substring=None, unique=None):
+def update_collections(dataset, new_collection, substring=None, unique=None, exact_match=False):
     """
     Update the collection of a dataset.
 
@@ -501,6 +501,12 @@ def update_collections(dataset, new_collection, substring=None, unique=None):
     substring : str, optional
         An optional substring in the collection to replace with new collection(s). If None, the
         entire collection will be replaced.
+    unique : bool, optional
+        When provided, this will be used to set the `unique` attribute of the new dataset(s). If
+        None, the `unique` attribute will be set to True if the collection does not contain
+        wildcards.
+    exact_match : bool
+        If True, the collection will be replaced only if it contains `substring`.
 
     Returns
     -------
@@ -515,7 +521,10 @@ def update_collections(dataset, new_collection, substring=None, unique=None):
         if revision is not None:
             raise NotImplementedError
         if substring:
-            after = [(collection or '').replace(substring, x) or None for x in after]
+            if exact_match and substring not in collection:
+                after = [collection]
+            else:
+                after = [(collection or '').replace(substring, x) or None for x in after]
         if unique is None:
             unique = [not set(name + (x or '')).intersection('*[?') for x in after]
         else:
@@ -527,7 +536,7 @@ def update_collections(dataset, new_collection, substring=None, unique=None):
                 updated &= D(name, folder, not isinstance(dataset, OptionalDataset), register, unique=unq)
     else:
         updated = copy(dataset)
-        updated._identifiers = [update_collections(dd, new_collection, substring, unique)
+        updated._identifiers = [update_collections(dd, new_collection, substring, unique, exact_match)
                                 for dd in updated._identifiers]
     return updated
 
