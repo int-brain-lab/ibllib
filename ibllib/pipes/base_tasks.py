@@ -390,8 +390,10 @@ class MesoscopeTask(DynamicTask):
         super().get_signatures(**kwargs)  # Set inputs and outputs
         # For all inputs and outputs that are part of the device collection, expand to one file per folder
         # All others keep unchanged
-        self.input_files = [update_collections(x, raw_imaging_folders, self.device_collection) for x in self.input_files]
-        self.output_files = [update_collections(x, raw_imaging_folders, self.device_collection) for x in self.output_files]
+        self.input_files = [
+            update_collections(x, raw_imaging_folders, self.device_collection, exact_match=True) for x in self.input_files]
+        self.output_files = [
+            update_collections(x, raw_imaging_folders, self.device_collection, exact_match=True) for x in self.output_files]
 
     def load_sync(self):
         """
