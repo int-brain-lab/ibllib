@@ -18,19 +18,30 @@ _logger = logging.getLogger('ibllib')
 
 
 def extract_timestamps_from_tdms_file(tdms_filepath: Path) -> dict:
-    # loads the tdms file data, and detects the rising edges
-    timestamps = {}  # stores the resulting edge times here
+    # extractor for tdms files as written by the daqami software, configured
+    # for neurophotometrics experiments: Frameclock is in AI7, DI1-4 are the
+    # bpod sync signals
+
     tdms_file = TdmsFile.read(tdms_filepath)
-    analog_group, digital_group = tdms_file.groups()
-    fs = analog_group.properties['ScanRate']
+    (digital_group,) = tdms_file.groups()
+    fs = digital_group.properties['ScanRate']  # this should be 10kHz
+    df = tdms_file.as_dataframe()
+    col = df.columns[-1]
+    vals = df[col].values.astype('int64')
+    columns = ['DI0', 'DI1', 'DI2', 'DI3']
 
-    for channel in analog_group.channels():
-        signal = (channel.data > 2.5).astype('int64')
-        timestamps[channel.name] = np.where(np.diff(signal) == 1)[0] / fs
+    # ugly but basically just a binary decoder for the binary data
+    # assumes 4 channels
+    data = np.array([list(bin(v)[2:].zfill(4)[::-1]) for v in vals], dtype='int64')
+    timestamps = {}
+    for i, name in enumerate(columns):
+        signal = data[:, i]
+        timestamps[name] = np.where(np.diff(signal) == 1)[0] / fs
 
-    for channel in digital_group.channels():
-        signal = (channel.data > 0.5).astype('int64')
-        timestamps[channel.name] = np.where(np.diff(signal) == 1)[0] / fs
+    # frameclock data is recorded on an analog channel
+    # for channel in analog_group.channels():
+    #     signal = (channel.data > 2.5).astype('int64')  # assumes 0-5V
+    #     timestamps[channel.name] = np.where(np.diff(signal) == 1)[0] / fs
 
     return timestamps
 
@@ -104,7 +115,7 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
         _logger.info(
             f'sync: n trials {len(bpod_data)}, n bpod sync {len(timestamps_bpod)}, n photometry {len(timestamps_nph)}, n match {len(ix_nph)}'
         )
-        # FIXME the framerate here is hardcoded, infer it instead!
+        # TODO the framerate here is hardcoded, infer it instead!
         assert np.all(np.abs(tcheck) < 1 / 60), 'Sync issue detected, residual above 1/60s'
         assert len(ix_nph) / len(timestamps_bpod) > 0.95, 'Sync issue detected, less than 95% of the bpod events matched'
         valid_bounds = [bpod_data[0]['Trial start timestamp'] - 2, bpod_data[-1]['Trial end timestamp'] + 2]
@@ -116,7 +127,6 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
         raw_photometry_folder = self.session_path / self.photometry_collection
         raw_neurophotometrics_df = pd.read_parquet(raw_photometry_folder / '_neurophotometrics_fpData.raw.pqt')
         return raw_neurophotometrics_df
-        # return ibl_df
 
     def _run(self, **kwargs) -> Tuple[pd.DataFrame, pd.DataFrame]:
         # 1) load photometry data
@@ -221,7 +231,7 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
         # get daqami timestamps
         tdms_filepath = self.session_path / self.sync_kwargs['collection'] / '_mcc_DAQdata.raw.tdms'
         self.timestamps = extract_timestamps_from_tdms_file(tdms_filepath)
-        frame_timestamps = self.timestamps[f'AI{self.sync_kwargs["frameclock_channel"]}']
+        frame_timestamps = self.timestamps[f'DI{self.sync_kwargs["frameclock_channel"]}']
 
         # and put them in the raw_df SystemTimestamp column
         if raw_df.shape[0] == frame_timestamps.shape[0]:
