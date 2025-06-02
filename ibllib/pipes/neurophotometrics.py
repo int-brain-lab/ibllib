@@ -233,12 +233,24 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
         self.timestamps = extract_timestamps_from_tdms_file(tdms_filepath)
         frame_timestamps = self.timestamps[f'DI{self.sync_kwargs["frameclock_channel"]}']
 
+        # compare number of frame timestamps
         # and put them in the raw_df SystemTimestamp column
         if raw_df.shape[0] == frame_timestamps.shape[0]:
             raw_df['SystemTimestamp'] = frame_timestamps
         elif raw_df.shape[0] == frame_timestamps.shape[0] + 1:
             # there is one extra frame timestamp from the last incomplete frame
             raw_df['SystemTimestamp'] = frame_timestamps[:-1]
+        elif raw_df.shape[0] > frame_timestamps:
+            # the daqami was stopped / closed before bonsai
+            # we discard all frames that can not be mapped
+            _logger.warning(
+                f'#frames recorded by bonsai: {raw_df.shape[0]} > #frame timestamps recorded by daqami {frame_timestamps.shape[0]}, dropping all frames without recorded timestamps'
+            )
+            raw_df = raw_df.iloc[: frame_timestamps.shape[0]]
+
+        elif raw_df.shape[0] < frame_timestamps:
+            # this should not be possible
+            raise ValueError('more timestamps for frames recorded by the daqami than frames were recorded by bonsai.')
         return raw_df
 
     def _get_neurophotometrics_timestamps(self) -> np.ndarray:
