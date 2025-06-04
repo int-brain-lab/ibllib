@@ -113,7 +113,9 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
         # then we check the alignment, should be less than the camera sampling rate
         tcheck = sync_nph_to_bpod_fcn(timestamps_nph[ix_nph]) - timestamps_bpod[ix_bpod]
         _logger.info(
-            f'sync: n trials {len(bpod_data)}, n bpod sync {len(timestamps_bpod)}, n photometry {len(timestamps_nph)}, n match {len(ix_nph)}'
+            f'sync: n trials {len(bpod_data)}'
+            f'n bpod sync {len(timestamps_bpod)}'
+            f'n photometry {len(timestamps_nph)}, n match {len(ix_nph)}'
         )
         # TODO the framerate here is hardcoded, infer it instead!
         assert np.all(np.abs(tcheck) < 1 / 60), 'Sync issue detected, residual above 1/60s'
@@ -243,9 +245,7 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
         elif raw_df.shape[0] > frame_timestamps.shape[0]:
             # the daqami was stopped / closed before bonsai
             # we discard all frames that can not be mapped
-            _logger.warning(
-                f'#frames recorded by bonsai: {raw_df.shape[0]} > #frame timestamps recorded by daqami {frame_timestamps.shape[0]}, dropping all frames without recorded timestamps'
-            )
+            _logger.warning(f'#frames bonsai: {raw_df.shape[0]} > #frames daqami {frame_timestamps.shape[0]}, dropping excess')
             raw_df = raw_df.iloc[: frame_timestamps.shape[0]]
 
         elif raw_df.shape[0] < frame_timestamps:
