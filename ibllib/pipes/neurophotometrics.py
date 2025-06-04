@@ -240,7 +240,7 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
         elif raw_df.shape[0] == frame_timestamps.shape[0] + 1:
             # there is one extra frame timestamp from the last incomplete frame
             raw_df['SystemTimestamp'] = frame_timestamps[:-1]
-        elif raw_df.shape[0] > frame_timestamps:
+        elif raw_df.shape[0] > frame_timestamps.shape[0]:
             # the daqami was stopped / closed before bonsai
             # we discard all frames that can not be mapped
             _logger.warning(
