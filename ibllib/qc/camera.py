@@ -135,6 +135,7 @@ class CameraQC(base.QC):
         self.n_samples = kwargs.pop('n_samples', 100)
         self.sync_collection = kwargs.pop('sync_collection', None)
         self.sync = kwargs.pop('sync_type', None)
+        self.protocol = kwargs.pop('protocol', None)
         super().__init__(session_path_or_eid, **kwargs)
 
         # Data
@@ -163,7 +164,10 @@ class CameraQC(base.QC):
         self.outcome = spec.QC.NOT_SET
 
         # Specify any checks to remove
-        self.checks_to_remove = []
+        if self.protocol is not None and 'habituation' in self.protocol:
+            self.checks_to_remove = ['check_wheel_alignment']
+        else:
+            self.checks_to_remove = []
         self._type = None
 
     @property
@@ -271,8 +275,12 @@ class CameraQC(base.QC):
                 else:
                     raise NotImplementedError(f'Unknown namespace "{ns}"')
             else:
-                wheel_data = training_wheel.get_wheel_position(
-                    self.session_path, task_collection=task_collection)
+                if self.protocol is not None and 'habituation' in self.protocol:
+                    wheel_data = training_wheel.get_wheel_position(
+                        self.session_path, task_collection=task_collection)
+                else:
+                    wheel_data = [None, None]
+
             self.data['wheel'] = Bunch(zip(wheel_keys, wheel_data))
 
         # Find short period of wheel motion for motion correlation.

@@ -68,9 +68,11 @@ def _load_passive_session_fixtures(session_path: str, task_collection: str = 'ra
     :rtype: dict
     """
 
-    # THIS CAN BE PREGENERATED SESSION NO
+    # The pregenerated session number has had many parameter names
     settings = rawio.load_settings(session_path, task_collection=task_collection)
-    ses_nb = settings['PREGENERATED_SESSION_NUM']
+    pars = map(settings.get, ['PRELOADED_SESSION_NUM', 'PREGENERATED_SESSION_NUM', 'SESSION_TEMPLATE_ID'])
+    ses_nb = next((k for k in pars if k is not None), None)
+
     session_order = settings.get('SESSION_ORDER', None)
     if session_order:  # TODO test this out and make sure it okay
         assert settings["SESSION_ORDER"][settings["SESSION_IDX"]] == ses_nb

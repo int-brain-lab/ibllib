@@ -700,9 +700,7 @@ class Pipeline(abc.ABC):
         list
             List of Alyx task dictionaries (existing and/or created).
         """
-        rerun__status__in = ([rerun__status__in]
-                             if isinstance(rerun__status__in, str)
-                             else rerun__status__in or [])
+        rerun__status__in = ensure_list(rerun__status__in)
         if '__all__' in rerun__status__in:
             rerun__status__in = [x for x in TASK_STATUS_SET if x != 'Abandoned']
         assert self.eid

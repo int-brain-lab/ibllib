@@ -143,6 +143,7 @@ class ExpectedDataset:
         - Currently if `unique` is true and multiple files are found, all files are returned without an exception raised
           although this may change in the future.
         - If `register` is false, all files are returned regardless of whether they are intended to be registered.
+        - If `register` is true, an input with register=True may not be returned if part of an OR operation.
         - If `inverted` is true, and files are found, the glob pattern is returned as missing.
         - If XOR, returns all patterns if all are present when only one should be, otherwise returns all missing
           patterns.
@@ -163,7 +164,7 @@ class ExpectedDataset:
                 missing = self.glob_pattern
         elif self.operator == 'and':
             assert len(self._identifiers) == 2
-            _ok, _actual_files, _missing = zip(*map(lambda x: x.find_files(session_path), self._identifiers))
+            _ok, _actual_files, _missing = zip(*map(lambda x: x.find_files(session_path, register=register), self._identifiers))
             ok = all(_ok)
             actual_files = flatten(_actual_files)
             missing = set(filter(None, flatten(_missing)))
@@ -171,14 +172,14 @@ class ExpectedDataset:
             assert len(self._identifiers) == 2
             missing = set()
             for d in self._identifiers:
-                ok, actual_files, _missing = d.find_files(session_path)
+                ok, actual_files, _missing = d.find_files(session_path, register=register)
                 if ok:
                     break
                 if missing is not None:
                     missing.update(_missing) if isinstance(_missing, set) else missing.add(_missing)
         elif self.operator == 'xor':
             assert len(self._identifiers) == 2
-            _ok, _actual_files, _missing = zip(*map(lambda x: x.find_files(session_path), self._identifiers))
+            _ok, _actual_files, _missing = zip(*map(lambda x: x.find_files(session_path, register=register), self._identifiers))
             ok = sum(_ok) == 1  # and sum(map(bool, map(len, _actual_files))) == 1
             # Return only those datasets that are complete if OK
             actual_files = _actual_files[_ok.index(True)] if ok else flatten(_actual_files)
@@ -201,7 +202,7 @@ class ExpectedDataset:
         Parameters
         ----------
         session_datasets : pandas.DataFrame
-            An data frame of session datasets.
+            A data frame of session datasets.
         kwargs
             Extra arguments for `one.util.filter_datasets`, namely revision_last_before, qc, and
             ignore_qc_not_set.

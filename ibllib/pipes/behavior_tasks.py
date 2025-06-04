@@ -16,7 +16,7 @@ from ibllib.qc.task_metrics import HabituationQC, TaskQC, update_dataset_qc
 from ibllib.io.extractors.ephys_passive import PassiveChoiceWorld
 from ibllib.io.extractors.bpod_trials import get_bpod_extractor
 from ibllib.io.extractors.ephys_fpga import FpgaTrials, FpgaTrialsHabituation, get_sync_and_chn_map
-from ibllib.io.extractors.mesoscope import TimelineTrials
+from ibllib.io.extractors.mesoscope import TimelineTrials, TimelineTrialsHabituation
 from ibllib.pipes import training_status
 from ibllib.plots.figures import BehaviourPlots
 
@@ -155,6 +155,40 @@ class HabituationTrialsNidq(HabituationTrialsBpod):
         qc = super().run_qc(trials_data=trials_data, update=update)
         qc.extractor.bpod_ttls = self.extractor.bpod
         return qc
+
+
+class HabituationTrialsTimeline(HabituationTrialsNidq):
+    """Behaviour task extractor with DAQdata.raw NPY datasets."""
+    @property
+    def signature(self):
+        signature = super().signature
+        signature['input_files'] = [
+            ('_iblrig_taskData.raw.*', self.collection, True),
+            ('_iblrig_taskSettings.raw.*', self.collection, True),
+            (f'_{self.sync_namespace}_DAQdata.raw.npy', self.sync_collection, True),
+            (f'_{self.sync_namespace}_DAQdata.timestamps.npy', self.sync_collection, True),
+            (f'_{self.sync_namespace}_DAQdata.meta.json', self.sync_collection, True),
+        ]
+        return signature
+
+    def extract_behaviour(self, save=True, **kwargs):
+        """Extract the Bpod trials data and Timeline acquired signals."""
+        # First determine the extractor from the task protocol
+        bpod_trials, _ = HabituationTrialsBpod.extract_behaviour(self, save=False, **kwargs)
+
+        # Sync Bpod trials to DAQ
+        self.extractor = TimelineTrialsHabituation(self.session_path, bpod_trials=bpod_trials, bpod_extractor=self.extractor)
+        save_path = self.session_path / self.output_collection
+        if not self._spacer_support(self.extractor.settings):
+            _logger.warning('Protocol spacers not supported; setting protocol_number to None')
+            self.protocol_number = None
+
+        # NB: The stimOff times are called stimCenter times for habituation choice world
+        dsets, out_files = self.extractor.extract(
+            save=save, path_out=save_path, sync_collection=self.sync_collection,
+            task_collection=self.collection, protocol_number=self.protocol_number, **kwargs)
+
+        return dsets, out_files
 
 
 class TrialRegisterRaw(base_tasks.RegisterRawDataTask, base_tasks.BehaviourTask):
@@ -423,7 +457,7 @@ class ChoiceWorldTrialsNidq(ChoiceWorldTrialsBpod):
         from brainbox.behavior import training
 
         trials = alfio.load_object(self.session_path.joinpath(self.output_collection), 'trials').to_df()
-        good_enough = training.criterion_delay(
+        good_enough, _ = training.criterion_delay(
             n_trials=trials.shape[0],
             perf_easy=training.compute_performance_easy(trials),
         )
@@ -431,7 +465,7 @@ class ChoiceWorldTrialsNidq(ChoiceWorldTrialsBpod):
             n_trials = trials.shape[0]
             while not good_enough and n_trials > 400:
                 n_trials -= 1
-                good_enough = training.criterion_delay(
+                good_enough, _ = training.criterion_delay(
                     n_trials=n_trials,
                     perf_easy=training.compute_performance_easy(trials[:n_trials]),
                 )
