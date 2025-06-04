@@ -952,7 +952,7 @@ class PostLP(base_tasks.VideoTask):
                 fig.clf()
                 snp = ReportSnapshot(self.session_path, session_id, one=self.one)
                 snp.outputs = [fig_path]
-                snp.register_images(widths=['orig'], function=str(dlc_qc_plot.__module__) + '.' + str(dlc_qc_plot.__name__))
+                snp.register_images(widths=['orig'], function=str(lp_qc_plot.__module__) + '.' + str(lp_qc_plot.__name__))
             except Exception:
                 _logger.error('Could not create and/or upload LP QC Plot')
                 _logger.error(traceback.format_exc())
