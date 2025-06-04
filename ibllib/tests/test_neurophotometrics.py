@@ -4,19 +4,9 @@ import sys
 import unittest
 from unittest import mock
 import tempfile
-import json
-from itertools import chain
 from pathlib import Path
-import subprocess
-from copy import deepcopy
-import uuid
 
-from one.api import ONE
-import numpy as np
 
-from ibllib.pipes.mesoscope_tasks import MesoscopePreprocess, MesoscopeFOV, find_triangle, surface_normal, _nearest_neighbour_1d
-from ibllib.io.extractors import mesoscope
-from ibllib.tests import TEST_DB
 from ibllib.io import session_params
 
 # Mock suit2p which is imported in MesoscopePreprocess
@@ -41,7 +31,6 @@ class TestNeurophotometricsExtractor(unittest.TestCase):
     def test_bpod_extractor(self):
         path = Path(__file__).parent / 'fixtures' / 'neurophotometrics' / '_ibl_experiment_description_bpod.yaml'
         self.experiment_description = session_params.read_params(path)
-        # expected
 
     def test_daqami_extractor(self):
         path = Path(__file__).parent / 'fixtures' / 'neurophotometrics' / '_ibl_experiment_description_bpod.yaml'
