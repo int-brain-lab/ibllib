@@ -33,5 +33,4 @@ seaborn>=0.9.0
 slidingRP>=1.1.1  # steinmetz lab refractory period metrics
 sparse
 tqdm>=4.32.1
-
-pyqt5
+ibl-photometry
