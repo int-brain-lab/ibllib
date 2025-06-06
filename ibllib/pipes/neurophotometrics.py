@@ -23,7 +23,14 @@ def extract_timestamps_from_tdms_file(tdms_filepath: Path) -> dict:
     # bpod sync signals
 
     tdms_file = TdmsFile.read(tdms_filepath)
-    (digital_group,) = tdms_file.groups()
+    groups = tdms_file.groups()
+    # this unfortunate hack is in here because there are a bunch of sessions where the frameclock is on DI0
+    if len(groups) == 1:
+        has_analog_group = False
+        (digital_group,) = groups
+    if len(groups) == 2:
+        has_analog_group = True
+        analog_group, digital_group = groups
     fs = digital_group.properties['ScanRate']  # this should be 10kHz
     df = tdms_file.as_dataframe()
     col = df.columns[-1]
@@ -38,10 +45,11 @@ def extract_timestamps_from_tdms_file(tdms_filepath: Path) -> dict:
         signal = data[:, i]
         timestamps[name] = np.where(np.diff(signal) == 1)[0] / fs
 
-    # frameclock data is recorded on an analog channel
-    # for channel in analog_group.channels():
-    #     signal = (channel.data > 2.5).astype('int64')  # assumes 0-5V
-    #     timestamps[channel.name] = np.where(np.diff(signal) == 1)[0] / fs
+    if has_analog_group:
+        # frameclock data is recorded on an analog channel
+        for channel in analog_group.channels():
+            signal = (channel.data > 2.5).astype('int64')  # assumes 0-5V
+            timestamps[channel.name] = np.where(np.diff(signal) == 1)[0] / fs
 
     return timestamps
 
@@ -233,7 +241,13 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
         # get daqami timestamps
         tdms_filepath = self.session_path / self.sync_kwargs['collection'] / '_mcc_DAQdata.raw.tdms'
         self.timestamps = extract_timestamps_from_tdms_file(tdms_filepath)
-        frame_timestamps = self.timestamps[f'DI{self.sync_kwargs["frameclock_channel"]}']
+        # downward compatibility - frameclock moved around, now is back on the AI7
+        # was specified with int before. if int,
+        if type(self.sync_kwargs['frameclock_channel']) is int:
+            sync_channel_name = f'DI{self.sync_kwargs["frameclock_channel"]}'
+        else:
+            sync_channel_name = self.sync_kwargs['frameclock_channel']
+        frame_timestamps = self.timestamps[sync_channel_name]
 
         # compare number of frame timestamps
         # and put them in the raw_df SystemTimestamp column
@@ -248,7 +262,7 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
             _logger.warning(f'#frames bonsai: {raw_df.shape[0]} > #frames daqami {frame_timestamps.shape[0]}, dropping excess')
             raw_df = raw_df.iloc[: frame_timestamps.shape[0]]
 
-        elif raw_df.shape[0] < frame_timestamps.shape[0]:
+        elif raw_df.shape[0] < frame_timestamps.shape:
             # this should not be possible
             raise ValueError('more timestamps for frames recorded by the daqami than frames were recorded by bonsai.')
         return raw_df
