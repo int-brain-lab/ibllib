@@ -99,7 +99,8 @@ class HabituationTrialsBpod(base_tasks.BehaviourTask):
         trials_data = self._assert_trials_data(trials_data)  # validate trials data
 
         # Compile task data for QC
-        qc = HabituationQC(self.session_path, one=self.one)
+        ns = 'task' if self.protocol_number is None else f'task_{self.protocol_number:02}'
+        qc = HabituationQC(self.session_path, namespace=ns, one=self.one)
         qc.extractor = TaskQCExtractor(self.session_path)
 
         # Update extractor fields
@@ -108,8 +109,7 @@ class HabituationTrialsBpod(base_tasks.BehaviourTask):
         qc.extractor.audio_ttls = self.extractor.audio  # used in iblapps QC viewer
         qc.extractor.settings = self.extractor.settings
 
-        namespace = 'task' if self.protocol_number is None else f'task_{self.protocol_number:02}'
-        qc.run(update=update, namespace=namespace)
+        qc.run(update=update)
         return qc
 
 
@@ -389,7 +389,8 @@ class ChoiceWorldTrialsBpod(base_tasks.BehaviourTask):
         if not QC:
             QC = HabituationQC if type(self.extractor).__name__ == 'HabituationTrials' else TaskQC
             _logger.debug('Running QC with %s.%s', QC.__module__, QC.__name__)
-        qc = QC(self.session_path, one=self.one, log=_logger)
+        namespace = 'task' if self.protocol_number is None else f'task_{self.protocol_number:02}'
+        qc = QC(self.session_path, namespace=namespace, one=self.one, log=_logger)
         if QC is not HabituationQC:
             qc_extractor.wheel_encoding = 'X1'
         qc_extractor.settings = self.extractor.settings
@@ -398,8 +399,7 @@ class ChoiceWorldTrialsBpod(base_tasks.BehaviourTask):
         qc.extractor = qc_extractor
 
         # Aggregate and update Alyx QC fields
-        namespace = 'task' if self.protocol_number is None else f'task_{self.protocol_number:02}'
-        qc.run(update=update, namespace=namespace)
+        qc.run(update=update)
         return qc
 
 
@@ -497,7 +497,8 @@ class ChoiceWorldTrialsNidq(ChoiceWorldTrialsBpod):
         if not QC:
             QC = HabituationQC if type(self.extractor).__name__ == 'HabituationTrials' else TaskQC
         _logger.debug('Running QC with %s.%s', QC.__module__, QC.__name__)
-        qc = QC(self.session_path, one=self.one, log=_logger)
+        namespace = 'task' if self.protocol_number is None else f'task_{self.protocol_number:02}'
+        qc = QC(self.session_path, namespace=namespace, one=self.one, log=_logger)
         if QC is not HabituationQC:
             # Add Bpod wheel data
             wheel_ts_bpod = self.extractor.bpod2fpga(self.extractor.bpod_trials['wheel_timestamps'])
@@ -511,8 +512,7 @@ class ChoiceWorldTrialsNidq(ChoiceWorldTrialsBpod):
         qc.extractor = qc_extractor
 
         # Aggregate and update Alyx QC fields
-        namespace = 'task' if self.protocol_number is None else f'task_{self.protocol_number:02}'
-        qc.run(update=update, namespace=namespace)
+        qc.run(update=update)
 
         if plot_qc:
             _logger.info('Creating Trials QC plots')
