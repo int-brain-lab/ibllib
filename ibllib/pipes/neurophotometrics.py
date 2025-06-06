@@ -242,10 +242,11 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
         tdms_filepath = self.session_path / self.sync_kwargs['collection'] / '_mcc_DAQdata.raw.tdms'
         self.timestamps = extract_timestamps_from_tdms_file(tdms_filepath)
         # downward compatibility - frameclock moved around, now is back on the AI7
-        # was specified with int before. if int,
-        if type(self.sync_kwargs['frameclock_channel']) is int:
+        # was specified with int before. if int
+        try:
+            int(self.sync_kwargs['frameclock_channel'])
             sync_channel_name = f'DI{self.sync_kwargs["frameclock_channel"]}'
-        else:
+        except ValueError:
             sync_channel_name = self.sync_kwargs['frameclock_channel']
         frame_timestamps = self.timestamps[sync_channel_name]
 
@@ -269,10 +270,15 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
 
     def _get_neurophotometrics_timestamps(self) -> np.ndarray:
         # get the sync channel
-        sync_colname = f'DI{self.kwargs["sync_channel"]}'
+        # again the ugly downward compatibility hack
+        try:
+            int(self.sync_kwargs['frameclock_channel'])
+            sync_channel_name = f'DI{self.sync_kwargs["frameclock_channel"]}'
+        except ValueError:
+            sync_channel_name = self.sync_kwargs['frameclock_channel']
 
         # and the corresponding timestamps
-        timestamps_nph = self.timestamps[sync_colname]
+        timestamps_nph = self.timestamps[sync_channel_name]
 
         # TODO replace this rudimentary spacer removal
         # to implement: detect spacer / remove spacer methods
