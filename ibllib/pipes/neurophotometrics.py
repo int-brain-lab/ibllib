@@ -269,16 +269,8 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
         return raw_df
 
     def _get_neurophotometrics_timestamps(self) -> np.ndarray:
-        # get the sync channel
-        # again the ugly downward compatibility hack
-        try:
-            int(self.sync_kwargs['frameclock_channel'])
-            sync_channel_name = f'DI{self.sync_kwargs["frameclock_channel"]}'
-        except ValueError:
-            sync_channel_name = self.sync_kwargs['frameclock_channel']
-
-        # and the corresponding timestamps
-        timestamps_nph = self.timestamps[sync_channel_name]
+        # get the sync channel and the corresponding timestamps
+        timestamps_nph = self.timestamps[f'DI{self.sync_channel}']
 
         # TODO replace this rudimentary spacer removal
         # to implement: detect spacer / remove spacer methods
