@@ -959,7 +959,8 @@ class FpgaTrials(extractors_base.BaseExtractor):
 
             # If first trial start is missing first detected FPGA event doesn't match any Bpod
             # starts then it's probably a mis-assigned valve or trial end event.
-            i1 = np.any(missing_bpod_idx == 0) and not np.any(np.isclose(fpga_events['intervals_0'][0], bpod_start))
+            i1 = (self._has_delay_initiation() and np.any(missing_bpod_idx == 0)
+                  and not np.any(np.isclose(fpga_events['intervals_0'][0], bpod_start)))
             # skip mis-assigned first FPGA trial start
             t_trial_start = np.sort(np.r_[fpga_events['intervals_0'][int(i1):], missing_bpod])
             ibpod = np.sort(np.r_[ibpod, missing_bpod_idx])
@@ -1178,7 +1179,8 @@ class FpgaTrials(extractors_base.BaseExtractor):
         bpod_event_intervals = self._assign_events(
             bpod['times'], bpod['polarities'], bpod_event_ttls, display=display)
 
-        if 'trial_start' not in bpod_event_intervals or bpod_event_intervals['trial_start'].size == 0:
+        if ('trial_start' not in bpod_event_intervals or bpod_event_intervals['trial_start'].size == 0
+                or not self._has_delay_initiation()):
             return bpod, bpod_event_intervals
 
         # The first trial pulse is longer and often assigned to another event.
@@ -1342,6 +1344,21 @@ class FpgaTrials(extractors_base.BaseExtractor):
 
         return fcn, drift, ibpod, ifpga
 
+    def _has_delay_initiation(self) -> bool:
+        """
+        Check if the first trial has a `delay_initiation` state.
+
+        Prior to iblrig v8.28.0, the first trial was used to handle, both, the detection of camera pulses and the
+        handling of the initial delay. This may cause issues with the extraction of trial events.
+
+        Returns
+        -------
+        bool
+            True if iblrig version < 8.28.0 or the first trial has a `delay_initiation` state, False otherwise.
+        """
+        iblrig_version = version.parse(self.settings.get("IBLRIG_VERSION", "0.0.0"))
+        has_delay_init = 'delay_initiation' in self.bpod_extractor.bpod_trials[0]['behavior_data']['States timestamps']
+        return iblrig_version < version.parse('8.28.0') or has_delay_init
 
 class FpgaTrialsHabituation(FpgaTrials):
     """Extract habituationChoiceWorld trial events from an NI DAQ."""
