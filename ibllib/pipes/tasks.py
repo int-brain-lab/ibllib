@@ -91,7 +91,7 @@ import one.params
 from one.api import ONE
 from one import webclient
 import one.alf.io as alfio
-from one.alf.path import ALFPath
+from one.alf.path import ALFPath, ensure_alf_path
 
 _logger = logging.getLogger(__name__)
 TASK_STATUS_SET = {'Waiting', 'Held', 'Started', 'Errored', 'Empty', 'Complete', 'Incomplete', 'Abandoned'}
@@ -134,7 +134,7 @@ class Task(abc.ABC):
         self.on_error = on_error
         self.taskid = taskid
         self.one = one
-        self.session_path = session_path
+        self.session_path = ensure_alf_path(session_path)
         self.register_kwargs = {}
         if parents:
             self.parents = parents
