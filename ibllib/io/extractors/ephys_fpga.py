@@ -1349,7 +1349,7 @@ class FpgaTrials(extractors_base.BaseExtractor):
         Check if the first trial has a `delay_initiation` state.
 
         Prior to iblrig v8.28.0, the first trial was used to handle, both, the detection of camera pulses and the
-        handling of the initial delay. This may cause issues with the extraction of trial events.
+        handling of the initial delay. This may cause issues with the extraction of events during the first trial.
 
         Returns
         -------
@@ -1358,10 +1358,9 @@ class FpgaTrials(extractors_base.BaseExtractor):
 
         Notes
         -----
-        This method will only return valid results if, both, `self.settings` and `self.bpod_extractor` are set
+        This method only returns valid results if, both, `self.settings` and `self.bpod_extractor` are set.
         """
-        iblrig_version = version.parse(self.settings.get("IBLRIG_VERSION", "0.0.0") if self.settings is not None
-                                       else '0.0.0')
+        iblrig_version = version.parse((self.settings or {}).get("IBLRIG_VERSION", "0.0.0"))
         has_delay_init = (hasattr(self,'bpod_extractor') and 'delay_initiation' in
                           self.bpod_extractor.bpod_trials[0]['behavior_data']['States timestamps'])
         return iblrig_version < version.parse('8.28.0') or has_delay_init
