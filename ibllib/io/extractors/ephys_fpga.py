@@ -1360,6 +1360,7 @@ class FpgaTrials(extractors_base.BaseExtractor):
         has_delay_init = 'delay_initiation' in self.bpod_extractor.bpod_trials[0]['behavior_data']['States timestamps']
         return iblrig_version < version.parse('8.28.0') or has_delay_init
 
+
 class FpgaTrialsHabituation(FpgaTrials):
     """Extract habituationChoiceWorld trial events from an NI DAQ."""
 
