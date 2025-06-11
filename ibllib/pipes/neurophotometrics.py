@@ -263,7 +263,7 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
             _logger.warning(f'#frames bonsai: {raw_df.shape[0]} > #frames daqami {frame_timestamps.shape[0]}, dropping excess')
             raw_df = raw_df.iloc[: frame_timestamps.shape[0]]
 
-        elif raw_df.shape[0] < frame_timestamps.shape[0]:
+        elif raw_df.shape[0] + 1 < frame_timestamps.shape[0]:
             # this should not be possible
             raise ValueError('more timestamps for frames recorded by the daqami than frames were recorded by bonsai.')
         return raw_df
