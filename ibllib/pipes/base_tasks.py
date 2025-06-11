@@ -62,18 +62,16 @@ class DynamicTask(Task):
         return collection_map.get(device)
 
     def read_params_file(self):
-        params = sess_params.read_params(self.session_path)
+        """Read the session parameters file.
 
-        if params is None:
+        Returns
+        -------
+        dict
+            The session parameters dictionary, or an empty dictionary if the file does not exist.
+        """
+        if not self.session_path:
             return {}
-
-        # TODO figure out the best way
-        # if params is None and self.one:
-        #     # Try to read params from alyx or try to download params file
-        #     params = self.one.load_dataset(self.one.path2eid(self.session_path), 'params.yml')
-        #     params = self.one.alyx.rest()
-
-        return params
+        return sess_params.read_params(self.session_path) or {}
 
 
 class BehaviourTask(DynamicTask):

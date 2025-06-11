@@ -134,7 +134,7 @@ class Task(abc.ABC):
         self.on_error = on_error
         self.taskid = taskid
         self.one = one
-        self.session_path = ensure_alf_path(session_path)
+        self.session_path = ensure_alf_path(session_path) if session_path else None
         self.register_kwargs = {}
         if parents:
             self.parents = parents
