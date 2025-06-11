@@ -989,8 +989,10 @@ class SDSCDataHandler(DataHandler):
             except FileExistsError:
                 pass
         task.session_path = SDSC_TMP.joinpath(session_path)
+        # If one of the symlinked input files is also an expected output, raise here to avoid overwriting
+        # In the future we may instead copy the data under this condition
         assert self.getOutputFiles(session_path=task.session_path).shape[0] == 0, (
-            "On SDSC patcher, input files output files should be distinct from input files to avoid overwriting")
+            "On SDSC patcher, output files should be distinct from input files to avoid overwriting")
 
     def uploadData(self, outputs, version, **kwargs):
         """
