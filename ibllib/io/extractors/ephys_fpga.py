@@ -1355,9 +1355,15 @@ class FpgaTrials(extractors_base.BaseExtractor):
         -------
         bool
             True if iblrig version < 8.28.0 or the first trial has a `delay_initiation` state, False otherwise.
+
+        Notes
+        -----
+        This method will only return valid results if, both, `self.settings` and `self.bpod_extractor` are set
         """
-        iblrig_version = version.parse(self.settings.get("IBLRIG_VERSION", "0.0.0"))
-        has_delay_init = 'delay_initiation' in self.bpod_extractor.bpod_trials[0]['behavior_data']['States timestamps']
+        iblrig_version = version.parse(self.settings.get("IBLRIG_VERSION", "0.0.0") if self.settings is not None
+                                       else '0.0.0')
+        has_delay_init = (hasattr(self,'bpod_extractor') and 'delay_initiation' in
+                          self.bpod_extractor.bpod_trials[0]['behavior_data']['States timestamps'])
         return iblrig_version < version.parse('8.28.0') or has_delay_init
 
 
