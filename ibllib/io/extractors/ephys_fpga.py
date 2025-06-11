@@ -1361,7 +1361,7 @@ class FpgaTrials(extractors_base.BaseExtractor):
         This method only returns valid results if, both, `self.settings` and `self.bpod_extractor` are set.
         """
         iblrig_version = version.parse((self.settings or {}).get("IBLRIG_VERSION", "0.0.0"))
-        has_delay_init = (hasattr(self,'bpod_extractor') and 'delay_initiation' in
+        has_delay_init = (hasattr(self, 'bpod_extractor') and 'delay_initiation' in
                           self.bpod_extractor.bpod_trials[0]['behavior_data']['States timestamps'])
         return iblrig_version < version.parse('8.28.0') or has_delay_init
 
