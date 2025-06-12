@@ -242,9 +242,9 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
         tdms_filepath = self.session_path / self.sync_kwargs['collection'] / '_mcc_DAQdata.raw.tdms'
         self.timestamps = extract_timestamps_from_tdms_file(tdms_filepath)
         # downward compatibility - frameclock moved around, now is back on the AI7
-        if self.sync_kwargs['frameclock_channel'] == '0':
+        if self.sync_kwargs['frameclock_channel'] in ['0',0]:
             sync_channel_name = f'DI{self.sync_kwargs["frameclock_channel"]}'
-        if self.sync_kwargs['frameclock_channel'] == '7':
+        if self.sync_kwargs['frameclock_channel'] in ['7',7]:
             sync_channel_name = f'AI{self.sync_kwargs["frameclock_channel"]}'
         else:
             sync_channel_name = self.sync_kwargs['frameclock_channel']
