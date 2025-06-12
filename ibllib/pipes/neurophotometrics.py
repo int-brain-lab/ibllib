@@ -274,5 +274,5 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
 
         # TODO replace this rudimentary spacer removal
         # to implement: detect spacer / remove spacer methods
-        timestamps_nph = timestamps_nph[15:]
+        timestamps_nph = timestamps_nph[15: ]
         return timestamps_nph
