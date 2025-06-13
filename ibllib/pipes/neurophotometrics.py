@@ -112,6 +112,10 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
         timestamps_bpod, bpod_data = self._get_bpod_timestamps()
         timestamps_nph = self._get_neurophotometrics_timestamps()
 
+        # verify presence of sync timestamps
+        for source, timestamps in zip(['bpod','neurophotometrics'], [timestamps_bpod, timestamps_nph]):
+            assert len(timestamps) > 0, f'{source} sync timestamps are empty'
+
         # sync the behaviour events to the photometry timestamps
         sync_nph_to_bpod_fcn, drift_ppm, ix_nph, ix_bpod = ibldsp.utils.sync_timestamps(
             timestamps_nph, timestamps_bpod, return_indices=True, linear=True
