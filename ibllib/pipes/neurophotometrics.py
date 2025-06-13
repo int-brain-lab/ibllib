@@ -244,7 +244,7 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
         # downward compatibility - frameclock moved around, now is back on the AI7
         if self.sync_kwargs['frameclock_channel'] in ['0',0]:
             sync_channel_name = f'DI{self.sync_kwargs["frameclock_channel"]}'
-        if self.sync_kwargs['frameclock_channel'] in ['7',7]:
+        elif self.sync_kwargs['frameclock_channel'] in ['7',7]:
             sync_channel_name = f'AI{self.sync_kwargs["frameclock_channel"]}'
         else:
             sync_channel_name = self.sync_kwargs['frameclock_channel']
