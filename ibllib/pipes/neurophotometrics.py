@@ -176,7 +176,7 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
         locations_df = pd.DataFrame(rois).set_index('ROI')
         locations_df_outpath = output_folder / 'photometryROI.locations.pqt'
         locations_df.to_parquet(locations_df_outpath)
-        return ibl_df, locations_df
+        return ibl_df_outpath, locations_df_outpath
 
 
 class FibrePhotometryBpodSync(FibrePhotometryBaseSync):
