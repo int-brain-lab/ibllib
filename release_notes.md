@@ -8,6 +8,7 @@
 - Only update relevant collections in update_collections
 - Update extended QC with task number prefix
 - Update trials extractors to handle clean first trial
+- Pin numpy to >=1.18,<=2.2 (numpy 2.3 is not compatible with numba)
 
 ## Release Note 3.3.1
 
