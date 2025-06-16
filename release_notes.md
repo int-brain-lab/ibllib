@@ -1,3 +1,14 @@
+## Release Note 3.4.0
+
+### features
+
+- Add revision as a kwarg to the spike sorting loader
+- Register bin files to flatiron
+- Ensure pre-existing compressed files are verified and registered
+- Only update relevant collections in update_collections
+- Update extended QC with task number prefix
+- Update trials extractors to handle clean first trial
+
 ## Release Note 3.3.1
 
 ### Bugfixes
