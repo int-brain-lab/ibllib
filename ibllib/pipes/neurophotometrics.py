@@ -13,6 +13,7 @@ from nptdms import TdmsFile
 
 from abc import abstractmethod
 from iblphotometry import io as fpio
+from iblutil.spacer import Spacer
 
 _logger = logging.getLogger('ibllib')
 
@@ -107,7 +108,6 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
 
     def _get_sync_function(self) -> Tuple[callable, list]:
         # returns the synchronization function
-
         # get the timestamps
         timestamps_bpod, bpod_data = self._get_bpod_timestamps()
         timestamps_nph = self._get_neurophotometrics_timestamps()
@@ -116,22 +116,38 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
         for source, timestamps in zip(['bpod','neurophotometrics'], [timestamps_bpod, timestamps_nph]):
             assert len(timestamps) > 0, f'{source} sync timestamps are empty'
 
-        # sync the behaviour events to the photometry timestamps
-        sync_nph_to_bpod_fcn, drift_ppm, ix_nph, ix_bpod = ibldsp.utils.sync_timestamps(
-            timestamps_nph, timestamps_bpod, return_indices=True, linear=True
-        )
-        # TODO log drift
+        # split into segments if multiple spacers are found
+        # attempt to sync for each segment (only one will work)
+        spacer = Spacer()
+        spacer_ix = spacer.find_spacers_from_timestamps(timestamps_nph, atol=1e-5)
+        # the indices that mark the boundaries of segments
 
-        # then we check the alignment, should be less than the camera sampling rate
-        tcheck = sync_nph_to_bpod_fcn(timestamps_nph[ix_nph]) - timestamps_bpod[ix_bpod]
-        _logger.info(
-            f'sync: n trials {len(bpod_data)}'
-            f'n bpod sync {len(timestamps_bpod)}'
-            f'n photometry {len(timestamps_nph)}, n match {len(ix_nph)}'
-        )
-        # TODO the framerate here is hardcoded, infer it instead!
-        assert np.all(np.abs(tcheck) < 1 / 60), 'Sync issue detected, residual above 1/60s'
-        assert len(ix_nph) / len(timestamps_bpod) > 0.95, 'Sync issue detected, less than 95% of the bpod events matched'
+        segment_ix = np.concatenate([spacer_ix, [timestamps_nph.shape[0]]])
+        segments = []
+        for i in range(segment_ix.shape[0]-1):
+            start_ix = segment_ix[i]
+            stop_ix = segment_ix[i+1]
+            segments.append(timestamps_nph[start_ix:stop_ix])
+
+        for i, timestamps_segment in enumerate(segments):
+            print(i)
+            # sync the behaviour events to the photometry timestamps
+            sync_nph_to_bpod_fcn, drift_ppm, ix_nph, ix_bpod = ibldsp.utils.sync_timestamps(
+                timestamps_segment, timestamps_bpod, return_indices=True, linear=True
+            )
+            # then we check the alignment, should be less than the camera sampling rate
+            tcheck = sync_nph_to_bpod_fcn(timestamps_segment[ix_nph]) - timestamps_bpod[ix_bpod]
+            _logger.info(
+                f'sync: n trials {len(bpod_data)}'
+                f'n bpod sync {len(timestamps_bpod)}'
+                f'n photometry {len(timestamps_segment)}, n match {len(ix_nph)}'
+            )
+            if len(ix_nph) / len(timestamps_bpod) < 0.95:
+                # wrong segment
+                continue
+            # TODO the framerate here is hardcoded, infer it instead!
+            assert np.all(np.abs(tcheck) < 1 / 60), 'Sync issue detected, residual above 1/60s'
+        
         valid_bounds = [bpod_data[0]['Trial start timestamp'] - 2, bpod_data[-1]['Trial end timestamp'] + 2]
 
         return sync_nph_to_bpod_fcn, valid_bounds
@@ -207,7 +223,7 @@ class FibrePhotometryBpodSync(FibrePhotometryBaseSync):
 
         # TODO replace this rudimentary spacer removal
         # to implement: detect spacer / remove spacer methods
-        timestamps_nph = timestamps_nph[15:]
+        # timestamps_nph = timestamps_nph[15:]
         return timestamps_nph
 
 
@@ -278,5 +294,5 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
 
         # TODO replace this rudimentary spacer removal
         # to implement: detect spacer / remove spacer methods
-        timestamps_nph = timestamps_nph[15: ]
+        # timestamps_nph = timestamps_nph[15: ]
         return timestamps_nph
