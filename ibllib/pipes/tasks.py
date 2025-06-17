@@ -91,7 +91,7 @@ import one.params
 from one.api import ONE
 from one import webclient
 import one.alf.io as alfio
-from one.alf.path import ALFPath
+from one.alf.path import ALFPath, ensure_alf_path
 
 _logger = logging.getLogger(__name__)
 TASK_STATUS_SET = {'Waiting', 'Held', 'Started', 'Errored', 'Empty', 'Complete', 'Incomplete', 'Abandoned'}
@@ -134,7 +134,7 @@ class Task(abc.ABC):
         self.on_error = on_error
         self.taskid = taskid
         self.one = one
-        self.session_path = session_path
+        self.session_path = ensure_alf_path(session_path) if session_path else None
         self.register_kwargs = {}
         if parents:
             self.parents = parents
@@ -377,7 +377,7 @@ class Task(abc.ABC):
         self.output_files = signature['output_files']
 
     @abc.abstractmethod
-    def _run(self, overwrite=False):
+    def _run(self, overwrite=False, **kwargs):
         """Execute main task code.
 
         This method contains a task's principal data processing code and should implemented
@@ -422,14 +422,14 @@ class Task(abc.ABC):
                 # Attempts to download missing data using globus
                 _logger.info('Not all input files found locally: attempting to re-download required files')
                 self.data_handler = self.get_data_handler(location='serverglobus')
-                self.data_handler.setUp(task=self)
+                self.data_handler.setUp(task=self, **kwargs)
                 # Double check we now have the required files to run the task
                 # TODO in future should raise error if even after downloading don't have the correct files
                 self.assert_expected_inputs(raise_error=False)
                 return True
         else:
             self.data_handler = self.get_data_handler()
-            self.data_handler.setUp(task=self)
+            self.data_handler.setUp(task=self, **kwargs)
             self.get_signatures(**kwargs)
             self.assert_expected_inputs(raise_error=False)
             return True

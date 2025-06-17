@@ -27,7 +27,7 @@ ibl-neuropixel>=1.6.2
 iblutil>=1.13.0
 iblqt>=0.4.2
 mtscomp>=1.0.1
-ONE-api>=3.0.0
+ONE-api>=3.2.0
 phylib>=2.6.0
 psychofit
 slidingRP>=1.1.1  # steinmetz lab refractory period metrics

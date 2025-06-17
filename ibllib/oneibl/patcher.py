@@ -679,7 +679,7 @@ class S3Patcher(Patcher):
 
         exists = self.check_datasets(file_list)
         if len(exists) > 0 and not force:
-            _logger.error(f'Files: {", ".join([f.name for f in file_list])} already exist, to force set force=True')
+            _logger.error(f'Files: {", ".join([f.name for f in file_list])} already exist, to overwrite set force=True')
             return
 
         response = super().patch_dataset(file_list, dry=dry, repository=self.s3_repo, ftp=False, **kwargs)

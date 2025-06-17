@@ -16,7 +16,7 @@ from copy import copy
 from one.api import ONE
 from one.webclient import AlyxClient
 from one.util import filter_datasets
-from one.alf.path import add_uuid_string, session_path_parts, get_alf_path
+from one.alf.path import add_uuid_string, get_alf_path, ensure_alf_path
 from one.alf.cache import _make_datasets_df
 from iblutil.util import flatten, ensure_list
 
@@ -549,7 +549,7 @@ class DataHandler(abc.ABC):
         :param signature: input and output file signatures
         :param one: ONE instance
         """
-        self.session_path = session_path
+        self.session_path = ensure_alf_path(session_path)
         self.signature = _parse_signature(signature)
         self.one = one
         self.processed = {}  # Map of filepaths and their processed records (e.g. upload receipts or Alyx records)
@@ -579,7 +579,7 @@ class DataHandler(abc.ABC):
         dfs = [file.filter(session_datasets)[1] for file in self.signature['input_files']]
         return one._cache.datasets.iloc[0:0] if len(dfs) == 0 else pd.concat(dfs).drop_duplicates()
 
-    def getOutputFiles(self):
+    def getOutputFiles(self, session_path=None):
         """
         Return a data frame of output datasets found on disk.
 
@@ -588,10 +588,11 @@ class DataHandler(abc.ABC):
         pandas.DataFrame
             A dataset data frame of datasets on disk that were specified in signature['output_files'].
         """
-        assert self.session_path
+        session_path = self.session_path if session_path is None else session_path
+        assert session_path
         # Next convert datasets to frame
         # Create dataframe of all ALF datasets
-        df = _make_datasets_df(self.session_path, hash_files=False).set_index(['eid', 'id'])
+        df = _make_datasets_df(session_path, hash_files=False).set_index(['eid', 'id'])
         # Filter outputs
         if len(self.signature['output_files']) == 0:
             return pd.DataFrame()
@@ -727,7 +728,7 @@ class ServerGlobusDataHandler(DataHandler):
             _logger.warning('Space left on server is < 500GB, won\'t re-download new data')
             return
 
-        rel_sess_path = '/'.join(self.session_path.parts[-3:])
+        rel_sess_path = self.session_path.session_path_short()
         target_paths = []
         source_paths = []
         for i, d in df.iterrows():
@@ -774,13 +775,13 @@ class RemoteEC2DataHandler(DataHandler):
         """
         super().__init__(session_path, signature, one=one)
 
-    def setUp(self, **_):
+    def setUp(self, check_hash=True, **_):
         """
         Function to download necessary data to run tasks using ONE
         :return:
         """
         df = super().getData()
-        self.one._check_filesystem(df, check_hash=False)
+        self.one._check_filesystem(df, check_hash=check_hash)
 
     def uploadData(self, outputs, version, **kwargs):
         """
@@ -857,7 +858,7 @@ class RemoteAwsDataHandler(DataHandler):
         # Set up Globus
         from one.remote.globus import Globus # noqa
         self.globus = Globus(client_name=kwargs.pop('client_name', 'server'), headless=True)
-        self.lab = session_path_parts(self.session_path, as_dict=True)['lab']
+        self.lab = self.session_path.lab
         if self.lab == 'cortexlab' and 'cortexlab' in self.one.alyx.base_url:
             base_url = 'https://alyx.internationalbrainlab.org'
             _logger.warning('Changing Alyx client to %s', base_url)
@@ -970,25 +971,30 @@ class SDSCDataHandler(DataHandler):
         super().__init__(session_path, signatures, one=one)
         self.patch_path = os.getenv('SDSC_PATCH_PATH', SDSC_PATCH_PATH)
         self.root_path = SDSC_ROOT_PATH
+        self.linked_files = []  # List of symlinks created to run tasks
 
-    def setUp(self, task):
+    def setUp(self, task, **_):
         """Function to create symlinks to necessary data to run tasks."""
         df = super().getData()
 
-        SDSC_TMP = Path(self.patch_path.joinpath(task.__class__.__name__))
+        SDSC_TMP = ensure_alf_path(self.patch_path.joinpath(task.__class__.__name__))
         session_path = Path(get_alf_path(self.session_path))
         for uuid, d in df.iterrows():
             file_path = session_path / d['rel_path']
             file_uuid = add_uuid_string(file_path, uuid)
             file_link = SDSC_TMP.joinpath(file_path)
             file_link.parent.mkdir(exist_ok=True, parents=True)
-            try:
+            try:  # TODO append link to task attribute
                 file_link.symlink_to(
                     Path(self.root_path.joinpath(file_uuid)))
+                self.linked_files.append(file_link)
             except FileExistsError:
                 pass
-
         task.session_path = SDSC_TMP.joinpath(session_path)
+        # If one of the symlinked input files is also an expected output, raise here to avoid overwriting
+        # In the future we may instead copy the data under this condition
+        assert self.getOutputFiles(session_path=task.session_path).shape[0] == 0, (
+            "On SDSC patcher, output files should be distinct from input files to avoid overwriting")
 
     def uploadData(self, outputs, version, **kwargs):
         """

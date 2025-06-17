@@ -8,7 +8,7 @@ from one.alf.path import session_path_parts
 from one.api import ONE
 
 from ibllib.oneibl.registration import get_lab
-from ibllib.oneibl.data_handlers import ServerDataHandler, ExpectedDataset
+from ibllib.oneibl.data_handlers import ServerDataHandler, SDSCDataHandler, ExpectedDataset
 from ibllib.pipes import base_tasks
 from ibllib.io.raw_data_loaders import load_settings, load_bpod_fronts
 from ibllib.qc.task_extractors import TaskQCExtractor
@@ -346,12 +346,14 @@ class ChoiceWorldTrialsBpod(base_tasks.BehaviourTask):
         qc = self.run_qc(trials, update=update, **kwargs)
         if update and not self.one.offline:
             on_server = self.location == 'server' and isinstance(self.data_handler, ServerDataHandler)
-            if not on_server:
-                _logger.warning('Updating dataset QC only supported on local servers')
+            on_sdsc = self.location == 'sdsc' and isinstance(self.data_handler, SDSCDataHandler)
+            if not (on_server or on_sdsc):
+                _logger.warning('Updating dataset QC only supported on local servers and SDSC')
             else:
-                labs = get_lab(self.session_path, self.one.alyx)
-                # registered_dsets = self.register_datasets(labs=labs)
-                datasets = self.data_handler.uploadData(output_files, self.version, labs=labs)
+                # On SDSC the lab is in the session path; on local servers we use Alyx to get the lab
+                lab = get_lab(self.session_path, self.one.alyx) if on_server else self.session_path.lab
+                # registered_dsets = self.register_datasets(labs=lab)
+                datasets = self.data_handler.uploadData(output_files, self.version, labs=lab)
                 update_dataset_qc(qc, datasets, self.one)
 
         return output_files
