@@ -13,7 +13,7 @@ from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
 
 from one.api import ONE, One
-from one.alf.path import get_alf_path, full_path_parts, filename_parts
+from one.alf.path import get_alf_path, ALFPath
 from one.alf.exceptions import ALFObjectNotFound, ALFMultipleCollectionsFound
 from one.alf import cache
 import one.alf.io as alfio
@@ -796,7 +796,7 @@ class SpikeSortingLoader:
     pid: str = None
     eid: str = ''
     pname: str = ''
-    session_path: Path = ''
+    session_path: ALFPath = ''
     # the following properties are the outcome of the post init function
     collections: list = None
     datasets: list = None   # list of all datasets belonging to the session
@@ -825,6 +825,7 @@ class SpikeSortingLoader:
             self.session_path = self.one.eid2path(self.eid)
         # fully local providing a session path
         else:
+            self.session_path = ALFPath(self.session_path)  # Ensure session_path is an ALFPath object
             if self.one:
                 self.eid = self.one.to_eid(self.session_path)
             else:
@@ -1048,11 +1049,8 @@ class SpikeSortingLoader:
         namespace_files = defaultdict(dict)
         available_namespaces = []
         for file in all_files:
-            fparts = filename_parts(file.name, as_dict=True)
-            fname = f"{fparts['object']}.{fparts['attribute']}"
-            nspace = fparts['namespace']
-            available_namespaces.append(nspace)
-            namespace_files[fname][nspace] = file
+            available_namespaces.append(file.namespace)
+            namespace_files[f"{file.object}.{file.attribute}"][file.namespace] = file
 
         if namespace not in set(available_namespaces):
             _logger.info(f'Could not find manual curation results for {namespace}, returning default'
@@ -1124,7 +1122,7 @@ class SpikeSortingLoader:
                     assert fn.relative_to(self.session_path).parts[2] == self.spike_sorter, \
                         f"You required strict version {self.spike_sorter}, {fn} does not match"
                 if self.revision:
-                    assert full_path_parts(fn)[5] == self.revision, \
+                    assert fn.revision == self.revision, \
                         f"You required strict revision {self.revision}, {fn} does not match"
 
     @staticmethod
@@ -1171,7 +1169,7 @@ class SpikeSortingLoader:
 
     @property
     def url(self):
-        """Gets flatiron URL for the session"""
+        """Gets flatiron URL for the session."""
         webclient = getattr(self.one, '_web_client', None)
         return webclient.rel_path2url(get_alf_path(self.session_path)) if webclient else None
 
@@ -1318,7 +1316,7 @@ class SpikeSortingLoader:
             return fig, axs
 
 
-@dataclass
+@dataclass(kw_only=True)
 class SessionLoader:
     """
     Object to load session data for a give session in the recommended way.
@@ -1386,7 +1384,7 @@ class SessionLoader:
         >>> sess_loader.load_wheel(sampling_rate=100)
     """
     one: One = None
-    session_path: Path = ''
+    session_path: ALFPath = ''
     eid: str = ''
     revision: str = ''
     data_info: pd.DataFrame = field(default_factory=pd.DataFrame, repr=False)
@@ -1407,7 +1405,7 @@ class SessionLoader:
         # If session path is given, takes precedence over eid
         if self.session_path is not None and self.session_path != '':
             self.eid = self.one.to_eid(self.session_path)
-            self.session_path = Path(self.session_path)
+            self.session_path = ALFPath(self.session_path)
         # Providing no session path, try to infer from eid
         else:
             if self.eid is not None and self.eid != '':
@@ -1493,7 +1491,7 @@ class SessionLoader:
         if len(dsets) == 0:
             return 'alf'
         else:
-            collections = [full_path_parts(self.session_path.joinpath(d), as_dict=True)['collection'] for d in dsets]
+            collections = [x.collection for x in map(self.session_path.joinpath, dsets)]
             if len(set(collections)) == 1:
                 return collections[0]
             else:
