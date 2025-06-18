@@ -106,7 +106,7 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
         # for daq based syncing, the timestamps are extracted from the tdms file
         ...
 
-    def _get_sync_function(self) -> Tuple[callable, list]:
+    def _get_sync_function(self, spacer_detection_mode='fast') -> Tuple[callable, list]:
         # returns the synchronization function
         # get the timestamps
         timestamps_bpod, bpod_data = self._get_bpod_timestamps()
@@ -119,18 +119,23 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
         # split into segments if multiple spacers are found
         # attempt to sync for each segment (only one will work)
         spacer = Spacer()
-        spacer_ix = spacer.find_spacers_from_timestamps(timestamps_nph, atol=1e-5)
-        # the indices that mark the boundaries of segments
+        
+        # the fast way
+        match spacer_detection_mode:
+            case 'fast':
+                spacer_ix = spacer.find_spacers_from_timestamps(timestamps_nph, atol=1e-5)
+            case 'safe':
+                spacer_ix, spacer_times = spacer.find_spacers_from_positive_fronts(timestamps_nph, fs=1000)
 
+        # the indices that mark the boundaries of segments
         segment_ix = np.concatenate([spacer_ix, [timestamps_nph.shape[0]]])
         segments = []
         for i in range(segment_ix.shape[0]-1):
-            start_ix = segment_ix[i]
+            start_ix = segment_ix[i] + (spacer.n_pulses * 2) - 1
             stop_ix = segment_ix[i+1]
             segments.append(timestamps_nph[start_ix:stop_ix])
 
         for i, timestamps_segment in enumerate(segments):
-            print(i)
             # sync the behaviour events to the photometry timestamps
             sync_nph_to_bpod_fcn, drift_ppm, ix_nph, ix_bpod = ibldsp.utils.sync_timestamps(
                 timestamps_segment, timestamps_bpod, return_indices=True, linear=True
@@ -144,6 +149,7 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
             )
             if len(ix_nph) / len(timestamps_bpod) < 0.95:
                 # wrong segment
+                print('wrong segment')
                 continue
             # TODO the framerate here is hardcoded, infer it instead!
             assert np.all(np.abs(tcheck) < 1 / 60), 'Sync issue detected, residual above 1/60s'
@@ -168,7 +174,8 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
         raw_df = self.load_data()
 
         # 2) get the synchronization function
-        sync_nph_to_bpod_fcn, valid_bounds = self._get_sync_function()
+        spacer_detection_mode = kwargs.get('spacer_detection_mode', 'fast')
+        sync_nph_to_bpod_fcn, valid_bounds = self._get_sync_function(spacer_detection_mode=spacer_detection_mode)
 
         # 3) convert to ibl_df
         ibl_df = fpio.from_raw_neurophotometrics_df_to_ibl_df(raw_df, rois=self.kwargs['fibers'], drop_first=False)
