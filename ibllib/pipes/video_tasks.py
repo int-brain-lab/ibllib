@@ -861,7 +861,7 @@ class PostLP(base_tasks.VideoTask):
             combined_licks = []
             output_files = []
             for cam in self.cameras:
-                pose_file = self.session_path.joinpath('alf', f'_ibl_{cam}Camera.lightningPose.pqt')
+                pose_file = next(self.session_path.joinpath('alf').rglob(f'_ibl_{cam}Camera.lightningPose.pqt'))
                 _logger.info(f'Running on {cam} video')
                 _logger.debug(pose_file)
 
