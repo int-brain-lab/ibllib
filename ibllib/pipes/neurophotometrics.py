@@ -61,8 +61,8 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
     priority = 90
     job_size = 'small'
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, session_path, one, **kwargs):
+        super().__init__(session_path, one=one, **kwargs)
         self.photometry_collection = kwargs['collection']  # raw_photometry_data
         self.kwargs = kwargs
 
