@@ -9,6 +9,12 @@
 - Update extended QC with task number prefix
 - Update trials extractors to handle clean first trial
 - Pin numpy to >=1.18,<=2.2 (numpy 2.3 is not compatible with numba)
+- `oneibl.patcher.patch_dataset`: revert from clobber to force
+- Ensure session paths are ALFPath instances
+- Update dataset QC
+- Handle `None` session path
+- Add options for SDSC and EC2 patchers
+- Use ALFPath objects in `Task` and `DataHandler` classes
 
 ## Release Note 3.3.1
 
