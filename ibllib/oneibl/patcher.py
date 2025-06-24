@@ -398,7 +398,7 @@ class IBLGlobusPatcher(Patcher, globus.Globus):
         self.alyx = alyx or AlyxClient()
         globus.Globus.__init__(self, client_name=client_name)  # NB we don't init Patcher as we're not using ONE
 
-    def delete_dataset(self, dataset, dry=False):
+    def delete_dataset(self, dataset, dry=False, aws_profile='ibladmin'):
         """
         Delete a dataset off Alyx and remove file record from all Globus repositories.
 
@@ -408,6 +408,8 @@ class IBLGlobusPatcher(Patcher, globus.Globus):
             The dataset record or ID to delete.
         dry : bool
             If true, dataset is not deleted and file paths that would be removed are returned.
+        aws_profile : str
+            The AWS profile name to use for S3 deletion.
 
         Returns
         -------
@@ -448,7 +450,7 @@ class IBLGlobusPatcher(Patcher, globus.Globus):
 
         # Remove S3 files
         if s3_files:
-            cmd = ['aws', 's3', 'rm', *s3_files, '--profile', 'ibladmin']
+            cmd = ['aws', 's3', 'rm', *s3_files, '--profile', aws_profile]
             if dry:
                 cmd.append('--dryrun')
             if _logger.level > logging.DEBUG:
@@ -456,7 +458,6 @@ class IBLGlobusPatcher(Patcher, globus.Globus):
                 cmd.append('--only-show-errors')  # Suppress verbose output
             else:
                 log_function = _logger.debug
-                cmd.append('--no-progress')  # Suppress progress info, estimated time, etc.
             _logger.debug(' '.join(cmd))
             process = Popen(cmd, stdout=PIPE, stderr=STDOUT)
             with process.stdout:
@@ -678,7 +679,7 @@ class S3Patcher(Patcher):
 
         exists = self.check_datasets(file_list)
         if len(exists) > 0 and not force:
-            _logger.error(f'Files: {", ".join([f.name for f in file_list])} already exist, to force set force=True')
+            _logger.error(f'Files: {", ".join([f.name for f in file_list])} already exist, to overwrite set force=True')
             return
 
         response = super().patch_dataset(file_list, dry=dry, repository=self.s3_repo, ftp=False, **kwargs)

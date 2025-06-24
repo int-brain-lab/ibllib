@@ -14,7 +14,7 @@ Pipeline:
 import json
 import logging
 import subprocess
-import shutil
+from zipfile import ZipFile, ZIP_DEFLATED
 import uuid
 from pathlib import Path
 from itertools import chain, groupby
@@ -145,35 +145,36 @@ class MesoscopeCompress(base_tasks.MesoscopeTask):
             outfile = self.session_path.joinpath(*filter(None, out_id))
             if outfile.exists() and not overwrite:
                 _logger.info('%s already exists; skipping...', outfile.relative_to(self.session_path))
-                continue
-            if not infiles:
-                _logger.info('No image files found in %s', in_dir.relative_to(self.session_path))
-                continue
+                outfiles.append(outfile)
+            else:
+                if not infiles:
+                    _logger.info('No image files found in %s', in_dir.relative_to(self.session_path))
+                    continue
 
-            _logger.debug(
-                'Input files:\n\t%s', '\n\t'.join(map(Path.as_posix, (x.relative_to(self.session_path) for x in infiles)))
-            )
+                _logger.debug(
+                    'Input files:\n\t%s', '\n\t'.join(map(Path.as_posix, (x.relative_to(self.session_path) for x in infiles)))
+                )
 
-            uncompressed_size = sum(x.stat().st_size for x in infiles)
-            _logger.info('Compressing %i file(s)', len(infiles))
-            cmd = 'tar -cjvf "{output}" "{input}"'.format(
-                output=outfile.relative_to(in_dir), input='" "'.join(str(x.relative_to(in_dir)) for x in infiles))
-            _logger.debug(cmd)
-            process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=in_dir)
-            info, error = process.communicate()  # b'2023-02-17_2_test_2P_00001_00001.tif\n'
-            _logger.debug(info.decode())
-            assert process.returncode == 0, f'compression failed: {error.decode()}'
+                uncompressed_size = sum(x.stat().st_size for x in infiles)
+                _logger.info('Compressing %i file(s)', len(infiles))
+                cmd = 'tar -cjvf "{output}" "{input}"'.format(
+                    output=outfile.relative_to(in_dir), input='" "'.join(str(x.relative_to(in_dir)) for x in infiles))
+                _logger.debug(cmd)
+                process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=in_dir)
+                info, error = process.communicate()  # b'2023-02-17_2_test_2P_00001_00001.tif\n'
+                _logger.debug(info.decode())
+                assert process.returncode == 0, f'compression failed: {error.decode()}'
 
-            # Check the output
-            assert outfile.exists(), 'output file missing'
-            outfiles.append(outfile)
-            compressed_size = outfile.stat().st_size
-            min_size = kwargs.pop('verify_min_size', 1024)
-            assert compressed_size > int(min_size), f'Compressed file < {min_size / 1024:.0f}KB'
-            _logger.info('Compression ratio = %.3f, saving %.2f pct (%.2f MB)',
-                         uncompressed_size / compressed_size,
-                         round((1 - (compressed_size / uncompressed_size)) * 10000) / 100,
-                         (uncompressed_size - compressed_size) / 1024 / 1024)
+                # Check the output
+                assert outfile.exists(), 'output file missing'
+                outfiles.append(outfile)
+                compressed_size = outfile.stat().st_size
+                min_size = kwargs.pop('verify_min_size', 1024)
+                assert compressed_size > int(min_size), f'Compressed file < {min_size / 1024:.0f}KB'
+                _logger.info('Compression ratio = %.3f, saving %.2f pct (%.2f MB)',
+                             uncompressed_size / compressed_size,
+                             round((1 - (compressed_size / uncompressed_size)) * 10000) / 100,
+                             (uncompressed_size - compressed_size) / 1024 / 1024)
 
             if verify_output:
                 # Test bzip
@@ -223,8 +224,9 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         """
         self.overwrite = kwargs.get('overwrite', False)
         all_files_present = super().setUp(**kwargs)  # Ensure files present
-        bin_sig = dataset_from_name('data.bin', self.input_files)
-        if not self.overwrite and all(x.find_files(self.session_path)[0] for x in bin_sig):
+        bin_sig, = dataset_from_name('data.bin', self.input_files)
+        renamed_bin_sig, = dataset_from_name('imaging.frames_motionRegistered.bin', self.input_files)
+        if not self.overwrite and (bin_sig | renamed_bin_sig).find_files(self.session_path)[0]:
             return all_files_present  # We have local bin files; no need to extract tifs
         tif_sig = dataset_from_name('*.tif', self.input_files)
         if not tif_sig:
@@ -285,12 +287,15 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                              ('mpciROITypes.names.tsv', 'alf/FOV*', True),
                              ('mpciROIs.masks.sparse_npz', 'alf/FOV*', True),
                              ('mpciROIs.neuropilMasks.sparse_npz', 'alf/FOV*', True),
-                             ('_suite2p_ROIData.raw.zip', 'alf/FOV*', False)]
+                             ('_suite2p_ROIData.raw.zip', 'alf/FOV*', False),
+                             ('imaging.frames_motionRegistered.bin', 'suite2p/plane*', False)]
         }
         if not self.overwrite:  # If not forcing re-registration, check whether bin files already exist on disk
             # Including the data.bin in the expected signature ensures raw data files are not needlessly re-downloaded
             # and/or uncompressed during task setup as the local data.bin may be used instead
-            registered_bin = I('data.bin', 'raw_bin_files/plane*', True, unique=False)
+            # NB: The data.bin file is renamed to imaging.frames_motionRegistered.bin before registration to Alyx
+            registered_bin = (I('data.bin', 'suite2p/plane*', True, unique=False) |
+                              I('imaging.frames_motionRegistered.bin', 'suite2p/plane*', True, unique=False))
             signature['input_files'][1] = registered_bin | signature['input_files'][1]
 
         return signature
@@ -360,16 +365,9 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
             }
         fov_dsets = [d[0] for d in self.signature['output_files'] if d[1].startswith('alf/FOV')]
         for plane_dir in self._get_plane_paths(suite2p_dir):
-            # Move bin file(s) out of the way
-            bin_files = list(plane_dir.glob('data*.bin'))  # e.g. data.bin, data_raw.bin, data_chan2_raw.bin
-            if any(bin_files):
-                (bin_files_dir := self.session_path.joinpath('raw_bin_files', plane_dir.name)).mkdir(parents=True, exist_ok=True)
-                _logger.debug('Moving bin file(s) to %s', bin_files_dir.relative_to(self.session_path))
-                for bin_file in bin_files:
-                    dst = bin_files_dir.joinpath(bin_file.name)
-                    bin_file.replace(dst)
-                # copy ops file for lazy re-runs
-                shutil.copy(plane_dir.joinpath('ops.npy'), bin_files_dir.joinpath('ops.npy'))
+            # Rename the registered bin file
+            if (bin_file := plane_dir.joinpath('data.bin')).exists():
+                bin_file.rename(plane_dir.joinpath('imaging.frames_motionRegistered.bin'))
             # Archive the raw suite2p output before renaming
             n = int(plane_dir.name.split('plane')[1])
             fov_dir = self.session_path.joinpath('alf', f'FOV_{n:02}')
@@ -377,13 +375,12 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                 for f in filter(Path.exists, map(fov_dir.joinpath, fov_dsets)):
                     _logger.debug('Removing old file %s', f.relative_to(self.session_path))
                     f.unlink()
-                if not any(fov_dir.iterdir()):
-                    _logger.debug('Removing old folder %s', fov_dir.relative_to(self.session_path))
-                    fov_dir.rmdir()
-            prev_level = _logger.level
-            _logger.setLevel(logging.WARNING)
-            shutil.make_archive(str(fov_dir / '_suite2p_ROIData.raw'), 'zip', plane_dir, logger=_logger)
-            _logger.setLevel(prev_level)
+            else:
+                fov_dir.mkdir(parents=True)
+            with ZipFile(fov_dir / '_suite2p_ROIData.raw.zip', 'w', compression=ZIP_DEFLATED) as zf:
+                for file in plane_dir.iterdir():
+                    if file.suffix != '.bin':
+                        zf.write(file, arcname=file.name)
             # save frameQC in each dir (for now, maybe there will be fov specific frame QC eventually)
             if frameQC is not None and len(frameQC) > 0:
                 np.save(fov_dir.joinpath('mpci.mpciFrameQC.npy'), frameQC)
@@ -412,8 +409,10 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                 sparse.save_npz(fp, roi_mask)
             with open(fov_dir.joinpath('mpciROIs.neuropilMasks.sparse_npz'), 'wb') as fp:
                 sparse.save_npz(fp, pil_mask)
-        # Remove old suite2p files
-        shutil.rmtree(str(suite2p_dir), ignore_errors=False, onerror=None)
+            # Remove the suite2p output files, leaving only the bins and ops
+            for path in sorted(plane_dir.iterdir()):
+                if path.name != 'ops.npy' and path.suffix != '.bin':
+                    path.unlink() if path.is_file() else path.rmdir()
         # Collect all files in those directories
         datasets = self.session_path.joinpath('alf').rglob('FOV_??/*.*.*')
         return sorted(x for x in datasets if x.name in fov_dsets)
@@ -601,7 +600,6 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         db = {
             'data_path': sorted(map(str, self.session_path.glob(f'{self.device_collection}'))),
             'save_path0': str(self.session_path),
-            'fast_disk': '',  # TODO
             'look_one_level_down': False,  # don't look in the children folders as that is where the reference data is
             'num_workers': self.cpu,  # this selects number of cores to parallelize over for the registration step
             'num_workers_roi': -1,  # for parallelization over FOVs during cell detection, for now don't
@@ -782,9 +780,15 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
 
         # Check for previous intermediate files
         plane_folders = self._get_plane_paths(save_path)
-        if len(plane_folders) == 0 and self.session_path.joinpath('raw_bin_files').exists():
-            self.session_path.joinpath('raw_bin_files').replace(save_path)
-            plane_folders = self._get_plane_paths(save_path)
+        if len(plane_folders) > 0:
+            for bin_file in save_path.glob('plane?*/imaging.frames_motionRegistered.bin'):
+                # If there is a previously registered bin file, rename back to data.bin
+                # This file name is hard-coded in suite2p but is renamed in _rename_outputs
+                # If a data.bin file already exists, we don't want to overwrite it -
+                # it may be from a manual registration or incomplete run
+                if not bin_file.with_name('data.bin').exists():
+                    bin_file.rename(bin_file.with_stem('data'))
+
         if len(plane_folders) == 0 or overwrite:
             _logger.info('Extracting tif data per plane')
             # Ingest tiff files
@@ -848,7 +852,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
             # Only return output file that are in the signature (for registration)
             out_files = chain.from_iterable(map(lambda x: x.find_files(self.session_path)[1], self.output_files))
         else:
-            out_files = save_path.rglob('*.*')
+            out_files = save_path.rglob('*.*')  # Output all files in suite2p folder
 
         return list(out_files)
 
