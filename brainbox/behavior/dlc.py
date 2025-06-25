@@ -51,10 +51,8 @@ def valid_feature(x: str):
 
 
 def likelihood_threshold(dlc, threshold=0.9):
-    """
-    Set dlc points with likelihood less than threshold to nan.
+    """Set dlc points with likelihood less than threshold to nan.
 
-    FIXME Add unit test.
     :param dlc: dlc pqt object
     :param threshold: likelihood threshold
     :return:
