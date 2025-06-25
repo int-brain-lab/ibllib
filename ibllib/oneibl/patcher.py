@@ -682,7 +682,7 @@ class S3Patcher(Patcher):
             _logger.error(f'Files: {", ".join([f.name for f in file_list])} already exist, to overwrite set force=True')
             return
 
-        response = super().patch_dataset(file_list, dry=dry, repository=self.s3_repo, ftp=False, force=force,  **kwargs)
+        response = super().patch_dataset(file_list, dry=dry, repository=self.s3_repo, ftp=False, force=force, **kwargs)
         # TODO in an ideal case the flatiron filerecord won't be altered when we register this dataset. This requires
         # changing the the alyx.data.register_view
         for ds in response:

@@ -106,8 +106,7 @@ class TestPoseQcBase(object):  # <- No unittest.TestCase inheritance
         outcome = self.qc.check_lick_detection()
         self.assertEqual('NOT_SET', outcome)
         self.qc.side = 'left'
-        self.qc.data['pose_coords'] = {'tongue_end_l': np.ones((2, 10)),
-                                      'tongue_end_r': np.ones((2, 10))}
+        self.qc.data['pose_coords'] = {'tongue_end_l': np.ones((2, 10)), 'tongue_end_r': np.ones((2, 10))}
         outcome = self.qc.check_lick_detection()
         self.assertEqual('FAIL', outcome)
         self.qc.data['pose_coords']['tongue_end_l'] *= np.nan

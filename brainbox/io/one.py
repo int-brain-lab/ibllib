@@ -1572,7 +1572,8 @@ class SessionLoader:
         tracker = 'lightningPose' if tracker in ['lp', 'litpose'] else tracker
         self.pose = {}
         for view in views:
-            pose_raw = self.one.load_object(self.eid, f'{view}Camera', attribute=[tracker, 'times'], revision=self.revision or None)
+            pose_raw = self.one.load_object(
+                self.eid, f'{view}Camera', attribute=[tracker, 'times'], revision=self.revision or None)
             # Double check if video timestamps are correct length or can be fixed
             times_fixed, dlc = self._check_video_timestamps(view, pose_raw['times'], pose_raw[tracker])
             self.pose[f'{view}Camera'] = likelihood_threshold(dlc, likelihood_thr)

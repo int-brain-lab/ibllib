@@ -828,7 +828,7 @@ class PostLP(base_tasks.VideoTask):
             # the following are required for the LP plot only
             # they are not strictly required, some plots just might be skipped
             # In particular the raw videos don't need to be downloaded as they can be streamed
-                           # [(f'_iblrig_{cam}Camera.raw.mp4', self.device_collection, True) for cam in self.cameras] +
+            # [(f'_iblrig_{cam}Camera.raw.mp4', self.device_collection, True) for cam in self.cameras] +
                            [(f'{cam}ROIMotionEnergy.position.npy', 'alf', False) for cam in self.cameras] +
                            [(f'{cam}Camera.ROIMotionEnergy.npy', 'alf', False) for cam in self.cameras] +
             # The trials table is used in the LP QC, however this is not an essential dataset
