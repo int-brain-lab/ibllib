@@ -26,7 +26,7 @@ from brainbox.io.spikeglx import Streamer
 from brainbox.behavior.dlc import SAMPLING, plot_trace_on_frame, plot_wheel_position, plot_lick_hist, \
     plot_lick_raster, plot_motion_energy_hist, plot_speed_hist, plot_pupil_diameter_hist
 from brainbox.ephys_plots import image_lfp_spectrum_plot, image_rms_plot, plot_brain_regions
-from brainbox.io.one import load_spike_sorting_fast
+from brainbox.io.one import SpikeSortingLoader
 from brainbox.behavior import training
 from iblutil.numerical import ismember
 from ibllib.plots.misc import Density
@@ -360,11 +360,12 @@ class SpikeSorting(ReportSnapshotProbe):
             if all_here and len(output_files) == len(spike_sorting_runs):
                 return output_files
             logger.info(self.output_directory)
-            for run in spike_sorting_runs:
-                collection = str(Path(run).parent.as_posix())
-                spikes, clusters, channels = load_spike_sorting_fast(
-                    eid=self.eid, probe=self.pname, one=self.one, nested=False, collection=collection,
-                    dataset_types=['spikes.depths'], brain_regions=self.brain_regions)
+            ss = SpikeSortingLoader(
+                one=self.one, pid=self.pid, eid=self.eid, pname=self.pname, session_path=self.session_path)
+            for run in map(self.session_path.joinpath, spike_sorting_runs):
+                sorter = run.without_revision().relative_to(self.session_path / f'alf/{self.pname}')
+                collection = run.relative_to(self.session_path).parent.as_posix()
+                spikes, clusters, channels = ss.load_spike_sorting(spike_sorter=sorter, revision=run.revision or None)
 
                 if 'atlas_id' not in channels.keys():
                     channels = self.get_channels('channels', collection)

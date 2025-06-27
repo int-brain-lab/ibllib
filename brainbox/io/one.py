@@ -599,7 +599,7 @@ class SpikeSortingLoader:
     This class can be instantiated in several manners
     - With Alyx database probe id:
             SpikeSortingLoader(pid=pid, one=one)
-    - With Alyx database eic and probe name:
+    - With Alyx database eid and probe name:
             SpikeSortingLoader(eid=eid, pname='probe00', one=one)
     - From a local session and probe name:
             SpikeSortingLoader(session_path=session_path, pname='probe00')
