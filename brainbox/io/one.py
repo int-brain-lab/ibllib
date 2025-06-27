@@ -1049,8 +1049,9 @@ class SpikeSortingLoader:
         namespace_files = defaultdict(dict)
         available_namespaces = []
         for file in all_files:
-            available_namespaces.append(file.namespace)
-            namespace_files[f"{file.object}.{file.attribute}"][file.namespace] = file
+            nspace = file.namespace or None
+            available_namespaces.append(nspace)
+            namespace_files[f"{file.object}.{file.attribute}"][nspace] = file
 
         if namespace not in set(available_namespaces):
             _logger.info(f'Could not find manual curation results for {namespace}, returning default'

@@ -424,6 +424,10 @@ class IBLGlobusPatcher(Patcher, globus.Globus):
         else:
             did = dataset['url'].split('/')[-1]
 
+        # Check if the dataset is protected (TODO this doesn't scale for many tags)
+        is_protected = any(self.alyx.rest('tags', 'read', id=tag)['is_protected'] for tag in dataset['tags'])
+        assert is_protected is False, f'Cannot delete protected dataset {did} ({dataset["name"]})'
+
         def is_aws(repository_name):
             return repository_name.startswith('aws_')
 
