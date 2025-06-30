@@ -1,9 +1,14 @@
-"""DLC QC
-This module runs a list of quality control metrics on the dlc traces.
+"""Pose estimation QC
+This module runs a list of quality control metrics on the pose estimation traces (DLC or LP).
 
 Example - Run DLC QC
     qc = DlcQC(eid, 'left', download_data=True)
     qc.run()
+
+Example - Run LP QC
+    qc = LpQC(eid, 'left', download_data=True)
+    qc.run()
+
 Question:
     We're not extracting the audio based on TTL length.  Is this a problem?
 """
@@ -18,13 +23,13 @@ import one.alf.io as alfio
 from one.alf.exceptions import ALFObjectNotFound
 from one.alf.spec import is_session_path
 from iblutil.util import Bunch
-from brainbox.behavior.dlc import insert_idx, SAMPLING
+from brainbox.behavior.dlc import insert_idx, SAMPLING, valid_feature
 
 _log = logging.getLogger(__name__)
 
 
-class DlcQC(base.QC):
-    """A class for computing camera QC metrics"""
+class PoseQC(base.QC):
+    """A parent class for computing camera Pose estimation QC metrics"""
 
     bbox = {
         'body': {
@@ -41,22 +46,11 @@ class DlcQC(base.QC):
         },
     }
 
-    dstypes = {
-        'left': [
-            '_ibl_leftCamera.dlc.*', '_ibl_leftCamera.times.*', '_ibl_leftCamera.features.*', '_ibl_trials.table.*'
-        ],
-        'right': [
-            '_ibl_rightCamera.dlc.*', '_ibl_rightCamera.times.*', '_ibl_rightCamera.features.*', '_ibl_trials.table.*'
-        ],
-        'body': [
-            '_ibl_bodyCamera.dlc.*', '_ibl_bodyCamera.times.*'
-        ],
-    }
-
-    def __init__(self, session_path_or_eid, side, ignore_checks=['check_pupil_diameter_snr'], **kwargs):
+    def __init__(self, session_path_or_eid, side, tracker, ignore_checks=[], **kwargs):
         """
         :param session_path_or_eid: A session eid or path
         :param side: The camera to run QC on
+        :param tracker: pose estimation algorithm. Options are {'dlc', 'lightningPose'}
         :param ignore_checks: Checks that won't count towards aggregate QC, but will be run and added to extended QC
         :param log: A logging.Logger instance, if None the 'ibllib' logger is used
         :param one: An ONE instance for fetching and setting the QC on Alyx
@@ -74,14 +68,29 @@ class DlcQC(base.QC):
         # QC outcomes map
         self.metrics = None
 
+        self.tracker = 'lightningPose' if tracker in ['lp', 'litpose'] else tracker
+        self.dstypes = {
+            'left': [
+                f'_ibl_leftCamera.{self.tracker}.*',
+                '_ibl_leftCamera.times.*', '_ibl_leftCamera.features.*', '_ibl_trials.table.*'
+            ],
+            'right': [
+                f'_ibl_rightCamera.{self.tracker}.*',
+                '_ibl_rightCamera.times.*', '_ibl_rightCamera.features.*', '_ibl_trials.table.*'
+            ],
+            'body': [
+                f'_ibl_bodyCamera.{self.tracker}.*', '_ibl_bodyCamera.times.*'
+            ],
+        }
+
     def load_data(self, download_data: bool = None) -> None:
         """Extract the data from data files
         Extracts all the required task data from the data files.
 
         Data keys:
             - camera_times (float array): camera frame timestamps extracted from frame headers
-            - dlc_coords (dict): keys are the points traced by dlc, items are x-y coordinates of
-                                 these points over time, those with likelihood <0.9 set to NaN
+            - pose_coords (dict): keys are the points traced by pose estimation, items are x-y
+                coordinates of these points over time, those with likelihood <0.9 set to NaN
 
         :param download_data: if True, any missing raw data is downloaded via ONE.
         """
@@ -95,17 +104,17 @@ class DlcQC(base.QC):
         # Load times
         cam_path = next(alf_path.rglob(f'*{self.side}Camera.times*')).parent
         self.data['camera_times'] = alfio.load_object(cam_path, f'{self.side}Camera')['times']
-        # Load dlc traces
-        dlc_path = next(alf_path.rglob(f'*{self.side}Camera.dlc*')).parent
-        dlc_df = alfio.load_object(dlc_path, f'{self.side}Camera', namespace='ibl')['dlc']
-        targets = np.unique(['_'.join(col.split('_')[:-1]) for col in dlc_df.columns])
+        # Load pose traces
+        pose_path = next(alf_path.rglob(f'*{self.side}Camera.{self.tracker}*')).parent
+        pose_df = alfio.load_object(pose_path, f'{self.side}Camera', namespace='ibl')[self.tracker]
+        targets = np.unique(['_'.join(x.split('_')[:-1]) for x in pose_df.keys() if valid_feature(x)])
         # Set values to nan if likelihood is too low
-        dlc_coords = {}
+        pose_coords = {}
         for t in targets:
-            idx = dlc_df.loc[dlc_df[f'{t}_likelihood'] < 0.9].index
-            dlc_df.loc[idx, [f'{t}_x', f'{t}_y']] = np.nan
-            dlc_coords[t] = np.array((dlc_df[f'{t}_x'], dlc_df[f'{t}_y']))
-        self.data['dlc_coords'] = dlc_coords
+            idx = pose_df.loc[pose_df[f'{t}_likelihood'] < 0.9].index
+            pose_df.loc[idx, [f'{t}_x', f'{t}_y']] = np.nan
+            pose_coords[t] = np.array((pose_df[f'{t}_x'], pose_df[f'{t}_y']))
+        self.data['pose_coords'] = pose_coords
 
         # load stim on times
         trial_path = next(alf_path.rglob('*trials.table*')).parent
@@ -114,7 +123,8 @@ class DlcQC(base.QC):
         # load pupil diameters
         if self.side in ['left', 'right']:
             feat_path = next(alf_path.rglob(f'*{self.side}Camera.features*')).parent
-            features = alfio.load_object(feat_path, f'{self.side}Camera', namespace='ibl')['features']
+            features = alfio.load_object(feat_path, f'{self.side}Camera', namespace='ibl')[
+                'features']
             self.data['pupilDiameter_raw'] = features['pupilDiameter_raw']
             self.data['pupilDiameter_smooth'] = features['pupilDiameter_smooth']
 
@@ -136,7 +146,8 @@ class DlcQC(base.QC):
                     except ALFObjectNotFound:
                         raise AssertionError(f'Dataset {ds} not found locally and failed to download')
                 else:
-                    raise AssertionError(f'Dataset {ds} not found locally and download_data is False')
+                    raise AssertionError(
+                        f'Dataset {ds} not found locally and download_data is False')
 
     def _compute_trial_window_idxs(self):
         """Find start and end times of a window around stimulus onsets in video indices."""
@@ -152,9 +163,11 @@ class DlcQC(base.QC):
         # find timepoints in windows around stimulus onset
         start_idx, end_idx = self._compute_trial_window_idxs()
         # compute fraction of points in windows that are NaN
-        dlc_coords = np.concatenate([self.data['dlc_coords'][body_part][0, start_idx[i]:end_idx[i]]
-                                     for i in range(len(start_idx))])
-        prop_nan = np.sum(np.isnan(dlc_coords)) / dlc_coords.shape[0]
+        pose_coords = np.concatenate([
+            self.data['pose_coords'][body_part][0, start_idx[i]:end_idx[i]]
+            for i in range(len(start_idx))
+        ])
+        prop_nan = np.sum(np.isnan(pose_coords)) / pose_coords.shape[0]
         return prop_nan
 
     def run(self, update: bool = False, **kwargs) -> (str, dict):
@@ -164,15 +177,15 @@ class DlcQC(base.QC):
         :param download_data: if True, downloads any missing data if required
         :returns: overall outcome as a str, a dict of checks and their outcomes
         """
-        _log.info(f'Running DLC QC for {self.side} camera, session {self.eid}')
-        namespace = f'dlc{self.side.capitalize()}'
+        _log.info(f'Running {self.tracker} QC for {self.side} camera, session {self.eid}')
+        namespace = f'{self.tracker}{self.side.capitalize()}'
         if all(x is None for x in self.data.values()):
             self.load_data(**kwargs)
 
         def is_metric(x):
             return isfunction(x) and x.__name__.startswith('check_')
 
-        checks = getmembers(DlcQC, is_metric)
+        checks = getmembers(type(self), is_metric)
         self.metrics = {f'_{namespace}_' + k[6:]: fn(self) for k, fn in checks}
 
         ignore_metrics = [f'_{namespace}_' + i[6:] for i in self.ignore_checks]
@@ -192,10 +205,10 @@ class DlcQC(base.QC):
         '''
         Check that the length of the DLC traces is the same length as the video.
         '''
-        dlc_coords = self.data['dlc_coords']
+        pose_coords = self.data['pose_coords']
         times = self.data['camera_times']
-        for target in dlc_coords.keys():
-            if times.shape[0] != dlc_coords[target].shape[1]:
+        for target in pose_coords.keys():
+            if times.shape[0] != pose_coords[target].shape[1]:
                 _log.warning(f'{self.side}Camera length of camera.times does not match '
                              f'length of camera.dlc {target}')
                 return 'FAIL'
@@ -205,10 +218,10 @@ class DlcQC(base.QC):
         '''
         Check that none of the dlc traces, except for the 'tube' traces, are all NaN.
         '''
-        dlc_coords = self.data['dlc_coords']
-        for target in dlc_coords.keys():
+        pose_coords = self.data['pose_coords']
+        for target in pose_coords.keys():
             if 'tube' not in target:
-                if all(np.isnan(dlc_coords[target][0])) or all(np.isnan(dlc_coords[target][1])):
+                if all(np.isnan(pose_coords[target][0])) or all(np.isnan(pose_coords[target][1])):
                     _log.warning(f'{self.side}Camera dlc trace {target} all NaN')
                     return 'FAIL'
         return 'PASS'
@@ -219,11 +232,11 @@ class DlcQC(base.QC):
         sessions with points out of this box were often faulty in terms of raw videos
         '''
 
-        dlc_coords = self.data['dlc_coords']
+        pose_coords = self.data['pose_coords']
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=RuntimeWarning)
-            x_mean = np.nanmean([np.nanmean(dlc_coords[k][0]) for k in dlc_coords.keys()])
-            y_mean = np.nanmean([np.nanmean(dlc_coords[k][1]) for k in dlc_coords.keys()])
+            x_mean = np.nanmean([np.nanmean(pose_coords[k][0]) for k in pose_coords.keys()])
+            y_mean = np.nanmean([np.nanmean(pose_coords[k][1]) for k in pose_coords.keys()])
 
         xrange = self.bbox[self.side]['xrange']
         yrange = self.bbox[self.side]['yrange']
@@ -231,6 +244,35 @@ class DlcQC(base.QC):
             return 'FAIL'
         else:
             return 'PASS'
+
+    def check_lick_detection(self):
+        '''
+        Check if both of the two tongue edge points are less than 10 % NaN, indicating that
+        wrong points are detected (spout edge, mouth edge)
+        '''
+
+        if self.side == 'body':
+            return 'NOT_SET'
+        pose_coords = self.data['pose_coords']
+        nan_l = np.mean(np.isnan(pose_coords['tongue_end_l'][0]))
+        nan_r = np.mean(np.isnan(pose_coords['tongue_end_r'][0]))
+        if (nan_l < 0.1) and (nan_r < 0.1):
+            return 'FAIL'
+        return 'PASS'
+
+
+class DlcQC(PoseQC):
+    """A class for computing DLC QC metrics"""
+
+    def __init__(self, session_path_or_eid, side, ignore_checks=['check_pupil_diameter_snr'], **kwargs):
+        """
+        :param session_path_or_eid: A session eid or path
+        :param side: The camera to run QC on
+        :param ignore_checks: Checks that won't count towards aggregate QC, but will be run and added to extended QC
+        :param log: A logging.Logger instance, if None the 'ibllib' logger is used
+        :param one: An ONE instance for fetching and setting the QC on Alyx
+        """
+        super().__init__(session_path_or_eid, side=side, tracker='dlc', ignore_checks=ignore_checks, **kwargs)
 
     def check_pupil_blocked(self):
         '''
@@ -253,21 +295,6 @@ class DlcQC(base.QC):
 
         return 'PASS'
 
-    def check_lick_detection(self):
-        '''
-        Check if both of the two tongue edge points are less than 10 % NaN, indicating that
-        wrong points are detected (spout edge, mouth edge)
-        '''
-
-        if self.side == 'body':
-            return 'NOT_SET'
-        dlc_coords = self.data['dlc_coords']
-        nan_l = np.mean(np.isnan(dlc_coords['tongue_end_l'][0]))
-        nan_r = np.mean(np.isnan(dlc_coords['tongue_end_r'][0]))
-        if (nan_l < 0.1) and (nan_r < 0.1):
-            return 'FAIL'
-        return 'PASS'
-
     def check_pupil_diameter_snr(self):
         if self.side == 'body':
             return 'NOT_SET'
@@ -275,9 +302,12 @@ class DlcQC(base.QC):
         if 'pupilDiameter_raw' not in self.data.keys() or 'pupilDiameter_smooth' not in self.data.keys():
             return 'NOT_SET'
         # compute signal to noise ratio between raw and smooth dia
-        good_idxs = np.where(~np.isnan(self.data['pupilDiameter_smooth']) & ~np.isnan(self.data['pupilDiameter_raw']))[0]
+        good_idxs = np.where(~np.isnan(self.data['pupilDiameter_smooth']) & ~np.isnan(
+            self.data['pupilDiameter_raw']))[0]
         snr = (np.var(self.data['pupilDiameter_smooth'][good_idxs]) /
-               (np.var(self.data['pupilDiameter_smooth'][good_idxs] - self.data['pupilDiameter_raw'][good_idxs])))
+               (np.var(
+                   self.data['pupilDiameter_smooth'][good_idxs] - self.data['pupilDiameter_raw'][
+                       good_idxs])))
         if snr < thresh:
             return 'FAIL', float(round(snr, 3))
         return 'PASS', float(round(snr, 3))
@@ -311,17 +341,35 @@ class DlcQC(base.QC):
             return 'PASS'
 
 
-def run_all_qc(session, cameras=('left', 'right', 'body'), one=None, **kwargs):
+class LpQC(PoseQC):
+    """A class for computing LP QC metrics"""
+
+    def __init__(self, session_path_or_eid, side, ignore_checks=[], **kwargs):
+        """
+        :param session_path_or_eid: A session eid or path
+        :param side: The camera to run QC on
+        :param ignore_checks: Checks that won't count towards aggregate QC, but will be run and added to extended QC
+        :param log: A logging.Logger instance, if None the 'ibllib' logger is used
+        :param one: An ONE instance for fetching and setting the QC on Alyx
+        """
+        super().__init__(session_path_or_eid, side=side, tracker='lightningPose', ignore_checks=ignore_checks, **kwargs)
+
+
+def run_all_qc(session, cameras=('left', 'right', 'body'), tracker='dlc', one=None, **kwargs):
     """Run DLC QC for all cameras
     Run the DLC QC for left, right and body cameras.
     :param session: A session path or eid.
     :param update: If True, QC fields are updated on Alyx.
     :param cameras: A list of camera names to perform QC on.
+    :param tracker: pose estimation algorithm to run QC on. Options are {'dlc', 'lightningPose'}
     :return: dict of DlcQC objects
     """
     qc = {}
     run_args = {k: kwargs.pop(k) for k in ('download_data', 'update') if k in kwargs.keys()}
     for camera in cameras:
-        qc[camera] = DlcQC(session, side=camera, one=one, **kwargs)
+        if tracker == 'dlc':
+            qc[camera] = DlcQC(session, side=camera, one=one, **kwargs)
+        elif tracker in ['lp', 'litpose', 'lightningPose']:
+            qc[camera] = LpQC(session, side=camera, one=one, **kwargs)
         qc[camera].run(**run_args)
     return qc
