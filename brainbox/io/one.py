@@ -900,7 +900,7 @@ class SpikeSortingLoader:
         :return:
         """
         revision = revision if revision is not None else self.revision
-        self.download_spike_sorting_object(obj, *args, **kwargs)
+        self.download_spike_sorting_object(obj, *args, revision=revision, **kwargs)
         return self._load_object(self.files[obj])
 
     def get_version(self, spike_sorter=None):
@@ -935,7 +935,7 @@ class SpikeSortingLoader:
         try:
             self.files[obj] = self.one.load_object(
                 self.eid, obj=obj, attribute=attributes.get(obj, None),
-                collection=collection, download_only=True, **kwargs)
+                collection=collection, download_only=True, revision=revision, **kwargs)
         except ALFObjectNotFound as e:
             if missing == 'raise':
                 raise e
