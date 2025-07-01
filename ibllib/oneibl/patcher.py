@@ -53,7 +53,7 @@ FLATIRON_MOUNT = '/mnt/ibl'
 FTP_HOST = 'test.alyx.internationalbrainlab.org'
 FTP_PORT = 21
 DMZ_REPOSITORY = 'ibl_patcher'  # in alyx, the repository name containing the patched filerecords
-SDSC_ROOT_PATH = PurePosixPath('/mnt/ibl')
+SDSC_ROOT_PATH = PurePosixPath(FLATIRON_MOUNT)
 SDSC_PATCH_PATH = PurePosixPath('/home/datauser/temp')
 
 
