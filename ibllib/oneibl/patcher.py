@@ -53,7 +53,7 @@ FLATIRON_MOUNT = '/mnt/ibl'
 FTP_HOST = 'test.alyx.internationalbrainlab.org'
 FTP_PORT = 21
 DMZ_REPOSITORY = 'ibl_patcher'  # in alyx, the repository name containing the patched filerecords
-SDSC_ROOT_PATH = PurePosixPath('/mnt/ibl')
+SDSC_ROOT_PATH = PurePosixPath(FLATIRON_MOUNT)
 SDSC_PATCH_PATH = PurePosixPath('/home/datauser/temp')
 
 
@@ -423,6 +423,10 @@ class IBLGlobusPatcher(Patcher, globus.Globus):
             dataset = self.alyx.rest('datasets', 'read', id=did)
         else:
             did = dataset['url'].split('/')[-1]
+
+        # Check if the dataset is protected (TODO this doesn't scale for many tags)
+        is_protected = any(self.alyx.rest('tags', 'read', id=tag)['is_protected'] for tag in dataset['tags'])
+        assert is_protected is False, f'Cannot delete protected dataset {did} ({dataset["name"]})'
 
         def is_aws(repository_name):
             return repository_name.startswith('aws_')
