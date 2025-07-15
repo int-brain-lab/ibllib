@@ -110,7 +110,7 @@ class Task(abc.ABC):
     time_elapsed_secs = None
     time_out_secs = 3600 * 2  # time-out after which a task is considered dead
     version = ibllib.__version__
-    force = False # whether to re-download missing input files on local server if not present
+    force = False  # whether to re-download missing input files on local server if not present
     job_size = 'small'  # either 'small' or 'large', defines whether task should be run as part of the large or small job services
     env = None  # the environment name within which to run the task (NB: the env is not activated automatically!)
     on_error = 'continue'  # whether to raise an exception on error ('raise') or report the error and continue ('continue')
@@ -502,7 +502,7 @@ class Task(abc.ABC):
             _logger.warning('Some files are not ALF datasets and will not be checked for ambiguity')
         if any(map(len, variant_datasets.values())):
             # Keep those with variants and make paths relative to session for logging purposes
-            to_frag = lambda x: x.relative_to_session().as_posix()  # noqa
+            def to_frag(x): return x.relative_to_session().as_posix()  # noqa
             ambiguous = {
                 to_frag(k): [to_frag(x) for x in v]
                 for k, v in variant_datasets.items() if any(v)}
