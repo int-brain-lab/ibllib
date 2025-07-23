@@ -20,7 +20,7 @@ from ibllib.qc.camera import run_all_qc as run_camera_qc, CameraQC
 from ibllib.misc import check_nvidia_driver
 from ibllib.io.video import label_from_path, assert_valid_label
 from ibllib.plots.snapshot import ReportSnapshot
-from ibllib.plots.figures import dlc_qc_plot, lp_qc_plot
+from ibllib.plots.figures import dlc_qc_plot, lp_qc_plot, pawstates_qc_plot
 from brainbox.behavior.dlc import likelihood_threshold, get_licks, get_pupil_diameter, get_smooth_pupil_diameter
 
 _logger = logging.getLogger('ibllib')
@@ -525,7 +525,7 @@ class EphysPostDLC(base_tasks.VideoTask):
         :param overwrite: bool, whether to recompute existing output files (default is False).
                           Note that the dlc_qc_plot will be (re-)computed even if overwrite = False
         :param run_qc: bool, whether to run the DLC QC (default is True)
-        :param plot_qc: book, whether to create the dlc_qc_plot (default is True)
+        :param plot_qc: bool, whether to create the dlc_qc_plot (default is True)
 
         """
         # Check if output files exist locally
@@ -847,7 +847,7 @@ class PostLP(base_tasks.VideoTask):
         :param overwrite: bool, whether to recompute existing output files (default is False).
                           Note that the lp_qc_plot will be (re-)computed even if overwrite = False
         :param run_qc: bool, whether to run the LP QC (default is True)
-        :param plot_qc: book, whether to create the lp_qc_plot (default is True)
+        :param plot_qc: bool, whether to create the lp_qc_plot (default is True)
 
         """
         # Check if output files exist locally
@@ -957,5 +957,206 @@ class PostLP(base_tasks.VideoTask):
                 _logger.error('Could not create and/or upload LP QC Plot')
                 _logger.error(traceback.format_exc())
                 self.status = -1
+
+        return output_files
+
+
+class LightningAction(base_tasks.VideoTask):
+
+    io_charge = 100
+    level = 2
+    force = True
+    job_size = 'small'
+    env = 'litaction'
+
+    laenv = Path.home().joinpath('Documents', 'PYTHON', 'envs', 'litaction', 'bin', 'activate')
+    scripts = Path.home().joinpath('Documents', 'PYTHON', 'iblscripts', 'deploy', 'serverpc', 'litaction')
+
+    @property
+    def signature(self):
+        signature = {
+            'input_files': [(f'_ibl_{cam}Camera.lightningPose.pqt', 'alf', True) for cam in self.cameras if cam != 'body'] +
+                           [(f'_ibl_{cam}Camera.times.npy', 'alf', True) for cam in self.cameras if cam != 'body'] +
+                           [('_ibl_wheel.position.npy', self.trials_collection, False),
+                            ('_ibl_wheel.timestamps.npy', self.trials_collection, False)],
+            'output_files': [(f'_ibl_{cam}Camera.pawstates.pqt', 'alf', True) for cam in self.cameras if cam != 'body']
+        }
+
+        return signature
+
+    def _check_env(self):
+        """Check that scripts are present, env can be activated and get iblvideo version"""
+        assert len(list(self.scripts.rglob('run_litaction.*'))) == 2, \
+            f'Scripts run_litaction.sh and run_litaction.py do not exist in {self.scripts}'
+        assert self.laenv.exists(), f"environment does not exist in assumed location {self.laenv}"
+        command2run = f"source {self.laenv}; python -c 'import iblvideo; print(iblvideo.__version__)'"
+        process = subprocess.Popen(
+            command2run,
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            executable="/bin/bash"
+        )
+        info, error = process.communicate()
+        if process.returncode != 0:
+            raise AssertionError(f"environment check failed\n{error.decode('utf-8')}")
+        version = info.decode("utf-8").strip().split('\n')[-1]
+        return version
+
+    def _run(self, overwrite=True, **kwargs):
+
+        # Gather video files
+        self.session_path = Path(self.session_path)
+
+        _logger.info(f'Running on {self.cameras} videos')
+
+        # Check the environment
+        self.version = self._check_env()
+        _logger.info(f'iblvideo version {self.version}')
+
+        # If all results exist and overwrite is False, skip computation
+        expected_outputs_present, expected_outputs = self.assert_expected(self.output_files, silent=True)
+        if overwrite is False and expected_outputs_present is True:
+            actual_outputs = expected_outputs
+            return actual_outputs
+
+        # Else, loop over videos
+        actual_outputs = []
+        for label in self.cameras:
+
+            if label == 'body':
+                _logger.info(f'paw states are not available for {label} camera; skipping')
+                continue
+
+            # Catch exceptions so that the other cams can still run but set status to Errored
+            try:
+
+                # ---------------------------
+                # Run action segmentation
+                # ---------------------------
+                pose_file = self.session_path.joinpath('alf', f'_ibl_{label}Camera.lightningPose.pqt')
+                pose_timestamp_file = self.session_path.joinpath('alf', f'_ibl_{label}Camera.times.npy')
+                wheel_file = self.session_path.joinpath(self.trials_collection, '_ibl_wheel.position.npy')
+                wheel_timestamps_file = self.session_path.joinpath(self.trials_collection, '_ibl_wheel.timestamps.npy')
+
+                t0 = time.time()
+                _logger.info(f'Running Lightning Action on {label}Camera.')
+                command2run = f"{self.scripts.joinpath('run_litaction.sh')} {str(self.laenv)} " \
+                              f"{pose_file} {pose_timestamp_file} " \
+                              f"{wheel_file} {wheel_timestamps_file} " \
+                              f"{overwrite}"
+                _logger.info(command2run)
+                process = subprocess.Popen(
+                    command2run,
+                    shell=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    executable="/bin/bash",
+                )
+                info, error = process.communicate()
+                if process.returncode != 0:
+                    error_str = error.decode("utf-8").strip()
+                    _logger.error(
+                        f'Lightning Action failed for {label}Camera.\n\n'
+                        f'++++++++ Output of subprocess for debugging ++++++++\n\n'
+                        f'{error_str}\n'
+                        f'++++++++++++++++++++++++++++++++++++++++++++\n'
+                    )
+                    self.status = -1
+                    # We don't add any files if LA failed to run
+                    continue
+                else:
+                    _logger.info(f'{label} camera took {(time.time() - t0)} seconds')
+                    result = next(self.session_path.joinpath('alf').glob(f'_ibl_{label}Camera.pawstates*.pqt'))
+                    actual_outputs.append(result)
+
+            except BaseException:
+                _logger.error(traceback.format_exc())
+                self.status = -1
+                continue
+
+        # catch here if there are no raw videos present
+        if len(actual_outputs) == 0:
+            _logger.info('Did not find any videos for this session')
+            actual_outputs = None
+            self.status = -1
+
+        return actual_outputs
+
+
+class PostLightningAction(base_tasks.VideoTask):
+    """
+    The PostLightningAction task takes LA paw states as performs qc.
+
+    This can be run on a single camera view or multiple camera views.
+    """
+    io_charge = 90
+    level = 3
+    force = True
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.trials_collection = kwargs.get('trials_collection', 'alf')
+        self.tracker = kwargs.get('tracker', 'lightningPose')
+
+    @property
+    def signature(self):
+        return {
+            'input_files': [(f'_ibl_{cam}Camera.{self.tracker}.pqt', 'alf', True) for cam in self.cameras if cam != 'body'] +
+                           [(f'_ibl_{cam}Camera.times.npy', 'alf', True) for cam in self.cameras if cam != 'body'] +
+            # The trials table is used in the LA QC plot, however this is not an essential dataset
+                           [('_ibl_trials.table.pqt', self.trials_collection, False),
+                            ('_ibl_wheel.position.npy', self.trials_collection, False),
+                            ('_ibl_wheel.timestamps.npy', self.trials_collection, False)],
+            'output_files': []
+        }
+
+    def _run(self, overwrite=True, run_qc=True, plot_qc=True):
+        """
+        Run the PostLightningAction task.
+        Returns a list of file locations for the output files in signature. The created plot
+        (la_qc_plot.{view}.{paw}.png) is not returned, but saved in session_path/snapshots and uploaded to Alyx as a note.
+
+        :param overwrite: bool, whether to recompute existing output files (default is False).
+                          Note that the lp_qc_plot will be (re-)computed even if overwrite = False
+        :param run_qc: bool, whether to run the LA QC (default is True)
+        :param plot_qc: bool, whether to create the pawstates_qc_plot (default is True)
+
+        """
+        # Check if output files exist locally
+        exist, output_files = self.assert_expected(self.output_files, silent=True)
+
+        if run_qc:
+            _logger.info('QC metrics not currently implemented for paw segmentation models')
+
+        if plot_qc:
+            _logger.info('Creating LA QC plot')
+            for cam in self.cameras:
+                if cam == 'body':
+                    _logger.info(f'paw states are not available for {cam} camera; skipping')
+                    continue
+                for paw in ['paw_l', 'paw_r']:
+                    try:
+                        session_id = self.one.path2eid(self.session_path)
+                        paw_pos = 'near' if paw == 'paw_l' else 'far'
+                        fig_path = self.session_path.joinpath('snapshot', f'la_qc_plot.{cam}.{paw_pos}_paw.png')
+                        fig_path.parent.mkdir(parents=True, exist_ok=True)
+                        fig = pawstates_qc_plot(
+                            self.session_path, one=self.one,
+                            camera=cam, paw=paw, tracker=self.tracker,
+                            device_collection=self.device_collection, trials_collection=self.trials_collection,
+                        )
+                        fig.savefig(fig_path)
+                        fig.clf()
+                        snp = ReportSnapshot(self.session_path, session_id, one=self.one)
+                        snp.outputs = [fig_path]
+                        snp.register_images(
+                            widths=['orig'],
+                            function=str(pawstates_qc_plot.__module__) + '.' + str(pawstates_qc_plot.__name__),
+                        )
+                    except Exception:
+                        _logger.error(f'Could not create and/or upload LA QC Plot for {cam} camera, {paw}')
+                        _logger.error(traceback.format_exc())
+                        self.status = -1
 
         return output_files
