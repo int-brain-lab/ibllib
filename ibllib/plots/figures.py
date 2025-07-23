@@ -1029,8 +1029,12 @@ def pawstates_qc_plot(
             logger.warning(f"Object loaded from _ibl_{camera}Camera.{feat} is empty")
             data[feat] = None
 
-    # Load session level data
-    for alf_object in ['trials', 'wheel']:
+    # Load trials data
+    local_file = list(session_path.joinpath(trials_collection).rglob('*trials.table*'))
+    data['trials'] = alfio.load_file_content(local_file[0])
+
+    # Load wheel data
+    for alf_object in ['wheel']:
         try:
             data[alf_object] = alfio.load_object(session_path.joinpath(trials_collection), alf_object)
             continue

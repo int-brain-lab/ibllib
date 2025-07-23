@@ -48,7 +48,7 @@ def extract_pawstate_plot_data(data, paw, tracker):
     df_ens = df.loc[:, df.columns.str.startswith(paw) & ~df.columns.str.contains(r'_\d+$')]
     df_probs = df_ens.loc[:, df_ens.columns.str.endswith(ORIG_LABELS)]
     df_var = df_ens.loc[:, df_ens.columns.str.endswith('ens_var')]
-    data['marker_data'], data['cam_times'] = extract_marker_data(
+    data['marker_data'] = extract_marker_data(
         paw, data[tracker], data['times'], data['wheel'],
     )
     data['data_df'], data['transition_frames'] = gen_data_df(
@@ -57,7 +57,6 @@ def extract_pawstate_plot_data(data, paw, tracker):
     data['durations_df'], data['durations'] = duration_data(
         data['data_df'], data['transition_frames'],
     )
-
     if data['trials'] is not None:
         data['interval_df'] = interval_data(data['data_df'], data['trials'])
         data['er'], data['vr'] = raster_data(data['interval_df'], data['data_df'], data['fps'])
@@ -75,7 +74,7 @@ def extract_marker_data(paw, pose_data, times_data, wheel_data):
     :param pose_data: Pose tracking data
     :param times_data: Camera timestamps
     :param wheel_data: Wheel position and velocity data
-    :returns: Tuple of (processed_markers_df, camera_times)
+    :returns: processed_markers_df
     """
     times = times_data
     markers = pose_data.loc[:, (f'{paw}_x', f'{paw}_y')].to_numpy()
@@ -98,7 +97,7 @@ def extract_marker_data(paw, pose_data, times_data, wheel_data):
     feature_names = ['paw_x_pos', 'paw_y_pos', 'wheel_vel', 'paw_x_vel', 'paw_y_vel', 'wheel_acc']
     df = pd.DataFrame(markers_comb, columns=feature_names)
 
-    return df, times
+    return df
 
 
 def gen_data_df(marker_data, probs, ens_vars, cam_times):
@@ -130,7 +129,7 @@ def gen_data_df(marker_data, probs, ens_vars, cam_times):
     data_df['e_mode'] = STATE_MAP(ensemble_mode)
     data_df['e_var'] = ensemble_variance
     data_df['frame_id'] = np.arange(0, len(data_df))
-    data_df['cam_times'] = cam_times
+    data_df['times'] = cam_times
 
     # Find transition frames
     any_transition_frames = data_df[
@@ -143,7 +142,7 @@ def gen_data_df(marker_data, probs, ens_vars, cam_times):
 
     # Reorder columns
     cols = ['paw_x_pos', 'paw_y_pos', 'paw_x_vel', 'paw_y_vel', 'paw_speed',
-            'wheel_vel', 'wheel_speed', 'wheel_acc', 'cam_times',
+            'wheel_vel', 'wheel_speed', 'wheel_acc', 'times',
             'e_mode', 'e_var', 'frame_id']
     data_df = data_df[cols]
 
@@ -158,7 +157,7 @@ def duration_data(data_df, any_transition_frames):
     :param any_transition_frames: Indices of transition frames
     :returns: Tuple of (state_duration_df, duration_summary)
     """
-    sd_df = data_df[["e_mode", "cam_times", "frame_id"]].copy()
+    sd_df = data_df[["e_mode", "times", "frame_id"]].copy()
 
     # Filter out noise frames around transitions
     for noise_frame in any_transition_frames:
@@ -170,7 +169,7 @@ def duration_data(data_df, any_transition_frames):
     sd_df['group'] = (sd_df['e_mode'] != sd_df['e_mode'].shift()).cumsum()
 
     # Calculate frame durations
-    sd_df['frame_duration'] = sd_df['cam_times'].shift(-1) - sd_df['cam_times']
+    sd_df['frame_duration'] = sd_df['times'].shift(-1) - sd_df['times']
     sd_df['frame_duration'] = sd_df['frame_duration'].fillna(1 / 60)  # Handle last frame
 
     # Sum durations within each group
@@ -190,16 +189,17 @@ def interval_data(data_df, trials_data):
     :param trials_data: Trials data object
     :returns: DataFrame with trial intervals and metadata
     """
-    ct = data_df["cam_times"]
+    ct = data_df["times"]
     tr = trials_data
 
-    interval_df = pd.DataFrame(tr['intervals'], columns=['start', 'end'])
+    interval_df = tr[['intervals_0', 'intervals_1']].rename(
+        columns={'intervals_0': 'start', 'intervals_1': 'end'}
+    )
     interval_df["frame_start"] = np.searchsorted(ct, interval_df["start"]).astype(int)
     interval_df["frame_end"] = np.searchsorted(ct, interval_df["end"]).astype(int)
     interval_df["firstMovement_times"] = tr["firstMovement_times"]
     interval_df["frame_fmt"] = np.searchsorted(ct, interval_df["firstMovement_times"])
     interval_df["stimOn_times"] = tr["stimOn_times"]
-    interval_df["stimOff_times"] = tr["stimOff_times"]
     interval_df["feedback_times"] = tr["feedback_times"]
     interval_df["trial_idx"] = np.arange(0, len(interval_df))
     interval_df["choice_data"] = (tr["feedbackType"] + 1) / 2

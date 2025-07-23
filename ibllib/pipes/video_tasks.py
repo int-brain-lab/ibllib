@@ -1039,10 +1039,10 @@ class LightningAction(base_tasks.VideoTask):
                 # ---------------------------
                 # Run action segmentation
                 # ---------------------------
-                pose_file = next(self.session_path.joinpath('alf').rglob(f'_ibl_{label}Camera.lightningPose.pqt')
-                pose_timestamp_file = self.session_path.joinpath('alf', f'_ibl_{label}Camera.times.npy')
-                wheel_file = self.session_path.joinpath(self.trials_collection, '_ibl_wheel.position.npy')
-                wheel_timestamps_file = self.session_path.joinpath(self.trials_collection, '_ibl_wheel.timestamps.npy')
+                pose_file = next(self.session_path.joinpath('alf').rglob(f'_ibl_{label}Camera.lightningPose.pqt'))
+                pose_timestamp_file = next(self.session_path.joinpath('alf').rglob(f'_ibl_{label}Camera.times.npy'))
+                wheel_file = next(self.session_path.joinpath(self.trials_collection).rglob('_ibl_wheel.position.npy'))
+                wheel_timestamps_file = next(self.session_path.joinpath(self.trials_collection).rglob('_ibl_wheel.timestamps.npy'))
 
                 t0 = time.time()
                 _logger.info(f'Running Lightning Action on {label}Camera.')
@@ -1143,7 +1143,7 @@ class PostLightningAction(base_tasks.VideoTask):
                 for paw in ['paw_l', 'paw_r']:
                     try:
                         session_id = self.one.path2eid(self.session_path)
-                        paw_pos = 'near' if paw == 'paw_l' else 'far'
+                        paw_pos = 'near' if paw == 'paw_r' else 'far'
                         fig_path = self.session_path.joinpath('snapshot', f'la_qc_plot.{cam}.{paw_pos}_paw.png')
                         fig_path.parent.mkdir(parents=True, exist_ok=True)
                         fig = pawstates_qc_plot(
