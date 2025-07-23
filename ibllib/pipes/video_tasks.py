@@ -655,10 +655,6 @@ class LightningPose(base_tasks.VideoTask):
     lpenv = Path.home().joinpath('Documents', 'PYTHON', 'envs', 'litpose', 'bin', 'activate')
     scripts = Path.home().joinpath('Documents', 'PYTHON', 'iblscripts', 'deploy', 'serverpc', 'litpose')
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.trials_collection = kwargs.get('trials_collection', 'alf')
-
     @property
     def signature(self):
         signature = {
@@ -975,6 +971,11 @@ class LightningAction(base_tasks.VideoTask):
 
     laenv = Path.home().joinpath('Documents', 'PYTHON', 'envs', 'litaction', 'bin', 'activate')
     scripts = Path.home().joinpath('Documents', 'PYTHON', 'iblscripts', 'deploy', 'serverpc', 'litaction')
+
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.trials_collection = kwargs.get('trials_collection', 'alf')
 
     @property
     def signature(self):
