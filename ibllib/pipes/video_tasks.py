@@ -1151,7 +1151,7 @@ class PostLightningAction(base_tasks.VideoTask):
                             camera=cam, paw=paw, tracker=self.tracker,
                             device_collection=self.device_collection, trials_collection=self.trials_collection,
                         )
-                        fig.savefig(fig_path)
+                        fig.savefig(fig_path, bbox_inches='tight', pad_inches=0.1)
                         fig.clf()
                         snp = ReportSnapshot(self.session_path, session_id, one=self.one)
                         snp.outputs = [fig_path]
