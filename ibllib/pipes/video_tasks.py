@@ -1039,7 +1039,7 @@ class LightningAction(base_tasks.VideoTask):
                 # ---------------------------
                 # Run action segmentation
                 # ---------------------------
-                pose_file = self.session_path.joinpath('alf', f'_ibl_{label}Camera.lightningPose.pqt')
+                pose_file = next(self.session_path.joinpath('alf').rglob(f'_ibl_{label}Camera.lightningPose.pqt')
                 pose_timestamp_file = self.session_path.joinpath('alf', f'_ibl_{label}Camera.times.npy')
                 wheel_file = self.session_path.joinpath(self.trials_collection, '_ibl_wheel.position.npy')
                 wheel_timestamps_file = self.session_path.joinpath(self.trials_collection, '_ibl_wheel.timestamps.npy')
