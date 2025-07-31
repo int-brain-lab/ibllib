@@ -111,14 +111,14 @@ class MesoscopeCompress(base_tasks.MesoscopeTask):
         _logger.setLevel(self._log_level or logging.INFO)
         return super().tearDown()
 
-    def _run(self, remove_uncompressed=False, verify_output=True, overwrite=False, **kwargs):
+    def _run(self, remove_uncompressed=True, verify_output=True, overwrite=False, **kwargs):
         """
         Run tar compression on all tif files in the device collection.
 
         Parameters
         ----------
         remove_uncompressed: bool
-            Whether to remove the original, uncompressed data. Default is False.
+            Whether to remove the original, uncompressed data. Default is True.
         verify_output: bool
             Whether to check that the compressed tar file can be uncompressed without errors.
             Default is True.
