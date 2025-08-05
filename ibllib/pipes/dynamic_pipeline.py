@@ -199,7 +199,7 @@ def _get_trials_tasks(session_path, acquisition_description=None, sync_tasks=Non
     """
     Generate behaviour tasks from acquisition description.
 
-    This returns all behaviour related tasks including TrialsRegisterRaw and TrainingStatus objects.
+    This returns all behaviour related tasks including TrialRegisterRaw and TrainingStatus objects.
 
     Parameters
     ----------
