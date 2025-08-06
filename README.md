@@ -9,7 +9,7 @@ The library is currently 2 main modules:
 -   **brainbox**: neuroscience analysis oriented library
 -   **ibllib**: general purpose library containing I/O, signal processing and IBL data pipelines utilities.
 
-[Release Notes here](release_notes.md)
+[Release Notes here](CHANGELOG.md)
 
 ## Requirements
 **OS**: Only tested on Linux. Windows and Mac may work, but are not supported.
@@ -26,9 +26,10 @@ See https://int-brain-lab.github.io/iblenv/07_contribution.html
 We use Semantic Versioning.
 
 Before committing to your branch:
--   run tests
--   flake8
-This is also enforced by continuous integration.
+-   check formating `flake8`
+-   run tests `python -m unittest discover`
+
+Pull request to `develop` or `main`.
 
 
 ## Matlab Library

@@ -53,7 +53,7 @@ FLATIRON_MOUNT = '/mnt/ibl'
 FTP_HOST = 'test.alyx.internationalbrainlab.org'
 FTP_PORT = 21
 DMZ_REPOSITORY = 'ibl_patcher'  # in alyx, the repository name containing the patched filerecords
-SDSC_ROOT_PATH = PurePosixPath('/mnt/ibl')
+SDSC_ROOT_PATH = PurePosixPath(FLATIRON_MOUNT)
 SDSC_PATCH_PATH = PurePosixPath('/home/datauser/temp')
 
 
@@ -398,7 +398,7 @@ class IBLGlobusPatcher(Patcher, globus.Globus):
         self.alyx = alyx or AlyxClient()
         globus.Globus.__init__(self, client_name=client_name)  # NB we don't init Patcher as we're not using ONE
 
-    def delete_dataset(self, dataset, dry=False):
+    def delete_dataset(self, dataset, dry=False, aws_profile='ibladmin'):
         """
         Delete a dataset off Alyx and remove file record from all Globus repositories.
 
@@ -408,6 +408,8 @@ class IBLGlobusPatcher(Patcher, globus.Globus):
             The dataset record or ID to delete.
         dry : bool
             If true, dataset is not deleted and file paths that would be removed are returned.
+        aws_profile : str
+            The AWS profile name to use for S3 deletion.
 
         Returns
         -------
@@ -421,6 +423,10 @@ class IBLGlobusPatcher(Patcher, globus.Globus):
             dataset = self.alyx.rest('datasets', 'read', id=did)
         else:
             did = dataset['url'].split('/')[-1]
+
+        # Check if the dataset is protected (TODO this doesn't scale for many tags)
+        is_protected = any(self.alyx.rest('tags', 'read', id=tag)['is_protected'] for tag in dataset['tags'])
+        assert is_protected is False, f'Cannot delete protected dataset {did} ({dataset["name"]})'
 
         def is_aws(repository_name):
             return repository_name.startswith('aws_')
@@ -448,7 +454,7 @@ class IBLGlobusPatcher(Patcher, globus.Globus):
 
         # Remove S3 files
         if s3_files:
-            cmd = ['aws', 's3', 'rm', *s3_files, '--profile', 'ibladmin']
+            cmd = ['aws', 's3', 'rm', *s3_files, '--profile', aws_profile]
             if dry:
                 cmd.append('--dryrun')
             if _logger.level > logging.DEBUG:
@@ -456,7 +462,6 @@ class IBLGlobusPatcher(Patcher, globus.Globus):
                 cmd.append('--only-show-errors')  # Suppress verbose output
             else:
                 log_function = _logger.debug
-                cmd.append('--no-progress')  # Suppress progress info, estimated time, etc.
             _logger.debug(' '.join(cmd))
             process = Popen(cmd, stdout=PIPE, stderr=STDOUT)
             with process.stdout:
@@ -678,10 +683,10 @@ class S3Patcher(Patcher):
 
         exists = self.check_datasets(file_list)
         if len(exists) > 0 and not force:
-            _logger.error(f'Files: {", ".join([f.name for f in file_list])} already exist, to force set force=True')
+            _logger.error(f'Files: {", ".join([f.name for f in file_list])} already exist, to overwrite set force=True')
             return
 
-        response = super().patch_dataset(file_list, dry=dry, repository=self.s3_repo, ftp=False, **kwargs)
+        response = super().patch_dataset(file_list, dry=dry, repository=self.s3_repo, ftp=False, force=force, **kwargs)
         # TODO in an ideal case the flatiron filerecord won't be altered when we register this dataset. This requires
         # changing the the alyx.data.register_view
         for ds in response:

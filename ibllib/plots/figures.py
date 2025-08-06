@@ -26,7 +26,7 @@ from brainbox.io.spikeglx import Streamer
 from brainbox.behavior.dlc import SAMPLING, plot_trace_on_frame, plot_wheel_position, plot_lick_hist, \
     plot_lick_raster, plot_motion_energy_hist, plot_speed_hist, plot_pupil_diameter_hist
 from brainbox.ephys_plots import image_lfp_spectrum_plot, image_rms_plot, plot_brain_regions
-from brainbox.io.one import load_spike_sorting_fast
+from brainbox.io.one import SpikeSortingLoader
 from brainbox.behavior import training
 from iblutil.numerical import ismember
 from ibllib.plots.misc import Density
@@ -360,11 +360,12 @@ class SpikeSorting(ReportSnapshotProbe):
             if all_here and len(output_files) == len(spike_sorting_runs):
                 return output_files
             logger.info(self.output_directory)
-            for run in spike_sorting_runs:
-                collection = str(Path(run).parent.as_posix())
-                spikes, clusters, channels = load_spike_sorting_fast(
-                    eid=self.eid, probe=self.pname, one=self.one, nested=False, collection=collection,
-                    dataset_types=['spikes.depths'], brain_regions=self.brain_regions)
+            ss = SpikeSortingLoader(
+                one=self.one, pid=self.pid, eid=self.eid, pname=self.pname, session_path=self.session_path)
+            for run in map(self.session_path.joinpath, spike_sorting_runs):
+                sorter = run.without_revision().relative_to(self.session_path / f'alf/{self.pname}')
+                collection = run.relative_to(self.session_path).parent.as_posix()
+                spikes, clusters, channels = ss.load_spike_sorting(spike_sorter=sorter, revision=run.revision or None)
 
                 if 'atlas_id' not in channels.keys():
                     channels = self.get_channels('channels', collection)
@@ -691,8 +692,28 @@ def raw_destripe(raw, fs, t0, i_plt, n_plt,
     return fig, axs
 
 
-def dlc_qc_plot(session_path, one=None, device_collection='raw_video_data',
-                cameras=('left', 'right', 'body'), trials_collection='alf'):
+def dlc_qc_plot(session_path, one=None, device_collection='raw_video_data', cameras=('left', 'right', 'body'),
+                trials_collection='alf'):
+
+    fig = pose_qc_plot(
+        session_path=session_path, one=one, device_collection=device_collection, cameras=cameras,
+        trials_collection=trials_collection, tracker='dlc',
+    )
+    return fig
+
+
+def lp_qc_plot(session_path, one=None, device_collection='raw_video_data', cameras=('left', 'right', 'body'),
+               trials_collection='alf'):
+
+    fig = pose_qc_plot(
+        session_path=session_path, one=one, device_collection=device_collection, cameras=cameras,
+        trials_collection=trials_collection, tracker='lightningPose',
+    )
+    return fig
+
+
+def pose_qc_plot(session_path, one=None, device_collection='raw_video_data',
+                 cameras=('left', 'right', 'body'), trials_collection='alf', tracker=None):
     """
     Creates DLC QC plot.
     Data is searched first locally, then on Alyx. Panels that lack required data are skipped.
@@ -701,9 +722,9 @@ def dlc_qc_plot(session_path, one=None, device_collection='raw_video_data',
      'raw_video_data/_iblrig_bodyCamera.raw.mp4',
      'raw_video_data/_iblrig_leftCamera.raw.mp4',
      'raw_video_data/_iblrig_rightCamera.raw.mp4',
-     'alf/_ibl_bodyCamera.dlc.pqt',
-     'alf/_ibl_leftCamera.dlc.pqt',
-     'alf/_ibl_rightCamera.dlc.pqt',
+     'alf/_ibl_bodyCamera.{tracker}.pqt',
+     'alf/_ibl_leftCamera.{tracker}.pqt',
+     'alf/_ibl_rightCamera.{tracker}.pqt',
      'alf/_ibl_bodyCamera.times.npy',
      'alf/_ibl_leftCamera.times.npy',
      'alf/_ibl_rightCamera.times.npy',
@@ -759,7 +780,7 @@ def dlc_qc_plot(session_path, one=None, device_collection='raw_video_data',
                 logger.warning(f"Could not load video frame for {cam} cam. Skipping trace on frame.")
                 data[f'{cam}_frame'] = None
         # Other camera associated data
-        for feat in ['dlc', 'times', 'features', 'ROIMotionEnergy']:
+        for feat in [tracker, 'times', 'features', 'ROIMotionEnergy']:
             # Check locally first, then try to load from alyx, if nothing works, set to None
             if feat == 'features' and cam == 'body':  # this doesn't exist for body cam
                 continue
@@ -780,7 +801,7 @@ def dlc_qc_plot(session_path, one=None, device_collection='raw_video_data',
 
     # If we have no frame and/or no DLC and/or no times for all cams, raise an error, something is really wrong
     assert any(data[f'{cam}_frame'] is not None for cam in cameras), "No camera data could be loaded, aborting."
-    assert any(data[f'{cam}_dlc'] is not None for cam in cameras), "No DLC data could be loaded, aborting."
+    assert any(data[f'{cam}_{tracker}'] is not None for cam in cameras), f"No {tracker} data could be loaded, aborting."
     assert any(data[f'{cam}_times'] is not None for cam in cameras), "No camera times data could be loaded, aborting."
 
     # Load session level data
@@ -810,9 +831,9 @@ def dlc_qc_plot(session_path, one=None, device_collection='raw_video_data',
     panels = []
     # Panel A, B, C: Trace on frame
     for cam in cameras:
-        if data[f'{cam}_frame'] is not None and data[f'{cam}_dlc'] is not None:
+        if data[f'{cam}_frame'] is not None and data[f'{cam}_{tracker}'] is not None:
             panels.append((plot_trace_on_frame,
-                           {'frame': data[f'{cam}_frame'], 'dlc_df': data[f'{cam}_dlc'], 'cam': cam}))
+                           {'frame': data[f'{cam}_frame'], 'dlc_df': data[f'{cam}_{tracker}'], 'cam': cam}))
         else:
             panels.append((None, f'Data missing\n{cam.capitalize()} cam trace on frame'))
 
@@ -843,17 +864,21 @@ def dlc_qc_plot(session_path, one=None, device_collection='raw_video_data',
         # Try if all data is there for left cam first, otherwise right
         for cam in ['left', 'right']:
             fail = False
-            if (data[f'{cam}_dlc'] is not None and data[f'{cam}_times'] is not None
-                    and len(data[f'{cam}_times']) >= len(data[f'{cam}_dlc'])):
+            if (data[f'{cam}_{tracker}'] is not None and data[f'{cam}_times'] is not None
+                    and len(data[f'{cam}_times']) >= len(data[f'{cam}_{tracker}'])):
                 break
             fail = True
         if not fail:
             paw = 'r' if cam == 'left' else 'l'
-            panels.append((plot_speed_hist, {'dlc_df': data[f'{cam}_dlc'], 'cam_times': data[f'{cam}_times'],
-                                             'trials_df': data['trials'], 'feature': f'paw_{paw}', 'cam': cam}))
-            panels.append((plot_speed_hist, {'dlc_df': data[f'{cam}_dlc'], 'cam_times': data[f'{cam}_times'],
-                                             'trials_df': data['trials'], 'feature': 'nose_tip', 'legend': False,
-                                             'cam': cam}))
+            panels.append((plot_speed_hist, {
+                'dlc_df': data[f'{cam}_{tracker}'], 'cam_times': data[f'{cam}_times'],
+                'trials_df': data['trials'], 'feature': f'paw_{paw}', 'cam': cam
+            }))
+            panels.append((plot_speed_hist, {
+                'dlc_df': data[f'{cam}_{tracker}'], 'cam_times': data[f'{cam}_times'],
+                'trials_df': data['trials'], 'feature': 'nose_tip', 'legend': False,
+                'cam': cam
+            }))
         else:
             panels.extend([(None, 'Data missing or corrupt\nSpeed histograms')] * 2)
 

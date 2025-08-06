@@ -3,7 +3,6 @@ from dataclasses import dataclass, field
 import gc
 import logging
 import re
-import os
 from pathlib import Path
 from collections import defaultdict
 
@@ -13,7 +12,7 @@ from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
 
 from one.api import ONE, One
-from one.alf.path import get_alf_path, full_path_parts, filename_parts
+from one.alf.path import get_alf_path, ALFPath
 from one.alf.exceptions import ALFObjectNotFound, ALFMultipleCollectionsFound
 from one.alf import cache
 import one.alf.io as alfio
@@ -410,191 +409,6 @@ def load_channel_locations(eid, probe=None, one=None, aligned=False, brain_atlas
     return channels
 
 
-def load_spike_sorting_fast(eid, one=None, probe=None, dataset_types=None, spike_sorter=None, revision=None,
-                            brain_regions=None, nested=True, collection=None, return_collection=False):
-    """
-    From an eid, loads spikes and clusters for all probes
-    The following set of dataset types are loaded:
-        'clusters.channels',
-        'clusters.depths',
-        'clusters.metrics',
-        'spikes.clusters',
-        'spikes.times',
-        'probes.description'
-    :param eid: experiment UUID or pathlib.Path of the local session
-    :param one: an instance of OneAlyx
-    :param probe: name of probe to load in, if not given all probes for session will be loaded
-    :param dataset_types: additional spikes/clusters objects to add to the standard default list
-    :param spike_sorter: name of the spike sorting you want to load (None for default)
-    :param collection: name of the spike sorting collection to load - exclusive with spike sorter name ex: "alf/probe00"
-    :param brain_regions: iblatlas.regions.BrainRegions object - will label acronyms if provided
-    :param nested: if a single probe is required, do not output a dictionary with the probe name as key
-    :param return_collection: (False) if True, will return the collection used to load
-    :return: spikes, clusters, channels (dict of bunch, 1 bunch per probe)
-    """
-    _logger.warning('Deprecation warning: brainbox.io.one.load_spike_sorting_fast will be removed in future versions.'
-                    'Use brainbox.io.one.SpikeSortingLoader instead')
-    if collection is None:
-        collection = _collection_filter_from_args(probe, spike_sorter)
-    _logger.debug(f"load spike sorting with collection filter {collection}")
-    kwargs = dict(eid=eid, one=one, collection=collection, revision=revision, dataset_types=dataset_types,
-                  brain_regions=brain_regions)
-    spikes, clusters, channels = _load_spike_sorting(**kwargs, return_channels=True)
-    clusters = merge_clusters_channels(clusters, channels, keys_to_add_extra=None)
-    if nested is False and len(spikes.keys()) == 1:
-        k = list(spikes.keys())[0]
-        channels = channels[k]
-        clusters = clusters[k]
-        spikes = spikes[k]
-    if return_collection:
-        return spikes, clusters, channels, collection
-    else:
-        return spikes, clusters, channels
-
-
-def load_spike_sorting(eid, one=None, probe=None, dataset_types=None, spike_sorter=None, revision=None,
-                       brain_regions=None, return_collection=False):
-    """
-    From an eid, loads spikes and clusters for all probes
-    The following set of dataset types are loaded:
-        'clusters.channels',
-        'clusters.depths',
-        'clusters.metrics',
-        'spikes.clusters',
-        'spikes.times',
-        'probes.description'
-    :param eid: experiment UUID or pathlib.Path of the local session
-    :param one: an instance of OneAlyx
-    :param probe: name of probe to load in, if not given all probes for session will be loaded
-    :param dataset_types: additional spikes/clusters objects to add to the standard default list
-    :param spike_sorter: name of the spike sorting you want to load (None for default)
-    :param brain_regions: iblatlas.regions.BrainRegions object - will label acronyms if provided
-    :param return_collection:(bool - False) if True, returns the collection for loading the data
-    :return: spikes, clusters (dict of bunch, 1 bunch per probe)
-    """
-    _logger.warning('Deprecation warning: brainbox.io.one.load_spike_sorting will be removed in future versions.'
-                    'Use brainbox.io.one.SpikeSortingLoader instead')
-    collection = _collection_filter_from_args(probe, spike_sorter)
-    _logger.debug(f"load spike sorting with collection filter {collection}")
-    spikes, clusters = _load_spike_sorting(eid=eid, one=one, collection=collection, revision=revision,
-                                           return_channels=False, dataset_types=dataset_types,
-                                           brain_regions=brain_regions)
-    if return_collection:
-        return spikes, clusters, collection
-    else:
-        return spikes, clusters
-
-
-def load_spike_sorting_with_channel(eid, one=None, probe=None, aligned=False, dataset_types=None,
-                                    spike_sorter=None, brain_atlas=None, nested=True, return_collection=False):
-    """
-    For a given eid, get spikes, clusters and channels information, and merges clusters
-    and channels information before returning all three variables.
-
-    Parameters
-    ----------
-    eid : [str, UUID, Path, dict]
-        Experiment session identifier; may be a UUID, URL, experiment reference string
-        details dict or Path
-    one : one.api.OneAlyx
-        An instance of ONE (shouldn't be in 'local' mode)
-    probe : [str, list of str]
-        The probe label(s), e.g. 'probe01'
-    aligned : bool
-        Whether to get the latest user aligned channel when not resolved or use histology track
-    dataset_types : list of str
-        Optional additional spikes/clusters objects to add to the standard default list
-    spike_sorter : str
-        Name of the spike sorting you want to load (None for default which is pykilosort if it's
-        available otherwise the default MATLAB kilosort)
-    brain_atlas : iblatlas.atlas.BrainAtlas
-        Brain atlas object (default: Allen atlas)
-    return_collection: bool
-        Returns an extra argument with the collection chosen
-
-    Returns
-    -------
-    spikes : dict of one.alf.io.AlfBunch
-        A dict with probe labels as keys, contains bunch(es) of spike data for the provided
-        session and spike sorter, with keys ('clusters', 'times')
-    clusters : dict of one.alf.io.AlfBunch
-        A dict with probe labels as keys, contains bunch(es) of cluster data, with keys
-        ('channels', 'depths', 'metrics')
-    channels : dict of one.alf.io.AlfBunch
-        A dict with probe labels as keys, contains channel locations with keys ('acronym',
-        'atlas_id', 'x', 'y', 'z').  Atlas IDs non-lateralized.
-    """
-    # --- Get spikes and clusters data
-    _logger.warning('Deprecation warning: brainbox.io.one.load_spike_sorting will be removed in future versions.'
-                    'Use brainbox.io.one.SpikeSortingLoader instead')
-    one = one or ONE()
-    brain_atlas = brain_atlas or AllenAtlas()
-    spikes, clusters, collection = load_spike_sorting(
-        eid, one=one, probe=probe, dataset_types=dataset_types, spike_sorter=spike_sorter, return_collection=True)
-    # -- Get brain regions and assign to clusters
-    channels = load_channel_locations(eid, one=one, probe=probe, aligned=aligned,
-                                      brain_atlas=brain_atlas)
-    clusters = merge_clusters_channels(clusters, channels, keys_to_add_extra=None)
-    if nested is False and len(spikes.keys()) == 1:
-        k = list(spikes.keys())[0]
-        channels = channels[k]
-        clusters = clusters[k]
-        spikes = spikes[k]
-    if return_collection:
-        return spikes, clusters, channels, collection
-    else:
-        return spikes, clusters, channels
-
-
-def load_ephys_session(eid, one=None):
-    """
-    From an eid, hits the Alyx database and downloads a standard default set of dataset types
-    From a local session Path (pathlib.Path), loads a standard default set of dataset types
-     to perform analysis:
-        'clusters.channels',
-        'clusters.depths',
-        'clusters.metrics',
-        'spikes.clusters',
-        'spikes.times',
-        'probes.description'
-
-    Parameters
-    ----------
-    eid : [str, UUID, Path, dict]
-        Experiment session identifier; may be a UUID, URL, experiment reference string
-        details dict or Path
-    one : oneibl.one.OneAlyx, optional
-        ONE object to use for loading. Will generate internal one if not used, by default None
-
-    Returns
-    -------
-    spikes : dict of one.alf.io.AlfBunch
-        A dict with probe labels as keys, contains bunch(es) of spike data for the provided
-        session and spike sorter, with keys ('clusters', 'times')
-    clusters : dict of one.alf.io.AlfBunch
-        A dict with probe labels as keys, contains bunch(es) of cluster data, with keys
-        ('channels', 'depths', 'metrics')
-    trials : one.alf.io.AlfBunch of numpy.ndarray
-        The session trials data
-    """
-    assert one
-    spikes, clusters = load_spike_sorting(eid, one=one)
-    trials = one.load_object(eid, 'trials')
-    return spikes, clusters, trials
-
-
-def _remove_old_clusters(session_path, probe):
-    # gets clusters and spikes from a local session folder
-    probe_path = session_path.joinpath('alf', probe)
-
-    # look for clusters.metrics.csv file, if it exists delete as we now have .pqt file instead
-    cluster_file = probe_path.joinpath('clusters.metrics.csv')
-
-    if cluster_file.exists():
-        os.remove(cluster_file)
-        _logger.info('Deleting old clusters.metrics.csv file')
-
-
 def merge_clusters_channels(dic_clus, channels, keys_to_add_extra=None):
     """
     Takes (default and any extra) values in given keys from channels and assign them to clusters.
@@ -785,7 +599,7 @@ class SpikeSortingLoader:
     This class can be instantiated in several manners
     - With Alyx database probe id:
             SpikeSortingLoader(pid=pid, one=one)
-    - With Alyx database eic and probe name:
+    - With Alyx database eid and probe name:
             SpikeSortingLoader(eid=eid, pname='probe00', one=one)
     - From a local session and probe name:
             SpikeSortingLoader(session_path=session_path, pname='probe00')
@@ -796,7 +610,7 @@ class SpikeSortingLoader:
     pid: str = None
     eid: str = ''
     pname: str = ''
-    session_path: Path = ''
+    session_path: ALFPath = ''
     # the following properties are the outcome of the post init function
     collections: list = None
     datasets: list = None   # list of all datasets belonging to the session
@@ -825,6 +639,7 @@ class SpikeSortingLoader:
             self.session_path = self.one.eid2path(self.eid)
         # fully local providing a session path
         else:
+            self.session_path = ALFPath(self.session_path)  # Ensure session_path is an ALFPath object
             if self.one:
                 self.eid = self.one.to_eid(self.session_path)
             else:
@@ -900,7 +715,7 @@ class SpikeSortingLoader:
         :return:
         """
         revision = revision if revision is not None else self.revision
-        self.download_spike_sorting_object(obj, *args, **kwargs)
+        self.download_spike_sorting_object(obj, *args, revision=revision, **kwargs)
         return self._load_object(self.files[obj])
 
     def get_version(self, spike_sorter=None):
@@ -935,7 +750,7 @@ class SpikeSortingLoader:
         try:
             self.files[obj] = self.one.load_object(
                 self.eid, obj=obj, attribute=attributes.get(obj, None),
-                collection=collection, download_only=True, **kwargs)
+                collection=collection, download_only=True, revision=revision, **kwargs)
         except ALFObjectNotFound as e:
             if missing == 'raise':
                 raise e
@@ -1048,11 +863,9 @@ class SpikeSortingLoader:
         namespace_files = defaultdict(dict)
         available_namespaces = []
         for file in all_files:
-            fparts = filename_parts(file.name, as_dict=True)
-            fname = f"{fparts['object']}.{fparts['attribute']}"
-            nspace = fparts['namespace']
+            nspace = file.namespace or None
             available_namespaces.append(nspace)
-            namespace_files[fname][nspace] = file
+            namespace_files[f"{file.object}.{file.attribute}"][nspace] = file
 
         if namespace not in set(available_namespaces):
             _logger.info(f'Could not find manual curation results for {namespace}, returning default'
@@ -1124,7 +937,7 @@ class SpikeSortingLoader:
                     assert fn.relative_to(self.session_path).parts[2] == self.spike_sorter, \
                         f"You required strict version {self.spike_sorter}, {fn} does not match"
                 if self.revision:
-                    assert full_path_parts(fn)[5] == self.revision, \
+                    assert fn.revision == self.revision, \
                         f"You required strict revision {self.revision}, {fn} does not match"
 
     @staticmethod
@@ -1171,7 +984,7 @@ class SpikeSortingLoader:
 
     @property
     def url(self):
-        """Gets flatiron URL for the session"""
+        """Gets flatiron URL for the session."""
         webclient = getattr(self.one, '_web_client', None)
         return webclient.rel_path2url(get_alf_path(self.session_path)) if webclient else None
 
@@ -1327,7 +1140,7 @@ class SpikeSortingLoader:
             return fig, axs
 
 
-@dataclass
+@dataclass(kw_only=True)
 class SessionLoader:
     """
     Object to load session data for a give session in the recommended way.
@@ -1395,7 +1208,7 @@ class SessionLoader:
         >>> sess_loader.load_wheel(sampling_rate=100)
     """
     one: One = None
-    session_path: Path = ''
+    session_path: ALFPath = ''
     eid: str = ''
     revision: str = ''
     data_info: pd.DataFrame = field(default_factory=pd.DataFrame, repr=False)
@@ -1416,7 +1229,7 @@ class SessionLoader:
         # If session path is given, takes precedence over eid
         if self.session_path is not None and self.session_path != '':
             self.eid = self.one.to_eid(self.session_path)
-            self.session_path = Path(self.session_path)
+            self.session_path = ALFPath(self.session_path)
         # Providing no session path, try to infer from eid
         else:
             if self.eid is not None and self.eid != '':
@@ -1502,7 +1315,7 @@ class SessionLoader:
         if len(dsets) == 0:
             return 'alf'
         else:
-            collections = [full_path_parts(self.session_path.joinpath(d), as_dict=True)['collection'] for d in dsets]
+            collections = [x.collection for x in map(self.session_path.joinpath, dsets)]
             if len(set(collections)) == 1:
                 return collections[0]
             else:
@@ -1560,7 +1373,7 @@ class SessionLoader:
         self.wheel = self.wheel.apply(np.float32)
         self.data_info.loc[self.data_info['name'] == 'wheel', 'is_loaded'] = True
 
-    def load_pose(self, likelihood_thr=0.9, views=['left', 'right', 'body']):
+    def load_pose(self, likelihood_thr=0.9, views=['left', 'right', 'body'], tracker='dlc'):
         """
         Function to load the pose estimation results (DLC) into SessionLoader.pose. SessionLoader.pose is a
         dictionary where keys are the names of the cameras for which pose data is loaded, and values are pandas
@@ -1574,13 +1387,17 @@ class SessionLoader:
             likelihood_thr=1. Default is 0.9
         views: list
             List of camera views for which to try and load data. Possible options are {'left', 'right', 'body'}
+        tracker : str
+            Tracking algorithm to load pose estimates from. Possible options are {'dlc', 'lightningPose'}
         """
         # empty the dictionary so that if one loads only one view, after having loaded several, the others don't linger
+        tracker = 'lightningPose' if tracker in ['lp', 'litpose'] else tracker
         self.pose = {}
         for view in views:
-            pose_raw = self.one.load_object(self.eid, f'{view}Camera', attribute=['dlc', 'times'], revision=self.revision or None)
+            pose_raw = self.one.load_object(
+                self.eid, f'{view}Camera', attribute=[tracker, 'times'], revision=self.revision or None)
             # Double check if video timestamps are correct length or can be fixed
-            times_fixed, dlc = self._check_video_timestamps(view, pose_raw['times'], pose_raw['dlc'])
+            times_fixed, dlc = self._check_video_timestamps(view, pose_raw['times'], pose_raw[tracker])
             self.pose[f'{view}Camera'] = likelihood_threshold(dlc, likelihood_thr)
             self.pose[f'{view}Camera'].insert(0, 'times', times_fixed)
             self.data_info.loc[self.data_info['name'] == 'pose', 'is_loaded'] = True
