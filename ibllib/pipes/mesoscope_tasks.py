@@ -269,10 +269,10 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         # The number of in and outputs will be dependent on the number of input raw imaging folders and output FOVs
         I = ExpectedDataset.input  # noqa
         signature = {
-            'input_files': [('_ibl_rawImagingData.meta.json', self.device_collection, True),
+            'input_files': [I('_ibl_rawImagingData.meta.json', self.device_collection, True, unique=False),
                             I('*.tif', self.device_collection, True) |
                             I('imaging.frames.tar.bz2', self.device_collection, True, unique=False),
-                            ('exptQC.mat', self.device_collection, False)],
+                            I('exptQC.mat', self.device_collection, False)],
             'output_files': [('mpci.ROIActivityF.npy', 'alf/FOV*', True),
                              ('mpci.ROINeuropilActivityF.npy', 'alf/FOV*', True),
                              ('mpci.ROIActivityDeconvolved.npy', 'alf/FOV*', True),
@@ -1050,6 +1050,8 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
 
         MLAPDV coordinates are in um relative to bregma.  Location IDs are from the 2017 Allen
         common coordinate framework atlas.
+        
+        FIXME stackPos Y, X (not X, Y) - may affect xy loc
 
         Parameters
         ----------
