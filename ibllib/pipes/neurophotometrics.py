@@ -202,9 +202,14 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
 
         for i, timestamps_segment in enumerate(segments):
             # sync the behaviour events to the photometry timestamps
-            sync_nph_to_bpod_fcn, drift_ppm, ix_nph, ix_bpod = ibldsp.utils.sync_timestamps(
-                timestamps_segment, timestamps_bpod, return_indices=True, linear=True
-            )
+            try:
+                sync_nph_to_bpod_fcn, drift_ppm, ix_nph, ix_bpod = ibldsp.utils.sync_timestamps(
+                    timestamps_segment, timestamps_bpod, return_indices=True, linear=True
+                )
+            except ValueError:
+                # this gets raised when there are no timestamps (multiple session restart)
+                continue
+
             # then we check the alignment, should be less than the camera sampling rate
             tcheck = sync_nph_to_bpod_fcn(timestamps_segment[ix_nph]) - timestamps_bpod[ix_bpod]
             _logger.info(
