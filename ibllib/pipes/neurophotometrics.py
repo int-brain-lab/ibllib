@@ -308,7 +308,7 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
     priority = 90
     job_size = 'small'
 
-    def __init__(self, *args, load_timestamps: bool = False, **kwargs):
+    def __init__(self, *args, load_timestamps: bool = True, **kwargs):
         super().__init__(*args, **kwargs)
         self.sync_kwargs = kwargs.get('sync_metadata', self.session_params['sync'])
         self.sync_channel = kwargs.get('sync_channel', self.session_params['devices']['neurophotometrics']['sync_channel'])
