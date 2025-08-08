@@ -96,7 +96,7 @@ def extract_timestamps_from_tdms_file_fast(tdms_filepath: Path, save_path: Optio
     # chunked loop
     n_chunks = df.shape[0] // chunk_size
     for i in range(n_chunks):
-        vals_ = vals[i * chunk_size : (i + 1) * chunk_size]
+        vals_ = vals[i * chunk_size: (i + 1) * chunk_size]
         data = np.array([list(f'{v:04b}'[::-1]) for v in vals_], dtype='int8')
 
         for j, name in enumerate(digital_channel_names):
