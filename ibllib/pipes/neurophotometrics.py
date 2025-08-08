@@ -2,7 +2,8 @@ import logging
 from pathlib import Path
 import numpy as np
 import pandas as pd
-from typing import Tuple
+from typing import Tuple, Optional
+import pickle
 
 import ibldsp.utils
 import ibllib.io.session_params
@@ -16,12 +17,14 @@ from iblphotometry import io as fpio
 from iblutil.spacer import Spacer
 
 _logger = logging.getLogger('ibllib')
+_logger.setLevel(logging.DEBUG)
 
 
-def extract_timestamps_from_tdms_file(tdms_filepath: Path) -> dict:
+def extract_timestamps_from_tdms_file(tdms_filepath: Path, save_path: Optional[Path] = None) -> dict:
     # extractor for tdms files as written by the daqami software, configured
     # for neurophotometrics experiments: Frameclock is in AI7, DI1-4 are the
     # bpod sync signals
+    _logger.info(f'extracting timestamps from tdms file: {tdms_filepath}')
 
     tdms_file = TdmsFile.read(tdms_filepath)
     groups = tdms_file.groups()
@@ -35,22 +38,84 @@ def extract_timestamps_from_tdms_file(tdms_filepath: Path) -> dict:
     fs = digital_group.properties['ScanRate']  # this should be 10kHz
     df = tdms_file.as_dataframe()
     col = df.columns[-1]
-    vals = df[col].values.astype('int64')
+    vals = df[col].values.astype('int32')
     columns = ['DI0', 'DI1', 'DI2', 'DI3']
 
     # ugly but basically just a binary decoder for the binary data
     # assumes 4 channels
-    data = np.array([list(bin(v)[2:].zfill(4)[::-1]) for v in vals], dtype='int64')
+    data = np.array([list(bin(v)[2:].zfill(4)[::-1]) for v in vals], dtype='int32')
     timestamps = {}
     for i, name in enumerate(columns):
-        signal = data[:, i]
-        timestamps[name] = np.where(np.diff(signal) == 1)[0] / fs
+        timestamps[name] = np.where(np.diff(data[:, i]) == 1)[0] / fs
 
     if has_analog_group:
         # frameclock data is recorded on an analog channel
         for channel in analog_group.channels():
-            signal = (channel.data > 2.5).astype('int64')  # assumes 0-5V
+            signal = (channel.data > 2.5).astype('int32')  # assumes 0-5V
             timestamps[channel.name] = np.where(np.diff(signal) == 1)[0] / fs
+
+    if save_path is not None:
+        _logger.info(f'saving extracted timestamps to: {save_path}')
+        with open(save_path, 'wb') as fH:
+            pickle.dump(timestamps, fH)
+
+    return timestamps
+
+
+def extract_timestamps_from_tdms_file_fast(tdms_filepath: Path, save_path: Optional[Path] = None, chunk_size=10000) -> dict:
+    # extractor for tdms files as written by the daqami software, configured
+    # for neurophotometrics experiments: Frameclock is in AI7, DI1-4 are the
+    # bpod sync signals
+    _logger.info(f'extracting timestamps from tdms file: {tdms_filepath}')
+
+    # this should be 10kHz
+    tdms_file = TdmsFile.read(tdms_filepath)
+    groups = tdms_file.groups()
+
+    # this unfortunate hack is in here because there are a bunch of sessions
+    # where the frameclock is on DI0
+    if len(groups) == 1:
+        has_analog_group = False
+        (digital_group,) = groups
+    if len(groups) == 2:
+        has_analog_group = True
+        analog_group, digital_group = groups
+    fs = digital_group.properties['ScanRate']  # this should be 10kHz
+    df = tdms_file.as_dataframe()
+
+    # inferring digital col name
+    (digital_col,) = [col for col in df.columns if 'Digital' in col]
+    vals = df[digital_col].values.astype('int8')
+    digital_channel_names = ['DI0', 'DI1', 'DI2', 'DI3']
+
+    # ini
+    timestamps = {}
+    for ch in digital_channel_names:
+        timestamps[ch] = []
+
+    # chunked loop
+    n_chunks = df.shape[0] // chunk_size
+    for i in range(n_chunks):
+        vals_ = vals[i * chunk_size : (i + 1) * chunk_size]
+        data = np.array([list(f'{v:04b}'[::-1]) for v in vals_], dtype='int8')
+
+        for j, name in enumerate(digital_channel_names):
+            ix = np.where(np.diff(data[:, j]) == 1)[0] + (chunk_size * i)
+            timestamps[name].append(ix / fs)
+
+    for ch in digital_channel_names:
+        timestamps[ch] = np.concatenate(timestamps[ch])
+
+    if has_analog_group:
+        # frameclock data is recorded on an analog channel
+        for channel in analog_group.channels():
+            signal = (channel.data > 2.5).astype('int32')  # assumes 0-5V
+            timestamps[channel.name] = np.where(np.diff(signal) == 1)[0] / fs
+
+    if save_path is not None:
+        _logger.info(f'saving extracted timestamps to: {save_path}')
+        with open(save_path, 'wb') as fH:
+            pickle.dump(timestamps, fH)
 
     return timestamps
 
@@ -63,7 +128,7 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
 
     def __init__(self, session_path, one, **kwargs):
         super().__init__(session_path, one=one, **kwargs)
-        self.photometry_collection = kwargs['collection']  # raw_photometry_data
+        self.photometry_collection = kwargs.get('collection', 'raw_photometry_data')  # raw_photometry_data
         self.kwargs = kwargs
 
         # we will work with the first protocol here
@@ -113,13 +178,13 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
         timestamps_nph = self._get_neurophotometrics_timestamps()
 
         # verify presence of sync timestamps
-        for source, timestamps in zip(['bpod','neurophotometrics'], [timestamps_bpod, timestamps_nph]):
+        for source, timestamps in zip(['bpod', 'neurophotometrics'], [timestamps_bpod, timestamps_nph]):
             assert len(timestamps) > 0, f'{source} sync timestamps are empty'
 
         # split into segments if multiple spacers are found
         # attempt to sync for each segment (only one will work)
         spacer = Spacer()
-        
+
         # the fast way
         match spacer_detection_mode:
             case 'fast':
@@ -130,9 +195,9 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
         # the indices that mark the boundaries of segments
         segment_ix = np.concatenate([spacer_ix, [timestamps_nph.shape[0]]])
         segments = []
-        for i in range(segment_ix.shape[0]-1):
+        for i in range(segment_ix.shape[0] - 1):
             start_ix = segment_ix[i] + (spacer.n_pulses * 2) - 1
-            stop_ix = segment_ix[i+1]
+            stop_ix = segment_ix[i + 1]
             segments.append(timestamps_nph[start_ix:stop_ix])
 
         for i, timestamps_segment in enumerate(segments):
@@ -153,7 +218,7 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
                 continue
             # TODO the framerate here is hardcoded, infer it instead!
             assert np.all(np.abs(tcheck) < 1 / 60), 'Sync issue detected, residual above 1/60s'
-        
+
         valid_bounds = [bpod_data[0]['Trial start timestamp'] - 2, bpod_data[-1]['Trial end timestamp'] + 2]
 
         return sync_nph_to_bpod_fcn, valid_bounds
@@ -238,10 +303,11 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
     priority = 90
     job_size = 'small'
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, load_timestamps: bool = False, **kwargs):
         super().__init__(*args, **kwargs)
-        self.sync_kwargs = kwargs['sync_metadata']
-        self.sync_channel = kwargs['sync_channel']
+        self.sync_kwargs = kwargs.get('sync_metadata', self.session_params['sync'])
+        self.sync_channel = kwargs.get('sync_channel', self.session_params['devices']['neurophotometrics']['sync_channel'])
+        self.load_timestamps = load_timestamps
 
     @property
     def signature(self):
@@ -250,7 +316,7 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
                 ('_neurophotometrics_fpData.raw.pqt', self.photometry_collection, True, True),
                 ('_iblrig_taskData.raw.jsonable', self.task_collection, True, True),
                 ('_neurophotometrics_fpData.channels.csv', self.photometry_collection, True, True),
-                ('_mcc_DAQdata.raw.tdms', self.sync_kwargs['collection'], True, True),
+                ('_mcc_DAQdata.raw.tdms', self.photometry_collection, True, True),
             ],
             'output_files': [
                 ('photometry.signal.pqt', 'alf/photometry', True),
@@ -266,12 +332,19 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
         raw_df = super().load_data()
 
         # get daqami timestamps
-        tdms_filepath = self.session_path / self.sync_kwargs['collection'] / '_mcc_DAQdata.raw.tdms'
-        self.timestamps = extract_timestamps_from_tdms_file(tdms_filepath)
+        # attempt to load
+        timestamps_filepath = self.session_path / self.photometry_collection / '_mcc_DAQdata.pkl'
+        if self.load_timestamps and timestamps_filepath.exists():
+            with open(timestamps_filepath, 'rb') as fH:
+                self.timestamps = pickle.load(fH)
+        else:  # extract timestamps:
+            tdms_filepath = self.session_path / self.photometry_collection / '_mcc_DAQdata.raw.tdms'
+            self.timestamps = extract_timestamps_from_tdms_file_fast(tdms_filepath, save_path=timestamps_filepath)
+
         # downward compatibility - frameclock moved around, now is back on the AI7
-        if self.sync_kwargs['frameclock_channel'] in ['0',0]:
+        if self.sync_kwargs['frameclock_channel'] in ['0', 0]:
             sync_channel_name = f'DI{self.sync_kwargs["frameclock_channel"]}'
-        elif self.sync_kwargs['frameclock_channel'] in ['7',7]:
+        elif self.sync_kwargs['frameclock_channel'] in ['7', 7]:
             sync_channel_name = f'AI{self.sync_kwargs["frameclock_channel"]}'
         else:
             sync_channel_name = self.sync_kwargs['frameclock_channel']
@@ -279,19 +352,38 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
 
         # compare number of frame timestamps
         # and put them in the raw_df SystemTimestamp column
+        # based on the different scenarios
+
+        # they are the same, all is well
         if raw_df.shape[0] == frame_timestamps.shape[0]:
             raw_df['SystemTimestamp'] = frame_timestamps
-        elif raw_df.shape[0] == frame_timestamps.shape[0] + 1:
-            # there is one extra frame timestamp from the last incomplete frame
+            _logger.debug(f'timestamps are of equal size {raw_df.shape[0]}')
+
+        # there is one more timestamp recorded by the daq
+        # (probably bonsai drops the last incomplete frame)
+        elif raw_df.shape[0] + 1 == frame_timestamps.shape[0]:
             raw_df['SystemTimestamp'] = frame_timestamps[:-1]
+            _logger.debug('one more timestamp in daq than frames by bonsai')
+
+        # there is one more frame by bonsai that doesn't have
+        # a timestamp (strange case)
+        elif raw_df.shape[0] == frame_timestamps.shape[0] + 1:
+            raw_df = raw_df.iloc[:-1]  # dropping the last frame
+            raw_df['SystemTimestamp'] = frame_timestamps
+            _logger.debug('one frame in bonsai than timestamps recorded by daq')
+
+        # there are many more frames recorded by bonsai than
+        # timestamps recorded by daqami
         elif raw_df.shape[0] > frame_timestamps.shape[0]:
             # the daqami was stopped / closed before bonsai
             # we discard all frames that can not be mapped
             _logger.warning(f'#frames bonsai: {raw_df.shape[0]} > #frames daqami {frame_timestamps.shape[0]}, dropping excess')
             raw_df = raw_df.iloc[: frame_timestamps.shape[0]]
 
+        # there are more timestamps recorded by daqami than
+        # frames recorded by bonsai
         elif raw_df.shape[0] + 1 < frame_timestamps.shape[0]:
-            # this should not be possible
+            # this should not be possible / indicates a serious issue / bonsai crash')
             raise ValueError('more timestamps for frames recorded by the daqami than frames were recorded by bonsai.')
         return raw_df
 
