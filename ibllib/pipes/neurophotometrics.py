@@ -216,9 +216,14 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
 
         for i, timestamps_segment in enumerate(segments):
             # sync the behaviour events to the photometry timestamps
-            sync_nph_to_bpod_fcn, drift_ppm, ix_nph, ix_bpod = ibldsp.utils.sync_timestamps(
-                timestamps_segment, timestamps_bpod, return_indices=True, linear=True
-            )
+            try:
+                sync_nph_to_bpod_fcn, drift_ppm, ix_nph, ix_bpod = ibldsp.utils.sync_timestamps(
+                    timestamps_segment, timestamps_bpod, return_indices=True, linear=True
+                )
+            except ValueError:
+                # this gets raised when there are no timestamps (multiple session restart)
+                continue
+
             # then we check the alignment, should be less than the camera sampling rate
             tcheck = sync_nph_to_bpod_fcn(timestamps_segment[ix_nph]) - timestamps_bpod[ix_bpod]
             _logger.info(
@@ -318,7 +323,7 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
     priority = 90
     job_size = 'small'
 
-    def __init__(self, *args, load_timestamps: bool = False, **kwargs):
+    def __init__(self, *args, load_timestamps: bool = True, **kwargs):
         super().__init__(*args, **kwargs)
         self.sync_kwargs = kwargs.get('sync_metadata', self.session_params['sync'])
         self.sync_channel = kwargs.get('sync_channel', self.session_params['devices']['neurophotometrics']['sync_channel'])
