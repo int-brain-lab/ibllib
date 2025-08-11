@@ -17,55 +17,62 @@ from iblphotometry import io as fpio
 from iblutil.spacer import Spacer
 
 _logger = logging.getLogger('ibllib')
-_logger.setLevel(logging.DEBUG)
 
 
-def extract_timestamps_from_tdms_file(tdms_filepath: Path, save_path: Optional[Path] = None) -> dict:
-    # extractor for tdms files as written by the daqami software, configured
-    # for neurophotometrics experiments: Frameclock is in AI7, DI1-4 are the
-    # bpod sync signals
-    _logger.info(f'extracting timestamps from tdms file: {tdms_filepath}')
+def _int2digital_channels(values: np.ndarray) -> np.ndarray:
+    """decoder for the digital channel values from the tdms file into a channel
+    based array (rows are temporal samples, columns are channels).
 
-    tdms_file = TdmsFile.read(tdms_filepath)
-    groups = tdms_file.groups()
-    # this unfortunate hack is in here because there are a bunch of sessions where the frameclock is on DI0
-    if len(groups) == 1:
-        has_analog_group = False
-        (digital_group,) = groups
-    if len(groups) == 2:
-        has_analog_group = True
-        analog_group, digital_group = groups
-    fs = digital_group.properties['ScanRate']  # this should be 10kHz
-    df = tdms_file.as_dataframe()
-    col = df.columns[-1]
-    vals = df[col].values.astype('int32')
-    columns = ['DI0', 'DI1', 'DI2', 'DI3']
+    essentially does:
 
-    # ugly but basically just a binary decoder for the binary data
-    # assumes 4 channels
-    data = np.array([list(bin(v)[2:].zfill(4)[::-1]) for v in vals], dtype='int32')
-    timestamps = {}
-    for i, name in enumerate(columns):
-        timestamps[name] = np.where(np.diff(data[:, i]) == 1)[0] / fs
+    0 -> 0000
+    1 -> 1000
+    2 -> 0100
+    3 -> 1100
+    4 -> 0010
+    5 -> 1010
+    6 -> 0110
+    ...
 
-    if has_analog_group:
-        # frameclock data is recorded on an analog channel
-        for channel in analog_group.channels():
-            signal = (channel.data > 2.5).astype('int32')  # assumes 0-5V
-            timestamps[channel.name] = np.where(np.diff(signal) == 1)[0] / fs
+    the order from binary representation is reversed so
+    columns index represents channel index
 
-    if save_path is not None:
-        _logger.info(f'saving extracted timestamps to: {save_path}')
-        with open(save_path, 'wb') as fH:
-            pickle.dump(timestamps, fH)
+    Parameters
+    ----------
+    values : np.ndarray
+        the input values from the tdms digital channel
 
-    return timestamps
+    Returns
+    -------
+    np.ndarray
+        a (n x 4) array
+    """
+    return np.array([list(f'{v:04b}'[::-1]) for v in values], dtype='int8')
 
 
-def extract_timestamps_from_tdms_file_fast(tdms_filepath: Path, save_path: Optional[Path] = None, chunk_size=10000) -> dict:
-    # extractor for tdms files as written by the daqami software, configured
-    # for neurophotometrics experiments: Frameclock is in AI7, DI1-4 are the
-    # bpod sync signals
+def extract_timestamps_from_tdms_file(
+    tdms_filepath: Path,
+    save_path: Optional[Path] = None,
+    chunk_size=10000,
+) -> dict:
+    """extractor for tdms files as written by the daqami software, configured for neurophotometrics
+    experiments: Frameclock is in AI7, DI1-4 are the bpod sync signals
+
+    Parameters
+    ----------
+    tdms_filepath : Path
+        path to TDMS file
+    save_path : Optional[Path], optional
+        if a path, save extracted timestamps from tdms file to this location, by default None
+    chunk_size : int, optional
+        if not None, process tdms data in chunks for decreased memory usage, by default 10000
+
+    Returns
+    -------
+    dict
+        a dict with the tdms channel names as keys and the timestamps of the rising fronts
+    """
+    #
     _logger.info(f'extracting timestamps from tdms file: {tdms_filepath}')
 
     # this should be 10kHz
@@ -93,18 +100,25 @@ def extract_timestamps_from_tdms_file_fast(tdms_filepath: Path, save_path: Optio
     for ch in digital_channel_names:
         timestamps[ch] = []
 
-    # chunked loop
-    n_chunks = df.shape[0] // chunk_size
-    for i in range(n_chunks):
-        vals_ = vals[i * chunk_size: (i + 1) * chunk_size]
-        data = np.array([list(f'{v:04b}'[::-1]) for v in vals_], dtype='int8')
+    # chunked loop for memory efficiency
+    if chunk_size is not None:
+        n_chunks = df.shape[0] // chunk_size
+        for i in range(n_chunks):
+            vals_ = vals[i * chunk_size : (i + 1) * chunk_size]
+            # data = np.array([list(f'{v:04b}'[::-1]) for v in vals_], dtype='int8')
+            data = _int2digital_channels(vals_)
 
+            for j, name in enumerate(digital_channel_names):
+                ix = np.where(np.diff(data[:, j]) == 1)[0] + (chunk_size * i)
+                timestamps[name].append(ix / fs)
+
+        for ch in digital_channel_names:
+            timestamps[ch] = np.concatenate(timestamps[ch])
+    else:
+        data = _int2digital_channels(vals)
         for j, name in enumerate(digital_channel_names):
-            ix = np.where(np.diff(data[:, j]) == 1)[0] + (chunk_size * i)
+            ix = np.where(np.diff(data[:, j]) == 1)[0]
             timestamps[name].append(ix / fs)
-
-    for ch in digital_channel_names:
-        timestamps[ch] = np.concatenate(timestamps[ch])
 
     if has_analog_group:
         # frameclock data is recorded on an analog channel
@@ -214,8 +228,9 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
             )
             if len(ix_nph) / len(timestamps_bpod) < 0.95:
                 # wrong segment
-                print('wrong segment')
+                _logger.info(f'segment {i} - wrong')
                 continue
+            _logger.info(f'segment {i} - matched')
             # TODO the framerate here is hardcoded, infer it instead!
             assert np.all(np.abs(tcheck) < 1 / 60), 'Sync issue detected, residual above 1/60s'
 
@@ -339,7 +354,7 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
                 self.timestamps = pickle.load(fH)
         else:  # extract timestamps:
             tdms_filepath = self.session_path / self.photometry_collection / '_mcc_DAQdata.raw.tdms'
-            self.timestamps = extract_timestamps_from_tdms_file_fast(tdms_filepath, save_path=timestamps_filepath)
+            self.timestamps = extract_timestamps_from_tdms_file(tdms_filepath, save_path=timestamps_filepath)
 
         # downward compatibility - frameclock moved around, now is back on the AI7
         if self.sync_kwargs['frameclock_channel'] in ['0', 0]:
