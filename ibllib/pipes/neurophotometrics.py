@@ -168,7 +168,7 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
             timestamps_bpod.append(
                 np.array(
                     [
-                        data['States timestamps'][sync_name][0][0] + data['Trial start timestamp']
+                        data['States timestamps'][sync_name][0][0] + data['Trial start timestamp'] - data['Bpod start timestamp']
                         for data in bpod_data
                         if sync_name in data['States timestamps']
                     ]
@@ -373,38 +373,44 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
         # compare number of frame timestamps
         # and put them in the raw_df SystemTimestamp column
         # based on the different scenarios
+        frame_times_adjusted = False # for debugging reasons
 
         # they are the same, all is well
         if raw_df.shape[0] == frame_timestamps.shape[0]:
             raw_df['SystemTimestamp'] = frame_timestamps
-            _logger.debug(f'timestamps are of equal size {raw_df.shape[0]}')
+            _logger.info(f'timestamps are of equal size {raw_df.shape[0]}')
+            frame_times_adjusted = True
 
-        # there is one more timestamp recorded by the daq
-        # (probably bonsai drops the last incomplete frame)
-        elif raw_df.shape[0] + 1 == frame_timestamps.shape[0]:
-            raw_df['SystemTimestamp'] = frame_timestamps[:-1]
-            _logger.debug('one more timestamp in daq than frames by bonsai')
-
-        # there is one more frame by bonsai that doesn't have
-        # a timestamp (strange case)
-        elif raw_df.shape[0] == frame_timestamps.shape[0] + 1:
-            raw_df = raw_df.iloc[:-1]  # dropping the last frame
-            raw_df['SystemTimestamp'] = frame_timestamps
-            _logger.debug('one frame in bonsai than timestamps recorded by daq')
-
-        # there are many more frames recorded by bonsai than
-        # timestamps recorded by daqami
+        # there are more timestamps recorded by DAQ than 
+        # frames recorded by bonsai
+        elif raw_df.shape[0] < frame_timestamps.shape[0]:
+            _logger.info(f'# bonsai frames: {raw_df.shape[0]}, # daq timestamps: {frame_timestamps.shape[0]}')
+            # there is exactly one more timestamp recorded by the daq
+            # (probably bonsai drops the last incomplete frame)
+            if raw_df.shape[0] == frame_timestamps.shape[0] - 1:
+                raw_df['SystemTimestamp'] = frame_timestamps[:-1]
+            # there are two more frames recorded by the DAQ than by
+            # bonsai - this is observed. TODO understand when this happens
+            elif raw_df.shape[0] == frame_timestamps.shape[0] - 2:
+                raw_df['SystemTimestamp'] = frame_timestamps[:-2]
+            # there are more frames recorded by the DAQ than that
+            # this indicates and issue - 
+            elif raw_df.shape[0] < frame_timestamps.shape[0] - 2:
+                raise ValueError('more timestamps for frames recorded by the daqami than frames were recorded by bonsai.')
+            frame_times_adjusted = True
+        
+        # there are more frames recorded by bonsai than by the DAQ
+        # this happens when the user stops the daqami recording before stopping the bonsai
+        # or when daqami crashes
         elif raw_df.shape[0] > frame_timestamps.shape[0]:
-            # the daqami was stopped / closed before bonsai
-            # we discard all frames that can not be mapped
+            # we drop all excess frames
             _logger.warning(f'#frames bonsai: {raw_df.shape[0]} > #frames daqami {frame_timestamps.shape[0]}, dropping excess')
             raw_df = raw_df.iloc[: frame_timestamps.shape[0]]
+            frame_times_adjusted = True
 
-        # there are more timestamps recorded by daqami than
-        # frames recorded by bonsai
-        elif raw_df.shape[0] + 1 < frame_timestamps.shape[0]:
-            # this should not be possible / indicates a serious issue / bonsai crash')
-            raise ValueError('more timestamps for frames recorded by the daqami than frames were recorded by bonsai.')
+        if not frame_times_adjusted:
+            raise ValueError('timestamp issue that hasnt been caught')
+
         return raw_df
 
     def _get_neurophotometrics_timestamps(self) -> np.ndarray:
