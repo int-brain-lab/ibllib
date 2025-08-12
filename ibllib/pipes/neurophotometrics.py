@@ -206,6 +206,9 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
             case 'safe':
                 spacer_ix, spacer_times = spacer.find_spacers_from_positive_fronts(timestamps_nph, fs=1000)
 
+        # verify spacer detection
+        assert spacer_ix.shape[0] > 0, 'spacer detection failed'
+
         # the indices that mark the boundaries of segments
         segment_ix = np.concatenate([spacer_ix, [timestamps_nph.shape[0]]])
         segments = []
@@ -214,33 +217,41 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
             stop_ix = segment_ix[i + 1]
             segments.append(timestamps_nph[start_ix:stop_ix])
 
-        for i, timestamps_segment in enumerate(segments):
-            # sync the behaviour events to the photometry timestamps
+        def check_segment(timestamps_segment):
+            # check a segment for matching sync
             try:
                 sync_nph_to_bpod_fcn, drift_ppm, ix_nph, ix_bpod = ibldsp.utils.sync_timestamps(
                     timestamps_segment, timestamps_bpod, return_indices=True, linear=True
                 )
             except ValueError:
                 # this gets raised when there are no timestamps (multiple session restart)
-                continue
+                return False
 
             # then we check the alignment, should be less than the camera sampling rate
             tcheck = sync_nph_to_bpod_fcn(timestamps_segment[ix_nph]) - timestamps_bpod[ix_bpod]
-            _logger.info(
-                f'sync: n trials {len(bpod_data)}'
-                f'n bpod sync {len(timestamps_bpod)}'
-                f'n photometry {len(timestamps_segment)}, n match {len(ix_nph)}'
-            )
+            # _logger.info(
+            #     f'sync: n trials {len(bpod_data)}'
+            #     f'n bpod sync {len(timestamps_bpod)}'
+            #     f'n photometry {len(timestamps_segment)}, n match {len(ix_nph)}'
+            # )
             if len(ix_nph) / len(timestamps_bpod) < 0.95:
                 # wrong segment
-                _logger.info(f'segment {i} - wrong')
-                continue
-            _logger.info(f'segment {i} - matched')
+                # _logger.info(f'segment {i} - wrong')
+                return False
+            # _logger.info(f'segment {i} - matched')
             # TODO the framerate here is hardcoded, infer it instead!
             assert np.all(np.abs(tcheck) < 1 / 60), 'Sync issue detected, residual above 1/60s'
+            return True
+        
+        checked_segments = [check_segment(segment) for segment in segments]
+        assert np.sum(checked_segments) == 1, 'multiple or none segments matched'
+        timestamps_segment = segments[np.where(checked_segments)[0][0]]
+
+        sync_nph_to_bpod_fcn, drift_ppm, ix_nph, ix_bpod = ibldsp.utils.sync_timestamps(
+                    timestamps_segment, timestamps_bpod, return_indices=True, linear=True
+                )
 
         valid_bounds = [bpod_data[0]['Trial start timestamp'] - 2, bpod_data[-1]['Trial end timestamp'] + 2]
-
         return sync_nph_to_bpod_fcn, valid_bounds
 
     def load_data(self) -> pd.DataFrame:
