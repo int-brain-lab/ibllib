@@ -104,7 +104,7 @@ def extract_timestamps_from_tdms_file(
     if chunk_size is not None:
         n_chunks = df.shape[0] // chunk_size
         for i in range(n_chunks):
-            vals_ = vals[i * chunk_size : (i + 1) * chunk_size]
+            vals_ = vals[i * chunk_size: (i + 1) * chunk_size]
             # data = np.array([list(f'{v:04b}'[::-1]) for v in vals_], dtype='int8')
             data = _int2digital_channels(vals_)
 
@@ -242,14 +242,14 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
             # TODO the framerate here is hardcoded, infer it instead!
             assert np.all(np.abs(tcheck) < 1 / 60), 'Sync issue detected, residual above 1/60s'
             return True
-        
+
         checked_segments = [check_segment(segment) for segment in segments]
         assert np.sum(checked_segments) == 1, 'multiple or none segments matched'
         timestamps_segment = segments[np.where(checked_segments)[0][0]]
 
         sync_nph_to_bpod_fcn, drift_ppm, ix_nph, ix_bpod = ibldsp.utils.sync_timestamps(
-                    timestamps_segment, timestamps_bpod, return_indices=True, linear=True
-                )
+            timestamps_segment, timestamps_bpod, return_indices=True, linear=True
+        )
 
         valid_bounds = [bpod_data[0]['Trial start timestamp'] - 2, bpod_data[-1]['Trial end timestamp'] + 2]
         return sync_nph_to_bpod_fcn, valid_bounds
@@ -384,7 +384,7 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
         # compare number of frame timestamps
         # and put them in the raw_df SystemTimestamp column
         # based on the different scenarios
-        frame_times_adjusted = False # for debugging reasons
+        frame_times_adjusted = False  # for debugging reasons
 
         # they are the same, all is well
         if raw_df.shape[0] == frame_timestamps.shape[0]:
@@ -392,7 +392,7 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
             _logger.info(f'timestamps are of equal size {raw_df.shape[0]}')
             frame_times_adjusted = True
 
-        # there are more timestamps recorded by DAQ than 
+        # there are more timestamps recorded by DAQ than
         # frames recorded by bonsai
         elif raw_df.shape[0] < frame_timestamps.shape[0]:
             _logger.info(f'# bonsai frames: {raw_df.shape[0]}, # daq timestamps: {frame_timestamps.shape[0]}')
@@ -405,11 +405,11 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
             elif raw_df.shape[0] == frame_timestamps.shape[0] - 2:
                 raw_df['SystemTimestamp'] = frame_timestamps[:-2]
             # there are more frames recorded by the DAQ than that
-            # this indicates and issue - 
+            # this indicates and issue -
             elif raw_df.shape[0] < frame_timestamps.shape[0] - 2:
                 raise ValueError('more timestamps for frames recorded by the daqami than frames were recorded by bonsai.')
             frame_times_adjusted = True
-        
+
         # there are more frames recorded by bonsai than by the DAQ
         # this happens when the user stops the daqami recording before stopping the bonsai
         # or when daqami crashes
