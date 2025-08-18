@@ -169,7 +169,7 @@ class TestAlignmentQcExisting(unittest.TestCase):
 
     def _get_prev_traj_id(self):
         traj = one.alyx.get('/trajectories?'
-                            f'&probe_id={self.probe_id}'
+                            f'&probe_insertion={self.probe_id}'
                             '&provenance=Ephys aligned histology track', clobber=True)
         if traj:
             self.prev_traj_id = traj[0]['id']
@@ -382,11 +382,12 @@ def _verify(tc, alignment_resolved=None, alignment_count=None,
         tc.assertEqual(insertion['json']['extended_qc']['alignment_qc'] < QC_THRESH,
                        alignment_qc < QC_THRESH)
         tc.assertTrue(np.isclose(insertion['json']['extended_qc']['alignment_qc'], alignment_qc))
-    if tc.prev_traj_id:
-        traj = one.alyx.get('/trajectories?'
-                            f'&probe_id={tc.probe_id}'
-                            '&provenance=Ephys aligned histology track', clobber=True)
-        tc.assertNotEqual(tc.prev_traj_id == traj[0]['id'], trajectory_created)
+    if trajectory_created:
+        if tc.prev_traj_id:
+            traj = one.alyx.get('/trajectories?'
+                                f'&probe_insertion={tc.probe_id}'
+                                '&provenance=Ephys aligned histology track', clobber=True)
+            tc.assertNotEqual(tc.prev_traj_id, traj[0]['id'])
     if alignment_date:
         tc.assertEqual(insertion['json']['extended_qc']['alignment_resolved_date'], alignment_date)
 

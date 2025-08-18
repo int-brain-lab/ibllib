@@ -185,7 +185,93 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
         # for daq based syncing, the timestamps are extracted from the tdms file
         ...
 
-    def _get_sync_function(self, spacer_detection_mode='fast') -> Tuple[callable, list]:
+    # def _get_sync_function(self, spacer_detection_mode='fallback') -> Tuple[callable, list]:
+    #     # returns the synchronization function
+    #     # get the timestamps
+    #     timestamps_bpod, bpod_data = self._get_bpod_timestamps()
+    #     timestamps_nph = self._get_neurophotometrics_timestamps()
+
+    #     # verify presence of sync timestamps
+    #     for source, timestamps in zip(['bpod', 'neurophotometrics'], [timestamps_bpod, timestamps_nph]):
+    #         assert len(timestamps) > 0, f'{source} sync timestamps are empty'
+
+    #     # split into segments if multiple spacers are found
+    #     # attempt to sync for each segment (only one will work)
+    #     spacer = Spacer()
+
+    #     def _get_segments(timestamps_nph, spacer_detection_mode):
+    #         segments = []
+
+    #         match spacer_detection_mode:
+    #             case 'fast':
+    #                 spacer_ix = spacer.find_spacers_from_timestamps(timestamps_nph, atol=1e-5)
+                        
+    #             case 'safe':
+    #                 spacer_ix, spacer_times = spacer.find_spacers_from_positive_fronts(timestamps_nph, fs=1000)
+    #                 spacer_ix = np.searchsorted(timestamps_nph, spacer_times)
+
+    #             case 'fallback': # first try fast, if fails, try safe
+    #                 segments = _get_segments(timestamps_nph, 'fast')
+    #                 if len(segments) > 0:
+    #                     return segments
+    #                 else:
+    #                     segments = _get_segments(timestamps_nph, 'safe')
+    #                     if len(segments) > 0:
+    #                         return segments
+    #                     else:
+    #                         raise ValueError('spacer detection failed')
+
+    #         # the indices that mark the boundaries of segments
+    #         segment_ix = np.concatenate([spacer_ix, [timestamps_nph.shape[0]]])
+    #         for i in range(segment_ix.shape[0] - 1):
+    #             start_ix = segment_ix[i] + (spacer.n_pulses * 2) - 1
+    #             stop_ix = segment_ix[i + 1]
+    #             segments.append(timestamps_nph[start_ix:stop_ix])
+
+    #         return segments
+
+    #     # verify spacer detection
+    #     segments = _get_segments(timestamps_nph, spacer_detection_mode=spacer_detection_mode)
+    #     assert len(segments) > 0, 'spacer detection failed'
+
+    #     def check_segment(timestamps_segment, matching_threshold = .95):
+    #         # check a segment for matching sync
+    #         try:
+    #             sync_nph_to_bpod_fcn, drift_ppm, ix_nph, ix_bpod = ibldsp.utils.sync_timestamps(
+    #                 timestamps_segment, timestamps_bpod, return_indices=True, linear=True
+    #             )
+    #         except ValueError:
+    #             # this gets raised when there are no timestamps (multiple session restart)
+    #             return False
+
+    #         # then we check the alignment, should be less than the camera sampling rate
+    #         tcheck = sync_nph_to_bpod_fcn(timestamps_segment[ix_nph]) - timestamps_bpod[ix_bpod]
+    #         # _logger.info(
+    #         #     f'sync: n trials {len(bpod_data)}'
+    #         #     f'n bpod sync {len(timestamps_bpod)}'
+    #         #     f'n photometry {len(timestamps_segment)}, n match {len(ix_nph)}'
+    #         # )
+    #         if len(ix_nph) / len(timestamps_bpod) < matching_threshold:
+    #             # wrong segment
+    #             return False
+    #         # _logger.info(f'segment {i} - matched')
+    #         # TODO the framerate here is hardcoded, infer it instead!
+    #         assert np.all(np.abs(tcheck) < 1 / 60), 'Sync issue detected, residual above 1/60s'
+    #         return True
+
+    #     checked_segments = [check_segment(segment) for segment in segments]
+
+    #     assert np.sum(checked_segments) == 1, f'error in segment matching: matching segments: {np.sum(checked_segments)}'
+    #     timestamps_segment = segments[np.where(checked_segments)[0][0]]
+
+    #     sync_nph_to_bpod_fcn, drift_ppm, ix_nph, ix_bpod = ibldsp.utils.sync_timestamps(
+    #         timestamps_segment, timestamps_bpod, return_indices=True, linear=True
+    #     )
+
+    #     valid_bounds = [bpod_data[0]['Trial start timestamp'] - 2, bpod_data[-1]['Trial end timestamp'] + 2]
+    #     return sync_nph_to_bpod_fcn, valid_bounds
+
+    def _get_sync_function(self) -> Tuple[callable, list]:
         # returns the synchronization function
         # get the timestamps
         timestamps_bpod, bpod_data = self._get_bpod_timestamps()
@@ -195,61 +281,10 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
         for source, timestamps in zip(['bpod', 'neurophotometrics'], [timestamps_bpod, timestamps_nph]):
             assert len(timestamps) > 0, f'{source} sync timestamps are empty'
 
-        # split into segments if multiple spacers are found
-        # attempt to sync for each segment (only one will work)
-        spacer = Spacer()
-
-        # the fast way
-        match spacer_detection_mode:
-            case 'fast':
-                spacer_ix = spacer.find_spacers_from_timestamps(timestamps_nph, atol=1e-5)
-            case 'safe':
-                spacer_ix, spacer_times = spacer.find_spacers_from_positive_fronts(timestamps_nph, fs=1000)
-
-        # verify spacer detection
-        assert spacer_ix.shape[0] > 0, 'spacer detection failed'
-
-        # the indices that mark the boundaries of segments
-        segment_ix = np.concatenate([spacer_ix, [timestamps_nph.shape[0]]])
-        segments = []
-        for i in range(segment_ix.shape[0] - 1):
-            start_ix = segment_ix[i] + (spacer.n_pulses * 2) - 1
-            stop_ix = segment_ix[i + 1]
-            segments.append(timestamps_nph[start_ix:stop_ix])
-
-        def check_segment(timestamps_segment):
-            # check a segment for matching sync
-            try:
-                sync_nph_to_bpod_fcn, drift_ppm, ix_nph, ix_bpod = ibldsp.utils.sync_timestamps(
-                    timestamps_segment, timestamps_bpod, return_indices=True, linear=True
-                )
-            except ValueError:
-                # this gets raised when there are no timestamps (multiple session restart)
-                return False
-
-            # then we check the alignment, should be less than the camera sampling rate
-            tcheck = sync_nph_to_bpod_fcn(timestamps_segment[ix_nph]) - timestamps_bpod[ix_bpod]
-            # _logger.info(
-            #     f'sync: n trials {len(bpod_data)}'
-            #     f'n bpod sync {len(timestamps_bpod)}'
-            #     f'n photometry {len(timestamps_segment)}, n match {len(ix_nph)}'
-            # )
-            if len(ix_nph) / len(timestamps_bpod) < 0.95:
-                # wrong segment
-                # _logger.info(f'segment {i} - wrong')
-                return False
-            # _logger.info(f'segment {i} - matched')
-            # TODO the framerate here is hardcoded, infer it instead!
-            assert np.all(np.abs(tcheck) < 1 / 60), 'Sync issue detected, residual above 1/60s'
-            return True
-
-        checked_segments = [check_segment(segment) for segment in segments]
-        assert np.sum(checked_segments) == 1, 'multiple or none segments matched'
-        timestamps_segment = segments[np.where(checked_segments)[0][0]]
-
         sync_nph_to_bpod_fcn, drift_ppm, ix_nph, ix_bpod = ibldsp.utils.sync_timestamps(
-            timestamps_segment, timestamps_bpod, return_indices=True, linear=True
+            timestamps_nph, timestamps_bpod, return_indices=True, linear=True
         )
+        _logger.info(f"synced with drift: {drift_ppm}")
 
         valid_bounds = [bpod_data[0]['Trial start timestamp'] - 2, bpod_data[-1]['Trial end timestamp'] + 2]
         return sync_nph_to_bpod_fcn, valid_bounds
@@ -270,8 +305,9 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
         raw_df = self.load_data()
 
         # 2) get the synchronization function
-        spacer_detection_mode = kwargs.get('spacer_detection_mode', 'fast')
-        sync_nph_to_bpod_fcn, valid_bounds = self._get_sync_function(spacer_detection_mode=spacer_detection_mode)
+        # spacer_detection_mode = kwargs.get('spacer_detection_mode', 'fallback')
+        # sync_nph_to_bpod_fcn, valid_bounds = self._get_sync_function(spacer_detection_mode=spacer_detection_mode)
+        sync_nph_to_bpod_fcn, valid_bounds = self._get_sync_function()
 
         # 3) convert to ibl_df
         ibl_df = fpio.from_raw_neurophotometrics_df_to_ibl_df(raw_df, rois=self.kwargs['fibers'], drop_first=False)
@@ -416,7 +452,9 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
         elif raw_df.shape[0] > frame_timestamps.shape[0]:
             # we drop all excess frames
             _logger.warning(f'#frames bonsai: {raw_df.shape[0]} > #frames daqami {frame_timestamps.shape[0]}, dropping excess')
-            raw_df = raw_df.iloc[: frame_timestamps.shape[0]]
+            n_frames_daqami = frame_timestamps.shape[0]
+            raw_df = raw_df.iloc[:n_frames_daqami]
+            raw_df.loc[:, 'SystemTimestamp'] = frame_timestamps
             frame_times_adjusted = True
 
         if not frame_times_adjusted:
