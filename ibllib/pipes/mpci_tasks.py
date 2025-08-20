@@ -258,7 +258,10 @@ class PMD(base_tasks.MesoscopeTask):
 
         display("Making QC metrics")
         #Generate some quality control metrics
-        outputs = self._run_qc(my_data, pmd_array, device=cfg.device, frame_batch_size=cfg.frame_batch_size)
+        outputs = self._qc_results(my_data,
+                                   pmd_array,
+                                   device=cfg.device,
+                                   frame_batch_size=cfg.frame_batch_size)
 
         ##TODO: Return file paths
 
