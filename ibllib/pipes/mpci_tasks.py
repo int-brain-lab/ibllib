@@ -71,6 +71,7 @@ class MotionBinDataset:
 
 class PMD(base_tasks.MesoscopeTask):
 
+    gpu=1
     def __init__(self,
                  session_path: Union[str, bytes, os.PathLike],
                  **kwargs):
@@ -92,6 +93,7 @@ class PMD(base_tasks.MesoscopeTask):
             'frame_batch_size': 1024,
             'num_pixels_ignore': 5, # How many pixels on the borders we ignore when training
             ## For training the network:
+            'train_network': True,
             'epochs': 5,
             'learning_rate': 1e-4,
         }
@@ -217,13 +219,6 @@ class PMD(base_tasks.MesoscopeTask):
                                                                                             device=device,
                                                                                             batch_size=frame_batch_size)
 
-        raw_spatial_corr = raw_spatial_corr.cpu().numpy()
-        pmd_spatial_corr = pmd_spatial_corr.cpu().numpy()
-        residual_spatial_corr = residual_spatial_corr.cpu().numpy()
-
-        raw_lag1 = raw_lag1.cpu().numpy()
-        pmd_lag1 = pmd_lag1.cpu().numpy()
-        resid_lag1 = resid_lag1.cpu().numpy()
         return raw_spatial_corr, pmd_spatial_corr, residual_spatial_corr, raw_lag1, pmd_lag1, resid_lag1
 
     def _run(self, **kwargs):
@@ -244,13 +239,21 @@ class PMD(base_tasks.MesoscopeTask):
         display("Merging Configs")
         cfg = OmegaConf.merge(self.cfg, kwargs)
 
+        display("Updating GPU status")
+        self.gpu = 1 if cfg.device.startswith("cuda") else 0
+
         display("Loading bin file")
         # Load the .bin file
         my_data= self._load_bin_file(self.session_path)
 
-        display("Training neural net")
-        #Train the neural network temporal denoiser
-        denoiser = self._train_denoiser(my_data, cfg)
+
+        if cfg.train_network:
+            display("Training neural net")
+            #Train the neural network temporal denoiser
+            denoiser = self._train_denoiser(my_data, cfg)
+        else:
+            display("No neural net used for this data")
+            denoiser = None
 
         display("Compressing data")
         #Use the neural network temporal denoiser to compress the data
@@ -263,7 +266,9 @@ class PMD(base_tasks.MesoscopeTask):
                                    device=cfg.device,
                                    frame_batch_size=cfg.frame_batch_size)
 
-        ##TODO: Return file paths
+        ## TODO: Register snapshots for each of these images
+
+        ## TODO: Return file paths
 
 import unittest
 
@@ -275,7 +280,8 @@ class TestPMD(unittest.TestCase):
         self.pmd_task = PMD(self.session_path)
 
     def test_pmd_processing(self):
-        self.pmd_task._run(device='cuda')
+        self.pmd_task._run(device='cuda',
+                           train_network=False)
 
 
 if __name__ == '__main__':
