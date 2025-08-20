@@ -198,7 +198,7 @@ class PMD(base_tasks.MesoscopeTask):
                                                                temporal_denoiser=None,  # Turn off denoiser
                                                                frame_batch_size=cfg.frame_batch_size)
 
-        display(f"processing complete. denoiser rank is {pmd_denoiser.pmd_rank}")
+        display(f"processing complete. denoiser rank is {pmd_output.pmd_rank}")
         return pmd_output
 
     def _qc_results(self,
@@ -219,9 +219,9 @@ class PMD(base_tasks.MesoscopeTask):
 
         raw_spatial_corr = raw_spatial_corr.cpu().numpy()
         pmd_spatial_corr = pmd_spatial_corr.cpu().numpy()
-        residual_spatial_corr = residual_spatail_corr.cpu().numpy()
+        residual_spatial_corr = residual_spatial_corr.cpu().numpy()
 
-        raw_lag1 = raw_lag.cpu().numpy()
+        raw_lag1 = raw_lag1.cpu().numpy()
         pmd_lag1 = pmd_lag1.cpu().numpy()
         resid_lag1 = resid_lag1.cpu().numpy()
         return raw_spatial_corr, pmd_spatial_corr, residual_spatial_corr, raw_lag1, pmd_lag1, resid_lag1
