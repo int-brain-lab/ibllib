@@ -10,6 +10,7 @@ from omegaconf import DictConfig, OmegaConf
 import hydra
 from masknmf import display
 import torch
+import re
 
 import logging
 _logger = logging.getLogger(__name__)
@@ -57,17 +58,16 @@ class MotionBinDataset:
 
     def _compute_shape(self):
         """
-        Loads the suite2p ops file to retrieve the dimensions of the data.bin file.
+        Loads the suite2p ops file to retrieve the dimensions of the data.bin file. This is now lazily loaded from a
+        zip file
 
         Returns
         -------
         (int, int, int)
             number of frames, number of y pixels, number of x pixels.
         """
-        ops_file = self.ops_path
-        if ops_file.exists():
-            ops = np.load(ops_file, allow_pickle=True).item()
-        return ops['nframes'], ops['Ly'], ops['Lx']
+        s2p_ops = np.load(self.ops_path, allow_pickle = True)['ops'].item()
+        return s2p_ops['nframes'], s2p_ops['Ly'], s2p_ops['Lx']
 
     def __getitem__(self, item: Union[int, list, np.ndarray, Tuple[Union[int, np.ndarray, slice, range]]]):
         return self.data[item].copy()
@@ -117,9 +117,10 @@ class PMD(base_tasks.MesoscopeTask):
         return signature
 
     def _load_bin_file(self,
-                       session_path: Union[str, bytes, os.PathLike]) -> np.ndarray:
-        bin_path = os.path.join(session_path, "data.bin")
-        ops_path = os.path.join(session_path, "ops.npy")
+                       s2p_folderpath: Union[str, bytes, os.PathLike],
+                       alf_folderpath: Union[str, bytes, os.PathLike]) -> np.ndarray:
+        bin_path = os.path.join(s2p_folderpath, "imaging.frames_motionRegistered.bin")
+        ops_path = os.path.join(alf_folderpath, '_suite2p_ROIData.raw.zip')
         my_data = MotionBinDataset(bin_path, ops_path)[:]
         return my_data
 
@@ -224,12 +225,48 @@ class PMD(base_tasks.MesoscopeTask):
 
         return raw_spatial_corr, pmd_spatial_corr, residual_spatial_corr, raw_lag1, pmd_lag1, resid_lag1
 
-    def _run(self, **kwargs):
+    def save_image(self,
+                   array: np.ndarray,
+                   filename: str,
+                   cmap: str = "gray"):
         """
-        Run the PMD processing task.
+        Save a 2D numpy array as a PNG image.
 
         Parameters
         ----------
+        array : np.ndarray
+            2D array representing the image.
+        filename : str
+            Path where the .png will be saved.
+        cmap : str
+            Colormap for visualization (default: "gray").
+        """
+        if array.ndim != 2:
+            raise ValueError("Input array must be 2D")
+
+        # Normalize array to [0, 1] for display
+        arr_min, arr_max = np.min(array), np.max(array)
+        if arr_max > arr_min:
+            array_norm = (array - arr_min) / (arr_max - arr_min)
+        else:
+            array_norm = np.zeros_like(array)
+
+        plt.imsave(filename, array_norm, cmap=cmap)
+        print(f"Saved image to {filename}")
+
+    def _run_singlevideo(self,
+                         s2p_folderpath: pathlib.Path,
+                         alf_folderpath: pathlib.Path,
+                         **kwargs):
+        """
+        Run the PMD processing task on a single plane of data (1 video)
+
+        Parameters
+        ----------
+        s2p_folderpath: A path of the form: '/path/to/subject/YYYY-MM-DD/XXX/suite2p/plane{i}'. This folder contains
+            the motion corrected .bin files
+        alf_folderpath: A path of the form '/path/to/subject/YYYY-MM-DD/XXX/alf/FOV{i}'. This folder contains the ops file
+            in a .zip
         kwargs
             Optional parameters that may be used in the future.
         
@@ -247,8 +284,7 @@ class PMD(base_tasks.MesoscopeTask):
 
         logging.info("Loading bin file")
         # Load the .bin file
-        my_data= self._load_bin_file(self.session_path)
-
+        my_data= self._load_bin_file(s2p_folderpath, alf_folderpath)
 
         if cfg.train_network:
             logging.info("Training neural net")
@@ -273,13 +309,44 @@ class PMD(base_tasks.MesoscopeTask):
 
         ## TODO: Return file paths
 
+    def _generate_per_dataset_input_paths(self):
+        """
+        Returns a list of tuples, describing relevant paths for each plane being processed. Each tuple has 2 paths:
+        (1) A path to the suite2p plane folder that is being processed
+        (2) A path to the alf FOV describing this plane
+        """
+        # Identify the plane paths
+        s2p_path = self.session_path.joinpath('suite2p')
+        pattern = re.compile(r'(?<=^plane)\d+$')
+        s2p_plane_paths = sorted(s2p_path.glob('plane?*'), key=lambda x: int(pattern.search(x.name).group()))
+
+        # Identify the alf output paths corresponding to each plane
+        alf_fov_paths = [f"FOV_{int(plane.stem.replace('plane', '')):02d}" for plane in s2p_plane_paths]
+        alf_fov_paths = [self.session_path.joinpath('alf/').joinpath(i) for i in alf_fov_paths]
+
+        return zip(s2p_plane_paths, alf_fov_paths)
+
+
+    def _run(self, **kwargs):
+        file_data = self._generate_per_dataset_input_paths()
+        for i, elt in enumerate(list(file_data)):
+            print(f"Processing fov {i}")
+            s2p_folderpath, alf_folderpath = elt
+            self._run_singlevideo(s2p_folderpath, alf_folderpath, **kwargs)
+            print("FINISHED ")
+
+
+
+
+
+
 import unittest
 
 class TestPMD(unittest.TestCase):
 
     def setUp(self):
         # self.session_path = '/path/to/subject/YYYY-MM-DD/XXX'
-        self.session_path = '/media/app2139/SanDisk_1/IBL_Alyx/cortexlab/Subjects/SP067/2025-06-03/001/suite2p/plane1/'
+        self.session_path = '/media/app2139/SanDisk_1/IBL_Alyx/cortexlab/Subjects/SP067/2025-06-03/001/'
         self.pmd_task = PMD(self.session_path)
 
     def test_pmd_processing(self):
