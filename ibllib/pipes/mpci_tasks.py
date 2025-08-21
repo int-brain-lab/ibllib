@@ -11,6 +11,7 @@ import hydra
 from masknmf import display
 import torch
 import re
+import matplotlib.pyplot as plt
 
 import logging
 _logger = logging.getLogger(__name__)
@@ -207,6 +208,7 @@ class PMD(base_tasks.MesoscopeTask):
         logging.info(f"processing complete. denoiser rank is {pmd_output.pmd_rank}")
         return pmd_output
 
+
     def _qc_results(self,
                     my_data: np.ndarray,
                     pmd_array: masknmf.PMDArray,
@@ -223,36 +225,53 @@ class PMD(base_tasks.MesoscopeTask):
                                                                                             device=device,
                                                                                             batch_size=frame_batch_size)
 
-        return raw_spatial_corr, pmd_spatial_corr, residual_spatial_corr, raw_lag1, pmd_lag1, resid_lag1
+        lag1_image_path = Path("lag1_img.png").resolve()
+        spatial_image_path = Path("spatial_img.png").resolve()
 
-    def save_image(self,
-                   array: np.ndarray,
-                   filename: str,
-                   cmap: str = "gray"):
+        self.plot_summary_images_side_by_side([raw_lag1, pmd_lag1, resid_lag1],
+                                              ['Raw Lag1 Autocov / Raw Std',
+                                                    'PMD Lag1 Autocov / Raw Std',
+                                                    'Resid Lag1 Autocov / Raw Std'],
+                                                    filename = lag1_image_path)
+
+        self.plot_summary_images_side_by_side([raw_spatial_corr, pmd_spatial_corr, residual_spatial_corr],
+                                              ['Raw Spatial Corr / Raw Std',
+                                               'PMD Spatial Corr / Raw Std',
+                                               'Resid Spatial Corr / Raw Std'],
+                                              filename = spatial_image_path)
+
+        return lag1_image_path, spatial_image_path
+
+    def plot_summary_images_side_by_side(self,
+                                         images,
+                                         titles,
+                                         filename='covariances.png',
+                                         cmap='viridis'):
         """
-        Save a 2D numpy array as a PNG image.
+        Plots 3 covariance images side by side and saves the figure as a PNG.
 
         Parameters
         ----------
-        array : np.ndarray
-            2D array representing the image.
+        images: list of 3 images, each np.ndarray
+            2D arrays representing covariance images.
+        titles: list of 3 strings, one title for each image
         filename : str
-            Path where the .png will be saved.
+            The absolute output path where we save the file.
         cmap : str
-            Colormap for visualization (default: "gray").
+            Colormap used to display the images (default is 'viridis').
         """
-        if array.ndim != 2:
-            raise ValueError("Input array must be 2D")
+        cov1, cov2, cov3 = images
+        fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 
-        # Normalize array to [0, 1] for display
-        arr_min, arr_max = np.min(array), np.max(array)
-        if arr_max > arr_min:
-            array_norm = (array - arr_min) / (arr_max - arr_min)
-        else:
-            array_norm = np.zeros_like(array)
+        for ax, cov, title in zip(axes, [cov1, cov2, cov3], titles):
+            im = ax.imshow(cov, cmap=cmap)
+            ax.set_title(title)
+            ax.axis('off')
+            fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
 
-        plt.imsave(filename, array_norm, cmap=cmap)
-        print(f"Saved image to {filename}")
+        plt.tight_layout()
+        plt.savefig(filename, dpi=300)
+        plt.close(fig)
 
     def _run_singlevideo(self,
                          s2p_folderpath: pathlib.Path,
@@ -300,14 +319,11 @@ class PMD(base_tasks.MesoscopeTask):
 
         logging.info("Making QC metrics")
         #Generate some quality control metrics
-        outputs = self._qc_results(my_data,
+        lag1_png, spatial_corr_png = self._qc_results(my_data,
                                    pmd_array,
                                    device=cfg.device,
                                    frame_batch_size=cfg.frame_batch_size)
-
-        ## TODO: Register snapshots for each of these images
-
-        ## TODO: Return file paths
+        print(f"Saved files at {lag1_png} and {spatial_corr_png}")
 
     def _generate_per_dataset_input_paths(self):
         """
