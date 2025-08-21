@@ -8,7 +8,7 @@ from one.alf.path import session_path_parts
 from one.api import ONE
 
 from ibllib.oneibl.registration import get_lab
-from ibllib.oneibl.data_handlers import ServerDataHandler, ExpectedDataset
+from ibllib.oneibl.data_handlers import ServerDataHandler, SDSCDataHandler, ExpectedDataset
 from ibllib.pipes import base_tasks
 from ibllib.io.raw_data_loaders import load_settings, load_bpod_fronts
 from ibllib.qc.task_extractors import TaskQCExtractor
@@ -99,7 +99,8 @@ class HabituationTrialsBpod(base_tasks.BehaviourTask):
         trials_data = self._assert_trials_data(trials_data)  # validate trials data
 
         # Compile task data for QC
-        qc = HabituationQC(self.session_path, one=self.one)
+        ns = 'task' if self.protocol_number is None else f'task_{self.protocol_number:02}'
+        qc = HabituationQC(self.session_path, namespace=ns, one=self.one)
         qc.extractor = TaskQCExtractor(self.session_path)
 
         # Update extractor fields
@@ -108,8 +109,7 @@ class HabituationTrialsBpod(base_tasks.BehaviourTask):
         qc.extractor.audio_ttls = self.extractor.audio  # used in iblapps QC viewer
         qc.extractor.settings = self.extractor.settings
 
-        namespace = 'task' if self.protocol_number is None else f'task_{self.protocol_number:02}'
-        qc.run(update=update, namespace=namespace)
+        qc.run(update=update)
         return qc
 
 
@@ -346,12 +346,14 @@ class ChoiceWorldTrialsBpod(base_tasks.BehaviourTask):
         qc = self.run_qc(trials, update=update, **kwargs)
         if update and not self.one.offline:
             on_server = self.location == 'server' and isinstance(self.data_handler, ServerDataHandler)
-            if not on_server:
-                _logger.warning('Updating dataset QC only supported on local servers')
+            on_sdsc = self.location == 'sdsc' and isinstance(self.data_handler, SDSCDataHandler)
+            if not (on_server or on_sdsc):
+                _logger.warning('Updating dataset QC only supported on local servers and SDSC')
             else:
-                labs = get_lab(self.session_path, self.one.alyx)
-                # registered_dsets = self.register_datasets(labs=labs)
-                datasets = self.data_handler.uploadData(output_files, self.version, labs=labs)
+                # On SDSC the lab is in the session path; on local servers we use Alyx to get the lab
+                lab = get_lab(self.session_path, self.one.alyx) if on_server else self.session_path.lab
+                # registered_dsets = self.register_datasets(labs=lab)
+                datasets = self.data_handler.uploadData(output_files, self.version, labs=lab)
                 update_dataset_qc(qc, datasets, self.one)
 
         return output_files
@@ -389,7 +391,8 @@ class ChoiceWorldTrialsBpod(base_tasks.BehaviourTask):
         if not QC:
             QC = HabituationQC if type(self.extractor).__name__ == 'HabituationTrials' else TaskQC
             _logger.debug('Running QC with %s.%s', QC.__module__, QC.__name__)
-        qc = QC(self.session_path, one=self.one, log=_logger)
+        namespace = 'task' if self.protocol_number is None else f'task_{self.protocol_number:02}'
+        qc = QC(self.session_path, namespace=namespace, one=self.one, log=_logger)
         if QC is not HabituationQC:
             qc_extractor.wheel_encoding = 'X1'
         qc_extractor.settings = self.extractor.settings
@@ -398,8 +401,7 @@ class ChoiceWorldTrialsBpod(base_tasks.BehaviourTask):
         qc.extractor = qc_extractor
 
         # Aggregate and update Alyx QC fields
-        namespace = 'task' if self.protocol_number is None else f'task_{self.protocol_number:02}'
-        qc.run(update=update, namespace=namespace)
+        qc.run(update=update)
         return qc
 
 
@@ -497,7 +499,8 @@ class ChoiceWorldTrialsNidq(ChoiceWorldTrialsBpod):
         if not QC:
             QC = HabituationQC if type(self.extractor).__name__ == 'HabituationTrials' else TaskQC
         _logger.debug('Running QC with %s.%s', QC.__module__, QC.__name__)
-        qc = QC(self.session_path, one=self.one, log=_logger)
+        namespace = 'task' if self.protocol_number is None else f'task_{self.protocol_number:02}'
+        qc = QC(self.session_path, namespace=namespace, one=self.one, log=_logger)
         if QC is not HabituationQC:
             # Add Bpod wheel data
             wheel_ts_bpod = self.extractor.bpod2fpga(self.extractor.bpod_trials['wheel_timestamps'])
@@ -511,8 +514,7 @@ class ChoiceWorldTrialsNidq(ChoiceWorldTrialsBpod):
         qc.extractor = qc_extractor
 
         # Aggregate and update Alyx QC fields
-        namespace = 'task' if self.protocol_number is None else f'task_{self.protocol_number:02}'
-        qc.run(update=update, namespace=namespace)
+        qc.run(update=update)
 
         if plot_qc:
             _logger.info('Creating Trials QC plots')

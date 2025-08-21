@@ -49,7 +49,7 @@ Running ephys QC, from local server PC (after ephys + bpod data have been copied
 import logging
 import sys
 from packaging import version
-from pathlib import Path, PurePosixPath
+from pathlib import PurePosixPath
 from datetime import datetime, timedelta
 from inspect import getmembers, isfunction
 from functools import reduce
@@ -71,20 +71,20 @@ FEEDBACK_NOGO_DELAY_SECS = 2
 
 BWM_CRITERIA = {
     'default': {'PASS': 0.99, 'WARNING': 0.90, 'FAIL': 0},  # Note: WARNING was 0.95 prior to Aug 2022
-    '_task_stimOff_itiIn_delays': {'PASS': 0.99, 'WARNING': 0},
-    '_task_positive_feedback_stimOff_delays': {'PASS': 0.99, 'WARNING': 0},
-    '_task_negative_feedback_stimOff_delays': {'PASS': 0.99, 'WARNING': 0},
-    '_task_wheel_move_during_closed_loop': {'PASS': 0.99, 'WARNING': 0},
-    '_task_response_stimFreeze_delays': {'PASS': 0.99, 'WARNING': 0},
-    '_task_detected_wheel_moves': {'PASS': 0.99, 'WARNING': 0},
-    '_task_trial_length': {'PASS': 0.99, 'WARNING': 0},
-    '_task_goCue_delays': {'PASS': 0.99, 'WARNING': 0},
-    '_task_errorCue_delays': {'PASS': 0.99, 'WARNING': 0},
-    '_task_stimOn_delays': {'PASS': 0.99, 'WARNING': 0},
-    '_task_stimOff_delays': {'PASS': 0.99, 'WARNING': 0},
-    '_task_stimFreeze_delays': {'PASS': 0.99, 'WARNING': 0},
-    '_task_iti_delays': {'NOT_SET': 0},
-    '_task_passed_trial_checks': {'NOT_SET': 0}
+    'stimOff_itiIn_delays': {'PASS': 0.99, 'WARNING': 0},
+    'positive_feedback_stimOff_delays': {'PASS': 0.99, 'WARNING': 0},
+    'negative_feedback_stimOff_delays': {'PASS': 0.99, 'WARNING': 0},
+    'wheel_move_during_closed_loop': {'PASS': 0.99, 'WARNING': 0},
+    'response_stimFreeze_delays': {'PASS': 0.99, 'WARNING': 0},
+    'detected_wheel_moves': {'PASS': 0.99, 'WARNING': 0},
+    'trial_length': {'PASS': 0.99, 'WARNING': 0},
+    'goCue_delays': {'PASS': 0.99, 'WARNING': 0},
+    'errorCue_delays': {'PASS': 0.99, 'WARNING': 0},
+    'stimOn_delays': {'PASS': 0.99, 'WARNING': 0},
+    'stimOff_delays': {'PASS': 0.99, 'WARNING': 0},
+    'stimFreeze_delays': {'PASS': 0.99, 'WARNING': 0},
+    'iti_delays': {'NOT_SET': 0},
+    'passed_trial_checks': {'NOT_SET': 0}
 }
 
 
@@ -147,7 +147,7 @@ def update_dataset_qc(qc, registered_datasets, one, override=False):
     # dict of QC check to outcome (as enum value)
     *_, outcomes = qc.compute_session_status()
     # work over map of dataset name (sans extension) to outcome (enum or dict of columns: enum)
-    for name, outcome in qc.compute_dataset_qc_status(outcomes).items():
+    for name, outcome in qc.compute_dataset_qc_status(outcomes, qc.namespace).items():
         # if outcome is a dict, calculate aggregate outcome for each column
         if isinstance(outcome, dict):
             extended_qc = outcome
@@ -206,16 +206,21 @@ class TaskQC(base.QC):
         # if None of this applies, return 'NOT_SET'
         return spec.QC.NOT_SET
 
-    def __init__(self, session_path_or_eid, **kwargs):
+    def __init__(self, session_path_or_eid, namespace='task', **kwargs):
         """
         Task QC for training, biased, and ephys choice world.
 
-        :param session_path_or_eid: A session eid or path
-        :param log: A logging.Logger instance, if None the 'ibllib' logger is used
-        :param one: An ONE instance for fetching and setting the QC on Alyx
+        Parameters
+        ----------
+        session_path_or_eid : str, uuid.UUID, pathlib.Path
+            A session eid or path. If a path, it must be a valid ALFPath.
+        namespace : str
+            The namespace of the QC fields in the Alyx JSON field.
+        log : logging.Logger, optional
+            A logging.Logger instance, if None the 'ibllib.qc.base' logger is used.
+        one : one.api.OneAlyx, optional
+            An ONE instance for fetching and setting the QC on Alyx.
         """
-        # When an eid is provided, we will download the required data by default (if necessary)
-        self.download_data = not spec.is_session_path(Path(session_path_or_eid))
         super().__init__(session_path_or_eid, **kwargs)
 
         # Data
@@ -226,7 +231,9 @@ class TaskQC(base.QC):
         self.passed = None
 
         # Criteria (initialize as outcomes vary by class, task, and hardware)
-        self.criteria = BWM_CRITERIA.copy()
+        self.namespace = namespace
+        self.criteria = {k if k == 'default' else f'_{namespace}_{k}': v
+                         for k, v in BWM_CRITERIA.items()}
 
     def compute(self, **kwargs):
         """Compute and store the QC metrics.
@@ -240,14 +247,14 @@ class TaskQC(base.QC):
             If True no data is extracted from the FPGA for ephys sessions.
         """
         assert self.extractor is not None
-
+        ns = kwargs.pop('namespace', self.namespace)
         ver = self.extractor.settings.get('IBLRIG_VERSION', '') or '0.0.0'
         if version.parse(ver) >= version.parse('8.0.0'):
-            self.criteria['_task_iti_delays'] = {'PASS': 0.99, 'WARNING': 0}
-            self.criteria['_task_passed_trial_checks'] = {'PASS': 0.7, 'WARNING': 0}
+            self.criteria[f'_{ns}_iti_delays'] = {'PASS': 0.99, 'WARNING': 0}
+            self.criteria[f'_{ns}_passed_trial_checks'] = {'PASS': 0.7, 'WARNING': 0}
         else:
-            self.criteria['_task_iti_delays'] = {'NOT_SET': 0}
-            self.criteria['_task_passed_trial_checks'] = {'NOT_SET': 0}
+            self.criteria[f'_{ns}_iti_delays'] = {'NOT_SET': 0}
+            self.criteria[f'_{ns}_passed_trial_checks'] = {'NOT_SET': 0}
 
         self.log.info(f'Session {self.session_path}: Running QC on behavior data...')
         self.get_bpodqc_metrics_frame(
@@ -308,7 +315,7 @@ class TaskQC(base.QC):
         """
         # Find all methods that begin with 'check_'
         checks = self._get_checks()
-        prefix = '_task_'  # Extended QC fields will start with this
+        prefix = f'_{kwargs.pop("namespace", self.namespace)}_'  # Extended QC fields will start with this
         # Method 'check_foobar' stored with key '_task_foobar' in metrics map
         qc_metrics_map = {prefix + k[6:]: fn(data, **kwargs) for k, fn in checks.items()}
 
@@ -326,7 +333,7 @@ class TaskQC(base.QC):
         self.metrics[name] = reduce(np.logical_and, trial_level_passed or (None, None))
         self.passed[name] = self.metrics[name].astype(float) if trial_level_passed else None
 
-    def run(self, update=False, namespace='task', **kwargs):
+    def run(self, update=False, **kwargs):
         """
         Compute the QC outcomes and return overall task QC outcome.
 
@@ -334,8 +341,6 @@ class TaskQC(base.QC):
         ----------
         update : bool
             If True, updates the session QC fields on Alyx.
-        namespace : str
-            The namespace of the QC fields in the Alyx JSON field.
         bpod_only : bool
             If True no data is extracted from the FPGA for ephys sessions.
 
@@ -351,7 +356,7 @@ class TaskQC(base.QC):
         outcome, results, _ = self.compute_session_status()
         if update:
             self.update_extended_qc(results)
-            self.update(outcome, namespace)
+            self.update(outcome, kwargs.get('namespace', self.namespace))
         return outcome, results
 
     def compute_session_status(self):
@@ -376,13 +381,15 @@ class TaskQC(base.QC):
         return session_outcome, results, outcomes
 
     @staticmethod
-    def compute_dataset_qc_status(outcomes):
+    def compute_dataset_qc_status(outcomes, namespace='task'):
         """Return map of dataset specific QC values.
 
         Parameters
         ----------
         outcomes : dict
             Map of checks and their individual outcomes.
+        namespace : str
+            The namespace of the QC fields in the Alyx JSON field.
 
         Returns
         -------
@@ -390,21 +397,21 @@ class TaskQC(base.QC):
             Map of dataset names and their outcome.
         """
         trials_table_outcomes = {
-            'intervals': outcomes.get('_task_iti_delays', spec.QC.NOT_SET),
-            'goCue_times': outcomes.get('_task_goCue_delays', spec.QC.NOT_SET),
+            'intervals': outcomes.get(f'_{namespace}_iti_delays', spec.QC.NOT_SET),
+            'goCue_times': outcomes.get(f'_{namespace}_goCue_delays', spec.QC.NOT_SET),
             'response_times': spec.QC.NOT_SET, 'choice': spec.QC.NOT_SET,
-            'stimOn_times': outcomes.get('_task_stimOn_delays', spec.QC.NOT_SET),
+            'stimOn_times': outcomes.get(f'_{namespace}_stimOn_delays', spec.QC.NOT_SET),
             'contrastLeft': spec.QC.NOT_SET, 'contrastRight': spec.QC.NOT_SET,
             'feedbackType': spec.QC.NOT_SET, 'probabilityLeft': spec.QC.NOT_SET,
-            'feedback_times': outcomes.get('_task_errorCue_delays', spec.QC.NOT_SET),
+            'feedback_times': outcomes.get(f'_{namespace}_errorCue_delays', spec.QC.NOT_SET),
             'firstMovement_times': spec.QC.NOT_SET
         }
-        reward_checks = ('_task_reward_volumes', '_task_reward_volume_set')
+        reward_checks = (f'_{namespace}_reward_volumes', f'_{namespace}_reward_volume_set')
         trials_table_outcomes['rewardVolume']: TaskQC.overall_outcome(
             (outcomes.get(x, spec.QC.NOT_SET) for x in reward_checks)
         )
         dataset_outcomes = {
-            '_ibl_trials.stimOff_times': outcomes.get('_task_stimOff_delays', spec.QC.NOT_SET),
+            '_ibl_trials.stimOff_times': outcomes.get(f'_{namespace}_stimOff_delays', spec.QC.NOT_SET),
             '_ibl_trials.table': trials_table_outcomes,
         }
         return dataset_outcomes
@@ -423,7 +430,7 @@ class HabituationQC(TaskQC):
         self.log.info(f'Session {self.session_path}: Running QC on habituation data...')
 
         # Initialize checks
-        prefix = '_task_'
+        prefix = f'_{kwargs.pop("namespace", self.namespace)}_'
         data = self.extractor.data
         audio_output = self.extractor.settings.get('device_sound', {}).get('OUTPUT', 'unknown')
         metrics = {}
