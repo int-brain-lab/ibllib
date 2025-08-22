@@ -1266,17 +1266,15 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
         face_ind = find_triangle(pt * 1e-3, points[:, :2] * 1e-3, dorsal_connectivity_list.astype(np.intp))
         assert face_ind != -1
 
-        dorsal_triangle = points[dorsal_connectivity_list[face_ind, :], :]
-
-        # Get the surface normal unit vector of dorsal triangle
-        normal_vector = surface_normal(dorsal_triangle)
-
-        # Update the surgery JSON field with normal unit vector, for use in histology alignment
-        self.update_surgery_json(meta, normal_vector)
-
         # find the coordDV that sits on the triangular face and had [coordML, coordAP] coordinates;
         # the three vertices defining the triangle
         face_vertices = points[dorsal_connectivity_list[face_ind, :], :]
+
+        # Get the surface normal unit vector of dorsal triangle
+        normal_vector = surface_normal(face_vertices)
+
+        # Update the surgery JSON field with normal unit vector, for use in histology alignment
+        self.update_surgery_json(meta, normal_vector)
 
         # all the vertices should be on the plane ax + by + cz = 1, so we can find
         # the abc coefficients by inverting the three equations for the three vertices

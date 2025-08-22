@@ -382,7 +382,6 @@ class MesoscopeTask(DynamicTask):
 
         Necessary because we don't know in advance how many device collection folders ("imaging bouts") to expect
         """
-        self.session_path = Path(self.session_path)
         # Glob for all device collection (raw imaging data) folders
         raw_imaging_folders = [p.name for p in self.session_path.glob(self.device_collection)]
         super().get_signatures(**kwargs)  # Set inputs and outputs
