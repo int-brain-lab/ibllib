@@ -212,6 +212,8 @@ class PMD(base_tasks.MesoscopeTask):
     def _qc_results(self,
                     my_data: np.ndarray,
                     pmd_array: masknmf.PMDArray,
+                    snapshot_folder: pathlib.Path,
+                    fov_identifier:str,
                     device: str = "cpu",
                     frame_batch_size: int = 100):
         raw_spatial_corr, pmd_spatial_corr, residual_spatial_corr = masknmf.diagnostics.compute_pmd_spatial_correlation_maps(
@@ -225,8 +227,9 @@ class PMD(base_tasks.MesoscopeTask):
                                                                                             device=device,
                                                                                             batch_size=frame_batch_size)
 
-        lag1_image_path = Path("lag1_img.png").resolve()
-        spatial_image_path = Path("spatial_img.png").resolve()
+        ## TODO: Make this a more meaningful location once it's clearer what register snapshots does
+        lag1_image_path = snapshot_folder / Path(f"lag1_img_{fov_identifier}.png")
+        spatial_image_path = snapshot_folder / Path(f"spatial_img_{fov_identifier}.png")
 
         self.plot_summary_images_side_by_side([raw_lag1, pmd_lag1, resid_lag1],
                                               ['Raw Lag1 Autocov / Raw Std',
@@ -276,6 +279,8 @@ class PMD(base_tasks.MesoscopeTask):
     def _run_singlevideo(self,
                          s2p_folderpath: pathlib.Path,
                          alf_folderpath: pathlib.Path,
+                         snapshot_path: pathlib.Path,
+                         fov_identifier: str,
                          **kwargs):
         """
         Run the PMD processing task on a single plane of data (1 video)
@@ -320,9 +325,12 @@ class PMD(base_tasks.MesoscopeTask):
         logging.info("Making QC metrics")
         #Generate some quality control metrics
         lag1_png, spatial_corr_png = self._qc_results(my_data,
-                                   pmd_array,
-                                   device=cfg.device,
-                                   frame_batch_size=cfg.frame_batch_size)
+                                                      pmd_array,
+                                                      snapshot_path,
+                                                      fov_identifier,
+                                                      device=cfg.device,
+                                                      frame_batch_size=cfg.frame_batch_size)
+
         print(f"Saved files at {lag1_png} and {spatial_corr_png}")
 
     def _generate_per_dataset_input_paths(self):
@@ -344,13 +352,22 @@ class PMD(base_tasks.MesoscopeTask):
 
 
     def _run(self, **kwargs):
+        # Make a folder where snapshots are stored:
+        snapshot_path = self.session_path / Path("pmd_qc_snapshots")
+        snapshot_path.mkdir(parents=True, exist_ok=True)
+        #Process each dataset
         file_data = self._generate_per_dataset_input_paths()
         for i, elt in enumerate(list(file_data)):
             print(f"Processing fov {i}")
             s2p_folderpath, alf_folderpath = elt
-            self._run_singlevideo(s2p_folderpath, alf_folderpath, **kwargs)
-            print("FINISHED ")
+            fov_identifier = alf_folderpath.stem
+            self._run_singlevideo(s2p_folderpath,
+                                  alf_folderpath,
+                                  snapshot_path,
+                                  fov_identifier,
+                                  **kwargs)
 
+        #TODO: Upload the snapshots to alyx
 
 
 
