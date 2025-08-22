@@ -12,6 +12,7 @@ from masknmf import display
 import torch
 import re
 import matplotlib.pyplot as plt
+import sparse
 
 import logging
 _logger = logging.getLogger(__name__)
@@ -243,8 +244,6 @@ class PMD(base_tasks.MesoscopeTask):
                                                'Resid Spatial Corr / Raw Std'],
                                               filename = spatial_image_path)
 
-        return lag1_image_path, spatial_image_path
-
     def plot_summary_images_side_by_side(self,
                                          images,
                                          titles,
@@ -324,14 +323,60 @@ class PMD(base_tasks.MesoscopeTask):
 
         logging.info("Making QC metrics")
         #Generate some quality control metrics
-        lag1_png, spatial_corr_png = self._qc_results(my_data,
-                                                      pmd_array,
-                                                      snapshot_path,
-                                                      fov_identifier,
-                                                      device=cfg.device,
-                                                      frame_batch_size=cfg.frame_batch_size)
+        self._qc_results(my_data,
+                         pmd_array,
+                         snapshot_path,
+                         fov_identifier,
+                         device=cfg.device,
+                         frame_batch_size=cfg.frame_batch_size)
 
-        print(f"Saved files at {lag1_png} and {spatial_corr_png}")
+        # print(f"Saved files at {lag1_png} and {spatial_corr_png}")
+        logging.info(f"Saved snapshots for fov {fov_identifier}")
+        logging.info(f"Saving the PMD results in the ONE format")
+        u_gxcs = self._sparse_u_to_gxcs(pmd_array.u,
+                                        pmd_array.shape[1],
+                                        pmd_array.shape[2])
+        u_projector_gxcs = self._sparse_u_to_gxcs(pmd_array.u_local_projector,
+                                                  pmd_array.shape[1],
+                                                  pmd_array.shape[2])
+        v = pmd_array.v.cpu().numpy()
+        mean_img = pmd_array.mean_img.cpu().numpy()
+        var_img = pmd_array.var_img.cpu().numpy()
+
+        with open(alf_folderpath.joinpath('_ibl_mpciU.images.sparse_npz'), 'wb') as fp:
+            sparse.save_npz(fp, u_gxcs)
+
+        with open(alf_folderpath.joinpath('_ibl_mpciU.projector.sparse_npz'), 'wb') as fp:
+            sparse.save_npz(fp, u_projector_gxcs)
+
+        np.save(alf_folderpath.joinpath('_ibl_mpciSVT.uncorrected.npy'), v)
+        np.save(alf_folderpath.joinpath('_ibl_mpciU.meanImage.npy'), mean_img)
+        np.save(alf_folderpath.joinpath('_ibl_mpciU.stdImage.npy'), var_img)
+
+
+    def _sparse_u_to_gxcs(self,
+                          u: torch.sparse_coo_tensor,
+                          fov_dim1: int,
+                          fov_dim2: int):
+        """
+        Given a sparse u matrix of shape (fov_dim1*fov_dim2, pmd_rank), we want to construct a gxcs sparse object
+        of shape (fov_dim1, fov_dim2, pmd_rank). The assumption is that u has columns which are vectorized in row
+        major order (so reshaping from (fov_dim1*fov_dim2,) --> (fov_dim1, fov_dim2) involves using shape C).
+        """
+        row_indices, col_indices = u.indices()
+        pmd_rank = u.shape[1]
+
+        # Convert row indices back to (height, width)
+        height_indices = (row_indices // fov_dim2).cpu().numpy()
+        width_indices = (row_indices % fov_dim2).cpu().numpy()
+        col_indices = col_indices.cpu().numpy()
+        values = u.values().cpu().numpy()
+
+        # Stack indices as (ndim, nnz)
+        final_ind = np.vstack([height_indices, width_indices, col_indices])
+        s = sparse.COO(final_ind, values, shape=(fov_dim1, fov_dim2, pmd_rank))
+        return sparse.GCXS.from_coo(s)
+
 
     def _generate_per_dataset_input_paths(self):
         """
