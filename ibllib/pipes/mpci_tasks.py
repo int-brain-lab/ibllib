@@ -111,11 +111,12 @@ class PMD(base_tasks.MesoscopeTask, base_tasks.RegisterRawDataTask):
         signature = {
             'input_files': [I('_suite2p_ROIData.raw.zip', 'alf/FOV*', True, unique=False),
                             I('imaging.frames_motionRegistered.bin', 'suite2p/plane*', True, unique=False)],
-            # FIXME come up with dataset names for outputs
-            'output_files': [('imaging.sparse1.sparse_npz', 'alf/FOV*', True),
-                             ('imaging.sparse2.sparse_npz', 'alf/FOV*', True),
-                             ('imaging.dense.npz', 'alf/FOV*', True),
-                             ('model.weights.npy', 'alf/FOV*', False)]  # False = not required output
+
+            'output_files': [('_ibl_mpciU.spatial_basis.sparse_npz', 'alf/FOV*', True),
+                             ('_ibl_mpciU.projector.sparse_npz', 'alf/FOV*', True),
+                             ('_ibl_mpciV.temporal_basis', 'alf/FOV*', True),
+                             ('_ibl_mpciU.meanImage', 'alf/FOV*', True),
+                             ('_ibl_mpciU.stdImage', 'alf/FOV*', True)]  # False = not required output
         }
         return signature
 
@@ -343,7 +344,7 @@ class PMD(base_tasks.MesoscopeTask, base_tasks.RegisterRawDataTask):
         var_img = pmd_array.var_img.cpu().numpy()
 
         output_file_list = []
-        curr_path = alf_folderpath.joinpath('_ibl_mpciU.images.sparse_npz')
+        curr_path = alf_folderpath.joinpath('_ibl_mpciU.spatial_basis.sparse_npz')
         with open(curr_path, 'wb') as fp:
             sparse.save_npz(fp, u_gxcs)
         output_file_list.append(curr_path)
@@ -353,7 +354,7 @@ class PMD(base_tasks.MesoscopeTask, base_tasks.RegisterRawDataTask):
             sparse.save_npz(fp, u_projector_gxcs)
         output_file_list.append(curr_path)
 
-        curr_path = alf_folderpath.joinpath('_ibl_mpciSVT.uncorrected.npy')
+        curr_path = alf_folderpath.joinpath('_ibl_mpciV.temporal_basis.npy')
         np.save(curr_path, v)
         output_file_list.append(curr_path)
 
