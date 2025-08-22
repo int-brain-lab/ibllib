@@ -74,7 +74,7 @@ class MotionBinDataset:
     def __getitem__(self, item: Union[int, list, np.ndarray, Tuple[Union[int, np.ndarray, slice, range]]]):
         return self.data[item].copy()
 
-class PMD(base_tasks.MesoscopeTask):
+class PMD(base_tasks.MesoscopeTask, base_tasks.RegisterRawDataTask):
 
     gpu=1
     def __init__(self,
@@ -228,7 +228,6 @@ class PMD(base_tasks.MesoscopeTask):
                                                                                             device=device,
                                                                                             batch_size=frame_batch_size)
 
-        ## TODO: Make this a more meaningful location once it's clearer what register snapshots does
         lag1_image_path = snapshot_folder / Path(f"lag1_img_{fov_identifier}.png")
         spatial_image_path = snapshot_folder / Path(f"spatial_img_{fov_identifier}.png")
 
@@ -412,7 +411,8 @@ class PMD(base_tasks.MesoscopeTask):
                                   fov_identifier,
                                   **kwargs)
 
-        #TODO: Upload the snapshots to alyx
+        ## COMMENTING THIS OUT UNTIL CLEARER HOW TO USE THIS
+        #self.register_snapshots(unlink=False, collection=snapshot_path)
 
 
 
