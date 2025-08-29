@@ -1,8 +1,7 @@
 import numpy as np
 from scipy.spatial import ConvexHull
 from ibllib.mpci.linalg import (
-    intersect_line_mesh_np,
-    intersect_line_mesh_nb,
+    intersect_line_mesh,
     get_closest_face,
     plane_normal_form,
 )
@@ -66,7 +65,6 @@ def get_plane_at_point_mlap(
     vertices: np.ndarray,
     connectivity_list: np.ndarray,
     upwards=True,
-    numba=False,  # eventually drop this
 ) -> Tuple[np.ndarray, np.ndarray]:
     """for a given ml,ap coordinates, returns the plane on the brain surface
     in normal form
@@ -85,11 +83,7 @@ def get_plane_at_point_mlap(
     # the mesh
     ln0 = np.array([ml, ap, 1000.0])
     ln = np.array([0.0, 0.0, -1.0])
-    if numba:
-        func = intersect_line_mesh_nb
-    else:
-        func = intersect_line_mesh_np
-    faces, ips, _ = func(vertices, connectivity_list, ln0, ln)
+    faces, ips, _ = intersect_line_mesh(vertices, connectivity_list, ln0, ln)
     face, ix = get_closest_face(faces, ln0)
     _, n = plane_normal_form(face)  # the brain normal
     p = ips[ix]  # the intersection point in the mesh triangle
