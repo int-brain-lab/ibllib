@@ -10,8 +10,16 @@ The following data repository contains intermediate results and code to reproduc
 ## Notes
 
 ## Overview of the Data
-We have released data from XXX Neuropixel experimental sessions, which encompass XXX distinct recordings, referred to as probe insertions. Those were obtained with XXX subjects performing the IBL task.
+We have released data from 198 Neuropixel experimental sessions, with single Neuropixel recordings, referred to as probe insertions. Those were obtained with 62 genetically modified subjects performing the IBL task.
 As output of spike-sorting, there are XXX units; of which XXX are considered to be of good quality. In total, XXX brain regions were recorded in sufficient numbers for comparison with IBL’s analysises [(IBL et al. 2023)](https://doi.org/10.1101/2023.07.04.547681).
+
+
+| Model | Subject Count | Neuropixel Count |
+| --- |---------------| --- |
+| Wildtype | 15 | 51|
+| CS       | 17 | 52|
+| SH       | 15 | 41|
+| FM       | 15 | 54|
 
 ## Data structure and download
 The organisation of the data follows the standard IBL data structure.
