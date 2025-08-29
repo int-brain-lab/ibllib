@@ -91,7 +91,7 @@ import one.params
 from one.api import ONE
 from one import webclient
 import one.alf.io as alfio
-from one.alf.path import ALFPath
+from one.alf.path import ALFPath, ensure_alf_path
 
 _logger = logging.getLogger(__name__)
 TASK_STATUS_SET = {'Waiting', 'Held', 'Started', 'Errored', 'Empty', 'Complete', 'Incomplete', 'Abandoned'}
@@ -116,7 +116,7 @@ class Task(abc.ABC):
     on_error = 'continue'  # whether to raise an exception on error ('raise') or report the error and continue ('continue')
 
     def __init__(self, session_path, parents=None, taskid=None, one=None,
-                 machine=None, clobber=True, location='server', scratch_folder=None, on_error='continue', **kwargs):
+                 machine=None, clobber=True, location='server', scratch_folder=None, on_error='continue', force=False, **kwargs):
         """
         Base task class
         :param session_path: session path
@@ -129,12 +129,13 @@ class Task(abc.ABC):
         data required for task downloaded via one), 'AWS' (remote compute node, data required for task downloaded via AWS),
         or 'SDSC' (SDSC flatiron compute node)
         :param scratch_folder: optional: Path where to write intermediate temporary data
+        :param force: whether to re-download missing input files on local server if not present
         :param args: running arguments
         """
         self.on_error = on_error
         self.taskid = taskid
         self.one = one
-        self.session_path = session_path
+        self.session_path = ensure_alf_path(session_path) if session_path else None
         self.register_kwargs = {}
         if parents:
             self.parents = parents
@@ -144,6 +145,7 @@ class Task(abc.ABC):
         self.machine = machine
         self.clobber = clobber
         self.location = location
+        self.force = force
         self.plot_tasks = []  # Plotting task/ tasks to create plot outputs during the task
         self.scratch_folder = scratch_folder
         self.kwargs = kwargs
@@ -377,7 +379,7 @@ class Task(abc.ABC):
         self.output_files = signature['output_files']
 
     @abc.abstractmethod
-    def _run(self, overwrite=False):
+    def _run(self, overwrite=False, **kwargs):
         """Execute main task code.
 
         This method contains a task's principal data processing code and should implemented
@@ -422,14 +424,14 @@ class Task(abc.ABC):
                 # Attempts to download missing data using globus
                 _logger.info('Not all input files found locally: attempting to re-download required files')
                 self.data_handler = self.get_data_handler(location='serverglobus')
-                self.data_handler.setUp(task=self)
+                self.data_handler.setUp(task=self, **kwargs)
                 # Double check we now have the required files to run the task
                 # TODO in future should raise error if even after downloading don't have the correct files
                 self.assert_expected_inputs(raise_error=False)
                 return True
         else:
             self.data_handler = self.get_data_handler()
-            self.data_handler.setUp(task=self)
+            self.data_handler.setUp(task=self, **kwargs)
             self.get_signatures(**kwargs)
             self.assert_expected_inputs(raise_error=False)
             return True
@@ -500,7 +502,7 @@ class Task(abc.ABC):
             _logger.warning('Some files are not ALF datasets and will not be checked for ambiguity')
         if any(map(len, variant_datasets.values())):
             # Keep those with variants and make paths relative to session for logging purposes
-            to_frag = lambda x: x.relative_to_session().as_posix()  # noqa
+            def to_frag(x): return x.relative_to_session().as_posix()  # noqa
             ambiguous = {
                 to_frag(k): [to_frag(x) for x in v]
                 for k, v in variant_datasets.items() if any(v)}

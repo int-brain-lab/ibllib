@@ -400,6 +400,15 @@ class TestVideo(unittest.TestCase):
         self.assertIsNone(label)
 
     def test_url_from_eid(self):
+        # Test remote mode
+        old_mode = self.one.mode
+        try:
+            self.one.mode = 'remote'
+            actual = video.url_from_eid(self.eid, label='left', one=self.one)
+            self.assertEqual(self.url, actual)
+        finally:
+            self.one.mode = old_mode
+
         self.one.mode = 'local'
         actual = video.url_from_eid(self.eid, 'left', self.one)
         self.assertEqual(self.url, actual)
@@ -409,15 +418,6 @@ class TestVideo(unittest.TestCase):
         actual = video.url_from_eid(self.eid, label=('left', 'right'), one=self.one)
         expected = {'left': self.url, 'right': None}
         self.assertEqual(expected, actual)
-
-        # Test remote mode
-        old_mode = self.one.mode
-        try:
-            self.one.mode = 'remote'
-            actual = video.url_from_eid(self.eid, label='left', one=self.one)
-            self.assertEqual(self.url, actual)
-        finally:
-            self.one.mode = old_mode
 
         # Test arg checks
         with self.assertRaises(ValueError):
