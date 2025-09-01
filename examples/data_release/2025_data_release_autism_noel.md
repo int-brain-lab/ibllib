@@ -22,12 +22,12 @@ We have released data from 198 Neuropixel experimental sessions, with single Neu
 As output of spike-sorting, there are XXX units; of which XXX are considered to be of good quality. In total, XXX brain regions were recorded in sufficient numbers for comparison with IBL’s analysises [(IBL et al. 2023)](https://doi.org/10.1101/2023.07.04.547681).
 
 
-| Model | Subject Count | Neuropixel Count |
-| --- |---------------| --- |
+| Model    | Subject Count | Neuropixel Count |
+|----------|---------------| --- |
 | Wildtype | 15 | 51|
-| CS       | 17 | 52|
-| SH       | 15 | 41|
-| FM       | 15 | 54|
+| Cntnap2  | 17 | 52|
+| shank3   | 15 | 41|
+| fmr1     | 15 | 54|
 
 ## Data structure and download
 The organisation of the data follows the standard IBL data structure.
@@ -51,7 +51,12 @@ If you are using this dataset for your research please cite the paper [A common 
 
 ### 2025-08-29: initial release
 
-### Excluded sessions
+Possible future evolutions
+- Spike sorting re-run with iblsorter or newer algorithm to have better yield and better pre-processing
+- Perform the missing alignments with an automatic tool to get
+
+
+#### Excluded sessions
 
 The following sessions were excluded as the synchronisation stream from the bpod couldn't be found in the FPGA. As such the behaviour information couldn't be extracted to a clock synced to the electrophysiology.
 
@@ -63,15 +68,16 @@ The following sessions were excluded as the synchronisation stream from the bpod
 | 429de7e8-1fc9-4aa2-87a1-0800268935d7 | CSP023 | 2020-11-17 | 001 |
 
 
-### Video data: QC report
+#### Video data: QC report
 We have only included video data where we could confidently align the frames timing to the main experiment clock.
 
-### Electrophysiology: QC report
+#### Electrophysiology: QC report
 
-#### Quality of uppermost channels
-XXX
+##### Quality of uppermost channels
+What we believe to be a failing Neuropixel headstage translates in the loss of 10-15 of the uppermost channels of the probes. This affects many recordings.
+Make sure to perform an anomaly detection using [ibl-neuropixel](https://github.com/int-brain-lab/ibl-neuropixel) or [spike interface](https://spikeinterface.readthedocs.io/en/stable/)
 
-#### CRITICAL: Missing spike sorting
+##### CRITICAL: Missing spike sorting
 The following insertions do not have any spike sorting available.
 
 | PID | EID | Subject | Date | Number | Probe |
@@ -93,7 +99,7 @@ The following insertions do not have any spike sorting available.
 | 131716c1-515e-4a45-9158-cf1af6da39c7 | 86bef629-a95d-4a68-890b-2f7cabb58504 | NYU-57 | 2021-11-18 | 001  | probe00 |
 
 
-#### CRITICAL: Missing Histology tracing
+##### CRITICAL: Missing Histology tracing
 
 | PID | EID | Subject | Date | Number | Probe |
 | --- | --- | --- | --- | --- | --- |
@@ -107,7 +113,7 @@ The following insertions do not have any spike sorting available.
 | 553b258e-e21d-48b2-8065-21246c82e51a | 9c257bc7-ac32-4255-bb03-8ff90dfc2547 | CSP017 | 2020-11-20 | 001  | probe00 |
 
 
-#### ERROR: Missing alignments
+##### ERROR: Missing alignments
 
 Here we have spike sorting and histology tracing, but the channels haven´t  been aligned. We are not releasing those datasets for the time being.
 Those would be good candidates for a future revision if the ephys atlas task force devises a tool to perform automatic alignments.
@@ -137,6 +143,3 @@ Those would be good candidates for a future revision if the ephys atlas task for
 | 8d6c9ffc-6606-4f11-89bf-cc422ce5022a | 50911ee6-732b-4b07-afe0-8c48a287c803 | NYU-49 | 2021-07-23 | 001  | probe01 |
 
 
-## Possible future evolutions
-- Spike sorting re-run with iblsorter or newer algorithm to have better yield and better pre-processing
-- Perform the missing alignments with an automatic tool
