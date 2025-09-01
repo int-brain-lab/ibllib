@@ -3,7 +3,6 @@
 This is the module called by the job services on the lab servers.  See
 iblscripts/deploy/serverpc/crons for the service scripts that employ this module.
 """
-
 import logging
 import time
 from datetime import datetime
@@ -18,8 +17,7 @@ import importlib.metadata
 from one.api import ONE
 from one.webclient import AlyxClient
 from one.remote.globus import get_lab_from_endpoint_id, get_local_endpoint_id
-from one.alf.spec import is_session_path
-from one.alf.path import session_path_parts
+from one.alf.path import ALFPath
 
 from ibllib import __version__ as ibllib_version
 from ibllib.pipes import tasks
@@ -30,11 +28,14 @@ from ibllib.io.session_params import read_params
 from ibllib.pipes.dynamic_pipeline import make_pipeline, acquisition_description_legacy_session
 
 _logger = logging.getLogger(__name__)
-LARGE_TASKS = ['EphysVideoCompress', 'TrainingVideoCompress', 'SpikeSorting', 'EphysDLC', 'MesoscopePreprocess']
+LARGE_TASKS = [
+    'EphysVideoCompress', 'TrainingVideoCompress', 'SpikeSorting', 'EphysDLC', 'MesoscopePreprocess'
+]
 
 
 def _run_command(cmd):
-    process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE)
     info, error = process.communicate()
     if process.returncode != 0:
         return None
@@ -47,26 +48,22 @@ def _get_volume_usage(vol, label=''):
     res = _run_command(cmd)
     # size_list = ['/dev/sdc1', '1921802500', '1427128132', '494657984', '75%', '/datadisk']
     size_list = re.split(' +', res.split('\n')[-1])
-    fac = 1024**2
-    d = {
-        'total': int(size_list[1]) / fac,
-        'used': int(size_list[2]) / fac,
-        'available': int(size_list[3]) / fac,
-        'volume': size_list[5],
-    }
-    return {f'{label}_{k}': d[k] for k in d}
+    fac = 1024 ** 2
+    d = {'total': int(size_list[1]) / fac,
+         'used': int(size_list[2]) / fac,
+         'available': int(size_list[3]) / fac,
+         'volume': size_list[5]}
+    return {f"{label}_{k}": d[k] for k in d}
 
 
 def report_health(alyx):
     """
     Get a few indicators and label the json field of the corresponding lab with them.
     """
-    status = {
-        'python_version': sys.version,
-        'ibllib_version': ibllib_version,
-        'phylib_version': importlib.metadata.version('phylib'),
-        'local_time': date2isostr(datetime.now()),
-    }
+    status = {'python_version': sys.version,
+              'ibllib_version': ibllib_version,
+              'phylib_version': importlib.metadata.version('phylib'),
+              'local_time': date2isostr(datetime.now())}
     status.update(_get_volume_usage('/mnt/s0/Data', 'raid'))
     status.update(_get_volume_usage('/', 'system'))
 
@@ -84,12 +81,11 @@ def job_creator(root_path, one=None, dry=False, rerun=False):
      1) create the session on Alyx
      2) create the tasks to be run on Alyx
 
-    For legacy sessions the raw data are registered separately, instead of within a pipeline task.
-
     Parameters
     ----------
     root_path : str, pathlib.Path
-        Main path containing sessions or a session path.
+        Main path containing sessions or a session path. NB: If a session path is passed,
+        a raw_session.flag file needn't be present.
     one : one.api.OneAlyx
         An ONE instance for registering the session(s).
     dry : bool
@@ -108,14 +104,16 @@ def job_creator(root_path, one=None, dry=False, rerun=False):
     if not one:
         one = ONE(cache_rest=None)
     rc = IBLRegistrationClient(one=one)
-    flag_files = Path(root_path).glob('**/raw_session.flag')
-    flag_files = [file for file in flag_files if re.search(r'/\d{4}-\d{2}-\d{2}/\d{3}/raw_session\.flag$', str(file))]
-    flag_files = filter(lambda x: is_session_path(x.parent), flag_files)
+    if (root_path := ALFPath(root_path)).is_session_path():
+        flag_files = [root_path.joinpath('raw_session.flag')]
+    else:
+        flag_files = root_path.glob('*/????-??-??/*/raw_session.flag')
+        flag_files = filter(lambda f: f.parent.is_session_path(), flag_files)
     pipes = []
     all_datasets = []
     for flag_file in flag_files:
         session_path = flag_file.parent
-        if session_path_parts(session_path)[1] in ('test', 'test_subject'):
+        if session_path.subject in ('test', 'test_subject'):
             _logger.debug('skipping test session %s', session_path)
             continue
         _logger.info(f'creating session for {session_path}')
@@ -165,7 +163,6 @@ def task_queue(mode='all', lab=None, alyx=None, env=(None,)):
     list of dict
         A list of Alyx tasks associated with `lab` that have a 'Waiting' status.
     """
-
     def predicate(task):
         classe = tasks.str2class(task['executable'])
         return (mode == 'all' or classe.job_size == mode) and classe.env in env
@@ -179,9 +176,8 @@ def task_queue(mode='all', lab=None, alyx=None, env=(None,)):
         return  # if the lab is none, this will return empty tasks each time
     data_repo = get_local_data_repository(alyx)
     # Filter for tasks
-    waiting_tasks = alyx.rest(
-        'tasks', 'list', status='Waiting', django=f'session__lab__name__in,{lab},data_repository__name,{data_repo}', no_cache=True
-    )
+    waiting_tasks = alyx.rest('tasks', 'list', status='Waiting',
+                              django=f'session__lab__name__in,{lab},data_repository__name,{data_repo}', no_cache=True)
     # Filter tasks by size
     filtered_tasks = filter(predicate, waiting_tasks)
     # Order tasks by priority
@@ -230,8 +226,9 @@ def tasks_runner(subjects_path, tasks_dict, one=None, dry=False, count=5, time_o
         # reconstruct the session local path. As many jobs belong to the same session
         # cache the result
         if last_session != tdict['session']:
-            ses = one.alyx.rest('sessions', 'list', django=f'pk,{tdict["session"]}')[0]
-            session_path = Path(subjects_path).joinpath(Path(ses['subject'], ses['start_time'][:10], str(ses['number']).zfill(3)))
+            ses = one.alyx.rest('sessions', 'list', django=f"pk,{tdict['session']}")[0]
+            session_path = Path(subjects_path).joinpath(
+                Path(ses['subject'], ses['start_time'][:10], str(ses['number']).zfill(3)))
             last_session = tdict['session']
         if dry:
             print(session_path, tdict['name'])
