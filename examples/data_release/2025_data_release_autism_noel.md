@@ -5,7 +5,15 @@ This is the dataset associated with the publication __A common computational and
 Nature Neuroscience | Volume 28 | July 2025 | 1519–1532 1519 nature neuroscience
 https://doi.org/10.1038/s41593-025-01965-8
 
-The following data repository contains intermediate results and code to reproduce the analysis: https://osf.io/fap2s/ and https://osf.io/fap2s/wiki/home/.
+Electrophysiology, behavioral and video data were collected in mice performing the IBL task (cite Behavior paper). 
+Animals were either wildtype, or from one of 3 different autism models:
+- B6.129P2-Fmr1tm1Cgr/J JAX Strain #003025
+- B6.129(Cg)-Cntnap2tm2Pele/J JAX Strain #028635
+- B6.129-Shank3tm2Gfng/J JAX Strain #017688
+
+The following data repository contains intermediate results and code to reproduce the analysis: https://osf.io/fap2s/ and https://osf.io/fap2s/wiki/home/. 
+
+Please note that different quality standards were applied in the article than what is presented in this page. For example, the IBL does not use a presence ratio to assess the quality of its good spike sorting units.
 
 ## Notes
 
