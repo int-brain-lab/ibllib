@@ -14,6 +14,8 @@ The following data repository contains intermediate results and code to reproduc
 Please note that different quality standards were applied in the [article](https://doi.org/10.1038/s41593-025-01965-8) than what is presented in this page. For example, the IBL does not use a presence ratio to assess the quality of its good spike sorting units.
 
 ## Notes
+The dataset has also been published via the [OSF platform](https://osf.io/fap2s/wiki/home/). However, downloading the dataset through OSF is not recommended.
+We recommend you download the data via ONE.
 
 ## Overview of the Data
 We have released data from 198 Neuropixel experimental sessions, with single Neuropixel recordings, referred to as probe insertions. Those were obtained with 62 genetically modified subjects performing the IBL task.
@@ -42,8 +44,11 @@ Note:
 
 
 ## How to cite this dataset
-If you are using this dataset for your research please cite the paper [A common computational and neural anomaly across mouse models of autism](https://doi.org/10.1038/s41593-025-01965-8).
-
+If you are using this dataset for your research please cite:
+- the paper [A common computational and neural anomaly across mouse models of autism](https://doi.org/10.1038/s41593-025-01965-8)
+- if you download the data via ONE (recommended), cite the DOI: 10.6084/m9.figshare.30024880
+  
+- if you download the data via OSF (not recommended), please use the OSF DOI.
 
 ## Data release notes and changelog
 
