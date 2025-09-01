@@ -1,15 +1,13 @@
 # 2025 - Autism
 
 
-This is the dataset associated with the publication __A common computational and neural anomaly across mouse models of autism__
-Nature Neuroscience | Volume 28 | July 2025 | 1519–1532 1519 nature neuroscience
-https://doi.org/10.1038/s41593-025-01965-8
+This is the dataset associated with the publication [A common computational and neural anomaly across mouse models of autism](https://www.nature.com/articles/s41593-025-01965-8).
 
 Electrophysiology, behavioral and video data were collected in mice performing the [IBL task](https://pubmed.ncbi.nlm.nih.gov/34011433/). 
 Animals were either wildtype, or from one of 3 different autism models:
-- B6.129P2-Fmr1tm1Cgr/J JAX Strain #003025
-- B6.129(Cg)-Cntnap2tm2Pele/J JAX Strain #028635
-- B6.129-Shank3tm2Gfng/J JAX Strain #017688
+- _B6.129P2-Fmr1tm1Cgr/J_ JAX Strain #003025
+- _B6.129(Cg)-Cntnap2tm2Pele/J_ JAX Strain #028635
+- _B6.129-Shank3tm2Gfng/J_ JAX Strain #017688
 
 The following data repository contains intermediate results and code to reproduce the analysis: https://osf.io/fap2s/ and https://osf.io/fap2s/wiki/home/. 
 
@@ -19,15 +17,15 @@ Please note that different quality standards were applied in the [article](https
 
 ## Overview of the Data
 We have released data from 198 Neuropixel experimental sessions, with single Neuropixel recordings, referred to as probe insertions. Those were obtained with 62 genetically modified subjects performing the IBL task.
-As output of spike-sorting, there are XXX units; of which XXX are considered to be of good quality. In total, XXX brain regions were recorded in sufficient numbers for comparison with IBL’s analysises [(IBL et al. 2023)](https://doi.org/10.1101/2023.07.04.547681).
+As output of spike-sorting, there are XXX units; of which XXX are considered to be of good quality. In total, XXX brain regions were recorded in sufficient numbers for comparison with IBL’s analyses [(IBL et al. 2023)](https://doi.org/10.1101/2023.07.04.547681).
 
 
 | Model    | Subject Count | Neuropixel Count |
 |----------|---------------| --- |
 | Wildtype | 15 | 51|
 | Cntnap2  | 17 | 52|
-| shank3   | 15 | 41|
-| fmr1     | 15 | 54|
+| Shank3b  | 15 | 41|
+| Fmr1     | 15 | 54|
 
 ## Data structure and download
 The organisation of the data follows the standard IBL data structure.
@@ -141,5 +139,3 @@ Those would be good candidates for a future revision if the ephys atlas task for
 | 8e5c51e1-690d-4b50-88c4-37242d5ccb65 | 8d3b57dd-4651-4c5f-a4c3-8de8865fdca3 | CSP026 | 2021-06-10 | 001  | probe00 |
 | fab06f3a-9ff5-405d-957c-6e628c25af3d | 7b3be2f3-e11c-4352-b73f-10e7813ccec9 | CSP026 | 2021-06-11 | 001  | probe00 |
 | 8d6c9ffc-6606-4f11-89bf-cc422ce5022a | 50911ee6-732b-4b07-afe0-8c48a287c803 | NYU-49 | 2021-07-23 | 001  | probe01 |
-
-
