@@ -46,7 +46,8 @@ To receive a notification that we released new datasets, please fill up [this fo
 ### 2025-Q1
 
 #### fixed
-62 sessions had the recordings of the lego wheel with flipped polarity. This was only affecting the dataset format and not the task itself, and was fixed for those 62 recordings.
+- 62 sessions had the recordings of the lego wheel with flipped polarity. This was only affecting the dataset format and not the task itself, and was fixed for those 62 recordings.
+- audio sync FPGA patch: For a number of important ephys sessions the audio was somehow not wired into the FPGA, however everything else was present and the Bpod recorded these TTLs so we decided to use the bpod2fpga interpolation to recover the audio TTLs in FPGA time. These were then added to the _spikeglx_sync object and the trials were re-extracted. These data were patched and the _spikeglx_sync datasets were protected so that they would not be overwritten in the future.
 
 ### 2024-05-15 Spike-sorting re-run
 

@@ -1,6 +1,5 @@
 # 2025 - Autism
 
-
 This is the dataset associated with the publication [A common computational and neural anomaly across mouse models of autism](https://www.nature.com/articles/s41593-025-01965-8).
 
 Electrophysiology, behavioral and video data were collected in mice performing the [IBL task](https://pubmed.ncbi.nlm.nih.gov/34011433/). 
