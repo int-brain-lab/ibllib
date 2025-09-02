@@ -257,6 +257,9 @@ def _get_trials_tasks(session_path, acquisition_description=None, sync_tasks=Non
                 # This may happen that the extractor is tied to a specific sync task: look for TrialsChoiceWorldBpod for example
                 elif hasattr(btasks, extractor + sync_label.capitalize()):
                     task = getattr(btasks, extractor + sync_label.capitalize())
+                # Passive sessions can be run in behavior boxes
+                elif 'passiveChoiceWorld' in protocol:
+                        registration_class = btasks.PassiveRegisterRaw
                 else:
                     # lookup in the project extraction repo if we find an extractor class
                     import projects.extraction_tasks
