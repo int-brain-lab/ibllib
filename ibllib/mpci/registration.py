@@ -35,7 +35,7 @@ import numpy as np
 import numba as nb
 import cv2
 
-from ibllib.mpci.brain_meshes import get_plane_at_point_mlap
+from ibllib.mpci.brain_meshes import get_plane_at_point_mlap, get_surface_points
 from ibllib.mpci.linalg import intersect_line_plane, surface_normal, find_triangle, _update_points
 from ibllib.pipes.base_tasks import MesoscopeTask
 from ibllib.io.extractors import mesoscope
@@ -69,15 +69,16 @@ def register_reference_stacks(stack_path, target_stack_path, crop_size=390, appl
 
     Returns
     -------
+    TODO outputs
     """
     img_data = {}
     # Load and process the two stacks
     for key, path in zip(('stack', 'target_stack'), (stack_path, target_stack_path)):
-        if (path := ALFPath(path)).is_file:
+        if (path := ALFPath(path)).is_file():
             pass
         elif path.is_session_path():
             try:  # glob for reference stack in session folder
-                path = next(path.glob('raw_imaging_data_??/referenceImage.stack.*'))
+                path = next(path.glob('raw_imaging_data_??/reference/referenceImage.stack.*'))
             except StopIteration:
                 raise FileNotFoundError(f'No reference stack found in session path {path}')
         else:
@@ -111,7 +112,7 @@ def register_reference_stacks(stack_path, target_stack_path, crop_size=390, appl
     
     # Extract and match ORB features from both images
     # https://stackoverflow.com/questions/62280342/image-alignment-with-orb-and-ransac-in-scikit-image
-    descriptor_extractor = ORB(n_keypoints=400, harris_k=0.0005)  # TODO tune these parameters; make kwargs
+    descriptor_extractor = ORB(n_keypoints=400, harris_k=0.0005, fast_n=13)  # TODO tune these parameters; make kwargs
     descriptor_extractor.detect_and_extract(img_data['target_stack_processed'])
     descriptors_target, keypoints_target = descriptor_extractor.descriptors, descriptor_extractor.keypoints
     descriptor_extractor.detect_and_extract(img_data['stack_processed'])
@@ -136,7 +137,9 @@ def register_reference_stacks(stack_path, target_stack_path, crop_size=390, appl
     # Apply transformation to image
     aligned = skimage.transform.warp(
         img_data['stack_processed'], transform_robust.inverse, order=1, mode='constant', cval=0, clip=True, preserve_range=True)
-    
+    assert not np.isnan(aligned).all(), 'Alignment resulted in NaN values'
+    params = {'rotation': transform_robust.rotation, 'translation': transform_robust.translation}
+
     # Make plots
     if display:
         # Plot the keypoint matches as lines between the reference and aligned images
@@ -154,6 +157,8 @@ def register_reference_stacks(stack_path, target_stack_path, crop_size=390, appl
         # TODO Plot before and after processing
         f, axs = plt.subplots(2, 3)
 
+        img = np.max(img_data['stack'], axis=0)
+        reference = np.max(img_data['target_stack'], axis=0)
         axs[0][0].imshow(img)
         axs[0][0].set_title('Unaligned')
         axs[0][1].imshow(aligned)
@@ -172,7 +177,7 @@ def register_reference_stacks(stack_path, target_stack_path, crop_size=390, appl
         axs[1][0].imshow(unaligned_diff)
         axs[1][0].set_title('Unaligned diff')
         axs[1][1].imshow(aligned_diff)
-        axs[1][1].set_title('Aligned diff')    
+        axs[1][1].set_title('Aligned diff')
         axs[1][2].imshow(delta_diff)
         axs[1][2].set_title('Delta diff')
 
@@ -230,7 +235,7 @@ def register_reference_stacks(stack_path, target_stack_path, crop_size=390, appl
         ani.save(Path.home().joinpath('Pictures', 'aligned.gif'), writer='pillow', fps=2)
         plt.show()
 
-    return aligned,  {'rotation': transform_robust.rotation, 'translation': transform_robust.translation}
+    return aligned,  params
 
 
 class MesoscopeFOV(MesoscopeTask):
@@ -302,10 +307,10 @@ class MesoscopeFOV(MesoscopeTask):
         assert set(mean_image_mlapdv.keys()) == set(mean_image_ids.keys()) and len(mean_image_ids) == nFOV
         for i in range(nFOV):
             alf_path = self.session_path.joinpath('alf', f'FOV_{i:02}')
+            alf_path.mkdir(parents=True, exist_ok=True)
             for attr, arr, sfx in (('mlapdv', mean_image_mlapdv[i], suffix),
                                    ('brainLocationIds', mean_image_ids[i], ('ccf', '2017', suffix))):
                 mean_image_files.append(alf_path / to_alf('mpciMeanImage', attr, 'npy', timescale=sfx))
-                mean_image_files[-1].parent.mkdir(parents=True, exist_ok=True)
                 np.save(mean_image_files[-1], arr)
 
         # Extract ROI MLAPDV coordinates and brain location IDs
@@ -370,7 +375,7 @@ class MesoscopeFOV(MesoscopeTask):
         """
         Extract ROI MLAPDV coordinates and brain location IDs.
 
-        MLAPDV coordinates are in um relative to bregma.  Location IDs are from the 2017 Allen
+        MLAPDV coordinates are in μm relative to bregma.  Location IDs are from the 2017 Allen
         common coordinate framework atlas.
 
         Parameters
@@ -531,7 +536,7 @@ class MesoscopeFOV(MesoscopeTask):
         -------
         points : numpy.array
             An N by 3 float array of x-y vertices, defining all points of the triangle mesh. These
-            are in um relative to the IBL bregma coordinates.
+            are in μm relative to the IBL bregma coordinates.
         connectivity_list : numpy.array
             An N by 3 integer array of vertex indices defining all points that form a triangle.
         """
@@ -547,7 +552,7 @@ class MesoscopeFOV(MesoscopeTask):
         Calculate the mean image pixel locations in MLAPDV coordinates and determine the brain
         location IDs.
 
-        MLAPDV coordinates are in um relative to bregma.  Location IDs are from the 2017 Allen
+        MLAPDV coordinates are in μm relative to bregma.  Location IDs are from the 2017 Allen
         common coordinate framework atlas.
 
         Parameters
@@ -571,8 +576,8 @@ class MesoscopeFOV(MesoscopeTask):
         # more accurately represent the living brain.
         atlas = atlas or MRITorontoAtlas(res_um=10)
         # The centre of the craniotomy / imaging window
-        coord_ml = meta['centerMM']['ML'] * 1e3  # mm -> um
-        coord_ap = meta['centerMM']['AP'] * 1e3  # mm -> um
+        coord_ml = meta['centerMM']['ML'] * 1e3  # mm -> μm
+        coord_ap = meta['centerMM']['AP'] * 1e3  # mm -> μm
         pt = np.array([coord_ml, coord_ap])
 
         points, connectivity_list = self.load_triangulation()
@@ -584,7 +589,7 @@ class MesoscopeFOV(MesoscopeTask):
         # only keep triangles that have normal vector with positive DV component
         dorsal_connectivity_list = connectivity_list[up_faces, :]
         # Flatten triangulation by dropping the dorsal coordinates and find the location of the
-        # window center (we convert mm -> um here)
+        # window center (we convert mm -> μm here)
         face_ind = find_triangle(pt * 1e-3, points[:, :2] * 1e-3, dorsal_connectivity_list.astype(np.intp))
         assert face_ind != -1
 
@@ -622,7 +627,7 @@ class MesoscopeFOV(MesoscopeTask):
         # what are the dimensions of the data arrays (ap, ml, dv)
         (nAP, nML, nDV) = atlas.image.shape
         # Let's shift the coordinates relative to bregma
-        voxel_size = atlas.res_um  # [um] resolution of the atlas
+        voxel_size = atlas.res_um  # [μm] resolution of the atlas
         bregma_coords = ALLEN_CCF_LANDMARKS_MLAPDV_UM['bregma'] / voxel_size  # (ml, ap, dv)
         axis_ml_um = (np.arange(nML) - bregma_coords[0]) * voxel_size
         axis_ap_um = (np.arange(nAP) - bregma_coords[1]) * voxel_size * -1.
@@ -642,12 +647,12 @@ class MesoscopeFOV(MesoscopeTask):
             # galvanometer units, and the x-y coordinates of the FOV center in galvanometer units.
             values = [[fov['MM']['topLeft'][0], fov['MM']['topRight'][0]],
                       [fov['MM']['bottomLeft'][0], fov['MM']['bottomRight'][0]]]
-            values = np.array(values) * 1e3  # mm -> um
+            values = np.array(values) * 1e3  # mm -> μm
             xx = interpn(points, values, (y_px_idx, x_px_idx))
 
             values = [[fov['MM']['topLeft'][1], fov['MM']['topRight'][1]],
                       [fov['MM']['bottomLeft'][1], fov['MM']['bottomRight'][1]]]
-            values = np.array(values) * 1e3  # mm -> um
+            values = np.array(values) * 1e3  # mm -> μm
             yy = interpn(points, values, (y_px_idx, x_px_idx))
 
             xx = xx.flatten() - coord_ml
@@ -701,7 +706,7 @@ class Reprojection(MesoscopeFOV):
     After imaging, the brain undergoes histology whereby the tissue is sectioned and imaged, then registered to the Allen atlas producing a file containing the Allen atlas volume coordinates for each pixel of the full-field image of the craniotomy.
     With this file we have the 3-D MLAPDV coordinates of the brain surface in meters of the full-field image. This registration step involves some warping, therefore the distance between two pixels may not be uniform in Allen coordinate space.
     The full-field ('reference') image contains the location of each zoomed-in field of view (FOV) in the craniotomy.
-    The reference image and FOVs microscope coordinates are in the same space with um coordinates. We can use this reference space to transform the FOVs into the Allen atlas space using nearest neighbor interpolation.
+    The reference image and FOVs microscope coordinates are in the same space with μm coordinates. We can use this reference space to transform the FOVs into the Allen atlas space using nearest neighbor interpolation.
     This is done in the 'interpolate_FOVs' method. After this step we have the 3-D coordinates for each pixel of the FOVs in the Allen atlas space.
     These are the coordinates of the brain surface from histology, however the imaging plane is not perfectly parallel with the brain surface, and the FOVs are imaged beneath the brain's surface.
     To account for this, we use three points chosen from the reference image where the surface is in focus at different imaging depths. From these three points we can construct a plane to determine the difference between the optical axis and the brain surface.
@@ -747,65 +752,74 @@ class Reprojection(MesoscopeFOV):
         mlapdv_rel = self.correct_fov_depth_and_surface_projection(mlapdv, meta, reference_image)
         mean_image_mlapdv = self.project_mlapdv_from_surface(mlapdv_rel)
 
+        # Look up brain location IDs from coordinates
+        mean_image_ids = []
+        for xyz in mean_image_mlapdv:
+            labels = self.atlas.get_labels(xyz.reshape(-1, 3))
+            mean_image_ids.append(labels.reshape(xyz.shape[:2]))
+
         # Save the mean image datasets
         suffix = None if provenance is Provenance.HISTOLOGY else provenance.name.lower()
         mean_image_files = []
         assert len(mean_image_mlapdv) == nFOV
         for i in range(nFOV):
             alf_path = self.session_path.joinpath('alf', f'FOV_{i:02}')
+            alf_path.mkdir(parents=True, exist_ok=True)
             for attr, arr, sfx in (('mlapdv', mean_image_mlapdv[i], suffix),
                                    ('brainLocationIds', mean_image_ids[i], ('ccf', '2017', suffix))):
                 mean_image_files.append(alf_path / to_alf('mpciMeanImage', attr, 'npy', timescale=sfx))
-                mean_image_files[-1].parent.mkdir(parents=True, exist_ok=True)
                 np.save(mean_image_files[-1], arr)
 
-        # Extract ROIs
-        rois = self.roi_mlapdv(mean_image_mlapdv)
+        # Extract ROI MLAPDV coordinates and brain location IDs
+        roi_mlapdv, roi_brain_ids = self.roi_mlapdv(nFOV, suffix=suffix)
+
+        # Write MLAPDV + brain location ID of ROIs to disk
+        roi_files = []
+        assert set(roi_mlapdv.keys()) == set(roi_brain_ids.keys()) and len(roi_mlapdv) == nFOV
+        for i in range(nFOV):
+            alf_path = self.session_path.joinpath('alf', f'FOV_{i:02}')
+            for attr, arr, sfx in (('mlapdv', roi_mlapdv[i], suffix),
+                                   ('brainLocationIds', roi_brain_ids[i], ('ccf', '2017', suffix))):
+                roi_files.append(alf_path / to_alf('mpciROIs', attr, 'npy', timescale=sfx))
+                np.save(roi_files[-1], arr)
 
         if display:
+            from ibllib.mpci.plotters import plot_brain_surface_points
             axes = plt.figure(figsize=[10, 10]).add_subplot(projection='3d')
+            brain_surface_points = get_surface_points(self.atlas)
+            axes = plot_brain_surface_points(brain_surface_points, ds=4, axes=axes)
             # Plot ROIs
-            for i, fov in enumerate(mlapdv):
-                # Plot the points in mlapdv space
-                yx_pos = alfio.load_file_content(self.session_path / f'alf/FOV_{i:02}' / 'mpciROIs.stackPos.npy')
-                roi_mlapdv = fov[yx_pos[:, 0], yx_pos[:, 1], :] * 1e6
-                axes.scatter(*roi_mlapdv.T, ".", c="k", s=1, alpha=0.05, label='ROIs in imaging plane')
+            for i, fov in enumerate(roi_mlapdv.values()):
+                axes.scatter(*fov.T, ".", c="k", s=1, alpha=0.05, label='ROIs in imaging plane')
 
+        # Register FOVs in Alyx
+        # self.register_fov(meta, suffix)
 
-        # Save the MLAPDV coordinates
-        files = []
-        for i, fov in enumerate(MLAPDV):
-            raise NotImplementedError
-            file = self.session_path.joinpath('alf', f'FOV_{i:02d}', 'mpciMeanImage.mlapdv.npy')
-            np.save(file, fov)
-            files.append(file)
-            # Save the brain locations
-            file = file.with_name('mpciMeanImage.brainLocationIds.npy')
-            ...  # TODO Save brain location IDs from atlas
-            files.append(file)
-            # Extract ROI locations
-            # self.roi_mlapdv(nFOV: int, suffix=None)
-            # self.register_fov
-            # Get full file list
-            rois = self.extract_rois(MLAPDV)
-        return MLAPDV, rois
+        return sorted([*meta_files, *roi_files, *mean_image_files])
 
-    def get_atlas_registered_reference_mlap(self, reference_eid, clobber=False, client_name='server'):
-        """Download the MLAPDV coordinates of the reference session.
-        
+    def get_atlas_registered_reference_mlap(self, reference_session_path, clobber=False, client_name='server'):
+        """Download the aligned reference stack Allen atlas indices.
+
         This is the file created by the histology pipeline, one per subject.
-        FIXME Rename to download
-        FIXME rename file to referenceImage.mlapdv.npy
+        This file contains the Allen atlas image volume indices for each pixel of the reference stack.
+
+        Returns
+        -------
+        pathlib.Path
+            The local filepath of the aligned reference stack.
+            A uint16 array with shape (h, w, 3), comprising Allen atlas image volume indices for
+            dimensions representing (ml, ap, dv).  The first two dimensions (h, w) should equal
+            those of the reference stack.
         """
-        reference_session_path = self.one.eid2path(reference_eid)
         assert reference_session_path.subject == self.session_path.subject
-        local_file = self.session_path.parents[2] / reference_session_path.relative_to_lab() / 'histology' / 'registered_mlapdv.npy'
+        assert self.one, 'ONE required'
+        local_file = self.session_path.parents[2] / reference_session_path.relative_to_lab() / 'histology' / 'referenceImage.mlapdv.npy'
         if clobber or not local_file.exists():
             # Download remote file
-            # TODO use task data handler here
-            # TODO Support http download
+            assert self.one, 'ONE required'
             local_file.parent.mkdir(parents=True, exist_ok=True)
-            try:  # if isinstance(self.data_handler, dh.ServerGlobusDataHandler):
+            try:
+                # assert isinstance(self.data_handler, dh.ServerGlobusDataHandler)  # If not, assume Globus not configured
                 handler = dh.ServerGlobusDataHandler(reference_session_path, {'input_files': [], 'output_files': []}, one=self.one)
                 endpoint_id = next(v['id'] for k, v in handler.globus.endpoints.items() if k.startwith('flatiron'))
                 handler.globus.add_endpoint(endpoint_id, label='flatiron_histology', root_path='/histology/')
@@ -815,7 +829,7 @@ class Reprojection(MesoscopeFOV):
             except Exception as e:
                 _logger.error(f'Failed to download via Globus: {e}')
                 with tempfile.TemporaryDirectory() as tmpdir:
-                    remote_file = f'{self.one.alyx._par.HTTP_DATA_SERVER}/histology/{reference_session_path.lab}/{reference_session_path.subject}/registered_mlapdv.npy'
+                    remote_file = f'{self.one.alyx._par.HTTP_DATA_SERVER}/histology/{reference_session_path.lab}/{reference_session_path.subject}/referenceImage.mlapdv.npy'
                     _logger.warning(f'Using HTTP download for {remote_file}')
                     file = self.one.alyx.download_file(remote_file, target_dir=tmpdir)
                     shutil.move(file, local_file)
@@ -846,7 +860,7 @@ class Reprojection(MesoscopeFOV):
         """
         try:
             param = next(x.split('=')[-1].strip() for x in meta['rawScanImageMeta']['Software'].split('\n') if x.startswith('SI.hDisplay.circleOffset'))
-            return np.fromiter(map(float, param[1:-1].split()), dtype=float) / 1e3  # um -> mm
+            return np.fromiter(map(float, param[1:-1].split()), dtype=float) / 1e3  # μm -> mm
         except StopIteration:
             return np.array([0, 0], dtype=float)
 
@@ -864,7 +878,7 @@ class Reprojection(MesoscopeFOV):
             The reference image extent in mm from the craniotomy center (left, right, top, bottom).
         """
         # Resolution of the objective in mm/degree of the scan angle
-        objective_resolution = ref_meta['scanImageParams']['objectiveResolution'] / 1000  # um -> mm
+        objective_resolution = ref_meta['scanImageParams']['objectiveResolution'] / 1000  # μm -> mm
         center_offset = self.get_window_center(ref_meta)  # (x, y) offset in mm
 
         # find centers, sizes and nLines of each FOV
@@ -896,7 +910,7 @@ class Reprojection(MesoscopeFOV):
         return ref_extent
 
     def get_fov_objective_extent(self, meta):
-        objective_resolution = meta['scanImageParams']['objectiveResolution'] / 1000  # um -> mm
+        objective_resolution = meta['scanImageParams']['objectiveResolution'] / 1000  # μm -> mm
         center_offset = self.get_window_center(meta) / objective_resolution
         si_rois = meta['rawScanImageMeta']['Artist']['RoiGroups']['imagingRoiGroup']['rois']
         si_rois = filter(lambda x: x['enable'], si_rois)
@@ -963,132 +977,7 @@ class Reprojection(MesoscopeFOV):
         plt.show()
         return f, ax
 
-    def _generate_referenceImage_mlapdv(self, save=False):
-        """Generate a dummy referenceImage.mlapdv.npy file for testing."""
-        stack, ref_meta = self._load_reference_stack()
-        meta_files = sorted(self.session_path.glob(self.signature['input_files'][0].glob_pattern))
-        meta = mesoscope.patch_imaging_meta(alfio.load_file_content(meta_files[0]) or {})
-        del meta['FOV'][1:]
-        fov = meta['FOV'][0]
-        fov['nXnYnZ'] = [*stack.shape[1:], 1]
-        fov['Zs'] = 0
-        objective_resolution = ref_meta['scanImageParams']['objectiveResolution']  # um/deg
-        window_center = self.get_window_center(ref_meta)
-        # find centers, sizes and nLines of each FOV
-        si_rois = ref_meta['rawScanImageMeta']['Artist']['RoiGroups']['imagingRoiGroup']['rois']
-        si_rois = list(filter(lambda x: x['enable'], si_rois))
-        nFOVs = len(si_rois)
-        cXY = np.full((nFOVs, 2), np.nan)
-        sXY = np.full((nFOVs, 2), np.nan)
-        nLines = np.zeros(nFOVs, dtype=int)
-
-        for i, roi in enumerate(si_rois):
-            # Get the center and size of the FOV in pixels
-            cXY[i, :] = roi['scanfields']['centerXY']
-            sXY[i, :] = roi['scanfields']['sizeXY']
-            nLines[i] = roi['scanfields']['pixelResolutionXY'][1]
-        cXY -= window_center
-        # Find extent
-        fov_order = np.argsort(cXY[:, 0])
-        
-        max_y = np.argmax(sXY[:, 1])
-        left = cXY[fov_order[0], 0] - sXY[fov_order[0], 0] / 2
-        right = cXY[fov_order[-1], 0] + sXY[fov_order[-1], 0] / 2
-        bottom = cXY[max_y, 1] - sXY[max_y, 1] / 2
-        top = cXY[max_y, 1] + sXY[max_y, 1] / 2
-
-        # TODO use this instead:
-        # ref_extent, _, objective_resolution = get_reference_image_extent(ref_meta)
-        # left, right, top, bottom = ref_extent / objective_resolution
-
-        fov['Deg'] = {}
-        fov['Deg']['topLeft'] = [left, top]
-        fov['Deg']['topRight'] = [right, top]
-        fov['Deg']['bottomLeft'] = [left, bottom]
-        fov['Deg']['bottomRight'] = [right, bottom]
-        fov['MM'] = {}
-
-        centerDegXY = np.array([ref_meta['centerDeg']['x'], ref_meta['centerDeg']['y']])
-        centerML, centerAP = ref_meta['centerMM']['ML'], ref_meta['centerMM']['AP']
-        pos_ml = np.array(ref_meta['imageOrientation']['positiveML'])
-        pos_ap = np.array(ref_meta['imageOrientation']['positiveAP'])
-
-        TF = np.linalg.pinv(np.array([np.r_[pos_ml, 1],
-                                      np.r_[pos_ap, 1],
-                                      [0, 0, 1]])) @ \
-            (np.array([[objective_resolution / 1000, 0], [0, objective_resolution / 1000], [0, 0]]) + \
-            np.tile([centerML, centerAP], (3, 1)))
-
-        meta['coordsTF'] = np.round(TF, 3)
-        fov['MM']['topLeft'] = np.r_[fov['Deg']['topLeft'] - centerDegXY, 1] @ TF
-        fov['MM']['topRight'] = np.r_[fov['Deg']['topRight'] - centerDegXY, 1] @ TF
-        fov['MM']['bottomLeft'] = np.r_[fov['Deg']['bottomLeft'] - centerDegXY, 1] @ TF
-        fov['MM']['bottomRight'] = np.r_[fov['Deg']['bottomRight'] - centerDegXY, 1] @ TF
-
-        try:
-            mode = self.one.mode
-            self.one.mode = 'local'  # Ensure surgery coordinates not updated
-            mlapdv, _ = self.project_mlapdv(meta)
-        except:
-            self.one.mode = mode
-
-        # Save the mlapdv array to a .npy file
-        if save:
-            folder = self.session_path.parents[4].joinpath('histology', *self.session_path.alf_parts[:2])
-            folder.mkdir(parents=True, exist_ok=True)
-            np.save(folder / 'referenceImage.mlapdv.npy', mlapdv[0])
-        return mlapdv
-
-    def _load_reference_mlapdv(self, test=True):
-        """Load the referenceImage.mlapdv.npy file.
-
-        Parameters
-        ----------
-        test : bool, optional
-            If True, load the test mlapdv file. Default is True.
-
-        Returns
-        -------
-        numpy.array
-            The reference image mlapdv array.
-        """
-        if test:
-            file = self.session_path.parents[4].joinpath(
-                'histology', *self.session_path.alf_parts[:2], 'referenceImage.mlapdv.npy')
-            if not file.exists():
-                return self._generate_referenceImage_mlapdv(save=True)
-            return np.load(file)
-        else:
-            # TODO Load the actual mlapdv file from the session path
-            raise NotImplementedError('Loading actual mlapdv file not implemented yet.')
-
-    def _load_reference_stack_registered(self):
-        """(Down)load the aligned reference stack Allen atlas indices.
-
-        This file contains the Allen atlas image volume indices for each pixel of the reference stack.
-        In the future we will rename this file to something like `referenceStack.atlasIndices.npy`.
-
-        Returns
-        -------
-        numpy.array
-            A uint16 array with shape (h, w, 3), comprising Allen atlas image volume indices for
-            dimensions representing (ml, ap, dv).  The first two dimensions (h, w) should equal
-            those of the reference stack.
-        
-        FIXME Merge with load_mlapdv and load_reference_mlapdv and get_atlas_registered_reference_mlap
-        """
-        FILENAME = 'registered_mlapdv.npy'  # TODO rename
-        assert self.one, 'ONE required'
-        lab, subject, *_ = self.session_path.session_parts
-        histology_path = self.one.cache_dir.joinpath('histology', lab, subject)
-        if not (ccf_idx_path := histology_path.joinpath(FILENAME)).exists():
-            assert not one.offline, 'No registered reference stack found'
-            histology_path.mkdir(parents=True, exist_ok=True)
-            remote_file_location = f'{self.one.alyx._par.HTTP_DATA_SERVER}/histology/{lab}/{subject}/{FILENAME}'
-            ccf_idx_path = one.alyx.download_file(remote_file_location, target_dir=histology_path)
-        return np.load(ccf_idx_path)
-
-    def load_mlapdv(self, display=True):
+    def _load_reference_stack_mlapdv(self, display=True):
         """Load the registered MLAPDV coordinates for the reference stack.
         
         Returns
@@ -1097,10 +986,10 @@ class Reprojection(MesoscopeFOV):
             A float array with shape (h, w, 3), comprising Allen atlas MLAPDV coordinates.
             The first two dimensions (h, w) should equal those of the reference stack.
         
-        FIXME rename method
-        FIXME rename file to referenceImage.mlapdv.npy
         """
-        file = self.get_atlas_registered_reference_mlap(self.reference_session, clobber=False)
+        assert self.reference_session
+        reference_session_path = self.one.eid2path(self.reference_session)
+        file = self.get_atlas_registered_reference_mlap(reference_session_path, clobber=False)
         ccf_idx = np.load(file)  # shape (h, w, 3) - ml, ap, dv indices
         # ccf_idx = self._load_reference_stack_registered()  # height, width, mlapdv
         # ba = MRITorontoAtlas(res_um=25)  # TODO Confirm atlas type with Steven
@@ -1123,7 +1012,7 @@ class Reprojection(MesoscopeFOV):
         ccf_idx[:, :, 1] = np.abs(ccf_idx[:, :, 1].astype('int64') - ba.label.shape[0]).astype(ccf_idx.dtype)
         # ccf_idx = ccf_idx.astype('int64')
         # Look up the MLAPDV coordinates using the registered CCF indices
-        xyz = ba.ccf2xyz(ccf_idx * ba.res_um, ccf_order='mlapdv')
+        xyz = ba.ccf2xyz(ccf_idx * ba.res_um, ccf_order='mlapdv') * 1e6  # m -> μm
 
         if display:  # FIXME Display using flatmap plot instead
             labels = ba.get_labels(xyz)
@@ -1153,6 +1042,19 @@ class Reprojection(MesoscopeFOV):
             # TODO Plot rectangle over imaging window area
             # ax.patch(xyz[0, 0, 0], xyz[0, 0, 1], xyz.shape[0], xyz.shape[1])
 
+        if reference_session_path.session_parts != self.session_path.session_parts:
+            # Ensure reference session files present
+            signature = {'input_files': self.signature['input_files'][-3:], 'output_files': []}
+            assert all(x.identifiers[-1].startswith('reference') for x in signature['input_files'])
+            if self.location == 'server' and self.force:
+                handler = dh.ServerGlobusDataHandler(reference_session_path, signature, one=self.one)
+            else:
+                handler = self.data_handler.__class__(reference_session_path, signature, one=self.one)
+            handler.setUp()
+            # Apply transform
+            display=True
+            aligned, transform = register_reference_stacks(self.session_path, reference_session_path, crop_size=390, apply_threshold=False, display=display)
+
         return xyz  # reference_stack_mlapdv
 
     def update_craniotomy_center(self, referenceImage):
@@ -1163,14 +1065,14 @@ class Reprojection(MesoscopeFOV):
             referenceImage['meta']['rawScanImageMeta']['XResolution']
         ])
         if referenceImage['meta']['rawScanImageMeta']['ResolutionUnit'].casefold() == 'centimeter':
-            # NB: these values are (y, x) in um
+            # NB: these values are (y, x) in μm
             px_per_um = yx_res * 1e-4
             um_per_px = 1 / px_per_um
         else:
             raise NotImplementedError('Reference image resolution unit must be in centimeters')
 
         ref_stack_n_px = np.array(referenceImage['mlapdv'].shape[:2])  # in (y, x)
-        craniotomy_center_offset = np.flip(self.get_window_center(referenceImage['meta']) * 1e3)  # (y, x) center offset mm -> um
+        craniotomy_center_offset = np.flip(self.get_window_center(referenceImage['meta']) * 1e3)  # (y, x) center offset mm -> μm
 
         image_center_px = ref_stack_n_px / 2
         # TODO Verify whether offset is added or subtracted
@@ -1179,7 +1081,7 @@ class Reprojection(MesoscopeFOV):
         craniotomy_pixel = np.round(craniotomy_pixel).astype(int)  # convert to pixel coordinates
         _logger.debug('Craniotomy pixel coordinates: (%d, %d)', *craniotomy_pixel)
 
-        craniotomy_resolved = referenceImage['mlapdv'][*craniotomy_pixel] * 1e3  # ML AP DV, m -> mm
+        craniotomy_resolved = referenceImage['mlapdv'][*craniotomy_pixel] / 1e3  # ML AP DV, μm -> mm
 
         subject = self.session_path.subject
         json = self.one.alyx.rest('subjects', 'read', id=subject)['json']
@@ -1238,8 +1140,8 @@ class Reprojection(MesoscopeFOV):
         # Test the interpolation with the exact center point from our grid
         center_flat_idx = np.ravel_multi_index((height // 2, width // 2), (height, width))
         center_point_from_grid = points[center_flat_idx]
-        center_mlapdv = interp(center_point_from_grid) * 1e6
-        expected = referenceImage['mlapdv'][height // 2, width // 2] * 1e6
+        center_mlapdv = interp(center_point_from_grid)
+        expected = referenceImage['mlapdv'][height // 2, width // 2]
         assert np.allclose(center_mlapdv, expected), f'Expected {expected}, got {center_mlapdv} at centre={centre}'
 
         if display:
@@ -1332,7 +1234,7 @@ class Reprojection(MesoscopeFOV):
             # ref_points_mlap = cs2d.transform(ref_points_rel, 'image', 'mlap')
 
         # FIXME review dv - ignoring the resolved DV here
-        stack_dv_m = (stack_dv[:, np.newaxis] - dv_avg) / 1e6  # um -> m
+        stack_dv_m = (stack_dv[:, np.newaxis] - dv_avg) / 1e6  # μm -> m
         # stack_dv_m = stack_dv[:, np.newaxis] / 1e6
         ref_points_ = np.c_[ref_points_mlap[:, :-1], stack_dv_m]
 
@@ -1376,7 +1278,7 @@ class Reprojection(MesoscopeFOV):
         p_ref, n_ref, dv_avg = self.get_brain_surface_plane_from_ref_points(reference_image)
         for i, (fov, fov_meta) in enumerate(zip(fov_mlapdv, meta['FOV'])):
             # Convert FOV depth from micrometers to meters
-            z = -1 * (fov_meta['Zs'] - dv_avg) / 1e6  # depth below reference plane (um -> m), positive = deeper
+            z = -1 * (fov_meta['Zs'] - dv_avg) # depth below reference plane (μm), positive = deeper
             _logger.info(f"FOV {i}: Original Zs={fov_meta['Zs']:.1f}μm, dv_avg={dv_avg:.1f}μm, converted depth z={z:.6f}m")
 
             # Replace surface dv with imaging depth
@@ -1422,10 +1324,10 @@ class Reprojection(MesoscopeFOV):
         from iblatlas.atlas import ALLEN_CCF_LANDMARKS_MLAPDV_UM, MRITorontoAtlas
         from ibllib.mpci.brain_meshes import calculate_surface_triangulation, get_plane_at_point_mlap
         # atlas = MRITorontoAtlas(atlas_res)        
-        atlas = AllenAtlas(res_um=25)  # 25 um resolution
+        atlas = AllenAtlas(res_um=25)  # 25 μm resolution
         atlas.compute_surface()
         # vertices, connectivity_list = calculate_surface_triangulation(atlas)  # Doesn't work for some reason
-        # Load triangulation in um
+        # Load triangulation in μm
         vertices, connectivity_list = self.load_triangulation(atlas=atlas)  # atlas=atlas
 
         _logger.info(f'Min-max ML vertex: {vertices[:, 0].min():.6f} to {vertices[:, 0].max():.6f} meters')
@@ -1437,7 +1339,7 @@ class Reprojection(MesoscopeFOV):
         # Pre-calculate triangulation data for optimization
         # Cache triangle equations (plane coefficients) for all triangles
         for fov in tqdm(mlapdv_rel):
-            fov_flat = fov.reshape(-1, 3) * 1e6  # fov is in m, here we convert toum. Now both triangulation and fov values are in um
+            fov_flat = fov.reshape(-1, 3) * 1e6  # fov is in m, here we convert toum. Now both triangulation and fov values are in μm
             fov_mlapdv = np.empty_like(fov_flat)
             fov_mlapdv_surface = np.empty_like(fov_flat)
 
@@ -1643,18 +1545,17 @@ class Reprojection(MesoscopeFOV):
         ----------
         mlapdv_rel : np.ndarray
             List of arrays, one per FOV, each with shape (height, width, 3), containing MLAPDV coordinates
-            in meters for each pixel in the imaging plane (with corrected ML/AP and DV).
+            in microns for each pixel in the imaging plane (with corrected ML/AP and DV).
 
         Returns
         -------
         list of np.ndarray
             List of arrays, one per FOV, each with shape (height, width, 3), containing MLAPDV coordinates
-            in meters for each pixel projected onto the Allen atlas surface.
+            in microns for each pixel projected onto the Allen atlas surface.
 
         Notes
         -----
         - This method uses the Allen atlas surface triangulation to find the local surface normal and position.
-        - The projection is performed in um for numerical stability, then converted back to meters.
         - The output can be used for downstream analysis or registration to atlas space.
     
         TODO combine with correct_fov_depth_and_surface_projection
@@ -1664,18 +1565,16 @@ class Reprojection(MesoscopeFOV):
         for n, fov in enumerate(mlapdv_rel):
             fov_flat = fov.reshape(-1, 3)
             fov_mlapdv = np.empty_like(fov_flat)
-            mlap_points = fov_flat[:, :2] * 1e6  # Convert m -> um for precision
+            mlap_points = fov_flat[:, :2] * 1e6  # Convert m -> μm for precision
             for i, point in tqdm(enumerate(mlap_points), total=len(mlap_points), desc=f'Projecting MLAPDV points {n+1}/{len(mlapdv_rel)}'):
                 p, n_vec = get_plane_at_point_mlap(point[0], point[1], vertices, connectivity_list)
                 fov_mlapdv[i] = p + n_vec * -1 * fov_flat[i, 2]  # Project by true depth
-            processed.append(fov_mlapdv.reshape(fov.shape) / 1e6)  # Convert back to meters
+            processed.append(fov_mlapdv.reshape(fov.shape))
 
         return processed
 
     def load_triangulation(self, legacy=False, atlas=None, display=False):
         """Load surface triangulation.
-
-        NB: Returns points in um. This is essential to avoid degenerate triangles due to numerical precision issues.
 
         Parameters
         ----------
@@ -1685,7 +1584,7 @@ class Reprojection(MesoscopeFOV):
         Returns
         -------
         vertices : numpy.ndarray
-            A numpy array containing the surface vertices in um.
+            A numpy array containing the surface vertices in μm.
         connectivity_list : numpy.ndarray
             An (N, 3) numpy array containing the surface connectivity information.
         
@@ -1749,7 +1648,7 @@ class Reprojection(MesoscopeFOV):
             ref_meta['rawScanImageMeta']['YResolution']
         ])
         if ref_meta['rawScanImageMeta']['ResolutionUnit'].casefold() == 'centimeter':
-            # NB: these values are (x, y) in um and shouldn't be used with mlap coordinates without rotation
+            # NB: these values are (x, y) in μm and shouldn't be used with mlap coordinates without rotation
             px_per_um = xy_res * 1e-4
             um_per_px = 1 / px_per_um
         else:
@@ -1764,16 +1663,16 @@ class Reprojection(MesoscopeFOV):
         # An array of the positive ML and AP directions in (x, y) pixel space
         rotation_matrix = np.c_[ref_meta['imageOrientation']['positiveML'],
                                 ref_meta['imageOrientation']['positiveAP']]
-        craniotomy_center_offset = np.array([center['x'], center['y']]) * 1e3  # um from center
-        mlap = np.array([center['ML'], center['AP']]) * 1e3  # um from bregma
+        craniotomy_center_offset = np.array([center['x'], center['y']]) * 1e3  # μm from center
+        mlap = np.array([center['ML'], center['AP']]) * 1e3  # μm from bregma
 
         # Where is bregma in pixel space?
         # ml is along the y axis, and is positive, so longditudinal fissure is at a large +ve y value
-        # ref_stack_n_px[1]/2 = 270 px, which is mlap[0] = 2600 um from bregma, so absolute bregma ml
+        # ref_stack_n_px[1]/2 = 270 px, which is mlap[0] = 2600 μm from bregma, so absolute bregma ml
         # distance is mlap[0] * px_per_um[1] = 260 so bregma is at 260 + 270 = 530 px
         #
         # ap is along the x axis, and is negative, so the back of the brain is at a large -ve x value
-        # ref_stack_n_px[0]/2 = 245 px, which is mlap[1] = -2000 um from bregma, so absolute bregma ap
+        # ref_stack_n_px[0]/2 = 245 px, which is mlap[1] = -2000 μm from bregma, so absolute bregma ap
         # distance is mlap[1] * px_per_um[0] = 200 so bregma is at 245 - 200  = 45 px
 
         def px2um(px):
@@ -1895,7 +1794,7 @@ class Reprojection(MesoscopeFOV):
             reference_image['points'] = alfio.load_file_content(points_path)
         if self.reference_session:
             # Load the mlapdv coordinates for the reference stack
-            reference_image['mlapdv'] = self.load_mlapdv(display=False)
+            reference_image['mlapdv'] = self._load_reference_stack_mlapdv(display=False)
             assert reference_image['stack'].shape[1:] == reference_image['mlapdv'].shape[:2], 'Reference stack and MLAPDV coordinates must have the same shape'
         return Bunch(reference_image)
 
@@ -1914,6 +1813,7 @@ class TestReferenceSession(unittest.TestCase):
         self.reprojection = Reprojection(self.session_path, one=self.one)
         self.reprojection.reference_session = self.reference_session
         self.reprojection.get_signatures()
+        self.reprojection.data_handler = self.reprojection.get_data_handler()
         # Download required datasets
         dsets = self.one.list_datasets(self.session_path)
         required = ['mpciROIs.stackPos.npy', 'experiment.description.yaml',
@@ -2001,14 +1901,100 @@ class TestReferenceSession(unittest.TestCase):
         expected = expected_result[0].reshape(-1, 3)[idx]
         np.testing.assert_array_almost_equal(result[0], expected, decimal=5)
 
+    def test_save_roi(self):
+        with open(self.session_path / 'mlapdv_final_georg.pkl', 'rb') as f:
+            fovs = pickle.load(f)
+        
+        with unittest.mock.patch.object(self.reprojection, 'update_craniotomy_center'), \
+                unittest.mock.patch.object(self.reprojection, 'interpolate_FOVs'), \
+                unittest.mock.patch.object(self.reprojection, 'correct_fov_depth_and_surface_projection'), \
+                unittest.mock.patch.object(self.reprojection, 'project_mlapdv_from_surface', return_value=list(fovs.values())):
+            self.reprojection._run()
+
+
+class TestSession(unittest.TestCase):
+    """Test extraction of FOV coordinates for non-reference session."""
+
+    def setUp(self):
+        self.one = ONE()
+        self.session_path = ALFPath(r'D:\Flatiron\alyx.internationalbrainlab.org\cortexlab\Subjects\SP037\2023-03-09\001')
+        self.reference_session = '839bb5b1-120f-49d0-b7c9-5174c0c66b5a'  # SP037/2023-02-20/001
+        # Download required datasets
+        dsets = self.one.list_datasets(self.session_path)
+        required = ['mpciROIs.stackPos.npy', 'experiment.description.yaml',
+                    'referenceImage.meta.json', 'referenceImage.stack.tif',
+                    '_ibl_rawImagingData.meta.json']
+        dsets = [d for d in dsets if any(d.endswith(r) for r in required)]
+        # self.one.load_datasets(self.session_path, dsets, download_only=True)  # commented out because of size mismatches
+        self.reprojection = Reprojection(self.session_path, one=self.one)
+        self.reprojection.reference_session = self.reference_session
+        self.reprojection.get_signatures()
+        self.reprojection.data_handler = self.reprojection.get_data_handler()
+
+    def test_session_with_save(self):
+        # 1. Download the MLAPDV coordinates of the reference session
+        # registered_mlapdv = self.reprojection.get_atlas_registered_reference_mlap(self.reference_session)
+        # ref_mlapdv = np.load(registered_mlapdv)
+        # mlapdv = self.reprojection.interpolate_FOVs()
+        # # 2. 
+        # get_rois_mlapdv_rel
+        # rois_mlapdv_from_rel
+        self.reprojection.atlas = AllenAtlas(res_um=25)
+        # Load the reference stack & (down)load the registered MLAPDV coordinates
+        reference_image = self.reprojection._load_reference_stack()
+        # Load main meta
+        _, meta_files, _ = self.reprojection.input_files[0].find_files(self.reprojection.session_path)
+        meta = mesoscope.patch_imaging_meta(alfio.load_file_content(meta_files[0]) or {})
+        nFOV = len(meta.get('FOV', []))
+
+        f = self.session_path / 'interpolated_fovs.pkl'
+        if f.exists():
+            with open(f, 'rb') as f:
+                mlapdv = pickle.load(f)
+        else:
+            mlapdv = self.reprojection.interpolate_FOVs(reference_image, meta)
+            with open(f, 'wb') as f:
+                pickle.dump(mlapdv, f)
+
+
+        f = self.session_path / 'interpolated_fovs_rel.pkl'
+        if f.exists():
+            with open(f, 'rb') as f:
+                mlapdv_rel = pickle.load(f)
+        else:
+            mlapdv_rel = self.reprojection.correct_fov_depth_and_surface_projection(mlapdv)
+            with open(f, 'wb') as f:
+                pickle.dump(mlapdv_rel, f)
+
+        # Account for optical plane tilt
+        if (self.session_path / 'mlapdv_final_georg.pkl').exists():
+            with open(self.session_path / 'mlapdv_final_georg.pkl', 'rb') as f:
+                fovs = pickle.load(f)
+        else:
+            fovs = dict.fromkeys(range(nFOV), None)
+        
+        # mlapdv_rel = self.correct_fov_depth_and_surface_projection(mlapdv, meta, reference_image)
+        done = sum(v is not None for v in fovs.values())
+        _logger.info('%i/%i processed', done, nFOV)
+        if done == nFOV:
+            return
+        i = next(i for i in fovs if fovs[i] is None)
+        _logger.info('Processing FOV %i', i)
+
+        mean_image_mlapdv = self.reprojection.project_mlapdv_from_surface(mlapdv_rel[i:i+1])
+        fovs[i] = mean_image_mlapdv[0]
+        with open(self.session_path / 'mlapdv_final_georg.pkl', 'wb') as f:
+            pickle.dump(fovs, f)
+
 
 
 if __name__ == '__main__':
     suite = unittest.TestSuite()
     # suite.addTest(TestReprojectionUnit("test_interpolate_FOVs"))
     # suite.addTest(TestReprojection('test_load_mlapdv'))
-    suite.addTest(TestReferenceSession('test_ref_session_with_save'))
+    # suite.addTest(TestReferenceSession('test_save_roi'))
     # suite.addTest(TestReferenceSession('test_project_mlapdv_from_surface_georg'))
+    suite.addTest(TestSession('test_session_with_save'))
     runner = unittest.TextTestRunner()
     runner.run(suite)
     exit()
