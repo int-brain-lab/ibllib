@@ -90,7 +90,6 @@ class PMD(base_tasks.MesoscopeTask, base_tasks.RegisterRawDataTask):
             'outdir': '.',
             'block_size_dim1': 32,
             'block_size_dim2': 32,
-            'background_rank': 0,
             'max_components': 20,
             'max_consecutive_failures': 1,
             'spatial_avg_factor': 1,
@@ -153,7 +152,6 @@ class PMD(base_tasks.MesoscopeTask, base_tasks.RegisterRawDataTask):
                                                         max_consecutive_failures=cfg.max_consecutive_failures,
                                                         temporal_avg_factor=cfg.temporal_avg_factor,
                                                         spatial_avg_factor=cfg.spatial_avg_factor,
-                                                        background_rank=cfg.background_rank,
                                                         device=device,
                                                         frame_batch_size=cfg.frame_batch_size)
 
@@ -191,7 +189,6 @@ class PMD(base_tasks.MesoscopeTask, base_tasks.RegisterRawDataTask):
                                                                max_consecutive_failures=cfg.max_consecutive_failures,
                                                                temporal_avg_factor=cfg.temporal_avg_factor,
                                                                spatial_avg_factor=cfg.spatial_avg_factor,
-                                                               background_rank=cfg.background_rank,
                                                                device=device,
                                                                temporal_denoiser=denoiser,
                                                                frame_batch_size=cfg.frame_batch_size)
@@ -203,7 +200,6 @@ class PMD(base_tasks.MesoscopeTask, base_tasks.RegisterRawDataTask):
                                                                max_consecutive_failures=cfg.max_consecutive_failures,
                                                                temporal_avg_factor=cfg.temporal_avg_factor,
                                                                spatial_avg_factor=cfg.spatial_avg_factor,
-                                                               background_rank=cfg.background_rank,
                                                                device=device,
                                                                temporal_denoiser=None,  # Turn off denoiser
                                                                frame_batch_size=cfg.frame_batch_size)
