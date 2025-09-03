@@ -3,7 +3,7 @@
 IBL aims to understand the neural basis of decision-making in the mouse by gathering a whole-brain activity map composed of electrophysiological recordings pooled from multiple laboratories.
 We have systematically recorded from nearly all major brain areas with Neuropixels probes, using a grid system for unbiased sampling and replicating each recording site in at least two laboratories.
 These data have been used to construct a brain-wide map of activity at single-spike cellular resolution during a [decision-making task]((https://elifesciences.org/articles/63711)).
-Please read the associated article [(IBL et al. 2023)](https://doi.org/10.1101/2023.07.04.547681).
+Please read the associated article [(IBL et al. 2025)](https://www.nature.com/articles/s41586-025-09235-0).
 In addition to the map, this data set contains other information gathered during the task: sensory stimuli presented to the mouse; 
 mouse decisions and response times; and mouse pose information from video recordings and DeepLabCut analysis.
 Please read our accompanying [technical paper](https://doi.org/10.6084/m9.figshare.21400815) for details on the experiment and data processing pipelines.
@@ -13,7 +13,7 @@ To explore the data, visit [our vizualisation website](https://viz.international
 We have released data from 459 Neuropixel experimental sessions, which encompass 699 distinct recordings,
 referred to as probe insertions. Those were obtained with 139 subjects performing the IBL task across 12 different laboratories.
 As output of spike-sorting, there are 621,733 units; of which 75,708 are considered to be of good quality.
-In total, 241 brain regions were recorded in sufficient numbers for inclusion in IBL’s analyses [(IBL et al. 2023)](https://doi.org/10.1101/2023.07.04.547681).
+In total, 241 brain regions were recorded in sufficient numbers for inclusion in IBL’s analyses [(IBL et al. 2025)](https://doi.org/10.1101/2023.07.04.547681).
 
 
 ## Data structure and download

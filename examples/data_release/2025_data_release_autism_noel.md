@@ -18,15 +18,17 @@ We recommend you download the data via ONE.
 
 ## Overview of the Data
 We have released data from 198 Neuropixel experimental sessions, with single Neuropixel recordings, referred to as probe insertions. Those were obtained with 62 genetically modified subjects performing the IBL task.
-As output of spike-sorting, there are XXX units; of which XXX are considered to be of good quality. In total, XXX brain regions were recorded in sufficient numbers for comparison with IBL’s analyses [(IBL et al. 2023)](https://doi.org/10.1101/2023.07.04.547681).
+As output of spike-sorting, there are 71,067 units; of which 12,163 are passing IBL automated quality control.
 
 
-| Model    | Subject Count | Neuropixel Count |
-|----------|---------------| --- |
-| Wildtype | 15 | 51|
-| Cntnap2  | 17 | 52|
-| Shank3b  | 15 | 41|
-| Fmr1     | 15 | 54|
+
+| Strain   | Subject Count | Recording Count | Units Count | Good Units Count |
+|:---------|--------------:|----------------:|------------:|-----------------:|
+| Cntnap2  |            17 |              52 |      20,467 |             2683 |
+| Fmr1     |            15 |              54 |      17,801 |             3491 |
+| Shank3t  |            15 |              41 |      16,357 |             2911 |
+| Wildtype |            15 |              51 |      16,442 |             3078 |
+| Total    |            62 |             198 |      71,067 |           12,163 |
 
 ## Data structure and download
 The organisation of the data follows the standard IBL data structure.
@@ -45,7 +47,7 @@ Note:
 ## How to cite this dataset
 If you are using this dataset for your research please cite:
 - the paper [A common computational and neural anomaly across mouse models of autism](https://doi.org/10.1038/s41593-025-01965-8)
-- if you download the data via ONE (recommended), cite the DOI: 10.6084/m9.figshare.30024880
+- if you download the data via ONE (recommended), cite the DOI: [10.6084/m9.figshare.30024880](https://figshare.com/account/articles/30024880?file=57596791)
   
 - if you download the data via OSF (not recommended), please use the OSF DOI.
 
@@ -53,10 +55,9 @@ If you are using this dataset for your research please cite:
 
 ### 2025-08-29: initial release
 
-Possible future evolutions
+Possible future evolutions:
 - Spike sorting re-run with iblsorter or newer algorithm to have better yield and better pre-processing
-- Perform the missing alignments with an automatic tool to get
-
+- Perfom new alignments of the brain region labels with regards to the ephys signatures using an automatic tool
 
 #### Excluded sessions
 
