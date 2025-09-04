@@ -502,7 +502,7 @@ class MesoscopeFOV(MesoscopeTask):
             The raw imaging meta data from _ibl_rawImagingData.meta.json.
         suffix : str
             The file attribute suffixes to load from the mpciMeanImage object. Either 'estimate' or
-            None. No suffix means the FOV location provenance will be L (Landmark).
+            None. No suffix means the FOV location provenance will be H (Histology).
 
         Returns
         -------
@@ -536,15 +536,23 @@ class MesoscopeFOV(MesoscopeTask):
                 alyx_FOV['location'] = []
                 alyx_fovs.append(alyx_FOV)
             else:
-                alyx_fovs.append(self.one.alyx.rest('fields-of-view', 'create', data=alyx_FOV))
+                # Check if FOV already exists
+                existing = self.one.alyx.rest('fields-of-view', 'list', session=alyx_FOV['session'],
+                                              name=alyx_FOV['name'], imaging_type=alyx_FOV['imaging_type'])
+                if existing:
+                    alyx_fovs.append(existing[0])
+                    _logger.warning(f'FOV {alyx_FOV["name"]} already exists in Alyx')
+                else:
+                    alyx_fovs.append(self.one.alyx.rest('fields-of-view', 'create', data=alyx_FOV))
 
             # Field of view location
-            data = {'field_of_view': alyx_fovs[-1].get('id'),
-                    'default_provenance': True,
-                    'coordinate_system': 'IBL-Allen',
-                    'n_xyz': fov['nXnYnZ']}
-            if suffix:
-                data['provenance'] = suffix[0].upper()
+            data = {
+                'field_of_view': alyx_fovs[-1].get('id'),
+                'default_provenance': True,
+                'coordinate_system': 'IBL-Allen',
+                'n_xyz': fov['nXnYnZ'],
+                'provenance': 'H' if not suffix else suffix[0].upper()
+            }
 
             # Convert coordinates to 4 x 3 array (n corners by n dimensions)
             # x1 = top left ml, y1 = top left ap, y2 = top right ap, etc.
@@ -822,6 +830,25 @@ class MesoscopeFOVHistology(MesoscopeFOV):
             labels = self.atlas.get_labels(xyz.reshape(-1, 3))
             mean_image_ids.append(labels.reshape(xyz.shape[:2]))
 
+        # Update the FOV meta data fields (used in register_fov)
+        for i, fov in enumerate(meta.get('FOV', [])):
+            fov['MLAPDV'] = {
+                'topLeft': mean_image_mlapdv[i][0, 0, :].tolist(),
+                'topRight': mean_image_mlapdv[i][0, -1, :].tolist(),
+                'bottomLeft': mean_image_mlapdv[i][-1, 0, :].tolist(),
+                'bottomRight': mean_image_mlapdv[i][-1, -1, :].tolist(),
+                'center': mean_image_mlapdv[i][round(mean_image_mlapdv[i].shape[0] / 2) - 1,
+                                               round(mean_image_mlapdv[i].shape[1] / 2) - 1, :].tolist()
+            }
+            fov['brainLocationIds'] = {
+                'topLeft': int(mean_image_ids[i][0, 0]),
+                'topRight': int(mean_image_ids[i][0, -1]),
+                'bottomLeft': int(mean_image_ids[i][-1, 0]),
+                'bottomRight': int(mean_image_ids[i][-1, -1]),
+                'center': int(mean_image_ids[i][round(mean_image_ids[i].shape[0] / 2) - 1,
+                                                round(mean_image_ids[i].shape[1] / 2)])
+            }
+
         # Save the mean image datasets
         suffix = None if provenance is Provenance.HISTOLOGY else provenance.name.lower()
         mean_image_files = []
@@ -857,7 +884,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
                 axes.scatter(*fov.T, ".", c="k", s=1, alpha=0.05, label='ROIs in imaging plane')
 
         # Register FOVs in Alyx
-        # self.register_fov(meta, suffix)
+        self.register_fov(meta, suffix)
 
         return sorted([*meta_files, *roi_files, *mean_image_files])
 
