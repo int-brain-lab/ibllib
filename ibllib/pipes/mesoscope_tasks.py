@@ -900,4 +900,3 @@ class MesoscopeSync(base_tasks.MesoscopeTask):
         _, out_files = mesosync.extract(
             save=True, sync=sync, chmap=chmap, device_collection=collections, events=events, use_volume_counter=legacy)
         return out_files
-

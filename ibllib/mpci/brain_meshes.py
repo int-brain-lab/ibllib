@@ -9,24 +9,25 @@ from iblatlas.atlas import BrainAtlas
 from typing import Tuple
 
 
-def load_surface_triangulation():
-    # DEPRECATED
-    path = "/home/georg/code/ibllib/ibllib/io/extractors/mesoscope/surface_triangulation.npz"
-    surface_triangulation = np.load(path)
-    points = surface_triangulation["points"].astype("f8")
-    connectivity_list = surface_triangulation["connectivity_list"]
-    surface_triangulation.close()
-    return points, connectivity_list
-
-
 def calculate_surface_triangulation(atlas: BrainAtlas) -> Tuple[np.ndarray, np.ndarray]:
-    """runs surface triangulation on the brain atlas and returns the mesh two arrays: points and connectivity_list
+    """
+    Run surface triangulation on the given brain atlas and return the mesh vertices and connectivity list.
 
-    Args:
-        atlas (BrainAtlas): _description_
+    Parameters
+    ----------
+    atlas : BrainAtlas
+        Brain atlas object containing anatomical data.
 
-    Returns:
-        Tuple[np.ndarray, np.ndarray]: _description_
+    Returns
+    -------
+    points : np.ndarray
+        Array of 3D coordinates representing the surface points of the brain atlas.
+    connectivity_list : np.ndarray
+        Array of indices representing the connectivity (triangles) between surface points.
+
+    Notes
+    -----
+    This function uses a convex hull to compute the triangulation of the surface points.
     """
     points = get_surface_points(atlas, dropna=True)
     hull = ConvexHull(points)
@@ -35,14 +36,20 @@ def calculate_surface_triangulation(atlas: BrainAtlas) -> Tuple[np.ndarray, np.n
 
 
 def get_surface_points(atlas: BrainAtlas, dropna=True) -> np.ndarray:
-    """for a given atlas, return all points that are on the brain surface in um.
+    """
+    Returns all points on the brain surface in micrometers.
 
-    Args:
-        atlas (BrainAtlas): _description_
-        dropna (bool, optional): _description_. Defaults to True.
+    Parameters
+    ----------
+    atlas : BrainAtlas
+        The brain atlas object.
+    dropna : bool, optional
+        If True, drop points with NaN values. Default is True.
 
-    Returns:
-        np.ndarray: the surface points with shape (N,3) in (ml,ap,dv)
+    Returns
+    -------
+    np.ndarray
+        Surface points with shape (N, 3) in (ml, ap, dv) coordinates.
     """
 
     ap_grid, ml_grid = np.meshgrid(
@@ -52,7 +59,7 @@ def get_surface_points(atlas: BrainAtlas, dropna=True) -> np.ndarray:
         np.stack(
             [ml_grid.T.flatten(), ap_grid.T.flatten(), atlas.top.flatten()], axis=1
         )
-        * 1e6  # <- converts the atlas into um
+        * 1e6  # <- converts the atlas into μm
     )
     if dropna:
         points = points[~np.isnan(points[:, 2])]
@@ -66,18 +73,27 @@ def get_plane_at_point_mlap(
     connectivity_list: np.ndarray,
     upwards=True,
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """for a given ml,ap coordinates, returns the plane on the brain surface
-    in normal form
+    """For a given ml, ap coordinate, return the plane on the brain surface in normal form.
 
-    Args:
-        ml (np.float64): _description_
-        ap (np.float64): _description_
-        vertices (np.ndarray): _description_
-        connectivity_list (np.ndarray): _description_
-        upwards (bool, optional): enforce the normal pointing upwards. Defaults to True.
+    Parameters
+    ----------
+    ml : np.float64
+        The mediolateral coordinate in micrometers.
+    ap : np.float64
+        The anteroposterior coordinate in micrometers.
+    vertices : np.ndarray
+        The mesh vertices as an Nx3 array in (ml, ap, dv) coordinates.
+    connectivity_list : np.ndarray
+        The mesh connectivity list.
+    upwards : bool
+        Enforce the normal pointing upwards. Defaults to True.
 
-    Returns:
-        Tuple[np.ndarray, np.ndarray]: plane as defined by point and normal
+    Returns
+    -------
+    np.ndarray
+        One of the points on the surface plane.
+    np.ndarray
+        The normal vector of the surface plane.
     """
     # projects from a point above the brain downwards until it intersects
     # the mesh
