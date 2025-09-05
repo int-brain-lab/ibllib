@@ -77,15 +77,18 @@ def _load_passive_session_fixtures(session_path: str, task_collection: str = 'ra
     if session_order:  # TODO test this out and make sure it okay
         assert settings["SESSION_ORDER"][settings["SESSION_IDX"]] == ses_nb
 
-    path_fixtures = Path(ephys_fpga.__file__).parent.joinpath("ephys_sessions")
+    iblrig_version =  8 #TODO: need to know when passive sessions started being written from the new fixtures file
+    if iblrig_version >= 8: # handle new sessions
+        path_fixtures = Path(ephys_fpga.__file__).parent / 'ephys_sessions' / 'passiveChoiceWorld_trials_fixtures.pqt'
+        all_trials = pd.read_parquet(path_fixtures)
+        session_template_trials = all_trials[all_trials['session_id'] == ses_nb].copy()
+        session_template_trials = session_template_trials[session_template_trials.stim_type == 'G']
+        gabor_params = session_template_trials[['position','contrast','stim_phase']].to_numpy()
+    else: # handle old sessions
+        path_fixtures = Path(ephys_fpga.__file__).parent / "ephys_sessions"
+        gabor_params = np.load(path_fixtures.joinpath(f"session_{ses_nb}_passive_pcs.npy"))
+    return gabor_params
 
-    fixture = {
-        "pcs": np.load(path_fixtures.joinpath(f"session_{ses_nb}_passive_pcs.npy")),
-        "delays": np.load(path_fixtures.joinpath(f"session_{ses_nb}_passive_stimDelays.npy")),
-        "ids": np.load(path_fixtures.joinpath(f"session_{ses_nb}_passive_stimIDs.npy")),
-    }
-
-    return fixture
 
 
 def _load_task_version(session_path: str, task_collection: str = 'raw_passive_data') -> str:
@@ -370,8 +373,7 @@ def _extract_passiveGabor_df(fttl: dict, session_path: str, task_collection: str
     assert (
         len(passiveGabor_intervals) == NGABOR
     ), f"Wrong number of Gabor stimuli detected: {len(passiveGabor_intervals)} / {NGABOR}"
-    fixture = _load_passive_session_fixtures(session_path, task_collection)
-    passiveGabor_properties = fixture["pcs"]
+    passiveGabor_properties = _load_passive_session_fixtures(session_path, task_collection)
     passiveGabor_table = np.append(passiveGabor_intervals, passiveGabor_properties, axis=1)
     columns = ["start", "stop", "position", "contrast", "phase"]
     passiveGabor_df = pd.DataFrame(passiveGabor_table, columns=columns)
