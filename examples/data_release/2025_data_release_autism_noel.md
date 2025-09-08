@@ -17,23 +17,39 @@ The dataset has also been published via the [OSF platform](https://osf.io/fap2s/
 We recommend you download the data via ONE.
 
 ## Overview of the Data
-We have released data from 198 Neuropixel experimental sessions, with single Neuropixel recordings, referred to as probe insertions. Those were obtained with 62 genetically modified subjects performing the IBL task.
-As output of spike-sorting, there are 71,067 units; of which 12,163 are passing IBL automated quality control.
+We have released data from 364 Neuropixel recordings, referred to as probe insertions. Those were obtained with 62 genetically modified subjects performing the IBL task.
+As output of spike-sorting, there are 129,313 units; of which 22,008 are passing IBL automated quality control.
 
-
-
-| Strain   | Subject Count | Recording Count | Units Count | Good Units Count |
-|:---------|--------------:|----------------:|------------:|-----------------:|
-| Cntnap2  |            17 |              52 |      20,467 |             2683 |
-| Fmr1     |            15 |              54 |      17,801 |             3491 |
-| Shank3t  |            15 |              41 |      16,357 |             2911 |
-| Wildtype |            15 |              51 |      16,442 |             3078 |
-| Total    |            62 |             198 |      71,067 |           12,163 |
+| strain   |   n_subjects | n_recordings | n_units | n_good_units |
+|:---------|-------------:|-------------:|--------:|-------------:|
+| Cntnap2  |           16 |           85 |  31,082 |        4,211 |
+| Fmr1     |           15 |          105 |  34,401 |        6,215 |
+| Shank3t  |           16 |           75 |  31,679 |        5,423 |
+| Wildtype |           15 |           99 |  32,151 |        6,159 |
+| Total    |           62 |          364 | 129,313 |       22,008 |
 
 ## Data structure and download
 The organisation of the data follows the standard IBL data structure.
 
-Please see
+Here is a minimal example of how to download the data for one of the insertions using `ibllib`
+
+```python
+import pandas as pd
+from brainbox.io.one import SpikeSortingLoader, SessionLoader
+from one.api import ONE
+
+one = ONE(base_url='https://openalyx.internationalbrainlab.org')
+insertions = one.search_insertions(project='angelaki_mouseASD')
+ssl = SpikeSortingLoader(one=one, pid=str(insertions[0]))
+sl = SessionLoader(one=one, eid=ssl.eid)
+sl.load_trials()
+spikes, clusters, channels = ssl.load_spike_sorting()
+df_clusters = pd.DataFrame(ssl.merge_clusters(spikes, clusters, channels))
+print(df_clusters)
+print(sl.trials)
+```
+
+To go further with more advanced examples, see:
 
 * [These instructions](https://int-brain-lab.github.io/iblenv/notebooks_external/data_structure.html) to download an example dataset for one session, and get familiarised with the data structure
 * [These instructions](https://int-brain-lab.github.io/iblenv/notebooks_external/data_download.html) to learn how to use the ONE-api to search and download the released datasets
@@ -42,7 +58,7 @@ Please see
 Note:
 
 * The tag associated to this release is `2025_Q3_Noel_et_al_Autism`
-
+* The project associated to this release is `angelaki_mouseASD`
 
 ## How to cite this dataset
 If you are using this dataset for your research please cite:
