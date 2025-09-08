@@ -63,7 +63,7 @@ Note:
 ## How to cite this dataset
 If you are using this dataset for your research please cite:
 - the paper [A common computational and neural anomaly across mouse models of autism](https://doi.org/10.1038/s41593-025-01965-8)
-- if you download the data via ONE (recommended), cite the DOI: [10.6084/m9.figshare.30024880](https://figshare.com/account/articles/30024880?file=57596791)
+- if you download the data via ONE (recommended), cite the DOI: [10.6084/m9.figshare.30024880](https://doi.org/10.6084/m9.figshare.30024880)
   
 - if you download the data via OSF (not recommended), please use the OSF DOI.
 
