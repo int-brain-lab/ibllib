@@ -338,7 +338,7 @@ class MesoscopeFOV(MesoscopeTask):
         _logger.info('Extracting %s MLAPDV datasets', suffix or 'final')
 
         # Extract mean image MLAPDV coordinates and brain location IDs
-        mean_image_mlapdv, mean_image_ids = self.project_mlapdv(meta)
+        mean_image_mlapdv, mean_image_ids = self.project_mlapdv(meta, provenance=provenance)
 
         # Save the meta data file with new coordinate fields
         with open(meta_files[0], 'w') as fp:
@@ -369,7 +369,7 @@ class MesoscopeFOV(MesoscopeTask):
                 np.save(roi_files[-1], arr)
 
         # Register FOVs in Alyx
-        self.register_fov(meta, suffix)
+        self.register_fov(meta, provenance)
 
         return sorted([*meta_files, *roi_files, *mean_image_files])
 
@@ -485,7 +485,7 @@ class MesoscopeFOV(MesoscopeTask):
         provenance = (Provenance[x.upper()] for x in timescale if x in provenances)
         return next(provenance, None) or Provenance.HISTOLOGY
 
-    def register_fov(self, meta: dict, suffix: str = None) -> (list, list):
+    def register_fov(self, meta: dict, provenance: Provenance) -> (list, list):
         """
         Create FOV on Alyx.
 
@@ -500,9 +500,8 @@ class MesoscopeFOV(MesoscopeTask):
         ----------
         meta : dict
             The raw imaging meta data from _ibl_rawImagingData.meta.json.
-        suffix : str
-            The file attribute suffixes to load from the mpciMeanImage object. Either 'estimate' or
-            None. No suffix means the FOV location provenance will be H (Histology).
+        provenance : Provenance
+            The provenance of the FOV location.
 
         Returns
         -------
@@ -539,9 +538,9 @@ class MesoscopeFOV(MesoscopeTask):
                 # Check if FOV already exists
                 existing = self.one.alyx.rest('fields-of-view', 'list', session=alyx_FOV['session'],
                                               name=alyx_FOV['name'], imaging_type=alyx_FOV['imaging_type'])
-                if existing:
+                if any(existing):
                     alyx_fovs.append(existing[0])
-                    _logger.warning(f'FOV {alyx_FOV["name"]} already exists in Alyx')
+                    _logger.debug(f'FOV {alyx_FOV["name"]} already exists in Alyx')
                 else:
                     alyx_fovs.append(self.one.alyx.rest('fields-of-view', 'create', data=alyx_FOV))
 
@@ -551,17 +550,19 @@ class MesoscopeFOV(MesoscopeTask):
                 'default_provenance': True,
                 'coordinate_system': 'IBL-Allen',
                 'n_xyz': fov['nXnYnZ'],
-                'provenance': 'H' if not suffix else suffix[0].upper()
+                'provenance': provenance.name[0]
             }
 
             # Convert coordinates to 4 x 3 array (n corners by n dimensions)
             # x1 = top left ml, y1 = top left ap, y2 = top right ap, etc.
-            coords = [fov['MLAPDV'][key] for key in ('topLeft', 'topRight', 'bottomLeft', 'bottomRight')]
+            d = fov['MLAPDV'][provenance.name.lower()]
+            coords = [d[key] for key in ('topLeft', 'topRight', 'bottomLeft', 'bottomRight')]
             coords = np.vstack(coords).T
             data.update({k: arr.tolist() for k, arr in zip('xyz', coords)})
 
             # Load MLAPDV + brain location ID maps of pixels
-            filename = 'mpciMeanImage.brainLocationIds_ccf_2017' + (f'_{suffix}' if suffix else '') + '.npy'
+            suffix = '' if provenance is Provenance.HISTOLOGY else f'_{provenance.name.lower()}'
+            filename = 'mpciMeanImage.brainLocationIds_ccf_2017' + suffix + '.npy'
             filepath = self.session_path.joinpath('alf', f'FOV_{i:02}', filename)
             mean_image_ids = alfio.load_file_content(filepath)
 
@@ -571,7 +572,15 @@ class MesoscopeFOV(MesoscopeTask):
                 print(data)
                 alyx_FOV['location'].append(data)
             else:
-                alyx_fovs[-1]['location'].append(self.one.alyx.rest('fov-location', 'create', data=data))
+                # Whether to patch or create a new location
+                existing = self.one.alyx.rest(
+                    'fov-location', 'list', field_of_view=data['field_of_view'], provenance=provenance.name)
+                if any(existing):
+                    _logger.info(f'Patching FOV location for {alyx_fovs[-1]["name"]}')
+                    loc = self.one.alyx.rest('fov-location', 'partial_update', id=existing[0]['id'], data=data)
+                else:
+                    loc = self.one.alyx.rest('fov-location', 'create', data=data)
+                alyx_fovs[-1]['location'].append(loc)
         return alyx_fovs
 
     def load_triangulation(self):
@@ -597,7 +606,7 @@ class MesoscopeFOV(MesoscopeTask):
         surface_triangulation.close()
         return points, connectivity_list
 
-    def project_mlapdv(self, meta, atlas=None):
+    def project_mlapdv(self, meta, atlas=None, provenance=Provenance.ESTIMATE):
         """
         Calculate the mean image pixel locations in MLAPDV coordinates and determine the brain
         location IDs.
@@ -612,6 +621,8 @@ class MesoscopeFOV(MesoscopeTask):
             view.
         atlas : ibllib.atlas.Atlas
             An atlas instance.
+        provenance : Provenance
+            The provenance of the coordinates.  Defaults to ESTIMATE.
 
         Returns
         -------
@@ -728,7 +739,10 @@ class MesoscopeFOV(MesoscopeTask):
             MLAPDV = np.reshape(MLAPDV, [*x_px_idx.shape, 3])
             annotation = np.reshape(annotation, x_px_idx.shape)
 
-            fov['MLAPDV'] = {
+            if 'MLAPDV' not in fov:
+                fov['MLAPDV'] = {}
+                fov['brainLocationIds'] = {}
+            fov['MLAPDV'][provenance.name.lower()] = {
                 'topLeft': MLAPDV[0, 0, :].tolist(),
                 'topRight': MLAPDV[0, -1, :].tolist(),
                 'bottomLeft': MLAPDV[-1, 0, :].tolist(),
@@ -737,7 +751,7 @@ class MesoscopeFOV(MesoscopeTask):
             }
 
             # Save the brain regions of the corners/centers of FOV (annotation field)
-            fov['brainLocationIds'] = {
+            fov['brainLocationIds'][provenance.name.lower()] = {
                 'topLeft': int(annotation[0, 0]),
                 'topRight': int(annotation[0, -1]),
                 'bottomLeft': int(annotation[-1, 0]),
@@ -832,7 +846,10 @@ class MesoscopeFOVHistology(MesoscopeFOV):
 
         # Update the FOV meta data fields (used in register_fov)
         for i, fov in enumerate(meta.get('FOV', [])):
-            fov['MLAPDV'] = {
+            if 'MLAPDV' not in fov:
+                fov['MLAPDV'] = {}
+                fov['brainLocationIds'] = {}
+            fov['MLAPDV'][provenance.name.lower()] = {
                 'topLeft': mean_image_mlapdv[i][0, 0, :].tolist(),
                 'topRight': mean_image_mlapdv[i][0, -1, :].tolist(),
                 'bottomLeft': mean_image_mlapdv[i][-1, 0, :].tolist(),
@@ -840,7 +857,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
                 'center': mean_image_mlapdv[i][round(mean_image_mlapdv[i].shape[0] / 2) - 1,
                                                round(mean_image_mlapdv[i].shape[1] / 2) - 1, :].tolist()
             }
-            fov['brainLocationIds'] = {
+            fov['brainLocationIds'][provenance.name.lower()] = {
                 'topLeft': int(mean_image_ids[i][0, 0]),
                 'topRight': int(mean_image_ids[i][0, -1]),
                 'bottomLeft': int(mean_image_ids[i][-1, 0]),
@@ -884,7 +901,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
                 axes.scatter(*fov.T, ".", c="k", s=1, alpha=0.05, label='ROIs in imaging plane')
 
         # Register FOVs in Alyx
-        self.register_fov(meta, suffix)
+        self.register_fov(meta, provenance)
 
         return sorted([*meta_files, *roi_files, *mean_image_files])
 
