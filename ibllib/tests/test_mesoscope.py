@@ -13,8 +13,9 @@ import uuid
 from one.api import ONE
 import numpy as np
 
-from ibllib.pipes.mesoscope_tasks import MesoscopePreprocess, MesoscopeFOV, \
-    find_triangle, surface_normal, _nearest_neighbour_1d
+from ibllib.pipes.mesoscope_tasks import MesoscopePreprocess
+from ibllib.mpci.registration import MesoscopeFOV, Provenance
+from ibllib.mpci.linalg import _nearest_neighbour_1d, surface_normal, find_triangle
 from ibllib.io.extractors import mesoscope
 from ibllib.tests import TEST_DB
 
@@ -274,17 +275,17 @@ class TestMesoscopeFOV(unittest.TestCase):
 
         # Check errors and warnings
         # No matching craniotomy center
-        with self.assertLogs('ibllib.pipes.mesoscope_tasks', 'ERROR'), \
+        with self.assertLogs('ibllib.mpci.registration', 'ERROR'), \
                 mock.patch.object(one.alyx, 'rest', return_value=[record, {}]):
             task.update_surgery_json({'centerMM': {'ML': 0., 'AP': 0.}}, normal_vector)
         # No matching surgery records
-        with self.assertLogs('ibllib.pipes.mesoscope_tasks', 'ERROR'), \
+        with self.assertLogs('ibllib.mpci.registration', 'ERROR'), \
                 mock.patch.object(one.alyx, 'rest', return_value=[]):
             task.update_surgery_json(meta, normal_vector)
         # ONE offline
         one.mode = 'local'
         try:
-            with self.assertLogs('ibllib.pipes.mesoscope_tasks', 'WARNING'):
+            with self.assertLogs('ibllib.mpci.registration', 'WARNING'):
                 task.update_surgery_json(meta, normal_vector)
         finally:
             # ONE function is cached so we must reset the mode for other tests
@@ -312,20 +313,20 @@ class TestRegisterFOV(unittest.TestCase):
         mlapdv = {'topLeft': [2317.2, -1599.8, -535.5], 'topRight': [2862.7, -1625.2, -748.7],
                   'bottomLeft': [2317.3, -2181.4, -466.3], 'bottomRight': [2862.7, -2206.9, -679.4],
                   'center': [2596.1, -1900.5, -588.6]}
-        meta = {'FOV': [{'MLAPDV': mlapdv, 'nXnYnZ': [512, 512, 1], 'roiUUID': 0}]}
+        meta = {'FOV': [{'MLAPDV': {'estimate': mlapdv}, 'nXnYnZ': [512, 512, 1], 'roiUUID': 0}]}
         eid = uuid.uuid4()
         with unittest.mock.patch.object(task.one.alyx, 'rest') as mock_rest, \
                 unittest.mock.patch.object(task.one, 'path2eid', return_value=eid):
-            task.register_fov(meta, 'estimate')
+            task.register_fov(meta, Provenance.ESTIMATE)
         calls = mock_rest.call_args_list
-        self.assertEqual(2, len(calls))
+        self.assertEqual(4, len(calls))  # list + create fov, list + create location
 
-        args, kwargs = calls[0]
+        args, kwargs = calls[1]  # note: first call should be list (to determine whether to patch or create)
         self.assertEqual(('fields-of-view', 'create'), args)
         expected = {'data': {'session': str(eid), 'imaging_type': 'mesoscope', 'name': 'FOV_00', 'stack': None}}
         self.assertEqual(expected, kwargs)
 
-        args, kwargs = calls[1]
+        args, kwargs = calls[3]
         self.assertEqual(('fov-location', 'create'), args)
         expected = ['field_of_view', 'default_provenance', 'coordinate_system', 'n_xyz', 'provenance', 'x', 'y', 'z',
                     'brain_region']
@@ -336,18 +337,19 @@ class TestRegisterFOV(unittest.TestCase):
         self.assertEqual('E', kwargs['data']['provenance'])
         self.assertEqual([2317.2, 2862.7, 2317.3, 2862.7], kwargs['data']['x'])
 
-        # Check dry mode with suffix input = None
+        # Check dry mode with histology provenance
         for file in self.session_path.joinpath('alf', 'FOV_00').glob('mpciMeanImage.*'):
             file.replace(file.with_name(file.name.replace('_estimate', '')))
         task.one.mode = 'local'
+        meta['FOV'][0]['MLAPDV']['histology'] = meta['FOV'][0]['MLAPDV']['estimate']
         with unittest.mock.patch.object(task.one.alyx, 'rest') as mock_rest:
-            out = task.register_fov(meta, None)
+            out = task.register_fov(meta, Provenance.HISTOLOGY)
             mock_rest.assert_not_called()
         self.assertEqual(1, len(out))
         self.assertEqual('FOV_00', out[0].get('name'))
         locations = out[0]['location']
         self.assertEqual(1, len(locations))
-        self.assertEqual('L', locations[0].get('provenance', 'L'))
+        self.assertEqual('H', locations[0].get('provenance', 'H'))
 
     def tearDown(self) -> None:
         """
@@ -384,8 +386,16 @@ class TestImagingMeta(unittest.TestCase):
                 {'roiUuid': None, **self._fov_deg(False)},
                 {'roiUUID': None, **self._fov_deg(False)}], **base
         }
+        # Test MLAPDV.topLeft -> MLAPDV.estimate.topLeft
+        meta['FOV'][0]['MLAPDV'] = {'topLeft': [0, 0, 0], 'center': [1, 0, 0]}
+        meta['FOV'][0]['brainLocationIds'] = {'topLeft': 0, 'center': 1}
         new_meta = mesoscope.patch_imaging_meta(meta)
-        self.assertEqual(set(chain(*map(dict.keys, new_meta['FOV']))), {'roiUUID', 'Deg', 'MM'})
+        expected = {'roiUUID', 'Deg', 'MM', 'MLAPDV', 'brainLocationIds'}
+        self.assertEqual(set(chain(*map(dict.keys, new_meta['FOV']))), expected)
+        self.assertEqual(set(new_meta['FOV'][0]['MLAPDV'].keys()), {'estimate'})
+        self.assertEqual(set(new_meta['FOV'][0]['brainLocationIds'].keys()), {'estimate'})
+        self.assertEqual(new_meta['FOV'][0]['MLAPDV']['estimate']['topLeft'], [0, 0, 0])
+        self.assertEqual(new_meta['FOV'][0]['brainLocationIds']['estimate']['topLeft'], 0)
         # Test topLeftDeg -> Deg.topLeft, etc.
         meta = {'nFrames': 2000, 'FOV': [self._fov_deg(True), self._fov_deg(True)], **base}
         new_meta = mesoscope.patch_imaging_meta(meta)

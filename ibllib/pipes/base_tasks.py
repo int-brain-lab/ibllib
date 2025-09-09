@@ -1,5 +1,6 @@
 """Abstract base classes for dynamic pipeline tasks."""
 import logging
+import json
 from pathlib import Path
 
 from packaging import version
@@ -382,7 +383,6 @@ class MesoscopeTask(DynamicTask):
 
         Necessary because we don't know in advance how many device collection folders ("imaging bouts") to expect
         """
-        self.session_path = Path(self.session_path)
         # Glob for all device collection (raw imaging data) folders
         raw_imaging_folders = [p.name for p in self.session_path.glob(self.device_collection)]
         super().get_signatures(**kwargs)  # Set inputs and outputs
@@ -496,6 +496,58 @@ class RegisterRawDataTask(DynamicTask):
         matplotlib.image.imsave(snapshot.with_suffix('.png'), img, cmap='gray')
         return snapshot.with_suffix('.png')
 
+    def upload_images(self, images, unlink=False):
+        """
+        Upload a folder or list of images as session notes.
+
+        Parameters
+        ----------
+        images : pathlib.Path or list of pathlib.Path
+            List of image file paths to upload or a folder containing images to upload.
+        unlink : bool
+            If true, files are deleted after upload.
+        """
+        eid = self.one.path2eid(self.session_path, query_type='remote')
+        if not eid:
+            _logger.warning('Failed to upload snapshots: session not found on Alyx')
+            return
+        note = dict(user=self.one.alyx.user, content_type='session', object_id=eid, text='')
+
+        if isinstance(images, Path) and images.is_dir():
+            snapshots = images.glob('*.*')
+        else:
+            snapshots = ensure_list(images)
+
+        notes = []
+        exts = ('.jpg', '.jpeg', '.png', '.tif', '.tiff', '.gif')
+        for snapshot in filter(lambda x: x.suffix.lower() in exts, snapshots):
+            if snapshot.suffix in ('.tif', '.tiff') and not snapshot.with_suffix('.png').exists():
+                _logger.debug('converting "%s" to png...', snapshot.relative_to(self.session_path))
+                snapshot = self._save_as_png(snapshot_tif := snapshot)
+                if unlink:
+                    snapshot_tif.unlink()
+            _logger.info('Uploading "%s"...', snapshot.relative_to(self.session_path))
+            # Check for accompanying .txt file for note text
+            if snapshot.with_suffix('.txt').exists():
+                with open(snapshot.with_suffix('.txt'), 'r') as txt_file:
+                    note['text'] = txt_file.read().strip()
+            else:
+                note['text'] = ''
+            # Check for accompanying .json file for note metadata
+            if snapshot.with_suffix('.json').exists():
+                with open(snapshot.with_suffix('.json'), 'r') as json_file:
+                    note['json'] = json.load(json_file)
+            else:
+                note['json'] = {}
+            # If animated GIF, do not resize
+            note['width'] = 'orig' if self._is_animated_gif(snapshot) else None
+            with open(snapshot, 'rb') as img_file:
+                files = {'image': img_file}
+                notes.append(self.one.alyx.rest('notes', 'create', data=note, files=files))
+            if unlink:
+                snapshot.unlink()
+        return notes
+
     def register_snapshots(self, unlink=False, collection=None):
         """
         Register any photos in the snapshots folder to the session. Typically imaging users will
@@ -543,32 +595,8 @@ class RegisterRawDataTask(DynamicTask):
         if not snapshots_path.exists():
             return
 
-        eid = self.one.path2eid(self.session_path, query_type='remote')
-        if not eid:
-            _logger.warning('Failed to upload snapshots: session not found on Alyx')
-            return
-        note = dict(user=self.one.alyx.user, content_type='session', object_id=eid, text='')
+        notes = self.upload_images(snapshots_path, unlink=unlink)
 
-        notes = []
-        exts = ('.jpg', '.jpeg', '.png', '.tif', '.tiff', '.gif')
-        for snapshot in filter(lambda x: x.suffix.lower() in exts, snapshots_path.glob('*.*')):
-            if snapshot.suffix in ('.tif', '.tiff') and not snapshot.with_suffix('.png').exists():
-                _logger.debug('converting "%s" to png...', snapshot.relative_to(self.session_path))
-                snapshot = self._save_as_png(snapshot_tif := snapshot)
-                if unlink:
-                    snapshot_tif.unlink()
-            _logger.info('Uploading "%s"...', snapshot.relative_to(self.session_path))
-            if snapshot.with_suffix('.txt').exists():
-                with open(snapshot.with_suffix('.txt'), 'r') as txt_file:
-                    note['text'] = txt_file.read().strip()
-            else:
-                note['text'] = ''
-            note['width'] = 'orig' if self._is_animated_gif(snapshot) else None
-            with open(snapshot, 'rb') as img_file:
-                files = {'image': img_file}
-                notes.append(self.one.alyx.rest('notes', 'create', data=note, files=files))
-            if unlink:
-                snapshot.unlink()
         # If nothing else in the snapshots folder, delete the folder
         if unlink and next(snapshots_path.rglob('*'), None) is None:
             snapshots_path.rmdir()

@@ -116,7 +116,7 @@ class Task(abc.ABC):
     on_error = 'continue'  # whether to raise an exception on error ('raise') or report the error and continue ('continue')
 
     def __init__(self, session_path, parents=None, taskid=None, one=None,
-                 machine=None, clobber=True, location='server', scratch_folder=None, on_error='continue', **kwargs):
+                 machine=None, clobber=True, location='server', scratch_folder=None, on_error='continue', force=False, **kwargs):
         """
         Base task class
         :param session_path: session path
@@ -129,6 +129,7 @@ class Task(abc.ABC):
         data required for task downloaded via one), 'AWS' (remote compute node, data required for task downloaded via AWS),
         or 'SDSC' (SDSC flatiron compute node)
         :param scratch_folder: optional: Path where to write intermediate temporary data
+        :param force: whether to re-download missing input files on local server if not present
         :param args: running arguments
         """
         self.on_error = on_error
@@ -144,6 +145,7 @@ class Task(abc.ABC):
         self.machine = machine
         self.clobber = clobber
         self.location = location
+        self.force = force
         self.plot_tasks = []  # Plotting task/ tasks to create plot outputs during the task
         self.scratch_folder = scratch_folder
         self.kwargs = kwargs
@@ -500,7 +502,7 @@ class Task(abc.ABC):
             _logger.warning('Some files are not ALF datasets and will not be checked for ambiguity')
         if any(map(len, variant_datasets.values())):
             # Keep those with variants and make paths relative to session for logging purposes
-            to_frag = lambda x: x.relative_to_session().as_posix()  # noqa
+            def to_frag(x): return x.relative_to_session().as_posix()  # noqa
             ambiguous = {
                 to_frag(k): [to_frag(x) for x in v]
                 for k, v in variant_datasets.items() if any(v)}

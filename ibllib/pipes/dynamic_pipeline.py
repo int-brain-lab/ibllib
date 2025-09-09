@@ -37,6 +37,7 @@ import ibllib.pipes.tasks as mtasks
 import ibllib.pipes.base_tasks as bstasks
 import ibllib.pipes.widefield_tasks as wtasks
 import ibllib.pipes.mesoscope_tasks as mscope_tasks
+from ibllib.mpci.registration import MesoscopeFOV
 import ibllib.pipes.sync_tasks as stasks
 import ibllib.pipes.behavior_tasks as btasks
 import ibllib.pipes.video_tasks as vtasks
@@ -592,11 +593,9 @@ def make_pipeline(session_path, **pkwargs):
             **kwargs, **mscope_kwargs
         )
         tasks['MesoscopePreprocess'] = type('MesoscopePreprocess', (mscope_tasks.MesoscopePreprocess,), {})(
-            **kwargs, **mscope_kwargs
-        )
-        tasks['MesoscopeFOV'] = type('MesoscopeFOV', (mscope_tasks.MesoscopeFOV,), {})(
-            **kwargs, **mscope_kwargs, parents=[tasks['MesoscopePreprocess']]
-        )
+            **kwargs, **mscope_kwargs)
+        tasks['MesoscopeFOV'] = type('MesoscopeFOV', (MesoscopeFOV,), {})(
+            **kwargs, **mscope_kwargs, parents=[tasks['MesoscopePreprocess']])
         tasks['MesoscopeSync'] = type('MesoscopeSync', (mscope_tasks.MesoscopeSync,), {})(
             **kwargs, **mscope_kwargs, **sync_kwargs
         )

@@ -69,6 +69,13 @@ def patch_imaging_meta(meta: dict) -> dict:
             for fov in meta.get('FOV', []):
                 fov['MM'] = {k: (np.r_[np.array(v) - centerDegXY, 1] @ TF).tolist() for k, v in fov['Deg'].items()}
 
+    # 2025-09-09 MLAPDV and brainLocationIds keys nested under provenance keys
+    if ver < version.Version('0.2.2'):
+        for fov in meta.get('FOV', []):
+            if 'center' in fov.get('MLAPDV', {}):
+                fov['MLAPDV'] = {'estimate': fov['MLAPDV']}
+                fov['brainLocationIds'] = {'estimate': fov['brainLocationIds']}
+
     assert 'nFrames' in meta, '"nFrames" key missing from meta data; rawImagingData.meta.json likely an old version'
     return meta
 

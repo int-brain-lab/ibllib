@@ -134,7 +134,7 @@ class ExpectedDataset:
         bool
             True if the dataset is found on disk or is optional.
         list of pathlib.Path
-            A list of matching dataset files.
+            A sorted list of matching dataset files.
         missing, None, str, set of str
             One or more glob patterns that either didn't yield files (or did in the case of inverted datasets).
 
@@ -194,7 +194,7 @@ class ExpectedDataset:
         else:
             raise NotImplementedError(f'logical {self.operator.upper()} not implemented')
 
-        return ok, actual_files, missing
+        return ok, sorted(actual_files), missing
 
     def filter(self, session_datasets, **kwargs):
         """Filter dataset frame by expected datasets.
