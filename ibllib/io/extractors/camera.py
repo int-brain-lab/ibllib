@@ -683,13 +683,13 @@ def groom_pin_state(gpio, ttl, ts, tolerance=2., display=False, take='first', mi
                 _logger.warning('Some onsets but not offsets (or vice versa) were not assigned; '
                                 'this may be a sign of faulty wiring or clock drift')
                 # Find indices of GPIO upticks where only the downtick was marked for removal
-                orphaned_onsets, =  np.where(~to_remove.reshape(-1, 2)[:, 0] & orphaned)
+                orphaned_onsets, = np.where(~to_remove.reshape(-1, 2)[:, 0] & orphaned)
                 # The onsets_ array already has the other TTLs removed (same size as to_remove ==
                 # False) so subtract the number of removed elements from index.
                 for i, v in enumerate(orphaned_onsets):
                     orphaned_onsets[i] -= to_remove.reshape(-1, 2)[:v, 0].sum()
                 # Same for offsets...
-                orphaned_offsets, =  np.where(~to_remove.reshape(-1, 2)[:, 1] & orphaned)
+                orphaned_offsets, = np.where(~to_remove.reshape(-1, 2)[:, 1] & orphaned)
                 for i, v in enumerate(orphaned_offsets):
                     orphaned_offsets[i] -= to_remove.reshape(-1, 2)[:v, 1].sum()
                 # Remove orphaned ttl onsets and offsets
