@@ -794,6 +794,10 @@ class MesoscopeFOVHistology(MesoscopeFOV):
     the surface location for each FOV pixel, then applying the adjusted depth.
     """
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.reference_session = kwargs.get('reference_session')  # an eid of the aligned histology session
+
     @property
     def signature(self):
         I = dh.ExpectedDataset.input  # noqa
@@ -819,7 +823,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
     def _run(self, *args, provenance=Provenance.HISTOLOGY, atlas_resolution=25, display=False):
         self.atlas = MRITorontoAtlas(res_um=atlas_resolution)  # TODO Check scaling appied to underlying volume
         # Load the reference stack & (down)load the registered MLAPDV coordinates
-        reference_image = self._load_reference_stack()
+        reference_image = self.load_reference_stack()
         # Load main meta
         _, meta_files, _ = self.input_files[0].find_files(self.session_path)
         meta = mesoscope.patch_imaging_meta(alfio.load_file_content(meta_files[0]) or {})
@@ -905,7 +909,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
 
         return sorted([*meta_files, *roi_files, *mean_image_files])
 
-    def get_atlas_registered_reference_mlap(self, reference_session_path, clobber=False):
+    def _get_atlas_registered_reference_mlap(self, reference_session_path, clobber=False):
         """Download the aligned reference stack Allen atlas indices.
 
         This is the file created by the histology pipeline, one per subject.
@@ -1073,7 +1077,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
                 - 'angle': The angle of the FOV in degrees.
         """
         # Load the reference image and all metadata
-        stack, ref_meta = self._load_reference_stack()
+        stack, ref_meta = self.load_reference_stack()
         meta_files = sorted(self.session_path.glob(self.signature['input_files'][0].glob_pattern))
         meta = mesoscope.patch_imaging_meta(alfio.load_file_content(meta_files[0]) or {})
         f, ax = plt.subplots()
@@ -1111,13 +1115,14 @@ class MesoscopeFOVHistology(MesoscopeFOV):
         Returns
         -------
         numpy.array
-            A float array with shape (h, w, 3), comprising Allen atlas MLAPDV coordinates.
+            A float array with shape (h, w, 3), comprising Allen atlas MLAPDV coordinates in μm.
             The first two dimensions (h, w) should equal those of the reference stack.
 
         """
         assert self.reference_session
         reference_session_path = self.one.eid2path(self.reference_session)
-        file = self.get_atlas_registered_reference_mlap(reference_session_path, clobber=False)
+        assert reference_session_path, f'Reference session not found for eid {self.reference_session}'
+        file = self._get_atlas_registered_reference_mlap(reference_session_path, clobber=False)
         ccf_idx = np.load(file)  # shape (h, w, 3) - ml, ap, dv indices
         # ccf_idx = self._load_reference_stack_registered()  # height, width, mlapdv
         # ba = MRITorontoAtlas(res_um=25)  # TODO Confirm atlas type with Steven
@@ -1519,7 +1524,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
             ax.plot_trisurf(points[:, 0], points[:, 1], points[:, 2], linewidth=0.2, antialiased=True)
         return points, dorsal_connectivity_list
 
-    def _load_reference_stack(self):
+    def load_reference_stack(self):
         """Load the referenceImage.stack.tif file and its metadata.
 
         Loads the files:
