@@ -18,6 +18,7 @@ import uuid
 from pathlib import Path
 from itertools import chain, groupby
 from fnmatch import fnmatch
+import shutil
 import re
 
 import numpy as np
@@ -783,7 +784,15 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         if len(plane_folders) == 0 or overwrite:
             _logger.info('Extracting tif data per plane')
             # Ingest tiff files
-            plane_folders, _ = self.bin_per_plane(metadata, save_folder=save_folder, save_path0=self.session_path)
+            try:
+                plane_folders, _ = self.bin_per_plane(metadata, save_folder=save_folder, save_path0=self.session_path)
+            except Exception:
+                _logger.error('Exception occurred, cleaning up incomplete suite2p folder')
+                # NB: Only remove the suite2p folder if there are no unexpected files in there
+                # If the extraction failed due to currupted tiffs, the ops file will not have been created
+                if save_path.exists() and set(x.name for x in save_path.rglob('*') if x.is_file()) <= {'data.bin'}:
+                    shutil.rmtree(save_path)
+                raise  # reraise original exception
 
         """ Bad frames """
         # exptQC.mat contains experimenter QC values that may not affect ROI detection (e.g. noises, pauses)
