@@ -43,7 +43,7 @@ def patch_imaging_meta(meta: dict) -> dict:
     ver = version.parse(meta.get('version') or '0.0.0')
     if ver <= version.parse('0.0.0'):
         if 'channelSaved' not in meta:
-            meta['channelSaved'] = next((x['channelIdx'] for x in meta['FOV'] if 'channelIdx' in x), [])
+            meta['channelSaved'] = next((x['channelIdx'] for x in meta.get('FOV', []) if 'channelIdx' in x), [])
         fields = ('topLeft', 'topRight', 'bottomLeft', 'bottomRight')
         for fov in meta.get('FOV', []):
             for unit in ('Deg', 'MM'):
