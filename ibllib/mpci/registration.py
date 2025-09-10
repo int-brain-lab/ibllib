@@ -1199,7 +1199,9 @@ class MesoscopeFOVHistology(MesoscopeFOV):
         craniotomy_pixel = np.round(craniotomy_pixel).astype(int)  # convert to pixel coordinates
         _logger.debug('Craniotomy pixel coordinates: (%d, %d)', *craniotomy_pixel)
 
-        craniotomy_resolved = referenceImage['mlapdv'][*craniotomy_pixel] / 1e3  # ML AP DV, μm -> mm
+        # This doesn't work in python 3.10, numpy 2.24
+        # craniotomy_resolved = referenceImage['mlapdv'][craniotomy_pixel] / 1e3  # py 3.11 # ML AP DV, μm -> mm
+        craniotomy_resolved = referenceImage['mlapdv'][craniotomy_pixel[0], craniotomy_pixel[1]] / 1e3
 
         # Update metadata
         referenceImage['meta']['centerMM']['ML_resolved'] = craniotomy_resolved[0]
