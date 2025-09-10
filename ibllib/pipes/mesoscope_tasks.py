@@ -791,7 +791,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                 # NB: Only remove the suite2p folder if there are no unexpected files in there
                 # If the extraction failed due to currupted tiffs, the ops file will not have been created
                 if save_path.exists() and set(x.name for x in save_path.rglob('*') if x.is_file()) <= {'data.bin'}:
-                    shutil.rmtree(save_path)
+                    shutil.rmtree(save_path, ignore_errors=True)
                 raise  # reraise original exception
 
         """ Bad frames """
