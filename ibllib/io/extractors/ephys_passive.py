@@ -5,6 +5,7 @@
 import json
 import logging
 from pathlib import Path
+from packaging import version
 from typing import Tuple
 
 import matplotlib.pyplot as plt
@@ -61,12 +62,17 @@ min_dataset_types = [
 ]
 
 
-def _get_n_expected_events(session_path, task_collection):
-    iblrig_version = 8  # TODO: need to know when passive sessions started being written from the new fixtures file
-    if iblrig_version >= 8:
+def _get_n_expected_events(session_path, task_collection, rig_version):
+    """
+    FInd the expected number of events. If v8 read from the fixtures file.
+    If less than v8 use hardcoded values.
+
+    """
+    if version.parse(rig_version) >= version.parse('8.0.0'):
         settings = rawio.load_settings(session_path, task_collection=task_collection)
-        num_total_stims = settings.get('NUM_STIM_PRESENTATIONS',(NTONES + NNOISES + NGABOR + NVALVE))
-        session_template_trials = _load_v8_fixture_df(settings['SESSION_TEMPLATE_ID'], num_stim_presentations=num_total_stims)
+        num_total_stims = settings.get('NUM_STIM_PRESENTATIONS', (NTONES + NNOISES + NGABOR + NVALVE))
+        session_template_trials = _load_v8_fixture_df(settings['SESSION_TEMPLATE_ID'],
+                                                      num_stim_presentations=num_total_stims)
         num_gabor = len(session_template_trials[session_template_trials.stim_type == 'G'])
         num_noise = len(session_template_trials[session_template_trials.stim_type == 'N'])
         num_tone = len(session_template_trials[session_template_trials.stim_type == 'T'])
@@ -78,17 +84,25 @@ def _get_n_expected_events(session_path, task_collection):
         num_valve = NVALVE
     return dict(gabor=num_gabor, noise=num_noise, tone=num_tone, valve=num_valve)
 
+
 def _load_v8_fixture_df(session_template_id, num_stim_presentations):
+    """ Load passive fixtures for iblrig v8 """
     all_trials = pd.read_parquet(PATH_FIXTURES_V8)
     session_template_trials = all_trials[all_trials['session_id'] == session_template_id].copy()
-    # repeat trials table if needed (this will happen if the user chose to have more stimulus presentations than the session template)
+    # Repeat trials table if needed
+    # (this will happen if the user chose to have more stimulus presentations than the session template)
     num_repeats = int(np.ceil(num_stim_presentations / len(session_template_trials)))
     if num_repeats > 1:
-        log.warning(f"Session template {session_template_id} has only {len(session_template_trials)} trials. The passive session was likely ran with a higher NUM_STIM_PRESENTATIONS. Repeating to reach {num_stim_presentations} presentations.")
-    session_template_trials = pd.concat([session_template_trials] * num_repeats, ignore_index=True).iloc[:num_stim_presentations]
+        log.warning(f"Session template {session_template_id} has only {len(session_template_trials)} trials. "
+                    f"The passive session was likely ran with a higher NUM_STIM_PRESENTATIONS. "
+                    f"Repeating to reach {num_stim_presentations} presentations.")
+    session_template_trials = pd.concat([session_template_trials] * num_repeats,
+                                        ignore_index=True).iloc[:num_stim_presentations]
     return session_template_trials
-    
-def _load_passive_session_gabor_fixtures(session_path: str, task_collection: str = 'raw_passive_data') -> dict:
+
+
+def _load_passive_session_gabor_fixtures(session_path: str, task_collection: str = 'raw_passive_data',
+                                         rig_version: str | None = None) -> dict:
     """load_passive_session_fixtures Loads corresponding ephys session fixtures
 
     :param session_path: the path to a session
@@ -106,13 +120,15 @@ def _load_passive_session_gabor_fixtures(session_path: str, task_collection: str
     if session_order:  # TODO test this out and make sure it okay
         assert settings["SESSION_ORDER"][settings["SESSION_IDX"]] == ses_nb
 
-    iblrig_version =  8 #TODO: need to know when passive sessions started being written from the new fixtures file
-    if iblrig_version >= 8: # handle new sessions
-        num_total_stims = settings.get('NUM_STIM_PRESENTATIONS',(NTONES + NNOISES + NGABOR + NVALVE))
+    if rig_version is None:
+        rig_version = _load_task_version(session_path, task_collection)
+
+    if version.parse(rig_version) >= version.parse('8.0.0'):
+        num_total_stims = settings.get('NUM_STIM_PRESENTATIONS', (NTONES + NNOISES + NGABOR + NVALVE))
         session_template_trials = _load_v8_fixture_df(ses_nb, num_total_stims)
-        session_template_trials = session_template_trials[session_template_trials.stim_type == 'G'] # only gabor trials
-        gabor_params = session_template_trials[['position','contrast','stim_phase']].to_numpy()
-    else: # handle old sessions
+        session_template_trials = session_template_trials[session_template_trials.stim_type == 'G']
+        gabor_params = session_template_trials[['position', 'contrast', 'stim_phase']].to_numpy()
+    else:  # handle old sessions
         gabor_params = np.load(PATH_FIXTURES_V7.joinpath(f"session_{ses_nb}_passive_pcs.npy"))
     return gabor_params
 
@@ -355,7 +371,8 @@ def _reshape_RF(RF_file, meta_stim):
 
 
 # 3/3 Replay of task stimuli
-def _extract_passiveGabor_df(fttl: dict, n_expected_gabor: int, session_path: str, task_collection: str = 'raw_passive_data') -> pd.DataFrame:
+def _extract_passiveGabor_df(fttl: dict, n_expected_gabor: int, rig_version: str, session_path: str,
+                             task_collection: str = 'raw_passive_data') -> pd.DataFrame:
     # At this stage we want to define what pulses are and not quality control them.
     # Pulses are strictly alternating with intervals
     # find min max lengths for both (we don't know which are pulses and which are intervals yet)
@@ -399,7 +416,8 @@ def _extract_passiveGabor_df(fttl: dict, n_expected_gabor: int, session_path: st
     assert (
         len(passiveGabor_intervals) == n_expected_gabor
     ), f"Wrong number of Gabor stimuli detected: {len(passiveGabor_intervals)} / {n_expected_gabor}"
-    passiveGabor_properties = _load_passive_session_gabor_fixtures(session_path, task_collection)
+    passiveGabor_properties = _load_passive_session_gabor_fixtures(session_path, task_collection,
+                                                                   rig_version=rig_version)
     passiveGabor_table = np.append(passiveGabor_intervals, passiveGabor_properties, axis=1)
     columns = ["start", "stop", "position", "contrast", "phase"]
     passiveGabor_df = pd.DataFrame(passiveGabor_table, columns=columns)
@@ -467,10 +485,10 @@ def _extract_passiveAudio_intervals(audio: dict, rig_version: str, num_tone: int
         soundOff_times = audio["times"][audio["polarities"] < 0]
 
         # Check they are the correct number
-        assert len(soundOn_times) == num_tone + num_noise, f"Wrong number of sound ONSETS, " \
-                                                       f"{len(soundOn_times)}/{num_tone + num_noise}"
-        assert len(soundOff_times) == num_tone + num_noise, f"Wrong number of sound OFFSETS, " \
-                                                        f"{len(soundOn_times)}/{num_tone + num_noise}"
+        assert len(soundOn_times) == num_tone + num_noise, \
+            f"Wrong number of sound ONSETS, {len(soundOn_times)}/{num_tone + num_noise}"
+        assert len(soundOff_times) == num_tone + num_noise, \
+            f"Wrong number of sound OFFSETS, {len(soundOn_times)}/{num_tone + num_noise}"
 
         diff = soundOff_times - soundOn_times
         # Tone is ~100ms so check if diff < 0.3
@@ -547,7 +565,13 @@ def extract_rfmapping(
     passiveRFM_frames, RF_ttl_trace = _reshape_RF(RF_file=RF_file, meta_stim=meta[mkey])
     rf_id_up, rf_id_dw, RF_n_ttl_expected = _get_id_raisefall_from_analogttl(RF_ttl_trace)
     meta[mkey]["ttl_num"] = RF_n_ttl_expected
-    rf_times_on_idx = np.where(np.diff(fttl["times"]) < 1)[0]
+    rf_times_on_idx = np.where(np.diff(fttl["times"]) <= 1)[0]
+
+    # Match polarities to ensure only detecting ttls in one direction.
+    # Find the mode polarities (in case the signal is switched for some reason)
+    flips = fttl['polarities'][rf_times_on_idx]
+    flip_match = np.median(flips)
+    rf_times_on_idx = rf_times_on_idx[flips == flip_match]
     rf_times_off_idx = rf_times_on_idx + 1
     RF_times = fttl["times"][np.sort(np.concatenate([rf_times_on_idx, rf_times_off_idx]))]
     RF_times_1 = RF_times[0::2]
@@ -575,18 +599,21 @@ def extract_task_replay(
         passivePeriods_df = extract_passive_periods(session_path, sync_collection, sync=sync, sync_map=sync_map)
         treplay = passivePeriods_df.taskReplay.values
 
-    # TODO need to check this is okay
+    task_version = _load_task_version(session_path, task_collection)
+
     fttl = ephys_fpga.get_sync_fronts(sync, sync_map["frame2ttl"], tmin=treplay[0], tmax=treplay[1])
     fttl = ephys_fpga._clean_frame2ttl(fttl)
-    num_expected_events = _get_n_expected_events(session_path=session_path, task_collection=task_collection)
-    passiveGabor_df = _extract_passiveGabor_df(fttl, n_expected_gabor=num_expected_events['gabor'], session_path=session_path, task_collection=task_collection, )
+    num_expected_events = _get_n_expected_events(session_path=session_path, task_collection=task_collection,
+                                                 rig_version=task_version)
+    passiveGabor_df = _extract_passiveGabor_df(fttl, n_expected_gabor=num_expected_events['gabor'], rig_version=task_version,
+                                               session_path=session_path, task_collection=task_collection)
 
     bpod = ephys_fpga.get_sync_fronts(sync, sync_map["bpod"], tmin=treplay[0], tmax=treplay[1])
     passiveValve_intervals = _extract_passiveValve_intervals(bpod, num_expected_events['valve'])
 
-    task_version = _load_task_version(session_path, task_collection)
     audio = ephys_fpga.get_sync_fronts(sync, sync_map["audio"], tmin=treplay[0], tmax=treplay[1])
-    passiveTone_intervals, passiveNoise_intervals = _extract_passiveAudio_intervals(audio, task_version, num_expected_events['tone'], num_expected_events['noise'])
+    passiveTone_intervals, passiveNoise_intervals = (
+        _extract_passiveAudio_intervals(audio, task_version, num_expected_events['tone'], num_expected_events['noise']))
 
     passiveStims_df = np.concatenate(
         [passiveValve_intervals, passiveTone_intervals, passiveNoise_intervals], axis=1
@@ -628,18 +655,23 @@ def extract_replay_debug(
 
     plot_passive_periods(passivePeriods_df, ax=ax)
 
+    task_version = _load_task_version(session_path, task_collection)
+
     fttl = ephys_fpga.get_sync_fronts(sync, sync_map["frame2ttl"], tmin=treplay[0])
-    num_expected_events = _get_n_expected_events(session_path=session_path, task_collection=task_collection)
-    passiveGabor_df = _extract_passiveGabor_df(fttl, n_expected_gabor=num_expected_events['gabor'], session_path=session_path, task_collection=task_collection)
+    num_expected_events = _get_n_expected_events(session_path=session_path, task_collection=task_collection,
+                                                 rig_version=task_version)
+    passiveGabor_df = _extract_passiveGabor_df(fttl, n_expected_gabor=num_expected_events['gabor'],
+                                               rig_version=task_version, session_path=session_path,
+                                               task_collection=task_collection)
     plot_gabor_times(passiveGabor_df, ax=ax)
 
     bpod = ephys_fpga.get_sync_fronts(sync, sync_map["bpod"], tmin=treplay[0])
     passiveValve_intervals = _extract_passiveValve_intervals(bpod, num_expected_events['valve'])
     plot_valve_times(passiveValve_intervals, ax=ax)
 
-    task_version = _load_task_version(session_path, task_collection)
     audio = ephys_fpga.get_sync_fronts(sync, sync_map["audio"], tmin=treplay[0])
-    passiveTone_intervals, passiveNoise_intervals = _extract_passiveAudio_intervals(audio, task_version, num_expected_events['tone'], num_expected_events['noise'])
+    passiveTone_intervals, passiveNoise_intervals = (
+        _extract_passiveAudio_intervals(audio, task_version, num_expected_events['tone'], num_expected_events['noise']))
     plot_audio_times(passiveTone_intervals, passiveNoise_intervals, ax=ax)
 
     passiveStims_df = np.concatenate(
