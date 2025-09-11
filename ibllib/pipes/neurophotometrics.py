@@ -140,16 +140,22 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
     priority = 90
     job_size = 'small'
 
-    def __init__(self, session_path, one, **kwargs):
+    def __init__(self, session_path, one, task_protocol=None, task_collection=None, **kwargs):
         super().__init__(session_path, one=one, **kwargs)
         self.photometry_collection = kwargs.get('collection', 'raw_photometry_data')  # raw_photometry_data
         self.kwargs = kwargs
+        self.task_protocol = task_protocol
+        self.task_collection = task_collection
 
-        # we will work with the first protocol here
-        for task in self.session_params['tasks']:
-            self.task_protocol = next(k for k in task)
+        if self.task_protocol is None:
+            # we will work with the first protocol here
+            for task in self.session_params['tasks']:
+                self.task_protocol = next(k for k in task)
+                break
+
+        if self.task_collection is None:
+            # if not provided, infer
             self.task_collection = ibllib.io.session_params.get_task_collection(self.session_params, self.task_protocol)
-            break
 
     def _get_bpod_timestamps(self) -> Tuple[np.ndarray, list]:
         # the timestamps for syncing, in the time of the bpod
@@ -185,92 +191,6 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
         # for daq based syncing, the timestamps are extracted from the tdms file
         ...
 
-    # def _get_sync_function(self, spacer_detection_mode='fallback') -> Tuple[callable, list]:
-    #     # returns the synchronization function
-    #     # get the timestamps
-    #     timestamps_bpod, bpod_data = self._get_bpod_timestamps()
-    #     timestamps_nph = self._get_neurophotometrics_timestamps()
-
-    #     # verify presence of sync timestamps
-    #     for source, timestamps in zip(['bpod', 'neurophotometrics'], [timestamps_bpod, timestamps_nph]):
-    #         assert len(timestamps) > 0, f'{source} sync timestamps are empty'
-
-    #     # split into segments if multiple spacers are found
-    #     # attempt to sync for each segment (only one will work)
-    #     spacer = Spacer()
-
-    #     def _get_segments(timestamps_nph, spacer_detection_mode):
-    #         segments = []
-
-    #         match spacer_detection_mode:
-    #             case 'fast':
-    #                 spacer_ix = spacer.find_spacers_from_timestamps(timestamps_nph, atol=1e-5)
-                        
-    #             case 'safe':
-    #                 spacer_ix, spacer_times = spacer.find_spacers_from_positive_fronts(timestamps_nph, fs=1000)
-    #                 spacer_ix = np.searchsorted(timestamps_nph, spacer_times)
-
-    #             case 'fallback': # first try fast, if fails, try safe
-    #                 segments = _get_segments(timestamps_nph, 'fast')
-    #                 if len(segments) > 0:
-    #                     return segments
-    #                 else:
-    #                     segments = _get_segments(timestamps_nph, 'safe')
-    #                     if len(segments) > 0:
-    #                         return segments
-    #                     else:
-    #                         raise ValueError('spacer detection failed')
-
-    #         # the indices that mark the boundaries of segments
-    #         segment_ix = np.concatenate([spacer_ix, [timestamps_nph.shape[0]]])
-    #         for i in range(segment_ix.shape[0] - 1):
-    #             start_ix = segment_ix[i] + (spacer.n_pulses * 2) - 1
-    #             stop_ix = segment_ix[i + 1]
-    #             segments.append(timestamps_nph[start_ix:stop_ix])
-
-    #         return segments
-
-    #     # verify spacer detection
-    #     segments = _get_segments(timestamps_nph, spacer_detection_mode=spacer_detection_mode)
-    #     assert len(segments) > 0, 'spacer detection failed'
-
-    #     def check_segment(timestamps_segment, matching_threshold = .95):
-    #         # check a segment for matching sync
-    #         try:
-    #             sync_nph_to_bpod_fcn, drift_ppm, ix_nph, ix_bpod = ibldsp.utils.sync_timestamps(
-    #                 timestamps_segment, timestamps_bpod, return_indices=True, linear=True
-    #             )
-    #         except ValueError:
-    #             # this gets raised when there are no timestamps (multiple session restart)
-    #             return False
-
-    #         # then we check the alignment, should be less than the camera sampling rate
-    #         tcheck = sync_nph_to_bpod_fcn(timestamps_segment[ix_nph]) - timestamps_bpod[ix_bpod]
-    #         # _logger.info(
-    #         #     f'sync: n trials {len(bpod_data)}'
-    #         #     f'n bpod sync {len(timestamps_bpod)}'
-    #         #     f'n photometry {len(timestamps_segment)}, n match {len(ix_nph)}'
-    #         # )
-    #         if len(ix_nph) / len(timestamps_bpod) < matching_threshold:
-    #             # wrong segment
-    #             return False
-    #         # _logger.info(f'segment {i} - matched')
-    #         # TODO the framerate here is hardcoded, infer it instead!
-    #         assert np.all(np.abs(tcheck) < 1 / 60), 'Sync issue detected, residual above 1/60s'
-    #         return True
-
-    #     checked_segments = [check_segment(segment) for segment in segments]
-
-    #     assert np.sum(checked_segments) == 1, f'error in segment matching: matching segments: {np.sum(checked_segments)}'
-    #     timestamps_segment = segments[np.where(checked_segments)[0][0]]
-
-    #     sync_nph_to_bpod_fcn, drift_ppm, ix_nph, ix_bpod = ibldsp.utils.sync_timestamps(
-    #         timestamps_segment, timestamps_bpod, return_indices=True, linear=True
-    #     )
-
-    #     valid_bounds = [bpod_data[0]['Trial start timestamp'] - 2, bpod_data[-1]['Trial end timestamp'] + 2]
-    #     return sync_nph_to_bpod_fcn, valid_bounds
-
     def _get_sync_function(self) -> Tuple[callable, list]:
         # returns the synchronization function
         # get the timestamps
@@ -285,7 +205,8 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
             timestamps_nph, timestamps_bpod, return_indices=True, linear=True
         )
         _logger.info(f"synced with drift: {drift_ppm}")
-
+        # TODO - assertion needed. 95% of timestamps in bpod need to be in timestamps of nph (but not the other way around)
+        
         valid_bounds = [bpod_data[0]['Trial start timestamp'] - 2, bpod_data[-1]['Trial end timestamp'] + 2]
         return sync_nph_to_bpod_fcn, valid_bounds
 
@@ -344,7 +265,7 @@ class FibrePhotometryBpodSync(FibrePhotometryBaseSync):
             'input_files': [
                 ('_neurophotometrics_fpData.raw.pqt', self.photometry_collection, True, True),
                 ('_iblrig_taskData.raw.jsonable', self.task_collection, True, True),
-                ('_neurophotometrics_fpData.channels.csv', self.photometry_collection, True, True),
+                # ('_neurophotometrics_fpData.channels.csv', self.photometry_collection, True, True),
                 ('_neurophotometrics_fpData.digitalIntputs.pqt', self.photometry_collection, True),
             ],
             'output_files': [
@@ -357,7 +278,9 @@ class FibrePhotometryBpodSync(FibrePhotometryBaseSync):
     def _get_neurophotometrics_timestamps(self) -> np.ndarray:
         # for bpod based syncing, the timestamps for syncing are in the digital inputs file
         raw_photometry_folder = self.session_path / self.photometry_collection
-        digital_inputs_df = pd.read_parquet(raw_photometry_folder / '_neurophotometrics_fpData.digitalIntputs.pqt')
+        digital_inputs_filepath = raw_photometry_folder / '_neurophotometrics_fpData.digitalIntputs.pqt'
+        version = fpio.infer_version_from_digital_inputs_file(digital_inputs_filepath)
+        digital_inputs_df = fpio.read_digital_inputs_file(digital_inputs_filepath, version=version)
         timestamps_nph = digital_inputs_df['SystemTimestamp'].values[digital_inputs_df['Channel'] == self.kwargs['sync_channel']]
 
         # TODO replace this rudimentary spacer removal
