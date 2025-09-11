@@ -1175,22 +1175,22 @@ class MesoscopeFOVHistology(MesoscopeFOV):
 
         return xyz  # reference_stack_mlapdv
 
-    def update_craniotomy_center(self, referenceImage):
+    def update_craniotomy_center(self, reference_image):
         """Update subject JSON with atlas-aligned craniotomy coordinates."""
         assert not self.one.offline
         yx_res = np.array([
-            referenceImage['meta']['rawScanImageMeta']['YResolution'],
-            referenceImage['meta']['rawScanImageMeta']['XResolution']
+            reference_image['meta']['rawScanImageMeta']['YResolution'],
+            reference_image['meta']['rawScanImageMeta']['XResolution']
         ])
-        if referenceImage['meta']['rawScanImageMeta']['ResolutionUnit'].casefold() == 'centimeter':
+        if reference_image['meta']['rawScanImageMeta']['ResolutionUnit'].casefold() == 'centimeter':
             # NB: these values are (y, x) in μm
             px_per_um = yx_res * 1e-4
             um_per_px = 1 / px_per_um
         else:
             raise NotImplementedError('Reference image resolution unit must be in centimeters')
 
-        ref_stack_n_px = np.array(referenceImage['mlapdv'].shape[:2])  # in (y, x)
-        craniotomy_center_offset = np.flip(self.get_window_center(referenceImage['meta']) * 1e3)  # (y, x) center offset mm -> μm
+        ref_stack_n_px = np.array(reference_image['mlapdv'].shape[:2])  # in (y, x)
+        craniotomy_center_offset = np.flip(self.get_window_center(reference_image['meta']) * 1e3)  # (y, x) center offset mm -> μm
 
         image_center_px = ref_stack_n_px / 2
         # TODO Verify whether offset is added or subtracted
@@ -1201,14 +1201,14 @@ class MesoscopeFOVHistology(MesoscopeFOV):
 
         # This doesn't work in python 3.10, numpy 2.24
         # craniotomy_resolved = referenceImage['mlapdv'][craniotomy_pixel] / 1e3  # py 3.11 # ML AP DV, μm -> mm
-        craniotomy_resolved = referenceImage['mlapdv'][craniotomy_pixel[0], craniotomy_pixel[1]] / 1e3
+        craniotomy_resolved = reference_image['mlapdv'][craniotomy_pixel[0], craniotomy_pixel[1]] / 1e3
 
         # Update metadata
-        referenceImage['meta']['centerMM']['ML_resolved'] = craniotomy_resolved[0]
-        referenceImage['meta']['centerMM']['AP_resolved'] = craniotomy_resolved[1]
+        reference_image['meta']['centerMM']['ML_resolved'] = craniotomy_resolved[0]
+        reference_image['meta']['centerMM']['AP_resolved'] = craniotomy_resolved[1]
         meta_path = next(self.session_path.glob('raw_imaging_data_??/reference/referenceImage.meta.json'))
         with open(meta_path, 'w') as f:
-            json.dump(referenceImage['meta'], f)
+            json.dump(reference_image['meta'], f)
 
         subject = self.session_path.subject
         subject_json = self.one.alyx.rest('subjects', 'read', id=subject)['json']
@@ -1226,21 +1226,21 @@ class MesoscopeFOVHistology(MesoscopeFOV):
 
         return self.one.alyx.json_field_update('subjects', subject, data=data)
 
-    def interpolate_FOVs(self, referenceImage, meta, display=False):
+    def interpolate_FOVs(self, reference_image, meta, display=False):
         """Interpolate the FOV coordinates from reference stack coordinates.
 
         """
         # Extract the reference image and mean image extents in mm along the coverslip, relative to the craniotomy center
-        assert np.all(self.get_window_center(referenceImage['meta']) == self.get_window_center(meta))
-        assert referenceImage['meta']['scanImageParams']['objectiveResolution'] == meta['scanImageParams']['objectiveResolution']
+        assert np.all(self.get_window_center(reference_image['meta']) == self.get_window_center(meta))
+        assert reference_image['meta']['scanImageParams']['objectiveResolution'] == meta['scanImageParams']['objectiveResolution']
         coordinates = self.get_fov_objective_extent(meta)
 
         # Reference image contains 3-D coordinates in m for each pixel of the reference image
-        height, width = referenceImage['mlapdv'].shape[:2]
+        height, width = reference_image['mlapdv'].shape[:2]
 
         # The fields of view and reference image extents are in the same coordinate space (objective space in mm)
         # Create objective coordinates directly using linear transformation
-        ref_extent = self.get_reference_image_extent(referenceImage['meta'])
+        ref_extent = self.get_reference_image_extent(reference_image['meta'])
         r_left, r_right, r_top, r_bottom = ref_extent
 
         # Create coordinate arrays
@@ -1258,7 +1258,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
         # Get interpolator for mlapdv coordinates at each reference image objective coordinate
         # Use nearest neighbour interpolation to get the nearest mlapdv coordinate for each pixel
         points = np.column_stack((xx_ref.ravel(), yy_ref.ravel()))
-        values = referenceImage['mlapdv'].reshape(-1, referenceImage['mlapdv'].shape[-1])
+        values = reference_image['mlapdv'].reshape(-1, reference_image['mlapdv'].shape[-1])
         interp = NearestNDInterpolator(points, values)
 
         # Sanity check: center of the window
@@ -1267,7 +1267,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
         center_flat_idx = np.ravel_multi_index((height // 2, width // 2), (height, width))
         center_point_from_grid = points[center_flat_idx]
         center_mlapdv = interp(center_point_from_grid)
-        expected = referenceImage['mlapdv'][height // 2, width // 2]
+        expected = reference_image['mlapdv'][height // 2, width // 2]
         assert np.allclose(center_mlapdv, expected), f'Expected {expected}, got {center_mlapdv} at centre={centre}'
 
         if display:
@@ -1342,11 +1342,11 @@ class MesoscopeFOVHistology(MesoscopeFOV):
         Returns
         -------
         p_ref : np.ndarray
-            The point on the plane.
+            The point on the plane in μm.
         n_ref : np.ndarray
             The normal vector of the plane.
         dv_avg : float
-            The average depth value of the surface points.
+            The average depth value of the surface points in μm.
 
         """
         points = reference_image['meta']['points']
@@ -1360,14 +1360,15 @@ class MesoscopeFOVHistology(MesoscopeFOV):
             # Convert to pixel coordinates
             ref_points_px = (ref_points_rel * reference_image['mlapdv'].shape[:2]).astype(int)
             # MLAPDV coordinates for each of the three points chosen
-            ref_points_mlap = reference_image['mlapdv'][*np.hsplit(ref_points_px, 2)].squeeze()
+            # ref_points_mlap = reference_image['mlapdv'][*np.hsplit(ref_points_px, 2)].squeeze()  # py 3.11
+            a, b = np.hsplit(ref_points_px, 2)
+            ref_points_mlap = reference_image['mlapdv'][a, b].squeeze()
         else:
             raise NotImplementedError
             # ref_points_mlap = cs2d.transform(ref_points_rel, 'image', 'mlap')
 
-        # FIXME review dv - ignoring the resolved DV here
-        stack_dv_m = (stack_dv[:, np.newaxis] - dv_avg) / 1e6  # μm -> m
-        # stack_dv_m = stack_dv[:, np.newaxis] / 1e6
+        # replace the resolved DV with optical plane depth
+        stack_dv_m = (stack_dv[:, np.newaxis] - dv_avg)  # μm
         ref_points_ = np.c_[ref_points_mlap[:, :-1], stack_dv_m]
 
         n_ref = surface_normal(ref_points_)
@@ -1486,7 +1487,6 @@ class MesoscopeFOVHistology(MesoscopeFOV):
         connectivity_list : numpy.ndarray
             An (N, 3) numpy array containing the surface connectivity information.
 
-        TODO Used atlas attribute to save loading multiple times
         """
         if legacy:
             # Load legacy triangulation from file
