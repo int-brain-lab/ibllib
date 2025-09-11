@@ -17,9 +17,8 @@ import one.alf.io as alfio
 
 from iblatlas.atlas import ALLEN_CCF_LANDMARKS_MLAPDV_UM, MRITorontoAtlas
 from iblutil.util import Bunch
-from ScanImageTiffReader import ScanImageTiffReader  # NB: use skimage if possible
-import tifffile
 from tqdm import tqdm
+import skimage.io
 import skimage.transform
 from scipy.interpolate import interpn, NearestNDInterpolator
 from scipy.ndimage import median_filter, gaussian_filter
@@ -132,7 +131,8 @@ def register_reference_stacks(stack_path, target_stack_path, save_path=None, dis
         else:
             raise ValueError(f'Invalid stack path {path}')
         # Load the image data
-        img_data[key] = ScanImageTiffReader(str(path)).data()
+        # img_data[key] = ScanImageTiffReader(str(path)).data()
+        img_data[key] = skimage.io.imread(path)
         img_data[key + '_processed'] = preprocess_vasculature(img_data[key], **kwargs).astype(np.float32)
 
     # Calculate quality metric (normalized cross-correlation)
@@ -170,7 +170,7 @@ def register_reference_stacks(stack_path, target_stack_path, save_path=None, dis
         'warp_matrix': warp_matrix,
         'method': 'ecc'
     }
-
+    # The same warp we will use on the MLAPDV array
     transform_robust = (skimage.transform.EuclideanTransform(rotation=params['rotation']) +
                         skimage.transform.EuclideanTransform(translation=params['translation']))
     aligned = skimage.transform.warp(
@@ -212,20 +212,24 @@ def write_stack_registration_qc(img_data, params, save_path=None, display=False)
     fig, axs = plt.subplots(2, 2)
     fig.suptitle('Reference session (*) vs session stack', fontsize=16)
 
+    # Max project the images
+    target_stack = np.max(img_data['target_stack'], axis=0)
+    stack = np.max(img_data['stack'], axis=0)
+
     # Calculate difference images
     unaligned_diff_raw = img_data['target_stack'] - img_data['stack']
     aligned_diff_raw = img_data['target_stack'] - img_data['aligned']
     maxmax = max(np.max(unaligned_diff_raw), np.max(aligned_diff_raw))
     minmin = min(np.min(unaligned_diff_raw), np.min(aligned_diff_raw))
-    unaligned_diff = (((unaligned_diff_raw - minmin) / (maxmax - minmin)) * 255).astype(np.uint8)
-    aligned_diff = (((aligned_diff_raw - minmin) / (maxmax - minmin)) * 255).astype(np.uint8)
+    unaligned_diff = np.max((((unaligned_diff_raw - minmin) / (maxmax - minmin)) * 255), axis=0).astype(np.uint8)
+    aligned_diff = np.max((((aligned_diff_raw - minmin) / (maxmax - minmin)) * 255), axis=0).astype(np.uint8)
 
     # Initial plots
-    unaligned_plot = axs[0][0].imshow(img_data['target_stack'])
+    unaligned_plot = axs[0][0].imshow(target_stack)
     axs[0][0].set_title('Unaligned')
-    aligned_plot = axs[0][1].imshow(img_data['target_stack'])
+    aligned_plot = axs[0][1].imshow(target_stack)
     axs[0][1].set_title('Aligned')
-    trans_plot = axs[1][0].imshow(img_data['stack'])
+    trans_plot = axs[1][0].imshow(stack)
     axs[1][0].set_title('Transform (unaligned vs aligned)')
     diff_plot = axs[1][1].imshow(unaligned_diff, cmap='grey')
     axs[1][1].set_title('Difference')
@@ -246,16 +250,16 @@ def write_stack_registration_qc(img_data, params, save_path=None, display=False)
 
     def update(frame):
         if frame % 2 == 0:
-            unaligned_plot.set_data(img_data['stack'])
+            unaligned_plot.set_data(stack)
             aligned_plot.set_data(img_data['aligned'])
             trans_plot.set_data(img_data['aligned'])
             diff_plot.set_data(aligned_diff)
             for t in txt:
                 t.set_text('')
         else:
-            unaligned_plot.set_data(img_data['target_stack'])
-            aligned_plot.set_data(img_data['target_stack'])
-            trans_plot.set_data(img_data['stack'])
+            unaligned_plot.set_data(target_stack)
+            aligned_plot.set_data(target_stack)
+            trans_plot.set_data(stack)
             diff_plot.set_data(unaligned_diff)
             for t in txt:
                 t.set_text('*')
@@ -269,6 +273,15 @@ def write_stack_registration_qc(img_data, params, save_path=None, display=False)
             save_path = save_path.with_suffix('.gif')
         ani.save(save_path, writer='pillow', fps=2)
         _logger.info(f'Saved stack registration QC to {save_path}')
+        # Also save the parameters as a JSON file
+        params = params.copy()
+        for k, v in params.items():
+            if isinstance(v, np.ndarray):
+                params[k] = v.tolist()
+            elif isinstance(v, (np.float32, np.float64)):
+                params[k] = float(v)
+            else:
+                params[k] = v
         with open(save_path.with_suffix('.json'), 'w') as fp:
             json.dump(params, fp, indent=4)
 
@@ -1150,13 +1163,16 @@ class MesoscopeFOVHistology(MesoscopeFOV):
         if reference_session_path.session_parts != self.session_path.session_parts:
             # Apply transform
             save_path = file.with_name('reference_stack_ecc_transform.gif')
-            xyz, _ = register_reference_stacks(
+            _, params = register_reference_stacks(
                 self.session_path, reference_session_path, save_path=save_path, display=display, crop_size=None)
+            transform_robust = (skimage.transform.EuclideanTransform(rotation=params['rotation']) +
+                                skimage.transform.EuclideanTransform(translation=params['translation']))
+            xyz = skimage.transform.warp(xyz, transform_robust, order=1, mode='constant', cval=0, clip=True, preserve_range=True)
             # Upload the saved image to Alyx as a note
             RegisterRawDataTask(self.session_path, one=self.one).upload_images(images=[save_path])
 
         if display:
-            labels = ba.get_labels(xyz)
+            labels = ba.get_labels(xyz / 1e6)  # μm -> m
             acronyms = ba.regions.id2acronym(labels)
 
             # Generate a colour map
@@ -1550,7 +1566,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
             raise FileNotFoundError('Reference stack not found')
         meta_path = stack_path.with_name('referenceImage.meta.json')
         meta = mesoscope.patch_imaging_meta(alfio.load_file_content(meta_path) or {})
-        reference_image = {'stack': tifffile.imread(stack_path), 'meta': meta}
+        reference_image = {'stack': skimage.io.imread(stack_path), 'meta': meta}
         if stack_path.with_name('referenceImage.points.json').exists():
             points_path = stack_path.with_name('referenceImage.points.json')
             # Copy to meta data

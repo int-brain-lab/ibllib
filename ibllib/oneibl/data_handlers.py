@@ -807,13 +807,13 @@ class RemoteHttpDataHandler(DataHandler):
         """
         super().__init__(session_path, signature, one=one)
 
-    def setUp(self, **_):
+    def setUp(self, check_hash=True, **_):
         """
         Function to download necessary data to run tasks using ONE
         :return:
         """
         df = super().getData()
-        self.one._check_filesystem(df)
+        self.one._check_filesystem(df, check_hash=check_hash)
 
     def uploadData(self, outputs, version, **kwargs):
         """
