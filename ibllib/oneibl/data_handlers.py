@@ -990,7 +990,7 @@ class SDSCDataHandler(DataHandler):
                 self.linked_files.append(file_link)
             except FileExistsError:
                 pass
-        task.session_path = SDSC_TMP.joinpath(session_path)
+        task.session_path = Path(SDSC_TMP.joinpath(session_path))
         # If one of the symlinked input files is also an expected output, raise here to avoid overwriting
         # In the future we may instead copy the data under this condition
         assert self.getOutputFiles(session_path=task.session_path).shape[0] == 0, (
