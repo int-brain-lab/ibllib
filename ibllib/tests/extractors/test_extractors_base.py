@@ -30,11 +30,12 @@ class TestExtractorMaps(unittest.TestCase):
     def test_get_task_extractor_map(self):
         """Test ibllib.io.extractors.base._get_task_extractor_map function."""
         # Check the custom map is loaded
-        with patch('builtins.__import__', side_effect=self.import_mock):
+        with patch.dict('sys.modules', {'projects': self.projects}):
             extractors = base._get_task_extractor_map()
             self.assertTrue(self.custom_extractors.items() < extractors.items())
         # Test handles case where module not installed
-        with patch('builtins.__import__', side_effect=ModuleNotFoundError):
+        with patch.dict('sys.modules', {'projects': None}):
+            # When trying to import a module that's None in sys.modules, it will raise ImportError
             extractors = base._get_task_extractor_map()
             self.assertFalse(set(self.custom_extractors.items()).issubset(set(extractors.items())))
         # Remove the file and check exception is caught
