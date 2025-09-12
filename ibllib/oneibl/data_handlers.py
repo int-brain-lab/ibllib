@@ -982,7 +982,7 @@ class SDSCDataHandler(DataHandler):
         for uuid, d in df.iterrows():
             file_path = session_path / d['rel_path']
             file_uuid = add_uuid_string(file_path, uuid)
-            file_link = SDSC_TMP.joinpath(file_path)
+            file_link = Path(SDSC_TMP.joinpath(file_path))
             file_link.parent.mkdir(exist_ok=True, parents=True)
             try:  # TODO append link to task attribute
                 file_link.symlink_to(
