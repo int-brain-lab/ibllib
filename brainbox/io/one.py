@@ -5,6 +5,7 @@ import logging
 import re
 from pathlib import Path
 from collections import defaultdict
+from uuid import UUID
 
 import numpy as np
 import pandas as pd
@@ -16,13 +17,14 @@ from one.alf.path import get_alf_path, ALFPath
 from one.alf.exceptions import ALFObjectNotFound, ALFMultipleCollectionsFound
 from one.alf import cache
 import one.alf.io as alfio
+from one.alf.spec import is_uuid
 from neuropixel import TIP_SIZE_UM, trace_header
 import spikeglx
 
 import ibldsp.voltage
 from ibldsp.waveform_extraction import WaveformsLoader
 from iblutil.util import Bunch
-from iblatlas.atlas import AllenAtlas, BrainRegions
+from iblatlas.atlas import AllenAtlas, MRITorontoAtlas, BrainRegions
 from iblatlas import atlas
 from ibllib.io.extractors.training_wheel import extract_wheel_moves, extract_first_movement_times
 from ibllib.pipes import histology
@@ -647,7 +649,7 @@ class SpikeSortingLoader:
                 df_sessions = cache._make_sessions_df(self.session_path)
                 self.one._cache['sessions'] = df_sessions.set_index('id')
                 self.one._cache['datasets'] = cache._make_datasets_df(self.session_path, hash_files=False)
-                self.eid = str(self.session_path.relative_to(self.session_path.parents[2]))
+                self.eid = self.session_path.session_path_short()
         # populates default properties
         self.collections = self.one.list_collections(
             self.eid, filename='spikes*', collection=f"alf/{self.pname}*")
@@ -1539,3 +1541,207 @@ class EphysSessionLoader(SessionLoader):
     @property
     def probes(self):
         return {k: self.ephys[k]['ssl'].pid for k in self.ephys}
+
+
+@dataclass(kw_only=True)
+class FOVLoader:
+    """Loader for a session field of view, such as in 2P imaging sessions."""
+
+    name : str = None
+    """Name of the field of view (FOV), e.g., 'FOV_00'."""
+
+    id : UUID = None
+    """ID of the field of view (FOV) in Alyx."""
+
+    info : dict = None
+    """Details from the fields-of-view endpoint in Alyx."""
+
+    eid : UUID = None
+    """ID of the session in Alyx."""
+
+    session_path: ALFPath = ''
+    """Path to the session directory."""
+
+    one: One = None
+    """An instance of the ONE API."""
+
+    location: list = field(default_factory=list)
+    """Location of the field of view (FOV) in the brain."""
+
+    collection: str = ''
+    """Alyx collection to look for the FOV data."""
+
+    datasets: list = field(default_factory=list)
+    """List of datasets available for the FOV."""
+
+    provenance: str = None  # TODO User ibllib.mpci.registration.Provenance enum
+    """Provenance of FOV location. None means default is used."""
+
+    @property
+    def number(self):
+        """Number of the field of view (FOV)."""
+        if self.name is not None and self.name.startswith('FOV_'):
+            return int(self.name.split('_')[-1])
+        return None
+
+    def __post_init__(self):
+        # pid gets precedence
+        if self.id is not None:
+            try:
+                info = self.one.alyx.rest('fields-of-view', 'read', id=self.id)
+                self.eid = UUID(info['session'])
+                self.name = info['name']
+                self.location = info['location']
+                self.datasets = info['datasets']
+                self.info = info  # NB: This may be removed in future
+            except NotImplementedError:
+                if self.eid == '' or self.name == '':
+                    raise IOError("Cannot infer session id and probe name from pid. "
+                                  "You need to pass eid and pname explicitly when instantiating SpikeSortingLoader.")
+            self.session_path = self.one.eid2path(self.eid)
+        # then eid / name combination
+        if not self.session_path:
+            self.session_path = self.one.eid2path(self.eid)
+        # fully local providing a session path
+        else:
+            self.session_path = ALFPath(self.session_path)  # Ensure session_path is an ALFPath object
+            if self.one:
+                self.eid = self.one.to_eid(self.session_path)
+            else:
+                self.one = One(cache_dir=self.session_path.parents[2], mode='local')
+                df_sessions = cache._make_sessions_df(self.session_path)
+                self.one._cache['sessions'] = df_sessions.set_index('id')
+                self.one._cache['datasets'] = cache._make_datasets_df(self.session_path, hash_files=False)
+                self.eid = self.session_path.session_path_short()
+
+        if not self.collection:
+            self.collection = f'alf/{self.name}'
+        self.datasets = self.one.list_datasets(self.eid)
+        if self.atlas is None:
+            self.atlas = MRITorontoAtlas()
+
+    def load_roi_times(self):
+        """Load the ROI times for the field of view (FOV).
+
+        Returns
+        -------
+        np.ndarray
+            Array of ROI times.
+
+        Raises
+        ------
+        one.alf.err.ALFObjectNotFound
+            If the ROI times file is not found.
+        """
+        if self.one is None:
+            raise ValueError("ONE instance is required to load ROI times.")
+
+        frame_times = self.one.load_dataset(self.eid, 'mpci.times.npy', collection=self.collection)
+        stack_pos = self.one.load_dataset(self.eid, 'mpciROIs.stackPos.npy', collection=self.collection)
+        timeshift = self.one.load_dataset(self.eid, 'mpciStack.timeshift.npy', collection=self.collection)
+        roi_offsets = timeshift[stack_pos[:, len(timeshift.shape)]]
+        roi_times = np.tile(frame_times, (roi_offsets.size, 1)) + roi_offsets[np.newaxis, :].T
+
+        return roi_times[self.number]
+
+    def load_roi_mlapdv(self, provenance=None):
+        """Load the ROI MLAPDV coordinates for the field of view (FOV).
+
+        Parameters
+        ----------
+        provenance : str, optional
+            The provenance of the MLAPDV coordinates to load. If not provided, the default provenance will be used.
+
+        Returns
+        -------
+        np.ndarray
+            Array of ROI MLAPDV coordinates.
+
+        Raises
+        ------
+        one.alf.err.ALFObjectNotFound
+            If the ROI MLAPDV file is not found.
+        """
+        raise NotImplementedError('This function is not yet implemented.')
+        if self.one is None:
+            raise ValueError('ONE instance is required to load ROI MLAPDV coordinates.')
+        elif self.one.offline:  # TODO: Could infer for < 3 provenances
+            raise NotImplementedError('Cannot load ROI MLAPDV coordinates in offline mode.')
+
+        if provenance is None
+            provenance = next(x['provenance'] for x in self.location if x['default_provenance'])
+            # TODO Convert to emun
+        if provenance == 'histology':
+            ...
+        mlapdv = self.one.load_dataset(self.eid, 'mpciROIs.mlapdv_estimate.npy', collection=self.collection)
+        return mlapdv[self.number]
+
+class MPCILoader(SessionLoader):
+    """Loader for MPCI sessions, such as mesoscope imaging sessions."""
+
+    def __init__(self, *args, fov=None, **kwargs):
+        """
+
+        Parameters
+        ----------
+        fov : str, int, UUID, optional
+            The name, number, or ID of the field of view (FOV) to load. If a name is provided, it will be converted to its
+            corresponding ID in Alyx. If not provided, all FOVs associated with the session will be loaded.
+        """
+        super().__init__(*args, **kwargs)
+        qargs = {}
+        if fov is not None:
+            if is_uuid(fov):
+                qargs = {'id': str(fov)}
+            else: # could be name or integer
+                qargs = {'name': str(f'FOV_{fov:02d}' if isinstance(fov, int) or fov.isnumeric() else fov)}
+        fovs = self.one.alyx.rest('fields-of-view', 'list', session=str(self.eid), **qargs)
+        self.mpci = {}
+        for fov in fovs:
+            self.mpci[fov['name']] = {}
+            self.mpci[fov['name']]['fov_id'] = UUID(fov['id'])
+            self.mpci[fov['name']]['fov_name'] = fov['name']
+            self.mpci[fov['name']]['ssl'] = FOVLoader(pid=fov['id'], one=self.one)
+
+    def name2id(self, fov_name):
+        """Convert an FOV name to its corresponding ID in Alyx.
+
+        Parameters
+        ----------
+        fov_name : str
+            The name of the field of view (FOV) to look up.
+
+        Returns
+        -------
+        UUID
+            The ID of the field of view (FOV) in Alyx.
+
+        Raises
+        ------
+        ValueError
+            If no FOV with the specified name is found in Alyx.
+
+        Examples
+        --------
+        >>> loader = MPCILoader(one=one, eid=eid)
+        >>> fov_id = loader.name2id('FOV_01')
+        >>> print(fov_id)
+        123e4567-e89b-12d3-a456-426614174000
+        """
+        fovs = self.one.alyx.rest('fovs', 'list', session=self.eid, name=fov_name)
+        if len(fovs) == 0:
+            raise ValueError(f'FOV with name "{fov_name}" not found in Alyx.')
+        return UUID(fovs[0]['id'])
+
+    def list_fovs(self):
+        """List all FOVs associated with the current session.
+
+        Returns
+        -------
+        list of str
+            A list of FOV names associated with the current session.
+
+        """
+        if self.one.offline:
+            return sorted(self.one.list_collections(self.eid, collection='FOV_??'))
+        return sorted(x['name'] for x in self.one.alyx.rest('fields-of-view', 'list', session=self.eid))
