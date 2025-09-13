@@ -2,7 +2,7 @@ import logging
 from pathlib import Path
 import numpy as np
 import pandas as pd
-from typing import Tuple, Optional
+from typing import Tuple, Optional, List
 import pickle
 
 import ibldsp.utils
@@ -13,7 +13,7 @@ from iblutil.io import jsonable
 from nptdms import TdmsFile
 
 from abc import abstractmethod
-from iblphotometry import io as fpio
+from iblphotometry import fpio
 from iblutil.spacer import Spacer
 
 _logger = logging.getLogger('ibllib')
@@ -104,7 +104,7 @@ def extract_timestamps_from_tdms_file(
     if chunk_size is not None:
         n_chunks = df.shape[0] // chunk_size
         for i in range(n_chunks):
-            vals_ = vals[i * chunk_size: (i + 1) * chunk_size]
+            vals_ = vals[i * chunk_size : (i + 1) * chunk_size]
             # data = np.array([list(f'{v:04b}'[::-1]) for v in vals_], dtype='int8')
             data = _int2digital_channels(vals_)
 
@@ -131,6 +131,24 @@ def extract_timestamps_from_tdms_file(
         with open(save_path, 'wb') as fH:
             pickle.dump(timestamps, fH)
 
+    return timestamps
+
+
+def extract_timestamps_from_bpod_jsonable(file_jsonable: str | Path, sync_states_names: List[str]):
+    _, bpod_data = jsonable.load_task_jsonable(file_jsonable)
+    timestamps = []
+    for sync_name in sync_states_names:
+        timestamps.append(
+            np.array(
+                [
+                    data['States timestamps'][sync_name][0][0] + data['Trial start timestamp'] - data['Bpod start timestamp']
+                    for data in bpod_data
+                    if sync_name in data['States timestamps']
+                ]
+            )
+        )
+    timestamps = np.sort(np.concatenate(timestamps))
+    timestamps = timestamps[~np.isnan(timestamps)]
     return timestamps
 
 
@@ -164,25 +182,14 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
         else:
             sync_states_names = ['trial_start', 'reward', 'exit_state']
 
-        # read in the raw behaviour data for syncing
+        file_jsonable = self.session_path.joinpath(self.task_collection, '_iblrig_taskData.raw.jsonable')
+        timestamps_bpod = extract_timestamps_from_bpod_jsonable(file_jsonable, sync_states_names)
+        return timestamps_bpod
+
+    def _get_valid_bounds(self):
         file_jsonable = self.session_path.joinpath(self.task_collection, '_iblrig_taskData.raw.jsonable')
         _, bpod_data = jsonable.load_task_jsonable(file_jsonable)
-
-        # we get the timestamps of the states from the bpod data
-        timestamps_bpod = []
-        for sync_name in sync_states_names:
-            timestamps_bpod.append(
-                np.array(
-                    [
-                        data['States timestamps'][sync_name][0][0] + data['Trial start timestamp'] - data['Bpod start timestamp']
-                        for data in bpod_data
-                        if sync_name in data['States timestamps']
-                    ]
-                )
-            )
-        timestamps_bpod = np.sort(np.concatenate(timestamps_bpod))
-        timestamps_bpod = timestamps_bpod[~np.isnan(timestamps_bpod)]
-        return timestamps_bpod, bpod_data
+        return [bpod_data[0]['Trial start timestamp'] - 2, bpod_data[-1]['Trial end timestamp'] + 2]
 
     @abstractmethod
     def _get_neurophotometrics_timestamps(self) -> np.ndarray:
@@ -194,7 +201,7 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
     def _get_sync_function(self) -> Tuple[callable, list]:
         # returns the synchronization function
         # get the timestamps
-        timestamps_bpod, bpod_data = self._get_bpod_timestamps()
+        timestamps_bpod = self._get_bpod_timestamps()
         timestamps_nph = self._get_neurophotometrics_timestamps()
 
         # verify presence of sync timestamps
@@ -204,17 +211,21 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
         sync_nph_to_bpod_fcn, drift_ppm, ix_nph, ix_bpod = ibldsp.utils.sync_timestamps(
             timestamps_nph, timestamps_bpod, return_indices=True, linear=True
         )
-        _logger.info(f"synced with drift: {drift_ppm}")
+        _logger.info(f'synced with drift: {drift_ppm}')
         # TODO - assertion needed. 95% of timestamps in bpod need to be in timestamps of nph (but not the other way around)
-        
-        valid_bounds = [bpod_data[0]['Trial start timestamp'] - 2, bpod_data[-1]['Trial end timestamp'] + 2]
+
+        valid_bounds = self._get_valid_bounds()
         return sync_nph_to_bpod_fcn, valid_bounds
 
     def load_data(self) -> pd.DataFrame:
         # loads the raw photometry data
         raw_photometry_folder = self.session_path / self.photometry_collection
-        raw_neurophotometrics_df = pd.read_parquet(raw_photometry_folder / '_neurophotometrics_fpData.raw.pqt')
-        return raw_neurophotometrics_df
+        photometry_df = fpio.from_neurophotometrics_file_to_photometry_df(
+            raw_photometry_folder / '_neurophotometrics_fpData.raw.pqt',
+            # data_columns=self.kwargs['fibers'],
+            drop_first=False,
+        )
+        return photometry_df
 
     def _run(self, **kwargs) -> Tuple[pd.DataFrame, pd.DataFrame]:
         # 1) load photometry data
@@ -223,27 +234,24 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
         # will be overridden with the timestamps from the tdms file
         # the idea behind this is that the rest of the sync is then the same
         # and handled by this base class
-        raw_df = self.load_data()
+        photometry_df = self.load_data()
 
         # 2) get the synchronization function
-        # spacer_detection_mode = kwargs.get('spacer_detection_mode', 'fallback')
-        # sync_nph_to_bpod_fcn, valid_bounds = self._get_sync_function(spacer_detection_mode=spacer_detection_mode)
         sync_nph_to_bpod_fcn, valid_bounds = self._get_sync_function()
 
-        # 3) convert to ibl_df
-        ibl_df = fpio.from_raw_neurophotometrics_df_to_ibl_df(raw_df, rois=self.kwargs['fibers'], drop_first=False)
-
         # 3) apply synchronization
-        ibl_df['times'] = sync_nph_to_bpod_fcn(raw_df['SystemTimestamp'])
-        ibl_df['valid'] = np.logical_and(ibl_df['times'] >= valid_bounds[0], ibl_df['times'] <= valid_bounds[1])
+        photometry_df['times'] = sync_nph_to_bpod_fcn(photometry_df['times'])
+        photometry_df['valid'] = np.logical_and(
+            photometry_df['times'] >= valid_bounds[0], photometry_df['times'] <= valid_bounds[1]
+        )
 
         # 4) write to disk
         output_folder = self.session_path.joinpath('alf', 'photometry')
         output_folder.mkdir(parents=True, exist_ok=True)
 
         # writing the synced photometry signal
-        ibl_df_outpath = output_folder / 'photometry.signal.pqt'
-        ibl_df.to_parquet(ibl_df_outpath)
+        photometry_df_outpath = output_folder / 'photometry.signal.pqt'
+        photometry_df.to_parquet(photometry_df_outpath)
 
         # writing the locations
         rois = []
@@ -252,7 +260,7 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
         locations_df = pd.DataFrame(rois).set_index('ROI')
         locations_df_outpath = output_folder / 'photometryROI.locations.pqt'
         locations_df.to_parquet(locations_df_outpath)
-        return ibl_df_outpath, locations_df_outpath
+        return photometry_df_outpath, locations_df_outpath
 
 
 class FibrePhotometryBpodSync(FibrePhotometryBaseSync):
@@ -266,7 +274,7 @@ class FibrePhotometryBpodSync(FibrePhotometryBaseSync):
                 ('_neurophotometrics_fpData.raw.pqt', self.photometry_collection, True, True),
                 ('_iblrig_taskData.raw.jsonable', self.task_collection, True, True),
                 # ('_neurophotometrics_fpData.channels.csv', self.photometry_collection, True, True),
-                ('_neurophotometrics_fpData.digitalIntputs.pqt', self.photometry_collection, True),
+                ('_neurophotometrics_fpData.digitalInputs.pqt', self.photometry_collection, True),
             ],
             'output_files': [
                 ('photometry.signal.pqt', 'alf/photometry', True),
@@ -278,10 +286,10 @@ class FibrePhotometryBpodSync(FibrePhotometryBaseSync):
     def _get_neurophotometrics_timestamps(self) -> np.ndarray:
         # for bpod based syncing, the timestamps for syncing are in the digital inputs file
         raw_photometry_folder = self.session_path / self.photometry_collection
-        digital_inputs_filepath = raw_photometry_folder / '_neurophotometrics_fpData.digitalIntputs.pqt'
-        version = fpio.infer_version_from_digital_inputs_file(digital_inputs_filepath)
-        digital_inputs_df = fpio.read_digital_inputs_file(digital_inputs_filepath, version=version)
-        timestamps_nph = digital_inputs_df['SystemTimestamp'].values[digital_inputs_df['Channel'] == self.kwargs['sync_channel']]
+        digital_inputs_filepath = raw_photometry_folder / '_neurophotometrics_fpData.digitalInputs.pqt'
+        digital_inputs_df = fpio.read_digital_inputs_file(digital_inputs_filepath)
+        # timestamps_nph = digital_inputs_df['times'].values[digital_inputs_df['channel'] == self.kwargs['sync_channel']]
+        timestamps_nph = digital_inputs_df.groupby('channel').get_group(self.kwargs['sync_channel'])['times'].values
 
         # TODO replace this rudimentary spacer removal
         # to implement: detect spacer / remove spacer methods
@@ -305,7 +313,7 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
             'input_files': [
                 ('_neurophotometrics_fpData.raw.pqt', self.photometry_collection, True, True),
                 ('_iblrig_taskData.raw.jsonable', self.task_collection, True, True),
-                ('_neurophotometrics_fpData.channels.csv', self.photometry_collection, True, True),
+                # ('_neurophotometrics_fpData.channels.csv', self.photometry_collection, True, True),
                 ('_mcc_DAQdata.raw.tdms', self.photometry_collection, True, True),
             ],
             'output_files': [
@@ -319,7 +327,7 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
         # the point of this functions is to overwrite the SystemTimestamp column
         # in the ibl_df with the values from the DAQ clock
         # then syncing will work the same as for the bpod based syncing
-        raw_df = super().load_data()
+        photometry_df = super().load_data()
 
         # get daqami timestamps
         # attempt to load
@@ -341,49 +349,51 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
         frame_timestamps = self.timestamps[sync_channel_name]
 
         # compare number of frame timestamps
-        # and put them in the raw_df SystemTimestamp column
+        # and put them in the photometry_df SystemTimestamp column
         # based on the different scenarios
         frame_times_adjusted = False  # for debugging reasons
 
         # they are the same, all is well
-        if raw_df.shape[0] == frame_timestamps.shape[0]:
-            raw_df['SystemTimestamp'] = frame_timestamps
-            _logger.info(f'timestamps are of equal size {raw_df.shape[0]}')
+        if photometry_df.shape[0] == frame_timestamps.shape[0]:
+            photometry_df['times'] = frame_timestamps
+            _logger.info(f'timestamps are of equal size {photometry_df.shape[0]}')
             frame_times_adjusted = True
 
         # there are more timestamps recorded by DAQ than
         # frames recorded by bonsai
-        elif raw_df.shape[0] < frame_timestamps.shape[0]:
-            _logger.info(f'# bonsai frames: {raw_df.shape[0]}, # daq timestamps: {frame_timestamps.shape[0]}')
+        elif photometry_df.shape[0] < frame_timestamps.shape[0]:
+            _logger.info(f'# bonsai frames: {photometry_df.shape[0]}, # daq timestamps: {frame_timestamps.shape[0]}')
             # there is exactly one more timestamp recorded by the daq
             # (probably bonsai drops the last incomplete frame)
-            if raw_df.shape[0] == frame_timestamps.shape[0] - 1:
-                raw_df['SystemTimestamp'] = frame_timestamps[:-1]
+            if photometry_df.shape[0] == frame_timestamps.shape[0] - 1:
+                photometry_df['times'] = frame_timestamps[:-1]
             # there are two more frames recorded by the DAQ than by
             # bonsai - this is observed. TODO understand when this happens
-            elif raw_df.shape[0] == frame_timestamps.shape[0] - 2:
-                raw_df['SystemTimestamp'] = frame_timestamps[:-2]
+            elif photometry_df.shape[0] == frame_timestamps.shape[0] - 2:
+                photometry_df['times'] = frame_timestamps[:-2]
             # there are more frames recorded by the DAQ than that
             # this indicates and issue -
-            elif raw_df.shape[0] < frame_timestamps.shape[0] - 2:
+            elif photometry_df.shape[0] < frame_timestamps.shape[0] - 2:
                 raise ValueError('more timestamps for frames recorded by the daqami than frames were recorded by bonsai.')
             frame_times_adjusted = True
 
         # there are more frames recorded by bonsai than by the DAQ
         # this happens when the user stops the daqami recording before stopping the bonsai
         # or when daqami crashes
-        elif raw_df.shape[0] > frame_timestamps.shape[0]:
+        elif photometry_df.shape[0] > frame_timestamps.shape[0]:
             # we drop all excess frames
-            _logger.warning(f'#frames bonsai: {raw_df.shape[0]} > #frames daqami {frame_timestamps.shape[0]}, dropping excess')
+            _logger.warning(
+                f'#frames bonsai: {photometry_df.shape[0]} > #frames daqami {frame_timestamps.shape[0]}, dropping excess'
+            )
             n_frames_daqami = frame_timestamps.shape[0]
-            raw_df = raw_df.iloc[:n_frames_daqami]
-            raw_df.loc[:, 'SystemTimestamp'] = frame_timestamps
+            photometry_df = photometry_df.iloc[:n_frames_daqami]
+            photometry_df.loc[:, 'SystemTimestamp'] = frame_timestamps
             frame_times_adjusted = True
 
         if not frame_times_adjusted:
             raise ValueError('timestamp issue that hasnt been caught')
 
-        return raw_df
+        return photometry_df
 
     def _get_neurophotometrics_timestamps(self) -> np.ndarray:
         # get the sync channel and the corresponding timestamps
