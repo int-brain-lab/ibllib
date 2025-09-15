@@ -24,7 +24,7 @@ import spikeglx
 import ibldsp.voltage
 from ibldsp.waveform_extraction import WaveformsLoader
 from iblutil.util import Bunch
-from iblatlas.atlas import AllenAtlas, MRITorontoAtlas, BrainRegions
+from iblatlas.atlas import AllenAtlas, MRITorontoAtlas, BrainRegions, BrainAtlas
 from iblatlas import atlas
 from ibllib.io.extractors.training_wheel import extract_wheel_moves, extract_first_movement_times
 from ibllib.pipes import histology
@@ -1577,6 +1577,9 @@ class FOVLoader:
     provenance: str = None  # TODO User ibllib.mpci.registration.Provenance enum
     """Provenance of FOV location. None means default is used."""
 
+    atlas: BrainAtlas = None
+    """Atlas to use for brain region lookups."""
+
     @property
     def number(self):
         """Number of the field of view (FOV)."""
@@ -1588,12 +1591,7 @@ class FOVLoader:
         # pid gets precedence
         if self.id is not None:
             try:
-                info = self.one.alyx.rest('fields-of-view', 'read', id=self.id)
-                self.eid = UUID(info['session'])
-                self.name = info['name']
-                self.location = info['location']
-                self.datasets = info['datasets']
-                self.info = info  # NB: This may be removed in future
+                self._get_endpoint_info()
             except NotImplementedError:
                 if self.eid == '' or self.name == '':
                     raise IOError("Cannot infer session id and probe name from pid. "
@@ -1619,6 +1617,19 @@ class FOVLoader:
         self.datasets = self.one.list_datasets(self.eid)
         if self.atlas is None:
             self.atlas = MRITorontoAtlas()
+
+    def _get_endpoint_info(self):
+        if self.id:
+            info = self.one.alyx.rest('fields-of-view', 'read', id=self.id)
+            self.eid = UUID(info['session'])
+            self.name = info['name']
+        else:
+            assert self.eid and self.name, 'either id or eid and name required'
+            info, = self.one.alyx.rest('fields-of-view', 'list', session=str(self.eid), name=self.name)
+            self.id = UUID(info['id'])
+        self.location = info['location']
+        self.datasets = info['datasets']
+        self.info = info  # NB: This may be removed in future
 
     def load_roi_times(self):
         """Load the ROI times for the field of view (FOV).
@@ -1668,12 +1679,15 @@ class FOVLoader:
         elif self.one.offline:  # TODO: Could infer for < 3 provenances
             raise NotImplementedError('Cannot load ROI MLAPDV coordinates in offline mode.')
 
-        if provenance is None
+        if provenance is None:
+            if not self.location:
+                self._get_endpoint_info()
             provenance = next(x['provenance'] for x in self.location if x['default_provenance'])
             # TODO Convert to emun
-        if provenance == 'histology':
-            ...
-        mlapdv = self.one.load_dataset(self.eid, 'mpciROIs.mlapdv_estimate.npy', collection=self.collection)
+        attr = 'mlapdv'
+        if provenance != 'histology':
+            attr += f'_{provenance}'
+        mlapdv = self.one.load_dataset(self.eid, f'mpciROIs.{attr}.npy', collection=self.collection)
         return mlapdv[self.number]
 
 class MPCILoader(SessionLoader):

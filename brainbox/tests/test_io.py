@@ -24,5 +24,50 @@ class TestIO_ONE(unittest.TestCase):
         self.assertRaises(ValueError, bbone.load_iti, trials)
 
 
+from one.api import ONE
+from uuid import UUID
+from brainbox.io.one import FOVLoader
+
+class TestFOVLoader(unittest.TestCase):
+    def setUp(self):
+        self.one = ONE()
+        self.eid = '787b98a3-3176-42e0-8792-ee8c66cf45e1'  # SP072/2025-08-20/001
+        self.fov_name = 'FOV_00'
+
+    def test_init_with_name(self):
+        loader = FOVLoader(one=self.one, eid=self.eid, name=self.fov_name)
+        self.assertEqual(loader.name, self.fov_name)
+        self.assertEqual(loader.number, 0)
+        self.assertEqual(loader.eid, UUID(self.eid))
+        self.assertIsInstance(loader.session_path, ALFPath)
+
+    @unittest.skip('Requires a valid FOV ID from Alyx.')
+    def test_init_with_id(self):
+        loader = FOVLoader(one=self.one, id=self.fov_id)
+        self.assertEqual(loader.id, self.fov_id)
+        self.assertEqual(loader.name, self.fov_name)
+        self.assertEqual(loader.number, 0)
+        self.assertIsInstance(loader.session_path, ALFPath)
+
+    def test_load_roi_times(self):
+        loader = FOVLoader(one=self.one, eid=self.eid, name=self.fov_name)
+        roi_times = loader.load_roi_times()
+        self.assertIsInstance(roi_times, np.ndarray)
+        self.assertGreater(roi_times.shape[0], 0)  # Should have some ROI times
+
+    def test_load_roi_mlapdv(self):
+        loader = FOVLoader(one=self.one, eid=self.eid, name=self.fov_name)
+        roi_mlapdv = loader.load_roi_mlapdv()
+        self.assertIsInstance(roi_mlapdv, np.ndarray)
+        self.assertGreater(roi_mlapdv.shape[0], 0)  # Should have some ROI MLAPDV values
+
+
 if __name__ == '__main__':
-    unittest.main(exit=False, verbosity=2)
+    suite = unittest.TestSuite()
+    suite.addTest(TestFOVLoader('test_load_roi_mlapdv'))
+    runner = unittest.TextTestRunner()
+    runner.run(suite)
+
+
+# if __name__ == '__main__':
+    # unittest.main(exit=False, verbosity=2)
