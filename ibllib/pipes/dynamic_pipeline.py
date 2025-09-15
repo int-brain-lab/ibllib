@@ -37,7 +37,6 @@ import ibllib.pipes.tasks as mtasks
 import ibllib.pipes.base_tasks as bstasks
 import ibllib.pipes.widefield_tasks as wtasks
 import ibllib.pipes.mesoscope_tasks as mscope_tasks
-from ibllib.mpci.registration import MesoscopeFOV
 import ibllib.pipes.sync_tasks as stasks
 import ibllib.pipes.behavior_tasks as btasks
 import ibllib.pipes.video_tasks as vtasks
@@ -587,7 +586,10 @@ def make_pipeline(session_path, **pkwargs):
 
     # Mesoscope tasks
     if 'mesoscope' in devices:
-        ((_, mscope_kwargs),) = devices['mesoscope'].items()
+
+        from ibllib.mpci.registration import MesoscopeFOV
+
+        (_, mscope_kwargs), = devices['mesoscope'].items()
         mscope_kwargs['device_collection'] = mscope_kwargs.pop('collection')
         tasks['MesoscopeRegisterSnapshots'] = type('MesoscopeRegisterSnapshots', (mscope_tasks.MesoscopeRegisterSnapshots,), {})(
             **kwargs, **mscope_kwargs

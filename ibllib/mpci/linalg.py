@@ -407,6 +407,7 @@ def fast_dot_product_check(plane_normal: np.ndarray, line_vector: np.ndarray) ->
             plane_normal[1] * line_vector[1] +
             plane_normal[2] * line_vector[2]) / (pn_norm * lv_norm)
 
+
 ###### GEORG'S ORIGINAL #####
 
 @nb.njit("float64(float64[:],float64[:])")
@@ -544,8 +545,8 @@ def _intersect_line_mesh(
             if np.abs(dot_prod) < tol:  # Not parallel - can intersect
                 # Compute intersection point
                 denominator = (normal[0] * line_vector[0] +
-                              normal[1] * line_vector[1] +
-                              normal[2] * line_vector[2])
+                               normal[1] * line_vector[1] +
+                               normal[2] * line_vector[2])
 
                 if np.abs(denominator) > 1e-12:  # Avoid division by zero
                     diff = p0 - line_point

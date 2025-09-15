@@ -450,7 +450,8 @@ class Task(abc.ABC):
         Function to optionally overload to clean up
         :return:
         """
-        self.data_handler.cleanUp(task=self)
+        if hasattr(self, 'data_handler') and self.data_handler is not None:
+            self.data_handler.cleanUp(task=self)
 
     def assert_expected_outputs(self, raise_error=True):
         """
