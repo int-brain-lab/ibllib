@@ -76,8 +76,9 @@ class MesoscopeFOV(MesoscopeTask):
 
         Notes
         -----
-        - Once the FOVs have been registered they cannot be updated with this task. Rerunning this
-          task will result in an error.
+        - Once the FOVs have been registered they cannot be deleted with this task. Rerunning this
+          task will update the FOV locations in Alyx, however if the number of FOVs has changed
+          then any extra FOVs will need to be deleted manually in Alyx.
         - This task modifies the first meta JSON file.  All meta files are registered by this task.
         """
         # Load necessary data
@@ -549,6 +550,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.reference_session = kwargs.get('reference_session')  # an eid of the aligned histology session
+        self.provenance = Provenance.HISTOLOGY if self.reference_session else Provenance.ESTIMATE
 
     @property
     def signature(self):
@@ -572,7 +574,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
         # TODO This should be updated to handle changes in provenance suffix and device collection
         return signature
 
-    def _run(self, *args, provenance=Provenance.HISTOLOGY, atlas_resolution=25, display=False):
+    def _run(self, *args, atlas_resolution=25, display=False):
         self.atlas = MRITorontoAtlas(res_um=atlas_resolution)  # TODO Check scaling appied to underlying volume
         # Load the reference stack & (down)load the registered MLAPDV coordinates
         reference_image = self.load_reference_stack()
@@ -580,15 +582,25 @@ class MesoscopeFOVHistology(MesoscopeFOV):
         _, meta_files, _ = self.input_files[0].find_files(self.session_path)
         meta = mesoscope.patch_imaging_meta(alfio.load_file_content(meta_files[0]) or {})
         nFOV = len(meta.get('FOV', []))
-        # Update the craniotomy center
-        self.update_craniotomy_center(reference_image)
-        meta['centerMM'] = reference_image['meta']['centerMM']
-        with open(meta_files[0], 'w') as fp:
-            json.dump(meta, fp)
-        # Add reference meta data to meta_files list for registration
-        meta_files.append(next(self.session_path.glob('raw_imaging_data_??/reference/referenceImage.meta.json')))
-        # Interpolate the FOVs to the reference stack
-        mlapdv = self.interpolate_FOVs(reference_image, meta)
+        if self.provenance is Provenance.HISTOLOGY:
+            _logger.info('Extracting histology MLAPDV datasets')
+            # Update the craniotomy center
+            self.update_craniotomy_center(reference_image)
+            meta['centerMM'] = reference_image['meta']['centerMM']
+            with open(meta_files[0], 'w') as fp:
+                json.dump(meta, fp)
+            # Add reference meta data to meta_files list for registration
+            meta_files.append(next(self.session_path.glob('raw_imaging_data_??/reference/referenceImage.meta.json')))
+            # Interpolate the FOVs to the reference stack
+            mlapdv = self.interpolate_FOVs(reference_image, meta)
+        elif 'points' in reference_image['meta']:
+            _logger.info('Extracting estimate MLAPDV datasets')
+            mlapdv, _ = self.project_mlapdv(meta, atlas=self.atlas, provenance=self.provenance)
+            # Convert to list of arrays for processing
+            mlapdv = [mlapdv[i] for i in range(nFOV)]
+        else:
+            _logger.warning('No reference image points found; will not account for optical plane tilt')
+            return self.super()._run(*args)
 
         # Account for optical plane tilt
         mlapdv_rel = self.correct_fov_depth_and_surface_projection(mlapdv, meta, reference_image)
@@ -605,7 +617,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
             if 'MLAPDV' not in fov:
                 fov['MLAPDV'] = {}
                 fov['brainLocationIds'] = {}
-            fov['MLAPDV'][provenance.name.lower()] = {
+            fov['MLAPDV'][self.provenance.name.lower()] = {
                 'topLeft': mean_image_mlapdv[i][0, 0, :].tolist(),
                 'topRight': mean_image_mlapdv[i][0, -1, :].tolist(),
                 'bottomLeft': mean_image_mlapdv[i][-1, 0, :].tolist(),
@@ -613,7 +625,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
                 'center': mean_image_mlapdv[i][round(mean_image_mlapdv[i].shape[0] / 2) - 1,
                                                round(mean_image_mlapdv[i].shape[1] / 2) - 1, :].tolist()
             }
-            fov['brainLocationIds'][provenance.name.lower()] = {
+            fov['brainLocationIds'][self.provenance.name.lower()] = {
                 'topLeft': int(mean_image_ids[i][0, 0]),
                 'topRight': int(mean_image_ids[i][0, -1]),
                 'bottomLeft': int(mean_image_ids[i][-1, 0]),
@@ -623,7 +635,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
             }
 
         # Save the mean image datasets
-        suffix = None if provenance is Provenance.HISTOLOGY else provenance.name.lower()
+        suffix = None if self.provenance is Provenance.HISTOLOGY else self.provenance.name.lower()
         mean_image_files = []
         assert len(mean_image_mlapdv) == nFOV
         for i in range(nFOV):
@@ -657,7 +669,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
                 axes.scatter(*fov.T, ".", c="k", s=1, alpha=0.05, label='ROIs in imaging plane')
 
         # Register FOVs in Alyx
-        self.register_fov(meta, provenance)
+        self.register_fov(meta, self.provenance)
 
         return sorted([*meta_files, *roi_files, *mean_image_files])
 
@@ -989,6 +1001,19 @@ class MesoscopeFOVHistology(MesoscopeFOV):
     def interpolate_FOVs(self, reference_image, meta, display=False):
         """Interpolate the FOV coordinates from reference stack coordinates.
 
+        Parameters
+        ----------
+        reference_image : dict
+            The reference image object containing metadata and mlapdv histology data.
+        meta : dict
+            The FOV metadata.
+        display : bool
+            Whether to display the FOVs.
+
+        Returns
+        -------
+        list of numpy.array
+            The interpolated MLAPDV coordinates for each FOV.
         """
         # Extract the reference image and mean image extents in mm along the coverslip, relative to the craniotomy center
         assert np.all(self.get_window_center(reference_image['meta']) == self.get_window_center(meta))
