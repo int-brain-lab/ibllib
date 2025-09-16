@@ -157,17 +157,13 @@ class EphysQC(base.QC):
                 sr = self.data['ap']
                 nc = sr.nc - sr.nsync
 
-                # verify that the channel layout is correct according to IBL layout
                 th = sr.geometry
-                if sr.meta.get('NP2.4_shank', None) is not None:
-                    h = neuropixel.trace_header(sr.major_version, nshank=4)
-                    h = neuropixel.split_trace_header(h, shank=int(sr.meta.get('NP2.4_shank')))
-                else:
+                # Verify that the channel layout is correct according to IBL layout for version 1 probes
+                if sr.major_version == 1:
                     h = neuropixel.trace_header(sr.major_version, nshank=np.unique(th['shank']).size)
-
-                if not (np.all(h['x'] == th['x']) and np.all(h['y'] == th['y'])):
-                    _logger.critical("Channel geometry seems incorrect")
-                    # raise ValueError("Wrong Neuropixel channel mapping used - ABORT")
+                    if not (np.all(h['x'] == th['x']) and np.all(h['y'] == th['y'])):
+                        _logger.critical("Channel geometry seems incorrect")
+                        raise ValueError("Wrong Neuropixel channel mapping used - ABORT")
 
                 t0s = np.arange(TMIN, sr.rl - SAMPLE_LENGTH, BATCHES_SPACING)
                 all_rms = np.zeros((2, nc, t0s.shape[0]))
@@ -179,7 +175,7 @@ class EphysQC(base.QC):
                     sl = slice(int(t0 * sr.fs), int((t0 + SAMPLE_LENGTH) * sr.fs))
                     raw = sr[sl, :-sr.nsync].T
                     all_rms[0, :, i], all_rms[1, :, i], all_srs[:, i], channel_ok[:, i], psd =\
-                        self._compute_metrics_array(raw, sr.fs, h)
+                        self._compute_metrics_array(raw, sr.fs, th)
                     psds += psd
                 # Calculate the median RMS across all samples per channel
                 results = {'rms': np.median(all_rms, axis=-1),
