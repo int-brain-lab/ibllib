@@ -586,8 +586,7 @@ def make_pipeline(session_path, **pkwargs):
 
     # Mesoscope tasks
     if 'mesoscope' in devices:
-
-        from ibllib.mpci.registration import MesoscopeFOV
+        from ibllib.mpci.tasks import MesoscopeFOVHistology
 
         (_, mscope_kwargs), = devices['mesoscope'].items()
         mscope_kwargs['device_collection'] = mscope_kwargs.pop('collection')
@@ -596,7 +595,7 @@ def make_pipeline(session_path, **pkwargs):
         )
         tasks['MesoscopePreprocess'] = type('MesoscopePreprocess', (mscope_tasks.MesoscopePreprocess,), {})(
             **kwargs, **mscope_kwargs)
-        tasks['MesoscopeFOV'] = type('MesoscopeFOV', (MesoscopeFOV,), {})(
+        tasks['MesoscopeFOV'] = type('MesoscopeFOV', (MesoscopeFOVHistology,), {})(
             **kwargs, **mscope_kwargs, parents=[tasks['MesoscopePreprocess']])
         tasks['MesoscopeSync'] = type('MesoscopeSync', (mscope_tasks.MesoscopeSync,), {})(
             **kwargs, **mscope_kwargs, **sync_kwargs
