@@ -872,9 +872,11 @@ class MesoscopeFOVHistology(MesoscopeFOV):
             The first two dimensions (h, w) should equal those of the reference stack.
 
         """
-        assert self.reference_session
-        reference_session_path = self.one.eid2path(self.reference_session)
-        assert reference_session_path, f'Reference session not found for eid {self.reference_session}'
+        assert self.reference_session, 'Reference session eID not set'
+        assert (reference_session_path := self.one.eid2path(self.reference_session)), \
+            f'Reference session not found for eid {self.reference_session}'
+        # Ensure reference session shares the same root dir as the task session path
+        reference_session_path = self.session_path.parents[2] / reference_session_path.session_path_short()
         file = self._get_atlas_registered_reference_mlap(reference_session_path, clobber=False)
         ccf_idx = np.load(file)  # shape (h, w, 3) - ml, ap, dv indices
         # ccf_idx = self._load_reference_stack_registered()  # height, width, mlapdv
