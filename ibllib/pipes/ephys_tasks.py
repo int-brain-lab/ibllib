@@ -465,7 +465,7 @@ class RawEphysQC(base_tasks.EphysTask):
         return signature
 
     # TODO make sure this works with NP2 probes (at the moment not sure it will due to raiseError mapping)
-    def _run(self, overwrite=False):
+    def _run(self, overwrite=True):
 
         eid = self.one.path2eid(self.session_path)
         probe = self.one.alyx.rest('insertions', 'list', session=eid, name=self.pname)
