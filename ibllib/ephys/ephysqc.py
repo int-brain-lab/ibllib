@@ -188,8 +188,12 @@ class EphysQC(base.QC):
                            'ap_freqs': fourier.fscale(WELCH_WIN_LENGTH_SAMPLES, 1 / sr.fs, one_sided=True),
                            'ap_power': psds.T / len(t0s),  # shape: (nfreqs, nchannels)
                            }
+                unsort = np.argsort(sr.raw_channel_order)[:-sr.nsync]
                 for k in files:
-                    np.save(files[k], results[k])
+                    if nc in results[k].shape:
+                        np.save(files[k], results[k][..., unsort])
+                    else:
+                        np.save(files[k], results[k])
             qc_files.extend([files[k] for k in files])
             for p in [10, 90]:
                 self.metrics[f'apRms_p{p}_raw'] = np.format_float_scientific(
@@ -219,19 +223,19 @@ def rmsmap(sglx, spectra=True, nmod=1):
     # the window generator will generates window indices
     wingen = utils.WindowGenerator(ns=sglx.ns, nswin=rms_win_length_samples, overlap=0)
     nwin = np.ceil(wingen.nwin / nmod).astype(int)
+    nc = sglx.nc - sglx.nsync
     # pre-allocate output dictionary of numpy arrays
-    win = {'TRMS': np.zeros((nwin, sglx.nc)),
+    win = {'TRMS': np.zeros((nwin, nc)),
            'nsamples': np.zeros((nwin,)),
            'fscale': fourier.fscale(WELCH_WIN_LENGTH_SAMPLES, 1 / sglx.fs, one_sided=True),
            'tscale': wingen.tscale(fs=sglx.fs)[::nmod]}
-    win['spectral_density'] = np.zeros((len(win['fscale']), sglx.nc))
+    win['spectral_density'] = np.zeros((len(win['fscale']), nc))
     # loop through the whole session
     with tqdm(total=wingen.nwin) as pbar:
         for iwindow, (first, last) in enumerate(wingen.firstlast):
             if np.mod(iwindow, nmod) != 0:
                 continue
-
-            D = sglx.read_samples(first_sample=first, last_sample=last)[0].transpose()
+            D = sglx[slice(first, last), :-sglx.nsync].T
             # remove low frequency noise below 1 Hz
             D = fourier.hp(D, 1 / sglx.fs, [0, 1])
             iw = np.floor(wingen.iw / nmod).astype(int)
@@ -283,12 +287,15 @@ def extract_rmsmap(sglx, out_folder=None, overwrite=False, spectra=True, nmod=1)
     # output ALF files, single precision with the optional label as suffix before extension
     if not out_folder.exists():
         out_folder.mkdir()
+    unsort = np.argsort(sglx.raw_channel_order)[:-sglx.nsync]
     tdict = {'rms': rms['TRMS'].astype(np.single), 'timestamps': rms['tscale'].astype(np.single)}
+    tdict['rms'] = tdict['rms'][:, unsort]
     out_time = alfio.save_object_npy(
         out_folder, object=alf_object_time, dico=tdict, namespace='iblqc')
     if spectra:
         fdict = {'power': rms['spectral_density'].astype(np.single),
                  'freqs': rms['fscale'].astype(np.single)}
+        fdict['power'] = fdict['power'][:, unsort]
         out_freq = alfio.save_object_npy(
             out_folder, object=alf_object_freq, dico=fdict, namespace='iblqc')
     return out_time + out_freq if spectra else out_time
