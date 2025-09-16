@@ -715,6 +715,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
                 remote_file = f'{self.one.alyx._par.HTTP_DATA_SERVER}/histology/' + remote_file
                 _logger.warning(f'Using HTTP download for {remote_file}')
                 local_file = self.one.alyx.download_file(remote_file, target_dir=local_file.parent)
+                assert local_file.exists(), f'Failed to download {remote_file} to {local_file}'
         return local_file
 
     def load_metadata_from_tif(self):
@@ -1171,7 +1172,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
         for i, (fov, fov_meta) in enumerate(zip(fov_mlapdv, meta['FOV'])):
             # Convert FOV depth from micrometers to meters
             z = -1 * (fov_meta['Zs'] - dv_avg)  # depth below reference plane (μm), positive = deeper
-            _logger.info(f"FOV {i}: Original Zs={fov_meta['Zs']:.1f}μm, dv_avg={dv_avg:.1f}μm, converted depth z={z:.6f}m")
+            _logger.info(f"FOV {i}: Original Zs={fov_meta['Zs']:.1f}μm, dv_avg={dv_avg:.1f}μm, converted depth z={z:.1f}μm")
 
             # Replace surface dv with imaging depth
             fov_ = fov.copy()
