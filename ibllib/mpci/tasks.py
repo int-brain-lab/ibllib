@@ -694,24 +694,25 @@ class MesoscopeFOVHistology(MesoscopeFOV):
         handler.setUp()
 
         _logger.info(f'Looking for reference MLAPDV in {reference_session_path.joinpath(self.device_collection, 'reference')}')
+        # NB: The local reference folder is expected to exist after handler.setUp()
         local_file = next(reference_session_path.glob(f'{self.device_collection}/reference')) / 'referenceImage.mlapdv.npy'
         if clobber or not local_file.exists():
             # Download remote file
             assert self.one, 'ONE required'
             local_file.parent.mkdir(parents=True, exist_ok=True)
+            lab = self.one.get_details(reference_session_path)['lab']
+            remote_file = f'{lab}/{reference_session_path.session_path_short()}/{local_file.name}'
             try:
                 # assert isinstance(self.data_handler, dh.ServerGlobusDataHandler)  # If not, assume Globus not configured
                 handler = dh.ServerGlobusDataHandler(
                     reference_session_path, {'input_files': [], 'output_files': []}, one=self.one)
-                endpoint_id = next(v['id'] for k, v in handler.globus.endpoints.items() if k.startwith('flatiron'))
+                endpoint_id = next(v['id'] for k, v in handler.globus.endpoints.items() if k.startswith('flatiron'))
                 handler.globus.add_endpoint(endpoint_id, label='flatiron_histology', root_path='/histology/')
-                remote_file = f'{reference_session_path.lab}/{reference_session_path.session_path_short()}/{local_file.name}'
                 handler.globus.mv('flatiron_histology', 'local', [remote_file], ['/'.join(local_file.parts[-5:])])
                 assert local_file.exists(), f'Failed to download {remote_file} to {local_file}'
             except Exception as e:
                 _logger.error(f'Failed to download via Globus: {e}')
-                remote_file = (f'{self.one.alyx._par.HTTP_DATA_SERVER}/histology/{reference_session_path.lab}/'
-                               f'{reference_session_path.subject}/referenceImage.mlapdv.npy')
+                remote_file = f'{self.one.alyx._par.HTTP_DATA_SERVER}/histology/' + remote_file
                 _logger.warning(f'Using HTTP download for {remote_file}')
                 local_file = self.one.alyx.download_file(remote_file, target_dir=local_file.parent)
         return local_file
