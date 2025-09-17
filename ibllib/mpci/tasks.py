@@ -8,6 +8,7 @@ import time
 import uuid
 import logging
 import json
+import pickle  # TODO remove once stable
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -607,6 +608,11 @@ class MesoscopeFOVHistology(MesoscopeFOV):
         # Account for optical plane tilt
         mlapdv_rel = self.correct_fov_depth_and_surface_projection(mlapdv, meta, reference_image)
         mean_image_mlapdv = self.project_mlapdv_from_surface(mlapdv_rel)
+
+        # Because generating the projected coordinates takes so long, for now we will save them
+        _logger.info('Saving mlapdv projection file to %s', self.session_path / 'mlapdv_projection.pkl')
+        with open(self.session_path / 'mlapdv_projection.pkl', 'wb') as fp:
+            pickle.dump((mlapdv_rel, mean_image_mlapdv), fp)
 
         # Look up brain location IDs from coordinates
         mean_image_ids = []
