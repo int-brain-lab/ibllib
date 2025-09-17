@@ -547,6 +547,8 @@ class MesoscopeFOVHistology(MesoscopeFOV):
     the surface location for each FOV pixel, then applying the adjusted depth.
     """
 
+    cpu = 4  # Currently uses a lot of parallel loops in numba
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.reference_session = kwargs.get('reference_session')  # an eid of the aligned histology session
