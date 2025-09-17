@@ -352,7 +352,7 @@ class IBLRegistrationClient(RegistrationClient):
                 _, _end_time = _get_session_times(ses_path, md, d)
                 user = md.get('PYBPOD_CREATOR')
                 user = user[0] if user[0] in users else self.one.alyx.user
-                volume = d[-1].get('water_delivered', sum(x['reward_amount'] for x in d)) / 1000
+                volume = d[-1].get('water_delivered', sum(x.get('reward_amount', 0) for x in d)) / 1000
                 if volume > 0:
                     self.register_water_administration(
                         subject['nickname'], volume, date_time=_end_time or end_time, user=user,
