@@ -71,6 +71,7 @@ class VideoCompress(base_tasks.VideoTask):
     Task to compress raw video data from .avi to .mp4 format.
     """
     priority = 90
+    io_charge = 100
     job_size = 'large'
 
     @property
@@ -105,6 +106,7 @@ class VideoConvert(base_tasks.VideoTask):
     Task that converts compressed avi to mp4 format and renames video and camlog files. Specific to UCLA widefield implementation
     """
     priority = 90
+    io_charge = 100
     job_size = 'small'
 
     @property

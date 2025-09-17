@@ -82,6 +82,7 @@ class MesoscopeCompress(base_tasks.MesoscopeTask):
     """ Tar compress raw 2p tif files, optionally remove uncompressed data."""
 
     priority = 90
+    io_charge = 100
     job_size = 'large'
     _log_level = None
 
@@ -195,7 +196,8 @@ class MesoscopeCompress(base_tasks.MesoscopeTask):
 class MesoscopePreprocess(base_tasks.MesoscopeTask):
     """Run suite2p preprocessing on tif files."""
 
-    priority = 80
+    priority = 100
+    io_charge = 100
     cpu = -1
     job_size = 'large'
     env = 'suite2p'
