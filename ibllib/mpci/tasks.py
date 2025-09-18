@@ -617,7 +617,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
         # Look up brain location IDs from coordinates
         mean_image_ids = []
         for xyz in mean_image_mlapdv:
-            labels = self.atlas.get_labels(xyz.reshape(-1, 3))
+            labels = self.atlas.get_labels(xyz.reshape(-1, 3) / 1e6)  # in m
             mean_image_ids.append(labels.reshape(xyz.shape[:2]))
 
         # Update the FOV meta data fields (used in register_fov)
