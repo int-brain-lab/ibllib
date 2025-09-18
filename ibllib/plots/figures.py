@@ -20,7 +20,6 @@ from one.alf.exceptions import ALFObjectNotFound
 from ibllib.io.video import get_video_frame, url_from_eid
 from ibllib.oneibl.data_handlers import ExpectedDataset
 import spikeglx
-import neuropixel
 from brainbox.plot import driftmap
 from brainbox.io.spikeglx import Streamer
 from brainbox.behavior.dlc import SAMPLING, plot_trace_on_frame, plot_wheel_position, plot_lick_hist, \
