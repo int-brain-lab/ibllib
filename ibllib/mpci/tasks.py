@@ -561,10 +561,10 @@ class MesoscopeFOVHistology(MesoscopeFOV):
         signature = {
             'input_files': [I('_ibl_rawImagingData.meta.json', self.device_collection, True),
                             I('mpciROIs.stackPos.npy', 'alf/FOV*', True),
-                            # New additions
+                            # New additions  # FIXME should be self.device_collection (may require patching exp desc files)
                             I('referenceImage.stack.tif', 'raw_imaging_data_??/reference', True, unique=True),
                             I('referenceImage.meta.json', 'raw_imaging_data_??/reference', True, unique=True),
-                            I('referenceImage.points.json', 'raw_imaging_data_??/reference', True, unique=True),
+                            I('referenceImage.points.json', 'raw_imaging_data_??/reference', False, unique=True),
                             # ('referenceImage.mlapdv.npy', 'histology', False)  # may be in another session folder!
                             ],
             'output_files': [('mpciMeanImage.brainLocationIds.npy', 'alf/FOV_*', True),
@@ -926,7 +926,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
 
         if reference_session_path.session_parts != self.session_path.session_parts:
             # Apply transform
-            save_path = file.with_name('reference_stack_ecc_transform.gif')
+            save_path = next(self.session_path.glob('raw_imaging_data_??/reference')) / 'reference_stack_ecc_transform.gif'
             _, params = register_reference_stacks(
                 self.session_path, reference_session_path, save_path=save_path, display=display, crop_size=None)
             transform_robust = (skimage.transform.EuclideanTransform(rotation=params['rotation']) +
