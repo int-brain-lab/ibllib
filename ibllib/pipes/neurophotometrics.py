@@ -16,6 +16,8 @@ from abc import abstractmethod
 from iblphotometry import fpio
 from iblutil.spacer import Spacer
 
+from one.api import ONE
+
 _logger = logging.getLogger('ibllib')
 
 
@@ -158,7 +160,14 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
     priority = 90
     job_size = 'small'
 
-    def __init__(self, session_path, one, task_protocol=None, task_collection=None, **kwargs):
+    def __init__(
+        self,
+        session_path: str | Path,
+        one: ONE,
+        task_protocol: str | None = None,
+        task_collection: str | None = None,
+        **kwargs,
+    ):
         super().__init__(session_path, one=one, **kwargs)
         self.photometry_collection = kwargs.get('collection', 'raw_photometry_data')  # raw_photometry_data
         self.kwargs = kwargs
@@ -211,8 +220,13 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
         sync_nph_to_bpod_fcn, drift_ppm, ix_nph, ix_bpod = ibldsp.utils.sync_timestamps(
             timestamps_nph, timestamps_bpod, return_indices=True, linear=True
         )
-        _logger.info(f'synced with drift: {drift_ppm}')
-        # TODO - assertion needed. 95% of timestamps in bpod need to be in timestamps of nph (but not the other way around)
+        if np.absolute(drift_ppm) > 20:
+            _logger.warning(f'sync with excessive drift: {drift_ppm}')
+        else:
+            _logger.info(f'synced with drift: {drift_ppm}')
+
+        # assertion: 95% of timestamps in bpod need to be in timestamps of nph (but not the other way around)
+        assert timestamps_bpod.shape[0] * 0.95 < ix_bpod.shape[0], 'less than 95% of bpod timestamps matched'
 
         valid_bounds = self._get_valid_bounds()
         return sync_nph_to_bpod_fcn, valid_bounds
@@ -267,6 +281,15 @@ class FibrePhotometryBpodSync(FibrePhotometryBaseSync):
     priority = 90
     job_size = 'small'
 
+    def __init__(
+        self,
+        *args,
+        digital_inputs_channel: int | None = None,
+        **kwargs,
+    ):
+        super().__init__(*args, **kwargs)
+        self.digital_inputs_channel = digital_inputs_channel
+
     @property
     def signature(self):
         signature = {
@@ -287,7 +310,7 @@ class FibrePhotometryBpodSync(FibrePhotometryBaseSync):
         # for bpod based syncing, the timestamps for syncing are in the digital inputs file
         raw_photometry_folder = self.session_path / self.photometry_collection
         digital_inputs_filepath = raw_photometry_folder / '_neurophotometrics_fpData.digitalInputs.pqt'
-        digital_inputs_df = fpio.read_digital_inputs_file(digital_inputs_filepath)
+        digital_inputs_df = fpio.read_digital_inputs_file(digital_inputs_filepath, channel=self.kwargs['sync_channel'])
         # timestamps_nph = digital_inputs_df['times'].values[digital_inputs_df['channel'] == self.kwargs['sync_channel']]
         timestamps_nph = digital_inputs_df.groupby('channel').get_group(self.kwargs['sync_channel'])['times'].values
 
