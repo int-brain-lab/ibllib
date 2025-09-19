@@ -713,7 +713,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
             handler = self.data_handler.__class__(reference_session_path, signature, one=self.one)
         handler.setUp()
 
-        _logger.info(f'Looking for reference MLAPDV in {reference_session_path.joinpath(self.device_collection, 'reference')}')
+        _logger.info('Looking for reference MLAPDV in %s', reference_session_path.joinpath(self.device_collection, 'reference'))
         # NB: The local reference folder is expected to exist after handler.setUp()
         local_file = next(reference_session_path.glob(f'{self.device_collection}/reference')) / 'referenceImage.mlapdv.npy'
         if clobber or not local_file.exists():
