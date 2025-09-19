@@ -536,9 +536,9 @@ class RegisterRawDataTask(DynamicTask):
             # Check for accompanying .json file for note metadata
             if snapshot.with_suffix('.json').exists():
                 with open(snapshot.with_suffix('.json'), 'r') as json_file:
-                    note['json'] = json.load(json_file)
+                    note['json'] = json_file.read().strip()
             else:
-                note['json'] = {}
+                note['json'] = None
             # If animated GIF, do not resize
             note['width'] = 'orig' if self._is_animated_gif(snapshot) else None
             with open(snapshot, 'rb') as img_file:
