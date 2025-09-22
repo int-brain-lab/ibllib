@@ -240,7 +240,7 @@ class MesoscopeFOV(MesoscopeTask):
         provenance = (Provenance[x.upper()] for x in timescale if x in provenances)
         return next(provenance, None) or Provenance.HISTOLOGY
 
-    def register_fov(self, meta: dict, provenance: Provenance, check_integrity: bool) -> (list, list):
+    def register_fov(self, meta: dict, provenance: Provenance, check_integrity: bool = True) -> (list, list):
         """
         Create FOV on Alyx.
 
