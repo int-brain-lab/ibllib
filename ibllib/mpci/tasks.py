@@ -630,7 +630,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
             mlapdv = [mlapdv[i] for i in range(nFOV)]
         else:
             _logger.warning('No reference image points found; will not account for optical plane tilt')
-            return self.super()._run(*args)
+            return super()._run(*args)
 
         # Account for optical plane tilt
         mlapdv_rel = self.correct_fov_depth_and_surface_projection(mlapdv, meta, reference_image)
@@ -796,6 +796,29 @@ class MesoscopeFOVHistology(MesoscopeFOV):
             return np.fromiter(map(float, param[1:-1].split()), dtype=float) / 1e3  # μm -> mm
         except StopIteration:
             return np.array([0, 0], dtype=float)
+
+    @staticmethod
+    def get_px_per_um(meta):
+        """Get the reference image pixel density in pixels per μm.
+
+        Parameters
+        ----------
+        meta : dict
+            The metadata dictionary.
+
+        Returns
+        -------
+        numpy.array
+            The reference image pixel density in pixels (y, x) per μm
+        """
+        if meta['rawScanImageMeta']['ResolutionUnit'].casefold() != 'centimeter':
+            raise NotImplementedError('Reference image resolution unit must be in centimeters')
+
+        yx_res = np.array([
+            meta['rawScanImageMeta']['YResolution'],
+            meta['rawScanImageMeta']['XResolution']
+        ])
+        return yx_res * 1e-4  # NB: these values are (y, x) in μm
 
     def get_reference_image_extent(self, ref_meta):
         """Get the reference image extent along the imaging plane in mm from the window center.
@@ -979,16 +1002,9 @@ class MesoscopeFOVHistology(MesoscopeFOV):
     def update_craniotomy_center(self, reference_image):
         """Update subject JSON with atlas-aligned craniotomy coordinates."""
         assert not self.one.offline
-        yx_res = np.array([
-            reference_image['meta']['rawScanImageMeta']['YResolution'],
-            reference_image['meta']['rawScanImageMeta']['XResolution']
-        ])
-        if reference_image['meta']['rawScanImageMeta']['ResolutionUnit'].casefold() == 'centimeter':
-            # NB: these values are (y, x) in μm
-            px_per_um = yx_res * 1e-4
-            um_per_px = 1 / px_per_um
-        else:
-            raise NotImplementedError('Reference image resolution unit must be in centimeters')
+        # Get the pixel coordinates of the craniotomy center in the reference image
+        px_per_um = self.get_px_per_um(reference_image['meta'])
+        um_per_px = 1 / px_per_um
 
         ref_stack_n_px = np.array(reference_image['mlapdv'].shape[:2])  # in (y, x)
         craniotomy_center_offset = np.flip(self.get_window_center(reference_image['meta']) * 1e3)  # (y, x) center offset mm -> μm
