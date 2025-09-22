@@ -4,6 +4,7 @@ See also :mod:`ibllib.pipes.mesoscope_tasks`.
 """
 from pathlib import Path
 from collections import Counter
+from datetime import datetime
 import time
 import uuid
 import logging
@@ -18,7 +19,7 @@ from scipy.spatial import ConvexHull
 import skimage.transform
 
 from one.alf.path import ALFPath, filename_parts
-from one.alf.spec import to_alf
+from one.alf.spec import to_alf, is_uuid
 import one.alf.io as alfio
 from iblatlas.atlas import ALLEN_CCF_LANDMARKS_MLAPDV_UM, MRITorontoAtlas
 from iblutil.util import Bunch
@@ -239,7 +240,7 @@ class MesoscopeFOV(MesoscopeTask):
         provenance = (Provenance[x.upper()] for x in timescale if x in provenances)
         return next(provenance, None) or Provenance.HISTOLOGY
 
-    def register_fov(self, meta: dict, provenance: Provenance) -> (list, list):
+    def register_fov(self, meta: dict, provenance: Provenance, check_integrity: bool) -> (list, list):
         """
         Create FOV on Alyx.
 
@@ -256,6 +257,10 @@ class MesoscopeFOV(MesoscopeTask):
             The raw imaging meta data from _ibl_rawImagingData.meta.json.
         provenance : Provenance
             The provenance of the FOV location.
+        check_integrity : bool
+            Whether to check that the number of FOVs in Alyx matches the number in the meta data.
+            A previous issue with multidepth recordings caused more FOVs to be registered than expected.
+            This check marks extraneous FOVs in Alyx with a data integrity error timestamp in the JSON field.
 
         Returns
         -------
@@ -276,27 +281,26 @@ class MesoscopeFOV(MesoscopeTask):
             stack_ids = {i: self.one.alyx.rest('imaging-stack', 'create', data={'name': i})['id']
                          for i in slice_counts if slice_counts[i] > 1}
 
+        fov_data = {
+            'session': self.session_path.as_posix() if dry else str(self.path2eid()), 'imaging_type': 'mesoscope'
+        }
+        session_fovs = self.one.alyx.rest(
+            'fields-of-view', 'list', session=fov_data['session'], imaging_type=fov_data['imaging_type'])
         for i, fov in enumerate(meta.get('FOV', [])):
             assert set(fov.keys()) >= {'MLAPDV', 'nXnYnZ', 'roiUUID'}
             # Field of view
-            alyx_FOV = {
-                'session': self.session_path.as_posix() if dry else str(self.path2eid()),
-                'imaging_type': 'mesoscope', 'name': f'FOV_{i:02}',
-                'stack': stack_ids.get(fov['roiUUID'])
-            }
+            fov_data.update({'name': f'FOV_{i:02}', 'stack': stack_ids.get(fov['roiUUID'])})
             if dry:
-                print(alyx_FOV)
-                alyx_FOV['location'] = []
-                alyx_fovs.append(alyx_FOV)
+                print(fov_data)
+                fov_data['location'] = []
+                alyx_fovs.append(fov_data)
             else:
                 # Check if FOV already exists
-                existing = self.one.alyx.rest('fields-of-view', 'list', session=alyx_FOV['session'],
-                                              name=alyx_FOV['name'], imaging_type=alyx_FOV['imaging_type'])
-                if any(existing):
-                    alyx_fovs.append(existing[0])
-                    _logger.debug(f'FOV {alyx_FOV["name"]} already exists in Alyx')
+                if existing := next((x for x in session_fovs if x['name'] == fov_data['name']), None):
+                    alyx_fovs.append(existing)
+                    _logger.debug(f'FOV {fov_data["name"]} already exists in Alyx')
                 else:
-                    alyx_fovs.append(self.one.alyx.rest('fields-of-view', 'create', data=alyx_FOV))
+                    alyx_fovs.append(self.one.alyx.rest('fields-of-view', 'create', data=fov_data))
 
             # Field of view location
             data = {
@@ -324,7 +328,7 @@ class MesoscopeFOV(MesoscopeTask):
 
             if dry:
                 print(data)
-                alyx_FOV['location'].append(data)
+                fov_data['location'].append(data)
             else:
                 # Whether to patch or create a new location
                 existing = self.one.alyx.rest(
@@ -335,6 +339,15 @@ class MesoscopeFOV(MesoscopeTask):
                 else:
                     loc = self.one.alyx.rest('fov-location', 'create', data=data)
                 alyx_fovs[-1]['location'].append(loc)
+
+        if check_integrity and not dry:
+            # Update FOV JSON field for FOVs that do not exist in meta data
+            if any(extraneous := set(f['id'] for f in session_fovs) - set(fov['id'] for fov in alyx_fovs)):
+                _logger.warning(f'Found {len(extraneous)} extraneous FOVs in Alyx: {extraneous}')
+                datetime_now = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+                for id in extraneous:
+                    self.one.alyx.json_field_update('fields-of-view', id, data={'data_integrity_error': datetime_now})
+
         return alyx_fovs
 
     def load_triangulation(self):
@@ -550,10 +563,24 @@ class MesoscopeFOVHistology(MesoscopeFOV):
 
     cpu = 4  # Currently uses a lot of parallel loops in numba
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, reference_session=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.reference_session = kwargs.get('reference_session')  # an eid of the aligned histology session
-        self.provenance = Provenance.HISTOLOGY if self.reference_session else Provenance.ESTIMATE
+        if reference_session:
+            self.provenance = Provenance.HISTOLOGY
+            if is_uuid(reference_session):  # an eid of the aligned histology session
+                assert self.one is not None and not self.one.offline, \
+                    'Alyx connection required to use reference session UUID'
+                reference_session_path = self.one.eid2path(reference_session)
+                if not reference_session_path:
+                    raise ValueError(f'Reference session not found for eID {reference_session}')
+                # Ensure reference session shares the same root dir as the task session path
+                self.reference_session = self.session_path.parents[2] / reference_session_path.session_path_short()
+            else:  # a path to the aligned histology session
+                self.reference_session = ALFPath(reference_session)
+                if not self.reference_session.exists():
+                    raise ValueError(f'Reference session path does not exist: {self.reference_session}')
+        else:
+            self.provenance = Provenance.ESTIMATE
 
     @property
     def signature(self):
@@ -603,7 +630,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
             mlapdv = [mlapdv[i] for i in range(nFOV)]
         else:
             _logger.warning('No reference image points found; will not account for optical plane tilt')
-            return self.super()._run(*args)
+            return super()._run(*args)
 
         # Account for optical plane tilt
         mlapdv_rel = self.correct_fov_depth_and_surface_projection(mlapdv, meta, reference_image)
@@ -681,7 +708,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
 
         return sorted([*meta_files, *roi_files, *mean_image_files])
 
-    def _get_atlas_registered_reference_mlap(self, reference_session_path, clobber=False):
+    def _get_atlas_registered_reference_mlap(self, clobber=False):
         """Download the aligned reference stack Allen atlas indices.
 
         This is the file created by the histology pipeline, one per subject.
@@ -689,53 +716,52 @@ class MesoscopeFOVHistology(MesoscopeFOV):
 
         Parameters
         ----------
-        reference_session_path : pathlib.Path
-            The session path of the reference session for this subject.
         clobber : bool
             If True, re-download the file even if it exists locally.
 
         Returns
         -------
-        pathlib.Path
+        one.alf.path.ALFPath
             The local filepath of the aligned reference stack.
             A uint16 array with shape (h, w, 3), comprising Allen atlas image volume indices for
             dimensions representing (ml, ap, dv).  The first two dimensions (h, w) should equal
             those of the reference stack.
         """
-        assert reference_session_path.subject == self.session_path.subject
+        assert self.reference_session, 'reference session path not set'
+        assert self.reference_session.subject == self.session_path.subject
         assert self.one, 'ONE required'
         # Ensure reference session reference files present
         signature = {'input_files': self.signature['input_files'][-3:], 'output_files': []}
         assert all(x.identifiers[-1].startswith('reference') for x in signature['input_files'])
         if self.location == 'server' and self.force:
-            handler = dh.ServerGlobusDataHandler(reference_session_path, signature, one=self.one)
+            handler = dh.ServerGlobusDataHandler(self.reference_session, signature, one=self.one)
         else:
-            handler = self.data_handler.__class__(reference_session_path, signature, one=self.one)
+            handler = self.data_handler.__class__(self.reference_session, signature, one=self.one)
         handler.setUp()
 
-        _logger.info('Looking for reference MLAPDV in %s', reference_session_path.joinpath(self.device_collection, 'reference'))
+        _logger.info('Looking for reference MLAPDV in %s', self.reference_session.joinpath(self.device_collection, 'reference'))
         # NB: The local reference folder is expected to exist after handler.setUp()
-        local_file = next(reference_session_path.glob(f'{self.device_collection}/reference')) / 'referenceImage.mlapdv.npy'
+        local_file = next(self.reference_session.glob(f'{self.device_collection}/reference')) / 'referenceImage.mlapdv.npy'
         if clobber or not local_file.exists():
             # Download remote file
             assert self.one, 'ONE required'
             local_file.parent.mkdir(parents=True, exist_ok=True)
-            lab = self.one.get_details(reference_session_path)['lab']
-            remote_file = f'{lab}/{reference_session_path.session_path_short()}/{local_file.name}'
+            lab = self.one.get_details(self.reference_session)['lab']
+            remote_file = f'{lab}/{self.reference_session.session_path_short()}/{local_file.name}'
             try:
                 # assert isinstance(self.data_handler, dh.ServerGlobusDataHandler)  # If not, assume Globus not configured
                 handler = dh.ServerGlobusDataHandler(
-                    reference_session_path, {'input_files': [], 'output_files': []}, one=self.one)
+                    self.reference_session, {'input_files': [], 'output_files': []}, one=self.one)
                 endpoint_id = next(v['id'] for k, v in handler.globus.endpoints.items() if k.startswith('flatiron'))
                 handler.globus.add_endpoint(endpoint_id, label='flatiron_histology', root_path='/histology/')
                 handler.globus.mv('flatiron_histology', 'local', [remote_file], ['/'.join(local_file.parts[-5:])])
-                assert local_file.exists(), f'Failed to download {remote_file} to {local_file}'
+                assert local_file.exists(), f'failed to download {remote_file} to {local_file}'
             except Exception as e:
                 _logger.error(f'Failed to download via Globus: {e}')
                 remote_file = f'{self.one.alyx._par.HTTP_DATA_SERVER}/histology/' + remote_file
                 _logger.warning(f'Using HTTP download for {remote_file}')
                 local_file = self.one.alyx.download_file(remote_file, target_dir=local_file.parent)
-                assert local_file.exists(), f'Failed to download {remote_file} to {local_file}'
+                assert local_file.exists(), f'failed to download {remote_file} to {local_file}'
         return local_file
 
     def load_metadata_from_tif(self):
@@ -770,6 +796,29 @@ class MesoscopeFOVHistology(MesoscopeFOV):
             return np.fromiter(map(float, param[1:-1].split()), dtype=float) / 1e3  # μm -> mm
         except StopIteration:
             return np.array([0, 0], dtype=float)
+
+    @staticmethod
+    def get_px_per_um(meta):
+        """Get the reference image pixel density in pixels per μm.
+
+        Parameters
+        ----------
+        meta : dict
+            The metadata dictionary.
+
+        Returns
+        -------
+        numpy.array
+            The reference image pixel density in pixels (y, x) per μm
+        """
+        if meta['rawScanImageMeta']['ResolutionUnit'].casefold() != 'centimeter':
+            raise NotImplementedError('Reference image resolution unit must be in centimeters')
+
+        yx_res = np.array([
+            meta['rawScanImageMeta']['YResolution'],
+            meta['rawScanImageMeta']['XResolution']
+        ])
+        return yx_res * 1e-4  # NB: these values are (y, x) in μm
 
     def get_reference_image_extent(self, ref_meta):
         """Get the reference image extent along the imaging plane in mm from the window center.
@@ -894,12 +943,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
             The first two dimensions (h, w) should equal those of the reference stack.
 
         """
-        assert self.reference_session, 'Reference session eID not set'
-        assert (reference_session_path := self.one.eid2path(self.reference_session)), \
-            f'Reference session not found for eid {self.reference_session}'
-        # Ensure reference session shares the same root dir as the task session path
-        reference_session_path = self.session_path.parents[2] / reference_session_path.session_path_short()
-        file = self._get_atlas_registered_reference_mlap(reference_session_path, clobber=False)
+        file = self._get_atlas_registered_reference_mlap(clobber=False)
         ccf_idx = np.load(file)  # shape (h, w, 3) - ml, ap, dv indices
         # ccf_idx = self._load_reference_stack_registered()  # height, width, mlapdv
         # ba = MRITorontoAtlas(res_um=25)  # TODO Confirm atlas type with Steven
@@ -924,11 +968,11 @@ class MesoscopeFOVHistology(MesoscopeFOV):
         # Look up the MLAPDV coordinates using the registered CCF indices
         xyz = ba.ccf2xyz(ccf_idx * ba.res_um, ccf_order='mlapdv') * 1e6  # m -> μm
 
-        if reference_session_path.session_parts != self.session_path.session_parts:
+        if self.reference_session.session_parts != self.session_path.session_parts:
             # Apply transform
             save_path = next(self.session_path.glob('raw_imaging_data_??/reference')) / 'reference_stack_ecc_transform.gif'
             _, params = register_reference_stacks(
-                self.session_path, reference_session_path, save_path=save_path, display=display, crop_size=None)
+                self.session_path, self.reference_session, save_path=save_path, display=display, crop_size=None)
             transform_robust = (skimage.transform.EuclideanTransform(rotation=params['rotation']) +
                                 skimage.transform.EuclideanTransform(translation=params['translation']))
             xyz = skimage.transform.warp(xyz, transform_robust, order=1, mode='constant', cval=0, clip=True, preserve_range=True)
@@ -958,16 +1002,9 @@ class MesoscopeFOVHistology(MesoscopeFOV):
     def update_craniotomy_center(self, reference_image):
         """Update subject JSON with atlas-aligned craniotomy coordinates."""
         assert not self.one.offline
-        yx_res = np.array([
-            reference_image['meta']['rawScanImageMeta']['YResolution'],
-            reference_image['meta']['rawScanImageMeta']['XResolution']
-        ])
-        if reference_image['meta']['rawScanImageMeta']['ResolutionUnit'].casefold() == 'centimeter':
-            # NB: these values are (y, x) in μm
-            px_per_um = yx_res * 1e-4
-            um_per_px = 1 / px_per_um
-        else:
-            raise NotImplementedError('Reference image resolution unit must be in centimeters')
+        # Get the pixel coordinates of the craniotomy center in the reference image
+        px_per_um = self.get_px_per_um(reference_image['meta'])
+        um_per_px = 1 / px_per_um
 
         ref_stack_n_px = np.array(reference_image['mlapdv'].shape[:2])  # in (y, x)
         craniotomy_center_offset = np.flip(self.get_window_center(reference_image['meta']) * 1e3)  # (y, x) center offset mm -> μm
@@ -995,16 +1032,21 @@ class MesoscopeFOVHistology(MesoscopeFOV):
         # TODO Assert only one craniotomy key
         if sum(k.startswith('craniotomy_') for k in subject_json.keys()) > 1:
             raise NotImplementedError('Multiple craniotomies found')
-
         data = {'craniotomy_00': subject_json['craniotomy_00'].copy()}
         data['craniotomy_00']['center_resolved'] = np.round(craniotomy_resolved[:2], 3).tolist()
+
+        # Update the subject JSON if processing the reference session
+        # i.e. the session with the histology-aligned reference stack
+        if self.reference_session and (self.reference_session.session_parts == self.session_path.session_parts):
+            _logger.info('Updating craniotomy center in subject JSON for %s', subject)
+            self.one.alyx.json_field_update('subjects', subject, data=data)
+
         _logger.info(
             'Craniotomy target: (%.2f, %.2f), actual: (%.2f, %.2f), difference: (%.2f, %.2f)',
             *subject_json['craniotomy_00']['center'], *data['craniotomy_00']['center_resolved'],
             *np.array(subject_json['craniotomy_00']['center']) - craniotomy_resolved[:2]
         )
-
-        return self.one.alyx.json_field_update('subjects', subject, data=data)
+        return craniotomy_resolved
 
     def interpolate_FOVs(self, reference_image, meta, display=False):
         """Interpolate the FOV coordinates from reference stack coordinates.
@@ -1061,7 +1103,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
         center_point_from_grid = points[center_flat_idx]
         center_mlapdv = interp(center_point_from_grid)
         expected = reference_image['mlapdv'][height // 2, width // 2]
-        assert np.allclose(center_mlapdv, expected), f'Expected {expected}, got {center_mlapdv} at centre={centre}'
+        assert np.allclose(center_mlapdv, expected), f'expected {expected}, got {center_mlapdv} at centre={centre}'
 
         if display:
             # For sanity, plot a rectangle of the reference image window extent, then plot each pixel of each FOV
@@ -1353,5 +1395,14 @@ class MesoscopeFOVHistology(MesoscopeFOV):
             # Load the mlapdv coordinates for the reference stack
             reference_image['mlapdv'] = self._load_reference_stack_mlapdv(display=False)
             assert reference_image['stack'].shape[1:] == reference_image['mlapdv'].shape[:2], \
-                'Reference stack and MLAPDV coordinates must have the same shape'
+                'reference stack and MLAPDV coordinates must have the same shape'
         return Bunch(reference_image)
+
+    # def cleanUp(self):
+    #     """Clean up temporary files."""
+    #     # When the task is successful, remove the intermediate file
+    #     intermediate_file = self.session_path / 'mlapdv_projection.pkl'
+    #     if self.status == 0 and intermediate_file.exists():
+    #         _logger.info('Cleaning up %s', intermediate_file)
+    #         intermediate_file.unlink()
+    #     return super().cleanUp()

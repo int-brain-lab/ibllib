@@ -136,7 +136,7 @@ def register_reference_stacks(stack_path, target_stack_path, save_path=None, dis
         stack, warp_matrix, (stack.shape[1], stack.shape[0]), flags=cv2.INTER_LINEAR + cv2.WARP_INVERSE_MAP)
 
     # Extract parameters
-    rotation = np.arctan2(warp_matrix[1, 0], warp_matrix[0, 0])
+    rotation = np.arctan2(warp_matrix[1, 0], warp_matrix[0, 0])  # in radians
     translation = warp_matrix[:, 2]
 
     # Normalize images
