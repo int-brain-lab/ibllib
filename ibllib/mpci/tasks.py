@@ -581,6 +581,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
                     raise ValueError(f'Reference session path does not exist: {self.reference_session}')
         else:
             self.provenance = Provenance.ESTIMATE
+            self.reference_session = None
 
     @property
     def signature(self):
