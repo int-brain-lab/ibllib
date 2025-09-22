@@ -42,9 +42,10 @@ class MesoscopeFOV(MesoscopeTask):
 
     @property
     def signature(self):
+        I = dh.ExpectedDataset.input  # noqa
         signature = {
-            'input_files': [('_ibl_rawImagingData.meta.json', self.device_collection, True),
-                            ('mpciROIs.stackPos.npy', 'alf/FOV*', True)],
+            'input_files': [I('_ibl_rawImagingData.meta.json', self.device_collection, True),
+                            I('mpciROIs.stackPos.npy', 'alf/FOV*', True)],
             'output_files': [('mpciMeanImage.brainLocationIds*.npy', 'alf/FOV_*', True),
                              ('mpciMeanImage.mlapdv*.npy', 'alf/FOV_*', True),
                              ('mpciROIs.mlapdv*.npy', 'alf/FOV_*', True),
@@ -84,8 +85,7 @@ class MesoscopeFOV(MesoscopeTask):
         - This task modifies the first meta JSON file.  All meta files are registered by this task.
         """
         # Load necessary data
-        (filename, collection, _), *_ = self.signature['input_files']
-        meta_files = sorted(self.session_path.glob(f'{collection}/{filename}'))
+        _, meta_files, _ = self.input_files[0].find_files(self.session_path)
         meta = mesoscope.patch_imaging_meta(alfio.load_file_content(meta_files[0]) or {})
         nFOV = len(meta.get('FOV', []))
 
@@ -903,7 +903,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
         """
         # Load the reference image and all metadata
         stack, ref_meta = self.load_reference_stack()
-        meta_files = sorted(self.session_path.glob(self.signature['input_files'][0].glob_pattern))
+        _, meta_files, _ = self.input_files[0].find_files(self.session_path)
         meta = mesoscope.patch_imaging_meta(alfio.load_file_content(meta_files[0]) or {})
         f, ax = plt.subplots()
         import cv2
