@@ -4,6 +4,7 @@ See also :mod:`ibllib.pipes.mesoscope_tasks`.
 """
 from pathlib import Path
 from collections import Counter
+from datetime import datetime
 import time
 import uuid
 import logging
@@ -239,7 +240,7 @@ class MesoscopeFOV(MesoscopeTask):
         provenance = (Provenance[x.upper()] for x in timescale if x in provenances)
         return next(provenance, None) or Provenance.HISTOLOGY
 
-    def register_fov(self, meta: dict, provenance: Provenance) -> (list, list):
+    def register_fov(self, meta: dict, provenance: Provenance, check_integrity: bool) -> (list, list):
         """
         Create FOV on Alyx.
 
@@ -256,6 +257,10 @@ class MesoscopeFOV(MesoscopeTask):
             The raw imaging meta data from _ibl_rawImagingData.meta.json.
         provenance : Provenance
             The provenance of the FOV location.
+        check_integrity : bool
+            Whether to check that the number of FOVs in Alyx matches the number in the meta data.
+            A previous issue with multidepth recordings caused more FOVs to be registered than expected.
+            This check marks extraneous FOVs in Alyx with a data integrity error timestamp in the JSON field.
 
         Returns
         -------
@@ -276,27 +281,26 @@ class MesoscopeFOV(MesoscopeTask):
             stack_ids = {i: self.one.alyx.rest('imaging-stack', 'create', data={'name': i})['id']
                          for i in slice_counts if slice_counts[i] > 1}
 
+        fov_data = {
+            'session': self.session_path.as_posix() if dry else str(self.path2eid()), 'imaging_type': 'mesoscope'
+        }
+        session_fovs = self.one.alyx.rest(
+            'fields-of-view', 'list', session=fov_data['session'], imaging_type=fov_data['imaging_type'])
         for i, fov in enumerate(meta.get('FOV', [])):
             assert set(fov.keys()) >= {'MLAPDV', 'nXnYnZ', 'roiUUID'}
             # Field of view
-            alyx_FOV = {
-                'session': self.session_path.as_posix() if dry else str(self.path2eid()),
-                'imaging_type': 'mesoscope', 'name': f'FOV_{i:02}',
-                'stack': stack_ids.get(fov['roiUUID'])
-            }
+            fov_data.update({'name': f'FOV_{i:02}', 'stack': stack_ids.get(fov['roiUUID'])})
             if dry:
-                print(alyx_FOV)
-                alyx_FOV['location'] = []
-                alyx_fovs.append(alyx_FOV)
+                print(fov_data)
+                fov_data['location'] = []
+                alyx_fovs.append(fov_data)
             else:
                 # Check if FOV already exists
-                existing = self.one.alyx.rest('fields-of-view', 'list', session=alyx_FOV['session'],
-                                              name=alyx_FOV['name'], imaging_type=alyx_FOV['imaging_type'])
-                if any(existing):
-                    alyx_fovs.append(existing[0])
-                    _logger.debug(f'FOV {alyx_FOV["name"]} already exists in Alyx')
+                if existing := next((x for x in session_fovs if x['name'] == fov_data['name']), None):
+                    alyx_fovs.append(existing)
+                    _logger.debug(f'FOV {fov_data["name"]} already exists in Alyx')
                 else:
-                    alyx_fovs.append(self.one.alyx.rest('fields-of-view', 'create', data=alyx_FOV))
+                    alyx_fovs.append(self.one.alyx.rest('fields-of-view', 'create', data=fov_data))
 
             # Field of view location
             data = {
@@ -324,7 +328,7 @@ class MesoscopeFOV(MesoscopeTask):
 
             if dry:
                 print(data)
-                alyx_FOV['location'].append(data)
+                fov_data['location'].append(data)
             else:
                 # Whether to patch or create a new location
                 existing = self.one.alyx.rest(
@@ -335,6 +339,15 @@ class MesoscopeFOV(MesoscopeTask):
                 else:
                     loc = self.one.alyx.rest('fov-location', 'create', data=data)
                 alyx_fovs[-1]['location'].append(loc)
+
+        if check_integrity and not dry:
+            # Update FOV JSON field for FOVs that do not exist in meta data
+            if any(extraneous := set(f['id'] for f in session_fovs) - set(fov['id'] for fov in alyx_fovs)):
+                _logger.warning(f'Found {len(extraneous)} extraneous FOVs in Alyx: {extraneous}')
+                datetime_now = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+                for id in extraneous:
+                    self.one.alyx.json_field_update('fields-of-view', id, data={'data_integrity_error': datetime_now})
+
         return alyx_fovs
 
     def load_triangulation(self):
