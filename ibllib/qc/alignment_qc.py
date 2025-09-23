@@ -398,7 +398,7 @@ class AlignmentQC(base.QC):
             self.alignments = prev_alignments
 
         outcomes = [align[2].split(':')[0] for key, align in self.alignments.items()
-                    if len(align) == 3]
+                    if len(align) >= 3]
         if len(outcomes) > 0:
             vals = list(map(QC.validate, outcomes))
             max_qc = np.argmax(vals)
