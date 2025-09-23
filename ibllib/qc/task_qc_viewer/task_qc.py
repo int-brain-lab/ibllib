@@ -78,16 +78,17 @@ class QcFrame:
         map = {k: [] for k in set(outcomes.values())}
         for k, v in outcomes.items():
             map[v].append(k[6:])
+
         for k, v in map.items():
-            if k == 'PASS':
+            if k.name == 'PASS':
                 continue
-            print(f'The following checks were labelled {k}:')
+            print(f'The following checks were labelled {k.name}:')
             print('\n'.join(v), '\n')
 
         print('The following *critical* checks did not pass:')
         critical_checks = [f'_{x.replace("check", "task")}' for x in CRITICAL_CHECKS]
         for k, v in outcomes.items():
-            if v != 'PASS' and k in critical_checks:
+            if v.name != 'PASS' and k in critical_checks:
                 print(k[6:])
 
         # Make DataFrame from the trail level metrics
@@ -106,8 +107,8 @@ class QcFrame:
         return self.qc.extractor.data['intervals'].shape[0]
 
     def get_wheel_data(self):
-        return {'re_pos': self.qc.extractor.data.get('wheel_position') or np.array([]),
-                're_ts': self.qc.extractor.data.get('wheel_timestamps') or np.array([])}
+        return {'re_pos': self.qc.extractor.data.get('wheel_position', np.array([])),
+                're_ts': self.qc.extractor.data.get('wheel_timestamps', np.array([]))}
 
     def create_plots(self, axes,
                      wheel_axes=None, trial_events=None, color_map=None, linestyle=None):
@@ -270,8 +271,10 @@ def show_session_task_qc(qc_or_session=None, bpod_only=False, local=False, one=N
         task.setUp()
         if local:  # currently setUp does not raise on missing data
             task.assert_expected_inputs(raise_error=True)
+        trials, _ = task.extract_behaviour(save=False)
+
         # Compute the QC and build the frame
-        task_qc = task.run_qc(update=False)
+        task_qc = task.run_qc(trials_data=trials, update=False)
         qc = QcFrame(task_qc)
 
     # Handle trial event names in habituationChoiceWorld
