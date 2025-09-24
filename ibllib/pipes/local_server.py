@@ -106,7 +106,7 @@ def job_creator(root_path, one=None, dry=False, rerun=False):
     if not one:
         one = ONE(cache_rest=None)
     rc = IBLRegistrationClient(one=one)
-    flag_files = Path(root_path).glob('**/raw_session.flag')
+    flag_files = Path(root_path).glob('*/????-??-??/*/raw_session.flag')
     flag_files = filter(lambda x: is_session_path(x.parent), flag_files)
     pipes = []
     all_datasets = []
