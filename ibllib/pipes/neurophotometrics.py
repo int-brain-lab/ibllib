@@ -531,7 +531,9 @@ class FibrePhotometryPassiveChoiceWorld(base_tasks.BehaviourTask):
     def _run(self, **kwargs) -> Tuple[pd.DataFrame, pd.DataFrame]:
         # load the fixtures - from the relative delays between trials, an "absolute" time vector is
         # created that is used for the synchronization
-        fixtures_path = Path(iblphotometry.__file__).parent / 'iblphotometry_tests' / 'fixtures' / 'passiveChoiceWorld_trials_fixtures.pqt'
+        fixtures_path = (
+            Path(iblphotometry.__file__).parent / 'iblphotometry_tests' / 'fixtures' / 'passiveChoiceWorld_trials_fixtures.pqt'
+        )
 
         # getting the task_settings
         with open(self.session_path / self.collection / '_iblrig_taskSettings.raw.json', 'r') as fH:
