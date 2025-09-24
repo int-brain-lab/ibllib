@@ -257,9 +257,6 @@ def _get_trials_tasks(session_path, acquisition_description=None, sync_tasks=Non
                 # This may happen that the extractor is tied to a specific sync task: look for TrialsChoiceWorldBpod for example
                 elif hasattr(btasks, extractor + sync_label.capitalize()):
                     task = getattr(btasks, extractor + sync_label.capitalize())
-                # Passive sessions can be run in behavior boxes
-                elif 'passiveChoiceWorld' in protocol:
-                        registration_class = btasks.PassiveRegisterRaw
                 else:
                     # lookup in the project extraction repo if we find an extractor class
                     import projects.extraction_tasks
@@ -610,19 +607,30 @@ def make_pipeline(session_path, **pkwargs):
     if 'neurophotometrics' in devices:
         # note: devices['neurophotometrics'] is the acquisition_description
         sync_mode = devices['neurophotometrics'].get('sync_mode', 'bpod')  # default to bpod for downward compatibility
+
+        # passive photometry
+        task_protocols = acquisition_description['tasks']
+        assert len(task_protocols) == 1, 'chained protocols are not yet supported for photometry extraction'
+        protocol = task_protocols[0]
+        if 'passive' in protocol:
+            assert sync_mode == 'daqami', 'passive protocol syncing only supported for DAQ based syncing'
+            tasks['FibrePhotometryPassiveChoiceWorld'] = type(
+                'FibrePhotometryPassiveChoiceWorld', (ptasks.FibrePhotometryPassiveChoiceWorld,), {}
+            )(
+                **kwargs,
+            )
+
         match sync_mode:
             case 'bpod':
                 # for synchronization with the BNC inputs of the neurophotometrics receiving the sync pulses
                 # from the individual bpods
                 tasks['FibrePhotometryBpodSync'] = type('FibrePhotometryBpodSync', (ptasks.FibrePhotometryBpodSync,), {})(
-                    **devices['neurophotometrics'],
                     **kwargs,
                 )
             case 'daqami':
                 # for synchronization with the DAQami receiving the sync pulses from the individual bpods
                 # as well as the frame clock from the FP3002
                 tasks['FibrePhotometryDAQSync'] = type('FibrePhotometryDAQSync', (ptasks.FibrePhotometryDAQSync,), {})(
-                    **devices['neurophotometrics'],
                     **kwargs,
                 )
 
