@@ -240,7 +240,7 @@ class MesoscopeFOV(MesoscopeTask):
         provenance = (Provenance[x.upper()] for x in timescale if x in provenances)
         return next(provenance, None) or Provenance.HISTOLOGY
 
-    def register_fov(self, meta: dict, provenance: Provenance, check_integrity: bool = True) -> (list, list):
+    def register_fov(self, meta: dict, provenance: Provenance, check_integrity: bool = True) -> tuple[list, list]:
         """
         Create FOV on Alyx.
 
@@ -623,7 +623,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
             # Add reference meta data to meta_files list for registration
             meta_files.append(next(self.session_path.glob('raw_imaging_data_??/reference/referenceImage.meta.json')))
             # Interpolate the FOVs to the reference stack
-            mlapdv = self.interpolate_FOVs(reference_image, meta)
+            mlapdv = self.interpolate_FOVs_smooth(reference_image, meta)
         elif 'points' in reference_image['meta']:
             _logger.info('Extracting estimate MLAPDV datasets')
             mlapdv, _ = self.project_mlapdv(meta, atlas=self.atlas, provenance=self.provenance)
@@ -1105,6 +1105,132 @@ class MesoscopeFOVHistology(MesoscopeFOV):
             ax.set_ylim([ref_extent[2] - 1, ref_extent[3] + 1])
             ax.set_xlabel('X (mm)')
             ax.set_ylabel('Y (mm)')
+
+        return mlapdv
+
+    def interpolate_FOVs_smooth(self, reference_image, meta, display=False):
+        """Interpolate the FOV coordinates from reference stack coordinates using smooth interpolation.
+
+        Unlike `interpolate_FOVs` this method does not cause aliasing artifacts due to nearest-neighbor
+        interpolation. Instead, it uses another form of interpolation to smoothly interpolate the MLAPDV
+        coordinates.
+
+        Parameters
+        ----------
+        reference_image : dict
+            The reference image object containing metadata and mlapdv histology data.
+        meta : dict
+            The FOV metadata.
+        display : bool
+            Whether to display the FOVs.
+
+        Returns
+        -------
+        list of numpy.array
+            The interpolated MLAPDV coordinates for each FOV.
+        """
+        # Lazy import to avoid adding a global dependency if unused
+        from scipy.interpolate import RegularGridInterpolator
+        # Optional: light smoothing filter (disabled by default). Can be enabled later if needed.
+        # from scipy.ndimage import gaussian_filter
+
+        # Sanity checks mirroring the nearest-neighbour implementation
+        assert np.all(get_window_center(reference_image['meta']) == get_window_center(meta))
+        assert reference_image['meta']['scanImageParams']['objectiveResolution'] == \
+            meta['scanImageParams']['objectiveResolution']
+
+        if 'mlapdv' not in reference_image:
+            raise ValueError('reference_image must contain key "mlapdv" with per-pixel MLAPDV coordinates')
+
+        ref_mlapdv = reference_image['mlapdv']  # shape (H, W, 3)
+        height, width = ref_mlapdv.shape[:2]
+
+        # Build the physical (objective space) coordinate axes (in mm) for the reference image.
+        # These are uniformly spaced, therefore we can use a RegularGridInterpolator.
+        r_left, r_right, r_top, r_bottom = self.get_reference_image_extent(reference_image['meta'])
+        x_ref = np.linspace(r_left, r_right, width)      # X increases left -> right
+        y_ref = np.linspace(r_top, r_bottom, height)     # Y increases top -> bottom
+
+        # Construct one interpolator per MLAPDV axis. Use linear interpolation (piecewise multilinear).
+        # (y, x) ordering because array indexing is [row(y), col(x)].
+        interpolators = []
+        for k in range(3):
+            interpolators.append(
+                RegularGridInterpolator(
+                    (y_ref, x_ref),
+                    ref_mlapdv[:, :, k],
+                    method='linear',
+                    bounds_error=False,
+                    fill_value=None  # extrapolate linearly outside (we will clip queries anyway)
+                )
+            )
+
+        # Optional smoothing of the underlying coordinate fields BEFORE interpolation.
+        # Disabled for now to preserve geometric fidelity. Uncomment if mild denoising required.
+        # sigma = 0.0
+        # if sigma > 0:
+        #     for k in range(3):
+        #         data = gaussian_filter(ref_mlapdv[:, :, k], sigma=sigma)
+        #         interpolators[k].values = data  # update underlying values
+
+        # Prepare FOV geometric definitions in objective space (mm)
+        coordinates = self.get_fov_objective_extent(meta)
+
+        mlapdv = []
+        if display:
+            fig, ax = plt.subplots()
+            ax.add_patch(plt.Rectangle((r_left, r_top), r_right - r_left, r_bottom - r_top,
+                                       fill=False, edgecolor='k', linewidth=1, label='Reference extent'))
+
+        for i, (fov_geo, fov_meta) in enumerate(zip(coordinates, meta['FOV'])):
+            width_px, height_px = fov_meta['nXnYnZ'][:2]
+            if fov_geo['angle'] != 0:
+                raise NotImplementedError(f'FOV {i} has non-zero rotation angle ({fov_geo["angle"]}°); '
+                                          'rotation-aware interpolation not yet implemented')
+
+            left, right, top, bottom = fov_geo['extent']  # mm relative to craniotomy center
+            x_fov = np.linspace(left, right, width_px)
+            y_fov = np.linspace(top, bottom, height_px)
+            xx, yy = np.meshgrid(x_fov, y_fov)
+
+            # Clip query points just inside the reference domain to avoid inadvertent extrapolation
+            # due to floating-point rounding (RegularGridInterpolator extrapolates when fill_value=None).
+            xxq = np.clip(xx, x_ref[0], x_ref[-1])
+            yyq = np.clip(yy, y_ref[0], y_ref[-1])
+            query_points = np.column_stack((yyq.ravel(), xxq.ravel()))  # (N, 2) in (y, x) order
+
+            # Interpolate each coordinate axis
+            interp_vals = np.empty((query_points.shape[0], 3), dtype=ref_mlapdv.dtype)
+            for k, interp in enumerate(interpolators):
+                interp_vals[:, k] = interp(query_points)
+
+            # Reshape to (H, W, 3)
+            mlapdv_arr = interp_vals.reshape(height_px, width_px, 3)
+            assert not np.any(np.isnan(mlapdv_arr)), f'NaNs encountered in interpolated MLAPDV for FOV {i}'
+            mlapdv.append(mlapdv_arr)
+
+            if display:
+                ax.scatter(xxq.ravel(), yyq.ravel(), s=1, alpha=0.3, label=f'FOV {i:02}')
+
+            # Basic sanity check at (approx) center pixel vs nearest-neighbour expectation
+            # Find closest reference pixel indices to FOV center in objective space
+            cx, cy = (left + right) / 2, (top + bottom) / 2
+            ix = int(np.round((cx - x_ref[0]) / (x_ref[-1] - x_ref[0]) * (width - 1)))
+            iy = int(np.round((cy - y_ref[0]) / (y_ref[-1] - y_ref[0]) * (height - 1)))
+            ref_center_val = ref_mlapdv[iy, ix]
+            fov_center_val = mlapdv_arr[mlapdv_arr.shape[0] // 2, mlapdv_arr.shape[1] // 2]
+            if not np.allclose(ref_center_val, fov_center_val, atol=5.):  # tolerate small deviations (μm)
+                _logger.debug(
+                    'FOV %d center mismatch (linear interp ≠ nearest reference): ref=%s, interp=%s',
+                    i, ref_center_val, fov_center_val
+                )
+
+        if display:
+            ax.set_xlabel('Objective X (mm)')
+            ax.set_ylabel('Objective Y (mm)')
+            ax.set_title('FOV pixel locations (smooth MLAPDV interpolation)')
+            ax.legend(markerscale=10, fontsize='x-small')
+            plt.show()
 
         return mlapdv
 
