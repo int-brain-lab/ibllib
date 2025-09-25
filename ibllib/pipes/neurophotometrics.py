@@ -58,10 +58,9 @@ def extract_timestamps_from_tdms_file(
     tdms_filepath: Path,
     save_path: Optional[Path] = None,
     chunk_size=10000,
-    extract_durations: bool = False,
 ) -> dict:
     """extractor for tdms files as written by the daqami software, configured for neurophotometrics
-    experiments: Frameclock is in AI7, DI1-4 are the bpod sync signals
+    experiments: Frameclock is in an analog channel (AI?), DI1-4 are the bpod sync signals
 
     Parameters
     ----------
@@ -75,76 +74,11 @@ def extract_timestamps_from_tdms_file(
     Returns
     -------
     dict
-        a dict with the tdms channel names as keys and the timestamps of the rising fronts
+        a dict with the tdms channel names as keys and 'positive' the timestamps of the rising edges
+        'negative' the falling edges
     """
     #
     _logger.info(f'extracting timestamps from tdms file: {tdms_filepath}')
-
-    # this should be 10kHz
-    tdms_file = TdmsFile.read(tdms_filepath)
-    groups = tdms_file.groups()
-
-    # this unfortunate hack is in here because there are a bunch of sessions
-    # where the frameclock is on DI0
-    if len(groups) == 1:
-        has_analog_group = False
-        (digital_group,) = groups
-    if len(groups) == 2:
-        has_analog_group = True
-        analog_group, digital_group = groups
-    fs = digital_group.properties['ScanRate']  # this should be 10kHz
-    df = tdms_file.as_dataframe()
-
-    # inferring digital col name
-    (digital_col,) = [col for col in df.columns if 'Digital' in col]
-    vals = df[digital_col].values.astype('int8')
-    digital_channel_names = ['DI0', 'DI1', 'DI2', 'DI3']
-
-    # ini
-    timestamps = {}
-    for ch in digital_channel_names:
-        timestamps[ch] = []
-
-    # chunked loop for memory efficiency
-    if chunk_size is not None:
-        n_chunks = df.shape[0] // chunk_size
-        for i in range(n_chunks):
-            vals_ = vals[i * chunk_size: (i + 1) * chunk_size]
-            # data = np.array([list(f'{v:04b}'[::-1]) for v in vals_], dtype='int8')
-            data = _int2digital_channels(vals_)
-
-            for j, name in enumerate(digital_channel_names):
-                ix = np.where(np.diff(data[:, j]) == 1)[0] + (chunk_size * i)
-                timestamps[name].append(ix / fs)
-
-        for ch in digital_channel_names:
-            timestamps[ch] = np.concatenate(timestamps[ch])
-    else:
-        data = _int2digital_channels(vals)
-        for j, name in enumerate(digital_channel_names):
-            ix = np.where(np.diff(data[:, j]) == 1)[0]
-            timestamps[name].append(ix / fs)
-
-    if has_analog_group:
-        # frameclock data is recorded on an analog channel
-        for channel in analog_group.channels():
-            signal = (channel.data > 2.5).astype('int32')  # assumes 0-5V
-            timestamps[channel.name] = np.where(np.diff(signal) == 1)[0] / fs
-
-    if save_path is not None:
-        _logger.info(f'saving extracted timestamps to: {save_path}')
-        with open(save_path, 'wb') as fH:
-            pickle.dump(timestamps, fH)
-
-    return timestamps
-
-
-def extract_ttl_durations_from_tdms_file(
-    tdms_filepath: Path,
-    save_path: Optional[Path] = None,
-    chunk_size=10000,
-) -> dict:
-    _logger.info(f'extracting ttl_durations from tdms file: {tdms_filepath}')
 
     # this should be 10kHz
     tdms_file = TdmsFile.read(tdms_filepath)
@@ -175,7 +109,7 @@ def extract_ttl_durations_from_tdms_file(
     if chunk_size is not None:
         n_chunks = df.shape[0] // chunk_size
         for i in range(n_chunks):
-            vals_ = vals[i * chunk_size: (i + 1) * chunk_size]
+            vals_ = vals[i * chunk_size : (i + 1) * chunk_size]
             # data = np.array([list(f'{v:04b}'[::-1]) for v in vals_], dtype='int8')
             data = _int2digital_channels(vals_)
 
@@ -193,7 +127,7 @@ def extract_ttl_durations_from_tdms_file(
         for j, name in enumerate(digital_channel_names):
             ix = np.where(np.diff(data[:, j]) == 1)[0]
             timestamps[name]['positive'].append(ix / fs)
-            ix = np.where(np.diff(data[:, j]) == -1)[0]
+            ix = np.where(np.diff(data[:, j]) == 1)[0]
             timestamps[name]['negative'].append(ix / fs)
 
     if has_analog_group:
@@ -204,17 +138,12 @@ def extract_ttl_durations_from_tdms_file(
             timestamps[channel.name]['positive'] = np.where(np.diff(signal) == 1)[0] / fs
             timestamps[channel.name]['negative'] = np.where(np.diff(signal) == -1)[0] / fs
 
-    # the actual diff
-    durations = {}
-    for channel in timestamps.keys():
-        durations[channel] = timestamps[channel]['negative'] - timestamps[channel]['positive']
-
     if save_path is not None:
-        _logger.info(f'saving extracted ttl durations to: {save_path}')
+        _logger.info(f'saving extracted timestamps to: {save_path}')
         with open(save_path, 'wb') as fH:
-            pickle.dump(durations, fH)
+            pickle.dump(timestamps, fH)
 
-    return durations
+    return timestamps
 
 
 def extract_timestamps_from_bpod_jsonable(file_jsonable: str | Path, sync_states_names: List[str]):
@@ -453,7 +382,7 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
             sync_channel_name = f'AI{self.sync_kwargs["frameclock_channel"]}'
         else:
             sync_channel_name = self.sync_kwargs['frameclock_channel']
-        frame_timestamps = self.timestamps[sync_channel_name]
+        frame_timestamps = self.timestamps[sync_channel_name]['positive']
 
         # compare number of frame timestamps
         # and put them in the photometry_df SystemTimestamp column
@@ -504,7 +433,7 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
 
     def _get_neurophotometrics_timestamps(self) -> np.ndarray:
         # get the sync channel and the corresponding timestamps
-        timestamps_nph = self.timestamps[f'DI{self.sync_channel}']
+        timestamps_nph = self.timestamps[f'DI{self.sync_channel}']['positive']
 
         # TODO replace this rudimentary spacer removal
         # to implement: detect spacer / remove spacer methods
@@ -532,7 +461,7 @@ class FibrePhotometryPassiveChoiceWorld(base_tasks.BehaviourTask):
         # load the fixtures - from the relative delays between trials, an "absolute" time vector is
         # created that is used for the synchronization
         fixtures_path = (
-            Path(iblphotometry.__file__).parent / 'iblphotometry_tests' / 'fixtures' / 'passiveChoiceWorld_trials_fixtures.pqt'
+            Path(iblphotometry.__file__).parent.parent / 'iblphotometry_tests' / 'fixtures' / 'passiveChoiceWorld_trials_fixtures.pqt'
         )
 
         # getting the task_settings
@@ -616,7 +545,7 @@ class FibrePhotometryPassiveChoiceWorld(base_tasks.BehaviourTask):
             self.timestamps = extract_timestamps_from_tdms_file(tdms_filepath, save_path=timestamps_filepath)
 
         sync_channel = self.session_params['devices']['neurophotometrics']['sync_channel']
-        valve_times_nph = self.timestamps[f'DI{sync_channel}']
+        valve_times_nph = self.timestamps[f'DI{sync_channel}']['positive']
 
         sync_fun, drift_ppm, ix_nph, ix_bpod = ibldsp.utils.sync_timestamps(
             valve_times_nph, valve_times_bpod, return_indices=True, linear=True
@@ -654,15 +583,16 @@ class FibrePhotometryPassiveChoiceWorld(base_tasks.BehaviourTask):
 
         # writing the passive events table
         # get the valve open duration
-        ttl_durations_filepath = self.session_path / self.photometry_collection / '_mcc_DAQdurations.pkl'
-        if self.load_timestamps and ttl_durations_filepath.exists():
-            with open(ttl_durations_filepath, 'rb') as fH:
-                ttl_durations = pickle.load(fH)
+        timestamps_filepath = self.session_path / self.photometry_collection / '_mcc_DAQdata.pkl'
+        if self.load_timestamps and timestamps_filepath.exists():
+            with open(timestamps_filepath, 'rb') as fH:
+                self.timestamps = pickle.load(fH)
         else:  # extract timestamps:
             tdms_filepath = self.session_path / self.photometry_collection / '_mcc_DAQdata.raw.tdms'
-            ttl_durations = extract_ttl_durations_from_tdms_file(tdms_filepath, save_path=ttl_durations_filepath)
+            self.timestamps = extract_timestamps_from_tdms_file(tdms_filepath, save_path=timestamps_filepath)
 
-        valve_open_dur = np.median(ttl_durations[f'DI{sync_channel}'][ix_nph])
+        ttl_durations = self.timestamps[f'DI{sync_channel}']['negative'] - self.timestamps[f'DI{sync_channel}']['positive']
+        valve_open_dur = np.median(ttl_durations[ix_nph])
         passiveStims_df = pd.DataFrame(
             dict(
                 valveOn=fixtures_df.groupby('stim_type').get_group('V')['t_bpod'],
