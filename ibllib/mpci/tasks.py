@@ -29,7 +29,7 @@ import ibllib.oneibl.data_handlers as dh
 from ibllib.mpci.brain_meshes import get_plane_at_point_mlap, get_surface_points
 from ibllib.mpci.linalg import intersect_line_plane, surface_normal, find_triangle, _update_points
 from ibllib.pipes.base_tasks import MesoscopeTask, RegisterRawDataTask
-from ibllib.mpci.registration import Provenance, register_reference_stacks
+from ibllib.mpci.registration import Provenance, register_reference_stacks, get_window_center, get_px_per_um
 
 _logger = logging.getLogger(__name__)
 
@@ -772,55 +772,6 @@ class MesoscopeFOVHistology(MesoscopeFOV):
         # meta = tif.metadata()  # fails - is empty str
         raise NotImplementedError
 
-    @staticmethod
-    def get_window_center(meta):
-        """Get the window offset from image center in mm.
-
-        Previously this was not extracted in the reference stack metadata,
-        but can now be found in the centerMM.x and centerMM.y fields.
-
-        Parameters
-        ----------
-        meta : dict
-            The metadata dictionary.
-
-        Returns
-        -------
-        numpy.array
-            The window center offset in mm (x, y).
-        """
-        try:
-            param = next(
-                x.split('=')[-1].strip() for x in meta['rawScanImageMeta']['Software'].split('\n')
-                if x.startswith('SI.hDisplay.circleOffset')
-            )
-            return np.fromiter(map(float, param[1:-1].split()), dtype=float) / 1e3  # μm -> mm
-        except StopIteration:
-            return np.array([0, 0], dtype=float)
-
-    @staticmethod
-    def get_px_per_um(meta):
-        """Get the reference image pixel density in pixels per μm.
-
-        Parameters
-        ----------
-        meta : dict
-            The metadata dictionary.
-
-        Returns
-        -------
-        numpy.array
-            The reference image pixel density in pixels (y, x) per μm
-        """
-        if meta['rawScanImageMeta']['ResolutionUnit'].casefold() != 'centimeter':
-            raise NotImplementedError('Reference image resolution unit must be in centimeters')
-
-        yx_res = np.array([
-            meta['rawScanImageMeta']['YResolution'],
-            meta['rawScanImageMeta']['XResolution']
-        ])
-        return yx_res * 1e-4  # NB: these values are (y, x) in μm
-
     def get_reference_image_extent(self, ref_meta):
         """Get the reference image extent along the imaging plane in mm from the window center.
 
@@ -836,7 +787,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
         """
         # Resolution of the objective in mm/degree of the scan angle
         objective_resolution = ref_meta['scanImageParams']['objectiveResolution'] / 1000  # μm -> mm
-        center_offset = self.get_window_center(ref_meta)  # (x, y) offset in mm
+        center_offset = get_window_center(ref_meta)  # (x, y) offset in mm
 
         # find centers, sizes and nLines of each FOV
         si_rois = ref_meta['rawScanImageMeta']['Artist']['RoiGroups']['imagingRoiGroup']['rois']
@@ -868,7 +819,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
 
     def get_fov_objective_extent(self, meta):
         objective_resolution = meta['scanImageParams']['objectiveResolution'] / 1000  # μm -> mm
-        center_offset = self.get_window_center(meta) / objective_resolution
+        center_offset = get_window_center(meta) / objective_resolution
         si_rois = meta['rawScanImageMeta']['Artist']['RoiGroups']['imagingRoiGroup']['rois']
         si_rois = filter(lambda x: x['enable'], si_rois)
         # Sort by ALF FOV number by matching ROI UUID
@@ -973,7 +924,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
             # Apply transform
             save_path = next(self.session_path.glob('raw_imaging_data_??/reference')) / 'reference_stack_ecc_transform.gif'
             _, params = register_reference_stacks(
-                self.session_path, self.reference_session, save_path=save_path, display=display, crop_size=None)
+                self.session_path, self.reference_session, save_path=save_path, display=display, crop_size=True)
             transform_robust = (skimage.transform.EuclideanTransform(rotation=params['rotation']) +
                                 skimage.transform.EuclideanTransform(translation=params['translation']))
             xyz = skimage.transform.warp(xyz, transform_robust, order=1, mode='constant', cval=0, clip=True, preserve_range=True)
@@ -1004,11 +955,11 @@ class MesoscopeFOVHistology(MesoscopeFOV):
         """Update subject JSON with atlas-aligned craniotomy coordinates."""
         assert not self.one.offline
         # Get the pixel coordinates of the craniotomy center in the reference image
-        px_per_um = self.get_px_per_um(reference_image['meta'])
+        px_per_um = get_px_per_um(reference_image['meta'])
         um_per_px = 1 / px_per_um
 
         ref_stack_n_px = np.array(reference_image['mlapdv'].shape[:2])  # in (y, x)
-        craniotomy_center_offset = np.flip(self.get_window_center(reference_image['meta']) * 1e3)  # (y, x) center offset mm -> μm
+        craniotomy_center_offset = np.flip(get_window_center(reference_image['meta']) * 1e3)  # (y, x) center offset mm -> μm
 
         image_center_px = ref_stack_n_px / 2
         # TODO Verify whether offset is added or subtracted
@@ -1067,7 +1018,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
             The interpolated MLAPDV coordinates for each FOV.
         """
         # Extract the reference image and mean image extents in mm along the coverslip, relative to the craniotomy center
-        assert np.all(self.get_window_center(reference_image['meta']) == self.get_window_center(meta))
+        assert np.all(get_window_center(reference_image['meta']) == get_window_center(meta))
         assert reference_image['meta']['scanImageParams']['objectiveResolution'] == meta['scanImageParams']['objectiveResolution']
         coordinates = self.get_fov_objective_extent(meta)
 
