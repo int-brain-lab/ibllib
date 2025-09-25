@@ -9,6 +9,7 @@ import logging
 from pathlib import Path
 
 from one.alf.path import ALFPath
+import one.alf.io as alfio
 
 import skimage.io
 import skimage.transform
@@ -21,6 +22,95 @@ import cv2
 
 _logger = logging.getLogger(__name__)
 Provenance = enum.Enum('Provenance', ['ESTIMATE', 'FUNCTIONAL', 'LANDMARK', 'HISTOLOGY'])  # py3.11 make StrEnum
+
+
+def get_window_center(meta):
+    """Get the window offset from image center in mm.
+
+    Previously this was not extracted in the reference stack metadata,
+    but can now be found in the centerMM.x and centerMM.y fields.
+
+    Parameters
+    ----------
+    meta : dict
+        The metadata dictionary.
+
+    Returns
+    -------
+    numpy.array
+        The window center offset in mm (x, y).
+    """
+    try:
+        param = next(
+            x.split('=')[-1].strip() for x in meta['rawScanImageMeta']['Software'].split('\n')
+            if x.startswith('SI.hDisplay.circleOffset')
+        )
+        return np.fromiter(map(float, param[1:-1].split()), dtype=float) / 1e3  # μm -> mm
+    except StopIteration:
+        return np.array([0, 0], dtype=float)
+
+
+def get_px_per_um(meta):
+    """Get the reference image pixel density in pixels per μm.
+
+    Parameters
+    ----------
+    meta : dict
+        The metadata dictionary.
+
+    Returns
+    -------
+    numpy.array
+        The reference image pixel density in pixels (y, x) per μm
+    """
+    if meta['rawScanImageMeta']['ResolutionUnit'].casefold() != 'centimeter':
+        raise NotImplementedError('Reference image resolution unit must be in centimeters')
+
+    yx_res = np.array([
+        meta['rawScanImageMeta']['YResolution'],
+        meta['rawScanImageMeta']['XResolution']
+    ])
+    return yx_res * 1e-4  # NB: these values are (y, x) in μm
+
+
+def get_window_px(meta):
+    """Get the window center and size in pixels.
+
+    Parameters
+    ----------
+    meta : dict
+        The metadata dictionary.
+
+    Returns
+    -------
+    numpy.array
+        The window center in pixels (y, x).
+    int
+        The window radius in pixels.
+    numpy.array
+        The reference image size in pixels (y, x).
+    """
+    diameter = next(
+        float(x.split('=')[-1].strip()) for x in meta['rawScanImageMeta']['Software'].split('\n')
+        if x.startswith('SI.hDisplay.circleDiameter')
+    )
+    offset = get_window_center(meta) * 1e3  # mm -> μm
+
+    si_rois = meta['rawScanImageMeta']['Artist']['RoiGroups']['imagingRoiGroup']['rois']
+    si_rois = list(filter(lambda x: x['enable'], si_rois))
+    # Get image size in pixels
+    # Scanfields comprise long, vertical rectangles tiled along the x-axis.
+    max_y = max(fov['scanfields']['sizeXY'][1] for fov in si_rois)
+    total_x = sum(fov['scanfields']['sizeXY'][0] for fov in si_rois)
+    image_size = np.array([max_y, total_x], dtype=int)  # (y, x) in pixels
+
+    # Get the pixel size in μm from the reference image metadata
+    px_per_um = get_px_per_um(meta)
+
+    diameter_px = diameter * px_per_um  # in pixels
+    radius_px = np.round(diameter_px / 2).astype(int)
+    center_px = np.flip(offset) * px_per_um  # (y, x) in pixels
+    return center_px, radius_px, image_size
 
 
 def preprocess_vasculature(image_stack, sigma=1.0, low_percentile=1, high_percentile=99, crop_size=390):
@@ -68,8 +158,15 @@ def preprocess_vasculature(image_stack, sigma=1.0, low_percentile=1, high_percen
 
     # Crop the image to remove cranial window boundry and image edges
     if crop_size:
-        c = ((np.array(image.shape) - crop_size) / 2).astype(int)
-        image = image[c[0]:(c[0] + crop_size), c[1]:(c[1] + crop_size)]
+        if isinstance(crop_size, tuple):
+            assert len(crop_size) == 2
+            a, b = crop_size
+            image = image[a, b]
+        else:
+            assert isinstance(crop_size, int)
+            assert crop_size < min(image.shape)
+            c = ((np.array(image.shape) - crop_size) / 2).astype(int)
+            image = image[c[0]:(c[0] + crop_size), c[1]:(c[1] + crop_size)]
 
     return (image * 255).astype(np.uint8)
 
@@ -117,6 +214,19 @@ def register_reference_stacks(stack_path, target_stack_path, save_path=None, dis
         # Load the image data
         # img_data[key] = ScanImageTiffReader(str(path)).data()
         img_data[key] = skimage.io.imread(path)
+        if kwargs.get('crop_size') is True:
+            try:
+                # Attempt to determine crop size based on window size
+                meta = alfio.load_file_content(path.with_name('_ibl_rawImagingData.meta.json'))
+                center_px, radius_px, image_size = get_window_px(meta)
+                crop_size = slice(max(0, int(center_px[0] - radius_px)), min(image_size[0], int(center_px[0] + radius_px))), \
+                            slice(max(0, int(center_px[1] - radius_px)), min(image_size[1], int(center_px[1] + radius_px)))
+                kwargs['crop_size'] = crop_size
+                _logger.info(f'Determined crop size for {path.session_path_short()}: {crop_size}')
+            except StopIteration:
+                _logger.warning(f'Could not determine crop size for {path}, using default')
+                kwargs['crop_size'] = 390  # Default crop size for 5mm window at pix_per_um=0.8
+
         img_data[key + '_processed'] = preprocess_vasculature(img_data[key], **kwargs).astype(np.float32)
 
     # Calculate quality metric (normalized cross-correlation)
@@ -157,17 +267,19 @@ def register_reference_stacks(stack_path, target_stack_path, save_path=None, dis
     # The same warp we will use on the MLAPDV array
     transform_robust = (skimage.transform.EuclideanTransform(rotation=params['rotation']) +
                         skimage.transform.EuclideanTransform(translation=params['translation']))
-    aligned = skimage.transform.warp(
+    img_data['aligned'] = skimage.transform.warp(
         np.max(img_data['stack'], axis=0), transform_robust,
         order=1, mode='constant', cval=0, clip=True, preserve_range=True)
+    img_data['aligned_processed'] = skimage.transform.warp(
+        img_data['stack_processed'], transform_robust,
+        order=1, mode='constant', cval=0, clip=True, preserve_range=True)
 
-    img_data['aligned'] = aligned
     write_stack_registration_qc(img_data, params, save_path=save_path, display=display)
 
-    return aligned, params
+    return img_data['aligned'], params
 
 
-def write_stack_registration_qc(img_data, params, save_path=None, display=False):
+def write_stack_registration_qc(img_data, params, save_path=None, display=False, plot_processed=False):
     """Write QC figure for stack registration.
 
     Writes an animated figure with three subplots, the first switching between aligned and
@@ -184,6 +296,8 @@ def write_stack_registration_qc(img_data, params, save_path=None, display=False)
         The path to save the QC figure.
     display : bool, optional
         Whether to display the QC figure.
+    plot_processed : bool, optional
+        Whether to plot the processed images instead of the raw images.
 
     Returns
     -------
@@ -197,16 +311,25 @@ def write_stack_registration_qc(img_data, params, save_path=None, display=False)
     fig.suptitle('Reference session (*) vs session stack', fontsize=16)
 
     # Max project the images
-    target_stack = np.max(img_data['target_stack'], axis=0)
-    stack = np.max(img_data['stack'], axis=0)
+    target_stack = img_data['target_stack_processed'] if plot_processed else np.max(img_data['target_stack'], axis=0)
+    stack = img_data['stack_processed'] if plot_processed else np.max(img_data['stack'], axis=0)
+    aligned = img_data['aligned_processed'] if plot_processed else img_data['aligned']
 
     # Calculate difference images
-    unaligned_diff_raw = img_data['target_stack'] - img_data['stack']
-    aligned_diff_raw = img_data['target_stack'] - img_data['aligned']
-    maxmax = max(np.max(unaligned_diff_raw), np.max(aligned_diff_raw))
-    minmin = min(np.min(unaligned_diff_raw), np.min(aligned_diff_raw))
-    unaligned_diff = np.max((((unaligned_diff_raw - minmin) / (maxmax - minmin)) * 255), axis=0).astype(np.uint8)
-    aligned_diff = np.max((((aligned_diff_raw - minmin) / (maxmax - minmin)) * 255), axis=0).astype(np.uint8)
+    if plot_processed:
+        unaligned_diff_raw = img_data['target_stack_processed'] - img_data['stack_processed']
+        aligned_diff_raw = img_data['target_stack_processed'] - img_data['aligned_processed']
+        maxmax = max(np.max(unaligned_diff_raw), np.max(aligned_diff_raw))
+        minmin = min(np.min(unaligned_diff_raw), np.min(aligned_diff_raw))
+        unaligned_diff = (((unaligned_diff_raw - minmin) / (maxmax - minmin)) * 255).astype(np.uint8)
+        aligned_diff = (((aligned_diff_raw - minmin) / (maxmax - minmin)) * 255).astype(np.uint8)
+    else:
+        unaligned_diff_raw = img_data['target_stack'] - img_data['stack']
+        aligned_diff_raw = img_data['target_stack'] - img_data['aligned']
+        maxmax = max(np.max(unaligned_diff_raw), np.max(aligned_diff_raw))
+        minmin = min(np.min(unaligned_diff_raw), np.min(aligned_diff_raw))
+        unaligned_diff = np.max((((unaligned_diff_raw - minmin) / (maxmax - minmin)) * 255), axis=0).astype(np.uint8)
+        aligned_diff = np.max((((aligned_diff_raw - minmin) / (maxmax - minmin)) * 255), axis=0).astype(np.uint8)
 
     # Initial plots
     unaligned_plot = axs[0][0].imshow(target_stack)
@@ -235,8 +358,8 @@ def write_stack_registration_qc(img_data, params, save_path=None, display=False)
     def update(frame):
         if frame % 2 == 0:
             unaligned_plot.set_data(stack)
-            aligned_plot.set_data(img_data['aligned'])
-            trans_plot.set_data(img_data['aligned'])
+            aligned_plot.set_data(aligned)
+            trans_plot.set_data(aligned)
             diff_plot.set_data(aligned_diff)
             for t in txt:
                 t.set_text('')

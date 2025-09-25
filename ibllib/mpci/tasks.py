@@ -29,7 +29,7 @@ import ibllib.oneibl.data_handlers as dh
 from ibllib.mpci.brain_meshes import get_plane_at_point_mlap, get_surface_points
 from ibllib.mpci.linalg import intersect_line_plane, surface_normal, find_triangle, _update_points
 from ibllib.pipes.base_tasks import MesoscopeTask, RegisterRawDataTask
-from ibllib.mpci.registration import Provenance, register_reference_stacks
+from ibllib.mpci.registration import Provenance, register_reference_stacks, get_window_center, get_px_per_um
 
 _logger = logging.getLogger(__name__)
 
@@ -240,7 +240,7 @@ class MesoscopeFOV(MesoscopeTask):
         provenance = (Provenance[x.upper()] for x in timescale if x in provenances)
         return next(provenance, None) or Provenance.HISTOLOGY
 
-    def register_fov(self, meta: dict, provenance: Provenance, check_integrity: bool = True) -> (list, list):
+    def register_fov(self, meta: dict, provenance: Provenance, check_integrity: bool = True) -> tuple[list, list]:
         """
         Create FOV on Alyx.
 
@@ -623,7 +623,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
             # Add reference meta data to meta_files list for registration
             meta_files.append(next(self.session_path.glob('raw_imaging_data_??/reference/referenceImage.meta.json')))
             # Interpolate the FOVs to the reference stack
-            mlapdv = self.interpolate_FOVs(reference_image, meta)
+            mlapdv = self.interpolate_FOVs_smooth(reference_image, meta)
         elif 'points' in reference_image['meta']:
             _logger.info('Extracting estimate MLAPDV datasets')
             mlapdv, _ = self.project_mlapdv(meta, atlas=self.atlas, provenance=self.provenance)
@@ -772,55 +772,6 @@ class MesoscopeFOVHistology(MesoscopeFOV):
         # meta = tif.metadata()  # fails - is empty str
         raise NotImplementedError
 
-    @staticmethod
-    def get_window_center(meta):
-        """Get the window offset from image center in mm.
-
-        Previously this was not extracted in the reference stack metadata,
-        but can now be found in the centerMM.x and centerMM.y fields.
-
-        Parameters
-        ----------
-        meta : dict
-            The metadata dictionary.
-
-        Returns
-        -------
-        numpy.array
-            The window center offset in mm (x, y).
-        """
-        try:
-            param = next(
-                x.split('=')[-1].strip() for x in meta['rawScanImageMeta']['Software'].split('\n')
-                if x.startswith('SI.hDisplay.circleOffset')
-            )
-            return np.fromiter(map(float, param[1:-1].split()), dtype=float) / 1e3  # μm -> mm
-        except StopIteration:
-            return np.array([0, 0], dtype=float)
-
-    @staticmethod
-    def get_px_per_um(meta):
-        """Get the reference image pixel density in pixels per μm.
-
-        Parameters
-        ----------
-        meta : dict
-            The metadata dictionary.
-
-        Returns
-        -------
-        numpy.array
-            The reference image pixel density in pixels (y, x) per μm
-        """
-        if meta['rawScanImageMeta']['ResolutionUnit'].casefold() != 'centimeter':
-            raise NotImplementedError('Reference image resolution unit must be in centimeters')
-
-        yx_res = np.array([
-            meta['rawScanImageMeta']['YResolution'],
-            meta['rawScanImageMeta']['XResolution']
-        ])
-        return yx_res * 1e-4  # NB: these values are (y, x) in μm
-
     def get_reference_image_extent(self, ref_meta):
         """Get the reference image extent along the imaging plane in mm from the window center.
 
@@ -836,7 +787,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
         """
         # Resolution of the objective in mm/degree of the scan angle
         objective_resolution = ref_meta['scanImageParams']['objectiveResolution'] / 1000  # μm -> mm
-        center_offset = self.get_window_center(ref_meta)  # (x, y) offset in mm
+        center_offset = get_window_center(ref_meta)  # (x, y) offset in mm
 
         # find centers, sizes and nLines of each FOV
         si_rois = ref_meta['rawScanImageMeta']['Artist']['RoiGroups']['imagingRoiGroup']['rois']
@@ -868,7 +819,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
 
     def get_fov_objective_extent(self, meta):
         objective_resolution = meta['scanImageParams']['objectiveResolution'] / 1000  # μm -> mm
-        center_offset = self.get_window_center(meta) / objective_resolution
+        center_offset = get_window_center(meta) / objective_resolution
         si_rois = meta['rawScanImageMeta']['Artist']['RoiGroups']['imagingRoiGroup']['rois']
         si_rois = filter(lambda x: x['enable'], si_rois)
         # Sort by ALF FOV number by matching ROI UUID
@@ -973,7 +924,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
             # Apply transform
             save_path = next(self.session_path.glob('raw_imaging_data_??/reference')) / 'reference_stack_ecc_transform.gif'
             _, params = register_reference_stacks(
-                self.session_path, self.reference_session, save_path=save_path, display=display, crop_size=None)
+                self.session_path, self.reference_session, save_path=save_path, display=display, crop_size=True)
             transform_robust = (skimage.transform.EuclideanTransform(rotation=params['rotation']) +
                                 skimage.transform.EuclideanTransform(translation=params['translation']))
             xyz = skimage.transform.warp(xyz, transform_robust, order=1, mode='constant', cval=0, clip=True, preserve_range=True)
@@ -1004,11 +955,11 @@ class MesoscopeFOVHistology(MesoscopeFOV):
         """Update subject JSON with atlas-aligned craniotomy coordinates."""
         assert not self.one.offline
         # Get the pixel coordinates of the craniotomy center in the reference image
-        px_per_um = self.get_px_per_um(reference_image['meta'])
+        px_per_um = get_px_per_um(reference_image['meta'])
         um_per_px = 1 / px_per_um
 
         ref_stack_n_px = np.array(reference_image['mlapdv'].shape[:2])  # in (y, x)
-        craniotomy_center_offset = np.flip(self.get_window_center(reference_image['meta']) * 1e3)  # (y, x) center offset mm -> μm
+        craniotomy_center_offset = np.flip(get_window_center(reference_image['meta']) * 1e3)  # (y, x) center offset mm -> μm
 
         image_center_px = ref_stack_n_px / 2
         # TODO Verify whether offset is added or subtracted
@@ -1067,7 +1018,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
             The interpolated MLAPDV coordinates for each FOV.
         """
         # Extract the reference image and mean image extents in mm along the coverslip, relative to the craniotomy center
-        assert np.all(self.get_window_center(reference_image['meta']) == self.get_window_center(meta))
+        assert np.all(get_window_center(reference_image['meta']) == get_window_center(meta))
         assert reference_image['meta']['scanImageParams']['objectiveResolution'] == meta['scanImageParams']['objectiveResolution']
         coordinates = self.get_fov_objective_extent(meta)
 
@@ -1154,6 +1105,132 @@ class MesoscopeFOVHistology(MesoscopeFOV):
             ax.set_ylim([ref_extent[2] - 1, ref_extent[3] + 1])
             ax.set_xlabel('X (mm)')
             ax.set_ylabel('Y (mm)')
+
+        return mlapdv
+
+    def interpolate_FOVs_smooth(self, reference_image, meta, display=False):
+        """Interpolate the FOV coordinates from reference stack coordinates using smooth interpolation.
+
+        Unlike `interpolate_FOVs` this method does not cause aliasing artifacts due to nearest-neighbor
+        interpolation. Instead, it uses another form of interpolation to smoothly interpolate the MLAPDV
+        coordinates.
+
+        Parameters
+        ----------
+        reference_image : dict
+            The reference image object containing metadata and mlapdv histology data.
+        meta : dict
+            The FOV metadata.
+        display : bool
+            Whether to display the FOVs.
+
+        Returns
+        -------
+        list of numpy.array
+            The interpolated MLAPDV coordinates for each FOV.
+        """
+        # Lazy import to avoid adding a global dependency if unused
+        from scipy.interpolate import RegularGridInterpolator
+        # Optional: light smoothing filter (disabled by default). Can be enabled later if needed.
+        # from scipy.ndimage import gaussian_filter
+
+        # Sanity checks mirroring the nearest-neighbour implementation
+        assert np.all(get_window_center(reference_image['meta']) == get_window_center(meta))
+        assert reference_image['meta']['scanImageParams']['objectiveResolution'] == \
+            meta['scanImageParams']['objectiveResolution']
+
+        if 'mlapdv' not in reference_image:
+            raise ValueError('reference_image must contain key "mlapdv" with per-pixel MLAPDV coordinates')
+
+        ref_mlapdv = reference_image['mlapdv']  # shape (H, W, 3)
+        height, width = ref_mlapdv.shape[:2]
+
+        # Build the physical (objective space) coordinate axes (in mm) for the reference image.
+        # These are uniformly spaced, therefore we can use a RegularGridInterpolator.
+        r_left, r_right, r_top, r_bottom = self.get_reference_image_extent(reference_image['meta'])
+        x_ref = np.linspace(r_left, r_right, width)      # X increases left -> right
+        y_ref = np.linspace(r_top, r_bottom, height)     # Y increases top -> bottom
+
+        # Construct one interpolator per MLAPDV axis. Use linear interpolation (piecewise multilinear).
+        # (y, x) ordering because array indexing is [row(y), col(x)].
+        interpolators = []
+        for k in range(3):
+            interpolators.append(
+                RegularGridInterpolator(
+                    (y_ref, x_ref),
+                    ref_mlapdv[:, :, k],
+                    method='linear',
+                    bounds_error=False,
+                    fill_value=None  # extrapolate linearly outside (we will clip queries anyway)
+                )
+            )
+
+        # Optional smoothing of the underlying coordinate fields BEFORE interpolation.
+        # Disabled for now to preserve geometric fidelity. Uncomment if mild denoising required.
+        # sigma = 0.0
+        # if sigma > 0:
+        #     for k in range(3):
+        #         data = gaussian_filter(ref_mlapdv[:, :, k], sigma=sigma)
+        #         interpolators[k].values = data  # update underlying values
+
+        # Prepare FOV geometric definitions in objective space (mm)
+        coordinates = self.get_fov_objective_extent(meta)
+
+        mlapdv = []
+        if display:
+            fig, ax = plt.subplots()
+            ax.add_patch(plt.Rectangle((r_left, r_top), r_right - r_left, r_bottom - r_top,
+                                       fill=False, edgecolor='k', linewidth=1, label='Reference extent'))
+
+        for i, (fov_geo, fov_meta) in enumerate(zip(coordinates, meta['FOV'])):
+            width_px, height_px = fov_meta['nXnYnZ'][:2]
+            if fov_geo['angle'] != 0:
+                raise NotImplementedError(f'FOV {i} has non-zero rotation angle ({fov_geo["angle"]}°); '
+                                          'rotation-aware interpolation not yet implemented')
+
+            left, right, top, bottom = fov_geo['extent']  # mm relative to craniotomy center
+            x_fov = np.linspace(left, right, width_px)
+            y_fov = np.linspace(top, bottom, height_px)
+            xx, yy = np.meshgrid(x_fov, y_fov)
+
+            # Clip query points just inside the reference domain to avoid inadvertent extrapolation
+            # due to floating-point rounding (RegularGridInterpolator extrapolates when fill_value=None).
+            xxq = np.clip(xx, x_ref[0], x_ref[-1])
+            yyq = np.clip(yy, y_ref[0], y_ref[-1])
+            query_points = np.column_stack((yyq.ravel(), xxq.ravel()))  # (N, 2) in (y, x) order
+
+            # Interpolate each coordinate axis
+            interp_vals = np.empty((query_points.shape[0], 3), dtype=ref_mlapdv.dtype)
+            for k, interp in enumerate(interpolators):
+                interp_vals[:, k] = interp(query_points)
+
+            # Reshape to (H, W, 3)
+            mlapdv_arr = interp_vals.reshape(height_px, width_px, 3)
+            assert not np.any(np.isnan(mlapdv_arr)), f'NaNs encountered in interpolated MLAPDV for FOV {i}'
+            mlapdv.append(mlapdv_arr)
+
+            if display:
+                ax.scatter(xxq.ravel(), yyq.ravel(), s=1, alpha=0.3, label=f'FOV {i:02}')
+
+            # Basic sanity check at (approx) center pixel vs nearest-neighbour expectation
+            # Find closest reference pixel indices to FOV center in objective space
+            cx, cy = (left + right) / 2, (top + bottom) / 2
+            ix = int(np.round((cx - x_ref[0]) / (x_ref[-1] - x_ref[0]) * (width - 1)))
+            iy = int(np.round((cy - y_ref[0]) / (y_ref[-1] - y_ref[0]) * (height - 1)))
+            ref_center_val = ref_mlapdv[iy, ix]
+            fov_center_val = mlapdv_arr[mlapdv_arr.shape[0] // 2, mlapdv_arr.shape[1] // 2]
+            if not np.allclose(ref_center_val, fov_center_val, atol=5.):  # tolerate small deviations (μm)
+                _logger.debug(
+                    'FOV %d center mismatch (linear interp ≠ nearest reference): ref=%s, interp=%s',
+                    i, ref_center_val, fov_center_val
+                )
+
+        if display:
+            ax.set_xlabel('Objective X (mm)')
+            ax.set_ylabel('Objective Y (mm)')
+            ax.set_title('FOV pixel locations (smooth MLAPDV interpolation)')
+            ax.legend(markerscale=10, fontsize='x-small')
+            plt.show()
 
         return mlapdv
 
