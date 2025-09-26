@@ -924,7 +924,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
             # Apply transform
             save_path = next(self.session_path.glob('raw_imaging_data_??/reference')) / 'reference_stack_ecc_transform.gif'
             _, params = register_reference_stacks(
-                self.session_path, self.reference_session, save_path=save_path, display=display, crop_size=True)
+                self.session_path, self.reference_session, save_path=save_path, display=display, crop_size=None)
             transform_robust = (skimage.transform.EuclideanTransform(rotation=params['rotation']) +
                                 skimage.transform.EuclideanTransform(translation=params['translation']))
             xyz = skimage.transform.warp(xyz, transform_robust, order=1, mode='constant', cval=0, clip=True, preserve_range=True)
