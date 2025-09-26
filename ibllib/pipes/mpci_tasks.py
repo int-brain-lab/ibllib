@@ -13,11 +13,10 @@ import torch
 import re
 import matplotlib.pyplot as plt
 import sparse
-
 import logging
 _logger = logging.getLogger(__name__)
 
-class MotionBinDataset:
+class MotionBinDataset(masknmf.ArrayLike):
     """Load a suite2p data.bin imaging registration file."""
 
     def __init__(self,
@@ -124,7 +123,7 @@ class PMD(base_tasks.MesoscopeTask, base_tasks.RegisterRawDataTask):
                        alf_folderpath: Union[str, bytes, os.PathLike]) -> np.ndarray:
         bin_path = os.path.join(s2p_folderpath, "imaging.frames_motionRegistered.bin")
         ops_path = os.path.join(alf_folderpath, '_suite2p_ROIData.raw.zip')
-        my_data = MotionBinDataset(bin_path, ops_path)[:]
+        my_data = MotionBinDataset(bin_path, ops_path)
         return my_data
 
     def _train_denoiser(self,
