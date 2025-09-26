@@ -98,18 +98,19 @@ def get_window_px(meta):
 
     si_rois = meta['rawScanImageMeta']['Artist']['RoiGroups']['imagingRoiGroup']['rois']
     si_rois = list(filter(lambda x: x['enable'], si_rois))
-    # Get image size in pixels
-    # Scanfields comprise long, vertical rectangles tiled along the x-axis.
-    max_y = max(fov['scanfields']['sizeXY'][1] for fov in si_rois)
-    total_x = sum(fov['scanfields']['sizeXY'][0] for fov in si_rois)
-    image_size = np.array([max_y, total_x], dtype=int)  # (y, x) in pixels
 
     # Get the pixel size in μm from the reference image metadata
     px_per_um = get_px_per_um(meta)
 
+    # Get image size in pixels
+    # Scanfields comprise long, vertical rectangles tiled along the x-axis.
+    max_y = max(fov['scanfields']['pixelResolutionXY'][1] for fov in si_rois)
+    total_x = sum(fov['scanfields']['pixelResolutionXY'][0] for fov in si_rois)
+    image_size = np.array([max_y, total_x], dtype=int)  # (y, x) in pixels
+
     diameter_px = diameter * px_per_um  # in pixels
     radius_px = np.round(diameter_px / 2).astype(int)
-    center_px = np.flip(offset) * px_per_um  # (y, x) in pixels
+    center_px = np.round(np.flip(offset) * px_per_um).astype(int)  # (y, x) in pixels
     return center_px, radius_px, image_size
 
 
@@ -219,8 +220,8 @@ def register_reference_stacks(stack_path, target_stack_path, save_path=None, dis
                 # Attempt to determine crop size based on window size
                 meta = alfio.load_file_content(path.with_name('referenceImage.meta.json'))
                 center_px, radius_px, image_size = get_window_px(meta)
-                crop_size = slice(max(0, int(center_px[0] - radius_px)), min(image_size[0], int(center_px[0] + radius_px))), \
-                            slice(max(0, int(center_px[1] - radius_px)), min(image_size[1], int(center_px[1] + radius_px)))
+                crop_size = slice(max(0, int(center_px[0] - radius_px[0])), min(image_size[0], int(center_px[0] + radius_px[0]))), \
+                            slice(max(0, int(center_px[1] - radius_px[1])), min(image_size[1], int(center_px[1] + radius_px[1])))
                 kwargs['crop_size'] = crop_size
                 _logger.info(f'Determined crop size for {path.session_path_short()}: {crop_size}')
             except StopIteration:
