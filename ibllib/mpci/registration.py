@@ -217,7 +217,7 @@ def register_reference_stacks(stack_path, target_stack_path, save_path=None, dis
         if kwargs.get('crop_size') is True:
             try:
                 # Attempt to determine crop size based on window size
-                meta = alfio.load_file_content(path.with_name('_ibl_rawImagingData.meta.json'))
+                meta = alfio.load_file_content(path.with_name('rawImagingData.meta.json'))
                 center_px, radius_px, image_size = get_window_px(meta)
                 crop_size = slice(max(0, int(center_px[0] - radius_px)), min(image_size[0], int(center_px[0] + radius_px))), \
                             slice(max(0, int(center_px[1] - radius_px)), min(image_size[1], int(center_px[1] + radius_px)))
