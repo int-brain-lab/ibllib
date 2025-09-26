@@ -109,7 +109,7 @@ def extract_timestamps_from_tdms_file(
     if chunk_size is not None:
         n_chunks = df.shape[0] // chunk_size
         for i in range(n_chunks):
-            vals_ = vals[i * chunk_size : (i + 1) * chunk_size]
+            vals_ = vals[i * chunk_size: (i + 1) * chunk_size]
             # data = np.array([list(f'{v:04b}'[::-1]) for v in vals_], dtype='int8')
             data = _int2digital_channels(vals_)
 
@@ -461,7 +461,8 @@ class FibrePhotometryPassiveChoiceWorld(base_tasks.BehaviourTask):
         # load the fixtures - from the relative delays between trials, an "absolute" time vector is
         # created that is used for the synchronization
         fixtures_path = (
-            Path(iblphotometry.__file__).parent.parent / 'iblphotometry_tests' / 'fixtures' / 'passiveChoiceWorld_trials_fixtures.pqt'
+            Path(iblphotometry.__file__).parent.parent / 'iblphotometry_tests' /
+            'fixtures' / 'passiveChoiceWorld_trials_fixtures.pqt'
         )
 
         # getting the task_settings
