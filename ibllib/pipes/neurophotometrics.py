@@ -109,7 +109,7 @@ def extract_timestamps_from_tdms_file(
     if chunk_size is not None:
         n_chunks = df.shape[0] // chunk_size
         for i in range(n_chunks):
-            vals_ = vals[i * chunk_size: (i + 1) * chunk_size]
+            vals_ = vals[i * chunk_size : (i + 1) * chunk_size]
             # data = np.array([list(f'{v:04b}'[::-1]) for v in vals_], dtype='int8')
             data = _int2digital_channels(vals_)
 
@@ -177,6 +177,8 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
         task_protocol: str | None = None,
         task_collection: str | None = None,
         assert_matching_timestamps: bool = True,
+        sync_states_names: list[str] | None = None,
+        sync_channel: int | str | None = None,  # if set, overwrites the value extracted from the experiment_description
         **kwargs,
     ):
         super().__init__(session_path, one=one, **kwargs)
@@ -196,15 +198,26 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
             # if not provided, infer
             self.task_collection = ibllib.io.session_params.get_task_collection(self.session_params, self.task_protocol)
 
+        # configuring the sync: state names
+        if sync_states_names is None:
+            if 'habituation' in self.task_protocol:
+                self.sync_states_names = ['iti', 'reward']
+            else:
+                self.sync_states_names = ['trial_start', 'reward', 'exit_state']
+        else:
+            self.sync_states_names = sync_states_names
+
+        # configuring the sync: channel
+        if sync_channel is None:
+            self.sync_channel = kwargs.get('sync_channel', self.session_params['devices']['neurophotometrics']['sync_channel'])
+        else:
+            self.sync_channel = sync_channel
+
     def _get_bpod_timestamps(self) -> np.ndarray:
         # the timestamps for syncing, in the time of the bpod
-        if 'habituation' in self.task_protocol:
-            sync_states_names = ['iti', 'reward']
-        else:
-            sync_states_names = ['trial_start', 'reward', 'exit_state']
 
         file_jsonable = self.session_path.joinpath(self.task_collection, '_iblrig_taskData.raw.jsonable')
-        timestamps_bpod = extract_timestamps_from_bpod_jsonable(file_jsonable, sync_states_names)
+        timestamps_bpod = extract_timestamps_from_bpod_jsonable(file_jsonable, self.sync_states_names)
         return timestamps_bpod
 
     def _get_valid_bounds(self):
@@ -242,7 +255,9 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
             assert timestamps_bpod.shape[0] * 0.95 < ix_bpod.shape[0], 'less than 95% of bpod timestamps matched'
         else:
             if not (timestamps_bpod.shape[0] * 0.95 < ix_bpod.shape[0]):
-                _logger.warning(f'less than 95% of bpod timestamps matched. n_timestamps:{timestamps_bpod.shape[0]} matched:{ix_bpod.shape[0]}')
+                _logger.warning(
+                    f'less than 95% of bpod timestamps matched. n_timestamps:{timestamps_bpod.shape[0]} matched:{ix_bpod.shape[0]}'
+                )
 
         valid_bounds = self._get_valid_bounds()
         return sync_nph_to_bpod_fcn, valid_bounds
@@ -301,11 +316,9 @@ class FibrePhotometryBpodSync(FibrePhotometryBaseSync):
     def __init__(
         self,
         *args,
-        digital_inputs_channel: int | None = None,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
-        self.digital_inputs_channel = digital_inputs_channel
 
     @property
     def signature(self):
@@ -327,11 +340,10 @@ class FibrePhotometryBpodSync(FibrePhotometryBaseSync):
         # for bpod based syncing, the timestamps for syncing are in the digital inputs file
         raw_photometry_folder = self.session_path / self.photometry_collection
         digital_inputs_filepath = raw_photometry_folder / '_neurophotometrics_fpData.digitalInputs.pqt'
-        digital_inputs_df = fpio.read_digital_inputs_file(
-            digital_inputs_filepath, channel=self.session_params['devices']['neurophotometrics']['sync_channel']
-        )
-        sync_channel = self.session_params['devices']['neurophotometrics']['sync_channel']
-        timestamps_nph = digital_inputs_df.groupby('channel').get_group(sync_channel)['times'].values
+        digital_inputs_df = fpio.read_digital_inputs_file(digital_inputs_filepath, channel=self.sync_channel)
+
+        # get the positive fronts
+        timestamps_nph = digital_inputs_df.groupby(['polarity', 'channel']).get_group((1, self.sync_channel))['times'].values
 
         # TODO replace this rudimentary spacer removal
         # to implement: detect spacer / remove spacer methods
@@ -346,7 +358,7 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
     def __init__(self, *args, load_timestamps: bool = True, **kwargs):
         super().__init__(*args, **kwargs)
         self.sync_kwargs = kwargs.get('sync_metadata', self.session_params['sync'])
-        self.sync_channel = kwargs.get('sync_channel', self.session_params['devices']['neurophotometrics']['sync_channel'])
+        # self.sync_channel = kwargs.get('sync_channel', self.session_params['devices']['neurophotometrics']['sync_channel'])
         self.load_timestamps = load_timestamps
 
     @property
@@ -467,8 +479,10 @@ class FibrePhotometryPassiveChoiceWorld(base_tasks.BehaviourTask):
         # load the fixtures - from the relative delays between trials, an "absolute" time vector is
         # created that is used for the synchronization
         fixtures_path = (
-            Path(iblphotometry.__file__).parent.parent / 'iblphotometry_tests' /
-            'fixtures' / 'passiveChoiceWorld_trials_fixtures.pqt'
+            Path(iblphotometry.__file__).parent.parent
+            / 'iblphotometry_tests'
+            / 'fixtures'
+            / 'passiveChoiceWorld_trials_fixtures.pqt'
         )
 
         # getting the task_settings
