@@ -176,6 +176,7 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
         one: ONE,
         task_protocol: str | None = None,
         task_collection: str | None = None,
+        assert_matching_timestamps: bool = True,
         **kwargs,
     ):
         super().__init__(session_path, one=one, **kwargs)
@@ -183,6 +184,7 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
         self.kwargs = kwargs
         self.task_protocol = task_protocol
         self.task_collection = task_collection
+        self.assert_matching_timestamps = assert_matching_timestamps
 
         if self.task_protocol is None:
             # we will work with the first protocol here
@@ -236,7 +238,11 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
             _logger.info(f'synced with drift: {drift_ppm}')
 
         # assertion: 95% of timestamps in bpod need to be in timestamps of nph (but not the other way around)
-        assert timestamps_bpod.shape[0] * 0.95 < ix_bpod.shape[0], 'less than 95% of bpod timestamps matched'
+        if self.assert_matching_timestamps:
+            assert timestamps_bpod.shape[0] * 0.95 < ix_bpod.shape[0], 'less than 95% of bpod timestamps matched'
+        else:
+            if not (timestamps_bpod.shape[0] * 0.95 < ix_bpod.shape[0]):
+                _logger.warning(f'less than 95% of bpod timestamps matched. n_timestamps:{timestamps_bpod.shape[0]} matched:{ix_bpod.shape[0]}')
 
         valid_bounds = self._get_valid_bounds()
         return sync_nph_to_bpod_fcn, valid_bounds
