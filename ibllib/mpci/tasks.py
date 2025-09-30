@@ -702,7 +702,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
             axes = plot_brain_surface_points(brain_surface_points, ds=4, axes=axes)
             # Plot ROIs
             for i, fov in enumerate(roi_mlapdv.values()):
-                axes.scatter(*fov.T, ".", c="k", s=1, alpha=0.05, label='ROIs in imaging plane')
+                axes.scatter(*fov.T, '.', c='r', s=1, alpha=0.05, label='ROIs in imaging plane')
 
         # Register FOVs in Alyx
         self.register_fov(meta, self.provenance)
