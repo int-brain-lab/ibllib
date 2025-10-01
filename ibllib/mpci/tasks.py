@@ -702,7 +702,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
             axes = plot_brain_surface_points(brain_surface_points, ds=4, axes=axes)
             # Plot ROIs
             for i, fov in enumerate(roi_mlapdv.values()):
-                axes.scatter(*fov.T, ".", c="k", s=1, alpha=0.05, label='ROIs in imaging plane')
+                axes.scatter(*fov.T, '.', c='r', s=1, alpha=0.05, label='ROIs in imaging plane')
 
         # Register FOVs in Alyx
         self.register_fov(meta, self.provenance)
@@ -1407,7 +1407,7 @@ class MesoscopeFOVHistology(MesoscopeFOV):
             return points / 1e6, dorsal_connectivity_list
         elif atlas is None:
             atlas = self.atlas
-        if not atlas.surface:
+        if atlas.surface is None:
             atlas.compute_surface()
         # Get surface points
         ap_grid, ml_grid = np.meshgrid(atlas.bc.yscale, atlas.bc.xscale)  # now this indexes into AP, ML
@@ -1420,12 +1420,12 @@ class MesoscopeFOVHistology(MesoscopeFOV):
         # Compute triangulation
         hull = ConvexHull(points)
         connectivity_list = hull.simplices
-        # Remove junk points (those that do not participate in the convex hull)
-        k_unique = np.unique(connectivity_list)
-        points = points[k_unique, :]
-        # Recompute with updated points
-        hull = ConvexHull(points)
-        connectivity_list = hull.simplices
+        # # Remove junk points (those that do not participate in the convex hull)
+        # k_unique = np.unique(connectivity_list)
+        # points = points[k_unique, :]
+        # # Recompute with updated points
+        # hull = ConvexHull(points)
+        # connectivity_list = hull.simplices
         # # Only keep faces that have normals pointing up (positive DV value).
         # # Calculate the normal vector pointing out of the convex hull.
         # triangles = points[connectivity_list, :]
