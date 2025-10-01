@@ -270,7 +270,7 @@ def plane_normal_form(face: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
 
 
 @nb.njit("float64[:](float64[:],float64[:],float64[:],float64[:])")
-def intersect_line_plane(
+def zintersect_line_plane(
     ln0: np.ndarray, ln: np.ndarray, p0: np.ndarray, n: np.ndarray
 ) -> np.ndarray:
     """return the intersection point of a line defined by l0 and l and plane in normal form p0 and n.
@@ -450,37 +450,27 @@ def intersect_line_mesh(
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """see intersect_line_mesh_np"""
     N = mesh_connectivity.shape[0]
-    vertices_to_check = np.zeros(N, dtype="bool")
+    vertices_to_keep = np.zeros(N, dtype='bool')
+    intersection_points = np.zeros((N, 3), dtype='float64')
+    faces = np.zeros((ix.shape[0], 3, 3), dtype='float64')
 
     for i in nb.prange(N):
-        face = vertices[mesh_connectivity[i]]
-        plane_point, plane_normal = plane_normal_form(face)
+        faces[i] = vertices[mesh_connectivity[i]]
+        plane_point, plane_normal = plane_normal_form(faces[i])
         # test if plane normal and line vector are parallel
         # if not, they will have an intersection point
         tol = 1e-5
         alpha = get_angle(plane_normal, line_vector)
         # exclude faces that will not be intersected
         if np.abs((np.abs(alpha) - np.pi / 2)) > tol:
-            face = vertices[mesh_connectivity[i]]
-            plane_point, plane_normal = plane_normal_form(face)
-            intersection_point = intersect_line_plane(
+            intersection_points[i] = intersect_line_plane(
                 line_point, line_vector, plane_point, plane_normal
             )
-            if point_in_face(face, intersection_point):
-                vertices_to_check[i] = True
+            vertices_to_keep[i] = point_in_face(faces[i], intersection_points[i])
 
-    ix = np.where(vertices_to_check)[0]
-    intersection_points = np.zeros((ix.shape[0], 3), dtype="float64")
-    faces = np.zeros((ix.shape[0], 3, 3), dtype="float64")
-    for j in nb.prange(ix.shape[0]):
-        i = ix[j]
-        face = vertices[mesh_connectivity[i]]
-        plane_point, plane_normal = plane_normal_form(face)
-        intersection_points[j] = intersect_line_plane(
-            line_point, line_vector, plane_point, plane_normal
-        )
-        faces[j] = face
-
+    ix = np.where(vertices_to_keep)[0]
+    faces = faces[vertices_to_keep, :, :]
+    intersection_points = intersection_points[vertices_to_keep, :]
     return (
         faces,
         intersection_points,
