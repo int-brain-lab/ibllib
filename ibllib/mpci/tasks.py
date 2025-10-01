@@ -88,6 +88,7 @@ class MesoscopeFOV(MesoscopeTask):
         _, meta_files, _ = self.input_files[0].find_files(self.session_path)
         meta = mesoscope.patch_imaging_meta(alfio.load_file_content(meta_files[0]) or {})
         nFOV = len(meta.get('FOV', []))
+        nchannels = len(meta['channelSaved']) if isinstance(meta['channelSaved'], list) else 1
 
         suffix = None if provenance is Provenance.HISTOLOGY else provenance.name.lower()
         _logger.info('Extracting %s MLAPDV datasets', suffix or 'final')
@@ -103,12 +104,21 @@ class MesoscopeFOV(MesoscopeTask):
         mean_image_files = []
         assert set(mean_image_mlapdv.keys()) == set(mean_image_ids.keys()) and len(mean_image_ids) == nFOV
         for i in range(nFOV):
-            alf_path = self.session_path.joinpath('alf', f'FOV_{i:02}')
-            alf_path.mkdir(parents=True, exist_ok=True)
-            for attr, arr, sfx in (('mlapdv', mean_image_mlapdv[i], suffix),
-                                   ('brainLocationIds', mean_image_ids[i], ('ccf', '2017', suffix))):
-                mean_image_files.append(alf_path / to_alf('mpciMeanImage', attr, 'npy', timescale=sfx))
-                np.save(mean_image_files[-1], arr)
+            alf_paths = []
+            if nchannels > 1:
+                for chn in range(nchannels):
+                    fov_ext = chr(97 + int(i))
+                    alf_paths.append(self.session_path.joinpath('alf', f'FOV_{i:02}{fov_ext}'))
+            else:
+                alf_paths.append(self.session_path.joinpath('alf', f'FOV_{i:02}'))
+
+            for alf_path in alf_paths:
+                alf_path.mkdir(parents=True, exist_ok=True)
+                for attr, arr, sfx in (('mlapdv', mean_image_mlapdv[i], suffix),
+                                       ('brainLocationIds', mean_image_ids[i], ('ccf', '2017', suffix))):
+                    mean_image_files.append(alf_path / to_alf('mpciMeanImage', attr, 'npy',
+                                                              timescale=sfx))
+                    np.save(mean_image_files[-1], arr)
 
         # Extract ROI MLAPDV coordinates and brain location IDs
         roi_mlapdv, roi_brain_ids = self.roi_mlapdv(nFOV, suffix=suffix)
@@ -117,11 +127,18 @@ class MesoscopeFOV(MesoscopeTask):
         roi_files = []
         assert set(roi_mlapdv.keys()) == set(roi_brain_ids.keys()) and len(roi_mlapdv) == nFOV
         for i in range(nFOV):
-            alf_path = self.session_path.joinpath('alf', f'FOV_{i:02}')
-            for attr, arr, sfx in (('mlapdv', roi_mlapdv[i], suffix),
-                                   ('brainLocationIds', roi_brain_ids[i], ('ccf', '2017', suffix))):
-                roi_files.append(alf_path / to_alf('mpciROIs', attr, 'npy', timescale=sfx))
-                np.save(roi_files[-1], arr)
+            alf_paths = []
+            if nchannels > 1:
+                for chn in range(nchannels):
+                    fov_ext = chr(97 + int(i))
+                    alf_paths.append(self.session_path.joinpath('alf', f'FOV_{i:02}{fov_ext}'))
+            else:
+                alf_paths.append(self.session_path.joinpath('alf', f'FOV_{i:02}'))
+            for alf_path in alf_paths:
+                for attr, arr, sfx in (('mlapdv', roi_mlapdv[i], suffix),
+                                       ('brainLocationIds', roi_brain_ids[i], ('ccf', '2017', suffix))):
+                    roi_files.append(alf_path / to_alf('mpciROIs', attr, 'npy', timescale=sfx))
+                    np.save(roi_files[-1], arr)
 
         # Register FOVs in Alyx
         self.register_fov(meta, provenance)

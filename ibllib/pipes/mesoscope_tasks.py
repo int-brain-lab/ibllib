@@ -263,6 +263,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
     def signature(self):
         # The number of in and outputs will be dependent on the number of input raw imaging folders and output FOVs
         I = ExpectedDataset.input  # noqa
+        O = ExpectedDataset.ouput  # noqa
         signature = {
             'input_files': [I('_ibl_rawImagingData.meta.json', self.device_collection, True, unique=False),
                             I('*.tif', self.device_collection, True) |
@@ -283,7 +284,8 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                              ('mpciROIs.masks.sparse_npz', 'alf/FOV*', True),
                              ('mpciROIs.neuropilMasks.sparse_npz', 'alf/FOV*', True),
                              ('_suite2p_ROIData.raw.zip', 'alf/FOV*', False),
-                             ('imaging.frames_motionRegistered.bin', 'suite2p/plane*', False)]
+                             O('imaging.frames_motionRegistered.bin', 'suite2p/plane*', False) |
+                             O('imaging.frames_motionRegistered.bin', 'suite2p/plane*/chn*', False)]
         }
         if not self.overwrite:  # If not forcing re-registration, check whether bin files already exist on disk
             # Including the data.bin in the expected signature ensures raw data files are not needlessly re-downloaded
@@ -333,7 +335,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         pil_mask_sp = sparse.COO(np.unravel_index(np.concatenate(pil_coords), shape), True, shape=shape)
         return sparse.GCXS.from_coo(roi_mask_sp), sparse.GCXS.from_coo(pil_mask_sp)
 
-    def _rename_outputs(self, suite2p_dir, frameQC_names, frameQC, rename_dict=None):
+    def _rename_outputs(self, suite2p_dir, frameQC_names, frameQC, rename_dict=None, dual_plane=False):
         """
         Convert suite2p output files to ALF datasets.
 
@@ -346,6 +348,8 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         rename_dict : dict or None
             The suite2p output filenames and the corresponding ALF name. NB: These files are saved
             after transposition. Default is None, i.e. using the default mapping hardcoded in the function below.
+        dual_plane : bool
+            If the file structure expected is that of a dual plane recording
 
         Returns
         -------
@@ -359,55 +363,65 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                 'Fneu.npy': 'mpci.ROINeuropilActivityF.npy'
             }
         fov_dsets = [d[0] for d in self.signature['output_files'] if d[1].startswith('alf/FOV')]
-        for plane_dir in self._get_plane_paths(suite2p_dir):
-            # Rename the registered bin file
-            if (bin_file := plane_dir.joinpath('data.bin')).exists():
-                bin_file.rename(plane_dir.joinpath('imaging.frames_motionRegistered.bin'))
-            # Archive the raw suite2p output before renaming
-            n = int(plane_dir.name.split('plane')[1])
-            fov_dir = self.session_path.joinpath('alf', f'FOV_{n:02}')
-            if fov_dir.exists():
-                for f in filter(Path.exists, map(fov_dir.joinpath, fov_dsets)):
-                    _logger.debug('Removing old file %s', f.relative_to(self.session_path))
-                    f.unlink()
+        for plane in self._get_plane_paths(suite2p_dir):
+            n = int(plane.name.split('plane')[1])
+            rename_folder = dict()
+            # Create a map of file to FOV name
+            if dual_plane:
+                chns = sorted(list(plane.glob('plane*_chn*')))
+                for i, chn in enumerate(chns):
+                    fov_ext = chr(97 + int(i))
+                    rename_folder[chn] = self.session_path.joinpath('alf', f'FOV_{n:02}{fov_ext}')
             else:
-                fov_dir.mkdir(parents=True)
-            with ZipFile(fov_dir / '_suite2p_ROIData.raw.zip', 'w', compression=ZIP_DEFLATED) as zf:
-                for file in plane_dir.iterdir():
-                    if file.suffix != '.bin':
-                        zf.write(file, arcname=file.name)
-            # save frameQC in each dir (for now, maybe there will be fov specific frame QC eventually)
-            if frameQC is not None and len(frameQC) > 0:
-                np.save(fov_dir.joinpath('mpci.mpciFrameQC.npy'), frameQC)
-                frameQC_names.to_csv(fov_dir.joinpath('mpciFrameQC.names.tsv'), sep='\t', index=False)
-            # extract some other data from suite2p outputs
-            ops = np.load(plane_dir.joinpath('ops.npy'), allow_pickle=True).item()
-            stat = np.load(plane_dir.joinpath('stat.npy'), allow_pickle=True)
-            iscell = np.load(plane_dir.joinpath('iscell.npy'))
-            # Save suite2p ROI activity outputs in transposed from (n_frames, n_ROI)
-            for k, v in rename_dict.items():
-                np.save(fov_dir.joinpath(v), np.load(plane_dir.joinpath(k)).T)
-            np.save(fov_dir.joinpath('mpci.badFrames.npy'), np.asarray(ops['badframes'], dtype=bool))
-            np.save(fov_dir.joinpath('mpciMeanImage.images.npy'), np.asarray(ops['meanImg'], dtype=float))
-            np.save(fov_dir.joinpath('mpciROIs.stackPos.npy'), np.asarray([(*s['med'], 0) for s in stat], dtype=int))
-            np.save(fov_dir.joinpath('mpciROIs.cellClassifier.npy'), np.asarray(iscell[:, 1], dtype=float))
-            np.save(fov_dir.joinpath('mpciROIs.mpciROITypes.npy'), np.asarray(iscell[:, 0], dtype=np.int16))
-            # clusters uuids
-            uuid_list = ['uuids'] + list(map(str, [uuid.uuid4() for _ in range(len(iscell))]))
-            with open(fov_dir.joinpath('mpciROIs.uuids.csv'), 'w+') as fid:
-                fid.write('\n'.join(uuid_list))
-            (pd.DataFrame([(0, 'no cell'), (1, 'cell')], columns=['roi_values', 'roi_labels'])
-             .to_csv(fov_dir.joinpath('mpciROITypes.names.tsv'), sep='\t', index=False))
-            # ROI and neuropil masks
-            roi_mask, pil_mask = self._masks2sparse(stat, ops)
-            with open(fov_dir.joinpath('mpciROIs.masks.sparse_npz'), 'wb') as fp:
-                sparse.save_npz(fp, roi_mask)
-            with open(fov_dir.joinpath('mpciROIs.neuropilMasks.sparse_npz'), 'wb') as fp:
-                sparse.save_npz(fp, pil_mask)
-            # Remove the suite2p output files, leaving only the bins and ops
-            for path in sorted(plane_dir.iterdir()):
-                if path.name != 'ops.npy' and path.suffix != '.bin':
-                    path.unlink() if path.is_file() else path.rmdir()
+                rename_folder[plane] = self.session_path.joinpath('alf', f'FOV_{n:02}')
+
+            for plane_dir, fov_dir in rename_folder.items():
+                # Rename the registered bin file
+                if (bin_file := plane_dir.joinpath('data.bin')).exists():
+                    bin_file.rename(plane_dir.joinpath('imaging.frames_motionRegistered.bin'))
+                # Archive the raw suite2p output before renaming
+                if fov_dir.exists():
+                    for f in filter(Path.exists, map(fov_dir.joinpath, fov_dsets)):
+                        _logger.debug('Removing old file %s', f.relative_to(self.session_path))
+                        f.unlink()
+                else:
+                    fov_dir.mkdir(parents=True)
+                with ZipFile(fov_dir / '_suite2p_ROIData.raw.zip', 'w', compression=ZIP_DEFLATED) as zf:
+                    for file in plane_dir.iterdir():
+                        if file.suffix != '.bin':
+                            zf.write(file, arcname=file.name)
+                # save frameQC in each dir (for now, maybe there will be fov specific frame QC eventually)
+                if frameQC is not None and len(frameQC) > 0:
+                    np.save(fov_dir.joinpath('mpci.mpciFrameQC.npy'), frameQC)
+                    frameQC_names.to_csv(fov_dir.joinpath('mpciFrameQC.names.tsv'), sep='\t', index=False)
+                # extract some other data from suite2p outputs
+                ops = np.load(plane_dir.joinpath('ops.npy'), allow_pickle=True).item()
+                stat = np.load(plane_dir.joinpath('stat.npy'), allow_pickle=True)
+                iscell = np.load(plane_dir.joinpath('iscell.npy'))
+                # Save suite2p ROI activity outputs in transposed from (n_frames, n_ROI)
+                for k, v in rename_dict.items():
+                    np.save(fov_dir.joinpath(v), np.load(plane_dir.joinpath(k)).T)
+                np.save(fov_dir.joinpath('mpci.badFrames.npy'), np.asarray(ops['badframes'], dtype=bool))
+                np.save(fov_dir.joinpath('mpciMeanImage.images.npy'), np.asarray(ops['meanImg'], dtype=float))
+                np.save(fov_dir.joinpath('mpciROIs.stackPos.npy'), np.asarray([(*s['med'], 0) for s in stat], dtype=int))
+                np.save(fov_dir.joinpath('mpciROIs.cellClassifier.npy'), np.asarray(iscell[:, 1], dtype=float))
+                np.save(fov_dir.joinpath('mpciROIs.mpciROITypes.npy'), np.asarray(iscell[:, 0], dtype=np.int16))
+                # clusters uuids
+                uuid_list = ['uuids'] + list(map(str, [uuid.uuid4() for _ in range(len(iscell))]))
+                with open(fov_dir.joinpath('mpciROIs.uuids.csv'), 'w+') as fid:
+                    fid.write('\n'.join(uuid_list))
+                (pd.DataFrame([(0, 'no cell'), (1, 'cell')], columns=['roi_values', 'roi_labels'])
+                 .to_csv(fov_dir.joinpath('mpciROITypes.names.tsv'), sep='\t', index=False))
+                # ROI and neuropil masks
+                roi_mask, pil_mask = self._masks2sparse(stat, ops)
+                with open(fov_dir.joinpath('mpciROIs.masks.sparse_npz'), 'wb') as fp:
+                    sparse.save_npz(fp, roi_mask)
+                with open(fov_dir.joinpath('mpciROIs.neuropilMasks.sparse_npz'), 'wb') as fp:
+                    sparse.save_npz(fp, pil_mask)
+                # Remove the suite2p output files, leaving only the bins and ops
+                for path in sorted(plane_dir.iterdir()):
+                    if path.name != 'ops.npy' and path.suffix != '.bin':
+                        path.unlink() if path.is_file() else path.rmdir()
         # Collect all files in those directories
         datasets = self.session_path.joinpath('alf').rglob('FOV_??/*.*.*')
         return sorted(x for x in datasets if x.name in fov_dsets)
@@ -570,7 +584,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
 
         # Currently supporting z-stacks but not supporting dual plane / volumetric imaging, assert that this is not the case
         if np.any(nXnYnZ[:, 2] > 1):
-            raise NotImplementedError('Dual-plane imaging not yet supported, data seems to more than one plane per FOV')
+            _logger.info('Dual-plane imaging detected')
 
         sW = np.sqrt(np.sum((np.array([fov['Deg']['topRight'] for fov in meta['FOV']]) - np.array(
             [fov['Deg']['topLeft'] for fov in meta['FOV']])) ** 2, axis=1))
@@ -688,6 +702,10 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
 
         return planes, ret
 
+    @staticmethod
+    def normalize_image(image):
+        return (image - np.min(image)) / (np.max(image) - np.min(image))
+
     def image_motion_registration(self, ops):
         """Perform motion registration.
 
@@ -710,6 +728,14 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         ops['do_registration'] = True
         ops['do_regmetrics'] = True
         ops['roidetect'] = False
+        if ops['nchannels'] > 1:
+            img1 = self.normalize_image(ops['meanImg'])
+            img2 = self.normalize_image(ops['meanImg_chan2'])
+            snr1 = 20 * np.log10(np.mean(img1) / np.std(img1))
+            snr2 = 20 * np.log10(np.mean(img2) / np.std(img2))
+            align_chn = 1 if snr1 > snr2 else 2
+            ops['align_by_chan'] = align_chn
+
         ret = suite2p.run_plane(ops)
         metrics = {k: ret.get(k, None) for k in ('regDX', 'regPC', 'tPC')}
         has_metrics = ops['do_regmetrics'] and metrics['regDX'] is not None
@@ -840,10 +866,38 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
                 _ = self.image_motion_registration(ops)
                 # TODO Handle metrics and QC here
 
+        # Split data into individual channels (only relevant for dual plane data)
+        split_plane_folders = []
+        dual_plane = False
+        for plane in plane_folders:
+            ops = np.load(plane.joinpath('ops.npy'), allow_pickle=True).item()
+            if ops['nchannels'] > 1:
+                # TODO this doesn't handle sessions where some planes are dual and others not
+                dual_plane = True
+                for chn in range(ops['nchannels']):
+                    plane_chn = plane.joinpath(f'chn{chn}')
+                    plane_chn.mkdir(parents=True, exist_ok=True)
+                    fname = 'data.bin' if chn == 0 else 'data_chan2.bin'
+                    shutil.move(plane.joinpath(fname), plane_chn.joinpath('data.bin'))
+                    shutil.copy(plane.joinpath('ops.npy'), plane_chn.joinpath('ops.npy'))
+                    ops_chn = np.load(plane_chn.joinpath('ops.npy'), allow_pickle=True).item()
+                    if chn == 1:
+                        ops_chn['meanImg'] = ops_chn['meanImg_chan2']
+                    ops_chn['save_path'] = str(plane_chn)
+                    ops_chn['ops_path'] = str(plane_chn.joinpath('ops.npy'))
+                    ops_chn['reg_file'] = str(plane_chn.joinpath('data.bin'))
+                    ops_chn['nchannels'] = 1
+                    _ = ops_chn.pop('reg_file_chan2')
+                    _ = ops_chn.pop('meanImg_chan2')
+                    np.save(plane_chn.joinpath('ops.npy'), ops_chn)
+                    split_plane_folders.append(plane_chn)
+            else:
+                split_plane_folders.append(plane)
+
         # ROI detection
         if kwargs.get('roidetect', True):
             _logger.info('Performing ROI detection')
-            for plane in plane_folders:
+            for plane in split_plane_folders:
                 ops = np.load(plane.joinpath('ops.npy'), allow_pickle=True).item()
                 ops.update(kwargs)
                 self.roi_detection(ops)
@@ -851,7 +905,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         """ Outputs """
         # Save and rename other outputs
         if rename_files:
-            self._rename_outputs(save_path, frameQC_names, frameQC)
+            self._rename_outputs(save_path, frameQC_names, frameQC, dual_plane=dual_plane)
             # Only return output file that are in the signature (for registration)
             out_files = chain.from_iterable(map(lambda x: x.find_files(self.session_path)[1], self.output_files))
         else:
