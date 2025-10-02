@@ -489,8 +489,13 @@ class FibrePhotometryPassiveChoiceWorld(base_tasks.BehaviourTask):
         with open(self.session_path / self.collection / '_iblrig_taskSettings.raw.json', 'r') as fH:
             task_settings = json.load(fH)
 
-        # getting the fixtures and creating a relative time vector
+        # getting the fixtures
         fixtures_df = pd.read_parquet(fixtures_path).groupby('session_id').get_group(task_settings['SESSION_TEMPLATE_ID'])
+
+        # the fixtures table contains delays between the individual stimuli
+        # in order to get their onset times, we need to do an adjusted cumsum of the intervals
+        # adjusted by: the length of each stimulus, plus the overhead time to load it and play it
+        # e.g. state machine time, bonsai delay etc.
 
         # stimulus durations
         stim_durations = dict(
@@ -502,11 +507,13 @@ class FibrePhotometryPassiveChoiceWorld(base_tasks.BehaviourTask):
         for s in fixtures_df['stim_type'].unique():
             fixtures_df.loc[fixtures_df['stim_type'] == s, 'delay'] = stim_durations[s]
 
-        # the audio go cue times
-        mic_go_cue_times_bpod = np.load(self.session_path / self.collection / '_iblmic_audioOnsetGoCue.times_mic.npy')
+        # the audio go cue times - recorded in the time of the mic clock
+        # this is assumed to be precise so we can use it to fit the unknown overhead
+        # time for each stim class
+        go_cue_times_mic = np.load(self.session_path / self.collection / '_iblmic_audioOnsetGoCue.times_mic.npy')
 
         # adding the delays
-        def obj_fun(x, mic_go_cue_times_bpod, fixtures_df):
+        def obj_fun(x, go_cue_times_mic, fixtures_df):
             # fit overhead
             for s in ['T', 'N', 'G', 'V']:
                 if s == 'T' or s == 'N':
@@ -520,41 +527,25 @@ class FibrePhotometryPassiveChoiceWorld(base_tasks.BehaviourTask):
                 fixtures_df['stim_delay'].values + np.roll(fixtures_df['delay'].values, 1) + fixtures_df['overhead'].values,
             )
 
-            mic_go_cue_times_rel = fixtures_df.groupby('stim_type').get_group('T')['t_rel'].values
-            err = np.sum((np.diff(mic_go_cue_times_rel) - np.diff(mic_go_cue_times_bpod)) ** 2)
+            go_cue_times_rel = fixtures_df.groupby('stim_type').get_group('T')['t_rel'].values
+            err = np.sum((np.diff(go_cue_times_rel) - np.diff(go_cue_times_mic)) ** 2)
             return err
 
         # fitting the overheads
         fixtures_df['overhead'] = 0.0
         bounds = ((0, np.inf), (0, np.inf), (0, np.inf))
-        pfit = minimize(obj_fun, (0.0, 0.0, 0.0), args=(mic_go_cue_times_bpod, fixtures_df), bounds=bounds)
+        pfit = minimize(obj_fun, (0.0, 0.0, 0.0), args=(go_cue_times_mic, fixtures_df), bounds=bounds)
         overheads = dict(zip(['T', 'N', 'G', 'V'], [pfit.x[0], pfit.x[0], pfit.x[1], pfit.x[2]]))
 
+        # creating the relative time vector for each stimulus
         for s in fixtures_df['stim_type'].unique():
             fixtures_df.loc[fixtures_df['stim_type'] == s, 'overhead'] = overheads[s]
         fixtures_df['t_rel'] = np.cumsum(
             fixtures_df['stim_delay'].values + np.roll(fixtures_df['delay'].values, 1) + fixtures_df['overhead'].values
         )
 
-        mic_go_cue_times_rel = fixtures_df.groupby('stim_type').get_group('T')['t_rel'].values
-
-        sync_fun, drift_ppm, ix_nph, ix_bpod = ibldsp.utils.sync_timestamps(
-            mic_go_cue_times_rel, mic_go_cue_times_bpod, return_indices=True, linear=True
-        )
-
-        assert ix_nph.shape[0] == 40, 'not all microphone onset events are accepted by the sync function'
-        if np.absolute(drift_ppm) > 20:
-            _logger.warning(f'sync with excessive drift: {drift_ppm}')
-        else:
-            _logger.info(f'synced with drift: {drift_ppm}')
-
-        # applying the sync to all the timestamps in the fixtures
-        fixtures_df['t_bpod'] = sync_fun(fixtures_df['t_rel'])
-
-        # dealing with the valve
-        # valve_times_rel = fixtures_df.groupby('stim_type').get_group('V')['t_rel'].values
-        # valve_times_bpod = sync_fun(valve_times_rel)
-        valve_times_bpod = fixtures_df.groupby('stim_type').get_group('V')['t_bpod'].values
+        # we now sync the valve times from the relative time and the neurophotometrics time
+        valve_times_rel = fixtures_df.groupby('stim_type').get_group('V')['t_rel'].values
 
         # getting the valve timestamps from the DAQ
         timestamps_filepath = self.session_path / self.photometry_collection / '_mcc_DAQdata.pkl'
@@ -566,12 +557,12 @@ class FibrePhotometryPassiveChoiceWorld(base_tasks.BehaviourTask):
             self.timestamps = extract_timestamps_from_tdms_file(tdms_filepath, save_path=timestamps_filepath)
 
         sync_channel = self.session_params['devices']['neurophotometrics']['sync_channel']
-        valve_times_nph = self.timestamps[f'DI{sync_channel}']['positive']
+        valve_times_daq = self.timestamps[f'DI{sync_channel}']['positive']
 
-        sync_fun, drift_ppm, ix_nph, ix_bpod = ibldsp.utils.sync_timestamps(
-            valve_times_nph, valve_times_bpod, return_indices=True, linear=True
+        sync_fun_rel_to_daq, drift_ppm, ix_rel, ix_daq = ibldsp.utils.sync_timestamps(
+            valve_times_rel, valve_times_daq, return_indices=True, linear=True
         )
-        assert ix_bpod.shape[0] == 40, 'not all bpod valve onset events are accepted by the sync function'
+        assert ix_rel.shape[0] == 40, 'not all bpod valve onset events are accepted by the sync function'
         if np.absolute(drift_ppm) > 20:
             _logger.warning(f'sync with excessive drift: {drift_ppm}')
         else:
@@ -583,12 +574,59 @@ class FibrePhotometryPassiveChoiceWorld(base_tasks.BehaviourTask):
             raw_photometry_folder / '_neurophotometrics_fpData.raw.pqt',
             drop_first=False,
         )
-        # apply synchronization
-        photometry_df['times'] = sync_fun(photometry_df['times'])
-        # verify that all are valid (i.e. mean nothing ... )
+
+        # load the photometry data and replace the timestamp column
+        # with the values from the frameclock timestamps as recorded by the DAQ
+        frameclock_channel = self.session_params['devices']['neurophotometrics']['sync_metadata']['frameclock_channel']
+        frame_timestamps = self.timestamps[frameclock_channel]['positive']
+
+        # compare number of frame timestamps
+        # and put them in the photometry_df SystemTimestamp column
+        # based on the different scenarios
+        frame_times_adjusted = False  # for debugging reasons
+
+        # they are the same, all is well
+        if photometry_df.shape[0] == frame_timestamps.shape[0]:
+            photometry_df['times'] = frame_timestamps
+            _logger.info(f'timestamps are of equal size {photometry_df.shape[0]}')
+            frame_times_adjusted = True
+
+        # there are more timestamps recorded by DAQ than
+        # frames recorded by bonsai
+        elif photometry_df.shape[0] < frame_timestamps.shape[0]:
+            _logger.info(f'# bonsai frames: {photometry_df.shape[0]}, # daq timestamps: {frame_timestamps.shape[0]}')
+            # there is exactly one more timestamp recorded by the daq
+            # (probably bonsai drops the last incomplete frame)
+            if photometry_df.shape[0] == frame_timestamps.shape[0] - 1:
+                photometry_df['times'] = frame_timestamps[:-1]
+            # there are two more frames recorded by the DAQ than by
+            # bonsai - this is observed. TODO understand when this happens
+            elif photometry_df.shape[0] == frame_timestamps.shape[0] - 2:
+                photometry_df['times'] = frame_timestamps[:-2]
+            # there are more frames recorded by the DAQ than that
+            # this indicates and issue -
+            elif photometry_df.shape[0] < frame_timestamps.shape[0] - 2:
+                raise ValueError('more timestamps for frames recorded by the daqami than frames were recorded by bonsai.')
+            frame_times_adjusted = True
+
+        # there are more frames recorded by bonsai than by the DAQ
+        # this happens when the user stops the daqami recording before stopping the bonsai
+        # or when daqami crashes
+        elif photometry_df.shape[0] > frame_timestamps.shape[0]:
+            # we drop all excess frames
+            _logger.warning(
+                f'#frames bonsai: {photometry_df.shape[0]} > #frames daqami {frame_timestamps.shape[0]}, dropping excess'
+            )
+            n_frames_daqami = frame_timestamps.shape[0]
+            photometry_df = photometry_df.iloc[:n_frames_daqami]
+            photometry_df.loc[:, 'SystemTimestamp'] = frame_timestamps
+            frame_times_adjusted = True
+
+        if not frame_times_adjusted:
+            raise ValueError('timestamp issue that hasnt been caught')
 
         # write to disk
-        # the synced photometry signal
+        # the photometry signal
         photometry_filepath = self.session_path / 'alf' / 'photometry' / 'photometry.signal.pqt'
         photometry_filepath.parent.mkdir(parents=True, exist_ok=True)
         photometry_df.to_parquet(photometry_filepath)
@@ -613,17 +651,19 @@ class FibrePhotometryPassiveChoiceWorld(base_tasks.BehaviourTask):
             self.timestamps = extract_timestamps_from_tdms_file(tdms_filepath, save_path=timestamps_filepath)
 
         ttl_durations = self.timestamps[f'DI{sync_channel}']['negative'] - self.timestamps[f'DI{sync_channel}']['positive']
-        valve_open_dur = np.median(ttl_durations[ix_nph])
+        valve_open_dur = np.median(ttl_durations[ix_daq])
         passiveStims_df = pd.DataFrame(
             dict(
-                valveOn=fixtures_df.groupby('stim_type').get_group('V')['t_bpod'],
-                valveOff=fixtures_df.groupby('stim_type').get_group('V')['t_bpod'] + valve_open_dur,
-                toneOn=fixtures_df.groupby('stim_type').get_group('T')['t_bpod'],
-                toneOff=fixtures_df.groupby('stim_type').get_group('T')['t_bpod'] + task_settings['GO_TONE_DURATION'],
-                noiseOn=fixtures_df.groupby('stim_type').get_group('N')['t_bpod'],
-                noiseOff=fixtures_df.groupby('stim_type').get_group('N')['t_bpod'] + task_settings['WHITE_NOISE_DURATION'],
+                valveOn=fixtures_df.groupby('stim_type').get_group('V')['t_rel'],
+                valveOff=fixtures_df.groupby('stim_type').get_group('V')['t_rel'] + valve_open_dur,
+                toneOn=fixtures_df.groupby('stim_type').get_group('T')['t_rel'],
+                toneOff=fixtures_df.groupby('stim_type').get_group('T')['t_rel'] + task_settings['GO_TONE_DURATION'],
+                noiseOn=fixtures_df.groupby('stim_type').get_group('N')['t_rel'],
+                noiseOff=fixtures_df.groupby('stim_type').get_group('N')['t_rel'] + task_settings['WHITE_NOISE_DURATION'],
             )
         )
+        # convert all times from fixture time (=rel) to daq time
+        passiveStims_df.iloc[:, :] = sync_fun_rel_to_daq(passiveStims_df.values)
         passiveStims_filepath = self.session_path / 'alf' / self.collection / '_ibl_passiveStims.table.pqt'
         passiveStims_filepath.parent.mkdir(exist_ok=True, parents=True)
         passiveStims_df.reset_index().to_parquet(passiveStims_filepath)
