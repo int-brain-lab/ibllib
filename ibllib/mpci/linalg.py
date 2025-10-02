@@ -270,7 +270,7 @@ def plane_normal_form(face: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
 
 
 @nb.njit("float64[:](float64[:],float64[:],float64[:],float64[:])")
-def zintersect_line_plane(
+def intersect_line_plane(
     ln0: np.ndarray, ln: np.ndarray, p0: np.ndarray, n: np.ndarray
 ) -> np.ndarray:
     """return the intersection point of a line defined by l0 and l and plane in normal form p0 and n.
@@ -452,7 +452,7 @@ def intersect_line_mesh(
     N = mesh_connectivity.shape[0]
     vertices_to_keep = np.zeros(N, dtype='bool')
     intersection_points = np.zeros((N, 3), dtype='float64')
-    faces = np.zeros((ix.shape[0], 3, 3), dtype='float64')
+    faces = np.zeros((N, 3, 3), dtype='float64')
 
     for i in nb.prange(N):
         faces[i] = vertices[mesh_connectivity[i]]
