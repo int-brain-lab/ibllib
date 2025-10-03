@@ -1,5 +1,6 @@
 """Functions for loading IBL ephys and trial data using the Open Neurophysiology Environment."""
 from dataclasses import dataclass, field
+import enum
 import gc
 import logging
 import re
@@ -1543,6 +1544,10 @@ class EphysSessionLoader(SessionLoader):
         return {k: self.ephys[k]['ssl'].pid for k in self.ephys}
 
 
+Provenance = enum.Enum('Provenance', ['ESTIMATE', 'FUNCTIONAL', 'LANDMARK', 'HISTOLOGY'])  # py3.11 make StrEnum
+# TODO import from ibllib.mpci.registration.Provenance
+
+
 @dataclass(kw_only=True)
 class FOVLoader:
     """Loader for a session field of view, such as in 2P imaging sessions."""
@@ -1574,7 +1579,7 @@ class FOVLoader:
     datasets: list = field(default_factory=list)
     """List of datasets available for the FOV."""
 
-    provenance: str = None  # TODO User ibllib.mpci.registration.Provenance enum
+    provenance: Provenance = None
     """Provenance of FOV location. None means default is used."""
 
     atlas: BrainAtlas = None
@@ -1673,22 +1678,61 @@ class FOVLoader:
         one.alf.err.ALFObjectNotFound
             If the ROI MLAPDV file is not found.
         """
-        raise NotImplementedError('This function is not yet implemented.')
+        return self._load_dataset_by_provenance('mpciROIs.mlapdv', provenance=provenance)
+
+    def _load_dataset_by_provenance(self, obj_attr, provenance=None):
+        """Load a dataset by its provenance for the field of view (FOV).
+
+        Parameters
+        ----------
+        obj_attr : str
+            The object.attribute string of the dataset to load.
+        provenance : str, optional
+            The provenance of the MLAPDV coordinates to load. If not provided, the default provenance will be used.
+
+        Returns
+        -------
+        np.ndarray
+            Array of ROI MLAPDV coordinates.
+
+        Raises
+        ------
+        one.alf.err.ALFObjectNotFound
+            If the ROI MLAPDV file is not found.
+        """
         if self.one is None:
             raise ValueError('ONE instance is required to load ROI MLAPDV coordinates.')
-        elif self.one.offline:  # TODO: Could infer for < 3 provenances
-            raise NotImplementedError('Cannot load ROI MLAPDV coordinates in offline mode.')
 
-        if provenance is None:
-            if not self.location:
-                self._get_endpoint_info()
+        provenance = provenance or self.provenance
+        # offline mode
+        if self.one.offline and not self.location:
+            dsets = sorted(self.session_path.joinpath(self.collection).glob(obj_attr + '*'), key=lambda x: x.timescale)
+            if not any(dsets):
+                raise ALFObjectNotFound(f'No {obj_attr} file found in {self.session_path}/{self.collection}')
+            if (provenance is None or provenance == Provenance.HISTOLOGY) and dsets[0].timescale == '':
+                return alfio.load_file_content(dsets[0])
+            elif provenance is None and len(dsets) == 1:
+                _logger.warning('Provenance = %s, histology not resolved', dsets[0].timescale)
+                return alfio.load_file_content(dsets[0])
+            elif provenance is not None:
+                for dset in dsets:
+                    if dset.timescale == provenance.name.casefold():
+                        return alfio.load_file_content(dset)
+                raise ALFObjectNotFound(f'No {obj_attr} file found for provenance {provenance.name} in {self.session_path}/{self.collection}')
+            else:
+                available = [Provenance[(x.timescale or 'histology').upper()] for x in dsets]
+                _logger.info('Available provenances: %s', available)
+                raise NotImplementedError('Multiple provenances found use ONE in online mode or specify a provenance.')
+        # online mode
+        if not self.location:
+            self._get_endpoint_info()
             provenance = next(x['provenance'] for x in self.location if x['default_provenance'])
-            # TODO Convert to emun
-        attr = 'mlapdv'
-        if provenance != 'histology':
-            attr += f'_{provenance}'
-        mlapdv = self.one.load_dataset(self.eid, f'mpciROIs.{attr}.npy', collection=self.collection)
-        return mlapdv[self.number]
+            # Convert to enum
+            provenance = Provenance[next(p for p in Provenance.__members__.keys() if p[0] == provenance)]
+        if provenance != Provenance.HISTOLOGY:
+            obj_attr += f'_{provenance.name.casefold()}'
+        return self.one.load_dataset(self.eid, obj_attr, collection=self.collection)
+
 
 class MPCILoader(SessionLoader):
     """Loader for MPCI sessions, such as mesoscope imaging sessions."""

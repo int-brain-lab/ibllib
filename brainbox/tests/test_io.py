@@ -1,4 +1,5 @@
 import unittest
+import tempfile
 
 import numpy as np
 
@@ -27,6 +28,7 @@ class TestIO_ONE(unittest.TestCase):
 from one.api import ONE
 from uuid import UUID
 from brainbox.io.one import FOVLoader
+from one.alf.path import ALFPath
 
 class TestFOVLoader(unittest.TestCase):
     def setUp(self):
@@ -60,6 +62,21 @@ class TestFOVLoader(unittest.TestCase):
         roi_mlapdv = loader.load_roi_mlapdv()
         self.assertIsInstance(roi_mlapdv, np.ndarray)
         self.assertGreater(roi_mlapdv.shape[0], 0)  # Should have some ROI MLAPDV values
+
+        # Test offline
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        session_path = ALFPath(tmp.name).joinpath(loader.session_path.session_path_short())
+        fov_dir = session_path.joinpath('alf', self.fov_name)
+        fov_dir.mkdir(parents=True, exist_ok=True)
+        np.save(fov_dir.joinpath('mpciROIs.mlapdv.npy'), np.arange(9).reshape(-1, 3))
+        np.save(fov_dir.joinpath('mpciROIs.mlapdv_estimate.npy'), np.arange(9, 18).reshape(-1, 3))
+        one = ONE(mode='local', cache_dir=tmp.name)
+        loader_offline = FOVLoader(one=one, name=self.fov_name, session_path=session_path)
+        roi_mlapdv_offline = loader_offline.load_roi_mlapdv()
+        np.testing.assert_array_equal(roi_mlapdv_offline, np.arange(9).reshape(-1, 3))
+        roi_mlapdv_estimate_offline = loader_offline.load_roi_mlapdv(provenance=bbone.Provenance.ESTIMATE)
+        np.testing.assert_array_equal(roi_mlapdv_estimate_offline, np.arange(9, 18).reshape(-1, 3))
 
 
 if __name__ == '__main__':
