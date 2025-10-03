@@ -355,10 +355,30 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
     priority = 90
     job_size = 'small'
 
-    def __init__(self, *args, load_timestamps: bool = True, **kwargs):
+    def __init__(
+        self,
+        *args,
+        load_timestamps: bool = True,
+        sync_channel: int | None = None,
+        frameclock_channel: int | None = None,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
-        self.sync_kwargs = kwargs.get('sync_metadata', self.session_params['sync'])
-        # self.sync_channel = kwargs.get('sync_channel', self.session_params['devices']['neurophotometrics']['sync_channel'])
+        # setting up sync properties
+        frameclock_channel = (
+            frameclock_channel or self.session_params['devices']['neurophotometrics']['sync_metadata']['frameclock_channel']
+        )
+        # downward compatibility - frameclock moved around, now is back on the AI7
+        if frameclock_channel in ['0', 0]:
+            self.frameclock_channel_name = f'DI{frameclock_channel}'
+        elif frameclock_channel in ['7', 7]:
+            self.frameclock_channel_name = f'AI{frameclock_channel}'
+        else:
+            self.frameclock_channel_name = frameclock_channel
+
+        self.sync_channel = sync_channel or self.session_params['devices']['neurophotometrics']['sync_channel']
+
+        # whether or not to reextract from tdms or attempt to load from .pkl
         self.load_timestamps = load_timestamps
 
     @property
@@ -393,14 +413,8 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
             tdms_filepath = self.session_path / self.photometry_collection / '_mcc_DAQdata.raw.tdms'
             self.timestamps = extract_timestamps_from_tdms_file(tdms_filepath, save_path=timestamps_filepath)
 
-        # downward compatibility - frameclock moved around, now is back on the AI7
-        if self.sync_kwargs['frameclock_channel'] in ['0', 0]:
-            sync_channel_name = f'DI{self.sync_kwargs["frameclock_channel"]}'
-        elif self.sync_kwargs['frameclock_channel'] in ['7', 7]:
-            sync_channel_name = f'AI{self.sync_kwargs["frameclock_channel"]}'
-        else:
-            sync_channel_name = self.sync_kwargs['frameclock_channel']
-        frame_timestamps = self.timestamps[sync_channel_name]['positive']
+        # timestamps of the frameclock in DAQ time
+        frame_timestamps = self.timestamps[self.frameclock_channel_name]['positive']
 
         # compare number of frame timestamps
         # and put them in the photometry_df SystemTimestamp column
@@ -577,8 +591,8 @@ class FibrePhotometryPassiveChoiceWorld(base_tasks.BehaviourTask):
 
         # load the photometry data and replace the timestamp column
         # with the values from the frameclock timestamps as recorded by the DAQ
-        frameclock_channel = self.session_params['devices']['neurophotometrics']['sync_metadata']['frameclock_channel']
-        frame_timestamps = self.timestamps[frameclock_channel]['positive']
+        frameclock_channel_name = self.session_params['devices']['neurophotometrics']['sync_metadata']['frameclock_channel']
+        frame_timestamps = self.timestamps[frameclock_channel_name]['positive']
 
         # compare number of frame timestamps
         # and put them in the photometry_df SystemTimestamp column
