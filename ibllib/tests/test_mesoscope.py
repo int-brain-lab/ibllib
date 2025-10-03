@@ -14,7 +14,8 @@ from one.api import ONE
 import numpy as np
 
 from ibllib.pipes.mesoscope_tasks import MesoscopePreprocess
-from ibllib.mpci.registration import MesoscopeFOV, Provenance
+from ibllib.mpci.tasks import MesoscopeFOV
+from ibllib.mpci.registration import Provenance
 from ibllib.mpci.linalg import _nearest_neighbour_1d, surface_normal, find_triangle
 from ibllib.io.extractors import mesoscope
 from ibllib.tests import TEST_DB

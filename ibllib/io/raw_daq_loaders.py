@@ -171,12 +171,9 @@ def correct_counter_discontinuities(raw, overflow=2**32):
     numpy.array
         An array of counts with the over- and underflow discontinuities removed.
     """
-    flowmax = overflow - 1
-    d = np.diff(raw)
-    # correct for counter flow discontinuities
-    d[d >= flowmax] = d[d >= flowmax] - flowmax
-    d[d <= -flowmax] = d[d <= -flowmax] + flowmax
-    return np.cumsum(np.r_[0, d]) + raw[0]  # back to position
+    flowmax = overflow / 3  # threshold for detecting overflow
+    raw[raw > flowmax] = raw[raw > flowmax] - overflow
+    return raw
 
 
 def load_timeline_sync_and_chmap(alf_path, chmap=None, timeline=None, save=True):
