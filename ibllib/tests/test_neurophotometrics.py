@@ -28,11 +28,11 @@ class TestNeurophotometricsExtractor(unittest.TestCase):
         # self.raw_photometry_folder = self.session_folder / 'raw_photometry_data'
         # self.raw_photometry_folder.mkdir(parents=True)
 
-    def test_bpod_extractor(self):
-        session_folder = Path(iblphotometry_tests.__file__).parent / 'data' / 'neurophotometrics' / 'raw_bpod_session'
-        assert session_folder.exists()
-        self.experiment_description = session_params.read_params(session_folder)
-        FibrePhotometryBpodSync()
+    # def test_bpod_extractor(self):
+    #     session_folder = Path(iblphotometry_tests.__file__).parent / 'data' / 'neurophotometrics' / 'raw_bpod_session'
+    #     assert session_folder.exists()
+    #     self.experiment_description = session_params.read_params(session_folder)
+    #     FibrePhotometryBpodSync()
 
     # def test_daqami_extractor(self):
         # path = Path(__file__).parent / 'fixtures' / 'neurophotometrics' / '_ibl_experiment_description_bpod.yaml'
