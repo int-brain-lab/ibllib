@@ -613,7 +613,7 @@ def make_pipeline(session_path, **pkwargs):
             case 'daqami':
                 # for synchronization with the DAQami receiving the sync pulses from the individual bpods
                 # as well as the frame clock from the FP3002
-                if 'passive' not in protocol: # excluding passive session
+                if 'passive' not in protocol:  # excluding passive session
                     tasks['FibrePhotometryDAQSync'] = type('FibrePhotometryDAQSync', (ptasks.FibrePhotometryDAQSync,), {})(
                         **kwargs,
                     )

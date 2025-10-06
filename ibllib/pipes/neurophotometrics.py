@@ -109,7 +109,7 @@ def extract_timestamps_from_tdms_file(
     if chunk_size is not None:
         n_chunks = df.shape[0] // chunk_size
         for i in range(n_chunks):
-            vals_ = vals[i * chunk_size : (i + 1) * chunk_size]
+            vals_ = vals[i * chunk_size: (i + 1) * chunk_size]
             # data = np.array([list(f'{v:04b}'[::-1]) for v in vals_], dtype='int8')
             data = _int2digital_channels(vals_)
 
@@ -256,7 +256,8 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
         else:
             if not (timestamps_bpod.shape[0] * 0.95 < ix_bpod.shape[0]):
                 _logger.warning(
-                    f'less than 95% of bpod timestamps matched. n_timestamps:{timestamps_bpod.shape[0]} matched:{ix_bpod.shape[0]}'
+                    f'less than 95% of bpod timestamps matched. \
+                        n_timestamps:{timestamps_bpod.shape[0]} matched:{ix_bpod.shape[0]}'
                 )
 
         valid_bounds = self._get_valid_bounds()
@@ -359,7 +360,7 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
         self,
         *args,
         load_timestamps: bool = True,
-        sync_channel: int | None = None,
+        # sync_channel: int | None = None,
         frameclock_channel: int | None = None,
         **kwargs,
     ):
@@ -376,7 +377,7 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
         else:
             self.frameclock_channel_name = frameclock_channel
 
-        self.sync_channel = sync_channel or self.session_params['devices']['neurophotometrics']['sync_channel']
+        self.sync_channel = self.sync_channel or self.session_params['devices']['neurophotometrics']['sync_channel']
 
         # whether or not to reextract from tdms or attempt to load from .pkl
         self.load_timestamps = load_timestamps
