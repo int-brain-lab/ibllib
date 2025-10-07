@@ -218,10 +218,12 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         """
         self.overwrite = kwargs.get('overwrite', False)
         all_files_present = super().setUp(**kwargs)  # Ensure files present
-        bin_sig, = dataset_from_name('data.bin', self.input_files)
-        renamed_bin_sig, = dataset_from_name('imaging.frames_motionRegistered.bin', self.input_files)
-        if not self.overwrite and (bin_sig | renamed_bin_sig).find_files(self.session_path)[0]:
-            return all_files_present  # We have local bin files; no need to extract tifs
+        if not self.overwrite:
+            # Check if the bin files already exist on disk, in which case we don't need to extract tifs
+            bin_sig, = dataset_from_name('data.bin', self.input_files)
+            renamed_bin_sig, = dataset_from_name('imaging.frames_motionRegistered.bin', self.input_files)
+            if (bin_sig | renamed_bin_sig).find_files(self.session_path)[0]:
+                return all_files_present  # We have local bin files; no need to extract tifs
         tif_sig = dataset_from_name('*.tif', self.input_files)
         if not tif_sig:
             return all_files_present  # No tifs in the signature; just return
