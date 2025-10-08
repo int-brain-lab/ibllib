@@ -789,7 +789,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
             _logger.info('Extracting tif data per plane')
             # Ingest tiff files
             try:
-                plane_folders, _ = self.bin_per_plane(metadata, save_folder=save_folder, save_path0=self.session_path)
+                plane_folders, _ = self.bin_per_plane(metadata, save_folder=save_folder, save_path0=self.session_path, **kwargs)
             except Exception:
                 _logger.error('Exception occurred, cleaning up incomplete suite2p folder')
                 # NB: Only remove the suite2p folder if there are no unexpected files in there
@@ -826,7 +826,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
             # The badframes array should always be a subset of the frameQC array
             assert np.max(badframes) < frameQC.size and np.all(frameQC[badframes])
             np.save(raw_image_collections[0].joinpath('bad_frames.npy'), badframes)
-
+            
         """ Suite2p """
         # Create alf if is doesn't exist
         self.session_path.joinpath('alf').mkdir(exist_ok=True)
