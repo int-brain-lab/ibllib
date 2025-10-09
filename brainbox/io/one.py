@@ -1533,7 +1533,7 @@ class SessionLoader:
         # This is because the first few frames are sometimes not recorded. We can remove the first few
         # timestamps in this case
         elif video_timestamps.shape[0] > video_data.shape[0]:
-            video_timestamps_fixed = video_timestamps[-video_data.shape[0] :]
+            video_timestamps_fixed = video_timestamps[-video_data.shape[0]:]
             return video_timestamps_fixed, video_data
         else:
             return video_timestamps, video_data

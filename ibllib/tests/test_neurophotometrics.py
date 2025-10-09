@@ -2,10 +2,10 @@
 
 import unittest
 import tempfile
-from pathlib import Path
-import iblphotometry_tests
-from ibllib.pipes.neurophotometrics import FibrePhotometryBpodSync
-from ibllib.io import session_params
+# from pathlib import Path
+# import iblphotometry_tests
+# from ibllib.pipes.neurophotometrics import FibrePhotometryBpodSync
+# from ibllib.io import session_params
 
 # Mock suit2p which is imported in MesoscopePreprocess
 # attrs = {'default_ops.return_value': {}}
