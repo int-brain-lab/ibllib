@@ -386,6 +386,9 @@ class MesoscopeTask(DynamicTask):
         # Glob for all device collection (raw imaging data) folders
         raw_imaging_folders = [p.name for p in self.session_path.glob(self.device_collection)]
         super().get_signatures(**kwargs)  # Set inputs and outputs
+        if not raw_imaging_folders:
+            _logger.warning('No folders found for device collection "%s"', self.device_collection)
+            return
         # For all inputs and outputs that are part of the device collection, expand to one file per folder
         # All others keep unchanged
         self.input_files = [
