@@ -265,8 +265,8 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         # The number of in and outputs will be dependent on the number of input raw imaging folders and output FOVs
         I = ExpectedDataset.input  # noqa
         signature = {
-            'input_files': [('_ibl_rawImagingData.meta.json', self.device_collection, True),
-                            I('*.tif', self.device_collection, True) |
+            'input_files': [I('_ibl_rawImagingData.meta.json', self.device_collection, True, unique=False),
+                            I('*.tif', self.device_collection, True, unique=False) |
                             I('imaging.frames.tar.bz2', self.device_collection, True, unique=False),
                             ('exptQC.mat', self.device_collection, False)],
             'output_files': [('mpci.ROIActivityF.npy', 'alf/FOV*', True),
@@ -826,7 +826,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
             # The badframes array should always be a subset of the frameQC array
             assert np.max(badframes) < frameQC.size and np.all(frameQC[badframes])
             np.save(raw_image_collections[0].joinpath('bad_frames.npy'), badframes)
-            
+
         """ Suite2p """
         # Create alf if is doesn't exist
         self.session_path.joinpath('alf').mkdir(exist_ok=True)
