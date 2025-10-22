@@ -1050,8 +1050,8 @@ class SpikeSortingLoader:
         :param **kwargs: kwargs passed to `driftmap()` (optional)
         :return:
         """
-        br = br or BrainRegions()
-        time_series = time_series or {}
+        br = BrainRegions() if br is None else br
+        time_series = {} if time_series is None else time_series
         fig, axs = plt.subplots(2, 2, gridspec_kw={
             'width_ratios': [.95, .05], 'height_ratios': [.1, .9]}, figsize=(16, 9), sharex='col')
         axs[0, 1].set_axis_off()
@@ -1094,13 +1094,20 @@ class SpikeSortingLoader:
                              save_dir=None,
                              label='raster',
                              gain=-93,
-                             title=None):
+                             title=None,
+                             alpha=0.3,
+                             processing='destripe'):
 
         # compute the raw data offset and destripe, we take 400ms around t0
         first_sample, last_sample = (int((t0 - 0.2) * sr.fs), int((t0 + 0.2) * sr.fs))
         raw = sr[first_sample:last_sample, :-sr.nsync].T
         channel_labels = channels['labels'] if (channels is not None) and ('labels' in channels) else True
-        destriped = ibldsp.voltage.destripe(raw, sr.fs, channel_labels=channel_labels)
+        if processing == 'destripe':
+            samples = ibldsp.voltage.destripe(raw, sr.fs, channel_labels=channel_labels)
+        else:
+            import scipy.signal
+            sos = scipy.signal.butter(**{"N": 3, "Wn": 300 / sr.fs * 2, "btype": "highpass"}, output="sos")
+            samples = scipy.signal.sosfiltfilt(sos, raw)
         # filter out the spikes according to good/bad clusters and to the time slice
         spike_sel = slice(*np.searchsorted(spikes['samples'], [first_sample, last_sample]))
         ss = spikes['samples'][spike_sel]
@@ -1110,9 +1117,9 @@ class SpikeSortingLoader:
             title = self._default_plot_title(spikes)
         # display the raw data snippet with spikes overlaid
         fig, axs = plt.subplots(1, 2, gridspec_kw={'width_ratios': [.95, .05]}, figsize=(16, 9), sharex='col')
-        Density(destriped, fs=sr.fs, taxis=1, gain=gain, ax=axs[0], t0=t0 - 0.2, unit='s')
-        axs[0].scatter(ss[sok] / sr.fs, sc[sok], color="green", alpha=0.5)
-        axs[0].scatter(ss[~sok] / sr.fs, sc[~sok], color="red", alpha=0.5)
+        Density(samples, fs=sr.fs, taxis=1, gain=gain, ax=axs[0], t0=t0 - 0.2, unit='s')
+        axs[0].scatter(ss[sok] / sr.fs, sc[sok], color="green", alpha=alpha)
+        axs[0].scatter(ss[~sok] / sr.fs, sc[~sok], color="red", alpha=alpha)
         axs[0].set(title=title, xlim=[t0 - 0.035, t0 + 0.035])
         # adds the channel locations if available
         if (channels is not None) and ('atlas_id' in channels):
@@ -1314,7 +1321,7 @@ class SessionLoader:
                               f'e.g sl.load_{obj}(collection="{collections[0]}")')
                 raise ALFMultipleCollectionsFound
 
-    def load_trials(self, collection=None):
+    def load_trials(self, collection=None, revision=None):
         """
         Function to load trials data into SessionLoader.trials
 
@@ -1323,13 +1330,13 @@ class SessionLoader:
         collection: str
             Alf collection of trials data
         """
-
+        revision = self.revision if revision is None else revision
         if not collection:
             collection = self._find_behaviour_collection('trials')
         # itiDuration frequently has a mismatched dimension, and we don't need it, exclude using regex
         self.one.wildcards = False
         self.trials = self.one.load_object(
-            self.eid, 'trials', collection=collection, attribute=r'(?!itiDuration).*', revision=self.revision or None).to_df()
+            self.eid, 'trials', collection=collection, attribute=r'(?!itiDuration).*', revision=revision or None).to_df()
         self.one.wildcards = True
         self.data_info.loc[self.data_info['name'] == 'trials', 'is_loaded'] = True
 

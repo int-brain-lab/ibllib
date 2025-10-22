@@ -1,8 +1,10 @@
+import importlib
 import logging
 from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 import traceback
 
 import packaging.version
@@ -124,7 +126,7 @@ class EphysCompressNP1(base_tasks.EphysTask):
     priority = 90
     cpu = 2
     io_charge = 100  # this jobs reads raw ap files
-    job_size = 'small'
+    job_size = 'large'
 
     @property
     def signature(self):
@@ -657,15 +659,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         For a scratch drive at /mnt/h0 we would have the following temp dir:
         /mnt/h0/iblsorter_1.8.0_CSHL071_2020-10-04_001_probe01/
         """
-        # get the scratch drive from the shell script
-        if self.scratch_folder is None:
-            with open(self.SHELL_SCRIPT) as fid:
-                lines = fid.readlines()
-            line = [line for line in lines if line.startswith("SCRATCH_DRIVE=")][0]
-            m = re.search(r"\=(.*?)(\#|\n)", line)[0]
-            scratch_drive = Path(m[1:-1].strip())
-        else:
-            scratch_drive = self.scratch_folder
+        scratch_drive = self.scratch_folder if self.scratch_folder else Path('/scratch')
         assert scratch_drive.exists(), f"Scratch drive {scratch_drive} not found"
         # get the version of the sorter
         self.version = self._fetch_iblsorter_version(self.SORTER_REPOSITORY)
@@ -737,11 +731,11 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
                     self.FORCE_RERUN = True
         self.scratch_folder_run.mkdir(parents=True, exist_ok=True)
         check_nvidia_driver()
-        try:
-            # if pykilosort is in the environment, use the installed version within the task
+        # this is the best way I found to check if iblsorter is installed and available without a try block
+        if 'iblsorter' in sys.modules and importlib.util.find_spec('iblsorter.ibl') is not None:
             import iblsorter.ibl  # noqa
             iblsorter.ibl.run_spike_sorting_ibl(bin_file=ap_file, scratch_dir=self.scratch_folder_run, delete=False)
-        except ImportError:
+        else:
             command2run = f"{self.SHELL_SCRIPT} {ap_file} {self.scratch_folder_run}"
             _logger.info(command2run)
             process = subprocess.Popen(
