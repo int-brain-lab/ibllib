@@ -82,6 +82,9 @@ class TestRegisterRawDataTask(unittest.TestCase):
         if cls.tmpdir:
             cls.tmpdir.cleanup()
         if cls.one and cls.eid:
+            notes = cls.one.alyx.rest('notes', 'list', django=f'object_id,{cls.eid}', no_cache=True)
+            for n in notes:
+                cls.one.alyx.rest('notes', 'delete', id=n['id'])
             cls.one.alyx.rest('sessions', 'delete', id=cls.eid)
 
 
