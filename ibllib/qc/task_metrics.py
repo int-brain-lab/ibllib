@@ -390,7 +390,15 @@ class TaskQC(base.QC):
         return session_outcome, results, outcomes
 
     def get_custom_session_criteria(self):
+        """
+        Use a custom criteria stored in a note associated with the session to evaluate the
+        QC outcome.
 
+        Returns
+        -------
+        dict
+            The QC criteria to use
+        """
         if self.one:
             note_title = f'=== SESSION QC CRITERIA {self.namespace} ==='
             query = f'text__icontains,{note_title},object_id,{str(self.eid)}'
@@ -570,8 +578,6 @@ class HabituationQC(TaskQC):
 # === Delays between events checks ===
 
 def check_stimOn_goCue_delays(data, audio_output='harp', **_):
-    # TODO check
-
     """
     Check the go cue tone occurs less than 10ms before stimulus on.
 
@@ -1328,7 +1334,6 @@ def check_stimOff_delays(data, **_):
 
 
 def check_stimFreeze_delays(data, **_):
-    # TODO account for nogo where we don't have stimFreeze
     """Check the stimulus freezes within 150ms of the intended time.
 
     Check that the time difference between the visual stimulus freeze-command
