@@ -391,8 +391,7 @@ class TaskQC(base.QC):
 
     def get_custom_session_criteria(self):
         """
-        Use a custom criteria stored in a note associated with the session to evaluate the
-        QC outcome.
+        Use a custom QC criteria associated with the session.
 
         Returns
         -------
