@@ -1348,7 +1348,7 @@ def check_stimFreeze_delays(data, **_):
     'intervals')
     """
     metric = np.nan_to_num(data['stimFreeze_times'] - data['stimFreezeTrigger_times'], nan=np.inf)
-    passed = (metric <= 0.15) & (metric > 0)
+    passed = ((metric <= 0.15) & (metric > 0)).astype(float)
     # Remove no_go trials (stimFreeze not triggered in no-go trials)
     passed[data['choice'] == 0] = np.nan
 
