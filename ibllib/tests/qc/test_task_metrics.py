@@ -429,7 +429,7 @@ class TestTaskMetrics(TaskQCTestData):
         # Set incorrect timestamp
         self.data['stimFreeze_times'][-1] = self.data['stimFreezeTrigger_times'][-1] + 0.2
         metric, passed = qcmetrics.check_stimFreeze_delays(self.data)
-        n = len(self.data['stimFreeze_times'])
+        n = len(self.data['stimFreeze_times']) - 1  # remove the nogo trial which we expect to be nan
         expected = (n - 1) / n
         self.assertEqual(np.nanmean(passed), expected, 'failed to detect dodgy timestamp')
 
