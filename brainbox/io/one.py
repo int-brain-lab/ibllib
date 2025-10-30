@@ -1621,21 +1621,6 @@ class PhotometrySessionLoader(SessionLoader):
         if restrict_to_session:
             if isinstance(self.trials, pd.DataFrame) and (self.trials.shape[0] == 0):
                 self.load_trials()
-            t_start = self.trials.iloc[0]['intervals_0']
-            t_stop = self.trials.iloc[-1]['intervals_1']
-
-            for band in raw_dfs.keys():
-                df = raw_dfs[band]
-                ix = np.logical_and(
-                    df.index.values > t_start - pre,
-                    df.index.values < t_stop + post,
-                )
-                raw_dfs[band] = df.loc[ix]
-
-            # the above indexing can lead to unevenly shaped bands.
-            # Cut to shortest
-            n = np.min([df.shape[0] for _, df in raw_dfs.items()])
-            for band in raw_dfs.keys():
-                raw_dfs[band] = raw_dfs[band].iloc[:n]
+            raw_dfs = fpio.restrict_to_session(raw_dfs, self.trials, pre, post)
 
         self.photometry = raw_dfs
