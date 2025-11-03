@@ -32,6 +32,6 @@ iblatlas>=0.5.3
 iblqt>=0.8.2
 iblutil>=1.13.0
 mtscomp>=1.0.1
-phylib>=2.6.0
+phylib>=2.6.3
 psychofit
 slidingRP>=1.1.1  # steinmetz lab refractory period metrics
