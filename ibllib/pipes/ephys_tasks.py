@@ -594,7 +594,6 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
     SHELL_SCRIPT = Path.home().joinpath(
         f"Documents/PYTHON/iblscripts/deploy/serverpc/{_sortername}/sort_recording.sh"
     )
-    SPIKE_SORTER_NAME = 'iblsorter'
     SORTER_REPOSITORY = Path.home().joinpath('Documents/PYTHON/SPIKE_SORTING/ibl-sorter')
 
     @property
@@ -614,7 +613,8 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
                 # ./spike_sorters/iblsorter/{self.pname}
                 ('_kilosort_raw.output.tar', f'spike_sorters/{self._sortername}/{self.pname}/', True),
                 # ./alf/{self.pname}/iblsorter
-                (f'_ibl_log.info_{self.SPIKE_SORTER_NAME}.log', f'alf/{self.pname}/{self._sortername}', True),
+                (f'{self._sortername}_parameters.yaml', f'alf/{self.pname}/{self._sortername}', True),
+                (f'_ibl_log.info_{self._sortername}.log', f'alf/{self.pname}/{self._sortername}', True),
                 ('_kilosort_whitening.matrix.npy', f'alf/{self.pname}/{self._sortername}/', True),
                 ('_phy_spikes_subset.channels.npy', f'alf/{self.pname}/{self._sortername}/', True),
                 ('_phy_spikes_subset.spikes.npy', f'alf/{self.pname}/{self._sortername}/', True),
@@ -712,15 +712,15 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
     def _run_iblsort(self, ap_file):
         """
         Runs the ks2 matlab spike sorting for one probe dataset
-        the raw spike sorting output is in session_path/spike_sorters/{self.SPIKE_SORTER_NAME}/probeXX folder
+        the raw spike sorting output is in session_path/spike_sorters/{self._sortername}/probeXX folder
         (discontinued support for old spike sortings in the probe folder <1.5.5)
         :return: path of the folder containing ks2 spike sorting output
         """
         iblutil.util.setup_logger('iblsorter', level='INFO')
-        sorter_dir = self.session_path.joinpath("spike_sorters", self.SPIKE_SORTER_NAME, self.pname)
+        sorter_dir = self.session_path.joinpath("spike_sorters", self._sortername, self.pname)
         self.FORCE_RERUN = False
         if not self.FORCE_RERUN:
-            log_file = sorter_dir.joinpath(f"_ibl_log.info_{self.SPIKE_SORTER_NAME}.log")
+            log_file = sorter_dir.joinpath(f"_ibl_log.info_{self._sortername}.log")
             if log_file.exists():
                 run_version = self._fetch_iblsorter_run_version(log_file)
                 if packaging.version.parse(run_version) >= packaging.version.parse('1.7.0'):
@@ -756,7 +756,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
                         log = fid.read()
                         _logger.error(log)
                     break
-                raise RuntimeError(f"{self.SPIKE_SORTER_NAME} {info_str}, {error_str}")
+                raise RuntimeError(f"{self._sortername} {info_str}, {error_str}")
         shutil.copytree(self.scratch_folder_run.joinpath('output'), sorter_dir, dirs_exist_ok=True)
         return sorter_dir
 
@@ -777,7 +777,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         out_files = []
         sorter_dir = self._run_iblsort(ap_file)  # runs the sorter, skips if it already ran
         # convert the data to ALF in the ./alf/probeXX/SPIKE_SORTER_NAME folder
-        probe_out_path = self.session_path.joinpath("alf", label, self.SPIKE_SORTER_NAME)
+        probe_out_path = self.session_path.joinpath("alf", label, self._sortername)
         shutil.rmtree(probe_out_path, ignore_errors=True)
         probe_out_path.mkdir(parents=True, exist_ok=True)
         ibllib.ephys.spikes.ks2_to_alf(
@@ -787,9 +787,9 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
             bin_file=ap_file,
             ampfactor=self._sample2v(ap_file),
         )
-        logfile = sorter_dir.joinpath(f"_ibl_log.info_{self.SPIKE_SORTER_NAME}.log")
+        logfile = sorter_dir.joinpath(f"_ibl_log.info_{self._sortername}.log")
         if logfile.exists():
-            shutil.copyfile(logfile, probe_out_path.joinpath(f"_ibl_log.info_{self.SPIKE_SORTER_NAME}.log"))
+            shutil.copyfile(logfile, probe_out_path.joinpath(f"_ibl_log.info_{self._sortername}.log"))
         # recover the QC files from the spike sorting output and copy them
         for file_qc in sorter_dir.glob('_iblqc_*.npy'):
             shutil.move(file_qc, file_qc_out := ap_file.parent.joinpath(file_qc.name))
@@ -803,7 +803,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
         # convert ks2_output into tar file and also register
         # Make this in case spike sorting is in old raw_ephys_data folders, for new
         # sessions it should already exist
-        tar_dir = self.session_path.joinpath('spike_sorters', self.SPIKE_SORTER_NAME, label)
+        tar_dir = self.session_path.joinpath('spike_sorters', self._sortername, label)
         tar_dir.mkdir(parents=True, exist_ok=True)
         out = ibllib.ephys.spikes.ks2_to_tar(sorter_dir, tar_dir, force=self.FORCE_RERUN)
         out_files.extend(out)
