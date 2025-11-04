@@ -310,7 +310,7 @@ class GlobusPatcher(Patcher, globus.Globus):
         :return:
         """
         responses = super().patch_datasets(file_list, **kwargs)
-        for dset, file in (responses, file_list):
+        for dset, file in zip(responses, file_list):
             # get the flatiron path
             fr = next(fr for fr in dset['file_records'] if 'flatiron' in fr['data_repository'])
             relative_path = add_uuid_string(fr['relative_path'], dset['id']).as_posix()
