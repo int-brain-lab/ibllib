@@ -315,6 +315,7 @@ class GlobusPatcher(Patcher, globus.Globus):
             fr = next(fr for fr in dset['file_records'] if 'flatiron' in fr['data_repository'])
             relative_path = add_uuid_string(fr['relative_path'], dset['id']).as_posix()
             flatiron_path = self.to_address(relative_path, fr['data_repository'])
+            aws_destination_key = 'data' + flatiron_path
             # loop over the remaining repositories (local servers) and create a transfer
             # from flatiron to the local server
             for fr in dset['file_records']:
@@ -326,7 +327,7 @@ class GlobusPatcher(Patcher, globus.Globus):
                         self.aws_transfers[region_name] = {}
                     if bucket_name not in self.aws_transfers[region_name]:
                         self.aws_transfers[region_name][bucket_name] = []
-                    self.aws_transfers[region_name][bucket_name].append((str(file), relative_path))
+                    self.aws_transfers[region_name][bucket_name].append((str(file), aws_destination_key))
                 if fr['data_repository'] not in self.endpoints:
                     continue
                 repo_gid = self.endpoints[fr['data_repository']]['id']
