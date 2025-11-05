@@ -609,7 +609,7 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
                 # ./raw_ephys_data/{self.pname}/
                 ('_iblqc_ephysTimeRmsAP.rms.npy', f'{self.device_collection}/{self.pname}/', True),
                 ('_iblqc_ephysTimeRmsAP.timestamps.npy', f'{self.device_collection}/{self.pname}/', True),
-                ('_iblqc_ephysSaturation.samples.npy', f'{self.device_collection}/{self.pname}/', True),
+                ('_iblqc_ephysSaturation.samples.pqt', f'{self.device_collection}/{self.pname}/', True),
                 # ./spike_sorters/iblsorter/{self.pname}
                 ('_kilosort_raw.output.tar', f'spike_sorters/{self._sortername}/{self.pname}/', True),
                 # ./alf/{self.pname}/iblsorter
