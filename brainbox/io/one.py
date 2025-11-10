@@ -1017,7 +1017,7 @@ class SpikeSortingLoader:
         elif direction == 'reverse':
             return self._sync['reverse'](values) / self._sync['fs']
 
-    def samples2times(self, values, direction='forward', band='ap'):
+    def samples2times(self, values, direction='forward', fs=None):
         """
         Converts ephys sample values to session main clock seconds
         :param values: numpy array of times in seconds or samples to resync
@@ -1025,8 +1025,9 @@ class SpikeSortingLoader:
          (seconds main time to samples probe time)
         :return:
         """
-        if band == 'lf':
-            values = values * 12
+        fs = fs or self._sync['fs']
+        fs_ratio = self._sync['fs'] / fs
+        values = values * fs_ratio
             
         self._get_probe_info()
         return self._sync[direction](values)
