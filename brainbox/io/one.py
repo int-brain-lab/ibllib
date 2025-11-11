@@ -1025,11 +1025,11 @@ class SpikeSortingLoader:
          (seconds main time to samples probe time)
         :return:
         """
+        self._get_probe_info()
         fs = fs or self._sync['fs']
         fs_ratio = self._sync['fs'] / fs
         values = values * fs_ratio
-            
-        self._get_probe_info()
+
         return self._sync[direction](values)
 
     @property
