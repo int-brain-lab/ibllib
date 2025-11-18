@@ -259,7 +259,7 @@ class TestWheel(unittest.TestCase):
         expected = [np.nan, 79.66293334, 100.73593334, 129.26693334, np.nan]
         np.testing.assert_array_almost_equal(times, expected)
         with self.assertRaises(ValueError):
-            wheel.get_movement_onset(intervals, np.random.permutation(self.trials['feedback_times']))
+            wheel.get_movement_onset(intervals, np.flipud(self.trials['feedback_times']))
 
 
 class TestTraining(unittest.TestCase):
