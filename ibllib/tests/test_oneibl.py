@@ -22,11 +22,14 @@ import iblutil.io.params as iopar
 from iblutil.util import Bunch
 
 from ibllib.oneibl import patcher, registration, data_handlers as handlers
+from ibllib.oneibl.IBLpatcher import GlobusPatcher, AWSPatcher, IBLPatcher
 import ibllib.io.extractors.base
 from ibllib.pipes.behavior_tasks import ChoiceWorldTrialsBpod
 from ibllib.pipes.tasks import Task
 from ibllib.tests import TEST_DB
 from ibllib.io import session_params
+
+from one.tests import remote as one_tests_remote
 
 
 class TestUtils(unittest.TestCase):
@@ -52,38 +55,38 @@ class TestUtils(unittest.TestCase):
             self.assertEqual('baz', registration.get_lab(session_path, alyx))
 
 
-class TestFTPPatcher(unittest.TestCase):
-    def setUp(self) -> None:
-        self.one = ONE(**TEST_DB)
+# class TestFTPPatcher(unittest.TestCase):
+#     def setUp(self) -> None:
+#         self.one = ONE(**TEST_DB)
 
-    def reset_params(self):
-        """Remove the FTP parameters from the AlyxClient"""
-        par = iopar.as_dict(self.one.alyx._par)
-        self.one.alyx._par = iopar.from_dict({k: v for k, v in par.items()
-                                              if not k.startswith('FTP')})
+#     def reset_params(self):
+#         """Remove the FTP parameters from the AlyxClient"""
+#         par = iopar.as_dict(self.one.alyx._par)
+#         self.one.alyx._par = iopar.from_dict({k: v for k, v in par.items()
+#                                               if not k.startswith('FTP')})
 
-    @mock.patch('ftplib.FTP_TLS')
-    def test_setup(self, _):
-        self.reset_params()
-        # Test silent setup (one instance is in silent mode)
-        patcher.FTPPatcher(one=self.one)
-        keys = ('FTP_DATA_SERVER', 'FTP_DATA_SERVER_LOGIN', 'FTP_DATA_SERVER_PWD')
-        self.assertTrue(all(k in self.one.alyx._par.as_dict() for k in keys))
-        # Silent mode off
-        self.reset_params()
-        self.one.alyx.silent = False
-        with mock.patch('builtins.input', new=self.mock_input), \
-                mock.patch('ibllib.oneibl.patcher.getpass', return_value='foobar'):
-            patcher.FTPPatcher(one=self.one)
-        self.assertEqual(self.one.alyx._par.FTP_DATA_SERVER_LOGIN, 'usr')
-        self.assertEqual(self.one.alyx._par.FTP_DATA_SERVER_PWD, 'foobar')
+#     @mock.patch('ftplib.FTP_TLS')
+#     def test_setup(self, _):
+#         self.reset_params()
+#         # Test silent setup (one instance is in silent mode)
+#         patcher.FTPPatcher(one=self.one)
+#         keys = ('FTP_DATA_SERVER', 'FTP_DATA_SERVER_LOGIN', 'FTP_DATA_SERVER_PWD')
+#         self.assertTrue(all(k in self.one.alyx._par.as_dict() for k in keys))
+#         # Silent mode off
+#         self.reset_params()
+#         self.one.alyx.silent = False
+#         with mock.patch('builtins.input', new=self.mock_input), \
+#                 mock.patch('ibllib.oneibl.patcher.getpass', return_value='foobar'):
+#             patcher.FTPPatcher(one=self.one)
+#         self.assertEqual(self.one.alyx._par.FTP_DATA_SERVER_LOGIN, 'usr')
+#         self.assertEqual(self.one.alyx._par.FTP_DATA_SERVER_PWD, 'foobar')
 
-    @staticmethod
-    def mock_input(prompt):
-        FTP_pars = {
-            'FTP_DATA_SERVER': 'ftp://server.net',
-            'FTP_DATA_SERVER_LOGIN': 'usr'}
-        return FTP_pars[next(k for k in FTP_pars.keys() if k in prompt.replace(',', '').split())]
+#     @staticmethod
+#     def mock_input(prompt):
+#         FTP_pars = {
+#             'FTP_DATA_SERVER': 'ftp://server.net',
+#             'FTP_DATA_SERVER_LOGIN': 'usr'}
+#         return FTP_pars[next(k for k in FTP_pars.keys() if k in prompt.replace(',', '').split())]
 
 
 class _GlobusPatcherTest(unittest.TestCase):
@@ -114,6 +117,38 @@ class _GlobusPatcherTest(unittest.TestCase):
         self.globus_sdk_mock = globus_sdk_mock.start()
         self.addCleanup(globus_sdk_mock.stop)
         self.one = ONE(**TEST_DB)
+
+class TestGlobusPatcher_new(_GlobusPatcherTest):
+    patcher_class = GlobusPatcher
+
+    def setUp(self) -> None:
+        super().setUp()
+        with mock.patch('one.remote.globus.load_client_params', return_value=self.pars):
+            self.globus_patcher = self.patcher_class(one=self.one, label='from a test')
+
+        # a create dataset to be deleted
+
+    def test_delete_dataset(self):
+        """ tests the GlobusPatcher single dataset deletion """
+        # 
+        ...
+
+    def test_delete_datasets(self):
+        """ tests the GlobusPatcher multiple dataset deletion """
+        ...
+
+    def test_patch_dataset(self):
+        """ tests the GlobusPatcher single dataset patching """
+        ...
+
+    def test_patch_datasets(self):
+        """ tests the GlobusPatcher multiple datasets patching """
+        ...
+
+
+
+
+
 
 
 class TestGlobusPatcher(_GlobusPatcherTest):

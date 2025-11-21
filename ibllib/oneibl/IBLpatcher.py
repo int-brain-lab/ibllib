@@ -379,6 +379,10 @@ class GlobusPatcher(Patcher):
         _ = globus.fetch_endpoints_from_alyx(alyx=self.one.alyx)
         self.patch_label = patch_label
 
+    def check_file(self, file_record: dict):
+        # TODO implement this function
+        ...
+
     def delete_file(
         self,
         file_record: dict,
@@ -682,7 +686,7 @@ class IBLPatcher:
             elif self.on_error == 'log':
                 return None
 
-    def delete_file(
+    def _delete_file(
         self,
         file_record: dict,
         check_exists: bool = True,
@@ -696,7 +700,7 @@ class IBLPatcher:
             self._delete_file_from_alyx(file_record['id'])
         return status
 
-    def delete_files(
+    def _delete_files(
         self,
         file_records: list[dict],
         check_exists: bool = True,
@@ -746,7 +750,7 @@ class IBLPatcher:
         # iterate over file records and remove them one by one
         statuses = {}
         for file_record in dataset['file_records']:
-            statuses[file_record['id']] = self.delete_file(file_record, remove_from_alyx=remove_from_alyx)
+            statuses[file_record['id']] = self._delete_file(file_record, remove_from_alyx=remove_from_alyx)
 
         # only remove the dataset from alyx if all the file records have been processed successfully
         if all(status == Status.SUCCESS for status in statuses.values()) and not self.dry:
@@ -788,7 +792,7 @@ class IBLPatcher:
                 for file_record in datasets['file_records']:
                     id_map[file_record['id']] = dataset['id']
 
-            file_record_statuses = self.delete_files(
+            file_record_statuses = self._delete_files(
                 file_records,
                 check_exists=check_exists,
                 ignore_missing=ignore_missing,
