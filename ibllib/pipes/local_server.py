@@ -11,7 +11,6 @@ import re
 import subprocess
 import sys
 import traceback
-import importlib
 import importlib.metadata
 
 from one.api import ONE
