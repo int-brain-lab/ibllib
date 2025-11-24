@@ -77,10 +77,10 @@ def feat_vars(units_b, units=None, feat_name='amps', dist='norm', test='ks', cma
     '''
 
     # Get units.
-    if not (units is None):  # we're using a subset of all units
+    if units is not None:  # we're using a subset of all units
         unit_list = list(units_b['depths'].keys())
         # For each unit in `unit_list`, remove unit from `units_b` if not in `units`.
-        [units_b['depths'].pop(unit) for unit in unit_list if not (int(unit) in units)]
+        [units_b['depths'].pop(unit) for unit in unit_list if int(unit) not in units]
     unit_list = list(units_b['depths'].keys())  # get new `unit_list` after removing unit
 
     # Calculate coefficients of variation for all units
