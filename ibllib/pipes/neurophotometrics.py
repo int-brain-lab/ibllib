@@ -15,10 +15,18 @@ from nptdms import TdmsFile
 from abc import abstractmethod
 import iblphotometry
 from iblphotometry import fpio
+from brainbox.io.one import PhotometrySessionLoader
 
 from one.api import ONE
 import json
 from scipy.optimize import minimize
+
+from ibllib.qc.base import QC
+import one.alf.spec.QC as qc_outcome
+from iblphotometry.metrics import n_unique_samples, n_edges
+from iblphotometry import qc
+from one.alf.spec import QC as QC_status
+
 
 _logger = logging.getLogger('ibllib')
 
@@ -109,7 +117,7 @@ def extract_timestamps_from_tdms_file(
     if chunk_size is not None:
         n_chunks = df.shape[0] // chunk_size
         for i in range(n_chunks):
-            vals_ = vals[i * chunk_size: (i + 1) * chunk_size]
+            vals_ = vals[i * chunk_size : (i + 1) * chunk_size]
             # data = np.array([list(f'{v:04b}'[::-1]) for v in vals_], dtype='int8')
             data = _int2digital_channels(vals_)
 
@@ -490,6 +498,24 @@ class FibrePhotometryPassiveChoiceWorld(base_tasks.BehaviourTask):
         self.kwargs = kwargs
         self.load_timestamps = load_timestamps
 
+    @property
+    def signature(self):
+        signature = {
+            'input_files': [
+                ('_neurophotometrics_fpData.raw.pqt', self.photometry_collection, True, True),
+                ('_mcc_DAQdata.raw.tdms', self.photometry_collection, True, True),
+                ('_iblrig_taskData.raw.jsonable', self.task_collection, True, True),
+                ('_iblrig_taskSettings.raw.json', self.task_collection, True, True),
+                ('_iblmic_audioOnsetGoCue.times_mic', self.task_collection, True, True),
+            ],
+            'output_files': [
+                ('photometry.signal.pqt', 'alf/photometry', True),
+                ('photometryROI.locations.pqt', 'alf/photometry', True),
+                ('_ibl_passiveStims.table.pqt', 'alf' / self.collection, True),
+            ],
+        }
+        return signature
+
     def _run(self, **kwargs) -> Tuple[pd.DataFrame, pd.DataFrame]:
         # load the fixtures - from the relative delays between trials, an "absolute" time vector is
         # created that is used for the synchronization
@@ -684,3 +710,84 @@ class FibrePhotometryPassiveChoiceWorld(base_tasks.BehaviourTask):
         passiveStims_df.reset_index().to_parquet(passiveStims_filepath)
 
         return photometry_filepath, locations_filepath, passiveStims_filepath
+
+
+class PhotometryQC(QC):
+    def __init__(self, session_path, **kwargs):
+        super().__init__(session_path, **kwargs)
+
+    def run(self) -> QC_status:
+        """Run the QC tests and return the outcome.
+
+        :return: One of "CRITICAL", "FAIL", "WARNING" or "PASS"
+        """
+        metrics = [n_unique_samples, n_edges]
+        qc_result = qc.qc_signals(self.loader['photometry'], metrics)
+
+        # TODO this will be defined elsewhere
+        ranges = {
+            'n_unique_samples': {
+                (-np.inf, -1): 'impossible',
+                (0, 10): QC_status.FAIL,
+                (10, 20): QC_status.CRITICAL,
+                (20, 30): QC_status.WARNING,
+                (30, np.inf): QC_status.PASS,
+            },
+            'n_edges': {
+                (-np.inf, -1): 'impossible',
+                (0, 0): QC.PASS,
+                (1, np.inf): QC.FAIL,
+            },
+        }
+
+        # map metrics to qc_outcomes
+        for i, row in qc_result.iterrows():
+            for (lower, upper), outcome in ranges[row['metric']].items():
+                if lower <= row['value'] < upper:
+                    if outcome == 'impossible':
+                        raise ValueError('impossible metric value')
+                    else:
+                        qc_result.loc[i, 'qc_outcome'] = outcome
+
+        # set QC
+        for i, row in qc_result.iterrows():
+            row['band'], row['brain_region'], row['outcome']
+            self.update(outcome=row['outcome'], namespace='-'.join(row['metric'], row['band'], row['brain_region']))
+
+        # figure out how to return the aggregate QC value
+        return self.overall_outcome(qc_result['qc_outcome'].values)
+
+    def load_data(self):
+        """Load the data required to compute the QC.
+        Subclasses may implement this for loading raw data.
+        """
+        self.loader = PhotometrySessionLoader(one=self.one, eid=self.eid)
+        self.loader.load_photometry(pre=0, post=0)
+
+
+class FibrePhotometryQC(base_tasks.Task):
+    def __init__(
+        self,
+        session_path: str | Path,
+        one: ONE,
+        **kwargs,
+    ):
+        super().__init__(session_path, one=one, **kwargs)
+        self.session_path = session_path
+        self.one = one or ONE()
+        self.qc = PhotometryQC(session_path, one=one)
+
+    @property
+    def signature(self):
+        signature = {
+            'input_files': [
+                ('photometry.signal.pqt', 'alf/photometry', True),
+                ('photometryROI.locations.pqt', 'alf/photometry', True),
+            ],
+            'output_files': [],
+        }
+        return signature
+
+    def _run(self):
+        self.qc.load_data()
+        self.qc.run()
