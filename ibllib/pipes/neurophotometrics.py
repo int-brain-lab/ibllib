@@ -7,6 +7,7 @@ import pickle
 
 import ibldsp.utils
 import ibllib.io.session_params
+import ibllib.io.session_params as sess_params
 from ibllib.pipes import base_tasks
 from iblutil.io import jsonable
 
@@ -22,7 +23,7 @@ import json
 from scipy.optimize import minimize
 
 from ibllib.qc.base import QC
-import one.alf.spec.QC as qc_outcome
+from one.alf.spec import QC as qc_outcome
 from iblphotometry.metrics import n_unique_samples, n_edges
 from iblphotometry import qc
 from one.alf.spec import QC as QC_status
@@ -715,6 +716,8 @@ class FibrePhotometryPassiveChoiceWorld(base_tasks.BehaviourTask):
 class PhotometryQC(QC):
     def __init__(self, session_path, **kwargs):
         super().__init__(session_path, **kwargs)
+        self.eid = self.one.path2eid(session_path)
+        self.session_path = session_path
 
     def run(self) -> QC_status:
         """Run the QC tests and return the outcome.
@@ -722,7 +725,7 @@ class PhotometryQC(QC):
         :return: One of "CRITICAL", "FAIL", "WARNING" or "PASS"
         """
         metrics = [n_unique_samples, n_edges]
-        qc_result = qc.qc_signals(self.loader['photometry'], metrics)
+        qc_result = qc.qc_signals(self.loader.photometry, metrics)
 
         # TODO this will be defined elsewhere
         ranges = {
@@ -735,8 +738,8 @@ class PhotometryQC(QC):
             },
             'n_edges': {
                 (-np.inf, -1): 'impossible',
-                (0, 0): QC.PASS,
-                (1, np.inf): QC.FAIL,
+                (0, 1): QC_status.PASS,
+                (1, np.inf): QC_status.FAIL,
             },
         }
 
@@ -751,11 +754,12 @@ class PhotometryQC(QC):
 
         # set QC
         for i, row in qc_result.iterrows():
-            row['band'], row['brain_region'], row['outcome']
-            self.update(outcome=row['outcome'], namespace='-'.join(row['metric'], row['band'], row['brain_region']))
+            brain_region, band, metric = row['brain_region'], row['band'], row['metric']
+            self.update(outcome=row['qc_outcome'], namespace=f'__photometry_{brain_region}_{band}_{metric}')
 
-        # figure out how to return the aggregate QC value
-        return self.overall_outcome(qc_result['qc_outcome'].values)
+        overall_outcome = self.overall_outcome(qc_result['qc_outcome'].values)
+        self.update(outcome=overall_outcome, namespace='_photometry')
+        return overall_outcome
 
     def load_data(self):
         """Load the data required to compute the QC.
@@ -774,7 +778,7 @@ class FibrePhotometryQC(base_tasks.Task):
     ):
         super().__init__(session_path, one=one, **kwargs)
         self.session_path = session_path
-        self.one = one or ONE()
+        self.one = one
         self.qc = PhotometryQC(session_path, one=one)
 
     @property
