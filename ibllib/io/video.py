@@ -176,7 +176,7 @@ def url_from_eid(eid, label=None, one=None):
     if not (label is None or np.isin(label, valid_labels).all()):
         raise ValueError('labels must be one of ("%s")' % '", "'.join(valid_labels))
     one = one or ONE()
-    session_path = one.eid2path(one.to_eid(eid))
+    session_path = one.eid2path(eid)
 
     # Filter the video files
     def match(dataset):

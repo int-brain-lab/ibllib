@@ -858,7 +858,8 @@ class MesoscopeSyncTimeline(extractors_base.BaseExtractor):
                 include = sorted(int(c.rsplit('_', 1)[-1]) for c in collections)
                 edges = edges[include, :]
             elif edges.shape[0] < len(collections):
-                raise ValueError('More raw imaging folders than detected bouts')
+                raise ValueError(f'More raw imaging folders (={len(collections)}) \
+                                 than detected bouts (={edges.shape[0]})')
 
         if display:
             _, ax = plt.subplots(1)

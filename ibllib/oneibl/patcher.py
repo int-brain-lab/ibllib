@@ -53,7 +53,7 @@ FLATIRON_MOUNT = '/mnt/ibl'
 FTP_HOST = 'test.alyx.internationalbrainlab.org'
 FTP_PORT = 21
 DMZ_REPOSITORY = 'ibl_patcher'  # in alyx, the repository name containing the patched filerecords
-SDSC_ROOT_PATH = PurePosixPath('/mnt/ibl')
+SDSC_ROOT_PATH = PurePosixPath(FLATIRON_MOUNT)
 SDSC_PATCH_PATH = PurePosixPath('/home/datauser/temp')
 
 
@@ -243,8 +243,10 @@ class GlobusPatcher(Patcher, globus.Globus):
         # transfers/delete from the current computer to the flatiron: mandatory and executed first
         local_id = self.endpoints['local']['id']
         self.globus_transfer = globus_sdk.TransferData(
-            self.client, local_id, flatiron_id, verify_checksum=True, sync_level='checksum', label=label)
-        self.globus_delete = globus_sdk.DeleteData(self.client, flatiron_id, label=label)
+            source_endpoint=local_id, destination_endpoint=flatiron_id,
+            verify_checksum=True, sync_level='checksum', label=label
+        )
+        self.globus_delete = globus_sdk.DeleteData(endpoint=flatiron_id, label=label)
         # transfers/delete from flatiron to optional third parties to synchronize / delete
         self.globus_transfers_locals = {}
         self.globus_deletes_locals = {}
@@ -303,7 +305,7 @@ class GlobusPatcher(Patcher, globus.Globus):
                 # if there is no transfer already created, initialize it
                 if repo_gid not in self.globus_transfers_locals:
                     self.globus_transfers_locals[repo_gid] = globus_sdk.TransferData(
-                        self.client, flatiron_id, repo_gid, verify_checksum=True,
+                        source_endpoint=flatiron_id, destination_endpoint=repo_gid, verify_checksum=True,
                         sync_level='checksum', label=f"{self.label} on {fr['data_repository']}")
                 # get the local server path and create the transfer item
                 local_server_path = self.to_address(fr['relative_path'], fr['data_repository'])
@@ -343,9 +345,8 @@ class GlobusPatcher(Patcher, globus.Globus):
             _wait_for_task(gtc.submit_transfer(self.globus_transfer))
             # re-initialize the globus_transfer property
             self.globus_transfer = globus_sdk.TransferData(
-                gtc,
-                self.globus_transfer['source_endpoint'],
-                self.globus_transfer['destination_endpoint'],
+                source_endpoint=self.globus_transfer['source_endpoint'],
+                destination_endpoint=self.globus_transfer['destination_endpoint'],
                 label=self.globus_transfer['label'],
                 verify_checksum=True, sync_level='checksum')
 
@@ -353,7 +354,6 @@ class GlobusPatcher(Patcher, globus.Globus):
         if len(self.globus_delete['DATA']) > 0:
             _wait_for_task(gtc.submit_delete(self.globus_delete))
             self.globus_delete = globus_sdk.DeleteData(
-                gtc,
                 endpoint=self.globus_delete['endpoint'],
                 label=self.globus_delete['label'])
 
@@ -423,6 +423,10 @@ class IBLGlobusPatcher(Patcher, globus.Globus):
             dataset = self.alyx.rest('datasets', 'read', id=did)
         else:
             did = dataset['url'].split('/')[-1]
+
+        # Check if the dataset is protected (TODO this doesn't scale for many tags)
+        is_protected = any(self.alyx.rest('tags', 'read', id=tag)['is_protected'] for tag in dataset['tags'])
+        assert is_protected is False, f'Cannot delete protected dataset {did} ({dataset["name"]})'
 
         def is_aws(repository_name):
             return repository_name.startswith('aws_')
@@ -682,7 +686,7 @@ class S3Patcher(Patcher):
             _logger.error(f'Files: {", ".join([f.name for f in file_list])} already exist, to overwrite set force=True')
             return
 
-        response = super().patch_dataset(file_list, dry=dry, repository=self.s3_repo, ftp=False, **kwargs)
+        response = super().patch_dataset(file_list, dry=dry, repository=self.s3_repo, ftp=False, force=force, **kwargs)
         # TODO in an ideal case the flatiron filerecord won't be altered when we register this dataset. This requires
         # changing the the alyx.data.register_view
         for ds in response:

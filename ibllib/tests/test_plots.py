@@ -15,7 +15,7 @@ import ibllib.plots.misc
 from ibllib.tests import TEST_DB
 from ibllib.tests.fixtures.utils import register_new_session
 from ibllib.plots.snapshot import Snapshot
-from ibllib.plots.figures import dlc_qc_plot
+from ibllib.plots.figures import dlc_qc_plot, lp_qc_plot
 
 
 WIDTH, HEIGHT = 1000, 100
@@ -167,6 +167,24 @@ class TestDlcQcPlot(unittest.TestCase):
         # fig.savefig(fig_path)
         # with Image.open(fig_path) as im:
         #     self.assertEqual(im.size, (1700, 1000))
+
+
+class TestLpQcPlot(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp_dir = tempfile.TemporaryDirectory()
+        cls.one = ONE(**TEST_DB)
+
+    @classmethod
+    def tearDownClass(cls):
+        # Clean up tmp dir
+        cls.tmp_dir.cleanup()
+
+    def test_without_inputs(self):
+        eid = '3473f9d2-aa5d-41a6-9048-c65d0b7ab97c'
+        with self.assertRaises(AssertionError):
+            lp_qc_plot(self.one.eid2path(eid), self.one)
 
 
 class TestMiscPlot(unittest.TestCase):

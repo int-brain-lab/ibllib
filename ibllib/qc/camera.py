@@ -914,7 +914,7 @@ class CameraQC(base.QC):
             # Plot variance over frames
             ax = f.add_subplot(gs[len(roi), :])
             ln = plt.plot(lpc_var)
-            [l.set_label(f'ROI #{i + 1}') for i, l in enumerate(ln)]
+            [_l.set_label(f'ROI #{i + 1}') for i, _l in enumerate(ln)]
             ax.axhline(threshold[0], 0, n, linestyle=':', color='r', label='lower threshold')
             ax.set(xlabel='Frame sample', ylabel='Variance of the Laplacian')
             plt.tight_layout()

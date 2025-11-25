@@ -4,6 +4,7 @@ import numpy as np
 from pathlib import Path
 from one.alf.spec import QC
 from datetime import date
+from typing import Tuple
 
 from neuropixel import trace_header
 import spikeglx
@@ -275,13 +276,8 @@ class AlignmentQC(base.QC):
 
         return results
 
-    def upload_channels(self, alignment_key, upload_alyx, upload_flatiron):
-        """
-        Upload channels to alyx and flatiron based on the alignment specified by the alignment key
-        """
-
-        feature = np.array(self.alignments[alignment_key][0])
-        track = np.array(self.alignments[alignment_key][1])
+    def get_channels_mlapdv(self, alignment_key: str) -> Tuple[np.ndarray, np.ndarray, np.array]:
+        feature, track = np.array(self.alignments[alignment_key][:2])
 
         try:
             meta_dset = self.one.list_datasets(self.insertion['session'], '*ap.meta',
@@ -291,25 +287,82 @@ class AlignmentQC(base.QC):
                                               collection=f'raw_ephys_data/{self.insertion["name"]}',
                                               download_only=True)
             geometry = spikeglx.read_geometry(meta_file)
-            chns = np.c_[geometry['x'], geometry['y']]
+            channels_xy = np.c_[geometry['x'], geometry['y']]
         except Exception as err:
             self.log.warning(f"Could not compute channel locations from meta file, errored with message: {err}. "
                              f"Will use default Neuropixel 1 channels")
             geometry = trace_header(version=1)
-            chns = np.c_[geometry['x'], geometry['y']]
+            channels_xy = np.c_[geometry['x'], geometry['y']]
 
-        ephysalign = EphysAlignment(self.xyz_picks, chns[:, 1],
+        ephysalign = EphysAlignment(self.xyz_picks, channels_xy[:, 1],
                                     track_prev=track,
                                     feature_prev=feature,
                                     brain_atlas=self.brain_atlas)
         channels_mlapdv = np.int32(ephysalign.get_channel_locations(feature, track) * 1e6)
         channels_atlas_id = ephysalign.get_brain_locations(channels_mlapdv / 1e6)['id']
+        return channels_mlapdv, channels_atlas_id, channels_xy
 
+    def create_electrode_datasets(self, alignment_key: str) -> list:
+        """
+        When an insertion alignment is resolved, we write datasets containing electrode locations
+        :return:
+        """
+        channels_mlapdv, channels_atlas_id, channels_xy = self.get_channels_mlapdv(alignment_key)
+        files_to_register = []
+        alf_path = self.one.eid2path(self.insertion['session']).joinpath('alf', self.insertion["name"])
+        alf_path.mkdir(exist_ok=True, parents=True)
+
+        f_name = alf_path.joinpath('electrodeSites.mlapdv.npy')
+        np.save(f_name, channels_mlapdv)
+        files_to_register.append(f_name)
+
+        f_name = alf_path.joinpath('electrodeSites.brainLocationIds_ccf_2017.npy')
+        np.save(f_name, channels_atlas_id)
+        files_to_register.append(f_name)
+
+        f_name = alf_path.joinpath('electrodeSites.localCoordinates.npy')
+        np.save(f_name, channels_xy)
+        files_to_register.append(f_name)
+        probe_collections = self.one.list_collections(self.insertion['session'], filename='channels*',
+                                                      collection=f'alf/{self.insertion["name"]}*')
+        feature, track = np.array(self.alignments[alignment_key][:2])
+        for collection in probe_collections:
+            chns = self.one.load_dataset(self.insertion['session'], 'channels.localCoordinates', collection=collection)
+
+            ephysalign = EphysAlignment(self.xyz_picks, chns[:, 1],
+                                        track_prev=track,
+                                        feature_prev=feature,
+                                        brain_atlas=self.brain_atlas)
+            channels_mlapdv = np.int32(ephysalign.get_channel_locations(feature, track) * 1e6)
+            channels_atlas_id = ephysalign.get_brain_locations(channels_mlapdv / 1e6)['id']
+
+            alf_path = self.one.eid2path(self.insertion['session']).joinpath(collection)
+            alf_path.mkdir(exist_ok=True, parents=True)
+
+            f_name = alf_path.joinpath('channels.mlapdv.npy')
+            np.save(f_name, channels_mlapdv)
+            files_to_register.append(f_name)
+
+            f_name = alf_path.joinpath('channels.brainLocationIds_ccf_2017.npy')
+            np.save(f_name, channels_atlas_id)
+            files_to_register.append(f_name)
+
+        self.log.info("The following files have been saved:")
+        for f in files_to_register:
+            self.log.info(f)
+
+        return files_to_register
+
+    def upload_channels(self, alignment_key, upload_alyx, upload_flatiron):
+        """
+        Upload channels to alyx and flatiron based on the alignment specified by the alignment key
+        """
+        channels_mlapdv, channels_atlas_id, channels_xy = self.get_channels_mlapdv(alignment_key)
         # Need to change channels stored on alyx as well as the stored key is not the same as the latest key
         if upload_alyx:
             if alignment_key != self.align_keys_sorted[0]:
                 histology.register_aligned_track(self.eid, channels_mlapdv / 1e6,
-                                                 chn_coords=chns, one=self.one,
+                                                 chn_coords=channels_xy, one=self.one,
                                                  overwrite=True, channels=self.channels_flag,
                                                  brain_atlas=self.brain_atlas)
 
@@ -322,47 +375,9 @@ class AlignmentQC(base.QC):
 
         files_to_register = []
         if upload_flatiron:
+            files_to_register = self.create_electrode_datasets()
+            self.log.info(f"Registering {len(files_to_register)} datasets on FTP patcher")
             ftp_patcher = FTPPatcher(one=self.one)
-
-            alf_path = self.one.eid2path(self.insertion['session']).joinpath('alf', self.insertion["name"])
-            alf_path.mkdir(exist_ok=True, parents=True)
-
-            f_name = alf_path.joinpath('electrodeSites.mlapdv.npy')
-            np.save(f_name, channels_mlapdv)
-            files_to_register.append(f_name)
-
-            f_name = alf_path.joinpath('electrodeSites.brainLocationIds_ccf_2017.npy')
-            np.save(f_name, channels_atlas_id)
-            files_to_register.append(f_name)
-
-            f_name = alf_path.joinpath('electrodeSites.localCoordinates.npy')
-            np.save(f_name, chns)
-            files_to_register.append(f_name)
-
-            probe_collections = self.one.list_collections(self.insertion['session'], filename='channels*',
-                                                          collection=f'alf/{self.insertion["name"]}*')
-
-            for collection in probe_collections:
-                chns = self.one.load_dataset(self.insertion['session'], 'channels.localCoordinates', collection=collection)
-                ephysalign = EphysAlignment(self.xyz_picks, chns[:, 1],
-                                            track_prev=track,
-                                            feature_prev=feature,
-                                            brain_atlas=self.brain_atlas)
-                channels_mlapdv = np.int32(ephysalign.get_channel_locations(feature, track) * 1e6)
-                channels_atlas_id = ephysalign.get_brain_locations(channels_mlapdv / 1e6)['id']
-
-                alf_path = self.one.eid2path(self.insertion['session']).joinpath(collection)
-                alf_path.mkdir(exist_ok=True, parents=True)
-
-                f_name = alf_path.joinpath('channels.mlapdv.npy')
-                np.save(f_name, channels_mlapdv)
-                files_to_register.append(f_name)
-
-                f_name = alf_path.joinpath('channels.brainLocationIds_ccf_2017.npy')
-                np.save(f_name, channels_atlas_id)
-                files_to_register.append(f_name)
-
-            self.log.info("Writing datasets to FlatIron")
             ftp_patcher.create_dataset(path=files_to_register,
                                        created_by=self.one.alyx.user)
 
@@ -383,7 +398,7 @@ class AlignmentQC(base.QC):
             self.alignments = prev_alignments
 
         outcomes = [align[2].split(':')[0] for key, align in self.alignments.items()
-                    if len(align) == 3]
+                    if len(align) >= 3]
         if len(outcomes) > 0:
             vals = list(map(QC.validate, outcomes))
             max_qc = np.argmax(vals)
