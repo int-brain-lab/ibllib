@@ -33,3 +33,4 @@ psychofit
 slidingRP>=1.1.1  # steinmetz lab refractory period metrics
 pyqt5
 ibl-style
+ibl-photometry>=0.1.2
