@@ -761,10 +761,7 @@ class PhotometryQC(QC):
         return overall_outcome
 
     def load_data(self):
-        """Load the data required to compute the QC.
-        Subclasses may implement this for loading raw data.
-        """
-        self.loader = PhotometrySessionLoader(one=self.one, eid=self.eid)
+        self.loader = PhotometrySessionLoader(one=self.one, session_path=self.session_path)
         self.loader.load_photometry(pre=0, post=0)
 
 
