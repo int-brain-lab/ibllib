@@ -3,7 +3,7 @@ import logging
 import warnings
 import os
 
-__version__ = '3.4.2'
+__version__ = '3.4.3'
 warnings.filterwarnings('always', category=DeprecationWarning, module='ibllib')
 
 # if this becomes a full-blown library we should let the logging configuration to the discretion of the dev
