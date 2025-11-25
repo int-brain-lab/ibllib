@@ -588,21 +588,20 @@ def make_pipeline(session_path, **pkwargs):
             **kwargs, **mscope_kwargs, parents=[tasks['MesoscopePreprocess']])
 
     if 'neurophotometrics' in devices:
-        # note: devices['neurophotometrics'] is the acquisition_description
-        sync_mode = devices['neurophotometrics'].get('sync_mode', 'bpod')  # default to bpod for downward compatibility
+        sync_mode = devices['neurophotometrics']['sync_mode']
 
         # passive photometry
         task_protocols = acquisition_description['tasks']
         assert len(task_protocols) == 1, 'chained protocols are not yet supported for photometry extraction'
         protocol = task_protocols[0]
         if 'passive' in protocol:
-            assert sync_mode == 'daqami', 'passive protocol syncing only supported for DAQ based syncing'
             tasks['FibrePhotometryPassiveChoiceWorld'] = type(
                 'FibrePhotometryPassiveChoiceWorld', (ptasks.FibrePhotometryPassiveChoiceWorld,), {}
             )(
-                **kwargs,
+                **kwargs
             )
 
+        # syncing / extraction
         match sync_mode:
             case 'bpod':
                 # for synchronization with the BNC inputs of the neurophotometrics receiving the sync pulses
@@ -617,6 +616,12 @@ def make_pipeline(session_path, **pkwargs):
                     tasks['FibrePhotometryDAQSync'] = type('FibrePhotometryDAQSync', (ptasks.FibrePhotometryDAQSync,), {})(
                         **kwargs,
                     )
+
+        # QC
+        if 0: # deactivated for now
+            tasks['FibrePhotometryQC'] = type('FibrePhotometryQC', (ptasks.FibrePhotometryQC,), {})(
+                **kwargs, parents=[tasks['FibrePhotometryDAQSync']] # conditional parents?
+            )
 
     p = mtasks.Pipeline(session_path=session_path, **pkwargs)
     p.tasks = tasks

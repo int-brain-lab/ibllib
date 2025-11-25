@@ -7,7 +7,6 @@ import pickle
 
 import ibldsp.utils
 import ibllib.io.session_params
-import ibllib.io.session_params as sess_params
 from ibllib.pipes import base_tasks
 from iblutil.io import jsonable
 
@@ -23,10 +22,9 @@ import json
 from scipy.optimize import minimize
 
 from ibllib.qc.base import QC
-from one.alf.spec import QC as qc_outcome
-from iblphotometry.metrics import n_unique_samples, n_edges
 from iblphotometry import qc
 from one.alf.spec import QC as QC_status
+from iblphotometry.metrics import n_unique_samples, n_edges
 
 
 _logger = logging.getLogger('ibllib')
@@ -281,7 +279,7 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
         )
         return photometry_df
 
-    def _run(self, **kwargs) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    def _run(self, **kwargs) -> Tuple[Path, Path]:
         # 1) load photometry data
 
         # note: when loading daq based syncing, the SystemTimestamp column
@@ -498,6 +496,9 @@ class FibrePhotometryPassiveChoiceWorld(base_tasks.BehaviourTask):
         self.photometry_collection = kwargs.get('collection', 'raw_photometry_data')
         self.kwargs = kwargs
         self.load_timestamps = load_timestamps
+        assert self.session_params['neurophotometrics']['sync_mode'] == 'daqami', (
+            'passive protocol syncing only supported for DAQ based syncing'
+        )
 
     @property
     def signature(self):
@@ -517,7 +518,7 @@ class FibrePhotometryPassiveChoiceWorld(base_tasks.BehaviourTask):
         }
         return signature
 
-    def _run(self, **kwargs) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    def _run(self, **kwargs) -> Tuple[Path, Path, Path]:
         # load the fixtures - from the relative delays between trials, an "absolute" time vector is
         # created that is used for the synchronization
         fixtures_path = (
@@ -714,16 +715,14 @@ class FibrePhotometryPassiveChoiceWorld(base_tasks.BehaviourTask):
 
 
 class PhotometryQC(QC):
-    def __init__(self, session_path, **kwargs):
+    """Photometry QC objects, implements load_data() and run() methods. Updates the QC fields in alyx."""
+
+    def __init__(self, session_path: str | Path, **kwargs):
         super().__init__(session_path, **kwargs)
         self.eid = self.one.path2eid(session_path)
         self.session_path = session_path
 
     def run(self) -> QC_status:
-        """Run the QC tests and return the outcome.
-
-        :return: One of "CRITICAL", "FAIL", "WARNING" or "PASS"
-        """
         metrics = [n_unique_samples, n_edges]
         qc_result = qc.qc_signals(self.loader.photometry, metrics)
 
@@ -770,6 +769,8 @@ class PhotometryQC(QC):
 
 
 class FibrePhotometryQC(base_tasks.Task):
+    """Photometry QC task. Just simply wraps around the QC object"""
+
     def __init__(
         self,
         session_path: str | Path,
