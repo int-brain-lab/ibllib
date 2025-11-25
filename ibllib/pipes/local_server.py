@@ -16,8 +16,7 @@ import importlib.metadata
 from one.api import ONE
 from one.webclient import AlyxClient
 from one.remote.globus import get_lab_from_endpoint_id, get_local_endpoint_id
-from one.alf.spec import is_session_path
-from one.alf.path import session_path_parts
+from one.alf.path import ALFPath
 
 from ibllib import __version__ as ibllib_version
 from ibllib.pipes import tasks
@@ -81,12 +80,11 @@ def job_creator(root_path, one=None, dry=False, rerun=False):
      1) create the session on Alyx
      2) create the tasks to be run on Alyx
 
-    For legacy sessions the raw data are registered separately, instead of within a pipeline task.
-
     Parameters
     ----------
     root_path : str, pathlib.Path
-        Main path containing sessions or a session path.
+        Main path containing sessions or a session path. NB: If a session path is passed,
+        a raw_session.flag file needn't be present.
     one : one.api.OneAlyx
         An ONE instance for registering the session(s).
     dry : bool
@@ -105,13 +103,16 @@ def job_creator(root_path, one=None, dry=False, rerun=False):
     if not one:
         one = ONE(cache_rest=None)
     rc = IBLRegistrationClient(one=one)
-    flag_files = Path(root_path).glob('*/????-??-??/*/raw_session.flag')
-    flag_files = filter(lambda x: is_session_path(x.parent), flag_files)
+    if (root_path := ALFPath(root_path)).is_session_path():
+        flag_files = [root_path.joinpath('raw_session.flag')]
+    else:
+        flag_files = root_path.glob('*/????-??-??/*/raw_session.flag')
+        flag_files = filter(lambda f: f.parent.is_session_path(), flag_files)
     pipes = []
     all_datasets = []
     for flag_file in flag_files:
         session_path = flag_file.parent
-        if session_path_parts(session_path)[1] in ('test', 'test_subject'):
+        if session_path.subject in ('test', 'test_subject'):
             _logger.debug('skipping test session %s', session_path)
             continue
         _logger.info(f'creating session for {session_path}')

@@ -60,6 +60,24 @@ class TestLocalServer(unittest.TestCase):
         queue = local_server.task_queue(mode='small', lab='foolab', alyx=alyx)
         self.assertEqual([tasks[2]], queue)
 
+    def test_job_creator(self):
+        """Test ibllib.pipes.local_server.job_creator function.
+
+        This test simply checks that a specific session path can be passed and that a raw_session.flag
+        file is not necessary. For a full test of the job creator, see ci.tests.iblscripts.test_report_create_jobs
+        in iblscripts.
+        """
+        session_path = self.tmpdir / 'foo' / '2020-01-01' / '001'
+        assert not session_path.joinpath('raw_session.flag').exists()
+        with self.assertLogs('ibllib.pipes.local_server', level='INFO') as log:
+            local_server.job_creator(session_path, dry=True)
+        self.assertIn('creating session for', log.output[-1])
+        # Check skip when test subject
+        session_path = self.tmpdir / 'test' / '2020-01-01' / '001'
+        with self.assertLogs('ibllib.pipes.local_server', level='DEBUG') as log:
+            local_server.job_creator(session_path, dry=True)
+        self.assertIn('skipping test session', log.output[-1])
+
 
 class TestPipesMisc(unittest.TestCase):
     """"""
