@@ -15,7 +15,6 @@ from nptdms import TdmsFile
 from abc import abstractmethod
 import iblphotometry
 from iblphotometry import fpio
-from brainbox.io.one import PhotometrySessionLoader
 
 from one.api import ONE
 import json
@@ -717,14 +716,24 @@ class FibrePhotometryPassiveChoiceWorld(base_tasks.BehaviourTask):
 class PhotometryQC(QC):
     """Photometry QC objects, implements load_data() and run() methods. Updates the QC fields in alyx."""
 
-    def __init__(self, session_path: str | Path, **kwargs):
+    def __init__(
+        self,
+        session_path: str | Path,
+        task_protocol: str | None = None,
+        photometry_collection: str = 'photometry',
+        revision: str | None = None,
+        **kwargs,
+    ):
         super().__init__(session_path, **kwargs)
         self.eid = self.one.path2eid(session_path)
         self.session_path = session_path
+        self.task_protocol = task_protocol
+        self.photometry_collection = photometry_collection
+        self.revision = revision
 
-    def run(self) -> QC_status:
+    def run(self, dry: bool = False) -> QC_status:
         metrics = [n_unique_samples, n_edges]
-        qc_result = qc.qc_signals(self.loader.photometry, metrics)
+        qc_result = qc.qc_signals(self.raw_dfs, metrics)
 
         # TODO this will be defined elsewhere
         ranges = {
@@ -754,15 +763,36 @@ class PhotometryQC(QC):
         # set QC
         for i, row in qc_result.iterrows():
             brain_region, band, metric = row['brain_region'], row['band'], row['metric']
-            self.update(outcome=row['qc_outcome'], namespace=f'__photometry_{brain_region}_{band}_{metric}')
+            if not dry:
+                self.update(outcome=row['qc_outcome'], namespace=f'__photometry_{brain_region}_{band}_{metric}')
 
         overall_outcome = self.overall_outcome(qc_result['qc_outcome'].values)
-        self.update(outcome=overall_outcome, namespace='_photometry')
+        if not dry:
+            self.update(outcome=overall_outcome, namespace='_photometry')
         return overall_outcome
 
     def load_data(self):
-        self.loader = PhotometrySessionLoader(one=self.one, session_path=self.session_path)
-        self.loader.load_photometry(pre=0, post=0)
+        # self.loader = PhotometrySessionLoader(one=self.one, session_path=self.session_path)
+        # self.loader.load_photometry(pre=0, post=0)
+
+        raw_dfs = fpio.from_session_path(
+            self.session_path,
+            collection=self.photometry_collection,
+            revision=self.revision,
+        )
+        # get the task collection
+        session_params = ibllib.io.session_params.read_params(self.session_path)
+        # if not provided, use the first protocol
+        if self.task_protocol is None:
+            for task in session_params['tasks']:
+                self.task_protocol = next(k for k in task)
+                break
+        self.task_collection = ibllib.io.session_params.get_task_collection(session_params, self.task_protocol)
+
+        # FIXME this is probably not the proper way to do it
+        number = self.task_collection[-2:]
+        trials_df = pd.read_parquet(self.session_path / 'alf' / f'task_{number}' / '_ibl_trials.table.pqt')
+        self.raw_dfs = fpio.restrict_to_session(raw_dfs, trials_df, 0, 0)
 
 
 class FibrePhotometryQC(base_tasks.Task):
@@ -772,12 +802,14 @@ class FibrePhotometryQC(base_tasks.Task):
         self,
         session_path: str | Path,
         one: ONE,
+        dry: bool = False,
         **kwargs,
     ):
         super().__init__(session_path, one=one, **kwargs)
         self.session_path = session_path
         self.one = one
         self.qc = PhotometryQC(session_path, one=one)
+        self.dry = dry
 
     @property
     def signature(self):
@@ -792,4 +824,4 @@ class FibrePhotometryQC(base_tasks.Task):
 
     def _run(self):
         self.qc.load_data()
-        self.qc.run()
+        self.qc.run(dry=self.dry)
