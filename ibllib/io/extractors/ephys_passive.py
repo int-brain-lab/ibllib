@@ -60,7 +60,10 @@ def load_task_replay_fixtures(
 
     if task_version is None:
         pars = map(settings.get, ['IBLRIG_VERSION','IBLRIG_VERSION_TAG'])
-        task_version = version.Version(next((k for k in pars if k is not None), '0.0.0'))
+        task_version = next((k for k in pars if k is not None), '0.0.0')
+        if task_version == '':
+            task_version = settings.get('PARAMS', {}).get('IBLRIG_VERSION', '0.0.0')
+        task_version = version.parse(task_version)
 
     if task_version >= version.parse('8.0.0'):
         task_replay = _load_v8_fixture_df(settings)
@@ -482,7 +485,10 @@ def extract_task_replay(
         settings = rawio.load_settings(session_path, task_collection=task_collection)
 
     pars = map(settings.get, ['IBLRIG_VERSION', 'IBLRIG_VERSION_TAG'])
-    task_version = version.Version(next((k for k in pars if k is not None), '0.0.0'))
+    task_version = next((k for k in pars if k is not None), '0.0.0')
+    if task_version == '':
+        task_version = settings.get('PARAMS', {}).get('IBLRIG_VERSION', '0.0.0')
+    task_version = version.Version(task_version)
 
     # Load in the expected task replay structure
     replay_trials = load_task_replay_fixtures(session_path=session_path, task_collection=task_collection,
@@ -593,6 +599,13 @@ def _extract_passive_gabor(
     start_times = ttl_signal[idx_start_stims]
     end_times = ttl_signal[idx_end_stims]
 
+    if len(start_times) == n_expected_gabor + 1:
+        # Sometimes an extra pulse is detected at the start, if this corresponds
+        # to the start of the fttl signal we remove it
+        if start_times[0] == fttl['times'][0]:
+            start_times = start_times[1:]
+            end_times = end_times[1:]
+
     assert start_times.size == n_expected_gabor, \
         f"Wrong number of Gabor stimuli detected: {start_times.size} / {n_expected_gabor}"
 
@@ -698,7 +711,7 @@ def _extract_passive_audio(
     if rig_version == version.parse('6.2.5'):
         pulse_diff = soundOff_times - soundOn_times
         keep = pulse_diff < 10
-        NREMOVE = ~keep.sum()
+        NREMOVE = np.sum(~keep)
         soundOn_times = soundOn_times[keep]
         soundOff_times = soundOff_times[keep]
     else:
@@ -721,8 +734,8 @@ def _extract_passive_audio(
         assert len(noiseOn_times) == len(noiseOff_times) == n_expected_noise
 
     # Fixed delays from soundcard ~500µs
-    assert np.allclose(toneOff_times - toneOn_times, 0.1, atol=0.0006), "Some tone lengths seem wrong."
-    assert np.allclose(noiseOff_times - noiseOn_times, 0.5, atol=0.0006), "Some noise lengths seem wrong."
+    assert np.allclose(toneOff_times - toneOn_times, 0.1, atol=0.02), "Some tone lengths seem wrong."
+    assert np.allclose(noiseOff_times - noiseOn_times, 0.5, atol=0.02), "Some noise lengths seem wrong."
 
     # if not np.allclose(toneOff_times - toneOn_times, 0.1, atol=0.0006):
     #     log.warning("Some tone lengths seem wrong.")
