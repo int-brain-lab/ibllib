@@ -245,7 +245,8 @@ class PassiveTaskNidq(base_tasks.BehaviourTask):
                             (f'_{self.sync_namespace}_sync.polarities.*', self.sync_collection, True),
                             (f'_{self.sync_namespace}_sync.times.*', self.sync_collection, True),
                             ('*.wiring.json', self.sync_collection, False),
-                            ('*.meta', self.sync_collection, False)],
+                            ('*.meta', self.sync_collection, False),
+                            ('*experiment.description.yaml', '', False)],
             'output_files': [('_ibl_passiveGabor.table.csv', self.output_collection, False),
                              ('_ibl_passivePeriods.intervalsTable.csv', self.output_collection, True),
                              ('_ibl_passiveRFM.times.npy', self.output_collection, True),
@@ -259,7 +260,7 @@ class PassiveTaskNidq(base_tasks.BehaviourTask):
             sync_collection=self.sync_collection, task_collection=self.collection, save=True,
             path_out=self.session_path.joinpath(self.output_collection), protocol_number=self.protocol_number)
 
-        if len(paths) != self.output_files:
+        if len(paths) != len(self.output_files):
             _logger.warning('Number of output files does not match the signature definition')
             self.status = -1
 
@@ -278,7 +279,8 @@ class PassiveTaskTimeline(base_tasks.BehaviourTask, base_tasks.MesoscopeTask):
                             ('_iblrig_RFMapStim.raw*', self.collection, True),
                             (f'_{self.sync_namespace}_sync.channels.*', self.sync_collection, False),
                             (f'_{self.sync_namespace}_sync.polarities.*', self.sync_collection, False),
-                            (f'_{self.sync_namespace}_sync.times.*', self.sync_collection, False)],
+                            (f'_{self.sync_namespace}_sync.times.*', self.sync_collection, False),
+                            ('*experiment.description.yaml', '', False)],
             'output_files': [('_ibl_passiveGabor.table.csv', self.output_collection, False),
                              ('_ibl_passivePeriods.intervalsTable.csv', self.output_collection, True),
                              ('_ibl_passiveRFM.times.npy', self.output_collection, True),
@@ -302,7 +304,7 @@ class PassiveTaskTimeline(base_tasks.BehaviourTask, base_tasks.MesoscopeTask):
             path_out=self.session_path.joinpath(self.output_collection),
             protocol_number=self.protocol_number, sync=sync, sync_map=chmap)
 
-        if len(paths) != self.output_files:
+        if len(paths) != len(self.output_files):
             _logger.warning('Number of output files does not match the signature definition')
             self.status = -1
 
