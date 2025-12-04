@@ -238,15 +238,31 @@ class PassiveTaskNidq(base_tasks.BehaviourTask):
 
     @property
     def signature(self):
+        I = ExpectedDataset.input  # noqa
+        ns = self.sync_namespace
+        # Neuropixels 3A sync data are kept in individual probe collections
+        v3A = (
+            I(f'_{ns}_sync.channels.probe??.npy', f'{self.sync_collection}/probe??', True, unique=False) &
+            I(f'_{ns}_sync.polarities.probe??.npy', f'{self.sync_collection}/probe??', True, unique=False) &
+            I(f'_{ns}_sync.times.probe??.npy', f'{self.sync_collection}/probe??', True, unique=False) &
+            I(f'_{ns}_*.ap.meta', f'{self.sync_collection}/probe??', True, unique=False) &
+            I(f'_{ns}_*wiring.json', f'{self.sync_collection}/probe??', False, unique=False)
+        )
+        # Neuropixels 3B sync data are kept in probe-independent datasets
+        v3B = (
+            I(f'_{ns}_sync.channels.npy', self.sync_collection, True) &
+            I(f'_{ns}_sync.polarities.npy', self.sync_collection, True) &
+            I(f'_{ns}_sync.times.npy', self.sync_collection, True) &
+            I(f'_{ns}_*.meta', self.sync_collection, True) &
+            I(f'_{ns}_*wiring.json', self.sync_collection, False)
+        )
+
         signature = {
             'input_files': [('_iblrig_taskSettings.raw*', self.collection, True),
                             ('_iblrig_RFMapStim.raw*', self.collection, True),
-                            (f'_{self.sync_namespace}_sync.channels.*', self.sync_collection, True),
-                            (f'_{self.sync_namespace}_sync.polarities.*', self.sync_collection, True),
-                            (f'_{self.sync_namespace}_sync.times.*', self.sync_collection, True),
-                            ('*.wiring.json', self.sync_collection, False),
-                            ('*.meta', self.sync_collection, False),
-                            ('*experiment.description.yaml', '', False)],
+                            ('*experiment.description.yaml', '', False),
+                            v3B | (~v3B & v3A)  # either 3B datasets OR 3A datasets must be present
+                            ],
             'output_files': [('_ibl_passiveGabor.table.csv', self.output_collection, False),
                              ('_ibl_passivePeriods.intervalsTable.csv', self.output_collection, True),
                              ('_ibl_passiveRFM.times.npy', self.output_collection, True),
@@ -256,8 +272,9 @@ class PassiveTaskNidq(base_tasks.BehaviourTask):
 
     def _run(self, **kwargs):
         """returns a list of pathlib.Paths. """
+        settings = kwargs.get('settings', None)
         data, paths = PassiveChoiceWorld(self.session_path).extract(
-            sync_collection=self.sync_collection, task_collection=self.collection, save=True,
+            sync_collection=self.sync_collection, task_collection=self.collection, settings=settings, save=True,
             path_out=self.session_path.joinpath(self.output_collection), protocol_number=self.protocol_number)
 
         if len(paths) != len(self.output_files):
@@ -277,9 +294,9 @@ class PassiveTaskTimeline(base_tasks.BehaviourTask, base_tasks.MesoscopeTask):
         signature = {
             'input_files': [('_iblrig_taskSettings.raw*', self.collection, True),
                             ('_iblrig_RFMapStim.raw*', self.collection, True),
-                            (f'_{self.sync_namespace}_sync.channels.*', self.sync_collection, False),
-                            (f'_{self.sync_namespace}_sync.polarities.*', self.sync_collection, False),
-                            (f'_{self.sync_namespace}_sync.times.*', self.sync_collection, False),
+                            (f'_{self.sync_namespace}_DAQdata.raw.npy', self.sync_collection, True),
+                            (f'_{self.sync_namespace}_DAQdata.timestamps.npy', self.sync_collection, True),
+                            (f'_{self.sync_namespace}_DAQdata.meta.json', self.sync_collection, True),
                             ('*experiment.description.yaml', '', False)],
             'output_files': [('_ibl_passiveGabor.table.csv', self.output_collection, False),
                              ('_ibl_passivePeriods.intervalsTable.csv', self.output_collection, True),

@@ -32,7 +32,9 @@ PATH_FIXTURES_V8 = Path(ephys_fpga.__file__).parent / 'ephys_sessions' / 'passiv
 def load_task_replay_fixtures(
     session_path: Path,
     task_collection: str = 'raw_passive_data',
-    settings: dict | None = None
+    settings: dict | None = None,
+    task_version: version.Version | None = None,
+    adjust: bool = True
 ) -> pd.DataFrame:
     """
     Load the expected task replay sequence for a passive session.
@@ -45,6 +47,8 @@ def load_task_replay_fixtures(
         The collection containing task data
     settings: dict, optional
         A dictionary containing the session settings.
+    task_version: str, optional
+        The iblrig version used for the session.
 
     Returns
     -------
@@ -54,7 +58,9 @@ def load_task_replay_fixtures(
     if settings is None:
         settings = rawio.load_settings(session_path, task_collection=task_collection)
 
-    task_version = version.parse(settings.get("IBLRIG_VERSION"))
+    if task_version is None:
+        pars = map(settings.get, ['IBLRIG_VERSION','IBLRIG_VERSION_TAG'])
+        task_version = version.Version(next((k for k in pars if k is not None), '0.0.0'))
 
     if task_version >= version.parse('8.0.0'):
         task_replay = _load_v8_fixture_df(settings)
@@ -63,7 +69,7 @@ def load_task_replay_fixtures(
 
     # For all versions before 8.29.0, there was a bug where the first gabor stimulus was blank and the
     # following gabor stimuli showed the parameters from the previous gabor trial.
-    if task_version <= version.parse('8.29.0'):
+    if task_version <= version.parse('8.29.0') and adjust:
         # Shift the parameters of all gabor stimuli by one trial
         idx = task_replay.index[task_replay['stim_type'] == 'G'].values
         task_replay.iloc[idx[1:], :] = task_replay.iloc[idx[:-1], :]
@@ -290,7 +296,7 @@ def _get_spacer_times(ttl_signal: np.ndarray, tmin: float, tmax: float, thresh: 
 
     spacer_info = _load_spacer_info()
 
-    spacer_model = spacer_info['jitter'] + np.diff(spacer_info['template'])
+    spacer_model = spacer_info['jitter'] + np.diff(spacer_info['template'])[2:-2]
     # spacer_model = jitter + np.diff(spacer_template)[2:-2]
     # diff ttl signal to compare to spacer_model
     dttl = np.diff(ttl_signal)
@@ -475,11 +481,12 @@ def extract_task_replay(
     if settings is None:
         settings = rawio.load_settings(session_path, task_collection=task_collection)
 
-    task_version = version.parse(settings['IBLRIG_VERSION'])
+    pars = map(settings.get, ['IBLRIG_VERSION', 'IBLRIG_VERSION_TAG'])
+    task_version = version.Version(next((k for k in pars if k is not None), '0.0.0'))
 
     # Load in the expected task replay structure
     replay_trials = load_task_replay_fixtures(session_path=session_path, task_collection=task_collection,
-                                              settings=settings)
+                                              settings=settings, task_version=task_version)
 
     # Extract the gabor events, uses the ttls on the frame2ttl channel
     fttl = ephys_fpga.get_sync_fronts(sync, sync_map["frame2ttl"], tmin=treplay[0], tmax=treplay[1])
@@ -590,10 +597,9 @@ def _extract_passive_gabor(
         f"Wrong number of Gabor stimuli detected: {start_times.size} / {n_expected_gabor}"
 
     # Check length of presentation of stim is within 150ms of expected
+    assert np.allclose(end_times - start_times, 0.3, atol=0.15), "Some Gabor presentation lengths seem wrong."
     # if not np.allclose(end_times - start_times, 0.3, atol=0.15):
     #     log.warning("Some Gabor presentation lengths seem wrong.")
-
-    assert np.allclose(end_times - start_times, 0.3, atol=0.15), "Some Gabor presentation lengths seem wrong."
 
     # Build our gabor dataframe that also contains the stimulus properties
     gabor_df = (
@@ -638,9 +644,11 @@ def _extract_passive_valve(
     assert len(bpod["times"]) == n_expected_valve * 2, "Wrong number of valve FRONTS detected"
 
     # Check all values are within bpod tolerance of 100µs
-    assert np.allclose(
-        valveOff_times - valveOn_times, valveOff_times[1] - valveOn_times[1], atol=0.0001
-    ), "Some valve outputs are longer or shorter than others"
+    assert np.allclose(valveOff_times - valveOn_times, valveOff_times[1] - valveOn_times[1], atol=0.0001), \
+        "Some valve outputs are longer or shorter than others"
+
+    # if not np.allclose(valveOff_times - valveOn_times, valveOff_times[1] - valveOn_times[1], atol=0.0001):
+    #     log.warning("Some valve outputs are longer or shorter than others")
 
     valve_df = (
         replay_trials.loc[replay_trials["stim_type"] == "V", ["stim_type"]]
@@ -713,14 +721,14 @@ def _extract_passive_audio(
         assert len(noiseOn_times) == len(noiseOff_times) == n_expected_noise
 
     # Fixed delays from soundcard ~500µs
-    # TODO do we want a warning or something?
     assert np.allclose(toneOff_times - toneOn_times, 0.1, atol=0.0006), "Some tone lengths seem wrong."
     assert np.allclose(noiseOff_times - noiseOn_times, 0.5, atol=0.0006), "Some noise lengths seem wrong."
 
-    # if not np.allclose(toneOff_times - toneOn_times, 0.3, atol=0.15):
+    # if not np.allclose(toneOff_times - toneOn_times, 0.1, atol=0.0006):
     #     log.warning("Some tone lengths seem wrong.")
     # if not np.allclose(noiseOff_times - noiseOn_times, 0.5, atol=0.0006):
     #     log.warning("Some noise lengths seem wrong.")
+    #
 
     tone_df = (
         replay_trials.loc[replay_trials["stim_type"] == "T", ["stim_type"]]
@@ -762,6 +770,7 @@ class PassiveChoiceWorld(BaseExtractor):
             task_collection: str = 'raw_passive_data',
             sync: dict | None = None,
             sync_map: dict | None = None,
+            settings: dict | None = None,
             plot: bool = False,
             **kwargs
     ) -> tuple:
@@ -771,7 +780,8 @@ class PassiveChoiceWorld(BaseExtractor):
             sync, sync_map = ephys_fpga.get_sync_and_chn_map(self.session_path, sync_collection)
 
         # Load in the task settings
-        settings = rawio.load_settings(self.session_path, task_collection=task_collection)
+        if settings is None:
+            settings = rawio.load_settings(self.session_path, task_collection=task_collection)
 
         # Get the start and end times of this protocol.
         if (protocol_number := kwargs.get('protocol_number')) is not None:  # look for spacer
