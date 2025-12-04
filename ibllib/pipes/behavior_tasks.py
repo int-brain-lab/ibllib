@@ -302,7 +302,8 @@ class PassiveTaskTimeline(base_tasks.BehaviourTask, base_tasks.MesoscopeTask):
             path_out=self.session_path.joinpath(self.output_collection),
             protocol_number=self.protocol_number, sync=sync, sync_map=chmap)
 
-        if any(x is None for x in paths):
+        if len(paths) != self.output_files:
+            _logger.warning('Number of output files does not match the signature definition')
             self.status = -1
 
         return paths
