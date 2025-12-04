@@ -512,8 +512,9 @@ def extract_task_replay(
     # Sort by start time and check if it matches the replay trials
     full_df = full_df.sort_values(by='start').reset_index(drop=True)
 
-    if not np.array_equal(full_df['stim_type'].values, replay_trials['stim_type'].values):
-        log.warning("The extracted sequence does not match the expected task replay sequence.")
+    if task_version != version.parse('6.2.5'):
+        assert np.array_equal(full_df['stim_type'].values, replay_trials['stim_type'].values), \
+            "The extracted sequence does not match the expected task replay sequence."
 
     # There was a bug in iblrig version 8.0 to 8.27.3, where the tone was played instead of the noise
     # See commit https://github.com/int-brain-lab/iblrig/commit/54d803b73de89173debd3003a55e0e4a3d8965f7
