@@ -597,15 +597,15 @@ def _extract_passive_gabor(
     thresh = intervals[0]
 
     # Find the onset of the pulses.
-    idx_start_stims = np.where((dttl < thresh) & (dttl > 0.1))[0]
+    idx_start_stims = np.where((dttl < thresh - 0.05) & (dttl > 0.1))[0]
 
     # Check if any pulse has been missed
-    if idx_start_stims.size < n_expected_gabor and np.any(np.diff(idx_start_stims) > 2):
-        log.warning("Looks like one or more pulses were not detected, trying to extrapolate...")
-        missing_where = np.where(np.diff(idx_start_stims) > 2)[0]
-        insert_where = missing_where + 1
-        missing_value = idx_start_stims[missing_where] + 2
-        idx_start_stims = np.insert(idx_start_stims, insert_where, missing_value)
+    # if idx_start_stims.size < n_expected_gabor and np.any(np.diff(idx_start_stims) > 2):
+    #     log.warning("Looks like one or more pulses were not detected, trying to extrapolate...")
+    #     missing_where = np.where(np.diff(idx_start_stims) > 2)[0]
+    #     insert_where = missing_where + 1
+    #     missing_value = idx_start_stims[missing_where] + 2
+    #     idx_start_stims = np.insert(idx_start_stims, insert_where, missing_value)
 
     # Get the offset times
     idx_end_stims = idx_start_stims + 1
