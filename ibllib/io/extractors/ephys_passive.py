@@ -498,9 +498,19 @@ def extract_task_replay(
                                               settings=settings, task_version=task_version)
 
     # Extract the gabor events, uses the ttls on the frame2ttl channel
-    fttl = ephys_fpga.get_sync_fronts(sync, sync_map["frame2ttl"], tmin=treplay[0], tmax=treplay[1])
-    fttl = ephys_fpga._clean_frame2ttl(fttl)
-    gabor_df = _extract_passive_gabor(fttl, replay_trials)
+    try:
+        fttl = ephys_fpga.get_sync_fronts(sync, sync_map["frame2ttl"], tmin=treplay[0], tmax=treplay[1])
+        fttl = ephys_fpga._clean_frame2ttl(fttl)
+        gabor_df = _extract_passive_gabor(fttl, replay_trials)
+    except AssertionError:
+        # There are a few sessions <8.29.0 where the first gabor was successfully shown. In these cases
+        # we rextract without the adjustment of the task replay fixture to remove the first gabor
+        log.warning('Attempting to extact gabor stimuli without adjusting for first blank gabor...')
+        replay_trials = load_task_replay_fixtures(session_path=session_path, task_collection=task_collection,
+                                                  settings=settings, task_version=task_version, adjust=False)
+        fttl = ephys_fpga.get_sync_fronts(sync, sync_map["frame2ttl"], tmin=treplay[0], tmax=treplay[1])
+        fttl = ephys_fpga._clean_frame2ttl(fttl)
+        gabor_df = _extract_passive_gabor(fttl, replay_trials)
 
     # Extract the valve events, uses the ttls on the bpod channel
     bpod = ephys_fpga.get_sync_fronts(sync, sync_map["bpod"], tmin=treplay[0], tmax=treplay[1])
@@ -715,14 +725,11 @@ def _extract_passive_audio(
     if rig_version == version.parse('6.2.5'):
         pulse_diff = soundOff_times - soundOn_times
         keep = pulse_diff < 10
-        NREMOVE = np.sum(~keep)
         soundOn_times = soundOn_times[keep]
         soundOff_times = soundOff_times[keep]
     else:
-        NREMOVE = 0
-
-    assert len(soundOn_times) == n_expected_audio - NREMOVE, "Wrong number of sound ONSETS"
-    assert len(soundOff_times) == n_expected_audio - NREMOVE, "Wrong number of sound OFFSETS"
+        assert len(soundOn_times) == n_expected_audio, "Wrong number of sound ONSETS"
+        assert len(soundOff_times) == n_expected_audio, "Wrong number of sound OFFSETS"
 
     pulse_diff = soundOff_times - soundOn_times
     # Tone is ~100ms so check if diff < 0.3
@@ -733,13 +740,19 @@ def _extract_passive_audio(
     toneOn_times, toneOff_times = soundOn_times[tone_mask], soundOff_times[tone_mask]
     noiseOn_times, noiseOff_times = soundOn_times[noise_mask], soundOff_times[noise_mask]
 
-    if rig_version != version.parse('6.2.5'):
-        assert len(toneOn_times) == len(toneOff_times) == n_expected_tone
-        assert len(noiseOn_times) == len(noiseOff_times) == n_expected_noise
-
     # Fixed delays from soundcard ~500µs
-    assert np.allclose(toneOff_times - toneOn_times, 0.1, atol=0.02), "Some tone lengths seem wrong."
-    assert np.allclose(noiseOff_times - noiseOn_times, 0.5, atol=0.02), "Some noise lengths seem wrong."
+    assert np.allclose(toneOff_times - toneOn_times, 0.1, atol=0.02, equal_nan=True), "Some tone lengths seem wrong."
+    assert np.allclose(noiseOff_times - noiseOn_times, 0.5, atol=0.02, equal_nan=True), "Some noise lengths seem wrong."
+
+    if rig_version == version.parse('6.2.5'):
+        # We pad the values with NaNs to match expected lengths
+        toneOn_times = np.r_[toneOn_times, np.full((n_expected_tone- len(toneOn_times)), np.nan)]
+        toneOff_times = np.r_[toneOff_times, np.full((n_expected_tone - len(toneOff_times)), np.nan)]
+        noiseOn_times = np.r_[noiseOn_times, np.full((n_expected_tone - len(noiseOn_times)), np.nan)]
+        noiseOff_times = np.r_[noiseOff_times, np.full((n_expected_tone - len(noiseOff_times)), np.nan)]
+
+    assert len(toneOn_times) == len(toneOff_times) == n_expected_tone, "Wrong number of tones detected"
+    assert len(noiseOn_times) == len(noiseOff_times) == n_expected_noise, "Wrong number of noise detected"
 
     # if not np.allclose(toneOff_times - toneOn_times, 0.1, atol=0.0006):
     #     log.warning("Some tone lengths seem wrong.")
