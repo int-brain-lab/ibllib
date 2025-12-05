@@ -100,7 +100,8 @@ def _load_v8_fixture_df(settings: dict) -> pd.DataFrame:
         A dataframe containing the expected task replay sequence.
     """
     all_trials = pd.read_parquet(PATH_FIXTURES_V8)
-    session_id = settings['SESSION_TEMPLATE_ID']
+    pars = map(settings.get, ['SESSION_TEMPLATE_ID','PREGENERATED_SESSION_NUM'])
+    session_id = next((k for k in pars if k is not None), None)
     replay_trials = all_trials[all_trials['session_id'] == session_id].copy()
 
     # In some cases the task replay is repeated, in these cases repeat the replay trials table as needed
