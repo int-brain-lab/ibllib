@@ -65,7 +65,9 @@ def load_task_replay_fixtures(
             task_version = settings.get('PARAMS', {}).get('IBLRIG_VERSION', '0.0.0')
         task_version = version.parse(task_version)
 
-    if task_version >= version.parse('8.0.0'):
+    task_protocol = settings.get('PYBPOD_PROTOCOL', '')
+
+    if task_version >= version.parse('8.0.0') or 'passiveChoiceWorldIndependent' in task_protocol:
         task_replay = _load_v8_fixture_df(settings)
     else:
         task_replay = _load_v7_fixture_df(settings)
