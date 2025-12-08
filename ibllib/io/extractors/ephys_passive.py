@@ -278,7 +278,7 @@ def extract_passive_periods(
     return passive_periods
 
 
-def _get_spacer_times(ttl_signal: np.ndarray, tmin: float, tmax: float, thresh: float = 3.0):
+def _get_spacer_times(ttl_signal: np.ndarray, tmin: float, tmax: float, thresh: float = 3.2):
     """
     Find the times of spacer onset/offset in the ttl_signal
 
@@ -518,6 +518,7 @@ def extract_task_replay(
 
     # Extract the audio events, uses the ttls on the audio channel
     audio = ephys_fpga.get_sync_fronts(sync, sync_map["audio"], tmin=treplay[0], tmax=treplay[1])
+    audio = ephys_fpga._clean_audio(audio)
     tone_df, noise_df = _extract_passive_audio(audio, replay_trials, task_version)
 
     # Build the full task replay dataframe and order by start time
@@ -666,8 +667,10 @@ def _extract_passive_valve(
     valveOn_times = bpod["times"][bpod["polarities"] > 0]
     valveOff_times = bpod["times"][bpod["polarities"] < 0]
 
-    assert len(valveOn_times) == n_expected_valve, "Wrong number of valve ONSET times"
-    assert len(valveOff_times) == n_expected_valve, "Wrong number of valve OFFSET times"
+    assert len(valveOn_times) == n_expected_valve, (f"Wrong number of valve ONSET times: "
+                                                    f"{len(valveOn_times)} / {n_expected_valve}")
+    assert len(valveOff_times) == n_expected_valve, (f"Wrong number of valve OFFSET times: "
+                                                     f"{len(valveOn_times)} / {n_expected_valve}")
     assert len(bpod["times"]) == n_expected_valve * 2, "Wrong number of valve FRONTS detected"
 
     # Check all values are within bpod tolerance of 100µs
@@ -728,8 +731,10 @@ def _extract_passive_audio(
         soundOn_times = soundOn_times[keep]
         soundOff_times = soundOff_times[keep]
     else:
-        assert len(soundOn_times) == n_expected_audio, "Wrong number of sound ONSETS"
-        assert len(soundOff_times) == n_expected_audio, "Wrong number of sound OFFSETS"
+        assert len(soundOn_times) == n_expected_audio, (f"Wrong number of sound ONSETS: "
+                                                        f"{len(soundOn_times)} / {n_expected_audio}")
+        assert len(soundOff_times) == n_expected_audio, (f"Wrong number of sound OFFSETS: "
+                                                         f"{len(soundOn_times)} / {n_expected_audio}")
 
     pulse_diff = soundOff_times - soundOn_times
     # Tone is ~100ms so check if diff < 0.3
