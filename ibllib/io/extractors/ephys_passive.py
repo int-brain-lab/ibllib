@@ -531,7 +531,7 @@ def extract_task_replay(
     # Sort by start time and check if it matches the replay trials
     full_df = full_df.sort_values(by='start').reset_index(drop=True)
 
-    if task_version != version.parse('6.2.5'):
+    if version.parse('6.2.5') <= task_version < version.parse('6.5.3'):
         assert np.array_equal(full_df['stim_type'].values, replay_trials['stim_type'].values), \
             "The extracted sequence does not match the expected task replay sequence."
 
@@ -752,7 +752,7 @@ def _extract_passive_audio(
     assert np.allclose(toneOff_times - toneOn_times, 0.1, atol=0.02, equal_nan=True), "Some tone lengths seem wrong."
     assert np.allclose(noiseOff_times - noiseOn_times, 0.5, atol=0.02, equal_nan=True), "Some noise lengths seem wrong."
 
-    if rig_version == version.parse('6.2.5'):
+    if version.parse('6.2.5') <= rig_version < version.parse('6.5.3'):
         # We pad the values with NaNs to match expected lengths
         toneOn_times = np.r_[toneOn_times, np.full((n_expected_tone- len(toneOn_times)), np.nan)]
         toneOff_times = np.r_[toneOff_times, np.full((n_expected_tone - len(toneOff_times)), np.nan)]
@@ -843,6 +843,7 @@ class PassiveChoiceWorld(BaseExtractor):
             log.error(f"Failed to extract RFMapping datasets: {e}")
             passiveRFM_times = None
 
+        # TODO split this up so that if one fails the other can still be extracted
         skip_replay = settings.get('SKIP_EVENT_REPLAY', False)
         if not skip_replay:
             try:
