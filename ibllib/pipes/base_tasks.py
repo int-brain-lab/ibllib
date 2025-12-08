@@ -277,8 +277,15 @@ class BehaviourTask(DynamicTask):
             raise ValueError('No trials data and/or extractor found')
         return trials_data
 
+    def get_signatures(self, **kwargs):
+        """ explicitly adding the experiment description file to the input files for all behavior tasks
+        This is pretty hacky but avoids having to modify all the child classes"""
+        super().get_signatures(**kwargs)
+        self.input_files.append(('_ibl_experiment.description.pqt', self.collection, True))
+        return super().get_signatures(**kwargs)
 
-class VideoTask(DynamicTask):
+
+class VideoTask(BehaviourTask):
 
     def __init__(self, session_path, cameras, **kwargs):
         super().__init__(session_path, cameras=cameras, **kwargs)
