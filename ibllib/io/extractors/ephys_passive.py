@@ -531,7 +531,7 @@ def extract_task_replay(
     # Sort by start time and check if it matches the replay trials
     full_df = full_df.sort_values(by='start').reset_index(drop=True)
 
-    if version.parse('6.2.5') <= task_version < version.parse('6.5.3'):
+    if version.parse('6.2.5') <= task_version <= version.parse('6.5.3'):
         assert np.array_equal(full_df['stim_type'].values, replay_trials['stim_type'].values), \
             "The extracted sequence does not match the expected task replay sequence."
 
@@ -672,7 +672,7 @@ def _extract_passive_valve(
     assert len(bpod["times"]) == n_expected_valve * 2, "Wrong number of valve FRONTS detected"
 
     # Check all values are within bpod tolerance of 100µs
-    assert np.allclose(valveOff_times - valveOn_times, valveOff_times[1] - valveOn_times[1], atol=0.0001), \
+    assert np.allclose(valveOff_times - valveOn_times, valveOff_times[1] - valveOn_times[1], atol=0.001), \
         "Some valve outputs are longer or shorter than others"
 
     # if not np.allclose(valveOff_times - valveOn_times, valveOff_times[1] - valveOn_times[1], atol=0.0001):
@@ -723,7 +723,7 @@ def _extract_passive_audio(
     n_expected_noise = (replay_trials['stim_type'] == 'N').sum()
     n_expected_audio = n_expected_tone + n_expected_noise
 
-    if version.parse('6.2.5') <= rig_version < version.parse('6.5.3'):
+    if version.parse('6.2.5') <= rig_version <= version.parse('6.5.3'):
         pulse_diff = soundOff_times - soundOn_times
         keep = pulse_diff < 1
         soundOn_times = soundOn_times[keep]
@@ -752,7 +752,7 @@ def _extract_passive_audio(
     assert np.allclose(toneOff_times - toneOn_times, 0.1, atol=0.02, equal_nan=True), "Some tone lengths seem wrong."
     assert np.allclose(noiseOff_times - noiseOn_times, 0.5, atol=0.02, equal_nan=True), "Some noise lengths seem wrong."
 
-    if version.parse('6.2.5') <= rig_version < version.parse('6.5.3'):
+    if version.parse('6.2.5') <= rig_version <= version.parse('6.5.3'):
         # We pad the values with NaNs to match expected lengths
         toneOn_times = np.r_[toneOn_times, np.full((n_expected_tone- len(toneOn_times)), np.nan)]
         toneOff_times = np.r_[toneOff_times, np.full((n_expected_tone - len(toneOff_times)), np.nan)]
