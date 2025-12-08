@@ -82,6 +82,12 @@ def load_task_replay_fixtures(
         idx = task_replay.index[task_replay['stim_type'] == 'G'][0]
         task_replay = task_replay.drop(idx)
 
+    # There was a bug in iblrig version 8.0 to 8.27.3, where the tone was played instead of the noise
+    # See commit https://github.com/int-brain-lab/iblrig/commit/54d803b73de89173debd3003a55e0e4a3d8965f7
+    if version.parse('8.0.0') <= task_version <= version.parse('8.27.3'):
+        idx = task_replay.index[task_replay['stim_type'] == 'N'].values
+        task_replay.loc[idx, 'stim_type'] = 'T'
+
     return task_replay
 
 
@@ -518,7 +524,6 @@ def extract_task_replay(
 
     # Extract the audio events, uses the ttls on the audio channel
     audio = ephys_fpga.get_sync_fronts(sync, sync_map["audio"], tmin=treplay[0], tmax=treplay[1])
-    audio = ephys_fpga._clean_audio(audio)
     tone_df, noise_df = _extract_passive_audio(audio, replay_trials, task_version)
 
     # Build the full task replay dataframe and order by start time
@@ -529,13 +534,6 @@ def extract_task_replay(
     if task_version != version.parse('6.2.5'):
         assert np.array_equal(full_df['stim_type'].values, replay_trials['stim_type'].values), \
             "The extracted sequence does not match the expected task replay sequence."
-
-    # There was a bug in iblrig version 8.0 to 8.27.3, where the tone was played instead of the noise
-    # See commit https://github.com/int-brain-lab/iblrig/commit/54d803b73de89173debd3003a55e0e4a3d8965f7
-    if version.parse('8.0.0') <= task_version <= version.parse('8.27.3'):
-        tone_df = pd.concat([tone_df, noise_df])
-        tone_df = tone_df.sort_values(by='start').reset_index(drop=True)
-        noise_df = pd.DataFrame(columns=['start', 'stop', 'stim_type'])
 
     max_len = max(len(tone_df), len(valve_df), len(noise_df))
 
@@ -725,11 +723,16 @@ def _extract_passive_audio(
     n_expected_noise = (replay_trials['stim_type'] == 'N').sum()
     n_expected_audio = n_expected_tone + n_expected_noise
 
-    if rig_version == version.parse('6.2.5'):
+    if version.parse('6.2.5') <= rig_version < version.parse('6.5.3'):
         pulse_diff = soundOff_times - soundOn_times
-        keep = pulse_diff < 10
+        keep = pulse_diff < 1
         soundOn_times = soundOn_times[keep]
         soundOff_times = soundOff_times[keep]
+        log.warning('Detected 6.2.5 <= iblrig version <= 6.5.3, removing extra audio pulses longer than 1s and relaxing checks')
+        if not len(soundOn_times) == n_expected_audio:
+            log.warning(f"Wrong number of sound ONSETS: {len(soundOn_times)} / {n_expected_audio}")
+        if not len(soundOff_times) == n_expected_audio:
+            log.warning(f"Wrong number of sound OFFSETS: {len(soundOn_times)} / {n_expected_audio}")
     else:
         assert len(soundOn_times) == n_expected_audio, (f"Wrong number of sound ONSETS: "
                                                         f"{len(soundOn_times)} / {n_expected_audio}")
