@@ -59,7 +59,7 @@ def load_task_replay_fixtures(
         settings = rawio.load_settings(session_path, task_collection=task_collection)
 
     if task_version is None:
-        pars = map(settings.get, ['IBLRIG_VERSION','IBLRIG_VERSION_TAG'])
+        pars = map(settings.get, ['IBLRIG_VERSION', 'IBLRIG_VERSION_TAG'])
         task_version = next((k for k in pars if k is not None), '0.0.0')
         if task_version == '':
             task_version = settings.get('PARAMS', {}).get('IBLRIG_VERSION', '0.0.0')
@@ -106,7 +106,7 @@ def _load_v8_fixture_df(settings: dict) -> pd.DataFrame:
         A dataframe containing the expected task replay sequence.
     """
     all_trials = pd.read_parquet(PATH_FIXTURES_V8)
-    pars = map(settings.get, ['SESSION_TEMPLATE_ID','PREGENERATED_SESSION_NUM'])
+    pars = map(settings.get, ['SESSION_TEMPLATE_ID', 'PREGENERATED_SESSION_NUM'])
     session_id = next((k for k in pars if k is not None), None)
     replay_trials = all_trials[all_trials['session_id'] == session_id].copy()
 
@@ -505,49 +505,69 @@ def extract_task_replay(
 
     # Extract the gabor events, uses the ttls on the frame2ttl channel
     try:
-        fttl = ephys_fpga.get_sync_fronts(sync, sync_map["frame2ttl"], tmin=treplay[0], tmax=treplay[1])
-        fttl = ephys_fpga._clean_frame2ttl(fttl)
-        gabor_df = _extract_passive_gabor(fttl, replay_trials)
-    except AssertionError:
-        # There are a few sessions <8.29.0 where the first gabor was successfully shown. In these cases
-        # we rextract without the adjustment of the task replay fixture to remove the first gabor
-        log.warning('Attempting to extact gabor stimuli without adjusting for first blank gabor...')
-        replay_trials = load_task_replay_fixtures(session_path=session_path, task_collection=task_collection,
-                                                  settings=settings, task_version=task_version, adjust=False)
-        fttl = ephys_fpga.get_sync_fronts(sync, sync_map["frame2ttl"], tmin=treplay[0], tmax=treplay[1])
-        fttl = ephys_fpga._clean_frame2ttl(fttl)
-        gabor_df = _extract_passive_gabor(fttl, replay_trials)
+        try:
+            fttl = ephys_fpga.get_sync_fronts(sync, sync_map["frame2ttl"], tmin=treplay[0], tmax=treplay[1])
+            fttl = ephys_fpga._clean_frame2ttl(fttl)
+            gabor_df = _extract_passive_gabor(fttl, replay_trials)
+        except AssertionError:
+            # There are a few sessions <8.29.0 where the first gabor was successfully shown. In these cases
+            # we rextract without the adjustment of the task replay fixture to remove the first gabor
+            log.warning('Attempting to extact gabor stimuli without adjusting for first blank gabor...')
+            replay_trials = load_task_replay_fixtures(session_path=session_path, task_collection=task_collection,
+                                                      settings=settings, task_version=task_version, adjust=False)
+            fttl = ephys_fpga.get_sync_fronts(sync, sync_map["frame2ttl"], tmin=treplay[0], tmax=treplay[1])
+            fttl = ephys_fpga._clean_frame2ttl(fttl)
+            gabor_df = _extract_passive_gabor(fttl, replay_trials)
+    except Exception as e:
+        log.error(f'Failed to extract gabor stimuli from passive session. {e}')
+        gabor_df = None
 
-    # Extract the valve events, uses the ttls on the bpod channel
-    bpod = ephys_fpga.get_sync_fronts(sync, sync_map["bpod"], tmin=treplay[0], tmax=treplay[1])
-    valve_df = _extract_passive_valve(bpod, replay_trials)
+    try:
+        # Extract the valve events, uses the ttls on the bpod channel
+        bpod = ephys_fpga.get_sync_fronts(sync, sync_map["bpod"], tmin=treplay[0], tmax=treplay[1])
+        valve_df = _extract_passive_valve(bpod, replay_trials)
 
-    # Extract the audio events, uses the ttls on the audio channel
-    audio = ephys_fpga.get_sync_fronts(sync, sync_map["audio"], tmin=treplay[0], tmax=treplay[1])
-    tone_df, noise_df = _extract_passive_audio(audio, replay_trials, task_version)
+        # Extract the audio events, uses the ttls on the audio channel
+        audio = ephys_fpga.get_sync_fronts(sync, sync_map["audio"], tmin=treplay[0], tmax=treplay[1])
+        tone_df, noise_df = _extract_passive_audio(audio, replay_trials, task_version)
 
-    # Build the full task replay dataframe and order by start time
-    full_df = pd.concat([gabor_df[['stim_type', 'start', 'stop']], valve_df, tone_df, noise_df])
-    # Sort by start time and check if it matches the replay trials
-    full_df = full_df.sort_values(by='start').reset_index(drop=True)
+        max_len = max(len(tone_df), len(valve_df), len(noise_df))
 
-    if version.parse('6.2.5') <= task_version <= version.parse('6.5.3'):
-        assert np.array_equal(full_df['stim_type'].values, replay_trials['stim_type'].values), \
-            "The extracted sequence does not match the expected task replay sequence."
+        # Build the stimulus dataframe
+        stim_df = pd.DataFrame({
+            'valveOn': valve_df['start'].reindex(range(max_len)),
+            'valveOff': valve_df['stop'].reindex(range(max_len)),
+            'toneOn': tone_df['start'].reindex(range(max_len)),
+            'toneOff': tone_df['stop'].reindex(range(max_len)),
+            'noiseOn': noise_df['start'].reindex(range(max_len)),
+            'noiseOff': noise_df['stop'].reindex(range(max_len)),
+        })
 
-    max_len = max(len(tone_df), len(valve_df), len(noise_df))
+    except Exception as e:
+        log.error(f'Failed to extract valve/audio stimuli from passive session. {e}')
+        stim_df = None
 
-    # Build the stimulus dataframe
-    stim_df = pd.DataFrame({
-        'valveOn': valve_df['start'].reindex(range(max_len)),
-        'valveOff': valve_df['stop'].reindex(range(max_len)),
-        'toneOn': tone_df['start'].reindex(range(max_len)),
-        'toneOff': tone_df['stop'].reindex(range(max_len)),
-        'noiseOn': noise_df['start'].reindex(range(max_len)),
-        'noiseOff': noise_df['stop'].reindex(range(max_len)),
-    })
+    if gabor_df is not None and stim_df is not None:
+        # Build the full task replay dataframe and order by start time
+        full_df = pd.concat([gabor_df[['stim_type', 'start', 'stop']], valve_df, tone_df, noise_df])
+        # Sort by start time and check if it matches the replay trials
+        full_df = full_df.sort_values(by='start').reset_index(drop=True)
 
-    gabor_df = gabor_df.drop(columns=['stim_type'])
+        if not version.parse('6.2.5') <= task_version <= version.parse('6.5.3'):
+            assert np.array_equal(full_df['stim_type'].values, replay_trials['stim_type'].values), \
+                "The extracted sequence does not match the expected task replay sequence."
+        gabor_df = gabor_df.drop(columns=['stim_type'])
+
+    elif gabor_df is None and stim_df is not None:
+        # Build the full task replay dataframe and order by start time excluding gabors
+        full_df = pd.concat([valve_df, tone_df, noise_df])
+        replay_trials = replay_trials[replay_trials['stim_type'] != 'G'].reset_index(drop=True)
+        # Sort by start time and check if it matches the replay trials
+        full_df = full_df.sort_values(by='start').reset_index(drop=True)
+
+        if not version.parse('6.2.5') <= task_version <= version.parse('6.5.3'):
+            assert np.array_equal(full_df['stim_type'].values, replay_trials['stim_type'].values), \
+                "The extracted sequence does not match the expected task replay sequence."
 
     return gabor_df, stim_df
 
@@ -597,14 +617,6 @@ def _extract_passive_gabor(
 
     # Find the onset of the pulses.
     idx_start_stims = np.where((dttl < thresh - 0.05) & (dttl > 0.1))[0]
-
-    # Check if any pulse has been missed
-    # if idx_start_stims.size < n_expected_gabor and np.any(np.diff(idx_start_stims) > 2):
-    #     log.warning("Looks like one or more pulses were not detected, trying to extrapolate...")
-    #     missing_where = np.where(np.diff(idx_start_stims) > 2)[0]
-    #     insert_where = missing_where + 1
-    #     missing_value = idx_start_stims[missing_where] + 2
-    #     idx_start_stims = np.insert(idx_start_stims, insert_where, missing_value)
 
     # Get the offset times
     idx_end_stims = idx_start_stims + 1
@@ -674,9 +686,6 @@ def _extract_passive_valve(
     # Check all values are within bpod tolerance of 100µs
     assert np.allclose(valveOff_times - valveOn_times, valveOff_times[1] - valveOn_times[1], atol=0.001), \
         "Some valve outputs are longer or shorter than others"
-
-    # if not np.allclose(valveOff_times - valveOn_times, valveOff_times[1] - valveOn_times[1], atol=0.0001):
-    #     log.warning("Some valve outputs are longer or shorter than others")
 
     valve_df = (
         replay_trials.loc[replay_trials["stim_type"] == "V", ["stim_type"]]
@@ -754,19 +763,13 @@ def _extract_passive_audio(
 
     if version.parse('6.2.5') <= rig_version <= version.parse('6.5.3'):
         # We pad the values with NaNs to match expected lengths
-        toneOn_times = np.r_[toneOn_times, np.full((n_expected_tone- len(toneOn_times)), np.nan)]
+        toneOn_times = np.r_[toneOn_times, np.full((n_expected_tone - len(toneOn_times)), np.nan)]
         toneOff_times = np.r_[toneOff_times, np.full((n_expected_tone - len(toneOff_times)), np.nan)]
         noiseOn_times = np.r_[noiseOn_times, np.full((n_expected_tone - len(noiseOn_times)), np.nan)]
         noiseOff_times = np.r_[noiseOff_times, np.full((n_expected_tone - len(noiseOff_times)), np.nan)]
 
     assert len(toneOn_times) == len(toneOff_times) == n_expected_tone, "Wrong number of tones detected"
     assert len(noiseOn_times) == len(noiseOff_times) == n_expected_noise, "Wrong number of noise detected"
-
-    # if not np.allclose(toneOff_times - toneOn_times, 0.1, atol=0.0006):
-    #     log.warning("Some tone lengths seem wrong.")
-    # if not np.allclose(noiseOff_times - noiseOn_times, 0.5, atol=0.0006):
-    #     log.warning("Some noise lengths seem wrong.")
-    #
 
     tone_df = (
         replay_trials.loc[replay_trials["stim_type"] == "T", ["stim_type"]]
@@ -843,7 +846,6 @@ class PassiveChoiceWorld(BaseExtractor):
             log.error(f"Failed to extract RFMapping datasets: {e}")
             passiveRFM_times = None
 
-        # TODO split this up so that if one fails the other can still be extracted
         skip_replay = settings.get('SKIP_EVENT_REPLAY', False)
         if not skip_replay:
             try:
