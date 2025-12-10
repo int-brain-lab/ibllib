@@ -164,9 +164,9 @@ class QcFrame:
             plot_args['ymax'] = 3
             ylabels = ['', 'frame2ttl', 'sound', '']
 
-        for event, c, l in zip(trial_events, cycle(color_map), linestyle):
+        for event, c, ln in zip(trial_events, cycle(color_map), linestyle):
             if event in trial_data:
-                plots.vertical_lines(trial_data[event], label=event, color=c, linestyle=l, **plot_args)
+                plots.vertical_lines(trial_data[event], label=event, color=c, linestyle=ln, **plot_args)
 
         axes.legend(loc='upper left', fontsize='xx-small', bbox_to_anchor=(1, 0.5))
         axes.set_yticks(list(range(plot_args['ymax'] + 1)))
