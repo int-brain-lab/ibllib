@@ -825,7 +825,7 @@ class PostLP(base_tasks.VideoTask):
         return {
             'input_files': [(f'_ibl_{cam}Camera.lightningPose.pqt', 'alf', True) for cam in self.cameras] +
                            [(f'_ibl_{cam}Camera.times.npy', 'alf', True) for cam in self.cameras] +
-                           ['_ibl_experiment.description.pqt', self.trial_collection, True] +
+                           ['_ibl_experiment.description.yaml', self.trial_collection, True] +
             # the following are required for the LP plot only
             # they are not strictly required, some plots just might be skipped
             # In particular the raw videos don't need to be downloaded as they can be streamed
