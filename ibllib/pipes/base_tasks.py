@@ -279,7 +279,8 @@ class BehaviourTask(DynamicTask):
 
     def get_signatures(self, **kwargs):
         """ explicitly adding the experiment description file to the input files for all behavior tasks
-        This is pretty hacky but avoids having to modify all the child classes"""
+        There is a trade-off between this inheritance design and explicit file signatures for child classes"""
+
         super().get_signatures(**kwargs)
         self.input_files.append(('_ibl_experiment.description.pqt', self.collection, True))
         return super().get_signatures(**kwargs)
