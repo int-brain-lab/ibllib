@@ -44,16 +44,20 @@ def insert_idx(array, values):
     return idx
 
 
-def likelihood_threshold(dlc, threshold=0.9):
-    """
-    Set dlc points with likelihood less than threshold to nan.
+def valid_feature(x: str):
+    if x.endswith('_x') or x.endswith('_y') or x.endswith('_likelihood'):
+        return True
+    return False
 
-    FIXME Add unit test.
+
+def likelihood_threshold(dlc, threshold=0.9):
+    """Set dlc points with likelihood less than threshold to nan.
+
     :param dlc: dlc pqt object
     :param threshold: likelihood threshold
     :return:
     """
-    features = np.unique(['_'.join(x.split('_')[:-1]) for x in dlc.keys()])
+    features = np.unique(['_'.join(x.split('_')[:-1]) for x in dlc.keys() if valid_feature(x)])
     for feat in features:
         nan_fill = dlc[f'{feat}_likelihood'] < threshold
         dlc.loc[nan_fill, (f'{feat}_x', f'{feat}_y')] = np.nan
@@ -268,7 +272,7 @@ def plot_trace_on_frame(frame, dlc_df, cam):
     # Threshold the dlc traces
     dlc_df = likelihood_threshold(dlc_df)
     # Features without tube
-    features = np.unique(['_'.join(x.split('_')[:-1]) for x in dlc_df.keys() if 'tube' not in x])
+    features = np.unique(['_'.join(x.split('_')[:-1]) for x in dlc_df.keys() if valid_feature(x) and 'tube' not in x])
     # Normalize the number of points across cameras
     dlc_df_norm = pd.DataFrame()
     for feat in features:

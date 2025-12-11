@@ -99,7 +99,7 @@ class TestBehaviourTask(unittest.TestCase):
     def test_get_task_collection(self) -> None:
         """Test for BehaviourTask.get_task_collection method."""
         params = {'tasks': [{'fooChoiceWorld': {'collection': 'raw_task_data_00'}}]}
-        task = ChoiceWorldTrialsBpod('')
+        task = ChoiceWorldTrialsBpod(None)
         self.assertIsNone(task.get_task_collection())
         task.session_params = params
         self.assertEqual('raw_task_data_00', task.get_task_collection())
@@ -109,7 +109,7 @@ class TestBehaviourTask(unittest.TestCase):
 
     def test_get_protocol(self) -> None:
         """Test for BehaviourTask.get_protocol method."""
-        task = ChoiceWorldTrialsBpod('')
+        task = ChoiceWorldTrialsBpod(None)
         self.assertIsNone(task.get_protocol())
         self.assertEqual('foobar', task.get_protocol(protocol='foobar'))
         task.session_params = {'tasks': [{'fooChoiceWorld': {'collection': 'raw_task_data_00'}}]}
@@ -125,7 +125,7 @@ class TestBehaviourTask(unittest.TestCase):
             {'fooChoiceWorld': {'collection': 'raw_task_data_00', 'protocol_number': 0}},
             {'barChoiceWorld': {'collection': 'raw_task_data_01', 'protocol_number': 1}}
         ]}
-        task = ChoiceWorldTrialsBpod('')
+        task = ChoiceWorldTrialsBpod(None)
         self.assertIsNone(task.get_protocol_number())
         self.assertRaises(ValueError, task.get_protocol_number, number='foo')
         self.assertEqual(1, task.get_protocol_number(number=1))
@@ -136,7 +136,7 @@ class TestBehaviourTask(unittest.TestCase):
 
     def test_assert_trials_data(self):
         """Test for BehaviourTask._assert_trials_data method."""
-        task = ChoiceWorldTrialsBpod('')
+        task = ChoiceWorldTrialsBpod(None)
         trials_data = {'foo': [1, 2, 3]}
 
         def _set(**_):

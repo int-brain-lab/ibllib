@@ -3,10 +3,12 @@ import logging
 import json
 import shutil
 import tarfile
+from typing import Tuple
 
 import numpy as np
 from one.alf.path import get_session_path
 import spikeglx
+from one.api import ONE
 
 from iblutil.util import Bunch
 import phylib.io.alf
@@ -15,6 +17,51 @@ import ibllib.ephys.ephysqc as ephysqc
 from ibllib.ephys import sync_probes
 
 _logger = logging.getLogger(__name__)
+
+
+def create_insertion(one: ONE, md: dict, label: str, eid: str) -> Tuple[dict, dict]:
+    """
+    Create or update a probe insertion in Alyx and return description and the alyx rest record.
+
+    This function checks if a probe insertion with the given label already exists for the
+    specified session. If it doesn't exist, it creates a new one. If it does, it updates
+    the existing record. It also prepares a dictionary with essential probe details.
+
+    Parameters
+    ----------
+    one : one.api.ONE
+        An instance of the ONE API to interact with Alyx.
+    md : dict
+        A Bunch object containing metadata from a spikeglx meta file, including
+        'neuropixelVersion', 'serial', and 'fileName'.
+    label : str
+        The label for the probe insertion (e.g., 'probe00').
+    eid : str
+        The unique experiment ID (UUID) for the session.
+
+    Returns
+    -------
+    tuple
+        A tuple containing:
+        - description (dict): A dictionary with probe details for metadata file,
+          containing keys 'label', 'model', 'serial', 'raw_file_name'.
+        - insertion (dict): The Alyx record for the created or updated probe insertion.
+    """
+    # create json description
+    description = {'label': label, 'model': md['neuropixelVersion'], 'serial': int(md['serial']),
+                   'raw_file_name': md['fileName']}
+
+    # create or update probe insertion on alyx
+    alyx_insertion = {'session': eid, 'model': md['neuropixelVersion'], 'serial': md['serial'], 'name': label}
+    pi = one.alyx.rest('insertions', 'list', session=eid, name=label)
+    if len(pi) == 0:
+        qc_dict = {'qc': 'NOT_SET', 'extended_qc': {}}
+        alyx_insertion.update({'json': qc_dict})
+        insertion = one.alyx.rest('insertions', 'create', data=alyx_insertion)
+    else:
+        insertion = one.alyx.rest('insertions', 'partial_update', data=alyx_insertion, id=pi[0]['id'])
+
+    return description, insertion
 
 
 def probes_description(ses_path, one):
@@ -36,24 +83,6 @@ def probes_description(ses_path, one):
         return
 
     subdirs, labels, efiles_sorted = zip(*sorted(ap_meta_files))
-
-    def _create_insertion(md, label, eid):
-
-        # create json description
-        description = {'label': label, 'model': md.neuropixelVersion, 'serial': int(md.serial), 'raw_file_name': md.fileName}
-
-        # create or update probe insertion on alyx
-        alyx_insertion = {'session': eid, 'model': md.neuropixelVersion, 'serial': md.serial, 'name': label}
-        pi = one.alyx.rest('insertions', 'list', session=eid, name=label)
-        if len(pi) == 0:
-            qc_dict = {'qc': 'NOT_SET', 'extended_qc': {}}
-            alyx_insertion.update({'json': qc_dict})
-            insertion = one.alyx.rest('insertions', 'create', data=alyx_insertion)
-        else:
-            insertion = one.alyx.rest('insertions', 'partial_update', data=alyx_insertion, id=pi[0]['id'])
-
-        return description, insertion
-
     # Ouputs the probes description file
     probe_description = []
     alyx_insertions = []
@@ -66,16 +95,16 @@ def probes_description(ses_path, one):
                 nshanks = np.unique(geometry['shank'])
                 for shank in nshanks:
                     label_ext = f'{label}{chr(97 + int(shank))}'
-                    description, insertion = _create_insertion(md, label_ext, eid)
+                    description, insertion = create_insertion(one, md, label_ext, eid)
                     probe_description.append(description)
                     alyx_insertions.append(insertion)
             # NP2.4 meta that has already been split
             else:
-                description, insertion = _create_insertion(md, label, eid)
+                description, insertion = create_insertion(one, md, label, eid)
                 probe_description.append(description)
                 alyx_insertions.append(insertion)
         else:
-            description, insertion = _create_insertion(md, label, eid)
+            description, insertion = create_insertion(one, md, label, eid)
             probe_description.append(description)
             alyx_insertions.append(insertion)
 

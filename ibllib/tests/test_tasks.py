@@ -10,6 +10,7 @@ from collections import OrderedDict
 import numpy as np
 
 import ibllib.pipes.tasks
+import ibllib.oneibl.data_handlers
 from ibllib.pipes.base_tasks import ExperimentDescriptionRegisterRaw
 from ibllib.pipes.video_tasks import VideoConvert
 from ibllib.io import session_params
@@ -400,6 +401,16 @@ class TestTask(unittest.TestCase):
             self.assertFalse(task._input_files_to_register(assert_all_exist=False))
             for f in ('alf/foo.bar.*', 'alf/bar.baz.npy', 'alf/baz.foo.npy'):
                 self.assertRegex(cm.output[-1], re.escape(f))
+
+    def test_location_data_handler(self):
+        task = Task00(self.session_path)
+        self.assertIsInstance(task.get_data_handler(), ibllib.oneibl.data_handlers.ServerDataHandler)
+
+        class TotoDataHandler(ibllib.oneibl.data_handlers.DataHandler):
+            pass
+
+        task = Task00(self.session_path, data_handler_class=TotoDataHandler)
+        self.assertIsInstance(task.get_data_handler(), TotoDataHandler)
 
 
 class TestMisc(unittest.TestCase):

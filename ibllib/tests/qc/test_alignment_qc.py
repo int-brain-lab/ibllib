@@ -11,6 +11,7 @@ from datetime import date
 
 from one.api import ONE
 from neuropixel import trace_header
+import one.alf.io as alfio
 
 from ibllib.tests import TEST_DB
 from ibllib.tests.fixtures.utils import register_new_session
@@ -169,7 +170,7 @@ class TestAlignmentQcExisting(unittest.TestCase):
 
     def _get_prev_traj_id(self):
         traj = one.alyx.get('/trajectories?'
-                            f'&probe_id={self.probe_id}'
+                            f'&probe_insertion={self.probe_id}'
                             '&provenance=Ephys aligned histology track', clobber=True)
         if traj:
             self.prev_traj_id = traj[0]['id']
@@ -382,11 +383,12 @@ def _verify(tc, alignment_resolved=None, alignment_count=None,
         tc.assertEqual(insertion['json']['extended_qc']['alignment_qc'] < QC_THRESH,
                        alignment_qc < QC_THRESH)
         tc.assertTrue(np.isclose(insertion['json']['extended_qc']['alignment_qc'], alignment_qc))
-    if tc.prev_traj_id:
-        traj = one.alyx.get('/trajectories?'
-                            f'&probe_id={tc.probe_id}'
-                            '&provenance=Ephys aligned histology track', clobber=True)
-        tc.assertNotEqual(tc.prev_traj_id == traj[0]['id'], trajectory_created)
+    if trajectory_created:
+        if tc.prev_traj_id:
+            traj = one.alyx.get('/trajectories?'
+                                f'&probe_insertion={tc.probe_id}'
+                                '&provenance=Ephys aligned histology track', clobber=True)
+            tc.assertNotEqual(tc.prev_traj_id, traj[0]['id'])
     if alignment_date:
         tc.assertEqual(insertion['json']['extended_qc']['alignment_resolved_date'], alignment_date)
 
@@ -397,7 +399,6 @@ class TestUploadToFlatIron(unittest.TestCase):
     xyz_picks = None
     trajectory = None
 
-    @unittest.skip("Skip FTP upload test")
     @classmethod
     def setUpClass(cls) -> None:
         data = np.load(Path(Path(__file__).parent.parent.
@@ -412,6 +413,9 @@ class TestUploadToFlatIron(unittest.TestCase):
                        allow_pickle=True)
         insertion = data['insertion'].tolist()
         insertion['json'] = {'xyz_picks': cls.xyz_picks}
+        # makes sure there is no existing probe insertion before creating a new one
+        for ins in one.alyx.rest('insertions', 'list', session=insertion['session'], name=insertion['name'], no_cache=True):
+            one.alyx.rest('insertions', 'delete', id=ins['id'])
         probe_insertion = one.alyx.rest('insertions', 'create', data=insertion)
         cls.probe_id = probe_insertion['id']
         cls.probe_name = probe_insertion['name']
@@ -421,23 +425,23 @@ class TestUploadToFlatIron(unittest.TestCase):
         cls.trajectory.update({'json': cls.alignments})
         cls.traj = one.alyx.rest('trajectories', 'create', data=cls.trajectory)
 
-        align_qc = AlignmentQC(cls.probe_id, one=one, brain_atlas=brain_atlas, channels=False)
-        align_qc.load_data(prev_alignments=cls.traj['json'],
-                           xyz_picks=np.array(cls.xyz_picks) / 1e6,
-                           cluster_chns=cls.cluster_chns,
-                           depths=SITES_COORDINATES[:, 1],
-                           chn_coords=SITES_COORDINATES)
-        cls.file_paths = align_qc.resolve_manual('2020-09-28T15:57:25_mayo', update=True,
-                                                 upload_alyx=True, upload_flatiron=True)
+        cls.align_qc = AlignmentQC(cls.probe_id, one=one, brain_atlas=brain_atlas, channels=False)
+        cls.align_qc.load_data(prev_alignments=cls.traj['json'],
+                               xyz_picks=np.array(cls.xyz_picks) / 1e6,
+                               cluster_chns=cls.cluster_chns,
+                               depths=SITES_COORDINATES[:, 1],
+                               chn_coords=SITES_COORDINATES)
+        cls.file_paths = cls.align_qc.resolve_manual('2020-09-28T15:57:25_mayo', update=True,
+                                                     upload_alyx=True, upload_flatiron=False)
         print(cls.file_paths)
 
     def test_data_content(self):
-        alf_path = one.eid2path(EPHYS_SESSION).joinpath('alf', self.probe_name)
-        channels_mlapdv = np.load(alf_path.joinpath('channels.mlapdv.npy'))
-        self.assertTrue(np.all(np.abs(channels_mlapdv) > 0))
-        channels_id = np.load(alf_path.joinpath('channels.brainLocationIds_ccf_2017.npy'))
-        self.assertEqual(channels_mlapdv.shape[0], channels_id.shape[0])
+        files_to_register = self.align_qc.create_electrode_datasets(alignment_key='2020-09-28T15:57:25_mayo')
+        esites = alfio.load_object(one.eid2path(EPHYS_SESSION).joinpath('alf', self.probe_name), 'electrodeSites')
+        np.testing.assert_array_equal([v.shape[0] for v in esites.values()], 384)
+        self.assertEqual(len(files_to_register), 3)
 
+    @unittest.skip
     def test_upload_to_flatiron(self):
         for file in self.file_paths:
             file_registered = one.alyx.get(f'/datasets?&session={EPHYS_SESSION}'

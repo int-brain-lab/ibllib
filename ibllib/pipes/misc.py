@@ -54,7 +54,7 @@ def create_alyx_probe_insertions(
     labels: list = None,
 ):
     if one is None:
-        one = ONE(cache_rest=None, mode='local')
+        one = ONE(cache_rest=None)
     eid = session_path if is_uuid_string(session_path) else one.path2eid(session_path)
     if eid is None:
         log.warning("Session not found on Alyx: please create session before creating insertions")

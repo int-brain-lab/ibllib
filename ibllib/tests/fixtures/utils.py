@@ -210,15 +210,15 @@ def create_fake_raw_video_data_folder(session_path, populate=True, write_pars_st
     return raw_video_data_path
 
 
-def create_fake_alf_folder_dlc_data(session_path, populate=True):
+def create_fake_alf_folder_pose_data(session_path, populate=True, tracker='dlc'):
     session_path = Path(session_path)
     alf_path = session_path / "alf"
     alf_path.mkdir(exist_ok=True, parents=True)
     if populate:
         file_list = [
-            "_ibl_leftCamera.dlc.pqt",
-            "_ibl_rightCamera.dlc.pqt",
-            "_ibl_bodyCamera.dlc.pqt",
+            f"_ibl_leftCamera.{tracker}.pqt",
+            f"_ibl_rightCamera.{tracker}.pqt",
+            f"_ibl_bodyCamera.{tracker}.pqt",
             "_ibl_leftCamera.times.npy",
             "_ibl_rightCamera.times.npy",
             "_ibl_bodyCamera.times.npy",

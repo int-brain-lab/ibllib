@@ -7,6 +7,7 @@ import numpy as np
 
 from one.api import ONE
 from one.alf.spec import is_uuid
+from one.alf.path import ensure_alf_path
 from ibllib.pipes import tasks
 from one.alf.exceptions import ALFObjectNotFound
 from neuropixel import trace_header, TIP_SIZE_UM
@@ -70,7 +71,7 @@ class ReportSnapshotProbe(ReportSnapshot):
         self.content_type = 'probeinsertion'
         self.pid = pid
         self.eid, self.pname = self.one.pid2eid(self.pid)
-        self.session_path = session_path or self.one.eid2path(self.eid)
+        self.session_path = ensure_alf_path(session_path or self.one.eid2path(self.eid))
         self.output_directory = self.session_path.joinpath('snapshot', self.pname)
         self.output_directory.mkdir(exist_ok=True, parents=True)
         self.histology_status = None

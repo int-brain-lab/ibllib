@@ -43,16 +43,16 @@ class TestAggregateOutcome(unittest.TestCase):
 
     def test_outcome_from_dict_stimFreeze_delays(self):
         # For '_task_stimFreeze_delays' the threshold are 0.99 PASS and 0 WARNING
-        qc_dict = {'gnap': .99, 'gnop': np.nan, '_task_stimFreeze_delays': .1}
-        expect = {'gnap': spec.QC.PASS, 'gnop': spec.QC.NOT_SET, '_task_stimFreeze_delays': spec.QC.WARNING}
+        qc_dict = {'gnap': .99, 'gnop': np.nan, 'stimFreeze_delays': .1}
+        expect = {'gnap': spec.QC.PASS, 'gnop': spec.QC.NOT_SET, 'stimFreeze_delays': spec.QC.WARNING}
         outcome, outcome_dict = qcmetrics.compute_session_status_from_dict(qc_dict, qcmetrics.BWM_CRITERIA)
         self.assertEqual(outcome, spec.QC.WARNING)
         self.assertEqual(expect, outcome_dict)
 
     def test_outcome_from_dict_iti_delays(self):
         # For '_task_iti_delays' the threshold is 0 NOT_SET
-        qc_dict = {'gnap': .99, 'gnop': np.nan, '_task_iti_delays': .1}
-        expect = {'gnap': spec.QC.PASS, 'gnop': spec.QC.NOT_SET, '_task_iti_delays': spec.QC.NOT_SET}
+        qc_dict = {'gnap': .99, 'gnop': np.nan, 'iti_delays': .1}
+        expect = {'gnap': spec.QC.PASS, 'gnop': spec.QC.NOT_SET, 'iti_delays': spec.QC.NOT_SET}
         outcome, outcome_dict = qcmetrics.compute_session_status_from_dict(qc_dict, qcmetrics.BWM_CRITERIA)
         self.assertEqual(outcome, spec.QC.PASS)
         self.assertEqual(expect, outcome_dict)

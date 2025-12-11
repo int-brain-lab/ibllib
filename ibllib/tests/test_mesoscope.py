@@ -45,7 +45,6 @@ class TestMesoscopePreprocess(unittest.TestCase):
         expected = {
             'data_path': [str(self.img_path)],
             'save_path0': str(self.session_path),
-            'fast_disk': '',
             'look_one_level_down': False,
             'num_workers': -1,
             'num_workers_roi': -1,
@@ -134,8 +133,10 @@ class TestMesoscopePreprocess(unittest.TestCase):
         # When clobber is False, a data.bin datasets are included as input
         self.task.overwrite = False
         raw = self.task.signature['input_files'][1]
-        self.assertEqual(3, len(raw.identifiers))
+        self.assertEqual(4, len(raw.identifiers))
         self.assertEqual('data.bin', raw.identifiers[0][-1])
+        self.assertEqual('imaging.frames_motionRegistered.bin', raw.identifiers[1][-1])
+        self.assertEqual('or', raw._identifiers[0].operator)
         # After setup and teardown the tif files should not have been removed
         self.task.setUp()
         self.task.tearDown()

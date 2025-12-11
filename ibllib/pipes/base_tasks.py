@@ -62,18 +62,16 @@ class DynamicTask(Task):
         return collection_map.get(device)
 
     def read_params_file(self):
-        params = sess_params.read_params(self.session_path)
+        """Read the session parameters file.
 
-        if params is None:
+        Returns
+        -------
+        dict
+            The session parameters dictionary, or an empty dictionary if the file does not exist.
+        """
+        if not self.session_path:
             return {}
-
-        # TODO figure out the best way
-        # if params is None and self.one:
-        #     # Try to read params from alyx or try to download params file
-        #     params = self.one.load_dataset(self.one.path2eid(self.session_path), 'params.yml')
-        #     params = self.one.alyx.rest()
-
-        return params
+        return sess_params.read_params(self.session_path) or {}
 
 
 class BehaviourTask(DynamicTask):
@@ -279,8 +277,16 @@ class BehaviourTask(DynamicTask):
             raise ValueError('No trials data and/or extractor found')
         return trials_data
 
+    def get_signatures(self, **kwargs):
+        """ explicitly adding the experiment description file to the input files for all behavior tasks
+        There is a trade-off between this inheritance design and explicit file signatures for child classes"""
 
-class VideoTask(DynamicTask):
+        super().get_signatures(**kwargs)
+        self.input_files.append(('_ibl_experiment.description.pqt', self.collection, True))
+        return super().get_signatures(**kwargs)
+
+
+class VideoTask(BehaviourTask):
 
     def __init__(self, session_path, cameras, **kwargs):
         super().__init__(session_path, cameras=cameras, **kwargs)
@@ -390,8 +396,10 @@ class MesoscopeTask(DynamicTask):
         super().get_signatures(**kwargs)  # Set inputs and outputs
         # For all inputs and outputs that are part of the device collection, expand to one file per folder
         # All others keep unchanged
-        self.input_files = [update_collections(x, raw_imaging_folders, self.device_collection) for x in self.input_files]
-        self.output_files = [update_collections(x, raw_imaging_folders, self.device_collection) for x in self.output_files]
+        self.input_files = [
+            update_collections(x, raw_imaging_folders, self.device_collection, exact_match=True) for x in self.input_files]
+        self.output_files = [
+            update_collections(x, raw_imaging_folders, self.device_collection, exact_match=True) for x in self.output_files]
 
     def load_sync(self):
         """

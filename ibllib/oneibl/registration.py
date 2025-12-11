@@ -10,8 +10,9 @@ from one.alf.path import get_session_path, folder_parts, get_alf_path
 from one.registration import RegistrationClient, get_dataset_type
 from one.remote.globus import get_local_endpoint_id, get_lab_from_endpoint_id
 from one.webclient import AlyxClient, no_cache
-from one.converters import ConversionMixin, datasets2records
+from one.converters import datasets2records
 import one.alf.exceptions as alferr
+from one.alf.path import ensure_alf_path
 from one.api import ONE
 from iblutil.util import ensure_list
 
@@ -133,7 +134,7 @@ def register_session_raw_data(session_path, one=None, overwrite=False, **kwargs)
     overwrite : bool
         If set to True, will patch the datasets. It will take very long. If set to False (default)
         will skip all already registered data.
-    **kwargs
+    kwargs
         Optional keyword arguments for one.registration.RegistrationClient.register_files.
 
     Returns
@@ -553,12 +554,13 @@ def get_lab(session_path, alyx=None):
     one.remote.globus.get_lab_from_endpoint_id
     """
     alyx = alyx or AlyxClient()
-    if not (ref := ConversionMixin.path2ref(session_path)):
+    session_path = ensure_alf_path(session_path)
+    if not session_path.is_session_path():
         raise ValueError(f'Failed to parse session path: {session_path}')
 
-    labs = [x['lab'] for x in alyx.rest('subjects', 'list', nickname=ref['subject'])]
+    labs = [x['lab'] for x in alyx.rest('subjects', 'list', nickname=session_path.subject)]
     if len(labs) == 0:
-        raise alferr.AlyxSubjectNotFound(ref['subject'])
+        raise alferr.AlyxSubjectNotFound(session_path.subject)
     elif len(labs) > 1:  # More than one subject with this nickname
         # use local endpoint ID to find the correct lab
         endpoint_labs = get_lab_from_endpoint_id(alyx=alyx)

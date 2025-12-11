@@ -3,15 +3,151 @@ import unittest
 from unittest import mock
 from functools import partial
 import numpy as np
+import pandas as pd
 import pickle
 import copy
 
 from iblutil.util import Bunch
 from one.api import ONE
 
+import brainbox.behavior.dlc as dlc
 import brainbox.behavior.wheel as wheel
 import brainbox.behavior.training as train
 from ibllib.tests import TEST_DB
+
+
+class TestDLC(unittest.TestCase):
+
+    def setUp(self):
+        pass
+
+    def test_plt_window(self):
+        """Test for brainbox.behavior.dlc.plt_window"""
+        window_lag = -0.5
+        window_len = 2
+        x = 10
+        beg, end = dlc.plt_window(x)
+        self.assertTrue(beg == x + window_lag, msg='Unexpected beg time')
+        self.assertTrue(end == x + window_len, msg='Unexpected beg time')
+
+    def test_insert_idx(self):
+        """Test for brainbox.behavior.dlc.insert_idx"""
+
+        # Test basic functionality with simple arrays
+        array = np.array([1, 3, 5, 7, 9])
+        values = np.array([2, 6])
+        result = dlc.insert_idx(array, values)
+        expected = np.array([1, 3])
+        np.testing.assert_array_equal(result, expected)
+
+        # Test when values exactly match array elements
+        array = np.array([1, 3, 5, 7, 9])
+        values = np.array([3, 7])
+        result = dlc.insert_idx(array, values)
+        expected = np.array([1, 3])
+        np.testing.assert_array_equal(result, expected)
+
+        # Test values at array boundaries
+        array = np.array([2, 4, 6, 8, 10])
+        values = np.array([1, 11])  # Below first, above last
+        result = dlc.insert_idx(array, values)
+        expected = np.array([0, 4])
+        np.testing.assert_array_equal(result, expected)
+
+        # Test with single value to insert
+        array = np.array([1, 3, 5, 7, 9])
+        values = np.array([4])
+        result = dlc.insert_idx(array, values)
+        expected = np.array([2])
+        np.testing.assert_array_equal(result, expected)
+
+        # Test that ValueError is raised when all values map to index 0
+        array = np.array([10, 20, 30])
+        values = np.array([1, 2, 3])  # All much closer to first element
+        with self.assertRaises(ValueError) as context:
+            dlc.insert_idx(array, values)
+        self.assertIn('Something is wrong, all values to insert are outside of the array', str(context.exception))
+
+        # Test with negative values in array and values
+        array = np.array([-5, -2, 1, 4])
+        values = np.array([-3, 0])
+        result = dlc.insert_idx(array, values)
+        expected = np.array([1, 2])
+        np.testing.assert_array_equal(result, expected)
+
+    def test_valid_feature(self):
+        """Test for brainbox.behavior.dlc.valid_feature"""
+
+        valid = dlc.valid_feature('test_x')
+        self.assertTrue(valid, msg='strings ending in "x" should be valid')
+
+        valid = dlc.valid_feature('test_y')
+        self.assertTrue(valid, msg='strings ending in "y" should be valid')
+
+        valid = dlc.valid_feature('test_likelihood')
+        self.assertTrue(valid, msg='strings ending in "likelihood" should be valid')
+
+        valid = dlc.valid_feature('test_l')
+        self.assertTrue(not valid, msg='only strings ending in "_x", "_y" or "_likelihood" are valid')
+
+        valid = dlc.valid_feature('testlikelihood')
+        self.assertTrue(not valid, msg='only strings ending in "_x", "_y" or "_likelihood" are valid')
+
+    def test_likelihood_threshold(self):
+        """Test for brainbox.behavior.dlc.likelihood_threshold"""
+
+        dlc_data = pd.DataFrame({
+            'nose_x': [10.0, 20.0, 30.0, 40.0, 50.0],
+            'nose_y': [15.0, 25.0, 35.0, 45.0, 55.0],
+            'nose_likelihood': [0.95, 0.85, 0.92, 0.88, 0.91],
+            'ear_x': [12.0, 22.0, 32.0, 42.0, 52.0],
+            'ear_y': [17.0, 27.0, 37.0, 47.0, 57.0],
+            'ear_likelihood': [0.99, 0.75, 0.80, 0.95, 0.60],
+            'tail_x': [5.0, 15.0, 25.0, 35.0, 45.0],
+            'tail_y': [8.0, 18.0, 28.0, 38.0, 48.0],
+            'tail_likelihood': [0.70, 0.95, 0.85, 0.92, 0.88]
+        })
+
+        # Test with default threshold of 0.9
+        result = dlc.likelihood_threshold(dlc_data.copy())
+        nans = {
+            'nose': np.array([1, 3]),
+            'ear': np.array([1, 2, 4]),
+            'tail': np.array([0, 2, 4]),
+        }
+        for kp in nans.keys():
+            for idx in range(5):
+                if len(np.where(nans[kp] == idx)[0]) > 0:
+                    self.assertTrue(pd.isna(result.loc[idx, f'{kp}_x']))
+                    self.assertTrue(pd.isna(result.loc[idx, f'{kp}_y']))
+                else:
+                    self.assertFalse(pd.isna(result.loc[idx, f'{kp}_x']))
+                    self.assertFalse(pd.isna(result.loc[idx, f'{kp}_y']))
+
+        # Test with custom threshold
+        result = dlc.likelihood_threshold(dlc_data.copy(), threshold=0.8)
+        nans = {
+            'nose': np.array([]),
+            'ear': np.array([1, 4]),
+            'tail': np.array([0]),
+        }
+        for kp in nans.keys():
+            for idx in range(5):
+                if len(np.where(nans[kp] == idx)[0]) > 0:
+                    self.assertTrue(pd.isna(result.loc[idx, f'{kp}_x']))
+                    self.assertTrue(pd.isna(result.loc[idx, f'{kp}_y']))
+                else:
+                    self.assertFalse(pd.isna(result.loc[idx, f'{kp}_x']))
+                    self.assertFalse(pd.isna(result.loc[idx, f'{kp}_y']))
+
+        # Test with dataframe containing no valid features
+        invalid_data = pd.DataFrame({
+            'random_col1': [1, 2, 3],
+            'random_col2': [4, 5, 6]
+        })
+        result = dlc.likelihood_threshold(invalid_data)
+        # Should return unchanged dataframe
+        pd.testing.assert_frame_equal(result, invalid_data)
 
 
 class TestWheel(unittest.TestCase):
@@ -123,7 +259,7 @@ class TestWheel(unittest.TestCase):
         expected = [np.nan, 79.66293334, 100.73593334, 129.26693334, np.nan]
         np.testing.assert_array_almost_equal(times, expected)
         with self.assertRaises(ValueError):
-            wheel.get_movement_onset(intervals, np.random.permutation(self.trials['feedback_times']))
+            wheel.get_movement_onset(intervals, np.flipud(self.trials['feedback_times']))
 
 
 class TestTraining(unittest.TestCase):

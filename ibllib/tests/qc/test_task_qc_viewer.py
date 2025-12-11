@@ -10,6 +10,7 @@ from ibllib.pipes.behavior_tasks import HabituationTrialsBpod, ChoiceWorldTrials
 from ibllib.qc.task_qc_viewer.task_qc import get_bpod_trials_task, show_session_task_qc, QcFrame
 from ibllib.qc.task_metrics import TaskQC
 from ibllib.tests import TEST_DB
+from one.alf import spec
 
 
 MOCK_QT = os.environ.get('IBL_MOCK_QT', True)
@@ -63,12 +64,13 @@ class TestTaskQC(unittest.TestCase):
         # Set up QC mock
         qc_mock = mock.Mock(spec=TaskQC, unsafe=True)
         qc_mock.metrics = {'foo': .7}
-        qc_mock.compute_session_status.return_value = ('Fail', qc_mock.metrics, {'foo': 'FAIL'})
+        qc_mock.compute_session_status.return_value = (spec.QC(40), qc_mock.metrics, {'foo': spec.QC(40)})
         qc_mock.extractor.data = {'intervals': np.array([[0, 1]])}
         qc_mock.extractor.frame_ttls = qc_mock.extractor.audio_ttls = qc_mock.extractor.bpod_ttls = mock.MagicMock()
         qc_mock.passed = dict()
 
         active_task = mock.Mock(spec=ChoiceWorldTrialsNidq, unsafe=True)
+        active_task.extract_behaviour.return_value = [None, None]
         active_task.run_qc.return_value = qc_mock
         active_task.name = 'Trials_activeChoiceWorld_01'
         trials_tasks_mock.return_value = [passive_task, active_task]
@@ -77,7 +79,7 @@ class TestTaskQC(unittest.TestCase):
         self.assertIsInstance(qc, QcFrame)
         self.assertIsInstance(qc.qc, TaskQC)
         self.assertCountEqual(qc.get_wheel_data(), ('re_ts', 're_pos'))
-        active_task.run_qc.assert_called_once_with(update=False)
+        active_task.run_qc.assert_called_once_with(trials_data=None, update=False)
         self.assertEqual('remote', active_task.location)
         active_task.setUp.assert_called_once()
         active_task.assert_expected_inputs.assert_not_called()
