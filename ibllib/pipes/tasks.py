@@ -116,7 +116,8 @@ class Task(abc.ABC):
     on_error = 'continue'  # whether to raise an exception on error ('raise') or report the error and continue ('continue')
 
     def __init__(self, session_path, parents=None, taskid=None, one=None,
-                 machine=None, clobber=True, location='server', scratch_folder=None, on_error='continue', force=False, **kwargs):
+                 machine=None, clobber=True, location='server', scratch_folder=None, on_error='continue',
+                 force=False, data_handler_class=None, **kwargs):
         """
         Base task class
         :param session_path: session path
@@ -127,7 +128,10 @@ class Task(abc.ABC):
         :param clobber: whether or not to overwrite log on rerun
         :param location: location where task is run. Options are 'server' (lab local servers'), 'remote' (remote compute node,
         data required for task downloaded via one), 'AWS' (remote compute node, data required for task downloaded via AWS),
-        or 'SDSC' (SDSC flatiron compute node)
+        or 'SDSC' (SDSC flatiron compute node). The data_handler_class parameter will override the location in
+         determining the handler class.
+        :param data_handler_class: custom class to handle data. If not provided, the location will
+         be used to infer the handler class.
         :param scratch_folder: optional: Path where to write intermediate temporary data
         :param force: whether to re-download missing input files on local server if not present
         :param args: running arguments
@@ -149,6 +153,7 @@ class Task(abc.ABC):
         self.plot_tasks = []  # Plotting task/ tasks to create plot outputs during the task
         self.scratch_folder = scratch_folder
         self.kwargs = kwargs
+        self.data_handler_class = data_handler_class
 
     @property
     def signature(self) -> Dict[str, List]:
@@ -551,27 +556,28 @@ class Task(abc.ABC):
         Gets the relevant data handler based on location argument
         :return:
         """
-        location = str.lower(location or self.location)
-        if location == 'local':
-            return data_handlers.LocalDataHandler(self.session_path, self.signature, one=self.one)
-        self.one = self.one or ONE()
-        if location == 'server':
-            dhandler = data_handlers.ServerDataHandler(self.session_path, self.signature, one=self.one)
-        elif location == 'serverglobus':
-            dhandler = data_handlers.ServerGlobusDataHandler(self.session_path, self.signature, one=self.one)
-        elif location == 'remote':
-            dhandler = data_handlers.RemoteHttpDataHandler(self.session_path, self.signature, one=self.one)
-        elif location == 'aws':
-            dhandler = data_handlers.RemoteAwsDataHandler(self.session_path, self.signature, one=self.one)
-        elif location == 'sdsc':
-            dhandler = data_handlers.SDSCDataHandler(self.session_path, self.signature, one=self.one)
-        elif location == 'popeye':
-            dhandler = data_handlers.PopeyeDataHandler(self.session_path, self.signature, one=self.one)
-        elif location == 'ec2':
-            dhandler = data_handlers.RemoteEC2DataHandler(self.session_path, self.signature, one=self.one)
-        else:
-            raise ValueError(f'Unknown location "{location}"')
-        return dhandler
+        if self.data_handler_class is None:
+            location = str.lower(location or self.location)
+            if location == 'local':
+                return data_handlers.LocalDataHandler(self.session_path, self.signature, one=self.one)
+            self.one = self.one or ONE()
+            if location == 'server':
+                self.data_handler_class = data_handlers.ServerDataHandler
+            elif location == 'serverglobus':
+                self.data_handler_class = data_handlers.ServerGlobusDataHandler
+            elif location == 'remote':
+                self.data_handler_class = data_handlers.RemoteHttpDataHandler
+            elif location == 'aws':
+                self.data_handler_class = data_handlers.RemoteAwsDataHandler
+            elif location == 'sdsc':
+                self.data_handler_class = data_handlers.SDSCDataHandler
+            elif location == 'popeye':
+                self.data_handler_class = data_handlers.PopeyeDataHandler
+            elif location == 'ec2':
+                self.data_handler_class = data_handlers.RemoteEC2DataHandler
+            else:
+                raise ValueError(f'Unknown location "{location}"')
+        return self.data_handler_class(self.session_path, self.signature, one=self.one)
 
     @staticmethod
     def make_lock_file(taskname='', time_out_secs=7200):

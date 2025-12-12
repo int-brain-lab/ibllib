@@ -27,7 +27,7 @@ See https://docs.internationalbrainlab.org/09_contribution.html
 We use Semantic Versioning.
 
 Before committing to your branch:
--   check formating `flake8`
+-   check formating `ruff check`
 -   run tests `python -m unittest discover`
 
 Pull request to `develop` or `main`.

@@ -4,7 +4,7 @@ boto3
 click>=7.0.0
 colorlog>=4.0.2
 flake8>=3.7.8
-globus-sdk
+globus-sdk>=4.0.0
 graphviz
 imagecodecs  # used to convert tif snapshots to png when registering mesoscope snapshots (also requires skimage)
 matplotlib>=3.0.3
@@ -32,6 +32,7 @@ iblatlas>=0.5.3
 iblqt>=0.8.2
 iblutil>=1.13.0
 mtscomp>=1.0.1
+ONE-api>=3.2.0
 phylib>=2.6.2
 psychofit
 slidingRP>=1.1.1  # steinmetz lab refractory period metrics
