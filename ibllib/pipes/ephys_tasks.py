@@ -845,9 +845,9 @@ class SpikeSorting(base_tasks.EphysTask, CellQCMixin):
                 _ = plot_task.run()
                 self.plot_tasks.append(plot_task)
 
-                plot_task = SpikeSortingPlots(ins[0]['id'], session_path=self.session_path, one=self.one)
-                _ = plot_task.run(collection=str(probe_out_path.relative_to(self.session_path)))
-                self.plot_tasks.append(plot_task)
+                # plot_task = SpikeSortingPlots(ins[0]['id'], session_path=self.session_path, one=self.one)
+                # _ = plot_task.run(collection=str(probe_out_path.relative_to(self.session_path)))
+                # self.plot_tasks.append(plot_task)
 
                 resolved = ins[0].get('json', {'temp': 0}).get('extended_qc', {'temp': 0}). \
                     get('alignment_resolved', False)
