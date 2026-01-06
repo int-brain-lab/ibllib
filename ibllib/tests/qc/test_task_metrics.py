@@ -179,6 +179,8 @@ class TaskQCTestData(unittest.TestCase):
             'position': np.ones_like(choice) * 35,
             'pause_duration': pauses
         }
+        # Change position sign to match choice direction and outcome
+        data['position'][data['choice'] != data['correct'] * 2 - 1] *= -1
 
         data['stimOnTrigger_times'] = start_times + data['quiescence'] + 1e-4
         data['stimOn_times'] = data['stimOnTrigger_times'] + 1e-1
@@ -521,9 +523,16 @@ class TestTaskMetrics(TaskQCTestData):
         self.assertTrue(np.isnan(metric[nogo]).all())
         self.assertTrue(np.isnan(passed[nogo]).all())
 
-        # Remove wheel data for choice trial
+        # Change position for one trial and check that it is caught
         assert self.data['choice'].any(), 'no choice trials in test data'
         n = np.argmax(self.data['choice'] != 0)  # Index of choice trial
+        # target position opposite to wheel movement for the given outcome
+        self.data['position'][n] = -self.data['position'][n]
+        metric, passed = qcmetrics.check_wheel_move_during_closed_loop(self.data, gain)
+        self.assertFalse(passed[n])
+
+        # Remove wheel data for choice trial
+        self.data['position'][n] = -self.data['position'][n]  # restore position
         mask = np.logical_xor(self.data['wheel_timestamps'] < self.data['goCue_times'][n],
                               self.data['wheel_timestamps'] > self.data['response_times'][n])
         self.data['wheel_timestamps'] = self.data['wheel_timestamps'][mask]

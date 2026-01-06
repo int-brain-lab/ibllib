@@ -846,13 +846,13 @@ def _wheel_move_during_closed_loop(re_ts, re_pos, data, wheel_gain=None, tol=1, 
     """
     Check the wheel moves the correct amount to reach threshold.
 
-    Check that the wheel moves by approximately 35 degrees during the closed-loop period
+    Check that the wheel moves by approximately +/- 35 degrees during the closed-loop period
     on trials where a feedback (error sound or valve) is delivered.
 
     Metric:
-        M = abs(w_resp - w_t0) - threshold_displacement, where w_resp = position at response
+        M = w_resp - w_t0 - threshold_displacement, where w_resp = position at response
         time, w_t0 = position at go cue time, threshold_displacement = displacement required to
-        move 35 visual degrees
+        move 35 visual degrees in the appropriate direction.
 
     Criterion:
         displacement < tol visual degree
@@ -877,21 +877,24 @@ def _wheel_move_during_closed_loop(re_ts, re_pos, data, wheel_gain=None, tol=1, 
                              end=data['response_times'])
 
     metric = np.zeros_like(data['feedback_times'])
-    # For each trial find the absolute displacement
+    # For each trial find the maximum displacement in either direction from the position at go cue
     for i, trial in enumerate(traces):
         t, pos = trial
         if pos.size != 0:
             # Find the position of the preceding sample and subtract it
             idx = np.abs(re_ts - t[0]).argmin() - 1
             origin = re_pos[idx]
-            metric[i] = np.abs(pos - origin).max()
+            p_max = np.argmax(np.abs(pos - origin))
+            metric[i] = (pos - origin)[p_max]
 
     # Load wheel_gain and thresholds for each trial
     wheel_gain = np.array([wheel_gain] * len(data['position']))
     thresh = data['position']
-    # abs displacement, s, in mm required to move 35 visual degrees
-    s_mm = np.abs(thresh / wheel_gain)  # don't care about direction
+    # displacement, s, in mm required to move 35 visual degrees
+    s_mm = thresh / wheel_gain
     criterion = cm_to_rad(s_mm * 1e-1)  # convert abs displacement to radians (wheel pos is in rad)
+    # For incorrect trials, the criterion is opposite direction
+    criterion *= data['correct'] * 2 - 1
     metric = metric - criterion  # difference should be close to 0
     rad_per_deg = cm_to_rad(1 / wheel_gain * 1e-1)
     passed = (np.abs(metric) < rad_per_deg * tol).astype(float)  # less than 1 visual degree off
