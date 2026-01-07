@@ -323,9 +323,11 @@ class FibrePhotometryBpodSync(FibrePhotometryBaseSync):
     def __init__(
         self,
         *args,
+        timestamps_colname: str | None = None,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
+        self.timestamps_colname = timestamps_colname
 
     @property
     def signature(self):
@@ -347,7 +349,9 @@ class FibrePhotometryBpodSync(FibrePhotometryBaseSync):
         # for bpod based syncing, the timestamps for syncing are in the digital inputs file
         raw_photometry_folder = self.session_path / self.photometry_collection
         digital_inputs_filepath = raw_photometry_folder / '_neurophotometrics_fpData.digitalInputs.pqt'
-        digital_inputs_df = fpio.read_digital_inputs_file(digital_inputs_filepath, channel=self.sync_channel)
+        digital_inputs_df = fpio.read_digital_inputs_file(
+            digital_inputs_filepath, channel=self.sync_channel, timestamps_colname=self.timestamps_colname
+        )
 
         # get the positive fronts
         timestamps_nph = digital_inputs_df.groupby(['polarity', 'channel']).get_group((1, self.sync_channel))['times'].values
