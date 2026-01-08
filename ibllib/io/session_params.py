@@ -31,7 +31,7 @@ from itertools import chain
 from copy import deepcopy
 
 from one.converters import ConversionMixin
-from iblutil.util import flatten
+from iblutil.util import flatten, ensure_list
 from iblutil.io.params import FileLock
 from packaging import version
 
@@ -342,7 +342,7 @@ def get_task_collection(sess_params, task_protocol=None):
     -----
     - The order of the set may not be the same as the descriptions tasks order when iterating.
     """
-    protocols = sess_params.get('tasks', [])
+    protocols = ensure_list(sess_params.get('tasks', []))
     if task_protocol is not None:
         task = next((x for x in protocols if task_protocol in x), None)
         return (task.get(task_protocol) or {}).get('collection')
