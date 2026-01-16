@@ -281,9 +281,8 @@ class BehaviourTask(DynamicTask):
         """ explicitly adding the experiment description file to the input files for all behavior tasks
         There is a trade-off between this inheritance design and explicit file signatures for child classes"""
 
+        self.signature['input_files'].append(('_ibl_experiment.description.yaml', self.collection, True))
         super().get_signatures(**kwargs)
-        self.input_files.append(('_ibl_experiment.description.yaml', self.collection, True))
-        return super().get_signatures(**kwargs)
 
 
 class VideoTask(BehaviourTask):
