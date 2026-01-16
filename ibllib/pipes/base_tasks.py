@@ -93,14 +93,6 @@ class BehaviourTask(DynamicTask):
         if self.protocol_number is not None:
             self.output_collection += f'/task_{self.protocol_number:02}'
 
-    @property
-    def signature(self):
-        return self.signature
-
-    @signature.setter
-    def signature(self, value):
-        self.signature = value
-
     def get_protocol(self, protocol=None, task_collection=None):
         """
         Return the task protocol name.
@@ -284,25 +276,6 @@ class BehaviourTask(DynamicTask):
         if not (trials_data and self.extractor):
             raise ValueError('No trials data and/or extractor found')
         return trials_data
-
-    def get_signatures(self, **kwargs):
-        """ explicitly adding the experiment description file to the input files for all behavior tasks
-        There is a trade-off between this inheritance design and explicit file signatures for child classes"""
-        for f in self.signature['input_files']:
-            _logger.info(f)
-
-        input_files = self.signature['input_files']
-        input_files.append(('_ibl_experiment.description.yaml', self.collection, True))
-        output_files = self.signature['output_files']
-
-        self.signature = {'input_files': input_files, 'output_files': output_files}
-
-        for f in self.signature['input_files']:
-            _logger.info(f)
-
-        import sys
-        sys.exit()
-        super().get_signatures(**kwargs)
 
 
 class VideoTask(BehaviourTask):

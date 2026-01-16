@@ -989,6 +989,7 @@ class SDSCDataHandler(DataHandler):
                     Path(self.root_path.joinpath(file_uuid)))
                 self.linked_files.append(file_link)
             except FileExistsError:
+                _logger.warning(f"could not symlink {file_link}")
                 pass
         task.session_path = Path(SDSC_TMP.joinpath(session_path))
         # If one of the symlinked input files is also an expected output, raise here to avoid overwriting

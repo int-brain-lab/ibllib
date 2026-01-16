@@ -456,6 +456,7 @@ class ChoiceWorldTrialsNidq(ChoiceWorldTrialsBpod):
                 ('_iblrig_taskSettings.raw.*', self.collection, True),
                 ('_iblrig_encoderEvents.raw*', self.collection, True),
                 ('_iblrig_encoderPositions.raw*', self.collection, True),
+                ('_ibl_experiment.description*', '', True),
                 v3B | (~v3B & v3A)  # either 3B datasets OR 3A datasets must be present
             ],
             'output_files': [
