@@ -283,12 +283,12 @@ class BehaviourTask(DynamicTask):
         for f in self.signature['input_files']:
             _logger.info(f)
 
-        self.signature['input_files'].append(('_ibl_experiment.description.yaml', self.collection, True))
+        self.signature['input_files'].append(('*experiment.description.*', self.collection, True))
         _logger.info('added')
         
         for f in self.signature['input_files']:
             _logger.info(f)
-            
+
         import sys
         sys.exit()
         super().get_signatures(**kwargs)
