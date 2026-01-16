@@ -380,6 +380,7 @@ class Task(abc.ABC):
         :return:
         """
         signature = data_handlers._parse_signature(self.signature)
+        _logger.info(f"{signature}")
         self.input_files = signature['input_files']
         self.output_files = signature['output_files']
 
