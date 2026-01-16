@@ -280,9 +280,15 @@ class BehaviourTask(DynamicTask):
     def get_signatures(self, **kwargs):
         """ explicitly adding the experiment description file to the input files for all behavior tasks
         There is a trade-off between this inheritance design and explicit file signatures for child classes"""
-        _logger.info(f"{self.signature}")
+        for f in self.signature['input_files']:
+            _logger.info(f)
+
         self.signature['input_files'].append(('_ibl_experiment.description.yaml', self.collection, True))
-        _logger.info(f"{self.signature}")
+        _logger.info('added')
+        
+        for f in self.signature['input_files']:
+            _logger.info(f)
+            
         import sys
         sys.exit()
         super().get_signatures(**kwargs)
