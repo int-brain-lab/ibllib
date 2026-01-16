@@ -93,6 +93,14 @@ class BehaviourTask(DynamicTask):
         if self.protocol_number is not None:
             self.output_collection += f'/task_{self.protocol_number:02}'
 
+    @property
+    def signature(self):
+        return self.signature
+
+    @signature.setter
+    def signature(self, value):
+        self.signature = value
+
     def get_protocol(self, protocol=None, task_collection=None):
         """
         Return the task protocol name.
@@ -282,10 +290,12 @@ class BehaviourTask(DynamicTask):
         There is a trade-off between this inheritance design and explicit file signatures for child classes"""
         for f in self.signature['input_files']:
             _logger.info(f)
-        import pdb
-        pdb.set_trace()
-        self.signature['input_files'].insert(0, ('*experiment.description.*', self.collection, True))
-        _logger.info('inserted')
+
+        input_files = self.signature['input_files']
+        input_files.append(('_ibl_experiment.description.yaml', self.collection, True))
+        output_files = self.signature['output_files']
+
+        self.signature = {'input_files': input_files, 'output_files': output_files}
 
         for f in self.signature['input_files']:
             _logger.info(f)
