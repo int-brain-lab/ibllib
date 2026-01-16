@@ -282,8 +282,9 @@ class BehaviourTask(DynamicTask):
         There is a trade-off between this inheritance design and explicit file signatures for child classes"""
         for f in self.signature['input_files']:
             _logger.info(f)
-
-        self.signature['input_files'].append(('*experiment.description.*', self.collection, True))
+        input_files = self.signature['input_files']
+        input_files.append(('*experiment.description.*', self.collection, True))
+        self.signature['input_files'] = input_files
         _logger.info('added')
         
         for f in self.signature['input_files']:
