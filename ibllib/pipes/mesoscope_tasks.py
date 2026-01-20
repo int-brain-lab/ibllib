@@ -219,6 +219,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         self.overwrite = kwargs.get('overwrite', False)
         all_files_present = super().setUp(**kwargs)  # Ensure files present
         if not self.overwrite:
+            # Check if the bin files already exist on disk, in which case we don't need to extract tifs
             bin_sig = dataset_from_name('data.bin', self.input_files)[0]
             renamed_bin_sig = dataset_from_name('imaging.frames_motionRegistered.bin', self.input_files)[0]
             if (bin_sig | renamed_bin_sig).find_files(self.session_path)[0]:
@@ -265,7 +266,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         I = ExpectedDataset.input  # noqa
         signature = {
             'input_files': [I('_ibl_rawImagingData.meta.json', self.device_collection, True, unique=False),
-                            I('*.tif', self.device_collection, True) |
+                            I('*.tif', self.device_collection, True, unique=False) |
                             I('imaging.frames.tar.bz2', self.device_collection, True, unique=False),
                             I('exptQC.mat', self.device_collection, False)],
             'output_files': [('mpci.ROIActivityF.npy', 'alf/FOV*', True),
@@ -788,7 +789,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
             _logger.info('Extracting tif data per plane')
             # Ingest tiff files
             try:
-                plane_folders, _ = self.bin_per_plane(metadata, save_folder=save_folder, save_path0=self.session_path)
+                plane_folders, _ = self.bin_per_plane(metadata, save_folder=save_folder, save_path0=self.session_path, **kwargs)
             except Exception:
                 _logger.error('Exception occurred, cleaning up incomplete suite2p folder')
                 # NB: Only remove the suite2p folder if there are no unexpected files in there

@@ -3,7 +3,6 @@ import logging
 from itertools import chain
 
 import numpy as np
-from scipy.signal import find_peaks
 import one.alf.io as alfio
 from one.alf.path import session_path_parts
 from iblutil.util import ensure_list
@@ -18,7 +17,6 @@ from ibllib.io.extractors.ephys_fpga import (
     FpgaTrials, FpgaTrialsHabituation, WHEEL_TICKS, WHEEL_RADIUS_CM, _assign_events_to_trial)
 from ibllib.io.extractors.training_wheel import extract_wheel_moves
 from ibllib.io.extractors.camera import attribute_times
-from brainbox.behavior.wheel import velocity_filtered
 
 _logger = logging.getLogger(__name__)
 
@@ -198,7 +196,7 @@ class TimelineTrials(FpgaTrials):
         if bpod_event_ttls is None:
             # The trial start TTLs are often too short for the low sampling rate of the DAQ and are
             # therefore not used in extraction
-            bpod_event_ttls = {'valve_open': (2.33e-4, 0.4), 'trial_end': (0.4, np.inf)}
+            bpod_event_ttls = {'trial_start': (0, 2.33e-4), 'valve_open': (5e-3, 0.4), 'trial_end': (0.4, np.inf)}
         bpod, bpod_event_intervals = super().get_bpod_event_times(
             sync=sync, chmap=chmap, bpod_event_ttls=bpod_event_ttls, display=display, **kwargs)
 
@@ -477,91 +475,97 @@ class TimelineTrials(FpgaTrials):
             ax1.set_ylabel('DAQ wheel position / rad'), ax1.set_xlabel('Time / s')
         return wheel, moves
 
-    def get_valve_open_times(self, display=False, threshold=100, driver_ttls=None):
+    def get_valve_open_times(self, display=False, threshold=3., driver_ttls=None):
         """
         Get the valve open times from the raw timeline voltage trace.
+
+        This function is designed to detect brief voltage pulses that toggle a solenoid valve.
+        It uses the driver TTLs to define time windows where 'open' and 'close' pulses are expected,
+        and then detects the onset of the voltage pulse within each window.
 
         Parameters
         ----------
         display : bool
-            Plot detected times on the raw voltage trace.
+            If True, plots the raw voltage trace, driver TTLs, and detected event times.
         threshold : float
-            The threshold of voltage change to apply. The default was set by eye; units should be
-            Volts per sample but doesn't appear to be.
+            The voltage threshold (in Volts) used to detect the onset of a pulse.
         driver_ttls : numpy.array
-            An optional array of driver TTLs to use for assigning with the valve times.
+            An Nx2 array of TTL 'on' and 'off' times that command the valve. If None, the
+            function cannot determine the valve state and returns empty arrays.
 
         Returns
         -------
         numpy.array
-            The detected valve open intervals.
+            An Mx2 array of [open, close] time intervals for the valve.
         numpy.array
-            If driver_ttls is not None, returns an array of open times that occurred directly after
-            the driver TTLs.
+            An array of M valve open times, corresponding to the start of each interval.
         """
-        WARN_THRESH = 10e-3  # open time threshold below which to log warning
         tl = self.timeline
-        info = next(x for x in tl['meta']['inputs'] if x['name'] == 'reward_valve')
-        values = tl['raw'][:, info['arrayColumn'] - 1]  # Timeline indices start from 1
+        info = next((x for x in tl['meta']['inputs'] if x['name'] == 'reward_valve'), None)
+        if info is None or driver_ttls is None:
+            _logger.warning('Cannot determine valve open times: reward_valve channel or driver TTLs not found.')
+            return np.array([]), np.array([])
 
-        # The voltage changes over ~1ms and can therefore occur over two DAQ samples at 2kHz
-        # making simple thresholding an issue.  For this reason we convolve the signal with a
-        # window and detect the peaks and troughs.
-        if (Fs := tl['meta']['daqSampleRate']) != 2000:  # e.g. 2kHz
-            _logger.warning('Reward valve detection not tested with a DAQ sample rate of %i', Fs)
-        dt = 1e-3  # change in voltage takes ~1ms when changing valve open state
-        N = dt / (1 / Fs)  # this means voltage change occurs over N samples
-        vel, _ = velocity_filtered(values, int(Fs / N))  # filtered voltage change over time
-        ups, _ = find_peaks(vel, height=threshold)  # valve closes (-5V -> 0V)
-        downs, _ = find_peaks(-1 * vel, height=threshold)  # valve opens (0V -> -5V)
+        values = tl['raw'][:, info['arrayColumn'] - 1]
+        timestamps = tl['timestamps']
 
-        # Convert these times into intervals
-        ixs = np.argsort(np.r_[downs, ups])  # sort indices
-        times = tl['timestamps'][np.r_[downs, ups]][ixs]  # ordered valve event times
-        polarities = np.r_[np.zeros_like(downs) - 1, np.ones_like(ups)][ixs]  # polarity sorted
-        missing = np.where(np.diff(polarities) == 0)[0]  # if some changes were missed insert NaN
-        times = np.insert(times, missing + int(polarities[0] == -1), np.nan)
-        if polarities[-1] == -1:  # ensure ends with a valve close
-            times = np.r_[times, np.nan]
-        if polarities[0] == 1:  # ensure starts with a valve open
-            # It seems it can start out at -5V (open), then when the reward happens it closes and
-            # immediately opens. In this case we insert discard the first open time.
-            times = np.r_[np.nan, times]
-        intervals = times.reshape(-1, 2)
+        def find_onset_in_window(start_time, end_time):
+            """Find the first timestamp where the voltage exceeds a threshold within a window."""
+            window_mask = (timestamps >= start_time) & (timestamps <= end_time)
+            if not np.any(window_mask):
+                return np.nan
 
-        # Log warning of improbably short intervals
-        short = np.sum(np.diff(intervals) < WARN_THRESH)
-        if short > 0:
-            _logger.warning('%i valve open intervals shorter than %i ms', short, WARN_THRESH)
+            window_indices = np.where(window_mask)[0]
+            # Find where voltage crosses the threshold in the window
+            crossings = np.where(values[window_indices] > threshold)[0]
 
-        # The closing of the valve is noisy. Keep only the falls that occur immediately after a Bpod TTL
-        if driver_ttls is not None:
-            # Returns an array of open_times indices, one for each driver TTL
-            ind = attribute_times(intervals[:, 0], driver_ttls[:, 0], tol=.1, take='after')
-            open_times = intervals[ind[ind >= 0], 0]
-            # TODO Log any > 40ms? Difficult to report missing valve times because of calibration
+            if crossings.size > 0:
+                # Return the timestamp of the first crossing
+                return timestamps[window_indices[crossings[0]]]
+            else:
+                return np.nan
+
+        # Define a 100ms search window after each TTL command
+        window_duration = 0.1
+
+        # Find open onsets after the TTL rises
+        open_onsets = np.array([find_onset_in_window(t_on, t_on + window_duration) for t_on in driver_ttls[:, 0]])
+
+        # Find close onsets after the TTL falls
+        close_onsets = np.array([find_onset_in_window(t_off, t_off + window_duration) for t_off in driver_ttls[:, 1]])
+
+        # Filter out any NaNs that resulted from missed detections
+        valid_mask = ~np.isnan(open_onsets) & ~np.isnan(close_onsets)
+        if np.sum(valid_mask) < len(driver_ttls):
+            _logger.warning('%d valve events missed during detection.', len(driver_ttls) - np.sum(valid_mask))
+
+        open_times = open_onsets[valid_mask]
+        close_times = close_onsets[valid_mask]
+
+        # The intervals are formed by the detected open and close times
+        intervals = np.c_[open_times, close_times]
 
         if display:
             fig, (ax0, ax1) = plt.subplots(nrows=2, sharex=True)
+            # Plot driver TTLs
             ax0.plot(tl['timestamps'], timeline_get_channel(tl, 'bpod'), color='grey', linestyle='-')
-            if driver_ttls is not None:
-                x = np.empty_like(driver_ttls.flatten())
-                x[0::2] = driver_ttls[:, 0]
-                x[1::2] = driver_ttls[:, 1]
-                y = np.ones_like(x)
-                y[1::2] -= 2
-                squares(x, y, ax=ax0, yrange=[0, 5])
-                # vertical_lines(driver_ttls, ymax=5, ax=ax0, linestyle='--', color='b')
-                ax0.plot(open_times, np.ones_like(open_times) * 4.5, 'g*')
-            ax1.plot(tl['timestamps'], values, 'k-o')
-            ax1.set_ylabel('Voltage / V'), ax1.set_xlabel('Time / s')
+            sq_ttls = np.ravel(np.column_stack((np.ones(len(driver_ttls)), np.zeros(len(driver_ttls)) - 1)))
+            squares(np.ravel(driver_ttls), sq_ttls, ax=ax0, yrange=[0, 5], color='blue')
+            ax0.set_title('Bpod Driver TTLs')
+            ax0.set_yticks([0, 5])
+            ax0.set_ylabel('Voltage (V)')
 
-            ax2 = ax1.twinx()
-            ax2.set_ylabel('dV', color='grey')
-            ax2.plot(tl['timestamps'], vel, linestyle='-', color='grey')
-            ax2.plot(intervals[:, 1], np.ones(len(intervals)) * threshold, 'r*', label='close')
-            ax2.plot(intervals[:, 0], np.ones(len(intervals)) * threshold, 'g*', label='open')
-        return intervals if driver_ttls is None else (intervals, open_times)
+            # Plot raw valve voltage and detected times
+            ax1.plot(timestamps, values, 'k-o', markersize=2)
+            ax1.axhline(threshold, color='orange', linestyle='--', label=f'Threshold ({threshold}V)')
+            ax1.plot(open_times, values[np.searchsorted(timestamps, open_times)], 'g*', markersize=10, label='Open')
+            ax1.plot(close_times, values[np.searchsorted(timestamps, close_times)], 'r*', markersize=10, label='Close')
+            ax1.set_ylabel('Voltage (V)')
+            ax1.set_xlabel('Time (s)')
+            ax1.legend()
+            plt.tight_layout()
+
+        return intervals, open_times
 
     def _assign_events_audio(self, audio_times, audio_polarities, display=False):
         """
