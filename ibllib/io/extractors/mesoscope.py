@@ -475,20 +475,26 @@ class TimelineTrials(FpgaTrials):
             ax1.set_ylabel('DAQ wheel position / rad'), ax1.set_xlabel('Time / s')
         return wheel, moves
 
-    def get_valve_open_times(self, display=False, threshold=3., driver_ttls=None):
+    def get_valve_open_times(self, display=True, threshold=2.0, driver_ttls=None):
         """
         Get the valve open times from the raw timeline voltage trace.
 
-        This function is designed to detect brief voltage pulses that toggle a solenoid valve.
-        It uses the driver TTLs to define time windows where 'open' and 'close' pulses are expected,
-        and then detects the onset of the voltage pulse within each window.
+        This function uses the driver TTLs to define time windows where 'open' and 'close'
+        pulses are expected. It is designed to be robust to two different modes of valve
+        operation:
+        1. A brief voltage pulse from 0V to 5V for both open and close events.
+        2. A sustained voltage level that switches between 0V (open) and 5V (closed).
+
+        To handle both cases, it removes the median voltage offset and detects the first
+        time the absolute signal crosses a threshold within the search window.
 
         Parameters
         ----------
         display : bool
             If True, plots the raw voltage trace, driver TTLs, and detected event times.
         threshold : float
-            The voltage threshold (in Volts) used to detect the onset of a pulse.
+            The absolute voltage threshold (in Volts) used to detect the onset of a pulse
+            or level change after baseline correction.
         driver_ttls : numpy.array
             An Nx2 array of TTL 'on' and 'off' times that command the valve. If None, the
             function cannot determine the valve state and returns empty arrays.
@@ -508,16 +514,23 @@ class TimelineTrials(FpgaTrials):
 
         values = tl['raw'][:, info['arrayColumn'] - 1]
         timestamps = tl['timestamps']
+        if hold_mode := np.median(values) > 4.:
+            _logger.info('Valve mode: 5V->0V when open')
+        else:
+            _logger.info('Valve mode: 0V->5V when opening or closing')
 
-        def find_onset_in_window(start_time, end_time):
-            """Find the first timestamp where the voltage exceeds a threshold within a window."""
+        def find_onset_in_window(start_time, end_time, event_type):
+            """Find the first timestamp where the voltage exceeds a threshold."""
             window_mask = (timestamps >= start_time) & (timestamps <= end_time)
             if not np.any(window_mask):
                 return np.nan
 
             window_indices = np.where(window_mask)[0]
-            # Find where voltage crosses the threshold in the window
-            crossings = np.where(values[window_indices] > threshold)[0]
+            # Find where the absolute corrected voltage crosses the threshold
+            if hold_mode and event_type == 'open':  # 'open' event 5V -> 0V
+                    crossings = np.where(values[window_indices] < 5.0 - threshold)[0]
+            else:  # 'close' or any event 0V -> 5V
+                crossings = np.where(values[window_indices] > threshold)[0]
 
             if crossings.size > 0:
                 # Return the timestamp of the first crossing
@@ -529,10 +542,10 @@ class TimelineTrials(FpgaTrials):
         window_duration = 0.1
 
         # Find open onsets after the TTL rises
-        open_onsets = np.array([find_onset_in_window(t_on, t_on + window_duration) for t_on in driver_ttls[:, 0]])
+        open_onsets = np.array([find_onset_in_window(t_on, t_on + window_duration, 'open') for t_on in driver_ttls[:, 0]])
 
         # Find close onsets after the TTL falls
-        close_onsets = np.array([find_onset_in_window(t_off, t_off + window_duration) for t_off in driver_ttls[:, 1]])
+        close_onsets = np.array([find_onset_in_window(t_off, t_off + window_duration, 'close') for t_off in driver_ttls[:, 1]])
 
         # Filter out any NaNs that resulted from missed detections
         valid_mask = ~np.isnan(open_onsets) & ~np.isnan(close_onsets)
@@ -555,9 +568,10 @@ class TimelineTrials(FpgaTrials):
             ax0.set_yticks([0, 5])
             ax0.set_ylabel('Voltage (V)')
 
-            # Plot raw valve voltage and detected times
+            # Plot valve voltage and detected times
             ax1.plot(timestamps, values, 'k-o', markersize=2)
             ax1.axhline(threshold, color='orange', linestyle='--', label=f'Threshold ({threshold}V)')
+            ax1.axhline(5.0 - threshold, color='orange', linestyle='--')
             ax1.plot(open_times, values[np.searchsorted(timestamps, open_times)], 'g*', markersize=10, label='Open')
             ax1.plot(close_times, values[np.searchsorted(timestamps, close_times)], 'r*', markersize=10, label='Close')
             ax1.set_ylabel('Voltage (V)')
@@ -649,7 +663,8 @@ class TimelineTrialsHabituation(FpgaTrialsHabituation, TimelineTrials):
         valve_driver_ttls = bpod_event_intervals['valve_open']
         # If there is a reward_valve channel, the voltage across the valve has been recorded and
         # should give a more accurate readout of the valve's activity.
-        if any(ch['name'] == 'reward_valve' for ch in self.timeline['meta']['inputs']):
+        use_valve_channel = kwargs.get('use_valve_channel', True)
+        if use_valve_channel and any(ch['name'] == 'reward_valve' for ch in self.timeline['meta']['inputs']):
             # Use the driver TTLs to find the valve open times that correspond to the valve opening
             valve_intervals, valve_open_times = self.get_valve_open_times(driver_ttls=valve_driver_ttls)
             if valve_open_times.size != start_times.size:
