@@ -336,7 +336,7 @@ class ChoiceWorldTrialsBpod(base_tasks.BehaviourTask):
 
     def _run(self, update=True, save=True, **kwargs):
         """Extracts an iblrig training session."""
-        trials, output_files = self.extract_behaviour(save=save)
+        trials, output_files = self.extract_behaviour(save=save, **kwargs)
         if trials is None:
             return None
         if self.one is None or self.one.offline:
@@ -530,8 +530,8 @@ class ChoiceWorldTrialsNidq(ChoiceWorldTrialsBpod):
                 self.status = -1
         return qc
 
-    def _run(self, update=True, plot_qc=True, save=True):
-        output_files = super()._run(update=update, save=save, plot_qc=plot_qc)
+    def _run(self, update=True, plot_qc=True, save=True, **kwargs):
+        output_files = super()._run(update=update, save=save, plot_qc=plot_qc, **kwargs)
         if update and not self.one.offline:
             self._behaviour_criterion(update=update)
 

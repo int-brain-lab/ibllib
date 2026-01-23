@@ -275,7 +275,8 @@ class TimelineTrials(FpgaTrials):
         correct = self.bpod_trials['feedbackType'] == 1
         # If there is a reward_valve channel, the voltage across the valve has been recorded and
         # should give a more accurate readout of the valve's activity.
-        if any(ch['name'] == 'reward_valve' for ch in self.timeline['meta']['inputs']):
+        use_valve_channel = kwargs.get('use_valve_channel', True)
+        if use_valve_channel and any(ch['name'] == 'reward_valve' for ch in self.timeline['meta']['inputs']):
             # TODO Let's look at the expected open length based on calibration and reward volume
             # import scipy.interpolate
             # # FIXME support v7 settings?
@@ -287,6 +288,9 @@ class TimelineTrials(FpgaTrials):
 
             # Use the driver TTLs to find the valve open times that correspond to the valve opening
             valve_intervals, valve_open_times = self.get_valve_open_times(driver_ttls=valve_driver_ttls)
+            if valve_open_times.size == 0:
+                _logger.error('No valve open times detected from reward_valve channel; falling back to TTLs')
+                valve_open_times = valve_driver_ttls[:, 0]
             if valve_open_times.size != np.sum(correct):
                 _logger.warning(
                     'Number of valve open times does not equal number of correct trials (%i != %i)',
@@ -475,7 +479,7 @@ class TimelineTrials(FpgaTrials):
             ax1.set_ylabel('DAQ wheel position / rad'), ax1.set_xlabel('Time / s')
         return wheel, moves
 
-    def get_valve_open_times(self, display=True, threshold=2.0, driver_ttls=None):
+    def get_valve_open_times(self, display=False, threshold=2.0, driver_ttls=None):
         """
         Get the valve open times from the raw timeline voltage trace.
 
@@ -667,6 +671,9 @@ class TimelineTrialsHabituation(FpgaTrialsHabituation, TimelineTrials):
         if use_valve_channel and any(ch['name'] == 'reward_valve' for ch in self.timeline['meta']['inputs']):
             # Use the driver TTLs to find the valve open times that correspond to the valve opening
             valve_intervals, valve_open_times = self.get_valve_open_times(driver_ttls=valve_driver_ttls)
+            if valve_open_times.size == 0:
+                _logger.error('No valve open times detected from reward_valve channel; falling back to TTLs')
+                valve_open_times = valve_driver_ttls[:, 0]
             if valve_open_times.size != start_times.size:
                 _logger.warning(
                     'Number of valve open times does not equal number of correct trials (%i != %i)',
