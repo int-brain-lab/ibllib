@@ -286,7 +286,7 @@ class BehaviourTask(DynamicTask):
         return super().get_signatures(**kwargs)
 
 
-class VideoTask(BehaviourTask):
+class VideoTask(DynamicTask):
 
     def __init__(self, session_path, cameras, **kwargs):
         super().__init__(session_path, cameras=cameras, **kwargs)
