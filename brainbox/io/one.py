@@ -1600,7 +1600,7 @@ class PhotometrySessionLoader(SessionLoader):
     def load_photometry(
         self,
         restrict_to_session: bool = True,
-        pre: int = 5,
+        pre: int = -5,
         post: int = 5,
     ):
         # session path precedence over eid
