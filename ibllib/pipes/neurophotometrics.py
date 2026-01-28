@@ -2,7 +2,7 @@ import logging
 from pathlib import Path
 import numpy as np
 import pandas as pd
-from typing import Tuple, Optional
+from typing import Tuple, Optional, List
 import pickle
 
 import ibldsp.utils
@@ -13,8 +13,18 @@ from iblutil.io import jsonable
 from nptdms import TdmsFile
 
 from abc import abstractmethod
-from iblphotometry import io as fpio
-from iblutil.spacer import Spacer
+import iblphotometry
+from iblphotometry import fpio
+
+from one.api import ONE
+import json
+from scipy.optimize import minimize
+
+from ibllib.qc.base import QC
+from iblphotometry import qc
+from one.alf.spec import QC as QC_status
+from iblphotometry.metrics import n_unique_samples, n_edges
+
 
 _logger = logging.getLogger('ibllib')
 
@@ -56,7 +66,7 @@ def extract_timestamps_from_tdms_file(
     chunk_size=10000,
 ) -> dict:
     """extractor for tdms files as written by the daqami software, configured for neurophotometrics
-    experiments: Frameclock is in AI7, DI1-4 are the bpod sync signals
+    experiments: Frameclock is in an analog channel (AI?), DI1-4 are the bpod sync signals
 
     Parameters
     ----------
@@ -70,7 +80,8 @@ def extract_timestamps_from_tdms_file(
     Returns
     -------
     dict
-        a dict with the tdms channel names as keys and the timestamps of the rising fronts
+        a dict with the tdms channel names as keys and 'positive' the timestamps of the rising edges
+        'negative' the falling edges
     """
     #
     _logger.info(f'extracting timestamps from tdms file: {tdms_filepath}')
@@ -98,33 +109,40 @@ def extract_timestamps_from_tdms_file(
     # ini
     timestamps = {}
     for ch in digital_channel_names:
-        timestamps[ch] = []
+        timestamps[ch] = dict(positive=[], negative=[])
 
     # chunked loop for memory efficiency
     if chunk_size is not None:
         n_chunks = df.shape[0] // chunk_size
         for i in range(n_chunks):
-            vals_ = vals[i * chunk_size: (i + 1) * chunk_size]
+            vals_ = vals[i * chunk_size : (i + 1) * chunk_size]
             # data = np.array([list(f'{v:04b}'[::-1]) for v in vals_], dtype='int8')
             data = _int2digital_channels(vals_)
 
             for j, name in enumerate(digital_channel_names):
                 ix = np.where(np.diff(data[:, j]) == 1)[0] + (chunk_size * i)
-                timestamps[name].append(ix / fs)
+                timestamps[name]['positive'].append(ix / fs)
+                ix = np.where(np.diff(data[:, j]) == -1)[0] + (chunk_size * i)
+                timestamps[name]['negative'].append(ix / fs)
 
         for ch in digital_channel_names:
-            timestamps[ch] = np.concatenate(timestamps[ch])
+            timestamps[ch]['positive'] = np.concatenate(timestamps[ch]['positive'])
+            timestamps[ch]['negative'] = np.concatenate(timestamps[ch]['negative'])
     else:
         data = _int2digital_channels(vals)
         for j, name in enumerate(digital_channel_names):
             ix = np.where(np.diff(data[:, j]) == 1)[0]
-            timestamps[name].append(ix / fs)
+            timestamps[name]['positive'].append(ix / fs)
+            ix = np.where(np.diff(data[:, j]) == 1)[0]
+            timestamps[name]['negative'].append(ix / fs)
 
     if has_analog_group:
         # frameclock data is recorded on an analog channel
         for channel in analog_group.channels():
+            timestamps[channel.name] = {}
             signal = (channel.data > 2.5).astype('int32')  # assumes 0-5V
-            timestamps[channel.name] = np.where(np.diff(signal) == 1)[0] / fs
+            timestamps[channel.name]['positive'] = np.where(np.diff(signal) == 1)[0] / fs
+            timestamps[channel.name]['negative'] = np.where(np.diff(signal) == -1)[0] / fs
 
     if save_path is not None:
         _logger.info(f'saving extracted timestamps to: {save_path}')
@@ -134,49 +152,84 @@ def extract_timestamps_from_tdms_file(
     return timestamps
 
 
+def extract_timestamps_from_bpod_jsonable(file_jsonable: str | Path, sync_states_names: List[str]):
+    _, bpod_data = jsonable.load_task_jsonable(file_jsonable)
+    timestamps = []
+    for sync_name in sync_states_names:
+        timestamps.append(
+            np.array(
+                [
+                    data['States timestamps'][sync_name][0][0] + data['Trial start timestamp'] - data['Bpod start timestamp']
+                    for data in bpod_data
+                    if sync_name in data['States timestamps']
+                ]
+            )
+        )
+    timestamps = np.sort(np.concatenate(timestamps))
+    timestamps = timestamps[~np.isnan(timestamps)]
+    return timestamps
+
+
 class FibrePhotometryBaseSync(base_tasks.DynamicTask):
     # base clas for syncing fibre photometry
     # derived classes are: FibrePhotometryBpodSync and FibrePhotometryDAQSync
     priority = 90
     job_size = 'small'
 
-    def __init__(self, session_path, one, **kwargs):
+    def __init__(
+        self,
+        session_path: str | Path,
+        one: ONE,
+        task_protocol: str | None = None,
+        task_collection: str | None = None,
+        assert_matching_timestamps: bool = True,
+        sync_states_names: list[str] | None = None,
+        sync_channel: int | str | None = None,  # if set, overwrites the value extracted from the experiment_description
+        **kwargs,
+    ):
         super().__init__(session_path, one=one, **kwargs)
         self.photometry_collection = kwargs.get('collection', 'raw_photometry_data')  # raw_photometry_data
         self.kwargs = kwargs
+        self.task_protocol = task_protocol
+        self.task_collection = task_collection
+        self.assert_matching_timestamps = assert_matching_timestamps
 
-        # we will work with the first protocol here
-        for task in self.session_params['tasks']:
-            self.task_protocol = next(k for k in task)
+        if self.task_protocol is None:
+            # we will work with the first protocol here
+            for task in self.session_params['tasks']:
+                self.task_protocol = next(k for k in task)
+                break
+
+        if self.task_collection is None:
+            # if not provided, infer
             self.task_collection = ibllib.io.session_params.get_task_collection(self.session_params, self.task_protocol)
-            break
 
-    def _get_bpod_timestamps(self) -> Tuple[np.ndarray, list]:
-        # the timestamps for syncing, in the time of the bpod
-        if 'habituation' in self.task_protocol:
-            sync_states_names = ['iti', 'reward']
+        # configuring the sync: state names
+        if sync_states_names is None:
+            if 'habituation' in self.task_protocol:
+                self.sync_states_names = ['iti', 'reward']
+            else:
+                self.sync_states_names = ['trial_start', 'reward', 'exit_state']
         else:
-            sync_states_names = ['trial_start', 'reward', 'exit_state']
+            self.sync_states_names = sync_states_names
 
-        # read in the raw behaviour data for syncing
+        # configuring the sync: channel
+        if sync_channel is None:
+            self.sync_channel = kwargs.get('sync_channel', self.session_params['devices']['neurophotometrics']['sync_channel'])
+        else:
+            self.sync_channel = sync_channel
+
+    def _get_bpod_timestamps(self) -> np.ndarray:
+        # the timestamps for syncing, in the time of the bpod
+
+        file_jsonable = self.session_path.joinpath(self.task_collection, '_iblrig_taskData.raw.jsonable')
+        timestamps_bpod = extract_timestamps_from_bpod_jsonable(file_jsonable, self.sync_states_names)
+        return timestamps_bpod
+
+    def _get_valid_bounds(self):
         file_jsonable = self.session_path.joinpath(self.task_collection, '_iblrig_taskData.raw.jsonable')
         _, bpod_data = jsonable.load_task_jsonable(file_jsonable)
-
-        # we get the timestamps of the states from the bpod data
-        timestamps_bpod = []
-        for sync_name in sync_states_names:
-            timestamps_bpod.append(
-                np.array(
-                    [
-                        data['States timestamps'][sync_name][0][0] + data['Trial start timestamp'] - data['Bpod start timestamp']
-                        for data in bpod_data
-                        if sync_name in data['States timestamps']
-                    ]
-                )
-            )
-        timestamps_bpod = np.sort(np.concatenate(timestamps_bpod))
-        timestamps_bpod = timestamps_bpod[~np.isnan(timestamps_bpod)]
-        return timestamps_bpod, bpod_data
+        return [bpod_data[0]['Trial start timestamp'] - 2, bpod_data[-1]['Trial end timestamp'] + 2]
 
     @abstractmethod
     def _get_neurophotometrics_timestamps(self) -> np.ndarray:
@@ -185,96 +238,10 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
         # for daq based syncing, the timestamps are extracted from the tdms file
         ...
 
-    # def _get_sync_function(self, spacer_detection_mode='fallback') -> Tuple[callable, list]:
-    #     # returns the synchronization function
-    #     # get the timestamps
-    #     timestamps_bpod, bpod_data = self._get_bpod_timestamps()
-    #     timestamps_nph = self._get_neurophotometrics_timestamps()
-
-    #     # verify presence of sync timestamps
-    #     for source, timestamps in zip(['bpod', 'neurophotometrics'], [timestamps_bpod, timestamps_nph]):
-    #         assert len(timestamps) > 0, f'{source} sync timestamps are empty'
-
-    #     # split into segments if multiple spacers are found
-    #     # attempt to sync for each segment (only one will work)
-    #     spacer = Spacer()
-
-    #     def _get_segments(timestamps_nph, spacer_detection_mode):
-    #         segments = []
-
-    #         match spacer_detection_mode:
-    #             case 'fast':
-    #                 spacer_ix = spacer.find_spacers_from_timestamps(timestamps_nph, atol=1e-5)
-                        
-    #             case 'safe':
-    #                 spacer_ix, spacer_times = spacer.find_spacers_from_positive_fronts(timestamps_nph, fs=1000)
-    #                 spacer_ix = np.searchsorted(timestamps_nph, spacer_times)
-
-    #             case 'fallback': # first try fast, if fails, try safe
-    #                 segments = _get_segments(timestamps_nph, 'fast')
-    #                 if len(segments) > 0:
-    #                     return segments
-    #                 else:
-    #                     segments = _get_segments(timestamps_nph, 'safe')
-    #                     if len(segments) > 0:
-    #                         return segments
-    #                     else:
-    #                         raise ValueError('spacer detection failed')
-
-    #         # the indices that mark the boundaries of segments
-    #         segment_ix = np.concatenate([spacer_ix, [timestamps_nph.shape[0]]])
-    #         for i in range(segment_ix.shape[0] - 1):
-    #             start_ix = segment_ix[i] + (spacer.n_pulses * 2) - 1
-    #             stop_ix = segment_ix[i + 1]
-    #             segments.append(timestamps_nph[start_ix:stop_ix])
-
-    #         return segments
-
-    #     # verify spacer detection
-    #     segments = _get_segments(timestamps_nph, spacer_detection_mode=spacer_detection_mode)
-    #     assert len(segments) > 0, 'spacer detection failed'
-
-    #     def check_segment(timestamps_segment, matching_threshold = .95):
-    #         # check a segment for matching sync
-    #         try:
-    #             sync_nph_to_bpod_fcn, drift_ppm, ix_nph, ix_bpod = ibldsp.utils.sync_timestamps(
-    #                 timestamps_segment, timestamps_bpod, return_indices=True, linear=True
-    #             )
-    #         except ValueError:
-    #             # this gets raised when there are no timestamps (multiple session restart)
-    #             return False
-
-    #         # then we check the alignment, should be less than the camera sampling rate
-    #         tcheck = sync_nph_to_bpod_fcn(timestamps_segment[ix_nph]) - timestamps_bpod[ix_bpod]
-    #         # _logger.info(
-    #         #     f'sync: n trials {len(bpod_data)}'
-    #         #     f'n bpod sync {len(timestamps_bpod)}'
-    #         #     f'n photometry {len(timestamps_segment)}, n match {len(ix_nph)}'
-    #         # )
-    #         if len(ix_nph) / len(timestamps_bpod) < matching_threshold:
-    #             # wrong segment
-    #             return False
-    #         # _logger.info(f'segment {i} - matched')
-    #         # TODO the framerate here is hardcoded, infer it instead!
-    #         assert np.all(np.abs(tcheck) < 1 / 60), 'Sync issue detected, residual above 1/60s'
-    #         return True
-
-    #     checked_segments = [check_segment(segment) for segment in segments]
-
-    #     assert np.sum(checked_segments) == 1, f'error in segment matching: matching segments: {np.sum(checked_segments)}'
-    #     timestamps_segment = segments[np.where(checked_segments)[0][0]]
-
-    #     sync_nph_to_bpod_fcn, drift_ppm, ix_nph, ix_bpod = ibldsp.utils.sync_timestamps(
-    #         timestamps_segment, timestamps_bpod, return_indices=True, linear=True
-    #     )
-
-    #     valid_bounds = [bpod_data[0]['Trial start timestamp'] - 2, bpod_data[-1]['Trial end timestamp'] + 2]
-    #     return sync_nph_to_bpod_fcn, valid_bounds
-
     def _get_sync_function(self) -> Tuple[callable, list]:
         # returns the synchronization function
         # get the timestamps
-        timestamps_bpod, bpod_data = self._get_bpod_timestamps()
+        timestamps_bpod = self._get_bpod_timestamps()
         timestamps_nph = self._get_neurophotometrics_timestamps()
 
         # verify presence of sync timestamps
@@ -284,59 +251,83 @@ class FibrePhotometryBaseSync(base_tasks.DynamicTask):
         sync_nph_to_bpod_fcn, drift_ppm, ix_nph, ix_bpod = ibldsp.utils.sync_timestamps(
             timestamps_nph, timestamps_bpod, return_indices=True, linear=True
         )
-        _logger.info(f"synced with drift: {drift_ppm}")
+        if np.absolute(drift_ppm) > 20:
+            _logger.warning(f'sync with excessive drift: {drift_ppm}')
+        else:
+            _logger.info(f'synced with drift: {drift_ppm}')
 
-        valid_bounds = [bpod_data[0]['Trial start timestamp'] - 2, bpod_data[-1]['Trial end timestamp'] + 2]
+        # assertion: 95% of timestamps in bpod need to be in timestamps of nph (but not the other way around)
+        if self.assert_matching_timestamps:
+            assert timestamps_bpod.shape[0] * 0.95 < ix_bpod.shape[0], 'less than 95% of bpod timestamps matched'
+        else:
+            if not (timestamps_bpod.shape[0] * 0.95 < ix_bpod.shape[0]):
+                _logger.warning(
+                    f'less than 95% of bpod timestamps matched. \
+                        n_timestamps:{timestamps_bpod.shape[0]} matched:{ix_bpod.shape[0]}'
+                )
+
+        valid_bounds = self._get_valid_bounds()
         return sync_nph_to_bpod_fcn, valid_bounds
 
     def load_data(self) -> pd.DataFrame:
         # loads the raw photometry data
         raw_photometry_folder = self.session_path / self.photometry_collection
-        raw_neurophotometrics_df = pd.read_parquet(raw_photometry_folder / '_neurophotometrics_fpData.raw.pqt')
-        return raw_neurophotometrics_df
+        photometry_df = fpio.from_neurophotometrics_file_to_photometry_df(
+            raw_photometry_folder / '_neurophotometrics_fpData.raw.pqt',
+            drop_first=False,
+        )
+        return photometry_df
 
-    def _run(self, **kwargs) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    def _run(self, **kwargs) -> Tuple[Path, Path]:
         # 1) load photometry data
 
         # note: when loading daq based syncing, the SystemTimestamp column
         # will be overridden with the timestamps from the tdms file
         # the idea behind this is that the rest of the sync is then the same
         # and handled by this base class
-        raw_df = self.load_data()
+        photometry_df = self.load_data()
 
         # 2) get the synchronization function
-        # spacer_detection_mode = kwargs.get('spacer_detection_mode', 'fallback')
-        # sync_nph_to_bpod_fcn, valid_bounds = self._get_sync_function(spacer_detection_mode=spacer_detection_mode)
         sync_nph_to_bpod_fcn, valid_bounds = self._get_sync_function()
 
-        # 3) convert to ibl_df
-        ibl_df = fpio.from_raw_neurophotometrics_df_to_ibl_df(raw_df, rois=self.kwargs['fibers'], drop_first=False)
-
         # 3) apply synchronization
-        ibl_df['times'] = sync_nph_to_bpod_fcn(raw_df['SystemTimestamp'])
-        ibl_df['valid'] = np.logical_and(ibl_df['times'] >= valid_bounds[0], ibl_df['times'] <= valid_bounds[1])
+        photometry_df['times'] = sync_nph_to_bpod_fcn(photometry_df['times'])
+        photometry_df['valid'] = np.logical_and(
+            photometry_df['times'] >= valid_bounds[0], photometry_df['times'] <= valid_bounds[1]
+        )
 
         # 4) write to disk
         output_folder = self.session_path.joinpath('alf', 'photometry')
         output_folder.mkdir(parents=True, exist_ok=True)
 
         # writing the synced photometry signal
-        ibl_df_outpath = output_folder / 'photometry.signal.pqt'
-        ibl_df.to_parquet(ibl_df_outpath)
+        photometry_filepath = self.session_path / 'alf' / 'photometry' / 'photometry.signal.pqt'
+        photometry_filepath.parent.mkdir(parents=True, exist_ok=True)
+        photometry_df.to_parquet(photometry_filepath)
 
         # writing the locations
         rois = []
-        for k, v in self.kwargs['fibers'].items():
+        for k, v in self.session_params['devices']['neurophotometrics']['fibers'].items():
             rois.append({'ROI': k, 'fiber': f'fiber_{v["location"]}', 'brain_region': v['location']})
         locations_df = pd.DataFrame(rois).set_index('ROI')
-        locations_df_outpath = output_folder / 'photometryROI.locations.pqt'
-        locations_df.to_parquet(locations_df_outpath)
-        return ibl_df_outpath, locations_df_outpath
+        locations_filepath = self.session_path / 'alf' / 'photometry' / 'photometryROI.locations.pqt'
+        locations_filepath.parent.mkdir(parents=True, exist_ok=True)
+        locations_df.to_parquet(locations_filepath)
+        return photometry_filepath, locations_filepath
 
 
 class FibrePhotometryBpodSync(FibrePhotometryBaseSync):
     priority = 90
     job_size = 'small'
+
+    def __init__(
+        self,
+        *args,
+        timestamps_colname: str | None = None,
+        **kwargs,
+    ):
+        super().__init__(*args, **kwargs)
+        self.timestamps_colname = timestamps_colname
 
     @property
     def signature(self):
@@ -344,8 +335,8 @@ class FibrePhotometryBpodSync(FibrePhotometryBaseSync):
             'input_files': [
                 ('_neurophotometrics_fpData.raw.pqt', self.photometry_collection, True, True),
                 ('_iblrig_taskData.raw.jsonable', self.task_collection, True, True),
-                ('_neurophotometrics_fpData.channels.csv', self.photometry_collection, True, True),
-                ('_neurophotometrics_fpData.digitalIntputs.pqt', self.photometry_collection, True),
+                # ('_neurophotometrics_fpData.channels.csv', self.photometry_collection, True, True),
+                ('_neurophotometrics_fpData.digitalInputs.pqt', self.photometry_collection, True),
             ],
             'output_files': [
                 ('photometry.signal.pqt', 'alf/photometry', True),
@@ -357,8 +348,13 @@ class FibrePhotometryBpodSync(FibrePhotometryBaseSync):
     def _get_neurophotometrics_timestamps(self) -> np.ndarray:
         # for bpod based syncing, the timestamps for syncing are in the digital inputs file
         raw_photometry_folder = self.session_path / self.photometry_collection
-        digital_inputs_df = pd.read_parquet(raw_photometry_folder / '_neurophotometrics_fpData.digitalIntputs.pqt')
-        timestamps_nph = digital_inputs_df['SystemTimestamp'].values[digital_inputs_df['Channel'] == self.kwargs['sync_channel']]
+        digital_inputs_filepath = raw_photometry_folder / '_neurophotometrics_fpData.digitalInputs.pqt'
+        digital_inputs_df = fpio.read_digital_inputs_file(
+            digital_inputs_filepath, channel=self.sync_channel, timestamps_colname=self.timestamps_colname
+        )
+
+        # get the positive fronts
+        timestamps_nph = digital_inputs_df.groupby(['polarity', 'channel']).get_group((1, self.sync_channel))['times'].values
 
         # TODO replace this rudimentary spacer removal
         # to implement: detect spacer / remove spacer methods
@@ -370,10 +366,30 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
     priority = 90
     job_size = 'small'
 
-    def __init__(self, *args, load_timestamps: bool = True, **kwargs):
+    def __init__(
+        self,
+        *args,
+        load_timestamps: bool = True,
+        # sync_channel: int | None = None,
+        frameclock_channel: int | None = None,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
-        self.sync_kwargs = kwargs.get('sync_metadata', self.session_params['sync'])
-        self.sync_channel = kwargs.get('sync_channel', self.session_params['devices']['neurophotometrics']['sync_channel'])
+        # setting up sync properties
+        frameclock_channel = (
+            frameclock_channel or self.session_params['devices']['neurophotometrics']['sync_metadata']['frameclock_channel']
+        )
+        # downward compatibility - frameclock moved around, now is back on the AI7
+        if frameclock_channel in ['0', 0]:
+            self.frameclock_channel_name = f'DI{frameclock_channel}'
+        elif frameclock_channel in ['7', 7]:
+            self.frameclock_channel_name = f'AI{frameclock_channel}'
+        else:
+            self.frameclock_channel_name = frameclock_channel
+
+        self.sync_channel = self.sync_channel or self.session_params['devices']['neurophotometrics']['sync_channel']
+
+        # whether or not to reextract from tdms or attempt to load from .pkl
         self.load_timestamps = load_timestamps
 
     @property
@@ -382,7 +398,7 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
             'input_files': [
                 ('_neurophotometrics_fpData.raw.pqt', self.photometry_collection, True, True),
                 ('_iblrig_taskData.raw.jsonable', self.task_collection, True, True),
-                ('_neurophotometrics_fpData.channels.csv', self.photometry_collection, True, True),
+                # ('_neurophotometrics_fpData.channels.csv', self.photometry_collection, True, True),
                 ('_mcc_DAQdata.raw.tdms', self.photometry_collection, True, True),
             ],
             'output_files': [
@@ -396,7 +412,7 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
         # the point of this functions is to overwrite the SystemTimestamp column
         # in the ibl_df with the values from the DAQ clock
         # then syncing will work the same as for the bpod based syncing
-        raw_df = super().load_data()
+        photometry_df = super().load_data()
 
         # get daqami timestamps
         # attempt to load
@@ -408,65 +424,408 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
             tdms_filepath = self.session_path / self.photometry_collection / '_mcc_DAQdata.raw.tdms'
             self.timestamps = extract_timestamps_from_tdms_file(tdms_filepath, save_path=timestamps_filepath)
 
-        # downward compatibility - frameclock moved around, now is back on the AI7
-        if self.sync_kwargs['frameclock_channel'] in ['0', 0]:
-            sync_channel_name = f'DI{self.sync_kwargs["frameclock_channel"]}'
-        elif self.sync_kwargs['frameclock_channel'] in ['7', 7]:
-            sync_channel_name = f'AI{self.sync_kwargs["frameclock_channel"]}'
-        else:
-            sync_channel_name = self.sync_kwargs['frameclock_channel']
-        frame_timestamps = self.timestamps[sync_channel_name]
+        # timestamps of the frameclock in DAQ time
+        frame_timestamps = self.timestamps[self.frameclock_channel_name]['positive']
 
         # compare number of frame timestamps
-        # and put them in the raw_df SystemTimestamp column
+        # and put them in the photometry_df SystemTimestamp column
         # based on the different scenarios
         frame_times_adjusted = False  # for debugging reasons
 
         # they are the same, all is well
-        if raw_df.shape[0] == frame_timestamps.shape[0]:
-            raw_df['SystemTimestamp'] = frame_timestamps
-            _logger.info(f'timestamps are of equal size {raw_df.shape[0]}')
+        if photometry_df.shape[0] == frame_timestamps.shape[0]:
+            photometry_df['times'] = frame_timestamps
+            _logger.info(f'timestamps are of equal size {photometry_df.shape[0]}')
             frame_times_adjusted = True
 
         # there are more timestamps recorded by DAQ than
         # frames recorded by bonsai
-        elif raw_df.shape[0] < frame_timestamps.shape[0]:
-            _logger.info(f'# bonsai frames: {raw_df.shape[0]}, # daq timestamps: {frame_timestamps.shape[0]}')
+        elif photometry_df.shape[0] < frame_timestamps.shape[0]:
+            _logger.info(f'# bonsai frames: {photometry_df.shape[0]}, # daq timestamps: {frame_timestamps.shape[0]}')
             # there is exactly one more timestamp recorded by the daq
             # (probably bonsai drops the last incomplete frame)
-            if raw_df.shape[0] == frame_timestamps.shape[0] - 1:
-                raw_df['SystemTimestamp'] = frame_timestamps[:-1]
+            if photometry_df.shape[0] == frame_timestamps.shape[0] - 1:
+                photometry_df['times'] = frame_timestamps[:-1]
             # there are two more frames recorded by the DAQ than by
             # bonsai - this is observed. TODO understand when this happens
-            elif raw_df.shape[0] == frame_timestamps.shape[0] - 2:
-                raw_df['SystemTimestamp'] = frame_timestamps[:-2]
+            elif photometry_df.shape[0] == frame_timestamps.shape[0] - 2:
+                photometry_df['times'] = frame_timestamps[:-2]
             # there are more frames recorded by the DAQ than that
             # this indicates and issue -
-            elif raw_df.shape[0] < frame_timestamps.shape[0] - 2:
+            elif photometry_df.shape[0] < frame_timestamps.shape[0] - 2:
                 raise ValueError('more timestamps for frames recorded by the daqami than frames were recorded by bonsai.')
             frame_times_adjusted = True
 
         # there are more frames recorded by bonsai than by the DAQ
         # this happens when the user stops the daqami recording before stopping the bonsai
         # or when daqami crashes
-        elif raw_df.shape[0] > frame_timestamps.shape[0]:
+        elif photometry_df.shape[0] > frame_timestamps.shape[0]:
             # we drop all excess frames
-            _logger.warning(f'#frames bonsai: {raw_df.shape[0]} > #frames daqami {frame_timestamps.shape[0]}, dropping excess')
+            _logger.warning(
+                f'#frames bonsai: {photometry_df.shape[0]} > #frames daqami {frame_timestamps.shape[0]}, dropping excess'
+            )
             n_frames_daqami = frame_timestamps.shape[0]
-            raw_df = raw_df.iloc[:n_frames_daqami]
-            raw_df.loc[:, 'SystemTimestamp'] = frame_timestamps
+            photometry_df = photometry_df.iloc[:n_frames_daqami]
+            photometry_df.loc[:, 'SystemTimestamp'] = frame_timestamps
             frame_times_adjusted = True
 
         if not frame_times_adjusted:
             raise ValueError('timestamp issue that hasnt been caught')
 
-        return raw_df
+        return photometry_df
 
     def _get_neurophotometrics_timestamps(self) -> np.ndarray:
         # get the sync channel and the corresponding timestamps
-        timestamps_nph = self.timestamps[f'DI{self.sync_channel}']
+        timestamps_nph = self.timestamps[f'DI{self.sync_channel}']['positive']
 
         # TODO replace this rudimentary spacer removal
         # to implement: detect spacer / remove spacer methods
         # timestamps_nph = timestamps_nph[15: ]
         return timestamps_nph
+
+
+class FibrePhotometryPassiveChoiceWorld(base_tasks.BehaviourTask):
+    priority = 90
+    job_size = 'small'
+
+    def __init__(
+        self,
+        session_path: str | Path,
+        one: ONE,
+        load_timestamps: bool = True,
+        **kwargs,
+    ):
+        super().__init__(session_path, one=one, **kwargs)
+        self.photometry_collection = kwargs.get('collection', 'raw_photometry_data')
+        self.kwargs = kwargs
+        self.load_timestamps = load_timestamps
+        assert self.session_params['neurophotometrics']['sync_mode'] == 'daqami', (
+            'passive protocol syncing only supported for DAQ based syncing'
+        )
+
+    @property
+    def signature(self):
+        signature = {
+            'input_files': [
+                ('_neurophotometrics_fpData.raw.pqt', self.photometry_collection, True, True),
+                ('_mcc_DAQdata.raw.tdms', self.photometry_collection, True, True),
+                ('_iblrig_taskData.raw.jsonable', self.task_collection, True, True),
+                ('_iblrig_taskSettings.raw.json', self.task_collection, True, True),
+                ('_iblmic_audioOnsetGoCue.times_mic', self.task_collection, True, True),
+            ],
+            'output_files': [
+                ('photometry.signal.pqt', 'alf/photometry', True),
+                ('photometryROI.locations.pqt', 'alf/photometry', True),
+                ('_ibl_passiveStims.table.pqt', 'alf' / self.collection, True),
+            ],
+        }
+        return signature
+
+    def _run(self, **kwargs) -> Tuple[Path, Path, Path]:
+        # load the fixtures - from the relative delays between trials, an "absolute" time vector is
+        # created that is used for the synchronization
+        fixtures_path = (
+            Path(iblphotometry.__file__).parent.parent
+            / 'iblphotometry_tests'
+            / 'fixtures'
+            / 'passiveChoiceWorld_trials_fixtures.pqt'
+        )
+
+        # getting the task_settings
+        with open(self.session_path / self.collection / '_iblrig_taskSettings.raw.json', 'r') as fH:
+            task_settings = json.load(fH)
+
+        # getting the fixtures
+        fixtures_df = pd.read_parquet(fixtures_path).groupby('session_id').get_group(task_settings['SESSION_TEMPLATE_ID'])
+
+        # the fixtures table contains delays between the individual stimuli
+        # in order to get their onset times, we need to do an adjusted cumsum of the intervals
+        # adjusted by: the length of each stimulus, plus the overhead time to load it and play it
+        # e.g. state machine time, bonsai delay etc.
+
+        # stimulus durations
+        stim_durations = dict(
+            T=task_settings['GO_TONE_DURATION'],
+            N=task_settings['WHITE_NOISE_DURATION'],
+            G=0.3,  # visual stimulus duration is hardcoded to 300ms
+            V=0.1,  # V=0.1102 from a a session # to be replaced later down
+        )
+        for s in fixtures_df['stim_type'].unique():
+            fixtures_df.loc[fixtures_df['stim_type'] == s, 'delay'] = stim_durations[s]
+
+        # the audio go cue times - recorded in the time of the mic clock
+        # this is assumed to be precise so we can use it to fit the unknown overhead
+        # time for each stim class
+        go_cue_times_mic = np.load(self.session_path / self.collection / '_iblmic_audioOnsetGoCue.times_mic.npy')
+
+        # adding the delays
+        def obj_fun(x, go_cue_times_mic, fixtures_df):
+            # fit overhead
+            for s in ['T', 'N', 'G', 'V']:
+                if s == 'T' or s == 'N':
+                    fixtures_df.loc[fixtures_df['stim_type'] == s, 'overhead'] = x[0]
+                if s == 'G':
+                    fixtures_df.loc[fixtures_df['stim_type'] == s, 'overhead'] = x[1]
+                if s == 'V':
+                    fixtures_df.loc[fixtures_df['stim_type'] == s, 'overhead'] = x[2]
+
+            fixtures_df['t_rel'] = np.cumsum(
+                fixtures_df['stim_delay'].values + np.roll(fixtures_df['delay'].values, 1) + fixtures_df['overhead'].values,
+            )
+
+            go_cue_times_rel = fixtures_df.groupby('stim_type').get_group('T')['t_rel'].values
+            err = np.sum((np.diff(go_cue_times_rel) - np.diff(go_cue_times_mic)) ** 2)
+            return err
+
+        # fitting the overheads
+        fixtures_df['overhead'] = 0.0
+        bounds = ((0, np.inf), (0, np.inf), (0, np.inf))
+        pfit = minimize(obj_fun, (0.0, 0.0, 0.0), args=(go_cue_times_mic, fixtures_df), bounds=bounds)
+        overheads = dict(zip(['T', 'N', 'G', 'V'], [pfit.x[0], pfit.x[0], pfit.x[1], pfit.x[2]]))
+
+        # creating the relative time vector for each stimulus
+        for s in fixtures_df['stim_type'].unique():
+            fixtures_df.loc[fixtures_df['stim_type'] == s, 'overhead'] = overheads[s]
+        fixtures_df['t_rel'] = np.cumsum(
+            fixtures_df['stim_delay'].values + np.roll(fixtures_df['delay'].values, 1) + fixtures_df['overhead'].values
+        )
+
+        # we now sync the valve times from the relative time and the neurophotometrics time
+        valve_times_rel = fixtures_df.groupby('stim_type').get_group('V')['t_rel'].values
+
+        # getting the valve timestamps from the DAQ
+        timestamps_filepath = self.session_path / self.photometry_collection / '_mcc_DAQdata.pkl'
+        if self.load_timestamps and timestamps_filepath.exists():
+            with open(timestamps_filepath, 'rb') as fH:
+                self.timestamps = pickle.load(fH)
+        else:  # extract timestamps:
+            tdms_filepath = self.session_path / self.photometry_collection / '_mcc_DAQdata.raw.tdms'
+            self.timestamps = extract_timestamps_from_tdms_file(tdms_filepath, save_path=timestamps_filepath)
+
+        sync_channel = self.session_params['devices']['neurophotometrics']['sync_channel']
+        valve_times_daq = self.timestamps[f'DI{sync_channel}']['positive']
+
+        sync_fun_rel_to_daq, drift_ppm, ix_rel, ix_daq = ibldsp.utils.sync_timestamps(
+            valve_times_rel, valve_times_daq, return_indices=True, linear=True
+        )
+        assert ix_rel.shape[0] == 40, 'not all bpod valve onset events are accepted by the sync function'
+        if np.absolute(drift_ppm) > 20:
+            _logger.warning(f'sync with excessive drift: {drift_ppm}')
+        else:
+            _logger.info(f'synced with drift: {drift_ppm}')
+
+        # loads the raw photometry data
+        raw_photometry_folder = self.session_path / self.photometry_collection
+        photometry_df = fpio.from_neurophotometrics_file_to_photometry_df(
+            raw_photometry_folder / '_neurophotometrics_fpData.raw.pqt',
+            drop_first=False,
+        )
+
+        # load the photometry data and replace the timestamp column
+        # with the values from the frameclock timestamps as recorded by the DAQ
+        frameclock_channel_name = self.session_params['devices']['neurophotometrics']['sync_metadata']['frameclock_channel']
+        frame_timestamps = self.timestamps[frameclock_channel_name]['positive']
+
+        # compare number of frame timestamps
+        # and put them in the photometry_df SystemTimestamp column
+        # based on the different scenarios
+        frame_times_adjusted = False  # for debugging reasons
+
+        # they are the same, all is well
+        if photometry_df.shape[0] == frame_timestamps.shape[0]:
+            photometry_df['times'] = frame_timestamps
+            _logger.info(f'timestamps are of equal size {photometry_df.shape[0]}')
+            frame_times_adjusted = True
+
+        # there are more timestamps recorded by DAQ than
+        # frames recorded by bonsai
+        elif photometry_df.shape[0] < frame_timestamps.shape[0]:
+            _logger.info(f'# bonsai frames: {photometry_df.shape[0]}, # daq timestamps: {frame_timestamps.shape[0]}')
+            # there is exactly one more timestamp recorded by the daq
+            # (probably bonsai drops the last incomplete frame)
+            if photometry_df.shape[0] == frame_timestamps.shape[0] - 1:
+                photometry_df['times'] = frame_timestamps[:-1]
+            # there are two more frames recorded by the DAQ than by
+            # bonsai - this is observed. TODO understand when this happens
+            elif photometry_df.shape[0] == frame_timestamps.shape[0] - 2:
+                photometry_df['times'] = frame_timestamps[:-2]
+            # there are more frames recorded by the DAQ than that
+            # this indicates and issue -
+            elif photometry_df.shape[0] < frame_timestamps.shape[0] - 2:
+                raise ValueError('more timestamps for frames recorded by the daqami than frames were recorded by bonsai.')
+            frame_times_adjusted = True
+
+        # there are more frames recorded by bonsai than by the DAQ
+        # this happens when the user stops the daqami recording before stopping the bonsai
+        # or when daqami crashes
+        elif photometry_df.shape[0] > frame_timestamps.shape[0]:
+            # we drop all excess frames
+            _logger.warning(
+                f'#frames bonsai: {photometry_df.shape[0]} > #frames daqami {frame_timestamps.shape[0]}, dropping excess'
+            )
+            n_frames_daqami = frame_timestamps.shape[0]
+            photometry_df = photometry_df.iloc[:n_frames_daqami]
+            photometry_df.loc[:, 'SystemTimestamp'] = frame_timestamps
+            frame_times_adjusted = True
+
+        if not frame_times_adjusted:
+            raise ValueError('timestamp issue that hasnt been caught')
+
+        # write to disk
+        # the photometry signal
+        photometry_filepath = self.session_path / 'alf' / 'photometry' / 'photometry.signal.pqt'
+        photometry_filepath.parent.mkdir(parents=True, exist_ok=True)
+        photometry_df.to_parquet(photometry_filepath)
+
+        # writing the locations
+        rois = []
+        for k, v in self.session_params['devices']['neurophotometrics']['fibers'].items():
+            rois.append({'ROI': k, 'fiber': f'fiber_{v["location"]}', 'brain_region': v['location']})
+        locations_df = pd.DataFrame(rois).set_index('ROI')
+        locations_filepath = self.session_path / 'alf' / 'photometry' / 'photometryROI.locations.pqt'
+        locations_filepath.parent.mkdir(parents=True, exist_ok=True)
+        locations_df.to_parquet(locations_filepath)
+
+        # writing the passive events table
+        # get the valve open duration
+        timestamps_filepath = self.session_path / self.photometry_collection / '_mcc_DAQdata.pkl'
+        if self.load_timestamps and timestamps_filepath.exists():
+            with open(timestamps_filepath, 'rb') as fH:
+                self.timestamps = pickle.load(fH)
+        else:  # extract timestamps:
+            tdms_filepath = self.session_path / self.photometry_collection / '_mcc_DAQdata.raw.tdms'
+            self.timestamps = extract_timestamps_from_tdms_file(tdms_filepath, save_path=timestamps_filepath)
+
+        ttl_durations = self.timestamps[f'DI{sync_channel}']['negative'] - self.timestamps[f'DI{sync_channel}']['positive']
+        valve_open_dur = np.median(ttl_durations[ix_daq])
+        passiveStims_df = pd.DataFrame(
+            dict(
+                valveOn=fixtures_df.groupby('stim_type').get_group('V')['t_rel'],
+                valveOff=fixtures_df.groupby('stim_type').get_group('V')['t_rel'] + valve_open_dur,
+                toneOn=fixtures_df.groupby('stim_type').get_group('T')['t_rel'],
+                toneOff=fixtures_df.groupby('stim_type').get_group('T')['t_rel'] + task_settings['GO_TONE_DURATION'],
+                noiseOn=fixtures_df.groupby('stim_type').get_group('N')['t_rel'],
+                noiseOff=fixtures_df.groupby('stim_type').get_group('N')['t_rel'] + task_settings['WHITE_NOISE_DURATION'],
+            )
+        )
+        # convert all times from fixture time (=rel) to daq time
+        passiveStims_df.iloc[:, :] = sync_fun_rel_to_daq(passiveStims_df.values)
+        passiveStims_filepath = self.session_path / 'alf' / self.collection / '_ibl_passiveStims.table.pqt'
+        passiveStims_filepath.parent.mkdir(exist_ok=True, parents=True)
+        passiveStims_df.reset_index().to_parquet(passiveStims_filepath)
+
+        return photometry_filepath, locations_filepath, passiveStims_filepath
+
+
+class PhotometryQC(QC):
+    """Photometry QC objects, implements load_data() and run() methods. Updates the QC fields in alyx."""
+
+    def __init__(
+        self,
+        session_path: str | Path,
+        task_protocol: str | None = None,
+        photometry_collection: str = 'photometry',
+        revision: str | None = None,
+        **kwargs,
+    ):
+        super().__init__(session_path, **kwargs)
+        self.eid = self.one.path2eid(session_path)
+        self.session_path = session_path
+        self.task_protocol = task_protocol
+        self.photometry_collection = photometry_collection
+        self.revision = revision
+
+    def run(self, dry: bool = False) -> QC_status:
+        metrics = [n_unique_samples, n_edges]
+        qc_result = qc.qc_signals(self.raw_dfs, metrics)
+
+        # TODO this will be defined elsewhere
+        ranges = {
+            'n_unique_samples': {
+                (-np.inf, -1): 'impossible',
+                (0, 10): QC_status.FAIL,
+                (10, 20): QC_status.CRITICAL,
+                (20, 30): QC_status.WARNING,
+                (30, np.inf): QC_status.PASS,
+            },
+            'n_edges': {
+                (-np.inf, -1): 'impossible',
+                (0, 1): QC_status.PASS,
+                (1, np.inf): QC_status.FAIL,
+            },
+        }
+
+        # map metrics to qc_outcomes
+        for i, row in qc_result.iterrows():
+            for (lower, upper), outcome in ranges[row['metric']].items():
+                if lower <= row['value'] < upper:
+                    if outcome == 'impossible':
+                        raise ValueError('impossible metric value')
+                    else:
+                        qc_result.loc[i, 'qc_outcome'] = outcome
+
+        # set QC
+        for i, row in qc_result.iterrows():
+            brain_region, band, metric = row['brain_region'], row['band'], row['metric']
+            if not dry:
+                self.update(outcome=row['qc_outcome'], namespace=f'__photometry_{brain_region}_{band}_{metric}')
+
+        overall_outcome = self.overall_outcome(qc_result['qc_outcome'].values)
+        if not dry:
+            self.update(outcome=overall_outcome, namespace='_photometry')
+        return overall_outcome
+
+    def load_data(self):
+        # self.loader = PhotometrySessionLoader(one=self.one, session_path=self.session_path)
+        # self.loader.load_photometry(pre=0, post=0)
+
+        raw_dfs = fpio.from_session_path(
+            self.session_path,
+            collection=self.photometry_collection,
+            revision=self.revision,
+        )
+        # get the task collection
+        session_params = ibllib.io.session_params.read_params(self.session_path)
+        # if not provided, use the first protocol
+        if self.task_protocol is None:
+            for task in session_params['tasks']:
+                self.task_protocol = next(k for k in task)
+                break
+        self.task_collection = ibllib.io.session_params.get_task_collection(session_params, self.task_protocol)
+
+        # FIXME this is probably not the proper way to do it
+        number = self.task_collection[-2:]
+        trials_df = pd.read_parquet(self.session_path / 'alf' / f'task_{number}' / '_ibl_trials.table.pqt')
+        self.raw_dfs = fpio.restrict_to_session(raw_dfs, trials_df, 0, 0)
+
+
+class FibrePhotometryQC(base_tasks.Task):
+    """Photometry QC task. Just simply wraps around the QC object"""
+
+    def __init__(
+        self,
+        session_path: str | Path,
+        one: ONE,
+        dry: bool = False,
+        **kwargs,
+    ):
+        super().__init__(session_path, one=one, **kwargs)
+        self.session_path = session_path
+        self.one = one
+        self.qc = PhotometryQC(session_path, one=one)
+        self.dry = dry
+
+    @property
+    def signature(self):
+        signature = {
+            'input_files': [
+                ('photometry.signal.pqt', 'alf/photometry', True),
+                ('photometryROI.locations.pqt', 'alf/photometry', True),
+            ],
+            'output_files': [],
+        }
+        return signature
+
+    def _run(self):
+        self.qc.load_data()
+        self.qc.run(dry=self.dry)
