@@ -13,20 +13,25 @@ from iblutil.io import jsonable
 from nptdms import TdmsFile
 
 from abc import abstractmethod
-import iblphotometry
-from iblphotometry import fpio
 
 from one.api import ONE
+from one.alf.spec import QC as QC_status
 import json
 from scipy.optimize import minimize
 
 from ibllib.qc.base import QC
-from iblphotometry import qc
-from one.alf.spec import QC as QC_status
-from iblphotometry.metrics import n_unique_samples, n_edges
 
 
 _logger = logging.getLogger('ibllib')
+
+try:
+    from iblphotometry import qc
+    from iblphotometry.metrics import n_unique_samples, n_edges
+    import iblphotometry
+    from iblphotometry import fpio
+except (ImportError, ModuleNotFoundError):
+    _logger.error('Failed to import iblphotometry. Make sure it is correctly installed.')
+
 
 
 def _int2digital_channels(values: np.ndarray) -> np.ndarray:
