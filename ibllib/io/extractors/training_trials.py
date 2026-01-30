@@ -734,7 +734,7 @@ class TrainingTrials(BaseBpodTrialsExtractor):
                  'wheel_timestamps', 'wheel_position', 'wheelMoves_intervals', 'wheelMoves_peakAmplitude',
                  'wheelMoves_peakVelocity_times', 'is_final_movement', 'phase', 'position', 'quiescence', 'pause_duration')
 
-    def _extract(self) -> dict:
+    def _extract(self, **_) -> dict:
         base = [RepNum, GoCueTriggerTimes, StimOnTriggerTimes, ItiInTimes, StimOffTriggerTimes, StimFreezeTriggerTimes,
                 ErrorCueTriggerTimes, TrialsTable, PhasePosQuiescence, PauseDuration]
         out, _ = run_extractor_classes(
