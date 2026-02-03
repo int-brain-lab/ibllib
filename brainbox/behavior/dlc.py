@@ -216,10 +216,10 @@ def get_smooth_pupil_diameter(diameter_raw, camera, std_thresh=5, nan_thresh=1, 
     """
     # set framerate of camera
     if camera == 'left':
-        fr = fr or SAMPLING['left']  # set by hardware
+        fr = fr if fr is not None else SAMPLING['left']  # set by hardware
         window = 31  # works well empirically
     elif camera == 'right':
-        fr = fr or SAMPLING['right']  # set by hardware
+        fr = fr if fr is not None else SAMPLING['right']  # set by hardware
         window = 75  # works well empirically
     else:
         raise NotImplementedError("camera has to be 'left' or 'right")
@@ -575,3 +575,4 @@ def plot_pupil_diameter_hist(pupil_diameter, cam_times, trials_df, cam='left'):
     plt.xticks([-0.5, 0, 0.5, 1, 1.5])
     plt.ylabel('z-scored smoothed pupil diameter [px]')
     plt.legend(loc='lower right', title='aligned to')
+
