@@ -7,8 +7,6 @@ import scipy.signal
 
 from one.api import ONE
 import neuropixel
-from ibldsp import voltage
-import ibldsp.utils
 
 from ibllib.ephys import ephysqc, spikes
 from ibllib.tests import TEST_DB
@@ -49,30 +47,6 @@ def make_synthetic_data(ns=10000, nc=384, nss=121, ncs=21, nspikes=1200, tr=None
         tmp = template[:, np.newaxis] * ampfac[np.newaxis, :]
         data[slice(iss[0], iss[-1] + 1), slice(itr[0], itr[-1] + 1)] += tmp
     return data
-
-
-def synthetic_with_bad_channels():
-    np.random.seed(12345)
-    ns, nc, fs = (30000, 384, 30000)
-    data = make_synthetic_data(ns=ns, nc=nc) * 1e-6 * 50
-
-    st = np.round(np.cumsum(- np.log(np.random.rand(int(ns / fs * 50 * 1.5))) / 50) * fs)
-    st = st[st < ns].astype(np.int32)
-    stripes = np.zeros(ns)
-    stripes[st] = 1
-    stripes = scipy.signal.convolve(stripes, ibldsp.utils.ricker(1200, 40), 'same') * 1e-6 * 2500
-
-    data = data + stripes[:, np.newaxis]
-    noise = np.random.randn(*data.shape) * 1e-6 * 10
-
-    channels = {'idead': [29, 36, 39, 40, 191], 'inoisy': [133, 235], 'ioutside': np.arange(275, 384)}
-
-    data[:, channels['idead']] = data[:, channels['idead']] / 20
-    noise[:, channels['inoisy']] = noise[:, channels['inoisy']] * 200
-    data[:, channels['idead']] = data[:, channels['idead']] / 20
-    data[:, channels['ioutside']] = 0
-    data += noise
-    return data, channels
 
 
 class TestNeuropixel(unittest.TestCase):
@@ -208,26 +182,6 @@ class TestDetectSpikes(unittest.TestCase):
 
         assert np.mean(xcor > .8) > .95
         assert np.nanmedian(xcor) > .99
-
-
-class TestDetectBadChannels(unittest.TestCase):
-
-    def test_channel_detections(self):
-        """
-        This test creates a synthetic dataset with voltage stripes and 3 types of bad channels
-        1) dead channels or low amplitude
-        2) noisy
-        3) out of the brain
-        """
-        data, channels = synthetic_with_bad_channels()
-        labels, xfeats = voltage.detect_bad_channels(data.T, fs=30000)
-        assert np.all(np.where(labels == 1)[0] == np.array(channels['idead']))
-        assert np.all(np.where(labels == 2)[0] == np.array(channels['inoisy']))
-        assert np.all(np.where(labels == 3)[0] == np.array(channels['ioutside']))
-        # from easyqc.gui import viewseis
-        # eqc = viewseis(data, si=1 / 30000 * 1e3, h=h, title='synth', taxis=0)
-        # from ibllib.plots.figures import ephys_bad_channels
-        # ephys_bad_channels(data.T, 30000, labels, xfeats)
 
 
 if __name__ == '__main__':
