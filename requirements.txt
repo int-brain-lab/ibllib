@@ -1,5 +1,5 @@
 # ibl libraries
-ONE-api>=3.2.0
+ONE-api>=3.4.2
 boto3
 click>=7.0.0
 colorlog>=4.0.2
