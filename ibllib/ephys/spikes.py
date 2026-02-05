@@ -87,7 +87,7 @@ def probes_description(ses_path, one):
     alyx_insertions = []
     for label, ef in zip(labels, efiles_sorted):
         md = spikeglx.read_meta_data(ef.ap.with_suffix('.meta'))
-        if md.neuropixelVersion == 'NP2.4':
+        if md.neuropixelVersion in ('NP2.4', 'NP2QB'):
             # NP2.4 meta that hasn't been split
             if md.get('NP2.4_shank', None) is None:
                 geometry = spikeglx.read_geometry(ef.ap.with_suffix('.meta'))
