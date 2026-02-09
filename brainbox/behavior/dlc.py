@@ -575,4 +575,3 @@ def plot_pupil_diameter_hist(pupil_diameter, cam_times, trials_df, cam='left'):
     plt.xticks([-0.5, 0, 0.5, 1, 1.5])
     plt.ylabel('z-scored smoothed pupil diameter [px]')
     plt.legend(loc='lower right', title='aligned to')
-
