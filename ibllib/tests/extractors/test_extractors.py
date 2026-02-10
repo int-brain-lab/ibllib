@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from unittest.mock import patch, Mock, MagicMock
 from pathlib import Path
+from copy import deepcopy
 
 import numpy as np
 import pandas as pd
@@ -658,10 +659,10 @@ class TestCameraExtractors(unittest.TestCase):
         # UNIT DATA
         fps = 60
         t_offset = 39.4
-        ts = np.arange(0, 10, 1 / fps) + t_offset
+        ts = np.arange(0, 20, 1 / fps) + t_offset
         # Add drift
         ts += np.full_like(ts, 1e-4).cumsum()
-        n_pulses = 2
+        n_pulses = 20
         pulse_width = 0.3
         duty = 0.5
         gpio = {'indices': np.empty(n_pulses * 2, dtype=np.int32),
@@ -679,8 +680,10 @@ class TestCameraExtractors(unittest.TestCase):
             gpio['indices'][i] = np.where(ts > rise)[0][0]
             gpio['indices'][i + 1] = np.where(ts > rise + pulse_width)[0][0]
 
-        gpio_, audio_, ts_ = camera.groom_pin_state(gpio, audio, ts)
-        self.assertEqual(audio, audio_, 'Audio dict shouldn\'t be affected')
+        # NB: The input arrys may be modified in place, so we deepcopy them before passing to the function
+        gpio_, audio_, ts_ = camera.groom_pin_state(*map(deepcopy, (gpio, audio, ts)))
+        for k in set(audio.keys()).union(audio_.keys()):
+            np.testing.assert_array_equal(audio.get(k, np.array([])), audio_.get(k, np.array([])), 'Audio should be unchanged')
         np.testing.assert_array_almost_equal(ts_[:4], [40., 40.016667, 40.033333, 40.05])
 
         # Broken TTLs + extra TTL
@@ -691,14 +694,30 @@ class TestCameraExtractors(unittest.TestCase):
         audio['polarities'] = np.ones(audio['times'].shape, dtype=np.int32)
         audio['polarities'][1::2] = -1
 
-        gpio_, audio_, _ = camera.groom_pin_state(gpio, audio, ts, min_diff=5e-3)
-        self.assertTrue(audio_['times'].size == gpio_['times'].size == 4)
+        with self.assertLogs(camera.__name__, level='WARNING') as cm:
+            gpio_, audio_, _ = camera.groom_pin_state(*map(deepcopy, (gpio, audio, ts)), min_diff=5e-3)
+            expected = ['WARNING:ibllib.io.extractors.camera:more sync TTLs than GPIO state changes, assigning timestamps']
+            self.assertEqual(cm.output, expected)
+        np.testing.assert_array_equal(audio_['times'], gpio_['times'])
+        # Expect both orphened pin state to be discarded and split TTL with short gap to be merged
+        # only the original 40 pulses should be kept
+        self.assertTrue(audio_['times'].size == gpio_['times'].size == n_pulses * 2)
 
         # One front shifted by a large amount
         audio['times'][4] -= 0.3
-        gpio_, audio_, _ = camera.groom_pin_state(gpio, audio, ts, tolerance=.1, min_diff=5e-3)
-        self.assertTrue(np.all(gpio_['times'] == audio_['times']))
-        self.assertTrue(np.all(gpio_['times'] == np.array([41., 41.3])))
+        # Expect the pulse with delayed onset to be discarded
+        with self.assertLogs(camera.__name__, level='WARNING') as cm:
+            gpio_, audio_, _ = camera.groom_pin_state(*map(deepcopy, (gpio, audio, ts)), tolerance=.1, min_diff=5e-3)
+            # Expect additional warning that match was found for pulse offset but not onset
+            expected += [
+                'WARNING:ibllib.io.extractors.camera:1 pin state rises could not be attributed to a sync TTL',
+                'WARNING:ibllib.io.extractors.camera:Some onsets but not offsets (or vice versa) were not assigned; '
+                'this may be a sign of faulty wiring or clock drift'
+            ]
+            self.assertEqual(cm.output, expected)
+
+        np.testing.assert_array_equal(gpio_['times'], audio_['times'])
+        np.testing.assert_array_almost_equal(gpio_['times'][:4], np.array([41., 41.3, 42.6, 42.9]))
 
     def test_attribute_times(self, display=False):
         # Create two timestamp arrays at two different frequencies
