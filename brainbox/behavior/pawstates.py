@@ -84,7 +84,12 @@ def extract_marker_data(paw, pose_data, times_data, wheel_data):
         wheel_pos, wheel_t = interpolate_position(wheel_data.timestamps, wheel_data.position, freq=fs)
         wheel_vel_oversampled, _ = velocity_filtered(wheel_pos, fs)
         # Resample wheel data at marker times
-        interpolator = interp1d(wheel_t, wheel_vel_oversampled, fill_value='extrapolate')
+        interpolator = interp1d(
+            wheel_t,
+            wheel_vel_oversampled,
+            fill_value=(wheel_vel_oversampled[0], wheel_vel_oversampled[-1]),
+            bounds_error=False,
+        )
         wh_vel = interpolator(times)
     else:
         wh_vel = np.zeros(len(times))
@@ -366,7 +371,7 @@ def plot_paw_positions_by_state(ax, frame, data_df, state, state_idx, camera, pa
                     ha='left', va='top', color='black', fontsize=12, rotation=90)
 
 
-def plot_state_duration_histogram(ax, durations, state, state_idx):
+def plot_state_duration_histogram(ax, durations, state, state_idx, xlim=None):
     """
     Plot histogram of durations for a specific behavioral state.
 
@@ -374,6 +379,7 @@ def plot_state_duration_histogram(ax, durations, state, state_idx):
     :param durations: DataFrame with state durations
     :param state: Behavioral state name
     :param state_idx: Index of state for coloring
+    :param xlim: x-limits of plot if computed externally
     """
     state_data = durations[durations['e_mode'] == state]['duration']
 
@@ -386,6 +392,9 @@ def plot_state_duration_histogram(ax, durations, state, state_idx):
 
     ax.set_title(f'Durations: {state}')
     ax.set_xlabel('Duration (s)')
+    if xlim is not None:
+        ax.set_xlim(xlim)
+
     if state_idx == 0:
         ax.set_ylabel('Frequency')
     else:

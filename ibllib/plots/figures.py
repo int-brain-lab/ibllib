@@ -1069,10 +1069,20 @@ def pawstates_qc_plot(
             panels.append((None, f'Data missing\n{state} paw positions'))
 
     # Panel E-H: State duration histograms
+    # First, collect all durations to determine global x-axis limits
+    if data.get('durations') is not None:
+        all_durations = data['durations']['duration'].values  # Extract duration column
+        if len(all_durations) > 0:
+            duration_xlim = (1 / 60., np.percentile(all_durations, 99))  # or use max(all_durations)
+        else:
+            duration_xlim = None
+    else:
+        duration_xlim = None
+
     for i, state in enumerate(STATE_LABELS):
         if data.get('durations') is not None:
             panels.append((plot_state_duration_histogram, {
-                'durations': data['durations'], 'state': state, 'state_idx': i,
+                'durations': data['durations'], 'state': state, 'state_idx': i, 'xlim': duration_xlim,
             }))
         else:
             panels.append((None, f'Data missing\n{state} durations'))
