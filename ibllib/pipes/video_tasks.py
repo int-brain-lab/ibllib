@@ -973,7 +973,6 @@ class LightningAction(base_tasks.VideoTask):
     laenv = Path.home().joinpath('Documents', 'PYTHON', 'envs', 'litaction', 'bin', 'activate')
     scripts = Path.home().joinpath('Documents', 'PYTHON', 'iblscripts', 'deploy', 'serverpc', 'litaction')
 
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.trials_collection = kwargs.get('trials_collection', 'alf')
@@ -1043,7 +1042,9 @@ class LightningAction(base_tasks.VideoTask):
                 pose_file = next(self.session_path.joinpath('alf').rglob(f'_ibl_{label}Camera.lightningPose.pqt'))
                 pose_timestamp_file = next(self.session_path.joinpath('alf').rglob(f'_ibl_{label}Camera.times.npy'))
                 wheel_file = next(self.session_path.joinpath(self.trials_collection).rglob('_ibl_wheel.position.npy'))
-                wheel_timestamps_file = next(self.session_path.joinpath(self.trials_collection).rglob('_ibl_wheel.timestamps.npy'))
+                wheel_timestamps_file = next(
+                    self.session_path.joinpath(self.trials_collection).rglob('_ibl_wheel.timestamps.npy')
+                )
 
                 t0 = time.time()
                 _logger.info(f'Running Lightning Action on {label}Camera.')
