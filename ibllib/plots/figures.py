@@ -1008,7 +1008,7 @@ def pawstates_qc_plot(
 
     # Load camera-specific data
     for feat in [tracker, 'times', 'pawstates']:
-        local_file = list(session_path.joinpath('alf').glob(f'*{camera}Camera.{feat}*'))
+        local_file = list(session_path.joinpath('alf').rglob(f'*{camera}Camera.{feat}*'))
         if len(local_file) > 0:
             data[feat] = alfio.load_file_content(local_file[0])
         else:

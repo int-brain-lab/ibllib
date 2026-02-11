@@ -1076,7 +1076,7 @@ class LightningAction(base_tasks.VideoTask):
                     continue
                 else:
                     _logger.info(f'{label} camera took {(time.time() - t0)} seconds')
-                    result = next(self.session_path.joinpath('alf').glob(f'_ibl_{label}Camera.pawstates*.pqt'))
+                    result = next(self.session_path.joinpath('alf/lightningaction').glob(f'_ibl_{label}Camera.pawstates*.pqt'))
                     actual_outputs.append(result)
 
             except BaseException:
