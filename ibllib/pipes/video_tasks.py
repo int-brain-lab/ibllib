@@ -984,7 +984,9 @@ class LightningAction(base_tasks.VideoTask):
                            [(f'_ibl_{cam}Camera.times.npy', 'alf', True) for cam in self.cameras if cam != 'body'] +
                            [('_ibl_wheel.position.npy', self.trials_collection, False),
                             ('_ibl_wheel.timestamps.npy', self.trials_collection, False)],
-            'output_files': [(f'_ibl_{cam}Camera.pawstates.pqt', 'alf', True) for cam in self.cameras if cam != 'body']
+            'output_files': [
+                (f'_ibl_{cam}Camera.pawstates.pqt', 'alf/lightningaction', True) for cam in self.cameras if cam != 'body'
+            ]
         }
 
         return signature
