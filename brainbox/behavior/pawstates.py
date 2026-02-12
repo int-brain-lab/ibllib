@@ -458,19 +458,18 @@ def plot_ensemble_variance_histogram(ax, data_df):
     ax.set_yscale('log')
 
 
-def plot_state_raster(ax, er, fps, plot_type='ensemble'):
+def plot_state_raster(ax, er, fps):
     """
     Plot raster of behavioral states across trials.
 
     :param ax: Matplotlib axis to plot on
     :param er: Ensemble raster data array
     :param fps: Camera frame rate
-    :param plot_type: Type of raster plot
     """
     xlim = 2 * fps  # 2 seconds in frames
     cmap = ListedColormap(COLORS)
 
-    sns.heatmap(er, cmap=cmap, cbar=False, ax=ax)
+    sns.heatmap(er, cmap=cmap, cbar=False, ax=ax, vmin=0, vmax=len(COLORS) - 1)
     ax.set_title("Raster of Ensemble Mode States")
     ax.set_xlabel("Time from first movement onset (s)")
 
