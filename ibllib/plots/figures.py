@@ -981,7 +981,6 @@ def pawstates_qc_plot(
     if video_path.exists():
         data['frame'] = get_video_frame(video_path, frame_number=5 * 60 * SAMPLING[camera])[:, :, 0]
         meta = get_video_meta(video_path)
-        data['fps'] = meta.fps
     # If not, try to stream a frame (try three times)
     else:
         try:
@@ -990,7 +989,6 @@ def pawstates_qc_plot(
                 try:
                     data['frame'] = get_video_frame(video_url, frame_number=5 * 60 * SAMPLING[camera])[:, :, 0]
                     meta = get_video_meta(video_url)
-                    data['fps'] = meta.fps
                     break
                 except Exception:
                     if tries < 2:
@@ -1000,11 +998,9 @@ def pawstates_qc_plot(
                     else:
                         logger.warning(f"Could not load video frame for {camera} cam. Skipping trace on frame.")
                         data['frame'] = None
-                        data['fps'] = 60
         except KeyError:
             logger.warning(f"Could not load video frame for {camera} cam. Skipping trace on frame.")
             data['frame'] = None
-        data['fps'] = 60
 
     # Load camera-specific data
     for feat in [tracker, 'times', 'pawstates']:
@@ -1023,6 +1019,9 @@ def pawstates_qc_plot(
         if data[feat] is not None and len(data[feat]) == 0:
             logger.warning(f"Object loaded from _ibl_{camera}Camera.{feat} is empty")
             data[feat] = None
+
+    # Compute fps from timestamps
+    data['fps'] = 1. / np.nanmedian(np.diff(data['times']))
 
     # Load trials data
     local_file = list(session_path.joinpath(trials_collection).rglob('*trials.table*'))
