@@ -827,7 +827,7 @@ class PassiveChoiceWorld(BaseExtractor):
         if settings is None:
             settings = rawio.load_settings(self.session_path, task_collection=task_collection)
 
-        skip_replay = settings.get('SKIP_EVENT_REPLAY', False)
+        self.skip_replay = settings.get('SKIP_EVENT_REPLAY', False)
 
         # Get the start and end times of this protocol.
         if (protocol_number := kwargs.get('protocol_number')) is not None:  # look for spacer
@@ -835,7 +835,7 @@ class PassiveChoiceWorld(BaseExtractor):
             bpod = ephys_fpga.get_sync_fronts(sync, sync_map['bpod'])
             # If there is no task reply we don't expect Bpod out signals during this period
             tmin, tmax = ephys_fpga.get_protocol_period(
-                self.session_path, protocol_number, bpod, exclude_empty_periods=not skip_replay)
+                self.session_path, protocol_number, bpod, exclude_empty_periods=not self.skip_replay)
         else:
             tmin = tmax = None
 
@@ -853,7 +853,7 @@ class PassiveChoiceWorld(BaseExtractor):
             log.error(f"Failed to extract RFMapping datasets: {e}")
             passiveRFM_times = None
 
-        if not skip_replay:
+        if not self.skip_replay:
             try:
                 (passiveGabor_df, passiveStims_df,) = extract_task_replay(
                     self.session_path, sync_collection=sync_collection, task_collection=task_collection,
@@ -863,6 +863,7 @@ class PassiveChoiceWorld(BaseExtractor):
                 passiveGabor_df, passiveStims_df = (None, None)
         else:
             # If we don't have task replay then we set the treplay intervals to NaN in our passivePeriods_df dataset
+            log.info(f"Skip replay = True, not extracting task replay stimuli.")
             passiveGabor_df, passiveStims_df = (None, None)
             passivePeriods_df.taskReplay = np.nan
 
