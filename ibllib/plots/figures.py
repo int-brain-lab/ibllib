@@ -20,7 +20,6 @@ from one.alf.exceptions import ALFObjectNotFound
 from ibllib.io.video import get_video_frame, url_from_eid
 from ibllib.oneibl.data_handlers import ExpectedDataset
 import spikeglx
-import neuropixel
 from brainbox.plot import driftmap
 from brainbox.io.spikeglx import Streamer
 from brainbox.behavior.dlc import SAMPLING, plot_trace_on_frame, plot_wheel_position, plot_lick_hist, \
@@ -466,15 +465,11 @@ class BadChannelsAp(ReportSnapshotProbe):
             else:
                 return []
 
-        if sr.meta.get('NP2.4_shank', None) is not None:
-            h = neuropixel.trace_header(sr.major_version, nshank=4)
-            h = neuropixel.split_trace_header(h, shank=int(sr.meta.get('NP2.4_shank')))
-        else:
-            h = neuropixel.trace_header(sr.major_version, nshank=np.unique(sr.geometry['shank']).size)
+        th = sr.geometry
 
         channel_labels, channel_features = voltage.detect_bad_channels(raw, sr.fs)
         _, eqcs, output_files = ephys_bad_channels(
-            raw=raw, fs=sr.fs, channel_labels=channel_labels, channel_features=channel_features, h=h, channels=electrodes,
+            raw=raw, fs=sr.fs, channel_labels=channel_labels, channel_features=channel_features, h=th, channels=electrodes,
             title=SNAPSHOT_LABEL, destripe=True, save_dir=self.output_directory, br=self.brain_regions, pid_info=self.pid_label)
         self.eqcs = eqcs
         return output_files

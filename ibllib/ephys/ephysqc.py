@@ -157,17 +157,13 @@ class EphysQC(base.QC):
                 sr = self.data['ap']
                 nc = sr.nc - sr.nsync
 
-                # verify that the channel layout is correct according to IBL layout
                 th = sr.geometry
-                if sr.meta.get('NP2.4_shank', None) is not None:
-                    h = neuropixel.trace_header(sr.major_version, nshank=4)
-                    h = neuropixel.split_trace_header(h, shank=int(sr.meta.get('NP2.4_shank')))
-                else:
+                # Verify that the channel layout is correct according to IBL layout for version 1 probes
+                if sr.major_version == 1:
                     h = neuropixel.trace_header(sr.major_version, nshank=np.unique(th['shank']).size)
-
-                if not (np.all(h['x'] == th['x']) and np.all(h['y'] == th['y'])):
-                    _logger.critical("Channel geometry seems incorrect")
-                    # raise ValueError("Wrong Neuropixel channel mapping used - ABORT")
+                    if not (np.all(h['x'] == th['x']) and np.all(h['y'] == th['y'])):
+                        _logger.critical("Channel geometry seems incorrect")
+                        raise ValueError("Wrong Neuropixel channel mapping used - ABORT")
 
                 t0s = np.arange(TMIN, sr.rl - SAMPLE_LENGTH, BATCHES_SPACING)
                 all_rms = np.zeros((2, nc, t0s.shape[0]))
@@ -179,7 +175,7 @@ class EphysQC(base.QC):
                     sl = slice(int(t0 * sr.fs), int((t0 + SAMPLE_LENGTH) * sr.fs))
                     raw = sr[sl, :-sr.nsync].T
                     all_rms[0, :, i], all_rms[1, :, i], all_srs[:, i], channel_ok[:, i], psd =\
-                        self._compute_metrics_array(raw, sr.fs, h)
+                        self._compute_metrics_array(raw, sr.fs, th)
                     psds += psd
                 # Calculate the median RMS across all samples per channel
                 results = {'rms': np.median(all_rms, axis=-1),
@@ -188,8 +184,12 @@ class EphysQC(base.QC):
                            'ap_freqs': fourier.fscale(WELCH_WIN_LENGTH_SAMPLES, 1 / sr.fs, one_sided=True),
                            'ap_power': psds.T / len(t0s),  # shape: (nfreqs, nchannels)
                            }
+                unsort = np.argsort(sr.raw_channel_order)[:-sr.nsync]
                 for k in files:
-                    np.save(files[k], results[k])
+                    if nc in results[k].shape:
+                        np.save(files[k], results[k][..., unsort])
+                    else:
+                        np.save(files[k], results[k])
             qc_files.extend([files[k] for k in files])
             for p in [10, 90]:
                 self.metrics[f'apRms_p{p}_raw'] = np.format_float_scientific(
@@ -219,19 +219,19 @@ def rmsmap(sglx, spectra=True, nmod=1):
     # the window generator will generates window indices
     wingen = utils.WindowGenerator(ns=sglx.ns, nswin=rms_win_length_samples, overlap=0)
     nwin = np.ceil(wingen.nwin / nmod).astype(int)
+    nc = sglx.nc - sglx.nsync
     # pre-allocate output dictionary of numpy arrays
-    win = {'TRMS': np.zeros((nwin, sglx.nc)),
+    win = {'TRMS': np.zeros((nwin, nc)),
            'nsamples': np.zeros((nwin,)),
            'fscale': fourier.fscale(WELCH_WIN_LENGTH_SAMPLES, 1 / sglx.fs, one_sided=True),
            'tscale': wingen.tscale(fs=sglx.fs)[::nmod]}
-    win['spectral_density'] = np.zeros((len(win['fscale']), sglx.nc))
+    win['spectral_density'] = np.zeros((len(win['fscale']), nc))
     # loop through the whole session
     with tqdm(total=wingen.nwin) as pbar:
         for iwindow, (first, last) in enumerate(wingen.firstlast):
             if np.mod(iwindow, nmod) != 0:
                 continue
-
-            D = sglx.read_samples(first_sample=first, last_sample=last)[0].transpose()
+            D = sglx[slice(first, last), :-sglx.nsync].T
             # remove low frequency noise below 1 Hz
             D = fourier.hp(D, 1 / sglx.fs, [0, 1])
             iw = np.floor(wingen.iw / nmod).astype(int)
@@ -283,12 +283,15 @@ def extract_rmsmap(sglx, out_folder=None, overwrite=False, spectra=True, nmod=1)
     # output ALF files, single precision with the optional label as suffix before extension
     if not out_folder.exists():
         out_folder.mkdir()
+    unsort = np.argsort(sglx.raw_channel_order)[:-sglx.nsync]
     tdict = {'rms': rms['TRMS'].astype(np.single), 'timestamps': rms['tscale'].astype(np.single)}
+    tdict['rms'] = tdict['rms'][:, unsort]
     out_time = alfio.save_object_npy(
         out_folder, object=alf_object_time, dico=tdict, namespace='iblqc')
     if spectra:
         fdict = {'power': rms['spectral_density'].astype(np.single),
                  'freqs': rms['fscale'].astype(np.single)}
+        fdict['power'] = fdict['power'][:, unsort]
         out_freq = alfio.save_object_npy(
             out_folder, object=alf_object_freq, dico=fdict, namespace='iblqc')
     return out_time + out_freq if spectra else out_time

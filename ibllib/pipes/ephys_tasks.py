@@ -571,6 +571,8 @@ class CellQCMixin:
             qcdict['whitening_matrix_conditioning'] = np.linalg.cond(wm)
         # groom qc dict (this function will eventually go directly into the json field update)
         for k in qcdict:
+            if np.isnan(qcdict[k]):
+                qcdict[k] = None
             if isinstance(qcdict[k], np.int64):
                 qcdict[k] = int(qcdict[k])
             elif isinstance(qcdict[k], float):

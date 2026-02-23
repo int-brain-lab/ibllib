@@ -105,11 +105,11 @@ def unit_stability(units_b, units=None, feat_names=['amps'], dist='norm', test='
     """
 
     # Get units.
-    if not (units is None):  # we're using a subset of all units
+    if units is not None:  # we're using a subset of all units
         unit_list = list(units_b[feat_names[0]].keys())
         # for each `feat` and unit in `unit_list`, remove unit from `units_b` if not in `units`
         for feat in feat_names:
-            [units_b[feat].pop(unit) for unit in unit_list if not (int(unit) in units)]
+            [units_b[feat].pop(unit) for unit in unit_list if int(unit) not in units]
     unit_list = list(units_b[feat_names[0]].keys())  # get new `unit_list` after removing units
 
     # Initialize `p_vals` and `variances`.
