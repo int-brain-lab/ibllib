@@ -319,12 +319,15 @@ class PassiveTaskTimeline(base_tasks.BehaviourTask, base_tasks.MesoscopeTask):
             self.protocol_number = None
 
         sync, chmap = self.load_sync()
-        data, paths = PassiveChoiceWorld(self.session_path).extract(
+        self.passive_extractor = PassiveChoiceWorld(self.session_path)
+        data, paths = self.passive_extractor.extract(
             sync_collection=self.sync_collection, task_collection=self.collection, save=True,
             path_out=self.session_path.joinpath(self.output_collection),
             protocol_number=self.protocol_number, sync=sync, sync_map=chmap)
 
-        if len(paths) != len(self.output_files):
+        expected_out = len(self.output_files) if not self.passive_extractor.skip_replay else 2
+
+        if len(paths) != expected_out:
             _logger.warning('Number of output files does not match the signature definition')
             self.status = -1
 
