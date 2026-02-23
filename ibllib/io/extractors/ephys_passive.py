@@ -569,6 +569,9 @@ def extract_task_replay(
             assert np.array_equal(full_df['stim_type'].values, replay_trials['stim_type'].values), \
                 "The extracted sequence does not match the expected task replay sequence."
 
+    elif gabor_df is not None and stim_df is None:
+        gabor_df = gabor_df.drop(columns=['stim_type'])
+        
     return gabor_df, stim_df
 
 
