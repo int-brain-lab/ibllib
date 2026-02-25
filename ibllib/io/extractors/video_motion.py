@@ -21,6 +21,7 @@ import ibllib.io.video as vidio
 from iblutil.util import Bunch
 from ibllib.io.extractors.ephys_fpga import get_sync_fronts, get_sync_and_chn_map
 import ibllib.io.raw_data_loaders as raw
+from ibllib.io.raw_daq_loaders import load_timeline_sync_and_chmap
 import ibllib.io.extractors.camera as cam
 from ibllib.plots.snapshot import ReportSnapshot
 import brainbox.video as video
@@ -401,6 +402,7 @@ class MotionAlignmentFullSession:
         self.label = label
         self.threshold = kwargs.get('threshold', 20)
         self.upload = kwargs.get('upload', False)
+        self.collection = kwargs.get('task_collection', 'raw_behavior_data')
         self.twin = kwargs.get('twin', 150)
         self.nprocess = kwargs.get('nprocess', int(cpu_count() - cpu_count() / 4))
 
@@ -451,10 +453,14 @@ class MotionAlignmentFullSession:
             sync, chmap = get_sync_and_chn_map(self.session_path, sync_collection='raw_ephys_data')
             sr = get_sync_fronts(sync, chmap[f'{self.label}_camera'])
             self.ttls = sr.times[::2]
+        elif sync == 'timeline':
+            sync, chmap = load_timeline_sync_and_chmap(self.session_path.joinpath('raw_sync_data'), save=False)
+            sr = get_sync_fronts(sync, chmap[f'{self.label}_camera'])
+            self.ttls = sr.times[::2]
         else:
             # Otherwise we assume the sync is 'bpod' and we read in the camera ttls from the raw bpod data
             cam_extractor = cam.CameraTimestampsBpod(session_path=self.session_path)
-            cam_extractor.bpod_trials = raw.load_data(self.session_path, task_collection='raw_behavior_data')
+            cam_extractor.bpod_trials = raw.load_data(self.session_path, task_collection=self.collection)
             self.ttls = cam_extractor._times_from_bpod()
 
         # Check if the ttl and video sizes match up
@@ -488,7 +494,10 @@ class MotionAlignmentFullSession:
         # trial aligned paw velocity (from the dlc) is a nice sanity check to make sure the alignment went well
         try:
             self.trials = alfio.load_file_content(next(alf_path.rglob('_ibl_trials.table*.pqt')))
-            self.dlc = alfio.load_file_content(next(alf_path.rglob(f'_ibl_{self.label}Camera.dlc*.pqt')))
+            try:
+                self.dlc = alfio.load_file_content(next(alf_path.rglob(f'_ibl_{self.label}Camera.dlc*.pqt')))
+            except StopIteration:
+                self.dlc = alfio.load_file_content(next(alf_path.rglob(f'_ibl_{self.label}Camera.lightning*.pqt')))
             self.dlc = likelihood_threshold(self.dlc)
             self.behavior = True
         except (ALFObjectNotFound, StopIteration):
