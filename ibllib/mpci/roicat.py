@@ -35,6 +35,72 @@ class SubjectAggregateTask(Task):
         self.subject_path = subject_path
         super().__init__(self.subject_path, **kwargs)
 
+
+def extract_masknmf_spatial_footprints(dr):
+    """
+    Given a masknmf demixingresults object, extracts the spatial footprints in a format needed for ROICaT cross-session matching
+    """
+    a = dr.ac_array.a.cpu().t().coalesce()  # Shape (num_neurons, num_pixels)
+    row, col = a.indices()
+    vals = a.values()
+
+    col_sum = torch.zeros(col.shape[0], device=a.device)
+    col_sum.scatter_reduce_(0, col, vals, reduce="sum")
+    per_value_divisors = col_sum[col]
+    vals /= per_value_divisors
+    vals = torch.nan_to_num(vals, nan=0.0)
+
+    row = row.cpu().numpy()
+    col = col.cpu().numpy()
+    vals = vals.cpu().numpy()
+
+    shape = a.shape
+    curr_csr_scipy = scipy.sparse.coo_matrix((vals, (row, col)), shape=shape).tocsr()
+    return curr_csr_scipy
+
+
+def extract_masknmf_mean_img(dr):
+    return dr.pmd_array.mean_img.cpu().numpy()
+
+def extract_suite2p_spatial_footprints(
+        ops: np.ndarray,
+        stat: np.ndarray,
+) -> scipy.sparse.csr_matrix:
+    """
+    From the suite2p/ROICaT repos
+    Returns:
+        (scipy.sparse.csr_matrix):
+            spatialFootprints (scipy.sparse.csr_matrix):
+                Sparse array of shape *(n_roi, frame_height * frame_width)*
+                containing the spatial footprints of the ROIs.
+    """
+    height, width = ops['Ly'], ops['Lx']
+    ## Add some code here to infer the height/width of the data from the ops file
+    dtype = None
+    isInt = np.issubdtype(dtype, np.integer)
+
+    rois_to_stack = []
+
+    for jj, roi in enumerate(stat):
+        lam = np.array(roi['lam'], ndmin=1)
+        dtype = lam.dtype
+        if isInt:
+            lam = dtype(lam / lam.sum() * np.iinfo(dtype).max)
+        else:
+            lam = lam / lam.sum()
+        ypix = np.array(roi['ypix'], dtype=np.uint64, ndmin=1)
+        xpix = np.array(roi['xpix'], dtype=np.uint64, ndmin=1)
+
+        tmp_roi = scipy.sparse.csr_matrix((lam, (ypix, xpix)), shape=(height, width), dtype=dtype)
+        rois_to_stack.append(tmp_roi.reshape(1, -1))
+
+    return scipy.sparse.vstack(rois_to_stack).tocsr()
+
+def extract_suite2p_mean_img(ops: dict) -> np.ndarray:
+    mean_img = ops['meanImg']
+    return mean_img
+
+
 class DemixingRoicat(Data_roicat):
 
     _notes = "um per pixel always 1.2 for IBL 2p mesoscope data"
@@ -166,19 +232,35 @@ class ROICaTTask(SubjectAggregateTask):
         for cID, paths in clusters.items():
             # Load the data for ROICaT processing
             data = self.load_data(paths)
+
+            ## Run ROICaT
+            defaults = roicat.util.get_default_parameters(pipeline='tracking')
+            outputs_roicat = roicat.pipelines.pipeline_tracking(defaults, custom_data=data)
             
         
     def load_data(self, paths):
-        """Load the data for ROICaT processing."""
+        """
+        Load the data for ROICaT processing.
+        Args:
+            paths: List of paths, one to each of the suite2p_ROIData.raw.zip files
+
+        """
+
+        #Build a list for all mean images
+        mean_images = []
+        footprints = []
+        for filepath in paths:
+            zip_path = filepath / "_suite2p_ROIData.raw.zip"
+            curr_ops = np.load(zip_path, allow_pickle=True)['ops'].item()
+            curr_stat = np.load(zip_path, allow_pickle = True)['stat'].item()
+            footprints.append(extract_suite2p_spatial_footprints(curr_ops, curr_stat))
+            mean_images.append(extract_suite2p_mean_img(curr_ops))
+
         
-        data = roicat.data_importing.Data_suite2p(
-            paths_statFiles=...,
-            paths_opsFiles=...,
-            um_per_pixel=1.2,  ## IMPORTANT PARAMETER
-            new_or_old_suite2p='new',
-            type_meanImg='meanImgE',
-            verbose=True,
-        )
+        data = roicat.DemixingRoicat(mean_images,
+                                     footprints,
+                                     um_per_pixel=1.2, ##This is specific to S. Picard's 2p mesoscope project
+                                     highpass_simga=3)
 
         assert data.check_completeness(verbose=False)['tracking'], 'Data object is missing attributes necessary for tracking.'
         return data
