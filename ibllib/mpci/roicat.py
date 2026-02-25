@@ -8,9 +8,14 @@ import numpy as np
 from one.alf.path import ALFPath
 import roicat
 import roicat.data_importing
+from roicat.data_importing import Data_roicat
 
 from ibllib.pipes.tasks import Task
 from ibllib.oneibl.data_handlers import ExpectedDataset
+from typing import *
+import scipy
+import scipy.sparse
+import torch
 
 
 logger = logging.getLogger('ibllib.ROICaT')
@@ -29,6 +34,87 @@ class SubjectAggregateTask(Task):
         """
         self.subject_path = subject_path
         super().__init__(self.subject_path, **kwargs)
+
+class DemixingRoicat(Data_roicat):
+
+    _notes = "um per pixel always 1.2 for IBL 2p mesoscope data"
+    def __init__(self,
+                 mean_img_list: List[np.ndarray],
+                 spatial_fp_list: List[scipy.sparse.coo_matrix],
+                 um_per_pixel: float = 1.2,
+                 roi_image_dims: tuple[int, int] = (36, 36),
+                 highpass_sigma: Optional[int] = 3):
+        """
+        Generic interface for doing multi-session tracking with any analysis pipeline
+        Args:
+            mean_img_list (List[np.ndarray]): List of mean images from each imaging session. Each image should have same dimensions.
+            spatial_fp_list (List[np.ndarray]): List of spatial footprint arrays, one for each session. Each individual array has shape (num_rois, num_pixels).
+                Each spatial footprint is flattened into a row of this array in "C" order.
+            um_per_pixel (float): Describes the resolution of the imaging
+            roi_image_dims (tuple[int, int]): Each ROI is spatially cropped for purposes of feature extraction in the ROICat pipeline. This specifies the crop dimensions.
+            highpass_sigma (int): We highpass filter the mean image to define an "enhanced" mean image (this is what s2p does) for use in the tracking pipeline.
+        """
+
+        super().__init__()
+        self.um_per_pixel = um_per_pixel
+        self._highpass_sigma = highpass_sigma
+        self._mean_img_list = mean_img_list
+        self.set_FOVHeightWidth(int(mean_img_list[0].shape[0]), int(mean_img_list[1].shape[1]))
+        self.set_fov_imgs_from_mean_imgs()
+        self.set_spatialFootprints(spatial_fp_list, self.um_per_pixel)
+        self.transform_spatialFootprints_to_ROIImages(out_height_width=roi_image_dims)
+
+    def set_fov_imgs_from_mean_imgs(self):
+        fov_list = self._filter_and_normalize_mean_img()
+        return self.set_FOV_images(fov_list)
+
+    def _filter_and_normalize_mean_img(self):
+        """
+        This pipeline convolves each image with a
+        """
+        if self._highpass_sigma is None:
+            return self._mean_img_list
+        else:
+            """
+            Spatially high-pass filter each image and normalize the data between 0 and 1
+            """
+            radius = int(torch.ceil(torch.tensor(2 * self._highpass_sigma)).item())
+            size = 2 * radius + 1
+            coords = torch.arange(-radius, radius + 1, dtype=torch.float32)
+            yy, xx = torch.meshgrid(coords, coords, indexing='ij')
+
+            # 2D Gaussian
+            kernel = torch.exp(-(xx**2 + yy**2) / (2 * self._highpass_sigma**2))
+
+            # Normalize so sum = 1
+            kernel /= kernel.sum()
+            kernel *= -1
+
+            kernel[radius, radius] += 1
+
+            # Reshape for conv2d: (out_ch, in_ch, H, W)
+            kernel = kernel.unsqueeze(0).unsqueeze(0)
+
+            new_list = []
+            for k in range(len(self._mean_img_list)):
+                curr_mean_img = torch.from_numpy(self._mean_img_list[k]).float()
+
+                image = curr_mean_img.unsqueeze(0).unsqueeze(0)
+                image = torch.nn.functional.pad(image,
+                                                pad=(radius, radius, radius, radius), mode="reflect")
+
+                # Convolve
+                output = torch.nn.functional.conv2d(image, kernel, padding=0).squeeze(0).squeeze(0).cpu()
+
+                #Normalize + clip
+                p1 = torch.quantile(output, 0.01)
+                p99 = torch.quantile(output, 0.99)
+                x_clipped = torch.clamp(output, min=p1, max=p99)
+                x_norm = (x_clipped - p1) / (p99 - p1)
+
+                x_norm = x_norm.numpy()
+                new_list.append(x_norm)
+            return new_list
 
 
 class ROICaTTask(SubjectAggregateTask):
