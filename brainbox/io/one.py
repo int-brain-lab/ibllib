@@ -89,16 +89,14 @@ def _get_spike_sorting_collection(collections, pname):
 
 
 def _channels_alyx2bunch(chans):
-    channels = Bunch(
-        {
-            'atlas_id': np.array([ch['brain_region'] for ch in chans]),
-            'x': np.array([ch['x'] for ch in chans]) / 1e6,
-            'y': np.array([ch['y'] for ch in chans]) / 1e6,
-            'z': np.array([ch['z'] for ch in chans]) / 1e6,
-            'axial_um': np.array([ch['axial'] for ch in chans]),
-            'lateral_um': np.array([ch['lateral'] for ch in chans]),
-        }
-    )
+    channels = Bunch({
+        'atlas_id': np.array([ch['brain_region'] for ch in chans]),
+        'x': np.array([ch['x'] for ch in chans]) / 1e6,
+        'y': np.array([ch['y'] for ch in chans]) / 1e6,
+        'z': np.array([ch['z'] for ch in chans]) / 1e6,
+        'axial_um': np.array([ch['axial'] for ch in chans]),
+        'lateral_um': np.array([ch['lateral'] for ch in chans]),
+    })
     return channels
 
 
@@ -1139,6 +1137,7 @@ class SpikeSortingLoader:
         gain=-93,
         title=None,
     ):
+
         # compute the raw data offset and destripe, we take 400ms around t0
         first_sample, last_sample = (int((t0 - 0.2) * sr.fs), int((t0 + 0.2) * sr.fs))
         raw = sr[first_sample:last_sample, : -sr.nsync].T
@@ -1533,7 +1532,7 @@ class SessionLoader:
         # This is because the first few frames are sometimes not recorded. We can remove the first few
         # timestamps in this case
         elif video_timestamps.shape[0] > video_data.shape[0]:
-            video_timestamps_fixed = video_timestamps[-video_data.shape[0]:]
+            video_timestamps_fixed = video_timestamps[-video_data.shape[0] :]
             return video_timestamps_fixed, video_data
         else:
             return video_timestamps, video_data
