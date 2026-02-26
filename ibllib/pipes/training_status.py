@@ -495,6 +495,8 @@ def get_data_collection(session_path):
         for i, (protocol, task_info) in enumerate(chain(*map(dict.items, task_protocols))):
             if 'passiveChoiceWorld' in protocol:
                 continue
+            elif 'ChoiceWorld' not in protocol:
+                continue
             collection = task_info.get('collection', f'raw_task_data_{i:02}')
             if collection == 'raw_passive_data':
                 continue

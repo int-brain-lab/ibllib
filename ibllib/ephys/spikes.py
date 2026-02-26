@@ -3,10 +3,12 @@ import logging
 import json
 import shutil
 import tarfile
+from typing import Tuple
 
 import numpy as np
 from one.alf.path import get_session_path
 import spikeglx
+from one.webclient import AlyxClient
 
 from iblutil.util import Bunch
 import phylib.io.alf
@@ -15,6 +17,50 @@ import ibllib.ephys.ephysqc as ephysqc
 from ibllib.ephys import sync_probes
 
 _logger = logging.getLogger(__name__)
+
+
+def create_insertion(alyx: AlyxClient, md: dict, label: str, eid: str) -> Tuple[dict, dict]:
+    """
+    Create or update a probe insertion in Alyx and return description and the alyx rest record.
+
+    This function checks if a probe insertion with the given label already exists for the
+    specified session. If it doesn't exist, it creates a new one. If it does, it updates
+    the existing record. It also prepares a dictionary with essential probe details.
+
+    Parameters
+    ----------
+    alyx : one.webclient.AlyxClient
+        An instance of the Alyx rest client.
+    md : dict
+        A Bunch object containing metadata from a spikeglx meta file, including
+        'neuropixelVersion', 'serial', and 'fileName'.
+    label : str
+        The label for the probe insertion (e.g., 'probe00').
+    eid : str
+        The unique experiment ID (UUID) for the session.
+
+    Returns
+    -------
+    tuple
+        A tuple containing:
+        - description (dict): A dictionary with probe details for metadata file,
+          containing keys 'label', 'model', 'serial', 'raw_file_name'.
+        - insertion (dict): The Alyx record for the created or updated probe insertion.
+    """
+    # create json description
+    description = {'label': label, 'model': md['neuropixelVersion'], 'serial': int(md['serial']), 'raw_file_name': md['fileName']}
+
+    # create or update probe insertion on alyx
+    alyx_insertion = {'session': eid, 'model': md['neuropixelVersion'], 'serial': md['serial'], 'name': label}
+    pi = alyx.rest('insertions', 'list', session=eid, name=label)
+    if len(pi) == 0:
+        qc_dict = {'qc': 'NOT_SET', 'extended_qc': {}}
+        alyx_insertion.update({'json': qc_dict})
+        insertion = alyx.rest('insertions', 'create', data=alyx_insertion)
+    else:
+        insertion = alyx.rest('insertions', 'partial_update', data=alyx_insertion, id=pi[0]['id'])
+
+    return description, insertion
 
 
 def probes_description(ses_path, one):
@@ -36,24 +82,6 @@ def probes_description(ses_path, one):
         return
 
     subdirs, labels, efiles_sorted = zip(*sorted(ap_meta_files))
-
-    def _create_insertion(md, label, eid):
-
-        # create json description
-        description = {'label': label, 'model': md.neuropixelVersion, 'serial': int(md.serial), 'raw_file_name': md.fileName}
-
-        # create or update probe insertion on alyx
-        alyx_insertion = {'session': eid, 'model': md.neuropixelVersion, 'serial': md.serial, 'name': label}
-        pi = one.alyx.rest('insertions', 'list', session=eid, name=label)
-        if len(pi) == 0:
-            qc_dict = {'qc': 'NOT_SET', 'extended_qc': {}}
-            alyx_insertion.update({'json': qc_dict})
-            insertion = one.alyx.rest('insertions', 'create', data=alyx_insertion)
-        else:
-            insertion = one.alyx.rest('insertions', 'partial_update', data=alyx_insertion, id=pi[0]['id'])
-
-        return description, insertion
-
     # Ouputs the probes description file
     probe_description = []
     alyx_insertions = []
@@ -66,16 +94,16 @@ def probes_description(ses_path, one):
                 nshanks = np.unique(geometry['shank'])
                 for shank in nshanks:
                     label_ext = f'{label}{chr(97 + int(shank))}'
-                    description, insertion = _create_insertion(md, label_ext, eid)
+                    description, insertion = create_insertion(one.alyx, md, label_ext, eid)
                     probe_description.append(description)
                     alyx_insertions.append(insertion)
             # NP2.4 meta that has already been split
             else:
-                description, insertion = _create_insertion(md, label, eid)
+                description, insertion = create_insertion(one.alyx, md, label, eid)
                 probe_description.append(description)
                 alyx_insertions.append(insertion)
         else:
-            description, insertion = _create_insertion(md, label, eid)
+            description, insertion = create_insertion(one.alyx, md, label, eid)
             probe_description.append(description)
             alyx_insertions.append(insertion)
 
@@ -102,8 +130,7 @@ def sync_spike_sorting(ap_file, out_path):
 
     out_files = []
     label = ap_file.parts[-1]  # now the bin file is always in a folder bearing the name of probe
-    sync_file = ap_file.parent.joinpath(
-        ap_file.name.replace('.ap.', '.sync.')).with_suffix('.npy')
+    sync_file = ap_file.parent.joinpath(ap_file.name.replace('.ap.', '.sync.')).with_suffix('.npy')
     # try to get probe sync if it doesn't exist
     if not sync_file.exists():
         _, sync_files = sync_probes.sync(get_session_path(ap_file))
@@ -112,8 +139,10 @@ def sync_spike_sorting(ap_file, out_path):
     if not sync_file.exists():
         # if there is no sync file it means something went wrong. Outputs the spike sorting
         # in time according the the probe by following ALF convention on the times objects
-        error_msg = f'No synchronisation file for {label}: {sync_file}. The spike-' \
-                    f'sorting is not synchronized and data not uploaded on Flat-Iron'
+        error_msg = (
+            f'No synchronisation file for {label}: {sync_file}. The spike-'
+            f'sorting is not synchronized and data not uploaded on Flat-Iron'
+        )
         _logger.error(error_msg)
         # remove the alf folder if the sync failed
         shutil.rmtree(out_path)
@@ -124,9 +153,20 @@ def sync_spike_sorting(ap_file, out_path):
     interp_times = apply_sync(sync_file, spike_samples / _sr(ap_file), forward=True)
     np.save(st_file, interp_times)
     # get the list of output files
-    out_files.extend([f for f in out_path.glob("*.*") if
-                      f.name.startswith(('channels.', 'drift', 'clusters.', 'spikes.', 'templates.',
-                                         '_kilosort_', '_phy_spikes_subset', '_ibl_log.info'))])
+    out_files.extend([
+        f
+        for f in out_path.glob('*.*')
+        if f.name.startswith((
+            'channels.',
+            'drift',
+            'clusters.',
+            'spikes.',
+            'templates.',
+            '_kilosort_',
+            '_phy_spikes_subset',
+            '_ibl_log.info',
+        ))
+    ])
     # the QC files computed during spike sorting stay within the raw ephys data folder
     out_files.extend(list(ap_file.parent.glob('_iblqc_*AP.*.npy')))
     return out_files, 0
@@ -162,31 +202,33 @@ def ks2_to_tar(ks_path, out_path, force=False):
             tar_dir.extractall(path=save_path)
 
     """
-    ks2_output = ['amplitudes.npy',
-                  'channel_map.npy',
-                  'channel_positions.npy',
-                  'cluster_Amplitude.tsv',
-                  'cluster_ContamPct.tsv',
-                  'cluster_group.tsv',
-                  'cluster_KSLabel.tsv',
-                  'params.py',
-                  'pc_feature_ind.npy',
-                  'pc_features.npy',
-                  'similar_templates.npy',
-                  'spike_clusters.npy',
-                  'spike_sorting_ks2.log',
-                  'spike_templates.npy',
-                  'spike_times.npy',
-                  'template_feature_ind.npy',
-                  'template_features.npy',
-                  'templates.npy',
-                  'templates_ind.npy',
-                  'whitening_mat.npy',
-                  'whitening_mat_inv.npy']
+    ks2_output = [
+        'amplitudes.npy',
+        'channel_map.npy',
+        'channel_positions.npy',
+        'cluster_Amplitude.tsv',
+        'cluster_ContamPct.tsv',
+        'cluster_group.tsv',
+        'cluster_KSLabel.tsv',
+        'params.py',
+        'pc_feature_ind.npy',
+        'pc_features.npy',
+        'similar_templates.npy',
+        'spike_clusters.npy',
+        'spike_sorting_ks2.log',
+        'spike_templates.npy',
+        'spike_times.npy',
+        'template_feature_ind.npy',
+        'template_features.npy',
+        'templates.npy',
+        'templates_ind.npy',
+        'whitening_mat.npy',
+        'whitening_mat_inv.npy',
+    ]
 
     out_file = Path(out_path).joinpath('_kilosort_raw.output.tar')
     if out_file.exists() and not force:
-        _logger.info(f"Already converted ks2 to tar: for {ks_path}, skipping.")
+        _logger.info(f'Already converted ks2 to tar: for {ks_path}, skipping.')
         return [out_file]
 
     with tarfile.open(out_file, 'w') as tar_dir:
@@ -197,7 +239,7 @@ def ks2_to_tar(ks_path, out_path, force=False):
     return [out_file]
 
 
-def detection(data, fs, h, detect_threshold=-4, time_tol=.002, distance_threshold_um=70):
+def detection(data, fs, h, detect_threshold=-4, time_tol=0.002, distance_threshold_um=70):
     """
     Detects and de-duplicates negative voltage spikes based on voltage thresholding.
     The de-duplication step locks in maximum amplitude events. To account for collisions the amplitude

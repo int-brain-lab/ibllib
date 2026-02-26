@@ -658,7 +658,8 @@ class FpgaTrials(extractors_base.BaseExtractor):
             self.settings = self.bpod_extractor.settings  # This is used by the TaskQC
             self.bpod_rsync_fields = bpod_rsync_fields
             if self.bpod_rsync_fields is None:
-                self.bpod_rsync_fields = tuple(self._time_fields(self.bpod_extractor.var_names))
+                self.bpod_rsync_fields = tuple([f for f in self._time_fields(self.bpod_extractor.var_names)
+                                                if 'wheel' not in f])
                 if 'table' in self.bpod_extractor.var_names:
                     if not self.bpod_trials:
                         self.bpod_trials = self.bpod_extractor.extract(save=False)
@@ -666,7 +667,7 @@ class FpgaTrials(extractors_base.BaseExtractor):
                     self.bpod_rsync_fields += tuple(self._time_fields(table_keys))
         elif bpod_rsync_fields:
             self.bpod_rsync_fields = bpod_rsync_fields
-        excluded = (*self.bpod_rsync_fields, 'table')
+        excluded = (*self.bpod_rsync_fields, 'table', *(f for f in self.bpod_extractor.var_names if 'wheel' in f))
         if bpod_fields:
             assert not set(self.bpod_fields).intersection(excluded), 'bpod_fields must not also be bpod_rsync_fields'
             self.bpod_fields = bpod_fields

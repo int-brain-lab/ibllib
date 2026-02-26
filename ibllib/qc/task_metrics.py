@@ -47,6 +47,7 @@ Running ephys QC, from local server PC (after ephys + bpod data have been copied
 >>> outcome, results = qc.run()
 """
 import logging
+import json
 import sys
 from packaging import version
 from pathlib import PurePosixPath
@@ -61,6 +62,7 @@ from scipy.stats import chisquare
 from brainbox.behavior.wheel import cm_to_rad, traces_by_trial
 from ibllib.io.extractors import ephys_fpga
 from one.alf import spec
+
 from . import base
 
 _log = logging.getLogger(__name__)
@@ -359,7 +361,7 @@ class TaskQC(base.QC):
             self.update(outcome, kwargs.get('namespace', self.namespace))
         return outcome, results
 
-    def compute_session_status(self):
+    def compute_session_status(self, use_custom=True):
         """
         Compute the overall session QC for each key and aggregates in a single value.
 
@@ -377,8 +379,35 @@ class TaskQC(base.QC):
         # Get mean passed of each check, or None if passed is None or all NaN
         results = {k: None if v is None or np.isnan(v).all() else np.nanmean(v)
                    for k, v in self.passed.items()}
+
+        # If a custom criteria is defined for this session, use it
+        if use_custom:
+            custom_criteria = self.get_custom_session_criteria()
+            if custom_criteria is not None:
+                self.criteria = custom_criteria
+
         session_outcome, outcomes = compute_session_status_from_dict(results, self.criteria)
         return session_outcome, results, outcomes
+
+    def get_custom_session_criteria(self):
+        """
+        Use a custom QC criteria associated with the session.
+
+        Returns
+        -------
+        dict
+            The QC criteria to use
+        """
+        if self.one:
+            note_title = f'=== SESSION QC CRITERIA {self.namespace} ==='
+            query = f'text__icontains,{note_title},object_id,{str(self.eid)}'
+            notes = self.one.alyx.rest('notes', 'list', django=query)
+            if len(notes) > 0:
+                notes = json.loads(notes[0]['text'])
+                criteria = {k if k == 'default' else f'_{self.namespace}_{k}': v
+                            for k, v in notes['criteria'].items()}
+                self.log.info('Using custom QC criteria found on Alyx note associated with session')
+                return criteria
 
     @staticmethod
     def compute_dataset_qc_status(outcomes, namespace='task'):
@@ -817,13 +846,13 @@ def _wheel_move_during_closed_loop(re_ts, re_pos, data, wheel_gain=None, tol=1, 
     """
     Check the wheel moves the correct amount to reach threshold.
 
-    Check that the wheel moves by approximately 35 degrees during the closed-loop period
+    Check that the wheel moves by approximately +/- 35 degrees during the closed-loop period
     on trials where a feedback (error sound or valve) is delivered.
 
     Metric:
-        M = abs(w_resp - w_t0) - threshold_displacement, where w_resp = position at response
+        M = w_resp - w_t0 - threshold_displacement, where w_resp = position at response
         time, w_t0 = position at go cue time, threshold_displacement = displacement required to
-        move 35 visual degrees
+        move 35 visual degrees in the appropriate direction.
 
     Criterion:
         displacement < tol visual degree
@@ -848,21 +877,24 @@ def _wheel_move_during_closed_loop(re_ts, re_pos, data, wheel_gain=None, tol=1, 
                              end=data['response_times'])
 
     metric = np.zeros_like(data['feedback_times'])
-    # For each trial find the absolute displacement
+    # For each trial find the maximum displacement in either direction from the position at go cue
     for i, trial in enumerate(traces):
         t, pos = trial
         if pos.size != 0:
             # Find the position of the preceding sample and subtract it
             idx = np.abs(re_ts - t[0]).argmin() - 1
             origin = re_pos[idx]
-            metric[i] = np.abs(pos - origin).max()
+            p_max = np.argmax(np.abs(pos - origin))
+            metric[i] = (pos - origin)[p_max]
 
     # Load wheel_gain and thresholds for each trial
     wheel_gain = np.array([wheel_gain] * len(data['position']))
     thresh = data['position']
-    # abs displacement, s, in mm required to move 35 visual degrees
-    s_mm = np.abs(thresh / wheel_gain)  # don't care about direction
+    # displacement, s, in mm required to move 35 visual degrees
+    s_mm = thresh / wheel_gain
     criterion = cm_to_rad(s_mm * 1e-1)  # convert abs displacement to radians (wheel pos is in rad)
+    # For incorrect trials, the criterion is opposite direction
+    criterion *= data['correct'] * 2 - 1
     metric = metric - criterion  # difference should be close to 0
     rad_per_deg = cm_to_rad(1 / wheel_gain * 1e-1)
     passed = (np.abs(metric) < rad_per_deg * tol).astype(float)  # less than 1 visual degree off
@@ -1124,6 +1156,7 @@ def check_n_trial_events(data, **_):
     intervals = data['intervals']
     correct = data['correct']
     err_trig = data['errorCueTrigger_times']
+    stim_trig = data['stimFreezeTrigger_times']
 
     # Exclude these fields; valve and errorCue times are the same as feedback_times and we must
     # test errorCueTrigger_times separately
@@ -1132,13 +1165,25 @@ def check_n_trial_events(data, **_):
                'wheelMoves_peakVelocity_times', 'valveOpen_times', 'wheelMoves_peakAmplitude',
                'wheelMoves_intervals', 'wheel_timestamps', 'stimFreeze_times']
     events = [k for k in data.keys() if k.endswith('_times') and k not in exclude]
+    exclude_nogo = exclude + ['stimFreezeTrigger_times', 'firstMovement_times']
+    events_nogo = [k for k in data.keys() if k.endswith('_times') and k not in exclude_nogo]
+
     metric = np.zeros(data['intervals'].shape[0], dtype=bool)
 
-    # For each trial interval check that one of each trial event occurred.  For incorrect trials,
-    # check the error cue trigger occurred within the interval, otherwise check it is nan.
+    # For each trial interval check that one of each trial event occurred.
+    # For incorrect trials, check the error cue trigger occurred within the interval, otherwise check it is nan.
+    # For no go trials, stimFreeze is nan
     for i, (start, end) in enumerate(intervals):
-        metric[i] = (all([start < data[k][i] < end for k in events]) and
-                     (np.isnan(err_trig[i]) if correct[i] else start < err_trig[i] < end))
+        if correct[i]:
+            met = all([start < data[k][i] < end for k in events]) and np.isnan(err_trig[i])
+        else:
+            if data['choice'][i] != 0:
+                met = all([start < data[k][i] < end for k in events]) and (start < err_trig[i] < end)
+            else:
+                met = (all([start < data[k][i] < end for k in events_nogo]) and
+                       np.isnan(stim_trig[i]) and (start < err_trig[i] < end))
+        metric[i] = met
+
     passed = metric.astype(bool)
     assert intervals.shape[0] == len(metric) == len(passed)
     return metric, passed
@@ -1228,9 +1273,13 @@ def check_errorCue_delays(data, audio_output='harp', **_):
       percentile of delays over 500 training sessions using the Xonar soundcard.
     """
     threshold = 0.0015 if audio_output.lower() == 'harp' else 0.062
+    # There are some instances when the mouse responds before the goCue ttl is finished. In these cases the errorCue
+    # tone is delayed. # TODO can this be a metric and also check xonar
+    idx = data['response_times'] - data['goCue_times'] < 0.105  # 0.1 is the length of the goCue tone, add a little buffer
     metric = np.nan_to_num(data['errorCue_times'] - data['errorCueTrigger_times'], nan=np.inf)
     passed = ((metric <= threshold) & (metric > 0)).astype(float)
     passed[data['correct']] = metric[data['correct']] = np.nan
+    passed[idx] = metric[idx] = np.nan
     assert data['intervals'].shape[0] == len(metric) == len(passed)
     return metric, passed
 
@@ -1306,7 +1355,10 @@ def check_stimFreeze_delays(data, **_):
     'intervals')
     """
     metric = np.nan_to_num(data['stimFreeze_times'] - data['stimFreezeTrigger_times'], nan=np.inf)
-    passed = (metric <= 0.15) & (metric > 0)
+    passed = ((metric <= 0.15) & (metric > 0)).astype(float)
+    # Remove no_go trials (stimFreeze not triggered in no-go trials)
+    passed[data['choice'] == 0] = np.nan
+
     assert data['intervals'].shape[0] == len(metric) == len(passed)
     return metric, passed
 
