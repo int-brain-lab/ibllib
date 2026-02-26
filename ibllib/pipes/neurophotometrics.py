@@ -33,7 +33,6 @@ except (ImportError, ModuleNotFoundError):
     _logger.error('Failed to import iblphotometry. Make sure it is correctly installed.')
 
 
-
 def _int2digital_channels(values: np.ndarray) -> np.ndarray:
     """decoder for the digital channel values from the tdms file into a channel
     based array (rows are temporal samples, columns are channels).
@@ -162,13 +161,11 @@ def extract_timestamps_from_bpod_jsonable(file_jsonable: str | Path, sync_states
     timestamps = []
     for sync_name in sync_states_names:
         timestamps.append(
-            np.array(
-                [
-                    data['States timestamps'][sync_name][0][0] + data['Trial start timestamp'] - data['Bpod start timestamp']
-                    for data in bpod_data
-                    if sync_name in data['States timestamps']
-                ]
-            )
+            np.array([
+                data['States timestamps'][sync_name][0][0] + data['Trial start timestamp'] - data['Bpod start timestamp']
+                for data in bpod_data
+                if sync_name in data['States timestamps']
+            ])
         )
     timestamps = np.sort(np.concatenate(timestamps))
     timestamps = timestamps[~np.isnan(timestamps)]

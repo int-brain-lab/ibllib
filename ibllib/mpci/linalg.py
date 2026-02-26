@@ -30,7 +30,7 @@ def surface_normal(triangle):
     Nz = (V[:, 0] * W[:, 1]) - (V[:, 1] * W[:, 0])  # Nz = (Vx * Wy) - (Vy * Wx)
     N = np.c_[Nx, Ny, Nz]
     # Calculate unit vector. Transpose allows vectorized operation.
-    A = N / np.sqrt((Nx ** 2) + (Ny ** 2) + (Nz ** 2))[np.newaxis].T
+    A = N / np.sqrt((Nx**2) + (Ny**2) + (Nz**2))[np.newaxis].T
     return A.squeeze()
 
 
@@ -51,9 +51,10 @@ def in_triangle(triangle, point):
     bool
         True if coordinate lies within triangle.
     """
+
     def area(x1, y1, x2, y2, x3, y3):
         """Calculate the area of a triangle, given its vertices."""
-        return abs((x1 * (y2 - y3) + x2 * (y3 - y1) + x3 * (y1 - y2)) / 2.)
+        return abs((x1 * (y2 - y3) + x2 * (y3 - y1) + x3 * (y1 - y2)) / 2.0)
 
     x1, y1, x2, y2, x3, y3 = triangle.flat
     x, y = point
@@ -210,7 +211,7 @@ def _update_points(t, normal_vector, coords, axis_ml_um, axis_ap_um, axis_dv_um,
     return MLAPDV, annotation
 
 
-@nb.njit("Tuple((float64[:], float64[:]))(float64[:,:])")
+@nb.njit('Tuple((float64[:], float64[:]))(float64[:,:])')
 def plane_normal_form(face: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """form a plane from a face (=3 points)
 
@@ -232,29 +233,29 @@ def plane_normal_form(face: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
 # def intersect_line_plane(
 #     ln0: np.ndarray, ln: np.ndarray, p0: np.ndarray, n: np.ndarray, warn=True
 # ) -> np.ndarray:
-    # """return the intersection point of a line defined by l0 and l and plane in normal form p0 and n.
+# """return the intersection point of a line defined by l0 and l and plane in normal form p0 and n.
 
-    # derivation: https://en.wikipedia.org/wiki/Line%E2%80%93plane_intersection
+# derivation: https://en.wikipedia.org/wiki/Line%E2%80%93plane_intersection
 
-    # point on line is p = ln0 + d * ln
-    # point on plane is (p - p0).n = 0
-    # subsitute and solve for d
-    # ((ln0 + d * ln) - p0).n = 0
+# point on line is p = ln0 + d * ln
+# point on plane is (p - p0).n = 0
+# subsitute and solve for d
+# ((ln0 + d * ln) - p0).n = 0
 
-    # Note:
-    # this function works in numpy, as if this fails ( = no intersection point) a warning is raised
-    # numba fails with ZeroDivisionError which can not be caught and handled
+# Note:
+# this function works in numpy, as if this fails ( = no intersection point) a warning is raised
+# numba fails with ZeroDivisionError which can not be caught and handled
 
-    # Args:
-    #     ln0 (np.ndarray): point on line
-    #     ln (np.ndarray): line vector
-    #     p0 (np.ndarray): point on plane
-    #     n (np.ndarray): plane normal
-    #     warn (bool, optional): warn or not. Defaults to True.
+# Args:
+#     ln0 (np.ndarray): point on line
+#     ln (np.ndarray): line vector
+#     p0 (np.ndarray): point on plane
+#     n (np.ndarray): plane normal
+#     warn (bool, optional): warn or not. Defaults to True.
 
-    # Returns:
-    #     np.ndarray: the intersection point
-    # """
+# Returns:
+#     np.ndarray: the intersection point
+# """
 #     #
 
 #     if warn:
@@ -269,10 +270,8 @@ def plane_normal_form(face: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
 #         return ln0 + d.reshape(-1, 1) * ln
 
 
-@nb.njit("float64[:](float64[:],float64[:],float64[:],float64[:])")
-def intersect_line_plane(
-    ln0: np.ndarray, ln: np.ndarray, p0: np.ndarray, n: np.ndarray
-) -> np.ndarray:
+@nb.njit('float64[:](float64[:],float64[:],float64[:],float64[:])')
+def intersect_line_plane(ln0: np.ndarray, ln: np.ndarray, p0: np.ndarray, n: np.ndarray) -> np.ndarray:
     """return the intersection point of a line defined by l0 and l and plane in normal form p0 and n.
 
     derivation: https://en.wikipedia.org/wiki/Line%E2%80%93plane_intersection
@@ -318,9 +317,15 @@ def point_in_face_original_method(face: np.ndarray, point: np.ndarray) -> np.boo
 
     # A = np.ones((4, 3)); A[:-1, :] = face.T
     A = np.ones((4, 3), dtype=np.float64)
-    A[0, 0] = face[0, 0]; A[0, 1] = face[1, 0]; A[0, 2] = face[2, 0]  # x coordinates
-    A[1, 0] = face[0, 1]; A[1, 1] = face[1, 1]; A[1, 2] = face[2, 1]  # y coordinates
-    A[2, 0] = face[0, 2]; A[2, 1] = face[1, 2]; A[2, 2] = face[2, 2]  # z coordinates
+    A[0, 0] = face[0, 0]
+    A[0, 1] = face[1, 0]
+    A[0, 2] = face[2, 0]  # x coordinates
+    A[1, 0] = face[0, 1]
+    A[1, 1] = face[1, 1]
+    A[1, 2] = face[2, 1]  # y coordinates
+    A[2, 0] = face[0, 2]
+    A[2, 1] = face[1, 2]
+    A[2, 2] = face[2, 2]  # z coordinates
     # A[3, :] = [1, 1, 1] already set
 
     # Compute pseudoinverse manually: pinv(A.T @ A) @ A.T @ ph
@@ -331,9 +336,11 @@ def point_in_face_original_method(face: np.ndarray, point: np.ndarray) -> np.boo
             AtA[i, j] = A[0, i] * A[0, j] + A[1, i] * A[1, j] + A[2, i] * A[2, j] + A[3, i] * A[3, j]
 
     # Compute determinant for 3x3 matrix
-    det = (AtA[0, 0] * (AtA[1, 1] * AtA[2, 2] - AtA[1, 2] * AtA[2, 1]) -
-           AtA[0, 1] * (AtA[1, 0] * AtA[2, 2] - AtA[1, 2] * AtA[2, 0]) +
-           AtA[0, 2] * (AtA[1, 0] * AtA[2, 1] - AtA[1, 1] * AtA[2, 0]))
+    det = (
+        AtA[0, 0] * (AtA[1, 1] * AtA[2, 2] - AtA[1, 2] * AtA[2, 1])
+        - AtA[0, 1] * (AtA[1, 0] * AtA[2, 2] - AtA[1, 2] * AtA[2, 0])
+        + AtA[0, 2] * (AtA[1, 0] * AtA[2, 1] - AtA[1, 1] * AtA[2, 0])
+    )
 
     if abs(det) < 1e-12:
         return False  # Singular matrix
@@ -361,9 +368,7 @@ def point_in_face_original_method(face: np.ndarray, point: np.ndarray) -> np.boo
         w[i] = inv_AtA[i, 0] * Atph[0] + inv_AtA[i, 1] * Atph[1] + inv_AtA[i, 2] * Atph[2]
 
     # Check condition: np.all(np.logical_and(w > 0, w < 1))
-    return (w[0] > 0 and w[0] < 1 and
-            w[1] > 0 and w[1] < 1 and
-            w[2] > 0 and w[2] < 1)
+    return w[0] > 0 and w[0] < 1 and w[1] > 0 and w[1] < 1 and w[2] > 0 and w[2] < 1
 
 
 @nb.njit
@@ -385,13 +390,13 @@ def point_in_face_np(face: np.ndarray, point: np.ndarray) -> np.bool_:
     return np.all(np.logical_and(w > 0, w < 1))
 
 
-@nb.njit("float64(float64[:],float64[:])")
+@nb.njit('float64(float64[:],float64[:])')
 def _get_angle(a, b):
     # the angle between two vectors a and b
     return np.arccos(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
 
 
-@nb.njit("float64(float64[:],float64[:])")
+@nb.njit('float64(float64[:],float64[:])')
 def fast_dot_product_check(plane_normal: np.ndarray, line_vector: np.ndarray) -> np.float64:
     """Fast check if plane normal and line vector are nearly parallel.
 
@@ -399,24 +404,25 @@ def fast_dot_product_check(plane_normal: np.ndarray, line_vector: np.ndarray) ->
     This avoids expensive arccos computation.
     """
     # Normalize vectors efficiently
-    pn_norm = np.sqrt(plane_normal[0]**2 + plane_normal[1]**2 + plane_normal[2]**2)
-    lv_norm = np.sqrt(line_vector[0]**2 + line_vector[1]**2 + line_vector[2]**2)
+    pn_norm = np.sqrt(plane_normal[0] ** 2 + plane_normal[1] ** 2 + plane_normal[2] ** 2)
+    lv_norm = np.sqrt(line_vector[0] ** 2 + line_vector[1] ** 2 + line_vector[2] ** 2)
 
     # Return normalized dot product
-    return (plane_normal[0] * line_vector[0] +
-            plane_normal[1] * line_vector[1] +
-            plane_normal[2] * line_vector[2]) / (pn_norm * lv_norm)
+    return (plane_normal[0] * line_vector[0] + plane_normal[1] * line_vector[1] + plane_normal[2] * line_vector[2]) / (
+        pn_norm * lv_norm
+    )
 
 
 ###### GEORG'S ORIGINAL #####
 
-@nb.njit("float64(float64[:],float64[:])")
+
+@nb.njit('float64(float64[:],float64[:])')
 def get_angle(a, b):
     # the angle between two vectors a and b
     return np.arccos(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
 
 
-@nb.njit("bool_(float64[:,:], float64[:])")
+@nb.njit('bool_(float64[:,:], float64[:])')
 def point_in_face(face: np.ndarray, point: np.ndarray) -> np.bool_:
     """check if the point is within the triangular face
 
@@ -439,7 +445,7 @@ def point_in_face(face: np.ndarray, point: np.ndarray) -> np.bool_:
 
 
 @nb.njit(
-    "Tuple((float64[:,:,:], float64[:,:], int64[:]))(float64[:,:], int32[:,:], float64[:], float64[:])",
+    'Tuple((float64[:,:,:], float64[:,:], int64[:]))(float64[:,:], int32[:,:], float64[:], float64[:])',
     parallel=True,
 )
 def intersect_line_mesh(
@@ -463,9 +469,7 @@ def intersect_line_mesh(
         alpha = get_angle(plane_normal, line_vector)
         # exclude faces that will not be intersected
         if np.abs((np.abs(alpha) - np.pi / 2)) > tol:
-            intersection_points[i] = intersect_line_plane(
-                line_point, line_vector, plane_point, plane_normal
-            )
+            intersection_points[i] = intersect_line_plane(line_point, line_vector, plane_point, plane_normal)
             vertices_to_keep[i] = point_in_face(faces[i], intersection_points[i])
 
     ix = np.where(vertices_to_keep)[0]
@@ -480,9 +484,9 @@ def intersect_line_mesh(
 
 ###### GEORG'S ORIGINAL #####
 
+
 @nb.njit(
-    "Tuple((float64[:,:,:], float64[:,:], int64[:]))(float64[:,:], int32[:,:], float64[:], float64[:])",
-    parallel=True, nogil=True
+    'Tuple((float64[:,:,:], float64[:,:], int64[:]))(float64[:,:], int32[:,:], float64[:], float64[:])', parallel=True, nogil=True
 )
 def _intersect_line_mesh(
     vertices: np.ndarray,
@@ -521,11 +525,11 @@ def _intersect_line_mesh(
         normal = np.array([
             v1[1] * v2[2] - v1[2] * v2[1],  # cross product x
             v1[2] * v2[0] - v1[0] * v2[2],  # cross product y
-            v1[0] * v2[1] - v1[1] * v2[0]   # cross product z
+            v1[0] * v2[1] - v1[1] * v2[0],  # cross product z
         ])
 
         # Normalize the normal vector
-        normal_length = np.sqrt(normal[0]**2 + normal[1]**2 + normal[2]**2)
+        normal_length = np.sqrt(normal[0] ** 2 + normal[1] ** 2 + normal[2] ** 2)
         if normal_length > 1e-12:  # Avoid division by zero
             normal = normal / normal_length
 
@@ -534,9 +538,7 @@ def _intersect_line_mesh(
 
             if np.abs(dot_prod) < tol:  # Not parallel - can intersect
                 # Compute intersection point
-                denominator = (normal[0] * line_vector[0] +
-                               normal[1] * line_vector[1] +
-                               normal[2] * line_vector[2])
+                denominator = normal[0] * line_vector[0] + normal[1] * line_vector[1] + normal[2] * line_vector[2]
 
                 if np.abs(denominator) > 1e-12:  # Avoid division by zero
                     diff = p0 - line_point
@@ -580,10 +582,8 @@ def _intersect_line_mesh(
     return faces, intersection_points, indices
 
 
-@nb.njit("Tuple((float64[:,:], int64))(float64[:,:,:],float64[:])")
-def get_closest_face(
-    faces: np.ndarray, point: np.ndarray
-) -> Tuple[np.ndarray, np.ndarray]:
+@nb.njit('Tuple((float64[:,:], int64))(float64[:,:,:],float64[:])')
+def get_closest_face(faces: np.ndarray, point: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """find the face closest to the point. For this, face coordinates are averaged.
 
     Args:
@@ -596,16 +596,14 @@ def get_closest_face(
     # faces is
     dists = np.array(
         [linalg.norm(point - np.average(face, axis=0)) for face in faces],
-        dtype="float64",
+        dtype='float64',
     )
     min_ix = np.argmin(dists)
     return faces[min_ix], min_ix
 
 
 # numpy version
-def find_closest_point_from_line_np(
-    points: np.ndarray, ln0: np.ndarray, ln: np.ndarray
-) -> np.ndarray:
+def find_closest_point_from_line_np(points: np.ndarray, ln0: np.ndarray, ln: np.ndarray) -> np.ndarray:
     """numpy variant of find_closest_point_from_line_nb"""
     ds = linalg.norm((ln0 - points) - np.dot(ln0 - points, ln)[:, np.newaxis] * ln, axis=1)
     point = points[np.argmin(ds)]
@@ -613,10 +611,8 @@ def find_closest_point_from_line_np(
 
 
 # numba compatible version
-@nb.njit("float64[:](float64[:,:], float64[:], float64[:])")
-def find_closest_point_from_line_nb(
-    points: np.ndarray, ln0: np.ndarray, ln: np.ndarray
-) -> np.ndarray:
+@nb.njit('float64[:](float64[:,:], float64[:], float64[:])')
+def find_closest_point_from_line_nb(points: np.ndarray, ln0: np.ndarray, ln: np.ndarray) -> np.ndarray:
     """for a given set of points, return the point that is closest to the line
     (defined by a point and a vector)
 
@@ -634,10 +630,8 @@ def find_closest_point_from_line_nb(
     return point
 
 
-@nb.njit("float64[:,:](float64[:,:],float64[:,:],float64[:])", parallel=True)
-def find_closest_points_on_surface(
-    points_eval: np.ndarray, brain_surface_points: np.ndarray, n: np.ndarray
-) -> np.ndarray:
+@nb.njit('float64[:,:](float64[:,:],float64[:,:],float64[:])', parallel=True)
+def find_closest_points_on_surface(points_eval: np.ndarray, brain_surface_points: np.ndarray, n: np.ndarray) -> np.ndarray:
     # TODO this needs heavy refactoring
     # rename into: find_closest_point_from_lines
     # as this is essentially a parallelizatoin wrapper find_closest_point_from_line_nb
@@ -645,9 +639,7 @@ def find_closest_points_on_surface(
     N = points_eval.shape[0]
     points_closest = np.zeros((N, 3))
     for i in nb.prange(N):
-        points_closest[i, :] = find_closest_point_from_line_nb(
-            brain_surface_points, points_eval[i], n
-        )
+        points_closest[i, :] = find_closest_point_from_line_nb(brain_surface_points, points_eval[i], n)
     return points_closest
 
 

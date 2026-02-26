@@ -29,10 +29,10 @@ class TestRegisterRawDataTask(unittest.TestCase):
             'subject': 'algernon',
             'start_time': RegistrationClient.ensure_ISO8601(None),
             'number': 1,
-            'users': ['test_user']}
+            'users': ['test_user'],
+        }
         ses = cls.one.alyx.rest('sessions', 'create', data=ses_dict)
-        cls.session_path = Path(cls.tmpdir.name).joinpath(
-            ses['subject'], ses['start_time'][:10], str(ses['number']).zfill(3))
+        cls.session_path = Path(cls.tmpdir.name).joinpath(ses['subject'], ses['start_time'][:10], str(ses['number']).zfill(3))
         cls.eid = ses['url'][-36:]
 
         # Add a couple of images
@@ -63,8 +63,12 @@ class TestRegisterRawDataTask(unittest.TestCase):
         task.input_files = task.output_files = []
         task.rename_files()  # Returns without raising
         I = ExpectedDataset.input  # noqa
-        task.input_files = [I('foo.*', collection, True), ]
-        task.output_files = [I('_ns_DAQdata.raw.bar', collection, True), ]
+        task.input_files = [
+            I('foo.*', collection, True),
+        ]
+        task.output_files = [
+            I('_ns_DAQdata.raw.bar', collection, True),
+        ]
         self.session_path.joinpath(collection).mkdir()
         self.session_path.joinpath(collection, 'foo.bar').touch()
         task.rename_files()
@@ -73,7 +77,9 @@ class TestRegisterRawDataTask(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             task.rename_files()
         # Check asserts number of inputs == number of outputs
-        task.output_files.append(I('_ns_DAQdata.baz.bar', collection, True),)
+        task.output_files.append(
+            I('_ns_DAQdata.baz.bar', collection, True),
+        )
         with self.assertRaises(AssertionError):
             task.rename_files()
 
@@ -121,10 +127,12 @@ class TestBehaviourTask(unittest.TestCase):
 
     def test_get_protocol_number(self) -> None:
         """Test for BehaviourTask.get_protocol_number method."""
-        params = {'tasks': [
-            {'fooChoiceWorld': {'collection': 'raw_task_data_00', 'protocol_number': 0}},
-            {'barChoiceWorld': {'collection': 'raw_task_data_01', 'protocol_number': 1}}
-        ]}
+        params = {
+            'tasks': [
+                {'fooChoiceWorld': {'collection': 'raw_task_data_00', 'protocol_number': 0}},
+                {'barChoiceWorld': {'collection': 'raw_task_data_01', 'protocol_number': 1}},
+            ]
+        }
         task = ChoiceWorldTrialsBpod(None)
         self.assertIsNone(task.get_protocol_number())
         self.assertRaises(ValueError, task.get_protocol_number, number='foo')

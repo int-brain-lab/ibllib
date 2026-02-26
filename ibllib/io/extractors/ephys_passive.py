@@ -19,10 +19,10 @@ from ibllib.io.extractors import ephys_fpga
 from ibllib.io.extractors.base import BaseExtractor
 import ibllib.io.extractors.passive_plotting as passive_plots
 
-log = logging.getLogger("ibllib")
+log = logging.getLogger('ibllib')
 
 FRAME_FS = 60  # Sampling freq of the ipad screen, in Hertz
-PATH_FIXTURES_V7 = Path(ephys_fpga.__file__).parent / "ephys_sessions"
+PATH_FIXTURES_V7 = Path(ephys_fpga.__file__).parent / 'ephys_sessions'
 PATH_FIXTURES_V8 = Path(ephys_fpga.__file__).parent / 'ephys_sessions' / 'passiveChoiceWorld_trials_fixtures.pqt'
 
 
@@ -34,7 +34,7 @@ def load_task_replay_fixtures(
     task_collection: str = 'raw_passive_data',
     settings: dict | None = None,
     task_version: version.Version | None = None,
-    adjust: bool = True
+    adjust: bool = True,
 ) -> pd.DataFrame:
     """
     Load the expected task replay sequence for a passive session.
@@ -114,9 +114,11 @@ def _load_v8_fixture_df(settings: dict) -> pd.DataFrame:
     num_total_stims = settings.get('NUM_STIM_PRESENTATIONS', len(replay_trials))
     num_repeats = int(np.ceil(num_total_stims / len(replay_trials)))
     if num_repeats > 1:
-        log.warning(f"Session template {session_id} has only {len(replay_trials)} trials. "
-                    f"The passive session was likely ran with a higher NUM_STIM_PRESENTATIONS. "
-                    f"Repeating to reach {num_total_stims} presentations.")
+        log.warning(
+            f'Session template {session_id} has only {len(replay_trials)} trials. '
+            f'The passive session was likely ran with a higher NUM_STIM_PRESENTATIONS. '
+            f'Repeating to reach {num_total_stims} presentations.'
+        )
     replay_trials = pd.concat([replay_trials] * num_repeats, ignore_index=True).iloc[:num_total_stims]
 
     # Rename stim_phase to phase for consistency
@@ -144,11 +146,11 @@ def _load_v7_fixture_df(settings: dict) -> pd.DataFrame:
 
     session_order = settings.get('SESSION_ORDER', None)
     if session_order:
-        assert settings["SESSION_ORDER"][settings["SESSION_IDX"]] == session_id
+        assert settings['SESSION_ORDER'][settings['SESSION_IDX']] == session_id
 
-    gabor_params = np.load(PATH_FIXTURES_V7.joinpath(f"session_{session_id}_passive_pcs.npy"))
-    replay_sequence = np.load(PATH_FIXTURES_V7.joinpath(f"session_{session_id}_passive_stimIDs.npy"))
-    stim_delays = np.load(PATH_FIXTURES_V7.joinpath(f"session_{session_id}_passive_stimDelays.npy"))
+    gabor_params = np.load(PATH_FIXTURES_V7.joinpath(f'session_{session_id}_passive_pcs.npy'))
+    replay_sequence = np.load(PATH_FIXTURES_V7.joinpath(f'session_{session_id}_passive_stimIDs.npy'))
+    stim_delays = np.load(PATH_FIXTURES_V7.joinpath(f'session_{session_id}_passive_stimDelays.npy'))
 
     replay_trials = pd.DataFrame(columns=['session_id', 'stim_delay', 'stim_type', 'position', 'contrast', 'phase'])
     replay_trials['session_id'] = [session_id] * len(replay_sequence)
@@ -163,7 +165,7 @@ def _load_v7_fixture_df(settings: dict) -> pd.DataFrame:
 
 
 def _load_passive_stim_meta() -> dict:
-    """"
+    """ "
     Load the passive stimulus metadata fixture file.
 
     Returns
@@ -171,8 +173,8 @@ def _load_passive_stim_meta() -> dict:
     dict
         A dictionary containing the passive stimulus metadata.
     """
-    path_fixtures = Path(ephys_fpga.__file__).parent.joinpath("ephys_sessions")
-    with open(path_fixtures.joinpath("passive_stim_meta.json"), "r") as f:
+    path_fixtures = Path(ephys_fpga.__file__).parent.joinpath('ephys_sessions')
+    with open(path_fixtures.joinpath('passive_stim_meta.json'), 'r') as f:
         meta = json.load(f)
 
     return meta
@@ -191,10 +193,9 @@ def _load_spacer_info() -> dict:
     meta = _load_passive_stim_meta()
     info = {
         't_quiet': meta['VISUAL_STIM_0']['delay_around'],
-        'template': np.array(meta['VISUAL_STIM_0']['ttl_frame_nums'],
-                             dtype=np.float32) / FRAME_FS,
+        'template': np.array(meta['VISUAL_STIM_0']['ttl_frame_nums'], dtype=np.float32) / FRAME_FS,
         'jitter': 3 / FRAME_FS,
-        'n_spacers': np.sum(np.array(meta['STIM_ORDER']) == 0)
+        'n_spacers': np.sum(np.array(meta['STIM_ORDER']) == 0),
     }
 
     return info
@@ -216,14 +217,14 @@ def _load_rf_mapping(session_path: Path, task_collection: str = 'raw_passive_dat
     frames: np.ndarray
         The frames of the receptive field mapping stimulus.
     """
-    file = session_path.joinpath(task_collection, "_iblrig_RFMapStim.raw.bin")
-    frame_array = np.fromfile(file, dtype="uint8")
+    file = session_path.joinpath(task_collection, '_iblrig_RFMapStim.raw.bin')
+    frame_array = np.fromfile(file, dtype='uint8')
 
     meta = _load_passive_stim_meta()
-    mkey = "VISUAL_STIM_" + {v: k for k, v in meta["VISUAL_STIMULI"].items()}["receptive_field_mapping"]
+    mkey = 'VISUAL_STIM_' + {v: k for k, v in meta['VISUAL_STIMULI'].items()}['receptive_field_mapping']
 
-    y_pix, x_pix, _ = meta[mkey]["stim_file_shape"]
-    frames = np.transpose(np.reshape(frame_array, [y_pix, x_pix, -1], order="F"), [2, 1, 0])
+    y_pix, x_pix, _ = meta[mkey]['stim_file_shape']
+    frames = np.transpose(np.reshape(frame_array, [y_pix, x_pix, -1], order='F'), [2, 1, 0])
 
     return frames
 
@@ -237,7 +238,7 @@ def extract_passive_periods(
     sync: dict | None = None,
     sync_map: dict | None = None,
     tmin: float | None = None,
-    tmax: float | None = None
+    tmax: float | None = None,
 ) -> pd.DataFrame:
     """
     Extract passive protocol periods from a session.
@@ -265,7 +266,7 @@ def extract_passive_periods(
     if sync is None or sync_map is None:
         sync, sync_map = ephys_fpga.get_sync_and_chn_map(session_path, sync_collection)
 
-    fttl = ephys_fpga.get_sync_fronts(sync, sync_map["frame2ttl"], tmin=tmin, tmax=tmax)
+    fttl = ephys_fpga.get_sync_fronts(sync, sync_map['frame2ttl'], tmin=tmin, tmax=tmax)
     fttl = ephys_fpga._clean_frame2ttl(fttl, display=False)
 
     tmax = tmax or sync['times'][-1]
@@ -278,8 +279,8 @@ def extract_passive_periods(
 
     passive_periods = pd.DataFrame(
         [t_starts_col, t_ends_col],
-        index=["start", "stop"],
-        columns=["passiveProtocol", "spontaneousActivity", "RFM", "taskReplay"],
+        index=['start', 'stop'],
+        columns=['passiveProtocol', 'spontaneousActivity', 'RFM', 'taskReplay'],
     )
     return passive_periods
 
@@ -316,7 +317,7 @@ def _get_spacer_times(ttl_signal: np.ndarray, tmin: float, tmax: float, thresh: 
     dttl[dttl > np.max(spacer_model)] = 0
     dttl[dttl < np.min(spacer_model)] = 0
     # Convolve cleaned diff ttl signal w/ spacer model
-    conv_dttl = np.correlate(dttl, spacer_model, mode="same")
+    conv_dttl = np.correlate(dttl, spacer_model, mode='same')
     # Find the peaks in the convolved signal that pass over a certain threshold
     idxs_spacer_middle, _ = scipy.signal.find_peaks(conv_dttl, height=thresh)
     # Find the duration of the spacer model
@@ -325,8 +326,8 @@ def _get_spacer_times(ttl_signal: np.ndarray, tmin: float, tmax: float, thresh: 
     is_valid = np.zeros((idxs_spacer_middle.size), dtype=bool)
     # Assert that before and after the peak the spacing between ttls is going up and down respectively
     for i, t in enumerate(idxs_spacer_middle):
-        before = np.all(np.diff(dttl[t - spacer_around:t]) >= 0)
-        after = np.all(np.diff(dttl[t:t + spacer_around]) <= 0)
+        before = np.all(np.diff(dttl[t - spacer_around : t]) >= 0)
+        after = np.all(np.diff(dttl[t : t + spacer_around]) <= 0)
         is_valid[i] = before and after
 
     idxs_spacer_middle = idxs_spacer_middle[is_valid]
@@ -342,15 +343,16 @@ def _get_spacer_times(ttl_signal: np.ndarray, tmin: float, tmax: float, thresh: 
 
     # Check correct number of spacers found
     if spacer_info['n_spacers'] != np.size(spacer_times) / 2:
-
         error_nspacer = True
         # NOTE THIS ONLY WORKS FOR THE CASE WHERE THE SIGNAL IS EXTRACTED ACCORDING TO BPOD SIGNAL
         # sometimes the first spacer is truncated
         # assess whether the first spacer is undetected, and then launch another spacer detection on truncated fttl
         # with a lower threshold value
         # Note: take *3 for some margin
-        if (spacer_times[0][0] > tmin + (spacer_info['template'][-1] + spacer_info['jitter']) * 3
-                and (np.size(spacer_times) / 2) == spacer_info['n_spacers'] - 1):
+        if (
+            spacer_times[0][0] > tmin + (spacer_info['template'][-1] + spacer_info['jitter']) * 3
+            and (np.size(spacer_times) / 2) == spacer_info['n_spacers'] - 1
+        ):
             # Truncate signals
             fttl_t = ttl_signal[np.where(ttl_signal < spacer_times[0][0])]
             conv_dttl_t = conv_dttl[np.where(ttl_signal < spacer_times[0][0])]
@@ -359,8 +361,7 @@ def _get_spacer_times(ttl_signal: np.ndarray, tmin: float, tmax: float, thresh: 
             # NB: cannot re-use the same algo for spacer detection as conv peaks towards spacer end
             # 1. Find time point at which conv raises above a given threshold value
             thresh_alt = 2.0
-            idx_nearend_spacer = int(np.where((conv_dttl_t[1:-2] < thresh_alt) &
-                                              (conv_dttl_t[2:-1] > thresh_alt))[0])
+            idx_nearend_spacer = int(np.where((conv_dttl_t[1:-2] < thresh_alt) & (conv_dttl_t[2:-1] > thresh_alt))[0])
             ddttl = ddttl[0:idx_nearend_spacer]
             # 2. Find time point before this, for which fttl diff increase/decrease (this is the middle of spacer)
             indx_middle = np.where((ddttl[0:-1] > 0) & (ddttl[1:] < 0))[0]
@@ -391,7 +392,7 @@ def extract_rfmapping(
     task_collection: str = 'raw_passive_data',
     sync: dict | None = None,
     sync_map: dict | None = None,
-    trfm: np.ndarray | None = None
+    trfm: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Extract the receptive field mapping stimulus times from a passive session.
@@ -429,9 +430,9 @@ def extract_rfmapping(
     rf_times_on = np.where(np.diff(np.abs(ttl_trace)) > 0)[0] / FRAME_FS
 
     # Get the ttl onset times as detected on the frame2ttl
-    fttl = ephys_fpga.get_sync_fronts(sync, sync_map["frame2ttl"], tmin=trfm[0], tmax=trfm[1])
+    fttl = ephys_fpga.get_sync_fronts(sync, sync_map['frame2ttl'], tmin=trfm[0], tmax=trfm[1])
     fttl = ephys_fpga._clean_frame2ttl(fttl)
-    fttl_times_on = np.where(np.diff(fttl["times"]) <= 1)[0]
+    fttl_times_on = np.where(np.diff(fttl['times']) <= 1)[0]
     # Ensure that all the polarities are the same for the selected times
     flips = fttl['polarities'][fttl_times_on]
     fttl_times_on = fttl_times_on[flips == np.median(flips)]
@@ -453,7 +454,7 @@ def extract_task_replay(
     settings: dict | None = None,
     sync: dict | None = None,
     sync_map: dict | None = None,
-    treplay: np.ndarray | None = None
+    treplay: np.ndarray | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Extract the task replay stimuli from a passive session.
@@ -500,22 +501,28 @@ def extract_task_replay(
     task_version = version.Version(task_version)
 
     # Load in the expected task replay structure
-    replay_trials = load_task_replay_fixtures(session_path=session_path, task_collection=task_collection,
-                                              settings=settings, task_version=task_version)
+    replay_trials = load_task_replay_fixtures(
+        session_path=session_path, task_collection=task_collection, settings=settings, task_version=task_version
+    )
 
     # Extract the gabor events, uses the ttls on the frame2ttl channel
     try:
         try:
-            fttl = ephys_fpga.get_sync_fronts(sync, sync_map["frame2ttl"], tmin=treplay[0], tmax=treplay[1])
+            fttl = ephys_fpga.get_sync_fronts(sync, sync_map['frame2ttl'], tmin=treplay[0], tmax=treplay[1])
             fttl = ephys_fpga._clean_frame2ttl(fttl)
             gabor_df = _extract_passive_gabor(fttl, replay_trials)
         except AssertionError:
             # There are a few sessions <8.29.0 where the first gabor was successfully shown. In these cases
             # we rextract without the adjustment of the task replay fixture to remove the first gabor
             log.warning('Attempting to extact gabor stimuli without adjusting for first blank gabor...')
-            replay_trials = load_task_replay_fixtures(session_path=session_path, task_collection=task_collection,
-                                                      settings=settings, task_version=task_version, adjust=False)
-            fttl = ephys_fpga.get_sync_fronts(sync, sync_map["frame2ttl"], tmin=treplay[0], tmax=treplay[1])
+            replay_trials = load_task_replay_fixtures(
+                session_path=session_path,
+                task_collection=task_collection,
+                settings=settings,
+                task_version=task_version,
+                adjust=False,
+            )
+            fttl = ephys_fpga.get_sync_fronts(sync, sync_map['frame2ttl'], tmin=treplay[0], tmax=treplay[1])
             fttl = ephys_fpga._clean_frame2ttl(fttl)
             gabor_df = _extract_passive_gabor(fttl, replay_trials)
     except Exception as e:
@@ -524,11 +531,11 @@ def extract_task_replay(
 
     try:
         # Extract the valve events, uses the ttls on the bpod channel
-        bpod = ephys_fpga.get_sync_fronts(sync, sync_map["bpod"], tmin=treplay[0], tmax=treplay[1])
+        bpod = ephys_fpga.get_sync_fronts(sync, sync_map['bpod'], tmin=treplay[0], tmax=treplay[1])
         valve_df = _extract_passive_valve(bpod, replay_trials)
 
         # Extract the audio events, uses the ttls on the audio channel
-        audio = ephys_fpga.get_sync_fronts(sync, sync_map["audio"], tmin=treplay[0], tmax=treplay[1])
+        audio = ephys_fpga.get_sync_fronts(sync, sync_map['audio'], tmin=treplay[0], tmax=treplay[1])
         tone_df, noise_df = _extract_passive_audio(audio, replay_trials, task_version)
 
         max_len = max(len(tone_df), len(valve_df), len(noise_df))
@@ -554,8 +561,9 @@ def extract_task_replay(
         full_df = full_df.sort_values(by='start').reset_index(drop=True)
 
         if not version.parse('6.2.5') <= task_version <= version.parse('6.5.3'):
-            assert np.array_equal(full_df['stim_type'].values, replay_trials['stim_type'].values), \
-                "The extracted sequence does not match the expected task replay sequence."
+            assert np.array_equal(full_df['stim_type'].values, replay_trials['stim_type'].values), (
+                'The extracted sequence does not match the expected task replay sequence.'
+            )
         gabor_df = gabor_df.drop(columns=['stim_type'])
 
     elif gabor_df is None and stim_df is not None:
@@ -566,19 +574,17 @@ def extract_task_replay(
         full_df = full_df.sort_values(by='start').reset_index(drop=True)
 
         if not version.parse('6.2.5') <= task_version <= version.parse('6.5.3'):
-            assert np.array_equal(full_df['stim_type'].values, replay_trials['stim_type'].values), \
-                "The extracted sequence does not match the expected task replay sequence."
+            assert np.array_equal(full_df['stim_type'].values, replay_trials['stim_type'].values), (
+                'The extracted sequence does not match the expected task replay sequence.'
+            )
 
     elif gabor_df is not None and stim_df is None:
         gabor_df = gabor_df.drop(columns=['stim_type'])
-        
+
     return gabor_df, stim_df
 
 
-def _extract_passive_gabor(
-    fttl: dict,
-    replay_trials: pd.DataFrame
-) -> pd.DataFrame:
+def _extract_passive_gabor(fttl: dict, replay_trials: pd.DataFrame) -> pd.DataFrame:
     """
     Extract the gabor stimulus times from a passive session.
 
@@ -634,31 +640,26 @@ def _extract_passive_gabor(
             start_times = start_times[1:]
             end_times = end_times[1:]
 
-    assert start_times.size == n_expected_gabor, \
-        f"Wrong number of Gabor stimuli detected: {start_times.size} / {n_expected_gabor}"
+    assert start_times.size == n_expected_gabor, (
+        f'Wrong number of Gabor stimuli detected: {start_times.size} / {n_expected_gabor}'
+    )
 
     # Check length of presentation of stim is within 150ms of expected
-    assert np.allclose(end_times - start_times, 0.3, atol=0.15), "Some Gabor presentation lengths seem wrong."
+    assert np.allclose(end_times - start_times, 0.3, atol=0.15), 'Some Gabor presentation lengths seem wrong.'
     # if not np.allclose(end_times - start_times, 0.3, atol=0.15):
     #     log.warning("Some Gabor presentation lengths seem wrong.")
 
     # Build our gabor dataframe that also contains the stimulus properties
     gabor_df = (
-        replay_trials
-        .loc[replay_trials["stim_type"] == "G",
-             ["stim_type", "position", "contrast", "phase"]]
-        .assign(start=start_times, stop=end_times)
-        [["stim_type", "start", "stop", "position", "contrast", "phase"]]
+        replay_trials.loc[replay_trials['stim_type'] == 'G', ['stim_type', 'position', 'contrast', 'phase']]
+        .assign(start=start_times, stop=end_times)[['stim_type', 'start', 'stop', 'position', 'contrast', 'phase']]
         .reset_index(drop=True)
     )
 
     return gabor_df
 
 
-def _extract_passive_valve(
-    bpod: dict,
-    replay_trials: pd.DataFrame
-) -> pd.DataFrame:
+def _extract_passive_valve(bpod: dict, replay_trials: pd.DataFrame) -> pd.DataFrame:
     """
     Extract the valve stimulus times from a passive session.
 
@@ -677,34 +678,30 @@ def _extract_passive_valve(
     n_expected_valve = (replay_trials['stim_type'] == 'V').sum()
 
     # All high fronts == valve open times and low fronts == valve close times
-    valveOn_times = bpod["times"][bpod["polarities"] > 0]
-    valveOff_times = bpod["times"][bpod["polarities"] < 0]
+    valveOn_times = bpod['times'][bpod['polarities'] > 0]
+    valveOff_times = bpod['times'][bpod['polarities'] < 0]
 
-    assert len(valveOn_times) == n_expected_valve, (f"Wrong number of valve ONSET times: "
-                                                    f"{len(valveOn_times)} / {n_expected_valve}")
-    assert len(valveOff_times) == n_expected_valve, (f"Wrong number of valve OFFSET times: "
-                                                     f"{len(valveOn_times)} / {n_expected_valve}")
-    assert len(bpod["times"]) == n_expected_valve * 2, "Wrong number of valve FRONTS detected"
+    assert len(valveOn_times) == n_expected_valve, f'Wrong number of valve ONSET times: {len(valveOn_times)} / {n_expected_valve}'
+    assert len(valveOff_times) == n_expected_valve, (
+        f'Wrong number of valve OFFSET times: {len(valveOn_times)} / {n_expected_valve}'
+    )
+    assert len(bpod['times']) == n_expected_valve * 2, 'Wrong number of valve FRONTS detected'
 
     # Check all values are within bpod tolerance of 100µs
-    assert np.allclose(valveOff_times - valveOn_times, valveOff_times[1] - valveOn_times[1], atol=0.001), \
-        "Some valve outputs are longer or shorter than others"
+    assert np.allclose(valveOff_times - valveOn_times, valveOff_times[1] - valveOn_times[1], atol=0.001), (
+        'Some valve outputs are longer or shorter than others'
+    )
 
     valve_df = (
-        replay_trials.loc[replay_trials["stim_type"] == "V", ["stim_type"]]
-        .assign(start=valveOn_times, stop=valveOff_times)
-        [["start", "stop", "stim_type"]]
+        replay_trials.loc[replay_trials['stim_type'] == 'V', ['stim_type']]
+        .assign(start=valveOn_times, stop=valveOff_times)[['start', 'stop', 'stim_type']]
         .reset_index(drop=True)
     )
 
     return valve_df
 
 
-def _extract_passive_audio(
-    audio: dict,
-    replay_trials: pd.DataFrame,
-    rig_version: version
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+def _extract_passive_audio(audio: dict, replay_trials: pd.DataFrame, rig_version: version) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Extract the audio stimulus times from a passive session.
 
@@ -728,8 +725,8 @@ def _extract_passive_audio(
     """
 
     # Get all sound onsets and offsets
-    soundOn_times = audio["times"][audio["polarities"] > 0]
-    soundOff_times = audio["times"][audio["polarities"] < 0]
+    soundOn_times = audio['times'][audio['polarities'] > 0]
+    soundOff_times = audio['times'][audio['polarities'] < 0]
 
     n_expected_tone = (replay_trials['stim_type'] == 'T').sum()
     n_expected_noise = (replay_trials['stim_type'] == 'N').sum()
@@ -742,14 +739,14 @@ def _extract_passive_audio(
         soundOff_times = soundOff_times[keep]
         log.warning('Detected 6.2.5 <= iblrig version <= 6.5.3, removing extra audio pulses longer than 1s and relaxing checks')
         if not len(soundOn_times) == n_expected_audio:
-            log.warning(f"Wrong number of sound ONSETS: {len(soundOn_times)} / {n_expected_audio}")
+            log.warning(f'Wrong number of sound ONSETS: {len(soundOn_times)} / {n_expected_audio}')
         if not len(soundOff_times) == n_expected_audio:
-            log.warning(f"Wrong number of sound OFFSETS: {len(soundOn_times)} / {n_expected_audio}")
+            log.warning(f'Wrong number of sound OFFSETS: {len(soundOn_times)} / {n_expected_audio}')
     else:
-        assert len(soundOn_times) == n_expected_audio, (f"Wrong number of sound ONSETS: "
-                                                        f"{len(soundOn_times)} / {n_expected_audio}")
-        assert len(soundOff_times) == n_expected_audio, (f"Wrong number of sound OFFSETS: "
-                                                         f"{len(soundOn_times)} / {n_expected_audio}")
+        assert len(soundOn_times) == n_expected_audio, f'Wrong number of sound ONSETS: {len(soundOn_times)} / {n_expected_audio}'
+        assert len(soundOff_times) == n_expected_audio, (
+            f'Wrong number of sound OFFSETS: {len(soundOn_times)} / {n_expected_audio}'
+        )
 
     pulse_diff = soundOff_times - soundOn_times
     # Tone is ~100ms so check if diff < 0.3
@@ -761,8 +758,8 @@ def _extract_passive_audio(
     noiseOn_times, noiseOff_times = soundOn_times[noise_mask], soundOff_times[noise_mask]
 
     # Fixed delays from soundcard ~500µs
-    assert np.allclose(toneOff_times - toneOn_times, 0.1, atol=0.02, equal_nan=True), "Some tone lengths seem wrong."
-    assert np.allclose(noiseOff_times - noiseOn_times, 0.5, atol=0.02, equal_nan=True), "Some noise lengths seem wrong."
+    assert np.allclose(toneOff_times - toneOn_times, 0.1, atol=0.02, equal_nan=True), 'Some tone lengths seem wrong.'
+    assert np.allclose(noiseOff_times - noiseOn_times, 0.5, atol=0.02, equal_nan=True), 'Some noise lengths seem wrong.'
 
     if version.parse('6.2.5') <= rig_version <= version.parse('6.5.3'):
         # We pad the values with NaNs to match expected lengths
@@ -771,20 +768,18 @@ def _extract_passive_audio(
         noiseOn_times = np.r_[noiseOn_times, np.full((n_expected_tone - len(noiseOn_times)), np.nan)]
         noiseOff_times = np.r_[noiseOff_times, np.full((n_expected_tone - len(noiseOff_times)), np.nan)]
 
-    assert len(toneOn_times) == len(toneOff_times) == n_expected_tone, "Wrong number of tones detected"
-    assert len(noiseOn_times) == len(noiseOff_times) == n_expected_noise, "Wrong number of noise detected"
+    assert len(toneOn_times) == len(toneOff_times) == n_expected_tone, 'Wrong number of tones detected'
+    assert len(noiseOn_times) == len(noiseOff_times) == n_expected_noise, 'Wrong number of noise detected'
 
     tone_df = (
-        replay_trials.loc[replay_trials["stim_type"] == "T", ["stim_type"]]
-        .assign(start=toneOn_times, stop=toneOff_times)
-        [["start", "stop", "stim_type"]]
+        replay_trials.loc[replay_trials['stim_type'] == 'T', ['stim_type']]
+        .assign(start=toneOn_times, stop=toneOff_times)[['start', 'stop', 'stim_type']]
         .reset_index(drop=True)
     )
 
     noise_df = (
-        replay_trials.loc[replay_trials["stim_type"] == "N", ["stim_type"]]
-        .assign(start=noiseOn_times, stop=noiseOff_times)
-        [["start", "stop", "stim_type"]]
+        replay_trials.loc[replay_trials['stim_type'] == 'N', ['stim_type']]
+        .assign(start=noiseOn_times, stop=noiseOff_times)[['start', 'stop', 'stim_type']]
         .reset_index(drop=True)
     )
 
@@ -796,27 +791,27 @@ def _extract_passive_audio(
 # ------------------------------------------------------------------
 class PassiveChoiceWorld(BaseExtractor):
     save_names = (
-        "_ibl_passivePeriods.intervalsTable.csv",
-        "_ibl_passiveRFM.times.npy",
-        "_ibl_passiveGabor.table.csv",
-        "_ibl_passiveStims.table.csv",
+        '_ibl_passivePeriods.intervalsTable.csv',
+        '_ibl_passiveRFM.times.npy',
+        '_ibl_passiveGabor.table.csv',
+        '_ibl_passiveStims.table.csv',
     )
     var_names = (
-        "passivePeriods_df",
-        "passiveRFM_times",
-        "passiveGabor_df",
-        "passiveStims_df",
+        'passivePeriods_df',
+        'passiveRFM_times',
+        'passiveGabor_df',
+        'passiveStims_df',
     )
 
     def _extract(
-            self,
-            sync_collection: str = 'raw_ephys_data',
-            task_collection: str = 'raw_passive_data',
-            sync: dict | None = None,
-            sync_map: dict | None = None,
-            settings: dict | None = None,
-            plot: bool = False,
-            **kwargs
+        self,
+        sync_collection: str = 'raw_ephys_data',
+        task_collection: str = 'raw_passive_data',
+        sync: dict | None = None,
+        sync_map: dict | None = None,
+        settings: dict | None = None,
+        plot: bool = False,
+        **kwargs,
     ) -> tuple:
 
         # Load in the sync and sync map if not provided
@@ -835,41 +830,58 @@ class PassiveChoiceWorld(BaseExtractor):
             bpod = ephys_fpga.get_sync_fronts(sync, sync_map['bpod'])
             # If there is no task reply we don't expect Bpod out signals during this period
             tmin, tmax = ephys_fpga.get_protocol_period(
-                self.session_path, protocol_number, bpod, exclude_empty_periods=not self.skip_replay)
+                self.session_path, protocol_number, bpod, exclude_empty_periods=not self.skip_replay
+            )
         else:
             tmin = tmax = None
 
         # Get the timing of the passive periods
-        passivePeriods_df = extract_passive_periods(self.session_path, sync_collection=sync_collection, sync=sync,
-                                                    sync_map=sync_map, tmin=tmin, tmax=tmax)
+        passivePeriods_df = extract_passive_periods(
+            self.session_path, sync_collection=sync_collection, sync=sync, sync_map=sync_map, tmin=tmin, tmax=tmax
+        )
         trfm = passivePeriods_df.RFM.values
         treplay = passivePeriods_df.taskReplay.values
 
         try:
             # RFMapping
-            passiveRFM_times = extract_rfmapping(self.session_path, sync_collection=sync_collection,
-                                                 task_collection=task_collection, sync=sync, sync_map=sync_map, trfm=trfm)
+            passiveRFM_times = extract_rfmapping(
+                self.session_path,
+                sync_collection=sync_collection,
+                task_collection=task_collection,
+                sync=sync,
+                sync_map=sync_map,
+                trfm=trfm,
+            )
         except Exception as e:
-            log.error(f"Failed to extract RFMapping datasets: {e}")
+            log.error(f'Failed to extract RFMapping datasets: {e}')
             passiveRFM_times = None
 
         if not self.skip_replay:
             try:
-                (passiveGabor_df, passiveStims_df,) = extract_task_replay(
-                    self.session_path, sync_collection=sync_collection, task_collection=task_collection,
-                    settings=settings, sync=sync, sync_map=sync_map, treplay=treplay)
+                (
+                    passiveGabor_df,
+                    passiveStims_df,
+                ) = extract_task_replay(
+                    self.session_path,
+                    sync_collection=sync_collection,
+                    task_collection=task_collection,
+                    settings=settings,
+                    sync=sync,
+                    sync_map=sync_map,
+                    treplay=treplay,
+                )
             except Exception as e:
-                log.error(f"Failed to extract task replay stimuli: {e}")
+                log.error(f'Failed to extract task replay stimuli: {e}')
                 passiveGabor_df, passiveStims_df = (None, None)
         else:
             # If we don't have task replay then we set the treplay intervals to NaN in our passivePeriods_df dataset
-            log.info(f"Skip replay = True, not extracting task replay stimuli.")
+            log.info('Skip replay = True, not extracting task replay stimuli.')
             passiveGabor_df, passiveStims_df = (None, None)
             passivePeriods_df.taskReplay = np.nan
 
         if plot:
             f, ax = plt.subplots(1, 1)
-            f.suptitle("/".join(str(self.session_path).split("/")[-5:]))
+            f.suptitle('/'.join(str(self.session_path).split('/')[-5:]))
             passive_plots.plot_sync_channels(sync=sync, sync_map=sync_map, ax=ax)
             passive_plots.plot_passive_periods(passivePeriods_df, ax=ax)
             passive_plots.plot_rfmapping(passiveRFM_times, ax=ax)
@@ -881,7 +893,7 @@ class PassiveChoiceWorld(BaseExtractor):
             passivePeriods_df,  # _ibl_passivePeriods.intervalsTable.csv
             passiveRFM_times,  # _ibl_passiveRFM.times.npy
             passiveGabor_df,  # _ibl_passiveGabor.table.csv,
-            passiveStims_df  # _ibl_passiveStims.table.csv
+            passiveStims_df,  # _ibl_passiveStims.table.csv
         )
 
         # Set save names to None if data not extracted - these will not be saved or registered
