@@ -22,7 +22,6 @@ WIDTH, HEIGHT = 1000, 100
 
 
 class TestSnapshot(unittest.TestCase):
-
     @classmethod
     def setUpClass(cls):
         # Make a small image and store in tmp file
@@ -46,8 +45,9 @@ class TestSnapshot(unittest.TestCase):
         try:
             img_file = list(Path('/var/www/').rglob(rel_path))[0]
         except IndexError:
-            img_file = http_download_file(url, target_dir=Path(self.tmp_dir.name), username=TEST_DB['username'],
-                                          password=TEST_DB['password'], silent=True)
+            img_file = http_download_file(
+                url, target_dir=Path(self.tmp_dir.name), username=TEST_DB['username'], password=TEST_DB['password'], silent=True
+            )
         return img_file
 
     def test_class_setup(self):
@@ -100,8 +100,11 @@ class TestSnapshot(unittest.TestCase):
         object_id = self.one.alyx.rest('datasets', 'list', limit=1)[0]['url'][-36:]
         snp = Snapshot(object_id, content_type='dataset', one=self.one)
         # Register multiple figures by giving a list
-        self.notes.extend(snp.register_images([self.img_file, self.img_file, self.img_file],
-                                              texts=['first', 'second', 'third'], widths=[None, 'orig', 200]))
+        self.notes.extend(
+            snp.register_images(
+                [self.img_file, self.img_file, self.img_file], texts=['first', 'second', 'third'], widths=[None, 'orig', 200]
+            )
+        )
         for i in range(3):
             self.assertEqual(self.notes[i - 3]['text'], expected_texts[i])
             img_db = self._get_image(self.notes[i - 3]['image'])
@@ -147,7 +150,6 @@ class TestSnapshot(unittest.TestCase):
 
 
 class TestDlcQcPlot(unittest.TestCase):
-
     @classmethod
     def setUpClass(cls):
         cls.tmp_dir = tempfile.TemporaryDirectory()
@@ -170,7 +172,6 @@ class TestDlcQcPlot(unittest.TestCase):
 
 
 class TestLpQcPlot(unittest.TestCase):
-
     @classmethod
     def setUpClass(cls):
         cls.tmp_dir = tempfile.TemporaryDirectory()
@@ -188,7 +189,6 @@ class TestLpQcPlot(unittest.TestCase):
 
 
 class TestMiscPlot(unittest.TestCase):
-
     def test_star_plot(self):
         r = np.random.rand(6)
         ax = ibllib.plots.misc.starplot(['a', 'b', 'c', 'd', 'e', 'f'], r, ylim=[0, 1])
