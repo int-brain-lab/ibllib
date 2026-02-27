@@ -236,8 +236,8 @@ class ROICaTTask(SubjectAggregateTask):
             ## Run ROICaT
             defaults = roicat.util.get_default_parameters(pipeline='tracking')
             outputs_roicat = roicat.pipelines.pipeline_tracking(defaults, custom_data=data)
-            
-        
+
+
     def load_data(self, paths):
         """
         Load the data for ROICaT processing.
@@ -251,16 +251,17 @@ class ROICaTTask(SubjectAggregateTask):
         footprints = []
         for filepath in paths:
             zip_path = filepath / "_suite2p_ROIData.raw.zip"
-            curr_ops = np.load(zip_path, allow_pickle=True)['ops'].item()
-            curr_stat = np.load(zip_path, allow_pickle = True)['stat'].item()
+            zip = np.load(zip_path, allow_pickle=True)
+            curr_ops = zip['ops'].item()
+            curr_stat = zip['stat']
             footprints.append(extract_suite2p_spatial_footprints(curr_ops, curr_stat))
             mean_images.append(extract_suite2p_mean_img(curr_ops))
 
         
-        data = roicat.DemixingRoicat(mean_images,
-                                     footprints,
-                                     um_per_pixel=1.2, ##This is specific to S. Picard's 2p mesoscope project
-                                     highpass_simga=3)
+        data = DemixingRoicat(mean_images,
+                              footprints,
+                              um_per_pixel=1.2, ##This is specific to S. Picard's 2p mesoscope project
+                              highpass_sigma=3)
 
         assert data.check_completeness(verbose=False)['tracking'], 'Data object is missing attributes necessary for tracking.'
         return data
@@ -377,7 +378,7 @@ if __name__ == '__main__':
     
     task = ROICaTTask(subject_path)
     task.get_signatures()
-    task.assert_expected_inputs()  # TODO support subject path
+    # task.assert_expected_inputs()  # TODO support subject path
     
     # FOV_paths_all = list(np.unique([(Path(path) / '..').resolve() for path in paths_allMLAPDV]))  # parent
     # RFM_paths_all = list(np.unique([(Path(path) / '..').resolve() for path in paths_allRFM]))
