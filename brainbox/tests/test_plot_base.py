@@ -2,10 +2,12 @@ import unittest
 
 import numpy as np
 
-from brainbox.plot_base import DefaultPlot, ImagePlot, ScatterPlot, ProbePlot, LinePlot, scatter_xyc_plot, arrange_channels2banks
+from brainbox.plot_base import (DefaultPlot, ImagePlot, ScatterPlot, ProbePlot, LinePlot,
+                                scatter_xyc_plot, arrange_channels2banks)
 
 
 class TestPlotBase(unittest.TestCase):
+
     def setUp(self):
         """
         Test Basic functionality of the plot class method
@@ -77,7 +79,8 @@ class TestPlotBase(unittest.TestCase):
 
         # Test conversion to dict
         plot_dict = plot_default.convert2dict()
-        keys_to_expect = ['data', 'plot_type', 'hlines', 'vlines', 'labels', 'xlim', 'ylim', 'zlim', 'clim']
+        keys_to_expect = ['data', 'plot_type', 'hlines', 'vlines', 'labels', 'xlim', 'ylim',
+                          'zlim', 'clim']
         self.assertTrue(all(key in plot_dict for key in keys_to_expect))
 
     def test_image(self):
@@ -96,7 +99,7 @@ class TestPlotBase(unittest.TestCase):
         plot_image.set_scale()
         self.assertEqual(plot_image.scale, (0.99, 9.9))
         plot_image.set_offset()
-        assert plot_image.offset == (0, 500)
+        assert (plot_image.offset == (0, 500))
 
         # Test instantiating with incorrect dimensions gives assert error
         with self.assertRaises(AssertionError):
@@ -181,7 +184,8 @@ class TestScatterXYC(unittest.TestCase):
         self.assertTrue(np.all(plot_scatter.color[-1] == (0, 0, 0, 1)))
 
     def test_RGB_conversion_with_clim(self):
-        plot_scatter = scatter_xyc_plot(self.x, self.y, self.c, cmap='binary', clim=(0, 50), rgb=True)
+        plot_scatter = scatter_xyc_plot(self.x, self.y, self.c, cmap='binary', clim=(0, 50),
+                                        rgb=True)
         self.assertEqual(len(plot_scatter.color), len(plot_scatter.data.x))
         self.assertTrue(np.all(plot_scatter.color[0] == (1, 1, 1, 1)))
         self.assertTrue(np.all(plot_scatter.color[50] == (0, 0, 0, 1)))
@@ -189,20 +193,23 @@ class TestScatterXYC(unittest.TestCase):
 
 
 class TestArrangeChannels2Bank(unittest.TestCase):
+
     def setUp(self):
         """
         Test arrange_channels2bank function
         """
         self.unique_y = np.arange(0, 200, 20)
         y = np.r_[self.unique_y, self.unique_y, self.unique_y]
-        x = np.r_[np.ones((len(self.unique_y))) * 5, np.ones((len(self.unique_y))) * 15, np.ones((len(self.unique_y))) * 25]
+        x = np.r_[np.ones((len(self.unique_y))) * 5, np.ones((len(self.unique_y))) * 15,
+                  np.ones((len(self.unique_y))) * 25]
         self.chn_coords = np.c_[x, y]
         self.data = np.random.rand((len(y)))
         self.depth = np.linspace(0, 3000, len(y))
 
     def test_no_pad(self):
         # For pyqtgraph implementation
-        data_bnk, x_bnk, y_bnk = arrange_channels2banks(self.data, self.chn_coords, pad=False, x_offset=10)
+        data_bnk, x_bnk, y_bnk = arrange_channels2banks(self.data, self.chn_coords, pad=False,
+                                                        x_offset=10)
         # Test the data has been distributed as expected
         self.assertEqual(len(data_bnk), 3)
         self.assertEqual(data_bnk[0].shape, (1, 10))
@@ -217,7 +224,8 @@ class TestArrangeChannels2Bank(unittest.TestCase):
         self.assertTrue(np.all(y_bnk[0] == self.unique_y))
 
     def test_pad(self):
-        data_bnk, x_bnk, y_bnk = arrange_channels2banks(self.data, self.chn_coords, pad=True, x_offset=10)
+        data_bnk, x_bnk, y_bnk = arrange_channels2banks(self.data, self.chn_coords, pad=True,
+                                                        x_offset=10)
         self.assertEqual(len(data_bnk), 3)
         # Check dimensions are correct and data has been assigned correctly
         self.assertEqual(data_bnk[2].shape, (3, 12))
@@ -237,17 +245,13 @@ class TestArrangeChannels2Bank(unittest.TestCase):
         self.assertEqual(len(y_bnk), 3)
         self.assertEqual(y_bnk[2].shape, (12,))
         self.assertTrue(
-            np.all(
-                y_bnk[2]
-                == np.r_[
-                    np.min(self.unique_y) - np.diff(self.unique_y)[0],
-                    self.unique_y,
-                    np.max(self.unique_y) + np.diff(self.unique_y)[-1],
-                ]
-            )
+            np.all(y_bnk[2] == np.r_[np.min(self.unique_y) - np.diff(self.unique_y)[0],
+                                     self.unique_y, np.max(self.unique_y) +
+                                     np.diff(self.unique_y)[-1]])
         )
 
     def test_with_depth(self):
-        data_bnk, x_bnk, y_bnk = arrange_channels2banks(self.data, self.chn_coords, depth=self.depth, pad=True, x_offset=10)
+        data_bnk, x_bnk, y_bnk = arrange_channels2banks(self.data, self.chn_coords,
+                                                        depth=self.depth, pad=True, x_offset=10)
         self.assertTrue(np.all(y_bnk[0][1:-1] == self.depth[:10]))
         self.assertTrue(np.all(y_bnk[2][1:-1] == self.depth[-10:]))

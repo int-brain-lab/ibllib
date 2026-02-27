@@ -17,6 +17,7 @@ from ibllib.tests import TEST_DB
 
 
 class TestDLC(unittest.TestCase):
+
     def setUp(self):
         pass
 
@@ -104,7 +105,7 @@ class TestDLC(unittest.TestCase):
             'ear_likelihood': [0.99, 0.75, 0.80, 0.95, 0.60],
             'tail_x': [5.0, 15.0, 25.0, 35.0, 45.0],
             'tail_y': [8.0, 18.0, 28.0, 38.0, 48.0],
-            'tail_likelihood': [0.70, 0.95, 0.85, 0.92, 0.88],
+            'tail_likelihood': [0.70, 0.95, 0.85, 0.92, 0.88]
         })
 
         # Test with default threshold of 0.9
@@ -140,15 +141,19 @@ class TestDLC(unittest.TestCase):
                     self.assertFalse(pd.isna(result.loc[idx, f'{kp}_y']))
 
         # Test with dataframe containing no valid features
-        invalid_data = pd.DataFrame({'random_col1': [1, 2, 3], 'random_col2': [4, 5, 6]})
+        invalid_data = pd.DataFrame({
+            'random_col1': [1, 2, 3],
+            'random_col2': [4, 5, 6]
+        })
         result = dlc.likelihood_threshold(invalid_data)
         # Should return unchanged dataframe
         pd.testing.assert_frame_equal(result, invalid_data)
 
 
 class TestWheel(unittest.TestCase):
+
     def setUp(self):
-        """Load pickled test data
+        """ Load pickled test data
         Test data is in the form ((inputs), (outputs)) where inputs is a tuple containing a
         numpy array of timestamps and one of positions; outputs is a tuple of outputs from
         the function under test, i.e. wheel.movements
@@ -172,7 +177,7 @@ class TestWheel(unittest.TestCase):
         self.trials = {
             'stimOn_times': np.array([0.2, 75, 100, 120, 164]),
             'feedback_times': np.array([60.2, 85, 103, 130, 188]),
-            'intervals': np.array([[0, 62], [63, 90], [95, 110], [115, 135], [140, 200]]),
+            'intervals': np.array([[0, 62], [63, 90], [95, 110], [115, 135], [140, 200]])
         }
 
     def test_velocity_filtered(self):
@@ -181,43 +186,24 @@ class TestWheel(unittest.TestCase):
         pos, _ = wheel.interpolate_position(*self.test_data[1][0], freq=Fs)
         vel, acc = wheel.velocity_filtered(pos, Fs)
         self.assertEqual(vel.shape, pos.shape)
-        expected = [
-            -0.03020161,
-            -0.02642356,
-            -0.0229635,
-            -0.01981592,
-            -0.01697264,
-            -0.01442305,
-            -0.01215438,
-            -0.01015202,
-            -0.00839981,
-            -0.00688036,
-        ]
+        expected = [-0.03020161, -0.02642356, -0.0229635, -0.01981592, -0.01697264,
+                    -0.01442305, -0.01215438, -0.01015202, -0.00839981, -0.00688036]
         np.testing.assert_array_almost_equal(vel[-10:], expected)
-        expected = [
-            0.0,
-            187.41222339,
-            4.16291917,
-            3.94583813,
-            3.67112556,
-            3.33635025,
-            2.94002541,
-            2.48170905,
-            1.96209209,
-            1.38307198,
-        ]
+        expected = [0., 187.41222339, 4.16291917, 3.94583813, 3.67112556,
+                    3.33635025, 2.94002541, 2.48170905, 1.96209209, 1.38307198]
         np.testing.assert_array_almost_equal(acc[:10], expected)
 
     def test_movements(self):
         # These test data are the same as those used in the MATLAB code
         inputs = self.test_data[0][0]
         expected = self.test_data[0][1]
-        on, off, amp, peak_vel = wheel.movements(*inputs, freq=1000, pos_thresh=8, pos_thresh_onset=1.5)
+        on, off, amp, peak_vel = wheel.movements(
+            *inputs, freq=1000, pos_thresh=8, pos_thresh_onset=1.5)
         self.assertTrue(np.array_equal(on, expected[0]), msg='Unexpected onsets')
         self.assertTrue(np.array_equal(off, expected[1]), msg='Unexpected offsets')
         self.assertTrue(np.array_equal(amp, expected[2]), msg='Unexpected move amps')
         # Differences due to convolution algorithm
-        all_close = np.allclose(peak_vel, expected[3], atol=1.0e-2)
+        all_close = np.allclose(peak_vel, expected[3], atol=1.e-2)
         self.assertTrue(all_close, msg='Unexpected peak velocities')
 
     def test_movements_FPGA(self):
@@ -226,11 +212,13 @@ class TestWheel(unittest.TestCase):
         pos, t = wheel.interpolate_position(*self.test_data[1][0], freq=1000)
         expected = self.test_data[1][1]
         thresholds = wheel.samples_to_cm(np.array([8, 1.5]))
-        on, off, amp, peak_vel = wheel.movements(t, pos, freq=1000, pos_thresh=thresholds[0], pos_thresh_onset=thresholds[1])
-        self.assertTrue(np.allclose(on, expected[0], atol=1.0e-5), msg='Unexpected onsets')
-        self.assertTrue(np.allclose(off, expected[1], atol=1.0e-5), msg='Unexpected offsets')
-        self.assertTrue(np.allclose(amp, expected[2], atol=1.0e-5), msg='Unexpected move amps')
-        self.assertTrue(np.allclose(peak_vel, expected[3], atol=1.0e-2), msg='Unexpected peak velocities')
+        on, off, amp, peak_vel = wheel.movements(
+            t, pos, freq=1000, pos_thresh=thresholds[0], pos_thresh_onset=thresholds[1])
+        self.assertTrue(np.allclose(on, expected[0], atol=1.e-5), msg='Unexpected onsets')
+        self.assertTrue(np.allclose(off, expected[1], atol=1.e-5), msg='Unexpected offsets')
+        self.assertTrue(np.allclose(amp, expected[2], atol=1.e-5), msg='Unexpected move amps')
+        self.assertTrue(np.allclose(peak_vel, expected[3], atol=1.e-2),
+                        msg='Unexpected peak velocities')
 
     def test_traces_by_trial(self):
         t, pos = self.test_data[0][0]
@@ -239,7 +227,13 @@ class TestWheel(unittest.TestCase):
         traces = wheel.traces_by_trial(t, pos, start=start, end=end)
         # Check correct number of tuples returned
         self.assertEqual(len(traces), start.size)
-        expected_ids = ([144, 60143], [74944, 84943], [99944, 102943], [119944, 129943], [163944, 187943])
+        expected_ids = (
+            [144, 60143],
+            [74944, 84943],
+            [99944, 102943],
+            [119944, 129943],
+            [163944, 187943]
+        )
 
         for trace, ind in zip(traces, expected_ids):
             trace_t, trace_pos = trace
@@ -304,7 +298,7 @@ class TestTraining(unittest.TestCase):
         trials, _ = self._get_trials(sess_dates=['2020-08-25', '2020-08-24', '2020-08-21'])
         trials_total = np.sum([len(trials[k]['contrastRight']) for k in trials.keys()])
         trials_all = train.concatenate_trials(trials)
-        assert len(trials_all['contrastRight']) == trials_total
+        assert (len(trials_all['contrastRight']) == trials_total)
 
         perf_easy = np.array([train.compute_performance_easy(trials[k]) for k in trials.keys()])
         n_trials = np.array([train.compute_n_trials(trials[k]) for k in trials.keys()])
@@ -312,60 +306,73 @@ class TestTraining(unittest.TestCase):
         rt = train.compute_median_reaction_time(trials_all, contrast=0)
         np.testing.assert_allclose(perf_easy, [0.91489362, 0.9, 0.90853659])
         np.testing.assert_array_equal(n_trials, [617, 532, 719])
-        np.testing.assert_allclose(psych, [4.04487042, 21.6293942, 1.91451396e-02, 1.72669957e-01], rtol=1e-5)
-        assert np.isclose(rt, 0.83655)
+        np.testing.assert_allclose(psych, [4.04487042, 21.6293942, 1.91451396e-02, 1.72669957e-01],
+                                   rtol=1e-5)
+        assert (np.isclose(rt, 0.83655))
 
     def test_in_training(self):
-        trials, task_protocol = self._get_trials(sess_dates=['2020-08-25', '2020-08-24', '2020-08-21'])
-        assert np.all(np.array(task_protocol) == 'training')
-        status, info, crit = train.get_training_status(trials, task_protocol, ephys_sess_dates=[], n_delay=0)
-        assert status == 'in training'
-        assert crit['Criteria']['val'] == 'trained_1a'
+        trials, task_protocol = self._get_trials(
+            sess_dates=['2020-08-25', '2020-08-24', '2020-08-21'])
+        assert (np.all(np.array(task_protocol) == 'training'))
+        status, info, crit = train.get_training_status(
+            trials, task_protocol, ephys_sess_dates=[], n_delay=0)
+        assert (status == 'in training')
+        assert (crit['Criteria']['val'] == 'trained_1a')
 
     def test_trained_1a(self):
-        trials, task_protocol = self._get_trials(sess_dates=['2020-08-26', '2020-08-25', '2020-08-24'])
-        assert np.all(np.array(task_protocol) == 'training')
-        status, info, crit = train.get_training_status(trials, task_protocol, ephys_sess_dates=[], n_delay=0)
-        assert status == 'trained 1a'
-        assert crit['Criteria']['val'] == 'trained_1b'
+        trials, task_protocol = self._get_trials(
+            sess_dates=['2020-08-26', '2020-08-25', '2020-08-24'])
+        assert (np.all(np.array(task_protocol) == 'training'))
+        status, info, crit = train.get_training_status(trials, task_protocol, ephys_sess_dates=[],
+                                                       n_delay=0)
+        assert (status == 'trained 1a')
+        assert (crit['Criteria']['val'] == 'trained_1b')
 
     def test_trained_1b(self):
-        trials, task_protocol = self._get_trials(sess_dates=['2020-08-27', '2020-08-26', '2020-08-25'])
-        assert np.all(np.array(task_protocol) == 'training')
-        status, info, crit = train.get_training_status(trials, task_protocol, ephys_sess_dates=[], n_delay=0)
+        trials, task_protocol = self._get_trials(
+            sess_dates=['2020-08-27', '2020-08-26', '2020-08-25'])
+        assert (np.all(np.array(task_protocol) == 'training'))
+        status, info, crit = train.get_training_status(trials, task_protocol, ephys_sess_dates=[],
+                                                       n_delay=0)
         self.assertEqual(status, 'trained 1b')
-        assert crit['Criteria']['val'] == 'ready4ephysrig'
+        assert (crit['Criteria']['val'] == 'ready4ephysrig')
 
     def test_training_to_bias(self):
-        trials, task_protocol = self._get_trials(sess_dates=['2020-08-31', '2020-08-28', '2020-08-27'])
-        assert ~np.all(np.array(task_protocol) == 'training') and np.any(np.array(task_protocol) == 'training')
-        status, info, crit = train.get_training_status(trials, task_protocol, ephys_sess_dates=[], n_delay=0)
-        assert status == 'trained 1b'
-        assert crit['Criteria']['val'] == 'ready4ephysrig'
+        trials, task_protocol = self._get_trials(
+            sess_dates=['2020-08-31', '2020-08-28', '2020-08-27'])
+        assert (~np.all(np.array(task_protocol) == 'training') and
+                np.any(np.array(task_protocol) == 'training'))
+        status, info, crit = train.get_training_status(trials, task_protocol, ephys_sess_dates=[],
+                                                       n_delay=0)
+        assert (status == 'trained 1b')
+        assert (crit['Criteria']['val'] == 'ready4ephysrig')
 
     def test_ready4ephys(self):
         sess_dates = ['2020-09-01', '2020-08-31', '2020-08-28']
         trials, task_protocol = self._get_trials(sess_dates=sess_dates)
-        assert np.all(np.array(task_protocol) == 'biased')
-        status, info, crit = train.get_training_status(trials, task_protocol, ephys_sess_dates=[], n_delay=0)
-        assert status == 'ready4ephysrig'
-        assert crit['Criteria']['val'] == 'ready4delay'
+        assert (np.all(np.array(task_protocol) == 'biased'))
+        status, info, crit = train.get_training_status(trials, task_protocol, ephys_sess_dates=[],
+                                                       n_delay=0)
+        assert (status == 'ready4ephysrig')
+        assert (crit['Criteria']['val'] == 'ready4delay')
 
     def test_ready4delay(self):
         sess_dates = ['2020-09-03', '2020-09-02', '2020-08-31']
         trials, task_protocol = self._get_trials(sess_dates=sess_dates)
-        assert np.all(np.array(task_protocol) == 'biased')
-        status, info, crit = train.get_training_status(trials, task_protocol, ephys_sess_dates=['2020-09-03'], n_delay=0)
-        assert status == 'ready4delay'
-        assert crit['Criteria']['val'] == 'ready4recording'
+        assert (np.all(np.array(task_protocol) == 'biased'))
+        status, info, crit = train.get_training_status(trials, task_protocol,
+                                                       ephys_sess_dates=['2020-09-03'], n_delay=0)
+        assert (status == 'ready4delay')
+        assert (crit['Criteria']['val'] == 'ready4recording')
 
     def test_ready4recording(self):
         sess_dates = ['2020-09-01', '2020-08-31', '2020-08-28']
         trials, task_protocol = self._get_trials(sess_dates=sess_dates)
-        assert np.all(np.array(task_protocol) == 'biased')
-        status, info, crit = train.get_training_status(trials, task_protocol, ephys_sess_dates=sess_dates, n_delay=1)
-        assert status == 'ready4recording'
-        assert crit['Criteria']['val'] == 'ready4recording'
+        assert (np.all(np.array(task_protocol) == 'biased'))
+        status, info, crit = train.get_training_status(trials, task_protocol,
+                                                       ephys_sess_dates=sess_dates, n_delay=1)
+        assert (status == 'ready4recording')
+        assert (crit['Criteria']['val'] == 'ready4recording')
 
     def test_query_criterion(self):
         """Test for brainbox.behavior.training.query_criterion function."""
@@ -378,7 +385,7 @@ class TestTraining(unittest.TestCase):
             'in_training': ['2019-04-01', '01390fcc-4f86-4707-8a3b-4d9309feb0a1'],
             'ready4delay': ['2019-04-09', 'f33f41cc-347a-458d-98c8-7e1c2c9c7600'],
             'ready4ephysrig': ['2019-04-10', 'abf5109c-d780-44c8-9561-83e857c7bc01'],
-            'ready4recording': ['2019-04-11', '7dc3c44b-225f-4083-be3d-07b8562885f4'],
+            'ready4recording': ['2019-04-11', '7dc3c44b-225f-4083-be3d-07b8562885f4']
         }
 
         # Mock output of subjects read endpoint only

@@ -19,8 +19,8 @@ from brainbox.behavior.wheel import cm_to_rad
 def _create_test_qc_outcomes():
     """Create task QC outcomes dict.
 
-    Used by TestAggregateOutcome.test_compute_dateset_qc_status and TestDatasetQC.
-    """
+     Used by TestAggregateOutcome.test_compute_dateset_qc_status and TestDatasetQC.
+     """
     outcomes = {'_task_' + k[6:]: spec.QC.NOT_SET for k in qcmetrics.TaskQC._get_checks(...)}
     outcomes['_task_reward_volumes'] = outcomes['_task_stimOn_delays'] = spec.QC.WARNING
     outcomes['_task_reward_volume_set'] = outcomes['_task_goCue_delays'] = spec.QC.FAIL
@@ -30,24 +30,21 @@ def _create_test_qc_outcomes():
 
 
 class TestAggregateOutcome(unittest.TestCase):
+
     def test_outcome_from_dict_default(self):
         # For a task that has no costume thresholds, default is 0.99 PASS and 0.9 WARNING and 0 FAIL,
         # np.nan and None return not set
-        qc_dict = {'gnap': 0.99, 'gnop': np.nan, 'gnip': None, 'gnep': 0.9, 'gnup': 0.89}
+        qc_dict = {'gnap': .99, 'gnop': np.nan, 'gnip': None, 'gnep': 0.9, 'gnup': 0.89}
         expect = {
-            'gnap': spec.QC.PASS,
-            'gnop': spec.QC.NOT_SET,
-            'gnip': spec.QC.NOT_SET,
-            'gnep': spec.QC.WARNING,
-            'gnup': spec.QC.FAIL,
-        }
+            'gnap': spec.QC.PASS, 'gnop': spec.QC.NOT_SET, 'gnip': spec.QC.NOT_SET,
+            'gnep': spec.QC.WARNING, 'gnup': spec.QC.FAIL}
         outcome, outcome_dict = qcmetrics.compute_session_status_from_dict(qc_dict, qcmetrics.BWM_CRITERIA)
         self.assertEqual(outcome, spec.QC.FAIL)
         self.assertEqual(expect, outcome_dict)
 
     def test_outcome_from_dict_stimFreeze_delays(self):
         # For '_task_stimFreeze_delays' the threshold are 0.99 PASS and 0 WARNING
-        qc_dict = {'gnap': 0.99, 'gnop': np.nan, 'stimFreeze_delays': 0.1}
+        qc_dict = {'gnap': .99, 'gnop': np.nan, 'stimFreeze_delays': .1}
         expect = {'gnap': spec.QC.PASS, 'gnop': spec.QC.NOT_SET, 'stimFreeze_delays': spec.QC.WARNING}
         outcome, outcome_dict = qcmetrics.compute_session_status_from_dict(qc_dict, qcmetrics.BWM_CRITERIA)
         self.assertEqual(outcome, spec.QC.WARNING)
@@ -55,7 +52,7 @@ class TestAggregateOutcome(unittest.TestCase):
 
     def test_outcome_from_dict_iti_delays(self):
         # For '_task_iti_delays' the threshold is 0 NOT_SET
-        qc_dict = {'gnap': 0.99, 'gnop': np.nan, 'iti_delays': 0.1}
+        qc_dict = {'gnap': .99, 'gnop': np.nan, 'iti_delays': .1}
         expect = {'gnap': spec.QC.PASS, 'gnop': spec.QC.NOT_SET, 'iti_delays': spec.QC.NOT_SET}
         outcome, outcome_dict = qcmetrics.compute_session_status_from_dict(qc_dict, qcmetrics.BWM_CRITERIA)
         self.assertEqual(outcome, spec.QC.PASS)
@@ -72,22 +69,19 @@ class TestAggregateOutcome(unittest.TestCase):
         """Test TaskQC.compute_dateset_qc_status method."""
         outcomes = _create_test_qc_outcomes()
         dataset_outcomes = qcmetrics.TaskQC.compute_dataset_qc_status(outcomes)
-        expected = {
-            '_ibl_trials.stimOff_times': spec.QC.PASS,
-            '_ibl_trials.table': {
-                'intervals': spec.QC.CRITICAL,
-                'goCue_times': spec.QC.FAIL,
-                'response_times': spec.QC.NOT_SET,
-                'choice': spec.QC.NOT_SET,
-                'stimOn_times': spec.QC.WARNING,
-                'contrastLeft': spec.QC.NOT_SET,
-                'contrastRight': spec.QC.NOT_SET,
-                'feedbackType': spec.QC.NOT_SET,
-                'probabilityLeft': spec.QC.NOT_SET,
-                'feedback_times': spec.QC.PASS,
-                'firstMovement_times': spec.QC.NOT_SET,
-            },
-        }
+        expected = {'_ibl_trials.stimOff_times': spec.QC.PASS,
+                    '_ibl_trials.table': {
+                        'intervals': spec.QC.CRITICAL,
+                        'goCue_times': spec.QC.FAIL,
+                        'response_times': spec.QC.NOT_SET,
+                        'choice': spec.QC.NOT_SET,
+                        'stimOn_times': spec.QC.WARNING,
+                        'contrastLeft': spec.QC.NOT_SET,
+                        'contrastRight': spec.QC.NOT_SET,
+                        'feedbackType': spec.QC.NOT_SET,
+                        'probabilityLeft': spec.QC.NOT_SET,
+                        'feedback_times': spec.QC.PASS,
+                        'firstMovement_times': spec.QC.NOT_SET}}
         self.assertDictEqual(expected, dataset_outcomes)
 
 
@@ -97,7 +91,7 @@ class TestDatasetQC(unittest.TestCase):
         registered_datasets = [
             {'name': '_ibl_trials.table.pqt', 'qc': 'NOT_SET', 'id': str(uuid4())},
             {'name': '_ibl_other.intervals.npy', 'qc': 'PASS', 'id': str(uuid4())},
-            {'name': '_ibl_trials.stimOff_times.npy', 'qc': 'NOT_SET', 'id': str(uuid4())},
+            {'name': '_ibl_trials.stimOff_times.npy', 'qc': 'NOT_SET', 'id': str(uuid4())}
         ]
         one = mock.MagicMock()
         one.alyx.get.side_effect = lambda *args, **kwargs: {'qc': spec.QC.NOT_SET.name, 'json': {'extended_qc': None}}
@@ -119,11 +113,9 @@ class TestDatasetQC(unittest.TestCase):
 
         # Test behaviour when dataset QC not in registered datasets list
         one.reset_mock()
-        with (
-            mock.patch.object(qc, 'compute_session_status', return_value=task_qc_results),
-            mock.patch.object(qc, 'compute_dataset_qc_status', return_value={'_ibl_foo.bar': spec.QC.PASS}),
-            self.assertLogs(qcmetrics.__name__, level=10) as cm,
-        ):
+        with mock.patch.object(qc, 'compute_session_status', return_value=task_qc_results), \
+                mock.patch.object(qc, 'compute_dataset_qc_status', return_value={'_ibl_foo.bar': spec.QC.PASS}), \
+                self.assertLogs(qcmetrics.__name__, level=10) as cm:
             out = qcmetrics.update_dataset_qc(qc, registered_datasets.copy(), one, override=False)
             self.assertEqual(registered_datasets, out)
             self.assertIn('dataset _ibl_foo.bar not registered', cm.output[-1])
@@ -131,11 +123,14 @@ class TestDatasetQC(unittest.TestCase):
             one.alyx.rest.assert_not_called()
 
         # Test assertion on duplicate dataset stems
-        registered_datasets.append({'name': '_ibl_other.intervals.csv', 'qc': 'FAIL', 'id': str(uuid4())})
+        registered_datasets.append({
+            'name': '_ibl_other.intervals.csv', 'qc': 'FAIL', 'id': str(uuid4())
+        })
         self.assertRaises(AssertionError, qcmetrics.update_dataset_qc, qc, registered_datasets.copy(), one)
 
 
 class TaskQCTestData(unittest.TestCase):
+
     def setUp(self):
         self.data = self.load_fake_bpod_data()
         self.wheel_gain = 4
@@ -164,9 +159,9 @@ class TaskQCTestData(unittest.TestCase):
 
         pauses = np.zeros(n, dtype=float)
         # add a 5s pause on 3rd trial
-        pauses[2] = 5.0
+        pauses[2] = 5.
         quiescence_length = 0.2 + np.random.standard_exponential(size=(n,))
-        iti_length = 0.5  # inter-trial interval
+        iti_length = .5  # inter-trial interval
         # trial lengths include quiescence period, a couple small trigger delays and iti
         trial_lengths = quiescence_length + resp_feeback_delay + (trigg_delay * 4) + iti_length
         # add on 60 + 2s for nogos + feedback time (1 or 2s) + ~0.5s for other responses
@@ -182,7 +177,7 @@ class TaskQCTestData(unittest.TestCase):
             'intervals': np.c_[start_times, end_times],
             'itiIn_times': end_times - iti_length + stimOff_itiIn_delay,
             'position': np.ones_like(choice) * 35,
-            'pause_duration': pauses,
+            'pause_duration': pauses
         }
         # Change position sign to match choice direction and outcome
         data['position'][data['choice'] != data['correct'] * 2 - 1] *= -1
@@ -192,7 +187,9 @@ class TaskQCTestData(unittest.TestCase):
         data['goCueTrigger_times'] = data['stimOn_times'] + 1e-3
         data['goCue_times'] = data['goCueTrigger_times'] + trigg_delay
 
-        data['response_times'] = end_times - (resp_feeback_delay + iti_length + (~correct + 1))
+        data['response_times'] = end_times - (
+            resp_feeback_delay + iti_length + (~correct + 1)
+        )
         data['feedback_times'] = data['response_times'] + resp_feeback_delay
         data['stimFreeze_times'] = data['response_times'] + 1e-2
         # StimFreeze for no go trials is nan
@@ -255,7 +252,7 @@ class TaskQCTestData(unittest.TestCase):
             # trial start to stim on; should be below quiescence threshold
             stimOn_trig = trial_data['stimOnTrigger_times'][i]
             trial_start = trial_data['intervals'][i, 0]
-            t, p = qt_wheel_fill(trial_start, stimOn_trig, 0.5, resolution)
+            t, p = qt_wheel_fill(trial_start, stimOn_trig, .5, resolution)
             if len(t) > 0:  # Possible for no movement during quiescence
                 add_frag(t, p)
 
@@ -264,7 +261,7 @@ class TaskQCTestData(unittest.TestCase):
             if trial_data['choice'][i] == 0:
                 # Add random wheel movements for duration of trial
                 goCue = trial_data['goCue_times'][i]
-                t, p = qt_wheel_fill(goCue, trial_end, 0.1, resolution)
+                t, p = qt_wheel_fill(goCue, trial_end, .1, resolution)
                 add_frag(t, p)
                 movement_times.append(t[0])
             else:
@@ -281,17 +278,18 @@ class TaskQCTestData(unittest.TestCase):
 
         # Stitch wheel fragments and assert no skips
         wheel_data = np.concatenate(list(map(np.column_stack, wheel_data)))
-        assert np.all(np.diff(wheel_data[:, 0]) > 0), "timestamps don't strictly increase"
+        assert np.all(np.diff(wheel_data[:, 0]) > 0), 'timestamps don\'t strictly increase'
         np.testing.assert_allclose(np.abs(np.diff(wheel_data[:, 1])), resolution)
         assert len(movement_times) == trial_data['intervals'].shape[0]
         return {
             'wheel_timestamps': wheel_data[:, 0],
             'wheel_position': wheel_data[:, 1],
-            'firstMovement_times': np.array(movement_times),
+            'firstMovement_times': np.array(movement_times)
         }
 
 
 class TestTaskMetrics(TaskQCTestData):
+
     def test_check_stimOn_goCue_delays(self):
         metric, passed = qcmetrics.check_stimOn_goCue_delays(self.data)
         self.assertTrue(np.allclose(metric, 0.0011), 'failed to return correct metric')
@@ -326,7 +324,9 @@ class TestTaskMetrics(TaskQCTestData):
 
     def test_check_positive_feedback_stimOff_delays(self):
         metric, passed = qcmetrics.check_positive_feedback_stimOff_delays(self.data)
-        self.assertTrue(np.allclose(metric[self.data['correct']], 1e-4), 'failed to return correct metric')
+        self.assertTrue(
+            np.allclose(metric[self.data['correct']], 1e-4), 'failed to return correct metric'
+        )
         # Set incorrect timestamp (stimOff occurs just after response)
         id = np.argmax(self.data['correct'])
         self.data['stimOff_times'][id] = self.data['response_times'][id] + 1e-2
@@ -489,7 +489,7 @@ class TestTaskMetrics(TaskQCTestData):
         wh_idx = np.argmax(ts > t1)
         if ts[wh_idx] > self.data['stimOnTrigger_times'][n]:
             # No sample during quiescence; insert one
-            self.data['wheel_timestamps'] = np.insert(ts, wh_idx, t2 - 0.001)
+            self.data['wheel_timestamps'] = np.insert(ts, wh_idx, t2 - .001)
             self.data['wheel_position'] = np.insert(pos, wh_idx, np.inf)
         else:  # Otherwise make one sample infinite
             self.data['wheel_position'][wh_idx] = np.inf
@@ -507,10 +507,8 @@ class TestTaskMetrics(TaskQCTestData):
         # Remove wheel data around feedback for choice trial
         assert self.data['choice'].any(), 'no choice trials in test data'
         n = np.argmax(self.data['choice'] != 0)  # Index of choice trial
-        mask = np.logical_xor(
-            self.data['wheel_timestamps'] > self.data['feedback_times'][n] - 1,
-            self.data['wheel_timestamps'] < self.data['feedback_times'][n] + 1,
-        )
+        mask = np.logical_xor(self.data['wheel_timestamps'] > self.data['feedback_times'][n] - 1,
+                              self.data['wheel_timestamps'] < self.data['feedback_times'][n] + 1)
         self.data['wheel_timestamps'] = self.data['wheel_timestamps'][mask]
         self.data['wheel_position'] = self.data['wheel_position'][mask]
 
@@ -535,10 +533,8 @@ class TestTaskMetrics(TaskQCTestData):
 
         # Remove wheel data for choice trial
         self.data['position'][n] = -self.data['position'][n]  # restore position
-        mask = np.logical_xor(
-            self.data['wheel_timestamps'] < self.data['goCue_times'][n],
-            self.data['wheel_timestamps'] > self.data['response_times'][n],
-        )
+        mask = np.logical_xor(self.data['wheel_timestamps'] < self.data['goCue_times'][n],
+                              self.data['wheel_timestamps'] > self.data['response_times'][n])
         self.data['wheel_timestamps'] = self.data['wheel_timestamps'][mask]
         self.data['wheel_position'] = self.data['wheel_position'][mask]
 
@@ -559,7 +555,7 @@ class TestTaskMetrics(TaskQCTestData):
 
     def test_check_n_trial_events(self):
         metric, passed = qcmetrics.check_n_trial_events(self.data)
-        self.assertTrue(np.all(passed == 1.0) and np.all(metric))
+        self.assertTrue(np.all(passed == 1.) and np.all(metric))
 
         # Change errorCueTriggers
         id = np.argmax(self.data['correct'])
@@ -607,7 +603,8 @@ class TestTaskMetrics(TaskQCTestData):
     def test_check_iti_delays(self):
         metric, passed = qcmetrics.check_iti_delays(self.data, subtract_pauses=True)
         # We want the metric to return positive values that are close to 0.1, given the test data
-        self.assertTrue(np.allclose(metric[:-1], 1e-2, atol=0.001), 'failed to return correct metric')
+        self.assertTrue(np.allclose(metric[:-1], 1e-2, atol=0.001),
+                        'failed to return correct metric')
         self.assertTrue(np.isnan(metric[-1]), 'last trial should be NaN')
         self.assertTrue(np.all(passed))
         # Paused trials should fail when subtract_pauses is False
@@ -636,7 +633,6 @@ class TestHabituationQC(unittest.TestCase):
     """Test HabituationQC class
     NB: For complete coverage this should be run along slide the integration tests
     """
-
     def setUp(self):
         eid = '8dd0fcb0-1151-4c97-ae35-2e2421695ad7'
         one = ONE(**TEST_DB)
@@ -653,8 +649,8 @@ class TestHabituationQC(unittest.TestCase):
         """
         trigg_delay = 1e-4  # an ideal delay between triggers and measured times
         iti_length = 0.5  # the so-called 'inter-trial interval'
-        blank_length = 1.0  # the time between trial start and stim on
-        stimCenter_length = 1.0  # the length of time the stimulus is in the center
+        blank_length = 1.  # the time between trial start and stim on
+        stimCenter_length = 1.  # the length of time the stimulus is in the center
         # the lengths of time between stim on and stim center
         stimOn_length = np.random.normal(size=(n,)) + 10
         # trial lengths include couple small trigger delays and iti
@@ -670,9 +666,9 @@ class TestHabituationQC(unittest.TestCase):
             'position': np.random.choice([-1, 1], n, replace=True) * 35,
             'feedbackType': np.ones(n),
             'feedback_times': end_times - 0.5,
-            'rewardVolume': np.ones(n) * 3.0,
+            'rewardVolume': np.ones(n) * 3.,
             'stimOff_times': end_times + trigg_delay,
-            'stimOffTrigger_times': end_times,
+            'stimOffTrigger_times': end_times
         }
 
         data['stimOn_times'] = data['stimOnTrigger_times'] + trigg_delay
@@ -708,16 +704,16 @@ class TestTaskQCWithCustomCriteria(TaskQCTestData):
         self.qc.extractor = Bunch({'data': self.data, 'settings': {}})
 
         import json
-
         note_title = '=== SESSION QC CRITERIA task ==='
-        note_text = {'title': note_title, 'criteria': {'default': {'WARNING': 1, 'FAIL': 0.5}}}
-
-        note_data = {
-            'user': self.one.alyx.user,
-            'content_type': 'session',
-            'object_id': self.eid,
-            'text': f'{json.dumps(note_text)}',
+        note_text = {
+            "title": note_title,
+            "criteria": {'default': {'WARNING': 1, 'FAIL': 0.5}}
         }
+
+        note_data = {'user': self.one.alyx.user,
+                     'content_type': 'session',
+                     'object_id': self.eid,
+                     'text': f'{json.dumps(note_text)}'}
 
         self.note = self.one.alyx.rest('notes', 'create', data=note_data)
 
@@ -727,11 +723,11 @@ class TestTaskQCWithCustomCriteria(TaskQCTestData):
         metrics = dict()
         passed = dict()
 
-        metrics['_task_stimOff_itiIn_delays'], passed['_task_stimOff_itiIn_delays'] = qcmetrics.check_stimOff_itiIn_delays(
-            self.data
-        )
+        metrics['_task_stimOff_itiIn_delays'], passed['_task_stimOff_itiIn_delays'] = (
+            qcmetrics.check_stimOff_itiIn_delays(self.data))
 
-        metrics['_task_stimOn_delays'], passed['_task_stimOn_delays'] = qcmetrics.check_stimOff_itiIn_delays(self.data)
+        metrics['_task_stimOn_delays'], passed['_task_stimOn_delays'] = (
+            qcmetrics.check_stimOff_itiIn_delays(self.data))
 
         self.qc.metrics = metrics
         self.qc.passed = passed

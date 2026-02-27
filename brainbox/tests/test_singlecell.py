@@ -37,21 +37,12 @@ class TestPeths(unittest.TestCase):
         record_length = 1654
         cluster_sel = [1, 2, 3, 6, 15, 16]
         np.random.seed(seed=42)
-        spike_times = np.sort(
-            np.random.rand(
-                n_spikes,
-            )
-            * record_length
-        )
+        spike_times = np.sort(np.random.rand(n_spikes, ) * record_length)
         spike_clusters = np.random.randint(0, n_clusters, n_spikes)
-        event_times = np.sort(
-            np.random.rand(
-                n_events,
-            )
-            * record_length
-        )
+        event_times = np.sort(np.random.rand(n_events, ) * record_length)
 
-        peth, fr = calculate_peths(spike_times, spike_clusters, cluster_ids=cluster_sel, align_times=event_times)
+        peth, fr = calculate_peths(spike_times, spike_clusters, cluster_ids=cluster_sel,
+                                   align_times=event_times)
         self.assertTrue(peth.means.shape[0] == len(cluster_sel))
         self.assertTrue(np.all(peth.means.shape == peth.stds.shape))
         self.assertTrue(np.all(fr.shape == (n_events, len(cluster_sel), 28)))
@@ -62,6 +53,6 @@ def test_firing_rate():
     pass
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     np.random.seed(0)
     unittest.main(exit=False)

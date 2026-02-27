@@ -4,7 +4,7 @@ import unittest
 import numpy as np
 
 from ibllib.pipes import histology
-from ibllib.pipes.ephys_alignment import EphysAlignment, TIP_SIZE_UM, _cumulative_distance
+from ibllib.pipes.ephys_alignment import (EphysAlignment, TIP_SIZE_UM, _cumulative_distance)
 import iblatlas.atlas as atlas
 
 # TODO Place this in setUpModule()
@@ -12,12 +12,13 @@ brain_atlas = atlas.AllenAtlas(res_um=25)
 
 
 class TestHistology(unittest.TestCase):
+
     def setUp(self) -> None:
         self.path_tracks = Path(__file__).parent.joinpath('fixtures', 'histology', 'tracks')
 
     def test_histology_get_brain_regions(self):
         # first part of the test is to check on an actual track file
-        for file_track in self.path_tracks.rglob('*_pts.csv'):
+        for file_track in self.path_tracks.rglob("*_pts.csv"):
             xyz = histology.load_track_csv(file_track, brain_atlas=brain_atlas)
             channels, ins = histology.get_brain_regions(xyz=xyz, brain_atlas=brain_atlas)
         # also check that it works from an insertion
@@ -30,7 +31,7 @@ class TestHistology(unittest.TestCase):
 
     def test_histology_insertion_from_track(self):
 
-        for file_track in self.path_tracks.rglob('*_pts.csv'):
+        for file_track in self.path_tracks.rglob("*_pts.csv"):
             xyz = histology.load_track_csv(file_track, brain_atlas=brain_atlas)
             insertion = atlas.Insertion.from_track(xyz, brain_atlas=brain_atlas)
             # checks that the tip coordinate is not the deepest point but its projection
@@ -46,18 +47,16 @@ class TestHistology(unittest.TestCase):
 
     def test_filename_parser(self):
         tdata = [
-            {
-                'input': Path('/gna/electrode_tracks_SWC_014/2019-12-12_SWC_014_001_probe01_fit.csv'),
-                'output': {'date': '2019-12-12', 'experiment_number': 1, 'name': 'probe01', 'subject': 'SWC_014'},
-            },
-            {
-                'input': Path('/gna/datadisk/Data/Histology/tracks/ZM_2407/2019-11-06_ZM_2407_001_probe_00_pts.csv'),
-                'output': {'date': '2019-11-06', 'experiment_number': 1, 'name': 'probe_00', 'subject': 'ZM_2407'},
-            },
-            {
-                'input': Path('/gna/2019-12-06_KS023_001_probe01_pts.csv'),
-                'output': {'date': '2019-12-06', 'experiment_number': 1, 'name': 'probe01', 'subject': 'KS023'},
-            },
+            {'input': Path("/gna/electrode_tracks_SWC_014/2019-12-12_SWC_014_001_probe01_fit.csv"),
+             'output': {'date': '2019-12-12', 'experiment_number': 1, 'name': 'probe01',
+                        'subject': 'SWC_014'}},
+            {'input': Path("/gna/datadisk/Data/Histology/"
+                           "tracks/ZM_2407/2019-11-06_ZM_2407_001_probe_00_pts.csv"),
+             'output': {'date': '2019-11-06', 'experiment_number': 1, 'name': 'probe_00',
+                        'subject': 'ZM_2407'}},
+            {'input': Path("/gna/2019-12-06_KS023_001_probe01_pts.csv"),
+             'output': {'date': '2019-12-06', 'experiment_number': 1, 'name': 'probe01',
+                        'subject': 'KS023'}},
         ]
         for t in tdata:
             track_file = t['input']
@@ -65,7 +64,8 @@ class TestHistology(unittest.TestCase):
 
 
 # Load in data for ephys alignment testing
-data = np.load(Path(Path(__file__).parent.joinpath('fixtures', 'ephysalignment'), 'alignment_data.npz'), allow_pickle=True)
+data = np.load(Path(Path(__file__).parent.joinpath('fixtures', 'ephysalignment'),
+                    'alignment_data.npz'), allow_pickle=True)
 xyz_picks = data['xyz_picks']
 feature_prev = data['feature_prev']
 track_prev = data['track_prev']
@@ -75,13 +75,15 @@ depths = np.arange(20, 3860, 20) / 1e6
 
 
 class TestsEphysAlignment(unittest.TestCase):
+
     def setUp(self):
         self.ephysalign = EphysAlignment(xyz_picks, brain_atlas=brain_atlas)
         self.feature = self.ephysalign.feature_init
         self.track = self.ephysalign.track_init
 
     def test_no_scaling(self):
-        xyz_channels = self.ephysalign.get_channel_locations(self.feature, self.track, depths=depths)
+        xyz_channels = self.ephysalign.get_channel_locations(self.feature, self.track,
+                                                             depths=depths)
         coords = np.r_[[xyz_picks[-1, :]], [xyz_channels[0, :]]]
         dist_to_fist_electrode = np.around(_cumulative_distance(coords)[-1], 5)
         assert np.isclose(dist_to_fist_electrode, (TIP_SIZE_UM + 20) / 1e6)
@@ -131,7 +133,9 @@ class TestsEphysAlignment(unittest.TestCase):
         fit = np.polyfit(feature_new[1:-1], track_new[1:-1], 1)
         linear_fit = np.around(1 / fit[0], 3)
 
-        feature_new, track_new = self.ephysalign.adjust_extremes_linear(feature_new, track_new, extend_feature=1)
+        feature_new, track_new = self.ephysalign.adjust_extremes_linear(feature_new,
+                                                                        track_new,
+                                                                        extend_feature=1)
 
         region_new, _ = self.ephysalign.scale_histology_regions(feature_new, track_new)
         _, scale_factor = self.ephysalign.get_scale_factor(region_new)
@@ -141,18 +145,21 @@ class TestsEphysAlignment(unittest.TestCase):
 
 
 class TestsEphysReconstruction(unittest.TestCase):
+
     def setUp(self):
-        self.ephysalign = EphysAlignment(xyz_picks, track_prev=track_prev, feature_prev=feature_prev, brain_atlas=brain_atlas)
+        self.ephysalign = EphysAlignment(xyz_picks, track_prev=track_prev,
+                                         feature_prev=feature_prev, brain_atlas=brain_atlas)
         self.feature = self.ephysalign.feature_init
         self.track = self.ephysalign.track_init
 
     def test_channel_locations(self):
-        xyz_channels = self.ephysalign.get_channel_locations(self.feature, self.track, depths=depths)
+        xyz_channels = self.ephysalign.get_channel_locations(self.feature, self.track,
+                                                             depths=depths)
         self.assertTrue(np.all(np.isclose(xyz_channels[0, :], xyz_channels_ref[0])))
         self.assertTrue(np.all(np.isclose(xyz_channels[-1, :], xyz_channels_ref[-1])))
         brain_regions = self.ephysalign.get_brain_locations(xyz_channels)
         self.assertTrue(np.all(np.equal(np.unique(brain_regions.acronym), brain_regions_ref)))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main(exit=False, verbosity=2)

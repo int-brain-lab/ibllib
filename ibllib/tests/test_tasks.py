@@ -1,5 +1,4 @@
 """Test ibllib.pipes.tasks module and Task class."""
-
 import sys
 import re
 import shutil
@@ -24,7 +23,12 @@ one = ONE(**TEST_DB)
 SUBJECT_NAME = 'algernon'
 USER_NAME = 'test_user'
 
-ses_dict = {'subject': SUBJECT_NAME, 'start_time': '2018-04-01T12:48:26.795526', 'number': 1, 'users': [USER_NAME]}
+ses_dict = {
+    'subject': SUBJECT_NAME,
+    'start_time': '2018-04-01T12:48:26.795526',
+    'number': 1,
+    'users': [USER_NAME]
+}
 
 desired_statuses = {
     'Task00': 'Complete',
@@ -33,15 +37,13 @@ desired_statuses = {
     'Task10': 'Complete',
     'Task11': 'Held',
     'TaskIncomplete': 'Incomplete',
-    'TaskGpuLock': 'Waiting',
+    'TaskGpuLock': 'Waiting'
 }
 
 desired_datasets = ['spikes.times.npy', 'spikes.amps.npy', 'spikes.clusters.npy']
-desired_versions = {
-    'spikes.times.npy': 'custom_job00',
-    'spikes.amps.npy': ibllib.__version__,
-    'spikes.clusters.npy': ibllib.__version__,
-}
+desired_versions = {'spikes.times.npy': 'custom_job00',
+                    'spikes.amps.npy': ibllib.__version__,
+                    'spikes.clusters.npy': ibllib.__version__}
 desired_logs = 'Running on machine: testmachine'
 desired_logs_rerun = {
     'Task00': 1,
@@ -50,7 +52,7 @@ desired_logs_rerun = {
     'Task10': 1,
     'Task11': 1,
     'TaskIncomplete': 1,
-    'TaskGpuLock': 2,
+    'TaskGpuLock': 2
 }
 
 
@@ -66,6 +68,7 @@ class Task00(ibllib.pipes.tasks.Task):
 
 #  job that outputs nothing
 class Task01_void(ibllib.pipes.tasks.Task):
+
     def _run(self, overwrite=False):
         out_files = None
         return out_files
@@ -91,8 +94,7 @@ class Task10(ibllib.pipes.tasks.Task):
     def _run(self, overwrite=False):
         out_files = [
             self.session_path.joinpath('alf', 'spikes.amps.npy'),
-            self.session_path.joinpath('alf', 'spikes.clusters.npy'),
-        ]
+            self.session_path.joinpath('alf', 'spikes.clusters.npy')]
         [f.touch() for f in out_files]
         return out_files
 
@@ -124,11 +126,13 @@ class TaskGpuLock(ibllib.pipes.tasks.Task):
 
 #  Job that encounters a GPU lock and is set to Waiting
 class TaskIncomplete(ibllib.pipes.tasks.Task):
+
     def _run(self, overwrite=False):
         self.status = -3
 
 
 class SomePipeline(ibllib.pipes.tasks.Pipeline):
+
     def __init__(self, session_path=None, **kwargs):
         super(SomePipeline, self).__init__(session_path, **kwargs)
         tasks = OrderedDict()
@@ -141,17 +145,20 @@ class SomePipeline(ibllib.pipes.tasks.Pipeline):
         tasks['TaskIncomplete'] = TaskIncomplete(self.session_path)
         tasks['Task10'] = Task10(self.session_path, parents=[tasks['Task00']])
         # When both its parents Complete, this task should be set to Waiting and should finally complete
-        tasks['Task11'] = Task11(self.session_path, parents=[tasks['Task02_error'], tasks['Task00']])
+        tasks['Task11'] = Task11(self.session_path, parents=[tasks['Task02_error'],
+                                                             tasks['Task00']])
         self.tasks = tasks
 
 
 class TestPipelineAlyx(unittest.TestCase):
+
     def setUp(self) -> None:
         self.td = tempfile.TemporaryDirectory()
         self.ses_dict = ses_dict.copy()
         self.ses_dict['number'] = np.random.randint(1, 999)
         ses = one.alyx.rest('sessions', 'create', data=self.ses_dict)
-        session_path = Path(self.td.name).joinpath(ses['subject'], ses['start_time'][:10], str(ses['number']).zfill(3))
+        session_path = Path(self.td.name).joinpath(
+            ses['subject'], ses['start_time'][:10], str(ses['number']).zfill(3))
         session_path.joinpath('alf').mkdir(exist_ok=True, parents=True)
         self.session_path = session_path
         self.eid = ses['url'][-36:]
@@ -181,9 +188,8 @@ class TestPipelineAlyx(unittest.TestCase):
         self.assertTrue(len(tasks) == NTASKS)
 
         # run them and make sure their statuses got updated appropriately
-        with mock.patch.object(
-            ibllib.pipes.tasks.Task, '_lock_file_path', return_value=Path(self.session_path).joinpath('.gpu_lock')
-        ):
+        with mock.patch.object(ibllib.pipes.tasks.Task, '_lock_file_path',
+                               return_value=Path(self.session_path).joinpath('.gpu_lock')):
             task_deck, datasets = pipeline.run(machine='testmachine')
             self.assertCountEqual(desired_statuses.items(), [(t['name'], t['status']) for t in task_deck])
             self.assertEqual(set(d['name'] for d in datasets), set(desired_datasets))
@@ -204,7 +210,8 @@ class TestPipelineAlyx(unittest.TestCase):
         self.assertTrue(all(check_statuses))
 
         # test the rerun option
-        with mock.patch.object(ibllib.pipes.tasks.Task, '_lock_file_path', return_value=Path(self.td.name).joinpath('.gpu_lock')):
+        with mock.patch.object(ibllib.pipes.tasks.Task, '_lock_file_path',
+                               return_value=Path(self.td.name).joinpath('.gpu_lock')):
             task_deck, dsets = pipeline.rerun_failed(machine='testmachine')
         task_02 = next(t for t in task_deck if t['name'] == 'Task02_error')
         self.assertEqual('Complete', task_02['status'])
@@ -219,15 +226,13 @@ class TestPipelineAlyx(unittest.TestCase):
         self.assertTrue(all(check_rerun))
 
         # Rerun without clobber and check that logs are not overwritten
-        with mock.patch.object(ibllib.pipes.tasks.Task, '_lock_file_path', return_value=Path(self.td.name).joinpath('.gpu_lock')):
+        with mock.patch.object(ibllib.pipes.tasks.Task, '_lock_file_path',
+                               return_value=Path(self.td.name).joinpath('.gpu_lock')):
             task_deck, dsets = pipeline.rerun_failed(machine='testmachine', clobber=False)
-        check_logs = (
-            t['log'].count(desired_logs) == desired_logs_rerun[t['name']]
-            if t['log']
-            else t['log'] == desired_logs_rerun[t['name']]
-            for t in task_deck
-        )
-        check_rerun = ('===RERUN===' in t['log'] if desired_logs_rerun[t['name']] == 2 else True for t in task_deck)
+        check_logs = (t['log'].count(desired_logs) == desired_logs_rerun[t['name']] if t['log']
+                      else t['log'] == desired_logs_rerun[t['name']] for t in task_deck)
+        check_rerun = ('===RERUN===' in t['log'] if desired_logs_rerun[t['name']] == 2
+                       else True for t in task_deck)
         self.assertTrue(all(check_logs))
         self.assertTrue(all(check_rerun))
 
@@ -242,6 +247,7 @@ class GpuTask(ibllib.pipes.tasks.Task):
 
 
 class TestLocks(unittest.TestCase):
+
     def test_gpu_lock_and_local_data_handler(self) -> None:
         # Remove any existing locks first
 
@@ -250,7 +256,8 @@ class TestLocks(unittest.TestCase):
             session_path.joinpath('alf').mkdir(parents=True)
             task = GpuTask(session_path, one=None, location='local')
             # Patch _lock_file_path method to point to different lock file location
-            with mock.patch.object(ibllib.pipes.tasks.Task, '_lock_file_path', return_value=Path(td).joinpath('.gpu_lock')):
+            with mock.patch.object(ibllib.pipes.tasks.Task, '_lock_file_path',
+                                   return_value=Path(td).joinpath('.gpu_lock')):
                 self.assertFalse(task.is_locked())
                 task.run()
                 self.assertEqual(0, task.status)
@@ -261,7 +268,7 @@ class TestLocks(unittest.TestCase):
                 self.assertEqual(-2, task.status)
                 self.assertTrue(task.is_locked())
                 # test the time out feature
-                task.time_out_secs = -1
+                task.time_out_secs = - 1
                 task._make_lock_file()
                 self.assertFalse(task.is_locked())
                 task.run()
@@ -269,12 +276,12 @@ class TestLocks(unittest.TestCase):
 
 
 class TestExperimentDescriptionRegisterRaw(unittest.TestCase):
+
     def setUp(self) -> None:
         self.tempdir = tempfile.TemporaryDirectory()
         self.addCleanup(self.tempdir.cleanup)
         session_path = Path(self.tempdir.name).joinpath(
-            SUBJECT_NAME, ses_dict['start_time'][:10], str(ses_dict['number']).zfill(3)
-        )
+            SUBJECT_NAME, ses_dict['start_time'][:10], str(ses_dict['number']).zfill(3))
         session_path.mkdir(parents=True)
         # Check for session on Alyx
         with no_cache(one.alyx):
@@ -287,7 +294,8 @@ class TestExperimentDescriptionRegisterRaw(unittest.TestCase):
                 ses = one.alyx.rest('sessions', 'create', data=ses_dict)
                 self.addCleanup(one.alyx.rest, 'sessions', 'delete', id=eid)
                 eid = ses['id']
-        fixture = Path(__file__).parent.joinpath('fixtures', 'io', '_ibl_experiment.description.yaml')
+        fixture = Path(__file__).parent.joinpath(
+            'fixtures', 'io', '_ibl_experiment.description.yaml')
         shutil.copy(fixture, session_path.joinpath('_ibl_experiment.description.yaml'))
         self.session_path, self.eid = session_path, eid
 
@@ -301,19 +309,17 @@ class TestExperimentDescriptionRegisterRaw(unittest.TestCase):
         ses = one.alyx.rest('sessions', 'read', id=self.eid, no_cache=True)
 
         # Check keys added to JSON
-        expected = {
-            '_widefield': None,
-            '_microphone_foo': None,
-            '_microphone_bar': None,
-            '_neuropixel_raw_probe00': None,
-            '_neuropixel_spike_sorting_probe00': None,
-            '_neuropixel_alignment_probe00': None,
-            '_neuropixel_raw_probe01': None,
-            '_neuropixel_spike_sorting_probe01': None,
-            '_neuropixel_alignment_probe01': None,
-            '_ephysChoiceWorld_01': None,
-            '_passiveChoiceWorld_00': None,
-        }
+        expected = {'_widefield': None,
+                    '_microphone_foo': None,
+                    '_microphone_bar': None,
+                    '_neuropixel_raw_probe00': None,
+                    '_neuropixel_spike_sorting_probe00': None,
+                    '_neuropixel_alignment_probe00': None,
+                    '_neuropixel_raw_probe01': None,
+                    '_neuropixel_spike_sorting_probe01': None,
+                    '_neuropixel_alignment_probe01': None,
+                    '_ephysChoiceWorld_01': None,
+                    '_passiveChoiceWorld_00': None}
         self.assertDictEqual(expected, ses['json'].get('sign_off_checklist', {}))
 
         # Run again without a custom sign off for neuropixels
@@ -322,15 +328,13 @@ class TestExperimentDescriptionRegisterRaw(unittest.TestCase):
         task.run()
 
         ses = one.alyx.rest('sessions', 'read', id=self.eid, no_cache=True)
-        expected = {
-            '_widefield': None,
-            '_microphone_foo': None,
-            '_microphone_bar': None,
-            '_neuropixel_probe00': None,
-            '_neuropixel_probe01': None,
-            '_ephysChoiceWorld_01': None,
-            '_passiveChoiceWorld_00': None,
-        }
+        expected = {'_widefield': None,
+                    '_microphone_foo': None,
+                    '_microphone_bar': None,
+                    '_neuropixel_probe00': None,
+                    '_neuropixel_probe01': None,
+                    '_ephysChoiceWorld_01': None,
+                    '_passiveChoiceWorld_00': None}
         self.assertDictEqual(expected, ses['json'].get('sign_off_checklist', {}))
 
 
@@ -365,22 +369,18 @@ class TestTask(unittest.TestCase):
         task = Task00(self.session_path)
         self.assertRaises(RuntimeError, task._input_files_to_register)
         I = ExpectedDataset.input  # noqa
-        task.input_files = [
-            I('register.optional.ext', 'alf', False, True),
-            I('register.optional_foo.ext', 'alf', False, True),
-            I('register.required.ext', 'alf', True, True),
-            I('ignore.required.ext', 'alf', True),
-            I('ignore.optional.ext', 'alf', False),
-        ]
+        task.input_files = [I('register.optional.ext', 'alf', False, True),
+                            I('register.optional_foo.ext', 'alf', False, True),
+                            I('register.required.ext', 'alf', True, True),
+                            I('ignore.required.ext', 'alf', True),
+                            I('ignore.optional.ext', 'alf', False)]
         self.session_path.joinpath('alf').mkdir()
         for f in task.input_files:
             self.session_path.joinpath(f.glob_pattern).touch()
         files = task._input_files_to_register(assert_all_exist=True)
-        expected = [
-            self.session_path.joinpath('alf', 'register.required.ext'),
-            self.session_path.joinpath('alf', 'register.optional.ext'),
-            self.session_path.joinpath('alf', 'register.optional_foo.ext'),
-        ]
+        expected = [self.session_path.joinpath('alf', 'register.required.ext'),
+                    self.session_path.joinpath('alf', 'register.optional.ext'),
+                    self.session_path.joinpath('alf', 'register.optional_foo.ext')]
         self.assertCountEqual(files, expected)
         expected[2].unlink()
         # assertNoLogs added in py 3.10
@@ -394,10 +394,9 @@ class TestTask(unittest.TestCase):
         self.assertEqual(files, expected[1:2])
         self.assertRaises(AssertionError, task._input_files_to_register, assert_all_exist=True)
         # Test with wildcards
-        task.input_files = [
-            I('foo.bar.*', 'alf', True, True),
-            I('bar.baz.npy', 'alf', True, True) | I('baz.foo.npy', 'alf', True, True),
-        ]
+        task.input_files = [I('foo.bar.*', 'alf', True, True),
+                            I('bar.baz.npy', 'alf', True, True) |
+                            I('baz.foo.npy', 'alf', True, True)]
         with self.assertLogs(ibllib.pipes.tasks.__name__, level='ERROR') as cm:
             self.assertFalse(task._input_files_to_register(assert_all_exist=False))
             for f in ('alf/foo.bar.*', 'alf/bar.baz.npy', 'alf/baz.foo.npy'):

@@ -9,7 +9,6 @@ from ibllib.io.extractors import base
 
 class TestExtractorMaps(unittest.TestCase):
     """Tests for functions that return Bpod extractor classes."""
-
     def setUp(self):
         # Store original __import__
         self.orig_import = __import__
@@ -63,7 +62,7 @@ class TestExtractorMaps(unittest.TestCase):
     def test_protocol2extractor(self):
         """Test ibllib.io.extractors.base.protocol2extractor function."""
         # Test fuzzy match
-        ((proc, expected),) = self.custom_extractors.items()
+        (proc, expected), = self.custom_extractors.items()
         with patch('builtins.__import__', side_effect=self.import_mock):
             extractor = base.protocol2extractor('_mw_' + proc)
             self.assertEqual(expected, extractor)

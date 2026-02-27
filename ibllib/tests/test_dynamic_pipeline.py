@@ -14,6 +14,7 @@ from ibllib.tests.fixtures.utils import populate_task_settings
 
 
 class TestCreateLegacyAcqusitionDescriptions(unittest.TestCase):
+
     def test_legacy_biased(self):
         session_path = Path(ibllib.tests.__file__).parent.joinpath('extractors', 'data', 'session_biased_ge5')
         ad = dyn.acquisition_description_legacy_session(session_path)
@@ -47,14 +48,12 @@ class TestGetTrialsTasks(unittest.TestCase):
         self.tempdir = Path(tmpdir.name).resolve()
         self.session_path_dynamic = self.tempdir / 'subject' / '2023-01-01' / '001'
         self.session_path_dynamic.mkdir(parents=True)
-        description = {
-            'version': '1.0.0',
-            'sync': {'nidq': {'collection': 'raw_ephys_data', 'extension': 'bin', 'acquisition_software': 'spikeglx'}},
-            'tasks': [
-                {'ephysChoiceWorld': {'task_collection': 'raw_task_data_00'}},
-                {'passiveChoiceWorld': {'task_collection': 'raw_task_data_01'}},
-            ],
-        }
+        description = {'version': '1.0.0',
+                       'sync': {'nidq': {'collection': 'raw_ephys_data', 'extension': 'bin', 'acquisition_software': 'spikeglx'}},
+                       'tasks': [
+                           {'ephysChoiceWorld': {'task_collection': 'raw_task_data_00'}},
+                           {'passiveChoiceWorld': {'task_collection': 'raw_task_data_01'}},
+                       ]}
         self.description = description
         with open(self.session_path_dynamic / '_ibl_experiment.description.yaml', 'w') as fp:
             yaml.safe_dump(description, fp)
@@ -148,7 +147,6 @@ class TestGetTrialsTasks(unittest.TestCase):
 
 class TestMisc(unittest.TestCase):
     """Test miscellaneous functions in pipes.dynamic_pipeline."""
-
     def test_sync_label(self):
         """Test pipes.dynamic_pipeline._sync_label function."""
         self.assertEqual('nidq', dyn._sync_label('nidq'))

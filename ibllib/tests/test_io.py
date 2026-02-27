@@ -19,8 +19,14 @@ import ibllib.io.raw_daq_loaders as raw_daq
 
 
 class TestsParams(unittest.TestCase):
+
     def setUp(self):
-        self.par_dict = {'A': 'tata', 'O': 'toto', 'I': 'titi', 'num': 15, 'liste': [1, 'turlu'], 'apath': Path('/gna/gna/gna')}
+        self.par_dict = {'A': 'tata',
+                         'O': 'toto',
+                         'I': 'titi',
+                         'num': 15,
+                         'liste': [1, 'turlu'],
+                         'apath': Path('/gna/gna/gna')}
         self.parstr = 'toto'
         params.write(self.parstr, self.par_dict)
         params.write(self.parstr, params.from_dict(self.par_dict))
@@ -37,24 +43,28 @@ class TestsParams(unittest.TestCase):
     def test_param_get_file(self):
         home_dir = Path(params.getfile(self.parstr)).parent
         # straight case the file is .{str} in the home directory
-        assert home_dir.joinpath('.toto') == Path(params.getfile(self.parstr))
+        assert home_dir.joinpath(".toto") == Path(params.getfile(self.parstr))
         # straight case the file is .{str} in the home directory
-        assert home_dir.joinpath('.toto') == Path(params.getfile('.toto'))
+        assert home_dir.joinpath(".toto") == Path(params.getfile(".toto"))
         # subfolder case
-        assert home_dir.joinpath('.toto', '.titi') == Path(params.getfile('toto/titi'))
+        assert home_dir.joinpath(".toto", ".titi") == Path(params.getfile("toto/titi"))
 
     def test_new_default_param(self):
         # in this case an updated version of the codes brings in a new parameter
-        default = {'A': 'tata2', 'O': 'toto2', 'I': 'titi2', 'E': 'tete2', 'num': 15, 'liste': [1, 'turlu']}
-        expected_result = {
-            'A': 'tata',
-            'O': 'toto',
-            'I': 'titi',
-            'num': 15,
-            'liste': [1, 'turlu'],
-            'apath': str(Path('/gna/gna/gna')),
-            'E': 'tete2',
-        }
+        default = {'A': 'tata2',
+                   'O': 'toto2',
+                   'I': 'titi2',
+                   'E': 'tete2',
+                   'num': 15,
+                   'liste': [1, 'turlu']}
+        expected_result = {'A': 'tata',
+                           'O': 'toto',
+                           'I': 'titi',
+                           'num': 15,
+                           'liste': [1, 'turlu'],
+                           'apath': str(Path('/gna/gna/gna')),
+                           'E': 'tete2',
+                           }
         par2 = params.read(self.parstr, default=default)
         self.assertCountEqual(par2.as_dict(), expected_result)
         # on the next path the parameter has been added to the param file
@@ -87,11 +97,11 @@ class TestsParams(unittest.TestCase):
 
 
 class TestsRawDataLoaders(unittest.TestCase):
+
     def setUp(self):
         self.tempfile = tempfile.NamedTemporaryFile(delete=False)
         self.bin_session_path = Path(__file__).parent.joinpath(
-            'fixtures', 'io', 'data_loaders', '_iblrig_test_mouse_2020-01-01_001'
-        )
+            'fixtures', 'io', 'data_loaders', "_iblrig_test_mouse_2020-01-01_001")
 
     def testFlagFileRead(self):
         # empty file should return True
@@ -117,7 +127,8 @@ class TestsRawDataLoaders(unittest.TestCase):
         file_list_2 = ['turltu']
         # also makes sure that if a string is provided it works
         flags.write_flag_file(self.tempfile.name, file_list_2[0])
-        self.assertEqual(set(flags.read_flag_file(self.tempfile.name)), set(file_list + file_list_2))
+        self.assertEqual(set(flags.read_flag_file(self.tempfile.name)),
+                         set(file_list + file_list_2))
 
         # writing again keeps unique file values
         flags.write_flag_file(self.tempfile.name, file_list_2[0])
@@ -138,7 +149,8 @@ class TestsRawDataLoaders(unittest.TestCase):
 
         # with an existing empty file, writing filelist returns the list if clobber
         flags.write_flag_file(self.tempfile.name, ['file1', 'file2', 'file3'], clobber=True)
-        self.assertEqual(set(flags.read_flag_file(self.tempfile.name)), set(['file1', 'file2', 'file3']))
+        self.assertEqual(set(flags.read_flag_file(self.tempfile.name)),
+                         set(['file1', 'file2', 'file3']))
 
         # test the removal of a file within the list
         flags.excise_flag_file(self.tempfile.name, removed_files='file1')
@@ -192,7 +204,9 @@ class TestsRawDataLoaders(unittest.TestCase):
         :return:
         """
         session = Path(__file__).parent.joinpath('extractors', 'data', 'session_ephys')
-        session2 = Path(__file__).parent.joinpath('fixtures', 'io', 'data_loaders', '_iblrig_test_mouse_2020-01-01_001')
+        session2 = Path(__file__).parent.joinpath(
+            'fixtures', 'io', 'data_loaders', '_iblrig_test_mouse_2020-01-01_001'
+        )
         gpio = raw.load_camera_gpio(session, 'body', as_dicts=True)
         gpio2 = raw.load_camera_gpio(session2, 'left', as_dicts=True)
         self.assertEqual(len(gpio), 4)  # One dict per pin
@@ -220,7 +234,7 @@ class TestsRawDataLoaders(unittest.TestCase):
             # Test loads file with UUID
             did = uuid.uuid4()  # Random uuid
             filename = session_path / 'raw_video_data' / f'_iblrig_{side}Camera.GPIO.{did}.bin'
-            np.full(1000, 1.87904819e09, dtype=np.float64).tofile(filename)
+            np.full(1000, 1.87904819e+09, dtype=np.float64).tofile(filename)
             with self.assertLogs('ibllib', level='WARNING'):
                 raw.load_camera_gpio(session_path, side, as_dicts=True)
 
@@ -259,7 +273,6 @@ class TestsRawDataLoaders(unittest.TestCase):
 
     def test_load_camera_frameData(self):
         import pandas as pd
-
         fd_raw = raw.load_camera_frameData(self.bin_session_path, raw=True)
         fd = raw.load_camera_frameData(self.bin_session_path)
         # Wrong camera input file not found
@@ -272,15 +285,16 @@ class TestsRawDataLoaders(unittest.TestCase):
         self.assertTrue(isinstance(fd, pd.DataFrame))
         self.assertTrue(isinstance(fd_raw, pd.DataFrame))
         # Column names
-        df_cols = ['Timestamp', 'embeddedTimeStamp', 'embeddedFrameCounter', 'embeddedGPIOPinState']
+        df_cols = ["Timestamp", "embeddedTimeStamp",
+                   "embeddedFrameCounter", "embeddedGPIOPinState"]
         self.assertTrue(np.all([x in fd.columns for x in df_cols]))
         self.assertTrue(np.all([x in fd_raw.columns for x in df_cols]))
         # Column types
         parsed_dtypes = {
-            'Timestamp': np.float64,
-            'embeddedTimeStamp': np.float64,
-            'embeddedFrameCounter': np.int64,
-            'embeddedGPIOPinState': object,
+            "Timestamp": np.float64,
+            "embeddedTimeStamp": np.float64,
+            "embeddedFrameCounter": np.int64,
+            "embeddedGPIOPinState": object
         }
         self.assertTrue(fd.dtypes.to_dict() == parsed_dtypes)
         self.assertTrue(all([x == np.int64 for x in fd_raw.dtypes]))
@@ -303,6 +317,7 @@ class TestsRawDataLoaders(unittest.TestCase):
 
 
 class TestsMisc(unittest.TestCase):
+
     def setUp(self):
         self._tdir = tempfile.TemporaryDirectory()
         # self.addClassCleanup(tmpdir.cleanup)  # py3.8
@@ -359,15 +374,14 @@ class TestVideo(unittest.TestCase):
         if cls.one._cache.sessions.empty:
             cls.one.load_cache()
         if 'public' in cls.one.alyx._par.HTTP_DATA_SERVER:
-            cls.one.alyx._par = cls.one.alyx._par.set('HTTP_DATA_SERVER', cls.one.alyx._par.HTTP_DATA_SERVER.rsplit('/', 1)[0])
+            cls.one.alyx._par = cls.one.alyx._par.set(
+                'HTTP_DATA_SERVER', cls.one.alyx._par.HTTP_DATA_SERVER.rsplit('/', 1)[0])
 
     def setUp(self) -> None:
         self.eid = '8dd0fcb0-1151-4c97-ae35-2e2421695ad7'
-        self.url = (
-            'https://ibl.flatironinstitute.org/mainenlab/'
-            'Subjects/ZM_1743/2019-06-14/001/raw_video_data/'
-            '_iblrig_leftCamera.raw.71cfeef2-2aa5-46b5-b88f-ca07e3d92474.mp4'
-        )
+        self.url = ('https://ibl.flatironinstitute.org/mainenlab/'
+                    'Subjects/ZM_1743/2019-06-14/001/raw_video_data/'
+                    '_iblrig_leftCamera.raw.71cfeef2-2aa5-46b5-b88f-ca07e3d92474.mp4')
 
     def test_label_from_path(self):
         # Test file path
@@ -443,7 +457,7 @@ class TestSessionParams(unittest.TestCase):
             'video': '',
             'ephys': dict(devices={'neuropixel': self.fixture['devices']['neuropixel']}),
             'behaviour': dict(devices={'microphone': self.fixture['devices']['microphone']}),
-            'sync': dict(sync={'nidq': sync}),
+            'sync': dict(sync={'nidq': sync})
         }
 
         # the behaviour computer contains the task, project and procedure keys
@@ -518,11 +532,13 @@ class TestSessionParams(unittest.TestCase):
 
     def test_patch_data(self):
         """Test for session_params._patch_file function."""
-        with patch(session_params.__name__ + '.SPEC_VERSION', '1.0.0'), self.assertLogs(session_params.__name__, logging.WARNING):
+        with patch(session_params.__name__ + '.SPEC_VERSION', '1.0.0'), \
+                self.assertLogs(session_params.__name__, logging.WARNING):
             data = session_params._patch_file({'version': '1.1.0'})
         self.assertEqual(data, {'version': '1.0.0'})
         # Check tasks dicts separated into lists
-        unpatched = {'version': '0.0.1', 'tasks': {'fooChoiceWorld': {1: '1'}, 'barChoiceWorld': {2: '2'}}}
+        unpatched = {'version': '0.0.1', 'tasks': {
+            'fooChoiceWorld': {1: '1'}, 'barChoiceWorld': {2: '2'}}}
         data = session_params._patch_file(unpatched)
         self.assertIsInstance(data['tasks'], list)
         self.assertEqual([['fooChoiceWorld'], ['barChoiceWorld']], list(map(list, data['tasks'])))
@@ -541,18 +557,15 @@ class TestSessionParams(unittest.TestCase):
             'probe01': 'raw_ephys_data/probe01',
             'nidq': 'raw_ephys_data',
             'passiveChoiceWorld': 'raw_passive_data',
-            'ephysChoiceWorld': 'raw_behavior_data',
+            'ephysChoiceWorld': 'raw_behavior_data'
         }
         self.assertCountEqual(expected, collections)
 
     def test_get_collections_repeat_protocols(self):
-        tasks = dict(
-            tasks=[
-                {'passiveChoiceWorld': {'collection': 'raw_passive_data', 'sync_label': 'bpod'}},
-                {'ephysChoiceWorld': {'collection': 'raw_behavior_data', 'sync_label': 'bpod'}},
-                {'passiveChoiceWorld': {'collection': 'raw_passive_data_bis'}},
-            ]
-        )
+        tasks = dict(tasks=[
+            {'passiveChoiceWorld': {'collection': 'raw_passive_data', 'sync_label': 'bpod'}},
+            {'ephysChoiceWorld': {'collection': 'raw_behavior_data', 'sync_label': 'bpod'}},
+            {'passiveChoiceWorld': {'collection': 'raw_passive_data_bis'}}])
         collections = session_params.get_collections(tasks)
         self.assertEqual(set(collections['passiveChoiceWorld']), set(['raw_passive_data_bis', 'raw_passive_data']))
         collections = session_params.get_collections(tasks, flat=True)
@@ -600,7 +613,6 @@ class TestSessionParams(unittest.TestCase):
 
 class TestRawDaqLoaders(unittest.TestCase):
     """Tests for raw_daq_loaders module"""
-
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmpdir.cleanup)
@@ -611,20 +623,17 @@ class TestRawDaqLoaders(unittest.TestCase):
         self.n_ttl = 6
         pulse_width = int(np.floor(50 * Fs))
         for i in np.arange(1, N, int(np.floor(N / self.n_ttl))):
-            a0_clean[i : i + pulse_width] = 1
+            a0_clean[i:i + pulse_width] = 1
         a0 = (a0_clean * np.full(N, 5)) + np.random.rand(N) + 1  # 0 -> 5V w/ noise and 1V DC offset
         ctr0 = np.cumsum(a0_clean)  # Counter channel, e.g. [0, 0, 0, 1, 1, 2, 3, 3, 3, 3, [...] n]
         ctr1 = np.cumsum(a0_clean * np.random.choice([1, -1], N))  # Position channel e.g. [0, 1, 2, 1, ...]
 
         self.timeline = {'timestamps': np.arange(0, N, Fs), 'raw': np.vstack([a0, ctr0, ctr1]).T}
-        self.meta = {
-            'daqSampleRate': Fs,
-            'inputs': [
-                {'name': 'bpod', 'arrayColumn': 1, 'measurement': 'Voltage', 'daqChannelID': 'ai0'},
-                {'name': 'neuralFrames', 'arrayColumn': 2, 'measurement': 'EdgeCount', 'daqChannelID': 'ctr0'},
-                {'name': 'rotaryEncoder', 'arrayColumn': 3, 'measurement': 'Position', 'daqChannelID': 'ctr1'},
-            ],
-        }
+        self.meta = {'daqSampleRate': Fs, 'inputs': [
+            {'name': 'bpod', 'arrayColumn': 1, 'measurement': 'Voltage', 'daqChannelID': 'ai0'},
+            {'name': 'neuralFrames', 'arrayColumn': 2, 'measurement': 'EdgeCount', 'daqChannelID': 'ctr0'},
+            {'name': 'rotaryEncoder', 'arrayColumn': 3, 'measurement': 'Position', 'daqChannelID': 'ctr1'}
+        ]}
         # FIXME Because of non-standard ALF naming we cannot use save_object_npy for this purpose
         # alfio.save_object_npy(self.tmpdir.name, self.timeline, 'DAQ data', namespace='timeline')
         for k, v in self.timeline.items():
@@ -645,12 +654,14 @@ class TestRawDaqLoaders(unittest.TestCase):
         fronts = sync['polarities'][sync['channels'] == 0]
         self.assertEqual(1, fronts[0])
         # Check polarities alternate between 1 and -1
-        self.assertTrue(np.all(np.unique(np.cumsum(fronts)) == [0, 1]) and np.all(np.unique(fronts) == [-1, 1]))
+        self.assertTrue(
+            np.all(np.unique(np.cumsum(fronts)) == [0, 1]) and np.all(np.unique(fronts) == [-1, 1])
+        )
         # Check edge count channel sync
         fronts = sync['polarities'][sync['channels'] == 1]
         # Check a few timestamps
         times = sync['times'][sync['channels'] == 1]
-        np.testing.assert_array_almost_equal(times[:5], np.arange(5) + 1.0)
+        np.testing.assert_array_almost_equal(times[:5], np.arange(5) + 1.)
         # Because of the way we made the data, the number of fronts should == pulse_width * n_ttl
         # Minus one from unique values because one of those values will be zero
         self.assertEqual(len(np.unique(self.timeline['raw'][:, 1])) - 1, len(fronts))
@@ -664,7 +675,7 @@ class TestRawDaqLoaders(unittest.TestCase):
         chmap['unknown'] = 2  # Add channel that's not in meta file
         with self.assertLogs(logging.getLogger('ibllib.io.raw_daq_loaders'), logging.WARNING) as log:
             raw_daq.extract_sync_timeline(self.tmpdir.name, chmap)
-            (record,) = log.records
+            record, = log.records
             self.assertIn('unknown', record.message)
 
         # Check measurement type validation
@@ -679,7 +690,7 @@ class TestRawDaqLoaders(unittest.TestCase):
         expected = {
             'SYSTEM': 'timeline',
             'SYNC_WIRING_ANALOG': {'ai0': 'bpod'},
-            'SYNC_WIRING_DIGITAL': {'ctr0': 'neuralFrames', 'ctr1': 'rotaryEncoder'},
+            'SYNC_WIRING_DIGITAL': {'ctr0': 'neuralFrames', 'ctr1': 'rotaryEncoder'}
         }
         self.assertDictEqual(expected, wiring)
         wiring, outpath = raw_daq.timeline_meta2wiring(self.tmpdir.name, save=True)

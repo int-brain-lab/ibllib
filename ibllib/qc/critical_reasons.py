@@ -5,7 +5,6 @@ Includes a GUI to prompt experimenter for reason for marking session/insertion a
 Choices are listed in the global variables. Multiple reasons can be selected.
 Places info in Alyx session note in a format that is machine retrievable (text->json).
 """
-
 import abc
 import logging
 import json
@@ -93,11 +92,9 @@ def main(uuid, alyx=None):
     elif len(ins_list) > 0 and len(sess_list) == 0:  # insertion
         note = CriticalInsertionNote(uuid, alyx)
     else:
-        raise ValueError(
-            f'Inadequate number of session (n={len(sess_list)}) '
-            f'or insertion (n={len(ins_list)}) found for uuid {uuid}.'
-            f'The query output should be of length 1.'
-        )
+        raise ValueError(f'Inadequate number of session (n={len(sess_list)}) '
+                         f'or insertion (n={len(ins_list)}) found for uuid {uuid}.'
+                         f'The query output should be of length 1.')
 
     note.upload_note()
 
@@ -164,10 +161,8 @@ class Note(abc.ABC):
         elif self.alyx.rest('insertions', 'list', id=self.uuid):
             content_type = 'probeinsertion'
         else:
-            raise ValueError(
-                f'Content type cannot be recognised from {self.uuid}. '
-                'Specify on initialistion e.g Note(uuid, alyx, content_type="subject"'
-            )
+            raise ValueError(f'Content type cannot be recognised from {self.uuid}. '
+                             'Specify on initialistion e.g Note(uuid, alyx, content_type="subject"')
         return content_type
 
     def describe(self):
@@ -223,12 +218,18 @@ class Note(abc.ABC):
 
     def _create_note(self, text):
 
-        data = {'user': self.alyx.user, 'content_type': self.content_type, 'object_id': self.uuid, 'text': f'{text}'}
+        data = {'user': self.alyx.user,
+                'content_type': self.content_type,
+                'object_id': self.uuid,
+                'text': f'{text}'}
         self.alyx.rest('notes', 'create', data=data)
 
     def _update_note(self, note_id, text):
 
-        data = {'user': self.alyx.user, 'content_type': self.content_type, 'object_id': self.uuid, 'text': f'{text}'}
+        data = {'user': self.alyx.user,
+                'content_type': self.content_type,
+                'object_id': self.uuid,
+                'text': f'{text}'}
         self.alyx.rest('notes', 'partial_update', id=note_id, data=data)
 
     def _delete_note(self, note_id):
@@ -265,11 +266,9 @@ class Note(abc.ABC):
         :return:
         """
 
-        prompt = (
-            f'{self.extra_prompt} '
-            f'\n {self.numbered_descriptions()} \n '
-            f'and enter the corresponding numbers separated by commas, e.g. 1,3 -> enter: '
-        )
+        prompt = f'{self.extra_prompt} ' \
+                 f'\n {self.numbered_descriptions()} \n ' \
+                 f'and enter the corresponding numbers separated by commas, e.g. 1,3 -> enter: '
 
         ans = input(prompt).strip().lower()
 
@@ -321,7 +320,11 @@ class CriticalNote(Note):
     """
 
     def format_note(self, **kwargs):
-        note_text = {'title': self.note_title, 'reasons_selected': self.selected_reasons, 'reason_for_other': self.other_reason}
+        note_text = {
+            "title": self.note_title,
+            "reasons_selected": self.selected_reasons,
+            "reason_for_other": self.other_reason
+        }
         return json.dumps(note_text)
 
     def update_existing_note(self, notes, **kwargs):
@@ -340,7 +343,8 @@ class CriticalNote(Note):
 
     def delete_note_prompt(self, notes):
 
-        prompt = f'You are about to delete {len(notes)} existing notes; do you want to proceed? y/n: '
+        prompt = f'You are about to delete {len(notes)} existing notes; ' \
+                 f'do you want to proceed? y/n: '
 
         ans = input(prompt).strip().lower()
 
@@ -372,9 +376,18 @@ class CriticalInsertionNote(CriticalNote):
     >>> note.upload_note(nums='1,4', other_reason='lots of bad channels')
     """
 
-    descriptions_gui = ['Noise and artifact', 'Drift', 'Poor neural yield', 'Brain Damage', 'Other']
+    descriptions_gui = [
+        'Noise and artifact',
+        'Drift',
+        'Poor neural yield',
+        'Brain Damage',
+        'Other'
+    ]
 
-    descriptions = ['Histological images missing', 'Track not visible on imaging data']
+    descriptions = [
+        'Histological images missing',
+        'Track not visible on imaging data'
+    ]
 
     @property
     def default_descriptions(self):
@@ -461,31 +474,31 @@ class SignOffNote(Note):
         json = self.session['json']
         sign_off_checklist = json.get('sign_off_checklist', None)
         if sign_off_checklist is None:
-            sign_off_checklist = {
-                self.sign_off_key: {'date': self.datetime_key.split('_')[0], 'user': self.datetime_key.split('_')[1]}
-            }
+            sign_off_checklist = {self.sign_off_key: {'date': self.datetime_key.split('_')[0],
+                                                      'user': self.datetime_key.split('_')[1]}}
         else:
-            sign_off_checklist[self.sign_off_key] = {
-                'date': self.datetime_key.split('_')[0],
-                'user': self.datetime_key.split('_')[1],
-            }
+            sign_off_checklist[self.sign_off_key] = {'date': self.datetime_key.split('_')[0],
+                                                     'user': self.datetime_key.split('_')[1]}
 
         json['sign_off_checklist'] = sign_off_checklist
 
-        self.alyx.json_field_update('sessions', self.uuid, 'json', data=json)
+        self.alyx.json_field_update("sessions", self.uuid, 'json', data=json)
 
     def format_note(self, **kwargs):
 
         note_text = {
-            'title': self.note_title,
-            f'{self.datetime_key}': {'reasons_selected': self.selected_reasons, 'reason_for_other': self.other_reason},
+            "title": self.note_title,
+            f'{self.datetime_key}': {"reasons_selected": self.selected_reasons,
+                                     "reason_for_other": self.other_reason}
         }
 
         return json.dumps(note_text)
 
     def format_existing_note(self, orignal_note):
 
-        extra_note = {f'{self.datetime_key}': {'reasons_selected': self.selected_reasons, 'reason_for_other': self.other_reason}}
+        extra_note = {f'{self.datetime_key}': {"reasons_selected": self.selected_reasons,
+                                               "reason_for_other": self.other_reason}
+                      }
 
         orignal_note.update(extra_note)
 
@@ -509,6 +522,7 @@ class SignOffNote(Note):
 
 
 class TaskSignOffNote(SignOffNote):
+
     """
     Class for signing off a task part of a session and optionally adding a related explanation note.
 
@@ -537,11 +551,12 @@ class TaskSignOffNote(SignOffNote):
         'raw trial data does not exist',
         'wheel data corrupt',
         'task data could not be synced',
-        'stimulus timings unreliable',
+        'stimulus timings unreliable'
     ]
 
 
 class PassiveSignOffNote(SignOffNote):
+
     """
     Class for signing off a passive part of a session and optionally adding a related explanation note.
 
@@ -576,6 +591,7 @@ class PassiveSignOffNote(SignOffNote):
 
 
 class VideoSignOffNote(SignOffNote):
+
     """
     Class for signing off a video part of a session and optionally adding a related explanation note.
 
@@ -611,6 +627,7 @@ class VideoSignOffNote(SignOffNote):
 
 
 class RawEphysSignOffNote(SignOffNote):
+
     """
     Class for signing off a raw ephys part of a session and optionally adding a related explanation note.
 
@@ -643,6 +660,7 @@ class RawEphysSignOffNote(SignOffNote):
 
 
 class SpikeSortingSignOffNote(SignOffNote):
+
     """
     Class for signing off a spike sorting part of a session and optionally adding a related explanation note.
 
@@ -674,6 +692,7 @@ class SpikeSortingSignOffNote(SignOffNote):
 
 
 class AlignmentSignOffNote(SignOffNote):
+
     """
     Class for signing off a alignment part of a session and optionally adding a related explanation note.
 

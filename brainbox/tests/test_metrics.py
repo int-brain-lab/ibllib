@@ -7,7 +7,8 @@ REC_LEN_SECS = 1000
 fr = 200
 
 
-def multiple_spike_trains(firing_rates=None, rec_len_secs=1000, cluster_ids=None, amplitude_noise=20 * 1e-6):
+def multiple_spike_trains(firing_rates=None, rec_len_secs=1000, cluster_ids=None,
+                          amplitude_noise=20 * 1e-6):
     """
     :param firing_rates: list or np.array of firing rates (spikes per second)
     :param rec_len_secs: recording length in seconds
@@ -41,8 +42,8 @@ def generate_spike_train(firing_rate=200, rec_len_secs=1000):
     :return: spike_times (secs) , spike_amplitudes (V)
     """
     # spike times: exponential decay prob
-    st = np.cumsum(-np.log(np.random.rand(int(rec_len_secs * firing_rate * 1.5))) / firing_rate)
-    st = st[: np.searchsorted(st, rec_len_secs)]
+    st = np.cumsum(- np.log(np.random.rand(int(rec_len_secs * firing_rate * 1.5))) / firing_rate)
+    st = st[:np.searchsorted(st, rec_len_secs)]
     return st
 
 
@@ -64,7 +65,6 @@ def test_clusters_metrics():
         # test expected bitwise qc values:
         expected_labels = 1 - np.sum(np.unpackbits(dfm['bitwise_fail']).reshape(-1, 8), axis=1) / 3
         assert np.allclose(dfm['label'], expected_labels)
-
     # check with missing clusters
     dfm = quick_unit_metrics(c, t, a, d, cluster_ids=np.arange(5), tbounds=[100, 900])
     idf, _ = ismember(np.arange(5), cid)
@@ -95,11 +95,5 @@ def test_drift_estimate():
 
 def test_noise_cut_off():
     np.random.seed(45)
-    amps = (
-        np.random.randn(
-            400,
-        )
-        * 1.2
-        + 4
-    )
+    amps = np.random.randn(400,) * 1.2 + 4
     assert noise_cutoff(amps)

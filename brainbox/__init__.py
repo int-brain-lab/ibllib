@@ -1,7 +1,5 @@
 """IBL shared data processing methods."""
-
 import logging
-
 try:
     import one
 except ModuleNotFoundError:

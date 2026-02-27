@@ -25,7 +25,8 @@ class TestQC(unittest.TestCase):
     def setUp(self) -> None:
         ses = one.alyx.rest('sessions', 'partial_update', id=self.eid, data={'qc': 'NOT_SET'})
         assert ses['qc'] == 'NOT_SET', 'failed to reset qc field for test'
-        extended = one.alyx.json_field_write('sessions', field_name='extended_qc', uuid=self.eid, data={})
+        extended = one.alyx.json_field_write('sessions', field_name='extended_qc',
+                                             uuid=self.eid, data={})
         assert not extended, 'failed to reset extended_qc field for test'
         self.qc = QC(self.eid, one=one)
 
@@ -132,10 +133,8 @@ class TestQC(unittest.TestCase):
 
     def test_compute_outcome_from_extended_qc(self):
         """Test for QC.compute_outcome_from_extended_qc method."""
-        detail = {
-            'extended_qc': {'foo': 'FAIL', 'bar': 'WARNING', '_baz_': 'CRITICAL'},
-            'json': {'extended_qc': {'foo': 'PASS', 'bar': 'WARNING', '_baz_': 'CRITICAL'}},
-        }
+        detail = {'extended_qc': {'foo': 'FAIL', 'bar': 'WARNING', '_baz_': 'CRITICAL'},
+                  'json': {'extended_qc': {'foo': 'PASS', 'bar': 'WARNING', '_baz_': 'CRITICAL'}}}
         with mock.patch.object(self.qc.one.alyx, 'get', return_value=detail):
             self.qc.json = False
             self.assertIs(self.qc.compute_outcome_from_extended_qc(), spec.QC.FAIL)

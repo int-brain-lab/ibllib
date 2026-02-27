@@ -22,9 +22,9 @@ def a_little_spike(nsw=121, nc=1):
     wav[5] = -0.1
     wav[10] = -0.3
     wav[15] = -0.1
-    sos = scipy.signal.butter(N=3, Wn=0.15, output='sos')
+    sos = scipy.signal.butter(N=3, Wn=.15, output='sos')
     spike = scipy.signal.sosfilt(sos, wav)
-    spike = -spike / np.max(spike)
+    spike = - spike / np.max(spike)
     if nc > 1:
         spike = spike[:, np.newaxis] * scipy.signal.hamming(nc)[np.newaxis, :]
     return spike
@@ -56,7 +56,7 @@ def synthetic_with_bad_channels():
     ns, nc, fs = (30000, 384, 30000)
     data = make_synthetic_data(ns=ns, nc=nc) * 1e-6 * 50
 
-    st = np.round(np.cumsum(-np.log(np.random.rand(int(ns / fs * 50 * 1.5))) / 50) * fs)
+    st = np.round(np.cumsum(- np.log(np.random.rand(int(ns / fs * 50 * 1.5))) / 50) * fs)
     st = st[st < ns].astype(np.int32)
     stripes = np.zeros(ns)
     stripes[st] = 1
@@ -77,7 +77,6 @@ def synthetic_with_bad_channels():
 
 class TestNeuropixel(unittest.TestCase):
     """Comprehensive tests about geometry are run as part of the spikeglx reader testing suite"""
-
     def test_layouts(self):
         dense = neuropixel.dense_layout()
         assert set(dense.keys()) == set(['x', 'y', 'row', 'col', 'ind', 'shank'])
@@ -93,6 +92,7 @@ class TestNeuropixel(unittest.TestCase):
 
 
 class TestFpgaTask(unittest.TestCase):
+
     def test_impeccable_dataset(self):
 
         fpga2bpod = np.array([11 * 1e-6, -20])  # bpod starts 20 secs before with 10 ppm drift
@@ -100,7 +100,7 @@ class TestFpgaTask(unittest.TestCase):
             'intervals': np.array([[0, 9.5], [10, 19.5]]),
             'stimOn_times': np.array([2, 12]),
             'goCue_times': np.array([2.0001, 12.0001]),
-            'stimFreeze_times': np.array([4.0, 14.0]),
+            'stimFreeze_times': np.array([4., 14.]),
             'feedback_times': np.array([4.0001, 14.0001]),
             'errorCue_times': np.array([4.0001, np.nan]),
             'valveOpen_times': np.array([np.nan, 14.0001]),
@@ -110,11 +110,11 @@ class TestFpgaTask(unittest.TestCase):
 
         alf_trials = {
             'goCueTrigger_times_bpod': np.polyval(fpga2bpod, fpga_trials['goCue_times'] - 0.00067),
-            'response_times_bpod': np.polyval(fpga2bpod, np.array([4.0, 14.0])),
+            'response_times_bpod': np.polyval(fpga2bpod, np.array([4., 14.])),
             'intervals_bpod': np.polyval(fpga2bpod, fpga_trials['intervals']),
             # Times from session start
             'goCueTrigger_times': fpga_trials['goCue_times'] - 0.00067,
-            'response_times': np.array([4.0, 14.0]),
+            'response_times': np.array([4., 14.]),
             'intervals': fpga_trials['intervals'],
             'stimOn_times': fpga_trials['stimOn_times'],
             'goCue_times': fpga_trials['goCue_times'],
@@ -168,6 +168,7 @@ class TestEphysQC(unittest.TestCase):
 
 
 class TestDetectSpikes(unittest.TestCase):
+
     def test_spike_detection(self):
         """
         Test that creates a synthetic dataset with spikes and an amplitude decay function
@@ -186,7 +187,7 @@ class TestDetectSpikes(unittest.TestCase):
         np.random.seed(973)
         display = False
         data = make_synthetic_data(ns, nc, nss, ncs, nspikes)
-        detects = spikes.detection(data, fs=fs, h=h, detect_threshold=-0.8, time_tol=0.0006)
+        detects = spikes.detection(data, fs=fs, h=h, detect_threshold=-0.8, time_tol=.0006)
 
         sample_out = (detects.time * fs + nss / 2 - 4).astype(np.int32)
         tr_out = detects.trace.astype(np.int32)
@@ -194,7 +195,6 @@ class TestDetectSpikes(unittest.TestCase):
 
         if display:
             from easyqc.gui import viewseis
-
             eqc = viewseis(data, si=1 / 30000 * 1e3, taxis=0, title='data')
             eqc.ctrl.add_scatter(detects.time * 1e3, detects.trace)
             eqco = viewseis(data_out, si=1 / 30000 * 1e3, taxis=0, title='data_out')  # noqa
@@ -206,11 +206,12 @@ class TestDetectSpikes(unittest.TestCase):
                 continue
             xcor[tr] = np.corrcoef(data[:, tr], data_out[:, tr])[1, 0]
 
-        assert np.mean(xcor > 0.8) > 0.95
-        assert np.nanmedian(xcor) > 0.99
+        assert np.mean(xcor > .8) > .95
+        assert np.nanmedian(xcor) > .99
 
 
 class TestDetectBadChannels(unittest.TestCase):
+
     def test_channel_detections(self):
         """
         This test creates a synthetic dataset with voltage stripes and 3 types of bad channels

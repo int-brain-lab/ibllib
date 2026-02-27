@@ -53,35 +53,32 @@ class TestTrials(unittest.TestCase):
         # Test filtering by choice and side
         # right correct
         ids, div = find_trial_ids(self.trials, side='right', choice='correct')
-        righ_corr_expected_ids = np.where(
-            np.bitwise_and(~np.isnan(self.trials['contrastRight']), self.trials['feedbackType'] == 1)
-        )[0]
+        righ_corr_expected_ids = np.where(np.bitwise_and(~np.isnan(self.trials['contrastRight']),
+                                          self.trials['feedbackType'] == 1))[0]
         self.assertTrue(np.all(ids == righ_corr_expected_ids))
 
         # right incorrect
         ids, div = find_trial_ids(self.trials, side='right', choice='incorrect')
-        righ_incor_expected_ids = np.where(
-            np.bitwise_and(~np.isnan(self.trials['contrastRight']), self.trials['feedbackType'] == -1)
-        )[0]
+        righ_incor_expected_ids = np.where(np.bitwise_and(~np.isnan(self.trials['contrastRight']),
+                                           self.trials['feedbackType'] == -1))[0]
         self.assertTrue(np.all(ids == righ_incor_expected_ids))
 
         # left correct
         ids, div = find_trial_ids(self.trials, side='left', choice='correct')
-        left_corr_expected_ids = np.where(
-            np.bitwise_and(~np.isnan(self.trials['contrastLeft']), self.trials['feedbackType'] == 1)
-        )[0]
+        left_corr_expected_ids = np.where(np.bitwise_and(~np.isnan(self.trials['contrastLeft']),
+                                          self.trials['feedbackType'] == 1))[0]
         self.assertTrue(np.all(ids == left_corr_expected_ids))
 
         # left incorrect
         ids, div = find_trial_ids(self.trials, side='left', choice='incorrect')
-        left_incorr_expected_ids = np.where(
-            np.bitwise_and(~np.isnan(self.trials['contrastLeft']), self.trials['feedbackType'] == -1)
-        )[0]
+        left_incorr_expected_ids = np.where(np.bitwise_and(~np.isnan(self.trials['contrastLeft']),
+                                            self.trials['feedbackType'] == -1))[0]
         self.assertTrue(np.all(ids == left_incorr_expected_ids))
 
         # Test sorting
         ids, div = find_trial_ids(self.trials, sort='choice and side')
-        expected_ids = np.r_[left_corr_expected_ids, left_incorr_expected_ids, righ_corr_expected_ids, righ_incor_expected_ids]
+        expected_ids = np.r_[left_corr_expected_ids, left_incorr_expected_ids,
+                             righ_corr_expected_ids, righ_incor_expected_ids]
         self.assertTrue(np.all(ids == expected_ids))
 
         ids, div = find_trial_ids(self.trials, side='left', sort='choice')
@@ -101,15 +98,15 @@ class TestTrials(unittest.TestCase):
         ids, div = find_trial_ids(self.trials, order='reaction time')
         self.assertTrue(np.all(ids == expected_ids))
 
-        ids, div = find_trial_ids(self.trials, side='left', choice='correct', order='reaction time')
+        ids, div = find_trial_ids(self.trials, side='left', choice='correct',
+                                  order='reaction time')
         expected_ids = left_corr_expected_ids[np.argsort(reaction_time[left_corr_expected_ids])]
         self.assertTrue(np.all(ids == expected_ids))
 
         # Test contrasts
         ids, div = find_trial_ids(self.trials, contrast=[1])
-        expected_ids = np.sort(
-            np.r_[np.where(self.trials['contrastLeft'] == 1)[0], np.where(self.trials['contrastRight'] == 1)[0]]
-        )
+        expected_ids = np.sort(np.r_[np.where(self.trials['contrastLeft'] == 1)[0],
+                               np.where(self.trials['contrastRight'] == 1)[0]])
         self.assertTrue(np.all(ids == expected_ids))
 
         ids, div = find_trial_ids(self.trials, contrast=[0.0625, 0], side='left')

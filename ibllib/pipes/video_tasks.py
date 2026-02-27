@@ -38,11 +38,12 @@ class VideoRegisterRaw(base_tasks.VideoTask, base_tasks.RegisterRawDataTask):
     def signature(self):
         signature = {
             'input_files': [],
-            'output_files': [(f'_iblrig_{cam}Camera.timestamps*', self.device_collection, False) for cam in self.cameras]
-            + [(f'_iblrig_{cam}Camera.GPIO.bin', self.device_collection, False) for cam in self.cameras]
-            + [(f'_iblrig_{cam}Camera.frame_counter.bin', self.device_collection, False) for cam in self.cameras]
-            + [(f'_iblrig_{cam}Camera.frameData.bin', self.device_collection, False) for cam in self.cameras]
-            + [('_iblrig_videoCodeFiles.raw*', self.device_collection, False)],
+            'output_files':
+                [(f'_iblrig_{cam}Camera.timestamps*', self.device_collection, False) for cam in self.cameras] +
+                [(f'_iblrig_{cam}Camera.GPIO.bin', self.device_collection, False) for cam in self.cameras] +
+                [(f'_iblrig_{cam}Camera.frame_counter.bin', self.device_collection, False) for cam in self.cameras] +
+                [(f'_iblrig_{cam}Camera.frameData.bin', self.device_collection, False) for cam in self.cameras] +
+                [('_iblrig_videoCodeFiles.raw*', self.device_collection, False)]
         }
         return signature
 
@@ -69,7 +70,6 @@ class VideoCompress(base_tasks.VideoTask):
     """
     Task to compress raw video data from .avi to .mp4 format.
     """
-
     priority = 90
     job_size = 'large'
 
@@ -77,7 +77,7 @@ class VideoCompress(base_tasks.VideoTask):
     def signature(self):
         signature = {
             'input_files': [(f'_iblrig_{cam}Camera.raw.*', self.device_collection, True) for cam in self.cameras],
-            'output_files': [(f'_iblrig_{cam}Camera.raw.mp4', self.device_collection, True) for cam in self.cameras],
+            'output_files': [(f'_iblrig_{cam}Camera.raw.mp4', self.device_collection, True) for cam in self.cameras]
         }
         return signature
 
@@ -85,9 +85,11 @@ class VideoCompress(base_tasks.VideoTask):
         # TODO different compression parameters based on whether it is training or not based on number of cameras?
         # avi to mp4 compression
         if self.sync == 'bpod':
-            command = 'ffmpeg -i {file_in} -y -nostdin -codec:v libx264 -preset slow -crf 29 -nostats -codec:a copy {file_out}'
+            command = ('ffmpeg -i {file_in} -y -nostdin -codec:v libx264 -preset slow -crf 29 '
+                       '-nostats -codec:a copy {file_out}')
         else:
-            command = 'ffmpeg -i {file_in} -y -nostdin -codec:v libx264 -preset slow -crf 17 -loglevel 0 -codec:a copy {file_out}'
+            command = ('ffmpeg -i {file_in} -y -nostdin -codec:v libx264 -preset slow -crf 17 '
+                       '-loglevel 0 -codec:a copy {file_out}')
 
         output_files = ffmpeg.iblrig_video_compression(self.session_path, command)
 
@@ -102,17 +104,16 @@ class VideoConvert(base_tasks.VideoTask):
     """
     Task that converts compressed avi to mp4 format and renames video and camlog files. Specific to UCLA widefield implementation
     """
-
     priority = 90
     job_size = 'small'
 
     @property
     def signature(self):
         signature = {
-            'input_files': [(f'{cam}_cam*.avi', self.device_collection, True) for cam in self.cameras]
-            + [(f'{cam}_cam*.camlog', self.device_collection, False) for cam in self.cameras],
-            'output_files': [(f'_iblrig_{cam}Camera.raw.mp4', self.device_collection, True) for cam in self.cameras]
-            + [(f'_iblrig_{cam}Camera.raw.camlog', self.device_collection, True) for cam in self.cameras],
+            'input_files': [(f'{cam}_cam*.avi', self.device_collection, True) for cam in self.cameras] +
+                           [(f'{cam}_cam*.camlog', self.device_collection, False) for cam in self.cameras],
+            'output_files': [(f'_iblrig_{cam}Camera.raw.mp4', self.device_collection, True) for cam in self.cameras] +
+                            [(f'_iblrig_{cam}Camera.raw.camlog', self.device_collection, True) for cam in self.cameras]
         }
 
         return signature
@@ -120,6 +121,7 @@ class VideoConvert(base_tasks.VideoTask):
     def _run(self):
         output_files = []
         for cam in self.cameras:
+
             # rename and register the camlog files
             camlog_file = next(self.session_path.joinpath(self.device_collection).glob(f'{cam}_cam*.camlog'))
             new_camlog_file = self.session_path.joinpath(self.device_collection, f'_iblrig_{cam}Camera.raw.camlog')
@@ -159,24 +161,21 @@ class VideoSyncQcCamlog(base_tasks.VideoTask):
     """
     Task to sync camera timestamps to main DAQ timestamps when camlog files are used. Specific to UCLA widefield implementation
     """
-
     priority = 40
     job_size = 'small'
 
     @property
     def signature(self):
         signature = {
-            'input_files': [(f'_iblrig_{cam}Camera.raw.mp4', self.device_collection, True) for cam in self.cameras]
-            + [(f'_iblrig_{cam}Camera.raw.camlog', self.device_collection, False) for cam in self.cameras]
-            + [
-                (f'_{self.sync_namespace}_sync.channels.npy', self.sync_collection, True),
-                (f'_{self.sync_namespace}_sync.polarities.npy', self.sync_collection, True),
-                (f'_{self.sync_namespace}_sync.times.npy', self.sync_collection, True),
-                ('*.wiring.json', self.sync_collection, True),
-                ('*wheel.position.npy', 'alf', False),
-                ('*wheel.timestamps.npy', 'alf', False),
-            ],
-            'output_files': [(f'_ibl_{cam}Camera.times.npy', 'alf', True) for cam in self.cameras],
+            'input_files': [(f'_iblrig_{cam}Camera.raw.mp4', self.device_collection, True) for cam in self.cameras] +
+                           [(f'_iblrig_{cam}Camera.raw.camlog', self.device_collection, False) for cam in self.cameras] +
+                           [(f'_{self.sync_namespace}_sync.channels.npy', self.sync_collection, True),
+                            (f'_{self.sync_namespace}_sync.polarities.npy', self.sync_collection, True),
+                            (f'_{self.sync_namespace}_sync.times.npy', self.sync_collection, True),
+                            ('*.wiring.json', self.sync_collection, True),
+                            ('*wheel.position.npy', 'alf', False),
+                            ('*wheel.timestamps.npy', 'alf', False)],
+            'output_files': [(f'_ibl_{cam}Camera.times.npy', 'alf', True) for cam in self.cameras]
         }
 
         return signature
@@ -191,14 +190,8 @@ class VideoSyncQcCamlog(base_tasks.VideoTask):
         if camera_data is None:
             camera_data, _ = self.extract_camera(save=False)
         qc = run_camera_qc(
-            self.session_path,
-            self.cameras,
-            one=self.one,
-            camlog=True,
-            sync_collection=self.sync_collection,
-            sync_type=self.sync,
-            update=update,
-        )
+            self.session_path, self.cameras, one=self.one, camlog=True, sync_collection=self.sync_collection, sync_type=self.sync,
+            update=update)
         return qc
 
     def _run(self, update=True, **kwargs):
@@ -216,7 +209,6 @@ class VideoSyncQcBpod(base_tasks.VideoTask):
     Task to sync camera timestamps to main DAQ timestamps
     N.B Signatures only reflect new daq naming convention, non-compatible with ephys when not running on server
     """
-
     priority = 40
     job_size = 'small'
 
@@ -231,26 +223,23 @@ class VideoSyncQcBpod(base_tasks.VideoTask):
     @property
     def signature(self):
         signature = {
-            'input_files': [(f'_iblrig_{cam}Camera.raw.mp4', self.device_collection, True) for cam in self.cameras]
-            + [(f'_iblrig_{cam}Camera.timestamps*', self.device_collection, False) for cam in self.cameras]
-            + [(f'_iblrig_{cam}Camera.GPIO.bin', self.device_collection, False) for cam in self.cameras]
-            + [(f'_iblrig_{cam}Camera.frame_counter.bin', self.device_collection, False) for cam in self.cameras]
-            + [(f'_iblrig_{cam}Camera.frameData.bin', self.device_collection, False) for cam in self.cameras]
-            + [
-                ('_iblrig_taskData.raw.*', self.collection, True),
-                ('_iblrig_taskSettings.raw.*', self.collection, True),
-                ('*wheel.position.npy', 'alf', False),
-                ('*wheel.timestamps.npy', 'alf', False),
-            ],
-            'output_files': [(f'_ibl_{cam}Camera.times.npy', 'alf', True) for cam in self.cameras],
+            'input_files': [(f'_iblrig_{cam}Camera.raw.mp4', self.device_collection, True) for cam in self.cameras] +
+                           [(f'_iblrig_{cam}Camera.timestamps*', self.device_collection, False) for cam in self.cameras] +
+                           [(f'_iblrig_{cam}Camera.GPIO.bin', self.device_collection, False) for cam in self.cameras] +
+                           [(f'_iblrig_{cam}Camera.frame_counter.bin', self.device_collection, False) for cam in self.cameras] +
+                           [(f'_iblrig_{cam}Camera.frameData.bin', self.device_collection, False) for cam in self.cameras] +
+                           [('_iblrig_taskData.raw.*', self.collection, True),
+                            ('_iblrig_taskSettings.raw.*', self.collection, True),
+                            ('*wheel.position.npy', 'alf', False),
+                            ('*wheel.timestamps.npy', 'alf', False)],
+            'output_files': [(f'_ibl_{cam}Camera.times.npy', 'alf', True) for cam in self.cameras]
         }
 
         return signature
 
     def extract_camera(self, save=True):
-        mp4_files = filter(
-            lambda x: label_from_path(x) in self.cameras or [], self.session_path.joinpath(self.device_collection).rglob('*.mp4')
-        )
+        mp4_files = filter(lambda x: label_from_path(x) in self.cameras or [],
+                           self.session_path.joinpath(self.device_collection).rglob('*.mp4'))
         if self.cameras != ['left']:
             raise NotImplementedError('Bpod Camera extraction currently only supports a left camera')
 
@@ -263,8 +252,8 @@ class VideoSyncQcBpod(base_tasks.VideoTask):
         if camera_data is None:
             camera_data, _ = self.extract_camera(save=False)
         qc = CameraQC(
-            self.session_path, 'left', sync_type='bpod', sync_collection=self.collection, one=self.one, protocol=self.protocol
-        )
+            self.session_path, 'left', sync_type='bpod', sync_collection=self.collection, one=self.one,
+            protocol=self.protocol)
         qc.run(update=update)
         return qc
 
@@ -283,29 +272,26 @@ class VideoSyncQcNidq(base_tasks.VideoTask):
     Task to sync camera timestamps to main DAQ timestamps
     N.B Signatures only reflect new daq naming convention, non-compatible with ephys when not running on server
     """
-
     priority = 40
     job_size = 'small'
 
     @property
     def signature(self):
         signature = {
-            'input_files': [(f'_iblrig_{cam}Camera.raw.mp4', self.device_collection, True) for cam in self.cameras]
-            + [(f'_iblrig_{cam}Camera.timestamps*', self.device_collection, False) for cam in self.cameras]
-            + [(f'_iblrig_{cam}Camera.GPIO.bin', self.device_collection, False) for cam in self.cameras]
-            + [(f'_iblrig_{cam}Camera.frame_counter.bin', self.device_collection, False) for cam in self.cameras]
-            + [(f'_iblrig_{cam}Camera.frameData.bin', self.device_collection, False) for cam in self.cameras]
-            + [
-                (f'_{self.sync_namespace}_sync.channels.npy', self.sync_collection, True),
-                (f'_{self.sync_namespace}_sync.polarities.npy', self.sync_collection, True),
-                (f'_{self.sync_namespace}_sync.times.npy', self.sync_collection, True),
-                (f'_{self.sync_namespace}_*.wiring.json', self.sync_collection, False),
-                (f'_{self.sync_namespace}_*.meta', self.sync_collection, True),
-                ('*wheel.position.npy', 'alf', False),
-                ('*wheel.timestamps.npy', 'alf', False),
-                ('*experiment.description*', '', False),
-            ],
-            'output_files': [(f'_ibl_{cam}Camera.times.npy', 'alf', True) for cam in self.cameras],
+            'input_files': [(f'_iblrig_{cam}Camera.raw.mp4', self.device_collection, True) for cam in self.cameras] +
+                           [(f'_iblrig_{cam}Camera.timestamps*', self.device_collection, False) for cam in self.cameras] +
+                           [(f'_iblrig_{cam}Camera.GPIO.bin', self.device_collection, False) for cam in self.cameras] +
+                           [(f'_iblrig_{cam}Camera.frame_counter.bin', self.device_collection, False) for cam in self.cameras] +
+                           [(f'_iblrig_{cam}Camera.frameData.bin', self.device_collection, False) for cam in self.cameras] +
+                           [(f'_{self.sync_namespace}_sync.channels.npy', self.sync_collection, True),
+                            (f'_{self.sync_namespace}_sync.polarities.npy', self.sync_collection, True),
+                            (f'_{self.sync_namespace}_sync.times.npy', self.sync_collection, True),
+                            (f'_{self.sync_namespace}_*.wiring.json', self.sync_collection, False),
+                            (f'_{self.sync_namespace}_*.meta', self.sync_collection, True),
+                            ('*wheel.position.npy', 'alf', False),
+                            ('*wheel.timestamps.npy', 'alf', False),
+                            ('*experiment.description*', '', False)],
+            'output_files': [(f'_ibl_{cam}Camera.times.npy', 'alf', True) for cam in self.cameras]
         }
 
         return signature
@@ -325,13 +311,8 @@ class VideoSyncQcNidq(base_tasks.VideoTask):
         if camera_data is None:
             camera_data, _ = self.extract_camera(save=False)
         qc = run_camera_qc(
-            self.session_path,
-            self.cameras,
-            one=self.one,
-            sync_collection=self.sync_collection,
-            sync_type=self.sync,
-            update=update,
-        )
+            self.session_path, self.cameras, one=self.one, sync_collection=self.sync_collection, sync_type=self.sync,
+            update=update)
         return qc
 
     def _run(self, update=True, **kwargs):
@@ -354,7 +335,6 @@ class DLC(base_tasks.VideoTask):
     t.dlcenv = Path('/path/to/your/dlcenv/bin/activate')
     t.scripts = Path('/path/to/your/iblscripts/deploy/serverpc/dlc')
     """
-
     gpu = 1
     cpu = 4
     io_charge = 100
@@ -369,29 +349,31 @@ class DLC(base_tasks.VideoTask):
     def signature(self):
         signature = {
             'input_files': [(f'_iblrig_{cam}Camera.raw.mp4', self.device_collection, True) for cam in self.cameras],
-            'output_files': [(f'_ibl_{cam}Camera.dlc.pqt', 'alf', True) for cam in self.cameras]
-            + [(f'{cam}Camera.ROIMotionEnergy.npy', 'alf', True) for cam in self.cameras]
-            + [(f'{cam}ROIMotionEnergy.position.npy', 'alf', True) for cam in self.cameras],
+            'output_files': [(f'_ibl_{cam}Camera.dlc.pqt', 'alf', True) for cam in self.cameras] +
+                            [(f'{cam}Camera.ROIMotionEnergy.npy', 'alf', True) for cam in self.cameras] +
+                            [(f'{cam}ROIMotionEnergy.position.npy', 'alf', True) for cam in self.cameras]
         }
 
         return signature
 
     def _check_dlcenv(self):
         """Check that scripts are present, dlcenv can be activated and get iblvideo version"""
-        assert len(list(self.scripts.rglob('run_dlc.*'))) == 2, (
+        assert len(list(self.scripts.rglob('run_dlc.*'))) == 2, \
             f'Scripts run_dlc.sh and run_dlc.py do not exist in {self.scripts}'
-        )
-        assert len(list(self.scripts.rglob('run_motion.*'))) == 2, (
+        assert len(list(self.scripts.rglob('run_motion.*'))) == 2, \
             f'Scripts run_motion.sh and run_motion.py do not exist in {self.scripts}'
-        )
         assert self.dlcenv.exists(), f'DLC environment does not exist in assumed location {self.dlcenv}'
         command2run = f"source {self.dlcenv}; python -c 'import iblvideo; print(iblvideo.__version__)'"
         process = subprocess.Popen(
-            command2run, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, executable='/bin/bash'
+            command2run,
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            executable='/bin/bash'
         )
         info, error = process.communicate()
         if process.returncode != 0:
-            raise AssertionError(f'DLC environment check failed\n{error.decode("utf-8")}')
+            raise AssertionError(f"DLC environment check failed\n{error.decode('utf-8')}")
         version = info.decode('utf-8').strip().split('\n')[-1]
         return version
 
@@ -443,7 +425,7 @@ class DLC(base_tasks.VideoTask):
                     check_nvidia_driver()
 
                     _logger.info(f'Running DLC on {cam}Camera.')
-                    command2run = f'{self.scripts.joinpath("run_dlc.sh")} {str(self.dlcenv)} {file_mp4} {overwrite}'
+                    command2run = f"{self.scripts.joinpath('run_dlc.sh')} {str(self.dlcenv)} {file_mp4} {overwrite}"
                     _logger.info(command2run)
                     process = subprocess.Popen(
                         command2run,
@@ -457,12 +439,10 @@ class DLC(base_tasks.VideoTask):
                     # _logger.info(info_str)
                     if process.returncode != 0:
                         error_str = error.decode('utf-8').strip()
-                        _logger.error(
-                            f'DLC failed for {cam}Camera.\n\n'
-                            f'++++++++ Output of subprocess for debugging ++++++++\n\n'
-                            f'{error_str}\n'
-                            f'++++++++++++++++++++++++++++++++++++++++++++\n'
-                        )
+                        _logger.error(f'DLC failed for {cam}Camera.\n\n'
+                                      f'++++++++ Output of subprocess for debugging ++++++++\n\n'
+                                      f'{error_str}\n'
+                                      f'++++++++++++++++++++++++++++++++++++++++++++\n')
                         self.status = -1
                         # We dont' run motion energy, or add any files if dlc failed to run
                         continue
@@ -470,7 +450,7 @@ class DLC(base_tasks.VideoTask):
                     actual_outputs.append(dlc_result)
 
                     _logger.info(f'Computing motion energy for {cam}Camera')
-                    command2run = f'{self.scripts.joinpath("run_motion.sh")} {str(self.dlcenv)} {file_mp4} {dlc_result}'
+                    command2run = f"{self.scripts.joinpath('run_motion.sh')} {str(self.dlcenv)} {file_mp4} {dlc_result}"
                     _logger.info(command2run)
                     process = subprocess.Popen(
                         command2run,
@@ -484,16 +464,16 @@ class DLC(base_tasks.VideoTask):
                     # _logger.info(info_str)
                     if process.returncode != 0:
                         error_str = error.decode('utf-8').strip()
-                        _logger.error(
-                            f'Motion energy failed for {cam}Camera.\n\n'
-                            f'++++++++ Output of subprocess for debugging ++++++++\n\n'
-                            f'{error_str}\n'
-                            f'++++++++++++++++++++++++++++++++++++++++++++\n'
-                        )
+                        _logger.error(f'Motion energy failed for {cam}Camera.\n\n'
+                                      f'++++++++ Output of subprocess for debugging ++++++++\n\n'
+                                      f'{error_str}\n'
+                                      f'++++++++++++++++++++++++++++++++++++++++++++\n')
                         self.status = -1
                         continue
-                    actual_outputs.append(next(self.session_path.joinpath('alf').glob(f'{cam}Camera.ROIMotionEnergy*.npy')))
-                    actual_outputs.append(next(self.session_path.joinpath('alf').glob(f'{cam}ROIMotionEnergy.position*.npy')))
+                    actual_outputs.append(next(self.session_path.joinpath('alf').glob(
+                        f'{cam}Camera.ROIMotionEnergy*.npy')))
+                    actual_outputs.append(next(self.session_path.joinpath('alf').glob(
+                        f'{cam}ROIMotionEnergy.position*.npy')))
             except Exception:
                 _logger.error(traceback.format_exc())
                 self.status = -1
@@ -510,7 +490,6 @@ class EphysPostDLC(base_tasks.VideoTask):
     """
     The post_dlc task takes dlc traces as input and computes useful quantities, as well as qc.
     """
-
     io_charge = 90
     level = 3
     force = True
@@ -522,24 +501,20 @@ class EphysPostDLC(base_tasks.VideoTask):
     @property
     def signature(self):
         return {
-            'input_files': [(f'_ibl_{cam}Camera.dlc.pqt', 'alf', True) for cam in self.cameras]
-            + [(f'_ibl_{cam}Camera.times.npy', 'alf', True) for cam in self.cameras]
-            +
+            'input_files': [(f'_ibl_{cam}Camera.dlc.pqt', 'alf', True) for cam in self.cameras] +
+                           [(f'_ibl_{cam}Camera.times.npy', 'alf', True) for cam in self.cameras] +
             # the following are required for the DLC plot only
             # they are not strictly required, some plots just might be skipped
             # In particular the raw videos don't need to be downloaded as they can be streamed
-            [(f'_iblrig_{cam}Camera.raw.mp4', self.device_collection, True) for cam in self.cameras]
-            + [(f'{cam}ROIMotionEnergy.position.npy', 'alf', False) for cam in self.cameras]
-            + [(f'{cam}Camera.ROIMotionEnergy.npy', 'alf', False) for cam in self.cameras]
-            +
+                           [(f'_iblrig_{cam}Camera.raw.mp4', self.device_collection, True) for cam in self.cameras] +
+                           [(f'{cam}ROIMotionEnergy.position.npy', 'alf', False) for cam in self.cameras] +
+                           [(f'{cam}Camera.ROIMotionEnergy.npy', 'alf', False) for cam in self.cameras] +
             # The trials table is used in the DLC QC, however this is not an essential dataset
-            [
-                ('_ibl_trials.table.pqt', self.trials_collection, False),
-                ('_ibl_wheel.position.npy', self.trials_collection, False),
-                ('_ibl_wheel.timestamps.npy', self.trials_collection, False),
-            ],
-            'output_files': [(f'_ibl_{cam}Camera.features.pqt', 'alf', True) for cam in self.cameras]
-            + [('licks.times.npy', 'alf', True)],
+                           [('_ibl_trials.table.pqt', self.trials_collection, False),
+                            ('_ibl_wheel.position.npy', self.trials_collection, False),
+                            ('_ibl_wheel.timestamps.npy', self.trials_collection, False)],
+            'output_files': [(f'_ibl_{cam}Camera.features.pqt', 'alf', True) for cam in self.cameras] +
+                            [('licks.times.npy', 'alf', True)]
         }
 
     def _run(self, overwrite=True, run_qc=True, plot_qc=True):
@@ -579,20 +554,20 @@ class EphysPostDLC(base_tasks.VideoTask):
                         dlc_t = np.load(next(Path(self.session_path).joinpath('alf').rglob(f'_ibl_{cam}Camera.times.*npy')))
                         times = True
                         if dlc_t.shape[0] == 0:
-                            _logger.error(f'camera.times empty for {cam} camera. Computations using camera.times will be skipped')
+                            _logger.error(f'camera.times empty for {cam} camera. '
+                                          f'Computations using camera.times will be skipped')
                             self.status = -1
                             times = False
                         elif dlc_t.shape[0] < len(dlc_thresh):
-                            _logger.error(
-                                f'Camera times shorter than DLC traces for {cam} camera. '
-                                f'Computations using camera.times will be skipped'
-                            )
+                            _logger.error(f'Camera times shorter than DLC traces for {cam} camera. '
+                                          f'Computations using camera.times will be skipped')
                             self.status = -1
                             times = 'short'
                     except StopIteration:
                         self.status = -1
                         times = False
-                        _logger.error(f'No camera.times for {cam} camera. Computations using camera.times will be skipped')
+                        _logger.error(f'No camera.times for {cam} camera. '
+                                      f'Computations using camera.times will be skipped')
                     # These features are only computed from left and right cam
                     if cam in ('left', 'right'):
                         features = pd.DataFrame()
@@ -609,7 +584,8 @@ class EphysPostDLC(base_tasks.VideoTask):
                         features['pupilDiameter_raw'] = get_pupil_diameter(dlc_thresh)
                         try:
                             _logger.info(f'Computing smooth pupil diameter for {cam} camera.')
-                            features['pupilDiameter_smooth'] = get_smooth_pupil_diameter(features['pupilDiameter_raw'], cam)
+                            features['pupilDiameter_smooth'] = get_smooth_pupil_diameter(features['pupilDiameter_raw'],
+                                                                                         cam)
                         except Exception:
                             _logger.error(f'Computing smooth pupil diameter for {cam} camera failed, saving all NaNs.')
                             _logger.error(traceback.format_exc())
@@ -650,18 +626,14 @@ class EphysPostDLC(base_tasks.VideoTask):
                 fig_path = self.session_path.joinpath('snapshot', 'dlc_qc_plot.png')
                 if not fig_path.parent.exists():
                     fig_path.parent.mkdir(parents=True, exist_ok=True)
-                fig = dlc_qc_plot(
-                    self.session_path,
-                    one=self.one,
-                    cameras=self.cameras,
-                    device_collection=self.device_collection,
-                    trials_collection=self.trials_collection,
-                )
+                fig = dlc_qc_plot(self.session_path, one=self.one, cameras=self.cameras, device_collection=self.device_collection,
+                                  trials_collection=self.trials_collection)
                 fig.savefig(fig_path)
                 fig.clf()
                 snp = ReportSnapshot(self.session_path, session_id, one=self.one)
                 snp.outputs = [fig_path]
-                snp.register_images(widths=['orig'], function=str(dlc_qc_plot.__module__) + '.' + str(dlc_qc_plot.__name__))
+                snp.register_images(widths=['orig'],
+                                    function=str(dlc_qc_plot.__module__) + '.' + str(dlc_qc_plot.__name__))
             except Exception:
                 _logger.error('Could not create and/or upload DLC QC Plot')
                 _logger.error(traceback.format_exc())
@@ -687,9 +659,9 @@ class LightningPose(base_tasks.VideoTask):
     def signature(self):
         signature = {
             'input_files': [(f'_iblrig_{cam}Camera.raw.mp4', self.device_collection, True) for cam in self.cameras],
-            'output_files': [(f'_ibl_{cam}Camera.lightningPose.pqt', 'alf', True) for cam in self.cameras]
-            + [(f'{cam}Camera.ROIMotionEnergy.npy', 'alf', True) for cam in self.cameras]
-            + [(f'{cam}ROIMotionEnergy.position.npy', 'alf', True) for cam in self.cameras],
+            'output_files': [(f'_ibl_{cam}Camera.lightningPose.pqt', 'alf', True) for cam in self.cameras] +
+                            [(f'{cam}Camera.ROIMotionEnergy.npy', 'alf', True) for cam in self.cameras] +
+                            [(f'{cam}ROIMotionEnergy.position.npy', 'alf', True) for cam in self.cameras]
         }
 
         return signature
@@ -705,18 +677,21 @@ class LightningPose(base_tasks.VideoTask):
 
     def _check_env(self):
         """Check that scripts are present, env can be activated and get iblvideo version"""
-        assert len(list(self.scripts.rglob('run_litpose.*'))) == 2, (
+        assert len(list(self.scripts.rglob('run_litpose.*'))) == 2, \
             f'Scripts run_litpose.sh and run_litpose.py do not exist in {self.scripts}'
-        )
-        assert self.lpenv.exists(), f'environment does not exist in assumed location {self.lpenv}'
+        assert self.lpenv.exists(), f"environment does not exist in assumed location {self.lpenv}"
         command2run = f"source {self.lpenv}; python -c 'import iblvideo; print(iblvideo.__version__)'"
         process = subprocess.Popen(
-            command2run, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, executable='/bin/bash'
+            command2run,
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            executable="/bin/bash"
         )
         info, error = process.communicate()
         if process.returncode != 0:
-            raise AssertionError(f'environment check failed\n{error.decode("utf-8")}')
-        version = info.decode('utf-8').strip().split('\n')[-1]
+            raise AssertionError(f"environment check failed\n{error.decode('utf-8')}")
+        version = info.decode("utf-8").strip().split('\n')[-1]
         return version
 
     def _run(self, overwrite=True, **kwargs):
@@ -724,8 +699,7 @@ class LightningPose(base_tasks.VideoTask):
         # Gather video files
         self.session_path = Path(self.session_path)
         mp4_files = [
-            self.session_path.joinpath(self.device_collection, f'_iblrig_{cam}Camera.raw.mp4')
-            for cam in self.cameras
+            self.session_path.joinpath(self.device_collection, f'_iblrig_{cam}Camera.raw.mp4') for cam in self.cameras
             if self.session_path.joinpath(self.device_collection, f'_iblrig_{cam}Camera.raw.mp4').exists()
         ]
 
@@ -751,7 +725,7 @@ class LightningPose(base_tasks.VideoTask):
                 check_nvidia_driver()
                 # Check that the video can be loaded
                 if not self._video_intact(mp4_file):
-                    _logger.error(f'Corrupt raw video file {mp4_file}')
+                    _logger.error(f"Corrupt raw video file {mp4_file}")
                     self.status = -1
                     continue
 
@@ -760,18 +734,18 @@ class LightningPose(base_tasks.VideoTask):
                 # ---------------------------
                 t0 = time.time()
                 _logger.info(f'Running Lightning Pose on {label}Camera.')
-                command2run = f'{self.scripts.joinpath("run_litpose.sh")} {str(self.lpenv)} {mp4_file} {overwrite}'
+                command2run = f"{self.scripts.joinpath('run_litpose.sh')} {str(self.lpenv)} {mp4_file} {overwrite}"
                 _logger.info(command2run)
                 process = subprocess.Popen(
                     command2run,
                     shell=True,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
-                    executable='/bin/bash',
+                    executable="/bin/bash",
                 )
                 info, error = process.communicate()
                 if process.returncode != 0:
-                    error_str = error.decode('utf-8').strip()
+                    error_str = error.decode("utf-8").strip()
                     _logger.error(
                         f'Lightning pose failed for {label}Camera.\n\n'
                         f'++++++++ Output of subprocess for debugging ++++++++\n\n'
@@ -791,7 +765,7 @@ class LightningPose(base_tasks.VideoTask):
                 # ---------------------------
                 t1 = time.time()
                 _logger.info(f'Computing motion energy for {label}Camera')
-                command2run = f'{self.scripts.joinpath("run_motion.sh")} {str(self.lpenv)} {mp4_file} {result}'
+                command2run = f"{self.scripts.joinpath('run_motion.sh')} {str(self.lpenv)} {mp4_file} {result}"
                 _logger.info(command2run)
                 process = subprocess.Popen(
                     command2run,
@@ -813,8 +787,10 @@ class LightningPose(base_tasks.VideoTask):
                     continue
                 else:
                     _logger.info(f'{label} camera took {(time.time() - t1)} seconds')
-                    actual_outputs.append(next(self.session_path.joinpath('alf').glob(f'{label}Camera.ROIMotionEnergy*.npy')))
-                    actual_outputs.append(next(self.session_path.joinpath('alf').glob(f'{label}ROIMotionEnergy.position*.npy')))
+                    actual_outputs.append(next(self.session_path.joinpath('alf').glob(
+                        f'{label}Camera.ROIMotionEnergy*.npy')))
+                    actual_outputs.append(next(self.session_path.joinpath('alf').glob(
+                        f'{label}ROIMotionEnergy.position*.npy')))
 
             except BaseException:
                 _logger.error(traceback.format_exc())
@@ -836,7 +812,6 @@ class PostLP(base_tasks.VideoTask, base_tasks.BehaviourTask):
 
     This can be run on a single camera view or multiple camera views.
     """
-
     io_charge = 90
     level = 3
     force = True
@@ -848,25 +823,21 @@ class PostLP(base_tasks.VideoTask, base_tasks.BehaviourTask):
     @property
     def signature(self):
         return {
-            'input_files': [(f'_ibl_{cam}Camera.lightningPose.pqt', 'alf', True) for cam in self.cameras]
-            + [(f'_ibl_{cam}Camera.times.npy', 'alf', True) for cam in self.cameras]
-            + [('_ibl_experiment.description.yaml', self.trials_collection, True)]
-            +
+            'input_files': [(f'_ibl_{cam}Camera.lightningPose.pqt', 'alf', True) for cam in self.cameras] +
+                           [(f'_ibl_{cam}Camera.times.npy', 'alf', True) for cam in self.cameras] +
+                           [('_ibl_experiment.description.yaml', self.trials_collection, True)] +
             # the following are required for the LP plot only
             # they are not strictly required, some plots just might be skipped
             # In particular the raw videos don't need to be downloaded as they can be streamed
             # [(f'_iblrig_{cam}Camera.raw.mp4', self.device_collection, True) for cam in self.cameras] +
-            [(f'{cam}ROIMotionEnergy.position.npy', 'alf', False) for cam in self.cameras]
-            + [(f'{cam}Camera.ROIMotionEnergy.npy', 'alf', False) for cam in self.cameras]
-            +
+                           [(f'{cam}ROIMotionEnergy.position.npy', 'alf', False) for cam in self.cameras] +
+                           [(f'{cam}Camera.ROIMotionEnergy.npy', 'alf', False) for cam in self.cameras] +
             # The trials table is used in the LP QC, however this is not an essential dataset
-            [
-                ('_ibl_trials.table.pqt', self.trials_collection, False),
-                ('_ibl_wheel.position.npy', self.trials_collection, False),
-                ('_ibl_wheel.timestamps.npy', self.trials_collection, False),
-            ],
-            'output_files': [(f'_ibl_{cam}Camera.features.pqt', 'alf', True) for cam in self.cameras]
-            + [('licks.times.npy', 'alf', True)],
+                           [('_ibl_trials.table.pqt', self.trials_collection, False),
+                            ('_ibl_wheel.position.npy', self.trials_collection, False),
+                            ('_ibl_wheel.timestamps.npy', self.trials_collection, False)],
+            'output_files': [(f'_ibl_{cam}Camera.features.pqt', 'alf', True) for cam in self.cameras] +
+                            [('licks.times.npy', 'alf', True)]
         }
 
     def _run(self, overwrite=True, run_qc=True, plot_qc=True):
@@ -905,20 +876,20 @@ class PostLP(base_tasks.VideoTask, base_tasks.BehaviourTask):
                         pose_t = np.load(next(Path(self.session_path).joinpath('alf').rglob(f'_ibl_{cam}Camera.times.*npy')))
                         times = True
                         if pose_t.shape[0] == 0:
-                            _logger.error(f'camera.times empty for {cam} camera. Computations using camera.times will be skipped')
+                            _logger.error(f'camera.times empty for {cam} camera. '
+                                          f'Computations using camera.times will be skipped')
                             self.status = -1
                             times = False
                         elif pose_t.shape[0] < len(pose_thresh):
-                            _logger.error(
-                                f'Camera times shorter than LP traces for {cam} camera. '
-                                f'Computations using camera.times will be skipped'
-                            )
+                            _logger.error(f'Camera times shorter than LP traces for {cam} camera. '
+                                          f'Computations using camera.times will be skipped')
                             self.status = -1
                             times = 'short'
                     except StopIteration:
                         self.status = -1
                         times = False
-                        _logger.error(f'No camera.times for {cam} camera. Computations using camera.times will be skipped')
+                        _logger.error(f'No camera.times for {cam} camera. '
+                                      f'Computations using camera.times will be skipped')
                     # These features are only computed from left and right cam
                     if cam in ('left', 'right'):
                         features = pd.DataFrame()
@@ -976,13 +947,8 @@ class PostLP(base_tasks.VideoTask, base_tasks.BehaviourTask):
                 fig_path = self.session_path.joinpath('snapshot', 'lp_qc_plot.png')
                 if not fig_path.parent.exists():
                     fig_path.parent.mkdir(parents=True, exist_ok=True)
-                fig = lp_qc_plot(
-                    self.session_path,
-                    one=self.one,
-                    cameras=self.cameras,
-                    device_collection=self.device_collection,
-                    trials_collection=self.trials_collection or 'alf',
-                )
+                fig = lp_qc_plot(self.session_path, one=self.one, cameras=self.cameras, device_collection=self.device_collection,
+                                 trials_collection=self.trials_collection or 'alf')
                 fig.savefig(fig_path)
                 fig.clf()
                 snp = ReportSnapshot(self.session_path, session_id, one=self.one)
