@@ -33,7 +33,6 @@ TODO notes on subclassing various methods of FpgaTrials for custom hardware.
 import logging
 from itertools import cycle
 from pathlib import Path
-import uuid
 import re
 
 import matplotlib.pyplot as plt
@@ -56,10 +55,9 @@ from ibllib.io.extractors.training_wheel import extract_wheel_moves
 from ibllib import plots
 from ibllib.io.extractors.default_channel_maps import DEFAULT_MAPS
 
-_logger = logging.getLogger(__name__)
+import ibldsp.sync
 
-SYNC_BATCH_SIZE_SECS = 100
-"""int: Number of samples to read at once in bin file for sync."""
+_logger = logging.getLogger(__name__)
 
 WHEEL_RADIUS_CM = 1  # stay in radians
 """float: The radius of the wheel used in the task. A value of 1 ensures units remain in radians."""
@@ -146,44 +144,12 @@ def _sync_to_alf(raw_ephys_apfile, output_path=None, save=False, parts=''):
     :return:
     """
     # handles input argument: support ibllib.io.spikeglx.Reader, str and pathlib.Path
-    if isinstance(raw_ephys_apfile, spikeglx.Reader):
-        sr = raw_ephys_apfile
-    else:
-        raw_ephys_apfile = Path(raw_ephys_apfile)
-        sr = spikeglx.Reader(raw_ephys_apfile)
-    if not (opened := sr.is_open):
-        sr.open()
-    # if no output, need a temp folder to swap for big files
-    if not output_path:
-        output_path = raw_ephys_apfile.parent
-    file_ftcp = Path(output_path).joinpath(f'fronts_times_channel_polarity{uuid.uuid4()}.bin')
-
-    # loop over chunks of the raw ephys file
-    wg = ibldsp.utils.WindowGenerator(sr.ns, int(SYNC_BATCH_SIZE_SECS * sr.fs), overlap=1)
-    fid_ftcp = open(file_ftcp, 'wb')
-    for sl in wg.slice:
-        ss = sr.read_sync(sl)
-        ind, fronts = ibldsp.utils.fronts(ss, axis=0)
-        # a = sr.read_sync_analog(sl)
-        sav = np.c_[(ind[0, :] + sl.start) / sr.fs, ind[1, :], fronts.astype(np.double)]
-        sav.tofile(fid_ftcp)
-    # close temp file, read from it and delete
-    fid_ftcp.close()
-    tim_chan_pol = np.fromfile(str(file_ftcp))
-    tim_chan_pol = tim_chan_pol.reshape((int(tim_chan_pol.size / 3), 3))
-    file_ftcp.unlink()
-    sync = {'times': tim_chan_pol[:, 0],
-            'channels': tim_chan_pol[:, 1],
-            'polarities': tim_chan_pol[:, 2]}
-    # If opened Reader was passed into function, leave open
-    if not opened:
-        sr.close()
+    output = ibldsp.sync.extract_spikeglx_sync(raw_ephys_apfile, output_path=output_path, save=save, parts=parts)
     if save:
-        out_files = alfio.save_object_npy(output_path, sync, 'sync',
-                                          namespace='spikeglx', parts=parts)
+        sync, out_files = output
         return Bunch(sync), out_files
     else:
-        return Bunch(sync)
+        return Bunch(output)
 
 
 def _rotary_encoder_positions_from_fronts(ta, pa, tb, pb, ticks=WHEEL_TICKS, radius=WHEEL_RADIUS_CM, coding='x4'):

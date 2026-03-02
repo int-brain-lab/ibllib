@@ -959,8 +959,8 @@ class SpikeSortingLoader:
         :param compute_metrics: if True, will explicitly recompute metrics (defaults to false)
         :return: cluster dictionary containing metrics and histology
         """
-        if spikes == {}:
-            return
+        if (spikes == {} or spikes is None) and compute_metrics is True:
+            raise ValueError('No spikes to compute metrics. Provide spikes or set compute_metrics to False.')
         nc = clusters['channels'].size
         # recompute metrics if they are not available
         metrics = None
