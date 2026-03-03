@@ -40,6 +40,7 @@ from iblatlas.atlas import ALLEN_CCF_LANDMARKS_MLAPDV_UM, MRITorontoAtlas
 from ibllib.pipes import base_tasks
 from ibllib.oneibl.data_handlers import ExpectedDataset, dataset_from_name
 from ibllib.io.extractors import mesoscope
+import ibllib.qc.mesoscope as mesoQC
 
 
 _logger = logging.getLogger(__name__)
@@ -502,7 +503,7 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         qc_labels = ['ok']
         frame_qc = []
         for e in exptQC:
-            assert e.keys() >= set(['frameQC_names', 'frameQC_frames'])
+            assert e.keys() >= {'frameQC_names', 'frameQC_frames'}
             # Initialize an NaN array the same size of frameQC_frames to fill with new enum values
             frames = np.full(e['frameQC_frames'].shape, fill_value=np.nan)
             # May be numpy array of str or a single str, in both cases we cast to list of str
@@ -1373,6 +1374,49 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
             mlapdv[i] = MLAPDV
             location_id[i] = annotation
         return mlapdv, location_id
+
+
+class MesoscopeQC(base_tasks.MesoscopeTask):
+    """Create FOV and FOV location objects in Alyx from metadata."""
+
+    priority = 40
+    job_size = 'small'
+
+    @property
+    def signature(self):
+        signature = {
+            'input_files': [('mpci.ROIActivityF.npy', 'alf/FOV*', True),
+                            ('mpci.ROINeuropilActivityF.npy', 'alf/FOV*', True),
+                            ('mpci.ROIActivityDeconvolved.npy', 'alf/FOV*', True),
+                            ('mpci.badFrames.npy', 'alf/FOV*', True),
+                            ('mpci.mpciFrameQC.npy', 'alf/FOV*', True),
+                            ('mpciFrameQC.names.tsv', 'alf/FOV*', True),
+                            ('mpciMeanImage.images.npy', 'alf/FOV*', True),
+                            ('mpciROIs.stackPos.npy', 'alf/FOV*', True),
+                            ('mpciROIs.mpciROITypes.npy', 'alf/FOV*', True),
+                            ('mpciROIs.cellClassifier.npy', 'alf/FOV*', True),
+                            ('mpciROIs.uuids.csv', 'alf/FOV*', True),
+                            ('mpciROITypes.names.tsv', 'alf/FOV*', True),
+                            ('mpciROIs.masks.sparse_npz', 'alf/FOV*', True),
+                            ('mpciROIs.neuropilMasks.sparse_npz', 'alf/FOV*', True),
+                            ('mpci.times.npy', 'alf/FOV*', True),
+                            ('mpciStack.timeshift.npy', 'alf/FOV*', True)],
+            'output_files': []
+        }
+        return signature
+
+    def _run(self, **kwargs):
+
+        assert self.eid
+        assert self.one and not self.one.offline
+
+        update = kwargs.pop('update', True)
+        outcome = mesoQC.MesoscopeQC.qc_session(self.eid, one=self, update=update, **kwargs)
+
+        if update:
+            mesoQC.update_dataset_qc_for_session(self.eid, outcome, [],
+                                                 self.one, override=False)
+        return []
 
 
 def surface_normal(triangle):
