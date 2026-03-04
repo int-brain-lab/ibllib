@@ -1,10 +1,12 @@
 """WIP ROICaT processing task for MPCI data."""
+import uuid
 import logging
 from itertools import groupby
 from collections import Counter
 
 from scipy.cluster.hierarchy import linkage, fcluster
 import numpy as np
+import pandas as pd
 from one.alf.path import ALFPath
 import roicat
 import roicat.data_importing
@@ -229,14 +231,40 @@ class ROICaTTask(SubjectAggregateTask):
         # Load the list of sessions to process
         paths = self.fetch_fov_list(sessions_to_exclude=sessions_to_exclude)
         clusters = self.group_fovs(paths)
+        roi_tables = []
         for cID, paths in clusters.items():
+            logger.info(f'\nProcessing FOV set {cID}/{len(clusters)} with {len(paths)} FOVs')
             # Load the data for ROICaT processing
             data = self.load_data(paths)
 
             ## Run ROICaT
             defaults = roicat.util.get_default_parameters(pipeline='tracking')
-            outputs_roicat = roicat.pipelines.pipeline_tracking(defaults, custom_data=data)
+            result, *_ = roicat.pipelines.pipeline_tracking(defaults, custom_data=data)
 
+            # Load the ROI UUIDs from each session into a table
+            dfs = []
+            for path in paths:
+                df = pd.read_csv(path / 'mpciROIs.uuids.csv', names=['roi_id'], header=0)
+                df['FOV_path'] = path.name
+                df['session_path'] = path.session_path_short()
+                df['eid'] = self.one.path2eid(path.session_path()) if self.one else None
+                dfs.append(df)
+            roi_table = pd.concat(dfs, ignore_index=True)
+            # Create a mapping from ROICaT cluster label to a new UUID, with -1 (unclustered) mapping to NA
+            id2uuid = {int(k): None if k == '-1' else uuid.uuid4() for k in result['clusters']['labels_dict']}
+            roi_table['cluster_id'] = [id2uuid[label] or pd.NA for label in result['clusters']['labels']]
+
+            logger.info('Number of clusters: %i', roi_table['cluster_id'].unique().size)
+            logger.info('Number of discarded ROIs: %i', roi_table['cluster_id'].isna().sum())
+
+            # Drop rows with cluster_id NA (these are the unclustered ROIs that didn't track across sessions)
+            roi_table = roi_table.dropna(subset=['cluster_id'])
+            roi_tables.append(roi_table)
+        
+        # Concatenate all roi_tables into one DataFrame
+        all_roi_table = pd.concat(roi_tables, ignore_index=True)
+        # Save the combined table to a parquet file
+        all_roi_table.to_parquet(self.subject_path / 'roicat' / 'mpciROIs.tracked.pqt', index=False)
 
     def load_data(self, paths):
         """
