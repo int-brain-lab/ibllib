@@ -10,6 +10,7 @@ from iblutil.util import Bunch
 from one.api import ONE
 from one.alf import spec
 from ibllib.tests import TEST_DB
+from ibllib.tests.fixtures.utils import register_new_session
 from ibllib.qc import task_metrics as qcmetrics
 
 from brainbox.behavior.wheel import cm_to_rad
@@ -128,7 +129,8 @@ class TestDatasetQC(unittest.TestCase):
         self.assertRaises(AssertionError, qcmetrics.update_dataset_qc, qc, registered_datasets.copy(), one)
 
 
-class TestTaskMetrics(unittest.TestCase):
+class TaskQCTestData(unittest.TestCase):
+
     def setUp(self):
         self.data = self.load_fake_bpod_data()
         self.wheel_gain = 4
@@ -177,6 +179,8 @@ class TestTaskMetrics(unittest.TestCase):
             'position': np.ones_like(choice) * 35,
             'pause_duration': pauses
         }
+        # Change position sign to match choice direction and outcome
+        data['position'][data['choice'] != data['correct'] * 2 - 1] *= -1
 
         data['stimOnTrigger_times'] = start_times + data['quiescence'] + 1e-4
         data['stimOn_times'] = data['stimOnTrigger_times'] + 1e-1
@@ -188,6 +192,8 @@ class TestTaskMetrics(unittest.TestCase):
         )
         data['feedback_times'] = data['response_times'] + resp_feeback_delay
         data['stimFreeze_times'] = data['response_times'] + 1e-2
+        # StimFreeze for no go trials is nan
+        data['stimFreeze_times'][0] = np.nan
         data['stimFreezeTrigger_times'] = data['stimFreeze_times'] - trigg_delay
         data['feedbackType'] = np.vectorize(lambda x: -1 if x == 0 else x)(data['correct'])
         outcome = data['feedbackType'].copy()
@@ -281,6 +287,9 @@ class TestTaskMetrics(unittest.TestCase):
             'firstMovement_times': np.array(movement_times)
         }
 
+
+class TestTaskMetrics(TaskQCTestData):
+
     def test_check_stimOn_goCue_delays(self):
         metric, passed = qcmetrics.check_stimOn_goCue_delays(self.data)
         self.assertTrue(np.allclose(metric, 0.0011), 'failed to return correct metric')
@@ -303,7 +312,9 @@ class TestTaskMetrics(unittest.TestCase):
 
     def test_check_response_stimFreeze_delays(self):
         metric, passed = qcmetrics.check_response_stimFreeze_delays(self.data)
-        self.assertTrue(np.allclose(metric, 1e-2), 'failed to return correct metric')
+        self.assertTrue(np.allclose(metric[1:], 1e-2), 'failed to return correct metric')
+        # No go trial has inf value as stimFreeze values are nan
+        self.assertEqual(metric[0], np.inf)
         # Set incorrect timestamp (stimFreeze occurs before response)
         self.data['stimFreeze_times'][-1] = self.data['response_times'][-1] - 1e-4
         metric, passed = qcmetrics.check_response_stimFreeze_delays(self.data)
@@ -414,11 +425,13 @@ class TestTaskMetrics(unittest.TestCase):
 
     def test_check_stimFreeze_delays(self):
         metric, passed = qcmetrics.check_stimFreeze_delays(self.data)
-        self.assertTrue(np.allclose(metric, 1e-4), 'failed to return correct metric')
+        self.assertTrue(np.allclose(metric[1:], 1e-4), 'failed to return correct metric')
+        # No go trial has inf value as stimFreeze values are nan
+        self.assertEqual(metric[0], np.inf)
         # Set incorrect timestamp
         self.data['stimFreeze_times'][-1] = self.data['stimFreezeTrigger_times'][-1] + 0.2
         metric, passed = qcmetrics.check_stimFreeze_delays(self.data)
-        n = len(self.data['stimFreeze_times'])
+        n = len(self.data['stimFreeze_times']) - 1  # remove the nogo trial which we expect to be nan
         expected = (n - 1) / n
         self.assertEqual(np.nanmean(passed), expected, 'failed to detect dodgy timestamp')
 
@@ -510,9 +523,16 @@ class TestTaskMetrics(unittest.TestCase):
         self.assertTrue(np.isnan(metric[nogo]).all())
         self.assertTrue(np.isnan(passed[nogo]).all())
 
-        # Remove wheel data for choice trial
+        # Change position for one trial and check that it is caught
         assert self.data['choice'].any(), 'no choice trials in test data'
         n = np.argmax(self.data['choice'] != 0)  # Index of choice trial
+        # target position opposite to wheel movement for the given outcome
+        self.data['position'][n] = -self.data['position'][n]
+        metric, passed = qcmetrics.check_wheel_move_during_closed_loop(self.data, gain)
+        self.assertFalse(passed[n])
+
+        # Remove wheel data for choice trial
+        self.data['position'][n] = -self.data['position'][n]  # restore position
         mask = np.logical_xor(self.data['wheel_timestamps'] < self.data['goCue_times'][n],
                               self.data['wheel_timestamps'] > self.data['response_times'][n])
         self.data['wheel_timestamps'] = self.data['wheel_timestamps'][mask]
@@ -667,6 +687,62 @@ class TestHabituationQC(unittest.TestCase):
         _, _, outcomes = self.qc.compute_session_status()
         if self.qc.passed['_task_habituation_time'] is None:
             self.assertEqual(outcomes['_task_habituation_time'], spec.QC.NOT_SET)
+
+
+class TestTaskQCWithCustomCriteria(TaskQCTestData):
+    """
+    Test running the task QC but with custom criteria stored in a note attached to the session
+    """
+
+    def setUp(self):
+
+        super().setUp()
+
+        self.one = ONE(**TEST_DB)
+        _, self.eid = register_new_session(self.one)
+        self.qc = qcmetrics.TaskQC(self.eid, one=self.one)
+        self.qc.extractor = Bunch({'data': self.data, 'settings': {}})
+
+        import json
+        note_title = '=== SESSION QC CRITERIA task ==='
+        note_text = {
+            "title": note_title,
+            "criteria": {'default': {'WARNING': 1, 'FAIL': 0.5}}
+        }
+
+        note_data = {'user': self.one.alyx.user,
+                     'content_type': 'session',
+                     'object_id': self.eid,
+                     'text': f'{json.dumps(note_text)}'}
+
+        self.note = self.one.alyx.rest('notes', 'create', data=note_data)
+
+    def test_compute(self):
+
+        # Build a dict of metrics and passed for a few the task qcs
+        metrics = dict()
+        passed = dict()
+
+        metrics['_task_stimOff_itiIn_delays'], passed['_task_stimOff_itiIn_delays'] = (
+            qcmetrics.check_stimOff_itiIn_delays(self.data))
+
+        metrics['_task_stimOn_delays'], passed['_task_stimOn_delays'] = (
+            qcmetrics.check_stimOff_itiIn_delays(self.data))
+
+        self.qc.metrics = metrics
+        self.qc.passed = passed
+
+        # Outcome using defualt BWM criteria
+        outcome, *_ = self.qc.compute_session_status(use_custom=False)
+        self.assertEqual(spec.QC.PASS, outcome)
+
+        # Outcome using custom note criteria
+        outcome, *_ = self.qc.compute_session_status(use_custom=True)
+        self.assertEqual(spec.QC.WARNING, outcome)
+
+    def tearDown(self):
+        self.one.alyx.rest('notes', 'delete', id=self.note['id'])
+        self.one.alyx.rest('sessions', 'delete', id=self.eid)
 
 
 if __name__ == '__main__':

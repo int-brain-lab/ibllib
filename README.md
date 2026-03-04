@@ -17,20 +17,17 @@ The library is currently 2 main modules:
 **Python Module**: Python 3.10 or higher, Python 3.12 recommended
 
 ## Installation, documentation and examples
-https://docs.internationalbrainlab.org
 
+Installation: https://docs.internationalbrainlab.org/02_installation.html
+Documentation and examples: https://docs.internationalbrainlab.org
 
 ## Contribution and development practices
-See https://int-brain-lab.github.io/iblenv/07_contribution.html
+See https://docs.internationalbrainlab.org/09_contribution.html
 
 We use Semantic Versioning.
 
 Before committing to your branch:
--   check formating `flake8`
+-   check formating `ruff check`
 -   run tests `python -m unittest discover`
 
 Pull request to `develop` or `main`.
-
-
-## Matlab Library
-The Matlab library has moved to its own repository here: https://github.com/int-brain-lab/ibllib-matlab/

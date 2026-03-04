@@ -187,7 +187,7 @@ def _load_acquisition_description(session_path):
         try:
             # v7 sessions used a different folder name for task data;
             # v8 sessions should always have a description file
-            assert session_path.joinpath('raw_behavior_data').exists()
+            assert Path(session_path).joinpath('raw_behavior_data').exists()
             acquisition_description = acquisition_description_legacy_session(session_path)
             assert acquisition_description
         except (AssertionError, ValueError):
