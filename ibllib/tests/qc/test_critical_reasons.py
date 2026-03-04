@@ -218,7 +218,10 @@ class TestSignOffNote(unittest.TestCase):
         assert expected_dict == note_dict
 
     def tearDown(self) -> None:
-        self.one.alyx.rest('sessions', 'delete', id=self.eid)
+
+        notes = self.one.alyx.rest('notes', 'list', django=f'object_id,{self.eid}', no_cache=True)
+        for n in notes:
+            self.one.alyx.rest('notes', 'delete', id=n['id'])
 
 
 if __name__ == '__main__':

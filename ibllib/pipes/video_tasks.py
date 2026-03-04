@@ -863,7 +863,7 @@ class LightningPose(base_tasks.VideoTask):
         return actual_outputs
 
 
-class PostLP(base_tasks.VideoTask):
+class PostLP(base_tasks.VideoTask, base_tasks.BehaviourTask):
     """
     The PostLP task takes LP traces as input and computes useful quantities, as well as qc.
 
@@ -875,13 +875,14 @@ class PostLP(base_tasks.VideoTask):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.trials_collection = kwargs.get('trials_collection', 'alf')
+        self.trials_collection = self.get_task_collection()
 
     @property
     def signature(self):
         return {
             'input_files': [(f'_ibl_{cam}Camera.lightningPose.pqt', 'alf', True) for cam in self.cameras] +
                            [(f'_ibl_{cam}Camera.times.npy', 'alf', True) for cam in self.cameras] +
+                           [('_ibl_experiment.description.yaml', self.trials_collection, True)] +
             # the following are required for the LP plot only
             # they are not strictly required, some plots just might be skipped
             # In particular the raw videos don't need to be downloaded as they can be streamed
@@ -1004,7 +1005,7 @@ class PostLP(base_tasks.VideoTask):
                 if not fig_path.parent.exists():
                     fig_path.parent.mkdir(parents=True, exist_ok=True)
                 fig = lp_qc_plot(self.session_path, one=self.one, cameras=self.cameras, device_collection=self.device_collection,
-                                 trials_collection=self.trials_collection)
+                                 trials_collection=self.trials_collection or 'alf')
                 fig.savefig(fig_path)
                 fig.clf()
                 snp = ReportSnapshot(self.session_path, session_id, one=self.one)
