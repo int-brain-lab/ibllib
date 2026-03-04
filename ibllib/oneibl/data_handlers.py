@@ -136,7 +136,7 @@ class ExpectedDataset:
         bool
             True if the dataset is found on disk or is optional.
         list of pathlib.Path
-            A list of matching dataset files.
+            A sorted list of matching dataset files.
         missing, None, str, set of str
             One or more glob patterns that either didn't yield files (or did in the case of inverted datasets).
 
@@ -196,7 +196,7 @@ class ExpectedDataset:
         else:
             raise NotImplementedError(f'logical {self.operator.upper()} not implemented')
 
-        return ok, actual_files, missing
+        return ok, sorted(actual_files), missing
 
     def filter(self, session_datasets, **kwargs):
         """Filter dataset frame by expected datasets.
@@ -700,7 +700,7 @@ class ServerGlobusDataHandler(DataHandler):
         :param signatures: input and output file signatures
         :param one: ONE instance
         """
-        from one.remote.globus import Globus, get_lab_from_endpoint_id  # noqa
+        from one.remote.globus import Globus  # noqa
 
         super().__init__(session_path, signatures, one=one)
         self.globus = Globus(client_name='server', headless=True)
@@ -816,13 +816,13 @@ class RemoteHttpDataHandler(DataHandler):
         """
         super().__init__(session_path, signature, one=one)
 
-    def setUp(self, **_):
+    def setUp(self, check_hash=True, **_):
         """
         Function to download necessary data to run tasks using ONE
         :return:
         """
         df = super().getData()
-        self.one._check_filesystem(df)
+        self.one._check_filesystem(df, check_hash=check_hash)
 
     def uploadData(self, outputs, version, **kwargs):
         """

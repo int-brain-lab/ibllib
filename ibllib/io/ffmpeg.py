@@ -26,6 +26,9 @@ def compress(file_in, file_out, command, remove_original=True):
 
     file_in = Path(file_in)
     file_out = Path(file_out)
+
+    meta_in = get_video_meta(file_in)
+    _logger.info(f'{file_in.name} - length: {meta_in["length"]:}, fps: {meta_in["fps"]:}')
     # if the output file already exists, overwrite it
     if file_out.exists():
         file_out.unlink()
@@ -33,6 +36,10 @@ def compress(file_in, file_out, command, remove_original=True):
     process = subprocess.Popen(command2run, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     info, error = process.communicate()
     assert process.returncode == 0, f'compression failed for {file_in}: {error}'
+
+    meta_out = get_video_meta(file_out)
+    _logger.info(f'{file_out.name} - length: {meta_out["length"]:}, fps: {meta_out["fps"]:}')
+
     # if the command was successful delete the original file
     if remove_original:
         file_in.unlink()

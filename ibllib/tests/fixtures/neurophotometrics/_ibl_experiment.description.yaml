@@ -1,0 +1,35 @@
+devices:
+  cameras:
+    left:
+      collection: raw_video_data
+      sync_label: audio
+  microphone:
+    microphone:
+      collection: raw_task_data_00
+      sync_label: audio
+  neurophotometrics:
+    collection: raw_photometry_data
+    datetime: '2025-05-26T15:08:40.237101'
+    fibers:
+      G0:
+        location: VTA
+    sync_channel: 2
+    sync_metadata:
+      acquisition_software: daqami
+      collection: raw_photometry_data
+      frameclock_channel: 7
+    sync_mode: daqami
+procedures:
+- Fiber photometry
+projects:
+- ibl_fibrephotometry
+- practice
+sync:
+  bpod:
+    acquisition_software: pybpod
+    collection: raw_task_data_00
+    extension: .jsonable
+tasks:
+- _iblrig_tasks_advancedChoiceWorld:
+    collection: raw_task_data_00
+version: 1.0.0

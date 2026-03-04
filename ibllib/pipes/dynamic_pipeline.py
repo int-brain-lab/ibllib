@@ -191,7 +191,7 @@ def _get_trials_tasks(session_path, acquisition_description=None, sync_tasks=Non
     """
     Generate behaviour tasks from acquisition description.
 
-    This returns all behaviour related tasks including TrialsRegisterRaw and TrainingStatus objects.
+    This returns all behaviour related tasks including TrialRegisterRaw and TrainingStatus objects.
 
     Parameters
     ----------
@@ -586,6 +586,8 @@ def make_pipeline(session_path, **pkwargs):
 
     # Mesoscope tasks
     if 'mesoscope' in devices:
+        from ibllib.mpci.tasks import MesoscopeFOV
+
         ((_, mscope_kwargs),) = devices['mesoscope'].items()
         mscope_kwargs['device_collection'] = mscope_kwargs.pop('collection')
         tasks['MesoscopeRegisterSnapshots'] = type('MesoscopeRegisterSnapshots', (mscope_tasks.MesoscopeRegisterSnapshots,), {})(
@@ -594,7 +596,7 @@ def make_pipeline(session_path, **pkwargs):
         tasks['MesoscopePreprocess'] = type('MesoscopePreprocess', (mscope_tasks.MesoscopePreprocess,), {})(
             **kwargs, **mscope_kwargs
         )
-        tasks['MesoscopeFOV'] = type('MesoscopeFOV', (mscope_tasks.MesoscopeFOV,), {})(
+        tasks['MesoscopeFOV'] = type('MesoscopeFOV', (MesoscopeFOV,), {})(
             **kwargs, **mscope_kwargs, parents=[tasks['MesoscopePreprocess']]
         )
         tasks['MesoscopeSync'] = type('MesoscopeSync', (mscope_tasks.MesoscopeSync,), {})(
@@ -605,12 +607,23 @@ def make_pipeline(session_path, **pkwargs):
         )
 
     if 'neurophotometrics' in devices:
-        # {'collection': 'raw_photometry_data', 'datetime': '2024-09-18T16:43:55.207000',
-        #   'fibers': {'G0': {'location': 'NBM'}, 'G1': {'location': 'SI'}}, 'sync_channel': 1}
-        photometry_kwargs = devices['neurophotometrics']
-        tasks['FibrePhotometrySync'] = type('FibrePhotometrySync', (ptasks.FibrePhotometrySync,), {})(
-            **kwargs, **photometry_kwargs
-        )
+        # note: devices['neurophotometrics'] is the acquisition_description
+        sync_mode = devices['neurophotometrics'].get('sync_mode', 'bpod')  # default to bpod for downward compatibility
+        match sync_mode:
+            case 'bpod':
+                # for synchronization with the BNC inputs of the neurophotometrics receiving the sync pulses
+                # from the individual bpods
+                tasks['FibrePhotometryBpodSync'] = type('FibrePhotometryBpodSync', (ptasks.FibrePhotometryBpodSync,), {})(
+                    **devices['neurophotometrics'],
+                    **kwargs,
+                )
+            case 'daqami':
+                # for synchronization with the DAQami receiving the sync pulses from the individual bpods
+                # as well as the frame clock from the FP3002
+                tasks['FibrePhotometryDAQSync'] = type('FibrePhotometryDAQSync', (ptasks.FibrePhotometryDAQSync,), {})(
+                    **devices['neurophotometrics'],
+                    **kwargs,
+                )
 
     p = mtasks.Pipeline(session_path=session_path, **pkwargs)
     p.tasks = tasks

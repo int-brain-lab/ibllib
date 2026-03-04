@@ -2,6 +2,7 @@ from pathlib import Path
 import datetime
 import logging
 import itertools
+import re
 
 from packaging import version
 from requests import HTTPError
@@ -98,7 +99,7 @@ def register_dataset(file_list, one=None, exists=False, versions=None, **kwargs)
             protected_status = IBLRegistrationClient(_one).check_protected_files(file_list)
             protected = _get_protected(protected_status)
         except HTTPError as err:
-            if "[Errno 500] /check-protected: 'A base session for" in str(err):
+            if err.response.status_code == 500 and re.search(r"check-protected: 'A (base )?session .* does not exist'", str(err)):
                 # If we get an error due to the session not existing, we take this to mean no datasets are protected
                 protected = False
             else:
@@ -349,7 +350,7 @@ class IBLRegistrationClient(RegistrationClient):
                 _, _end_time = _get_session_times(ses_path, md, d)
                 user = md.get('PYBPOD_CREATOR')
                 user = user[0] if user[0] in users else self.one.alyx.user
-                volume = d[-1].get('water_delivered', sum(x['reward_amount'] for x in d)) / 1000
+                volume = d[-1].get('water_delivered', sum(x.get('reward_amount', 0) for x in d)) / 1000
                 if volume > 0:
                     self.register_water_administration(
                         subject['nickname'],
@@ -492,6 +493,8 @@ def _get_session_performance(md, ses_data):
     n_trials = []
     n_correct = []
     for data, settings in filter(all, zip(ses_data, md)):
+        if 'trial_num' not in data:
+            continue  # Skip if no trial_num key in task data
         # In some protocols trials start from 0, in others, from 1
         n = data[-1]['trial_num'] + int(data[0]['trial_num'] == 0)  # +1 if starts from 0
         n_trials.append(n)
@@ -501,7 +504,7 @@ def _get_session_performance(md, ses_data):
         if 'habituationChoiceWorld' in settings.get('PYBPOD_PROTOCOL', ''):
             n_correct.append(0)
         else:
-            n_correct.append(data[-1].get('ntrials_correct', sum(x['trial_correct'] for x in data)))
+            n_correct.append(data[-1].get('ntrials_correct', sum(x.get('trial_correct', 0) for x in data)))
 
     return sum(n_trials), sum(n_correct)
 

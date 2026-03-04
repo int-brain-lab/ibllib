@@ -291,7 +291,8 @@ class PassiveTaskNidq(base_tasks.BehaviourTask):
     def _run(self, **kwargs):
         """returns a list of pathlib.Paths."""
         settings = kwargs.get('settings', None)
-        data, paths = PassiveChoiceWorld(self.session_path).extract(
+        self.passive_extractor = PassiveChoiceWorld(self.session_path)
+        data, paths = self.passive_extractor.extract(
             sync_collection=self.sync_collection,
             task_collection=self.collection,
             settings=settings,
@@ -300,7 +301,9 @@ class PassiveTaskNidq(base_tasks.BehaviourTask):
             protocol_number=self.protocol_number,
         )
 
-        if len(paths) != len(self.output_files):
+        expected_out = len(self.output_files) if not self.passive_extractor.skip_replay else 2
+
+        if len(paths) != expected_out:
             _logger.warning('Number of output files does not match the signature definition')
             self.status = -1
 
@@ -344,7 +347,8 @@ class PassiveTaskTimeline(base_tasks.BehaviourTask, base_tasks.MesoscopeTask):
             self.protocol_number = None
 
         sync, chmap = self.load_sync()
-        data, paths = PassiveChoiceWorld(self.session_path).extract(
+        self.passive_extractor = PassiveChoiceWorld(self.session_path)
+        data, paths = self.passive_extractor.extract(
             sync_collection=self.sync_collection,
             task_collection=self.collection,
             save=True,
@@ -354,7 +358,9 @@ class PassiveTaskTimeline(base_tasks.BehaviourTask, base_tasks.MesoscopeTask):
             sync_map=chmap,
         )
 
-        if len(paths) != len(self.output_files):
+        expected_out = len(self.output_files) if not self.passive_extractor.skip_replay else 2
+
+        if len(paths) != expected_out:
             _logger.warning('Number of output files does not match the signature definition')
             self.status = -1
 
@@ -391,7 +397,7 @@ class ChoiceWorldTrialsBpod(base_tasks.BehaviourTask):
 
     def _run(self, update=True, save=True, **kwargs):
         """Extracts an iblrig training session."""
-        trials, output_files = self.extract_behaviour(save=save)
+        trials, output_files = self.extract_behaviour(save=save, **kwargs)
         if trials is None:
             return None
         if self.one is None or self.one.offline:
@@ -586,8 +592,8 @@ class ChoiceWorldTrialsNidq(ChoiceWorldTrialsBpod):
                 self.status = -1
         return qc
 
-    def _run(self, update=True, plot_qc=True, save=True):
-        output_files = super()._run(update=update, save=save, plot_qc=plot_qc)
+    def _run(self, update=True, plot_qc=True, save=True, **kwargs):
+        output_files = super()._run(update=update, save=save, plot_qc=plot_qc, **kwargs)
         if update and not self.one.offline:
             self._behaviour_criterion(update=update)
 
