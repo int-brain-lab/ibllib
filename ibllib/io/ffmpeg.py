@@ -28,7 +28,7 @@ def compress(file_in, file_out, command, remove_original=True):
     file_out = Path(file_out)
 
     meta_in = get_video_meta(file_in)
-    _logger.info(f"{file_in.name} - length: {meta_in['length']:}, fps: {meta_in['fps']:}")
+    _logger.info(f'{file_in.name} - length: {meta_in["length"]:}, fps: {meta_in["fps"]:}')
     # if the output file already exists, overwrite it
     if file_out.exists():
         file_out.unlink()
@@ -38,8 +38,8 @@ def compress(file_in, file_out, command, remove_original=True):
     assert process.returncode == 0, f'compression failed for {file_in}: {error}'
 
     meta_out = get_video_meta(file_out)
-    _logger.info(f"{file_out.name} - length: {meta_out['length']:}, fps: {meta_out['fps']:}")
-    
+    _logger.info(f'{file_out.name} - length: {meta_out["length"]:}, fps: {meta_out["fps"]:}')
+
     # if the command was successful delete the original file
     if remove_original:
         file_in.unlink()
@@ -61,14 +61,13 @@ def iblrig_video_compression(session_path, command, verify_output=True):
     >>>            '-nostats -loglevel 0 -codec:a copy {file_out}')
     :return: list of compressed files
     """
-    output_files = list(session_path.joinpath("raw_video_data").rglob('_iblrig_*.mp4'))
-    rig_avi_files = list(session_path.joinpath("raw_video_data").rglob('_iblrig_*.avi'))
+    output_files = list(session_path.joinpath('raw_video_data').rglob('_iblrig_*.mp4'))
+    rig_avi_files = list(session_path.joinpath('raw_video_data').rglob('_iblrig_*.avi'))
     # first compress everything (the rationale is not to delete anything if there is a crash)
     for file_in in rig_avi_files:
-        _logger.info(f"compressing {file_in}")
+        _logger.info(f'compressing {file_in}')
         file_out = file_in.with_suffix('.mp4')
-        status, fout = compress(file_in=file_in, file_out=file_out,
-                                command=command, remove_original=False)
+        status, fout = compress(file_in=file_in, file_out=file_out, command=command, remove_original=False)
         output_files.append(fout)
 
     if verify_output:

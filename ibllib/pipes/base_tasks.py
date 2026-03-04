@@ -1,4 +1,5 @@
 """Abstract base classes for dynamic pipeline tasks."""
+
 import logging
 import json
 from pathlib import Path
@@ -19,7 +20,6 @@ _logger = logging.getLogger(__name__)
 
 
 class DynamicTask(Task):
-
     def __init__(self, session_path, **kwargs):
         super().__init__(session_path, **kwargs)
         self.session_params = self.read_params_file()
@@ -76,7 +76,6 @@ class DynamicTask(Task):
 
 
 class BehaviourTask(DynamicTask):
-
     extractor = None
     """ibllib.io.extractors.base.BaseBpodExtractor: A trials extractor object."""
 
@@ -279,7 +278,7 @@ class BehaviourTask(DynamicTask):
         return trials_data
 
     def get_signatures(self, **kwargs):
-        """ explicitly adding the experiment description file to the input files for all behavior tasks
+        """explicitly adding the experiment description file to the input files for all behavior tasks
         There is a trade-off between this inheritance design and explicit file signatures for child classes"""
 
         super().get_signatures(**kwargs)
@@ -288,7 +287,6 @@ class BehaviourTask(DynamicTask):
 
 
 class VideoTask(DynamicTask):
-
     def __init__(self, session_path, cameras, **kwargs):
         super().__init__(session_path, cameras=cameras, **kwargs)
         self.cameras = cameras
@@ -339,14 +337,12 @@ class VideoTask(DynamicTask):
 
 
 class AudioTask(DynamicTask):
-
     def __init__(self, session_path, **kwargs):
         super().__init__(session_path, **kwargs)
         self.device_collection = self.get_device_collection('microphone', kwargs.get('device_collection', 'raw_behavior_data'))
 
 
 class EphysTask(DynamicTask):
-
     def __init__(self, session_path, **kwargs):
         super().__init__(session_path, **kwargs)
 
@@ -382,7 +378,8 @@ class MesoscopeTask(DynamicTask):
         super().__init__(session_path, **kwargs)
 
         self.device_collection = self.get_device_collection(
-            'mesoscope', kwargs.get('device_collection', 'raw_imaging_data_[0-9]*'))
+            'mesoscope', kwargs.get('device_collection', 'raw_imaging_data_[0-9]*')
+        )
 
     def get_signatures(self, **kwargs):
         """
@@ -400,9 +397,11 @@ class MesoscopeTask(DynamicTask):
         # For all inputs and outputs that are part of the device collection, expand to one file per folder
         # All others keep unchanged
         self.input_files = [
-            update_collections(x, raw_imaging_folders, self.device_collection, exact_match=True) for x in self.input_files]
+            update_collections(x, raw_imaging_folders, self.device_collection, exact_match=True) for x in self.input_files
+        ]
         self.output_files = [
-            update_collections(x, raw_imaging_folders, self.device_collection, exact_match=True) for x in self.output_files]
+            update_collections(x, raw_imaging_folders, self.device_collection, exact_match=True) for x in self.output_files
+        ]
 
     def load_sync(self):
         """
@@ -630,14 +629,12 @@ class RegisterRawDataTask(DynamicTask):
 
 class ExperimentDescriptionRegisterRaw(RegisterRawDataTask):
     """dict of list: custom sign off keys corresponding to specific devices"""
+
     sign_off_categories = SIGN_OFF_CATEGORIES
 
     @property
     def signature(self):
-        signature = {
-            'input_files': [],
-            'output_files': [('*experiment.description.yaml', '', True)]
-        }
+        signature = {'input_files': [], 'output_files': [('*experiment.description.yaml', '', True)]}
         return signature
 
     def _run(self, **kwargs):

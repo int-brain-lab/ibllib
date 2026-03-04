@@ -3,6 +3,7 @@
 This module provides tools for registering widefield reference stack images to one another, and
 for extracting atlas coordinates from FOV mean images.
 """
+
 import json
 import enum
 import logging
@@ -42,7 +43,8 @@ def get_window_center(meta):
     """
     try:
         param = next(
-            x.split('=')[-1].strip() for x in meta['rawScanImageMeta']['Software'].split('\n')
+            x.split('=')[-1].strip()
+            for x in meta['rawScanImageMeta']['Software'].split('\n')
             if x.startswith('SI.hDisplay.circleOffset')
         )
         return np.fromiter(map(float, param[1:-1].split()), dtype=float) / 1e3  # μm -> mm
@@ -66,10 +68,7 @@ def get_px_per_um(meta):
     if meta['rawScanImageMeta']['ResolutionUnit'].casefold() != 'centimeter':
         raise NotImplementedError('Reference image resolution unit must be in centimeters')
 
-    yx_res = np.array([
-        meta['rawScanImageMeta']['YResolution'],
-        meta['rawScanImageMeta']['XResolution']
-    ])
+    yx_res = np.array([meta['rawScanImageMeta']['YResolution'], meta['rawScanImageMeta']['XResolution']])
     return yx_res * 1e-4  # NB: these values are (y, x) in μm
 
 
@@ -91,7 +90,8 @@ def get_window_px(meta):
         The reference image size in pixels (y, x).
     """
     diameter = next(
-        float(x.split('=')[-1].strip()) for x in meta['rawScanImageMeta']['Software'].split('\n')
+        float(x.split('=')[-1].strip())
+        for x in meta['rawScanImageMeta']['Software'].split('\n')
         if x.startswith('SI.hDisplay.circleDiameter')
     )
     offset = get_window_center(meta) * 1e3  # mm -> μm
@@ -167,7 +167,7 @@ def preprocess_vasculature(image_stack, sigma=1.0, low_percentile=1, high_percen
             assert isinstance(crop_size, int)
             assert crop_size < min(image.shape)
             c = ((np.array(image.shape) - crop_size) / 2).astype(int)
-            image = image[c[0]:(c[0] + crop_size), c[1]:(c[1] + crop_size)]
+            image = image[c[0] : (c[0] + crop_size), c[1] : (c[1] + crop_size)]
 
     return (image * 255).astype(np.uint8)
 
@@ -220,8 +220,10 @@ def register_reference_stacks(stack_path, target_stack_path, save_path=None, dis
                 # Attempt to determine crop size based on window size
                 meta = alfio.load_file_content(path.with_name('referenceImage.meta.json'))
                 center_px, radius_px, image_size = get_window_px(meta)
-                crop_size = slice(max(0, int(center_px[0] - radius_px[0])), min(image_size[0], int(center_px[0] + radius_px[0]))), \
-                            slice(max(0, int(center_px[1] - radius_px[1])), min(image_size[1], int(center_px[1] + radius_px[1])))
+                crop_size = (
+                    slice(max(0, int(center_px[0] - radius_px[0])), min(image_size[0], int(center_px[0] + radius_px[0]))),
+                    slice(max(0, int(center_px[1] - radius_px[1])), min(image_size[1], int(center_px[1] + radius_px[1]))),
+                )
                 kwargs['crop_size'] = crop_size
                 _logger.info(f'Determined crop size for {path.session_path_short()}: {crop_size}')
             except StopIteration:
@@ -244,7 +246,8 @@ def register_reference_stacks(stack_path, target_stack_path, save_path=None, dis
 
     # Apply the transformation to the processed image
     aligned_processed = cv2.warpAffine(
-        stack, warp_matrix, (stack.shape[1], stack.shape[0]), flags=cv2.INTER_LINEAR + cv2.WARP_INVERSE_MAP)
+        stack, warp_matrix, (stack.shape[1], stack.shape[0]), flags=cv2.INTER_LINEAR + cv2.WARP_INVERSE_MAP
+    )
 
     # Extract parameters
     rotation = np.arctan2(warp_matrix[1, 0], warp_matrix[0, 0])  # in radians
@@ -263,17 +266,18 @@ def register_reference_stacks(stack_path, target_stack_path, save_path=None, dis
         'correlation': cc,
         'quality_ncc': ncc,
         'warp_matrix': warp_matrix,
-        'method': 'ecc'
+        'method': 'ecc',
     }
     # The same warp we will use on the MLAPDV array
-    transform_robust = (skimage.transform.EuclideanTransform(rotation=params['rotation']) +
-                        skimage.transform.EuclideanTransform(translation=params['translation']))
+    transform_robust = skimage.transform.EuclideanTransform(rotation=params['rotation']) + skimage.transform.EuclideanTransform(
+        translation=params['translation']
+    )
     img_data['aligned'] = skimage.transform.warp(
-        np.max(img_data['stack'], axis=0), transform_robust,
-        order=1, mode='constant', cval=0, clip=True, preserve_range=True)
+        np.max(img_data['stack'], axis=0), transform_robust, order=1, mode='constant', cval=0, clip=True, preserve_range=True
+    )
     img_data['aligned_processed'] = skimage.transform.warp(
-        img_data['stack_processed'], transform_robust,
-        order=1, mode='constant', cval=0, clip=True, preserve_range=True)
+        img_data['stack_processed'], transform_robust, order=1, mode='constant', cval=0, clip=True, preserve_range=True
+    )
 
     write_stack_registration_qc(img_data, params, save_path=save_path, display=display)
 
@@ -343,16 +347,25 @@ def write_stack_registration_qc(img_data, params, save_path=None, display=False,
     axs[1][1].set_title('Difference')
 
     # Add large asterisk in top left corner to indicate which image is currently displayed
-    txt = [axs[0][i].text(
-        0.05, 0.95, '*', color='red', fontsize=20,
-        verticalalignment='top', horizontalalignment='left',
-        transform=axs[0][i].transAxes) for i in range(2)]
+    txt = [
+        axs[0][i].text(
+            0.05,
+            0.95,
+            '*',
+            color='red',
+            fontsize=20,
+            verticalalignment='top',
+            horizontalalignment='left',
+            transform=axs[0][i].transAxes,
+        )
+        for i in range(2)
+    ]
     # Remove all axes ticks and labels
     for ax in axs.flatten():
         ax.axis('off')
     # Write params at bottom of figure
     par_text = [f'{k.capitalize()}: {v}' for k, v in params.items()]
-    fig.text(0., 0.01, ', \n'.join(par_text), ha='left')
+    fig.text(0.0, 0.01, ', \n'.join(par_text), ha='left')
     # Reduce space between subplots
     # fig.tight_layout()
 

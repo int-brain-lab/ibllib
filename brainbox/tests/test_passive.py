@@ -6,9 +6,7 @@ from iblutil.numerical import ismember2d
 
 class TestPassive(unittest.TestCase):
     def test_rf_map(self):
-        """
-
-        """
+        """ """
         # Simulate fake rfmap data
         test_frames = np.full((60, 15, 15), 128, dtype='uint8')
         # Test on and off individually
@@ -51,9 +49,9 @@ class TestPassive(unittest.TestCase):
         spike_times = np.arange(25, 35, 0.01)
         spike_depths = 500 * np.ones_like(spike_times)
 
-        rf_map_avg, depths = passive.get_rf_map_over_depth(rf_map_times, rf_map_pos,
-                                                           rf_stim_frames, spike_times,
-                                                           spike_depths, x_lim=[0, 60])
+        rf_map_avg, depths = passive.get_rf_map_over_depth(
+            rf_map_times, rf_map_pos, rf_stim_frames, spike_times, spike_depths, x_lim=[0, 60]
+        )
         non_zero = np.where(rf_map_avg['on'] != 0)
         self.assertEqual(np.argmin(np.abs(depths - 500)), non_zero[0][0])
         self.assertTrue(np.all(non_zero[1] == 10))
@@ -74,13 +72,17 @@ class TestPassive(unittest.TestCase):
         # Make random times
         aud_stim = {}
         aud_stim['valveOn'] = np.array([10, 20, 30])
-        spike_times = np.r_[np.arange(8, 9.6, 0.01), np.arange(9.6, 15, 0.002),
-                            np.arange(18, 19.6, 0.005), np.arange(19.6, 25, 0.002),
-                            np.arange(28, 29.6, 0.01), np.arange(29.6, 35, 0.002)]
+        spike_times = np.r_[
+            np.arange(8, 9.6, 0.01),
+            np.arange(9.6, 15, 0.002),
+            np.arange(18, 19.6, 0.005),
+            np.arange(19.6, 25, 0.002),
+            np.arange(28, 29.6, 0.01),
+            np.arange(29.6, 35, 0.002),
+        ]
         spike_depths = np.zeros_like(spike_times)
 
-        stim_activity = passive.get_stim_aligned_activity(aud_stim, spike_times, spike_depths,
-                                                          z_score_flag=False, x_lim=[0, 40])
+        stim_activity = passive.get_stim_aligned_activity(aud_stim, spike_times, spike_depths, z_score_flag=False, x_lim=[0, 40])
 
         self.assertCountEqual(stim_activity.keys(), ['valveOn'])
         # The first may be a bit different due to overlap with noise floor

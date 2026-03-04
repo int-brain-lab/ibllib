@@ -52,14 +52,9 @@ def get_surface_points(atlas: BrainAtlas, dropna=True) -> np.ndarray:
         Surface points with shape (N, 3) in (ml, ap, dv) coordinates.
     """
 
-    ap_grid, ml_grid = np.meshgrid(
-        atlas.bc.yscale, atlas.bc.xscale
-    )  # now this indexes into AP, ML
+    ap_grid, ml_grid = np.meshgrid(atlas.bc.yscale, atlas.bc.xscale)  # now this indexes into AP, ML
     points = (
-        np.stack(
-            [ml_grid.T.flatten(), ap_grid.T.flatten(), atlas.top.flatten()], axis=1
-        )
-        * 1e6  # <- converts the atlas into μm
+        np.stack([ml_grid.T.flatten(), ap_grid.T.flatten(), atlas.top.flatten()], axis=1) * 1e6  # <- converts the atlas into μm
     )
     if dropna:
         points = points[~np.isnan(points[:, 2])]

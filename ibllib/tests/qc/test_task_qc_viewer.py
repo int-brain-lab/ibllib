@@ -1,4 +1,5 @@
 """Tests for the ibllib.qc.task_qc_viewer package."""
+
 import os
 import unittest
 from unittest import mock
@@ -32,13 +33,15 @@ class TestTaskQC(unittest.TestCase):
 
     def test_get_bpod_trials_task(self):
         """Test get_bpod_trials_task function."""
-        task = HabituationTrialsBpod('foo/bar', one=self.one,
-                                     protocol_number=0, protocol='habituationChoiceWorld', collection='raw_task_data_00')
+        task = HabituationTrialsBpod(
+            'foo/bar', one=self.one, protocol_number=0, protocol='habituationChoiceWorld', collection='raw_task_data_00'
+        )
         bpod_task = get_bpod_trials_task(task)
         self.assertIs(task, bpod_task)
 
-        task = ChoiceWorldTrialsNidq('foo/bar', one=self.one,
-                                     protocol_number=2, protocol='ephysChoiceWorld', collection='raw_task_data_02')
+        task = ChoiceWorldTrialsNidq(
+            'foo/bar', one=self.one, protocol_number=2, protocol='ephysChoiceWorld', collection='raw_task_data_02'
+        )
         bpod_task = get_bpod_trials_task(task)
         self.assertIs(bpod_task.__class__, ChoiceWorldTrialsBpod)
         self.assertEqual(bpod_task.protocol_number, 2)
@@ -63,7 +66,7 @@ class TestTaskQC(unittest.TestCase):
 
         # Set up QC mock
         qc_mock = mock.Mock(spec=TaskQC, unsafe=True)
-        qc_mock.metrics = {'foo': .7}
+        qc_mock.metrics = {'foo': 0.7}
         qc_mock.compute_session_status.return_value = (spec.QC(40), qc_mock.metrics, {'foo': spec.QC(40)})
         qc_mock.extractor.data = {'intervals': np.array([[0, 1]])}
         qc_mock.extractor.frame_ttls = qc_mock.extractor.audio_ttls = qc_mock.extractor.bpod_ttls = mock.MagicMock()
