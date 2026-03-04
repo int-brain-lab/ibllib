@@ -815,7 +815,7 @@ class SpikeSortingLoader:
         _logger.debug(f"loading waveforms from {self.collection}")
         return self.one.load_object(
             id=self.eid, obj="waveforms", attribute=["traces", "templates", "table", "channels"],
-            collection=self._get_spike_sorting_collection("pykilosort"), download_only=True, **kwargs
+            collection=self._get_spike_sorting_collection(), download_only=True, **kwargs
         )
 
     def raw_waveforms(self, **kwargs):
