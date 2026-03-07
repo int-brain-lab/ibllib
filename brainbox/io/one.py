@@ -30,7 +30,7 @@ from ibllib.pipes import histology
 from ibllib.pipes.ephys_alignment import EphysAlignment
 from ibllib.plots import vertical_lines, Density
 
-import iblphotometry.io as fpio
+from iblphotometry import fpio
 
 import brainbox.plot
 from brainbox.io.spikeglx import Streamer
@@ -552,7 +552,6 @@ def load_iti(trials):
 
 
 def load_channels_from_insertion(ins, depths=None, one=None, ba=None):
-
     PROV_2_VAL = {
         'Resolved': 90,
         'Ephys aligned histology track': 70,
@@ -878,7 +877,6 @@ class SpikeSortingLoader:
 
     @staticmethod
     def filter_files_by_namespace(all_files, namespace):
-
         # Create dict for each file with available namespaces, no namespce is stored under the key None
         namespace_files = defaultdict(dict)
         available_namespaces = []
@@ -1143,7 +1141,6 @@ class SpikeSortingLoader:
         alpha=0.3,
         processing='destripe',
     ):
-
         # compute the raw data offset and destripe, we take 400ms around t0
         first_sample, last_sample = (int((t0 - 0.2) * sr.fs), int((t0 + 0.2) * sr.fs))
         raw = sr[first_sample:last_sample, : -sr.nsync].T
