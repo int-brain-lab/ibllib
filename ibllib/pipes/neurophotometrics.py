@@ -422,6 +422,10 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
             tdms_filepath = self.session_path / self.photometry_collection / '_mcc_DAQdata.raw.tdms'
             self.timestamps = extract_timestamps_from_tdms_file(tdms_filepath, save_path=timestamps_filepath)
 
+        # verify that those timestamps
+        _timestamps_bpod = self._get_bpod_timestamps()
+        assert self.sync_channel == self.infer_sync_channel(self.timestamps, _timestamps_bpod)
+
         # timestamps of the frameclock in DAQ time
         frame_timestamps = self.timestamps[self.frameclock_channel_name]['positive']
 
@@ -448,10 +452,16 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
             # bonsai - this is observed. TODO understand when this happens
             elif photometry_df.shape[0] == frame_timestamps.shape[0] - 2:
                 photometry_df['times'] = frame_timestamps[:-2]
+            elif photometry_df.shape[0] == frame_timestamps.shape[0] - 3:
+                photometry_df['times'] = frame_timestamps[:-3]
             # there are more frames recorded by the DAQ than that
             # this indicates and issue -
             elif photometry_df.shape[0] < frame_timestamps.shape[0] - 2:
-                raise ValueError('more timestamps for frames recorded by the daqami than frames were recorded by bonsai.')
+                _logger.warning(f'#frames bonsai: {photometry_df.shape[0]} > #frames daqami {frame_timestamps.shape[0]}')
+                raise ValueError(
+                    'more timestamps for frames recorded by the daqami than frames were recorded by bonsai:'
+                    f'# frames bonsai: {photometry_df.shape[0]} > #frames daqami {frame_timestamps.shape[0]}'
+                )
             frame_times_adjusted = True
 
         # there are more frames recorded by bonsai than by the DAQ
@@ -480,6 +490,30 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
         # to implement: detect spacer / remove spacer methods
         # timestamps_nph = timestamps_nph[15: ]
         return timestamps_nph
+
+    def infer_sync_channel(self, timestamps_daq, timestamps_bpod, return_index=True):
+        matched_channels = []
+        for i, ch in enumerate(['DI0', 'DI1', 'DI2', 'DI3']):
+            timestamps_daq_ch = timestamps_daq[ch]['positive']
+            try:
+                sync_fcn, drift_ppm, ix_daq, ix_bpod = ibldsp.utils.sync_timestamps(
+                    timestamps_daq_ch, timestamps_bpod, return_indices=True, linear=True
+                )
+                if ix_bpod.shape[0] / timestamps_bpod.shape[0] > 0.95:
+                    matched_channels.append(dict(index=i, name=ch))
+            except ValueError:
+                continue
+
+        match len(matched_channels):
+            case 0:
+                raise ValueError("can't infer sync channel: no matching channel found")
+            case 1:
+                if return_index:
+                    return int(matched_channels[0]['name'][-1])
+                else:
+                    return matched_channels[0]['name']
+            case _:
+                raise ValueError(f"can't infer sync channel: {len(matched_channels)} channels matched")
 
 
 class FibrePhotometryPassiveChoiceWorld(base_tasks.BehaviourTask):
