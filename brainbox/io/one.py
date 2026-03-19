@@ -30,7 +30,7 @@ from ibllib.pipes import histology
 from ibllib.pipes.ephys_alignment import EphysAlignment
 from ibllib.plots import vertical_lines, Density
 
-import iblphotometry.io as fpio
+import iblphotometry.fpio as fpio
 
 import brainbox.plot
 from brainbox.io.spikeglx import Streamer
