@@ -451,12 +451,14 @@ class FibrePhotometryDAQSync(FibrePhotometryBaseSync):
             # there are two more frames recorded by the DAQ than by
             # bonsai - this is observed. TODO understand when this happens
             elif photometry_df.shape[0] == frame_timestamps.shape[0] - 2:
+                _logger.warning(f'#frames bonsai: {photometry_df.shape[0]} > #frames daqami {frame_timestamps.shape[0]}')
                 photometry_df['times'] = frame_timestamps[:-2]
             elif photometry_df.shape[0] == frame_timestamps.shape[0] - 3:
+                _logger.warning(f'#frames bonsai: {photometry_df.shape[0]} > #frames daqami {frame_timestamps.shape[0]}')
                 photometry_df['times'] = frame_timestamps[:-3]
             # there are more frames recorded by the DAQ than that
-            # this indicates and issue -
-            elif photometry_df.shape[0] < frame_timestamps.shape[0] - 2:
+            # this indicates an issue
+            elif photometry_df.shape[0] < frame_timestamps.shape[0] - 3:
                 _logger.warning(f'#frames bonsai: {photometry_df.shape[0]} > #frames daqami {frame_timestamps.shape[0]}')
                 raise ValueError(
                     'more timestamps for frames recorded by the daqami than frames were recorded by bonsai:'
