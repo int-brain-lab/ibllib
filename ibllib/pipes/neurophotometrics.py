@@ -41,7 +41,7 @@ LED_STATES = {
     'No LED ON': {0: 0, 1: 8, 2: 16, 3: 32, 4: 64, 5: 128, 6: 256, 7: 512, 8: 48, 9: 528, 10: 544, 11: 560},
     'L415': {0: 1, 1: 9, 2: 17, 3: 33, 4: 65, 5: 129, 6: 257, 7: 513, 8: 49, 9: 529, 10: 545, 11: 561},
     'L470': {0: 2, 1: 10, 2: 18, 3: 34, 4: 66, 5: 130, 6: 258, 7: 514, 8: 50, 9: 530, 10: 546, 11: 562},
-    'L560': {0: 4, 1: 12, 2: 20, 3: 36, 4: 68, 5: 132, 6: 260, 7: 516, 8: 52, 9: 532, 10: 548, 11: 564}
+    'L560': {0: 4, 1: 12, 2: 20, 3: 36, 4: 68, 5: 132, 6: 260, 7: 516, 8: 52, 9: 532, 10: 548, 11: 564},
 }
 
 
@@ -71,8 +71,7 @@ class FibrePhotometrySync(base_tasks.DynamicTask):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.device_collection = self.get_device_collection(
-            'neurophotometrics', device_collection='raw_photometry_data')
+        self.device_collection = self.get_device_collection('neurophotometrics', device_collection='raw_photometry_data')
         # we will work with the first protocol here
         for task in self.session_params['tasks']:
             self.task_protocol = next(k for k in task)
@@ -82,12 +81,16 @@ class FibrePhotometrySync(base_tasks.DynamicTask):
     @property
     def signature(self):
         signature = {
-            'input_files': [('_neurophotometrics_fpData.raw.pqt', self.device_collection, True, True),
-                            ('_iblrig_taskData.raw.jsonable', self.task_collection, True, True),
-                            ('_neurophotometrics_fpData.channels.csv', self.device_collection, True, True),
-                            ('_neurophotometrics_fpData.digitalIntputs.pqt', self.device_collection, True)],
-            'output_files': [('photometry.signal.pqt', 'alf/photometry', True),
-                             ('photometryROI.locations.pqt', 'alf/photometry', True)]
+            'input_files': [
+                ('_neurophotometrics_fpData.raw.pqt', self.device_collection, True, True),
+                ('_iblrig_taskData.raw.jsonable', self.task_collection, True, True),
+                ('_neurophotometrics_fpData.channels.csv', self.device_collection, True, True),
+                ('_neurophotometrics_fpData.digitalIntputs.pqt', self.device_collection, True),
+            ],
+            'output_files': [
+                ('photometry.signal.pqt', 'alf/photometry', True),
+                ('photometryROI.locations.pqt', 'alf/photometry', True),
+            ],
         }
         return signature
 
@@ -110,21 +113,23 @@ class FibrePhotometrySync(base_tasks.DynamicTask):
         # we get the timestamps of the states from the bpod data
         tbpod = []
         for sname in sync_states_names:
-            tbpod.append(np.array(
-                [bd['States timestamps'][sname][0][0] + bd['Trial start timestamp'] for bd in bpod_data if
-                 sname in bd['States timestamps']]))
+            tbpod.append(
+                np.array([
+                    bd['States timestamps'][sname][0][0] + bd['Trial start timestamp']
+                    for bd in bpod_data
+                    if sname in bd['States timestamps']
+                ])
+            )
         tbpod = np.sort(np.concatenate(tbpod))
         tbpod = tbpod[~np.isnan(tbpod)]
         # we get the timestamps for the photometry data
         tph = df_digital_inputs['SystemTimestamp'].values[df_digital_inputs['Channel'] == self.kwargs['sync_channel']]
         tph = tph[15:]  # TODO: we may want to detect the spacers before removing it, especially for successive sessions
         # sync the behaviour events to the photometry timestamps
-        fcn_nph_to_bpod_times, drift_ppm, iph, ibpod = ibldsp.utils.sync_timestamps(
-            tph, tbpod, return_indices=True, linear=True)
+        fcn_nph_to_bpod_times, drift_ppm, iph, ibpod = ibldsp.utils.sync_timestamps(tph, tbpod, return_indices=True, linear=True)
         # then we check the alignment, should be less than the screen refresh rate
         tcheck = fcn_nph_to_bpod_times(tph[iph]) - tbpod[ibpod]
-        _logger.info(
-            f'sync: n trials {len(bpod_data)}, n bpod sync {len(tbpod)}, n photometry {len(tph)}, n match {len(iph)}')
+        _logger.info(f'sync: n trials {len(bpod_data)}, n bpod sync {len(tbpod)}, n photometry {len(tph)}, n match {len(iph)}')
         assert np.all(np.abs(tcheck) < 1 / 60), 'Sync issue detected, residual above 1/60s'
         assert len(iph) / len(tbpod) > 0.95, 'Sync issue detected, less than 95% of the bpod events matched'
         valid_bounds = [bpod_data[0]['Trial start timestamp'] - 2, bpod_data[-1]['Trial end timestamp'] + 2]

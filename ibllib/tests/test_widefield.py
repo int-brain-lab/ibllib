@@ -1,4 +1,3 @@
-
 # test the renaming of files
 # test that you can't save unless you give the correct number of paths
 
@@ -11,7 +10,6 @@ from ibllib.pipes.widefield_tasks import WidefieldRegisterRaw
 
 
 class TestWidefieldExtractor(unittest.TestCase):
-
     def setUp(self):
         # make temp directory and store the results
         self.td = tempfile.TemporaryDirectory()
@@ -61,7 +59,6 @@ class TestWidefieldExtractor(unittest.TestCase):
 
 
 class TestWidefieldRegister(unittest.TestCase):
-
     def setUp(self):
         # make temp directory and store the results
         self.td = tempfile.TemporaryDirectory()
