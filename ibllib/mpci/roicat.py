@@ -7,12 +7,14 @@ from collections import Counter
 from scipy.cluster.hierarchy import linkage, fcluster
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 from one.alf.path import ALFPath
 import roicat
 import roicat.data_importing
 from roicat.data_importing import Data_roicat
 
 from ibllib.pipes.tasks import Task
+from ibllib.pipes.base_tasks import RegisterRawDataTask
 from ibllib.oneibl.data_handlers import ExpectedDataset
 from typing import *
 import scipy
@@ -36,6 +38,26 @@ class SubjectAggregateTask(Task):
         """
         self.subject_path = subject_path
         super().__init__(self.subject_path, **kwargs)
+
+    def register_datasets(self, **kwargs):
+        """
+        Register output datasets from the task to Alyx.
+
+        Parameters
+        ----------
+        kwargs
+            Directly passed to the `DataHandler.upload_data` method.
+
+        Returns
+        -------
+        list
+            The output of the `DataHandler.upload_data` method, e.g. a list of registered datasets.
+        """
+        if self.location != 'server':
+            raise NotImplementedError('Dataset registration is only implemented for server-side execution.')
+        # TODO Register to aggregates endpoint
+        raise NotImplementedError
+        return self.data_handler.uploadData(self.outputs, self.version, **kwargs)
 
 
 def extract_masknmf_spatial_footprints(dr):
@@ -188,7 +210,7 @@ class DemixingRoicat(Data_roicat):
 class ROICaTTask(SubjectAggregateTask):
     cpu = 1   # CPU resource
     gpu = 1   # GPU resources: as of now, either 0 or 1
-    io_charge = 30  # integer percentage
+    io_charge = 60  # integer percentage
     priority = 70  # integer percentage, 100 means highest priority
     ram = 12  # RAM needed to run (GB)
     job_size = 'large'  # either 'small' or 'large', defines whether task should be run as part of the large or small job services
@@ -226,20 +248,67 @@ class ROICaTTask(SubjectAggregateTask):
         """Data handlers not supported yet."""
         return None
 
-    def _run(self, sessions_to_exclude=None):
+    def _run(self, sessions_to_exclude=None, display=False):
         """Run ROICaT processing for the subject."""
         # Load the list of sessions to process
         paths = self.fetch_fov_list(sessions_to_exclude=sessions_to_exclude)
-        clusters = self.group_fovs(paths)
+        paths = paths[:24]  # TODO remove limit
+        grouped = self.group_fovs(paths)
+
+        if display:
+            # Display all mean images for user to optionally exclude any additional sessions before processing
+            for gID, paths in grouped.items():
+                # Create a figure with as many subplots as paths in the cluster
+                fig, axs = plt.subplots(1, len(paths), figsize=(5 * len(paths), 5))
+                fig.suptitle(f'FOV group {gID}', fontsize=16)
+                for i, (ax, path) in enumerate(zip(axs, paths)):
+                    mean_img = np.load(path / 'mpciMeanImage.images.npy')
+                    ax.imshow(mean_img)
+                    ax.set_title(f'{path.session_path_short()} - {path.name}')
+                    ax.axis('off')
+                    # Overlay a number in the corner for reference
+                    ax.text(0.05, 0.95, f'{i}', transform=ax.transAxes, fontsize=12, color='yellow', ha='left', va='top')
+                plt.tight_layout()
+                plt.show()  # plt.savefig("debug_cluster.png", dpi=150)
+                # Prompt the user to input any indices of sessions to exclude from this cluster, separated by commas (e.g., "0,2" to exclude the first and third sessions in the cluster)
+                exclude_input = input(f'Enter indices of sessions to exclude from FOV group {gID}, separated by commas (or press Enter to keep all): ')
+                if exclude_input.strip():
+                    exclude_indices = list(map(int, map(str.strip, exclude_input.split(','))))
+                    grouped[gID] = [path for i, path in enumerate(paths) if i not in exclude_indices]
+                    logger.info('Excluding sessions at indices %s from FOV group %s\n\t%s', exclude_indices, gID,
+                                '\n\t'.join(f'{path.session_path_short()}/{path.name}' for i, path in enumerate(paths) if i in exclude_indices))
+
+        # Ensure output directory exists
+        if not (outpath := self.subject_path.joinpath('ROICaT')).exists():
+            outpath.mkdir(parents=True)
+
         roi_tables = []
-        for cID, paths in clusters.items():
-            logger.info(f'\nProcessing FOV set {cID}/{len(clusters)} with {len(paths)} FOVs')
+        all_data = []
+        for gID, paths in grouped.items():
+            logger.info(f'\nProcessing FOV set {gID}/{len(grouped)} with {len(paths)} FOVs')
             # Load the data for ROICaT processing
             data = self.load_data(paths)
 
             ## Run ROICaT
             defaults = roicat.util.get_default_parameters(pipeline='tracking')
-            result, *_ = roicat.pipelines.pipeline_tracking(defaults, custom_data=data)
+            # dir save
+            defaults['results_saving']['dir_save'] = outpath / f'group_{gID:02d}'
+            defaults['results_saving']['dir_save'].mkdir(exist_ok=True)
+            result, run_data, params = roicat.pipelines.pipeline_tracking(defaults, custom_data=data)
+            all_data.append((result, run_data, params, paths))
+
+            """
+            Exlude some clusters based on quality metrics (e.g. silhouette score)
+
+            Option 1: Exclude low-quality clusters entirely (NB this will exclude all ROIs in those clusters from the final output)
+            Option 2: Add these two quality metrics as additional columns in the final output, so users can apply their own thresholds
+            """
+            sample_silhouette = np.array(result['clusters']['quality_metrics']['sample_silhouette'])
+            labels = np.array(result['clusters']['labels'])
+            labels[sample_silhouette < .1] = -1  # mark low-quality samples as unclustered
+            labels_dict = result['clusters']['labels_dict']
+            cluster_silhouette = result['clusters']['quality_metrics']['cluster_silhouette']
+            labels_dict = {k: v for i, (k, v) in enumerate(labels_dict.items()) if cluster_silhouette[i] > .2}  # filter out low-quality clusters
 
             # Load the ROI UUIDs from each session into a table
             dfs = []
@@ -251,6 +320,7 @@ class ROICaTTask(SubjectAggregateTask):
                 dfs.append(df)
             roi_table = pd.concat(dfs, ignore_index=True)
             # Create a mapping from ROICaT cluster label to a new UUID, with -1 (unclustered) mapping to NA
+            # TODO We may want to preserve the id2uuid map
             id2uuid = {int(k): None if k == '-1' else uuid.uuid4() for k in result['clusters']['labels_dict']}
             roi_table['cluster_id'] = [id2uuid[label] or pd.NA for label in result['clusters']['labels']]
 
@@ -260,11 +330,23 @@ class ROICaTTask(SubjectAggregateTask):
             # Drop rows with cluster_id NA (these are the unclustered ROIs that didn't track across sessions)
             roi_table = roi_table.dropna(subset=['cluster_id'])
             roi_tables.append(roi_table)
-        
+            
+            # Upload some of the images to Alyx for visualization purposes
+            self.upload_visualization_images(
+                defalts['results_saving']['dir_save'] / 'visualization',
+                group_id=gID, 
+            )
+
         # Concatenate all roi_tables into one DataFrame
         all_roi_table = pd.concat(roi_tables, ignore_index=True)
+        if not all_roi_table['roi_id'].unique().size == all_roi_table.shape[0]:
+            logger.warning('Duplicate ROI IDs across sessions.')
         # Save the combined table to a parquet file
-        all_roi_table.to_parquet(self.subject_path / 'roicat' / 'mpciROIs.tracked.pqt', index=False)
+        all_roi_table.to_parquet(outpath / '_ibl_mpciROIs.tracked.pqt', index=False)
+        # Save raw output as a pickle
+        with open(outpath / '_ibl_roicat.raw.pkl', 'wb') as f:
+            pickle.dump(all_data, f)
+        return [outpath / '_ibl_mpciROIs.tracked.pqt', outpath / '_ibl_roicat.raw.pkl']
 
     def load_data(self, paths):
         """
@@ -310,7 +392,42 @@ class ROICaTTask(SubjectAggregateTask):
         if sessions_to_exclude:
             alf_paths = [path for path in alf_paths if path.session_path_short() not in sessions_to_exclude]
         return alf_paths
-    
+
+    def upload_visualization_images(self, save_dir, group_id=None, **kwargs):
+        """Upload some of the images to Alyx for visualization purposes."""
+        if not self.one or self.one.offline or not save_dir or not save_dir.exists():
+             logger.warning('Skipping upload of visualization images to Alyx.')
+             return
+        
+        images = [
+            'alignment/all_to_all_geometric.png', 'alignment/all_to_all_nonrigid.png',
+            'FOV_images_aligned_geometric/FOV_images_aligned_geometric.gif',
+            'FOV_images_aligned_nonrigid/FOV_images_aligned_nonrigid.gif',
+            'FOV_clusters.gif'
+        ]
+        # TODO: Could add gif of ROI samples
+        note = dict(user=self.one.alyx.user, content_type='subject', object_id=self.subject_path.name,
+                    text='', json=kwargs or None)
+        notes = []
+        # TODO Handle duplicate notes
+        for img in images:
+            img_path = save_dir / img
+            # If animated GIF, do not resize
+            note['width'] = 'orig' if RegisterRawDataTask._is_animated_gif(img_path) else None
+            if group_id is not None:
+                note['text'] = f'FOV group {group_id} - {img_path.stem}'
+            else:
+                note['text'] = img_path.stem
+            if img_path.exists():
+                with open(img_path, 'rb') as img_file:
+                    files = {'image': img_file}
+                    notes.append(self.one.alyx.rest('notes', 'create', data=note, files=files))
+                    logger.info(f'Uploaded {img} to Alyx for subject {self.subject_path.name}')
+            else:
+                logger.warning(f'Visualization image {img} not found at {img_path}, skipping upload.')
+        return notes
+            
+        
     def group_fovs(self, alf_paths):
         """Group FOVs by their location.
         
@@ -421,4 +538,4 @@ if __name__ == '__main__':
     # #exclude the buggy days
     # alf_paths = list([Path(path).resolve() for path in alf_paths_full if not any(d in path.__str__() for d in days_to_exclude)])
     exclude = {'SP072/2025-09-17/001', 'SP072/2025-09-18/001', 'SP072/2025-09-19/001'}  # These MLAPDV files have odd dimensions; (512, 756, 3), (512, 752, 3)
-    task._run(sessions_to_exclude=exclude)
+    task._run(sessions_to_exclude=exclude, display=False)
