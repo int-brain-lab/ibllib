@@ -1,6 +1,8 @@
 """WIP ROICaT processing task for MPCI data."""
 import uuid
 import logging
+import shutil
+import tempfile
 from itertools import groupby
 from collections import Counter
 
@@ -9,6 +11,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from one.alf.path import ALFPath
+from one.api import ONE
 import roicat
 import roicat.data_importing
 from roicat.data_importing import Data_roicat
@@ -248,26 +251,56 @@ class ROICaTTask(SubjectAggregateTask):
         """Data handlers not supported yet."""
         return None
 
-    def _run(self, sessions_to_exclude=None, display=False):
-        """Run ROICaT processing for the subject."""
+    def _run(self, sessions_to_exclude=None, sessions_to_include=None, display=False, **kwargs):
+        """Run ROICaT processing for the subject.
+        
+        Parameters
+        ----------
+        sessions_to_exclude : list of str, optional
+            List of session paths to exclude from processing, in short format (e.g. 'SP072/2025-09-17/001'), by default None.
+        sessions_to_include : list of str, optional
+            List of session paths to include in processing, in short format (e.g. 'SP072/2025-09-17/001'), by default None.
+        display : bool, optional
+            Whether to display the mean images for each FOV group and allow the user to exclude additional sessions based on
+            image quality, by default False.
+        threshold : float, optional
+            The maximum distance in microns between FOVs for them to be considered part of the same group in the initial
+            clustering step, by default 300.
+        display_processed_images : bool, optional
+            Whether to display processed mean images as ROICaT sees them or the images from mpciMeanImage.images.npy (quicker).
+            By default True (the former).
+        """
         # Load the list of sessions to process
-        paths = self.fetch_fov_list(sessions_to_exclude=sessions_to_exclude)
+        if sessions_to_include and sessions_to_exclude:
+            raise ValueError('Cannot specify both sessions_to_include and sessions_to_exclude')
+        paths = self.fetch_fov_list(sessions_to_exclude=sessions_to_exclude, sessions_to_include=sessions_to_include)
         paths = paths[:24]  # TODO remove limit
-        grouped = self.group_fovs(paths)
+        grouped = self.group_fovs(paths, **kwargs)
 
         if display:
             # Display all mean images for user to optionally exclude any additional sessions before processing
             for gID, paths in grouped.items():
+                # Load mean images for this group
+                if kwargs.get('display_processed_images', True):
+                    mean_images = self.load_data(paths).FOV_images
+                else:                     
+                    mean_images = [np.load(path / 'mpciMeanImage.images.npy') for path in paths]
                 # Create a figure with as many subplots as paths in the cluster
                 fig, axs = plt.subplots(1, len(paths), figsize=(5 * len(paths), 5))
                 fig.suptitle(f'FOV group {gID}', fontsize=16)
                 for i, (ax, path) in enumerate(zip(axs, paths)):
-                    mean_img = np.load(path / 'mpciMeanImage.images.npy')
-                    ax.imshow(mean_img)
+                    mean_img = mean_images[i]
+                    ax.imshow(mean_img, cmap='gray')
+                    # Add crosshairs at the center
+                    center_y, center_x = mean_img.shape[0] // 2, mean_img.shape[1] // 2
+                    ax.axhline(center_y, color='red', linestyle='--')
+                    ax.axvline(center_x, color='red', linestyle='--')
+                    
                     ax.set_title(f'{path.session_path_short()} - {path.name}')
                     ax.axis('off')
                     # Overlay a number in the corner for reference
                     ax.text(0.05, 0.95, f'{i}', transform=ax.transAxes, fontsize=12, color='yellow', ha='left', va='top')
+                logger.info('Displaying mean images for FOV group %s. Please inspect and decide if any sessions should be excluded based on image quality or other factors.', gID)
                 plt.tight_layout()
                 plt.show()  # plt.savefig("debug_cluster.png", dpi=150)
                 # Prompt the user to input any indices of sessions to exclude from this cluster, separated by commas (e.g., "0,2" to exclude the first and third sessions in the cluster)
@@ -282,6 +315,7 @@ class ROICaTTask(SubjectAggregateTask):
         if not (outpath := self.subject_path.joinpath('ROICaT')).exists():
             outpath.mkdir(parents=True)
 
+        tmp_output = tempfile.TemporaryDirectory(prefix=f'roicat_{self.subject_path.name}_')
         roi_tables = []
         all_data = []
         for gID, paths in grouped.items():
@@ -292,7 +326,8 @@ class ROICaTTask(SubjectAggregateTask):
             ## Run ROICaT
             defaults = roicat.util.get_default_parameters(pipeline='tracking')
             # dir save
-            defaults['results_saving']['dir_save'] = outpath / f'group_{gID:02d}'
+            # Save to temp dir first then copy to final destination, to avoid issues with network drive
+            defaults['results_saving']['dir_save'] = Path(tmp_output.name) / f'group_{gID:02d}'
             defaults['results_saving']['dir_save'].mkdir(exist_ok=True)
             result, run_data, params = roicat.pipelines.pipeline_tracking(defaults, custom_data=data)
             all_data.append((result, run_data, params, paths))
@@ -323,6 +358,7 @@ class ROICaTTask(SubjectAggregateTask):
             # TODO We may want to preserve the id2uuid map
             id2uuid = {int(k): None if k == '-1' else uuid.uuid4() for k in result['clusters']['labels_dict']}
             roi_table['cluster_id'] = [id2uuid[label] or pd.NA for label in result['clusters']['labels']]
+            roi_table['group_id'] = gID
 
             logger.info('Number of clusters: %i', roi_table['cluster_id'].unique().size)
             logger.info('Number of discarded ROIs: %i', roi_table['cluster_id'].isna().sum())
@@ -333,8 +369,8 @@ class ROICaTTask(SubjectAggregateTask):
             
             # Upload some of the images to Alyx for visualization purposes
             self.upload_visualization_images(
-                defalts['results_saving']['dir_save'] / 'visualization',
-                group_id=gID, 
+                defaults['results_saving']['dir_save'] / 'visualization',
+                group_id=gID
             )
 
         # Concatenate all roi_tables into one DataFrame
@@ -360,14 +396,14 @@ class ROICaTTask(SubjectAggregateTask):
         mean_images = []
         footprints = []
         for filepath in paths:
-            zip_path = filepath / "_suite2p_ROIData.raw.zip"
+            zip_path = filepath / '_suite2p_ROIData.raw.zip'
             zip = np.load(zip_path, allow_pickle=True)
             curr_ops = zip['ops'].item()
             curr_stat = zip['stat']
             footprints.append(extract_suite2p_spatial_footprints(curr_ops, curr_stat))
             mean_images.append(extract_suite2p_mean_img(curr_ops))
 
-        
+
         data = DemixingRoicat(mean_images,
                               footprints,
                               um_per_pixel=1.2, ##This is specific to S. Picard's 2p mesoscope project
@@ -376,7 +412,7 @@ class ROICaTTask(SubjectAggregateTask):
         assert data.check_completeness(verbose=False)['tracking'], 'Data object is missing attributes necessary for tracking.'
         return data
 
-    def fetch_fov_list(self, sessions_to_exclude=None):
+    def fetch_fov_list(self, sessions_to_exclude=None, sessions_to_include=None):
         """Fetch the list of FOVs to process."""
         match self.location:
             case 'remote':
@@ -391,6 +427,8 @@ class ROICaTTask(SubjectAggregateTask):
         
         if sessions_to_exclude:
             alf_paths = [path for path in alf_paths if path.session_path_short() not in sessions_to_exclude]
+        if sessions_to_include:
+            alf_paths = [path for path in alf_paths if path.session_path_short() in sessions_to_include]
         return alf_paths
 
     def upload_visualization_images(self, save_dir, group_id=None, **kwargs):
@@ -403,7 +441,7 @@ class ROICaTTask(SubjectAggregateTask):
             'alignment/all_to_all_geometric.png', 'alignment/all_to_all_nonrigid.png',
             'FOV_images_aligned_geometric/FOV_images_aligned_geometric.gif',
             'FOV_images_aligned_nonrigid/FOV_images_aligned_nonrigid.gif',
-            'FOV_clusters.gif'
+            'FOV_clusters.gif', 'clustering/dist.png'
         ]
         # TODO: Could add gif of ROI samples
         note = dict(user=self.one.alyx.user, content_type='subject', object_id=self.subject_path.name,
@@ -428,10 +466,19 @@ class ROICaTTask(SubjectAggregateTask):
         return notes
             
         
-    def group_fovs(self, alf_paths):
+    def group_fovs(self, alf_paths, threshold=300.):
         """Group FOVs by their location.
         
         NB: This can be simplified when we've accounted for objective angle
+        
+        Parameters
+        ----------
+        alf_paths : list of ALFPath
+            List of ALFPath objects pointing to the FOV directories to be grouped.
+        threshold : float
+            The maximum distance in microns between FOVs for them to be considered part of the same group.
+            This is a strict threshold used for complete-linkage clustering, which enforces that all
+            members of a cluster are within this distance of each other.
         """
     
         def most_common_suffix(paths):
@@ -463,12 +510,9 @@ class ROICaTTask(SubjectAggregateTask):
         MLAPDVs = np.array([np.load(p / 'mpciMeanImage.mlapdv_estimate.npy') for p in alf_paths]) # shape (n, 512, 512, 3)  [coords in microns: (ML, AP, DV)]
         MLAPDVs_means = np.mean(MLAPDVs, axis=(1,2))
 
-        # Choose your strict threshold in microns:
-        THRESH = 300.0  # use <= THRESH
-
-        # Complete-linkage clustering enforces max intra-cluster distance ≤ THRESH
+        # Complete-linkage clustering enforces max intra-cluster distance ≤ threshold
         Z = linkage(MLAPDVs_means, method='complete', metric='euclidean')
-        cLabels = fcluster(Z, t=THRESH, criterion='distance')  # 1..K
+        cLabels = fcluster(Z, t=threshold, criterion='distance')  # 1..K
 
         # Turn singletons into noise (-1)
         unique, counts = np.unique(cLabels, return_counts=True)
@@ -491,7 +535,7 @@ class ROICaTTask(SubjectAggregateTask):
         new_ids, new_sizes = np.unique(cLabels[cLabels != -1], return_counts=True)
         n_clusters = len(new_ids)
 
-        clusters = dict.fromkeys(map(int, new_ids))
+        groups = dict.fromkeys(map(int, new_ids))
 
         for cID in new_ids:
             #in cases where two clustered FOVs come from the same session, choose the top one (TODO this is a HACK for now)
@@ -500,7 +544,7 @@ class ROICaTTask(SubjectAggregateTask):
                 if n == cID and (not any(path_list) or p.session_path() != path_list[-1].session_path()):
                     path_list.append(p)
 
-            clusters[int(cID)] = path_list
+            groups[int(cID)] = path_list
             if path_list:
                 #in cases where two clustered FOVs come from the same session, choose the top one (TODO this is a HACK for now)
                 inferred_name = 'FOV_' + most_common_suffix(path_list)
@@ -511,8 +555,20 @@ class ROICaTTask(SubjectAggregateTask):
 
                 #[print(path[34:-11]) for i,path in enumerate(paths_toFOVs)]
 
-        return clusters
+        return groups
 
+
+def validate_sessions_list(paths):
+    """Ensure paths are short session paths"""
+    _paths = set()
+    # convert full paths to short format
+    for p in paths:
+        p = p.replace('\\', '/')
+        if len(p.split('/')) > 3:  # if full path provided, convert to short format
+            _paths.add(ALFPath(p).session_path().relative_to(ROOT).as_posix())
+        else:
+            _paths.add(p)
+    return _paths
 
 
 if __name__ == '__main__':
@@ -521,7 +577,7 @@ if __name__ == '__main__':
     subject = 'SP072'
     subject_path = ROOT / subject
     
-    task = ROICaTTask(subject_path)
+    task = ROICaTTask(subject_path)#, one=ONE())
     task.get_signatures()
     # task.assert_expected_inputs()  # TODO support subject path
     
@@ -538,4 +594,4 @@ if __name__ == '__main__':
     # #exclude the buggy days
     # alf_paths = list([Path(path).resolve() for path in alf_paths_full if not any(d in path.__str__() for d in days_to_exclude)])
     exclude = {'SP072/2025-09-17/001', 'SP072/2025-09-18/001', 'SP072/2025-09-19/001'}  # These MLAPDV files have odd dimensions; (512, 756, 3), (512, 752, 3)
-    task._run(sessions_to_exclude=exclude, display=False)
+    task._run(sessions_to_exclude=validate_sessions_list(exclude), display=False)
