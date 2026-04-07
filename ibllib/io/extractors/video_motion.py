@@ -492,7 +492,7 @@ class MotionAlignmentFullSession:
 
         if self.frate != self.camera_meta['fps']:
             # Load in the raw camera timestamps and infer the frame rate from these values
-            _, raw_times = raw.load_camera_ssv_times(self.session_path,self.label)
+            _, raw_times = raw.load_camera_ssv_times(self.session_path, self.label)
             self.frate = 1 / np.nanmedian(np.diff(raw_times))
 
         # We attempt to load in some behavior data (trials and dlc). This is only needed for the summary plots, having

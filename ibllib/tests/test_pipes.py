@@ -145,6 +145,38 @@ class TestPipesMisc(unittest.TestCase):
         expected = ['_spikeglx_ephysData_g0_t0.nidq.bin', '_spikeglx_ephysData_g0_t0.nidq.meta']
         self.assertCountEqual(expected, [x.name for x in nidq_files])
 
+    def test_move_ephys_files_dry(self):
+        def _snapshot(path: Path) -> set[str]:
+            return {
+                f"{'d' if p.is_dir() else 'f'}:{p.relative_to(path).as_posix()}"
+                for p in path.rglob('*')
+            }
+
+        # 3A: dry run should report destination folder without moving files.
+        self._test_rename_ephys_files(self.session_path_3A, 4)
+        before_3a = _snapshot(self.session_path_3A / 'raw_ephys_data')
+        print(before_3a)
+        reported_3a = misc.move_ephys_files(self.session_path_3A, dry=True)
+        after_3a = _snapshot(self.session_path_3A / 'raw_ephys_data')
+        self.assertEqual(before_3a, after_3a)
+        self.assertEqual({self.session_path_3A / 'raw_ephys_data' / 'probe00'}, reported_3a)
+        self.assertFalse((self.session_path_3A / 'raw_ephys_data' / 'probe00').exists())
+
+        # 3B: dry run should report all probe folders and leave NIDAQ/probe files in place.
+        self._test_rename_ephys_files(self.session_path_3B, 14)
+        before_3b = _snapshot(self.session_path_3B / 'raw_ephys_data')
+        reported_3b = misc.move_ephys_files(self.session_path_3B, dry=True)
+        after_3b = _snapshot(self.session_path_3B / 'raw_ephys_data')
+        self.assertEqual(before_3b, after_3b)
+        self.assertEqual(
+            {self.session_path_3B / 'raw_ephys_data' / f'probe0{x}' for x in range(3)},
+            reported_3b,
+        )
+
+        nidq_files = self.session_path_3B.joinpath('raw_ephys_data', 'my_run_g0_t0').glob('*.nidq.*')
+        expected = ['_spikeglx_ephysData_g0_t0.nidq.bin', '_spikeglx_ephysData_g0_t0.nidq.meta']
+        self.assertListEqual(expected, [x.name for x in nidq_files])
+
     def test_create_alyx_probe_insertions(self):
         # Connect to test DB
         one = ONE(**TEST_DB)

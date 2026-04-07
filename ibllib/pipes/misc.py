@@ -136,7 +136,7 @@ def get_new_filename(filename: str) -> str:
     return '.'.join([root + match.group(1), *parts[1:]])
 
 
-def move_ephys_files(session_folder: str) -> None:
+def move_ephys_files(session_folder: str | Path, dry: bool = False) -> set | None:
     """move_ephys_files is system agnostic (3A, 3B1, 3B2).
     Moves all properly named ephys files to appropriate locations for transfer.
     Use rename_ephys_files function before this one.
@@ -150,6 +150,7 @@ def move_ephys_files(session_folder: str) -> None:
     raw_ephys_data_path = session_path / "raw_ephys_data"
 
     imec_files = session_path.rglob("*.imec*")
+    probe_folders = []
     for imf in imec_files:
         # For 3B system probe0x == imecx
         probe_number = re.match(r'_spikeglx_ephysData_g\d_t\d.imec(\d+).*', imf.name)
@@ -161,8 +162,14 @@ def move_ephys_files(session_folder: str) -> None:
         else:
             probe_number, = probe_number.groups()
             probe_label = f'probe{probe_number.zfill(2)}'
-        raw_ephys_data_path.joinpath(probe_label).mkdir(exist_ok=True)
-        shutil.move(imf, raw_ephys_data_path.joinpath(probe_label, imf.name))
+        if not dry:
+            raw_ephys_data_path.joinpath(probe_label).mkdir(exist_ok=True)
+            shutil.move(imf, raw_ephys_data_path.joinpath(probe_label, imf.name))
+        else:
+            probe_folders.append(raw_ephys_data_path.joinpath(probe_label))
+
+    if dry:
+        return set(probe_folders)
 
     # NIDAq files (3B system only)
     nidq_files = session_path.rglob("*.nidq.*")

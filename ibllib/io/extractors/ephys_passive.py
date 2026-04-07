@@ -571,7 +571,7 @@ def extract_task_replay(
 
     elif gabor_df is not None and stim_df is None:
         gabor_df = gabor_df.drop(columns=['stim_type'])
-        
+
     return gabor_df, stim_df
 
 
