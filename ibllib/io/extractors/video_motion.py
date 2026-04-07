@@ -490,6 +490,11 @@ class MotionAlignmentFullSession:
         # Compute the frame rate of the camera
         self.frate = round(1 / np.nanmedian(np.diff(self.ttl_times)))
 
+        if self.frate != self.camera_meta['fps']:
+            # Load in the raw camera timestamps and infer the frame rate from these values
+            _, raw_times = raw.load_camera_ssv_times(self.session_path,self.label)
+            self.frate = 1 / np.nanmedian(np.diff(raw_times))
+
         # We attempt to load in some behavior data (trials and dlc). This is only needed for the summary plots, having
         # trial aligned paw velocity (from the dlc) is a nice sanity check to make sure the alignment went well
         try:
@@ -703,7 +708,7 @@ class MotionAlignmentFullSession:
             return np.nan, np.nan
 
         # Compute the cross correlation between the video motion energy and the wheel speed
-        xcorr = signal.correlate(align_me[~isnan], vs[~isnan])
+        xcorr = signal.correlate(align_me[~isnan], vs[~isnan], mode='full')
         # The max value of the cross correlation indicates the shift that needs to be applied
         # The +2 comes from the fact that the video motion energy was computed from the difference between frames
         shift = np.nanargmax(xcorr) - align_me[~isnan].size + 2
@@ -923,14 +928,14 @@ class MotionAlignmentFullSession:
         ax01.set_xlabel('Time in session')
 
         xs = np.searchsorted(self.ttl_times, self.t_shifts)
-        ttl_diff = (self.times - self.camera_times)[xs] * self.camera_meta['fps']
+        ttl_diff = (self.times - self.camera_times)[xs] * self.frate
         ax02.plot(self.t_shifts, ttl_diff, label='extracted - ttl')
         ax02.set_ylim(np.min(ttl_diff) - 10, np.max(ttl_diff) + 10)
         ax02.legend()
         ax02.set_ylabel('Frames')
         ax02.set_xlabel('Time in session')
 
-        ax03.plot(self.camera_times, (self.camera_times - self.new_times) * self.camera_meta['fps'], 'k', label='extracted - new')
+        ax03.plot(self.camera_times, (self.camera_times - self.new_times) * self.frate, 'k', label='extracted - new')
         ax03.legend()
         ax03.set_ylim(-5, 5)
         ax03.set_ylabel('Frames')
@@ -992,14 +997,14 @@ class MotionAlignmentFullSession:
         ax01.set_xlabel('Time in session')
 
         xs = np.searchsorted(self.ttl_times, self.t_shifts)
-        ttl_diff = (self.times - self.camera_times)[xs] * self.camera_meta['fps']
+        ttl_diff = (self.times - self.camera_times)[xs] * self.frate
         ax02.plot(self.t_shifts, ttl_diff, label='extracted - ttl')
         ax02.set_ylim(np.min(ttl_diff) - 10, np.max(ttl_diff) + 10)
         ax02.legend()
         ax02.set_ylabel('Frames')
         ax02.set_xlabel('Time in session')
 
-        ax03.plot(self.camera_times, (self.camera_times - self.new_times) * self.camera_meta['fps'], 'k', label='extracted - new')
+        ax03.plot(self.camera_times, (self.camera_times - self.new_times) * self.frate, 'k', label='extracted - new')
         ax03.legend()
         ax03.set_ylim(-5, 5)
         ax03.set_ylabel('Frames')
