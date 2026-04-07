@@ -537,11 +537,11 @@ def groom_pin_state(gpio, ttl, ts, tolerance=2., display=False, take='first', mi
     time.  At the end of this the number of GPIO fronts should equal the number of TTLs.
 
     Note:
-      - This function is ultra safe: we probably don't need assign all the ups and down fronts.
-      separately and could potentially even align the timestamps without removing the missed fronts
+      - This function is ultra safe: we probably don't need assign all the ups and down fronts
+        separately and could potentially even align the timestamps without removing the missed fronts.
       - The input gpio and TTL dicts may be modified by this function.
       - For training sessions the frame rate is only 30Hz and the TTLs tend to be broken up by
-      small gaps.  Setting the min_diff to 5ms helps the timestamp assignment accuracy.
+        small gaps.  Setting the min_diff to 5ms helps the timestamp assignment accuracy.
 
     Parameters
     ----------
@@ -650,7 +650,7 @@ def groom_pin_state(gpio, ttl, ts, tolerance=2., display=False, take='first', mi
                 plt.legend()
                 plt.show()
             # Remove the missed fronts
-            to_remove = np.in1d(gpio['indices'], low2high[missed])
+            to_remove = np.isin(gpio['indices'], low2high[missed])
             assigned = assigned[~missed]
         onsets_ = sync_times[::2][assigned]
 
@@ -665,7 +665,7 @@ def groom_pin_state(gpio, ttl, ts, tolerance=2., display=False, take='first', mi
         if np.any(missed := assigned == -1):
             _logger.warning(f'{sum(missed)} pin state falls could not be attributed to a sync TTL')
             # Remove the missed fronts
-            to_remove |= np.in1d(gpio['indices'], high2low[missed])
+            to_remove |= np.isin(gpio['indices'], high2low[missed])
             assigned = assigned[~missed]
         offsets_ = sync_times[1::2][assigned]
 

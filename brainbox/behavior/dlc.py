@@ -74,14 +74,16 @@ def get_speed(dlc, dlc_t, camera, feature='paw_r'):
     :param feature: dlc feature to compute speed over
     :return:
     """
+
     x = dlc[f'{feature}_x'] / RESOLUTION[camera]
     y = dlc[f'{feature}_y'] / RESOLUTION[camera]
 
     # get speed in px/sec [half res]
-    s = ((np.diff(x) ** 2 + np.diff(y) ** 2) ** .5) * SAMPLING[camera]
-
     dt = np.diff(dlc_t)
     tv = dlc_t[:-1] + dt / 2
+    fps = 1 / np.nanmedian(dt)
+
+    s = ((np.diff(x) ** 2 + np.diff(y) ** 2) ** .5) * fps
 
     # interpolate over original time scale
     if tv.size > 1:
@@ -202,21 +204,22 @@ def get_pupil_diameter(dlc):
         return np.nanmedian(diameters, axis=0)
 
 
-def get_smooth_pupil_diameter(diameter_raw, camera, std_thresh=5, nan_thresh=1):
+def get_smooth_pupil_diameter(diameter_raw, camera, std_thresh=5, nan_thresh=1, fr=None):
     """
     :param diameter_raw: np.array, raw pupil diameters, calculated from (thresholded) dlc traces
     :param camera: str ('left', 'right'), which camera to run the smoothing for
     :param std_thresh: threshold (in standard deviations) beyond which a point is labeled as an outlier
     :param nan_thresh: threshold (in seconds) above which we will not interpolate nans, but keep them
                        (for long stretches interpolation may not be appropriate)
+    :param fr: framerate (frames per second); if None, default value based on camera string used
     :return:
     """
     # set framerate of camera
     if camera == 'left':
-        fr = SAMPLING['left']  # set by hardware
+        fr = fr if fr is not None else SAMPLING['left']  # set by hardware
         window = 31  # works well empirically
     elif camera == 'right':
-        fr = SAMPLING['right']  # set by hardware
+        fr = fr if fr is not None else SAMPLING['right']  # set by hardware
         window = 75  # works well empirically
     else:
         raise NotImplementedError("camera has to be 'left' or 'right")
@@ -460,11 +463,12 @@ def plot_motion_energy_hist(camera_dict, trials_df):
             try:
                 motion_energy = zscore(camera_dict[cam]['motion_energy'], nan_policy='omit')
                 try:
+                    fr = 1.0 / np.nanmedian(np.diff(camera_dict[cam]['times']))
                     start_idx = insert_idx(camera_dict[cam]['times'], start_window)
-                    end_idx = np.array(start_idx + int(WINDOW_LEN * SAMPLING[cam]), dtype='int64')
+                    end_idx = np.array(start_idx + int(WINDOW_LEN * fr), dtype='int64')
                     me_all = [motion_energy[start_idx[i]:end_idx[i]] for i in range(len(start_idx))]
                     me_all = [m for m in me_all if len(m) > 0]
-                    times = np.arange(len(me_all[0])) / SAMPLING[cam] + WINDOW_LAG
+                    times = np.arange(len(me_all[0])) / fr + WINDOW_LAG
                     me_mean = np.mean(me_all, axis=0)
                     me_std = np.std(me_all, axis=0) / np.sqrt(len(me_all))
                     plt.plot(times, me_mean, label=f'{cam} cam', color=colors[cam], linewidth=2)
@@ -512,14 +516,15 @@ def plot_speed_hist(dlc_df, cam_times, trials_df, feature='paw_r', cam='left', l
         raise ValueError("Camera times length and DLC length are inconsistent")
     # Get speeds
     speeds = get_speed(dlc_df, cam_times, camera=cam, feature=feature)
+    fr = 1.0 / np.nanmedian(np.diff(cam_times))
     # Windows aligned to align_to
     start_window, end_window = plt_window(trials_df['stimOn_times'])
     start_idx = insert_idx(cam_times, start_window)
-    end_idx = np.array(start_idx + int(WINDOW_LEN * SAMPLING[cam]), dtype='int64')
+    end_idx = np.array(start_idx + int(WINDOW_LEN * fr), dtype='int64')
     # Add speeds to trials_df
     trials_df[f'speed_{feature}'] = [speeds[start_idx[i]:end_idx[i]] for i in range(len(start_idx))]
     # Plot
-    times = np.arange(len(trials_df[f'speed_{feature}'].iloc[0])) / SAMPLING[cam] + WINDOW_LAG
+    times = np.arange(len(trials_df[f'speed_{feature}'].iloc[0])) / fr + WINDOW_LAG
     # Need to expand the series of lists into a dataframe first, for the nan skipping to work
     correct = trials_df[trials_df['feedbackType'] == 1][f'speed_{feature}']
     incorrect = trials_df[trials_df['feedbackType'] == -1][f'speed_{feature}']
@@ -549,17 +554,18 @@ def plot_pupil_diameter_hist(pupil_diameter, cam_times, trials_df, cam='left'):
     :param cam: str, camera to use ('body', 'left', 'right') default is 'left'
     :returns: matplotlib.axis
     """
+    fr = 1.0 / np.nanmedian(np.diff(cam_times))
     for align_to, color in zip(['stimOn_times', 'feedback_times'], ['red', 'purple']):
         start_window, end_window = plt_window(trials_df[align_to])
         start_idx = insert_idx(cam_times, start_window)
-        end_idx = np.array(start_idx + int(WINDOW_LEN * SAMPLING[cam]), dtype='int64')
+        end_idx = np.array(start_idx + int(WINDOW_LEN * fr), dtype='int64')
         # Per trial norm
         pupil_all = [zscore(list(pupil_diameter[start_idx[i]:end_idx[i]])) for i in range(len(start_idx))]
         pupil_all_norm = [trial - trial[0] for trial in pupil_all]
 
         pupil_mean = np.nanmean(pupil_all_norm, axis=0)
         pupil_std = np.nanstd(pupil_all_norm, axis=0) / np.sqrt(len(pupil_all_norm))
-        times = np.arange(len(pupil_all_norm[0])) / SAMPLING[cam] + WINDOW_LAG
+        times = np.arange(len(pupil_all_norm[0])) / fr + WINDOW_LAG
 
         plt.plot(times, pupil_mean, label=align_to.split("_")[0], color=color)
         plt.fill_between(times, pupil_mean + pupil_std, pupil_mean - pupil_std, color=color, alpha=0.5)

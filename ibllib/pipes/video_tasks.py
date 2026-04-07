@@ -861,7 +861,7 @@ class LightningPose(base_tasks.VideoTask):
         return actual_outputs
 
 
-class PostLP(base_tasks.VideoTask):
+class PostLP(base_tasks.VideoTask, base_tasks.BehaviourTask):
     """
     The PostLP task takes LP traces as input and computes useful quantities, as well as qc.
 
