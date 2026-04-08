@@ -8,20 +8,20 @@ from brainbox import video
 class TestVideo(unittest.TestCase):
     def setUp(self) -> None:
         """Test frames are 12 2x2x3 arrays, where
-            frames[0][...,0] =
-                [[1, 1],
-                 [1, 1]]
+        frames[0][...,0] =
+            [[1, 1],
+             [1, 1]]
 
-            frames[1][...,0] =
-                [[2, 2],
-                 [2, 2]]
+        frames[1][...,0] =
+            [[2, 2],
+             [2, 2]]
 
-            [...]
+        [...]
 
-            frames[-1][...,0] =
-                [[12, 12],
-                 [12, 12]]
-            """
+        frames[-1][...,0] =
+            [[12, 12],
+             [12, 12]]
+        """
         self.frames = np.cumsum(np.ones((12, 2, 2, 3)), axis=0).astype(np.uint8)
 
     def test_frame_diff(self):

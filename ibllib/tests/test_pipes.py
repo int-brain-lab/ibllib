@@ -21,6 +21,7 @@ from ibllib.pipes.ephys_tasks import SpikeSorting
 
 class TestLocalServer(unittest.TestCase):
     """Tests for the ibllib.pipes.local_server module."""
+
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
         self.tmpdir = Path(tmp.name)
@@ -39,7 +40,7 @@ class TestLocalServer(unittest.TestCase):
         tasks = [
             {'executable': 'ibllib.pipes.mesoscope_tasks.MesoscopePreprocess', 'priority': 80},
             {'executable': 'ibllib.pipes.ephys_tasks.SpikeSorting', 'priority': SpikeSorting.priority},  # 60
-            {'executable': 'ibllib.pipes.base_tasks.RegisterRawDataTask', 'priority': RegisterRawDataTask.priority}  # 100
+            {'executable': 'ibllib.pipes.base_tasks.RegisterRawDataTask', 'priority': RegisterRawDataTask.priority},  # 100
         ]
         alyx = mock.Mock(spec=AlyxClient)
         alyx.rest.return_value = tasks
@@ -80,11 +81,10 @@ class TestPipesMisc(unittest.TestCase):
         ephys_folder = self.session_path_3A / 'raw_ephys_data'
         fu.populate_raw_spikeglx(ephys_folder, '3A', legacy=True, n_probes=1)
         # IBL protocol is for users to copy data to the right probe folder
-        shutil.move(ephys_folder.joinpath('raw_ephys_folder'),
-                    ephys_folder.joinpath('my_run_probe00'))
+        shutil.move(ephys_folder.joinpath('raw_ephys_folder'), ephys_folder.joinpath('my_run_probe00'))
 
     def test_get_new_filename(self):
-        different_gt = "ignoreThisPart_g1_t2.imec.ap.meta"
+        different_gt = 'ignoreThisPart_g1_t2.imec.ap.meta'
         nidaq = 'foobar_g0_t0.nidq.cbin'
 
         for suf in ('.ap.bin', '0.ap.bin', '1.ap.meta'):
@@ -104,7 +104,7 @@ class TestPipesMisc(unittest.TestCase):
         """Test SpikeGLX output files are correctly renamed"""
         misc.rename_ephys_files(path)
         n = 0
-        for f in path.rglob("*.*.*"):
+        for f in path.rglob('*.*.*'):
             if any(x in f.name for x in ('.ap.', '.lf.', '.nidq.')):
                 self.assertTrue(f.name.startswith('_spikeglx_ephysData_g'))
                 n += 1
@@ -114,43 +114,39 @@ class TestPipesMisc(unittest.TestCase):
         # Test for 3A
         self._test_rename_ephys_files(self.session_path_3A, 4)
         misc.move_ephys_files(self.session_path_3A)
-        probe_folders = list(self.session_path_3A.rglob("*probe*"))
+        probe_folders = list(self.session_path_3A.rglob('*probe*'))
         self.assertTrue(len(probe_folders) == 1 and probe_folders[0].parts[-1] == 'probe00')
         expected = [
             '_spikeglx_ephysData_g0_t0.imec.ap.bin',
             '_spikeglx_ephysData_g0_t0.imec.ap.meta',
             '_spikeglx_ephysData_g0_t0.imec.lf.bin',
-            '_spikeglx_ephysData_g0_t0.imec.lf.meta'
+            '_spikeglx_ephysData_g0_t0.imec.lf.meta',
         ]
         self.assertCountEqual(expected, [x.name for x in probe_folders[0].glob('*')])
 
         # Test for 3B
         self._test_rename_ephys_files(self.session_path_3B, 14)
         misc.move_ephys_files(self.session_path_3B)
-        probe_folders = sorted(self.session_path_3B.rglob("*probe*"))
+        probe_folders = sorted(self.session_path_3B.rglob('*probe*'))
         # Check moved into 'probexx' folders
         self.assertTrue(len(probe_folders) == 3)
-        self.assertCountEqual((f'probe0{x}' for x in range(3)),
-                              [x.parts[-1] for x in probe_folders])
+        self.assertCountEqual((f'probe0{x}' for x in range(3)), [x.parts[-1] for x in probe_folders])
         for i in range(3):
             expected = [
                 f'_spikeglx_ephysData_g0_t0.imec{i}.ap.bin',
                 f'_spikeglx_ephysData_g0_t0.imec{i}.ap.meta',
                 f'_spikeglx_ephysData_g0_t0.imec{i}.lf.bin',
-                f'_spikeglx_ephysData_g0_t0.imec{i}.lf.meta'
+                f'_spikeglx_ephysData_g0_t0.imec{i}.lf.meta',
             ]
             self.assertCountEqual(expected, [x.name for x in probe_folders[i].glob('*')])
 
-        nidq_files = self.session_path_3B.joinpath('raw_ephys_data').glob("*.nidq.*")
+        nidq_files = self.session_path_3B.joinpath('raw_ephys_data').glob('*.nidq.*')
         expected = ['_spikeglx_ephysData_g0_t0.nidq.bin', '_spikeglx_ephysData_g0_t0.nidq.meta']
         self.assertCountEqual(expected, [x.name for x in nidq_files])
 
     def test_move_ephys_files_dry(self):
         def _snapshot(path: Path) -> set[str]:
-            return {
-                f"{'d' if p.is_dir() else 'f'}:{p.relative_to(path).as_posix()}"
-                for p in path.rglob('*')
-            }
+            return {f'{"d" if p.is_dir() else "f"}:{p.relative_to(path).as_posix()}' for p in path.rglob('*')}
 
         # 3A: dry run should report destination folder without moving files.
         self._test_rename_ephys_files(self.session_path_3A, 4)
@@ -189,47 +185,45 @@ class TestPipesMisc(unittest.TestCase):
 
         # Force probe insertion 3A
         labels = [''.join(random.choices(string.ascii_letters, k=5)), ''.join(random.choices(string.ascii_letters, k=5))]
-        misc.create_alyx_probe_insertions(
-            eid, one=one, model="3A", labels=labels, force=True
-        )
+        misc.create_alyx_probe_insertions(eid, one=one, model='3A', labels=labels, force=True)
         # Verify it's been inserted
-        alyx_insertion = one.alyx.rest("insertions", "list", session=eid, no_cache=True)
-        alyx_insertion = [x for x in alyx_insertion if x["model"] == "3A"]
-        self.assertTrue(alyx_insertion[0]["model"] == "3A")
-        self.assertTrue(alyx_insertion[0]["name"] in labels)
-        self.assertTrue(alyx_insertion[1]["model"] == "3A")
-        self.assertTrue(alyx_insertion[1]["name"] in labels)
+        alyx_insertion = one.alyx.rest('insertions', 'list', session=eid, no_cache=True)
+        alyx_insertion = [x for x in alyx_insertion if x['model'] == '3A']
+        self.assertTrue(alyx_insertion[0]['model'] == '3A')
+        self.assertTrue(alyx_insertion[0]['name'] in labels)
+        self.assertTrue(alyx_insertion[1]['model'] == '3A')
+        self.assertTrue(alyx_insertion[1]['name'] in labels)
         # Cleanup DB
-        one.alyx.rest("insertions", "delete", id=alyx_insertion[0]["id"])
-        one.alyx.rest("insertions", "delete", id=alyx_insertion[1]["id"])
+        one.alyx.rest('insertions', 'delete', id=alyx_insertion[0]['id'])
+        one.alyx.rest('insertions', 'delete', id=alyx_insertion[1]['id'])
         # Force probe insertion 3B
         labels = [''.join(random.choices(string.ascii_letters, k=5)), ''.join(random.choices(string.ascii_letters, k=5))]
-        misc.create_alyx_probe_insertions(eid, one=one, model="3B2", labels=labels)
+        misc.create_alyx_probe_insertions(eid, one=one, model='3B2', labels=labels)
         # Verify it's been inserted
-        alyx_insertion = one.alyx.rest("insertions", "list", session=eid, no_cache=True)
-        self.assertTrue(alyx_insertion[0]["model"] == "3B2")
-        self.assertTrue(alyx_insertion[0]["name"] in labels)
-        self.assertTrue(alyx_insertion[1]["model"] == "3B2")
-        self.assertTrue(alyx_insertion[1]["name"] in labels)
+        alyx_insertion = one.alyx.rest('insertions', 'list', session=eid, no_cache=True)
+        self.assertTrue(alyx_insertion[0]['model'] == '3B2')
+        self.assertTrue(alyx_insertion[0]['name'] in labels)
+        self.assertTrue(alyx_insertion[1]['model'] == '3B2')
+        self.assertTrue(alyx_insertion[1]['name'] in labels)
         # Cleanup DB
-        one.alyx.rest("insertions", "delete", id=alyx_insertion[0]["id"])
-        one.alyx.rest("insertions", "delete", id=alyx_insertion[1]["id"])
+        one.alyx.rest('insertions', 'delete', id=alyx_insertion[0]['id'])
+        one.alyx.rest('insertions', 'delete', id=alyx_insertion[1]['id'])
 
     def test_probe_names_from_session_path(self):
         expected_pnames = ['probe00', 'probe01', 'probe03', 'probe02a', 'probe02b', 'probe02c', 'probe02d', 'probe04']
-        nidq_file = Path(__file__).parent.joinpath("fixtures/pipes", "sample3B_g0_t0.nidq.meta")
+        nidq_file = Path(__file__).parent.joinpath('fixtures/pipes', 'sample3B_g0_t0.nidq.meta')
         meta_files = {
-            "probe00": Path(__file__).parent.joinpath("fixtures/pipes", "sample3A_g0_t0.imec.ap.meta"),
-            "probe01": Path(__file__).parent.joinpath("fixtures/pipes", "sample3B_g0_t0.imec1.ap.meta"),
-            "probe04": Path(__file__).parent.joinpath("fixtures/pipes", "sampleNP2.1_g0_t0.imec.ap.meta"),
-            "probe03": Path(__file__).parent.joinpath("fixtures/pipes", "sampleNP2.4_1shank_g0_t0.imec.ap.meta"),
-            "probe02": Path(__file__).parent.joinpath("fixtures/pipes", "sampleNP2.4_4shanks_g0_t0.imec.ap.meta"),
+            'probe00': Path(__file__).parent.joinpath('fixtures/pipes', 'sample3A_g0_t0.imec.ap.meta'),
+            'probe01': Path(__file__).parent.joinpath('fixtures/pipes', 'sample3B_g0_t0.imec1.ap.meta'),
+            'probe04': Path(__file__).parent.joinpath('fixtures/pipes', 'sampleNP2.1_g0_t0.imec.ap.meta'),
+            'probe03': Path(__file__).parent.joinpath('fixtures/pipes', 'sampleNP2.4_1shank_g0_t0.imec.ap.meta'),
+            'probe02': Path(__file__).parent.joinpath('fixtures/pipes', 'sampleNP2.4_4shanks_g0_t0.imec.ap.meta'),
         }
         with tempfile.TemporaryDirectory() as tdir:
             session_path = Path(tdir).joinpath('Algernon', '2021-02-12', '001')
             raw_ephys_path = session_path.joinpath('raw_ephys_data')
             raw_ephys_path.mkdir(parents=True, exist_ok=True)
-            shutil.copy(nidq_file, raw_ephys_path.joinpath("_spikeglx_ephysData_g0_t0.nidq.meta"))
+            shutil.copy(nidq_file, raw_ephys_path.joinpath('_spikeglx_ephysData_g0_t0.nidq.meta'))
             for pname, meta_file in meta_files.items():
                 probe_path = raw_ephys_path.joinpath(pname)
                 probe_path.mkdir()
@@ -252,11 +246,11 @@ class TestScanFixPassiveFiles(unittest.TestCase):
             self.session_path,
             self.passive_session_path,
         ) = fu.create_fake_ephys_recording_bad_passive_transfer_sessions(
-            self.tmp_dir.name, lab="fakelab", mouse="fakemouse", date="1900-01-01", num="001"
+            self.tmp_dir.name, lab='fakelab', mouse='fakemouse', date='1900-01-01', num='001'
         )
         # Create another complete ephys session same mouse and date
         self.other_good_session = fu.create_fake_complete_ephys_session(
-            self.tmp_dir.name, lab="fakelab", mouse="fakemouse", date="1900-01-01", increment=True
+            self.tmp_dir.name, lab='fakelab', mouse='fakemouse', date='1900-01-01', increment=True
         )
 
     def test_scan_fix(self):
@@ -287,7 +281,7 @@ class TestScanFixPassiveFiles(unittest.TestCase):
         moved_ok = fix.move_rename_pairs(from_to_pairs)
         self.assertTrue(not moved_ok)
         # Bad paths
-        from_to_pairs = [("bla", "ble")]
+        from_to_pairs = [('bla', 'ble')]
         moved_ok = fix.move_rename_pairs(from_to_pairs)
         self.assertTrue(sum(moved_ok) == 0)
         # Same as execute
@@ -330,10 +324,12 @@ class TestRegisterRawDataTask(unittest.TestCase):
         task = RegisterRawDataTask(self.session_path, one=self.one)
         # Mock the _is_animated_gif function to return true for any GIF file
         as_png_side_effect = lambda x: x.with_suffix('.png').touch() or x.with_suffix('.png')  # noqa
-        with mock.patch.object(self.one.alyx, 'rest') as rest, \
-                mock.patch.object(self.one, 'path2eid', return_value=str(uuid4())), \
-                mock.patch.object(task, '_save_as_png', side_effect=as_png_side_effect), \
-                mock.patch.object(task, '_is_animated_gif', side_effect=lambda x: x.suffix == '.gif'):
+        with (
+            mock.patch.object(self.one.alyx, 'rest') as rest,
+            mock.patch.object(self.one, 'path2eid', return_value=str(uuid4())),
+            mock.patch.object(task, '_save_as_png', side_effect=as_png_side_effect),
+            mock.patch.object(task, '_is_animated_gif', side_effect=lambda x: x.suffix == '.gif'),
+        ):
             task.register_snapshots(collection=['', f'{collection}*'])
             self.assertEqual(5, rest.call_count)
             files = []
@@ -371,7 +367,6 @@ class TestRegisterRawDataTask(unittest.TestCase):
 
 
 class TestSleeplessDecorator(unittest.TestCase):
-
     def test_decorator_argument_passing(self):
 
         def dummy_function(arg1, arg2):
@@ -384,8 +379,8 @@ class TestSleeplessDecorator(unittest.TestCase):
         self.assertEqual(decorated_func.__name__, 'dummy_function')
 
         # Check if arguments are passed correctly
-        result = decorated_func("test1", "test2")
-        self.assertEqual(result, ("test1", "test2"))
+        result = decorated_func('test1', 'test2')
+        self.assertEqual(result, ('test1', 'test2'))
 
 
 if __name__ == '__main__':

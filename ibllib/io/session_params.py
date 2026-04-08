@@ -22,6 +22,7 @@ EGRESS
         - if the device file is not on the server create it.
         - once copy is complete aggregate the qc from file.
 """
+
 import yaml
 import uuid
 import logging
@@ -165,6 +166,7 @@ def merge_params(a, b, copy=False):
     dict
         A merged dictionary consisting of fields from `a` and `b`.
     """
+
     def to_hashable(dict_item):
         """Convert protocol -> dict map to hashable tuple of protocol + sorted key value pairs."""
         hashable = (dict_item[0], *chain.from_iterable(sorted(dict_item[1].items())))
@@ -174,12 +176,7 @@ def merge_params(a, b, copy=False):
         """Merge dicts recursively up to max_depth."""
         merged = dict(left)
         for key, value in right.items():
-            if (
-                key in merged
-                and isinstance(merged[key], dict)
-                and isinstance(value, dict)
-                and depth < max_depth
-            ):
+            if key in merged and isinstance(merged[key], dict) and isinstance(value, dict) and depth < max_depth:
                 merged[key] = merge_dicts(merged[key], value, depth=depth + 1, max_depth=max_depth)
             else:
                 merged[key] = value
