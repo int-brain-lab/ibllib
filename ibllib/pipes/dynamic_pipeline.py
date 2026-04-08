@@ -41,7 +41,7 @@ import ibllib.pipes.behavior_tasks as btasks
 import ibllib.pipes.video_tasks as vtasks
 import ibllib.pipes.ephys_tasks as etasks
 import ibllib.pipes.audio_tasks as atasks
-import ibllib.pipes.neurophotometrics as ptasks
+import iblphotometry.tasks as ptasks
 
 _logger = logging.getLogger(__name__)
 
