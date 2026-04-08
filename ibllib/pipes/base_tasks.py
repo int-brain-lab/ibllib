@@ -282,7 +282,7 @@ class BehaviourTask(DynamicTask):
         There is a trade-off between this inheritance design and explicit file signatures for child classes"""
 
         super().get_signatures(**kwargs)
-        self.input_files.append(('_ibl_experiment.description.pqt', self.collection, True))
+        self.input_files.append(('_ibl_experiment.description.yaml', self.collection, True))
         return super().get_signatures(**kwargs)
 
 
