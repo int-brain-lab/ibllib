@@ -20,7 +20,7 @@ from ibllib.qc.camera import run_all_qc as run_camera_qc, CameraQC
 from ibllib.misc import check_nvidia_driver
 from ibllib.io.video import label_from_path, assert_valid_label
 from ibllib.plots.snapshot import ReportSnapshot
-from ibllib.plots.figures import dlc_qc_plot, lp_qc_plot, pawstates_qc_plot
+from ibllib.plots.figures import dlc_qc_plot, lp_qc_plot, load_pawstates_qc_data, pawstates_qc_plot
 from brainbox.behavior.dlc import likelihood_threshold, get_licks, get_pupil_diameter, get_smooth_pupil_diameter
 
 _logger = logging.getLogger('ibllib')
@@ -1164,11 +1164,12 @@ class PostLightningAction(base_tasks.VideoTask):
                         paw_pos = 'near' if paw == 'paw_r' else 'far'
                         fig_path = self.session_path.joinpath('snapshot', f'la_qc_plot.{cam}.{paw_pos}_paw.png')
                         fig_path.parent.mkdir(parents=True, exist_ok=True)
-                        fig = pawstates_qc_plot(
+                        data = load_pawstates_qc_data(
                             self.session_path, one=self.one,
                             camera=cam, paw=paw, tracker=self.tracker,
                             device_collection=self.device_collection, trials_collection=self.trials_collection,
                         )
+                        fig = pawstates_qc_plot(data, camera=cam, paw=paw, tracker=self.tracker, session_id=session_id)
                         fig.savefig(fig_path, bbox_inches='tight', pad_inches=0.1)
                         fig.clf()
                         snp = ReportSnapshot(self.session_path, session_id, one=self.one)

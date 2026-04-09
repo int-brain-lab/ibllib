@@ -935,117 +935,38 @@ def pose_qc_plot(session_path, one=None, device_collection='raw_video_data',
     return fig
 
 
-def pawstates_qc_plot(
-        session_path, one=None,
-        camera='left', paw='paw_l', tracker='lightningPose',
-        device_collection='raw_video_data', trials_collection='alf',
-):
+def pawstates_qc_plot(data, camera, paw, tracker, session_id=None):
     """
-    Creates pawstates behavioral QC plot.
-    Data is searched first locally, then on Alyx. Panels that lack required data are skipped.
+    Run data manipulation and create the pawstates behavioral QC figure.
 
-    Required data to create all panels:
-     'raw_video_data/_iblrig_{camera}Camera.raw.mp4',
-     'alf/_ibl_{camera}Camera.{tracker}.pqt',
-     'alf/_ibl_{camera}Camera.times.npy',
-     'alf/_ibl_trials.choice.npy',
-     'alf/_ibl_trials.feedbackType.npy',
-     'alf/_ibl_trials.feedback_times.npy',
-     'alf/_ibl_trials.stimOn_times.npy',
-     'alf/_ibl_trials.firstMovement_times.npy',
-     'alf/_ibl_wheel.position.npy',
-     'alf/_ibl_wheel.timestamps.npy',
+    Accepts the raw data dict returned by load_pawstates_qc_data, runs extract_pawstate_plot_data
+    to compute derived quantities, then renders all panels. Panels that lack required data
+    display a placeholder message rather than raising an error.
 
-    :param session_path: Path to session data on disk
-    :param one: ONE instance, if None is given, default ONE is instantiated
+    :param data: dict of raw loaded data with the following keys (any key set to None skips the dependent panels):
+        - ``'frame'``: np.ndarray, shape (H, W), dtype uint8 — single grayscale video frame used as background for
+          paw position scatter plots (panels A-D).
+        - ``'{tracker}'``: pd.DataFrame — pose estimates from the tracker (e.g., lightningPose), with at least columns
+          ``{paw}_x`` and ``{paw}_y``.
+        - ``'times'``: np.ndarray, shape (n_frames,) — camera timestamps in seconds.
+        - ``'pawstates'``: pd.DataFrame — paw state predictions; columns must include per-paw state probabilities
+          (``{paw}_{state}_prob``) and ensemble variance (``{paw}_*_ens_var``).
+        - ``'fps'``: float — camera frame rate in Hz.
+        - ``'trials'``: pd.DataFrame or None — trials table with columns
+          ``intervals_0``, ``intervals_1``, ``firstMovement_times``, ``stimOn_times``, ``feedback_times``,
+          ``feedbackType``.
+          Set to None to skip trial panels N-O and raster panels P-Q.
+        - ``'wheel'``: Bunch or None — wheel object with attributes ``timestamps`` (np.ndarray, shape (n,)) and
+          ``position`` (np.ndarray, shape (n,)).
+          Set to None to zero-fill wheel velocity.
     :param camera: Camera view ('left' or 'right')
     :param paw: Paw identifier ('paw_l' or 'paw_r')
     :param tracker: Tracker type (e.g., 'dlc', 'lightningPose')
-    :param device_collection: Collection name for video data
-    :param trials_collection: Collection name for trials data
+    :param session_id: Optional session UUID shown in the figure title
     :returns: Matplotlib figure
     """
-
-    one = one or ONE()
-    # hack for running on cortexlab local server
-    if one.alyx.base_url == 'https://alyx.cortexlab.net':
-        one = ONE(base_url='https://alyx.internationalbrainlab.org')
-
-    data = {}
-    session_path = Path(session_path)
-    eid = one.path2eid(session_path)
-
-    # Load video frame
-    video_path = session_path.joinpath(device_collection, f'_iblrig_{camera}Camera.raw.mp4')
-    # Check if video data is available locally; if yes, load a single frame
-    if video_path.exists():
-        data['frame'] = get_video_frame(video_path, frame_number=5 * 60 * SAMPLING[camera])[:, :, 0]
-        meta = get_video_meta(video_path)
-    # If not, try to stream a frame (try three times)
-    else:
-        try:
-            video_url = url_from_eid(eid=eid, one=one)[camera]
-            for tries in range(3):
-                try:
-                    data['frame'] = get_video_frame(video_url, frame_number=5 * 60 * SAMPLING[camera])[:, :, 0]
-                    meta = get_video_meta(video_url)
-                    break
-                except Exception:
-                    if tries < 2:
-                        tries += 1
-                        logger.info(f"Streaming {camera} video failed, retrying x{tries}")
-                        time.sleep(30)
-                    else:
-                        logger.warning(f"Could not load video frame for {camera} cam. Skipping trace on frame.")
-                        data['frame'] = None
-        except KeyError:
-            logger.warning(f"Could not load video frame for {camera} cam. Skipping trace on frame.")
-            data['frame'] = None
-
-    # Load camera-specific data
-    for feat in [tracker, 'times', 'pawstates']:
-        local_file = list(session_path.joinpath('alf').rglob(f'*{camera}Camera.{feat}*'))
-        if len(local_file) > 0:
-            data[feat] = alfio.load_file_content(local_file[0])
-        else:
-            alyx_ds = [ds for ds in one.list_datasets(eid) if f'{camera}Camera.{feat}' in ds]
-            if len(alyx_ds) > 0:
-                data[feat] = one.load_dataset(eid, alyx_ds[0])
-            else:
-                logger.warning(f"Could not load _ibl_{camera}Camera.{feat}")
-                data[feat] = None
-
-        # Check for empty objects
-        if data[feat] is not None and len(data[feat]) == 0:
-            logger.warning(f"Object loaded from _ibl_{camera}Camera.{feat} is empty")
-            data[feat] = None
-
-    # Compute fps from timestamps
-    data['fps'] = 1. / np.nanmedian(np.diff(data['times']))
-
-    # Load trials data
-    local_file = list(session_path.joinpath(trials_collection).rglob('*trials.table*'))
-    data['trials'] = alfio.load_file_content(local_file[0])
-
-    # Load wheel data
-    for alf_object in ['wheel']:
-        try:
-            data[alf_object] = alfio.load_object(session_path.joinpath(trials_collection), alf_object)
-            continue
-        except ALFObjectNotFound:
-            pass
-        try:
-            data[alf_object] = one.load_object(eid, alf_object, collection=trials_collection)
-        except ALFObjectNotFound:
-            logger.warning(f"Could not load {alf_object} object")
-            data[alf_object] = None
-
-    # Process marker data and predictions if provided
-    if (
-            data[tracker] is not None
-            and data['times'] is not None
-            and data['pawstates'] is not None
-    ):
+    # Data manipulation
+    if data[tracker] is not None and data['times'] is not None and data['pawstates'] is not None:
         try:
             data = extract_pawstate_plot_data(data, paw, tracker)
         except Exception as e:
@@ -1123,7 +1044,7 @@ def pawstates_qc_plot(
     else:
         panels.append((None, 'Data missing\nEnsemble variance'))
 
-    # Panel N-0: Trial information
+    # Panel N-O: Trial information
     if data.get('interval_df') is not None:
         panels.append((plot_trial_correctness, {'interval_df': data['interval_df']}))
         panels.append((plot_trial_duration, {'interval_df': data['interval_df']}))
@@ -1205,10 +1126,117 @@ def pawstates_qc_plot(
                 ax.axis('off')
 
     # Add title
-    title_cam = camera
     title_paw = "far" if paw == "paw_l" else "near"
-    fig.suptitle(f"Pawstates QC - Session: {eid} ({title_cam} camera, {title_paw} paw)",
-                 fontsize=14, y=0.95)
+    title = f"Pawstates QC - Session: {session_id} ({camera} camera, {title_paw} paw)" \
+        if session_id is not None else f"Pawstates QC - {camera} camera, {title_paw} paw"
+    fig.suptitle(title, fontsize=14, y=0.95)
 
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     return fig
+
+
+def load_pawstates_qc_data(
+        session_path, one=None,
+        camera='left', paw='paw_l', tracker='lightningPose',
+        device_collection='raw_video_data', trials_collection='alf',
+):
+    """
+    Load raw data required for the pawstates QC plot.
+
+    Data is searched first locally, then downloaded from Alyx via ONE. Returns the raw data dict
+    and session eid; pass both to plot_pawstates_qc to run manipulation and plotting.
+
+    Datasets loaded:
+     '{device_collection}/_iblrig_{camera}Camera.raw.mp4',
+     'alf/_ibl_{camera}Camera.{tracker}.pqt',
+     'alf/_ibl_{camera}Camera.times.npy',
+     'alf/lightningaction/_ibl_{camera}Camera.pawstates.pqt',
+     '{trials_collection}/_ibl_trials.table.pqt',
+     '{trials_collection}/_ibl_wheel.position.npy',
+     '{trials_collection}/_ibl_wheel.timestamps.npy',
+
+    :param session_path: Path to session data on disk
+    :param one: ONE instance, if None is given, default ONE is instantiated
+    :param camera: Camera view ('left' or 'right')
+    :param paw: Paw identifier ('paw_l' or 'paw_r')
+    :param tracker: Tracker type (e.g., 'dlc', 'lightningPose')
+    :param device_collection: Collection name for video data
+    :param trials_collection: Collection name for trials data
+    :returns: data dict
+    """
+
+    one = one or ONE()
+    # hack for running on cortexlab local server
+    if one.alyx.base_url == 'https://alyx.cortexlab.net':
+        one = ONE(base_url='https://alyx.internationalbrainlab.org')
+
+    data = {}
+    session_path = Path(session_path)
+    eid = one.path2eid(session_path)
+
+    # Load video frame
+    video_path = session_path.joinpath(device_collection, f'_iblrig_{camera}Camera.raw.mp4')
+    # Check if video data is available locally; if yes, load a single frame
+    if video_path.exists():
+        data['frame'] = get_video_frame(video_path, frame_number=5 * 60 * SAMPLING[camera])[:, :, 0]
+        meta = get_video_meta(video_path)
+    # If not, try to stream a frame (try three times)
+    else:
+        try:
+            video_url = url_from_eid(eid=eid, one=one)[camera]
+            for tries in range(3):
+                try:
+                    data['frame'] = get_video_frame(video_url, frame_number=5 * 60 * SAMPLING[camera])[:, :, 0]
+                    meta = get_video_meta(video_url)
+                    break
+                except Exception:
+                    if tries < 2:
+                        tries += 1
+                        logger.info(f"Streaming {camera} video failed, retrying x{tries}")
+                        time.sleep(30)
+                    else:
+                        logger.warning(f"Could not load video frame for {camera} cam. Skipping trace on frame.")
+                        data['frame'] = None
+        except KeyError:
+            logger.warning(f"Could not load video frame for {camera} cam. Skipping trace on frame.")
+            data['frame'] = None
+
+    # Load camera-specific data
+    for feat in [tracker, 'times', 'pawstates']:
+        local_file = list(session_path.joinpath('alf').rglob(f'*{camera}Camera.{feat}*'))
+        if len(local_file) > 0:
+            data[feat] = alfio.load_file_content(local_file[0])
+        else:
+            alyx_ds = [ds for ds in one.list_datasets(eid) if f'{camera}Camera.{feat}' in ds]
+            if len(alyx_ds) > 0:
+                data[feat] = one.load_dataset(eid, alyx_ds[0])
+            else:
+                logger.warning(f"Could not load _ibl_{camera}Camera.{feat}")
+                data[feat] = None
+
+        # Check for empty objects
+        if data[feat] is not None and len(data[feat]) == 0:
+            logger.warning(f"Object loaded from _ibl_{camera}Camera.{feat} is empty")
+            data[feat] = None
+
+    # Compute fps from timestamps
+    data['fps'] = 1. / np.nanmedian(np.diff(data['times']))
+
+    # Load trials data
+    local_file = list(session_path.joinpath(trials_collection).rglob('*trials.table*'))
+    data['trials'] = alfio.load_file_content(local_file[0])
+
+    # Load wheel data
+    for alf_object in ['wheel']:
+        try:
+            data[alf_object] = alfio.load_object(session_path.joinpath(trials_collection), alf_object)
+            continue
+        except ALFObjectNotFound:
+            pass
+        try:
+            data[alf_object] = one.load_object(eid, alf_object, collection=trials_collection)
+        except ALFObjectNotFound:
+            logger.warning(f"Could not load {alf_object} object")
+            data[alf_object] = None
+
+    return data
