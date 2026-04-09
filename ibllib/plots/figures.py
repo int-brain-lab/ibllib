@@ -1053,12 +1053,8 @@ def pawstates_qc_plot(data, camera, paw, tracker, session_id=None):
 
     # Panel P-Q: Raster plots
     if data.get('er') is not None and data.get('vr') is not None:
-        panels.append((plot_state_raster, {
-            'er': data['er'], 'fps': data['fps'], 'plot_type': 'ensemble',
-        }))
-        panels.append((plot_variance_raster, {
-            'vr': data['vr'], 'fps': data['fps'], 'plot_type': 'variance',
-        }))
+        panels.append((plot_state_raster, {'er': data['er'], 'fps': data['fps']}))
+        panels.append((plot_variance_raster, {'vr': data['vr'], 'fps': data['fps']}))
     else:
         panels.extend([(None, 'Data missing\nState raster'), (None, 'Data missing\nVariance raster')])
 

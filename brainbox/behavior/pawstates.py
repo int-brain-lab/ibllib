@@ -495,14 +495,13 @@ def plot_state_raster(ax, er, fps):
     ax.axvline(x=fps / 2, color='black', linestyle='--')
 
 
-def plot_variance_raster(ax, vr, fps, plot_type='variance'):
+def plot_variance_raster(ax, vr, fps):
     """
     Plot raster of ensemble variance values across trials.
 
     :param ax: Matplotlib axis to plot on
     :param vr: Variance raster data array
     :param fps: Camera frame rate
-    :param plot_type: Type of raster plot
     """
     xlim = 2 * fps  # 2 seconds in frames
 
