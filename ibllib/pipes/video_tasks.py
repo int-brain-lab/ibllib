@@ -963,6 +963,20 @@ class PostLP(base_tasks.VideoTask, base_tasks.BehaviourTask):
 
 
 class LightningAction(base_tasks.VideoTask):
+    """
+    Run Lightning Action (action segmentation) on LightningPose keypoint outputs.
+
+    Takes per-camera pose estimates (_ibl_{cam}Camera.lightningPose.pqt) and wheel data as input
+    and produces paw state labels (_ibl_{cam}Camera.pawstates.pqt) saved under alf/lightningaction.
+    Body camera is skipped as paw states are not applicable to that view.
+
+    Environment
+    -----------
+    Requires a dedicated ``litaction`` Python environment (set via ``env = 'litaction'``) with
+    ``iblvideo`` installed, located at ~/Documents/PYTHON/envs/litaction/. The task also requires
+    ``run_litaction.sh`` and ``run_litaction.py`` scripts to be present in
+    ~/Documents/PYTHON/iblscripts/deploy/serverpc/litaction/.
+    """
 
     io_charge = 100
     level = 2
