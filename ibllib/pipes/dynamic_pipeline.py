@@ -592,7 +592,7 @@ def make_pipeline(session_path, **pkwargs):
             FibrePhotometryBpodSync,
             FibrePhotometryDAQSync,
             FibrePhotometryPassiveChoiceWorld,
-            FibrePhotometryQC,
+            # FibrePhotometryQC,
         )
         sync_mode = devices['neurophotometrics']['sync_mode']
 
