@@ -622,12 +622,13 @@ def make_pipeline(session_path, **pkwargs):
                     tasks['FibrePhotometryDAQSync'] = type('FibrePhotometryDAQSync', (FibrePhotometryDAQSync,), {})(
                         **kwargs,
                     )
+            case _:
+                raise ValueError('unknown sync mode')
 
         # QC
-        if 0:  # deactivated for now
-            tasks['FibrePhotometryQC'] = type('FibrePhotometryQC', (FibrePhotometryQC,), {})(
-                **kwargs, parents=[tasks['FibrePhotometryDAQSync']]  # conditional parents?
-            )
+        # tasks['FibrePhotometryQC'] = type('FibrePhotometryQC', (FibrePhotometryQC,), {})(
+        #     **kwargs, parents=[tasks['FibrePhotometryDAQSync']]  # conditional parents?
+        # )
 
     p = mtasks.Pipeline(session_path=session_path, **pkwargs)
     p.tasks = tasks
