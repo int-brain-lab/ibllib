@@ -171,7 +171,7 @@ class TestPipesMisc(unittest.TestCase):
 
         nidq_files = self.session_path_3B.joinpath('raw_ephys_data', 'my_run_g0_t0').glob('*.nidq.*')
         expected = ['_spikeglx_ephysData_g0_t0.nidq.bin', '_spikeglx_ephysData_g0_t0.nidq.meta']
-        self.assertListEqual(expected, [x.name for x in nidq_files])
+        self.assertListEqual(sorted(expected), sorted([x.name for x in nidq_files]))
 
     def test_create_alyx_probe_insertions(self):
         # Connect to test DB
