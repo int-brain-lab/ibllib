@@ -35,3 +35,6 @@ mtscomp>=1.0.1
 phylib>=2.6.3
 psychofit
 slidingRP>=1.1.1  # steinmetz lab refractory period metrics
+pyqt5
+ibl-style
+ibl-photometry>=0.3.2
