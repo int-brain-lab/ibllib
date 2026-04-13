@@ -12,26 +12,29 @@ import numpy as np
 import pandas as pd
 import scipy.signal
 import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
 
 from ibldsp import voltage
 from ibllib.plots.snapshot import ReportSnapshotProbe, ReportSnapshot
 from one.api import ONE
 import one.alf.io as alfio
 from one.alf.exceptions import ALFObjectNotFound
-from ibllib.io.video import get_video_frame, url_from_eid
+from ibllib.io.video import get_video_frame, get_video_meta, url_from_eid
 from ibllib.oneibl.data_handlers import ExpectedDataset
 import spikeglx
 from brainbox.plot import driftmap
 from brainbox.io.spikeglx import Streamer
 from brainbox.behavior.dlc import (
-    SAMPLING,
-    plot_trace_on_frame,
-    plot_wheel_position,
-    plot_lick_hist,
-    plot_lick_raster,
-    plot_motion_energy_hist,
-    plot_speed_hist,
-    plot_pupil_diameter_hist,
+    SAMPLING, plot_trace_on_frame, plot_wheel_position, plot_lick_hist,
+    plot_lick_raster, plot_motion_energy_hist, plot_speed_hist, plot_pupil_diameter_hist,
+)
+from brainbox.behavior.pawstates import (
+    extract_pawstate_plot_data,
+    plot_ensemble_variance_histogram, plot_paw_positions_by_state, plot_paw_speed_transitions,
+    plot_state_duration_histogram, plot_state_raster,
+    plot_total_duration_bars, plot_trial_correctness, plot_trial_duration,
+    plot_variance_raster, plot_wheel_speed_transitions,
+    STATE_LABELS,
 )
 from brainbox.ephys_plots import image_lfp_spectrum_plot, image_rms_plot, plot_brain_regions
 from brainbox.io.one import SpikeSortingLoader
@@ -1070,3 +1073,306 @@ def pose_qc_plot(
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
 
     return fig
+
+
+def pawstates_qc_plot(data, camera, paw, tracker, session_id=None):
+    """
+    Run data manipulation and create the pawstates behavioral QC figure.
+
+    Accepts the raw data dict returned by load_pawstates_qc_data, runs extract_pawstate_plot_data
+    to compute derived quantities, then renders all panels. Panels that lack required data
+    display a placeholder message rather than raising an error.
+
+    :param data: dict of raw loaded data with the following keys (any key set to None skips the dependent panels):
+        - ``'frame'``: np.ndarray, shape (H, W), dtype uint8 — single grayscale video frame used as background for
+          paw position scatter plots (panels A-D).
+        - ``'{tracker}'``: pd.DataFrame — pose estimates from the tracker (e.g., lightningPose), with at least columns
+          ``{paw}_x`` and ``{paw}_y``.
+        - ``'times'``: np.ndarray, shape (n_frames,) — camera timestamps in seconds.
+        - ``'pawstates'``: pd.DataFrame — paw state predictions; columns must include per-paw state probabilities
+          (``{paw}_{state}_prob``) and ensemble variance (``{paw}_*_ens_var``).
+        - ``'fps'``: float — camera frame rate in Hz.
+        - ``'trials'``: pd.DataFrame or None — trials table with columns
+          ``intervals_0``, ``intervals_1``, ``firstMovement_times``, ``stimOn_times``, ``feedback_times``,
+          ``feedbackType``.
+          Set to None to skip trial panels N-O and raster panels P-Q.
+        - ``'wheel'``: Bunch or None — wheel object with attributes ``timestamps`` (np.ndarray, shape (n,)) and
+          ``position`` (np.ndarray, shape (n,)).
+          Set to None to zero-fill wheel velocity.
+    :param camera: Camera view ('left' or 'right')
+    :param paw: Paw identifier ('paw_l' or 'paw_r')
+    :param tracker: Tracker type (e.g., 'dlc', 'lightningPose')
+    :param session_id: Optional session UUID shown in the figure title
+    :returns: Matplotlib figure
+    """
+    # Data manipulation
+    if data[tracker] is not None and data['times'] is not None and data['pawstates'] is not None:
+        try:
+            data = extract_pawstate_plot_data(data, paw, tracker)
+        except Exception as e:
+            logger.error(f"Error processing marker data: {e}")
+            data['processed'] = False
+    else:
+        data['processed'] = False
+
+    # Make list of panels
+    panels = []
+
+    # Panel A-D: Paw positions for each state
+    for i, state in enumerate(STATE_LABELS):
+        if data.get('frame') is not None and data.get('data_df') is not None:
+            panels.append((plot_paw_positions_by_state, {
+                'frame': data['frame'], 'data_df': data['data_df'], 'state': state,
+                'state_idx': i, 'camera': camera, 'paw': paw, 'tracker': tracker,
+            }))
+        else:
+            panels.append((None, f'Data missing\n{state} paw positions'))
+
+    # Panel E-H: State duration histograms
+    # First, collect all durations to determine global x-axis limits
+    if data.get('durations') is not None:
+        all_durations = data['durations']['duration'].values  # Extract duration column
+        if len(all_durations) > 0:
+            duration_xlim = (1 / 60., np.percentile(all_durations, 99))  # or use max(all_durations)
+        else:
+            duration_xlim = None
+    else:
+        duration_xlim = None
+
+    for i, state in enumerate(STATE_LABELS):
+        if data.get('durations') is not None:
+            panels.append((plot_state_duration_histogram, {
+                'durations': data['durations'], 'state': state, 'state_idx': i, 'xlim': duration_xlim,
+            }))
+        else:
+            panels.append((None, f'Data missing\n{state} durations'))
+
+    # Panel I-J: Wheel speed transitions
+    if data.get('wheel_transitions') is not None and data.get('data_df') is not None:
+        panels.append((plot_wheel_speed_transitions, {
+            'wheel_transitions': data['wheel_transitions'],
+            'data_df': data['data_df'],
+            'fps': data['fps'],
+            'transition_start': 'still',
+        }))
+        panels.append((plot_wheel_speed_transitions, {
+            'wheel_transitions': data['wheel_transitions'],
+            'data_df': data['data_df'],
+            'fps': data['fps'],
+            'transition_start': 'wheel_turn',
+        }))
+    else:
+        panels.extend([(None, 'Data missing\nWheel transitions'), (None, 'Data missing\nWheel transitions')])
+
+    # Panel K: Paw speed transitions
+    if data.get('wheel_transitions') is not None and data.get('data_df') is not None:
+        panels.append((plot_paw_speed_transitions, {
+            'wheel_transitions': data['wheel_transitions'], 'data_df': data['data_df'], 'fps': data['fps']
+        }))
+    else:
+        panels.extend([(None, 'Data missing\nPaw transitions')])
+
+    # Panel L: Total duration bar plot
+    if data.get('durations') is not None:
+        panels.append((plot_total_duration_bars, {'durations': data['durations']}))
+    else:
+        panels.append((None, 'Data missing\nTotal durations'))
+
+    # Panel M: Ensemble variance histogram
+    if data.get('data_df') is not None:
+        panels.append((plot_ensemble_variance_histogram, {'data_df': data['data_df']}))
+    else:
+        panels.append((None, 'Data missing\nEnsemble variance'))
+
+    # Panel N-O: Trial information
+    if data.get('interval_df') is not None:
+        panels.append((plot_trial_correctness, {'interval_df': data['interval_df']}))
+        panels.append((plot_trial_duration, {'interval_df': data['interval_df']}))
+    else:
+        panels.extend([(None, 'Data missing\nTrial correctness'), (None, 'Data missing\nTrial duration')])
+
+    # Panel P-Q: Raster plots
+    if data.get('er') is not None and data.get('vr') is not None:
+        panels.append((plot_state_raster, {'er': data['er'], 'fps': data['fps']}))
+        panels.append((plot_variance_raster, {'vr': data['vr'], 'fps': data['fps']}))
+    else:
+        panels.extend([(None, 'Data missing\nState raster'), (None, 'Data missing\nVariance raster')])
+
+    # Create figure and plot panels
+    plt.rcParams.update({'font.size': 10})
+    fig = plt.figure(figsize=(25, 12), dpi=300)
+
+    # Create custom grid layout to match original
+    gs = gridspec.GridSpec(
+        5, 9, figure=fig,
+        width_ratios=[1, 1, 1, 1, 0.5, 1, 1, 1, 1],
+        wspace=0.35, hspace=0.4,
+    )
+
+    # Panel positions matching original layout
+    panel_positions = [
+        # Paw positions (row 0, cols 0-3)
+        gs[0, 0], gs[0, 1], gs[0, 2], gs[0, 3],
+        # Duration histograms (row 1, cols 0-3)
+        gs[1, 0], gs[1, 1], gs[1, 2], gs[1, 3],
+        # Transitions (rows 2-3, cols 0-3)
+        gs[2, 0:2], gs[2, 2:4],
+        gs[3, 0:4],
+        # Total duration and variance (row 4, cols 0-3)
+        gs[4, 0:2], gs[4, 2:4],
+        # Trial info (rows 0-4, col 4 split)
+        None, None,  # These will be handled specially
+        # Rasters (rows 0-4, cols 6-9)
+        gs[0:5, 5:7], gs[0:5, 7:]
+    ]
+
+    for i, (panel, pos) in enumerate(zip(panels, panel_positions)):
+        if pos is None:  # Special handling for trial info panels
+            # Create nested GridSpec for trial info
+            inner_gs = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=gs[:, 4], wspace=1.1)
+            if i == len(panels) - 4:  # Trial correctness
+                ax = fig.add_subplot(inner_gs[0, 0])
+            else:  # Trial duration
+                ax = fig.add_subplot(inner_gs[0, 1])
+        elif pos is not None:
+            ax = fig.add_subplot(pos)
+        else:
+            continue
+
+        # Add panel letter
+        if i < len(ascii_uppercase):
+            bbox = ax.get_position()
+            fig.text(bbox.x0 - 0.01, bbox.y1 + 0.01, ascii_uppercase[i],
+                     transform=fig.transFigure, fontsize=14, fontweight='bold')
+
+        # Plot panel or error message
+        if panel[0] is None:
+            ax.text(.5, .5, panel[1], color='r', fontweight='bold', fontsize=12,
+                    horizontalalignment='center', verticalalignment='center',
+                    transform=ax.transAxes)
+            ax.axis('off')
+        else:
+            try:
+                panel[0](ax=ax, **panel[1])
+            except Exception:
+                logger.error(f'Error in {panel[0].__name__}\n' + traceback.format_exc())
+                ax.text(.5, .5, f'Error while plotting\n{panel[0].__name__}', color='r',
+                        fontweight='bold', fontsize=12, horizontalalignment='center',
+                        verticalalignment='center', transform=ax.transAxes)
+                ax.axis('off')
+
+    # Add title
+    title_paw = "far" if paw == "paw_l" else "near"
+    title = f"Pawstates QC - Session: {session_id} ({camera} camera, {title_paw} paw)" \
+        if session_id is not None else f"Pawstates QC - {camera} camera, {title_paw} paw"
+    fig.suptitle(title, fontsize=14, y=0.95)
+
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    return fig
+
+
+def load_pawstates_qc_data(
+        session_path, one=None,
+        camera='left', paw='paw_l', tracker='lightningPose',
+        device_collection='raw_video_data', trials_collection='alf',
+):
+    """
+    Load raw data required for the pawstates QC plot.
+
+    Data is searched first locally, then downloaded from Alyx via ONE. Returns the raw data dict
+    and session eid; pass both to plot_pawstates_qc to run manipulation and plotting.
+
+    Datasets loaded:
+     '{device_collection}/_iblrig_{camera}Camera.raw.mp4',
+     'alf/_ibl_{camera}Camera.{tracker}.pqt',
+     'alf/_ibl_{camera}Camera.times.npy',
+     'alf/lightningaction/_ibl_{camera}Camera.pawstates.pqt',
+     '{trials_collection}/_ibl_trials.table.pqt',
+     '{trials_collection}/_ibl_wheel.position.npy',
+     '{trials_collection}/_ibl_wheel.timestamps.npy',
+
+    :param session_path: Path to session data on disk
+    :param one: ONE instance, if None is given, default ONE is instantiated
+    :param camera: Camera view ('left' or 'right')
+    :param paw: Paw identifier ('paw_l' or 'paw_r')
+    :param tracker: Tracker type (e.g., 'dlc', 'lightningPose')
+    :param device_collection: Collection name for video data
+    :param trials_collection: Collection name for trials data
+    :returns: data dict
+    """
+
+    one = one or ONE()
+    # hack for running on cortexlab local server
+    if one.alyx.base_url == 'https://alyx.cortexlab.net':
+        one = ONE(base_url='https://alyx.internationalbrainlab.org')
+
+    data = {}
+    session_path = Path(session_path)
+    eid = one.path2eid(session_path)
+
+    # Load video frame
+    video_path = session_path.joinpath(device_collection, f'_iblrig_{camera}Camera.raw.mp4')
+    # Check if video data is available locally; if yes, load a single frame
+    if video_path.exists():
+        data['frame'] = get_video_frame(video_path, frame_number=5 * 60 * SAMPLING[camera])[:, :, 0]
+        meta = get_video_meta(video_path)
+    # If not, try to stream a frame (try three times)
+    else:
+        try:
+            video_url = url_from_eid(eid=eid, one=one)[camera]
+            for tries in range(3):
+                try:
+                    data['frame'] = get_video_frame(video_url, frame_number=5 * 60 * SAMPLING[camera])[:, :, 0]
+                    meta = get_video_meta(video_url)
+                    break
+                except Exception:
+                    if tries < 2:
+                        tries += 1
+                        logger.info(f"Streaming {camera} video failed, retrying x{tries}")
+                        time.sleep(30)
+                    else:
+                        logger.warning(f"Could not load video frame for {camera} cam. Skipping trace on frame.")
+                        data['frame'] = None
+        except KeyError:
+            logger.warning(f"Could not load video frame for {camera} cam. Skipping trace on frame.")
+            data['frame'] = None
+
+    # Load camera-specific data
+    for feat in [tracker, 'times', 'pawstates']:
+        local_file = list(session_path.joinpath('alf').rglob(f'*{camera}Camera.{feat}*'))
+        if len(local_file) > 0:
+            data[feat] = alfio.load_file_content(local_file[0])
+        else:
+            alyx_ds = [ds for ds in one.list_datasets(eid) if f'{camera}Camera.{feat}' in ds]
+            if len(alyx_ds) > 0:
+                data[feat] = one.load_dataset(eid, alyx_ds[0])
+            else:
+                logger.warning(f"Could not load _ibl_{camera}Camera.{feat}")
+                data[feat] = None
+
+        # Check for empty objects
+        if data[feat] is not None and len(data[feat]) == 0:
+            logger.warning(f"Object loaded from _ibl_{camera}Camera.{feat} is empty")
+            data[feat] = None
+
+    # Compute fps from timestamps
+    data['fps'] = 1. / np.nanmedian(np.diff(data['times']))
+
+    # Load trials data
+    local_file = list(session_path.joinpath(trials_collection).rglob('*trials.table*'))
+    data['trials'] = alfio.load_file_content(local_file[0])
+
+    # Load wheel data
+    for alf_object in ['wheel']:
+        try:
+            data[alf_object] = alfio.load_object(session_path.joinpath(trials_collection), alf_object)
+            continue
+        except ALFObjectNotFound:
+            pass
+        try:
+            data[alf_object] = one.load_object(eid, alf_object, collection=trials_collection)
+        except ALFObjectNotFound:
+            logger.warning(f"Could not load {alf_object} object")
+            data[alf_object] = None
+
+    return data

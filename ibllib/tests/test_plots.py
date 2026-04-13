@@ -15,7 +15,9 @@ import ibllib.plots.misc
 from ibllib.tests import TEST_DB
 from ibllib.tests.fixtures.utils import register_new_session
 from ibllib.plots.snapshot import Snapshot
-from ibllib.plots.figures import dlc_qc_plot, lp_qc_plot
+import pandas as pd
+
+from ibllib.plots.figures import dlc_qc_plot, lp_qc_plot, pawstates_qc_plot
 
 
 WIDTH, HEIGHT = 1000, 100
@@ -201,3 +203,69 @@ class TestMiscPlot(unittest.TestCase):
         ibllib.plots.misc.wiggle(w, fs=30000)
         ibllib.plots.misc.Traces(w, fs=30000, color='r')
         plt.close('all')
+
+
+class TestPlotPawstatesQC(unittest.TestCase):
+
+    N_FRAMES = 200
+    FPS = 60.
+    TRACKER = 'lightningPose'
+    PAW = 'paw_l'
+    CAMERA = 'left'
+
+    @classmethod
+    def setUpClass(cls):
+        plt.switch_backend('Agg')
+
+    @classmethod
+    def _make_data(cls):
+        """Build a minimal synthetic data dict matching the pawstates_qc_plot raw input spec."""
+        rng = np.random.default_rng(seed=0)
+        n = cls.N_FRAMES
+
+        # Construct pawstates: 4 equal blocks, each with a different dominant state (1-4).
+        # ORIG_LABELS order is (background, still, move, wheel_turn, groom); STATE_MAP expects
+        # argmax in {1,2,3,4}, so background (index 0) must never win.
+        probs = np.full((n, 5), 0.05)
+        block = n // 4
+        for state_idx in range(1, 5):
+            probs[(state_idx - 1) * block:state_idx * block, state_idx] = 0.8
+        pawstates = pd.DataFrame(
+            probs,
+            columns=[f'{cls.PAW}_{label}' for label in ('background', 'still', 'move', 'wheel_turn', 'groom')],
+        )
+        pawstates[f'{cls.PAW}_ens_var'] = rng.uniform(0, 0.3, n)
+
+        return {
+            'frame': rng.integers(0, 255, (480, 640), dtype=np.uint8),
+            cls.TRACKER: pd.DataFrame({
+                f'{cls.PAW}_x': rng.uniform(100, 400, n),
+                f'{cls.PAW}_y': rng.uniform(100, 300, n),
+            }),
+            'times': np.arange(n) / cls.FPS,
+            'pawstates': pawstates,
+            'fps': cls.FPS,
+            'trials': None,
+            'wheel': None,
+        }
+
+    def tearDown(self):
+        plt.close('all')
+
+    def test_all_none_data(self):
+        """All panels show a placeholder without raising when data values are None."""
+        data = {
+            'frame': None, self.TRACKER: None, 'times': None,
+            'pawstates': None, 'fps': None, 'trials': None, 'wheel': None,
+        }
+        fig = pawstates_qc_plot(data, camera=self.CAMERA, paw=self.PAW, tracker=self.TRACKER)
+        self.assertIsNotNone(fig)
+        self.assertGreater(len(fig.axes), 0)
+
+    def test_with_synthetic_data(self):
+        """Figure renders without error when given valid synthetic data."""
+        fig = pawstates_qc_plot(
+            self._make_data(), camera=self.CAMERA, paw=self.PAW, tracker=self.TRACKER,
+        )
+        self.assertIsNotNone(fig)
+        self.assertGreater(len(fig.axes), 0)

@@ -1265,6 +1265,8 @@ class SessionLoader:
     pose: dict = field(default_factory=dict, repr=False)
     motion_energy: dict = field(default_factory=dict, repr=False)
     pupil: pd.DataFrame = field(default_factory=pd.DataFrame, repr=False)
+    licks: pd.DataFrame = field(default_factory=pd.DataFrame, repr=False)
+    pawstates: dict = field(default_factory=dict, repr=False)
 
     def __post_init__(self):
         """
@@ -1285,12 +1287,21 @@ class SessionLoader:
             if self.eid is not None and self.eid != '':
                 self.session_path = self.one.eid2path(self.eid)
             else:
-                raise ValueError('If no session path is given, eid is required.')
+                raise ValueError("If no session path is given, eid is required.")
 
-        data_names = ['trials', 'wheel', 'pose', 'motion_energy', 'pupil']
+        data_names = [
+            'trials',
+            'wheel',
+            'pose',
+            'motion_energy',
+            'pupil',
+            'licks',
+            'pawstates',
+        ]
         self.data_info = pd.DataFrame(columns=['name', 'is_loaded'], data=zip(data_names, [False] * len(data_names)))
 
-    def load_session_data(self, trials=True, wheel=True, pose=True, motion_energy=True, pupil=True, reload=False):
+    def load_session_data(self, trials=True, wheel=True, pose=True, motion_energy=True, pupil=True, licks=True,
+                          pawstates=True, reload=False):
         """
         Function to load available session data into the SessionLoader object. Input parameters allow to control which
         data is loaded. Data is loaded into an attribute of the SessionLoader object with the same name as the input
@@ -1312,12 +1323,32 @@ class SessionLoader:
         pupil: boolean
             Whether to load pupil diameter (raw and smooth) for the left/right camera into SessionLoader.pupil,
             default is True
+        licks: boolean
+            Whether to load lick times into SessionLoader.licks, default is True
+        pawstates: boolean
+            Whether to load paw state predictions for each available camera into SessionLoader.pawstates, default is True
         reload: boolean
             Whether to reload data that has already been loaded into this SessionLoader object, default is False
         """
         load_df = self.data_info.copy()
-        load_df['to_load'] = [trials, wheel, pose, motion_energy, pupil]
-        load_df['load_func'] = [self.load_trials, self.load_wheel, self.load_pose, self.load_motion_energy, self.load_pupil]
+        load_df['to_load'] = [
+            trials,
+            wheel,
+            pose,
+            motion_energy,
+            pupil,
+            licks,
+            pawstates,
+        ]
+        load_df['load_func'] = [
+            self.load_trials,
+            self.load_wheel,
+            self.load_pose,
+            self.load_motion_energy,
+            self.load_pupil,
+            self.load_licks,
+            self.load_pawstates,
+        ]
 
         for idx, row in load_df.iterrows():
             if row['to_load'] is False:
@@ -1469,9 +1500,38 @@ class SessionLoader:
 
     def load_licks(self):
         """
-        Not yet implemented
+        Function to load lick times into SessionLoader.licks.
         """
-        pass
+        licks_raw = self.one.load_object(self.eid, 'licks', collection='alf', revision=self.revision or None)
+        self.licks = pd.DataFrame({'times': licks_raw['times']})
+        self.data_info.loc[self.data_info['name'] == 'licks', 'is_loaded'] = True
+
+    def load_pawstates(self, views=('left', 'right')):
+        """
+        Function to load paw state predictions into SessionLoader.pawstates. SessionLoader.pawstates is a
+        dictionary where keys are the names of the cameras for which paw state data is loaded, and values are
+        pandas DataFrames with the camera timestamps and paw state probabilities.
+
+        Paw state data is not available for the body camera; only left and right cameras are loaded by default.
+
+        Parameters
+        ----------
+        views: list or tuple
+            Camera views for which to load paw state data. Possible options are {'left', 'right'}.
+        """
+        self.pawstates = {}
+        for view in views:
+            pawstates_raw = self.one.load_object(
+                self.eid, f'{view}Camera', attribute='pawstates', collection='alf/lightningaction',
+                revision=self.revision or None)
+            times_raw = self.one.load_object(
+                self.eid, f'{view}Camera', attribute='times', collection='alf',
+                revision=self.revision or None)
+            times_fixed, pawstates_df = self._check_video_timestamps(
+                view, times_raw['times'], pawstates_raw['pawstates'])
+            self.pawstates[f'{view}Camera'] = pawstates_df.copy()
+            self.pawstates[f'{view}Camera'].insert(0, 'times', times_fixed)
+            self.data_info.loc[self.data_info['name'] == 'pawstates', 'is_loaded'] = True
 
     def load_pupil(self, snr_thresh=5.0):
         """
