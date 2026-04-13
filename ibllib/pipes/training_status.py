@@ -637,8 +637,8 @@ def get_training_info_for_session(session_paths, one, force=True):
                 if prot is False:
                     continue
                 try:
-                    alf = alf_collections[np.where(protocols == prot)[0]]
-                    raw = collections[np.where(protocols == prot)[0]]
+                    alf = alf_collections[np.where(np.array(protocols) == prot)[0]]
+                    raw = collections[np.where(np.array(protocols) == prot)[0]]
                 except TypeError:
                     alf = None
                     raw = None

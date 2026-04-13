@@ -172,6 +172,16 @@ def merge_params(a, b, copy=False):
         hashable = (dict_item[0], *chain.from_iterable(sorted(dict_item[1].items())))
         return tuple(tuple(x) if isinstance(x, list) else x for x in hashable)
 
+    def merge_dicts(left, right, depth=0, max_depth=1):
+        """Merge dicts recursively up to max_depth."""
+        merged = dict(left)
+        for key, value in right.items():
+            if key in merged and isinstance(merged[key], dict) and isinstance(value, dict) and depth < max_depth:
+                merged[key] = merge_dicts(merged[key], value, depth=depth + 1, max_depth=max_depth)
+            else:
+                merged[key] = value
+        return merged
+
     if copy:
         a = deepcopy(a)
     for k in b:
@@ -192,7 +202,7 @@ def merge_params(a, b, copy=False):
                 to_add = set(b[k]) - set(prev)
             a[k] = prev + list(to_add)
         elif isinstance(b[k], dict):
-            a[k] = {**a.get(k, {}), **b[k]}
+            a[k] = merge_dicts(a.get(k, {}), b[k])
         else:  # A string
             a[k] = b[k]
     return a

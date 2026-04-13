@@ -72,9 +72,9 @@ def load_task_replay_fixtures(
     else:
         task_replay = _load_v7_fixture_df(settings)
 
-    # For all versions before 8.29.0, there was a bug where the first gabor stimulus was blank and the
+    # For all versions there is a bug where the first gabor stimulus was blank and the
     # following gabor stimuli showed the parameters from the previous gabor trial.
-    if task_version <= version.parse('8.29.0') and adjust:
+    if adjust:
         # Shift the parameters of all gabor stimuli by one trial
         idx = task_replay.index[task_replay['stim_type'] == 'G'].values
         task_replay.iloc[idx[1:], :] = task_replay.iloc[idx[:-1], :]
@@ -577,6 +577,9 @@ def extract_task_replay(
             assert np.array_equal(full_df['stim_type'].values, replay_trials['stim_type'].values), (
                 'The extracted sequence does not match the expected task replay sequence.'
             )
+
+    elif gabor_df is not None and stim_df is None:
+        gabor_df = gabor_df.drop(columns=['stim_type'])
 
     return gabor_df, stim_df
 

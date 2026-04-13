@@ -208,15 +208,15 @@ def load_timeline_sync_and_chmap(alf_path, chmap=None, timeline=None, save=True)
     """
     if not chmap:
         if not timeline:
-            meta = alfio.load_object(alf_path, 'DAQdata', namespace='timeline', attribute='meta')['meta']
+            meta = alfio.load_object(alf_path, 'DAQdata', namespace='timeline', attribute='meta', short_keys=True)['meta']
         else:
             meta = timeline['meta']
         chmap = timeline_meta2chmap(meta, include_channels=all_default_labels())
     try:
-        sync = alfio.load_object(alf_path, 'sync')
+        sync = alfio.load_object(alf_path, 'sync', short_keys=True)
     except alferr.ALFObjectNotFound:
         if not timeline:
-            timeline = alfio.load_object(alf_path, 'DAQdata')
+            timeline = alfio.load_object(alf_path, 'DAQdata', short_keys=True)
         sync = extract_sync_timeline(timeline, chmap=chmap)
         if save:
             alfio.save_object_npy(alf_path, sync, object='sync', namespace='timeline')
@@ -253,7 +253,7 @@ def extract_sync_timeline(timeline, chmap=None, floor_percentile=10, threshold=N
         A map of channel names and their corresponding indices for sync channels, if chmap is None.
     """
     if isinstance(timeline, (str, Path)):
-        timeline = alfio.load_object(timeline, 'DAQdata', namespace='timeline')
+        timeline = alfio.load_object(timeline, 'DAQdata', namespace='timeline', short_keys=True)
     assert timeline.keys() >= {'timestamps', 'raw', 'meta'}, 'Timeline object missing attributes'
 
     # If no channel map was passed, load it from 'wiring' file, or extract from meta file

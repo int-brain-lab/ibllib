@@ -586,6 +586,11 @@ class TestSessionParams(unittest.TestCase):
         self.assertCountEqual(['devices', 'procedures', 'projects', 'sync', 'tasks', 'version'], g.keys())
         self.assertEqual(4, len(g['tasks']))
         self.assertDictEqual(f['tasks'][0], g['tasks'][-1])
+        # Test nested dict merge up to devices -> neuropixel -> probeXX
+        nested_a = {'devices': {'neuropixel': {'probe00': {'collection': 'raw_ephys_data/probe00'}}}}
+        nested_b = {'devices': {'neuropixel': {'probe02': {'collection': 'raw_ephys_data/probe02'}}}}
+        nested = session_params.merge_params(nested_a, nested_b, copy=False)
+        self.assertEqual({'probe00', 'probe02'}, set(nested['devices']['neuropixel'].keys()))
 
     def test_get_protocol_number(self):
         """Test ibllib.io.session_params.get_task_protocol_number function."""
