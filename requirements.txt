@@ -44,4 +44,4 @@ psychofit
 slidingRP>=1.1.1  # steinmetz lab refractory period metrics
 sparse
 tqdm>=4.32.1
-ibl-photometry
+ibl-photometry>=0.3.2
