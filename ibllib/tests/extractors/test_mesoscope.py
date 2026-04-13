@@ -1,4 +1,5 @@
 """Tests for ibllib.io.extractors.mesoscope module."""
+
 import unittest
 from itertools import repeat, chain
 
@@ -9,6 +10,7 @@ from ibllib.io.extractors import mesoscope
 
 class TestMesoscopeSyncTimeline(unittest.TestCase):
     """Tests for MesoscopeSyncTimeline extractor class."""
+
     def setUp(self) -> None:
         """Simulate for meta data for 9 FOVs at 3 different depths.
 
@@ -24,16 +26,17 @@ class TestMesoscopeSyncTimeline(unittest.TestCase):
         delta_depth = 40
         self.line_period = 4.158e-05
 
-        self.meta = {
-            'scanImageParams': {'hRoiManager': {'linePeriod': self.line_period, 'scanFrameRate': 13.6803}},
-            'FOV': []
-        }
+        self.meta = {'scanImageParams': {'hRoiManager': {'linePeriod': self.line_period, 'scanFrameRate': 13.6803}}, 'FOV': []}
         nXnYnZ = [self.n_lines, self.n_lines, 1]
         for i, slice_id in enumerate(chain.from_iterable(map(lambda x: list(repeat(x, reps)), range(n_depths)))):
             offset = (i % n_depths) * (self.n_lines + n_lines_flyback) - ((i % n_depths) - 1)
             offset = offset or 1  # start at 1 for MATLAB indexing
-            fov = {'slice_id': slice_id, 'Zs': start_depth + (delta_depth * slice_id),
-                   'nXnYnZ': nXnYnZ, 'lineIdx': list(range(offset, self.n_lines + offset))}
+            fov = {
+                'slice_id': slice_id,
+                'Zs': start_depth + (delta_depth * slice_id),
+                'nXnYnZ': nXnYnZ,
+                'lineIdx': list(range(offset, self.n_lines + offset)),
+            }
             self.meta['FOV'].append(fov)
 
     def test_get_timeshifts_multidepth(self):
@@ -56,7 +59,7 @@ class TestMesoscopeSyncTimeline(unittest.TestCase):
                 np.testing.assert_almost_equal(expected, line_shifts)
 
         # NB: The following values are fixed for the setup parameters
-        expected = [0., 0.02436588, 0.04873176, 0.07309781, 0.09746369, 0.12182957, 0.14619562, 0.1705615, 0.19492738]
+        expected = [0.0, 0.02436588, 0.04873176, 0.07309781, 0.09746369, 0.12182957, 0.14619562, 0.1705615, 0.19492738]
         np.testing.assert_almost_equal(expected, fov_time_shifts)
 
 
