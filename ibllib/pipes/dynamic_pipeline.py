@@ -612,7 +612,7 @@ def make_pipeline(session_path, **pkwargs):
             # FibrePhotometryQC,
         )
 
-        sync_mode = devices['neurophotometrics']['sync_mode']
+        sync_mode = devices['neurophotometrics']['sync']
 
         # passive photometry
         task_protocols = acquisition_description['tasks']

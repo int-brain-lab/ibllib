@@ -854,7 +854,7 @@ class SpikeSortingLoader:
         :return:
         """
         # we do not specify the spike sorter on purpose here: the electrode sites do not depend on the spike sorting
-        self.download_spike_sorting_object(obj='electrodeSites', collection=f'alf/{self.pname}', missing='ignore')
+        self.download_spike_sorting_object(obj='electrodeSites', collection=f'alf/{self.pname}', missing='ignore', **kwargs)
         self.download_spike_sorting_object(obj='channels', missing='ignore', **kwargs)
         channels = self._load_object(self.files['channels'], wildcards=self.one.wildcards)
         if 'electrodeSites' in self.files:  # if common dict keys, electrodeSites prevails
