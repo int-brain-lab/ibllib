@@ -373,7 +373,7 @@ def _get_sync_config(acquisition_description):
     return sync, sync_label, sync_args, sync_kwargs
 
 
-def get_sync_tasks(acquisition_description, sync_tasks, **kwargs):
+def get_sync_tasks(acquisition_description, **kwargs):
     sync, sync_label, sync_args, sync_kwargs = _get_sync_config(acquisition_description)
     sync_tasks = OrderedDict()
     if sync_label == 'nidq' and sync_args['sync_collection'] == 'raw_ephys_data':
@@ -693,7 +693,7 @@ def make_pipeline(session_path, **pkwargs):
     )(**kwargs)
 
     # Syncing tasks
-    sync_tasks = get_sync_tasks(session_path, acquisition_description, **kwargs)
+    sync_tasks = get_sync_tasks(acquisition_description, **kwargs)
     tasks.update(sync_tasks)
 
     # Behavior tasks
@@ -701,27 +701,27 @@ def make_pipeline(session_path, **pkwargs):
     tasks.update(behavior_tasks)
 
     # Ephys tasks
-    ephys_tasks = get_ephys_tasks()
+    ephys_tasks = get_ephys_tasks(acquisition_description, sync_tasks, **kwargs)
     tasks.update(ephys_tasks)
 
     # Video tasks
-    video_tasks = get_video_tasks()
+    video_tasks = get_video_tasks(acquisition_description, sync_tasks, **kwargs)
     tasks.update(video_tasks)
 
     # Audio tasks
-    audio_tasks = get_audio_tasks()
+    audio_tasks = get_audio_tasks(acquisition_description, **kwargs)
     tasks.update(audio_tasks)
 
     # Widefield tasks
-    wfield_tasks = get_wfield_tasks()
+    wfield_tasks = get_wfield_tasks(acquisition_description, sync_tasks, **kwargs)
     tasks.update(wfield_tasks)
 
     # Mesoscope tasks
-    mesoscope_tasks = get_mesoscope_tasks()
+    mesoscope_tasks = get_mesoscope_tasks(acquisition_description, **kwargs)
     tasks.update(mesoscope_tasks)
 
     # photometry tasks
-    photometry_tasks = get_photometry_tasks()
+    photometry_tasks = get_photometry_tasks(acquisition_description, **kwargs)
     tasks.update(photometry_tasks)
 
     # combine: make pipeline and add tasks
