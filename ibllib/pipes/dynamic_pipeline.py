@@ -216,12 +216,7 @@ def _get_trials_tasks(session_path, acquisition_description=None, sync_tasks=Non
     kwargs = {'session_path': session_path, 'one': one}
 
     # Syncing tasks
-    ((sync, sync_args),) = acquisition_description['sync'].items()
-    sync_label = _sync_label(sync, **sync_args)  # get the format of the DAQ data. This informs the extractor task
-    sync_args['sync_collection'] = sync_args.pop('collection')  # rename the key so it matches task run arguments
-    sync_args['sync_ext'] = sync_args.pop('extension', None)
-    sync_args['sync_namespace'] = sync_args.pop('acquisition_software', None)
-    sync_kwargs = {'sync': sync, **sync_args}
+    _, sync_label, _, sync_kwargs = _get_sync_config(acquisition_description)
 
     # Behavior tasks
     protocol_numbers = set()
