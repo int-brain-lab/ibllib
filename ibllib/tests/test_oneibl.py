@@ -47,8 +47,10 @@ class TestUtils(unittest.TestCase):
         # Should find intersection based on labs with endpoint ID
         subjects = [{'lab': 'bar'}, {'lab': 'baz'}]
         data_repo_labs = [{'name': 'baz'}, {'name': 'foobar'}]
-        with mock.patch.object(alyx, 'rest', side_effect=[subjects, data_repo_labs]), \
-                mock.patch('one.remote.globus.get_local_endpoint_id'):
+        with (
+            mock.patch.object(alyx, 'rest', side_effect=[subjects, data_repo_labs]),
+            mock.patch('one.remote.globus.get_local_endpoint_id'),
+        ):
             self.assertEqual('baz', registration.get_lab(session_path, alyx))
 
 
@@ -59,8 +61,7 @@ class TestFTPPatcher(unittest.TestCase):
     def reset_params(self):
         """Remove the FTP parameters from the AlyxClient"""
         par = iopar.as_dict(self.one.alyx._par)
-        self.one.alyx._par = iopar.from_dict({k: v for k, v in par.items()
-                                              if not k.startswith('FTP')})
+        self.one.alyx._par = iopar.from_dict({k: v for k, v in par.items() if not k.startswith('FTP')})
 
     @mock.patch('ftplib.FTP_TLS')
     def test_setup(self, _):
@@ -72,17 +73,17 @@ class TestFTPPatcher(unittest.TestCase):
         # Silent mode off
         self.reset_params()
         self.one.alyx.silent = False
-        with mock.patch('builtins.input', new=self.mock_input), \
-                mock.patch('ibllib.oneibl.patcher.getpass', return_value='foobar'):
+        with (
+            mock.patch('builtins.input', new=self.mock_input),
+            mock.patch('ibllib.oneibl.patcher.getpass', return_value='foobar'),
+        ):
             patcher.FTPPatcher(one=self.one)
         self.assertEqual(self.one.alyx._par.FTP_DATA_SERVER_LOGIN, 'usr')
         self.assertEqual(self.one.alyx._par.FTP_DATA_SERVER_PWD, 'foobar')
 
     @staticmethod
     def mock_input(prompt):
-        FTP_pars = {
-            'FTP_DATA_SERVER': 'ftp://server.net',
-            'FTP_DATA_SERVER_LOGIN': 'usr'}
+        FTP_pars = {'FTP_DATA_SERVER': 'ftp://server.net', 'FTP_DATA_SERVER_LOGIN': 'usr'}
         return FTP_pars[next(k for k in FTP_pars.keys() if k in prompt.replace(',', '').split())]
 
 
@@ -107,7 +108,7 @@ class _GlobusPatcherTest(unittest.TestCase):
             'local_endpoint': str(uuid.uuid1()),
             'local_path': str(self.root_path),
             'access_token': 'abc',
-            'expires_at_seconds': datetime.datetime.now().timestamp() + 60**2
+            'expires_at_seconds': datetime.datetime.now().timestamp() + 60**2,
         })
         # Mock the globus SDK so that no actual tasks are submitted
         globus_sdk_mock = mock.patch('one.remote.globus.globus_sdk')
@@ -129,8 +130,10 @@ class TestGlobusPatcher(_GlobusPatcherTest):
     def test_patch_datasets(self):
         """Tests for GlobusPatcher.patch_datasets and GlobusPatcher.launch_transfers methods."""
         # Create a couple of datasets to patch
-        file_list = ['ZFM-01935/2021-02-05/001/alf/_ibl_wheelMoves.intervals.npy',
-                     'ZM_1743/2019-06-14/001/alf/_ibl_wheel.position.npy']
+        file_list = [
+            'ZFM-01935/2021-02-05/001/alf/_ibl_wheelMoves.intervals.npy',
+            'ZM_1743/2019-06-14/001/alf/_ibl_wheel.position.npy',
+        ]
         dids = ['80fabd30-9dc8-4778-b349-d175af63e1bd', 'fede964f-55cd-4267-95e0-327454e68afb']
         # These exist on the test database, so get their info in order to mock registration response
         for r in (responses := self.one.alyx.rest('datasets', 'list', django=f'pk__in,{dids}')):
@@ -218,16 +221,17 @@ class TestIBLGlobusPatcher(_GlobusPatcherTest):
                 s3_fr['data_repository'] = 'aws_mainenlab'
                 s3_fr['data_repository_path'] = 'data' + s3_fr['data_repository_path']
                 relative_path = '/'.join(Path(s3_fr['data_url']).parts[4:])
-                s3_fr['data_url'] = (
-                    'https://bucket.s3.amazonaws.com/' + s3_fr['data_repository_path'] + relative_path)
+                s3_fr['data_url'] = 'https://bucket.s3.amazonaws.com/' + s3_fr['data_repository_path'] + relative_path
                 self.dset['file_records'].append(s3_fr)
         # Also make the flatiron endpoint ID None
         del self.endpoint_ids['flatiron_mainenlab']
         # Reset mock calls
         self.globus_patcher.client.reset_mock()
         self.globus_sdk_mock.reset_mock()
-        with mock.patch.object(self.one.alyx, 'rest', side_effect=self._alyx_patch) as alyx_mock, \
-                mock.patch('ibllib.oneibl.patcher.Popen') as proc_mock:
+        with (
+            mock.patch.object(self.one.alyx, 'rest', side_effect=self._alyx_patch) as alyx_mock,
+            mock.patch('ibllib.oneibl.patcher.Popen') as proc_mock,
+        ):
             line = mock.MagicMock()
             line.decode.return_value = '...'
             proc_mock().wait.return_value = 0
@@ -240,9 +244,7 @@ class TestIBLGlobusPatcher(_GlobusPatcherTest):
             self.assertCountEqual(['mainen_lab_SR', 'aws_mainenlab'], deleted)
             self.assertFalse(any(args == ('datasets', 'delete') for args, _ in alyx_mock.call_args_list))
             self.globus_sdk_mock.DeleteData.assert_not_called()
-            expected = [
-                'aws', 's3', 'rm', 's3://bucket' + s3_fr['data_url'][31:], '--profile', 'ibladmin', '--dryrun'
-            ]
+            expected = ['aws', 's3', 'rm', 's3://bucket' + s3_fr['data_url'][31:], '--profile', 'ibladmin', '--dryrun']
             proc_mock.assert_called_once_with(expected, stdout=-1, stderr=-2)
 
             # Test not dry + with higher log level (should add only-show-errors flag to aws command)
@@ -262,41 +264,55 @@ class TestIBLGlobusPatcher(_GlobusPatcherTest):
             return self.dset
         if endpoint == 'data-repository' and action == 'read':
             fr = next(fr for fr in self.dset['file_records'] if fr['data_repository'] == kwargs['id'])
-            return {'name': fr['data_repository'], 'globus_path': fr['data_repository_path'],
-                    'repository_type': 'Fileserver', 'globus_is_personal': fr['data_url'] is None,
-                    'globus_endpoint_id': self.endpoint_ids.get(fr['data_repository'])}
+            return {
+                'name': fr['data_repository'],
+                'globus_path': fr['data_repository_path'],
+                'repository_type': 'Fileserver',
+                'globus_is_personal': fr['data_url'] is None,
+                'globus_endpoint_id': self.endpoint_ids.get(fr['data_repository']),
+            }
 
 
 class TestAlyx2Path(unittest.TestCase):
     dset = {
-        'url': 'https://alyx.internationalbrainlab.org/'
-               'datasets/00059298-1b33-429c-a802-fa51bb662d72',
+        'url': 'https://alyx.internationalbrainlab.org/datasets/00059298-1b33-429c-a802-fa51bb662d72',
         'name': 'channels.localCoordinates.npy',
         'collection': 'alf/probe00',
-        'session': ('https://alyx.internationalbrainlab.org/'
-                    'sessions/7cffad38-0f22-4546-92b5-fd6d2e8b2be9'),
+        'session': ('https://alyx.internationalbrainlab.org/sessions/7cffad38-0f22-4546-92b5-fd6d2e8b2be9'),
         'file_records': [
-            {'id': 'c9ae1b6e-03a6-41c9-9e1b-4a7f9b5cfdbf', 'data_repository': 'ibl_floferlab_SR',
-             'data_repository_path': '/mnt/s0/Data/Subjects/',
-             'relative_path': 'SWC_014/2019-12-11/001/alf/probe00/channels.localCoordinates.npy',
-             'data_url': None, 'exists': True},
-            {'id': 'f434a638-bc61-4695-884e-70fd1e521d60', 'data_repository': 'flatiron_hoferlab',
-             'data_repository_path': '/hoferlab/Subjects/',
-             'relative_path': 'SWC_014/2019-12-11/001/alf/probe00/channels.localCoordinates.npy',
-             'data_url': (
-                 'https://ibl.flatironinstitute.org/hoferlab/Subjects/SWC_014/2019-12-11/001/'
-                 'alf/probe00/channels.localCoordinates.00059298-1b33-429c-a802-fa51bb662d72.npy'),
-             'exists': True}],
+            {
+                'id': 'c9ae1b6e-03a6-41c9-9e1b-4a7f9b5cfdbf',
+                'data_repository': 'ibl_floferlab_SR',
+                'data_repository_path': '/mnt/s0/Data/Subjects/',
+                'relative_path': 'SWC_014/2019-12-11/001/alf/probe00/channels.localCoordinates.npy',
+                'data_url': None,
+                'exists': True,
+            },
+            {
+                'id': 'f434a638-bc61-4695-884e-70fd1e521d60',
+                'data_repository': 'flatiron_hoferlab',
+                'data_repository_path': '/hoferlab/Subjects/',
+                'relative_path': 'SWC_014/2019-12-11/001/alf/probe00/channels.localCoordinates.npy',
+                'data_url': (
+                    'https://ibl.flatironinstitute.org/hoferlab/Subjects/SWC_014/2019-12-11/001/'
+                    'alf/probe00/channels.localCoordinates.00059298-1b33-429c-a802-fa51bb662d72.npy'
+                ),
+                'exists': True,
+            },
+        ],
     }
 
     def test_dsets_2_path(self):
         self.assertEqual(len(patcher.globus_path_from_dataset([self.dset] * 3)), 3)
-        sdsc_path = ('/mnt/ibl/hoferlab/Subjects/SWC_014/2019-12-11/001/alf/probe00/'
-                     'channels.localCoordinates.00059298-1b33-429c-a802-fa51bb662d72.npy')
-        globus_path_sdsc = ('/hoferlab/Subjects/SWC_014/2019-12-11/001/alf/probe00/'
-                            'channels.localCoordinates.00059298-1b33-429c-a802-fa51bb662d72.npy')
-        globus_path_sr = ('/mnt/s0/Data/Subjects/SWC_014/2019-12-11/001/alf/probe00/'
-                          'channels.localCoordinates.npy')
+        sdsc_path = (
+            '/mnt/ibl/hoferlab/Subjects/SWC_014/2019-12-11/001/alf/probe00/'
+            'channels.localCoordinates.00059298-1b33-429c-a802-fa51bb662d72.npy'
+        )
+        globus_path_sdsc = (
+            '/hoferlab/Subjects/SWC_014/2019-12-11/001/alf/probe00/'
+            'channels.localCoordinates.00059298-1b33-429c-a802-fa51bb662d72.npy'
+        )
+        globus_path_sr = '/mnt/s0/Data/Subjects/SWC_014/2019-12-11/001/alf/probe00/channels.localCoordinates.npy'
 
         # Test sdsc_path_from_dataset
         testable = patcher.sdsc_path_from_dataset(self.dset)
@@ -330,7 +346,6 @@ def get_mock_session_settings(subject='clns0730', user='test_user'):
 
 
 class TestRegistration(unittest.TestCase):
-
     subject = ''
     """str: The name of the subject under which to create sessions."""
 
@@ -350,7 +365,7 @@ class TestRegistration(unittest.TestCase):
             'subject': self.subject,
             'start_time': '2018-04-01T12:48:26.795526',
             'number': 2,
-            'users': [self.settings['PYBPOD_CREATOR'][0]]
+            'users': [self.settings['PYBPOD_CREATOR'][0]],
         }
 
         # makes sure tests start without session created
@@ -396,10 +411,9 @@ class TestRegistration(unittest.TestCase):
 
         # simulate all the datasets exists, re-register and asserts that exists is set to True
         # as the files haven't changed
-        frs = self.one.alyx.rest('files', 'list', django=f"dataset__session,{ses['url'][-36:]}")
+        frs = self.one.alyx.rest('files', 'list', django=f'dataset__session,{ses["url"][-36:]}')
         for fr in frs:
-            self.one.alyx.rest('files', 'partial_update',
-                               id=fr['url'][-36:], data={'exists': True})
+            self.one.alyx.rest('files', 'partial_update', id=fr['url'][-36:], data={'exists': True})
         r = registration.register_dataset(file_list=flist, one=self.one)
         self.assertTrue(all(all(fr['exists'] for fr in rr['file_records']) for rr in r))
         # now that files have changed, makes sure the exists flags are set to False
@@ -411,8 +425,7 @@ class TestRegistration(unittest.TestCase):
         # Add a protected tag to all the datasets
         dsets = self.one.alyx.rest('datasets', 'list', session=ses['url'][-36:])
         for d in dsets:
-            self.one.alyx.rest('datasets', 'partial_update',
-                               id=d['url'][-36:], data={'tags': [self.tag['name']]})
+            self.one.alyx.rest('datasets', 'partial_update', id=d['url'][-36:], data={'tags': [self.tag['name']]})
 
         # Check that we get an exception error unless force=True
         flist = list(self.rev_path.glob('*.npy'))
@@ -429,8 +442,7 @@ class TestRegistration(unittest.TestCase):
         # Add a protected tag to all the datasets
         dsets = self.one.alyx.rest('datasets', 'list', session=ses['url'][-36:])
         for d in dsets:
-            self.one.alyx.rest('datasets', 'partial_update',
-                               id=d['url'][-36:], data={'tags': [self.tag['name']]})
+            self.one.alyx.rest('datasets', 'partial_update', id=d['url'][-36:], data={'tags': [self.tag['name']]})
 
         # Register again with revision in file path, it should register to self.revision + a
         flist = list(self.rev_path.glob('*.npy'))
@@ -454,8 +466,7 @@ class TestRegistration(unittest.TestCase):
         # Protect the latest datasets
         dsets = self.one.alyx.rest('datasets', 'list', session=ses['url'][-36:], no_cache=True)
         for d in dsets:
-            self.one.alyx.rest('datasets', 'partial_update',
-                               id=d['url'][-36:], data={'tags': [self.tag['name']]})
+            self.one.alyx.rest('datasets', 'partial_update', id=d['url'][-36:], data={'tags': [self.tag['name']]})
 
         # Same day revision
         # Need to remake the original files
@@ -497,8 +508,7 @@ class TestRegistration(unittest.TestCase):
         settings_file = self._write_settings_file()
         rc = registration.IBLRegistrationClient(one=self.one)
         rc.register_session(str(self.session_path), procedures=['Ephys recording with acute probe(s)'])
-        eid = self.one.search(subject=self.subject, date_range=['2018-04-01', '2018-04-01'],
-                              query_type='remote')[0]
+        eid = self.one.search(subject=self.subject, date_range=['2018-04-01', '2018-04-01'], query_type='remote')[0]
         datasets = self.one.alyx.rest('datasets', 'list', session=eid)
         for ds in datasets:
             self.assertTrue(ds['hash'] is not None)
@@ -513,8 +523,7 @@ class TestRegistration(unittest.TestCase):
         with open(settings_file, 'w') as fid:
             json.dump(self.settings, fid)
         rc.register_session(self.session_path)
-        eid = self.one.search(subject=self.subject, date_range=['2018-04-01', '2018-04-01'],
-                              query_type='remote')[0]
+        eid = self.one.search(subject=self.subject, date_range=['2018-04-01', '2018-04-01'], query_type='remote')[0]
         ses_info = self.one.alyx.rest('sessions', 'read', id=eid)
         self.assertTrue(ses_info['procedures'] == [])
         # re-register the session as unknown protocol, this time without removing session first
@@ -526,8 +535,7 @@ class TestRegistration(unittest.TestCase):
         with open(settings_file, 'w') as fid:
             json.dump(self.settings, fid)
         rc.register_session(self.session_path)
-        eid = self.one.search(subject=self.subject, date_range=['2018-04-01', '2018-04-01'],
-                              query_type='remote')[0]
+        eid = self.one.search(subject=self.subject, date_range=['2018-04-01', '2018-04-01'], query_type='remote')[0]
         ses_info = self.one.alyx.rest('sessions', 'read', id=eid)
         self.assertTrue(ses_info['procedures'] == [])
         self.assertEqual(self.settings['SESSION_END_TIME'], ses_info['end_time'])
@@ -543,23 +551,27 @@ class TestRegistration(unittest.TestCase):
         rc = registration.IBLRegistrationClient(one=self.one)
         experiment_description = {
             'procedures': ['Ephys recording with acute probe(s)'],
-            'sync': {'nidq': {'collection': 'raw_ephys_data'}}}
+            'sync': {'nidq': {'collection': 'raw_ephys_data'}},
+        }
         session_params.write_params(self.session_path, experiment_description)
         # Should fail because the session doesn't exist on Alyx
         self.assertRaises(AssertionError, rc.register_session, self.session_path)
         # Create the session
         ses_ = {
-            'subject': self.subject, 'users': [self.one.alyx.user],
-            'type': 'Experiment', 'number': int(self.session_path.name),
+            'subject': self.subject,
+            'users': [self.one.alyx.user],
+            'type': 'Experiment',
+            'number': int(self.session_path.name),
             'start_time': rc.ensure_ISO8601(self.session_path.parts[-2]),
-            'n_correct_trials': 100, 'n_trials': 200
+            'n_correct_trials': 100,
+            'n_trials': 200,
         }
         session = self.one.alyx.rest('sessions', 'create', data=ses_)
         # Should fail because the session lacks critical information
-        self.assertRaisesRegex(
-            AssertionError, 'missing session information: location', rc.register_session, self.session_path)
+        self.assertRaisesRegex(AssertionError, 'missing session information: location', rc.register_session, self.session_path)
         session = self.one.alyx.rest(
-            'sessions', 'partial_update', id=session['url'][-36:], data={'location': self.settings['PYBPOD_BOARD']})
+            'sessions', 'partial_update', id=session['url'][-36:], data={'location': self.settings['PYBPOD_BOARD']}
+        )
         # Should now register
         ses, dsets = rc.register_session(self.session_path)
         # Check that session was updated, namely the n trials and procedures
@@ -573,7 +585,7 @@ class TestRegistration(unittest.TestCase):
             f'{self.subject}/2018-04-01/002/alf/spikes.amps.npy',
             f'{self.subject}/2018-04-01/002/alf/spikes.times.npy',
             f'{self.subject}/2018-04-01/002/alf/#{self.revision}#/spikes.amps.npy',
-            f'{self.subject}/2018-04-01/002/alf/#{self.revision}#/spikes.times.npy'
+            f'{self.subject}/2018-04-01/002/alf/#{self.revision}#/spikes.times.npy',
         ]
         self.assertCountEqual(expected, registered)
 
@@ -600,8 +612,9 @@ class TestRegistration(unittest.TestCase):
         settings = self.settings.copy()
         settings['PYBPOD_PROTOCOL'] = '_iblrig_tasks_passiveChoiceWorld'
         settings['POOP_COUNT'] = 53
-        start_time = (datetime.datetime.fromisoformat(settings['SESSION_DATETIME']) -
-                      datetime.timedelta(hours=1, minutes=2, seconds=12))
+        start_time = datetime.datetime.fromisoformat(settings['SESSION_DATETIME']) - datetime.timedelta(
+            hours=1, minutes=2, seconds=12
+        )
         settings['SESSION_DATETIME'] = start_time.isoformat()
         with open(behaviour_paths[0].joinpath('_iblrig_taskSettings.raw.json'), 'w') as fid:
             json.dump(settings, fid)
@@ -623,7 +636,7 @@ class TestRegistration(unittest.TestCase):
         # Test weightings created on Alyx
         w = self.one.alyx.rest('subjects', 'read', id=self.subject)['weighings']
         self.assertEqual(2, len(w))
-        self.assertCountEqual({22.}, {x['weight'] for x in w})
+        self.assertCountEqual({22.0}, {x['weight'] for x in w})
         weight_dates = {x['date_time'] for x in w}
         self.assertEqual(2, len(weight_dates))
         self.assertIn(ses_info['start_time'], weight_dates)
@@ -632,7 +645,7 @@ class TestRegistration(unittest.TestCase):
         self.td.cleanup()
         self.one.alyx.rest('revisions', 'delete', id=self.rev['name'])
         self.one.alyx.rest('tags', 'delete', id=self.tag['name'])
-        today_revision = self.one.alyx.rest('revisions', 'list', id=self.today_revision)
+        today_revision = self.one.alyx.rest('revisions', 'list')
         today_rev = [rev for rev in today_revision if self.today_revision in rev['name']]
         for rev in today_rev:
             self.one.alyx.rest('revisions', 'delete', id=rev['name'])
@@ -668,7 +681,7 @@ class TestDataHandlers(unittest.TestCase):
                 ('_iblrig_taskData.raw.*', 'raw_task_data_00', True),
                 ('_iblrig_taskSettings.raw.*', 'raw_task_data_00', True),
                 ('_iblrig_encoderEvents.raw*', 'raw_task_data_00', False),
-            ]
+            ],
         }
 
         handler = handlers.ServerDataHandler('subject/2023-01-01/001', signature, one=one)
@@ -768,8 +781,7 @@ class TestDataHandlers(unittest.TestCase):
         self.assertEqual('and', dset.operator)
         self.assertCountEqual(collections, [x[0] for x in dset.identifiers])
         # Check with register values and compound datasets
-        dataset = (I('foo.bar.*', 'alf/probe??', True, unique=False) |
-                   I('baz.bar.*', 'alf/probe??', False, True, unique=False))
+        dataset = I('foo.bar.*', 'alf/probe??', True, unique=False) | I('baz.bar.*', 'alf/probe??', False, True, unique=False)
         dset = handlers.update_collections(dataset, collections)
         self.assertIsInstance(dset, handlers.Input)
         self.assertEqual('or', dset.operator)
@@ -779,14 +791,12 @@ class TestDataHandlers(unittest.TestCase):
             self.assertCountEqual(collections, [x[0] for x in d.identifiers])
             self.assertFalse(any(dd.unique for dd in d._identifiers))
         # Check behaviour with unique and substring args
-        dset = handlers.update_collections(
-            dataset, ['probe00', 'probe01'], substring='probe??', unique=True)
+        dset = handlers.update_collections(dataset, ['probe00', 'probe01'], substring='probe??', unique=True)
         for d in dset._identifiers:
             self.assertCountEqual(collections, [x[0] for x in d.identifiers])
             self.assertTrue(all(dd.unique for dd in d._identifiers))
         # Check behaviour with None collections and optional dataset
-        dataset = (I('foo.bar.*', 'alf/probe00', True, unique=False) |
-                   I('baz.bar.*', None, False, True, unique=False))
+        dataset = I('foo.bar.*', 'alf/probe00', True, unique=False) | I('baz.bar.*', None, False, True, unique=False)
         dset = handlers.update_collections(dataset, 'foo', substring='alf')
         expected_types = (handlers.Input, handlers.OptionalInput)
         expected_collections = ('foo/probe00', None)
@@ -799,7 +809,7 @@ class TestDataHandlers(unittest.TestCase):
         self.assertRaises(NotImplementedError, handlers.update_collections, dataset, None)
         # Check exact match kwarg
         dataset = I('foo.*', 'bar', True, unique=False) | I('bar.*', 'bar', True, unique=False)
-        dataset |= (I('foo.bar.ext', 'alf/probe??', True, unique=False) | I('baz.bar.ext', 'alf/probe??', True, unique=True))
+        dataset |= I('foo.bar.ext', 'alf/probe??', True, unique=False) | I('baz.bar.ext', 'alf/probe??', True, unique=True)
         dset = handlers.update_collections(dataset, ['alf/probe00', 'alf/probe01'], substring='alf/probe??', exact_match=True)
         # The first two datasets should not be updated
         self.assertEqual(dset.identifiers[:2], dset._identifiers[0].identifiers)
@@ -808,8 +818,11 @@ class TestDataHandlers(unittest.TestCase):
         self.assertEqual('and', dset._identifiers[1]._identifiers[0].operator)
         self.assertEqual('and', dset._identifiers[1]._identifiers[1].operator)
         expected = (
-            ('alf/probe00', None, 'foo.bar.ext'), ('alf/probe01', None, 'foo.bar.ext'),
-            ('alf/probe00', None, 'baz.bar.ext'), ('alf/probe01', None, 'baz.bar.ext'))
+            ('alf/probe00', None, 'foo.bar.ext'),
+            ('alf/probe01', None, 'foo.bar.ext'),
+            ('alf/probe00', None, 'baz.bar.ext'),
+            ('alf/probe01', None, 'baz.bar.ext'),
+        )
         self.assertEqual(expected, dset.identifiers[2:])
 
 
@@ -830,14 +843,16 @@ class TestSDSCDataHandler(unittest.TestCase):
         class DummyTask(Task):
             signature = {
                 'input_files': [('_iblrig_taskSettings.raw.json', 'raw_behavior_data', True)],
-                'output_files': [('_iblrig_taskSettings.raw.json', 'raw_behavior_data', True)]
+                'output_files': [('_iblrig_taskSettings.raw.json', 'raw_behavior_data', True)],
             }
 
             def _run(self):
                 pass
 
-        with mock.patch('ibllib.oneibl.data_handlers.SDSC_ROOT_PATH', self.root_path), \
-             mock.patch('ibllib.oneibl.data_handlers.SDSC_PATCH_PATH', self.patch_path):
+        with (
+            mock.patch('ibllib.oneibl.data_handlers.SDSC_ROOT_PATH', self.root_path),
+            mock.patch('ibllib.oneibl.data_handlers.SDSC_PATCH_PATH', self.patch_path),
+        ):
             task = DummyTask(self.session_path, one=self.one, collection='raw_behavior_data', location='SDSC', on_error='raise')
             # Add some files on disk to check they are symlinked by setUp method
             for uid, rel_path in task.get_data_handler().getData().rel_path.items():
@@ -1015,7 +1030,8 @@ class TestExpectedDataset(unittest.TestCase):
         # Optional datasets 2
         dsets = [
             [session_path, uuid4(), f'raw_ephys_data/probe{p:02}/_spikeglx_sync.{attr}.probe{p:02}.npy', 1024, None, True]
-            for attr in ('channels', 'polarities', 'times') for p in range(2)
+            for attr in ('channels', 'polarities', 'times')
+            for p in range(2)
         ]
         qc = pd.Categorical.from_codes(np.zeros(len(dsets), dtype=int), dtype=QC_TYPE)
         df2 = pd.DataFrame(dsets, columns=column_names).set_index('id').sort_index().assign(qc=qc)
@@ -1037,8 +1053,9 @@ class TestExpectedDataset(unittest.TestCase):
         self.assertTrue(ok)
 
         # Test OR
-        d = (I('_spikeglx_sync.channels.npy', 'raw_ephys_data', True) |
-             I('_spikeglx_sync.channels.probe??.npy', 'raw_ephys_data/probe??', True, unique=False))
+        d = I('_spikeglx_sync.channels.npy', 'raw_ephys_data', True) | I(
+            '_spikeglx_sync.channels.probe??.npy', 'raw_ephys_data/probe??', True, unique=False
+        )
         merged = pd.concat([df1, df2])
         ok, filtered_df = d.filter(merged)
         self.assertTrue(ok)
@@ -1049,8 +1066,9 @@ class TestExpectedDataset(unittest.TestCase):
         self.assertCountEqual(expected, filtered_df.index)
 
         # Test XOR
-        d = (I('_spikeglx_sync.channels.npy', 'raw_ephys_data', True) ^
-             I('_spikeglx_sync.channels.probe??.npy', 'raw_ephys_data/probe??', True, unique=False))
+        d = I('_spikeglx_sync.channels.npy', 'raw_ephys_data', True) ^ I(
+            '_spikeglx_sync.channels.probe??.npy', 'raw_ephys_data/probe??', True, unique=False
+        )
         ok, filtered_df = d.filter(merged)
         self.assertFalse(ok)
         expected = merged.index[merged['rel_path'].str.contains('channels')]
@@ -1070,9 +1088,9 @@ class TestExpectedDataset(unittest.TestCase):
         dataset = I('foo.bar.baz', 'collection', True)
         self.assertEqual(('collection', None, 'foo.bar.baz'), dataset.identifiers)
         # Ensure that nested identifiers are returned as flat tuple of tuples
-        dataset = (I('dataset_a', None, True, unique=False) |
-                   I('dataset_b', 'foo', True) |
-                   I('dataset_c', None, True, unique=False))
+        dataset = (
+            I('dataset_a', None, True, unique=False) | I('dataset_b', 'foo', True) | I('dataset_c', None, True, unique=False)
+        )
         self.assertEqual(3, len(dataset.identifiers))
         self.assertEqual({3}, set(map(len, dataset.identifiers)))
         expected = ((None, None, 'dataset_a'), ('foo', None, 'dataset_b'), (None, None, 'dataset_c'))

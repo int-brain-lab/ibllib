@@ -15,14 +15,15 @@ import ibllib.plots.misc
 from ibllib.tests import TEST_DB
 from ibllib.tests.fixtures.utils import register_new_session
 from ibllib.plots.snapshot import Snapshot
-from ibllib.plots.figures import dlc_qc_plot, lp_qc_plot
+import pandas as pd
+
+from ibllib.plots.figures import dlc_qc_plot, lp_qc_plot, pawstates_qc_plot
 
 
 WIDTH, HEIGHT = 1000, 100
 
 
 class TestSnapshot(unittest.TestCase):
-
     @classmethod
     def setUpClass(cls):
         # Make a small image and store in tmp file
@@ -46,8 +47,9 @@ class TestSnapshot(unittest.TestCase):
         try:
             img_file = list(Path('/var/www/').rglob(rel_path))[0]
         except IndexError:
-            img_file = http_download_file(url, target_dir=Path(self.tmp_dir.name), username=TEST_DB['username'],
-                                          password=TEST_DB['password'], silent=True)
+            img_file = http_download_file(
+                url, target_dir=Path(self.tmp_dir.name), username=TEST_DB['username'], password=TEST_DB['password'], silent=True
+            )
         return img_file
 
     def test_class_setup(self):
@@ -100,8 +102,11 @@ class TestSnapshot(unittest.TestCase):
         object_id = self.one.alyx.rest('datasets', 'list', limit=1)[0]['url'][-36:]
         snp = Snapshot(object_id, content_type='dataset', one=self.one)
         # Register multiple figures by giving a list
-        self.notes.extend(snp.register_images([self.img_file, self.img_file, self.img_file],
-                                              texts=['first', 'second', 'third'], widths=[None, 'orig', 200]))
+        self.notes.extend(
+            snp.register_images(
+                [self.img_file, self.img_file, self.img_file], texts=['first', 'second', 'third'], widths=[None, 'orig', 200]
+            )
+        )
         for i in range(3):
             self.assertEqual(self.notes[i - 3]['text'], expected_texts[i])
             img_db = self._get_image(self.notes[i - 3]['image'])
@@ -147,7 +152,6 @@ class TestSnapshot(unittest.TestCase):
 
 
 class TestDlcQcPlot(unittest.TestCase):
-
     @classmethod
     def setUpClass(cls):
         cls.tmp_dir = tempfile.TemporaryDirectory()
@@ -170,7 +174,6 @@ class TestDlcQcPlot(unittest.TestCase):
 
 
 class TestLpQcPlot(unittest.TestCase):
-
     @classmethod
     def setUpClass(cls):
         cls.tmp_dir = tempfile.TemporaryDirectory()
@@ -188,7 +191,6 @@ class TestLpQcPlot(unittest.TestCase):
 
 
 class TestMiscPlot(unittest.TestCase):
-
     def test_star_plot(self):
         r = np.random.rand(6)
         ax = ibllib.plots.misc.starplot(['a', 'b', 'c', 'd', 'e', 'f'], r, ylim=[0, 1])
@@ -201,3 +203,69 @@ class TestMiscPlot(unittest.TestCase):
         ibllib.plots.misc.wiggle(w, fs=30000)
         ibllib.plots.misc.Traces(w, fs=30000, color='r')
         plt.close('all')
+
+
+class TestPlotPawstatesQC(unittest.TestCase):
+
+    N_FRAMES = 200
+    FPS = 60.
+    TRACKER = 'lightningPose'
+    PAW = 'paw_l'
+    CAMERA = 'left'
+
+    @classmethod
+    def setUpClass(cls):
+        plt.switch_backend('Agg')
+
+    @classmethod
+    def _make_data(cls):
+        """Build a minimal synthetic data dict matching the pawstates_qc_plot raw input spec."""
+        rng = np.random.default_rng(seed=0)
+        n = cls.N_FRAMES
+
+        # Construct pawstates: 4 equal blocks, each with a different dominant state (1-4).
+        # ORIG_LABELS order is (background, still, move, wheel_turn, groom); STATE_MAP expects
+        # argmax in {1,2,3,4}, so background (index 0) must never win.
+        probs = np.full((n, 5), 0.05)
+        block = n // 4
+        for state_idx in range(1, 5):
+            probs[(state_idx - 1) * block:state_idx * block, state_idx] = 0.8
+        pawstates = pd.DataFrame(
+            probs,
+            columns=[f'{cls.PAW}_{label}' for label in ('background', 'still', 'move', 'wheel_turn', 'groom')],
+        )
+        pawstates[f'{cls.PAW}_ens_var'] = rng.uniform(0, 0.3, n)
+
+        return {
+            'frame': rng.integers(0, 255, (480, 640), dtype=np.uint8),
+            cls.TRACKER: pd.DataFrame({
+                f'{cls.PAW}_x': rng.uniform(100, 400, n),
+                f'{cls.PAW}_y': rng.uniform(100, 300, n),
+            }),
+            'times': np.arange(n) / cls.FPS,
+            'pawstates': pawstates,
+            'fps': cls.FPS,
+            'trials': None,
+            'wheel': None,
+        }
+
+    def tearDown(self):
+        plt.close('all')
+
+    def test_all_none_data(self):
+        """All panels show a placeholder without raising when data values are None."""
+        data = {
+            'frame': None, self.TRACKER: None, 'times': None,
+            'pawstates': None, 'fps': None, 'trials': None, 'wheel': None,
+        }
+        fig = pawstates_qc_plot(data, camera=self.CAMERA, paw=self.PAW, tracker=self.TRACKER)
+        self.assertIsNotNone(fig)
+        self.assertGreater(len(fig.axes), 0)
+
+    def test_with_synthetic_data(self):
+        """Figure renders without error when given valid synthetic data."""
+        fig = pawstates_qc_plot(
+            self._make_data(), camera=self.CAMERA, paw=self.PAW, tracker=self.TRACKER,
+        )
+        self.assertIsNotNone(fig)
+        self.assertGreater(len(fig.axes), 0)

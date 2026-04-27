@@ -19,19 +19,20 @@ from ibllib.pipes.dynamic_pipeline import get_trials_tasks
 from ibllib.pipes.base_tasks import BehaviourTask
 from ibllib.pipes.behavior_tasks import HabituationTrialsBpod, ChoiceWorldTrialsBpod
 
-EVENT_MAP = {'goCue_times': ['#2ca02c', 'solid'],  # green
-             'goCueTrigger_times': ['#2ca02c', 'dotted'],  # green
-             'errorCue_times': ['#d62728', 'solid'],  # red
-             'errorCueTrigger_times': ['#d62728', 'dotted'],  # red
-             'valveOpen_times': ['#17becf', 'solid'],  # cyan
-             'stimFreeze_times': ['#0000ff', 'solid'],  # blue
-             'stimFreezeTrigger_times': ['#0000ff', 'dotted'],  # blue
-             'stimOff_times': ['#9400d3', 'solid'],  # dark violet
-             'stimOffTrigger_times': ['#9400d3', 'dotted'],  # dark violet
-             'stimOn_times': ['#e377c2', 'solid'],  # pink
-             'stimOnTrigger_times': ['#e377c2', 'dotted'],  # pink
-             'response_times': ['#8c564b', 'solid'],  # brown
-             }
+EVENT_MAP = {
+    'goCue_times': ['#2ca02c', 'solid'],  # green
+    'goCueTrigger_times': ['#2ca02c', 'dotted'],  # green
+    'errorCue_times': ['#d62728', 'solid'],  # red
+    'errorCueTrigger_times': ['#d62728', 'dotted'],  # red
+    'valveOpen_times': ['#17becf', 'solid'],  # cyan
+    'stimFreeze_times': ['#0000ff', 'solid'],  # blue
+    'stimFreezeTrigger_times': ['#0000ff', 'dotted'],  # blue
+    'stimOff_times': ['#9400d3', 'solid'],  # dark violet
+    'stimOffTrigger_times': ['#9400d3', 'dotted'],  # dark violet
+    'stimOn_times': ['#e377c2', 'solid'],  # pink
+    'stimOnTrigger_times': ['#e377c2', 'dotted'],  # pink
+    'response_times': ['#8c564b', 'solid'],  # brown
+}
 cm = [EVENT_MAP[k][0] for k in EVENT_MAP]
 ls = [EVENT_MAP[k][1] for k in EVENT_MAP]
 CRITICAL_CHECKS = (
@@ -46,7 +47,7 @@ CRITICAL_CHECKS = (
     'check_stimOn_goCue_delays',
     'check_stimulus_move_before_goCue',
     'check_wheel_move_before_feedback',
-    'check_wheel_freeze_during_quiescence'
+    'check_wheel_freeze_during_quiescence',
 )
 
 
@@ -54,7 +55,6 @@ _logger = logging.getLogger(__name__)
 
 
 class QcFrame:
-
     qc = None
     """ibllib.qc.task_metrics.TaskQC: A TaskQC object containing extracted data"""
 
@@ -78,22 +78,22 @@ class QcFrame:
         map = {k: [] for k in set(outcomes.values())}
         for k, v in outcomes.items():
             map[v].append(k[6:])
+
         for k, v in map.items():
-            if k == 'PASS':
+            if k.name == 'PASS':
                 continue
-            print(f'The following checks were labelled {k}:')
+            print(f'The following checks were labelled {k.name}:')
             print('\n'.join(v), '\n')
 
         print('The following *critical* checks did not pass:')
         critical_checks = [f'_{x.replace("check", "task")}' for x in CRITICAL_CHECKS]
         for k, v in outcomes.items():
-            if v != 'PASS' and k in critical_checks:
+            if v.name != 'PASS' and k in critical_checks:
                 print(k[6:])
 
         # Make DataFrame from the trail level metrics
         def get_trial_level_failed(d):
-            new_dict = {k[6:]: v for k, v in d.items() if
-                        isinstance(v, Sized) and len(v) == self.n_trials}
+            new_dict = {k[6:]: v for k, v in d.items() if isinstance(v, Sized) and len(v) == self.n_trials}
             return pd.DataFrame.from_dict(new_dict)
 
         self.frame = get_trial_level_failed(self.qc.metrics)
@@ -106,11 +106,12 @@ class QcFrame:
         return self.qc.extractor.data['intervals'].shape[0]
 
     def get_wheel_data(self):
-        return {'re_pos': self.qc.extractor.data.get('wheel_position') or np.array([]),
-                're_ts': self.qc.extractor.data.get('wheel_timestamps') or np.array([])}
+        return {
+            're_pos': self.qc.extractor.data.get('wheel_position', np.array([])),
+            're_ts': self.qc.extractor.data.get('wheel_timestamps', np.array([])),
+        }
 
-    def create_plots(self, axes,
-                     wheel_axes=None, trial_events=None, color_map=None, linestyle=None):
+    def create_plots(self, axes, wheel_axes=None, trial_events=None, color_map=None, linestyle=None):
         """
         Plots the data for bnc1 (sound) and bnc2 (frame2ttl).
 
@@ -129,11 +130,11 @@ class QcFrame:
                 'goCue_times',
                 'goCueTrigger_times',
                 'feedback_times',
-                ('stimCenter_times'
-                 if 'stimCenter_times' in self.qc.extractor.data
-                 else 'stimFreeze_times'),  # handle habituationChoiceWorld exception
+                (
+                    'stimCenter_times' if 'stimCenter_times' in self.qc.extractor.data else 'stimFreeze_times'
+                ),  # handle habituationChoiceWorld exception
                 'stimOff_times',
-                'stimOn_times'
+                'stimOn_times',
             ]
 
         plot_args = {
@@ -163,9 +164,9 @@ class QcFrame:
             plot_args['ymax'] = 3
             ylabels = ['', 'frame2ttl', 'sound', '']
 
-        for event, c, l in zip(trial_events, cycle(color_map), linestyle):
+        for event, c, ln in zip(trial_events, cycle(color_map), linestyle):
             if event in trial_data:
-                plots.vertical_lines(trial_data[event], label=event, color=c, linestyle=l, **plot_args)
+                plots.vertical_lines(trial_data[event], label=event, color=c, linestyle=ln, **plot_args)
 
         axes.legend(loc='upper left', fontsize='xx-small', bbox_to_anchor=(1, 0.5))
         axes.set_yticks(list(range(plot_args['ymax'] + 1)))
@@ -177,14 +178,14 @@ class QcFrame:
             wheel_plot_args = {
                 'ax': wheel_axes,
                 'ymin': wheel_data['re_pos'].min() if wheel_data['re_pos'].size else 0,
-                'ymax': wheel_data['re_pos'].max() if wheel_data['re_pos'].size else 1}
+                'ymax': wheel_data['re_pos'].max() if wheel_data['re_pos'].size else 1,
+            }
             plot_args = {**plot_args, **wheel_plot_args}
 
             wheel_axes.plot(wheel_data['re_ts'], wheel_data['re_pos'], 'k-x')
             for event, c, ln in zip(trial_events, cycle(color_map), linestyle):
                 if event in trial_data:
-                    plots.vertical_lines(trial_data[event],
-                                         label=event, color=c, linestyle=ln, **plot_args)
+                    plots.vertical_lines(trial_data[event], label=event, color=c, linestyle=ln, **plot_args)
 
 
 def get_bpod_trials_task(task):
@@ -207,9 +208,13 @@ def get_bpod_trials_task(task):
         assert isinstance(task, BehaviourTask)
         # A dynamic pipeline task
         trials_class = HabituationTrialsBpod if 'habituation' in task.protocol else ChoiceWorldTrialsBpod
-        task = trials_class(task.session_path,
-                            collection=task.collection, protocol_number=task.protocol_number,
-                            protocol=task.protocol, one=task.one)
+        task = trials_class(
+            task.session_path,
+            collection=task.collection,
+            protocol_number=task.protocol_number,
+            protocol=task.protocol,
+            one=task.one,
+        )
     return task
 
 
@@ -270,8 +275,10 @@ def show_session_task_qc(qc_or_session=None, bpod_only=False, local=False, one=N
         task.setUp()
         if local:  # currently setUp does not raise on missing data
             task.assert_expected_inputs(raise_error=True)
+        trials, _ = task.extract_behaviour(save=False)
+
         # Compute the QC and build the frame
-        task_qc = task.run_qc(update=False)
+        task_qc = task.run_qc(trials_data=trials, update=False)
         qc = QcFrame(task_qc)
 
     # Handle trial event names in habituationChoiceWorld
@@ -283,18 +290,15 @@ def show_session_task_qc(qc_or_session=None, bpod_only=False, local=False, one=N
     wheel_data = qc.get_wheel_data()
     w = ViewEphysQC.viewqc(wheel=wheel_data if wheel_data['re_pos'].size else None)
 
-    qc.create_plots(w.wplot.canvas.ax,
-                    wheel_axes=getattr(w.wplot.canvas, 'ax2', None),
-                    trial_events=list(events),
-                    color_map=cm,
-                    linestyle=ls)
+    qc.create_plots(
+        w.wplot.canvas.ax, wheel_axes=getattr(w.wplot.canvas, 'ax2', None), trial_events=list(events), color_map=cm, linestyle=ls
+    )
 
     # Update table and callbacks
     n_trials = qc.frame.shape[0]
     if 'task_qc' in locals():
         df_trials = pd.DataFrame({
-            k: v for k, v in task_qc.extractor.data.items()
-            if not k.startswith('wheel') and v.size == n_trials
+            k: v for k, v in task_qc.extractor.data.items() if not k.startswith('wheel') and v.size == n_trials
         })
         df = df_trials.merge(qc.frame, left_index=True, right_index=True)
     else:
@@ -320,8 +324,7 @@ def qc_gui_cli():
     >>> ipython task_qc.py ./KS022/2019-12-10/001 --local
     """
     # Parse parameters
-    parser = argparse.ArgumentParser(description='Quick viewer to see the behaviour data from'
-                                                 'choice world sessions.')
+    parser = argparse.ArgumentParser(description='Quick viewer to see the behaviour data fromchoice world sessions.')
     parser.add_argument('session', help='session uuid or path')
     parser.add_argument('--bpod', action='store_true', help='run QC on Bpod data only (no FPGA)')
     parser.add_argument('--local', action='store_true', help='run from disk location (lab server')
