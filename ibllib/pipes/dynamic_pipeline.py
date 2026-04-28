@@ -458,13 +458,13 @@ def make_pipeline(session_path, **pkwargs):
             nptype = spikeglx._get_neuropixel_version_from_meta(spikeglx.read_meta_data(meta_file))
             nshanks = spikeglx._get_nshanks_from_meta(spikeglx.read_meta_data(meta_file))
 
-            if (nptype == 'NP2.1') or (nptype == 'NP2.4' and nshanks == 1):
+            if (nptype == 'NP2.1') or (nptype in ['NP2.4', 'NP2QB'] and nshanks == 1):
                 tasks[f'EphyCompressNP21_{pname}'] = type(f'EphyCompressNP21_{pname}', (etasks.EphysCompressNP21,), {})(
                     **kwargs, **ephys_kwargs, pname=pname
                 )
                 all_probes.append(pname)
                 register_tasks.append(tasks[f'EphyCompressNP21_{pname}'])
-            elif nptype == 'NP2.4' and nshanks > 1:
+            elif nptype in ['NP2.4', 'NP2QB'] and nshanks > 1:
                 tasks[f'EphyCompressNP24_{pname}'] = type(f'EphyCompressNP24_{pname}', (etasks.EphysCompressNP24,), {})(
                     **kwargs, **ephys_kwargs, pname=pname, nshanks=nshanks
                 )
