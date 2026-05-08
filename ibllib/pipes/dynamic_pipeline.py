@@ -716,8 +716,8 @@ def make_pipeline(session_path, **pkwargs):
     tasks.update(mesoscope_tasks)
 
     # photometry tasks
-    photometry_tasks = get_photometry_tasks(acquisition_description, **kwargs)
-    tasks.update(photometry_tasks)
+    # photometry_tasks = get_photometry_tasks(acquisition_description, **kwargs)
+    # tasks.update(photometry_tasks)
 
     # combine: make pipeline and add tasks
     p = mtasks.Pipeline(session_path=session_path, **pkwargs)
