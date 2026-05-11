@@ -30,7 +30,7 @@ from ibllib.pipes import histology
 from ibllib.pipes.ephys_alignment import EphysAlignment
 from ibllib.plots import vertical_lines, Density
 
-from iblphotometry import fpio
+# from iblphotometry import fpio
 
 import brainbox.plot
 from brainbox.io.spikeglx import Streamer
@@ -1589,46 +1589,46 @@ class EphysSessionLoader(SessionLoader):
         return {k: self.ephys[k]['ssl'].pid for k in self.ephys}
 
 
-class PhotometrySessionLoader(SessionLoader):
-    photometry: dict = field(default_factory=dict, repr=False)
+# class PhotometrySessionLoader(SessionLoader):
+#     photometry: dict = field(default_factory=dict, repr=False)
 
-    def __init__(self, *args, photometry_collection: str = 'photometry', **kwargs):
-        self.photometry_collection = photometry_collection
-        self.revision = kwargs.get('revision', None)
+#     def __init__(self, *args, photometry_collection: str = 'photometry', **kwargs):
+#         self.photometry_collection = photometry_collection
+#         self.revision = kwargs.get('revision', None)
 
-        # determine if loading by eid or session path
-        self.load_by_path = True if 'session_path' in kwargs else False
+#         # determine if loading by eid or session path
+#         self.load_by_path = True if 'session_path' in kwargs else False
 
-        super().__init__(*args, **kwargs)
+#         super().__init__(*args, **kwargs)
 
-    def load_session_data(self, **kwargs):
-        super().load_session_data(**kwargs)
-        self.load_photometry()
+#     def load_session_data(self, **kwargs):
+#         super().load_session_data(**kwargs)
+#         self.load_photometry()
 
-    def load_photometry(
-        self,
-        restrict_to_session: bool = True,
-        pre: int = -5,
-        post: int = 5,
-    ):
-        # session path precedence over eid
-        if self.load_by_path:
-            raw_dfs = fpio.from_session_path(
-                self.session_path,
-                collection=self.photometry_collection,
-                revision=self.revision,
-            )
-        else:  # load by eid
-            raw_dfs = fpio.from_eid(
-                self.eid,
-                self.one,
-                collection=self.photometry_collection,
-                revision=self.revision,
-            )
+#     def load_photometry(
+#         self,
+#         restrict_to_session: bool = True,
+#         pre: int = -5,
+#         post: int = 5,
+#     ):
+#         # session path precedence over eid
+#         if self.load_by_path:
+#             raw_dfs = fpio.from_session_path(
+#                 self.session_path,
+#                 collection=self.photometry_collection,
+#                 revision=self.revision,
+#             )
+#         else:  # load by eid
+#             raw_dfs = fpio.from_eid(
+#                 self.eid,
+#                 self.one,
+#                 collection=self.photometry_collection,
+#                 revision=self.revision,
+#             )
 
-        if restrict_to_session:
-            if isinstance(self.trials, pd.DataFrame) and (self.trials.shape[0] == 0):
-                self.load_trials()
-            raw_dfs = fpio.restrict_to_session(raw_dfs, self.trials, pre, post)
+#         if restrict_to_session:
+#             if isinstance(self.trials, pd.DataFrame) and (self.trials.shape[0] == 0):
+#                 self.load_trials()
+#             raw_dfs = fpio.restrict_to_session(raw_dfs, self.trials, pre, post)
 
-        self.photometry = raw_dfs
+#         self.photometry = raw_dfs
