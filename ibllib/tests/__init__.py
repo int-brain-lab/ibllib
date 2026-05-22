@@ -12,7 +12,7 @@ def _get_test_db():
             'base_url': 'https://test.alyx.internationalbrainlab.org',
             'username': 'test_user',
             'password': 'TapetesBloc18',
-            'silent': True
+            'silent': True,
         }
 
 

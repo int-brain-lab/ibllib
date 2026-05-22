@@ -12,6 +12,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - merging clusters with channels doesn't require reading spikes if metrics are available
   - compute autocorrelogram method
 
+## [4.0.1] 2026-05-22
+
+### Fixed
+- Re-fetch job deck from Alyx after task completion so Held children are correctly released to Waiting even when set by concurrent workers during a long-running parent task
+
+## [4.0.0] 2026-04-15
+
+## Removed
+- Photometry pipeline code removed and moved to separate repository ibl-photometry
+
+## Fixed
+- Passive extractor accounts for missing first gabor
+
+## Added
+- Video wheel alignment can handle timeline datasets
+- Spikesorting job supports dockerised implementation
+- Dry option for move ephys files
+- Implemented video tasks for paw segmentation from pose estimates and associated qc plots
+
 
 ## [3.4.3] 2025-11-25
 ## [3.4.2] 2025-11-24 YANKED

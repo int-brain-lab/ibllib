@@ -7,6 +7,7 @@ flake8>=3.7.8
 globus-sdk>=4.0.0
 graphviz
 ibl-neuropixel>=1.10.0
+ibl-photometry>=0.3.2
 ibl-style
 iblatlas>=0.5.3
 iblqt>=0.8.2
@@ -19,7 +20,7 @@ numba>=0.56
 numpy>=1.18,<=2.3  # numpy 2.4 is not compatible with numba - ETA Q1 2026 ?
 opencv-python-headless
 pandas<3.0  # temporary freeze while repos get up to date
-phylib>=2.6.2
+phylib>=2.6.3
 psychofit
 pyarrow
 pynrrd>=0.4.0

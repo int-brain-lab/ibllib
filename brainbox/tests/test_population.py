@@ -2,21 +2,26 @@ from pathlib import Path
 import pickle
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.model_selection import KFold
-from brainbox.population.decode import (xcorr, classify, regress, get_spike_counts_in_bins,
-                                        sigtest_pseudosessions, sigtest_linshift)
+from brainbox.population.decode import (
+    xcorr,
+    classify,
+    regress,
+    get_spike_counts_in_bins,
+    sigtest_pseudosessions,
+    sigtest_linshift,
+)
 import unittest
 import numpy as np
 
 
 def _random_data(max_cluster):
     nspikes = 10000
-    spike_times = np.cumsum(np.random.exponential(scale=.025, size=nspikes))
+    spike_times = np.cumsum(np.random.exponential(scale=0.025, size=nspikes))
     spike_clusters = np.random.randint(0, max_cluster, nspikes)
     return spike_times, spike_clusters
 
 
 class TestPopulation(unittest.TestCase):
-
     def setUp(self):
         # Test data is a dictionary of spike times and clusters and event times and groups
         pickle_file = Path(__file__).parent.joinpath('fixtures', 'ephys_test.p')
@@ -50,8 +55,7 @@ class TestPopulation(unittest.TestCase):
         times = np.column_stack(((event_times - 0.5), (event_times + 0.5)))
         counts, cluster_ids = get_spike_counts_in_bins(spike_times, spike_clusters, times)
         counts = counts.T
-        accuracy, pred, prob, acc_training = classify(counts, event_groups, clf,
-                                                      cross_validation=cv, return_training=True)
+        accuracy, pred, prob, acc_training = classify(counts, event_groups, clf, cross_validation=cv, return_training=True)
         self.assertTrue(accuracy == 0.2222222222222222)
         self.assertTrue(acc_training == 0.9444444444444444)
         self.assertEqual(pred.shape, event_groups.shape)
@@ -70,27 +74,21 @@ class TestPopulation(unittest.TestCase):
         counts = counts.T
 
         # Test all regularization methods WITHOUT cross-validation
-        pred = regress(counts, event_groups, cross_validation=None,
-                       return_training=False, regularization=None)
+        pred = regress(counts, event_groups, cross_validation=None, return_training=False, regularization=None)
         self.assertEqual(pred.shape, event_groups.shape)
-        pred = regress(counts, event_groups, cross_validation=None,
-                       return_training=False, regularization='L1')
+        pred = regress(counts, event_groups, cross_validation=None, return_training=False, regularization='L1')
         self.assertEqual(pred.shape, event_groups.shape)
-        pred = regress(counts, event_groups, cross_validation=None,
-                       return_training=False, regularization='L2')
+        pred = regress(counts, event_groups, cross_validation=None, return_training=False, regularization='L2')
         self.assertEqual(pred.shape, event_groups.shape)
 
         # Test all regularization methods WITH cross-validation
-        pred, pred_training = regress(counts, event_groups, cross_validation=cv,
-                                      return_training=True, regularization=None)
+        pred, pred_training = regress(counts, event_groups, cross_validation=cv, return_training=True, regularization=None)
         self.assertEqual(pred.shape, event_groups.shape)
         self.assertEqual(pred_training.shape, event_groups.shape)
-        pred, pred_training = regress(counts, event_groups, cross_validation=cv,
-                                      return_training=True, regularization='L1')
+        pred, pred_training = regress(counts, event_groups, cross_validation=cv, return_training=True, regularization='L1')
         self.assertEqual(pred.shape, event_groups.shape)
         self.assertEqual(pred_training.shape, event_groups.shape)
-        pred, pred_training = regress(counts, event_groups, cross_validation=cv,
-                                      return_training=True, regularization='L2')
+        pred, pred_training = regress(counts, event_groups, cross_validation=cv, return_training=True, regularization='L2')
         self.assertEqual(pred.shape, event_groups.shape)
         self.assertEqual(pred_training.shape, event_groups.shape)
 
@@ -133,7 +131,7 @@ class TestPopulation(unittest.TestCase):
     def test_xcorr_2(self):
         max_cluster = 10
         spike_times, spike_clusters = _random_data(max_cluster)
-        bin_size, winsize_bins = .001, .05
+        bin_size, winsize_bins = 0.001, 0.05
 
         c = xcorr(spike_times, spike_clusters, bin_size=bin_size, window_size=winsize_bins)
 
@@ -151,7 +149,7 @@ class TestPopulation(unittest.TestCase):
 
         acount = 0
         for i in range(100):
-            if sigtest_pseudosessions(X, y, fStatMeas, genPseudo, npseuds=100)[0] < .1:
+            if sigtest_pseudosessions(X, y, fStatMeas, genPseudo, npseuds=100)[0] < 0.1:
                 acount += 1
         self.assertTrue(acount <= 50)
 
@@ -167,11 +165,11 @@ class TestPopulation(unittest.TestCase):
 
         acount = 0
         for i in range(100):
-            if sigtest_linshift(X, y, fStatMeas, D=600)[0] < .1:
+            if sigtest_linshift(X, y, fStatMeas, D=600)[0] < 0.1:
                 acount += 1
         self.assertTrue(acount <= 50)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     np.random.seed(0)
     unittest.main(exit=False)

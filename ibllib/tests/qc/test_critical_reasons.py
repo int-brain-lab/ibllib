@@ -13,16 +13,15 @@ import ibllib.qc.critical_reasons as usrpmt
 
 
 def mock_input(prompt):
-    if "Select from this list the reason(s)" in prompt:
-        return "1," + prompt[prompt.index(') Other') - 1]  # always choose last option, 'Other'
-    elif "Explain why you selected" in prompt:
-        return "estoy un poco preocupada"
-    elif "You are about to delete" in prompt:
-        return "y"
+    if 'Select from this list the reason(s)' in prompt:
+        return '1,' + prompt[prompt.index(') Other') - 1]  # always choose last option, 'Other'
+    elif 'Explain why you selected' in prompt:
+        return 'estoy un poco preocupada'
+    elif 'You are about to delete' in prompt:
+        return 'y'
 
 
 class TestUserPmtSess(unittest.TestCase):
-
     def setUp(self) -> None:
         self.one = ONE(**TEST_DB)
         # Make sure tests use correct session ID
@@ -35,11 +34,13 @@ class TestUserPmtSess(unittest.TestCase):
         self.sess_id = eid
 
         # Make new insertion with random name
-        data = {'name': ''.join(random.choices(string.ascii_letters, k=5)),
-                'session': self.sess_id,
-                'model': '3A',
-                'json': None,
-                'datasets': []}
+        data = {
+            'name': ''.join(random.choices(string.ascii_letters, k=5)),
+            'session': self.sess_id,
+            'model': '3A',
+            'json': None,
+            'datasets': [],
+        }
         self.one.alyx.rest('insertions', 'create', data=data)
         # 3. Save ins id in global variable for test access
         self.ins_id = self.one.alyx.rest('insertions', 'list', session=self.sess_id, name=data['name'], no_cache=True)[0]['id']
@@ -54,7 +55,8 @@ class TestUserPmtSess(unittest.TestCase):
         expected_dict = {
             'title': '=== EXPERIMENTER REASON(S) FOR MARKING THE SESSION AS CRITICAL ===',
             'reasons_selected': ['synching impossible', 'Other'],
-            'reason_for_other': 'estoy un poco preocupada'}
+            'reason_for_other': 'estoy un poco preocupada',
+        }
         self.assertDictEqual(expected_dict, critical_dict)
 
     def test_userinput_ins(self):
@@ -66,7 +68,8 @@ class TestUserPmtSess(unittest.TestCase):
         expected_dict = {
             'title': '=== EXPERIMENTER REASON(S) FOR MARKING THE INSERTION AS CRITICAL ===',
             'reasons_selected': ['Track not visible on imaging data', 'Other'],
-            'reason_for_other': 'estoy un poco preocupada'}
+            'reason_for_other': 'estoy un poco preocupada',
+        }
         self.assertDictEqual(expected_dict, critical_dict)
 
     def test_note_already_existing(self):
@@ -100,7 +103,9 @@ class TestUserPmtSess(unittest.TestCase):
         critical_dict = json.loads(note[0]['text'])
         expected_dict = {
             'title': '=== EXPERIMENTER REASON(S) FOR MARKING THE INSERTION AS CRITICAL ===',
-            'reasons_selected': ['Drift'], 'reason_for_other': []}
+            'reasons_selected': ['Drift'],
+            'reason_for_other': [],
+        }
         self.assertDictEqual(expected_dict, critical_dict)
 
     def test_note_probe_ins(self):
@@ -117,10 +122,7 @@ class TestUserPmtSess(unittest.TestCase):
             self.one.alyx.rest('notes', 'delete', id=note['id'])
 
         # create new note
-        my_note = {'user': self.one.alyx.user,
-                   'content_type': content_type,
-                   'object_id': eid,
-                   'text': f'{note_text}'}
+        my_note = {'user': self.one.alyx.user, 'content_type': content_type, 'object_id': eid, 'text': f'{note_text}'}
 
         self.one.alyx.rest('notes', 'create', data=my_note)
         query = f'text__icontains,{note_text},object_id,{eid}'
@@ -153,10 +155,8 @@ class TestSignOffNote(unittest.TestCase):
         _, eid = register_new_session(self.one, subject='ZM_1743')
         self.eid = str(eid)
         self.sign_off_keys = ['biasedChoiceWorld_00', 'passiveChoiceWorld_01']
-        data = {'sign_off_checklist': dict.fromkeys(map(lambda x: f'{x}', self.sign_off_keys)),
-                'lala': 'blabla',
-                'fafa': 'gaga'}
-        self.one.alyx.json_field_update("sessions", self.eid, data=data)
+        data = {'sign_off_checklist': dict.fromkeys(map(lambda x: f'{x}', self.sign_off_keys)), 'lala': 'blabla', 'fafa': 'gaga'}
+        self.one.alyx.json_field_update('sessions', self.eid, data=data)
 
     def test_sign_off(self):
         sess = self.one.alyx.rest('sessions', 'read', id=self.eid, no_cache=True)
@@ -182,8 +182,10 @@ class TestSignOffNote(unittest.TestCase):
         note_dict = json.loads(notes[0]['text'])
         expected_dict = {
             'title': f'{note.note_title}',
-            f'{note.datetime_key}': {'reasons_selected': ['wheel data corrupt', 'Other'],
-                                     'reason_for_other': "estoy un poco preocupada"}
+            f'{note.datetime_key}': {
+                'reasons_selected': ['wheel data corrupt', 'Other'],
+                'reason_for_other': 'estoy un poco preocupada',
+            },
         }
         assert expected_dict == note_dict
 
@@ -209,10 +211,11 @@ class TestSignOffNote(unittest.TestCase):
 
         expected_dict = {
             'title': f'{note.note_title}',
-            '2022-11-10_user': {'reasons_selected': ['wheel data corrupt', 'Other'],
-                                'reason_for_other': "estoy un poco preocupada"},
-            f'{note.datetime_key}': {'reasons_selected': ['raw trial data does not exist'],
-                                     'reason_for_other': []}
+            '2022-11-10_user': {
+                'reasons_selected': ['wheel data corrupt', 'Other'],
+                'reason_for_other': 'estoy un poco preocupada',
+            },
+            f'{note.datetime_key}': {'reasons_selected': ['raw trial data does not exist'], 'reason_for_other': []},
         }
 
         assert expected_dict == note_dict
