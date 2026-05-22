@@ -991,13 +991,15 @@ def run_alyx_task(
     # update task status on Alyx
     t = one.alyx.rest('tasks', 'partial_update', id=tdict['id'], data=patch_data)
     # check for dependent held tasks
-    # NB: Assumes dependent tasks are all part of the same session!
+    # Re-fetch the deck so children set to Held while this task was running (race condition for
+    # long tasks with concurrent workers) are visible to the transition check.
     next(x for x in job_deck if x['id'] == t['id'])['status'] = t['status']  # Update status in job deck
-    dependent_tasks = filter(lambda x: t['id'] in x['parents'] and x['status'] == 'Held', job_deck)
+    current_deck = one.alyx.rest('tasks', 'list', session=tdict['session'], no_cache=True)
+    dependent_tasks = filter(lambda x: t['id'] in x['parents'] and x['status'] == 'Held', current_deck)
     for d in dependent_tasks:
         assert d['id'] != t['id'], 'task its own parent'
         # if all their parent tasks now complete, set to waiting
-        parent_status = [next(x['status'] for x in job_deck if x['id'] == y) for y in d['parents']]
+        parent_status = [next(x['status'] for x in current_deck if x['id'] == y) for y in d['parents']]
         if set(parent_status) <= {'Complete', 'Incomplete'}:
             one.alyx.rest('tasks', 'partial_update', id=d['id'], data={'status': 'Waiting'})
     task.cleanUp()
