@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.1] 2026-05-22
+
+### Fixed
+- Re-fetch job deck from Alyx after task completion so Held children are correctly released to Waiting even when set by concurrent workers during a long-running parent task
+
 ## [4.0.0] 2026-04-15
 
 ## Removed
