@@ -464,7 +464,7 @@ def make_pipeline(session_path, **pkwargs):
                 )
                 all_probes.append(pname)
                 register_tasks.append(tasks[f'EphyCompressNP21_{pname}'])
-            elif nptype in ['NP2.4', 'NP2QB'] and nshanks > 1:
+            elif nptype in ('NP2.4', 'NP2QB') and nshanks > 1:
                 tasks[f'EphyCompressNP24_{pname}'] = type(f'EphyCompressNP24_{pname}', (etasks.EphysCompressNP24,), {})(
                     **kwargs, **ephys_kwargs, pname=pname, nshanks=nshanks
                 )
