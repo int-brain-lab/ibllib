@@ -5,7 +5,6 @@ import pandas as pd
 
 
 class TestUtils(unittest.TestCase):
-
     def test_isostr2date(self):
         # test the full string
         a = ibllib.time.isostr2date('2018-03-01T12:34:56.99999')
@@ -31,5 +30,5 @@ class TestUtils(unittest.TestCase):
         self.assertEqual(expected, ibllib.time.date2isostr(dt))
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main(exit=False, verbosity=2)

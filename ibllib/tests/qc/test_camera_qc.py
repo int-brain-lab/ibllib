@@ -71,7 +71,7 @@ class TestCameraQC(unittest.TestCase):
         self.assertIs(spec.QC.NOT_SET, self.qc.check_brightness())
 
     def test_check_file_headers(self):
-        self.qc.data['video'] = {'fps': 60.}
+        self.qc.data['video'] = {'fps': 60.0}
         self.assertIs(spec.QC.PASS, self.qc.check_file_headers())
         self.qc.data['video']['fps'] = 150
         self.assertIs(spec.QC.FAIL, self.qc.check_file_headers())
@@ -79,7 +79,7 @@ class TestCameraQC(unittest.TestCase):
         self.assertIs(spec.QC.NOT_SET, self.qc.check_file_headers())
 
     def test_check_framerate(self):
-        FPS = 60.
+        FPS = 60.0
         self.qc.data['video'] = {'fps': FPS}
         self.qc.data['timestamps'] = np.array([round(1 / FPS, 4)] * 1000).cumsum()
         outcome, frate = self.qc.check_framerate()
@@ -90,7 +90,7 @@ class TestCameraQC(unittest.TestCase):
         self.assertIs(spec.QC.NOT_SET, self.qc.check_framerate())
 
     def test_check_pin_state(self):
-        FPS = 60.
+        FPS = 60.0
         self.assertIs(spec.QC.NOT_SET, self.qc.check_pin_state())
         # Add some dummy data
         self.qc.data.timestamps = np.array([round(1 / FPS, 4)] * 5).cumsum()
@@ -129,7 +129,7 @@ class TestCameraQC(unittest.TestCase):
         self.assertEqual(1, sz_diff)
 
         # Verify threshold arg; should be warning due to size diff
-        outcome, *_ = self.qc.check_dropped_frames(threshold=70.)
+        outcome, *_ = self.qc.check_dropped_frames(threshold=70.0)
         self.assertIs(spec.QC.WARNING, outcome)
 
         # Verify critical outcome
@@ -149,13 +149,45 @@ class TestCameraQC(unittest.TestCase):
         figs = plt.get_fignums()
         self.assertEqual(len(plt.figure(figs[0]).axes), 16)
         # Verify Laplacian on blurred images
-        expected = np.array([11.82, 12.94, 13.84, 14.52, 15.68, 16.76, 18.85, 21.9,
-                             25.45, 31.3, 40.48, 54.05, 81.53, 133.19, 425.15, 425.15])
+        expected = np.array([
+            11.82,
+            12.94,
+            13.84,
+            14.52,
+            15.68,
+            16.76,
+            18.85,
+            21.9,
+            25.45,
+            31.3,
+            40.48,
+            54.05,
+            81.53,
+            133.19,
+            425.15,
+            425.15,
+        ])
         actual = [round(x, 2) for x in plt.figure(figs[1]).axes[3].lines[0]._y.tolist()]
         np.testing.assert_array_equal(expected, actual)
         # Verify fft on blurred images
-        expected = np.array([6.91, 7.2, 7.61, 8.08, 8.76, 9.47, 10.35, 11.22,
-                             11.04, 11.42, 11.35, 11.94, 12.45, 13.22, 13.6, 13.6])
+        expected = np.array([
+            6.91,
+            7.2,
+            7.61,
+            8.08,
+            8.76,
+            9.47,
+            10.35,
+            11.22,
+            11.04,
+            11.42,
+            11.35,
+            11.94,
+            12.45,
+            13.22,
+            13.6,
+            13.6,
+        ])
         actual = [round(x, 2) for x in plt.figure(figs[2]).axes[3].lines[0]._y.tolist()]
         np.testing.assert_array_almost_equal(expected, actual, 1)
 
@@ -176,7 +208,7 @@ class TestCameraQC(unittest.TestCase):
         # Verify plots
         axes = plt.gcf().axes
         self.assertEqual(3, len(axes))
-        expected = np.array([100., 93.74829841, 93.2494463])
+        expected = np.array([100.0, 93.74829841, 93.2494463])
         np.testing.assert_almost_equal(axes[2].lines[0]._y, expected)
 
         # Verify not set (no frame samples and not in test mode)
@@ -185,8 +217,7 @@ class TestCameraQC(unittest.TestCase):
 
         # Verify percent threshold as False
         thresh = (75, 80)
-        outcome = self.qc.check_position(test=True, pct_thresh=False,
-                                         hist_thresh=thresh, display=True)
+        outcome = self.qc.check_position(test=True, pct_thresh=False, hist_thresh=thresh, display=True)
         self.assertIs(spec.QC.FAIL, outcome)
         fig = plt.get_fignums()[-1]
         thr = [ln._y[0] for ln in plt.figure(fig).axes[2].lines[1:]]
@@ -201,7 +232,7 @@ class TestCameraQC(unittest.TestCase):
         self.assertIs(spec.QC.NOT_SET, self.qc.check_resolution())
 
     def test_check_timestamps(self):
-        FPS = 60.
+        FPS = 60.0
         n = 1000
         self.qc.data['video'] = Bunch({'fps': FPS, 'length': n})
         self.qc.data['timestamps'] = np.array([round(1 / FPS, 4)] * n).cumsum()
@@ -245,7 +276,7 @@ class TestCameraQC(unittest.TestCase):
         self.qc.data['wheel'] = {
             'timestamps': np.arange(4000),
             'position': np.random.random(4000),
-            'period': np.array([3000, 3050])
+            'period': np.array([3000, 3050]),
         }
         self.qc.data['timestamps'] = np.arange(5000, 6000)
         outcome = self.qc.check_wheel_alignment()
@@ -259,7 +290,7 @@ class TestCameraQC(unittest.TestCase):
 
     def test_get_active_wheel_period(self):
         """Check that warning is raised, period is returned None, and QC is NOT_SET
-         if there is active wheel period to be found"""
+        if there is active wheel period to be found"""
         wheel_keys = ('timestamps', 'position')
         wheel_data = (np.arange(1000), np.ones(1000))
         self.qc.data['wheel'] = Bunch(zip(wheel_keys, wheel_data))
@@ -271,10 +302,13 @@ class TestCameraQC(unittest.TestCase):
 
     def test_get_task_collection(self):
         """Test for ibllib.qc.camera.get_task_collection"""
-        params = {'version': '1.0.0', 'tasks': [
-            {'passiveChoiceWorld': {'collection': 'raw_task_data_00'}},
-            {'ephysChoiceWorld': {'collection': 'raw_task_data_01'}}
-        ]}
+        params = {
+            'version': '1.0.0',
+            'tasks': [
+                {'passiveChoiceWorld': {'collection': 'raw_task_data_00'}},
+                {'ephysChoiceWorld': {'collection': 'raw_task_data_01'}},
+            ],
+        }
         self.assertEqual('raw_behavior_data', get_task_collection(None))
         self.assertEqual('raw_task_data_01', get_task_collection(params))
 
