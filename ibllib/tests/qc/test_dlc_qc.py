@@ -11,7 +11,6 @@ from ibllib.tests.fixtures import utils
 
 
 class TestPoseQcBase(object):  # <- No unittest.TestCase inheritance
-
     QC_CLASS = None  # To be overridden in subclasses
     TRACKER = None  # To be overridden in subclasses
 
@@ -36,7 +35,7 @@ class TestPoseQcBase(object):  # <- No unittest.TestCase inheritance
         ONE.cache_clear()
 
     def runTest(self):
-        self.skipTest("Base class test case should not be run directly")
+        self.skipTest('Base class test case should not be run directly')
 
     def test_ensure_data(self):
         if self.QC_CLASS is None:
@@ -90,7 +89,8 @@ class TestPoseQcBase(object):  # <- No unittest.TestCase inheritance
             return  # allows use of pytest even for this base class
         self.qc.data['pose_coords'] = {
             'nose_tip': np.vstack((np.random.randint(400, 500, (1, 10)), np.random.randint(350, 450, size=(1, 10)))),
-            'tube_r': np.vstack((np.ones((2, 10)) * np.nan))}
+            'tube_r': np.vstack((np.ones((2, 10)) * np.nan)),
+        }
         outcome = self.qc.check_mean_in_bbox()
         self.assertEqual('PASS', outcome)
         for side in ['body', 'right']:
@@ -115,7 +115,6 @@ class TestPoseQcBase(object):  # <- No unittest.TestCase inheritance
 
 
 class TestDlcQC(TestPoseQcBase, unittest.TestCase):
-
     QC_CLASS = DlcQC
     TRACKER = 'dlc'
 
@@ -165,8 +164,10 @@ class TestDlcQC(TestPoseQcBase, unittest.TestCase):
         outcome = self.qc.check_paw_far_nan()
         self.assertEqual('NOT_SET', outcome)
         # Check that left and right pass when numbers
-        self.qc.data['pose_coords'] = {'paw_l': rng.normal(scale=100, size=(2, self.qc.data['camera_times'].shape[0])),
-                                       'paw_r': rng.normal(scale=100, size=(2, self.qc.data['camera_times'].shape[0]))}
+        self.qc.data['pose_coords'] = {
+            'paw_l': rng.normal(scale=100, size=(2, self.qc.data['camera_times'].shape[0])),
+            'paw_r': rng.normal(scale=100, size=(2, self.qc.data['camera_times'].shape[0])),
+        }
         for self.qc.side in ['left', 'right']:
             outcome = self.qc.check_paw_close_nan()
             self.assertEqual('PASS', outcome)
@@ -185,10 +186,9 @@ class TestDlcQC(TestPoseQcBase, unittest.TestCase):
 
 
 class TestLpQC(TestPoseQcBase, unittest.TestCase):
-
     QC_CLASS = LpQC
     TRACKER = 'lightningPose'
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main(exit=False, verbosity=2)

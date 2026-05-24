@@ -1,4 +1,5 @@
 """Tests for ephys FPGA sync and FPGA wheel extraction."""
+
 import unittest
 import tempfile
 from pathlib import Path
@@ -14,7 +15,6 @@ import brainbox.behavior.wheel as wh
 
 
 class TestsFolderStructure(unittest.TestCase):
-
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory()
         pl = Path(self.dir.name) / 'raw_ephys_data' / 'probe_left'
@@ -43,7 +43,6 @@ class TestsFolderStructure(unittest.TestCase):
 
 
 class TestSyncExtraction(unittest.TestCase):
-
     def setUp(self):
         self.workdir = Path(__file__).parents[1] / 'fixtures' / 'sync_ephys_fpga'
         self.meta_files = list(Path.glob(self.workdir, '*.meta'))
@@ -63,11 +62,9 @@ class TestSyncExtraction(unittest.TestCase):
             ses_path = Path(tdir).joinpath('raw_ephys_data')
             ses_path.mkdir(parents=True, exist_ok=True)
             bin_file = ses_path.joinpath(fn).with_suffix('.bin')
-            nidq = spikeglx._mock_spikeglx_file(bin_file, self.workdir / fn,
-                                                ns=ns, nc=nc, sync_depth=sync_depth)
+            nidq = spikeglx._mock_spikeglx_file(bin_file, self.workdir / fn, ns=ns, nc=nc, sync_depth=sync_depth)
             syncs, files = ephys_fpga.extract_sync(tdir)
-            self.assertTrue(np.all(syncs[0].channels[slice(1, None, 2)] ==
-                                   np.arange(0, nidq['sync_depth'])))
+            self.assertTrue(np.all(syncs[0].channels[slice(1, None, 2)] == np.arange(0, nidq['sync_depth'])))
             with self.assertLogs(level='INFO') as log:
                 ephys_fpga.extract_sync(tdir)
                 self.assertEqual(1, len(log.output))
@@ -75,7 +72,6 @@ class TestSyncExtraction(unittest.TestCase):
 
 
 class TestIBLChannelMaps(unittest.TestCase):
-
     def setUp(self):
         self.workdir = Path(__file__).parents[1] / 'fixtures'
 
@@ -89,7 +85,6 @@ class TestIBLChannelMaps(unittest.TestCase):
 
 
 class TestTTLsExtraction(unittest.TestCase):
-
     def test_audio_ttl_wiring_camera(self):
         """
         Test ephys_fpga._clean_audio function.
@@ -100,74 +95,382 @@ class TestTTLsExtraction(unittest.TestCase):
         # on this example it's business as usual and the clean up should not change anything
         audio = {
             'times': np.array([1740.1032, 1740.20176667, 1741.0786, 1741.57713333, 1744.78716667, 1744.88573333]),
-            'polarities': np.array([1., -1., 1., -1., 1., -1.]),
+            'polarities': np.array([1.0, -1.0, 1.0, -1.0, 1.0, -1.0]),
         }
         audio_ = ephys_fpga._clean_audio(audio)
         self.assertEqual(audio, audio_)
         # on that example
-        audio = {'times': np.array([3399.4090251, 3399.4110249, 3399.4156911, 3399.4176909,
-                                    3399.42232377, 3399.42432357, 3399.42898977, 3399.43095624,
-                                    3399.43562244, 3399.43762224, 3399.44228844, 3399.44425491,
-                                    3399.44892111, 3399.45092091, 3399.45558711, 3399.45755358,
-                                    3399.46221978, 3399.46421958, 3399.46888578, 3399.47085225,
-                                    3399.47551845, 3399.47751825, 3399.48215112, 3399.48415092,
-                                    3399.48881712, 3399.49081692, 3399.49544979, 3399.49744959,
-                                    3399.50211579, 3399.50411559, 3400.306602, 3400.3086018,
-                                    3400.313268, 3400.3152678, 3400.31990067, 3400.32190047,
-                                    3400.32656667, 3400.32856647, 3400.33319934, 3400.33519914,
-                                    3400.33986534, 3400.34186514, 3400.34649801, 3400.34849781,
-                                    3400.35316401, 3400.35516381, 3400.35979668, 3400.36179648,
-                                    3400.36646268, 3400.36846248, 3400.37309535, 3400.37509515,
-                                    3400.37976135, 3400.38172782, 3400.38639402, 3400.38839382,
-                                    3400.39306002, 3400.39502649, 3400.39969269, 3400.40169249,
-                                    3400.40635869, 3400.40832516, 3400.41299136, 3400.41499116,
-                                    3400.41962403, 3400.42162383, 3400.42629003, 3400.42828983,
-                                    3400.4329227, 3400.4349225, 3400.4395887, 3400.4415885,
-                                    3400.44622137, 3400.44822117, 3400.45288737, 3400.45488717,
-                                    3400.45952004, 3400.46151984, 3400.46618604, 3400.46818584,
-                                    3400.47281871, 3400.47481851, 3400.47948471, 3400.48148451,
-                                    3400.48611738, 3400.48811718, 3400.49278338, 3400.49478318,
-                                    3400.49941605, 3400.50141585, 3400.50608205, 3400.50808185,
-                                    3400.51271472, 3400.51471452, 3400.51938072, 3400.52138052,
-                                    3400.52601339, 3400.52801319, 3400.53267939, 3400.53467919,
-                                    3400.53931206, 3400.54131186, 3400.54597806, 3400.54797786,
-                                    3400.55261073, 3400.55461053, 3400.55927673, 3400.5612432,
-                                    3400.5659094, 3400.5679092, 3400.5725754, 3400.57454187,
-                                    3400.57920807, 3400.58120787, 3400.58587407, 3400.58784054,
-                                    3400.59250674, 3400.59450654, 3400.59917274, 3400.60113921,
-                                    3400.60580541, 3400.60780521, 3400.61243808, 3400.61443788,
-                                    3400.61910408, 3400.62110388, 3400.62573675, 3400.62773655,
-                                    3400.63240275, 3400.63440255, 3400.63903542, 3400.64103522,
-                                    3400.64570142, 3400.64770122, 3400.65233409, 3400.65433389,
-                                    3400.65900009, 3400.66099989, 3400.66563276, 3400.66763256,
-                                    3400.67229876, 3400.67429856, 3400.67893143, 3400.68093123,
-                                    3400.68559743, 3400.68759723, 3400.6922301, 3400.6942299,
-                                    3400.6988961, 3400.7008959, 3400.70552877, 3400.70752857,
-                                    3400.71219477, 3400.71419457, 3400.71882744, 3400.72082724,
-                                    3400.72549344, 3400.72749324, 3400.73212611, 3400.73412591,
-                                    3400.73879211, 3400.74079191, 3400.74542478, 3400.74742458,
-                                    3400.75209078, 3400.75405725, 3400.75872345, 3400.76072325,
-                                    3400.76538945, 3400.76735592, 3400.77202212, 3400.77402192,
-                                    3400.77868812, 3400.78065459, 3400.78532079, 3400.78732059,
-                                    3400.79198679, 3400.79395326, 3400.79861946, 3400.80061926]),
-                 'polarities': np.array([1., -1., 1., -1., 1., -1., 1., -1., 1., -1., 1., -1., 1.,
-                                         -1., 1., -1., 1., -1., 1., -1., 1., -1., 1., -1., 1., -1.,
-                                         1., -1., 1., -1., 1., -1., 1., -1., 1., -1., 1., -1., 1.,
-                                         -1., 1., -1., 1., -1., 1., -1., 1., -1., 1., -1., 1., -1.,
-                                         1., -1., 1., -1., 1., -1., 1., -1., 1., -1., 1., -1., 1.,
-                                         -1., 1., -1., 1., -1., 1., -1., 1., -1., 1., -1., 1., -1.,
-                                         1., -1., 1., -1., 1., -1., 1., -1., 1., -1., 1., -1., 1.,
-                                         -1., 1., -1., 1., -1., 1., -1., 1., -1., 1., -1., 1., -1.,
-                                         1., -1., 1., -1., 1., -1., 1., -1., 1., -1., 1., -1., 1.,
-                                         -1., 1., -1., 1., -1., 1., -1., 1., -1., 1., -1., 1., -1.,
-                                         1., -1., 1., -1., 1., -1., 1., -1., 1., -1., 1., -1., 1.,
-                                         -1., 1., -1., 1., -1., 1., -1., 1., -1., 1., -1., 1., -1.,
-                                         1., -1., 1., -1., 1., -1., 1., -1., 1., -1., 1., -1., 1.,
-                                         -1., 1., -1., 1., -1., 1., -1., 1., -1., 1., -1.])
-                 }
+        audio = {
+            'times': np.array([
+                3399.4090251,
+                3399.4110249,
+                3399.4156911,
+                3399.4176909,
+                3399.42232377,
+                3399.42432357,
+                3399.42898977,
+                3399.43095624,
+                3399.43562244,
+                3399.43762224,
+                3399.44228844,
+                3399.44425491,
+                3399.44892111,
+                3399.45092091,
+                3399.45558711,
+                3399.45755358,
+                3399.46221978,
+                3399.46421958,
+                3399.46888578,
+                3399.47085225,
+                3399.47551845,
+                3399.47751825,
+                3399.48215112,
+                3399.48415092,
+                3399.48881712,
+                3399.49081692,
+                3399.49544979,
+                3399.49744959,
+                3399.50211579,
+                3399.50411559,
+                3400.306602,
+                3400.3086018,
+                3400.313268,
+                3400.3152678,
+                3400.31990067,
+                3400.32190047,
+                3400.32656667,
+                3400.32856647,
+                3400.33319934,
+                3400.33519914,
+                3400.33986534,
+                3400.34186514,
+                3400.34649801,
+                3400.34849781,
+                3400.35316401,
+                3400.35516381,
+                3400.35979668,
+                3400.36179648,
+                3400.36646268,
+                3400.36846248,
+                3400.37309535,
+                3400.37509515,
+                3400.37976135,
+                3400.38172782,
+                3400.38639402,
+                3400.38839382,
+                3400.39306002,
+                3400.39502649,
+                3400.39969269,
+                3400.40169249,
+                3400.40635869,
+                3400.40832516,
+                3400.41299136,
+                3400.41499116,
+                3400.41962403,
+                3400.42162383,
+                3400.42629003,
+                3400.42828983,
+                3400.4329227,
+                3400.4349225,
+                3400.4395887,
+                3400.4415885,
+                3400.44622137,
+                3400.44822117,
+                3400.45288737,
+                3400.45488717,
+                3400.45952004,
+                3400.46151984,
+                3400.46618604,
+                3400.46818584,
+                3400.47281871,
+                3400.47481851,
+                3400.47948471,
+                3400.48148451,
+                3400.48611738,
+                3400.48811718,
+                3400.49278338,
+                3400.49478318,
+                3400.49941605,
+                3400.50141585,
+                3400.50608205,
+                3400.50808185,
+                3400.51271472,
+                3400.51471452,
+                3400.51938072,
+                3400.52138052,
+                3400.52601339,
+                3400.52801319,
+                3400.53267939,
+                3400.53467919,
+                3400.53931206,
+                3400.54131186,
+                3400.54597806,
+                3400.54797786,
+                3400.55261073,
+                3400.55461053,
+                3400.55927673,
+                3400.5612432,
+                3400.5659094,
+                3400.5679092,
+                3400.5725754,
+                3400.57454187,
+                3400.57920807,
+                3400.58120787,
+                3400.58587407,
+                3400.58784054,
+                3400.59250674,
+                3400.59450654,
+                3400.59917274,
+                3400.60113921,
+                3400.60580541,
+                3400.60780521,
+                3400.61243808,
+                3400.61443788,
+                3400.61910408,
+                3400.62110388,
+                3400.62573675,
+                3400.62773655,
+                3400.63240275,
+                3400.63440255,
+                3400.63903542,
+                3400.64103522,
+                3400.64570142,
+                3400.64770122,
+                3400.65233409,
+                3400.65433389,
+                3400.65900009,
+                3400.66099989,
+                3400.66563276,
+                3400.66763256,
+                3400.67229876,
+                3400.67429856,
+                3400.67893143,
+                3400.68093123,
+                3400.68559743,
+                3400.68759723,
+                3400.6922301,
+                3400.6942299,
+                3400.6988961,
+                3400.7008959,
+                3400.70552877,
+                3400.70752857,
+                3400.71219477,
+                3400.71419457,
+                3400.71882744,
+                3400.72082724,
+                3400.72549344,
+                3400.72749324,
+                3400.73212611,
+                3400.73412591,
+                3400.73879211,
+                3400.74079191,
+                3400.74542478,
+                3400.74742458,
+                3400.75209078,
+                3400.75405725,
+                3400.75872345,
+                3400.76072325,
+                3400.76538945,
+                3400.76735592,
+                3400.77202212,
+                3400.77402192,
+                3400.77868812,
+                3400.78065459,
+                3400.78532079,
+                3400.78732059,
+                3400.79198679,
+                3400.79395326,
+                3400.79861946,
+                3400.80061926,
+            ]),
+            'polarities': np.array([
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+                1.0,
+                -1.0,
+            ]),
+        }
         audio_ = ephys_fpga._clean_audio(audio)
-        expected = {'times': np.array([3399.4090251, 3399.50411559, 3400.306602, 3400.80061926]),
-                    'polarities': np.array([1., -1., 1., -1.])}
+        expected = {
+            'times': np.array([3399.4090251, 3399.50411559, 3400.306602, 3400.80061926]),
+            'polarities': np.array([1.0, -1.0, 1.0, -1.0]),
+        }
         assert all(np.all(audio_[k] == expected[k]) for k in audio_)
 
     def test_audio_ttl_start_up_down(self):
@@ -182,14 +485,14 @@ class TestTTLsExtraction(unittest.TestCase):
                 if tone == 'unassigned':
                     self.assertFalse(len(intervals))
                 else:
-                    np.testing.assert_array_almost_equal(
-                        intervals[:, 0], audio['times'][audio[tone]], err_msg=tone)
+                    np.testing.assert_array_almost_equal(intervals[:, 0], audio['times'][audio[tone]], err_msg=tone)
+
         audio = {
             'times': np.array([1740.1032, 1740.20176667, 1741.0786, 1741.57713333, 1744.78716667, 1744.88573333]),
-            'polarities': np.array([1., -1., 1., -1., 1., -1.]),
+            'polarities': np.array([1.0, -1.0, 1.0, -1.0, 1.0, -1.0]),
             'error_tone': np.array([False, False, True, False, False, False]),
             'ready_tone': np.array([True, False, False, False, True, False]),
-            'channels': np.zeros(6, dtype=int)
+            'channels': np.zeros(6, dtype=int),
         }
         extractor = ephys_fpga.FpgaTrials('subject/2023-01-01/000')  # placeholder session path unused
         _audio, audio_intervals = extractor.get_audio_event_times(audio, {'audio': 0})
@@ -212,16 +515,14 @@ class TestTTLsExtraction(unittest.TestCase):
         # flicker ends with a polarity switch - downgoing pulse is removed
         t = np.r_[0, np.cumsum(diff[np.array([1, 1, 0, 0, 1])])] + 1
         frame2ttl = {'times': t, 'polarities': np.mod(np.arange(t.size) + 1, 2) * 2 - 1}
-        expected = {'times': np.array([1., 1.1, 1.2, 1.31]),
-                    'polarities': np.array([1, -1, 1, -1])}
+        expected = {'times': np.array([1.0, 1.1, 1.2, 1.31]), 'polarities': np.array([1, -1, 1, -1])}
         frame2ttl_ = ephys_fpga._clean_frame2ttl(frame2ttl, display=DISPLAY, threshold=F2TTL_THRESH)
         assert all(np.all(frame2ttl_[k] == expected[k]) for k in frame2ttl_)
 
         # stand-alone flicker
         t = np.r_[0, np.cumsum(diff[np.array([1, 1, 0, 0, 0, 1])])] + 1
         frame2ttl = {'times': t, 'polarities': np.mod(np.arange(t.size) + 1, 2) * 2 - 1}
-        expected = {'times': np.array([1., 1.1, 1.2, 1.215, 1.315]),
-                    'polarities': np.array([1, -1, 1, -1, 1])}
+        expected = {'times': np.array([1.0, 1.1, 1.2, 1.215, 1.315]), 'polarities': np.array([1, -1, 1, -1, 1])}
         frame2ttl_ = ephys_fpga._clean_frame2ttl(frame2ttl, display=DISPLAY)
         assert all(np.all(frame2ttl_[k] == expected[k]) for k in frame2ttl_)
 
@@ -229,29 +530,129 @@ class TestTTLsExtraction(unittest.TestCase):
         """Test FpgaTrials.get_bpod_event_times method."""
         expected = {
             'trial_start': np.array([0, 4, 8, 12, 14, 16, 20, 24, 26, 28, 32, 34, 38, 42, 46, 48, 52, 56]),
-            'valve_open': np.array([2, 6, 10, 18, 22, 30, 36, 40, 44, 50, 54])
+            'valve_open': np.array([2, 6, 10, 18, 22, 30, 36, 40, 44, 50, 54]),
         }
-        bpod_fronts_ = np.array([1., -1., 1., -1., 1., -1., 1., -1., 1., -1., 1., -1., 1.,
-                                 -1., 1., -1., 1., -1., 1., -1., 1., -1., 1., -1., 1., -1.,
-                                 1., -1., 1., -1., 1., -1., 1., -1., 1., -1., 1., -1., 1.,
-                                 -1., 1., -1., 1., -1., 1., -1., 1., -1., 1., -1., 1., -1.,
-                                 1., -1., 1., -1., 1., -1.])
+        bpod_fronts_ = np.array([
+            1.0,
+            -1.0,
+            1.0,
+            -1.0,
+            1.0,
+            -1.0,
+            1.0,
+            -1.0,
+            1.0,
+            -1.0,
+            1.0,
+            -1.0,
+            1.0,
+            -1.0,
+            1.0,
+            -1.0,
+            1.0,
+            -1.0,
+            1.0,
+            -1.0,
+            1.0,
+            -1.0,
+            1.0,
+            -1.0,
+            1.0,
+            -1.0,
+            1.0,
+            -1.0,
+            1.0,
+            -1.0,
+            1.0,
+            -1.0,
+            1.0,
+            -1.0,
+            1.0,
+            -1.0,
+            1.0,
+            -1.0,
+            1.0,
+            -1.0,
+            1.0,
+            -1.0,
+            1.0,
+            -1.0,
+            1.0,
+            -1.0,
+            1.0,
+            -1.0,
+            1.0,
+            -1.0,
+            1.0,
+            -1.0,
+            1.0,
+            -1.0,
+            1.0,
+            -1.0,
+            1.0,
+            -1.0,
+        ])
 
-        bpod_times_ = np.array([6.75033333, 109.7648, 117.12136667, 117.27136667,
-                                118.51416667, 118.51426667, 122.3873, 122.5373,
-                                123.7964, 123.7965, 127.82903333, 127.97903333,
-                                129.24503333, 129.24513333, 132.97976667, 132.97986667,
-                                136.8624, 136.8625, 140.56083333, 140.71083333,
-                                141.95523333, 141.95533333, 143.55326667, 143.70326667,
-                                144.93636667, 144.93646667, 149.5042, 149.5043,
-                                153.08273333, 153.08283333, 155.29713333, 155.44713333,
-                                156.70316667, 156.70326667, 164.0096, 164.0097,
-                                164.9186, 165.0686, 166.30633333, 166.30643333,
-                                167.91133333, 168.06133333, 169.28373333, 169.28386667,
-                                171.39736667, 171.54736667, 172.77786667, 172.77796667,
-                                176.7828, 176.7829, 178.0305, 178.1805,
-                                179.41063333, 179.41073333, 181.70343333, 181.85343333,
-                                183.12896667, 183.12906667])
+        bpod_times_ = np.array([
+            6.75033333,
+            109.7648,
+            117.12136667,
+            117.27136667,
+            118.51416667,
+            118.51426667,
+            122.3873,
+            122.5373,
+            123.7964,
+            123.7965,
+            127.82903333,
+            127.97903333,
+            129.24503333,
+            129.24513333,
+            132.97976667,
+            132.97986667,
+            136.8624,
+            136.8625,
+            140.56083333,
+            140.71083333,
+            141.95523333,
+            141.95533333,
+            143.55326667,
+            143.70326667,
+            144.93636667,
+            144.93646667,
+            149.5042,
+            149.5043,
+            153.08273333,
+            153.08283333,
+            155.29713333,
+            155.44713333,
+            156.70316667,
+            156.70326667,
+            164.0096,
+            164.0097,
+            164.9186,
+            165.0686,
+            166.30633333,
+            166.30643333,
+            167.91133333,
+            168.06133333,
+            169.28373333,
+            169.28386667,
+            171.39736667,
+            171.54736667,
+            172.77786667,
+            172.77796667,
+            176.7828,
+            176.7829,
+            178.0305,
+            178.1805,
+            179.41063333,
+            179.41073333,
+            181.70343333,
+            181.85343333,
+            183.12896667,
+            183.12906667,
+        ])
         extractor = ephys_fpga.FpgaTrials('subject/2023-01-01/000')  # placeholder session path unused
         sync = {'times': bpod_times_, 'polarities': bpod_fronts_, 'channels': np.zeros_like(bpod_times_, dtype=int)}
         _, bpod_intervals = extractor.get_bpod_event_times(sync, {'bpod': 0})
@@ -259,13 +660,28 @@ class TestTTLsExtraction(unittest.TestCase):
             np.testing.assert_array_equal(bpod_intervals[k][:, 0], bpod_times_[expected[k]])
 
     def test_ttl_bpod_gaelle_writes_protocols_but_guido_doesnt_read_them(self):
-        bpod_t = np.array([5.423290950005423, 6.397993470006398, 6.468919710006469,
-                           7.497916800007498, 7.997933460007998, 8.599239990008599,
-                           8.5993399800086, 15.141985650015142, 15.642002310015641,
-                           16.215411630016217, 16.215511620016215, 17.104122750017105,
-                           17.175015660017174, 18.204012750018205, 18.704029410018705,
-                           19.286337840019286, 19.28643783001929, 21.76005711002176,
-                           21.83095002002183, 22.85998044002286])
+        bpod_t = np.array([
+            5.423290950005423,
+            6.397993470006398,
+            6.468919710006469,
+            7.497916800007498,
+            7.997933460007998,
+            8.599239990008599,
+            8.5993399800086,
+            15.141985650015142,
+            15.642002310015641,
+            16.215411630016217,
+            16.215511620016215,
+            17.104122750017105,
+            17.175015660017174,
+            18.204012750018205,
+            18.704029410018705,
+            19.286337840019286,
+            19.28643783001929,
+            21.76005711002176,
+            21.83095002002183,
+            22.85998044002286,
+        ])
         pol = (np.mod(np.arange(bpod_t.size), 2) - 0.5) * 2
         sync = {'times': bpod_t, 'polarities': pol, 'channels': np.zeros_like(bpod_t, dtype=int)}
         extractor = ephys_fpga.FpgaTrials('subject/2023-01-01/000')  # placeholder session path unused
@@ -301,19 +717,19 @@ class TestTTLsExtraction(unittest.TestCase):
         t_trial_start = np.arange(0, 5) * 10
         t_event = np.arange(0, 5) * 10 - 2
         t_event_nans = ephys_fpga._assign_events_to_trial(t_trial_start, t_event)
-        desired_out = np.array([8., 18., 28., 38., np.nan])
+        desired_out = np.array([8.0, 18.0, 28.0, 38.0, np.nan])
         self.assertTrue(np.allclose(desired_out, t_event_nans, equal_nan=True, atol=0, rtol=0))
 
         # test with several events per trial, missing events and events before
         t_trial_start = np.array([0, 10, 20, 30, 40])
         t_event = np.array([-1, 2, 4, 12, 35, 42])
         t_event_nans = ephys_fpga._assign_events_to_trial(t_trial_start, t_event)
-        desired_out = np.array([4, 12., np.nan, 35, 42])
+        desired_out = np.array([4, 12.0, np.nan, 35, 42])
         self.assertTrue(np.allclose(desired_out, t_event_nans, equal_nan=True, atol=0, rtol=0))
 
         # same test above but this time take the first index instead of last
         t_event_nans = ephys_fpga._assign_events_to_trial(t_trial_start, t_event, take='first')
-        desired_out = np.array([2, 12., np.nan, 35, 42])
+        desired_out = np.array([2, 12.0, np.nan, 35, 42])
         self.assertTrue(np.allclose(desired_out, t_event_nans, equal_nan=True, atol=0, rtol=0))
 
         # take second to last
@@ -327,12 +743,11 @@ class TestTTLsExtraction(unittest.TestCase):
         self.assertTrue(np.allclose(desired_out, t_event_nans, equal_nan=True, atol=0, rtol=0))
 
         # test errors
-        self.assertRaises(ValueError, ephys_fpga._assign_events_to_trial, np.array([0., 2., 1.]), t_event)
-        self.assertRaises(ValueError, ephys_fpga._assign_events_to_trial, t_trial_start, np.array([0., 2., 1.]))
+        self.assertRaises(ValueError, ephys_fpga._assign_events_to_trial, np.array([0.0, 2.0, 1.0]), t_event)
+        self.assertRaises(ValueError, ephys_fpga._assign_events_to_trial, t_trial_start, np.array([0.0, 2.0, 1.0]))
 
 
 class TestWheelExtraction(unittest.TestCase):
-
     def setUp(self) -> None:
         self.ta = np.array([2, 4, 6, 8, 12, 14, 16, 18])
         self.pa = np.array([1, -1, 1, -1, 1, -1, 1, -1])
@@ -362,17 +777,17 @@ class TestWheelExtraction(unittest.TestCase):
 
     def test_wheel_trace_from_sync(self):
         """Test ephys_fpga._rotary_encoder_positions_from_fronts function."""
-        pos_ = - np.array([-1, 0, -1, -2, -1, -2]) * (np.pi / ephys_fpga.WHEEL_TICKS)
+        pos_ = -np.array([-1, 0, -1, -2, -1, -2]) * (np.pi / ephys_fpga.WHEEL_TICKS)
         ta = np.array([1, 2, 3, 4, 5, 6])
         tb = np.array([0.5, 3.2, 3.3, 3.4, 5.25, 5.5])
         pa = (np.mod(np.arange(6), 2) - 0.5) * 2
-        pb = (np.mod(np.arange(6) + 1, 2) - .5) * 2
+        pb = (np.mod(np.arange(6) + 1, 2) - 0.5) * 2
         t, pos = ephys_fpga._rotary_encoder_positions_from_fronts(ta, pa, tb, pb, coding='x2')
         self.assertTrue(np.all(np.isclose(pos_, pos)))
 
-        pos_ = - np.array([-1, 0, -1, 0, -1, -2]) * (np.pi / ephys_fpga.WHEEL_TICKS)
+        pos_ = -np.array([-1, 0, -1, 0, -1, -2]) * (np.pi / ephys_fpga.WHEEL_TICKS)
         tb = np.array([0.5, 3.2, 3.4, 5.25])
-        pb = (np.mod(np.arange(4) + 1, 2) - .5) * 2
+        pb = (np.mod(np.arange(4) + 1, 2) - 0.5) * 2
         t, pos = ephys_fpga._rotary_encoder_positions_from_fronts(ta, pa, tb, pb, coding='x2')
         self.assertTrue(np.all(np.isclose(pos_, pos)))
 
@@ -423,7 +838,6 @@ class TestExtractedWheelUnits(unittest.TestCase):
 
 
 class TestWheelMovesExtraction(unittest.TestCase):
-
     def setUp(self) -> None:
         """
         Test data is in the form ((inputs), (outputs)) where inputs is a tuple containing a
@@ -459,7 +873,7 @@ class TestWheelMovesExtraction(unittest.TestCase):
 
         # Check the first 3 intervals
         ints = np.array([[24.78462599, 25.22562599], [29.58762599, 31.15062599], [31.64262599, 31.81662599]])
-        actual = wheel_moves['intervals'][:3, ]
+        actual = wheel_moves['intervals'][:3,]
         self.assertIsNone(np.testing.assert_allclose(actual, ints), 'unexpected intervals')
 
         # Check amplitudes
@@ -480,7 +894,7 @@ class TestWheelMovesExtraction(unittest.TestCase):
 
         # Check the first 3 intervals.  As position thresholds are adjusted by units and
         # encoding, we should expect the intervals to be identical to above
-        actual = wheel_moves['intervals'][:3, ]
+        actual = wheel_moves['intervals'][:3,]
         self.assertIsNone(np.testing.assert_allclose(actual, ints), 'unexpected intervals')
 
     def test_movement_log(self):
@@ -500,7 +914,8 @@ class TestWheelMovesExtraction(unittest.TestCase):
                 r = 3.1 if unit == 'cm' else 1
                 # print(encoding, unit)
                 t, p = ephys_fpga._rotary_encoder_positions_from_fronts(
-                    ta, pa, tb, pb, ticks=1024, coding=encoding.lower(), radius=r)
+                    ta, pa, tb, pb, ticks=1024, coding=encoding.lower(), radius=r
+                )
                 expected = f'INFO:{logname}:Wheel in {unit} units using {encoding} encoding'
                 with self.assertLogs(logname, level='INFO') as cm:
                     ephys_fpga.extract_wheel_moves(t, p)
