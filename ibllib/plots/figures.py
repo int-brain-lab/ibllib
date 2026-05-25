@@ -372,7 +372,20 @@ class SpikeSorting(ReportSnapshotProbe):
         """runs for initiated PID, streams data, destripe and check bad channels"""
 
         def plot_driftmap(self, collection, channels, n_spikes, n_clusters):
-            """Build and save a driftmap PNG using memory-mapped spike npy files."""
+            """
+            Build and save a driftmap PNG using memory-mapped spike npy files.
+
+            Parameters
+            ----------
+            collection : str
+                ALF collection path relative to session root (e.g. 'alf/probe00').
+            channels : dict
+                Channels object with at least 'axial_um' and optionally 'atlas_id'.
+            n_spikes : int
+                Number of spikes, used in the figure title.
+            n_clusters : int
+                Number of clusters, used in the figure title.
+            """
             times_file = self.session_path.joinpath(collection, 'spikes.times.npy')
             depths_file = self.session_path.joinpath(collection, 'spikes.depths.npy')
             dlim = [0, float(np.max(channels['axial_um']))]
