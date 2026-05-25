@@ -239,6 +239,87 @@ def ks2_to_tar(ks_path, out_path, force=False):
     return [out_file]
 
 
+def driftmap_spike_sorting_memmap(times_file, depths_file, t_bin=0.007, d_bin=10, chunk_size=2_000_000, tlim=None, dlim=None):
+    """
+    Build a spike-sorting driftmap 2D histogram from npy files without loading all
+    spikes into RAM.
+
+    Produces the same result as calling ``brainbox.plot.driftmap`` with
+    ``plot_style='bincount'``, but processes spikes in temporal chunks of
+    ``chunk_size`` so peak RAM usage stays proportional to the chunk size rather
+    than to the total number of spikes (~32 MB per chunk for the default of 2 M
+    spikes, vs. ~800 MB for a typical 50 M-spike recording).
+
+    Parameters
+    ----------
+    times_file : pathlib.Path
+        Path to ``spikes.times.npy``.  Must be sorted ascending.
+    depths_file : pathlib.Path
+        Path to ``spikes.depths.npy``, same length as *times_file*.
+    t_bin : float
+        Time bin width in seconds.
+    d_bin : float
+        Depth bin width in micrometres.
+    chunk_size : int
+        Number of spikes processed per iteration (default: 2 000 000 ≈ 32 MB
+        working set for two float64 arrays).
+    tlim : list of float, optional
+        ``[t_start, t_end]`` in seconds.  Defaults to ``[times[0], times[-1]]``
+        (requires only two element reads via mmap).
+    dlim : list of float, optional
+        ``[d_min, d_max]`` in micrometres.  When omitted the full depth range is
+        scanned in chunks; pass it explicitly (e.g. from ``channels.localCoordinates``)
+        to avoid that extra pass.
+
+    Returns
+    -------
+    R : numpy.ndarray
+        2-D float32 array of shape ``(n_depth_bins, n_time_bins)`` with spike
+        counts per bin.
+    t_scale : numpy.ndarray
+        Left edge of each time bin (seconds).
+    d_scale : numpy.ndarray
+        Left edge of each depth bin (micrometres).
+    n_spikes : int
+        Total number of spikes (length of *times_file*).
+    """
+    times = np.load(times_file, mmap_mode='r')
+    depths = np.load(depths_file, mmap_mode='r')
+    n_spikes = int(times.size)
+
+    tlim = tlim or [float(times[0]), float(times[-1])]
+    if dlim is None:
+        d_min, d_max = np.inf, -np.inf
+        for start in range(0, n_spikes, chunk_size):
+            chunk = np.asarray(depths[start : start + chunk_size])
+            valid = chunk[~np.isnan(chunk)]
+            if valid.size:
+                d_min = min(d_min, float(valid.min()))
+                d_max = max(d_max, float(valid.max()))
+        dlim = [d_min, d_max]
+
+    t_scale = np.arange(tlim[0], tlim[1] + t_bin / 2, t_bin)
+    d_scale = np.arange(dlim[0], dlim[1] + d_bin / 2, d_bin)
+    nt, nd = t_scale.size, d_scale.size
+
+    R = np.zeros((nd, nt), dtype=np.float32)
+
+    for start in range(0, n_spikes, chunk_size):
+        t_chunk = np.asarray(times[start : start + chunk_size])
+        d_chunk = np.asarray(depths[start : start + chunk_size])
+        iok = ~np.isnan(d_chunk)
+        t_chunk, d_chunk = t_chunk[iok], d_chunk[iok]
+
+        ti = np.floor((t_chunk - tlim[0]) / t_bin).astype(np.int64)
+        di = np.floor((d_chunk - dlim[0]) / d_bin).astype(np.int64)
+        valid = (ti >= 0) & (ti < nt) & (di >= 0) & (di < nd)
+
+        ind2d = np.ravel_multi_index([di[valid], ti[valid]], dims=(nd, nt))
+        R.flat += np.bincount(ind2d, minlength=nd * nt)
+
+    return R, t_scale, d_scale, n_spikes
+
+
 def detection(data, fs, h, detect_threshold=-4, time_tol=0.002, distance_threshold_um=70):
     """
     Detects and de-duplicates negative voltage spikes based on voltage thresholding.

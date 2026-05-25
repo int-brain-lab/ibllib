@@ -22,18 +22,30 @@ from one.alf.exceptions import ALFObjectNotFound
 from ibllib.io.video import get_video_frame, get_video_meta, url_from_eid
 from ibllib.oneibl.data_handlers import ExpectedDataset
 import spikeglx
-from brainbox.plot import driftmap
 from brainbox.io.spikeglx import Streamer
+import ibllib.ephys.spikes
 from brainbox.behavior.dlc import (
-    SAMPLING, plot_trace_on_frame, plot_wheel_position, plot_lick_hist,
-    plot_lick_raster, plot_motion_energy_hist, plot_speed_hist, plot_pupil_diameter_hist,
+    SAMPLING,
+    plot_trace_on_frame,
+    plot_wheel_position,
+    plot_lick_hist,
+    plot_lick_raster,
+    plot_motion_energy_hist,
+    plot_speed_hist,
+    plot_pupil_diameter_hist,
 )
 from brainbox.behavior.pawstates import (
     extract_pawstate_plot_data,
-    plot_ensemble_variance_histogram, plot_paw_positions_by_state, plot_paw_speed_transitions,
-    plot_state_duration_histogram, plot_state_raster,
-    plot_total_duration_bars, plot_trial_correctness, plot_trial_duration,
-    plot_variance_raster, plot_wheel_speed_transitions,
+    plot_ensemble_variance_histogram,
+    plot_paw_positions_by_state,
+    plot_paw_speed_transitions,
+    plot_state_duration_histogram,
+    plot_state_raster,
+    plot_total_duration_bars,
+    plot_trial_correctness,
+    plot_trial_duration,
+    plot_variance_raster,
+    plot_wheel_speed_transitions,
     STATE_LABELS,
 )
 from brainbox.ephys_plots import image_lfp_spectrum_plot, image_rms_plot, plot_brain_regions
@@ -128,7 +140,6 @@ class BehaviourPlots(ReportSnapshot):
         self.output_directory.mkdir(exist_ok=True, parents=True)
 
     def _run(self):
-
         output_files = []
         trials = alfio.load_object(self.session_path.joinpath(self.trials_collection), 'trials')
         if self.one:
@@ -165,7 +176,6 @@ class HistologySlices(ReportSnapshotProbe):
     """Plots coronal and sagittal slice showing electrode locations."""
 
     def _run(self):
-
         assert self.pid
         assert self.brain_atlas
 
@@ -213,7 +223,6 @@ class LfpPlots(ReportSnapshotProbe):
     """
 
     def _run(self):
-
         assert self.pid
 
         output_files = []
@@ -302,7 +311,6 @@ class ApPlots(ReportSnapshotProbe):
     """
 
     def _run(self):
-
         assert self.pid
 
         output_files = []
@@ -363,14 +371,41 @@ class SpikeSorting(ReportSnapshotProbe):
     def _run(self, collection=None):
         """runs for initiated PID, streams data, destripe and check bad channels"""
 
-        def plot_driftmap(self, spikes, clusters, channels, collection):
-            fig, axs = plt.subplots(1, 2, gridspec_kw={'width_ratios': [0.95, 0.05]}, figsize=(16, 9))
-            driftmap(spikes.times, spikes.depths, t_bin=0.007, d_bin=10, vmax=0.5, ax=axs[0])
-            title_str = (
-                f'{self.pid_label}, {collection}, {self.pid} \n '
-                f'{spikes.clusters.size:_} spikes, {clusters.depths.size:_} clusters'
+        def plot_driftmap(self, collection, channels, n_spikes, n_clusters):
+            """
+            Build and save a driftmap PNG using memory-mapped spike npy files.
+
+            Parameters
+            ----------
+            collection : str
+                ALF collection path relative to session root (e.g. 'alf/probe00').
+            channels : dict
+                Channels object with at least 'axial_um' and optionally 'atlas_id'.
+            n_spikes : int
+                Number of spikes, used in the figure title.
+            n_clusters : int
+                Number of clusters, used in the figure title.
+            """
+            times_file = self.session_path.joinpath(collection, 'spikes.times.npy')
+            depths_file = self.session_path.joinpath(collection, 'spikes.depths.npy')
+            dlim = [0, float(np.max(channels['axial_um']))]
+            r, t_scale, d_scale, _ = ibllib.ephys.spikes.driftmap_spike_sorting_memmap(
+                times_file, depths_file, t_bin=0.007, d_bin=10, dlim=dlim
             )
-            ylim = (0, np.max(channels['axial_um']))
+
+            fig, axs = plt.subplots(1, 2, gridspec_kw={'width_ratios': [0.95, 0.05]}, figsize=(16, 9))
+            axs[0].imshow(
+                r,
+                aspect='auto',
+                cmap='binary',
+                vmin=0,
+                vmax=0.5,
+                extent=np.r_[t_scale[[0, -1]], d_scale[[0, -1]]],
+                origin='lower',
+            )
+            axs[0].set(xlabel='time (secs)', ylabel='depth (um)')
+            title_str = f'{self.pid_label}, {collection}, {self.pid}\n{n_spikes:_} spikes, {n_clusters:_} clusters'
+            ylim = (0, float(np.max(channels['axial_um'])))
             axs[0].set(ylim=ylim, title=title_str)
             run_label = str(Path(collection).relative_to(f'alf/{self.pname}'))
             run_label = 'ks2matlab' if run_label == '.' else run_label
@@ -393,18 +428,17 @@ class SpikeSorting(ReportSnapshotProbe):
 
             fig.savefig(outfile)
             plt.close(fig)
-
             return outfile, fig, axs
 
         output_files = []
         if self.location == 'server':
             assert collection
-            spikes = alfio.load_object(self.session_path.joinpath(collection), 'spikes')
+            # Only load small cluster/channel objects — spike arrays are mmap'd by driftmap_spike_sorting_memmap
             clusters = alfio.load_object(self.session_path.joinpath(collection), 'clusters')
             channels = alfio.load_object(self.session_path.joinpath(collection), 'channels')
             channels['axial_um'] = channels['localCoordinates'][:, 1]
-
-            out, fig, axs = plot_driftmap(self, spikes, clusters, channels, collection)
+            n_spikes = int(np.load(self.session_path.joinpath(collection, 'spikes.times.npy'), mmap_mode='r').size)
+            out, fig, axs = plot_driftmap(self, collection, channels, n_spikes, clusters.depths.size)
             output_files.append(out)
 
         else:
@@ -418,12 +452,18 @@ class SpikeSorting(ReportSnapshotProbe):
             for run in map(self.session_path.joinpath, spike_sorting_runs):
                 sorter = run.without_revision().relative_to(self.session_path / f'alf/{self.pname}')
                 collection = run.relative_to(self.session_path).parent.as_posix()
+                # load_spike_sorting downloads files to session_path; spike arrays are freed immediately
+                # after extracting counts — driftmap_spike_sorting_memmap reads from disk
                 spikes, clusters, channels = ss.load_spike_sorting(spike_sorter=sorter, revision=run.revision or None)
-
                 if 'atlas_id' not in channels.keys():
                     channels = self.get_channels('channels', collection)
+                if 'axial_um' not in channels:
+                    channels['axial_um'] = channels['localCoordinates'][:, 1]
+                n_spikes = int(spikes.times.size)
+                n_clusters = int(clusters.depths.size)
+                del spikes  # free large spike arrays; files are cached on disk by load_spike_sorting
 
-                out, fig, axs = plot_driftmap(self, spikes, clusters, channels, collection)
+                out, fig, axs = plot_driftmap(self, collection, channels, n_spikes, n_clusters)
                 output_files.append(out)
 
         return output_files
@@ -781,7 +821,6 @@ def raw_destripe(
 def dlc_qc_plot(
     session_path, one=None, device_collection='raw_video_data', cameras=('left', 'right', 'body'), trials_collection='alf'
 ):
-
     fig = pose_qc_plot(
         session_path=session_path,
         one=one,
@@ -796,7 +835,6 @@ def dlc_qc_plot(
 def lp_qc_plot(
     session_path, one=None, device_collection='raw_video_data', cameras=('left', 'right', 'body'), trials_collection='alf'
 ):
-
     fig = pose_qc_plot(
         session_path=session_path,
         one=one,
@@ -1110,7 +1148,7 @@ def pawstates_qc_plot(data, camera, paw, tracker, session_id=None):
         try:
             data = extract_pawstate_plot_data(data, paw, tracker)
         except Exception as e:
-            logger.error(f"Error processing marker data: {e}")
+            logger.error(f'Error processing marker data: {e}')
             data['processed'] = False
     else:
         data['processed'] = False
@@ -1121,10 +1159,18 @@ def pawstates_qc_plot(data, camera, paw, tracker, session_id=None):
     # Panel A-D: Paw positions for each state
     for i, state in enumerate(STATE_LABELS):
         if data.get('frame') is not None and data.get('data_df') is not None:
-            panels.append((plot_paw_positions_by_state, {
-                'frame': data['frame'], 'data_df': data['data_df'], 'state': state,
-                'state_idx': i, 'camera': camera, 'paw': paw, 'tracker': tracker,
-            }))
+            panels.append((
+                plot_paw_positions_by_state,
+                {
+                    'frame': data['frame'],
+                    'data_df': data['data_df'],
+                    'state': state,
+                    'state_idx': i,
+                    'camera': camera,
+                    'paw': paw,
+                    'tracker': tracker,
+                },
+            ))
         else:
             panels.append((None, f'Data missing\n{state} paw positions'))
 
@@ -1133,7 +1179,7 @@ def pawstates_qc_plot(data, camera, paw, tracker, session_id=None):
     if data.get('durations') is not None:
         all_durations = data['durations']['duration'].values  # Extract duration column
         if len(all_durations) > 0:
-            duration_xlim = (1 / 60., np.percentile(all_durations, 99))  # or use max(all_durations)
+            duration_xlim = (1 / 60.0, np.percentile(all_durations, 99))  # or use max(all_durations)
         else:
             duration_xlim = None
     else:
@@ -1141,34 +1187,47 @@ def pawstates_qc_plot(data, camera, paw, tracker, session_id=None):
 
     for i, state in enumerate(STATE_LABELS):
         if data.get('durations') is not None:
-            panels.append((plot_state_duration_histogram, {
-                'durations': data['durations'], 'state': state, 'state_idx': i, 'xlim': duration_xlim,
-            }))
+            panels.append((
+                plot_state_duration_histogram,
+                {
+                    'durations': data['durations'],
+                    'state': state,
+                    'state_idx': i,
+                    'xlim': duration_xlim,
+                },
+            ))
         else:
             panels.append((None, f'Data missing\n{state} durations'))
 
     # Panel I-J: Wheel speed transitions
     if data.get('wheel_transitions') is not None and data.get('data_df') is not None:
-        panels.append((plot_wheel_speed_transitions, {
-            'wheel_transitions': data['wheel_transitions'],
-            'data_df': data['data_df'],
-            'fps': data['fps'],
-            'transition_start': 'still',
-        }))
-        panels.append((plot_wheel_speed_transitions, {
-            'wheel_transitions': data['wheel_transitions'],
-            'data_df': data['data_df'],
-            'fps': data['fps'],
-            'transition_start': 'wheel_turn',
-        }))
+        panels.append((
+            plot_wheel_speed_transitions,
+            {
+                'wheel_transitions': data['wheel_transitions'],
+                'data_df': data['data_df'],
+                'fps': data['fps'],
+                'transition_start': 'still',
+            },
+        ))
+        panels.append((
+            plot_wheel_speed_transitions,
+            {
+                'wheel_transitions': data['wheel_transitions'],
+                'data_df': data['data_df'],
+                'fps': data['fps'],
+                'transition_start': 'wheel_turn',
+            },
+        ))
     else:
         panels.extend([(None, 'Data missing\nWheel transitions'), (None, 'Data missing\nWheel transitions')])
 
     # Panel K: Paw speed transitions
     if data.get('wheel_transitions') is not None and data.get('data_df') is not None:
-        panels.append((plot_paw_speed_transitions, {
-            'wheel_transitions': data['wheel_transitions'], 'data_df': data['data_df'], 'fps': data['fps']
-        }))
+        panels.append((
+            plot_paw_speed_transitions,
+            {'wheel_transitions': data['wheel_transitions'], 'data_df': data['data_df'], 'fps': data['fps']},
+        ))
     else:
         panels.extend([(None, 'Data missing\nPaw transitions')])
 
@@ -1204,26 +1263,39 @@ def pawstates_qc_plot(data, camera, paw, tracker, session_id=None):
 
     # Create custom grid layout to match original
     gs = gridspec.GridSpec(
-        5, 9, figure=fig,
+        5,
+        9,
+        figure=fig,
         width_ratios=[1, 1, 1, 1, 0.5, 1, 1, 1, 1],
-        wspace=0.35, hspace=0.4,
+        wspace=0.35,
+        hspace=0.4,
     )
 
     # Panel positions matching original layout
     panel_positions = [
         # Paw positions (row 0, cols 0-3)
-        gs[0, 0], gs[0, 1], gs[0, 2], gs[0, 3],
+        gs[0, 0],
+        gs[0, 1],
+        gs[0, 2],
+        gs[0, 3],
         # Duration histograms (row 1, cols 0-3)
-        gs[1, 0], gs[1, 1], gs[1, 2], gs[1, 3],
+        gs[1, 0],
+        gs[1, 1],
+        gs[1, 2],
+        gs[1, 3],
         # Transitions (rows 2-3, cols 0-3)
-        gs[2, 0:2], gs[2, 2:4],
+        gs[2, 0:2],
+        gs[2, 2:4],
         gs[3, 0:4],
         # Total duration and variance (row 4, cols 0-3)
-        gs[4, 0:2], gs[4, 2:4],
+        gs[4, 0:2],
+        gs[4, 2:4],
         # Trial info (rows 0-4, col 4 split)
-        None, None,  # These will be handled specially
+        None,
+        None,  # These will be handled specially
         # Rasters (rows 0-4, cols 6-9)
-        gs[0:5, 5:7], gs[0:5, 7:]
+        gs[0:5, 5:7],
+        gs[0:5, 7:],
     ]
 
     for i, (panel, pos) in enumerate(zip(panels, panel_positions)):
@@ -1242,29 +1314,49 @@ def pawstates_qc_plot(data, camera, paw, tracker, session_id=None):
         # Add panel letter
         if i < len(ascii_uppercase):
             bbox = ax.get_position()
-            fig.text(bbox.x0 - 0.01, bbox.y1 + 0.01, ascii_uppercase[i],
-                     transform=fig.transFigure, fontsize=14, fontweight='bold')
+            fig.text(
+                bbox.x0 - 0.01, bbox.y1 + 0.01, ascii_uppercase[i], transform=fig.transFigure, fontsize=14, fontweight='bold'
+            )
 
         # Plot panel or error message
         if panel[0] is None:
-            ax.text(.5, .5, panel[1], color='r', fontweight='bold', fontsize=12,
-                    horizontalalignment='center', verticalalignment='center',
-                    transform=ax.transAxes)
+            ax.text(
+                0.5,
+                0.5,
+                panel[1],
+                color='r',
+                fontweight='bold',
+                fontsize=12,
+                horizontalalignment='center',
+                verticalalignment='center',
+                transform=ax.transAxes,
+            )
             ax.axis('off')
         else:
             try:
                 panel[0](ax=ax, **panel[1])
             except Exception:
                 logger.error(f'Error in {panel[0].__name__}\n' + traceback.format_exc())
-                ax.text(.5, .5, f'Error while plotting\n{panel[0].__name__}', color='r',
-                        fontweight='bold', fontsize=12, horizontalalignment='center',
-                        verticalalignment='center', transform=ax.transAxes)
+                ax.text(
+                    0.5,
+                    0.5,
+                    f'Error while plotting\n{panel[0].__name__}',
+                    color='r',
+                    fontweight='bold',
+                    fontsize=12,
+                    horizontalalignment='center',
+                    verticalalignment='center',
+                    transform=ax.transAxes,
+                )
                 ax.axis('off')
 
     # Add title
-    title_paw = "far" if paw == "paw_l" else "near"
-    title = f"Pawstates QC - Session: {session_id} ({camera} camera, {title_paw} paw)" \
-        if session_id is not None else f"Pawstates QC - {camera} camera, {title_paw} paw"
+    title_paw = 'far' if paw == 'paw_l' else 'near'
+    title = (
+        f'Pawstates QC - Session: {session_id} ({camera} camera, {title_paw} paw)'
+        if session_id is not None
+        else f'Pawstates QC - {camera} camera, {title_paw} paw'
+    )
     fig.suptitle(title, fontsize=14, y=0.95)
 
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
@@ -1272,9 +1364,13 @@ def pawstates_qc_plot(data, camera, paw, tracker, session_id=None):
 
 
 def load_pawstates_qc_data(
-        session_path, one=None,
-        camera='left', paw='paw_l', tracker='lightningPose',
-        device_collection='raw_video_data', trials_collection='alf',
+    session_path,
+    one=None,
+    camera='left',
+    paw='paw_l',
+    tracker='lightningPose',
+    device_collection='raw_video_data',
+    trials_collection='alf',
 ):
     """
     Load raw data required for the pawstates QC plot.
@@ -1328,13 +1424,13 @@ def load_pawstates_qc_data(
                 except Exception:
                     if tries < 2:
                         tries += 1
-                        logger.info(f"Streaming {camera} video failed, retrying x{tries}")
+                        logger.info(f'Streaming {camera} video failed, retrying x{tries}')
                         time.sleep(30)
                     else:
-                        logger.warning(f"Could not load video frame for {camera} cam. Skipping trace on frame.")
+                        logger.warning(f'Could not load video frame for {camera} cam. Skipping trace on frame.')
                         data['frame'] = None
         except KeyError:
-            logger.warning(f"Could not load video frame for {camera} cam. Skipping trace on frame.")
+            logger.warning(f'Could not load video frame for {camera} cam. Skipping trace on frame.')
             data['frame'] = None
 
     # Load camera-specific data
@@ -1347,16 +1443,16 @@ def load_pawstates_qc_data(
             if len(alyx_ds) > 0:
                 data[feat] = one.load_dataset(eid, alyx_ds[0])
             else:
-                logger.warning(f"Could not load _ibl_{camera}Camera.{feat}")
+                logger.warning(f'Could not load _ibl_{camera}Camera.{feat}')
                 data[feat] = None
 
         # Check for empty objects
         if data[feat] is not None and len(data[feat]) == 0:
-            logger.warning(f"Object loaded from _ibl_{camera}Camera.{feat} is empty")
+            logger.warning(f'Object loaded from _ibl_{camera}Camera.{feat} is empty')
             data[feat] = None
 
     # Compute fps from timestamps
-    data['fps'] = 1. / np.nanmedian(np.diff(data['times']))
+    data['fps'] = 1.0 / np.nanmedian(np.diff(data['times']))
 
     # Load trials data
     local_file = list(session_path.joinpath(trials_collection).rglob('*trials.table*'))
@@ -1372,7 +1468,7 @@ def load_pawstates_qc_data(
         try:
             data[alf_object] = one.load_object(eid, alf_object, collection=trials_collection)
         except ALFObjectNotFound:
-            logger.warning(f"Could not load {alf_object} object")
+            logger.warning(f'Could not load {alf_object} object')
             data[alf_object] = None
 
     return data

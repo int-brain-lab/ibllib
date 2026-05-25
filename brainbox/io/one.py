@@ -831,7 +831,7 @@ class SpikeSortingLoader:
             id=self.eid,
             obj='waveforms',
             attribute=['traces', 'templates', 'table', 'channels'],
-            collection=self._get_spike_sorting_collection('pykilosort'),
+            collection=self._get_spike_sorting_collection(),
             download_only=True,
             **kwargs,
         )
