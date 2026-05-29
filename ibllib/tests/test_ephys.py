@@ -8,6 +8,8 @@ import scipy.signal
 
 from one.api import ONE
 import neuropixel
+from ibldsp import voltage
+import ibldsp.utils
 
 from ibllib.ephys import ephysqc, spikes
 from ibllib.tests import TEST_DB
@@ -72,7 +74,6 @@ def synthetic_with_bad_channels():
     data[:, channels['ioutside']] = 0
     data += noise
     return data, channels
-
 
 
 class TestNeuropixel(unittest.TestCase):
