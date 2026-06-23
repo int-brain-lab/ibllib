@@ -11,7 +11,7 @@ from ibllib.pipes.behavior_tasks import ChoiceWorldTrialsNidq, HabituationTrials
 from ibllib.io.extractors.base import run_extractor_classes
 from ibllib.io.extractors.biased_trials import ProbaContrasts
 
-from ci.tests import base
+from ibllib.tests import base
 
 
 class TestEphysTaskExtraction(base.IntegrationTest):

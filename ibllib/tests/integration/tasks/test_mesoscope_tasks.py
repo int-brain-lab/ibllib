@@ -27,7 +27,7 @@ from ibllib.pipes.behavior_tasks import ChoiceWorldTrialsTimeline, HabituationTr
 from ibllib.io.extractors import mesoscope
 from ibllib.io.raw_daq_loaders import load_timeline_sync_and_chmap
 
-from ci.tests import base
+from ibllib.tests import base
 
 _logger = logging.getLogger('ibllib')
 

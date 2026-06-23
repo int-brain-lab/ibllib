@@ -11,7 +11,7 @@ import numpy.testing
 
 import ibllib.io.video as vidio
 from one.api import ONE
-from ci.tests import base
+from ibllib.tests import base
 from ibllib.io.raw_daq_loaders import load_channels_tdms, correct_counter_discontinuities
 from ibllib.io.raw_data_loaders import patch_settings, load_settings
 

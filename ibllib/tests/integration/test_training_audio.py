@@ -4,7 +4,7 @@ import numpy as np
 import one.alf.io as alfio
 from ibllib.io.extractors import training_audio as audio
 
-from ci.tests import base
+from ibllib.testsests import base
 
 
 class TestAudioExtraction(base.IntegrationTest):

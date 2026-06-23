@@ -8,7 +8,7 @@ import numpy as np
 from one.api import ONE
 from ibllib.pipes.behavior_tasks import PassiveRegisterRaw, PassiveTaskNidq
 
-from ci.tests import base
+from ibllib.tests import base
 
 _logger = logging.getLogger('ibllib')
 

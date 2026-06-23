@@ -13,7 +13,7 @@ from one.registration import RegistrationClient
 from ibllib.pipes.ephys_tasks import (EphysRegisterRaw, EphysCompressNP1, EphysCompressNP21, EphysCompressNP24,
                                       EphysSyncRegisterRaw, EphysSyncPulses, EphysPulses, SpikeSorting)
 
-from ci.tests import base
+from ibllib.tests import base
 
 _logger = logging.getLogger('ibllib')
 

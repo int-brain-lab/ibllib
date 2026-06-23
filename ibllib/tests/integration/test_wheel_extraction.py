@@ -9,7 +9,7 @@ from one.alf.path import get_session_path
 from ibllib.io.extractors import training_wheel
 from ibllib.pipes.behavior_tasks import ChoiceWorldTrialsNidq
 
-from ci.tests import base
+from ibllib.tests import base
 
 DISPLAY = False
 

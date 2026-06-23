@@ -10,7 +10,7 @@ import ibllib.io.session_params as sess_params
 from ibllib.io.raw_data_loaders import patch_settings
 import unittest
 
-from ci.tests import base
+from ibllib.tests import base
 
 _logger = logging.getLogger('ibllib')
 

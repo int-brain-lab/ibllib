@@ -4,7 +4,7 @@ import shutil
 from one.api import ONE
 from ibllib.pipes.sync_tasks import SyncRegisterRaw, SyncMtscomp, SyncPulses
 
-from ci.tests import base
+from ibllib.tests import base
 
 _logger = logging.getLogger('ibllib')
 

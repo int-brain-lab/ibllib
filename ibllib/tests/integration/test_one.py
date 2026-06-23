@@ -16,7 +16,7 @@ import ibllib.oneibl.registration as reg
 from one.api import ONE
 import one.alf.exceptions as alferr
 
-from ci.tests.base import IntegrationTest, TEST_DB
+from ibllib.tests.base import IntegrationTest, TEST_DB
 
 
 class TestVideoStreamer(IntegrationTest):

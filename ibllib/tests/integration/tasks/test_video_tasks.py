@@ -19,7 +19,7 @@ from ibllib.io.video import get_video_meta
 from ibllib.io.extractors.ephys_fpga import get_sync_and_chn_map
 from ibllib.io.extractors.camera import extract_camera_sync
 
-from ci.tests import base
+from ibllib.tests import base
 
 _logger = logging.getLogger('ibllib')
 

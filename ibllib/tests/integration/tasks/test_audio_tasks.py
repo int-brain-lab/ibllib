@@ -6,7 +6,7 @@ from pathlib import Path
 from one.api import ONE
 from ibllib.pipes.audio_tasks import AudioCompress, AudioSync
 
-from ci.tests import base
+from ibllib.tests import base
 
 _logger = logging.getLogger('ibllib')
 

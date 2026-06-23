@@ -40,7 +40,7 @@ import ibllib.qc.camera as camQC
 from ibllib.qc.camera import CameraQC
 import ibllib.io.video as vidio
 
-from ci.tests import base
+from ibllib.tests import base
 
 
 def _get_video_lengths(eid):

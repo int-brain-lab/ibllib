@@ -3,7 +3,7 @@ import shutil
 import ibllib.pipes.behavior_tasks as btasks
 from one.api import ONE
 
-from ci.tests import base
+from ibllib.tests import base
 
 _logger = logging.getLogger('ibllib')
 

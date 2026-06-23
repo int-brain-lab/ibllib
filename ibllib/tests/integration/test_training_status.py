@@ -1,4 +1,4 @@
-from ci.tests import base
+from ibllib.tests import base
 from one.api import One
 import one.alf.io as alfio
 import shutil

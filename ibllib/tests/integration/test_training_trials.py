@@ -12,7 +12,7 @@ import ibllib.io.raw_data_loaders as rawio
 from one.api import One
 import one.alf.io as alfio
 
-from ci.tests import base
+from ibllib.tests import base
 
 TRIAL_KEYS = ['goCue_times', 'probabilityLeft', 'intervals', 'goCueTrigger_times', 'quiescencePeriod',
               'response_times', 'feedbackType', 'contrastLeft', 'feedback_times',

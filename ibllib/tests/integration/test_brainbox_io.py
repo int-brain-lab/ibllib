@@ -13,7 +13,7 @@ from neuropixel import trace_header
 from iblatlas.regions import BrainRegions
 from brainbox.io.one import SpikeSortingLoader, SessionLoader
 
-from ci.tests.base import IntegrationTest
+from ibllib.tests.base import IntegrationTest
 
 _logger = logging.getLogger('ibllib')
 _logger.setLevel(10)

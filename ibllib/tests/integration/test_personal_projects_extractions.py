@@ -7,7 +7,7 @@ from one.api import ONE
 
 from ibllib.pipes.behavior_tasks import ChoiceWorldTrialsBpod
 
-from ci.tests import base
+from ibllib.tests import base
 
 """
 To add support for these personal projects:

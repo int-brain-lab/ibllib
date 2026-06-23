@@ -25,17 +25,18 @@ def sanitize(s: str) -> str:
     return re.sub(r"[^a-zA-Z0-9-]", "-", s).strip("-").lower()
 
 
-PY_VERSION      = os.environ["PY_VERSION"]
-GITHUB_SHA      = os.environ["GITHUB_SHA"]
-GITHUB_RUN_ID   = os.environ["GITHUB_RUN_ID"]
-RUN_ATTEMPT     = os.environ.get("GITHUB_RUN_ATTEMPT", "1")
-GITHUB_REPO     = os.environ["GITHUB_REPOSITORY"]      # "owner/repo"
-GITHUB_REF      = os.environ.get("GITHUB_REF_NAME", "")
-REPO_URL        = os.environ["REPO_URL"]
-TEAMSPACE       = os.environ["LIGHTNING_TEAMSPACE"]    # "owner/teamspace"
-COVERALLS_TOKEN = os.environ["COVERALLS_REPO_TOKEN"]
-PR_NUMBER       = os.environ.get("PR_NUMBER", "")
-JOB_TIMEOUT     = int(os.environ.get("JOB_TIMEOUT_SECONDS", "7200"))
+PY_VERSION           = os.environ["PY_VERSION"]
+GITHUB_SHA           = os.environ["GITHUB_SHA"]
+GITHUB_RUN_ID        = os.environ["GITHUB_RUN_ID"]
+RUN_ATTEMPT          = os.environ.get("GITHUB_RUN_ATTEMPT", "1")
+GITHUB_REPO          = os.environ["GITHUB_REPOSITORY"]      # "owner/repo"
+GITHUB_REF           = os.environ.get("GITHUB_REF_NAME", "")
+REPO_URL             = os.environ["REPO_URL"]
+TEAMSPACE            = os.environ["LIGHTNING_TEAMSPACE"]    # "owner/teamspace"
+INTEGRATION_DATA_DIR = os.environ.get("INTEGRATION_DATA_DIR", "/data")
+COVERALLS_TOKEN      = os.environ["COVERALLS_REPO_TOKEN"]
+PR_NUMBER            = os.environ.get("PR_NUMBER", "")
+JOB_TIMEOUT          = int(os.environ.get("JOB_TIMEOUT_SECONDS", "7200"))
 # Base image for the Lightning job. python:3.12 verified to ship git/bash/pip.
 # uv (installed at runtime) provides the actual test Python via PY_VERSION, so
 # this base Python version is only used to bootstrap `pip install uv`.
@@ -71,7 +72,7 @@ job = Job.run(
         # --- runtime / bootstrap ---
         "PY_VERSION": PY_VERSION,
         "REPO_URL": REPO_URL,
-        "INTEGRATION_DATA_DIR": "/data",
+        "INTEGRATION_DATA_DIR": INTEGRATION_DATA_DIR,
         # --- Coveralls auth + parallel grouping ---
         "COVERALLS_REPO_TOKEN": COVERALLS_TOKEN,
         "COVERALLS_PARALLEL": "true",

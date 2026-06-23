@@ -9,7 +9,7 @@ import unittest.mock
 from ibllib.pipes.behavior_tasks import ChoiceWorldTrialsBpod
 from one.api import ONE
 from one.alf import spec
-from ci.tests import base
+from ibllib.tests import base
 
 one = ONE(**base.TEST_DB)
 

@@ -10,7 +10,7 @@ from one.api import ONE
 from ibllib.pipes.widefield_tasks import WidefieldPreprocess, WidefieldCompress, WidefieldSync, WidefieldRegisterRaw
 from ibllib.io.extractors.ephys_fpga import get_sync_and_chn_map, get_sync_fronts
 
-from ci.tests import base
+from ibllib.tests import base
 
 _logger = logging.getLogger('ibllib')
 

@@ -16,7 +16,7 @@ from packaging import version
 from ibllib.io.extractors import ephys_passive
 from ibllib.io.extractors import ephys_fpga
 from ibllib.pipes.behavior_tasks import PassiveTaskNidq
-from ci.tests import base
+from ibllib.tests import base
 
 log = logging.getLogger('ibllib')
 
