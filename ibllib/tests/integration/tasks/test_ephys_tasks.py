@@ -112,13 +112,14 @@ class EphysTemplate(base.IntegrationTest):
 class TestEphysRegisterRaw(base.IntegrationTest):
 
     def setUp(self) -> None:
-        self.one = ONE(**base.TEST_DB, cache_dir=self.data_path / 'ephys', cache_rest=None)
+        self._tempdir = tempfile.TemporaryDirectory()
+        self.one = ONE(**base.TEST_DB, cache_dir=self._tempdir.name, cache_rest=None)
         path, self.eid = RegistrationClient(self.one).create_new_session('ZM_1743')
         # Currently the task protocol of a session must contain 'ephys' in order to create an insertion!
         self.one.alyx.rest('sessions', 'partial_update', id=self.eid, data={'task_protocol': 'ephys'})
 
         # make a random session path and move the meta files into random probe names
-        self.session_path = Path(tempfile.TemporaryDirectory().name).joinpath(path.relative_to(self.one.cache_dir))
+        self.session_path = Path(self._tempdir.name).joinpath(path.relative_to(self.one.cache_dir))
         # make random probe names and the directories
         self.probe_NP1, self.probe_NP21, self.probe_NP24 = [''.join(random.choices(string.ascii_letters, k=5)) for i in range(3)]
 
@@ -146,7 +147,7 @@ class TestEphysRegisterRaw(base.IntegrationTest):
             assert pid[0]['model'] == model
 
     def tearDown(self) -> None:
-        shutil.rmtree(self.session_path)
+        self._tempdir.cleanup()
         self.one.alyx.rest('sessions', 'delete', id=self.eid)
         for probe in self.expected_probes:
             pid = self.one.alyx.rest('insertions', 'list', session=self.eid, name=probe)

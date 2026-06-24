@@ -98,7 +98,7 @@ class TestStandardPipelines(base.IntegrationTest):
 
     def test_mesoscope(self):
         shutil.copytree(self.folder_path.joinpath('mesoscope'), self.session_path)
-        filepath = Path(base.__file__).parents[2].joinpath('deploy', 'mesoscope', '_ibl_experiment.description.yaml')
+        filepath = self.data_path.joinpath('mesoscope', 'test', '2023-03-03', '002', '_ibl_experiment.description.yaml')
         shutil.copy(filepath, self.session_path)
         self.check_pipeline()
 

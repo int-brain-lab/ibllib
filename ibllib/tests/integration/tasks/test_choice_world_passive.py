@@ -1,5 +1,6 @@
 import logging
 import shutil
+import tempfile
 import unittest.mock
 
 import pandas as pd
@@ -34,7 +35,9 @@ class TestPassiveRegisterRaw(base.IntegrationTest):
 class TestPassiveTrials(base.IntegrationTest):
 
     def setUp(self) -> None:
-        self.session_path = self.default_data_root().joinpath('ephys', 'passive_extraction', 'SWC_054', '2020-10-10', '001')
+        raw_session_path = self.default_data_root().joinpath('ephys', 'passive_extraction', 'SWC_054', '2020-10-10', '001')
+        self._tempdir = tempfile.TemporaryDirectory()
+        self.session_path, _ = base.make_sym_links(raw_session_path, self._tempdir.name)
         self.alf_path = self.session_path.joinpath('alf')
         self.one = ONE(**base.TEST_DB, mode='local')
 
@@ -72,4 +75,4 @@ class TestPassiveTrials(base.IntegrationTest):
         self.assertTrue(np.all(np.isnan(passive_intervals.taskReplay.values)))
 
     def tearDown(self) -> None:
-        shutil.rmtree(self.alf_path)
+        self._tempdir.cleanup()

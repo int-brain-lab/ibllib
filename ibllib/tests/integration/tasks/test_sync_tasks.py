@@ -1,5 +1,7 @@
 import logging
 import shutil
+import tempfile
+from pathlib import Path
 
 from one.api import ONE
 from ibllib.pipes.sync_tasks import SyncRegisterRaw, SyncMtscomp, SyncPulses
@@ -11,8 +13,10 @@ _logger = logging.getLogger('ibllib')
 
 class SyncTemplate(base.IntegrationTest):
     def setUp(self) -> None:
-        self.session_path = self.default_data_root().joinpath('widefield', 'widefieldChoiceWorld', 'JC076',
-                                                              '2022-02-04', '001')
+        raw_session_path = self.default_data_root().joinpath('widefield', 'widefieldChoiceWorld', 'JC076',
+                                                             '2022-02-04', '001')
+        self._tempdir = tempfile.TemporaryDirectory()
+        self.session_path, _ = base.make_sym_links(raw_session_path, self._tempdir.name)
         self.widefield_path = self.session_path.joinpath('raw_widefield_data')
         self.kwargs = dict(sync_collection='raw_widefield_data', sync='nidq', sync_namespace='spikeglx', one=ONE(**base.TEST_DB))
 
@@ -27,14 +31,14 @@ class SyncTemplate(base.IntegrationTest):
                 assert file in task.outputs
 
     def tearDown(self) -> None:
-        shutil.rmtree(self.widefield_path)
+        self._tempdir.cleanup()
 
 
 class TestSyncRegisterRaw(base.IntegrationTest):
 
     def setUp(self) -> None:
-        self.session_path = self.default_data_root().joinpath('widefield', 'widefieldChoiceWorld', 'JC076',
-                                                              'test_date', 'test_sess')
+        self._tempdir = tempfile.TemporaryDirectory()
+        self.session_path = Path(self._tempdir.name).joinpath('JC076', 'test_date', 'test_sess')
         self.sync_collection = 'raw_device_collection'
         self.sync = 'random'
         self.sync_ext = 'tdms'
@@ -57,7 +61,7 @@ class TestSyncRegisterRaw(base.IntegrationTest):
         self.assertIn(self.wiring_file, task.outputs)
 
     def tearDown(self) -> None:
-        shutil.rmtree(self.session_path.parent)
+        self._tempdir.cleanup()
 
 
 class TestSyncMtscomp(SyncTemplate):

@@ -32,36 +32,16 @@ from ibllib.tests import base
 _logger = logging.getLogger('ibllib')
 
 
-def _delete_sync(*session_paths):
-    """
-    Delete the _timeline_sync.*.npy files that are created during testing.
-
-    Parameters
-    ----------
-    *session_paths : pathlib.Path
-        One or more session paths containing sync files to remove.
-
-    Returns
-    -------
-    list of pathlib.Path
-        A list of deleted files.
-    """
-    deleted = []
-    for file in chain(*map(lambda x: x.glob('raw_sync_data/_timeline_sync.*.npy'), session_paths)):
-        deleted.append(file)
-        _logger.debug('Deleting %s', file.relative_to(base.IntegrationTest.default_data_root()))
-        file.unlink()
-
 
 class TestTimelineTrials(base.IntegrationTest):
     session_path = None
 
     def setUp(self) -> None:
         self.one = ONE(**base.TEST_DB)
-        # A new test session with Bpod channel fix'd in timeline
-        self.session_path = self.default_data_root().joinpath('mesoscope', 'test', '2023-02-17', '002')
-        self.addCleanup(shutil.rmtree, self.session_path / 'alf', ignore_errors=True)
-        self.addClassCleanup(_delete_sync, self.session_path)
+        raw_session_path = self.default_data_root().joinpath('mesoscope', 'test', '2023-02-17', '002')
+        self._tempdir = tempfile.TemporaryDirectory()
+        self.session_path, _ = base.make_sym_links(raw_session_path, self._tempdir.name)
+        self.addCleanup(self._tempdir.cleanup)
 
     def test_sync(self):
         # Mocking training wheel extractor as session doesn't have Bpod rotary encoder data
@@ -197,10 +177,10 @@ class TestTimelineTrialsHabituation(base.IntegrationTest):
 
     def setUp(self) -> None:
         self.one = ONE(**base.TEST_DB)
-        # A new test session with Bpod channel fix'd in timeline
-        self.session_path = self.default_data_root().joinpath('mesoscope', 'SP065', '2024-10-07', '001')
-        self.addCleanup(shutil.rmtree, self.session_path / 'alf', ignore_errors=True)
-        self.addClassCleanup(_delete_sync, self.session_path)
+        raw_session_path = self.default_data_root().joinpath('mesoscope', 'SP065', '2024-10-07', '001')
+        self._tempdir = tempfile.TemporaryDirectory()
+        self.session_path, _ = base.make_sym_links(raw_session_path, self._tempdir.name)
+        self.addCleanup(self._tempdir.cleanup)
 
     def test_extraction(self):
         """Test habituation data is correct.
@@ -400,12 +380,14 @@ class TestMesoscopeSync(base.IntegrationTest):
 
     def setUp(self) -> None:
         self.one = ONE(**base.TEST_DB)
-        self.session_path_0 = self.default_data_root().joinpath('mesoscope', 'test', '2023-02-17', '002')
-        self.session_path_1 = self.default_data_root().joinpath('mesoscope', 'test', '2023-03-03', '002')
-        self.session_path_2 = self.default_data_root().joinpath('mesoscope', 'SP061', '2025-02-26', '001')
-        self.addClassCleanup(_delete_sync, self.session_path_0, self.session_path_1)
-        self.addCleanup(shutil.rmtree, self.session_path_1 / 'alf', ignore_errors=True)
-        self.addCleanup(shutil.rmtree, self.session_path_0 / 'alf', ignore_errors=True)
+        data_root = self.default_data_root()
+        self._tempdir = tempfile.TemporaryDirectory()
+        self.session_path_0, _ = base.make_sym_links(
+            data_root.joinpath('mesoscope', 'test', '2023-02-17', '002'), self._tempdir.name)
+        self.session_path_1, _ = base.make_sym_links(
+            data_root.joinpath('mesoscope', 'test', '2023-03-03', '002'), self._tempdir.name)
+        self.session_path_2 = data_root.joinpath('mesoscope', 'SP061', '2025-02-26', '001')
+        self.addCleanup(self._tempdir.cleanup)
 
     def test_single_depth(self):
         """Test for MesoscopeSync with single depth, single bout."""
@@ -540,16 +522,14 @@ class TestMesoscopeRegisterSnapshots(base.IntegrationTest):
     @classmethod
     def setUpClass(cls) -> None:
         cls.one = ONE(**base.TEST_DB)
-        cls.session_path = cls.default_data_root().joinpath('mesoscope', 'test', '2023-03-03', '002')
+        raw_session_path = cls.default_data_root().joinpath('mesoscope', 'test', '2023-03-03', '002')
+        cls._tempdir = tempfile.TemporaryDirectory()
+        cls.session_path, _ = base.make_sym_links(raw_session_path, cls._tempdir.name)
+        cls.addClassCleanup(cls._tempdir.cleanup)
         # Create some reference images to register
         for i in range(2):
             for file in cls.reference_files:
                 p = cls.session_path.joinpath(f'raw_imaging_data_{i:02}', 'reference', file)
-                if p.parents[1].exists():
-                    cls.addClassCleanup(p.unlink)
-                else:
-                    # For now these raw_imaging_data_0* folders are created new
-                    cls.addClassCleanup(shutil.rmtree, p.parents[1])
                 p.parent.mkdir(parents=True, exist_ok=True)
                 p.touch()
 

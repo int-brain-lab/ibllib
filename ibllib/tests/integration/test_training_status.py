@@ -1,7 +1,9 @@
+import tempfile
+import shutil
+
 from ibllib.tests import base
 from one.api import One
 import one.alf.io as alfio
-import shutil
 from ibllib.pipes import training_status
 import numpy as np
 
@@ -10,19 +12,17 @@ class TestTrainingStatus(base.IntegrationTest):
     """Test training status computations."""
     @classmethod
     def setUpClass(cls) -> None:
-        cls.subj_path = cls.default_data_root().joinpath('training_status', 'PL023')
+        cls._tempdir = tempfile.TemporaryDirectory()
+        cls.addClassCleanup(cls._tempdir.cleanup)
+        raw_session_path = cls.default_data_root().joinpath('training_status', 'PL023', '2021-08-03', '002')
+        cls.session_path, _ = base.make_sym_links(raw_session_path, cls._tempdir.name)
+        cls.subj_path = cls.session_path.parents[1]
         print('Building ONE cache from filesystem...')
         cls.one = One.setup(cls.subj_path, silent=True)
 
-        cls.session_path = cls.subj_path.joinpath('2021-08-03', '002')
         cls.temp_results = cls.subj_path.joinpath('training_results_temp')
         cls.new_session1 = cls.subj_path.joinpath('2021-08-05', '001')
         cls.new_session2 = cls.subj_path.joinpath('2021-09-08', '001')
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        for file in cls.subj_path.glob('*.pqt'):
-            file.unlink()
 
     def tearDown(self) -> None:
         if self.new_session1.exists():
