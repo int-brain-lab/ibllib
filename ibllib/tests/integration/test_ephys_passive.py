@@ -259,6 +259,9 @@ class TestExtractReplayNoiseMissing(base.IntegrationTest):
 
 
 class TestEphysPassiveExtraction(base.IntegrationTest):
+
+    required_files = ['ephys/passive_extraction/SWC_054/2020-10-10/001']
+
     def setUp(self) -> None:
         self.root_folder = self.data_path.joinpath('ephys', 'passive_extraction')
         self.session_path = self.root_folder.joinpath('SWC_054', '2020-10-10', '001')
@@ -293,6 +296,9 @@ class TestChainedPassiveExtraction(base.IntegrationTest):
 
      Employs the ibllib.pipes.behavior_tasks.PassiveTaskNidq class.
      """
+
+    required_files = ['ephys/passive_extraction/ZFM-05496/2022-12-08/001']
+
     def setUp(self) -> None:
         self.root_folder = self.data_path.joinpath('ephys', 'passive_extraction')
         self.session_path = self.root_folder.joinpath('ZFM-05496', '2022-12-08', '001')

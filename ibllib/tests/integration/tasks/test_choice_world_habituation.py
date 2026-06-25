@@ -13,15 +13,11 @@ _logger = logging.getLogger('ibllib')
 
 
 class HabituationTemplate(base.IntegrationTest):
+    required_files = ['tasks/choice_world_habituation/steinmetzlab/Subjects/NR_0020/2022-01-27/001']
 
     def setUp(self) -> None:
         self.one = ONE(**base.TEST_DB, mode='local')
-        self.raw_session_path = next(self.default_data_root().joinpath(
-            'tasks', 'choice_world_habituation').rglob('raw_behavior_data')).parent
-        self.session_path, self.extraction_path = base.make_sym_links(self.raw_session_path)
-
-    def tearDown(self):
-        shutil.rmtree(self.extraction_path)
+        self.session_path = self.data_path.joinpath(self.required_files[0])
 
 
 class TestHabituationRegisterRaw(HabituationTemplate):

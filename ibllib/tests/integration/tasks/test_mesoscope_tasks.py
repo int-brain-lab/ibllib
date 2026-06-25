@@ -32,16 +32,14 @@ from ibllib.tests import base
 _logger = logging.getLogger('ibllib')
 
 
-
 class TestTimelineTrials(base.IntegrationTest):
     session_path = None
+    required_files = ['mesoscope/test/2023-02-17/002']
+    _writable_scope = 'test'
 
     def setUp(self) -> None:
         self.one = ONE(**base.TEST_DB)
-        raw_session_path = self.default_data_root().joinpath('mesoscope', 'test', '2023-02-17', '002')
-        self._tempdir = tempfile.TemporaryDirectory()
-        self.session_path, _ = base.make_sym_links(raw_session_path, self._tempdir.name)
-        self.addCleanup(self._tempdir.cleanup)
+        self.session_path = self.data_path.joinpath(self.required_files[0])
 
     def test_sync(self):
         # Mocking training wheel extractor as session doesn't have Bpod rotary encoder data
@@ -174,13 +172,11 @@ class TestTimelineTrials(base.IntegrationTest):
 class TestTimelineTrialsHabituation(base.IntegrationTest):
     """Test for HabituationTrialsTimeline task."""
     session_path = None
+    required_files = ['mesoscope/SP065/2024-10-07/001']
 
     def setUp(self) -> None:
         self.one = ONE(**base.TEST_DB)
-        raw_session_path = self.default_data_root().joinpath('mesoscope', 'SP065', '2024-10-07', '001')
-        self._tempdir = tempfile.TemporaryDirectory()
-        self.session_path, _ = base.make_sym_links(raw_session_path, self._tempdir.name)
-        self.addCleanup(self._tempdir.cleanup)
+        self.session_path = self.data_path.joinpath(self.required_files[0])
 
     def test_extraction(self):
         """Test habituation data is correct.
@@ -377,17 +373,15 @@ class TestMesoscopeSync(base.IntegrationTest):
     # session_path_0 = None  # A single imaging bout
     # session_path_1 = None  # Multiple imaging bouts
     # session_path_2 = None  # Multiple depths
+    required_files = ['mesoscope/test/2023-02-17/002', 'mesoscope/test/2023-03-03/002', 'mesoscope/SP061/2025-02-26/001']
+    _writable_scope = 'test'
 
     def setUp(self) -> None:
         self.one = ONE(**base.TEST_DB)
         data_root = self.default_data_root()
-        self._tempdir = tempfile.TemporaryDirectory()
-        self.session_path_0, _ = base.make_sym_links(
-            data_root.joinpath('mesoscope', 'test', '2023-02-17', '002'), self._tempdir.name)
-        self.session_path_1, _ = base.make_sym_links(
-            data_root.joinpath('mesoscope', 'test', '2023-03-03', '002'), self._tempdir.name)
+        self.session_path_0 = data_root.joinpath('mesoscope', 'test', '2023-02-17', '002')
+        self.session_path_1 = data_root.joinpath('mesoscope', 'test', '2023-03-03', '002')
         self.session_path_2 = data_root.joinpath('mesoscope', 'SP061', '2025-02-26', '001')
-        self.addCleanup(self._tempdir.cleanup)
 
     def test_single_depth(self):
         """Test for MesoscopeSync with single depth, single bout."""
@@ -517,15 +511,14 @@ class TestMesoscopeSync(base.IntegrationTest):
 class TestMesoscopeRegisterSnapshots(base.IntegrationTest):
     session_path = None
     one = None
+    required_files = ['mesoscope/test/2023-03-03/002']
     reference_files = ['referenceImage.raw.tif', 'referenceImage.stack.tif', 'referenceImage.meta.json']
 
     @classmethod
     def setUpClass(cls) -> None:
+        super().setUpClass()
         cls.one = ONE(**base.TEST_DB)
-        raw_session_path = cls.default_data_root().joinpath('mesoscope', 'test', '2023-03-03', '002')
-        cls._tempdir = tempfile.TemporaryDirectory()
-        cls.session_path, _ = base.make_sym_links(raw_session_path, cls._tempdir.name)
-        cls.addClassCleanup(cls._tempdir.cleanup)
+        cls.session_path = cls.data_path.joinpath(cls.required_files[0])
         # Create some reference images to register
         for i in range(2):
             for file in cls.reference_files:
@@ -560,19 +553,21 @@ class TestMesoscopeRegisterSnapshots(base.IntegrationTest):
 
 class TestMesoscopePreprocessRename(base.IntegrationTest):
     session_path = None
+    required_files = ['mesoscope/SP037/2023-03-23/002']
+    _writable_scope = 'test'
 
     """Test for MesoscopePreprocess task."""
     def setUp(self) -> None:
-        self.tempdir = tempfile.TemporaryDirectory()
-        self.addCleanup(self.tempdir.cleanup)
-        self.session_path = self.default_data_root().joinpath('mesoscope', 'SP037', '2023-03-23', '002')
+        self.session_path = self.data_path.joinpath(self.required_files[0])
         self.alf_path = self.session_path.joinpath('suite2p', 'plane2')
         self.rename_dict = {
             'F.npy': 'mpci.ROIActivityF.npy',
             'spks.npy': 'mpci.ROIActivityDeconvolved.npy',
             'Fneu.npy': 'mpci.ROINeuropilActivityF.npy'}
-        # Copy files to temp dir
-        self.suite2pdir = Path(self.tempdir.name).joinpath(*self.alf_path.parts[-6:])
+        # Copy files to another temp dir
+        self._tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tempdir.cleanup)
+        self.suite2pdir = Path(self._tempdir.name).joinpath(*self.alf_path.parts[-6:])
         shutil.copytree(self.alf_path, self.suite2pdir)
         # Create a 'combined' folder which suite2p may create but should be ignored
         self.suite2pdir.joinpath('combined').mkdir()
@@ -658,13 +653,9 @@ class TestMesoscopePreprocess(base.IntegrationTest):
 
     """Test for MesoscopePreprocess task."""
     def setUp(self) -> None:
-        self.tempdir = tempfile.TemporaryDirectory()
-        self.addCleanup(self.tempdir.cleanup)
-        session_path = self.default_data_root().joinpath('mesoscope', 'SP053', '2024-02-07', '001')
+        self.session_path = self.default_data_root().joinpath('mesoscope', 'SP053', '2024-02-07', '001')
         # Copy files to temp dir
         # NB: suite2p dir now in session_path, not alf folder. This shouldn't affect these tests
-        self.session_path = Path(self.tempdir.name).joinpath(*session_path.parts[-3:])
-        shutil.copytree(session_path, self.session_path)
         self.one = ONE(**base.TEST_DB)
         # Mock suite2p
         self.suite2p_mock = MagicMock()
@@ -729,6 +720,7 @@ class TestMesoscopePreprocess(base.IntegrationTest):
 
 class TestMesoscopeCompress(base.IntegrationTest):
     """Test for MesoscopeCompress task."""
+
     def setUp(self) -> None:
         tempdir = tempfile.TemporaryDirectory()
         self.addCleanup(tempdir.cleanup)

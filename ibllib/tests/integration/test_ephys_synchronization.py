@@ -9,6 +9,9 @@ from ibllib.tests import base
 
 
 class TestEphysCheckList(base.IntegrationTest):
+
+    required_files = ['ephys/sync']
+
     def setUp(self):
         self.folder3a = self.data_path.joinpath('ephys/sync/sync_3A')
         self.folder3b = self.data_path.joinpath('ephys/sync/sync_3B')

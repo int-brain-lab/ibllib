@@ -12,11 +12,11 @@ _logger = logging.getLogger('ibllib')
 
 
 class SyncTemplate(base.IntegrationTest):
+    required_files = ['widefield/widefieldChoiceWorld/JC076/2022-02-04/001']
+    _writable_scope = 'test'
+    
     def setUp(self) -> None:
-        raw_session_path = self.default_data_root().joinpath('widefield', 'widefieldChoiceWorld', 'JC076',
-                                                             '2022-02-04', '001')
-        self._tempdir = tempfile.TemporaryDirectory()
-        self.session_path, _ = base.make_sym_links(raw_session_path, self._tempdir.name)
+        self.session_path = self.data_path.joinpath(self.required_files[0])
         self.widefield_path = self.session_path.joinpath('raw_widefield_data')
         self.kwargs = dict(sync_collection='raw_widefield_data', sync='nidq', sync_namespace='spikeglx', one=ONE(**base.TEST_DB))
 
@@ -29,9 +29,6 @@ class SyncTemplate(base.IntegrationTest):
                 file = next(self.session_path.joinpath(exp_files[1]).glob(exp_files[0]), None)
                 assert file.exists()
                 assert file in task.outputs
-
-    def tearDown(self) -> None:
-        self._tempdir.cleanup()
 
 
 class TestSyncRegisterRaw(base.IntegrationTest):

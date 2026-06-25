@@ -19,9 +19,7 @@ class TestPassiveRegisterRaw(base.IntegrationTest):
     required_files = ['tasks/choice_world_ephys/steinmetzlab/Subjects/NR_0020/2022-05-12/001']
 
     def setUp(self) -> None:
-        self.raw_session_path = next(self.default_data_root().joinpath(
-            'tasks', 'choice_world_ephys').rglob('raw_passive_data')).parent
-        self.session_path, self.extraction_path = base.make_sym_links(self.raw_session_path)
+        self.session_path = self.data_path.joinpath(self.required_files[0])
         self.one = ONE(**base.TEST_DB, mode='local')
 
     def test_register(self):
@@ -33,11 +31,11 @@ class TestPassiveRegisterRaw(base.IntegrationTest):
 
 
 class TestPassiveTrials(base.IntegrationTest):
+    required_files = ['ephys/passive_extraction/SWC_054/2020-10-10/001']
+    _writable_scope = 'test'
 
     def setUp(self) -> None:
-        raw_session_path = self.default_data_root().joinpath('ephys', 'passive_extraction', 'SWC_054', '2020-10-10', '001')
-        self._tempdir = tempfile.TemporaryDirectory()
-        self.session_path, _ = base.make_sym_links(raw_session_path, self._tempdir.name)
+        self.session_path = self.default_data_root().joinpath(self.required_files[0])
         self.alf_path = self.session_path.joinpath('alf')
         self.one = ONE(**base.TEST_DB, mode='local')
 
@@ -73,6 +71,3 @@ class TestPassiveTrials(base.IntegrationTest):
         passive_intervals = pd.read_csv(next(o for o in task.outputs
                                              if '_ibl_passivePeriods.intervalsTable.csv' in o.name))
         self.assertTrue(np.all(np.isnan(passive_intervals.taskReplay.values)))
-
-    def tearDown(self) -> None:
-        self._tempdir.cleanup()

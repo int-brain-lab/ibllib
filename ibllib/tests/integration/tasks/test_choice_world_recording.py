@@ -14,12 +14,7 @@ class RecordingTemplate(base.IntegrationTest):
 
     def setUp(self) -> None:
         self.one = ONE(**base.TEST_DB, mode='local')
-        self.raw_session_path = next(self.default_data_root().joinpath(
-            'tasks', 'choice_world_ephys').rglob('raw_behavior_data')).parent
-        self.session_path, self.extraction_path = base.make_sym_links(self.raw_session_path)
-
-    def tearDown(self):
-        shutil.rmtree(self.extraction_path)
+        self.session_path = self.data_path.joinpath(self.required_files[0])
 
 
 class TestTrainingTrialsRecording(RecordingTemplate):

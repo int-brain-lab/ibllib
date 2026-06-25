@@ -10,6 +10,7 @@ echo "Running full test suite under coverage (PY_VERSION=${PY_VERSION})"
 
 export ONE_SAVE_ON_DELETE=false  # prevent ONE from writing cache tables to disk
 export NO_PROGRESSBARS=1  # supress progress bars in test output (for cleaner logs)
+export INTEGRATION_DATA_WRITABLE=0  # s3 data connection is read only, so integration tests must not attempt to write to it
 
 # INTEGRATION_DATA_DIR is set by CI (Step 3) -> integration tests run.
 # In Step 1 it's unset -> integration tests auto-skip, unit tests run.

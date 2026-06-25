@@ -16,8 +16,12 @@ _logger = logging.getLogger('ibllib')
 
 
 class TestWidefieldRegisterRaw(base.IntegrationTest):
+
+    required_files = ['widefield/widefieldChoiceWorld/CSK-im-011/2021-07-21/001']
+
     @classmethod
     def setUpClass(cls) -> None:
+        super().setUpClass()
         cls.session_path = cls.default_data_root().joinpath(
             'widefield', 'widefieldChoiceWorld', 'CSK-im-011', '2021-07-21', '001')
         if not cls.session_path.exists():
@@ -79,8 +83,10 @@ class TestWidefieldRegisterRaw(base.IntegrationTest):
 
     @classmethod
     def tearDownClass(cls) -> None:
-        shutil.rmtree(cls.widefield_folder)
-        shutil.rmtree(cls.alf_folder.parent)
+        if cls._writable_tempdir is None:
+            shutil.rmtree(cls.widefield_folder, ignore_errors=True)
+            shutil.rmtree(cls.alf_folder.parent, ignore_errors=True)
+        super().tearDownClass()
 
 
 class TestWidefieldPreprocessAndCompress(base.IntegrationTest):
@@ -89,8 +95,11 @@ class TestWidefieldPreprocessAndCompress(base.IntegrationTest):
     data_folder = None
     alf_folder = None
 
+    required_files = ['widefield/widefieldChoiceWorld/CSK-im-011/2021-07-21/001']
+
     @classmethod
     def setUpClass(cls) -> None:
+        super().setUpClass()
         cls.session_path = cls.default_data_root().joinpath(
             'widefield', 'widefieldChoiceWorld', 'CSK-im-011', '2021-07-21', '001')
         if not cls.session_path.exists():
@@ -170,16 +179,20 @@ class TestWidefieldPreprocessAndCompress(base.IntegrationTest):
 
     @classmethod
     def tearDownClass(cls) -> None:
-        shutil.rmtree(cls.widefield_folder)
-        shutil.rmtree(cls.alf_folder.parent)
+        if cls._writable_tempdir is None:
+            shutil.rmtree(cls.widefield_folder, ignore_errors=True)
+            shutil.rmtree(cls.alf_folder.parent, ignore_errors=True)
+        super().tearDownClass()
 
 
 class TestWidefieldSync(base.IntegrationTest):
     patch = None  # A mock of get_video_meta
     video_meta = Bunch()
 
+    required_files = ['widefield/widefieldChoiceWorld/JC076/2022-02-04/002']
+
     def setUp(self):
-        self.session_path = self.default_data_root().joinpath(
+        self.session_path = self.data_path.joinpath(
             'widefield', 'widefieldChoiceWorld', 'JC076', '2022-02-04', '002')
         if not self.session_path.exists():
             return

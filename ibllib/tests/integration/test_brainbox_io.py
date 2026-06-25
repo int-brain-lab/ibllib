@@ -64,6 +64,8 @@ class TestReadChannels(unittest.TestCase):
 
 class TestReadSpikeSorting(IntegrationTest):
 
+    required_files = ['brainbox/io/spike_sorting']
+
     def setUp(self) -> None:
         self.root_path = self.data_path.joinpath('brainbox/io/spike_sorting')
         self.session_path = self.root_path.joinpath('SWC_054/2020-10-05/001')
@@ -198,6 +200,7 @@ class TestSessionLoader(IntegrationTest):
 
     @classmethod
     def setUpClass(cls) -> None:
+        super().setUpClass()
         cls.root_path = cls.default_data_root().joinpath('ephys', 'choice_world_init')
         if not cls.root_path.exists():
             return
@@ -208,8 +211,10 @@ class TestSessionLoader(IntegrationTest):
 
     @classmethod
     def tearDownClass(cls) -> None:
-        for file in cls.root_path.glob('*.pqt'):
-            file.unlink()
+        if cls._writable_tempdir is None and hasattr(cls, 'root_path') and cls.root_path.exists():
+            for file in cls.root_path.glob('*.pqt'):
+                file.unlink()
+        super().tearDownClass()
 
     def test_load_trials_data(self):
         expected = [
