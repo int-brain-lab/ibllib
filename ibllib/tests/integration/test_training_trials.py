@@ -46,6 +46,7 @@ class TestSessions(base.IntegrationTest):
     ]
 
     def setUp(self):
+        super().setUp()
         self.INIT_FOLDERS = list(map(self.data_path.joinpath, self.required_files))
         if not all(map(Path.exists, self.INIT_FOLDERS)):
             raise FileNotFoundError('missing fixure folders')

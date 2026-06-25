@@ -13,6 +13,7 @@ class TestEphysCheckList(base.IntegrationTest):
     required_files = ['ephys/sync']
 
     def setUp(self):
+        super().setUp()
         self.folder3a = self.data_path.joinpath('ephys/sync/sync_3A')
         self.folder3b = self.data_path.joinpath('ephys/sync/sync_3B')
         self.folder3b_single = self.data_path.joinpath('ephys/sync/sync_3B_single')

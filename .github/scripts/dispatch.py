@@ -75,6 +75,7 @@ job = Job.run(
         "INTEGRATION_DATA_DIR": INTEGRATION_DATA_DIR,
         # --- Coveralls auth + parallel grouping ---
         "COVERALLS_REPO_TOKEN": COVERALLS_TOKEN,
+        "COVERALLS_SERVICE_NAME": "github-actions",  # override auto-detection from GITHUB_ACTIONS=true
         "COVERALLS_PARALLEL": "true",
         "COVERALLS_FLAG_NAME": f"py{PY_VERSION}",   # label only; need not be unique
         # --- CI context forwarded for build-id correlation (see header) ---

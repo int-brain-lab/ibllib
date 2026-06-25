@@ -44,6 +44,7 @@ class TestWheelExtractionSimpleEphys(base.IntegrationTest):
     required_files = ['wheel/ephys/three_clockwise_revolutions']
 
     def setUp(self) -> None:
+        super().setUp()
         self.session_path = \
             self.data_path.joinpath('wheel', 'ephys', 'three_clockwise_revolutions')
         assert self.session_path.exists()
@@ -60,6 +61,7 @@ class TestWheelExtractionSessionEphys(base.IntegrationTest):
     required_files = ['wheel/ephys/sessions']
 
     def setUp(self) -> None:
+        super().setUp()
         self.root_path = self.data_path.joinpath('wheel', 'ephys', 'sessions')
         if not self.root_path.exists():
             return
@@ -84,6 +86,7 @@ class TestWheelExtractionTraining(base.IntegrationTest):
     required_files = ['wheel/training']
 
     def setUp(self) -> None:
+        super().setUp()
         self.root_path = self.data_path.joinpath('wheel', 'training')
         assert self.root_path.exists()
 

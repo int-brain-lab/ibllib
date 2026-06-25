@@ -21,6 +21,7 @@ from ibllib.tests.base import IntegrationTest, TEST_DB
 
 class TestVideoStreamer(IntegrationTest):
     def setUp(self) -> None:
+        super().setUp()
         self.one = ONE(**TEST_DB)
         self.eid, = self.one.search(subject='ZM_1743', number=1, date_range='2019-06-14')
 
@@ -94,6 +95,7 @@ class TestRegistration(IntegrationTest):
         cls.subject = ''.join(random.choices(string.ascii_letters, k=10))
 
     def setUp(self) -> None:
+        super().setUp()
         self.tempdir = TemporaryDirectory()
         self.session_path = Path(self.tempdir.name).joinpath(
             'Subjects_init', self.subject, *self.source_path.parts[-2:])

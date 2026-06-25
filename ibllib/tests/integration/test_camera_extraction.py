@@ -85,6 +85,7 @@ class TestTrainingCameraExtractor(base.IntegrationTest):
     required_files = ['camera/FMR007/2021-02-25/001', 'camera/ZFM-01867/2021-03-23/002']
 
     def setUp(self) -> None:
+        super().setUp()
         self.training_eid = '7082d576-4eb4-41dc-a16e-8a742829a83a'  # For reference
         self.session_path = self.data_path / 'camera' / 'FMR007' / '2021-02-25' / '001'
         self.n_frames = 107913  # Number of frames in video
@@ -244,6 +245,7 @@ class TestTrainingCameraExtractorNew(base.IntegrationTest):
     required_files = ['training/8.28.0/2025-06-12/002/*',]
 
     def setUp(self):
+        super().setUp()
         session_path = get_session_path(next(self.data_path.glob(self.required_files[0])))
         frame_data = raw.load_camera_frameData(session_path, camera='left')
         self.n_frames = len(frame_data)
@@ -282,6 +284,7 @@ class TestEphysCameraExtractor(base.IntegrationTest):
                       'Subjects_init/ZM_1098/2019-01-25/001/*.mp4']
 
     def setUp(self) -> None:
+        super().setUp()
         self.ephys_eid = '6c6983ef-7383-4989-9183-32b1a300d17a'
         self.session_path = self.data_path / 'camera' / 'SWC_054' / '2020-10-07' / '001'
         self.groom_session_path = self.data_path.joinpath('ephys', 'ephys_choice_world_task',
@@ -553,6 +556,7 @@ class TestCameraQC(base.IntegrationTest):
     ]
 
     def setUp(self) -> None:
+        super().setUp()
         self.incomplete = self.data_path.joinpath('Subjects_init', 'ZM_1098', '2019-01-25', '001')
         self.ephys = (
             '6c6983ef-7383-4989-9183-32b1a300d17a',
@@ -752,6 +756,7 @@ class TestWheelMotionNRG(base.IntegrationTest):
                       'camera/SWC_054/2020-10-07/001']
 
     def setUp(self) -> None:
+        super().setUp()
         real_eid = '6c6983ef-7383-4989-9183-32b1a300d17a'
         self.frames = np.load(self.data_path / 'camera' / f'{real_eid}_frame_samples.npy')
         self.one = ONE(**base.TEST_DB)
@@ -803,6 +808,7 @@ class TestWheelAlignment(base.IntegrationTest):
     required_files = ['training/CSHL_003/2019-04-05/001', 'ephys/choice_world_init/KS022/2019-12-10/001']
 
     def setUp(self) -> None:
+        super().setUp()
         self.training_folder = self.data_path.joinpath('training', 'CSHL_003', '2019-04-05', '001')
         self.ephys_folder = self.data_path.joinpath(
             'ephys', 'choice_world_init', 'KS022', '2019-12-10', '001')

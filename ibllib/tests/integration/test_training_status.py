@@ -15,6 +15,7 @@ class TestTrainingStatus(base.IntegrationTest):
 
     @classmethod
     def setUpClass(cls) -> None:
+        super().setUpClass()
         cls.subj_path = cls.data_path.joinpath(cls.required_files[0])
         print('Building ONE cache from filesystem...')
         cls.one = One.setup(cls.subj_path, silent=True)

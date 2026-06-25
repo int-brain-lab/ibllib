@@ -95,6 +95,7 @@ class TestLoadFixtures(base.IntegrationTest):
 
 class TestExtractPassivePeriods(base.IntegrationTest):
     def setUp(self):
+        super().setUp()
         self.root_folder = self.data_path.joinpath('ephys', 'passive_extraction')
         self.session_path = self.root_folder.joinpath('SWC_054', '2020-10-10', '001')
         if not self.root_folder.exists():
@@ -124,6 +125,7 @@ class TestExtractPassivePeriods(base.IntegrationTest):
 
 class TestExtractRFMapping(base.IntegrationTest):
     def setUp(self):
+        super().setUp()
         self.root_folder = self.data_path.joinpath('ephys', 'passive_extraction')
         self.session_path = self.root_folder.joinpath('SWC_054', '2020-10-10', '001')
         if not self.root_folder.exists():
@@ -141,6 +143,7 @@ class TestExtractRFMapping(base.IntegrationTest):
 
 class TestExtractTaskReplayComponents(base.IntegrationTest):
     def setUp(self):
+        super().setUp()
         self.root_folder = self.data_path.joinpath('ephys', 'passive_extraction')
         self.session_path = self.root_folder.joinpath('SWC_054', '2020-10-10', '001')
         if not self.root_folder.exists():
@@ -196,6 +199,7 @@ class TestExtractTaskReplayComponents(base.IntegrationTest):
 class TestExtractTaskReplay(base.IntegrationTest):
 
     def setUp(self):
+        super().setUp()
         self.root_folder = self.data_path.joinpath('ephys', 'passive_extraction')
         self.session_path = self.root_folder.joinpath('SWC_054', '2020-10-10', '001')
         if not self.root_folder.exists():
@@ -227,6 +231,7 @@ class TestExtractTaskReplay(base.IntegrationTest):
 
 class TestExtractReplayNoiseMissing(base.IntegrationTest):
     def setUp(self):
+        super().setUp()
         self.root_folder = self.data_path.joinpath('ephys', 'passive_extraction')
         self.session_path = self.root_folder.joinpath('KM_020', '2024-08-07', '001')
         if not self.root_folder.exists():
@@ -263,6 +268,7 @@ class TestEphysPassiveExtraction(base.IntegrationTest):
     required_files = ['ephys/passive_extraction/SWC_054/2020-10-10/001']
 
     def setUp(self) -> None:
+        super().setUp()
         self.root_folder = self.data_path.joinpath('ephys', 'passive_extraction')
         self.session_path = self.root_folder.joinpath('SWC_054', '2020-10-10', '001')
         if not self.root_folder.exists():
@@ -300,6 +306,7 @@ class TestChainedPassiveExtraction(base.IntegrationTest):
     required_files = ['ephys/passive_extraction/ZFM-05496/2022-12-08/001']
 
     def setUp(self) -> None:
+        super().setUp()
         self.root_folder = self.data_path.joinpath('ephys', 'passive_extraction')
         self.session_path = self.root_folder.joinpath('ZFM-05496', '2022-12-08', '001')
         if not self.session_path.exists():

@@ -67,6 +67,7 @@ class TestReadSpikeSorting(IntegrationTest):
     required_files = ['brainbox/io/spike_sorting']
 
     def setUp(self) -> None:
+        super().setUp()
         self.root_path = self.data_path.joinpath('brainbox/io/spike_sorting')
         self.session_path = self.root_path.joinpath('SWC_054/2020-10-05/001')
         print('Building ONE cache from filesystem...')
