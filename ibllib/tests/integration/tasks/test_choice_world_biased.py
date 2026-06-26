@@ -13,6 +13,7 @@ class BiasedTemplate(base.IntegrationTest):
     required_files = ['tasks/choice_world_biased/steinmetzlab/Subjects/NR_0020/2022-03-14/001']
 
     def setUp(self) -> None:
+        super().setUp()
         self.one = ONE(**base.TEST_DB, mode='local')
         self.session_path = self.data_path.joinpath(self.required_files[0])
 

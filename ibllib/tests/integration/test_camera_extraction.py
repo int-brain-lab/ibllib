@@ -83,6 +83,7 @@ def _save_qc_frames(qc, **kwargs):
 class TestTrainingCameraExtractor(base.IntegrationTest):
 
     required_files = ['camera/FMR007/2021-02-25/001', 'camera/ZFM-01867/2021-03-23/002']
+    _writable_scope = 'test'
 
     def setUp(self) -> None:
         super().setUp()
@@ -243,6 +244,7 @@ class TestTrainingCameraExtractorNew(base.IntegrationTest):
     normally the case. It has been added here to test the effect of decoupling camera start and first trial on the
     synchronization of the camera timestamps with the Bpod trials."""
     required_files = ['training/8.28.0/2025-06-12/002/*',]
+    _writable_scope = 'test'
 
     def setUp(self):
         super().setUp()
@@ -282,6 +284,7 @@ class TestEphysCameraExtractor(base.IntegrationTest):
     required_files = ['camera/SWC_054/2020-10-07/001',
                       'ephys/ephys_choice_world_task/ibl_witten_27/2021-01-21/001',
                       'Subjects_init/ZM_1098/2019-01-25/001/*.mp4']
+    _writable_scope = 'test'
 
     def setUp(self) -> None:
         super().setUp()
@@ -554,6 +557,7 @@ class TestCameraQC(base.IntegrationTest):
         'camera/7082d576-4eb4-41dc-a16e-8a742829a83a_frame_samples.npy',
         'camera/451bc9c0-113c-408e-a924-122ffe44306e_frame_samples.npy'
     ]
+    _writable_scope = 'test'
 
     def setUp(self) -> None:
         super().setUp()
@@ -754,6 +758,7 @@ class TestWheelMotionNRG(base.IntegrationTest):
 
     required_files = ['camera/6c6983ef-7383-4989-9183-32b1a300d17a_frame_samples.npy',
                       'camera/SWC_054/2020-10-07/001']
+    _writable_scope = 'test'
 
     def setUp(self) -> None:
         super().setUp()
@@ -806,6 +811,7 @@ class TestWheelMotionNRG(base.IntegrationTest):
 class TestWheelAlignment(base.IntegrationTest):
 
     required_files = ['training/CSHL_003/2019-04-05/001', 'ephys/choice_world_init/KS022/2019-12-10/001']
+    _writable_scope = 'test'
 
     def setUp(self) -> None:
         super().setUp()

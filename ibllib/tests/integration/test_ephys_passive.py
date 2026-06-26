@@ -266,6 +266,7 @@ class TestExtractReplayNoiseMissing(base.IntegrationTest):
 class TestEphysPassiveExtraction(base.IntegrationTest):
 
     required_files = ['ephys/passive_extraction/SWC_054/2020-10-10/001']
+    _writable_scope = 'test'
 
     def setUp(self) -> None:
         super().setUp()
@@ -304,6 +305,7 @@ class TestChainedPassiveExtraction(base.IntegrationTest):
      """
 
     required_files = ['ephys/passive_extraction/ZFM-05496/2022-12-08/001']
+    _writable_scope = 'test'
 
     def setUp(self) -> None:
         super().setUp()

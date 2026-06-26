@@ -13,6 +13,7 @@ from ibllib.tests import base
 class TestEphysCheckList(base.IntegrationTest):
 
     required_files = ['ephys/ttl_check']
+    _writable_scope = 'test'
 
     def setUp(self):
         super().setUp()

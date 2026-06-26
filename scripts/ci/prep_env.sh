@@ -6,6 +6,9 @@ set -euo pipefail
 
 : "${PY_VERSION:?PY_VERSION must be set}"
 
+echo "Installing system dependencies"
+apt-get update -qq && apt-get install -y -qq ffmpeg
+
 echo "Installing uv"
 pip install uv
 
@@ -16,7 +19,7 @@ uv venv --python "${PY_VERSION}" /workspace/venv
 source /workspace/venv/bin/activate
 
 echo "Installing project + coverage tooling"
-uv pip install -e .
+uv pip install -e ".[wfield]"
 uv pip install coverage coveralls
 
 echo "Env ready ($(python --version))"

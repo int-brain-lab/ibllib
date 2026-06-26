@@ -65,6 +65,7 @@ class TestReadChannels(unittest.TestCase):
 class TestReadSpikeSorting(IntegrationTest):
 
     required_files = ['brainbox/io/spike_sorting']
+    _writable_scope = 'test'
 
     def setUp(self) -> None:
         super().setUp()
@@ -74,10 +75,6 @@ class TestReadSpikeSorting(IntegrationTest):
         self.one = One.setup(self.root_path, silent=True)
         self.pname = 'probe01'
         self.eid = self.one.path2eid(self.session_path)
-
-    def tearDown(self) -> None:
-        for file in self.root_path.glob('*.pqt'):
-            file.unlink()
 
     def _check(self, spike_times, spike_sorter='pykilosort'):
         if spike_sorter == 'pykilosort':

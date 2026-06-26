@@ -16,6 +16,7 @@ class SyncTemplate(base.IntegrationTest):
     _writable_scope = 'test'
     
     def setUp(self) -> None:
+        super().setUp()
         self.session_path = self.data_path.joinpath(self.required_files[0])
         self.widefield_path = self.session_path.joinpath('raw_widefield_data')
         self.kwargs = dict(sync_collection='raw_widefield_data', sync='nidq', sync_namespace='spikeglx', one=ONE(**base.TEST_DB))

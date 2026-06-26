@@ -377,6 +377,7 @@ class TestMesoscopeSync(base.IntegrationTest):
     _writable_scope = 'test'
 
     def setUp(self) -> None:
+        super().setUp()
         self.one = ONE(**base.TEST_DB)
         data_root = self.default_data_root()
         self.session_path_0 = data_root.joinpath('mesoscope', 'test', '2023-02-17', '002')

@@ -128,7 +128,7 @@ class TestEphysHabituationTaskExtraction(TestEphysTaskExtraction):
 
     # Expect 'alf', 'raw_ephys_data', 'raw_behavior_data' collections in each.
     required_files = [
-        'ephys/habituation_choice_world_task/MM015/2023-10-05/002/*',  # normal session
+        'ephys/habituation_choice_world_task/MM015/2023-10-05/002',  # normal session
     ]
 
     trials_task = HabituationTrialsNidq

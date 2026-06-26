@@ -88,13 +88,22 @@ class IntegrationTest(unittest.TestCase):
     Note: test classes using _writable_scope = 'test' must call super().setUp() / super().tearDown()."""
 
     @classmethod
+    def _required_sources(cls):
+        """Yield actual source paths for required_files, expanding glob patterns."""
+        for rf in cls.required_files:
+            if any(c in rf for c in '*?['):
+                yield from cls.data_path.glob(rf)
+            else:
+                yield cls.data_path / rf
+
+    @classmethod
     def setUpClass(cls):
         super().setUpClass()
         cls.data_path = cls.default_data_root()
         if not INTEGRATION_DATA_WRITABLE and cls.required_files and cls._writable_scope == 'class':
-            _, cls._writable_tempdir = make_sym_links(map(cls.data_path.joinpath, cls.required_files))
+            _, cls._writable_tempdir = make_sym_links(cls._required_sources())
             cls.data_path = Path(cls._writable_tempdir.name)
-            
+
     @classmethod
     def tearDownClass(cls):
         if cls._writable_tempdir is not None:

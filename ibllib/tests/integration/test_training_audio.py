@@ -10,6 +10,7 @@ from ibllib.tests import base
 class TestAudioExtraction(base.IntegrationTest):
 
     required_files = ['Subjects_init/ZM_1085/2019-07-01/002/raw_behavior_data']
+    _writable_scope = 'test'
 
     def setUp(self):
         super().setUp()
