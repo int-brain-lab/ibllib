@@ -13,7 +13,7 @@ _logger = logging.getLogger('ibllib')
 
 class TestAudioCompress(base.IntegrationTest):
     def setUp(self) -> None:
-        self.data_path = self.data_path.joinpath('ephys', 'ephys_video_init', 'ZM_1735', '2019-08-01', '001', 'raw_behavior_data')
+        self.data_path = self.default_data_root().joinpath('ephys', 'ephys_video_init', 'ZM_1735', '2019-08-01', '001', 'raw_behavior_data')
         self.temp_dir = Path(tempfile.TemporaryDirectory().name)
         self.session_path = self.temp_dir.joinpath('ZM_1735', '2019-08-01', '001')
         shutil.copytree(self.data_path, self.session_path.joinpath('raw_behavior_data'))
@@ -34,7 +34,7 @@ class TestAudioCompress(base.IntegrationTest):
 class TestAudioSync(base.IntegrationTest):
 
     def setUp(self) -> None:
-        self.data_path = self.data_path.joinpath('ephys', 'ephys_video_init', 'ZM_1735', '2019-08-01', '001', 'raw_behavior_data')
+        self.data_path = self.default_data_root().joinpath('ephys', 'ephys_video_init', 'ZM_1735', '2019-08-01', '001', 'raw_behavior_data')
         self.temp_dir = Path(tempfile.TemporaryDirectory().name)
         self.session_path = self.temp_dir.joinpath('ZM_1735', '2019-08-01', '001')
         shutil.copytree(self.data_path, self.session_path.joinpath('raw_behavior_data'))

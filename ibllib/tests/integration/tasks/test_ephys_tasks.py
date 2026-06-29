@@ -21,7 +21,7 @@ _logger = logging.getLogger('ibllib')
 class EphysTemplate(base.IntegrationTest):
 
     def setUp(self) -> None:
-        self.data_path = self.data_path.joinpath('ephys', 'ephys_np2', 'raw_ephys_data')
+        self.data_path = self.default_data_root().joinpath('ephys', 'ephys_np2', 'raw_ephys_data')
         tmpdir = tempfile.TemporaryDirectory()
         self.addCleanup(tmpdir.cleanup)
         self.temp_dir = Path(tmpdir.name)

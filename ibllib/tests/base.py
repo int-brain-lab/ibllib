@@ -60,6 +60,39 @@ class TimeLoggingTestRunner(TextTestRunner):
         return result
 
 
+class _DataPathDescriptor:
+    """Descriptor that makes IntegrationTest.data_path work on both classes and instances.
+
+    Accessing cls.data_path in a classmethod (e.g. setUpClass) returns the same computed
+    value as self.data_path does in an instance method, so subclasses never need to call
+    default_data_root() directly.
+
+    Priority (highest to lowest):
+      1. Instance-level temp dir  (_writable_scope='test', set in setUp)
+      2. Class-level temp dir     (_writable_scope='class', set in setUpClass)
+      3. Explicit assignment      (e.g. self.data_path = self.data_path / subdir)
+      4. Configured data root     (INTEGRATION_DATA_DIR or ibl_ci params)
+    """
+
+    def __get__(self, obj, cls=None):
+        if obj is None:
+            # Class-level access (cls.data_path): skip instance-level check
+            if getattr(cls, '_writable_tempdir', None) is not None:
+                return Path(cls._writable_tempdir.name)
+            return cls.default_data_root()
+        # Instance-level access (self.data_path)
+        if obj.__dict__.get('_writable_tempdir') is not None:
+            return Path(obj.__dict__['_writable_tempdir'].name)
+        if type(obj)._writable_tempdir is not None:
+            return Path(type(obj)._writable_tempdir.name)
+        if '_data_path_explicit' in obj.__dict__:
+            return obj.__dict__['_data_path_explicit']
+        return type(obj).default_data_root()
+
+    def __set__(self, obj, value):
+        obj.__dict__['_data_path_explicit'] = value
+
+
 @unittest.skipUnless(
     INTEGRATION_DATA_DIR and os.path.isdir(INTEGRATION_DATA_DIR),
     "Integration data not available (set INTEGRATION_DATA_DIR to enable).",
@@ -87,6 +120,11 @@ class IntegrationTest(unittest.TestCase):
     (e.g. multiple test methods that call backup_alf on the same session).
     Note: test classes using _writable_scope = 'test' must call super().setUp() / super().tearDown()."""
 
+    data_path = _DataPathDescriptor()
+    """Active data root. Resolves to the writable temp dir when active, else the configured root.
+    Works on both classes (cls.data_path in setUpClass) and instances (self.data_path in tests).
+    Subclasses may narrow it: self.data_path = self.data_path / subdir."""
+
     @classmethod
     def _required_sources(cls):
         """Yield actual source paths for required_files, expanding glob patterns."""
@@ -99,10 +137,8 @@ class IntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.data_path = cls.default_data_root()
         if not INTEGRATION_DATA_WRITABLE and cls.required_files and cls._writable_scope == 'class':
             _, cls._writable_tempdir = make_sym_links(cls._required_sources())
-            cls.data_path = Path(cls._writable_tempdir.name)
 
     @classmethod
     def tearDownClass(cls):
@@ -113,10 +149,8 @@ class IntegrationTest(unittest.TestCase):
 
     def setUp(self):
         super().setUp()
-        self.data_path = self.default_data_root()  # sync instance attr with class-level setting from setUpClass
         if not INTEGRATION_DATA_WRITABLE and self.required_files and self._writable_scope == 'test':
             _, self._writable_tempdir = make_sym_links(self._required_sources())
-            self.data_path = Path(self._writable_tempdir.name)
 
     def tearDown(self):
         if getattr(self, '_writable_tempdir', None) is not None and self._writable_scope == 'test':
@@ -134,7 +168,6 @@ class IntegrationTest(unittest.TestCase):
         """
         super().__init__(*args, **kwargs)
 
-        self.data_path = self.default_data_root()
         if type(self)._writable_tempdir is None and self._writable_scope != 'test':
             data_present = (self.data_path.exists() and
                             self.data_path.is_dir() and
@@ -147,11 +180,10 @@ class IntegrationTest(unittest.TestCase):
 
     @classmethod
     def default_data_root(cls):
-        """Returns the path to the integration data.
+        """Returns the configured data root (class-level temp dir if active, else INTEGRATION_DATA_DIR).
 
-        When INTEGRATION_DATA_WRITABLE=0 and setUpClass has created a writable mirror, returns
-        the writable temp dir so all path construction automatically uses the writable location.
-        Otherwise returns the configured data root (INTEGRATION_DATA_DIR or ibl_ci params).
+        For instance-level path resolution (e.g. in setUp or test methods), use self.data_path
+        instead — it also checks for instance-level temp dirs created by _writable_scope='test'.
         """
         if getattr(cls, '_writable_tempdir', None) is not None:
             return Path(cls._writable_tempdir.name)

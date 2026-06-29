@@ -378,7 +378,6 @@ class TestMesoscopeSync(base.IntegrationTest):
     _writable_scope = 'class'
 
     def setUp(self) -> None:
-        super().setUp()
         self.one = ONE(**base.TEST_DB)
         self.session_path_0 = self.data_path.joinpath('mesoscope', 'test', '2023-02-17', '002')
         self.session_path_1 = self.data_path.joinpath('mesoscope', 'test', '2023-03-03', '002')
@@ -554,12 +553,10 @@ class TestMesoscopeRegisterSnapshots(base.IntegrationTest):
 
 class TestMesoscopePreprocessRename(base.IntegrationTest):
     session_path = None
-    required_files = ['mesoscope/SP037/2023-03-23/002']
-    _writable_scope = 'test'
 
     """Test for MesoscopePreprocess task."""
     def setUp(self) -> None:
-        self.session_path = self.data_path.joinpath(self.required_files[0])
+        self.session_path = self.default_data_root().joinpath('mesoscope', 'SP037', '2023-03-23', '002')
         self.alf_path = self.session_path.joinpath('suite2p', 'plane2')
         self.rename_dict = {
             'F.npy': 'mpci.ROIActivityF.npy',
@@ -654,7 +651,7 @@ class TestMesoscopePreprocess(base.IntegrationTest):
 
     """Test for MesoscopePreprocess task."""
     def setUp(self) -> None:
-        self.session_path = self.default_data_root().joinpath('mesoscope', 'SP053', '2024-02-07', '001')
+        self.session_path = self.data_path.joinpath('mesoscope', 'SP053', '2024-02-07', '001')
         # Copy files to temp dir
         # NB: suite2p dir now in session_path, not alf folder. This shouldn't affect these tests
         self.one = ONE(**base.TEST_DB)

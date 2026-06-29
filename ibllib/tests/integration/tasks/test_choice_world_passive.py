@@ -36,7 +36,7 @@ class TestPassiveTrials(base.IntegrationTest):
 
     def setUp(self) -> None:
         super().setUp()
-        self.session_path = self.default_data_root().joinpath(self.required_files[0])
+        self.session_path = self.data_path.joinpath(self.required_files[0])
         self.alf_path = self.session_path.joinpath('alf')
         self.one = ONE(**base.TEST_DB, mode='local')
 
