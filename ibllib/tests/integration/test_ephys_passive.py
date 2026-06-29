@@ -94,6 +94,9 @@ class TestLoadFixtures(base.IntegrationTest):
 
 
 class TestExtractPassivePeriods(base.IntegrationTest):
+
+    required_files = ['ephys/passive_extraction/SWC_054/2020-10-10/001']
+
     def setUp(self):
         super().setUp()
         self.root_folder = self.data_path.joinpath('ephys', 'passive_extraction')
@@ -124,6 +127,9 @@ class TestExtractPassivePeriods(base.IntegrationTest):
 
 
 class TestExtractRFMapping(base.IntegrationTest):
+
+    required_files = ['ephys/passive_extraction/SWC_054/2020-10-10/001']
+
     def setUp(self):
         super().setUp()
         self.root_folder = self.data_path.joinpath('ephys', 'passive_extraction')
@@ -142,6 +148,9 @@ class TestExtractRFMapping(base.IntegrationTest):
 
 
 class TestExtractTaskReplayComponents(base.IntegrationTest):
+
+    required_files = ['ephys/passive_extraction/SWC_054/2020-10-10/001']
+
     def setUp(self):
         super().setUp()
         self.root_folder = self.data_path.joinpath('ephys', 'passive_extraction')

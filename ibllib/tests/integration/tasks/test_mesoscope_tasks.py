@@ -38,6 +38,7 @@ class TestTimelineTrials(base.IntegrationTest):
     _writable_scope = 'test'
 
     def setUp(self) -> None:
+        super().setUp()
         self.one = ONE(**base.TEST_DB)
         self.session_path = self.data_path.joinpath(self.required_files[0])
 
@@ -374,15 +375,14 @@ class TestMesoscopeSync(base.IntegrationTest):
     # session_path_1 = None  # Multiple imaging bouts
     # session_path_2 = None  # Multiple depths
     required_files = ['mesoscope/test/2023-02-17/002', 'mesoscope/test/2023-03-03/002', 'mesoscope/SP061/2025-02-26/001']
-    _writable_scope = 'test'
+    _writable_scope = 'class'
 
     def setUp(self) -> None:
         super().setUp()
         self.one = ONE(**base.TEST_DB)
-        data_root = self.default_data_root()
-        self.session_path_0 = data_root.joinpath('mesoscope', 'test', '2023-02-17', '002')
-        self.session_path_1 = data_root.joinpath('mesoscope', 'test', '2023-03-03', '002')
-        self.session_path_2 = data_root.joinpath('mesoscope', 'SP061', '2025-02-26', '001')
+        self.session_path_0 = self.data_path.joinpath('mesoscope', 'test', '2023-02-17', '002')
+        self.session_path_1 = self.data_path.joinpath('mesoscope', 'test', '2023-03-03', '002')
+        self.session_path_2 = self.data_path.joinpath('mesoscope', 'SP061', '2025-02-26', '001')
 
     def test_single_depth(self):
         """Test for MesoscopeSync with single depth, single bout."""

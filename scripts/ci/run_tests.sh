@@ -15,7 +15,7 @@ export INTEGRATION_DATA_WRITABLE=0  # s3 data connection is read only, so integr
 # INTEGRATION_DATA_DIR is set by CI (Step 3) -> integration tests run.
 # In Step 1 it's unset -> integration tests auto-skip, unit tests run.
 set +e
-coverage run --rcfile "scripts/ci/.coveragerc" -m unittest discover -t . -p "test_*.py"
+coverage run --rcfile "scripts/ci/.coveragerc" -m unittest discover -v -t . -p "test_*.py"
 TEST_EXIT=$?
 set -e
 

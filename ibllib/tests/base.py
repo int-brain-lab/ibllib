@@ -115,7 +115,7 @@ class IntegrationTest(unittest.TestCase):
         super().setUp()
         self.data_path = self.default_data_root()  # sync instance attr with class-level setting from setUpClass
         if not INTEGRATION_DATA_WRITABLE and self.required_files and self._writable_scope == 'test':
-            _, self._writable_tempdir = make_sym_links(map(self.data_path.joinpath, self.required_files))
+            _, self._writable_tempdir = make_sym_links(self._required_sources())
             self.data_path = Path(self._writable_tempdir.name)
 
     def tearDown(self):
