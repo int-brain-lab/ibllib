@@ -21,5 +21,6 @@ source /workspace/venv/bin/activate
 echo "Installing project + coverage tooling"
 uv pip install -e ".[wfield]"
 uv pip install coverage coveralls
+uv pip install git+https://github.com/int-brain-lab/project_extraction.git
 
 echo "Env ready ($(python --version))"

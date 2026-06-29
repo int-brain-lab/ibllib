@@ -376,7 +376,6 @@ def get_sync_tasks(acquisition_description, **kwargs):
         sync_tasks[f'SyncPulses_{sync}'] = type(f'SyncPulses_{sync}', (etasks.EphysSyncPulses,), {})(
             **kwargs, **sync_kwargs, parents=[sync_tasks['SyncRegisterRaw']]
         )
-        sync_tasks = [sync_tasks[f'SyncPulses_{sync}']]
     elif sync_label == 'timeline':
         sync_tasks['SyncRegisterRaw'] = type('SyncRegisterRaw', (stasks.SyncRegisterRaw,), {})(**kwargs, **sync_kwargs)
     elif sync_label == 'nidq':
@@ -384,7 +383,6 @@ def get_sync_tasks(acquisition_description, **kwargs):
         sync_tasks[f'SyncPulses_{sync}'] = type(f'SyncPulses_{sync}', (stasks.SyncPulses,), {})(
             **kwargs, **sync_kwargs, parents=[sync_tasks['SyncRegisterRaw']]
         )
-        sync_tasks = [sync_tasks[f'SyncPulses_{sync}']]
     elif sync_label == 'tdms':
         sync_tasks['SyncRegisterRaw'] = type('SyncRegisterRaw', (stasks.SyncRegisterRaw,), {})(**kwargs, **sync_kwargs)
     elif sync_label == 'bpod':
@@ -458,7 +456,7 @@ def get_ephys_tasks(acquisition_description, sync_tasks, **kwargs):
     return ephys_tasks
 
 
-def get_video_tasks(acquisition_description, sync_tasks, **kwargs):
+def get_video_tasks(acquisition_description, sync_tasks, behavior_tasks=None, **kwargs):
     devices = acquisition_description.get('devices', {})
     sync, _, _, sync_kwargs = _get_sync_config(acquisition_description)
     video_tasks = OrderedDict()
@@ -499,11 +497,9 @@ def get_video_tasks(acquisition_description, sync_tasks, **kwargs):
             video_tasks[tn] = type((tn := 'DLC'), (vtasks.DLC,), {})(**kwargs, **video_kwargs, parents=[dlc_parent_task])
 
             # The PostDLC plots require a trials object for QC
-            # Find the first task that outputs a trials.table dataset
-            trials_task = (
-                t for t in video_tasks.values() if any('trials.table' in f[0] for f in t.signature.get('output_files', []))
-            )
-            if trials_task := next(trials_task, None):
+            # Find the first active trials task that outputs a trials.table dataset
+            trials_task = next(filter(is_active_trials_task, (behavior_tasks or {}).values()), None)
+            if trials_task:
                 parents = [video_tasks['DLC'], video_tasks[f'VideoSyncQC_{sync}'], trials_task]
                 trials_collection = getattr(trials_task, 'output_collection', 'alf')
             else:
@@ -690,17 +686,20 @@ def make_pipeline(session_path, **pkwargs):
     # Syncing tasks
     sync_tasks = get_sync_tasks(acquisition_description, **kwargs)
     tasks.update(sync_tasks)
+    # Only nidq SyncPulses tasks are parents for downstream tasks; SyncRegisterRaw (timeline/tdms)
+    # is not a prerequisite for trials/video/ephys tasks.
+    sync_parent_tasks = [t for name, t in sync_tasks.items() if name.startswith('SyncPulses')]
 
     # Behavior tasks
-    behavior_tasks = _get_trials_tasks(session_path, acquisition_description, sync_tasks=sync_tasks, one=pkwargs.get('one'))
+    behavior_tasks = _get_trials_tasks(session_path, acquisition_description, sync_tasks=sync_parent_tasks, one=pkwargs.get('one'))
     tasks.update(behavior_tasks)
 
     # Ephys tasks
-    ephys_tasks = get_ephys_tasks(acquisition_description, sync_tasks, **kwargs)
+    ephys_tasks = get_ephys_tasks(acquisition_description, sync_parent_tasks, **kwargs)
     tasks.update(ephys_tasks)
 
     # Video tasks
-    video_tasks = get_video_tasks(acquisition_description, sync_tasks, **kwargs)
+    video_tasks = get_video_tasks(acquisition_description, sync_parent_tasks, behavior_tasks=behavior_tasks, **kwargs)
     tasks.update(video_tasks)
 
     # Audio tasks
@@ -708,7 +707,7 @@ def make_pipeline(session_path, **pkwargs):
     tasks.update(audio_tasks)
 
     # Widefield tasks
-    wfield_tasks = get_wfield_tasks(acquisition_description, sync_tasks, **kwargs)
+    wfield_tasks = get_wfield_tasks(acquisition_description, sync_parent_tasks, **kwargs)
     tasks.update(wfield_tasks)
 
     # Mesoscope tasks
