@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from ibldsp.utils import sync_timestamps
+from ibldsp.sync import sync_timestamps
 
 import ibllib.io.raw_data_loaders as rawio
 from ibllib.io.extractors import ephys_fpga

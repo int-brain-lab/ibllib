@@ -464,11 +464,11 @@ class TestEphysCameraExtractor(base.IntegrationTest):
 
     def test_get_video_length(self):
         # Verify using URL
-        url = (one.params.get().HTTP_DATA_SERVER +
-               '/mainenlab/Subjects/ZM_1743/2019-06-14/001/raw_video_data/'
-               '_iblrig_leftCamera.raw.71cfeef2-2aa5-46b5-b88f-ca07e3d92474.mp4')
+        url = (one.params.default().HTTP_DATA_SERVER +
+               '/mainenlab/Subjects/ZM_3003/2020-07-28/001/raw_video_data/'
+               '_iblrig_leftCamera.raw.fc670ca4-b693-41ea-976e-a29710d9932a.mp4')
         length = camio.get_video_length(url)
-        self.assertEqual(length, 144120)
+        self.assertEqual(length, 249229)
 
         # Verify using local path
         video_path = next(
@@ -616,7 +616,7 @@ class TestCameraQC(base.IntegrationTest):
         video_path = session_path.joinpath('raw_video_data', '_iblrig_leftCamera.raw.mp4')
         if not video_path.exists():
             video_path.touch()
-            self.addCleanup(video_path.unlink)
+            self.addCleanup(video_path.unlink, missing_ok=True)
         qc = camQC.run_all_qc(session_path, cameras=('left',), stream=False, update=False, one=one,
                               n_samples=n_samples, extract_times=True)
         self.assertIsInstance(qc, dict)
@@ -723,12 +723,17 @@ class TestCameraQC(base.IntegrationTest):
         task_collection = 'raw_task_data_00'
         shutil.copytree(session_path.joinpath('raw_behavior_data'),
                         session_path.joinpath(task_collection))
-        self.addCleanup(shutil.rmtree, session_path.joinpath(task_collection))
+        self.addCleanup(shutil.rmtree, session_path.joinpath(task_collection), ignore_errors=True)
         # Second, create and experiment description file
         sess_params = acquisition_description_legacy_session(session_path, save=False)
         video_meta = {'fps': 80, 'width': 640, 'height': 512}
         sess_params['devices']['cameras']['left'].update(video_meta)
         sess_params['sync'] = {'bpod': {'collection': task_collection}}  # Change to bpod sync
+        # remove any existing symlink to the description file (may be non-writable in the test environment)
+        desc_file = session_path.joinpath('_ibl_experiment.description.yaml')
+        if desc_file.exists() and desc_file.is_symlink():
+            desc_file.unlink()
+        # Write the session description file to the session path and ensure it is cleaned up after the test
         self.addCleanup(session_params.write_params(session_path, sess_params).unlink)
         # Check load data method
         qc = CameraQC(session_path, camera='left', stream=False, one=self.one, n_samples=0)

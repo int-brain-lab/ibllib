@@ -44,6 +44,7 @@ from packaging import version
 
 import spikeglx
 import ibldsp.utils
+from ibldsp.sync import sync_timestamps
 import one.alf.io as alfio
 from one.alf.path import filename_parts
 from iblutil.util import Bunch
@@ -855,7 +856,7 @@ class FpgaTrials(extractors_base.BaseExtractor):
             bpod_start = self.bpod_trials['intervals'][:, 0]
             if len(t_trial_start) > len(bpod_start) / 2:  # if least half the trial start TTLs detected
                 _logger.warning('Attempting to get protocol period from aligning trial start TTLs')
-                fcn, *_ = ibldsp.utils.sync_timestamps(bpod_start, t_trial_start)
+                fcn, *_ = sync_timestamps(bpod_start, t_trial_start)
                 buffer = 2.5  # the number of seconds to include before/after task
                 start, end = fcn(self.bpod_trials['intervals'].flat[[0, -1]])
                 # NB: The following was added by k1o0 in commit b31d14e5113180b50621c985b2f230ba84da1dd3
@@ -1392,7 +1393,7 @@ class FpgaTrials(extractors_base.BaseExtractor):
                 bpod_fpga_timestamps[i] = trials[sync_field]
 
         # Sync the two timestamps
-        fcn, drift, ibpod, ifpga = ibldsp.utils.sync_timestamps(*bpod_fpga_timestamps, return_indices=True)
+        fcn, drift, ibpod, ifpga = sync_timestamps(*bpod_fpga_timestamps, return_indices=True)
 
         # If it's drifting too much throw warning or error
         _logger.info('N trials: %i bpod, %i FPGA, %i merged, sync %.5f ppm', *map(len, bpod_fpga_timestamps), len(ibpod), drift)

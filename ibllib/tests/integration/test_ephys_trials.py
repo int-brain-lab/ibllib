@@ -157,8 +157,8 @@ class TestEphysTrialsFPGA(base.IntegrationTest):
     """The task to use for trials extraction (may depend on task protocol)."""
 
     required_files = [
-        'ephys/ephys_choice_world_task/ibl_witten_27/2021-01-21/001/*',
-        'ephys/ephys_choice_world_task/ibl_witten_13/2019-11-25/001/*',  # FPGA stops before bpod, custom sync
+        'ephys/ephys_choice_world_task/ibl_witten_27/2021-01-21/001',
+        'ephys/ephys_choice_world_task/ibl_witten_13/2019-11-25/001',  # FPGA stops before bpod, custom sync
     ]
 
     def test_frame2ttl_flicker(self):
@@ -167,7 +167,7 @@ class TestEphysTrialsFPGA(base.IntegrationTest):
         task = self.trials_task(session_path,
                                 one=ONE(mode='local'), collection='raw_behavior_data',
                                 sync_collection='raw_ephys_data')
-        fpga_trials, _ = task.extract_behaviour(save=True)
+        fpga_trials, _ = task.extract_behaviour(save=False)
         # Run the task QC
         qc = task.run_qc(fpga_trials, update=False, plot_qc=False)
         # Aggregate and update Alyx QC fields

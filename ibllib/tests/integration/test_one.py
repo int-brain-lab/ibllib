@@ -22,8 +22,8 @@ from ibllib.tests.base import IntegrationTest, TEST_DB
 class TestVideoStreamer(IntegrationTest):
     def setUp(self) -> None:
         super().setUp()
-        self.one = ONE(**TEST_DB)
-        self.eid, = self.one.search(subject='ZM_1743', number=1, date_range='2019-06-14')
+        self.one = ONE(base_url='https://openalyx.internationalbrainlab.org', silent=True)
+        self.eid, = self.one.search(subject='ZM_3003', number=1, date_range='2020-07-28')
 
     def test_video_streamer(self):
         dset = self.one.alyx.rest('datasets', 'list',
@@ -33,7 +33,7 @@ class TestVideoStreamer(IntegrationTest):
         vs = VideoStreamer(url)
         f, im = vs.get_frame(frame_id)
         assert f
-        assert vs.total_frames == 144120
+        assert vs.total_frames == 249229
         # Test with data set dict
         vs = VideoStreamer(dset)
         f, im2 = vs.get_frame(frame_id)

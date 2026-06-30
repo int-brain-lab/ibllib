@@ -7,7 +7,6 @@ from pathlib import Path
 import json
 
 import numpy as np
-import numpy.testing
 
 import ibllib.io.video as vidio
 from one.api import ONE
@@ -93,8 +92,8 @@ class TestVideoIO(base.IntegrationTest):
         self.assertEqual(meta.duration.total_seconds(), 2639.616667)
 
         # Check with remote path
-        one = ONE(**base.TEST_DB)
-        dset = one.alyx.rest('datasets', 'list', session='a41019f8-e430-473b-b22c-bb740dbecc33',
+        one = ONE(base_url='https://openalyx.internationalbrainlab.org', silent=True)
+        dset = one.alyx.rest('datasets', 'list', session='fe1fd79f-b051-411f-a0a9-2530a02cc78d',
                              name='_iblrig_leftCamera.raw.mp4', exists=True)[0]
         video_url = next(fr['data_url'] for fr in dset['file_records'] if fr['data_url'])
         meta = vidio.get_video_meta(video_url, one=one)

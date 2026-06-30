@@ -44,6 +44,9 @@ class TestEphysCheckList(base.IntegrationTest):
 
     def test_checklist_empty_folder(self):
         ses_path = self.init_folder / 'empty'
+        # Ensure the folder structure exists for the test
+        for subfolder in ['probe00', 'probe01']:
+            ses_path.joinpath(subfolder).mkdir(parents=True, exist_ok=True)
         with self.assertRaises(FileNotFoundError):
             ibllib.ephys.ephysqc.validate_ttl_test(ses_path)
 
