@@ -20,8 +20,6 @@ class TestEphysCheckList(base.IntegrationTest):
         self.init_folder = self.data_path.joinpath('ephys', 'ttl_check')
         if not self.init_folder.exists():
             return
-        for sf in self.init_folder.joinpath('ttl_3B_single').rglob('_spikeglx_sync.*.npy'):
-            sf.unlink()
 
     def test_checklist_mock_3B_single(self):
         ses_path = self.init_folder / 'ttl_3B_single'
@@ -48,3 +46,9 @@ class TestEphysCheckList(base.IntegrationTest):
         ses_path = self.init_folder / 'empty'
         with self.assertRaises(FileNotFoundError):
             ibllib.ephys.ephysqc.validate_ttl_test(ses_path)
+
+    def tearDown(self):
+        # Remove any generated *.timestamps.npy and *.sync.npy files.
+        for sf in self.init_folder.rglob('*g0_t0.imec*.npy'):
+            sf.unlink()
+        return super().tearDown()

@@ -116,7 +116,7 @@ def version3A(ses_path, display=True, type='smooth', tol=2.1, probe_names=None):
 
 def version3B(ses_path, display=True, type=None, tol=2.5, probe_names=None):
     """
-    From a session path with _spikeglx_sync arrays extraccted, locate ephys files for 3A and
+    From a session path with _spikeglx_sync arrays extracted, locate ephys files for 3A and
      outputs one sync.timestamps.probeN.npy file per acquired probe. By convention the reference
      probe is the one with the most synchronisation pulses.
      Assumes the _spikeglx_sync datasets are already extracted from binary data

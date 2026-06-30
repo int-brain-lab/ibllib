@@ -14,13 +14,17 @@ export INTEGRATION_DATA_WRITABLE=0  # s3 data connection is read only, so integr
 
 # INTEGRATION_DATA_DIR is set by CI (Step 3) -> integration tests run.
 # In Step 1 it's unset -> integration tests auto-skip, unit tests run.
+if [ -z "${COVERALLS_REPO_TOKEN:-}" ]; then
+    echo "COVERALLS_REPO_TOKEN not set!!"
+fi
 set +e
 coverage run --rcfile "scripts/ci/.coveragerc" -m unittest discover -v -t . -p "test_*.py"
 TEST_EXIT=$?
 set -e
 
 coverage report || true
-
+# Set service name
+COVERALLS_SERVICE_NAME="github-actions"  # override auto-detection from GITHUB_ACTIONS=true
 echo "Reporting partial coverage to Coveralls (parallel)"
 coveralls --service=github-actions || echo "coveralls upload failed (non-fatal)"
 

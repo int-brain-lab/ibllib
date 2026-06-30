@@ -1,6 +1,4 @@
 import logging
-import shutil
-import tempfile
 import unittest.mock
 
 import pandas as pd
