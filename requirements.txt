@@ -1,18 +1,27 @@
 # ibl libraries
-ONE-api>=3.0.0
+ONE-api>=3.4.2
 boto3
 click>=7.0.0
 colorlog>=4.0.2
 flake8>=3.7.8
 globus-sdk>=4.0.0
 graphviz
+ibl-neuropixel>=1.10.0
+ibl-photometry>=0.3.2
+ibl-style
+iblatlas>=0.5.3
+iblqt>=0.8.2
+iblutil>=1.13.0
 imagecodecs  # used to convert tif snapshots to png when registering mesoscope snapshots (also requires skimage)
 matplotlib>=3.0.3
+mtscomp>=1.0.1
 nptdms
 numba>=0.56
 numpy>=1.18
 opencv-python-headless
-pandas
+pandas<3.0  # temporary freeze while repos get up to date
+phylib>=2.6.3
+psychofit
 pyarrow
 pynrrd>=0.4.0
 pyqt5
@@ -22,19 +31,6 @@ scikit-image  # this is a widefield requirement missing as of July 2023, we may 
 scikit-learn>=0.22.1
 scipy>=1.7.0
 seaborn>=0.9.0
+slidingRP>=1.1.1  # steinmetz lab refractory period metrics
 sparse
 tqdm>=4.32.1
-# ibl libraries
-ONE-api>=3.2.0
-ibl-neuropixel>=1.9.0
-ibl-style
-iblatlas>=0.5.3
-iblqt>=0.8.2
-iblutil>=1.13.0
-mtscomp>=1.0.1
-phylib>=2.6.3
-psychofit
-slidingRP>=1.1.1  # steinmetz lab refractory period metrics
-pyqt5
-ibl-style
-ibl-photometry>=0.3.2
