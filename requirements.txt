@@ -17,7 +17,7 @@ matplotlib>=3.0.3
 mtscomp>=1.0.1
 nptdms
 numba>=0.56
-numpy>=1.18,<=2.3  # numpy 2.4 is not compatible with numba - ETA Q1 2026 ?
+numpy>=1.18
 opencv-python-headless
 pandas<3.0  # temporary freeze while repos get up to date
 phylib>=2.6.3
