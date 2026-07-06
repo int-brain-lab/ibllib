@@ -604,47 +604,47 @@ def make_pipeline(session_path, **pkwargs):
             **kwargs, **mscope_kwargs, parents=[tasks['MesoscopePreprocess']]
         )
 
-    if 'neurophotometrics' in devices:
-        from iblphotometry.tasks import (
-            FibrePhotometryBpodSync,
-            FibrePhotometryDAQSync,
-            FibrePhotometryPassiveChoiceWorld,
-            # FibrePhotometryQC,
-        )
+    # if 'neurophotometrics' in devices:
+    #     from iblphotometry.tasks import (
+    #         FibrePhotometryBpodSync,
+    #         FibrePhotometryDAQSync,
+    #         FibrePhotometryPassiveChoiceWorld,
+    #         # FibrePhotometryQC,
+    #     )
 
-        sync_mode = devices['neurophotometrics']['sync_mode']
+    #     sync_mode = devices['neurophotometrics']['sync_mode']
 
-        # passive photometry
-        task_protocols = acquisition_description['tasks']
-        assert len(task_protocols) == 1, 'chained protocols are not yet supported for photometry extraction'
-        protocol = task_protocols[0]
-        if 'passive' in protocol:
-            tasks['FibrePhotometryPassiveChoiceWorld'] = type(
-                'FibrePhotometryPassiveChoiceWorld', (FibrePhotometryPassiveChoiceWorld,), {}
-            )(**kwargs)
+    #     # passive photometry
+    #     task_protocols = acquisition_description['tasks']
+    #     assert len(task_protocols) == 1, 'chained protocols are not yet supported for photometry extraction'
+    #     protocol = task_protocols[0]
+    #     if 'passive' in protocol:
+    #         tasks['FibrePhotometryPassiveChoiceWorld'] = type(
+    #             'FibrePhotometryPassiveChoiceWorld', (FibrePhotometryPassiveChoiceWorld,), {}
+    #         )(**kwargs)
 
-        # syncing / extraction
-        match sync_mode:
-            case 'bpod':
-                # for synchronization with the BNC inputs of the neurophotometrics receiving the sync pulses
-                # from the individual bpods
-                tasks['FibrePhotometryBpodSync'] = type('FibrePhotometryBpodSync', (FibrePhotometryBpodSync,), {})(
-                    **kwargs,
-                )
-            case 'daqami':
-                # for synchronization with the DAQami receiving the sync pulses from the individual bpods
-                # as well as the frame clock from the FP3002
-                if 'passive' not in protocol:  # excluding passive session
-                    tasks['FibrePhotometryDAQSync'] = type('FibrePhotometryDAQSync', (FibrePhotometryDAQSync,), {})(
-                        **kwargs,
-                    )
-            case _:
-                raise ValueError('unknown sync mode')
+    #     # syncing / extraction
+    #     match sync_mode:
+    #         case 'bpod':
+    #             # for synchronization with the BNC inputs of the neurophotometrics receiving the sync pulses
+    #             # from the individual bpods
+    #             tasks['FibrePhotometryBpodSync'] = type('FibrePhotometryBpodSync', (FibrePhotometryBpodSync,), {})(
+    #                 **kwargs,
+    #             )
+    #         case 'daqami':
+    #             # for synchronization with the DAQami receiving the sync pulses from the individual bpods
+    #             # as well as the frame clock from the FP3002
+    #             if 'passive' not in protocol:  # excluding passive session
+    #                 tasks['FibrePhotometryDAQSync'] = type('FibrePhotometryDAQSync', (FibrePhotometryDAQSync,), {})(
+    #                     **kwargs,
+    #                 )
+    #         case _:
+    #             raise ValueError('unknown sync mode')
 
-        # QC
-        # tasks['FibrePhotometryQC'] = type('FibrePhotometryQC', (FibrePhotometryQC,), {})(
-        #     **kwargs, parents=[tasks['FibrePhotometryDAQSync']]  # conditional parents?
-        # )
+    #     # QC
+    #     # tasks['FibrePhotometryQC'] = type('FibrePhotometryQC', (FibrePhotometryQC,), {})(
+    #     #     **kwargs, parents=[tasks['FibrePhotometryDAQSync']]  # conditional parents?
+    #     # )
 
     p = mtasks.Pipeline(session_path=session_path, **pkwargs)
     p.tasks = tasks
