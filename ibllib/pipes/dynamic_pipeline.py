@@ -187,6 +187,37 @@ def _load_acquisition_description(session_path):
     return acquisition_description
 
 
+def _get_sync_config(acquisition_description: dict) -> tuple[str, str, dict, dict]:
+    """
+    Parse the sync section of an acquisition description into task arguments.
+
+    Parameters
+    ----------
+    acquisition_description : dict
+        An acquisition description.
+
+    Returns
+    -------
+    str
+        The sync type, e.g. 'nidq', 'tdms', 'bpod'.
+    str
+        The sync label determining the extractor tasks (see :func:`_sync_label`).
+    dict
+        The sync arguments with keys renamed to match task run arguments
+        ('sync_collection', 'sync_ext', 'sync_namespace').
+    dict
+        The sync keyword arguments, i.e. ``sync_args`` plus the 'sync' key.
+    """
+    ((sync, sync_args),) = acquisition_description['sync'].items()
+    sync_args = sync_args.copy()  # ensure acquisition_description unchanged
+    sync_label = _sync_label(sync, **sync_args)  # get the format of the DAQ data. This informs the extractor task
+    sync_args['sync_collection'] = sync_args.pop('collection')  # rename the key so it matches task run arguments
+    sync_args['sync_ext'] = sync_args.pop('extension', None)
+    sync_args['sync_namespace'] = sync_args.pop('acquisition_software', None)
+    sync_kwargs = {'sync': sync, **sync_args}
+    return sync, sync_label, sync_args, sync_kwargs
+
+
 def _get_trials_tasks(session_path, acquisition_description=None, sync_tasks=None, one=None):
     """
     Generate behaviour tasks from acquisition description.
@@ -216,12 +247,7 @@ def _get_trials_tasks(session_path, acquisition_description=None, sync_tasks=Non
     kwargs = {'session_path': session_path, 'one': one}
 
     # Syncing tasks
-    ((sync, sync_args),) = acquisition_description['sync'].items()
-    sync_label = _sync_label(sync, **sync_args)  # get the format of the DAQ data. This informs the extractor task
-    sync_args['sync_collection'] = sync_args.pop('collection')  # rename the key so it matches task run arguments
-    sync_args['sync_ext'] = sync_args.pop('extension', None)
-    sync_args['sync_namespace'] = sync_args.pop('acquisition_software', None)
-    sync_kwargs = {'sync': sync, **sync_args}
+    _, sync_label, _, sync_kwargs = _get_sync_config(acquisition_description)
 
     # Behavior tasks
     protocol_numbers = set()
@@ -381,6 +407,394 @@ def is_active_trials_task(task) -> bool:
     return trials_task and any(fnmatch('_ibl_trials.table.pqt', pat) for pat in output_names)
 
 
+def get_sync_tasks(acquisition_description: dict, **kwargs) -> tuple[OrderedDict, list]:
+    """
+    Build the synchronisation tasks for a session.
+
+    Parameters
+    ----------
+    acquisition_description : dict
+        An acquisition description.
+    kwargs
+        Additional keyword arguments passed to each task (e.g. 'session_path', 'one').
+
+    Returns
+    -------
+    OrderedDict[str, ibllib.pipes.tasks.Task]
+        All sync tasks keyed by name, to be added to the master pipeline.
+    list of ibllib.pipes.tasks.Task
+        The subset of sync tasks that downstream tasks must set as parents (empty unless a
+        SyncPulses task is created).
+    """
+    sync, sync_label, sync_args, sync_kwargs = _get_sync_config(acquisition_description)
+    sync_tasks = OrderedDict()
+    # tasks that downstream (behaviour, ephys, video, widefield) extraction depends on as parents
+    sync_parents = []
+    if sync_label == 'nidq' and sync_args['sync_collection'] == 'raw_ephys_data':
+        sync_tasks['SyncRegisterRaw'] = type('SyncRegisterRaw', (etasks.EphysSyncRegisterRaw,), {})(**kwargs, **sync_kwargs)
+        sync_tasks[f'SyncPulses_{sync}'] = type(f'SyncPulses_{sync}', (etasks.EphysSyncPulses,), {})(
+            **kwargs, **sync_kwargs, parents=[sync_tasks['SyncRegisterRaw']]
+        )
+        sync_parents = [sync_tasks[f'SyncPulses_{sync}']]
+    elif sync_label == 'timeline':
+        sync_tasks['SyncRegisterRaw'] = type('SyncRegisterRaw', (stasks.SyncRegisterRaw,), {})(**kwargs, **sync_kwargs)
+    elif sync_label == 'nidq':
+        sync_tasks['SyncRegisterRaw'] = type('SyncRegisterRaw', (stasks.SyncMtscomp,), {})(**kwargs, **sync_kwargs)
+        sync_tasks[f'SyncPulses_{sync}'] = type(f'SyncPulses_{sync}', (stasks.SyncPulses,), {})(
+            **kwargs, **sync_kwargs, parents=[sync_tasks['SyncRegisterRaw']]
+        )
+        sync_parents = [sync_tasks[f'SyncPulses_{sync}']]
+    elif sync_label == 'tdms':
+        sync_tasks['SyncRegisterRaw'] = type('SyncRegisterRaw', (stasks.SyncRegisterRaw,), {})(**kwargs, **sync_kwargs)
+    elif sync_label == 'bpod':
+        pass  # ATM we don't have anything for this; it may not be needed in the future
+    return sync_tasks, sync_parents
+
+
+def get_ephys_tasks(acquisition_description: dict, sync_tasks: list, **kwargs) -> OrderedDict:
+    """
+    Build the ephys (Neuropixel) tasks for a session.
+
+    Parameters
+    ----------
+    acquisition_description : dict
+        An acquisition description.
+    sync_tasks : list
+        The sync tasks to set as parents of the sync-dependent ephys tasks.
+    kwargs
+        Additional keyword arguments passed to each task (must include 'session_path').
+
+    Returns
+    -------
+    OrderedDict[str, ibllib.pipes.tasks.Task]
+        A map of task name to ephys task object.
+    """
+    session_path = kwargs['session_path']
+    _, _, _, sync_kwargs = _get_sync_config(acquisition_description)
+    devices = acquisition_description.get('devices', {})
+    ephys_tasks = OrderedDict()
+    if 'neuropixel' in devices:
+        ephys_kwargs = {'device_collection': 'raw_ephys_data'}
+        ephys_tasks['EphysRegisterRaw'] = type('EphysRegisterRaw', (etasks.EphysRegisterRaw,), {})(**kwargs, **ephys_kwargs)
+
+        all_probes = []
+        register_tasks = []
+        for pname, probe_info in devices['neuropixel'].items():
+            # Glob to support collections such as _00a, _00b. This doesn't fix the issue of NP2.4
+            # extractions, however.
+            probe_collection = next(session_path.glob(probe_info['collection'] + '*'))
+            meta_file = spikeglx.glob_ephys_files(probe_collection, ext='meta')
+            meta_file = meta_file[0].get('ap')
+            nptype = spikeglx._get_neuropixel_version_from_meta(spikeglx.read_meta_data(meta_file))
+            nshanks = spikeglx._get_nshanks_from_meta(spikeglx.read_meta_data(meta_file))
+
+            if (nptype == 'NP2.1') or (nptype == 'NP2.4' and nshanks == 1):
+                ephys_tasks[f'EphyCompressNP21_{pname}'] = type(f'EphyCompressNP21_{pname}', (etasks.EphysCompressNP21,), {})(
+                    **kwargs, **ephys_kwargs, pname=pname
+                )
+                all_probes.append(pname)
+                register_tasks.append(ephys_tasks[f'EphyCompressNP21_{pname}'])
+            elif nptype == 'NP2.4' and nshanks > 1:
+                ephys_tasks[f'EphyCompressNP24_{pname}'] = type(f'EphyCompressNP24_{pname}', (etasks.EphysCompressNP24,), {})(
+                    **kwargs, **ephys_kwargs, pname=pname, nshanks=nshanks
+                )
+                register_tasks.append(ephys_tasks[f'EphyCompressNP24_{pname}'])
+                all_probes += [f'{pname}{chr(97 + int(shank))}' for shank in range(nshanks)]
+            else:
+                ephys_tasks[f'EphysCompressNP1_{pname}'] = type(f'EphyCompressNP1_{pname}', (etasks.EphysCompressNP1,), {})(
+                    **kwargs, **ephys_kwargs, pname=pname
+                )
+                register_tasks.append(ephys_tasks[f'EphysCompressNP1_{pname}'])
+                all_probes.append(pname)
+
+        if nptype == '3A':
+            ephys_tasks['EphysPulses'] = type('EphysPulses', (etasks.EphysPulses,), {})(
+                **kwargs, **ephys_kwargs, **sync_kwargs, pname=all_probes, parents=register_tasks + sync_tasks
+            )
+
+        for pname in all_probes:
+            register_task = [reg_task for reg_task in register_tasks if pname[:7] in reg_task.name]
+
+            if nptype != '3A':
+                ephys_tasks[f'EphysPulses_{pname}'] = type(f'EphysPulses_{pname}', (etasks.EphysPulses,), {})(
+                    **kwargs, **ephys_kwargs, **sync_kwargs, pname=[pname], parents=register_task + sync_tasks
+                )
+                ephys_tasks[f'Spikesorting_{pname}'] = type(f'Spikesorting_{pname}', (etasks.SpikeSorting,), {})(
+                    **kwargs, **ephys_kwargs, pname=pname, parents=[ephys_tasks[f'EphysPulses_{pname}']]
+                )
+            else:
+                ephys_tasks[f'Spikesorting_{pname}'] = type(f'Spikesorting_{pname}', (etasks.SpikeSorting,), {})(
+                    **kwargs, **ephys_kwargs, pname=pname, parents=[ephys_tasks['EphysPulses']]
+                )
+
+            ephys_tasks[f'RawEphysQC_{pname}'] = type(f'RawEphysQC_{pname}', (etasks.RawEphysQC,), {})(
+                **kwargs, **ephys_kwargs, pname=pname, parents=register_task
+            )
+
+    return ephys_tasks
+
+
+def get_video_tasks(acquisition_description: dict, sync_tasks: list, trials_tasks: dict = None, **kwargs) -> OrderedDict:
+    """
+    Build the video (camera) tasks for a session.
+
+    Parameters
+    ----------
+    acquisition_description : dict
+        An acquisition description.
+    sync_tasks : list
+        The sync tasks to set as parents of the sync-dependent video tasks.
+    trials_tasks : dict, optional
+        The behaviour tasks, searched for the trials.table producer that PostDLC QC depends on.
+    kwargs
+        Additional keyword arguments passed to each task (e.g. 'session_path', 'one').
+
+    Returns
+    -------
+    OrderedDict[str, ibllib.pipes.tasks.Task]
+        A map of task name to video task object.
+    """
+    sync, _, _, sync_kwargs = _get_sync_config(acquisition_description)
+    devices = acquisition_description.get('devices', {})
+    video_tasks = OrderedDict()
+
+    if 'cameras' in devices:
+        cams = list(devices['cameras'].keys())
+        subset_cams = [c for c in cams if c in ('left', 'right', 'body', 'belly')]
+        video_kwargs = {'device_collection': 'raw_video_data', 'cameras': cams}
+        video_compressed = sess_params.get_video_compressed(acquisition_description)
+
+        if video_compressed:
+            # This is for widefield case where the video is already compressed
+            video_tasks[tn] = type((tn := 'VideoConvert'), (vtasks.VideoConvert,), {})(**kwargs, **video_kwargs)
+            dlc_parent_task = video_tasks['VideoConvert']
+            video_tasks[tn] = type((tn := f'VideoSyncQC_{sync}'), (vtasks.VideoSyncQcCamlog,), {})(
+                **kwargs, **video_kwargs, **sync_kwargs
+            )
+        else:
+            video_tasks[tn] = type((tn := 'VideoRegisterRaw'), (vtasks.VideoRegisterRaw,), {})(**kwargs, **video_kwargs)
+            video_tasks[tn] = type((tn := 'VideoCompress'), (vtasks.VideoCompress,), {})(**kwargs, **video_kwargs, **sync_kwargs)
+            dlc_parent_task = video_tasks['VideoCompress']
+            if sync == 'bpod':
+                video_tasks[tn] = type((tn := f'VideoSyncQC_{sync}'), (vtasks.VideoSyncQcBpod,), {})(
+                    **kwargs, **video_kwargs, **sync_kwargs, parents=[video_tasks['VideoCompress']]
+                )
+            elif sync == 'nidq':
+                # Here we restrict to videos that we support (left, right or body)
+                video_kwargs['cameras'] = subset_cams
+                video_tasks[tn] = type((tn := f'VideoSyncQC_{sync}'), (vtasks.VideoSyncQcNidq,), {})(
+                    **kwargs, **video_kwargs, **sync_kwargs, parents=[video_tasks['VideoCompress']] + sync_tasks
+                )
+
+        if sync_kwargs['sync'] != 'bpod':
+            # Here we restrict to videos that we support (left, right or body)
+            # Currently there is no plan to run DLC on the belly cam
+            subset_cams = [c for c in cams if c in ('left', 'right', 'body')]
+            video_kwargs['cameras'] = subset_cams
+            video_tasks[tn] = type((tn := 'DLC'), (vtasks.DLC,), {})(**kwargs, **video_kwargs, parents=[dlc_parent_task])
+
+            # The PostDLC plots require a trials object for QC.
+            # Find the first task (behaviour or video) that outputs a trials.table dataset.
+            candidate_tasks = chain((trials_tasks or {}).values(), video_tasks.values())
+            trials_task = (t for t in candidate_tasks if any('trials.table' in f[0] for f in t.signature.get('output_files', [])))
+            if trials_task := next(trials_task, None):
+                parents = [video_tasks['DLC'], video_tasks[f'VideoSyncQC_{sync}'], trials_task]
+                trials_collection = getattr(trials_task, 'output_collection', 'alf')
+            else:
+                parents = [video_tasks['DLC'], video_tasks[f'VideoSyncQC_{sync}']]
+                trials_collection = 'alf'
+            video_tasks[tn] = type((tn := 'PostDLC'), (vtasks.EphysPostDLC,), {})(
+                **kwargs, cameras=subset_cams, trials_collection=trials_collection, parents=parents
+            )
+
+    return video_tasks
+
+
+def get_audio_tasks(acquisition_description: dict, **kwargs) -> OrderedDict:
+    """
+    Build the audio (microphone) tasks for a session.
+
+    Parameters
+    ----------
+    acquisition_description : dict
+        An acquisition description.
+    kwargs
+        Additional keyword arguments passed to each task (e.g. 'session_path', 'one').
+
+    Returns
+    -------
+    OrderedDict[str, ibllib.pipes.tasks.Task]
+        A map of task name to audio task object.
+    """
+    _, _, _, sync_kwargs = _get_sync_config(acquisition_description)
+    devices = acquisition_description.get('devices', {})
+    audio_tasks = OrderedDict()
+    if 'microphone' in devices:
+        ((_, micro_kwargs),) = devices['microphone'].items()
+        micro_kwargs['device_collection'] = micro_kwargs.pop('collection')
+        if sync_kwargs['sync'] == 'bpod':
+            audio_tasks['AudioRegisterRaw'] = type('AudioRegisterRaw', (atasks.AudioSync,), {})(
+                **kwargs, **sync_kwargs, **micro_kwargs, collection=micro_kwargs['device_collection']
+            )
+        elif sync_kwargs['sync'] == 'nidq':
+            audio_tasks['AudioRegisterRaw'] = type('AudioRegisterRaw', (atasks.AudioCompress,), {})(**kwargs, **micro_kwargs)
+
+    return audio_tasks
+
+
+def get_wfield_tasks(acquisition_description: dict, sync_tasks: list, **kwargs) -> OrderedDict:
+    """
+    Build the widefield imaging tasks for a session.
+
+    Parameters
+    ----------
+    acquisition_description : dict
+        An acquisition description.
+    sync_tasks : list
+        The sync tasks to set as parents of the widefield sync task.
+    kwargs
+        Additional keyword arguments passed to each task (e.g. 'session_path', 'one').
+
+    Returns
+    -------
+    OrderedDict[str, ibllib.pipes.tasks.Task]
+        A map of task name to widefield task object.
+    """
+    _, _, _, sync_kwargs = _get_sync_config(acquisition_description)
+    devices = acquisition_description.get('devices', {})
+    wfield_tasks = OrderedDict()
+
+    if 'widefield' in devices:
+        ((_, wfield_kwargs),) = devices['widefield'].items()
+        wfield_kwargs['device_collection'] = wfield_kwargs.pop('collection')
+        wfield_tasks['WideFieldRegisterRaw'] = type('WidefieldRegisterRaw', (wtasks.WidefieldRegisterRaw,), {})(
+            **kwargs, **wfield_kwargs
+        )
+        wfield_tasks['WidefieldCompress'] = type('WidefieldCompress', (wtasks.WidefieldCompress,), {})(
+            **kwargs, **wfield_kwargs, parents=[wfield_tasks['WideFieldRegisterRaw']]
+        )
+        wfield_tasks['WidefieldPreprocess'] = type('WidefieldPreprocess', (wtasks.WidefieldPreprocess,), {})(
+            **kwargs, **wfield_kwargs, parents=[wfield_tasks['WidefieldCompress']]
+        )
+        wfield_tasks['WidefieldSync'] = type('WidefieldSync', (wtasks.WidefieldSync,), {})(
+            **kwargs,
+            **wfield_kwargs,
+            **sync_kwargs,
+            parents=[wfield_tasks['WideFieldRegisterRaw'], wfield_tasks['WidefieldCompress']] + sync_tasks,
+        )
+        wfield_tasks['WidefieldFOV'] = type('WidefieldFOV', (wtasks.WidefieldFOV,), {})(
+            **kwargs, **wfield_kwargs, parents=[wfield_tasks['WidefieldPreprocess']]
+        )
+
+    return wfield_tasks
+
+
+def get_mesoscope_tasks(acquisition_description: dict, **kwargs) -> OrderedDict:
+    """
+    Build the mesoscope imaging tasks for a session.
+
+    Parameters
+    ----------
+    acquisition_description : dict
+        An acquisition description.
+    kwargs
+        Additional keyword arguments passed to each task (e.g. 'session_path', 'one').
+
+    Returns
+    -------
+    OrderedDict[str, ibllib.pipes.tasks.Task]
+        A map of task name to mesoscope task object.
+    """
+    _, _, _, sync_kwargs = _get_sync_config(acquisition_description)
+    devices = acquisition_description.get('devices', {})
+    mesoscope_tasks = OrderedDict()
+
+    if 'mesoscope' in devices:
+        ((_, mscope_kwargs),) = devices['mesoscope'].items()
+        mscope_kwargs['device_collection'] = mscope_kwargs.pop('collection')
+        mesoscope_tasks['MesoscopeRegisterSnapshots'] = type(
+            'MesoscopeRegisterSnapshots', (mscope_tasks.MesoscopeRegisterSnapshots,), {}
+        )(**kwargs, **mscope_kwargs)
+        mesoscope_tasks['MesoscopePreprocess'] = type('MesoscopePreprocess', (mscope_tasks.MesoscopePreprocess,), {})(
+            **kwargs, **mscope_kwargs
+        )
+        mesoscope_tasks['MesoscopeFOV'] = type('MesoscopeFOV', (mscope_tasks.MesoscopeFOV,), {})(
+            **kwargs, **mscope_kwargs, parents=[mesoscope_tasks['MesoscopePreprocess']]
+        )
+        mesoscope_tasks['MesoscopeSync'] = type('MesoscopeSync', (mscope_tasks.MesoscopeSync,), {})(
+            **kwargs, **mscope_kwargs, **sync_kwargs
+        )
+        mesoscope_tasks['MesoscopeCompress'] = type('MesoscopeCompress', (mscope_tasks.MesoscopeCompress,), {})(
+            **kwargs, **mscope_kwargs, parents=[mesoscope_tasks['MesoscopePreprocess']]
+        )
+
+    return mesoscope_tasks
+
+
+def get_photometry_tasks(acquisition_description: dict, **kwargs) -> OrderedDict:
+    """
+    Build the fibre photometry tasks for a session.
+
+    Parameters
+    ----------
+    acquisition_description : dict
+        An acquisition description.
+    kwargs
+        Additional keyword arguments passed to each task (e.g. 'session_path', 'one').
+
+    Returns
+    -------
+    OrderedDict[str, ibllib.pipes.tasks.Task]
+        A map of task name to photometry task object.
+    """
+    devices = acquisition_description.get('devices', {})
+    photometry_tasks = OrderedDict()
+
+    if 'neurophotometrics' in devices:
+        from iblphotometry.tasks import (
+            FibrePhotometryBpodSync,
+            FibrePhotometryDAQSync,
+            FibrePhotometryPassiveChoiceWorld,
+            # FibrePhotometryQC,
+        )
+
+        sync_mode = devices['neurophotometrics']['sync_mode']
+
+        # passive photometry
+        task_protocols = acquisition_description['tasks']
+        assert len(task_protocols) == 1, 'chained protocols are not yet supported for photometry extraction'
+        protocol = task_protocols[0]
+        if 'passive' in protocol:
+            photometry_tasks['FibrePhotometryPassiveChoiceWorld'] = type(
+                'FibrePhotometryPassiveChoiceWorld', (FibrePhotometryPassiveChoiceWorld,), {}
+            )(**kwargs)
+
+        # syncing / extraction
+        match sync_mode:
+            case 'bpod':
+                # for synchronization with the BNC inputs of the neurophotometrics receiving the sync pulses
+                # from the individual bpods
+                photometry_tasks['FibrePhotometryBpodSync'] = type('FibrePhotometryBpodSync', (FibrePhotometryBpodSync,), {})(
+                    **kwargs,
+                )
+            case 'daqami':
+                # for synchronization with the DAQami receiving the sync pulses from the individual bpods
+                # as well as the frame clock from the FP3002
+                if 'passive' not in protocol:  # excluding passive session
+                    photometry_tasks['FibrePhotometryDAQSync'] = type('FibrePhotometryDAQSync', (FibrePhotometryDAQSync,), {})(
+                        **kwargs,
+                    )
+            case _:
+                raise ValueError('unknown sync mode')
+
+        # QC
+        # photometry_tasks['FibrePhotometryQC'] = type('FibrePhotometryQC', (FibrePhotometryQC,), {})(
+        #     **kwargs, parents=[photometry_tasks['FibrePhotometryDAQSync']]  # conditional parents?
+        # )
+
+    return photometry_tasks
+
+
 def make_pipeline(session_path, **pkwargs):
     """
     Creates a pipeline of extractor tasks from a session's experiment description file.
@@ -403,7 +817,6 @@ def make_pipeline(session_path, **pkwargs):
         raise ValueError('Session path does not exist')
     tasks = OrderedDict()
     acquisition_description = _load_acquisition_description(session_path)
-    devices = acquisition_description.get('devices', {})
     kwargs = {'session_path': session_path, 'one': pkwargs.get('one')}
 
     # Registers the experiment description file
@@ -411,240 +824,32 @@ def make_pipeline(session_path, **pkwargs):
         'ExperimentDescriptionRegisterRaw', (bstasks.ExperimentDescriptionRegisterRaw,), {}
     )(**kwargs)
 
-    # Syncing tasks
-    ((sync, sync_args),) = acquisition_description['sync'].items()
-    sync_args = sync_args.copy()  # ensure acquisition_description unchanged
-    sync_label = _sync_label(sync, **sync_args)  # get the format of the DAQ data. This informs the extractor task
-    sync_args['sync_collection'] = sync_args.pop('collection')  # rename the key so it matches task run arguments
-    sync_args['sync_ext'] = sync_args.pop('extension', None)
-    sync_args['sync_namespace'] = sync_args.pop('acquisition_software', None)
-    sync_kwargs = {'sync': sync, **sync_args}
-    sync_tasks = []
-    if sync_label == 'nidq' and sync_args['sync_collection'] == 'raw_ephys_data':
-        tasks['SyncRegisterRaw'] = type('SyncRegisterRaw', (etasks.EphysSyncRegisterRaw,), {})(**kwargs, **sync_kwargs)
-        tasks[f'SyncPulses_{sync}'] = type(f'SyncPulses_{sync}', (etasks.EphysSyncPulses,), {})(
-            **kwargs, **sync_kwargs, parents=[tasks['SyncRegisterRaw']]
-        )
-        sync_tasks = [tasks[f'SyncPulses_{sync}']]
-    elif sync_label == 'timeline':
-        tasks['SyncRegisterRaw'] = type('SyncRegisterRaw', (stasks.SyncRegisterRaw,), {})(**kwargs, **sync_kwargs)
-    elif sync_label == 'nidq':
-        tasks['SyncRegisterRaw'] = type('SyncRegisterRaw', (stasks.SyncMtscomp,), {})(**kwargs, **sync_kwargs)
-        tasks[f'SyncPulses_{sync}'] = type(f'SyncPulses_{sync}', (stasks.SyncPulses,), {})(
-            **kwargs, **sync_kwargs, parents=[tasks['SyncRegisterRaw']]
-        )
-        sync_tasks = [tasks[f'SyncPulses_{sync}']]
-    elif sync_label == 'tdms':
-        tasks['SyncRegisterRaw'] = type('SyncRegisterRaw', (stasks.SyncRegisterRaw,), {})(**kwargs, **sync_kwargs)
-    elif sync_label == 'bpod':
-        pass  # ATM we don't have anything for this; it may not be needed in the future
+    # Syncing tasks: sync_tasks holds all sync tasks to add to the pipeline, sync_parents is the
+    # subset that downstream (behaviour, ephys, video, widefield) tasks depend on as parents
+    sync_tasks, sync_parents = get_sync_tasks(acquisition_description, **kwargs)
+    tasks.update(sync_tasks)
 
     # Behavior tasks
-    tasks.update(_get_trials_tasks(session_path, acquisition_description, sync_tasks=sync_tasks, one=pkwargs.get('one')))
+    behavior_tasks = _get_trials_tasks(session_path, acquisition_description, sync_tasks=sync_parents, one=pkwargs.get('one'))
+    tasks.update(behavior_tasks)
 
     # Ephys tasks
-    if 'neuropixel' in devices:
-        ephys_kwargs = {'device_collection': 'raw_ephys_data'}
-        tasks['EphysRegisterRaw'] = type('EphysRegisterRaw', (etasks.EphysRegisterRaw,), {})(**kwargs, **ephys_kwargs)
+    tasks.update(get_ephys_tasks(acquisition_description, sync_parents, **kwargs))
 
-        all_probes = []
-        register_tasks = []
-        for pname, probe_info in devices['neuropixel'].items():
-            # Glob to support collections such as _00a, _00b. This doesn't fix the issue of NP2.4
-            # extractions, however.
-            probe_collection = next(session_path.glob(probe_info['collection'] + '*'))
-            meta_file = spikeglx.glob_ephys_files(probe_collection, ext='meta')
-            meta_file = meta_file[0].get('ap')
-            nptype = spikeglx._get_neuropixel_version_from_meta(spikeglx.read_meta_data(meta_file))
-            nshanks = spikeglx._get_nshanks_from_meta(spikeglx.read_meta_data(meta_file))
-
-            if (nptype == 'NP2.1') or (nptype == 'NP2.4' and nshanks == 1):
-                tasks[f'EphyCompressNP21_{pname}'] = type(f'EphyCompressNP21_{pname}', (etasks.EphysCompressNP21,), {})(
-                    **kwargs, **ephys_kwargs, pname=pname
-                )
-                all_probes.append(pname)
-                register_tasks.append(tasks[f'EphyCompressNP21_{pname}'])
-            elif nptype == 'NP2.4' and nshanks > 1:
-                tasks[f'EphyCompressNP24_{pname}'] = type(f'EphyCompressNP24_{pname}', (etasks.EphysCompressNP24,), {})(
-                    **kwargs, **ephys_kwargs, pname=pname, nshanks=nshanks
-                )
-                register_tasks.append(tasks[f'EphyCompressNP24_{pname}'])
-                all_probes += [f'{pname}{chr(97 + int(shank))}' for shank in range(nshanks)]
-            else:
-                tasks[f'EphysCompressNP1_{pname}'] = type(f'EphyCompressNP1_{pname}', (etasks.EphysCompressNP1,), {})(
-                    **kwargs, **ephys_kwargs, pname=pname
-                )
-                register_tasks.append(tasks[f'EphysCompressNP1_{pname}'])
-                all_probes.append(pname)
-
-        if nptype == '3A':
-            tasks['EphysPulses'] = type('EphysPulses', (etasks.EphysPulses,), {})(
-                **kwargs, **ephys_kwargs, **sync_kwargs, pname=all_probes, parents=register_tasks + sync_tasks
-            )
-
-        for pname in all_probes:
-            register_task = [reg_task for reg_task in register_tasks if pname[:7] in reg_task.name]
-
-            if nptype != '3A':
-                tasks[f'EphysPulses_{pname}'] = type(f'EphysPulses_{pname}', (etasks.EphysPulses,), {})(
-                    **kwargs, **ephys_kwargs, **sync_kwargs, pname=[pname], parents=register_task + sync_tasks
-                )
-                tasks[f'Spikesorting_{pname}'] = type(f'Spikesorting_{pname}', (etasks.SpikeSorting,), {})(
-                    **kwargs, **ephys_kwargs, pname=pname, parents=[tasks[f'EphysPulses_{pname}']]
-                )
-            else:
-                tasks[f'Spikesorting_{pname}'] = type(f'Spikesorting_{pname}', (etasks.SpikeSorting,), {})(
-                    **kwargs, **ephys_kwargs, pname=pname, parents=[tasks['EphysPulses']]
-                )
-
-            tasks[f'RawEphysQC_{pname}'] = type(f'RawEphysQC_{pname}', (etasks.RawEphysQC,), {})(
-                **kwargs, **ephys_kwargs, pname=pname, parents=register_task
-            )
-
-    # Video tasks
-    if 'cameras' in devices:
-        cams = list(devices['cameras'].keys())
-        subset_cams = [c for c in cams if c in ('left', 'right', 'body', 'belly')]
-        video_kwargs = {'device_collection': 'raw_video_data', 'cameras': cams}
-        video_compressed = sess_params.get_video_compressed(acquisition_description)
-
-        if video_compressed:
-            # This is for widefield case where the video is already compressed
-            tasks[tn] = type((tn := 'VideoConvert'), (vtasks.VideoConvert,), {})(**kwargs, **video_kwargs)
-            dlc_parent_task = tasks['VideoConvert']
-            tasks[tn] = type((tn := f'VideoSyncQC_{sync}'), (vtasks.VideoSyncQcCamlog,), {})(
-                **kwargs, **video_kwargs, **sync_kwargs
-            )
-        else:
-            tasks[tn] = type((tn := 'VideoRegisterRaw'), (vtasks.VideoRegisterRaw,), {})(**kwargs, **video_kwargs)
-            tasks[tn] = type((tn := 'VideoCompress'), (vtasks.VideoCompress,), {})(**kwargs, **video_kwargs, **sync_kwargs)
-            dlc_parent_task = tasks['VideoCompress']
-            if sync == 'bpod':
-                tasks[tn] = type((tn := f'VideoSyncQC_{sync}'), (vtasks.VideoSyncQcBpod,), {})(
-                    **kwargs, **video_kwargs, **sync_kwargs, parents=[tasks['VideoCompress']]
-                )
-            elif sync == 'nidq':
-                # Here we restrict to videos that we support (left, right or body)
-                video_kwargs['cameras'] = subset_cams
-                tasks[tn] = type((tn := f'VideoSyncQC_{sync}'), (vtasks.VideoSyncQcNidq,), {})(
-                    **kwargs, **video_kwargs, **sync_kwargs, parents=[tasks['VideoCompress']] + sync_tasks
-                )
-
-        if sync_kwargs['sync'] != 'bpod':
-            # Here we restrict to videos that we support (left, right or body)
-            # Currently there is no plan to run DLC on the belly cam
-            subset_cams = [c for c in cams if c in ('left', 'right', 'body')]
-            video_kwargs['cameras'] = subset_cams
-            tasks[tn] = type((tn := 'DLC'), (vtasks.DLC,), {})(**kwargs, **video_kwargs, parents=[dlc_parent_task])
-
-            # The PostDLC plots require a trials object for QC
-            # Find the first task that outputs a trials.table dataset
-            trials_task = (t for t in tasks.values() if any('trials.table' in f[0] for f in t.signature.get('output_files', [])))
-            if trials_task := next(trials_task, None):
-                parents = [tasks['DLC'], tasks[f'VideoSyncQC_{sync}'], trials_task]
-                trials_collection = getattr(trials_task, 'output_collection', 'alf')
-            else:
-                parents = [tasks['DLC'], tasks[f'VideoSyncQC_{sync}']]
-                trials_collection = 'alf'
-            tasks[tn] = type((tn := 'PostDLC'), (vtasks.EphysPostDLC,), {})(
-                **kwargs, cameras=subset_cams, trials_collection=trials_collection, parents=parents
-            )
+    # Video tasks (behaviour tasks provide the trials object required by PostDLC QC)
+    tasks.update(get_video_tasks(acquisition_description, sync_parents, trials_tasks=behavior_tasks, **kwargs))
 
     # Audio tasks
-    if 'microphone' in devices:
-        ((microphone, micro_kwargs),) = devices['microphone'].items()
-        micro_kwargs['device_collection'] = micro_kwargs.pop('collection')
-        if sync_kwargs['sync'] == 'bpod':
-            tasks['AudioRegisterRaw'] = type('AudioRegisterRaw', (atasks.AudioSync,), {})(
-                **kwargs, **sync_kwargs, **micro_kwargs, collection=micro_kwargs['device_collection']
-            )
-        elif sync_kwargs['sync'] == 'nidq':
-            tasks['AudioRegisterRaw'] = type('AudioRegisterRaw', (atasks.AudioCompress,), {})(**kwargs, **micro_kwargs)
+    tasks.update(get_audio_tasks(acquisition_description, **kwargs))
 
     # Widefield tasks
-    if 'widefield' in devices:
-        ((_, wfield_kwargs),) = devices['widefield'].items()
-        wfield_kwargs['device_collection'] = wfield_kwargs.pop('collection')
-        tasks['WideFieldRegisterRaw'] = type('WidefieldRegisterRaw', (wtasks.WidefieldRegisterRaw,), {})(
-            **kwargs, **wfield_kwargs
-        )
-        tasks['WidefieldCompress'] = type('WidefieldCompress', (wtasks.WidefieldCompress,), {})(
-            **kwargs, **wfield_kwargs, parents=[tasks['WideFieldRegisterRaw']]
-        )
-        tasks['WidefieldPreprocess'] = type('WidefieldPreprocess', (wtasks.WidefieldPreprocess,), {})(
-            **kwargs, **wfield_kwargs, parents=[tasks['WidefieldCompress']]
-        )
-        tasks['WidefieldSync'] = type('WidefieldSync', (wtasks.WidefieldSync,), {})(
-            **kwargs,
-            **wfield_kwargs,
-            **sync_kwargs,
-            parents=[tasks['WideFieldRegisterRaw'], tasks['WidefieldCompress']] + sync_tasks,
-        )
-        tasks['WidefieldFOV'] = type('WidefieldFOV', (wtasks.WidefieldFOV,), {})(
-            **kwargs, **wfield_kwargs, parents=[tasks['WidefieldPreprocess']]
-        )
+    tasks.update(get_wfield_tasks(acquisition_description, sync_parents, **kwargs))
 
     # Mesoscope tasks
-    if 'mesoscope' in devices:
-        ((_, mscope_kwargs),) = devices['mesoscope'].items()
-        mscope_kwargs['device_collection'] = mscope_kwargs.pop('collection')
-        tasks['MesoscopeRegisterSnapshots'] = type('MesoscopeRegisterSnapshots', (mscope_tasks.MesoscopeRegisterSnapshots,), {})(
-            **kwargs, **mscope_kwargs
-        )
-        tasks['MesoscopePreprocess'] = type('MesoscopePreprocess', (mscope_tasks.MesoscopePreprocess,), {})(
-            **kwargs, **mscope_kwargs
-        )
-        tasks['MesoscopeFOV'] = type('MesoscopeFOV', (mscope_tasks.MesoscopeFOV,), {})(
-            **kwargs, **mscope_kwargs, parents=[tasks['MesoscopePreprocess']]
-        )
-        tasks['MesoscopeSync'] = type('MesoscopeSync', (mscope_tasks.MesoscopeSync,), {})(
-            **kwargs, **mscope_kwargs, **sync_kwargs
-        )
-        tasks['MesoscopeCompress'] = type('MesoscopeCompress', (mscope_tasks.MesoscopeCompress,), {})(
-            **kwargs, **mscope_kwargs, parents=[tasks['MesoscopePreprocess']]
-        )
+    tasks.update(get_mesoscope_tasks(acquisition_description, **kwargs))
 
-    if 'neurophotometrics' in devices:
-        from iblphotometry.tasks import (
-            FibrePhotometryBpodSync,
-            FibrePhotometryDAQSync,
-            FibrePhotometryPassiveChoiceWorld,
-            # FibrePhotometryQC,
-        )
-
-        sync_mode = devices['neurophotometrics']['sync_mode']
-
-        # passive photometry
-        task_protocols = acquisition_description['tasks']
-        assert len(task_protocols) == 1, 'chained protocols are not yet supported for photometry extraction'
-        protocol = task_protocols[0]
-        if 'passive' in protocol:
-            tasks['FibrePhotometryPassiveChoiceWorld'] = type(
-                'FibrePhotometryPassiveChoiceWorld', (FibrePhotometryPassiveChoiceWorld,), {}
-            )(**kwargs)
-
-        # syncing / extraction
-        match sync_mode:
-            case 'bpod':
-                # for synchronization with the BNC inputs of the neurophotometrics receiving the sync pulses
-                # from the individual bpods
-                tasks['FibrePhotometryBpodSync'] = type('FibrePhotometryBpodSync', (FibrePhotometryBpodSync,), {})(
-                    **kwargs,
-                )
-            case 'daqami':
-                # for synchronization with the DAQami receiving the sync pulses from the individual bpods
-                # as well as the frame clock from the FP3002
-                if 'passive' not in protocol:  # excluding passive session
-                    tasks['FibrePhotometryDAQSync'] = type('FibrePhotometryDAQSync', (FibrePhotometryDAQSync,), {})(
-                        **kwargs,
-                    )
-            case _:
-                raise ValueError('unknown sync mode')
-
-        # QC
-        # tasks['FibrePhotometryQC'] = type('FibrePhotometryQC', (FibrePhotometryQC,), {})(
-        #     **kwargs, parents=[tasks['FibrePhotometryDAQSync']]  # conditional parents?
-        # )
+    # Photometry tasks
+    tasks.update(get_photometry_tasks(acquisition_description, **kwargs))
 
     p = mtasks.Pipeline(session_path=session_path, **pkwargs)
     p.tasks = tasks
