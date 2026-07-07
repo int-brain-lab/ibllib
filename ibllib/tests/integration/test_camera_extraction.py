@@ -283,7 +283,7 @@ class TestEphysCameraExtractor(base.IntegrationTest):
 
     required_files = ['camera/SWC_054/2020-10-07/001',
                       'ephys/ephys_choice_world_task/ibl_witten_27/2021-01-21/001',
-                      'Subjects_init/ZM_1098/2019-01-25/001/*.mp4']
+                      'Subjects_init/ZM_1098/2019-01-25/001']
     _writable_scope = 'test'
 
     def setUp(self) -> None:
@@ -734,7 +734,7 @@ class TestCameraQC(base.IntegrationTest):
         if desc_file.exists() and desc_file.is_symlink():
             desc_file.unlink()
         # Write the session description file to the session path and ensure it is cleaned up after the test
-        self.addCleanup(session_params.write_params(session_path, sess_params).unlink)
+        self.addCleanup(session_params.write_params(session_path, sess_params).unlink, missing_ok=True)
         # Check load data method
         qc = CameraQC(session_path, camera='left', stream=False, one=self.one, n_samples=0)
         qc.load_data(load_video=False)

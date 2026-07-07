@@ -122,10 +122,10 @@ class TestWidefieldPreprocessAndCompress(base.IntegrationTest):
 
         orig_data_file = next(cls.data_folder.glob('*.dat'))
         new_data_file = cls.widefield_folder.joinpath(orig_data_file.name)
-        try:
-            new_data_file.symlink_to(orig_data_file)
-        except OSError as e:
-            _logger.error(f'Error creating symlink: {e}')
+        # .dat file must be a writable copy: wfield opens it with mode='r+' to write motion data
+        if new_data_file.is_symlink():
+            new_data_file.unlink()
+        if not new_data_file.exists():
             shutil.copy(orig_data_file, new_data_file)
 
     def test_preprocess(self):

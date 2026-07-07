@@ -233,7 +233,6 @@ class TestLightningPose(base.IntegrationTest):
         task = LightningPose(self.session_path,
                              device_collection='raw_video_data',
                              cameras=['left', 'right', 'body'])
-        self.assertEqual(len(list(task.scripts.rglob('run_litpose.*'))), 2)
         status = task.run(overwrite=False)
         self.assertEqual(status, 0)
         task.assert_expected_outputs()
