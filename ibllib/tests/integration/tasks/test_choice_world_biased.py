@@ -1,5 +1,4 @@
 import logging
-import shutil
 import ibllib.pipes.behavior_tasks as btasks
 from one.api import ONE
 
@@ -9,7 +8,7 @@ _logger = logging.getLogger('ibllib')
 
 
 class BiasedTemplate(base.IntegrationTest):
-    
+
     required_files = ['tasks/choice_world_biased/steinmetzlab/Subjects/NR_0020/2022-03-14/001']
 
     def setUp(self) -> None:

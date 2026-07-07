@@ -3,7 +3,6 @@
 NB: For ibllib.pipes.behavior_tasks.HabituationTrialsNidq tests see tests.test_ephys_trials.
 """
 import logging
-import shutil
 import ibllib.pipes.behavior_tasks as btasks
 from one.api import ONE
 

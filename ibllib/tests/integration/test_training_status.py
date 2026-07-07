@@ -1,4 +1,3 @@
-import tempfile
 import shutil
 
 from ibllib.tests import base
@@ -10,7 +9,7 @@ import numpy as np
 
 class TestTrainingStatus(base.IntegrationTest):
     """Test training status computations."""
-    
+
     required_files = ['training_status/PL023']
 
     @classmethod

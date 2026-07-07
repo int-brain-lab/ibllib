@@ -691,7 +691,8 @@ def make_pipeline(session_path, **pkwargs):
     sync_parent_tasks = [t for name, t in sync_tasks.items() if name.startswith('SyncPulses')]
 
     # Behavior tasks
-    behavior_tasks = _get_trials_tasks(session_path, acquisition_description, sync_tasks=sync_parent_tasks, one=pkwargs.get('one'))
+    behavior_tasks = _get_trials_tasks(
+        session_path, acquisition_description, sync_tasks=sync_parent_tasks, one=pkwargs.get('one'))
     tasks.update(behavior_tasks)
 
     # Ephys tasks

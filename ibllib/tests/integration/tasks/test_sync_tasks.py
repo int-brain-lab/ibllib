@@ -14,7 +14,7 @@ _logger = logging.getLogger('ibllib')
 class SyncTemplate(base.IntegrationTest):
     required_files = ['widefield/widefieldChoiceWorld/JC076/2022-02-04/001']
     _writable_scope = 'test'
-    
+
     def setUp(self) -> None:
         super().setUp()
         self.session_path = self.data_path.joinpath(self.required_files[0])

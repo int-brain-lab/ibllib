@@ -226,10 +226,7 @@ class TestLightningPose(base.IntegrationTest):
             link.symlink_to(ff)
 
     @unittest.mock.patch(
-        "ibllib.pipes.video_tasks.LightningPose._check_env", return_value=unittest.mock.MagicMock('mock_version')
-    )
-    @unittest.mock.patch.object(
-        LightningPose, 'scripts', Path(__file__).parents[3].joinpath('deploy', 'serverpc', 'litpose')
+        "ibllib.pipes.video_tasks.LightningPose._check_env", return_value='mock_version'
     )
     def test_litpose(self, mock_check_env):
         # Test the existence of the relevant iblscripts scripts separately as we are mocking the relevant check
@@ -240,6 +237,29 @@ class TestLightningPose(base.IntegrationTest):
         status = task.run(overwrite=False)
         self.assertEqual(status, 0)
         task.assert_expected_outputs()
+
+    @unittest.mock.patch('ibllib.pipes.video_tasks.check_nvidia_driver')
+    @unittest.mock.patch('ibllib.pipes.video_tasks.subprocess.Popen')
+    @unittest.mock.patch(
+        "ibllib.pipes.video_tasks.LightningPose._check_env", return_value='mock_version'
+    )
+    def test_litpose_overwrite(self, mock_check_env, mock_popen, mock_nvidia):
+        # Force the pose estimation / motion energy branches to actually run by setting overwrite=True.
+        # The real run_litpose.sh / run_motion.sh scripts are replaced by a mocked subprocess.Popen whose
+        # returncode must be set explicitly, since the task checks process.returncode after communicate().
+        mock_process = unittest.mock.MagicMock()
+        mock_process.communicate.return_value = (b'', b'')
+        mock_process.returncode = 0
+        mock_popen.return_value = mock_process
+
+        task = LightningPose(self.session_path,
+                             device_collection='raw_video_data',
+                             cameras=['left', 'right', 'body'])
+        status = task.run(overwrite=True)
+        self.assertEqual(status, 0)
+        task.assert_expected_outputs()
+        # One Popen call for pose estimation and one for motion energy, per camera
+        self.assertEqual(mock_popen.call_count, 2 * len(task.cameras))
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()

@@ -100,7 +100,7 @@ class TestWidefieldPreprocessAndCompress(base.IntegrationTest):
     @classmethod
     def setUpClass(cls) -> None:
         super().setUpClass()
-        cls.session_path = cls.default_data_root().joinpath(
+        cls.session_path = cls.data_path.joinpath(
             'widefield', 'widefieldChoiceWorld', 'CSK-im-011', '2021-07-21', '001')
         if not cls.session_path.exists():
             raise unittest.SkipTest(reason=f'File not found: {cls.session_path}')
