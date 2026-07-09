@@ -12,7 +12,7 @@ nptdms
 numba>=0.56
 numpy>=1.18
 opencv-python-headless
-pandas
+pandas<3  # pinned due to segfault bug in 3.0.4: https://github.com/pandas-dev/pandas/issues/66086
 pyarrow
 pynrrd>=0.4.0
 pyqt5

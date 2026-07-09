@@ -52,7 +52,7 @@ from brainbox.ephys_plots import image_lfp_spectrum_plot, image_rms_plot, plot_b
 from brainbox.io.one import SpikeSortingLoader
 from brainbox.behavior import training
 from iblutil.numerical import ismember
-from ibllib.plots.misc import Density
+from ibllib.plots import Density
 
 
 logger = logging.getLogger(__name__)
