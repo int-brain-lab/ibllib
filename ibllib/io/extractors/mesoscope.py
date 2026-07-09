@@ -11,7 +11,7 @@ from iblutil.util import ensure_list
 import matplotlib.pyplot as plt
 from packaging import version
 
-from ibllib.plots.misc import squares, vertical_lines
+from ibllib.plots import squares, vertical_lines
 from ibllib.io.raw_daq_loaders import (
     extract_sync_timeline,
     timeline_get_channel,

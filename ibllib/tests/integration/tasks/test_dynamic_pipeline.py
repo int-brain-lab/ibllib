@@ -1,3 +1,4 @@
+import sys
 import logging
 import shutil
 import tempfile
@@ -9,6 +10,7 @@ import ibllib.pipes.dynamic_pipeline as dynamic
 import ibllib.io.session_params as sess_params
 from ibllib.io.raw_data_loaders import patch_settings
 import unittest
+from unittest.mock import patch, MagicMock
 
 from ibllib.tests import base
 
@@ -97,10 +99,27 @@ class TestStandardPipelines(base.IntegrationTest):
         self.check_pipeline()
 
     def test_mesoscope(self):
-        shutil.copytree(self.folder_path.joinpath('mesoscope'), self.session_path)
-        filepath = self.data_path.joinpath('mesoscope', 'test', '2023-03-03', '002', '_ibl_experiment.description.yaml')
-        shutil.copy(filepath, self.session_path)
-        self.check_pipeline()
+        """Test that the mesoscope pipeline is created when the mesoscope device is present."""
+        # get_mesoscope_tasks does a local `import mpci.alyx.pipeline`, so faking it requires
+        # sys.modules entries for every level of the dotted path (mpci, mpci.alyx,
+        # mpci.alyx.pipeline), with the parent -> child attributes wired up to match, since the
+        # real import machinery normally does that wiring for us.
+        pipeline_mock = MagicMock()
+        pipeline_mock.make_pipeline.return_value = {'MesoscopeRegisterSnapshots': 'mocked_task'}
+        alyx_mock = MagicMock(pipeline=pipeline_mock)
+        mpci_mock = MagicMock(alyx=alyx_mock)
+        fake_modules = {'mpci': mpci_mock, 'mpci.alyx': alyx_mock, 'mpci.alyx.pipeline': pipeline_mock}
+        with patch.dict(sys.modules, fake_modules):
+            experiment_description = {'devices': {'foo': {'bar': 'baz'}}}
+            # Without mesoscope device, the pipeline should not be created
+            ret = dynamic.get_mesoscope_tasks(experiment_description)
+            self.assertEqual(ret, {})
+            pipeline_mock.make_pipeline.assert_not_called()
+            # With mesoscope device, the make_pipeline should be called
+            experiment_description['devices']['mesoscope'] = {'collection': 'raw_imaging_data'}
+            ret = dynamic.get_mesoscope_tasks(experiment_description)
+            pipeline_mock.make_pipeline.assert_called_once_with(experiment_description)
+            self.assertEqual(ret, {'MesoscopeRegisterSnapshots': 'mocked_task'})
 
     def test_chained(self):
         """Test pipeline creation when there are multiple task protocols run within a session"""

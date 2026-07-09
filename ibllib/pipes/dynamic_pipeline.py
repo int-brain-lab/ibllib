@@ -36,7 +36,6 @@ import ibllib.io.session_params as sess_params
 import ibllib.pipes.tasks as mtasks
 import ibllib.pipes.base_tasks as bstasks
 import ibllib.pipes.widefield_tasks as wtasks
-import ibllib.pipes.mesoscope_tasks as mscope_tasks
 import ibllib.pipes.sync_tasks as stasks
 import ibllib.pipes.behavior_tasks as btasks
 import ibllib.pipes.video_tasks as vtasks
@@ -560,30 +559,12 @@ def get_wfield_tasks(acquisition_description, sync_tasks, **kwargs):
 
 
 def get_mesoscope_tasks(acquisition_description, **kwargs):
-    _, _, _, sync_kwargs = _get_sync_config(acquisition_description)
-    devices = acquisition_description.get('devices', {})
+    if 'mesoscope' not in acquisition_description.get('devices', {}):
+        return {}
 
-    mesoscope_tasks = OrderedDict()
-    if 'mesoscope' in devices:
-        ((_, mscope_kwargs),) = devices['mesoscope'].items()
-        mscope_kwargs['device_collection'] = mscope_kwargs.pop('collection')
-        mesoscope_tasks['MesoscopeRegisterSnapshots'] = type(
-            'MesoscopeRegisterSnapshots', (mscope_tasks.MesoscopeRegisterSnapshots,), {}
-        )(**kwargs, **mscope_kwargs)
-        mesoscope_tasks['MesoscopePreprocess'] = type('MesoscopePreprocess', (mscope_tasks.MesoscopePreprocess,), {})(
-            **kwargs, **mscope_kwargs
-        )
-        mesoscope_tasks['MesoscopeFOV'] = type('MesoscopeFOV', (mscope_tasks.MesoscopeFOV,), {})(
-            **kwargs, **mscope_kwargs, parents=[mesoscope_tasks['MesoscopePreprocess']]
-        )
-        mesoscope_tasks['MesoscopeSync'] = type('MesoscopeSync', (mscope_tasks.MesoscopeSync,), {})(
-            **kwargs, **mscope_kwargs, **sync_kwargs
-        )
-        mesoscope_tasks['MesoscopeCompress'] = type('MesoscopeCompress', (mscope_tasks.MesoscopeCompress,), {})(
-            **kwargs, **mscope_kwargs, parents=[mesoscope_tasks['MesoscopePreprocess']]
-        )
-
-    return mesoscope_tasks
+    import mpci.alyx.pipeline
+    pipe = mpci.alyx.pipeline.make_pipeline(acquisition_description, **kwargs)
+    return pipe.tasks
 
 
 def get_photometry_tasks(acquisition_description, **kwargs):

@@ -640,10 +640,9 @@ class Pipeline(abc.ABC):
     Pipeline class: collection of related and potentially interdependent tasks
     """
 
-    tasks = OrderedDict()
     one = None
 
-    def __init__(self, session_path=None, one=None, eid=None):
+    def __init__(self, session_path=None, one=None, eid=None, tasks=None):
         assert session_path or eid
         self.one = one
         if one and one.alyx.cache_mode and one.alyx.default_expiry.seconds > 1:
@@ -660,6 +659,7 @@ class Pipeline(abc.ABC):
                 # eID for newer sessions may not be in cache so use remote query
                 self.eid = one.path2eid(session_path, query_type='remote') if self.one else None
         self.label = self.__module__ + '.' + type(self).__name__
+        self.tasks = tasks or OrderedDict()
 
     @staticmethod
     def _get_exec_name(obj):
