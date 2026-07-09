@@ -52,12 +52,24 @@ owner, _, teamspace = TEAMSPACE.partition("/")
 
 # Bootstrap inside the container (python:3.12 — verified git/bash/pip):
 #   guard -> clone @ commit -> hand off to repo-versioned CI scripts.
+#
+# For pull_request events, GITHUB_SHA is a virtual merge commit
+# (refs/pull/<N>/merge) that is not available in a regular clone.
+# Fetch the PR merge ref explicitly so the Lightning job can check it out.
+if PR_NUMBER:
+    checkout_cmd = (
+        f"git fetch origin refs/pull/{PR_NUMBER}/merge && "
+        "git checkout FETCH_HEAD"
+    )
+else:
+    checkout_cmd = 'git checkout "$GITHUB_SHA"'
+
 command = (
     "set -e && "
     "command -v git >/dev/null || { echo 'ERROR: git not present in image'; exit 127; } && "
     'git clone --no-checkout "$REPO_URL" /workspace/repo && '
     "cd /workspace/repo && "
-    'git checkout "$GITHUB_SHA" && '
+    f"{checkout_cmd} && "
     "bash scripts/ci/run_tests.sh"
 )
 
