@@ -560,7 +560,7 @@ def get_wfield_tasks(acquisition_description, sync_tasks, **kwargs):
 
 def get_mesoscope_tasks(acquisition_description, **kwargs):
     if 'mesoscope' not in acquisition_description.get('devices', {}):
-        return {}
+        return OrderedDict()
 
     import mpci.alyx.pipeline
     pipe = mpci.alyx.pipeline.make_pipeline(acquisition_description, **kwargs)

@@ -659,7 +659,9 @@ class Pipeline(abc.ABC):
                 # eID for newer sessions may not be in cache so use remote query
                 self.eid = one.path2eid(session_path, query_type='remote') if self.one else None
         self.label = self.__module__ + '.' + type(self).__name__
-        self.tasks = tasks or OrderedDict()
+        self.tasks = tasks or {}
+        if not isinstance(self.tasks, OrderedDict):
+            self.tasks = OrderedDict(self.tasks)
 
     @staticmethod
     def _get_exec_name(obj):
