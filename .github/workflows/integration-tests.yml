@@ -3,6 +3,8 @@ name: Integration Tests (Lightning)
 on:
   push:
     branches: [master, ci]
+  pull_request:
+    branches: ['*']
 
 
 # No top-level env: each step declares exactly what it consumes (explicit wiring).
