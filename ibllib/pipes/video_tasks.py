@@ -71,6 +71,7 @@ class VideoCompress(base_tasks.VideoTask):
     """
 
     priority = 90
+    io_charge = 100
     job_size = 'large'
 
     @property
@@ -104,6 +105,7 @@ class VideoConvert(base_tasks.VideoTask):
     """
 
     priority = 90
+    io_charge = 100
     job_size = 'small'
 
     @property

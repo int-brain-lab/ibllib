@@ -2,6 +2,7 @@ from pathlib import Path
 import datetime
 import logging
 import itertools
+import re
 
 from packaging import version
 from requests import HTTPError
@@ -98,7 +99,7 @@ def register_dataset(file_list, one=None, exists=False, versions=None, **kwargs)
             protected_status = IBLRegistrationClient(_one).check_protected_files(file_list)
             protected = _get_protected(protected_status)
         except HTTPError as err:
-            if "[Errno 500] /check-protected: 'A base session for" in str(err):
+            if err.response.status_code == 500 and re.search(r"check-protected: 'A (base )?session .* does not exist'", str(err)):
                 # If we get an error due to the session not existing, we take this to mean no datasets are protected
                 protected = False
             else:
@@ -349,7 +350,7 @@ class IBLRegistrationClient(RegistrationClient):
                 _, _end_time = _get_session_times(ses_path, md, d)
                 user = md.get('PYBPOD_CREATOR')
                 user = user[0] if user[0] in users else self.one.alyx.user
-                volume = d[-1].get('water_delivered', sum(x['reward_amount'] for x in d)) / 1000
+                volume = d[-1].get('water_delivered', sum(x.get('reward_amount', 0) for x in d)) / 1000
                 if volume > 0:
                     self.register_water_administration(
                         subject['nickname'],
