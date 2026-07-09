@@ -106,7 +106,7 @@ class TestStandardPipelines(base.IntegrationTest):
         # sys.modules entries for every level of the dotted path (mpci, mpci.alyx,
         # mpci.alyx.pipeline), with the parent -> child attributes wired up to match, since the
         # real import machinery normally does that wiring for us.
-        pipe = Pipeline(session_path=self.session_path, one=self.one, tasks={'MesoscopeRegisterSnapshots': 'mocked_task'})
+        pipe = Pipeline(session_path=self.session_path, tasks={'MesoscopeRegisterSnapshots': 'mocked_task'})
         pipeline_mock = MagicMock()
         pipeline_mock.make_pipeline.return_value = pipe
         alyx_mock = MagicMock(pipeline=pipeline_mock)
