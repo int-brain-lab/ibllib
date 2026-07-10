@@ -822,6 +822,8 @@ class PassiveChoiceWorld(BaseExtractor):
         if sync is None or sync_map is None:
             sync, sync_map = ephys_fpga.get_sync_and_chn_map(self.session_path, sync_collection)
 
+        if not settings:
+            settings = rawio.load_settings(self.session_path, task_collection=task_collection) or {}
         skip_replay = settings.get('SKIP_EVENT_REPLAY', False)
         # Get the start and end times of this protocol
         if (protocol_number := kwargs.get('protocol_number')) is not None:  # look for spacer

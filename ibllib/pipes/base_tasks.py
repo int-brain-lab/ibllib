@@ -1,7 +1,6 @@
 """Abstract base classes for dynamic pipeline tasks."""
 
 import logging
-import json
 from pathlib import Path
 
 from packaging import version

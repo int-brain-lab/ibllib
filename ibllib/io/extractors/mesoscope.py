@@ -546,7 +546,7 @@ class TimelineTrials(FpgaTrials):
             window_indices = np.where(window_mask)[0]
             # Find where the absolute corrected voltage crosses the threshold
             if hold_mode and event_type == 'open':  # 'open' event 5V -> 0V
-                    crossings = np.where(values[window_indices] < 5.0 - threshold)[0]
+                crossings = np.where(values[window_indices] < 5.0 - threshold)[0]
             else:  # 'close' or any event 0V -> 5V
                 crossings = np.where(values[window_indices] > threshold)[0]
 

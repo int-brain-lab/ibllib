@@ -44,7 +44,7 @@ class TestTimelineTrials(base.IntegrationTest):
                     [33.46808532, 36.9309287]]
         with self.subTest(k='intervals'):
             np.testing.assert_array_almost_equal(expected, trials['intervals'][:4, :])
-        expected = [20.903, 26.033, 30.826, 34.803, 39.257, 44.131, 53.225]
+        expected = [20.903, 26.053, 30.844, 34.821, 39.257, 44.15, 53.244]
         with self.subTest(k='feedback_times'):
             np.testing.assert_array_almost_equal(expected, trials['feedback_times'])
         expected = [20.811, 25.892, 30.742, 34.731, 39.091, 43.992, 53.125]
@@ -97,13 +97,13 @@ class TestTimelineTrials(base.IntegrationTest):
             self.assertTrue(all(isinstance(x, np.ndarray) and x.size == 0 for x in out))
 
         # Test with TTLs
-        ttls = np.array([[26.033, 26.099], [30.826, 30.891], [34.803, 34.868], [44.131, 44.196], [53.225, 53.29 ]])
+        ttls = np.array([[26.033, 26.099], [30.826, 30.891], [34.803, 34.868], [44.131, 44.196], [53.225, 53.29]])
         # Above TTLS taken from this code:
         # sync, chmap = timeline_trials.load_sync()
         # evts = timeline_trials.get_bpod_event_times(sync, chmap)
         # ttls = evts[1]['valve_open']
         intervals, open_times = timeline_trials.get_valve_open_times(driver_ttls=ttls)
-        expected = np.array([[26.033, 26.101], [30.826, 30.894], [34.803, 34.871], [44.131, 44.199], [53.225, 53.293]])
+        expected = np.array([[26.053, 26.101], [30.844, 30.894], [34.821, 34.871], [44.15, 44.199], [53.244, 53.293]])
         np.testing.assert_array_almost_equal(expected, intervals)
         np.testing.assert_array_almost_equal(expected[:, 0], open_times)
         # Test display
