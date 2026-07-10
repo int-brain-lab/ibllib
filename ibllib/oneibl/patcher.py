@@ -20,11 +20,13 @@ Patch some local datasets using Globus
 >>> patcher.launch_transfers(local_servers=True)  # transfer to all remote repositories
 
 """
+
 import abc
 import ftplib
 from pathlib import Path, PurePosixPath, WindowsPath
 from collections import defaultdict
 from itertools import starmap
+from functools import lru_cache
 from subprocess import Popen, PIPE, STDOUT
 import subprocess
 import logging
@@ -32,6 +34,7 @@ from getpass import getpass
 import shutil
 
 import globus_sdk
+import boto3
 import iblutil.io.params as iopar
 from iblutil.util import ensure_list
 from one.alf.path import get_session_path, add_uuid_string, full_path_parts
@@ -40,7 +43,7 @@ from one import params
 from one.webclient import AlyxClient
 from one.converters import path_from_dataset
 from one.remote import globus
-from one.remote.aws import url2uri, get_s3_from_alyx
+from one.remote.aws import url2uri, get_s3_from_alyx, get_aws_access_keys
 
 from ibllib.oneibl.registration import register_dataset
 
@@ -94,6 +97,29 @@ def globus_path_from_dataset(dset, repository=None, uuid=False):
      the first filerecord with a URL)
     """
     return path_from_dataset(dset, root_path=PurePosixPath('/'), repository=repository, uuid=uuid)
+
+
+@lru_cache(maxsize=32)
+def get_s3_bucket_from_alyx(alyx, repository_name):
+    """
+    Retrieves the S3 bucket and region associated with a given Alyx repository.
+
+    Parameters
+    ----------
+    alyx : AlyxClient
+        An instance of the Alyx client.
+    repository_name : str
+        The name of the repository to look up.
+
+    Returns
+    -------
+    str
+        The S3 bucket name.
+    str
+        The S3 region name.
+    """
+    session_keys, bucket_name = get_aws_access_keys(alyx, repository_name)
+    return bucket_name, session_keys['region_name']
 
 
 class Patcher(abc.ABC):
@@ -161,7 +187,7 @@ class Patcher(abc.ABC):
         nses = len(register_dict)
         for i, label in enumerate(register_dict):
             _files = register_dict[label]['files']
-            _logger.info(f"{i + 1}/{nses} {label}, registering {len(_files)} files")
+            _logger.info(f'{i + 1}/{nses} {label}, registering {len(_files)} files')
             responses.append(self.register_dataset(_files, **kwargs))
         return responses
 
@@ -243,18 +269,18 @@ class GlobusPatcher(Patcher, globus.Globus):
         # transfers/delete from the current computer to the flatiron: mandatory and executed first
         local_id = self.endpoints['local']['id']
         self.globus_transfer = globus_sdk.TransferData(
-            self.client, local_id, flatiron_id, verify_checksum=True, sync_level='checksum', label=label)
-        self.globus_delete = globus_sdk.DeleteData(self.client, flatiron_id, label=label)
+            source_endpoint=local_id, destination_endpoint=flatiron_id, verify_checksum=True, sync_level='checksum', label=label
+        )
+        self.globus_delete = globus_sdk.DeleteData(endpoint=flatiron_id, label=label)
         # transfers/delete from flatiron to optional third parties to synchronize / delete
         self.globus_transfers_locals = {}
         self.globus_deletes_locals = {}
+        self.aws_transfers = {}  # dictionary region_name -> bucket_name -> list of (src, dst)
         super().__init__(one=one)
 
     def _scp(self, local_path, remote_path, dry=True):
-        remote_path = PurePosixPath('/').joinpath(
-            remote_path.relative_to(PurePosixPath(FLATIRON_MOUNT))
-        )
-        _logger.info(f"Globus copy {local_path} to {remote_path}")
+        remote_path = PurePosixPath('/').joinpath(remote_path.relative_to(PurePosixPath(FLATIRON_MOUNT)))
+        _logger.info(f'Globus copy {local_path} to {remote_path}')
         local_path = globus.as_globus_path(local_path)
         if not dry:
             if isinstance(self.globus_transfer, globus_sdk.TransferData):
@@ -284,16 +310,24 @@ class GlobusPatcher(Patcher, globus.Globus):
         :return:
         """
         responses = super().patch_datasets(file_list, **kwargs)
-        for dset in responses:
+        for dset, file in zip(responses, file_list):
             # get the flatiron path
             fr = next(fr for fr in dset['file_records'] if 'flatiron' in fr['data_repository'])
             relative_path = add_uuid_string(fr['relative_path'], dset['id']).as_posix()
             flatiron_path = self.to_address(relative_path, fr['data_repository'])
+            aws_destination_key = 'data' + flatiron_path
             # loop over the remaining repositories (local servers) and create a transfer
             # from flatiron to the local server
             for fr in dset['file_records']:
                 if fr['data_repository'] == DMZ_REPOSITORY:
                     continue
+                if fr['data_repository'].startswith('aws_'):
+                    bucket_name, region_name = get_s3_bucket_from_alyx(self.one.alyx, fr['data_repository'])
+                    if region_name not in self.aws_transfers:
+                        self.aws_transfers[region_name] = {}
+                    if bucket_name not in self.aws_transfers[region_name]:
+                        self.aws_transfers[region_name][bucket_name] = []
+                    self.aws_transfers[region_name][bucket_name].append((str(file), aws_destination_key))
                 if fr['data_repository'] not in self.endpoints:
                     continue
                 repo_gid = self.endpoints[fr['data_repository']]['id']
@@ -303,8 +337,12 @@ class GlobusPatcher(Patcher, globus.Globus):
                 # if there is no transfer already created, initialize it
                 if repo_gid not in self.globus_transfers_locals:
                     self.globus_transfers_locals[repo_gid] = globus_sdk.TransferData(
-                        self.client, flatiron_id, repo_gid, verify_checksum=True,
-                        sync_level='checksum', label=f"{self.label} on {fr['data_repository']}")
+                        source_endpoint=flatiron_id,
+                        destination_endpoint=repo_gid,
+                        verify_checksum=True,
+                        sync_level='checksum',
+                        label=f'{self.label} on {fr["data_repository"]}',
+                    )
                 # get the local server path and create the transfer item
                 local_server_path = self.to_address(fr['relative_path'], fr['data_repository'])
                 self.globus_transfers_locals[repo_gid].add_item(flatiron_path, local_server_path)
@@ -313,7 +351,7 @@ class GlobusPatcher(Patcher, globus.Globus):
     def launch_transfers(self, local_servers=False):
         """
         patcher.launch_transfers()
-        Launches the globus transfer and delete from the local patch computer to the flat-rion
+        Launches the globus transfer and delete from the local patch computer to the flatiron
         :param: local_servers (False): if True, sync the local servers after the main transfer
         :return: None
         """
@@ -335,7 +373,7 @@ class GlobusPatcher(Patcher, globus.Globus):
                     break
                 _ = gtc.task_wait(task_id=resp['task_id'], timeout=30)
             if tinfo and tinfo['fatal_error'] is not None:
-                raise ConnectionError(f"Globus transfer failed \n {tinfo}")
+                raise ConnectionError(f'Globus transfer failed \n {tinfo}')
 
         # handles the transfers first
         if len(self.globus_transfer['DATA']) > 0:
@@ -343,19 +381,17 @@ class GlobusPatcher(Patcher, globus.Globus):
             _wait_for_task(gtc.submit_transfer(self.globus_transfer))
             # re-initialize the globus_transfer property
             self.globus_transfer = globus_sdk.TransferData(
-                gtc,
-                self.globus_transfer['source_endpoint'],
-                self.globus_transfer['destination_endpoint'],
+                source_endpoint=self.globus_transfer['source_endpoint'],
+                destination_endpoint=self.globus_transfer['destination_endpoint'],
                 label=self.globus_transfer['label'],
-                verify_checksum=True, sync_level='checksum')
+                verify_checksum=True,
+                sync_level='checksum',
+            )
 
         # do the same for deletes
         if len(self.globus_delete['DATA']) > 0:
             _wait_for_task(gtc.submit_delete(self.globus_delete))
-            self.globus_delete = globus_sdk.DeleteData(
-                gtc,
-                endpoint=self.globus_delete['endpoint'],
-                label=self.globus_delete['label'])
+            self.globus_delete = globus_sdk.DeleteData(endpoint=self.globus_delete['endpoint'], label=self.globus_delete['label'])
 
         # launch the local transfers and local deletes
         if local_servers:
@@ -377,6 +413,30 @@ class GlobusPatcher(Patcher, globus.Globus):
             if len(transfer['DATA']) > 0:
                 self.client.submit_delete(delete)
 
+    def launch_aws_transfers(self, aws_profile='ibladmin', dry=False):
+        """Launches the AWS transfers from local path to AWS S3 bucket.
+
+        Parameters
+        ----------
+        aws_profile : str
+            The AWS profile name to use.
+        dry : bool
+            If true, the transfer is not actually executed.
+
+        """
+        session = boto3.Session(profile_name=aws_profile)
+        for region, buckets in self.aws_transfers.items():
+            s3_client = session.client('s3', region_name=region)
+            for bucket, files in buckets.items():
+                try:
+                    for source_file, destination_key in files:
+                        if not dry:
+                            s3_client.upload_file(source_file, bucket, destination_key)
+                        _logger.info(f'Copied {source_file} to s3://{bucket}/{destination_key}')
+                except Exception as e:
+                    _logger.error(f'Failed to copy {source_file} to S3: {e}')
+                    raise
+
 
 class IBLGlobusPatcher(Patcher, globus.Globus):
     """This is a replacement for the GlobusPatcher class, utilizing the ONE Globus class.
@@ -384,6 +444,7 @@ class IBLGlobusPatcher(Patcher, globus.Globus):
     The GlobusPatcher class is more complicated but has the advantage of being able to launch
     transfers independently to registration, although it remains to be seen whether this is useful.
     """
+
     def __init__(self, alyx=None, client_name='default'):
         """
         A Globus patcher for IBL data.
@@ -497,20 +558,20 @@ class SSHPatcher(Patcher):
     """
     Requires SSH keys access on the FlatIron
     """
+
     def __init__(self, one=None):
-        res = _run_command(f"ssh -p {FLATIRON_PORT} {FLATIRON_USER}@{FLATIRON_HOST} ls")
+        res = _run_command(f'ssh -p {FLATIRON_PORT} {FLATIRON_USER}@{FLATIRON_HOST} ls')
         if res[0] != 0:
-            raise PermissionError("Could not connect to the Flatiron via SSH. Check your RSA keys")
+            raise PermissionError('Could not connect to the Flatiron via SSH. Check your RSA keys')
         super().__init__(one=one)
 
     def _scp(self, local_path, remote_path, dry=True):
-        cmd = f"ssh -p {FLATIRON_PORT} {FLATIRON_USER}@{FLATIRON_HOST}" \
-              f" mkdir -p {remote_path.parent}; "
-        cmd += f"scp -P {FLATIRON_PORT} {local_path} {FLATIRON_USER}@{FLATIRON_HOST}:{remote_path}"
+        cmd = f'ssh -p {FLATIRON_PORT} {FLATIRON_USER}@{FLATIRON_HOST} mkdir -p {remote_path.parent}; '
+        cmd += f'scp -P {FLATIRON_PORT} {local_path} {FLATIRON_USER}@{FLATIRON_HOST}:{remote_path}'
         return _run_command(cmd, dry=dry)
 
     def _rm(self, flatiron_path, dry=True):
-        cmd = f"ssh -p {FLATIRON_PORT} {FLATIRON_USER}@{FLATIRON_HOST} rm {flatiron_path}"
+        cmd = f'ssh -p {FLATIRON_PORT} {FLATIRON_USER}@{FLATIRON_HOST} rm {flatiron_path}'
         return _run_command(cmd, dry=dry)
 
 
@@ -518,6 +579,7 @@ class FTPPatcher(Patcher):
     """
     This is used to register from anywhere without write access to FlatIron
     """
+
     def __init__(self, one=None):
         super().__init__(one=one)
         alyx = self.one.alyx
@@ -530,7 +592,7 @@ class FTPPatcher(Patcher):
         self.ftp.prot_p()
         self.ftp.login(login, pwd)
         # pre-fetch the repositories so as not to query them for every file registered
-        self.repositories = self.one.alyx.rest("data-repository", "list")
+        self.repositories = self.one.alyx.rest('data-repository', 'list')
 
     @staticmethod
     def setup(par=None, silent=False):
@@ -542,9 +604,9 @@ class FTPPatcher(Patcher):
         :return: the modified parameters object
         """
         DEFAULTS = {
-            "FTP_DATA_SERVER": "ftp://ibl.flatironinstitute.org",
-            "FTP_DATA_SERVER_LOGIN": "iblftp",
-            "FTP_DATA_SERVER_PWD": None
+            'FTP_DATA_SERVER': 'ftp://ibl.flatironinstitute.org',
+            'FTP_DATA_SERVER_LOGIN': 'iblftp',
+            'FTP_DATA_SERVER_PWD': None,
         }
         if par is None:
             par = params.get(silent=silent)
@@ -570,49 +632,45 @@ class FTPPatcher(Patcher):
         params.save(par, client_key)  # Client params
         return iopar.from_dict(par)
 
-    def create_dataset(self, path, created_by='root', dry=False, repository=DMZ_REPOSITORY,
-                       **kwargs):
+    def create_dataset(self, path, created_by='root', dry=False, repository=DMZ_REPOSITORY, **kwargs):
         # overrides the superclass just to remove the server repository argument
-        response = super().patch_dataset(path, created_by=created_by, dry=dry,
-                                         repository=repository, ftp=True, **kwargs)
+        response = super().patch_dataset(path, created_by=created_by, dry=dry, repository=repository, ftp=True, **kwargs)
         # need to patch the file records to be consistent
         for ds in response:
             frs = ds['file_records']
             fr_server = next(filter(lambda fr: 'flatiron' in fr['data_repository'], frs))
-            fr_ftp = next(filter(lambda fr: fr['data_repository'] == DMZ_REPOSITORY and
-                                 fr['relative_path'] == fr_server['relative_path'], frs))
-            reposerver = next(filter(lambda rep: rep['name'] == fr_server['data_repository'],
-                                     self.repositories))
-            relative_path = str(PurePosixPath(reposerver['globus_path']).joinpath(
-                PurePosixPath(fr_ftp['relative_path'])))[1:]
+            fr_ftp = next(
+                filter(
+                    lambda fr: fr['data_repository'] == DMZ_REPOSITORY and fr['relative_path'] == fr_server['relative_path'], frs
+                )
+            )
+            reposerver = next(filter(lambda rep: rep['name'] == fr_server['data_repository'], self.repositories))
+            relative_path = str(PurePosixPath(reposerver['globus_path']).joinpath(PurePosixPath(fr_ftp['relative_path'])))[1:]
             # 1) if there was already a file, the registration created a duplicate
-            fr_2del = list(filter(lambda fr: fr['data_repository'] == DMZ_REPOSITORY and
-                                             fr['relative_path'] == relative_path, frs))  # NOQA
+            fr_2del = list(
+                filter(lambda fr: fr['data_repository'] == DMZ_REPOSITORY and fr['relative_path'] == relative_path, frs)
+            )  # NOQA
             if len(fr_2del) == 1:
                 self.one.alyx.rest('files', 'delete', id=fr_2del[0]['id'])
             # 2) the patch ftp file needs to be prepended with the server repository path
-            self.one.alyx.rest('files', 'partial_update', id=fr_ftp['id'],
-                               data={'relative_path': relative_path, 'exists': True})
+            self.one.alyx.rest('files', 'partial_update', id=fr_ftp['id'], data={'relative_path': relative_path, 'exists': True})
             # 3) the server file is labeled as not existing
-            self.one.alyx.rest('files', 'partial_update', id=fr_server['id'],
-                               data={'exists': False})
+            self.one.alyx.rest('files', 'partial_update', id=fr_server['id'], data={'exists': False})
         return response
 
     def _scp(self, local_path, remote_path, dry=True):
         # remote_path = '/mnt/ibl/zadorlab/Subjects/flowers/2018-07-13/001
-        remote_path = PurePosixPath('/').joinpath(
-            remote_path.relative_to(PurePosixPath(FLATIRON_MOUNT))
-        )
+        remote_path = PurePosixPath('/').joinpath(remote_path.relative_to(PurePosixPath(FLATIRON_MOUNT)))
         # local_path
         self.mktree(remote_path.parent)
         self.ftp.pwd()
-        _logger.info(f"FTP upload {local_path}")
+        _logger.info(f'FTP upload {local_path}')
         with open(local_path, 'rb') as fid:
             self.ftp.storbinary(f'STOR {local_path.name}', fid)
         return 0, ''
 
     def mktree(self, remote_path):
-        """ Browse to the tree on the ftp server, making directories on the way"""
+        """Browse to the tree on the ftp server, making directories on the way"""
         if str(remote_path) != '.':
             try:
                 self.ftp.cwd(str(remote_path))
@@ -622,14 +680,14 @@ class FTPPatcher(Patcher):
                 self.ftp.cwd(str(remote_path))
 
     def _rm(self, flatiron_path, dry=True):
-        raise PermissionError("This Patcher does not have admin permissions to remove data "
-                              "from the FlatIron server. ")
+        raise PermissionError('This Patcher does not have admin permissions to remove data from the FlatIron server. ')
 
 
 class SDSCPatcher(Patcher):
     """
     This is used to patch data on the SDSC server
     """
+
     def __init__(self, one=None):
         assert one
         super().__init__(one=one)
@@ -644,7 +702,7 @@ class SDSCPatcher(Patcher):
 
     def _scp(self, local_path, remote_path, dry=True):
 
-        _logger.info(f"Copy {local_path} to {remote_path}")
+        _logger.info(f'Copy {local_path} to {remote_path}')
         if not dry:
             if not Path(remote_path).parent.exists():
                 Path(remote_path).parent.mkdir(exist_ok=True, parents=True)
@@ -652,12 +710,10 @@ class SDSCPatcher(Patcher):
         return 0, ''
 
     def _rm(self, flatiron_path, dry=True):
-        raise PermissionError("This Patcher does not have admin permissions to remove data "
-                              "from the FlatIron server")
+        raise PermissionError('This Patcher does not have admin permissions to remove data from the FlatIron server')
 
 
 class S3Patcher(Patcher):
-
     def __init__(self, one=None):
         assert one
         super().__init__(one=one)
@@ -672,8 +728,9 @@ class S3Patcher(Patcher):
         exists = []
         for file in file_list:
             collection = full_path_parts(file, as_dict=True)['collection']
-            dset = self.one.alyx.rest('datasets', 'list', session=self.one.path2eid(file), name=file.name,
-                                      collection=collection, clobber=True)
+            dset = self.one.alyx.rest(
+                'datasets', 'list', session=self.one.path2eid(file), name=file.name, collection=collection, clobber=True
+            )
             if len(dset) > 0:
                 exists.append(file)
 
@@ -693,8 +750,7 @@ class S3Patcher(Patcher):
             frs = ds['file_records']
             fr_server = next(filter(lambda fr: 'flatiron' in fr['data_repository'], frs))
             # Update the flatiron file record to be false
-            self.one.alyx.rest('files', 'partial_update', id=fr_server['id'],
-                               data={'exists': False})
+            self.one.alyx.rest('files', 'partial_update', id=fr_server['id'], data={'exists': False})
 
     def _scp(self, local_path, remote_path, dry=True):
 
@@ -705,4 +761,4 @@ class S3Patcher(Patcher):
         return 0, ''
 
     def _rm(self, *args, **kwargs):
-        raise PermissionError("This Patcher does not have admin permissions to remove data.")
+        raise PermissionError('This Patcher does not have admin permissions to remove data.')

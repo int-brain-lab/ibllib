@@ -9,6 +9,7 @@ from ibllib.io.extractors import base
 
 class TestExtractorMaps(unittest.TestCase):
     """Tests for functions that return Bpod extractor classes."""
+
     def setUp(self):
         # Store original __import__
         self.orig_import = __import__
@@ -30,11 +31,12 @@ class TestExtractorMaps(unittest.TestCase):
     def test_get_task_extractor_map(self):
         """Test ibllib.io.extractors.base._get_task_extractor_map function."""
         # Check the custom map is loaded
-        with patch('builtins.__import__', side_effect=self.import_mock):
+        with patch.dict('sys.modules', {'projects': self.projects}):
             extractors = base._get_task_extractor_map()
             self.assertTrue(self.custom_extractors.items() < extractors.items())
         # Test handles case where module not installed
-        with patch('builtins.__import__', side_effect=ModuleNotFoundError):
+        with patch.dict('sys.modules', {'projects': None}):
+            # When trying to import a module that's None in sys.modules, it will raise ImportError
             extractors = base._get_task_extractor_map()
             self.assertFalse(set(self.custom_extractors.items()).issubset(set(extractors.items())))
         # Remove the file and check exception is caught
@@ -61,7 +63,7 @@ class TestExtractorMaps(unittest.TestCase):
     def test_protocol2extractor(self):
         """Test ibllib.io.extractors.base.protocol2extractor function."""
         # Test fuzzy match
-        (proc, expected), = self.custom_extractors.items()
+        ((proc, expected),) = self.custom_extractors.items()
         with patch('builtins.__import__', side_effect=self.import_mock):
             extractor = base.protocol2extractor('_mw_' + proc)
             self.assertEqual(expected, extractor)

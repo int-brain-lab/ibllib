@@ -69,6 +69,7 @@ missing data.
 ... task.cleanUp()
 
 """
+
 from pathlib import Path
 import abc
 import logging
@@ -99,8 +100,8 @@ TASK_STATUS_SET = {'Waiting', 'Held', 'Started', 'Errored', 'Empty', 'Complete',
 
 class Task(abc.ABC):
     log = ''  # placeholder to keep the log of the task for registration
-    cpu = 1   # CPU resource
-    gpu = 0   # GPU resources: as of now, either 0 or 1
+    cpu = 1  # CPU resource
+    gpu = 0  # GPU resources: as of now, either 0 or 1
     io_charge = 5  # integer percentage
     priority = 30  # integer percentage, 100 means highest priority
     ram = 4  # RAM needed to run (GB)
@@ -115,8 +116,21 @@ class Task(abc.ABC):
     env = None  # the environment name within which to run the task (NB: the env is not activated automatically!)
     on_error = 'continue'  # whether to raise an exception on error ('raise') or report the error and continue ('continue')
 
-    def __init__(self, session_path, parents=None, taskid=None, one=None,
-                 machine=None, clobber=True, location='server', scratch_folder=None, on_error='continue', force=False, **kwargs):
+    def __init__(
+        self,
+        session_path,
+        parents=None,
+        taskid=None,
+        one=None,
+        machine=None,
+        clobber=True,
+        location='server',
+        scratch_folder=None,
+        on_error='continue',
+        force=False,
+        data_handler_class=None,
+        **kwargs,
+    ):
         """
         Base task class
         :param session_path: session path
@@ -127,7 +141,10 @@ class Task(abc.ABC):
         :param clobber: whether or not to overwrite log on rerun
         :param location: location where task is run. Options are 'server' (lab local servers'), 'remote' (remote compute node,
         data required for task downloaded via one), 'AWS' (remote compute node, data required for task downloaded via AWS),
-        or 'SDSC' (SDSC flatiron compute node)
+        or 'SDSC' (SDSC flatiron compute node). The data_handler_class parameter will override the location in
+         determining the handler class.
+        :param data_handler_class: custom class to handle data. If not provided, the location will
+         be used to infer the handler class.
         :param scratch_folder: optional: Path where to write intermediate temporary data
         :param force: whether to re-download missing input files on local server if not present
         :param args: running arguments
@@ -149,6 +166,7 @@ class Task(abc.ABC):
         self.plot_tasks = []  # Plotting task/ tasks to create plot outputs during the task
         self.scratch_folder = scratch_folder
         self.kwargs = kwargs
+        self.data_handler_class = data_handler_class
 
     @property
     def signature(self) -> Dict[str, List]:
@@ -220,10 +238,10 @@ class Task(abc.ABC):
             # check that alyx user is logged in
             if not self.one.alyx.is_logged_in:
                 self.one.alyx.authenticate()
-            tdict = self.one.alyx.rest('tasks', 'partial_update', id=self.taskid,
-                                       data={'status': 'Started'})
-            self.log = ('' if not tdict['log'] else tdict['log'] +
-                        '\n\n=============================RERUN=============================\n')
+            tdict = self.one.alyx.rest('tasks', 'partial_update', id=self.taskid, data={'status': 'Started'})
+            self.log = (
+                '' if not tdict['log'] else tdict['log'] + '\n\n=============================RERUN=============================\n'
+            )
 
         # Setup the console handler with a StringIO object
         logger_level = _logger.level
@@ -503,16 +521,15 @@ class Task(abc.ABC):
             _logger.warning('Some files are not ALF datasets and will not be checked for ambiguity')
         if any(map(len, variant_datasets.values())):
             # Keep those with variants and make paths relative to session for logging purposes
-            def to_frag(x): return x.relative_to_session().as_posix()  # noqa
-            ambiguous = {
-                to_frag(k): [to_frag(x) for x in v]
-                for k, v in variant_datasets.items() if any(v)}
+            def to_frag(x):
+                return x.relative_to_session().as_posix()  # noqa
+
+            ambiguous = {to_frag(k): [to_frag(x) for x in v] for k, v in variant_datasets.items() if any(v)}
             _logger.error('Ambiguous input datasets found: %s', ambiguous)
 
             if raise_ambiguous or self.location == 'sdsc':  # take no chances on SDSC
                 # This could be mitigated if loading with data OneSDSC
-                raise NotImplementedError(
-                    'Multiple variant datasets found. Loading for these is undefined.')
+                raise NotImplementedError('Multiple variant datasets found. Loading for these is undefined.')
 
         return everything_is_fine, files
 
@@ -552,27 +569,28 @@ class Task(abc.ABC):
         Gets the relevant data handler based on location argument
         :return:
         """
-        location = str.lower(location or self.location)
-        if location == 'local':
-            return data_handlers.LocalDataHandler(self.session_path, self.signature, one=self.one)
-        self.one = self.one or ONE()
-        if location == 'server':
-            dhandler = data_handlers.ServerDataHandler(self.session_path, self.signature, one=self.one)
-        elif location == 'serverglobus':
-            dhandler = data_handlers.ServerGlobusDataHandler(self.session_path, self.signature, one=self.one)
-        elif location == 'remote':
-            dhandler = data_handlers.RemoteHttpDataHandler(self.session_path, self.signature, one=self.one)
-        elif location == 'aws':
-            dhandler = data_handlers.RemoteAwsDataHandler(self.session_path, self.signature, one=self.one)
-        elif location == 'sdsc':
-            dhandler = data_handlers.SDSCDataHandler(self.session_path, self.signature, one=self.one)
-        elif location == 'popeye':
-            dhandler = data_handlers.PopeyeDataHandler(self.session_path, self.signature, one=self.one)
-        elif location == 'ec2':
-            dhandler = data_handlers.RemoteEC2DataHandler(self.session_path, self.signature, one=self.one)
-        else:
-            raise ValueError(f'Unknown location "{location}"')
-        return dhandler
+        if self.data_handler_class is None:
+            location = str.lower(location or self.location)
+            if location == 'local':
+                return data_handlers.LocalDataHandler(self.session_path, self.signature, one=self.one)
+            self.one = self.one or ONE()
+            if location == 'server':
+                self.data_handler_class = data_handlers.ServerDataHandler
+            elif location == 'serverglobus':
+                self.data_handler_class = data_handlers.ServerGlobusDataHandler
+            elif location == 'remote':
+                self.data_handler_class = data_handlers.RemoteHttpDataHandler
+            elif location == 'aws':
+                self.data_handler_class = data_handlers.RemoteAwsDataHandler
+            elif location == 'sdsc':
+                self.data_handler_class = data_handlers.SDSCDataHandler
+            elif location == 'popeye':
+                self.data_handler_class = data_handlers.PopeyeDataHandler
+            elif location == 'ec2':
+                self.data_handler_class = data_handlers.RemoteEC2DataHandler
+            else:
+                raise ValueError(f'Unknown location "{location}"')
+        return self.data_handler_class(self.session_path, self.signature, one=self.one)
 
     @staticmethod
     def make_lock_file(taskname='', time_out_secs=7200):
@@ -609,7 +627,7 @@ class Task(abc.ABC):
             return True
 
     def _creates_lock(self):
-        if self.location == "popeye":
+        if self.location == 'popeye':
             return True
         if self.is_locked():
             return False
@@ -622,10 +640,10 @@ class Pipeline(abc.ABC):
     """
     Pipeline class: collection of related and potentially interdependent tasks
     """
-    tasks = OrderedDict()
+
     one = None
 
-    def __init__(self, session_path=None, one=None, eid=None):
+    def __init__(self, session_path=None, one=None, eid=None, tasks=None):
         assert session_path or eid
         self.one = one
         if one and one.alyx.cache_mode and one.alyx.default_expiry.seconds > 1:
@@ -642,6 +660,9 @@ class Pipeline(abc.ABC):
                 # eID for newer sessions may not be in cache so use remote query
                 self.eid = one.path2eid(session_path, query_type='remote') if self.one else None
         self.label = self.__module__ + '.' + type(self).__name__
+        self.tasks = tasks or {}
+        if not isinstance(self.tasks, OrderedDict):
+            self.tasks = OrderedDict(self.tasks)
 
     @staticmethod
     def _get_exec_name(obj):
@@ -740,12 +761,24 @@ class Pipeline(abc.ABC):
             else:
                 parents_ids = []
 
-            task_dict = {'executable': executable, 'priority': t.priority,
-                         'io_charge': t.io_charge, 'gpu': t.gpu, 'cpu': t.cpu,
-                         'ram': t.ram, 'module': self.label, 'parents': parents_ids,
-                         'level': t.level, 'time_out_sec': t.time_out_secs, 'session': self.eid,
-                         'status': 'Waiting', 'log': None, 'name': t.name, 'graph': self.name,
-                         'arguments': arguments}
+            task_dict = {
+                'executable': executable,
+                'priority': t.priority,
+                'io_charge': t.io_charge,
+                'gpu': t.gpu,
+                'cpu': t.cpu,
+                'ram': t.ram,
+                'module': self.label,
+                'parents': parents_ids,
+                'level': t.level,
+                'time_out_sec': t.time_out_secs,
+                'session': self.eid,
+                'status': 'Waiting',
+                'log': None,
+                'name': t.name,
+                'graph': self.name,
+                'arguments': arguments,
+            }
             if self.data_repo:
                 task_dict.update({'data_repository': self.data_repo})
             # if the task already exists, patch it otherwise, create it
@@ -771,12 +804,24 @@ class Pipeline(abc.ABC):
             else:
                 parent_names = []
 
-            task_dict = {'executable': self._get_exec_name(t), 'priority': t.priority,
-                         'io_charge': t.io_charge, 'gpu': t.gpu, 'cpu': t.cpu,
-                         'ram': t.ram, 'module': self.label, 'parents': parent_names,
-                         'level': t.level, 'time_out_sec': t.time_out_secs, 'session': self.eid,
-                         'status': 'Waiting', 'log': None, 'name': t.name, 'graph': self.name,
-                         'arguments': t.kwargs}
+            task_dict = {
+                'executable': self._get_exec_name(t),
+                'priority': t.priority,
+                'io_charge': t.io_charge,
+                'gpu': t.gpu,
+                'cpu': t.cpu,
+                'ram': t.ram,
+                'module': self.label,
+                'parents': parent_names,
+                'level': t.level,
+                'time_out_sec': t.time_out_secs,
+                'session': self.eid,
+                'status': 'Waiting',
+                'log': None,
+                'name': t.name,
+                'graph': self.name,
+                'arguments': t.kwargs,
+            }
             if self.data_repo:
                 task_dict.update({'data_repository': self.data_repo})
 
@@ -807,9 +852,15 @@ class Pipeline(abc.ABC):
             if j['status'] not in status__in:
                 continue
             # here we update the status in-place to avoid another hit to the database
-            task_deck[i], dsets = run_alyx_task(tdict=j, session_path=self.session_path,
-                                                one=self.one, job_deck=task_deck,
-                                                machine=machine, clobber=clobber, **kwargs)
+            task_deck[i], dsets = run_alyx_task(
+                tdict=j,
+                session_path=self.session_path,
+                one=self.one,
+                job_deck=task_deck,
+                machine=machine,
+                clobber=clobber,
+                **kwargs,
+            )
             if dsets is not None:
                 all_datasets.extend(dsets)
         return task_deck, all_datasets
@@ -844,8 +895,17 @@ def str2class(task_executable: str):
     return getattr(importlib.import_module(strmodule), strclass)
 
 
-def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
-                  max_md5_size=None, machine=None, clobber=True, location='server', mode='log'):
+def run_alyx_task(
+    tdict=None,
+    session_path=None,
+    one=None,
+    job_deck=None,
+    max_md5_size=None,
+    machine=None,
+    clobber=True,
+    location='server',
+    mode='log',
+):
     """
     Runs a single Alyx job and registers output datasets.
 
@@ -891,7 +951,7 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
         parent_statuses = [j['status'] for j in parent_tasks]
         # if any of the parent tasks is not complete, throw a warning
         if not set(parent_statuses) <= {'Complete', 'Incomplete'}:
-            _logger.warning(f"{tdict['name']} has unmet dependencies")
+            _logger.warning(f'{tdict["name"]} has unmet dependencies')
             # if parents are waiting or failed, set the current task status to Held
             # once the parents ran, the descendent tasks will be set from Held to Waiting (see below)
             if set(parent_statuses).intersection({'Errored', 'Held', 'Empty', 'Waiting', 'Started', 'Abandoned'}):
@@ -900,13 +960,11 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
     # creates the job from the module name in the database
     classe = str2class(tdict['executable'])
     tkwargs = tdict.get('arguments') or {}  # if the db field is null it returns None
-    task = classe(session_path, one=one, taskid=tdict['id'], machine=machine, clobber=clobber,
-                  location=location, **tkwargs)
+    task = classe(session_path, one=one, taskid=tdict['id'], machine=machine, clobber=clobber, location=location, **tkwargs)
     # sets the status flag to started before running
     one.alyx.rest('tasks', 'partial_update', id=tdict['id'], data={'status': 'Started'})
     status = task.run()
-    patch_data = {'time_elapsed_secs': task.time_elapsed_secs, 'log': task.log,
-                  'version': task.version}
+    patch_data = {'time_elapsed_secs': task.time_elapsed_secs, 'log': task.log, 'version': task.version}
     # if there is no data to register, set status to Empty
     if task.outputs is None:  # NB: an empty list is still considered Complete.
         patch_data['status'] = 'Empty'
@@ -936,13 +994,15 @@ def run_alyx_task(tdict=None, session_path=None, one=None, job_deck=None,
     # update task status on Alyx
     t = one.alyx.rest('tasks', 'partial_update', id=tdict['id'], data=patch_data)
     # check for dependent held tasks
-    # NB: Assumes dependent tasks are all part of the same session!
+    # Re-fetch the deck so children set to Held while this task was running (race condition for
+    # long tasks with concurrent workers) are visible to the transition check.
     next(x for x in job_deck if x['id'] == t['id'])['status'] = t['status']  # Update status in job deck
-    dependent_tasks = filter(lambda x: t['id'] in x['parents'] and x['status'] == 'Held', job_deck)
+    current_deck = one.alyx.rest('tasks', 'list', session=tdict['session'], no_cache=True)
+    dependent_tasks = filter(lambda x: t['id'] in x['parents'] and x['status'] == 'Held', current_deck)
     for d in dependent_tasks:
         assert d['id'] != t['id'], 'task its own parent'
         # if all their parent tasks now complete, set to waiting
-        parent_status = [next(x['status'] for x in job_deck if x['id'] == y) for y in d['parents']]
+        parent_status = [next(x['status'] for x in current_deck if x['id'] == y) for y in d['parents']]
         if set(parent_status) <= {'Complete', 'Incomplete'}:
             one.alyx.rest('tasks', 'partial_update', id=d['id'], data={'status': 'Waiting'})
     task.cleanUp()

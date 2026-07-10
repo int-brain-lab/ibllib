@@ -3,10 +3,12 @@ import logging
 import json
 import shutil
 import tarfile
+from typing import Tuple
 
 import numpy as np
 from one.alf.path import get_session_path
 import spikeglx
+from one.webclient import AlyxClient
 
 from iblutil.util import Bunch
 import phylib.io.alf
@@ -15,6 +17,50 @@ import ibllib.ephys.ephysqc as ephysqc
 from ibllib.ephys import sync_probes
 
 _logger = logging.getLogger(__name__)
+
+
+def create_insertion(alyx: AlyxClient, md: dict, label: str, eid: str) -> Tuple[dict, dict]:
+    """
+    Create or update a probe insertion in Alyx and return description and the alyx rest record.
+
+    This function checks if a probe insertion with the given label already exists for the
+    specified session. If it doesn't exist, it creates a new one. If it does, it updates
+    the existing record. It also prepares a dictionary with essential probe details.
+
+    Parameters
+    ----------
+    alyx : one.webclient.AlyxClient
+        An instance of the Alyx rest client.
+    md : dict
+        A Bunch object containing metadata from a spikeglx meta file, including
+        'neuropixelVersion', 'serial', and 'fileName'.
+    label : str
+        The label for the probe insertion (e.g., 'probe00').
+    eid : str
+        The unique experiment ID (UUID) for the session.
+
+    Returns
+    -------
+    tuple
+        A tuple containing:
+        - description (dict): A dictionary with probe details for metadata file,
+          containing keys 'label', 'model', 'serial', 'raw_file_name'.
+        - insertion (dict): The Alyx record for the created or updated probe insertion.
+    """
+    # create json description
+    description = {'label': label, 'model': md['neuropixelVersion'], 'serial': int(md['serial']), 'raw_file_name': md['fileName']}
+
+    # create or update probe insertion on alyx
+    alyx_insertion = {'session': eid, 'model': md['neuropixelVersion'], 'serial': md['serial'], 'name': label}
+    pi = alyx.rest('insertions', 'list', session=eid, name=label)
+    if len(pi) == 0:
+        qc_dict = {'qc': 'NOT_SET', 'extended_qc': {}}
+        alyx_insertion.update({'json': qc_dict})
+        insertion = alyx.rest('insertions', 'create', data=alyx_insertion)
+    else:
+        insertion = alyx.rest('insertions', 'partial_update', data=alyx_insertion, id=pi[0]['id'])
+
+    return description, insertion
 
 
 def probes_description(ses_path, one):
@@ -36,24 +82,6 @@ def probes_description(ses_path, one):
         return
 
     subdirs, labels, efiles_sorted = zip(*sorted(ap_meta_files))
-
-    def _create_insertion(md, label, eid):
-
-        # create json description
-        description = {'label': label, 'model': md.neuropixelVersion, 'serial': int(md.serial), 'raw_file_name': md.fileName}
-
-        # create or update probe insertion on alyx
-        alyx_insertion = {'session': eid, 'model': md.neuropixelVersion, 'serial': md.serial, 'name': label}
-        pi = one.alyx.rest('insertions', 'list', session=eid, name=label)
-        if len(pi) == 0:
-            qc_dict = {'qc': 'NOT_SET', 'extended_qc': {}}
-            alyx_insertion.update({'json': qc_dict})
-            insertion = one.alyx.rest('insertions', 'create', data=alyx_insertion)
-        else:
-            insertion = one.alyx.rest('insertions', 'partial_update', data=alyx_insertion, id=pi[0]['id'])
-
-        return description, insertion
-
     # Ouputs the probes description file
     probe_description = []
     alyx_insertions = []
@@ -66,16 +94,16 @@ def probes_description(ses_path, one):
                 nshanks = np.unique(geometry['shank'])
                 for shank in nshanks:
                     label_ext = f'{label}{chr(97 + int(shank))}'
-                    description, insertion = _create_insertion(md, label_ext, eid)
+                    description, insertion = create_insertion(one.alyx, md, label_ext, eid)
                     probe_description.append(description)
                     alyx_insertions.append(insertion)
             # NP2.4 meta that has already been split
             else:
-                description, insertion = _create_insertion(md, label, eid)
+                description, insertion = create_insertion(one.alyx, md, label, eid)
                 probe_description.append(description)
                 alyx_insertions.append(insertion)
         else:
-            description, insertion = _create_insertion(md, label, eid)
+            description, insertion = create_insertion(one.alyx, md, label, eid)
             probe_description.append(description)
             alyx_insertions.append(insertion)
 
@@ -102,8 +130,7 @@ def sync_spike_sorting(ap_file, out_path):
 
     out_files = []
     label = ap_file.parts[-1]  # now the bin file is always in a folder bearing the name of probe
-    sync_file = ap_file.parent.joinpath(
-        ap_file.name.replace('.ap.', '.sync.')).with_suffix('.npy')
+    sync_file = ap_file.parent.joinpath(ap_file.name.replace('.ap.', '.sync.')).with_suffix('.npy')
     # try to get probe sync if it doesn't exist
     if not sync_file.exists():
         _, sync_files = sync_probes.sync(get_session_path(ap_file))
@@ -112,8 +139,10 @@ def sync_spike_sorting(ap_file, out_path):
     if not sync_file.exists():
         # if there is no sync file it means something went wrong. Outputs the spike sorting
         # in time according the the probe by following ALF convention on the times objects
-        error_msg = f'No synchronisation file for {label}: {sync_file}. The spike-' \
-                    f'sorting is not synchronized and data not uploaded on Flat-Iron'
+        error_msg = (
+            f'No synchronisation file for {label}: {sync_file}. The spike-'
+            f'sorting is not synchronized and data not uploaded on Flat-Iron'
+        )
         _logger.error(error_msg)
         # remove the alf folder if the sync failed
         shutil.rmtree(out_path)
@@ -124,9 +153,20 @@ def sync_spike_sorting(ap_file, out_path):
     interp_times = apply_sync(sync_file, spike_samples / _sr(ap_file), forward=True)
     np.save(st_file, interp_times)
     # get the list of output files
-    out_files.extend([f for f in out_path.glob("*.*") if
-                      f.name.startswith(('channels.', 'drift', 'clusters.', 'spikes.', 'templates.',
-                                         '_kilosort_', '_phy_spikes_subset', '_ibl_log.info'))])
+    out_files.extend([
+        f
+        for f in out_path.glob('*.*')
+        if f.name.startswith((
+            'channels.',
+            'drift',
+            'clusters.',
+            'spikes.',
+            'templates.',
+            '_kilosort_',
+            '_phy_spikes_subset',
+            '_ibl_log.info',
+        ))
+    ])
     # the QC files computed during spike sorting stay within the raw ephys data folder
     out_files.extend(list(ap_file.parent.glob('_iblqc_*AP.*.npy')))
     return out_files, 0
@@ -162,31 +202,33 @@ def ks2_to_tar(ks_path, out_path, force=False):
             tar_dir.extractall(path=save_path)
 
     """
-    ks2_output = ['amplitudes.npy',
-                  'channel_map.npy',
-                  'channel_positions.npy',
-                  'cluster_Amplitude.tsv',
-                  'cluster_ContamPct.tsv',
-                  'cluster_group.tsv',
-                  'cluster_KSLabel.tsv',
-                  'params.py',
-                  'pc_feature_ind.npy',
-                  'pc_features.npy',
-                  'similar_templates.npy',
-                  'spike_clusters.npy',
-                  'spike_sorting_ks2.log',
-                  'spike_templates.npy',
-                  'spike_times.npy',
-                  'template_feature_ind.npy',
-                  'template_features.npy',
-                  'templates.npy',
-                  'templates_ind.npy',
-                  'whitening_mat.npy',
-                  'whitening_mat_inv.npy']
+    ks2_output = [
+        'amplitudes.npy',
+        'channel_map.npy',
+        'channel_positions.npy',
+        'cluster_Amplitude.tsv',
+        'cluster_ContamPct.tsv',
+        'cluster_group.tsv',
+        'cluster_KSLabel.tsv',
+        'params.py',
+        'pc_feature_ind.npy',
+        'pc_features.npy',
+        'similar_templates.npy',
+        'spike_clusters.npy',
+        'spike_sorting_ks2.log',
+        'spike_templates.npy',
+        'spike_times.npy',
+        'template_feature_ind.npy',
+        'template_features.npy',
+        'templates.npy',
+        'templates_ind.npy',
+        'whitening_mat.npy',
+        'whitening_mat_inv.npy',
+    ]
 
     out_file = Path(out_path).joinpath('_kilosort_raw.output.tar')
     if out_file.exists() and not force:
-        _logger.info(f"Already converted ks2 to tar: for {ks_path}, skipping.")
+        _logger.info(f'Already converted ks2 to tar: for {ks_path}, skipping.')
         return [out_file]
 
     with tarfile.open(out_file, 'w') as tar_dir:
@@ -197,7 +239,88 @@ def ks2_to_tar(ks_path, out_path, force=False):
     return [out_file]
 
 
-def detection(data, fs, h, detect_threshold=-4, time_tol=.002, distance_threshold_um=70):
+def driftmap_spike_sorting_memmap(times_file, depths_file, t_bin=0.007, d_bin=10, chunk_size=2_000_000, tlim=None, dlim=None):
+    """
+    Build a spike-sorting driftmap 2D histogram from npy files without loading all
+    spikes into RAM.
+
+    Produces the same result as calling ``brainbox.plot.driftmap`` with
+    ``plot_style='bincount'``, but processes spikes in temporal chunks of
+    ``chunk_size`` so peak RAM usage stays proportional to the chunk size rather
+    than to the total number of spikes (~32 MB per chunk for the default of 2 M
+    spikes, vs. ~800 MB for a typical 50 M-spike recording).
+
+    Parameters
+    ----------
+    times_file : pathlib.Path
+        Path to ``spikes.times.npy``.  Must be sorted ascending.
+    depths_file : pathlib.Path
+        Path to ``spikes.depths.npy``, same length as *times_file*.
+    t_bin : float
+        Time bin width in seconds.
+    d_bin : float
+        Depth bin width in micrometres.
+    chunk_size : int
+        Number of spikes processed per iteration (default: 2 000 000 ≈ 32 MB
+        working set for two float64 arrays).
+    tlim : list of float, optional
+        ``[t_start, t_end]`` in seconds.  Defaults to ``[times[0], times[-1]]``
+        (requires only two element reads via mmap).
+    dlim : list of float, optional
+        ``[d_min, d_max]`` in micrometres.  When omitted the full depth range is
+        scanned in chunks; pass it explicitly (e.g. from ``channels.localCoordinates``)
+        to avoid that extra pass.
+
+    Returns
+    -------
+    R : numpy.ndarray
+        2-D float32 array of shape ``(n_depth_bins, n_time_bins)`` with spike
+        counts per bin.
+    t_scale : numpy.ndarray
+        Left edge of each time bin (seconds).
+    d_scale : numpy.ndarray
+        Left edge of each depth bin (micrometres).
+    n_spikes : int
+        Total number of spikes (length of *times_file*).
+    """
+    times = np.load(times_file, mmap_mode='r')
+    depths = np.load(depths_file, mmap_mode='r')
+    n_spikes = int(times.size)
+
+    tlim = tlim or [float(times[0]), float(times[-1])]
+    if dlim is None:
+        d_min, d_max = np.inf, -np.inf
+        for start in range(0, n_spikes, chunk_size):
+            chunk = np.asarray(depths[start : start + chunk_size])
+            valid = chunk[~np.isnan(chunk)]
+            if valid.size:
+                d_min = min(d_min, float(valid.min()))
+                d_max = max(d_max, float(valid.max()))
+        dlim = [d_min, d_max]
+
+    t_scale = np.arange(tlim[0], tlim[1] + t_bin / 2, t_bin)
+    d_scale = np.arange(dlim[0], dlim[1] + d_bin / 2, d_bin)
+    nt, nd = t_scale.size, d_scale.size
+
+    R = np.zeros((nd, nt), dtype=np.float32)
+
+    for start in range(0, n_spikes, chunk_size):
+        t_chunk = np.asarray(times[start : start + chunk_size])
+        d_chunk = np.asarray(depths[start : start + chunk_size])
+        iok = ~np.isnan(d_chunk)
+        t_chunk, d_chunk = t_chunk[iok], d_chunk[iok]
+
+        ti = np.floor((t_chunk - tlim[0]) / t_bin).astype(np.int64)
+        di = np.floor((d_chunk - dlim[0]) / d_bin).astype(np.int64)
+        valid = (ti >= 0) & (ti < nt) & (di >= 0) & (di < nd)
+
+        ind2d = np.ravel_multi_index([di[valid], ti[valid]], dims=(nd, nt))
+        R.flat += np.bincount(ind2d, minlength=nd * nt)
+
+    return R, t_scale, d_scale, n_spikes
+
+
+def detection(data, fs, h, detect_threshold=-4, time_tol=0.002, distance_threshold_um=70):
     """
     Detects and de-duplicates negative voltage spikes based on voltage thresholding.
     The de-duplication step locks in maximum amplitude events. To account for collisions the amplitude
