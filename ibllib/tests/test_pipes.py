@@ -13,10 +13,22 @@ from one.api import ONE
 import ibllib.tests.fixtures.utils as fu
 from ibllib.pipes import misc, local_server
 from ibllib.pipes.misc import sleepless
-from ibllib.tests import TEST_DB
+from ibllib.pipes.tasks import Task
 import ibllib.pipes.scan_fix_passive_files as fix
 from ibllib.pipes.base_tasks import RegisterRawDataTask
 from ibllib.pipes.ephys_tasks import SpikeSorting
+
+from ibllib.tests import TEST_DB
+
+class EnvTask(Task):
+    """Dummy task to test environment filtering."""
+
+    priority = 80
+    env = 'suite2p'
+    job_size = 'large'
+
+    def _run(self, **_):
+        pass
 
 
 class TestLocalServer(unittest.TestCase):
@@ -38,7 +50,7 @@ class TestLocalServer(unittest.TestCase):
         """Test ibllib.pipes.local_server.task_queue function."""
         lab_repo_mock.return_value = 'foo_repo'
         tasks = [
-            {'executable': 'ibllib.pipes.mesoscope_tasks.MesoscopePreprocess', 'priority': 80},
+            {'executable': 'ibllib.tests.test_pipes.EnvTask', 'priority': EnvTask.priority},  # 80
             {'executable': 'ibllib.pipes.ephys_tasks.SpikeSorting', 'priority': SpikeSorting.priority},  # 60
             {'executable': 'ibllib.pipes.base_tasks.RegisterRawDataTask', 'priority': RegisterRawDataTask.priority},  # 100
         ]
@@ -49,12 +61,12 @@ class TestLocalServer(unittest.TestCase):
         self.assertEqual('Waiting', alyx.rest.call_args.kwargs.get('status'))
         self.assertIn('foolab', alyx.rest.call_args.kwargs.get('django', ''))
         self.assertIn('foo_repo', alyx.rest.call_args.kwargs.get('django', ''))
-        # Expect to return tasks in descending priority order, without mesoscope task (different env)
+        # Expect to return tasks in descending priority order, without EnvTask (different env)
         self.assertEqual([tasks[2]], queue)
-        # Expect only mesoscope task returned when relevant env passed
+        # Expect only EnvTask returned when relevant env passed
         queue = local_server.task_queue(lab='foolab', alyx=alyx, env=('suite2p', 'iblsorter'))
         self.assertEqual([tasks[0], tasks[1]], queue)
-        # Expect no tasks as mesoscope task is a large job
+        # Expect no tasks as EnvTask is a large job
         queue = local_server.task_queue(mode='small', lab='foolab', alyx=alyx, env=('suite2p',))
         self.assertEqual([], queue)
         # Expect only register task as it's the only small job
