@@ -44,7 +44,7 @@ class TestTimelineTrials(base.IntegrationTest):
                     [33.46808532, 36.9309287]]
         with self.subTest(k='intervals'):
             np.testing.assert_array_almost_equal(expected, trials['intervals'][:4, :])
-        expected = [20.903, 26.056, 30.847, 34.824, 39.257, 44.153, 53.247]
+        expected = [20.903, 26.033, 30.826, 34.803, 39.257, 44.131, 53.225]
         with self.subTest(k='feedback_times'):
             np.testing.assert_array_almost_equal(expected, trials['feedback_times'])
         expected = [20.811, 25.892, 30.742, 34.731, 39.091, 43.992, 53.125]
@@ -70,7 +70,7 @@ class TestTimelineTrials(base.IntegrationTest):
         self.assertEqual(4090, len(wheel['timestamps']))
         np.testing.assert_array_almost_equal([20.809, 20.811, 20.812, 20.813, 20.814], wheel['timestamps'][:5])
         np.testing.assert_array_almost_equal([0., 0.00153398, 0.00306796, 0.00460194, 0.00613592], wheel['position'][:5])
-        expected = [[20.811, 21.216], [25.892, 26.251], [30.742, 31.173], [32.161, 33.208], [34.731, 36.756]]
+        expected = [[20.811, 21.216], [25.892, 26.251], [30.742, 31.172], [32.161, 33.208], [34.731, 36.756]]
         np.testing.assert_array_almost_equal(expected, moves['intervals'][:5, :])
         # Check input validation
         self.assertRaises(ValueError, timeline_trials.get_wheel_positions, coding='x3')
@@ -90,23 +90,30 @@ class TestTimelineTrials(base.IntegrationTest):
     def test_get_valve_open_times(self, plt_mock):
         """Test for TimelineTrials.get_valve_open_times in ibllib.io.extractors.mesoscope."""
         timeline_trials = mesoscope.TimelineTrials(self.session_path, sync_collection='raw_sync_data')
-        expected = [[26.056, 26.099],
-                    [30.847, 30.891],
-                    [34.824, 34.868],
-                    [44.153, 44.197],
-                    [53.247, 53.29],
-                    [66.295, np.nan]]
-        np.testing.assert_array_almost_equal(expected, timeline_trials.get_valve_open_times())
+        # No longer supporting extraction without driver TTLs
+        with self.assertLogs(mesoscope._logger, level='WARNING'):
+            out = timeline_trials.get_valve_open_times()
+            self.assertEqual(2, len(out))
+            self.assertTrue(all(isinstance(x, np.ndarray) and x.size == 0 for x in out))
+
+        # Test with TTLs
+        ttls = np.array([[26.033, 26.099], [30.826, 30.891], [34.803, 34.868], [44.131, 44.196], [53.225, 53.29 ]])
+        # Above TTLS taken from this code:
+        # sync, chmap = timeline_trials.load_sync()
+        # evts = timeline_trials.get_bpod_event_times(sync, chmap)
+        # ttls = evts[1]['valve_open']
+        intervals, open_times = timeline_trials.get_valve_open_times(driver_ttls=ttls)
+        expected = np.array([[26.033, 26.101], [30.826, 30.894], [34.803, 34.871], [44.131, 44.199], [53.225, 53.293]])
+        np.testing.assert_array_almost_equal(expected, intervals)
+        np.testing.assert_array_almost_equal(expected[:, 0], open_times)
         # Test display
         plt_mock.subplots.return_value = (MagicMock(), (MagicMock(), MagicMock()))
-        open_times = timeline_trials.get_valve_open_times(display=True)
+        intervals, open_times = timeline_trials.get_valve_open_times(display=True, driver_ttls=ttls)
         plt_mock.subplots.assert_called()
         # The second axes should be a plot of expected valve open times
         ax0, ax1 = plt_mock.subplots.return_value[1]
         ax1.plot.assert_called()
-        ax1.twinx.assert_called()
-        ax2 = ax1.twinx()
-        np.testing.assert_array_equal(ax2.plot.call_args_list[1].args[0], open_times[:, 1])
+        np.testing.assert_array_equal(ax1.plot.call_args_list[1].args[0], open_times)
 
     @patch('ibllib.io.extractors.mesoscope.plt')
     def test_plot_timeline(self, plt_mock):

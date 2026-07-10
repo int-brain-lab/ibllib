@@ -173,8 +173,9 @@ def correct_counter_discontinuities(raw, overflow=2**32):
     numpy.array
         An array of counts with the over- and underflow discontinuities removed.
     """
+    raw = raw.copy()
     flowmax = overflow / 3  # threshold for detecting overflow
-    raw[raw > flowmax] = raw[raw > flowmax] - overflow
+    raw[raw > flowmax] = raw[raw > flowmax] - (overflow - 1)
     return raw
 
 
