@@ -143,6 +143,44 @@ def job_creator(root_path, one=None, dry=False, rerun=False):
     return pipes, all_datasets
 
 
+def list_available_envs(root=Path.home() / 'Documents/PYTHON/envs'):
+    """
+    List all the envs within `root` dir.
+
+    Parameters
+    ----------
+    root : str, pathlib.Path
+        The directory containing venvs.
+
+    Returns
+    -------
+    list of str
+        A list of envs, including None (assumed to be base iblenv).
+    """
+    try:
+        envs = filter(Path.is_dir, Path(root).iterdir())
+        return [None, *sorted(x.name for x in envs)]
+    except FileNotFoundError:
+        return [None]
+
+
+def list_queued_envs(one=None):
+    """
+    The set of all envs in the list of waiting tasks.
+
+    Returns
+    -------
+    set
+        All environments required to process waiting tasks.
+    """
+    one = one or ONE(mode='remote', cache_rest=None)
+    waiting_tasks = task_queue(mode='large', alyx=one.alyx, env=list_available_envs())
+    envs_in_queue = set()
+    for task_exe in map(lambda x: x['executable'], waiting_tasks):
+        envs_in_queue.add(tasks.str2class(task_exe).env)
+    return envs_in_queue
+
+
 def task_queue(mode='all', lab=None, alyx=None, env=(None,)):
     """
     Query waiting jobs from the specified Lab
