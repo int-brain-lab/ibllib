@@ -114,14 +114,14 @@ class MesoscopeCompress(base_tasks.MesoscopeTask):
         _logger.setLevel(self._log_level or logging.INFO)
         return super().tearDown()
 
-    def _run(self, remove_uncompressed=False, verify_output=True, overwrite=False, **kwargs):
+    def _run(self, remove_uncompressed=True, verify_output=True, overwrite=False, **kwargs):
         """
         Run tar compression on all tif files in the device collection.
 
         Parameters
         ----------
         remove_uncompressed: bool
-            Whether to remove the original, uncompressed data. Default is False.
+            Whether to remove the original, uncompressed data. Default is True.
         verify_output: bool
             Whether to check that the compressed tar file can be uncompressed without errors.
             Default is True.
@@ -230,10 +230,11 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         """
         self.overwrite = kwargs.get('overwrite', False)
         all_files_present = super().setUp(**kwargs)  # Ensure files present
-        (bin_sig,) = dataset_from_name('data.bin', self.input_files)
-        (renamed_bin_sig,) = dataset_from_name('imaging.frames_motionRegistered.bin', self.input_files)
-        if not self.overwrite and (bin_sig | renamed_bin_sig).find_files(self.session_path)[0]:
-            return all_files_present  # We have local bin files; no need to extract tifs
+        if not self.overwrite:
+            bin_sig = dataset_from_name('data.bin', self.input_files)[0]
+            renamed_bin_sig = dataset_from_name('imaging.frames_motionRegistered.bin', self.input_files)[0]
+            if (bin_sig | renamed_bin_sig).find_files(self.session_path)[0]:
+                return all_files_present  # We have local bin files; no need to extract tifs
         tif_sig = dataset_from_name('*.tif', self.input_files)
         if not tif_sig:
             return all_files_present  # No tifs in the signature; just return
@@ -275,30 +276,26 @@ class MesoscopePreprocess(base_tasks.MesoscopeTask):
         # The number of in and outputs will be dependent on the number of input raw imaging folders and output FOVs
         I = ExpectedDataset.input  # noqa
         signature = {
-            'input_files': [
-                ('_ibl_rawImagingData.meta.json', self.device_collection, True),
-                I('*.tif', self.device_collection, True)
-                | I('imaging.frames.tar.bz2', self.device_collection, True, unique=False),
-                ('exptQC.mat', self.device_collection, False),
-            ],
-            'output_files': [
-                ('mpci.ROIActivityF.npy', 'alf/FOV*', True),
-                ('mpci.ROINeuropilActivityF.npy', 'alf/FOV*', True),
-                ('mpci.ROIActivityDeconvolved.npy', 'alf/FOV*', True),
-                ('mpci.badFrames.npy', 'alf/FOV*', True),
-                ('mpci.mpciFrameQC.npy', 'alf/FOV*', True),
-                ('mpciFrameQC.names.tsv', 'alf/FOV*', True),
-                ('mpciMeanImage.images.npy', 'alf/FOV*', True),
-                ('mpciROIs.stackPos.npy', 'alf/FOV*', True),
-                ('mpciROIs.mpciROITypes.npy', 'alf/FOV*', True),
-                ('mpciROIs.cellClassifier.npy', 'alf/FOV*', True),
-                ('mpciROIs.uuids.csv', 'alf/FOV*', True),
-                ('mpciROITypes.names.tsv', 'alf/FOV*', True),
-                ('mpciROIs.masks.sparse_npz', 'alf/FOV*', True),
-                ('mpciROIs.neuropilMasks.sparse_npz', 'alf/FOV*', True),
-                ('_suite2p_ROIData.raw.zip', 'alf/FOV*', False),
-                ('imaging.frames_motionRegistered.bin', 'suite2p/plane*', False),
-            ],
+            'input_files': [I('_ibl_rawImagingData.meta.json', self.device_collection, True, unique=False),
+                            I('*.tif', self.device_collection, True) |
+                            I('imaging.frames.tar.bz2', self.device_collection, True, unique=False),
+                            I('exptQC.mat', self.device_collection, False)],
+            'output_files': [('mpci.ROIActivityF.npy', 'alf/FOV*', True),
+                             ('mpci.ROINeuropilActivityF.npy', 'alf/FOV*', True),
+                             ('mpci.ROIActivityDeconvolved.npy', 'alf/FOV*', True),
+                             ('mpci.badFrames.npy', 'alf/FOV*', True),
+                             ('mpci.mpciFrameQC.npy', 'alf/FOV*', True),
+                             ('mpciFrameQC.names.tsv', 'alf/FOV*', True),
+                             ('mpciMeanImage.images.npy', 'alf/FOV*', True),
+                             ('mpciROIs.stackPos.npy', 'alf/FOV*', True),
+                             ('mpciROIs.mpciROITypes.npy', 'alf/FOV*', True),
+                             ('mpciROIs.cellClassifier.npy', 'alf/FOV*', True),
+                             ('mpciROIs.uuids.csv', 'alf/FOV*', True),
+                             ('mpciROITypes.names.tsv', 'alf/FOV*', True),
+                             ('mpciROIs.masks.sparse_npz', 'alf/FOV*', True),
+                             ('mpciROIs.neuropilMasks.sparse_npz', 'alf/FOV*', True),
+                             ('_suite2p_ROIData.raw.zip', 'alf/FOV*', False),
+                             ('imaging.frames_motionRegistered.bin', 'suite2p/plane*', False)]
         }
         if not self.overwrite:  # If not forcing re-registration, check whether bin files already exist on disk
             # Including the data.bin in the expected signature ensures raw data files are not needlessly re-downloaded
@@ -1115,6 +1112,8 @@ class MesoscopeFOV(base_tasks.MesoscopeTask):
 
         MLAPDV coordinates are in um relative to bregma.  Location IDs are from the 2017 Allen
         common coordinate framework atlas.
+        
+        FIXME stackPos Y, X (not X, Y) - may affect xy loc
 
         Parameters
         ----------
