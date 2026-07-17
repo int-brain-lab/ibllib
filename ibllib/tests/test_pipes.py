@@ -20,6 +20,7 @@ from ibllib.pipes.ephys_tasks import SpikeSorting
 
 from ibllib.tests import TEST_DB
 
+
 class EnvTask(Task):
     """Dummy task to test environment filtering."""
 

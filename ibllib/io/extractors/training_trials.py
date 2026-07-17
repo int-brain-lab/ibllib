@@ -784,9 +784,19 @@ class TrainingTrials(BaseBpodTrialsExtractor):
         'pause_duration',
     )
 
-    def _extract(self, **_) -> dict:
-        base = [RepNum, GoCueTriggerTimes, StimOnTriggerTimes, ItiInTimes, StimOffTriggerTimes, StimFreezeTriggerTimes,
-                ErrorCueTriggerTimes, TrialsTable, PhasePosQuiescence, PauseDuration]
+    def _extract(self) -> dict:
+        base = [
+            RepNum,
+            GoCueTriggerTimes,
+            StimOnTriggerTimes,
+            ItiInTimes,
+            StimOffTriggerTimes,
+            StimFreezeTriggerTimes,
+            ErrorCueTriggerTimes,
+            TrialsTable,
+            PhasePosQuiescence,
+            PauseDuration,
+        ]
         out, _ = run_extractor_classes(
             base,
             session_path=self.session_path,

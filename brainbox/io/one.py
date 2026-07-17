@@ -988,8 +988,6 @@ class SpikeSortingLoader:
         :param compute_metrics: if True, will explicitly recompute metrics (defaults to false)
         :return: cluster dictionary containing metrics and histology
         """
-        if spikes == {}:
-            return
         nc = clusters['channels'].size
         # recompute metrics if they are not available
         metrics = None
@@ -997,6 +995,9 @@ class SpikeSortingLoader:
             metrics = clusters.pop('metrics')
             if metrics.shape[0] != nc:
                 metrics = None
+        no_spikes = spikes == {} or spikes is None
+        if no_spikes and (metrics is None or compute_metrics is True):
+            raise ValueError('No spikes to compute metrics. Provide spikes or set compute_metrics to False.')
         if metrics is None or compute_metrics is True:
             _logger.debug('recompute clusters metrics')
             metrics = SpikeSortingLoader.compute_metrics(spikes, clusters)
@@ -1049,7 +1050,7 @@ class SpikeSortingLoader:
         elif direction == 'reverse':
             return self._sync['reverse'](values) / self._sync['fs']
 
-    def samples2times(self, values, direction='forward'):
+    def samples2times(self, values, direction='forward', fs=None):
         """
         Converts ephys sample values to session main clock seconds
         :param values: numpy array of times in seconds or samples to resync
@@ -1058,6 +1059,10 @@ class SpikeSortingLoader:
         :return:
         """
         self._get_probe_info()
+        fs = fs or self._sync['fs']
+        fs_ratio = self._sync['fs'] / fs
+        values = values * fs_ratio
+
         return self._sync[direction](values)
 
     @property
