@@ -94,7 +94,7 @@ class _DataPathDescriptor:
 
 
 @unittest.skipUnless(
-    INTEGRATION_DATA_DIR and os.path.isdir(INTEGRATION_DATA_DIR),
+    INTEGRATION_DATA_DIR,
     "Integration data not available (set INTEGRATION_DATA_DIR to enable).",
 )
 class IntegrationTest(unittest.TestCase):
@@ -168,7 +168,7 @@ class IntegrationTest(unittest.TestCase):
         """
         super().__init__(*args, **kwargs)
 
-        if type(self)._writable_tempdir is None and self._writable_scope != 'test':
+        if INTEGRATION_DATA_DIR and type(self)._writable_tempdir is None and self._writable_scope != 'test':
             data_present = (self.data_path.exists() and
                             self.data_path.is_dir() and
                             any(self.data_path.glob('Subjects_init')))

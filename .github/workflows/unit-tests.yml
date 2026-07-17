@@ -1,13 +1,11 @@
-name: CI
+name: Unit Tests (GitHub Actions)
 
 on:
-  schedule:
-    - cron:  '0 0 * * *'  # every day at midnight
   workflow_dispatch:  # For manual triggering
   push:
-    branches: [ master, develop, public ]
+    branches: [ master, develop, ci ]
   pull_request:
-    branches: [ master, develop ]
+    branches: [ "*" ]
 
 jobs:
   build:
@@ -18,12 +16,12 @@ jobs:
       max-parallel: 2
       matrix:
         os: ["windows-latest", "ubuntu-latest"]
-        python-version: ["3.10", "3.12"]
+        python-version: ["3.10", "3.13"]
         exclude:
           - os: windows-latest
             python-version: 3.10
           - os: ubuntu-latest
-            python-version: 3.12
+            python-version: 3.13
     env:
       ONE_SAVE_ON_DELETE: false
     steps:
