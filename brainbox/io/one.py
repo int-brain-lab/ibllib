@@ -1625,7 +1625,7 @@ class SessionLoader:
             return video_timestamps, video_data
 
     @staticmethod
-    def _apply_tidy_transformations(trials: pd.DataFrame) -> pd.DataFrame:
+    def apply_tidy_transformations(trials: pd.DataFrame) -> pd.DataFrame:
         """
         Apply tidy data transformations to trials DataFrame.
 
