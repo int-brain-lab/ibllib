@@ -203,8 +203,12 @@ def task_queue(mode='all', lab=None, alyx=None, env=(None,)):
     """
 
     def predicate(task):
-        classe = tasks.str2class(task['executable'])
-        return (mode == 'all' or classe.job_size == mode) and classe.env in env
+        try:
+            classe = tasks.str2class(task['executable'])
+            return (mode == 'all' or classe.job_size == mode) and classe.env in env
+        except ModuleNotFoundError:
+            _logger.error('Task %s not found in this env', task['executable'])
+            return False
 
     alyx = alyx or AlyxClient(cache_rest=None)
     if lab is None:
