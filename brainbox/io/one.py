@@ -5,7 +5,6 @@ import gc
 import logging
 import re
 import copy
-import math
 from pathlib import Path
 from collections import defaultdict
 from typing import Literal
@@ -1425,7 +1424,7 @@ class SessionLoader:
         self.one.wildcards = True
         self.data_info.loc[self.data_info['name'] == 'trials', 'is_loaded'] = True
         if style == 'tidy':
-            self.trials = self._apply_tidy_transformations(self.trials)
+            self.trials = self.apply_tidy_transformations(self.trials)
 
     def load_wheel(self, fs=1000, corner_frequency=20, order=8, collection=None):
         """
@@ -1671,41 +1670,26 @@ class SessionLoader:
         #   - Left 25% trial: contrastLeft=0.25, contrastRight=NaN
         #   - Right 0% trial: contrastLeft=NaN, contrastRight=0.0
         #
-        # We consolidate into two tidy columns: gabor_stimulus_contrast and gabor_stimulus_side
-        def compute_gabor_stimulus_side(left, right):
-            # Determine side based on which column has a non-NaN value
-            left_valid = not pd.isna(left)
-            right_valid = not pd.isna(right)
-            if left_valid and not right_valid:
-                return 'left'
-            elif right_valid and not left_valid:
-                return 'right'
-            elif left_valid and right_valid:
-                # Both have values - should not happen in valid IBL data, but handle defensively
-                return 'left' if left >= right else 'right'
-            else:
-                return 'none'  # Both NaN - unexpected, indicates corrupted data
-
-        def compute_gabor_stimulus_contrast(left, right):
-            # Return the non-NaN contrast value as percentage (could be 0 for 0% contrast trials)
-            # Multiply by 100 and round to 2 decimal places
-            if not pd.isna(left) and (pd.isna(right) or left > 0):
-                return round(left * 100, 2)
-            elif not pd.isna(right):
-                return round(right * 100, 2)
-            else:
-                return np.nan  # Both NaN - unexpected
-
-        trials['gabor_stimulus_side'] = [
-            compute_gabor_stimulus_side(left, r) for left, r in zip(trials['contrastLeft'], trials['contrastRight'])
-        ]
-        trials['gabor_stimulus_contrast'] = [
-            compute_gabor_stimulus_contrast(left, r) for left, r in zip(trials['contrastLeft'], trials['contrastRight'])
-        ]
+        # We consolidate into two tidy columns: gabor_stimulus_side and gabor_stimulus_contrast.
+        # The side is given by which column is populated; the contrast by the populated value.
+        left = trials['contrastLeft']
+        right = trials['contrastRight']
+        left_valid = left.notna().to_numpy()
+        right_valid = right.notna().to_numpy()
+        trials['gabor_stimulus_side'] = np.select([left_valid, right_valid], ['left', 'right'], default='none')
+        # defensive: both columns populated should not happen in valid IBL data; if it does,
+        # attribute the trial to the side carrying the larger contrast
+        both_valid = left_valid & right_valid
+        if both_valid.any():
+            trials.loc[both_valid, 'gabor_stimulus_side'] = np.where(
+                left.to_numpy()[both_valid] >= right.to_numpy()[both_valid], 'left', 'right'
+            )
+        # take the non-NaN value (NaN where both are NaN) and express as a percentage
+        trials['gabor_stimulus_contrast'] = (left.fillna(right).to_numpy() * 100).round(2)
 
         # Compute block_index and block_type from probabilityLeft
         # Validate: probabilityLeft must not contain NaN (indicates corrupted trial data)
-        prob_left = trials['probabilityLeft'].values
+        prob_left = trials['probabilityLeft'].to_numpy()
         nan_mask = pd.isna(prob_left)
         if np.any(nan_mask):
             nan_indices = np.where(nan_mask)[0].tolist()
@@ -1714,27 +1698,23 @@ class SessionLoader:
                 'This indicates corrupted or incomplete trial data.'
             )
 
-        # block_index increments each time probabilityLeft changes
+        # block_index increments each time probabilityLeft changes (cumulative count of changes)
         block_index = np.zeros(len(prob_left), dtype=int)
-        current_block = 0
-        for i in range(1, len(prob_left)):
-            if not math.isclose(prob_left[i], prob_left[i - 1]):
-                current_block += 1
-            block_index[i] = current_block
+        if len(prob_left) > 1:
+            block_index[1:] = np.cumsum(~np.isclose(prob_left[1:], prob_left[:-1]))
         trials['block_index'] = block_index
 
-        # block_type: categorical based on probabilityLeft value
-        def compute_block_type(prob):
-            if math.isclose(prob, 0.5):
-                return 'unbiased'
-            elif math.isclose(prob, 0.8):
-                return 'left_block'
-            elif math.isclose(prob, 0.2):
-                return 'right_block'
-            else:
-                return f'p={prob}'  # Unexpected value, preserve it
-
-        trials['block_type'] = trials['probabilityLeft'].apply(compute_block_type)
+        # block_type: categorical label per known probabilityLeft value
+        block_type = np.select(
+            [np.isclose(prob_left, 0.5), np.isclose(prob_left, 0.8), np.isclose(prob_left, 0.2)],
+            ['unbiased', 'left_block', 'right_block'],
+            default='',
+        ).astype(object)
+        # preserve any unexpected probability values verbatim
+        unexpected = block_type == ''
+        if unexpected.any():
+            block_type[unexpected] = [f'p={prob}' for prob in prob_left[unexpected]]
+        trials['block_type'] = block_type
 
         return trials
 
