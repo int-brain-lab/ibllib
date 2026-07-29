@@ -78,7 +78,7 @@ def register_dataset(file_list, one=None, exists=False, versions=None, **kwargs)
     elif isinstance(file_list, (str, Path)):
         file_list = [file_list]
 
-    assert len(set(get_session_path(f) for f in file_list)) == 1
+    assert len(set(map(get_session_path, file_list))) == 1
     assert all(Path(f).exists() for f in file_list)
 
     client = IBLRegistrationClient(one)
@@ -531,6 +531,41 @@ def get_local_data_repository(ac):
     return next((da['name'] for da in data_repo), None)
 
 
+def nickname2lab(nickname, alyx):
+    """
+    Get lab from a subject name.
+
+    On local lab servers, the lab name is not in the ALF path and the globus endpoint ID may be
+    associated with multiple labs, so lab name is fetched from the subjects endpoint.
+
+    Parameters
+    ----------
+    session_path : str, pathlib.Path
+        The session path from which to determine the lab name.
+    alyx : one.webclient.AlyxClient
+        An AlyxClient instance for querying data repositories.
+
+    Returns
+    -------
+    str
+        The lab name associated with the session path subject.
+
+    See Also
+    --------
+    one.remote.globus.get_lab_from_endpoint_id
+    """
+    labs = [x['lab'] for x in alyx.rest('subjects', 'list', nickname=nickname)]
+    if len(labs) == 0:
+        raise alferr.AlyxSubjectNotFound(nickname)
+    elif len(labs) > 1:  # More than one subject with this nickname
+        # use local endpoint ID to find the correct lab
+        endpoint_labs = get_lab_from_endpoint_id(alyx=alyx)
+        lab = next(x for x in labs if x in endpoint_labs)
+    else:
+        (lab,) = labs
+    return lab
+
+
 def get_lab(session_path, alyx=None):
     """
     Get lab from a session path using the subject name.
@@ -559,14 +594,4 @@ def get_lab(session_path, alyx=None):
     if not session_path.is_session_path():
         raise ValueError(f'Failed to parse session path: {session_path}')
 
-    labs = [x['lab'] for x in alyx.rest('subjects', 'list', nickname=session_path.subject)]
-    if len(labs) == 0:
-        raise alferr.AlyxSubjectNotFound(session_path.subject)
-    elif len(labs) > 1:  # More than one subject with this nickname
-        # use local endpoint ID to find the correct lab
-        endpoint_labs = get_lab_from_endpoint_id(alyx=alyx)
-        lab = next(x for x in labs if x in endpoint_labs)
-    else:
-        (lab,) = labs
-
-    return lab
+    return nickname2lab(session_path.subject, alyx)
