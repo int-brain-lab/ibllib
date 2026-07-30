@@ -419,7 +419,7 @@ class ChoiceWorldTrialsBpod(base_tasks.BehaviourTask):
         self.extractor.default_path = self.output_collection
         return self.extractor.extract(task_collection=self.collection, **kwargs)
 
-    def run_qc(self, trials_data=None, update=True, QC=None):
+    def run_qc(self, trials_data=None, update=True, QC=None, **_):
         """
         Run the task QC.
 
@@ -617,6 +617,7 @@ class ChoiceWorldTrialsTimeline(ChoiceWorldTrialsNidq):
 
     def extract_behaviour(self, save=True, **kwargs):
         """Extract the Bpod trials data and Timeline acquired signals."""
+        _ = kwargs.pop('plot_qc', None)
         # First determine the extractor from the task protocol
         bpod_trials, _ = ChoiceWorldTrialsBpod.extract_behaviour(self, save=False, **kwargs)
 
