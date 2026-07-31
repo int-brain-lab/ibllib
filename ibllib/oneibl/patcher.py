@@ -1,9 +1,13 @@
 """A module for ad-hoc dataset modification and registration.
 
-Unlike the DataHandler class in oneibl.data_handlers, the Patcher class allows one to fully remove
-datasets (delete them from the database and repositories), and to overwrite datasets on both the
-main repositories and the local servers.  Additionally the Patcher can handle datasets from
-multiple sessions at once.
+The Patcher classes provide the protocol implementations that the Transfer classes in
+oneibl.data_handlers delegate to, and are used directly to overwrite datasets on both the main
+repositories and the local servers.
+
+NB: A DataHandler is now able to register datasets belonging to several sessions at once, to
+transfer them as soon as they are registered (see the 'immediate' mode of ServerDataHandler), and
+to fully remove datasets from both the database and the repositories (see DataHandler.deleteData),
+so the Patcher classes are no longer required for those.
 
 Examples
 --------

@@ -115,6 +115,12 @@ class Task(abc.ABC):
     job_size = 'small'  # either 'small' or 'large', defines whether task should be run as part of the large or small job services
     env = None  # the environment name within which to run the task (NB: the env is not activated automatically!)
     on_error = 'continue'  # whether to raise an exception on error ('raise') or report the error and continue ('continue')
+    # The Alyx model that the output datasets relate to. The default, 'session', means the datasets
+    # are within a subject/date/number path. Any other content type means the datasets are
+    # aggregated over sessions, and dataset_object_id must also be set. NB: This is distinct from
+    # the content_type of ibllib.plots.snapshot.ReportSnapshot, which relates images to an object.
+    dataset_content_type = 'session'
+    dataset_object_id = None  # the UUID of the object that the output datasets relate to
 
     def __init__(
         self,
@@ -129,6 +135,8 @@ class Task(abc.ABC):
         on_error='continue',
         force=False,
         data_handler_class=None,
+        dataset_content_type=None,
+        dataset_object_id=None,
         **kwargs,
     ):
         """
@@ -147,6 +155,11 @@ class Task(abc.ABC):
          be used to infer the handler class.
         :param scratch_folder: optional: Path where to write intermediate temporary data
         :param force: whether to re-download missing input files on local server if not present
+        :param dataset_content_type: the name of the Alyx model the output datasets relate to, e.g.
+         'subject'. Defaults to 'session'. For any other content type the datasets are aggregated
+         over sessions and dataset_object_id is required.
+        :param dataset_object_id: the UUID of the object the output datasets relate to. Required if
+         dataset_content_type is not 'session'.
         :param args: running arguments
         """
         self.on_error = on_error
@@ -167,6 +180,11 @@ class Task(abc.ABC):
         self.scratch_folder = scratch_folder
         self.kwargs = kwargs
         self.data_handler_class = data_handler_class
+        # NB: only override the class attributes if provided, so that subclasses may declare these
+        if dataset_content_type:
+            self.dataset_content_type = dataset_content_type
+        if dataset_object_id:
+            self.dataset_object_id = dataset_object_id
 
     @property
     def signature(self) -> Dict[str, List]:
@@ -569,10 +587,16 @@ class Task(abc.ABC):
         Gets the relevant data handler based on location argument
         :return:
         """
+        # Output datasets that are not associated with a session must be registered to a different
+        # repository, so the handler is told what they relate to. NB: These are passed only when set
+        # so as not to break any custom data handler class that doesn't accept them.
+        handler_kwargs = {}
+        if self.dataset_content_type != 'session':
+            handler_kwargs = {'content_type': self.dataset_content_type, 'object_id': self.dataset_object_id}
         if self.data_handler_class is None:
             location = str.lower(location or self.location)
             if location == 'local':
-                return data_handlers.LocalDataHandler(self.session_path, self.signature, one=self.one)
+                return data_handlers.LocalDataHandler(self.session_path, self.signature, one=self.one, **handler_kwargs)
             self.one = self.one or ONE()
             if location == 'server':
                 self.data_handler_class = data_handlers.ServerDataHandler
@@ -590,7 +614,7 @@ class Task(abc.ABC):
                 self.data_handler_class = data_handlers.RemoteEC2DataHandler
             else:
                 raise ValueError(f'Unknown location "{location}"')
-        return self.data_handler_class(self.session_path, self.signature, one=self.one)
+        return self.data_handler_class(self.session_path, self.signature, one=self.one, **handler_kwargs)
 
     @staticmethod
     def make_lock_file(taskname='', time_out_secs=7200):

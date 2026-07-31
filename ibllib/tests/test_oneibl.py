@@ -784,6 +784,111 @@ class TestDataHandlers(unittest.TestCase):
         with self.assertRaises(ValueError):
             handlers.ServerDataHandler('subject/2023-01-01/001', signature, one=one, mode='immediately')
 
+    @mock.patch('ibllib.oneibl.data_handlers.register_dataset')
+    def test_patch_datasets(self, register_dataset_mock):
+        """Test that a handler may register files belonging to several sessions at once.
+
+        Together with the immediate transfer mode this is the behaviour that previously required
+        one of the ibllib.oneibl.patcher.Patcher classes.
+        """
+        one = mock.MagicMock()
+        one.alyx = None
+        signature = {'input_files': [], 'output_files': []}
+        files = ['subject/2023-01-01/001/alf/foo.bar.npy', 'subject/2023-01-02/001/alf/foo.bar.npy']
+        register_dataset_mock.return_value = []
+        # No session path is required: the sessions are resolved from the file paths on registration
+        handler = handlers.ServerDataHandler(None, signature, one=one, mode='immediate')
+        self.assertIsNone(handler.session_path)
+        handler.uploadData(files, '0.0.0')
+        self.assertEqual(files, register_dataset_mock.call_args.args[0])
+
+    def test_remote_path(self):
+        """Test for remote_path and uses_uuid_filenames functions."""
+        did = str(uuid4())
+        # Data on the main repositories have the dataset UUID in the filename
+        for repository in ('flatiron_cortexlab', 'aws_aggregates'):
+            self.assertTrue(handlers.uses_uuid_filenames(repository))
+            file_record = {'data_repository': repository, 'relative_path': 'alf/foo.bar.npy'}
+            expected = f'alf/foo.bar.{did}.npy'
+            self.assertEqual(expected, handlers.remote_path(file_record, {'id': did}).as_posix())
+        # Data on the local servers do not
+        self.assertFalse(handlers.uses_uuid_filenames('foolab_SR'))
+        file_record = {'data_repository': 'foolab_SR', 'relative_path': 'alf/foo.bar.npy'}
+        self.assertEqual('alf/foo.bar.npy', handlers.remote_path(file_record, {'id': did}).as_posix())
+
+    @mock.patch('ibllib.oneibl.data_handlers.register_dataset')
+    def test_aggregate_registration(self, register_dataset_mock):
+        """Test handling of datasets that are not associated with a session."""
+        one = mock.MagicMock()
+        one.alyx = None
+        signature = {'input_files': [], 'output_files': [('foo.bar.npy', None, True)]}
+        object_id = str(uuid4())
+        aggregate = dict(content_type='subject', object_id=object_id)
+
+        # An object ID is required to identify the object the datasets relate to
+        with self.assertRaises(ValueError):
+            handlers.ServerDataHandler('root', signature, one=one, content_type='subject', mode='immediate')
+        # Alyx does not transfer datasets that aren't associated with a session, so the delayed
+        # transfer would leave the data stranded
+        with self.assertRaises(ValueError):
+            handlers.ServerDataHandler('root', signature, one=one, **aggregate)
+
+        handler = handlers.ServerDataHandler('root', signature, one=one, mode='immediate', **aggregate)
+        self.assertTrue(handler.is_aggregate)
+        self.assertEqual(handlers.AGGREGATE_REPOSITORY, handler.repository)
+        expected = {**aggregate, 'repository': handlers.AGGREGATE_REPOSITORY}
+        self.assertEqual(expected, handler.registration_kwargs)
+        # The input signature cannot express datasets aggregated over sessions
+        self.assertRaises(NotImplementedError, handler.getData)
+
+        # Check the fields Alyx requires for these datasets are passed on to registration
+        register_dataset_mock.return_value = []
+        handler.uploadData(['Subjects/foolab/foo/foo.bar.npy'], '0.0.0')
+        for key, value in expected.items():
+            self.assertEqual(value, register_dataset_mock.call_args.kwargs.get(key))
+
+        # Session datasets should be unaffected
+        handler = handlers.ServerDataHandler('subject/2023-01-01/001', signature, one=one)
+        self.assertFalse(handler.is_aggregate)
+        self.assertEqual({}, handler.registration_kwargs)
+
+    def test_delete_data(self):
+        """Test for DataHandler.deleteData method."""
+        one = mock.MagicMock()
+        signature = {'input_files': [], 'output_files': []}
+        did = str(uuid4())
+        dataset = {
+            'id': did,
+            'name': 'foo.bar.npy',
+            'protected': False,
+            'file_records': [
+                {'id': 0, 'data_repository': 'foolab_SR', 'relative_path': 'alf/foo.bar.npy', 'exists': True},
+                {'id': 1, 'data_repository': 'flatiron_foolab', 'relative_path': 'alf/foo.bar.npy', 'exists': True},
+                # The data were never transferred to AWS so there is nothing to delete there
+                {'id': 2, 'data_repository': 'aws_foolab', 'relative_path': 'alf/foo.bar.npy', 'exists': False},
+            ],
+        }
+        handler = handlers.ServerDataHandler('subject/2023-01-01/001', signature, one=one)
+        protocols = {'flatiron': mock.MagicMock(), 'aws': mock.MagicMock()}
+
+        # A dry run should neither delete the data nor the dataset record
+        with mock.patch.dict(handler.protocols, protocols):
+            deleted = handler.deleteData(dataset, dry=True)
+        self.assertEqual({'flatiron'}, set(deleted), 'only existing data with a protocol may be deleted')
+        protocols['flatiron'].delete.assert_not_called()
+        one.alyx.rest.assert_not_called()
+
+        with mock.patch.dict(handler.protocols, protocols):
+            handler.deleteData(dataset)
+        protocols['flatiron'].delete.assert_called_once()
+        protocols['aws'].delete.assert_not_called()
+        # The dataset record should be removed only once the data have been
+        one.alyx.rest.assert_called_once_with('datasets', 'delete', id=did)
+
+        # Protected datasets should never be deleted
+        with mock.patch.dict(handler.protocols, protocols):
+            self.assertRaises(AssertionError, handler.deleteData, {**dataset, 'protected': True})
+
     def test_getData(self):
         """Test for DataHandler.getData method."""
         one = ONE(**TEST_DB, mode='remote')

@@ -28,6 +28,54 @@ from ibllib.oneibl.patcher import FTPPatcher, SDSCPatcher, SDSC_ROOT_PATH, SDSC_
 
 _logger = logging.getLogger(__name__)
 
+AGGREGATE_REPOSITORY = 'flatiron_aggregates'
+"""str: the default repository for datasets that are not associated with a single session."""
+
+UUID_FILENAME_STORES = ('flatiron', 'aws')
+"""tuple of str: the repository stores that store the dataset UUID in the filename.
+
+For historical reasons the data on these repositories are named 'object.attribute.uuid.extension',
+although this is not reflected in the relative path of their file records.
+"""
+
+
+def uses_uuid_filenames(repository_name):
+    """Whether the data on a given repository have the dataset UUID in the filename.
+
+    Parameters
+    ----------
+    repository_name : str
+        The name of a data repository, e.g. 'flatiron_cortexlab'.
+
+    Returns
+    -------
+    bool
+        True if the files on this repository are named 'object.attribute.uuid.extension'.
+    """
+    return repository_store(repository_name) in UUID_FILENAME_STORES
+
+
+def remote_path(file_record, dataset):
+    """Return the path of a dataset on its repository, relative to the repository root.
+
+    Parameters
+    ----------
+    file_record : dict
+        An Alyx file record.
+    dataset : dict
+        The Alyx dataset record that the file record belongs to.
+
+    Returns
+    -------
+    pathlib.PurePosixPath
+        The relative path of the file on its repository, with the dataset UUID added to the
+        filename for those repositories that store it there.
+    """
+    path = PurePosixPath(file_record['relative_path'])
+    if uses_uuid_filenames(file_record['data_repository']):
+        path = add_uuid_string(path, dataset['id'])
+    return path
+
 
 def repository_store(repository_name):
     """Return the store part of an Alyx data repository name.
@@ -646,6 +694,28 @@ class Transfer(abc.ABC):
         """
         raise NotImplementedError(f'{self.__class__.__name__} cannot transfer already-registered files')
 
+    def delete(self, handler, items):
+        """Remove data from a data repository.
+
+        This deletes the data only; the Alyx records are removed by :meth:`DataHandler.deleteData`
+        once every repository has been dealt with.
+
+        Parameters
+        ----------
+        handler : DataHandler
+            The handler this transfer is acting on behalf of.
+        items : list of (dict, dict)
+            One tuple per file to remove, of (Alyx file record, Alyx dataset record). All file
+            records are guaranteed to be on repositories of the same store, although not
+            necessarily the same repository.
+
+        Raises
+        ------
+        NotImplementedError
+            This protocol cannot delete data.
+        """
+        raise NotImplementedError(f'{self.__class__.__name__} cannot delete data')
+
     def cleanUp(self, handler, **kwargs):
         """Remove any local staging artefacts created by `setUp`. Default: no-op."""
         pass
@@ -681,11 +751,11 @@ class LocalTransfer(Transfer):
             A list of newly created Alyx dataset records or the registration data if dry.
         """
         versions = super().uploadData(handler, outputs, version)
-        data_repo = get_local_data_repository(handler.one.alyx)
         # If clobber = False, do not re-upload the outputs that have already been processed
         outputs = ensure_list(outputs)
         to_upload = list(filter(None if clobber else lambda x: x not in handler.processed, outputs))
-        records = register_dataset(to_upload, one=handler.one, versions=versions, repository=data_repo, **kwargs) or []
+        register_kwargs = {'repository': handler.repository, **handler.registration_kwargs, **kwargs}
+        records = register_dataset(to_upload, one=handler.one, versions=versions, **register_kwargs) or []
         if kwargs.get('dry', False):
             return records
         # Store processed outputs
@@ -786,7 +856,8 @@ class GlobusTransfer(Transfer):
             The newly created/updated Alyx dataset records.
         """
         versions = super().uploadData(handler, outputs, version)
-        response = register_dataset(outputs, one=handler.one, server_only=True, versions=versions, **kwargs)
+        register_kwargs = {**handler.registration_kwargs, **kwargs}
+        response = register_dataset(outputs, one=handler.one, server_only=True, versions=versions, **register_kwargs)
         if kwargs.get('dry', False):
             return response
         items = []
@@ -818,7 +889,7 @@ class GlobusTransfer(Transfer):
                 # Set exists status to false until the transfer is verified below
                 handler.one.alyx.rest('files', 'partial_update', id=fr['id'], data={'exists': False})
                 source_paths.append(path)
-                target_paths.append(add_uuid_string(fr['relative_path'], dset['id']))
+                target_paths.append(remote_path(fr, dset))
 
             if len(target_paths) != 0:
                 ts = time()
@@ -843,6 +914,23 @@ class GlobusTransfer(Transfer):
                             _logger.warning(f'File {name} found on {repository} but sizes do not match')
                     except ValueError:
                         _logger.warning(f'File {name} not found on {repository}')
+
+    def delete(self, handler, items):
+        """Delete data from their Globus repository.
+
+        See Also
+        --------
+        Transfer.delete
+        """
+        by_repository = defaultdict(list)
+        for fr, dset in items:
+            by_repository[fr['data_repository']].append(remote_path(fr, dset).as_posix())
+
+        for repository, paths in by_repository.items():
+            globus = self._globus_client(handler, repository)
+            for path in paths:
+                _logger.info('Deleting %s from %s', path, repository)
+            globus.delete_data(paths, repository)
 
     def cleanUp(self, handler, **_):
         """Clean up, remove the files that were downloaded from Globus once task has completed."""
@@ -883,6 +971,16 @@ class S3Transfer(Transfer):
         s3_patcher = S3Patcher(one=handler.one)
         return s3_patcher.patch_dataset(outputs, created_by=handler.one.alyx.user, versions=versions, **kwargs)
 
+    @staticmethod
+    def _bucket_key(file_record, dataset):
+        """Return the S3 bucket key of a dataset.
+
+        This is the repository path joined with the file record's relative path, i.e. the same key
+        that ONE resolves when downloading from AWS.
+        """
+        key = PurePosixPath(file_record['data_repository_path'], remote_path(file_record, dataset))
+        return key.as_posix().lstrip('/')
+
     def transfer(self, handler, items):
         """Upload registered files to their S3 bucket, then flag them as existing.
 
@@ -899,13 +997,30 @@ class S3Transfer(Transfer):
         for repository, group in by_repository.items():
             s3, bucket = get_s3_from_alyx(handler.one.alyx, repo_name=repository)
             for path, fr, dset in group:
-                # The bucket key is the repository path joined with the file record's relative
-                # path, with the dataset UUID added, i.e. the same key ONE resolves on download.
-                key = PurePosixPath(fr['data_repository_path'], fr['relative_path'])
-                key = add_uuid_string(key, dset['id']).as_posix().lstrip('/')
+                key = self._bucket_key(fr, dset)
                 _logger.info('Uploading %s to s3://%s/%s', path, bucket, key)
                 s3.Bucket(bucket).upload_file(str(path), key)
                 handler.one.alyx.rest('files', 'partial_update', id=fr['id'], data={'exists': True})
+
+    def delete(self, handler, items):
+        """Delete data from their S3 bucket.
+
+        See Also
+        --------
+        Transfer.delete
+        """
+        from one.remote.aws import get_s3_from_alyx  # noqa
+
+        by_repository = defaultdict(list)
+        for fr, dset in items:
+            by_repository[fr['data_repository']].append((fr, dset))
+
+        for repository, group in by_repository.items():
+            s3, bucket = get_s3_from_alyx(handler.one.alyx, repo_name=repository)
+            for fr, dset in group:
+                key = self._bucket_key(fr, dset)
+                _logger.info('Deleting s3://%s/%s', bucket, key)
+                s3.Object(bucket, key).delete()
 
     def cleanUp(self, handler, task=None, **_):
         """Clean up, remove the files downloaded from S3, but only once the task has completed."""
@@ -915,35 +1030,77 @@ class S3Transfer(Transfer):
 
 
 class DataHandler(abc.ABC):
+    """Stage the input data a task requires, and register and upload the datasets it outputs."""
+
+    protocols = {}
     """Map of str to Transfer: the protocol to use to reach each data repository store.
 
     Keys are the store part of a data repository name (see :func:`repository_store`), e.g.
     'flatiron' for the 'flatiron_cortexlab' repository. This is declared per location, as not
     every location is set up to reach every store, e.g. a machine may not hold S3 credentials.
-    Used by :meth:`transferData` to push data to each repository registration created a file
-    record for. An empty map means this handler never transfers data itself.
+    Used by :meth:`transferData` and :meth:`deleteData`. An empty map means this handler never
+    moves or removes data itself.
     """
 
-    protocols = {}
-
-    def __init__(self, session_path, signature, one=None, download=None, upload=None):
+    def __init__(
+        self, session_path, signature, one=None, download=None, upload=None,
+        content_type='session', object_id=None, repository=None
+    ):
         """
         Base data handler class.
 
-        :param session_path: path to session
+        :param session_path: path to session. May be None when the datasets do not belong to a
+            single session, e.g. when patching datasets from several sessions at once.
         :param signature: input and output file signatures
         :param one: ONE instance
         :param download: a :class:`Transfer` instance used to stage missing input datasets.
             Defaults to a no-op transfer that assumes inputs are already present.
         :param upload: a :class:`Transfer` instance used to register/upload output datasets.
             Defaults to a no-op transfer that registers nothing.
+        :param content_type: the name of the Alyx model the datasets relate to, e.g. 'subject'.
+            Defaults to 'session', i.e. datasets within a subject/date/number path. For any other
+            content type the datasets are aggregated over sessions and `object_id` is required.
+        :param object_id: the UUID of the object the datasets relate to. Required if `content_type`
+            is not 'session'.
+        :param repository: the name of the data repository to register the datasets to. Defaults to
+            the local repository for session datasets, and to AGGREGATE_REPOSITORY otherwise.
         """
-        self.session_path = ensure_alf_path(session_path)
+        self.session_path = ensure_alf_path(session_path) if session_path else None
         self.signature = _parse_signature(signature)
         self.one = one
         self.processed = {}  # Map of filepaths and their processed records (e.g. upload receipts or Alyx records)
         self.download = download or Transfer()
         self.upload = upload or Transfer()
+        self.content_type = content_type or 'session'
+        self.object_id = object_id
+        if self.is_aggregate and not object_id:
+            raise ValueError(f'object_id required for "{self.content_type}" datasets')
+        self._repository = repository
+
+    @property
+    def is_aggregate(self):
+        """bool: True if the datasets are not associated with a single session."""
+        return self.content_type != 'session'
+
+    @property
+    def repository(self):
+        """str: the name of the data repository to register the datasets to."""
+        if self._repository:
+            return self._repository
+        # Aggregate datasets are not associated with a lab, and so have their own repository
+        return AGGREGATE_REPOSITORY if self.is_aggregate else get_local_data_repository(self.one.alyx)
+
+    @property
+    def registration_kwargs(self):
+        """dict: extra keyword arguments for registering this handler's datasets.
+
+        Empty for session datasets, whose repositories Alyx resolves from the session's lab. For
+        aggregate datasets Alyx cannot do this, so the content type, object ID and an explicit
+        repository must all be provided.
+        """
+        if not self.is_aggregate:
+            return {}
+        return {'content_type': self.content_type, 'object_id': str(self.object_id), 'repository': self.repository}
 
     def setUp(self, **kwargs):
         """Download/stage any missing input datasets required to run the task."""
@@ -962,7 +1119,18 @@ class DataHandler(abc.ABC):
         pandas.DataFrame, None
             A data frame of required datasets. An empty frame is returned if no registered datasets are required,
             while None is returned if no instance of ONE is set.
+
+        Raises
+        ------
+        NotImplementedError
+            The datasets are not associated with a session. Aggregate datasets are typically
+            derived from the datasets of many sessions, which an input signature (a collection and
+            revision relative to one session) cannot express, and `one.api.One.list_aggregates`
+            identifies them by relation and identifier strings rather than by object ID. Such
+            tasks should load their own inputs for the time being.
         """
+        if self.is_aggregate:
+            raise NotImplementedError(f'getData is not supported for "{self.content_type}" datasets')
         if self.one is None and one is None:
             return
         one = one or self.one
@@ -1048,20 +1216,80 @@ class DataHandler(abc.ABC):
             self.protocols[store].transfer(self, items)
         return {store: [fr for _, fr, _ in items] for store, items in pending.items()}
 
+    def deleteData(self, datasets, dry=False):
+        """
+        Delete datasets from each repository this handler can reach, and from Alyx.
+
+        The data are removed from every repository that holds them and that this handler declares a
+        protocol for in :attr:`protocols`; the Alyx dataset record is removed only once all of them
+        have been dealt with. Protected datasets are never deleted.
+
+        Parameters
+        ----------
+        datasets : list of dict
+            One or more Alyx dataset records to delete.
+        dry : bool
+            If true, log the files that would be removed without deleting anything.
+
+        Returns
+        -------
+        dict
+            A map of store name to the list of file records deleted from that store.
+
+        Raises
+        ------
+        AssertionError
+            One or more of the datasets is protected by a tag.
+        """
+        datasets = ensure_list(datasets)
+        # Alyx refuses to delete protected datasets, so check before removing any data
+        for dset in datasets:
+            if 'protected' in dset:  # not present on records returned by registration
+                protected = dset['protected']
+            else:
+                protected = self.one.alyx.rest('datasets', 'read', id=dset['id'])['protected']
+            assert not protected, f'Cannot delete protected dataset {dset["id"]} ({dset["name"]})'
+
+        pending = defaultdict(list)
+        for dset in datasets:
+            for fr in filter(lambda x: x['exists'], dset['file_records']):
+                store = repository_store(fr['data_repository'])
+                if store in self.protocols:
+                    pending[store].append((fr, dset))
+                else:
+                    _logger.warning(
+                        'No transfer protocol for repository "%s"; unable to delete %s',
+                        fr['data_repository'],
+                        fr['relative_path'],
+                    )
+        if dry:
+            for store, items in pending.items():
+                for fr, _ in items:
+                    _logger.info('Would delete %s from %s', fr['relative_path'], fr['data_repository'])
+            return {store: [fr for fr, _ in items] for store, items in pending.items()}
+
+        for store, items in pending.items():
+            self.protocols[store].delete(self, items)
+        for dset in datasets:
+            _logger.info('Deleting dataset %s from Alyx', dset['id'])
+            self.one.alyx.rest('datasets', 'delete', id=dset['id'])
+        return {store: [fr for fr, _ in items] for store, items in pending.items()}
+
     def cleanUp(self, **kwargs):
         """Clean up any local files staged by `setUp`."""
         return self.download.cleanUp(self, **kwargs)
 
 
 class LocalDataHandler(DataHandler):
-    def __init__(self, session_path, signatures, one=None):
+    def __init__(self, session_path, signatures, one=None, **kwargs):
         """
         Data handler for running tasks locally, with no architecture or db connection
         :param session_path: path to session
         :param signature: input and output file signatures
         :param one: ONE instance
+        :param kwargs: see DataHandler
         """
-        super().__init__(session_path, signatures, one=one)
+        super().__init__(session_path, signatures, one=one, **kwargs)
 
 
 class ServerDataHandler(DataHandler):
@@ -1077,7 +1305,7 @@ class ServerDataHandler(DataHandler):
 
     protocols = {'flatiron': GlobusTransfer(), 'aws': S3Transfer()}
 
-    def __init__(self, session_path, signatures, one=None, mode='delayed'):
+    def __init__(self, session_path, signatures, one=None, mode='delayed', **kwargs):
         """
         Data handler for running tasks on lab local servers when all data is available locally
 
@@ -1086,10 +1314,16 @@ class ServerDataHandler(DataHandler):
         :param one: ONE instance
         :param mode: whether to leave the transfer to Alyx ('delayed', the default) or to transfer
             the data to the other repositories immediately after registering them ('immediate').
+        :param kwargs: see DataHandler
         """
         if mode not in ('delayed', 'immediate'):
             raise ValueError(f'Unknown mode "{mode}"')
-        super().__init__(session_path, signatures, one=one, upload=LocalTransfer())
+        super().__init__(session_path, signatures, one=one, upload=LocalTransfer(), **kwargs)
+        if self.is_aggregate and mode == 'delayed':
+            # Alyx creates a file record for each of a session's lab repositories and its nightly
+            # job transfers the data to those that are pending. Aggregate datasets are registered
+            # to a single repository instead, so nothing would ever transfer the data.
+            raise ValueError(f'"{self.content_type}" datasets must be registered with mode="immediate"')
         self.mode = mode
 
     def uploadData(self, outputs, version, **kwargs):
@@ -1117,7 +1351,7 @@ class ServerDataHandler(DataHandler):
 
 
 class ServerGlobusDataHandler(ServerDataHandler):
-    def __init__(self, session_path, signatures, one=None, mode='delayed'):
+    def __init__(self, session_path, signatures, one=None, mode='delayed', **kwargs):
         """
         Data handler for running tasks on lab local servers. Will download missing data from SDSC using Globus
 
@@ -1126,13 +1360,14 @@ class ServerGlobusDataHandler(ServerDataHandler):
         :param one: ONE instance
         :param mode: whether to leave the upload transfer to Alyx ('delayed', the default) or to
             transfer the data to the other repositories immediately after registering them.
+        :param kwargs: see DataHandler
         """
-        super().__init__(session_path, signatures, one=one, mode=mode)
+        super().__init__(session_path, signatures, one=one, mode=mode, **kwargs)
         self.download = GlobusTransfer()
 
 
 class RemoteEC2DataHandler(DataHandler):
-    def __init__(self, session_path, signature, one=None):
+    def __init__(self, session_path, signature, one=None, **kwargs):
         """
         Data handler for running tasks on remote compute node. Downloads missing data via HTTP
         using ONE, and uploads output data via the S3 patcher.
@@ -1140,24 +1375,26 @@ class RemoteEC2DataHandler(DataHandler):
         :param session_path: path to session
         :param signature: input and output file signatures
         :param one: ONE instance
+        :param kwargs: see DataHandler
         """
-        super().__init__(session_path, signature, one=one, download=HTTPTransfer(), upload=S3Transfer())
+        super().__init__(session_path, signature, one=one, download=HTTPTransfer(), upload=S3Transfer(), **kwargs)
 
 
 class RemoteHttpDataHandler(DataHandler):
-    def __init__(self, session_path, signature, one=None):
+    def __init__(self, session_path, signature, one=None, **kwargs):
         """
         Data handler for running tasks on remote compute node. Will download missing data via http using ONE
 
         :param session_path: path to session
         :param signature: input and output file signatures
         :param one: ONE instance
+        :param kwargs: see DataHandler
         """
-        super().__init__(session_path, signature, one=one, download=HTTPTransfer(), upload=FTPTransfer())
+        super().__init__(session_path, signature, one=one, download=HTTPTransfer(), upload=FTPTransfer(), **kwargs)
 
 
 class RemoteAwsDataHandler(DataHandler):
-    def __init__(self, session_path, signature, one=None):
+    def __init__(self, session_path, signature, one=None, **kwargs):
         """
         Data handler for running tasks on remote compute node.
 
@@ -1168,8 +1405,9 @@ class RemoteAwsDataHandler(DataHandler):
         :param session_path: path to session
         :param signature: input and output file signatures
         :param one: ONE instance
+        :param kwargs: see DataHandler
         """
-        super().__init__(session_path, signature, one=one, download=S3Transfer(), upload=GlobusTransfer())
+        super().__init__(session_path, signature, one=one, download=S3Transfer(), upload=GlobusTransfer(), **kwargs)
 
 
 class RemoteGlobusDataHandler(DataHandler):
@@ -1181,9 +1419,9 @@ class RemoteGlobusDataHandler(DataHandler):
     :param one: ONE instance
     """
 
-    def __init__(self, session_path, signature, one=None):
+    def __init__(self, session_path, signature, one=None, **kwargs):
         # NB: downloading via Globus here is not yet implemented (matches previous behaviour)
-        super().__init__(session_path, signature, one=one, upload=FTPTransfer())
+        super().__init__(session_path, signature, one=one, upload=FTPTransfer(), **kwargs)
 
 
 class SDSCDataHandler(DataHandler):

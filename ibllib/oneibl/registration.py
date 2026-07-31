@@ -94,11 +94,17 @@ def register_dataset(file_list, one=None, exists=False, versions=None, **kwargs)
 
         return pr
 
+    # Datasets that are not associated with a session cannot be located by path alone: the content
+    # type, object ID and repository must be passed on to the protected files check as well.
+    protected_kwargs = {k: v for k, v in kwargs.items() if k in ('content_type', 'object_id')}
+    if protected_kwargs and kwargs.get('repository'):
+        protected_kwargs['name'] = kwargs['repository']
+
     # Account for cases where we are connected to cortex lab database
     if one.alyx.base_url == 'https://alyx.cortexlab.net':
         try:
             _one = ONE(base_url='https://alyx.internationalbrainlab.org', mode='remote', cache_rest=one.alyx.cache_mode)
-            protected_status = IBLRegistrationClient(_one).check_protected_files(file_list)
+            protected_status = IBLRegistrationClient(_one).check_protected_files(file_list, **protected_kwargs)
             protected = _get_protected(protected_status)
         except HTTPError as err:
             if err.response.status_code == 500 and re.search(r"check-protected: 'A (base )?session .* does not exist'", str(err)):
@@ -107,7 +113,7 @@ def register_dataset(file_list, one=None, exists=False, versions=None, **kwargs)
             else:
                 raise err
     else:
-        protected_status = client.check_protected_files(file_list)
+        protected_status = client.check_protected_files(file_list, **protected_kwargs)
         protected = _get_protected(protected_status)
 
     # If we find a protected dataset, and we don't have a force=True flag, raise an error

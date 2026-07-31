@@ -8,6 +8,7 @@ import unittest
 from unittest import mock
 from pathlib import Path
 from collections import OrderedDict
+from uuid import uuid4
 import numpy as np
 
 import ibllib.pipes.tasks
@@ -412,6 +413,33 @@ class TestTask(unittest.TestCase):
 
         task = Task00(self.session_path, data_handler_class=TotoDataHandler)
         self.assertIsInstance(task.get_data_handler(), TotoDataHandler)
+
+    def test_aggregate_data_handler(self):
+        """Test that the object the output datasets relate to is passed to the data handler."""
+        object_id = str(uuid4())
+        task = Task00(
+            self.session_path, location='local', dataset_content_type='subject', dataset_object_id=object_id
+        )
+        handler = task.get_data_handler()
+        self.assertTrue(handler.is_aggregate)
+        self.assertEqual('subject', handler.content_type)
+        self.assertEqual(object_id, handler.object_id)
+
+        # These may also be declared by the task class
+        class AggregateTask(Task00):
+            dataset_content_type = 'subject'
+            dataset_object_id = object_id
+
+        self.assertTrue(AggregateTask(self.session_path, location='local').get_data_handler().is_aggregate)
+
+        # For session datasets these are not passed on at all, so that any custom data handler
+        # class that doesn't accept them keeps working
+        class StrictDataHandler(ibllib.oneibl.data_handlers.DataHandler):
+            def __init__(self, session_path, signature, one=None):
+                super().__init__(session_path, signature, one=one)
+
+        task = Task00(self.session_path, data_handler_class=StrictDataHandler)
+        self.assertFalse(task.get_data_handler().is_aggregate)
 
 
 class TestMisc(unittest.TestCase):
