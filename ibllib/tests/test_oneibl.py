@@ -727,6 +727,63 @@ class TestDataHandlers(unittest.TestCase):
         self.assertEqual(4, len(out))
         self.assertDictEqual(expected, handler.processed)
 
+    def test_repository_store(self):
+        """Test for repository_store function."""
+        self.assertEqual('flatiron', handlers.repository_store('flatiron_cortexlab'))
+        self.assertEqual('aws', handlers.repository_store('aws_aggregates'))
+        # Once the per-lab repositories are consolidated the name will be the store
+        self.assertEqual('flatiron', handlers.repository_store('flatiron'))
+
+    @mock.patch('ibllib.oneibl.data_handlers.register_dataset')
+    def test_server_transfer_data(self, register_dataset_mock):
+        """A test for ServerDataHandler.transferData and the immediate transfer mode."""
+        one = mock.MagicMock()
+        one.alyx = None
+        signature = {'input_files': [], 'output_files': [('foo.bar.npy', 'alf', True)]}
+        files = ['alf/foo.bar.npy']
+        # A toy Alyx dataset record with a file record per repository. Only the local server record
+        # exists; the others are awaiting the data. NB: no protocol is defined for 'ibl_patcher'.
+        register_dataset_mock.return_value = [
+            {
+                'id': str(uuid4()),
+                'name': 'foo.bar.npy',
+                'file_size': 1024,
+                'file_records': [
+                    {'id': 0, 'data_repository': 'foolab_SR', 'relative_path': 'alf/foo.bar.npy', 'exists': True},
+                    {'id': 1, 'data_repository': 'flatiron_foolab', 'relative_path': 'alf/foo.bar.npy', 'exists': False},
+                    {'id': 2, 'data_repository': 'aws_foolab', 'relative_path': 'alf/foo.bar.npy', 'exists': False},
+                    {'id': 3, 'data_repository': 'ibl_patcher', 'relative_path': 'alf/foo.bar.npy', 'exists': False},
+                ],
+            }
+        ]
+
+        # In delayed mode (the default) the transfer is left to Alyx
+        handler = handlers.ServerDataHandler('subject/2023-01-01/001', signature, one=one)
+        protocols = {'flatiron': mock.MagicMock(), 'aws': mock.MagicMock()}
+        with mock.patch.dict(handler.protocols, protocols):
+            handler.uploadData(files, '0.0.0')
+        for transfer in protocols.values():
+            transfer.transfer.assert_not_called()
+
+        # In immediate mode the data are transferred as part of registering them
+        handler = handlers.ServerDataHandler('subject/2023-01-01/001', signature, one=one, mode='immediate')
+        protocols = {'flatiron': mock.MagicMock(), 'aws': mock.MagicMock()}
+        with mock.patch.dict(handler.protocols, protocols):
+            handler.uploadData(files, '0.0.0')
+            for store, transfer in protocols.items():
+                transfer.transfer.assert_called_once()
+                items = transfer.transfer.call_args.args[1]
+                self.assertEqual(1, len(items), 'expected one file per repository')
+                path, file_record, _ = items[0]
+                self.assertEqual(files[0], path, 'failed to pair file record with its local path')
+                self.assertEqual(f'{store}_foolab', file_record['data_repository'])
+            # The local server record exists and there is no protocol for 'ibl_patcher', so both are skipped
+            self.assertEqual({'flatiron', 'aws'}, set(handler.transferData(handler.processed)))
+
+        # An unknown mode should raise rather than silently skipping the transfer
+        with self.assertRaises(ValueError):
+            handlers.ServerDataHandler('subject/2023-01-01/001', signature, one=one, mode='immediately')
+
     def test_getData(self):
         """Test for DataHandler.getData method."""
         one = ONE(**TEST_DB, mode='remote')

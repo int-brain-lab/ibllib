@@ -11,6 +11,7 @@ from pathlib import Path, PurePosixPath
 import shutil
 import os
 import abc
+from collections import defaultdict
 from time import time
 from copy import copy
 
@@ -26,6 +27,33 @@ from ibllib.oneibl.patcher import FTPPatcher, SDSCPatcher, SDSC_ROOT_PATH, SDSC_
 
 
 _logger = logging.getLogger(__name__)
+
+
+def repository_store(repository_name):
+    """Return the store part of an Alyx data repository name.
+
+    Data repositories are named '<store>_<scope>', where the store is the physical location of the
+    data (e.g. 'flatiron', 'aws') and the scope is either a lab name or 'aggregates', e.g.
+    'flatiron_cortexlab', 'aws_aggregates'. The store determines which protocol is required to
+    reach the repository (see :attr:`DataHandler.protocols`), while the scope is a property of the
+    data itself.
+
+    Parameters
+    ----------
+    repository_name : str
+        The name of a data repository, e.g. 'flatiron_cortexlab'.
+
+    Returns
+    -------
+    str
+        The store part of the repository name, e.g. 'flatiron'.
+
+    Notes
+    -----
+    - Once the per-lab repositories are consolidated into a single repository per store (e.g. one
+      'flatiron' repository instead of 'flatiron_<lab>'), this will simply return the name as is.
+    """
+    return repository_name.split('_')[0]
 
 
 class ExpectedDataset:
@@ -550,22 +578,376 @@ def update_collections(dataset, new_collection, substring=None, unique=None, exa
     return updated
 
 
-class DataHandler(abc.ABC):
-    def __init__(self, session_path, signature, one=None):
+class Transfer(abc.ABC):
+    """A protocol for moving files to/from a data repository, independent of *where* a task runs.
+
+    A :class:`DataHandler` composes one `Transfer` for downloading missing inputs and one for
+    uploading/registering outputs. The same `Transfer` instance may serve both roles (e.g.
+    :class:`LocalTransfer`), or different mechanisms may be mixed freely, e.g. download via S3
+    but upload via Globus (see :class:`RemoteAwsDataHandler`).
+
+    `Transfer` instances are stateless and may be shared/reused across handlers: any state
+    specific to a given task run (staged file paths, scratch directories, etc.) is read from and
+    written to the `handler` passed into each method, never stored on `self`.
+    """
+
+    def setUp(self, handler, **kwargs):
+        """Download or otherwise stage any missing input datasets.
+
+        Default: assume inputs are already present and do nothing.
         """
-        Base data handler class
+        pass
+
+    def uploadData(self, handler, outputs, version, **kwargs):
+        """Register (and, depending on the mechanism, physically move) output datasets.
+
+        Default: compute the per-output version list expected by subclasses, without
+        registering anything (used e.g. by :class:`LocalDataHandler` for local-only runs).
+
+        Parameters
+        ----------
+        handler : DataHandler
+            The handler this transfer is acting on behalf of.
+        outputs : list of pathlib.Path
+            A set of ALF paths to register to Alyx.
+        version : str, list of str
+            The version of ibllib used to generate these output files.
+
+        Returns
+        -------
+        list of dicts, dict
+            The newly created/updated Alyx dataset records, or the version list if not overridden.
+        """
+        if isinstance(outputs, list):
+            return [version for _ in outputs]
+        return [version]
+
+    def transfer(self, handler, items):
+        """Move already-registered files to their destination data repository.
+
+        Unlike `uploadData`, this does not register anything: the Alyx records already exist and
+        only the data need moving. This is used by :meth:`DataHandler.transferData` to satisfy
+        each of the file records created by registration, and is therefore only implemented by
+        those protocols that can push to a repository independently of registration.
+
+        Parameters
+        ----------
+        handler : DataHandler
+            The handler this transfer is acting on behalf of.
+        items : list of (pathlib.Path, dict, dict)
+            One tuple per file to move, of (local file path, Alyx file record, Alyx dataset
+            record). All file records are guaranteed to be on repositories of the same store,
+            although not necessarily the same repository.
+
+        Raises
+        ------
+        NotImplementedError
+            This protocol cannot move data independently of registration.
+        """
+        raise NotImplementedError(f'{self.__class__.__name__} cannot transfer already-registered files')
+
+    def cleanUp(self, handler, **kwargs):
+        """Remove any local staging artefacts created by `setUp`. Default: no-op."""
+        pass
+
+
+class LocalTransfer(Transfer):
+    """Register outputs directly against the local repository; no bytes are moved.
+
+    Used when the task runs on the machine that already holds the data (typically a lab's local
+    acquisition server). New datasets are picked up by Alyx's nightly Globus sync.
+    """
+
+    def uploadData(self, handler, outputs, version, clobber=False, **kwargs):
+        """
+        Upload and/or register output data.
+
+        Parameters
+        ----------
+        handler : DataHandler
+            The handler this transfer is acting on behalf of.
+        outputs : list of pathlib.Path
+            A set of ALF paths to register to Alyx.
+        version : str, list of str
+            The version of ibllib used to generate these output files.
+        clobber : bool
+            If True, re-upload outputs that have already been passed to this method.
+        kwargs
+            Optional keyword arguments for one.registration.RegistrationClient.register_files.
+
+        Returns
+        -------
+        list of dicts, dict
+            A list of newly created Alyx dataset records or the registration data if dry.
+        """
+        versions = super().uploadData(handler, outputs, version)
+        data_repo = get_local_data_repository(handler.one.alyx)
+        # If clobber = False, do not re-upload the outputs that have already been processed
+        outputs = ensure_list(outputs)
+        to_upload = list(filter(None if clobber else lambda x: x not in handler.processed, outputs))
+        records = register_dataset(to_upload, one=handler.one, versions=versions, repository=data_repo, **kwargs) or []
+        if kwargs.get('dry', False):
+            return records
+        # Store processed outputs
+        handler.processed.update({k: v for k, v in zip(to_upload, records) if v})
+        return [handler.processed[x] for x in outputs if x in handler.processed]
+
+
+class GlobusTransfer(Transfer):
+    """Move files to/from a Globus data repository, e.g. one of the flatiron endpoints."""
+
+    @staticmethod
+    def _globus_client(handler, repository):
+        """Build a Globus client with the local and `repository` endpoints registered.
+
+        Parameters
+        ----------
+        handler : DataHandler
+            The handler this transfer is acting on behalf of.
+        repository : str
+            The name of the Globus data repository to register, e.g. 'flatiron_cortexlab'.
+
+        Returns
+        -------
+        one.remote.globus.Globus
+            A Globus client instance.
+        """
+        from one.remote.globus import Globus  # noqa
+
+        globus = Globus(client_name='server', headless=True)
+        # on local servers set up the local root path manually as some have different globus config paths
+        globus.endpoints['local']['root_path'] = '/mnt/s0/Data/Subjects'
+        # For cortex lab we need to get the endpoint from the ibl alyx
+        if 'cortexlab' in repository and 'cortexlab' in handler.one.alyx.base_url:
+            alyx = AlyxClient(base_url='https://alyx.internationalbrainlab.org', cache_rest=None)
+        else:
+            alyx = handler.one.alyx
+        globus.add_endpoint(repository, alyx=alyx)
+        return globus
+
+    def setUp(self, handler, **_):
+        """Download any missing input datasets from flatiron using globus-sdk."""
+        lab = get_lab(handler.session_path, handler.one.alyx)
+        repository = f'flatiron_{lab}'
+        globus = self._globus_client(handler, repository)
+        if lab == 'cortexlab' and 'cortexlab' in handler.one.alyx.base_url:
+            one = ONE(base_url='https://alyx.internationalbrainlab.org', cache_rest=handler.one.alyx.cache_mode)
+            df = handler.getData(one=one)
+        else:
+            df = handler.getData()
+
+        if len(df) == 0:
+            # If no datasets found in the cache only work off local file system do not attempt to
+            # download any missing data using Globus
+            return
+
+        # Check for space on local server. If less that 500 GB don't download new data
+        space_free = shutil.disk_usage(globus.endpoints['local']['root_path'])[2]
+        if space_free < 500e9:
+            _logger.warning("Space left on server is < 500GB, won't re-download new data")
+            return
+
+        rel_sess_path = handler.session_path.session_path_short()
+        target_paths = []
+        source_paths = []
+        handler.local_paths = []
+        for i, d in df.iterrows():
+            sess_path = Path(rel_sess_path).joinpath(d['rel_path'])
+            full_local_path = Path(globus.endpoints['local']['root_path']).joinpath(sess_path)
+            if not full_local_path.exists():
+                uuid = i
+                handler.local_paths.append(full_local_path)
+                target_paths.append(sess_path)
+                source_paths.append(add_uuid_string(sess_path, uuid))
+
+        if len(target_paths) != 0:
+            ts = time()
+            for sp, tp in zip(source_paths, target_paths):
+                _logger.info(f'Downloading {sp} to {tp}')
+            globus.mv(repository, 'local', source_paths, target_paths)
+            _logger.debug(f'Complete. Time elapsed {time() - ts}')
+
+    def uploadData(self, handler, outputs, version, **kwargs):
+        """
+        Register output datasets on the server repositories and transfer them to flatiron.
+
+        Parameters
+        ----------
+        handler : DataHandler
+            The handler this transfer is acting on behalf of.
+        outputs : list of pathlib.Path
+            A set of ALF paths to register to Alyx.
+        version : str, list of str
+            The version of ibllib used to generate these output files.
+
+        Returns
+        -------
+        list of dicts, dict
+            The newly created/updated Alyx dataset records.
+        """
+        versions = super().uploadData(handler, outputs, version)
+        response = register_dataset(outputs, one=handler.one, server_only=True, versions=versions, **kwargs)
+        if kwargs.get('dry', False):
+            return response
+        items = []
+        for dset, out in zip(ensure_list(response), ensure_list(outputs)):
+            assert Path(out).name == dset['name']
+            fr = next(fr for fr in dset['file_records'] if repository_store(fr['data_repository']) == 'flatiron')
+            items.append((out, fr, dset))
+        self.transfer(handler, items)
+        return response
+
+    def transfer(self, handler, items):
+        """Transfer registered files over Globus, verifying each before flagging it as existing.
+
+        See Also
+        --------
+        Transfer.transfer
+        """
+        by_repository = defaultdict(list)
+        for path, fr, dset in items:
+            by_repository[fr['data_repository']].append((path, fr, dset))
+
+        for repository, group in by_repository.items():
+            globus = self._globus_client(handler, repository)
+            source_paths, target_paths, collections = [], [], {}
+            for path, fr, dset in group:
+                collection = '/'.join(fr['relative_path'].split('/')[:-1])
+                details = {dset['name']: {'fr_id': fr['id'], 'size': dset['file_size']}}
+                collections.setdefault(collection, {}).update(details)
+                # Set exists status to false until the transfer is verified below
+                handler.one.alyx.rest('files', 'partial_update', id=fr['id'], data={'exists': False})
+                source_paths.append(path)
+                target_paths.append(add_uuid_string(fr['relative_path'], dset['id']))
+
+            if len(target_paths) != 0:
+                ts = time()
+                for sp, tp in zip(source_paths, target_paths):
+                    _logger.info(f'Uploading {sp} to {tp}')
+                globus.mv('local', repository, source_paths, target_paths)
+                _logger.debug(f'Complete. Time elapsed {time() - ts}')
+
+            for collection, files in collections.items():
+                globus_files = globus.ls(repository, collection, remove_uuid=True, return_size=True)
+                file_names = [str(gl[0]) for gl in globus_files]
+                file_sizes = [gl[1] for gl in globus_files]
+
+                for name, details in files.items():
+                    try:
+                        idx = file_names.index(name)
+                        size = file_sizes[idx]
+                        if size == details['size']:
+                            # update the file record if sizes match
+                            handler.one.alyx.rest('files', 'partial_update', id=details['fr_id'], data={'exists': True})
+                        else:
+                            _logger.warning(f'File {name} found on {repository} but sizes do not match')
+                    except ValueError:
+                        _logger.warning(f'File {name} not found on {repository}')
+
+    def cleanUp(self, handler, **_):
+        """Clean up, remove the files that were downloaded from Globus once task has completed."""
+        for file in getattr(handler, 'local_paths', []):
+            os.unlink(file)
+
+
+class HTTPTransfer(Transfer):
+    """Download missing input datasets via HTTP, using ONE's own web client."""
+
+    def setUp(self, handler, check_hash=True, **_):
+        """Function to download necessary data to run tasks using ONE."""
+        df = handler.getData()
+        handler.one._check_filesystem(df, check_hash=check_hash)
+
+
+class FTPTransfer(Transfer):
+    """Register and upload output datasets via FTP, to the DMZ repository."""
+
+    def uploadData(self, handler, outputs, version, **kwargs):
+        """Function to upload and register data of completed task via FTP patcher."""
+        versions = super().uploadData(handler, outputs, version)
+        ftp_patcher = FTPPatcher(one=handler.one)
+        return ftp_patcher.create_dataset(path=outputs, created_by=handler.one.alyx.user, versions=versions, **kwargs)
+
+
+class S3Transfer(Transfer):
+    """Download input datasets from, and/or upload output datasets to, the IBL S3 bucket."""
+
+    def setUp(self, handler, **_):
+        """Function to download necessary data to run tasks using AWS boto3."""
+        df = handler.getData()
+        handler.local_paths = handler.one._download_aws(map(lambda x: x[1], df.iterrows()))
+
+    def uploadData(self, handler, outputs, version, **kwargs):
+        """Function to upload and register data of completed task via S3 patcher."""
+        versions = super().uploadData(handler, outputs, version)
+        s3_patcher = S3Patcher(one=handler.one)
+        return s3_patcher.patch_dataset(outputs, created_by=handler.one.alyx.user, versions=versions, **kwargs)
+
+    def transfer(self, handler, items):
+        """Upload registered files to their S3 bucket, then flag them as existing.
+
+        See Also
+        --------
+        Transfer.transfer
+        """
+        from one.remote.aws import get_s3_from_alyx  # noqa
+
+        by_repository = defaultdict(list)
+        for path, fr, dset in items:
+            by_repository[fr['data_repository']].append((path, fr, dset))
+
+        for repository, group in by_repository.items():
+            s3, bucket = get_s3_from_alyx(handler.one.alyx, repo_name=repository)
+            for path, fr, dset in group:
+                # The bucket key is the repository path joined with the file record's relative
+                # path, with the dataset UUID added, i.e. the same key ONE resolves on download.
+                key = PurePosixPath(fr['data_repository_path'], fr['relative_path'])
+                key = add_uuid_string(key, dset['id']).as_posix().lstrip('/')
+                _logger.info('Uploading %s to s3://%s/%s', path, bucket, key)
+                s3.Bucket(bucket).upload_file(str(path), key)
+                handler.one.alyx.rest('files', 'partial_update', id=fr['id'], data={'exists': True})
+
+    def cleanUp(self, handler, task=None, **_):
+        """Clean up, remove the files downloaded from S3, but only once the task has completed."""
+        if task is not None and task.status == 0:
+            for file in getattr(handler, 'local_paths', []):
+                os.unlink(file)
+
+
+class DataHandler(abc.ABC):
+    """Map of str to Transfer: the protocol to use to reach each data repository store.
+
+    Keys are the store part of a data repository name (see :func:`repository_store`), e.g.
+    'flatiron' for the 'flatiron_cortexlab' repository. This is declared per location, as not
+    every location is set up to reach every store, e.g. a machine may not hold S3 credentials.
+    Used by :meth:`transferData` to push data to each repository registration created a file
+    record for. An empty map means this handler never transfers data itself.
+    """
+
+    protocols = {}
+
+    def __init__(self, session_path, signature, one=None, download=None, upload=None):
+        """
+        Base data handler class.
+
         :param session_path: path to session
         :param signature: input and output file signatures
         :param one: ONE instance
+        :param download: a :class:`Transfer` instance used to stage missing input datasets.
+            Defaults to a no-op transfer that assumes inputs are already present.
+        :param upload: a :class:`Transfer` instance used to register/upload output datasets.
+            Defaults to a no-op transfer that registers nothing.
         """
         self.session_path = ensure_alf_path(session_path)
         self.signature = _parse_signature(signature)
         self.one = one
         self.processed = {}  # Map of filepaths and their processed records (e.g. upload receipts or Alyx records)
+        self.download = download or Transfer()
+        self.upload = upload or Transfer()
 
     def setUp(self, **kwargs):
-        """Function to optionally overload to download required data to run task."""
-        pass
+        """Download/stage any missing input datasets required to run the task."""
+        return self.download.setUp(self, **kwargs)
 
     def getData(self, one=None):
         """Finds the datasets required for task based on input signatures.
@@ -608,23 +990,67 @@ class DataHandler(abc.ABC):
         present = [file.filter(df)[1] for file in self.signature['output_files']]
         return pd.concat(present).droplevel('eid')
 
-    def uploadData(self, outputs, version):
+    def uploadData(self, outputs, version, **kwargs):
         """
-        Function to optionally overload to upload and register data
-        :param outputs: output files from task to register
-        :param version: ibllib version
-        :return:
-        """
-        if isinstance(outputs, list):
-            versions = [version for _ in outputs]
-        else:
-            versions = [version]
+        Upload and/or register output data.
 
-        return versions
+        This is typically called by :meth:`ibllib.pipes.tasks.Task.register_datasets`. The
+        actual work is delegated to this handler's `upload` Transfer instance.
+
+        Parameters
+        ----------
+        outputs : list of pathlib.Path
+            A set of ALF paths to register to Alyx.
+        version : str, list of str
+            The version of ibllib used to generate these output files.
+        kwargs
+            Optional keyword arguments passed through to the `upload` Transfer.
+
+        Returns
+        -------
+        list of dicts, dict
+            A list of newly created Alyx dataset records or the registration data if dry.
+        """
+        return self.upload.uploadData(self, outputs, version, **kwargs)
+
+    def transferData(self, datasets):
+        """
+        Transfer registered datasets to each repository that is awaiting the data.
+
+        The destination repositories are taken from the file records returned by the registration
+        endpoint: Alyx creates one per repository associated with the session's lab, and those
+        that do not yet hold the data have exists=False. Each is transferred with the protocol
+        this handler declares for its store in :attr:`protocols`; repositories this handler has no
+        protocol for are skipped, as another process is expected to handle them (e.g. Alyx's
+        nightly Globus transfer).
+
+        Parameters
+        ----------
+        datasets : dict
+            A map of local file path to its Alyx dataset record, as returned by registration.
+
+        Returns
+        -------
+        dict
+            A map of store name to the list of file records transferred to that store.
+        """
+        pending = defaultdict(list)
+        for path, dset in datasets.items():
+            for fr in filter(lambda x: not x['exists'], dset['file_records']):
+                store = repository_store(fr['data_repository'])
+                if store in self.protocols:
+                    pending[store].append((path, fr, dset))
+                else:
+                    _logger.debug(
+                        'No transfer protocol for repository "%s"; skipping %s', fr['data_repository'], fr['relative_path']
+                    )
+        for store, items in pending.items():
+            self.protocols[store].transfer(self, items)
+        return {store: [fr for _, fr, _ in items] for store, items in pending.items()}
 
     def cleanUp(self, **kwargs):
-        """Function to optionally overload to clean up files after running task."""
-        pass
+        """Clean up any local files staged by `setUp`."""
+        return self.download.cleanUp(self, **kwargs)
 
 
 class LocalDataHandler(DataHandler):
@@ -639,49 +1065,48 @@ class LocalDataHandler(DataHandler):
 
 
 class ServerDataHandler(DataHandler):
-    def __init__(self, session_path, signatures, one=None):
+    """Data handler for running tasks on lab local servers when all data is available locally.
+
+    Output datasets are registered against the server's own data repository. When `mode` is
+    'delayed' (the default) the data are left for Alyx to transfer: registration creates a file
+    record with exists=False on each of the lab's other repositories, Alyx's nightly Globus job
+    moves the data to flatiron, then a separate cron syncs flatiron to the S3 mirror. When `mode`
+    is 'immediate' this handler instead pushes the data to each of those repositories itself, as
+    soon as they are registered.
+    """
+
+    protocols = {'flatiron': GlobusTransfer(), 'aws': S3Transfer()}
+
+    def __init__(self, session_path, signatures, one=None, mode='delayed'):
         """
         Data handler for running tasks on lab local servers when all data is available locally
 
         :param session_path: path to session
         :param signature: input and output file signatures
         :param one: ONE instance
+        :param mode: whether to leave the transfer to Alyx ('delayed', the default) or to transfer
+            the data to the other repositories immediately after registering them ('immediate').
         """
-        super().__init__(session_path, signatures, one=one)
+        if mode not in ('delayed', 'immediate'):
+            raise ValueError(f'Unknown mode "{mode}"')
+        super().__init__(session_path, signatures, one=one, upload=LocalTransfer())
+        self.mode = mode
 
-    def uploadData(self, outputs, version, clobber=False, **kwargs):
+    def uploadData(self, outputs, version, **kwargs):
         """
-        Upload and/or register output data.
+        Register output data, and transfer it if this handler's mode is 'immediate'.
 
-        This is typically called by :meth:`ibllib.pipes.tasks.Task.register_datasets`.
-
-        Parameters
-        ----------
-        outputs : list of pathlib.Path
-            A set of ALF paths to register to Alyx.
-        version : str, list of str
-            The version of ibllib used to generate these output files.
-        clobber : bool
-            If True, re-upload outputs that have already been passed to this method.
-        kwargs
-            Optional keyword arguments for one.registration.RegistrationClient.register_files.
-
-        Returns
-        -------
-        list of dicts, dict
-            A list of newly created Alyx dataset records or the registration data if dry.
+        See Also
+        --------
+        DataHandler.uploadData
+        DataHandler.transferData
         """
-        versions = super().uploadData(outputs, version)
-        data_repo = get_local_data_repository(self.one.alyx)
-        # If clobber = False, do not re-upload the outputs that have already been processed
-        outputs = ensure_list(outputs)
-        to_upload = list(filter(None if clobber else lambda x: x not in self.processed, outputs))
-        records = register_dataset(to_upload, one=self.one, versions=versions, repository=data_repo, **kwargs) or []
-        if kwargs.get('dry', False):
-            return records
-        # Store processed outputs
-        self.processed.update({k: v for k, v in zip(to_upload, records) if v})
-        return [self.processed[x] for x in outputs if x in self.processed]
+        records = super().uploadData(outputs, version, **kwargs)
+        if self.mode == 'immediate' and not kwargs.get('dry', False):
+            # NB: `processed` maps each local file path to its dataset record, so unlike the
+            # returned records it is guaranteed to pair each file with its own registration.
+            self.transferData({k: v for k, v in self.processed.items() if k in ensure_list(outputs)})
+        return records
 
     def cleanUp(self, **_):
         """Empties and returns the processed dataset mep."""
@@ -691,117 +1116,32 @@ class ServerDataHandler(DataHandler):
         return processed
 
 
-class ServerGlobusDataHandler(DataHandler):
-    def __init__(self, session_path, signatures, one=None):
+class ServerGlobusDataHandler(ServerDataHandler):
+    def __init__(self, session_path, signatures, one=None, mode='delayed'):
         """
         Data handler for running tasks on lab local servers. Will download missing data from SDSC using Globus
 
         :param session_path: path to session
         :param signatures: input and output file signatures
         :param one: ONE instance
+        :param mode: whether to leave the upload transfer to Alyx ('delayed', the default) or to
+            transfer the data to the other repositories immediately after registering them.
         """
-        from one.remote.globus import Globus  # noqa
-        super().__init__(session_path, signatures, one=one)
-        self.globus = Globus(client_name='server', headless=True)
-
-        # on local servers set up the local root path manually as some have different globus config paths
-        self.globus.endpoints['local']['root_path'] = '/mnt/s0/Data/Subjects'
-
-        # Find the lab
-        self.lab = get_lab(self.session_path, self.one.alyx)
-
-        # For cortex lab we need to get the endpoint from the ibl alyx
-        if self.lab == 'cortexlab':
-            alyx = AlyxClient(base_url='https://alyx.internationalbrainlab.org', cache_rest=None)
-            self.globus.add_endpoint(f'flatiron_{self.lab}', alyx=alyx)
-        else:
-            self.globus.add_endpoint(f'flatiron_{self.lab}', alyx=self.one.alyx)
-
-        self.local_paths = []
-
-    def setUp(self, **_):
-        """Function to download necessary data to run tasks using globus-sdk."""
-        if self.lab == 'cortexlab' and 'cortexlab' in self.one.alyx.base_url:
-            df = super().getData(one=ONE(base_url='https://alyx.internationalbrainlab.org', cache_rest=self.one.alyx.cache_mode))
-        else:
-            df = super().getData(one=self.one)
-
-        if len(df) == 0:
-            # If no datasets found in the cache only work off local file system do not attempt to
-            # download any missing data using Globus
-            return
-
-        # Check for space on local server. If less that 500 GB don't download new data
-        space_free = shutil.disk_usage(self.globus.endpoints['local']['root_path'])[2]
-        if space_free < 500e9:
-            _logger.warning("Space left on server is < 500GB, won't re-download new data")
-            return
-
-        rel_sess_path = self.session_path.session_path_short()
-        target_paths = []
-        source_paths = []
-        for i, d in df.iterrows():
-            sess_path = Path(rel_sess_path).joinpath(d['rel_path'])
-            full_local_path = Path(self.globus.endpoints['local']['root_path']).joinpath(sess_path)
-            if not full_local_path.exists():
-                uuid = i
-                self.local_paths.append(full_local_path)
-                target_paths.append(sess_path)
-                source_paths.append(add_uuid_string(sess_path, uuid))
-
-        if len(target_paths) != 0:
-            ts = time()
-            for sp, tp in zip(source_paths, target_paths):
-                _logger.info(f'Downloading {sp} to {tp}')
-            self.globus.mv(f'flatiron_{self.lab}', 'local', source_paths, target_paths)
-            _logger.debug(f'Complete. Time elapsed {time() - ts}')
-
-    def uploadData(self, outputs, version, **kwargs):
-        """
-        Function to upload and register data of completed task
-        :param outputs: output files from task to register
-        :param version: ibllib version
-        :return: output info of registered datasets
-        """
-        versions = super().uploadData(outputs, version)
-        data_repo = get_local_data_repository(self.one.alyx)
-        return register_dataset(outputs, one=self.one, versions=versions, repository=data_repo, **kwargs)
-
-    def cleanUp(self, **_):
-        """Clean up, remove the files that were downloaded from Globus once task has completed."""
-        for file in self.local_paths:
-            os.unlink(file)
+        super().__init__(session_path, signatures, one=one, mode=mode)
+        self.download = GlobusTransfer()
 
 
 class RemoteEC2DataHandler(DataHandler):
     def __init__(self, session_path, signature, one=None):
         """
-        Data handler for running tasks on remote compute node. Will download missing data via http using ONE
+        Data handler for running tasks on remote compute node. Downloads missing data via HTTP
+        using ONE, and uploads output data via the S3 patcher.
 
         :param session_path: path to session
         :param signature: input and output file signatures
         :param one: ONE instance
         """
-        super().__init__(session_path, signature, one=one)
-
-    def setUp(self, check_hash=True, **_):
-        """
-        Function to download necessary data to run tasks using ONE
-        :return:
-        """
-        df = super().getData()
-        self.one._check_filesystem(df, check_hash=check_hash)
-
-    def uploadData(self, outputs, version, **kwargs):
-        """
-        Function to upload and register data of completed task via S3 patcher
-        :param outputs: output files from task to register
-        :param version: ibllib version
-        :return: output info of registered datasets
-        """
-        versions = super().uploadData(outputs, version)
-        s3_patcher = S3Patcher(one=self.one)
-        return s3_patcher.patch_dataset(outputs, created_by=self.one.alyx.user, versions=versions, **kwargs)
+        super().__init__(session_path, signature, one=one, download=HTTPTransfer(), upload=S3Transfer())
 
 
 class RemoteHttpDataHandler(DataHandler):
@@ -813,26 +1153,7 @@ class RemoteHttpDataHandler(DataHandler):
         :param signature: input and output file signatures
         :param one: ONE instance
         """
-        super().__init__(session_path, signature, one=one)
-
-    def setUp(self, check_hash=True, **_):
-        """
-        Function to download necessary data to run tasks using ONE
-        :return:
-        """
-        df = super().getData()
-        self.one._check_filesystem(df, check_hash=check_hash)
-
-    def uploadData(self, outputs, version, **kwargs):
-        """
-        Function to upload and register data of completed task via FTP patcher
-        :param outputs: output files from task to register
-        :param version: ibllib version
-        :return: output info of registered datasets
-        """
-        versions = super().uploadData(outputs, version)
-        ftp_patcher = FTPPatcher(one=self.one)
-        return ftp_patcher.create_dataset(path=outputs, created_by=self.one.alyx.user, versions=versions, **kwargs)
+        super().__init__(session_path, signature, one=one, download=HTTPTransfer(), upload=FTPTransfer())
 
 
 class RemoteAwsDataHandler(DataHandler):
@@ -841,100 +1162,14 @@ class RemoteAwsDataHandler(DataHandler):
         Data handler for running tasks on remote compute node.
 
         This will download missing data from the private IBL S3 AWS data bucket.  New datasets are
-        uploaded via Globus.
+        uploaded via Globus, immediately (rather than waiting for the nightly transfer), since this
+        compute node's local repository is not otherwise synced by Alyx's nightly job.
 
         :param session_path: path to session
         :param signature: input and output file signatures
         :param one: ONE instance
         """
-        super().__init__(session_path, signature, one=one)
-        self.local_paths = []
-
-    def setUp(self, **_):
-        """Function to download necessary data to run tasks using AWS boto3."""
-        df = super().getData()
-        self.local_paths = self.one._download_aws(map(lambda x: x[1], df.iterrows()))
-
-    def uploadData(self, outputs, version, **kwargs):
-        """
-        Function to upload and register data of completed task via FTP patcher
-        :param outputs: output files from task to register
-        :param version: ibllib version
-        :return: output info of registered datasets
-        """
-        # Set up Globus
-        from one.remote.globus import Globus  # noqa
-
-        self.globus = Globus(client_name=kwargs.pop('client_name', 'server'), headless=True)
-        self.lab = self.session_path.lab
-        if self.lab == 'cortexlab' and 'cortexlab' in self.one.alyx.base_url:
-            base_url = 'https://alyx.internationalbrainlab.org'
-            _logger.warning('Changing Alyx client to %s', base_url)
-            ac = AlyxClient(base_url=base_url, cache_rest=self.one.alyx.cache_mode)
-        else:
-            ac = self.one.alyx
-        self.globus.add_endpoint(f'flatiron_{self.lab}', alyx=ac)
-
-        # register datasets
-        versions = super().uploadData(outputs, version)
-        response = register_dataset(outputs, one=self.one, server_only=True, versions=versions, **kwargs)
-
-        # upload directly via globus
-        source_paths = []
-        target_paths = []
-        collections = {}
-
-        for dset, out in zip(response, outputs):
-            assert Path(out).name == dset['name']
-            # set flag to false
-            fr = next(fr for fr in dset['file_records'] if 'flatiron' in fr['data_repository'])
-            collection = '/'.join(fr['relative_path'].split('/')[:-1])
-            if collection in collections.keys():
-                collections[collection].update({f'{dset["name"]}': {'fr_id': fr['id'], 'size': dset['file_size']}})
-            else:
-                collections[collection] = {f'{dset["name"]}': {'fr_id': fr['id'], 'size': dset['file_size']}}
-
-            # Set all exists status to false for server file records
-            self.one.alyx.rest('files', 'partial_update', id=fr['id'], data={'exists': False})
-
-            source_paths.append(out)
-            target_paths.append(add_uuid_string(fr['relative_path'], dset['id']))
-
-        if len(target_paths) != 0:
-            ts = time()
-            for sp, tp in zip(source_paths, target_paths):
-                _logger.info(f'Uploading {sp} to {tp}')
-            self.globus.mv('local', f'flatiron_{self.lab}', source_paths, target_paths)
-            _logger.debug(f'Complete. Time elapsed {time() - ts}')
-
-        for collection, files in collections.items():
-            globus_files = self.globus.ls(f'flatiron_{self.lab}', collection, remove_uuid=True, return_size=True)
-            file_names = [str(gl[0]) for gl in globus_files]
-            file_sizes = [gl[1] for gl in globus_files]
-
-            for name, details in files.items():
-                try:
-                    idx = file_names.index(name)
-                    size = file_sizes[idx]
-                    if size == details['size']:
-                        # update the file record if sizes match
-                        self.one.alyx.rest('files', 'partial_update', id=details['fr_id'], data={'exists': True})
-                    else:
-                        _logger.warning(f'File {name} found on SDSC but sizes do not match')
-                except ValueError:
-                    _logger.warning(f'File {name} not found on SDSC')
-
-        return response
-
-        # ftp_patcher = FTPPatcher(one=self.one)
-        # return ftp_patcher.create_dataset(path=outputs, created_by=self.one.alyx.user,
-        #                                   versions=versions, **kwargs)
-
-    def cleanUp(self, task):
-        """Clean up, remove the files that were downloaded from globus once task has completed."""
-        if task.status == 0:
-            for file in self.local_paths:
-                os.unlink(file)
+        super().__init__(session_path, signature, one=one, download=S3Transfer(), upload=GlobusTransfer())
 
 
 class RemoteGlobusDataHandler(DataHandler):
@@ -947,23 +1182,8 @@ class RemoteGlobusDataHandler(DataHandler):
     """
 
     def __init__(self, session_path, signature, one=None):
-        super().__init__(session_path, signature, one=one)
-
-    def setUp(self, **_):
-        """Function to download necessary data to run tasks using globus."""
-        # TODO
-        pass
-
-    def uploadData(self, outputs, version, **kwargs):
-        """
-        Function to upload and register data of completed task via FTP patcher
-        :param outputs: output files from task to register
-        :param version: ibllib version
-        :return: output info of registered datasets
-        """
-        versions = super().uploadData(outputs, version)
-        ftp_patcher = FTPPatcher(one=self.one)
-        return ftp_patcher.create_dataset(path=outputs, created_by=self.one.alyx.user, versions=versions, **kwargs)
+        # NB: downloading via Globus here is not yet implemented (matches previous behaviour)
+        super().__init__(session_path, signature, one=one, upload=FTPTransfer())
 
 
 class SDSCDataHandler(DataHandler):
@@ -983,7 +1203,7 @@ class SDSCDataHandler(DataHandler):
 
     def setUp(self, task, **_):
         """Function to create symlinks to necessary data to run tasks."""
-        df = super().getData()
+        df = self.getData()
 
         SDSC_TMP = ensure_alf_path(self.patch_path.joinpath(task.__class__.__name__))
         session_path = Path(get_alf_path(self.session_path))
@@ -1005,12 +1225,7 @@ class SDSCDataHandler(DataHandler):
         )
 
     def uploadData(self, outputs, version, **kwargs):
-        """
-        Function to upload and register data of completed task via SDSC patcher
-        :param outputs: output files from task to register
-        :param version: ibllib version
-        :return: output info of registered datasets
-        """
+        """Function to upload and register data of completed task via SDSC patcher."""
         versions = super().uploadData(outputs, version)
         sdsc_patcher = SDSCPatcher(one=self.one)
         return sdsc_patcher.patch_datasets(outputs, dry=False, versions=versions, **kwargs)

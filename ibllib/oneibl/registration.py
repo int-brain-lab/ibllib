@@ -7,7 +7,7 @@ import re
 from packaging import version
 from requests import HTTPError
 
-from one.alf.path import get_session_path, folder_parts, get_alf_path
+from one.alf.path import folder_parts, get_alf_path
 from one.registration import RegistrationClient, get_dataset_type
 from one.remote.globus import get_local_endpoint_id, get_lab_from_endpoint_id
 from one.webclient import AlyxClient, no_cache
@@ -44,12 +44,15 @@ REGISTRATION_GLOB_PATTERNS = [
 
 def register_dataset(file_list, one=None, exists=False, versions=None, **kwargs):
     """
-    Registers a set of files belonging to a session only on the server.
+    Registers a set of files, on the server.
 
     Parameters
     ----------
     file_list : list, str, pathlib.Path
-        A filepath (or list thereof) of ALF datasets to register to Alyx.
+        A filepath (or list thereof) of ALF datasets to register to Alyx. Files may belong to
+        different sessions; `one.registration.RegistrationClient.register_files` groups them
+        accordingly and issues one registration request per session (or, for non-session
+        datasets, per `content_type`/`object_id`).
     one : one.api.OneAlyx
         An instance of ONE.
     exists : bool
@@ -78,7 +81,6 @@ def register_dataset(file_list, one=None, exists=False, versions=None, **kwargs)
     elif isinstance(file_list, (str, Path)):
         file_list = [file_list]
 
-    assert len(set(map(get_session_path, file_list))) == 1
     assert all(Path(f).exists() for f in file_list)
 
     client = IBLRegistrationClient(one)
