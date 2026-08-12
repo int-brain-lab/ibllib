@@ -784,7 +784,7 @@ class TrainingTrials(BaseBpodTrialsExtractor):
         'pause_duration',
     )
 
-    def _extract(self) -> dict:
+    def _extract(self, **_) -> dict:
         base = [
             RepNum,
             GoCueTriggerTimes,

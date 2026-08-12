@@ -19,7 +19,7 @@ nptdms
 numba>=0.56
 numpy>=1.18
 opencv-python-headless
-pandas<3.0  # temporary freeze while repos get up to date
+pandas<3  # pinned due to segfault bug in 3.0.4: https://github.com/pandas-dev/pandas/issues/66086
 phylib>=2.6.3
 psychofit
 pyarrow
@@ -31,6 +31,7 @@ scikit-image  # this is a widefield requirement missing as of July 2023, we may 
 scikit-learn>=0.22.1
 scipy>=1.7.0
 seaborn>=0.9.0
-slidingRP>=1.1.1  # steinmetz lab refractory period metrics
 sparse
 tqdm>=4.32.1
+slidingRP>=1.1.1  # steinmetz lab refractory period metrics
+

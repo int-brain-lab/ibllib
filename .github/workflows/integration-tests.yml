@@ -1,0 +1,94 @@
+name: Integration Tests (Lightning)
+
+on:
+  schedule:
+    - cron:  '0 0 * * *'  # every day at midnight
+  push:
+    branches: [master, ci]
+  pull_request:
+    branches: [master, develop]
+  workflow_dispatch  # For manual triggering
+
+# No top-level env: each step declares exactly what it consumes (explicit wiring).
+
+jobs:
+  dispatch-tests:
+    name: "py${{ matrix.python_version }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        python_version: ['3.12']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'  # version of Python used to run the dispatch script (not the job itself, which is defined in the image).
+
+      - name: Install lightning-sdk
+        run: pip install "lightning-sdk==2026.6.8"
+
+      - name: Dispatch Lightning job (blocking)
+        env:
+          # --- Lightning auth (read by lightning-sdk automatically) ---
+          LIGHTNING_USER_ID: ${{ secrets.LIGHTNING_USER_ID }}
+          LIGHTNING_API_KEY: ${{ secrets.LIGHTNING_API_KEY }}
+          # --- consumed by dispatch.py / Job.run ---
+          LIGHTNING_TEAMSPACE: ${{ vars.LIGHTNING_TEAMSPACE }}   # "owner/teamspace"
+          INTEGRATION_DATA_DIR: ${{ vars.INTEGRATION_DATA_DIR }}
+          REPO_URL: https://github.com/${{ github.repository }}.git
+          COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
+          PY_VERSION: ${{ matrix.python_version }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          JOB_TIMEOUT_SECONDS: '7200'
+        run: |
+          lightning login
+          python .github/scripts/dispatch.py
+
+      - name: Cleanup orphaned job
+        if: always()
+        env:
+          LIGHTNING_USER_ID: ${{ secrets.LIGHTNING_USER_ID }}
+          LIGHTNING_API_KEY: ${{ secrets.LIGHTNING_API_KEY }}
+          LIGHTNING_TEAMSPACE: ${{ vars.LIGHTNING_TEAMSPACE }}
+          PY_VERSION: ${{ matrix.python_version }}
+        run: |
+          lightning login
+          python - <<'PY'
+          import os, re
+          from lightning_sdk import Job, Status
+          def s(x): return re.sub(r"[^a-zA-Z0-9-]", "-", x).strip("-").lower()
+          ts = os.environ["LIGHTNING_TEAMSPACE"]; owner, _, team = ts.partition("/")
+          name = (f"{s(os.environ['GITHUB_REPOSITORY'])}"
+                  f"-py{os.environ['PY_VERSION'].replace('.','')}"
+                  f"-{os.environ['GITHUB_RUN_ID']}"
+                  f"-{os.environ.get('GITHUB_RUN_ATTEMPT','1')}")
+          try:
+              j = Job(name=name, teamspace=team, org=owner)
+              if j.status in (Status.Running, Status.Pending):
+                  print(f"Stopping orphaned job {name}"); j.stop()
+              else:
+                  print(f"Job {name} already terminal: {j.status}")
+          except Exception as e:
+              print(f"Cleanup skipped: {e}")
+          PY
+
+  finalize-coveralls:
+    name: Finalize Coveralls parallel build
+    needs: dispatch-tests
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install coveralls
+        run: pip install --upgrade coveralls
+      - name: Finish parallel build
+        # Same service as the in-image reports so the build correlates.
+        run: coveralls --finish --service=github-actions
+        env:
+          COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
