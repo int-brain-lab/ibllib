@@ -7,7 +7,7 @@ on:
     branches: [master, ci]
   pull_request:
     branches: [master, develop]
-  workflow_dispatch  # For manual triggering
+  workflow_dispatch:  # For manual triggering
 
 # No top-level env: each step declares exactly what it consumes (explicit wiring).
 
