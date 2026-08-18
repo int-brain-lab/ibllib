@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ibllib"
+description = "IBL libraries"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "IBL Staff"},
+]
+requires-python = ">=3.10"
+dynamic = ["version", "dependencies"]
+
+[project.urls]
+Homepage = "https://www.internationalbrainlab.com/"
+Repository = "https://github.com/int-brain-lab/ibllib"
+Changelog = "https://github.com/int-brain-lab/ibllib/blob/master/CHANGELOG.md"
+
+[project.scripts]
+task_qc = "ibllib.qc.task_qc_viewer.task_qc:qc_gui_cli"
+
+[project.optional-dependencies]
+wfield = ["wfield==0.3.7", "labcams"]
+
+[tool.setuptools.dynamic]
+version = {attr = "ibllib.__version__"}
+dependencies = {file = ["requirements.txt"]}
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+exclude = ["scratch"]
