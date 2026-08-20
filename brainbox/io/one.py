@@ -7,6 +7,7 @@ import re
 import copy
 from pathlib import Path
 from collections import defaultdict
+from typing import Literal
 
 import numpy as np
 import pandas as pd
@@ -1398,7 +1399,12 @@ class SessionLoader:
                 )
                 raise ALFMultipleCollectionsFound
 
-    def load_trials(self, collection=None, revision=None):
+    def load_trials(
+        self,
+        collection=None,
+        revision=None,
+        style: Literal['one', 'tidy'] = 'one',
+    ):
         """
         Function to load trials data into SessionLoader.trials
 
@@ -1417,6 +1423,8 @@ class SessionLoader:
         ).to_df()
         self.one.wildcards = True
         self.data_info.loc[self.data_info['name'] == 'trials', 'is_loaded'] = True
+        if style == 'tidy':
+            self.trials = self.apply_tidy_transformations(self.trials)
 
     def load_wheel(self, fs=1000, corner_frequency=20, order=8, collection=None):
         """
@@ -1532,8 +1540,8 @@ class SessionLoader:
         self.pawstates = {}
         for view in views:
             pawstates_raw = self.one.load_object(
-                self.eid, f'{view}Camera', attribute='pawstates', collection='alf/lightningaction',
-                revision=self.revision or None)
+                self.eid, f'{view}Camera', attribute='pawstates', collection='alf/lightningaction', revision=self.revision or None
+            )
             times_raw = self.one.load_object(
                 self.eid, f'{view}Camera', attribute='times', collection='alf',
                 revision=self.revision or None)
@@ -1614,6 +1622,101 @@ class SessionLoader:
             return video_timestamps_fixed, video_data
         else:
             return video_timestamps, video_data
+
+    @staticmethod
+    def apply_tidy_transformations(trials: pd.DataFrame) -> pd.DataFrame:
+        """
+        Apply tidy data transformations to trials DataFrame.
+
+        Transformations:
+        - choice: -1/0/+1 -> "counter_clockwise"/"none"/"clockwise"
+        - feedbackType: -1/+1 -> True/False (is_mouse_rewarded)
+        - contrastLeft/contrastRight -> gabor_stimulus_contrast + gabor_stimulus_side
+        - probabilityLeft -> block_index (increments on change) + block_type (categorical)
+
+        Parameters
+        ----------
+        trials : pd.DataFrame
+            Raw trials data from SessionLoader.
+
+        Returns
+        -------
+        pd.DataFrame
+            Transformed trials with tidy column formats.
+        """
+        trials = trials.copy()
+
+        # Transform choice: -1 -> "counter_clockwise", 0 -> "none", +1 -> "clockwise"
+        choice_map = {-1.0: 'counter_clockwise', 0.0: 'none', 1.0: 'clockwise'}
+        trials['choice'] = trials['choice'].map(choice_map)
+
+        # Transform feedbackType to boolean: +1 -> True (rewarded), -1 -> False (not rewarded)
+        trials['is_mouse_rewarded'] = trials['feedbackType'] == 1.0
+
+        # Consolidate contrast columns into gabor_stimulus_contrast + gabor_stimulus_side
+        #
+        # IBL encodes stimulus side using contrastLeft/contrastRight columns where one column
+        # contains the contrast value and the other is NaN. This comes from the IBL extraction
+        # pipeline (ibllib/io/extractors/biased_trials.py ContrastLR extractor):
+        #
+        #   contrastLeft = [t['contrast'] if np.sign(t['position']) < 0 else np.nan ...]
+        #   contrastRight = [t['contrast'] if np.sign(t['position']) > 0 else np.nan ...]
+        #
+        # The stimulus position determines which column gets the value:
+        #   - position < 0 (left, -35 deg): contrastLeft = contrast, contrastRight = NaN
+        #   - position > 0 (right, +35 deg): contrastRight = contrast, contrastLeft = NaN
+        #
+        # This applies to ALL contrast levels including 0% contrast trials. For example:
+        #   - Left 25% trial: contrastLeft=0.25, contrastRight=NaN
+        #   - Right 0% trial: contrastLeft=NaN, contrastRight=0.0
+        #
+        # We consolidate into two tidy columns: gabor_stimulus_side and gabor_stimulus_contrast.
+        # The side is given by which column is populated; the contrast by the populated value.
+        left = trials['contrastLeft']
+        right = trials['contrastRight']
+        left_valid = left.notna().to_numpy()
+        right_valid = right.notna().to_numpy()
+        trials['gabor_stimulus_side'] = np.select([left_valid, right_valid], ['left', 'right'], default='none')
+        # defensive: both columns populated should not happen in valid IBL data; if it does,
+        # attribute the trial to the side carrying the larger contrast
+        both_valid = left_valid & right_valid
+        if both_valid.any():
+            trials.loc[both_valid, 'gabor_stimulus_side'] = np.where(
+                left.to_numpy()[both_valid] >= right.to_numpy()[both_valid], 'left', 'right'
+            )
+        # take the non-NaN value (NaN where both are NaN) and express as a percentage
+        trials['gabor_stimulus_contrast'] = (left.fillna(right).to_numpy() * 100).round(2)
+
+        # Compute block_index and block_type from probabilityLeft
+        # Validate: probabilityLeft must not contain NaN (indicates corrupted trial data)
+        prob_left = trials['probabilityLeft'].to_numpy()
+        nan_mask = pd.isna(prob_left)
+        if np.any(nan_mask):
+            nan_indices = np.where(nan_mask)[0].tolist()
+            raise ValueError(
+                f'probabilityLeft contains NaN values at trial indices {nan_indices}. '
+                'This indicates corrupted or incomplete trial data.'
+            )
+
+        # block_index increments each time probabilityLeft changes (cumulative count of changes)
+        block_index = np.zeros(len(prob_left), dtype=int)
+        if len(prob_left) > 1:
+            block_index[1:] = np.cumsum(~np.isclose(prob_left[1:], prob_left[:-1]))
+        trials['block_index'] = block_index
+
+        # block_type: categorical label per known probabilityLeft value
+        block_type = np.select(
+            [np.isclose(prob_left, 0.5), np.isclose(prob_left, 0.8), np.isclose(prob_left, 0.2)],
+            ['unbiased', 'left_block', 'right_block'],
+            default='',
+        ).astype(object)
+        # preserve any unexpected probability values verbatim
+        unexpected = block_type == ''
+        if unexpected.any():
+            block_type[unexpected] = [f'p={prob}' for prob in prob_left[unexpected]]
+        trials['block_type'] = block_type
+
+        return trials
 
 
 class EphysSessionLoader(SessionLoader):
