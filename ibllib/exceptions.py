@@ -31,7 +31,8 @@ class SyncFrontsAnomaly(IblError):
     explanation = (
         ' The raw sync pulse fronts show a specific, classifiable pathology: dropped edges, '
         'a duplicate/bounced burst, an isolated mistimed edge, or an unreliable 3A reference '
-        'channel. Raised only when the caller opted in via raise_on_anomaly=True.'
+        'channel. Raised only when the caller opted in via raise_on_anomaly=True. See '
+        'https://github.com/int-brain-lab/lfpack/issues/8 for the original investigation.'
     )
 
 

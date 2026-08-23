@@ -140,8 +140,14 @@ class TestVersion3AAnomalyRaising(unittest.TestCase):
         with self.assertRaises(SyncFrontsAnomaly):
             sync_probes.version3A('fake_session', display=False, raise_on_anomaly=True)
 
-    def test_does_not_raise_by_default(self):
-        qc_all, out_files = sync_probes.version3A('fake_session', display=False)
+    def test_raises_by_default(self):
+        # raise_on_anomaly defaults to True for version3A (unlike version3B): 3A is a legacy
+        # extraction path, so an anomaly here is unlikely and worth failing loudly on.
+        with self.assertRaises(SyncFrontsAnomaly):
+            sync_probes.version3A('fake_session', display=False)
+
+    def test_does_not_raise_when_explicitly_disabled(self):
+        qc_all, out_files = sync_probes.version3A('fake_session', display=False, raise_on_anomaly=False)
         self.assertFalse(qc_all)
         self.assertTrue(len(out_files) > 0)
 

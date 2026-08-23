@@ -45,7 +45,7 @@ def sync(ses_path, **kwargs):
         return version3B(ses_path, **kwargs)
 
 
-def version3A(ses_path, display=True, type='smooth', tol=2.1, probe_names=None, raise_on_anomaly=False):
+def version3A(ses_path, display=True, type='smooth', tol=2.1, probe_names=None, raise_on_anomaly=True):
     """
     From a session path with _spikeglx_sync arrays extracted, locate ephys files for 3A and
      outputs one sync.timestamps.probeN.npy file per acquired probe. By convention the reference
@@ -53,9 +53,13 @@ def version3A(ses_path, display=True, type='smooth', tol=2.1, probe_names=None, 
      Assumes the _spikeglx_sync datasets are already extracted from binary data
     :param ses_path:
     :param type: linear, exact or smooth
-    :param raise_on_anomaly: if True, raise SyncFrontsAnomaly when the sync_probe_front_times
-     tolerance check fails for a probe, instead of only logging it and continuing with
-     qc_all=False (default). No auto-switching between frame2ttl/right_camera is attempted.
+    :param raise_on_anomaly: if True (default), raise SyncFrontsAnomaly when the
+     sync_probe_front_times tolerance check fails for a probe, instead of only logging it and
+     continuing with qc_all=False. No auto-switching between frame2ttl/right_camera is attempted.
+     Defaults to True (unlike version3B's raise_on_anomaly, which defaults to False): 3A is a
+     legacy extraction path as of 2026-08-23 -- no ephys recording currently acquired uses 3A
+     hardware, so an anomaly here should be rare, and if one does occur, raising is the lesser
+     of the two evils versus letting a bad sync silently land in the database.
     :return: bool True on a a successful sync
     """
     ephys_files = spikeglx.glob_ephys_files(ses_path, ext='meta', bin_exists=False)
