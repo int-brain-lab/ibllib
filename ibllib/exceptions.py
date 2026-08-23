@@ -27,6 +27,14 @@ class Neuropixel3BSyncFrontsNonMatching(IblError):
     )
 
 
+class SyncFrontsAnomaly(IblError):
+    explanation = (
+        ' The raw sync pulse fronts show a specific, classifiable pathology: dropped edges, '
+        'a duplicate/bounced burst, an isolated mistimed edge, or an unreliable 3A reference '
+        'channel. Raised only when the caller opted in via raise_on_anomaly=True.'
+    )
+
+
 class NvidiaDriverNotReady(IblError):
     explanation = (
         'Nvidia driver does not respond. This usually means the GPU is inaccessible '
