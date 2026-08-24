@@ -1,9 +1,10 @@
 [build-system]
-requires = ["setuptools>=64"]
-build-backend = "setuptools.build_meta"
+requires = ["uv_build<0.13.0"]
+build-backend = "uv_build"
 
 [project]
 name = "ibllib"
+version = "3.5.dev+ci1"
 description = "IBL libraries"
 readme = "README.md"
 license = {text = "MIT"}
@@ -11,7 +12,6 @@ authors = [
     {name = "IBL Staff"},
 ]
 requires-python = ">=3.10"
-dynamic = ["version"]
 dependencies = [
     "ONE-api>=3.4.2",
     "boto3",
@@ -67,15 +67,6 @@ dev = [
     "ruff",
 ]
 
-[tool.setuptools.dynamic]
-version = {attr = "ibllib.__version__"}
-
-[tool.setuptools]
-include-package-data = true
-
-[tool.setuptools.packages.find]
-exclude = ["scratch"]
-
 [tool.uv]
 required-environments = [
     "sys_platform == 'linux' and platform_machine == 'x86_64'",
@@ -83,3 +74,7 @@ required-environments = [
     "sys_platform == 'darwin' and platform_machine == 'arm64'",
     "sys_platform == 'darwin' and platform_machine == 'x86_64'",
 ]
+
+[tool.uv.build-backend]
+module-name = ["brainbox", "ibllib", "examples"]
+module-root = ""
