@@ -39,6 +39,7 @@ jobs:
     - name: Flake8 & ruff
       run: |
         python -m ruff check .
+        python -m ruff format --check .
         python -m flake8 --select D --ignore E ibllib/qc/camera.py ibllib/qc/task_metrics.py
     - name: Brainbox tests
       run: |
