@@ -173,7 +173,7 @@ class IntegrationTest(unittest.TestCase):
                             self.data_path.is_dir() and
                             any(self.data_path.glob('Subjects_init')))
             if self.required_files:
-                data_present &= all(map(self.data_path.glob, self.required_files))
+                data_present &= all(any(self.data_path.glob(pattern)) for pattern in self.required_files)
             if not data_present:
                 raise FileNotFoundError(f'Invalid data root folder {self.data_path.absolute()}\n\t'
                                         'must contain a "Subjects_init" folder.')
