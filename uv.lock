@@ -861,6 +861,7 @@ wheels = [
 
 [[package]]
 name = "ibllib"
+version = "3.5.dev0+ci1"
 source = { editable = "." }
 dependencies = [
     { name = "boto3" },
