@@ -2,3 +2,5 @@
 9e6a865e726e3c64a209581105f24dc9465ca025
 # ruff commit of ibllib develop branch
 1baae2a91363bf844bbcde701ce71402bf7f06a6
+# second round of ruffing before introducing ruff format as a check
+ac765d3778d2860875dcc5397198745fbf887ac9
