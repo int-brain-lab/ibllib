@@ -8,14 +8,14 @@ from ibllib.tests import base
 
 
 class TestAudioExtraction(base.IntegrationTest):
-
     required_files = ['Subjects_init/ZM_1085/2019-07-01/002/raw_behavior_data']
     _writable_scope = 'test'
 
     def setUp(self):
         super().setUp()
-        file_wav = self.data_path.joinpath('Subjects_init', 'ZM_1085', '2019-07-01', '002',
-                                           'raw_behavior_data', '_iblrig_micData.raw.wav')
+        file_wav = self.data_path.joinpath(
+            'Subjects_init', 'ZM_1085', '2019-07-01', '002', 'raw_behavior_data', '_iblrig_micData.raw.wav'
+        )
         self.ses_path = file_wav.parents[1]
         if not self.ses_path.exists():
             return
@@ -37,14 +37,13 @@ class TestAudioExtraction(base.IntegrationTest):
 
 
 class TestAudioProcessing(base.IntegrationTest):
-
     def test_detect_go_cues(self):
         fs = 200_000
-        w = np.load(self.data_path.joinpath("sound/example_gocue_clicks_error_fs200k.npy"))
-        dtect = audio.detect_ready_tone(w, fs, threshold=.2)
+        w = np.load(self.data_path.joinpath('sound/example_gocue_clicks_error_fs200k.npy'))
+        dtect = audio.detect_ready_tone(w, fs, threshold=0.2)
         # this example contains 3 go cue times
         self.assertTrue(np.all(dtect == (np.array([188863, 1318916, 1932242]))))
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main(exit=False)

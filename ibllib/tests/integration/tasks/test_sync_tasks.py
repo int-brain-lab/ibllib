@@ -33,7 +33,6 @@ class SyncTemplate(base.IntegrationTest):
 
 
 class TestSyncRegisterRaw(base.IntegrationTest):
-
     def setUp(self) -> None:
         self._tempdir = tempfile.TemporaryDirectory()
         self.session_path = Path(self._tempdir.name).joinpath('JC076', 'test_date', 'test_sess')
@@ -50,8 +49,14 @@ class TestSyncRegisterRaw(base.IntegrationTest):
         self.wiring_file.touch()
 
     def test_register(self):
-        task = SyncRegisterRaw(self.session_path, sync_collection=self.sync_collection, sync=self.sync, sync_ext=self.sync_ext,
-                               sync_namespace=self.sync_namespace, one=ONE(**base.TEST_DB))
+        task = SyncRegisterRaw(
+            self.session_path,
+            sync_collection=self.sync_collection,
+            sync=self.sync,
+            sync_ext=self.sync_ext,
+            sync_namespace=self.sync_namespace,
+            one=ONE(**base.TEST_DB),
+        )
         status = task.run()
 
         self.assertEqual(status, 0)
@@ -63,7 +68,6 @@ class TestSyncRegisterRaw(base.IntegrationTest):
 
 
 class TestSyncMtscomp(SyncTemplate):
-
     def test_rename_and_compress(self):
         self.copy_folder('rename_compress')
         task = SyncMtscomp(self.session_path, **self.kwargs)
@@ -95,7 +99,6 @@ class TestSyncMtscomp(SyncTemplate):
 
 
 class TestSyncPulses(SyncTemplate):
-
     def test_extract_pulses_bin(self):
         self.copy_folder('compress')
         task = SyncPulses(self.session_path, **self.kwargs)

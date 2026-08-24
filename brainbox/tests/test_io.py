@@ -12,16 +12,14 @@ class TestIO_ONE(unittest.TestCase):
     @staticmethod
     def _make_tidy_trials():
         """Build a small trials DataFrame spanning several probabilityLeft blocks."""
-        return pd.DataFrame(
-            {
-                'choice': [-1.0, 0.0, 1.0, -1.0, 1.0, 0.0],
-                'feedbackType': [1.0, -1.0, 1.0, 1.0, -1.0, 1.0],
-                # one of contrastLeft/contrastRight holds the value, the other is NaN
-                'contrastLeft': [0.25, np.nan, 0.0, np.nan, 0.125, np.nan],
-                'contrastRight': [np.nan, 1.0, np.nan, 0.0, np.nan, 0.0625],
-                'probabilityLeft': [0.5, 0.5, 0.8, 0.8, 0.2, 0.5],
-            }
-        )
+        return pd.DataFrame({
+            'choice': [-1.0, 0.0, 1.0, -1.0, 1.0, 0.0],
+            'feedbackType': [1.0, -1.0, 1.0, 1.0, -1.0, 1.0],
+            # one of contrastLeft/contrastRight holds the value, the other is NaN
+            'contrastLeft': [0.25, np.nan, 0.0, np.nan, 0.125, np.nan],
+            'contrastRight': [np.nan, 1.0, np.nan, 0.0, np.nan, 0.0625],
+            'probabilityLeft': [0.5, 0.5, 0.8, 0.8, 0.2, 0.5],
+        })
 
     def test_tidy_choice_mapping(self):
         """choice: -1/0/+1 map to counter_clockwise/none/clockwise."""

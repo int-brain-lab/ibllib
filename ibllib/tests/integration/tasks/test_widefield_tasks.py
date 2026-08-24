@@ -16,14 +16,14 @@ _logger = logging.getLogger('ibllib')
 
 
 class TestWidefieldRegisterRaw(base.IntegrationTest):
-
     required_files = ['widefield/widefieldChoiceWorld/CSK-im-011/2021-07-21/001']
 
     @classmethod
     def setUpClass(cls) -> None:
         super().setUpClass()
         cls.session_path = cls.default_data_root().joinpath(
-            'widefield', 'widefieldChoiceWorld', 'CSK-im-011', '2021-07-21', '001')
+            'widefield', 'widefieldChoiceWorld', 'CSK-im-011', '2021-07-21', '001'
+        )
         if not cls.session_path.exists():
             raise unittest.SkipTest(reason=f'File not found: {cls.session_path}')
         cls.one = ONE(**base.TEST_DB, mode='local')
@@ -101,8 +101,7 @@ class TestWidefieldPreprocessAndCompress(base.IntegrationTest):
     @classmethod
     def setUpClass(cls) -> None:
         super().setUpClass()
-        cls.session_path = cls.data_path.joinpath(
-            'widefield', 'widefieldChoiceWorld', 'CSK-im-011', '2021-07-21', '001')
+        cls.session_path = cls.data_path.joinpath('widefield', 'widefieldChoiceWorld', 'CSK-im-011', '2021-07-21', '001')
         if not cls.session_path.exists():
             raise unittest.SkipTest(reason=f'File not found: {cls.session_path}')
         cls.one = ONE(**base.TEST_DB, mode='local')
@@ -142,26 +141,31 @@ class TestWidefieldPreprocessAndCompress(base.IntegrationTest):
         # Test content of files
         PRECISION = 4  # Desired decimal precision
         # U
-        assert_array_almost_equal(np.load(self.data_folder.joinpath('U.npy')),
-                                  np.load(self.alf_folder.joinpath('widefieldU.images.npy')),
-                                  decimal=PRECISION)
+        assert_array_almost_equal(
+            np.load(self.data_folder.joinpath('U.npy')),
+            np.load(self.alf_folder.joinpath('widefieldU.images.npy')),
+            decimal=PRECISION,
+        )
         # SVT
         assert_array_almost_equal(
             np.load(self.data_folder.joinpath('SVT.npy')),
             np.load(self.alf_folder.joinpath('widefieldSVT.uncorrected.npy')),
-            decimal=PRECISION)
+            decimal=PRECISION,
+        )
 
         # Haemo corrected SVT
         assert_array_almost_equal(
             np.load(self.data_folder.joinpath('SVTcorr.npy')),
             np.load(self.alf_folder.joinpath('widefieldSVT.haemoCorrected.npy')),
-            decimal=PRECISION)
+            decimal=PRECISION,
+        )
 
         # Frame average
         assert_array_almost_equal(
             np.load(self.data_folder.joinpath('frames_average.npy')),
             np.load(self.alf_folder.joinpath('widefieldChannels.frameAverage.npy')),
-            decimal=PRECISION)
+            decimal=PRECISION,
+        )
 
         task.wf.remove_files()
 
@@ -193,23 +197,19 @@ class TestWidefieldSync(base.IntegrationTest):
     required_files = ['widefield/widefieldChoiceWorld/JC076/2022-02-04/002']
 
     def setUp(self):
-        self.session_path = self.data_path.joinpath(
-            'widefield', 'widefieldChoiceWorld', 'JC076', '2022-02-04', '002')
+        self.session_path = self.data_path.joinpath('widefield', 'widefieldChoiceWorld', 'JC076', '2022-02-04', '002')
         if not self.session_path.exists():
             return
         self.alf_folder = self.session_path.joinpath('alf', 'widefield')
         self.video_file = self.session_path.joinpath('raw_widefield_data', 'imaging.frames.mov')
         self.video_file.touch()
         self.video_meta.length = 2032
-        self.patch = unittest.mock.patch('ibllib.io.extractors.widefield.get_video_meta',
-                                         return_value=self.video_meta)
+        self.patch = unittest.mock.patch('ibllib.io.extractors.widefield.get_video_meta', return_value=self.video_meta)
         self.patch.start()
         self.one = ONE(**base.TEST_DB, mode='local')
 
     def test_sync(self):
-        task = WidefieldSync(
-            self.session_path, sync_collection='raw_widefield_data', sync_namespace='spikeglx', one=self.one
-        )
+        task = WidefieldSync(self.session_path, sync_collection='raw_widefield_data', sync_namespace='spikeglx', one=self.one)
         status = task.run()
         self.assertEqual(0, status)
 
@@ -235,9 +235,7 @@ class TestWidefieldSync(base.IntegrationTest):
     def test_video_led_sync_not_enough(self):
         # Mock video file with more frames than led timestamps
         self.video_meta.length = 2035
-        task = WidefieldSync(
-            self.session_path, sync_collection='raw_widefield_data', sync_namespace='spikeglx', one=self.one
-        )
+        task = WidefieldSync(self.session_path, sync_collection='raw_widefield_data', sync_namespace='spikeglx', one=self.one)
         expected_error = 'ValueError: More video frames than led frames detected'
         with self.assertLogs('ibllib.pipes.tasks', logging.ERROR) as log:
             status = task.run()
@@ -248,9 +246,7 @@ class TestWidefieldSync(base.IntegrationTest):
     def test_video_led_sync_too_many(self):
         # Mock video file with more than two extra led timestamps
         self.video_meta.length = 2029
-        task = WidefieldSync(
-            self.session_path, sync_collection='raw_widefield_data', sync_namespace='spikeglx', one=self.one
-        )
+        task = WidefieldSync(self.session_path, sync_collection='raw_widefield_data', sync_namespace='spikeglx', one=self.one)
         expected_error = 'ValueError: Led frames and video frames differ by more than 2'
         with self.assertLogs('ibllib.pipes.tasks', logging.ERROR) as log:
             status = task.run()

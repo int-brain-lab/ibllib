@@ -1,4 +1,5 @@
 """Tests for Timeline behaviour extraction for UCL mesoscope."""
+
 import logging
 import unittest
 from unittest.mock import patch, MagicMock, ANY
@@ -30,18 +31,16 @@ class TestTimelineTrials(base.IntegrationTest):
         # Mocking training wheel extractor as session doesn't have Bpod rotary encoder data
         with patch('ibllib.io.extractors.training_wheel.Wheel._extract') as mock:
             mock().__getitem__.return_value = np.zeros(7)  # n trials = 7
-            task = ChoiceWorldTrialsTimeline(self.session_path, sync_collection='raw_sync_data',
-                                             sync_namespace='timeline', collection='raw_task_data_00')
+            task = ChoiceWorldTrialsTimeline(
+                self.session_path, sync_collection='raw_sync_data', sync_namespace='timeline', collection='raw_task_data_00'
+            )
             task.one = ONE(**base.TEST_DB, mode='local')  # Don't try updating behaviour criterion
             self.assertFalse(task.run(), 'extraction task failed')
 
         # Check ALF trials
         trials = alfio.load_object(self.session_path / 'alf', 'trials')
         self.assertEqual(18, len(trials.keys()))
-        expected = [[9.97294005, 24.00193085],
-                    [24.52629002, 28.16019116],
-                    [28.6754851, 32.94392776],
-                    [33.46808532, 36.9309287]]
+        expected = [[9.97294005, 24.00193085], [24.52629002, 28.16019116], [28.6754851, 32.94392776], [33.46808532, 36.9309287]]
         with self.subTest(k='intervals'):
             np.testing.assert_array_almost_equal(expected, trials['intervals'][:4, :])
         expected = [20.903, 26.053, 30.844, 34.821, 39.257, 44.15, 53.244]
@@ -53,7 +52,7 @@ class TestTimelineTrials(base.IntegrationTest):
 
         # Check ALF wheel
         wheel = alfio.load_object(self.session_path / 'alf', 'wheel')
-        expected = [0., 0.00153398, 0.00306796, 0.00460194, 0.00613592]
+        expected = [0.0, 0.00153398, 0.00306796, 0.00460194, 0.00613592]
         np.testing.assert_array_almost_equal(expected, wheel['position'][:5])
         expected = [20.809, 20.811, 20.812, 20.813, 20.814]
         np.testing.assert_array_almost_equal(expected, wheel['timestamps'][:5])
@@ -69,15 +68,17 @@ class TestTimelineTrials(base.IntegrationTest):
         self.assertCountEqual(['intervals', 'peakAmplitude', 'peakVelocity_times'], moves.keys())
         self.assertEqual(4090, len(wheel['timestamps']))
         np.testing.assert_array_almost_equal([20.809, 20.811, 20.812, 20.813, 20.814], wheel['timestamps'][:5])
-        np.testing.assert_array_almost_equal([0., 0.00153398, 0.00306796, 0.00460194, 0.00613592], wheel['position'][:5])
+        np.testing.assert_array_almost_equal([0.0, 0.00153398, 0.00306796, 0.00460194, 0.00613592], wheel['position'][:5])
         expected = [[20.811, 21.216], [25.892, 26.251], [30.742, 31.172], [32.161, 33.208], [34.731, 36.756]]
         np.testing.assert_array_almost_equal(expected, moves['intervals'][:5, :])
         # Check input validation
         self.assertRaises(ValueError, timeline_trials.get_wheel_positions, coding='x3')
         # Test display
         plt_mock.subplots.return_value = (MagicMock(), (MagicMock(), MagicMock()))
-        timeline_trials.bpod_trials = {'wheel_position': np.zeros_like(wheel['position']),
-                                       'wheel_timestamps': wheel['timestamps']}
+        timeline_trials.bpod_trials = {
+            'wheel_position': np.zeros_like(wheel['position']),
+            'wheel_timestamps': wheel['timestamps'],
+        }
         timeline_trials.bpod2fpga = lambda x: x
         timeline_trials.get_wheel_positions(display=True)
         plt_mock.subplots.assert_called()
@@ -157,12 +158,14 @@ class TestTimelineTrials(base.IntegrationTest):
             'right_camera': 14,
             'belly_camera': 15,
             'audio': 16,
-            'rotary_encoder': 17}
+            'rotary_encoder': 17,
+        }
         self.assertDictEqual(expected, chmap)
 
 
 class TestTimelineTrialsHabituation(base.IntegrationTest):
     """Test for HabituationTrialsTimeline task."""
+
     session_path = None
     required_files = ['mesoscope/SP065/2024-10-07/001']
 
@@ -198,7 +201,8 @@ class TestTimelineTrialsHabituation(base.IntegrationTest):
             # Check all non-NaN stim times are greater than the trigger times
             valid = ~np.isnan(trials[f'{k}_times'])
             correct = np.greater(
-                trials[f'{k}_times'], trials[f'{k}Trigger_times'], where=valid, out=np.ones(valid.shape, dtype=bool))
+                trials[f'{k}_times'], trials[f'{k}Trigger_times'], where=valid, out=np.ones(valid.shape, dtype=bool)
+            )
             self.assertTrue(correct.all(), f'{sum(~correct)}/{len(correct)} {k} times are invalid')
 
 

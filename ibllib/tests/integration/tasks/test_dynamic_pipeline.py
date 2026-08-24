@@ -20,7 +20,6 @@ _logger = logging.getLogger('ibllib')
 
 
 class TestDynamicPipeline(base.IntegrationTest):
-
     required_files = ['dynamic_pipeline/ephys_NP3B']
 
     def setUp(self) -> None:
@@ -47,8 +46,7 @@ class TestDynamicPipeline(base.IntegrationTest):
         self.compare_dicts(alyx_tasks_from_dict, alyx_tasks_from_pipe)
 
     def compare_dicts(self, dict1, dict2, id=True):
-        self.assertSetEqual(set([pl['name'] for pl in dict1]),
-                            set([pl['name'] for pl in dict2]))
+        self.assertSetEqual(set([pl['name'] for pl in dict1]), set([pl['name'] for pl in dict2]))
         for d1, d2 in zip(dict1, dict2):
             if id:
                 self.assertEqual(d2['id'], d1['id'])
@@ -94,7 +92,7 @@ class TestStandardPipelines(base.IntegrationTest):
         shutil.copytree(self.folder_path.joinpath('widefield'), self.session_path)
         self.check_pipeline()
 
-    @unittest.skip("Skipping photometry test for now")
+    @unittest.skip('Skipping photometry test for now')
     def test_photometry(self):
         src = self.folder_path.joinpath('neurophotometrics', 'cortexlab', 'Subjects', 'CQ001', '2024-11-07', '001')
         shutil.copytree(src, self.session_path)
@@ -127,8 +125,7 @@ class TestStandardPipelines(base.IntegrationTest):
     def test_chained(self):
         """Test pipeline creation when there are multiple task protocols run within a session"""
         shutil.copytree(self.folder_path.joinpath('chained'), self.session_path)
-        shutil.copytree(self.folder_path.joinpath('ephys_NP3B', 'raw_ephys_data'),
-                        self.session_path.joinpath('raw_ephys_data'))
+        shutil.copytree(self.folder_path.joinpath('ephys_NP3B', 'raw_ephys_data'), self.session_path.joinpath('raw_ephys_data'))
         self.check_pipeline()
 
     def test_extractors(self):
@@ -137,8 +134,7 @@ class TestStandardPipelines(base.IntegrationTest):
         experiment.description file.
         """
         shutil.copytree(self.folder_path.joinpath('extractors'), self.session_path)
-        shutil.copytree(self.folder_path.joinpath('ephys_NP24', 'raw_ephys_data'),
-                        self.session_path.joinpath('raw_ephys_data'))
+        shutil.copytree(self.folder_path.joinpath('ephys_NP24', 'raw_ephys_data'), self.session_path.joinpath('raw_ephys_data'))
         self.check_pipeline()
         # Tests that an error is raised if sync and extractor aren't matching
         exp_desc = sess_params.read_params(self.session_path)
@@ -147,10 +143,13 @@ class TestStandardPipelines(base.IntegrationTest):
         self.assertRaises(ValueError, self.check_pipeline)
         # Modify the experiment description to include a novel task
         exp_desc['tasks'] = [
-            {'nouveauChoiceWorld':
-                {'collection': 'raw_task_data_00',
-                 'extractors': ['TrialRegisterRaw', 'ChoiceWorldTrialsBpod'],
-                 'sync_label': 'bpod'}}
+            {
+                'nouveauChoiceWorld': {
+                    'collection': 'raw_task_data_00',
+                    'extractors': ['TrialRegisterRaw', 'ChoiceWorldTrialsBpod'],
+                    'sync_label': 'bpod',
+                }
+            }
         ]
         sess_params.write_params(self.session_path, exp_desc)
         pipe = dynamic.make_pipeline(self.session_path)
@@ -172,8 +171,7 @@ class TestStandardPipelines(base.IntegrationTest):
         self.compare_dicts(dy_pipe, expected_pipe)
 
     def compare_dicts(self, dict1, dict2):
-        self.assertSetEqual(set([pl['name'] for pl in dict1]),
-                            set([pl['name'] for pl in dict2]))
+        self.assertSetEqual(set([pl['name'] for pl in dict1]), set([pl['name'] for pl in dict2]))
         for d1, d2 in zip(dict1, dict2):
             for k in ('executable', 'parents', 'name', 'arguments'):
                 with self.subTest(key=k, name_1=d1.get('name'), name_2=d2.get('name')):
@@ -224,14 +222,29 @@ class TestDynamicPipelineWithAlyx(base.IntegrationTest):
                 self.assertEqual(t['status'], 'Complete')
 
         expected = [
-            '_ibl_experiment.description.yaml', '_iblrig_taskData.raw.jsonable', '_iblrig_taskSettings.raw.json',
-            '_iblrig_encoderEvents.raw.ssv', '_iblrig_encoderPositions.raw.ssv', '_iblrig_encoderTrialInfo.raw.ssv',
-            '_iblrig_ambientSensorData.raw.jsonable', '_iblrig_leftCamera.timestamps.ssv', '_iblrig_videoCodeFiles.raw.zip',
-            '_iblrig_leftCamera.raw.mp4', '_ibl_trials.goCueTrigger_times.npy', '_ibl_trials.stimOnTrigger_times.npy',
-            '_ibl_trials.stimOffTrigger_times.npy', '_ibl_trials.table.pqt', '_ibl_trials.stimOff_times.npy',
-            '_ibl_wheel.timestamps.npy', '_ibl_wheel.position.npy', '_ibl_wheelMoves.intervals.npy',
-            '_ibl_wheelMoves.peakAmplitude.npy', '_ibl_trials.included.npy', '_ibl_trials.quiescencePeriod.npy',
-            '_ibl_leftCamera.times.npy']
+            '_ibl_experiment.description.yaml',
+            '_iblrig_taskData.raw.jsonable',
+            '_iblrig_taskSettings.raw.json',
+            '_iblrig_encoderEvents.raw.ssv',
+            '_iblrig_encoderPositions.raw.ssv',
+            '_iblrig_encoderTrialInfo.raw.ssv',
+            '_iblrig_ambientSensorData.raw.jsonable',
+            '_iblrig_leftCamera.timestamps.ssv',
+            '_iblrig_videoCodeFiles.raw.zip',
+            '_iblrig_leftCamera.raw.mp4',
+            '_ibl_trials.goCueTrigger_times.npy',
+            '_ibl_trials.stimOnTrigger_times.npy',
+            '_ibl_trials.stimOffTrigger_times.npy',
+            '_ibl_trials.table.pqt',
+            '_ibl_trials.stimOff_times.npy',
+            '_ibl_wheel.timestamps.npy',
+            '_ibl_wheel.position.npy',
+            '_ibl_wheelMoves.intervals.npy',
+            '_ibl_wheelMoves.peakAmplitude.npy',
+            '_ibl_trials.included.npy',
+            '_ibl_trials.quiescencePeriod.npy',
+            '_ibl_leftCamera.times.npy',
+        ]
         self.assertCountEqual(expected, (d['name'] for d in all_dsets))
 
     def tearDown(self) -> None:

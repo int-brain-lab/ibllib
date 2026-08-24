@@ -2,6 +2,7 @@
 
 NB: For ibllib.pipes.behavior_tasks.HabituationTrialsNidq tests see tests.test_ephys_trials.
 """
+
 import logging
 import ibllib.pipes.behavior_tasks as btasks
 from one.api import ONE
@@ -20,7 +21,6 @@ class HabituationTemplate(base.IntegrationTest):
 
 
 class TestHabituationRegisterRaw(HabituationTemplate):
-
     def test_task(self):
         wf = btasks.HabituationRegisterRaw(self.session_path, one=self.one, collection='raw_behavior_data')
         status = wf.run()
@@ -30,7 +30,6 @@ class TestHabituationRegisterRaw(HabituationTemplate):
 
 
 class TestHabituationTrialsBpod(HabituationTemplate):
-
     def test_task(self):
         wf = btasks.HabituationTrialsBpod(self.session_path, one=self.one, collection='raw_behavior_data', save=True)
         status = wf.run(update=False)

@@ -18,33 +18,36 @@ To add support for these personal projects:
 """
 raise unittest.SkipTest('Support for these tasks not yet implemented for the dynamic pipeline')
 
-TRAINING_TRIALS_SIGNATURE = ('_ibl_trials.goCueTrigger_times.npy',
-                             '_ibl_trials.included.npy',
-                             '_ibl_trials.laserStimulation.npy',
-                             '_ibl_trials.stimOnTrigger_times.npy',
-                             '_ibl_trials.stimOffTrigger_times.npy',
-                             '_ibl_trials.stimOff_times.npy',
-                             '_ibl_trials.quiescencePeriod.npy',
-                             '_ibl_trials.table.pqt',
-                             '_ibl_wheel.position.npy',
-                             '_ibl_wheel.timestamps.npy',
-                             '_ibl_wheelMoves.intervals.npy',
-                             '_ibl_wheelMoves.peakAmplitude.npy')
+TRAINING_TRIALS_SIGNATURE = (
+    '_ibl_trials.goCueTrigger_times.npy',
+    '_ibl_trials.included.npy',
+    '_ibl_trials.laserStimulation.npy',
+    '_ibl_trials.stimOnTrigger_times.npy',
+    '_ibl_trials.stimOffTrigger_times.npy',
+    '_ibl_trials.stimOff_times.npy',
+    '_ibl_trials.quiescencePeriod.npy',
+    '_ibl_trials.table.pqt',
+    '_ibl_wheel.position.npy',
+    '_ibl_wheel.timestamps.npy',
+    '_ibl_wheelMoves.intervals.npy',
+    '_ibl_wheelMoves.peakAmplitude.npy',
+)
 
-EPHYS_TRIALS_SIGNATURE = ('_ibl_trials.goCueTrigger_times.npy',
-                          '_ibl_trials.stimOff_times.npy',
-                          '_ibl_trials.stimOnTrigger_times.npy',
-                          '_ibl_trials.stimOffTrigger_times.npy',
-                          '_ibl_trials.quiescencePeriod.npy',
-                          '_ibl_wheel.timestamps.npy',
-                          '_ibl_wheel.position.npy',
-                          '_ibl_wheelMoves.intervals.npy',
-                          '_ibl_wheelMoves.peakAmplitude.npy',
-                          '_ibl_trials.table.pqt')
+EPHYS_TRIALS_SIGNATURE = (
+    '_ibl_trials.goCueTrigger_times.npy',
+    '_ibl_trials.stimOff_times.npy',
+    '_ibl_trials.stimOnTrigger_times.npy',
+    '_ibl_trials.stimOffTrigger_times.npy',
+    '_ibl_trials.quiescencePeriod.npy',
+    '_ibl_wheel.timestamps.npy',
+    '_ibl_wheel.position.npy',
+    '_ibl_wheelMoves.intervals.npy',
+    '_ibl_wheelMoves.peakAmplitude.npy',
+    '_ibl_trials.table.pqt',
+)
 
 
 class TestEphysTaskExtraction(base.IntegrationTest):
-
     def setUp(self) -> None:
         self.one_offline = ONE(mode='local')
         self.session_path = self.data_path.joinpath('personal_projects/ephys_biased_opto/ZFM-01802/2021-03-10/001')
@@ -57,6 +60,7 @@ class TestEphysTaskExtraction(base.IntegrationTest):
         should be defined in the experiment.description file, which has its own _extract_behavior method.
         """
         from ibllib.pipes.ephys_preprocessing import LaserTrialsLegacy
+
         desired_output = list(EPHYS_TRIALS_SIGNATURE) + ['_ibl_trials.laserProbability.npy', '_ibl_trials.laserStimulation.npy']
         task = LaserTrialsLegacy(self.session_path, one=self.one_offline)
         task.run()
@@ -70,6 +74,7 @@ class TestTrainingTaskExtraction(base.IntegrationTest):
     The bpod jsonable can optionally contains 'laserStimulation' and 'laserProbability' fields
     Sometimes only the former. THe normal biased extractor detects them automatically
     """
+
     session_path = None
 
     def setUp(self) -> None:
@@ -101,9 +106,7 @@ class TestTrainingTaskExtraction(base.IntegrationTest):
         self.assertEqual(set(p.name for p in task.outputs), set(desired_output))
         trials = check_trials(self.session_path)
         self.assertTrue(np.all(np.unique(trials.laserStimulation) == np.array([0, 1])))
-        self.assertTrue(
-            np.all(np.logical_and(trials.laserProbability >= 0, trials.laserProbability <= 1))
-        )
+        self.assertTrue(np.all(np.logical_and(trials.laserProbability >= 0, trials.laserProbability <= 1)))
 
 
 def check_trials(session_path):

@@ -8,7 +8,6 @@ _logger = logging.getLogger('ibllib')
 
 
 class BiasedTemplate(base.IntegrationTest):
-
     required_files = ['tasks/choice_world_biased/steinmetzlab/Subjects/NR_0020/2022-03-14/001']
 
     def setUp(self) -> None:
@@ -17,7 +16,6 @@ class BiasedTemplate(base.IntegrationTest):
 
 
 class TestBiasedTrialsBpod(BiasedTemplate):
-
     def test_task(self):
         wf = btasks.ChoiceWorldTrialsBpod(self.session_path, one=self.one, collection='raw_behavior_data')
         status = wf.run(update=False)
@@ -27,7 +25,6 @@ class TestBiasedTrialsBpod(BiasedTemplate):
 
 
 class TestTrialRegisterRaw(BiasedTemplate):
-
     def test_task(self):
         wf = btasks.TrialRegisterRaw(self.session_path, one=self.one, collection='raw_behavior_data')
         status = wf.run()

@@ -5,13 +5,13 @@ on the ephysChoiceWorld task, doing a dummy without animal and check that all sy
 This test is also a synchronization extraction test, as it checks the ouput. The tear down function
 removes all _spikeglx_ files so they are regenerated from the small files accessible
 """
+
 import ibllib.ephys.ephysqc
 
 from ibllib.tests import base
 
 
 class TestEphysCheckList(base.IntegrationTest):
-
     required_files = ['ephys/ttl_check']
     _writable_scope = 'test'
 

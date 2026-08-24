@@ -25,6 +25,7 @@ _logger = logging.getLogger('ibllib')
 
 class TimeLoggingTestResult(TextTestResult):
     """A class to record test durations"""
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.test_timings = []
@@ -47,6 +48,7 @@ class TimeLoggingTestResult(TextTestResult):
 
 class TimeLoggingTestRunner(TextTestRunner):
     """A class that prints a list of the slowest tests to the output stream"""
+
     def __init__(self, slow_test_threshold=0.3, *args, **kwargs):
         self.slow_test_threshold = slow_test_threshold
         super().__init__(resultclass=TimeLoggingTestResult, *args, **kwargs)
@@ -95,7 +97,7 @@ class _DataPathDescriptor:
 
 @unittest.skipUnless(
     INTEGRATION_DATA_DIR,
-    "Integration data not available (set INTEGRATION_DATA_DIR to enable).",
+    'Integration data not available (set INTEGRATION_DATA_DIR to enable).',
 )
 class IntegrationTest(unittest.TestCase):
     """Base class for tests that require S3 integration data.
@@ -169,14 +171,13 @@ class IntegrationTest(unittest.TestCase):
         super().__init__(*args, **kwargs)
 
         if INTEGRATION_DATA_DIR and type(self)._writable_tempdir is None and self._writable_scope != 'test':
-            data_present = (self.data_path.exists() and
-                            self.data_path.is_dir() and
-                            any(self.data_path.glob('Subjects_init')))
+            data_present = self.data_path.exists() and self.data_path.is_dir() and any(self.data_path.glob('Subjects_init'))
             if self.required_files:
                 data_present &= all(map(self.data_path.glob, self.required_files))
             if not data_present:
-                raise FileNotFoundError(f'Invalid data root folder {self.data_path.absolute()}\n\t'
-                                        'must contain a "Subjects_init" folder.')
+                raise FileNotFoundError(
+                    f'Invalid data root folder {self.data_path.absolute()}\n\tmust contain a "Subjects_init" folder.'
+                )
 
     @classmethod
     def default_data_root(cls):
@@ -233,8 +234,10 @@ def list_current_sessions(one=None):
     :param one: An ONE object for fetching session eid from path
     :return: Set of integration session eids
     """
+
     def not_null(itr):
         return filter(lambda x: x is not None, itr)
+
     one = one or ONE()
     root = IntegrationTest.default_data_root()
     folders = set(get_session_path(x[0]) for x in os.walk(root))
@@ -250,6 +253,7 @@ def disable_log(level=logging.CRITICAL, restore_level=None, quiet=False):
     :param quiet: If false the fact that the log is disabled will be printed
     :return:
     """
+
     def decorator(func):
         @wraps(func)
         def wrapper(self, *args, **kwargs):
@@ -261,7 +265,9 @@ def disable_log(level=logging.CRITICAL, restore_level=None, quiet=False):
                 print('**Log re-enabled**')
             logging.disable(restore_level or logging.NOTSET)
             return output
+
         return wrapper
+
     return decorator
 
 
@@ -275,7 +281,7 @@ def _get_test_db():
             'base_url': 'https://test.alyx.internationalbrainlab.org',
             'username': 'test_user',
             'password': 'TapetesBloc18',
-            'silent': True
+            'silent': True,
         }
 
 

@@ -10,8 +10,16 @@ import numpy as np
 from one.api import ONE
 import one.alf.io as alfio
 from one.registration import RegistrationClient
-from ibllib.pipes.ephys_tasks import (EphysRegisterRaw, EphysCompressNP1, EphysCompressNP21, EphysCompressNP24,
-                                      EphysSyncRegisterRaw, EphysSyncPulses, EphysPulses, SpikeSorting)
+from ibllib.pipes.ephys_tasks import (
+    EphysRegisterRaw,
+    EphysCompressNP1,
+    EphysCompressNP21,
+    EphysCompressNP24,
+    EphysSyncRegisterRaw,
+    EphysSyncPulses,
+    EphysPulses,
+    SpikeSorting,
+)
 
 from ibllib.tests import base
 
@@ -19,7 +27,6 @@ _logger = logging.getLogger('ibllib')
 
 
 class EphysTemplate(base.IntegrationTest):
-
     def setUp(self) -> None:
         self.data_path = self.default_data_root().joinpath('ephys', 'ephys_np2', 'raw_ephys_data')
         tmpdir = tempfile.TemporaryDirectory()
@@ -109,7 +116,6 @@ class EphysTemplate(base.IntegrationTest):
 
 
 class TestEphysRegisterRaw(base.IntegrationTest):
-
     def setUp(self) -> None:
         self._tempdir = tempfile.TemporaryDirectory()
         self.one = ONE(**base.TEST_DB, cache_dir=self._tempdir.name, cache_rest=None)
@@ -155,7 +161,6 @@ class TestEphysRegisterRaw(base.IntegrationTest):
 
 
 class TestEphysSyncRegisterRaw(EphysTemplate):
-
     def test_compress(self):
         self.copy_nidq_data(sync_collection='raw_ephys_data', ext='.bin')
         task = EphysSyncRegisterRaw(self.session_path, one=self.one, sync_collection='raw_ephys_data')
@@ -179,7 +184,6 @@ class TestEphysSyncRegisterRaw(EphysTemplate):
 
 
 class TestEphysSyncPulses(EphysTemplate):
-
     def test_pulses(self):
         self.copy_nidq_data(sync_collection='raw_ephys_data', ext='.cbin')
         task = EphysSyncPulses(self.session_path, one=self.one, sync_collection='raw_ephys_data')
@@ -189,7 +193,6 @@ class TestEphysSyncPulses(EphysTemplate):
 
 
 class TestEphysCompressNP1(EphysTemplate):
-
     def test_compress(self):
         self.copy_ap_data(probe=self.probe, ext='.bin', meta='NP1')
         self.copy_lf_data(probe=self.probe, ext='.bin', meta='NP1')
@@ -220,7 +223,6 @@ class TestEphysCompressNP1(EphysTemplate):
 
 
 class TestEphysCompressNP21(EphysTemplate):
-
     def test_process(self):
         self.copy_ap_data(probe=self.probe, ext='.bin', meta='NP21')
 
@@ -250,7 +252,6 @@ class TestEphysCompressNP21(EphysTemplate):
 
 
 class TestEphysCompressNP24(EphysTemplate):
-
     def test_process(self):
         self.copy_ap_data(probe=self.probe, ext='.bin', meta='NP24')
 
@@ -266,7 +267,6 @@ class TestEphysCompressNP24(EphysTemplate):
 
 
 class TestEphysPulses(EphysTemplate):
-
     def test_probe_sync_pulses(self):
         self.copy_sync_files()
         self.copy_ap_data(probe=self.probe, ext='.cbin', meta='NP1', wiring=False)
@@ -290,8 +290,12 @@ class TestEphysPulses(EphysTemplate):
         task = EphysCompressNP24(self.session_path, one=self.one, pname='probe01')
         task.run()
         shutil.rmtree(self.session_path.joinpath('raw_ephys_data', 'probe01'))
-        task = EphysPulses(self.session_path, pname=['probe00', 'probe01a', 'probe01b', 'probe01c', 'probe01d'],
-                           one=self.one, sync_collection='raw_ephys_data')
+        task = EphysPulses(
+            self.session_path,
+            pname=['probe00', 'probe01a', 'probe01b', 'probe01c', 'probe01d'],
+            one=self.one,
+            sync_collection='raw_ephys_data',
+        )
         status = task.run()
         assert status == 0
         self.check_files(task)
@@ -311,7 +315,6 @@ class TestEphysPulses(EphysTemplate):
 
 
 class TestSpikeSortingTask(unittest.TestCase):
-
     def test_get_ks2_version(self):
         test_strings = [
             '\x1b[0m15:39:37.919 [I] ibl:90               Starting Pykilosort version ibl_1.3.0, output in gnagga^[[0m\n',

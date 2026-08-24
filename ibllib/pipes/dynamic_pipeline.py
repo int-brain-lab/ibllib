@@ -563,6 +563,7 @@ def get_mesoscope_tasks(acquisition_description, **kwargs):
         return OrderedDict()
 
     import mpci.alyx.pipeline
+
     pipe = mpci.alyx.pipeline.make_pipeline(acquisition_description, **kwargs)
     return pipe.tasks
 
@@ -673,7 +674,8 @@ def make_pipeline(session_path, **pkwargs):
 
     # Behavior tasks
     behavior_tasks = _get_trials_tasks(
-        session_path, acquisition_description, sync_tasks=sync_parent_tasks, one=pkwargs.get('one'))
+        session_path, acquisition_description, sync_tasks=sync_parent_tasks, one=pkwargs.get('one')
+    )
     tasks.update(behavior_tasks)
 
     # Ephys tasks

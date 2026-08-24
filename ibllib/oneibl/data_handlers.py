@@ -701,6 +701,7 @@ class ServerGlobusDataHandler(DataHandler):
         :param one: ONE instance
         """
         from one.remote.globus import Globus  # noqa
+
         super().__init__(session_path, signatures, one=one)
         self.globus = Globus(client_name='server', headless=True)
 

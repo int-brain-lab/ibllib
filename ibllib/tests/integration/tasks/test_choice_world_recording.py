@@ -8,7 +8,6 @@ _logger = logging.getLogger('ibllib')
 
 
 class RecordingTemplate(base.IntegrationTest):
-
     required_files = ['tasks/choice_world_ephys/steinmetzlab/Subjects/NR_0020/2022-05-12/001']
 
     def setUp(self) -> None:
@@ -17,10 +16,14 @@ class RecordingTemplate(base.IntegrationTest):
 
 
 class TestTrainingTrialsRecording(RecordingTemplate):
-
     def test_task(self):
-        wf = btasks.ChoiceWorldTrialsNidq(self.session_path, one=self.one, collection='raw_behavior_data',
-                                          sync_namespace='spikeglx', sync_collection='raw_ephys_data')
+        wf = btasks.ChoiceWorldTrialsNidq(
+            self.session_path,
+            one=self.one,
+            collection='raw_behavior_data',
+            sync_namespace='spikeglx',
+            sync_collection='raw_ephys_data',
+        )
         status = wf.run(update=False, plot_qc=False)
         self.assertEqual(0, status)
         wf.assert_expected_outputs()
@@ -28,7 +31,6 @@ class TestTrainingTrialsRecording(RecordingTemplate):
 
 
 class TestTrialRegisterRaw(RecordingTemplate):
-
     def test_task(self):
         wf = btasks.TrialRegisterRaw(self.session_path, one=self.one, collection='raw_behavior_data')
         status = wf.run()

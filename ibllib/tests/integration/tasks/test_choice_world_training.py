@@ -17,7 +17,6 @@ class TrainingTemplate(base.IntegrationTest):
 
 
 class TestTrainingTrialsBpod(TrainingTemplate):
-
     def test_task(self):
         wf = btasks.ChoiceWorldTrialsBpod(self.session_path, one=self.one, collection='raw_behavior_data')
         status = wf.run(update=False)
@@ -27,7 +26,6 @@ class TestTrainingTrialsBpod(TrainingTemplate):
 
 
 class TestTrialRegisterRaw(TrainingTemplate):
-
     def test_task(self):
         wf = btasks.TrialRegisterRaw(self.session_path, one=self.one, collection='raw_behavior_data')
         status = wf.run()
@@ -36,7 +34,6 @@ class TestTrialRegisterRaw(TrainingTemplate):
 
 
 class TestTrainingTrialsBpodSavePath(TrainingTemplate):
-
     def test_task(self):
         shutil.move(self.session_path.joinpath('raw_behavior_data'), self.session_path.joinpath('raw_lala_data'))
         wf = btasks.ChoiceWorldTrialsBpod(self.session_path, one=self.one, collection='raw_lala_data')

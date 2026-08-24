@@ -1298,7 +1298,7 @@ class SessionLoader:
             if self.eid is not None and self.eid != '':
                 self.session_path = self.one.eid2path(self.eid)
             else:
-                raise ValueError("If no session path is given, eid is required.")
+                raise ValueError('If no session path is given, eid is required.')
 
         data_names = [
             'trials',
@@ -1311,8 +1311,9 @@ class SessionLoader:
         ]
         self.data_info = pd.DataFrame(columns=['name', 'is_loaded'], data=zip(data_names, [False] * len(data_names)))
 
-    def load_session_data(self, trials=True, wheel=True, pose=True, motion_energy=True, pupil=True, licks=True,
-                          pawstates=True, reload=False):
+    def load_session_data(
+        self, trials=True, wheel=True, pose=True, motion_energy=True, pupil=True, licks=True, pawstates=True, reload=False
+    ):
         """
         Function to load available session data into the SessionLoader object. Input parameters allow to control which
         data is loaded. Data is loaded into an attribute of the SessionLoader object with the same name as the input
@@ -1543,10 +1544,9 @@ class SessionLoader:
                 self.eid, f'{view}Camera', attribute='pawstates', collection='alf/lightningaction', revision=self.revision or None
             )
             times_raw = self.one.load_object(
-                self.eid, f'{view}Camera', attribute='times', collection='alf',
-                revision=self.revision or None)
-            times_fixed, pawstates_df = self._check_video_timestamps(
-                view, times_raw['times'], pawstates_raw['pawstates'])
+                self.eid, f'{view}Camera', attribute='times', collection='alf', revision=self.revision or None
+            )
+            times_fixed, pawstates_df = self._check_video_timestamps(view, times_raw['times'], pawstates_raw['pawstates'])
             self.pawstates[f'{view}Camera'] = pawstates_df.copy()
             self.pawstates[f'{view}Camera'].insert(0, 'times', times_fixed)
             self.data_info.loc[self.data_info['name'] == 'pawstates', 'is_loaded'] = True

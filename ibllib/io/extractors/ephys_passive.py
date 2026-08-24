@@ -831,7 +831,8 @@ class PassiveChoiceWorld(BaseExtractor):
             bpod = ephys_fpga.get_sync_fronts(sync, sync_map['bpod'])
             # If there is no task reply we don't expect Bpod out signals during this period
             tmin, tmax = ephys_fpga.get_protocol_period(
-                self.session_path, protocol_number, bpod, exclude_empty_periods=not skip_replay)
+                self.session_path, protocol_number, bpod, exclude_empty_periods=not skip_replay
+            )
         else:
             tmin = tmax = None
 

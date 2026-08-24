@@ -13,7 +13,7 @@ from ibllib.pipes.video_tasks import (
     VideoSyncQcNidq,
     VideoConvert,
     VideoSyncQcCamlog,
-    LightningPose
+    LightningPose,
 )
 from ibllib.io.video import get_video_meta
 from ibllib.io.extractors.ephys_fpga import get_sync_and_chn_map
@@ -49,8 +49,9 @@ class TestVideoEphysCompress(base.IntegrationTest):
         self.one = ONE(**base.TEST_DB, mode='local')
 
     def test_compress(self):
-        task = VideoCompress(self.session_path, device_collection='raw_video_data', cameras=['left', 'right', 'body'],
-                             sync='nidq', one=self.one)
+        task = VideoCompress(
+            self.session_path, device_collection='raw_video_data', cameras=['left', 'right', 'body'], sync='nidq', one=self.one
+        )
         status = task.run()
         assert status == 0
         task.assert_expected_outputs()
@@ -75,8 +76,9 @@ class TestVideoCompress(base.IntegrationTest):
 
 class TestVideoConvert(base.IntegrationTest):
     def setUp(self) -> None:
-        self.folder_path = self.data_path.joinpath('widefield', 'widefieldChoiceWorld', 'JC076', '2022-02-04', '002',
-                                                   'raw_video_data')
+        self.folder_path = self.data_path.joinpath(
+            'widefield', 'widefieldChoiceWorld', 'JC076', '2022-02-04', '002', 'raw_video_data'
+        )
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.temp_dir = Path(tmp.name)
@@ -134,8 +136,14 @@ class TestVideoSyncQCBpod(base.IntegrationTest):
 
     @unittest.mock.patch('ibllib.pipes.video_tasks.CameraQC')
     def test_videosync(self, mock_qc):
-        task = VideoSyncQcBpod(self.session_path, device_collection='raw_video_data', cameras=['left'], sync='bpod',
-                               one=self.one, collection='raw_behavior_data')
+        task = VideoSyncQcBpod(
+            self.session_path,
+            device_collection='raw_video_data',
+            cameras=['left'],
+            sync='bpod',
+            one=self.one,
+            collection='raw_behavior_data',
+        )
         status = task.run()
         self.assertEqual(mock_qc.call_count, 1)
         self.assertEqual(status, 0)
@@ -155,16 +163,22 @@ class TestVideoSyncQcCamlog(base.IntegrationTest):
         self.session_path.joinpath('raw_video_data', '_iblrig_leftCamera.raw.mp4').touch()
         self.video_length = 244162
 
-        self.patch = unittest.mock.patch('ibllib.io.extractors.camera.get_video_length',
-                                         return_value=self.video_length)
+        self.patch = unittest.mock.patch('ibllib.io.extractors.camera.get_video_length', return_value=self.video_length)
         self.patch.start()
         self.one = ONE(**base.TEST_DB, mode='local')
 
     @unittest.mock.patch('ibllib.qc.camera.CameraQCCamlog')
     def test_videosync(self, mock_qc):
 
-        task = VideoSyncQcCamlog(self.session_path, device_collection='raw_video_data', sync='nidq', sync_namespace='spikeglx',
-                                 sync_collection='raw_sync_data', cameras=['left'], one=self.one)
+        task = VideoSyncQcCamlog(
+            self.session_path,
+            device_collection='raw_video_data',
+            sync='nidq',
+            sync_namespace='spikeglx',
+            sync_collection='raw_sync_data',
+            cameras=['left'],
+            one=self.one,
+        )
         status = task.run()
         self.assertEqual(status, 0)
         task.assert_expected_outputs()
@@ -202,8 +216,15 @@ class TestVideoSyncQCNidq(base.IntegrationTest):
 
     @unittest.mock.patch('ibllib.qc.camera.CameraQC')
     def test_videosync(self, mock_qc):
-        task = VideoSyncQcNidq(self.session_path, device_collection='raw_video_data', sync='nidq', sync_namespace='spikeglx',
-                               sync_collection='raw_ephys_data', cameras=['left', 'right', 'body'], one=self.one)
+        task = VideoSyncQcNidq(
+            self.session_path,
+            device_collection='raw_video_data',
+            sync='nidq',
+            sync_namespace='spikeglx',
+            sync_collection='raw_ephys_data',
+            cameras=['left', 'right', 'body'],
+            one=self.one,
+        )
         status = task.run()
         self.assertEqual(3, mock_qc.call_count)
         self.assertEqual(status, 0)
@@ -225,23 +246,17 @@ class TestLightningPose(base.IntegrationTest):
             link.parent.mkdir(exist_ok=True, parents=True)
             link.symlink_to(ff)
 
-    @unittest.mock.patch(
-        "ibllib.pipes.video_tasks.LightningPose._check_env", return_value='mock_version'
-    )
+    @unittest.mock.patch('ibllib.pipes.video_tasks.LightningPose._check_env', return_value='mock_version')
     def test_litpose(self, mock_check_env):
         # Test the existence of the relevant iblscripts scripts separately as we are mocking the relevant check
-        task = LightningPose(self.session_path,
-                             device_collection='raw_video_data',
-                             cameras=['left', 'right', 'body'])
+        task = LightningPose(self.session_path, device_collection='raw_video_data', cameras=['left', 'right', 'body'])
         status = task.run(overwrite=False)
         self.assertEqual(status, 0)
         task.assert_expected_outputs()
 
     @unittest.mock.patch('ibllib.pipes.video_tasks.check_nvidia_driver')
     @unittest.mock.patch('ibllib.pipes.video_tasks.subprocess.Popen')
-    @unittest.mock.patch(
-        "ibllib.pipes.video_tasks.LightningPose._check_env", return_value='mock_version'
-    )
+    @unittest.mock.patch('ibllib.pipes.video_tasks.LightningPose._check_env', return_value='mock_version')
     def test_litpose_overwrite(self, mock_check_env, mock_popen, mock_nvidia):
         # Force the pose estimation / motion energy branches to actually run by setting overwrite=True.
         # The real run_litpose.sh / run_motion.sh scripts are replaced by a mocked subprocess.Popen whose
@@ -251,9 +266,7 @@ class TestLightningPose(base.IntegrationTest):
         mock_process.returncode = 0
         mock_popen.return_value = mock_process
 
-        task = LightningPose(self.session_path,
-                             device_collection='raw_video_data',
-                             cameras=['left', 'right', 'body'])
+        task = LightningPose(self.session_path, device_collection='raw_video_data', cameras=['left', 'right', 'body'])
         status = task.run(overwrite=True)
         self.assertEqual(status, 0)
         task.assert_expected_outputs()
