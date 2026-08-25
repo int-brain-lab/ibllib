@@ -148,7 +148,23 @@ class IntegrationTest(unittest.TestCase):
         super().tearDownClass()
 
     def setUp(self):
+        """Validate the data root and, if required, build a per-test writable mirror.
+
+        The data-root validation lives here rather than in __init__ because __init__ runs
+        during test construction (collection), before @skipUnless is consulted; raising there
+        would abort collection of the whole module. Subclasses overriding setUp must call
+        super().setUp() for the skip to take effect.
+        """
         super().setUp()
+        if INTEGRATION_DATA_DIR and type(self)._writable_tempdir is None and self._writable_scope != 'test':
+            data_present = (self.data_path.exists() and
+                            self.data_path.is_dir() and
+                            any(self.data_path.glob('Subjects_init')))
+            if self.required_files:
+                data_present &= all(any(self.data_path.glob(pattern)) for pattern in self.required_files)
+            if not data_present:
+                self.skipTest(f'Invalid data root folder {self.data_path.absolute()}: '
+                              'missing "Subjects_init" or required_files')
         if not INTEGRATION_DATA_WRITABLE and self.required_files and self._writable_scope == 'test':
             _, self._writable_tempdir = make_sym_links(self._required_sources())
 
@@ -167,16 +183,6 @@ class IntegrationTest(unittest.TestCase):
         :param data_path: The data root path to the integration data directory
         """
         super().__init__(*args, **kwargs)
-
-        if INTEGRATION_DATA_DIR and type(self)._writable_tempdir is None and self._writable_scope != 'test':
-            data_present = (self.data_path.exists() and
-                            self.data_path.is_dir() and
-                            any(self.data_path.glob('Subjects_init')))
-            if self.required_files:
-                data_present &= all(map(self.data_path.glob, self.required_files))
-            if not data_present:
-                raise FileNotFoundError(f'Invalid data root folder {self.data_path.absolute()}\n\t'
-                                        'must contain a "Subjects_init" folder.')
 
     @classmethod
     def default_data_root(cls):
