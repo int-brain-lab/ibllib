@@ -9,7 +9,7 @@ import one.alf.exceptions
 from iblutil.util import Bunch
 import spikeglx
 
-from ibllib.exceptions import Neuropixel3BSyncFrontsNonMatching
+from ibllib.exceptions import Neuropixel3BSyncFrontsNonMatching, SyncFrontsAnomaly
 from ibllib.io.extractors.ephys_fpga import get_sync_fronts, get_ibl_sync_map
 
 _logger = logging.getLogger(__name__)
@@ -45,7 +45,7 @@ def sync(ses_path, **kwargs):
         return version3B(ses_path, **kwargs)
 
 
-def version3A(ses_path, display=True, type='smooth', tol=2.1, probe_names=None):
+def version3A(ses_path, display=True, type='smooth', tol=2.1, probe_names=None, raise_on_anomaly=True):
     """
     From a session path with _spikeglx_sync arrays extracted, locate ephys files for 3A and
      outputs one sync.timestamps.probeN.npy file per acquired probe. By convention the reference
@@ -53,6 +53,13 @@ def version3A(ses_path, display=True, type='smooth', tol=2.1, probe_names=None):
      Assumes the _spikeglx_sync datasets are already extracted from binary data
     :param ses_path:
     :param type: linear, exact or smooth
+    :param raise_on_anomaly: if True (default), raise SyncFrontsAnomaly when the
+     sync_probe_front_times tolerance check fails for a probe, instead of only logging it and
+     continuing with qc_all=False. No auto-switching between frame2ttl/right_camera is attempted.
+     Defaults to True (unlike version3B's raise_on_anomaly, which defaults to False): 3A is a
+     legacy extraction path as of 2026-08-23 -- no ephys recording currently acquired uses 3A
+     hardware, so an anomaly here should be rare, and if one does occur, raising is the lesser
+     of the two evils versus letting a bad sync silently land in the database.
     :return: bool True on a a successful sync
     """
     ephys_files = spikeglx.glob_ephys_files(ses_path, ext='meta', bin_exists=False)
@@ -85,9 +92,11 @@ def version3A(ses_path, display=True, type='smooth', tol=2.1, probe_names=None):
             d['times'].append(sync['times'][isync])
         return d
 
+    aux_used = 'frame2ttl'
     d = get_sync_fronts('frame2ttl')
     if not d:
         _logger.warning('Ephys sync: frame2ttl not detected on both probes, using camera sync')
+        aux_used = 'right_camera'
         d = get_sync_fronts('right_camera')
         if not min([t[0] for t in d['times']]) > 0.2:
             raise ValueError('Cameras started before ephys, no sync possible')
@@ -110,11 +119,16 @@ def version3A(ses_path, display=True, type='smooth', tol=2.1, probe_names=None):
         else:
             timestamps, qc = sync_probe_front_times(d.times[:, ind], d.times[:, iref], sr, display=display, type=type, tol=tol)
             qc_all &= qc
+            if not qc:
+                probe_name = ephys_file.path.parts[-1]
+                _logger.error(f'{ses_path} probe {probe_name}: sync anomaly using aux channel "{aux_used}"')
+                if raise_on_anomaly:
+                    raise SyncFrontsAnomaly(f'{ses_path} probe {probe_name}: aux channel "{aux_used}"')
         out_files = _save_timestamps_npy(ephys_file, timestamps, sr)
     return qc_all, out_files
 
 
-def version3B(ses_path, display=True, type=None, tol=2.5, probe_names=None):
+def version3B(ses_path, display=True, type=None, tol=2.5, probe_names=None, raise_on_anomaly=False):
     """
     From a session path with _spikeglx_sync arrays extracted, locate ephys files for 3A and
      outputs one sync.timestamps.probeN.npy file per acquired probe. By convention the reference
@@ -124,6 +138,9 @@ def version3B(ses_path, display=True, type=None, tol=2.5, probe_names=None):
     :param type: linear, exact or smooth
     :param probe_names: by default will rglob all probes in the directory. If specified, this will filter
      the probes on which to perform the synchronisation, defaults to None, optional
+    :param raise_on_anomaly: if True, raise SyncFrontsAnomaly when a classifiable raw-pulse
+     pathology (dropped_edges / duplicate_burst / single_edge_glitch) is found on the probe or
+     reference channel, instead of only logging it and continuing with qc_all=False (default).
     :return: None
     """
     DEFAULT_TYPE = 'smooth'
@@ -168,6 +185,13 @@ def version3B(ses_path, display=True, type=None, tol=2.5, probe_names=None):
         if not qcdiff:
             qc_all = False
             type_probe = type or 'exact'
+            # _check_diff_3b filters to rising edges only (polarities == 1); match that here so
+            # the diagnosis is computed on the same front subset that triggered the anomaly.
+            label = (classify_sync_anomaly(sync_probe.times[sync_probe.polarities == 1])
+                     or classify_sync_anomaly(sync_nidq.times[sync_nidq.polarities == 1]))
+            _logger.error(f'{ses_path} probe {ef.path.parts[-1]}: sync anomaly detected: {label}')
+            if raise_on_anomaly and label is not None:
+                raise SyncFrontsAnomaly(f'{ses_path} probe {ef.path.parts[-1]}: {label}')
         else:
             type_probe = type or DEFAULT_TYPE
         timestamps, qc = sync_probe_front_times(
@@ -270,6 +294,59 @@ def _save_timestamps_npy(ephys_file, tself_tref, sr):
     timestamps[:, 0] *= np.float64(sr)
     np.save(file_ts, timestamps)
     return [file_sync, file_ts]
+
+
+def classify_sync_anomaly(times, block=20, burst_factor=0.2, glitch_abs_thresh=0.005):
+    """
+    Classify a raw-pulse pathology from a single channel's front times, independent of
+    whichever knot representation ('smooth'/'exact') ends up chosen downstream.
+
+    Three independent checks, in order of precedence:
+
+    - ``dropped_edges``: a sustained pulse-rate change (block-median inter-pulse interval
+      drifts more than 30% from the global median, and stays drifted through to the end --
+      not a transient blip). Typically real edges dropped partway through the recording.
+    - ``duplicate_burst``: an inter-pulse interval far shorter than nominal (< ``burst_factor``
+      times the median). Typically a bounced/double-triggered edge.
+    - ``single_edge_glitch``: one isolated interval deviating from the median by more than
+      ``glitch_abs_thresh`` in absolute terms (not relative -- real cases found this way
+      ranged from 2.4% to 28% of the nominal period, too variable for a relative threshold).
+
+    Parameters
+    ----------
+    times : array_like
+        Front times (seconds) of a single channel, one polarity.
+    block : int
+        Number of consecutive intervals averaged per block for the `dropped_edges` check.
+    burst_factor : float
+        Fraction of the median interval below which an interval is flagged as a burst.
+    glitch_abs_thresh : float
+        Absolute deviation (seconds) from the median interval above which a single interval
+        is flagged as an isolated glitch.
+
+    Returns
+    -------
+    str or None
+        One of 'dropped_edges', 'duplicate_burst', 'single_edge_glitch', or None (clean).
+    """
+    dt = np.diff(np.asarray(times))
+    med = np.median(dt)
+    if med <= 0:
+        return None
+
+    if dt.size >= block * 3:
+        block_med = np.array([np.median(dt[i:i + block]) for i in range(0, dt.size - block, block)])
+        bad = np.where(np.abs(block_med - med) / med > 0.3)[0]
+        if bad.size > 0 and bad[-1] >= len(block_med) - 2:  # sustained to the end, not a blip
+            return 'dropped_edges'
+
+    if np.any(dt < burst_factor * med):
+        return 'duplicate_burst'
+
+    if np.max(np.abs(dt - med)) > glitch_abs_thresh:
+        return 'single_edge_glitch'
+
+    return None
 
 
 def _check_diff_3b(sync):
