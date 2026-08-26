@@ -541,16 +541,14 @@ def extract_task_replay(
         max_len = max(len(tone_df), len(valve_df), len(noise_df))
 
         # Build the stimulus dataframe
-        stim_df = pd.DataFrame(
-            {
-                'valveOn': valve_df['start'].reindex(range(max_len)),
-                'valveOff': valve_df['stop'].reindex(range(max_len)),
-                'toneOn': tone_df['start'].reindex(range(max_len)),
-                'toneOff': tone_df['stop'].reindex(range(max_len)),
-                'noiseOn': noise_df['start'].reindex(range(max_len)),
-                'noiseOff': noise_df['stop'].reindex(range(max_len)),
-            }
-        )
+        stim_df = pd.DataFrame({
+            'valveOn': valve_df['start'].reindex(range(max_len)),
+            'valveOff': valve_df['stop'].reindex(range(max_len)),
+            'toneOn': tone_df['start'].reindex(range(max_len)),
+            'toneOff': tone_df['stop'].reindex(range(max_len)),
+            'noiseOn': noise_df['start'].reindex(range(max_len)),
+            'noiseOff': noise_df['stop'].reindex(range(max_len)),
+        })
 
     except Exception as e:
         log.error(f'Failed to extract valve/audio stimuli from passive session. {e}')
@@ -653,7 +651,8 @@ def _extract_passive_gabor(fttl: dict, replay_trials: pd.DataFrame) -> pd.DataFr
 
     # Build our gabor dataframe that also contains the stimulus properties
     gabor_df = (
-        replay_trials.loc[replay_trials['stim_type'] == 'G', ['stim_type', 'position', 'contrast', 'phase']]
+        replay_trials
+        .loc[replay_trials['stim_type'] == 'G', ['stim_type', 'position', 'contrast', 'phase']]
         .assign(start=start_times, stop=end_times)[['stim_type', 'start', 'stop', 'position', 'contrast', 'phase']]
         .reset_index(drop=True)
     )
@@ -695,7 +694,8 @@ def _extract_passive_valve(bpod: dict, replay_trials: pd.DataFrame) -> pd.DataFr
     )
 
     valve_df = (
-        replay_trials.loc[replay_trials['stim_type'] == 'V', ['stim_type']]
+        replay_trials
+        .loc[replay_trials['stim_type'] == 'V', ['stim_type']]
         .assign(start=valveOn_times, stop=valveOff_times)[['start', 'stop', 'stim_type']]
         .reset_index(drop=True)
     )
@@ -774,13 +774,15 @@ def _extract_passive_audio(audio: dict, replay_trials: pd.DataFrame, rig_version
     assert len(noiseOn_times) == len(noiseOff_times) == n_expected_noise, 'Wrong number of noise detected'
 
     tone_df = (
-        replay_trials.loc[replay_trials['stim_type'] == 'T', ['stim_type']]
+        replay_trials
+        .loc[replay_trials['stim_type'] == 'T', ['stim_type']]
         .assign(start=toneOn_times, stop=toneOff_times)[['start', 'stop', 'stim_type']]
         .reset_index(drop=True)
     )
 
     noise_df = (
-        replay_trials.loc[replay_trials['stim_type'] == 'N', ['stim_type']]
+        replay_trials
+        .loc[replay_trials['stim_type'] == 'N', ['stim_type']]
         .assign(start=noiseOn_times, stop=noiseOff_times)[['start', 'stop', 'stim_type']]
         .reset_index(drop=True)
     )

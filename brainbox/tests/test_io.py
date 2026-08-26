@@ -12,16 +12,14 @@ class TestIO_ONE(unittest.TestCase):
     @staticmethod
     def _make_tidy_trials():
         """Build a small trials DataFrame spanning several probabilityLeft blocks."""
-        return pd.DataFrame(
-            {
-                'choice': [-1.0, 0.0, 1.0, -1.0, 1.0, 0.0],
-                'feedbackType': [1.0, -1.0, 1.0, 1.0, -1.0, 1.0],
-                # one of contrastLeft/contrastRight holds the value, the other is NaN
-                'contrastLeft': [0.25, np.nan, 0.0, np.nan, 0.125, np.nan],
-                'contrastRight': [np.nan, 1.0, np.nan, 0.0, np.nan, 0.0625],
-                'probabilityLeft': [0.5, 0.5, 0.8, 0.8, 0.2, 0.5],
-            }
-        )
+        return pd.DataFrame({
+            'choice': [-1.0, 0.0, 1.0, -1.0, 1.0, 0.0],
+            'feedbackType': [1.0, -1.0, 1.0, 1.0, -1.0, 1.0],
+            # one of contrastLeft/contrastRight holds the value, the other is NaN
+            'contrastLeft': [0.25, np.nan, 0.0, np.nan, 0.125, np.nan],
+            'contrastRight': [np.nan, 1.0, np.nan, 0.0, np.nan, 0.0625],
+            'probabilityLeft': [0.5, 0.5, 0.8, 0.8, 0.2, 0.5],
+        })
 
     def test_tidy_choice_mapping(self):
         """choice: -1/0/+1 map to counter_clockwise/none/clockwise."""
@@ -67,15 +65,13 @@ class TestIO_ONE(unittest.TestCase):
     def test_load_iti(self):
         """Test for brainbox.io.one.load_iti function."""
         trials = bbone.alfio.AlfBunch({})
-        trials.intervals = np.array(
-            [
-                [114.52487625, 117.88103707],
-                [118.5169474, 122.89742147],
-                [123.49302927, 126.12216664],
-                [126.68107337, 129.53872083],
-                [130.11952807, 133.90539162],
-            ]
-        )
+        trials.intervals = np.array([
+            [114.52487625, 117.88103707],
+            [118.5169474, 122.89742147],
+            [123.49302927, 126.12216664],
+            [126.68107337, 129.53872083],
+            [130.11952807, 133.90539162],
+        ])
         trials.stimOff_times = [117.38098379, 122.39736201, 125.62210278, 129.03865947, 133.4053633]
         expected = np.array([1.13596361, 1.09566726, 1.05897059, 1.0808686, np.nan])
         np.testing.assert_array_almost_equal(bbone.load_iti(trials), expected)

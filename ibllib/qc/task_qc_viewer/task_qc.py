@@ -297,9 +297,9 @@ def show_session_task_qc(qc_or_session=None, bpod_only=False, local=False, one=N
     # Update table and callbacks
     n_trials = qc.frame.shape[0]
     if 'task_qc' in locals():
-        df_trials = pd.DataFrame(
-            {k: v for k, v in task_qc.extractor.data.items() if not k.startswith('wheel') and v.size == n_trials}
-        )
+        df_trials = pd.DataFrame({
+            k: v for k, v in task_qc.extractor.data.items() if not k.startswith('wheel') and v.size == n_trials
+        })
         df = df_trials.merge(qc.frame, left_index=True, right_index=True)
     else:
         df = qc.frame

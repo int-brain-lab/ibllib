@@ -1,4 +1,4 @@
-preview = false
+preview = true
 line-length = 130
 exclude = [
     "brainbox/examples/",

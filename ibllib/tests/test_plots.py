@@ -237,12 +237,10 @@ class TestPlotPawstatesQC(unittest.TestCase):
 
         return {
             'frame': rng.integers(0, 255, (480, 640), dtype=np.uint8),
-            cls.TRACKER: pd.DataFrame(
-                {
-                    f'{cls.PAW}_x': rng.uniform(100, 400, n),
-                    f'{cls.PAW}_y': rng.uniform(100, 300, n),
-                }
-            ),
+            cls.TRACKER: pd.DataFrame({
+                f'{cls.PAW}_x': rng.uniform(100, 400, n),
+                f'{cls.PAW}_y': rng.uniform(100, 300, n),
+            }),
             'times': np.arange(n) / cls.FPS,
             'pawstates': pawstates,
             'fps': cls.FPS,

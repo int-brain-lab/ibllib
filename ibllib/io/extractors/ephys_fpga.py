@@ -960,17 +960,15 @@ class FpgaTrials(extractors_base.BaseExtractor):
             )
 
         t_iti_in, t_trial_end = bpod_event_intervals['trial_end'].T
-        fpga_events = alfio.AlfBunch(
-            {
-                'goCue_times': audio_event_intervals['ready_tone'][:, 0],
-                'errorCue_times': audio_event_intervals['error_tone'][:, 0],
-                'valveOpen_times': bpod_event_intervals['valve_open'][:, 0],
-                'valveClose_times': bpod_event_intervals['valve_open'][:, 1],
-                'itiIn_times': t_iti_in,
-                'intervals_0': bpod_event_intervals['trial_start'][:, 0],
-                'intervals_1': t_trial_end,
-            }
-        )
+        fpga_events = alfio.AlfBunch({
+            'goCue_times': audio_event_intervals['ready_tone'][:, 0],
+            'errorCue_times': audio_event_intervals['error_tone'][:, 0],
+            'valveOpen_times': bpod_event_intervals['valve_open'][:, 0],
+            'valveClose_times': bpod_event_intervals['valve_open'][:, 1],
+            'itiIn_times': t_iti_in,
+            'intervals_0': bpod_event_intervals['trial_start'][:, 0],
+            'intervals_1': t_trial_end,
+        })
 
         # Sync the Bpod clock to the DAQ.
         # NB: The Bpod extractor typically drops the final, incomplete, trial. Hence there is
@@ -1604,15 +1602,13 @@ class FpgaTrialsHabituation(FpgaTrials):
                 'Expected at least "trial_iti" and "valve_open" Bpod events. `bpod_event_ttls` kwarg may be incorrect.'
             )
 
-        fpga_events = alfio.AlfBunch(
-            {
-                'feedback_times': bpod_event_intervals['valve_open'][:, 0],
-                'valveClose_times': bpod_event_intervals['valve_open'][:, 1],
-                'intervals_0': bpod_event_intervals['trial_iti'][:, 1],
-                'intervals_1': bpod_event_intervals['trial_iti'][:, 0],
-                'goCue_times': audio_event_intervals['ready_tone'][:, 0],
-            }
-        )
+        fpga_events = alfio.AlfBunch({
+            'feedback_times': bpod_event_intervals['valve_open'][:, 0],
+            'valveClose_times': bpod_event_intervals['valve_open'][:, 1],
+            'intervals_0': bpod_event_intervals['trial_iti'][:, 1],
+            'intervals_1': bpod_event_intervals['trial_iti'][:, 0],
+            'goCue_times': audio_event_intervals['ready_tone'][:, 0],
+        })
 
         # Sync the Bpod clock to the DAQ.
         self.bpod2fpga, drift_ppm, ibpod, ifpga = self.sync_bpod_clock(self.bpod_trials, fpga_events, self.sync_field)
@@ -1624,24 +1620,22 @@ class FpgaTrialsHabituation(FpgaTrials):
         out.update({k: self.bpod2fpga(self.bpod_trials[k][ibpod]) for k in self.bpod_rsync_fields})
 
         # Assigning each event to a trial ensures exactly one event per trial (missing events are NaN)
-        trials = alfio.AlfBunch(
-            {
-                'goCue_times': _assign_events_to_trial(out['goCueTrigger_times'], fpga_events['goCue_times'], take='first'),
-                'feedback_times': _assign_events_to_trial(fpga_events['intervals_0'], fpga_events['feedback_times']),
-                'stimCenter_times': _assign_events_to_trial(
-                    out['stimCenterTrigger_times'], self.frame2ttl['times'], take='first', t_trial_end=out['stimOffTrigger_times']
-                ),
-                'stimOn_times': _assign_events_to_trial(
-                    out['stimOnTrigger_times'], self.frame2ttl['times'], take='first', t_trial_end=out['stimCenterTrigger_times']
-                ),
-                'stimOff_times': _assign_events_to_trial(
-                    out['stimOffTrigger_times'],
-                    self.frame2ttl['times'],
-                    take='first',
-                    t_trial_end=np.r_[out['intervals'][1:, 0], np.inf],
-                ),
-            }
-        )
+        trials = alfio.AlfBunch({
+            'goCue_times': _assign_events_to_trial(out['goCueTrigger_times'], fpga_events['goCue_times'], take='first'),
+            'feedback_times': _assign_events_to_trial(fpga_events['intervals_0'], fpga_events['feedback_times']),
+            'stimCenter_times': _assign_events_to_trial(
+                out['stimCenterTrigger_times'], self.frame2ttl['times'], take='first', t_trial_end=out['stimOffTrigger_times']
+            ),
+            'stimOn_times': _assign_events_to_trial(
+                out['stimOnTrigger_times'], self.frame2ttl['times'], take='first', t_trial_end=out['stimCenterTrigger_times']
+            ),
+            'stimOff_times': _assign_events_to_trial(
+                out['stimOffTrigger_times'],
+                self.frame2ttl['times'],
+                take='first',
+                t_trial_end=np.r_[out['intervals'][1:, 0], np.inf],
+            ),
+        })
         out.update({k: trials[k][ifpga] for k in trials.keys()})
 
         # If stim on occurs before trial end, use stim on time. Likewise for trial end and stim off

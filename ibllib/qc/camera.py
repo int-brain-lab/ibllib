@@ -550,12 +550,10 @@ class CameraQC(base.QC):
             plt.gca().tick_params(left=False)
             plt.legend()
 
-        outcome = self.overall_outcome(
-            (
-                'PASS' if size_diff == 0 else 'WARNING' if np.abs(size_diff) < 5 else 'FAIL',
-                'PASS' if np.abs(ndiff_low2high) < 5 else 'WARNING',
-            )
-        )
+        outcome = self.overall_outcome((
+            'PASS' if size_diff == 0 else 'WARNING' if np.abs(size_diff) < 5 else 'FAIL',
+            'PASS' if np.abs(ndiff_low2high) < 5 else 'WARNING',
+        ))
         return outcome, ndiff_low2high, size_diff
 
     def check_dropped_frames(self, threshold=0.1):
@@ -576,12 +574,10 @@ class CameraQC(base.QC):
         dropped = np.diff(self.data['count']).astype(int) - 1
         pct_dropped = sum(dropped) / len(dropped) * 100
         # Calculate overall outcome for this check
-        outcome = self.overall_outcome(
-            (
-                'PASS' if size_diff == 0 else 'WARNING' if np.abs(size_diff) < 5 else 'FAIL',
-                'PASS' if pct_dropped < threshold else 'FAIL',
-            )
-        )
+        outcome = self.overall_outcome((
+            'PASS' if size_diff == 0 else 'WARNING' if np.abs(size_diff) < 5 else 'FAIL',
+            'PASS' if pct_dropped < threshold else 'FAIL',
+        ))
         return outcome, int(sum(dropped)), size_diff
 
     def check_timestamps(self):

@@ -677,7 +677,8 @@ class TrainingStatus(base_tasks.BehaviourTask):
             if self.one and not self.one.offline:
                 _logger.debug('Updating JSON field of subjects endpoint')
                 status = (
-                    df.set_index('date')[['training_status', 'session_path']]
+                    df
+                    .set_index('date')[['training_status', 'session_path']]
                     .drop_duplicates(subset='training_status', keep='first')
                     .to_dict()
                 )

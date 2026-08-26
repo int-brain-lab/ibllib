@@ -144,13 +144,11 @@ class ImagePlot(DefaultPlot):
         :param cmap: name of colormap to use
         """
 
-        data = Bunch(
-            {
-                'x': self._set_default(x, np.arange(img.shape[0])),
-                'y': self._set_default(y, np.arange(img.shape[1])),
-                'c': img,
-            }
-        )
+        data = Bunch({
+            'x': self._set_default(x, np.arange(img.shape[0])),
+            'y': self._set_default(y, np.arange(img.shape[1])),
+            'c': img,
+        })
 
         # Make sure dimensions agree
         assert data['c'].shape[0] == data['x'].shape[0], 'dimensions must agree'

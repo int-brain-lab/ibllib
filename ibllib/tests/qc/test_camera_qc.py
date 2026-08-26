@@ -149,49 +149,45 @@ class TestCameraQC(unittest.TestCase):
         figs = plt.get_fignums()
         self.assertEqual(len(plt.figure(figs[0]).axes), 16)
         # Verify Laplacian on blurred images
-        expected = np.array(
-            [
-                11.82,
-                12.94,
-                13.84,
-                14.52,
-                15.68,
-                16.76,
-                18.85,
-                21.9,
-                25.45,
-                31.3,
-                40.48,
-                54.05,
-                81.53,
-                133.19,
-                425.15,
-                425.15,
-            ]
-        )
+        expected = np.array([
+            11.82,
+            12.94,
+            13.84,
+            14.52,
+            15.68,
+            16.76,
+            18.85,
+            21.9,
+            25.45,
+            31.3,
+            40.48,
+            54.05,
+            81.53,
+            133.19,
+            425.15,
+            425.15,
+        ])
         actual = [round(x, 2) for x in plt.figure(figs[1]).axes[3].lines[0]._y.tolist()]
         np.testing.assert_array_equal(expected, actual)
         # Verify fft on blurred images
-        expected = np.array(
-            [
-                6.91,
-                7.2,
-                7.61,
-                8.08,
-                8.76,
-                9.47,
-                10.35,
-                11.22,
-                11.04,
-                11.42,
-                11.35,
-                11.94,
-                12.45,
-                13.22,
-                13.6,
-                13.6,
-            ]
-        )
+        expected = np.array([
+            6.91,
+            7.2,
+            7.61,
+            8.08,
+            8.76,
+            9.47,
+            10.35,
+            11.22,
+            11.04,
+            11.42,
+            11.35,
+            11.94,
+            12.45,
+            13.22,
+            13.6,
+            13.6,
+        ])
         actual = [round(x, 2) for x in plt.figure(figs[2]).axes[3].lines[0]._y.tolist()]
         np.testing.assert_array_almost_equal(expected, actual, 1)
 

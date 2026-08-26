@@ -413,20 +413,18 @@ class TestEphysCameraExtractor(base.IntegrationTest):
         self.assertEqual(ts.size, n_frames, 'unexpected size')
         self.assertTrue(not np.isnan(ts).any(), 'nans in timestamps')
         self.assertTrue(np.all(np.diff(ts) > 0), 'timestamps not strictly increasing')
-        expected = np.array(
-            [
-                197.76558813,
-                197.79905145,
-                197.81578311,
-                197.83251477,
-                197.84924643,
-                197.86597809,
-                197.88270975,
-                197.89944141,
-                197.91617307,
-                197.93290473,
-            ]
-        )
+        expected = np.array([
+            197.76558813,
+            197.79905145,
+            197.81578311,
+            197.83251477,
+            197.84924643,
+            197.86597809,
+            197.88270975,
+            197.89944141,
+            197.91617307,
+            197.93290473,
+        ])
         np.testing.assert_array_almost_equal(ts[:10], expected)
 
         # Test extraction parameters
@@ -813,20 +811,18 @@ class TestWheelMotionNRG(base.IntegrationTest):
                 aln.align_motion(period=[5000, 5000.01], side=side)
 
             dt_i, c, df = aln.align_motion(period=period, side=side)
-        expected = np.array(
-            [
-                0.90278801,
-                0.68067675,
-                0.73734772,
-                0.82648895,
-                0.80950881,
-                0.88054471,
-                0.84264046,
-                0.302118,
-                0.94302567,
-                0.86188695,
-            ]
-        )
+        expected = np.array([
+            0.90278801,
+            0.68067675,
+            0.73734772,
+            0.82648895,
+            0.80950881,
+            0.88054471,
+            0.84264046,
+            0.302118,
+            0.94302567,
+            0.86188695,
+        ])
         np.testing.assert_array_almost_equal(expected, df[:10])
         self.assertEqual(1, dt_i)
         self.assertEqual(18.74374, round(c, 5))

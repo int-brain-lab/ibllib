@@ -95,19 +95,17 @@ class TestDLC(unittest.TestCase):
     def test_likelihood_threshold(self):
         """Test for brainbox.behavior.dlc.likelihood_threshold"""
 
-        dlc_data = pd.DataFrame(
-            {
-                'nose_x': [10.0, 20.0, 30.0, 40.0, 50.0],
-                'nose_y': [15.0, 25.0, 35.0, 45.0, 55.0],
-                'nose_likelihood': [0.95, 0.85, 0.92, 0.88, 0.91],
-                'ear_x': [12.0, 22.0, 32.0, 42.0, 52.0],
-                'ear_y': [17.0, 27.0, 37.0, 47.0, 57.0],
-                'ear_likelihood': [0.99, 0.75, 0.80, 0.95, 0.60],
-                'tail_x': [5.0, 15.0, 25.0, 35.0, 45.0],
-                'tail_y': [8.0, 18.0, 28.0, 38.0, 48.0],
-                'tail_likelihood': [0.70, 0.95, 0.85, 0.92, 0.88],
-            }
-        )
+        dlc_data = pd.DataFrame({
+            'nose_x': [10.0, 20.0, 30.0, 40.0, 50.0],
+            'nose_y': [15.0, 25.0, 35.0, 45.0, 55.0],
+            'nose_likelihood': [0.95, 0.85, 0.92, 0.88, 0.91],
+            'ear_x': [12.0, 22.0, 32.0, 42.0, 52.0],
+            'ear_y': [17.0, 27.0, 37.0, 47.0, 57.0],
+            'ear_likelihood': [0.99, 0.75, 0.80, 0.95, 0.60],
+            'tail_x': [5.0, 15.0, 25.0, 35.0, 45.0],
+            'tail_y': [8.0, 18.0, 28.0, 38.0, 48.0],
+            'tail_likelihood': [0.70, 0.95, 0.85, 0.92, 0.88],
+        })
 
         # Test with default threshold of 0.9
         result = dlc.likelihood_threshold(dlc_data.copy())
