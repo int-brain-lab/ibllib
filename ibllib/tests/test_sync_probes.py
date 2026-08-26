@@ -76,9 +76,11 @@ class TestVersion3BAnomalyRaising(unittest.TestCase):
 
         self.patches = [
             mock.patch.object(sync_probes.spikeglx, 'glob_ephys_files', return_value=self.ephys_files),
-            mock.patch.object(sync_probes.alfio, 'load_object', side_effect=lambda path, *a, **k: (
-                nidq_ef['sync'] if path == nidq_ef.path else probe_ef['sync']
-            )),
+            mock.patch.object(
+                sync_probes.alfio,
+                'load_object',
+                side_effect=lambda path, *a, **k: nidq_ef['sync'] if path == nidq_ef.path else probe_ef['sync'],
+            ),
             mock.patch.object(sync_probes, 'get_ibl_sync_map', return_value={'imec_sync': 6}),
             mock.patch.object(sync_probes, '_get_sr', return_value=30000.0),
             mock.patch.object(sync_probes, '_save_timestamps_npy', return_value=['fake_sync.npy', 'fake_timestamps.npy']),
@@ -128,8 +130,7 @@ class TestVersion3AAnomalyRaising(unittest.TestCase):
             mock.patch.object(sync_probes, '_get_sr', return_value=30000.0),
             mock.patch.object(sync_probes, '_save_timestamps_npy', return_value=['fake_sync.npy', 'fake_timestamps.npy']),
             # force the tolerance check to fail regardless of the (irrelevant here) input data
-            mock.patch.object(sync_probes, 'sync_probe_front_times',
-                               return_value=(np.array([[0.0, 0.0], [1.0, 1.0]]), False)),
+            mock.patch.object(sync_probes, 'sync_probe_front_times', return_value=(np.array([[0.0, 0.0], [1.0, 1.0]]), False)),
         ]
         for p in self.patches:
             mocked = p.start()
