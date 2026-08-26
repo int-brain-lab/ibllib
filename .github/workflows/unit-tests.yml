@@ -10,8 +10,6 @@ on:
 jobs:
   ruff:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -26,6 +24,7 @@ jobs:
         run: python -m ruff check .
   build:
     name: build (${{ matrix.python-version }}, ${{ matrix.os }})
+    needs: ruff
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false  # Whether to stop execution of other instances
