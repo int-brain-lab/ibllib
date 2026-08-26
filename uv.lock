@@ -13,7 +13,6 @@ required-markers = [
     "platform_machine == 'x86_64' and sys_platform == 'linux'",
     "platform_machine == 'AMD64' and sys_platform == 'win32'",
     "platform_machine == 'arm64' and sys_platform == 'darwin'",
-    "platform_machine == 'x86_64' and sys_platform == 'darwin'",
 ]
 
 [[package]]
@@ -867,7 +866,6 @@ dependencies = [
     { name = "boto3" },
     { name = "click" },
     { name = "colorlog" },
-    { name = "flake8" },
     { name = "globus-sdk" },
     { name = "graphviz" },
     { name = "ibl-neuropixel" },
@@ -894,7 +892,6 @@ dependencies = [
     { name = "pyarrow" },
     { name = "pynrrd" },
     { name = "pyqt5" },
-    { name = "pytest" },
     { name = "requests" },
     { name = "scikit-image", version = "0.25.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "scikit-image", version = "0.26.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
@@ -918,7 +915,9 @@ wfield = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "flake8" },
     { name = "flake8-docstrings" },
+    { name = "pytest" },
     { name = "ruff" },
 ]
 
@@ -927,7 +926,6 @@ requires-dist = [
     { name = "boto3" },
     { name = "click", specifier = ">=7.0.0" },
     { name = "colorlog", specifier = ">=4.0.2" },
-    { name = "flake8", specifier = ">=3.7.8" },
     { name = "globus-sdk", specifier = ">=4.0.0" },
     { name = "graphviz" },
     { name = "ibl-neuropixel", specifier = ">=1.10.0" },
@@ -951,7 +949,6 @@ requires-dist = [
     { name = "pyarrow" },
     { name = "pynrrd", specifier = ">=0.4.0" },
     { name = "pyqt5" },
-    { name = "pytest" },
     { name = "requests", specifier = ">=2.22.0" },
     { name = "scikit-image" },
     { name = "scikit-learn", specifier = ">=0.22.1" },
@@ -966,7 +963,9 @@ provides-extras = ["wfield"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "flake8", specifier = ">=3.7.8" },
     { name = "flake8-docstrings" },
+    { name = "pytest" },
     { name = "ruff" },
 ]
 
