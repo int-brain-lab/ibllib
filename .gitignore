@@ -12,6 +12,7 @@ python/scratch
 *checkpoint.ipynb
 build/
 venv/
+.venv/
 ibllibenv/
 dist/
 ibllib.egg-info/
