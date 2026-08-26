@@ -960,9 +960,9 @@ def pose_qc_plot(
 
     # Simplify and clean up trials data
     if data['trials']:
-        data['trials'] = pd.DataFrame({
-            k: data['trials'][k] for k in ['stimOn_times', 'feedback_times', 'choice', 'feedbackType']
-        })
+        data['trials'] = pd.DataFrame(
+            {k: data['trials'][k] for k in ['stimOn_times', 'feedback_times', 'choice', 'feedbackType']}
+        )
         # Discard nan events and too long trials
         data['trials'] = data['trials'].dropna()
         data['trials'] = data['trials'].drop(
@@ -995,10 +995,16 @@ def pose_qc_plot(
 
         # Panel E: Wheel position
         if data['wheel']:
-            panels.append((
-                plot_wheel_position,
-                {'wheel_position': data['wheel'].position, 'wheel_time': data['wheel'].timestamps, 'trials_df': data['trials']},
-            ))
+            panels.append(
+                (
+                    plot_wheel_position,
+                    {
+                        'wheel_position': data['wheel'].position,
+                        'wheel_time': data['wheel'].timestamps,
+                        'trials_df': data['trials'],
+                    },
+                )
+            )
         else:
             panels.append((None, 'Data missing\nWheel position'))
 
@@ -1015,27 +1021,31 @@ def pose_qc_plot(
             fail = True
         if not fail:
             paw = 'r' if cam == 'left' else 'l'
-            panels.append((
-                plot_speed_hist,
-                {
-                    'dlc_df': data[f'{cam}_{tracker}'],
-                    'cam_times': data[f'{cam}_times'],
-                    'trials_df': data['trials'],
-                    'feature': f'paw_{paw}',
-                    'cam': cam,
-                },
-            ))
-            panels.append((
-                plot_speed_hist,
-                {
-                    'dlc_df': data[f'{cam}_{tracker}'],
-                    'cam_times': data[f'{cam}_times'],
-                    'trials_df': data['trials'],
-                    'feature': 'nose_tip',
-                    'legend': False,
-                    'cam': cam,
-                },
-            ))
+            panels.append(
+                (
+                    plot_speed_hist,
+                    {
+                        'dlc_df': data[f'{cam}_{tracker}'],
+                        'cam_times': data[f'{cam}_times'],
+                        'trials_df': data['trials'],
+                        'feature': f'paw_{paw}',
+                        'cam': cam,
+                    },
+                )
+            )
+            panels.append(
+                (
+                    plot_speed_hist,
+                    {
+                        'dlc_df': data[f'{cam}_{tracker}'],
+                        'cam_times': data[f'{cam}_times'],
+                        'trials_df': data['trials'],
+                        'feature': 'nose_tip',
+                        'legend': False,
+                        'cam': cam,
+                    },
+                )
+            )
         else:
             panels.extend([(None, 'Data missing or corrupt\nSpeed histograms')] * 2)
 
@@ -1059,15 +1069,17 @@ def pose_qc_plot(
                 break
             fail = True
         if not fail:
-            panels.append((
-                plot_pupil_diameter_hist,
-                {
-                    'pupil_diameter': data[f'{cam}_features'].pupilDiameter_smooth,
-                    'cam_times': data[f'{cam}_times'],
-                    'trials_df': data['trials'],
-                    'cam': cam,
-                },
-            ))
+            panels.append(
+                (
+                    plot_pupil_diameter_hist,
+                    {
+                        'pupil_diameter': data[f'{cam}_features'].pupilDiameter_smooth,
+                        'cam_times': data[f'{cam}_times'],
+                        'trials_df': data['trials'],
+                        'cam': cam,
+                    },
+                )
+            )
         else:
             panels.append((None, 'Data missing or corrupt\nPupil diameter'))
 
@@ -1159,18 +1171,20 @@ def pawstates_qc_plot(data, camera, paw, tracker, session_id=None):
     # Panel A-D: Paw positions for each state
     for i, state in enumerate(STATE_LABELS):
         if data.get('frame') is not None and data.get('data_df') is not None:
-            panels.append((
-                plot_paw_positions_by_state,
-                {
-                    'frame': data['frame'],
-                    'data_df': data['data_df'],
-                    'state': state,
-                    'state_idx': i,
-                    'camera': camera,
-                    'paw': paw,
-                    'tracker': tracker,
-                },
-            ))
+            panels.append(
+                (
+                    plot_paw_positions_by_state,
+                    {
+                        'frame': data['frame'],
+                        'data_df': data['data_df'],
+                        'state': state,
+                        'state_idx': i,
+                        'camera': camera,
+                        'paw': paw,
+                        'tracker': tracker,
+                    },
+                )
+            )
         else:
             panels.append((None, f'Data missing\n{state} paw positions'))
 
@@ -1187,47 +1201,55 @@ def pawstates_qc_plot(data, camera, paw, tracker, session_id=None):
 
     for i, state in enumerate(STATE_LABELS):
         if data.get('durations') is not None:
-            panels.append((
-                plot_state_duration_histogram,
-                {
-                    'durations': data['durations'],
-                    'state': state,
-                    'state_idx': i,
-                    'xlim': duration_xlim,
-                },
-            ))
+            panels.append(
+                (
+                    plot_state_duration_histogram,
+                    {
+                        'durations': data['durations'],
+                        'state': state,
+                        'state_idx': i,
+                        'xlim': duration_xlim,
+                    },
+                )
+            )
         else:
             panels.append((None, f'Data missing\n{state} durations'))
 
     # Panel I-J: Wheel speed transitions
     if data.get('wheel_transitions') is not None and data.get('data_df') is not None:
-        panels.append((
-            plot_wheel_speed_transitions,
-            {
-                'wheel_transitions': data['wheel_transitions'],
-                'data_df': data['data_df'],
-                'fps': data['fps'],
-                'transition_start': 'still',
-            },
-        ))
-        panels.append((
-            plot_wheel_speed_transitions,
-            {
-                'wheel_transitions': data['wheel_transitions'],
-                'data_df': data['data_df'],
-                'fps': data['fps'],
-                'transition_start': 'wheel_turn',
-            },
-        ))
+        panels.append(
+            (
+                plot_wheel_speed_transitions,
+                {
+                    'wheel_transitions': data['wheel_transitions'],
+                    'data_df': data['data_df'],
+                    'fps': data['fps'],
+                    'transition_start': 'still',
+                },
+            )
+        )
+        panels.append(
+            (
+                plot_wheel_speed_transitions,
+                {
+                    'wheel_transitions': data['wheel_transitions'],
+                    'data_df': data['data_df'],
+                    'fps': data['fps'],
+                    'transition_start': 'wheel_turn',
+                },
+            )
+        )
     else:
         panels.extend([(None, 'Data missing\nWheel transitions'), (None, 'Data missing\nWheel transitions')])
 
     # Panel K: Paw speed transitions
     if data.get('wheel_transitions') is not None and data.get('data_df') is not None:
-        panels.append((
-            plot_paw_speed_transitions,
-            {'wheel_transitions': data['wheel_transitions'], 'data_df': data['data_df'], 'fps': data['fps']},
-        ))
+        panels.append(
+            (
+                plot_paw_speed_transitions,
+                {'wheel_transitions': data['wheel_transitions'], 'data_df': data['data_df'], 'fps': data['fps']},
+            )
+        )
     else:
         panels.extend([(None, 'Data missing\nPaw transitions')])
 

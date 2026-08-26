@@ -253,12 +253,14 @@ class TimelineTrials(FpgaTrials):
             )
 
         t_iti_in, t_trial_end = bpod_event_intervals['trial_end'].T
-        fpga_events = alfio.AlfBunch({
-            'itiIn_times': t_iti_in,
-            'intervals_1': t_trial_end,
-            'goCue_times': audio_event_intervals['ready_tone'][:, 0],
-            'errorTone_times': audio_event_intervals['error_tone'][:, 0],
-        })
+        fpga_events = alfio.AlfBunch(
+            {
+                'itiIn_times': t_iti_in,
+                'intervals_1': t_trial_end,
+                'goCue_times': audio_event_intervals['ready_tone'][:, 0],
+                'errorTone_times': audio_event_intervals['error_tone'][:, 0],
+            }
+        )
 
         # Sync the Bpod clock to the DAQ
         self.bpod2fpga, drift_ppm, ibpod, ifpga = self.sync_bpod_clock(self.bpod_trials, fpga_events, self.sync_field)

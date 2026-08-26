@@ -89,14 +89,16 @@ def _get_spike_sorting_collection(collections, pname):
 
 
 def _channels_alyx2bunch(chans):
-    channels = Bunch({
-        'atlas_id': np.array([ch['brain_region'] for ch in chans]),
-        'x': np.array([ch['x'] for ch in chans]) / 1e6,
-        'y': np.array([ch['y'] for ch in chans]) / 1e6,
-        'z': np.array([ch['z'] for ch in chans]) / 1e6,
-        'axial_um': np.array([ch['axial'] for ch in chans]),
-        'lateral_um': np.array([ch['lateral'] for ch in chans]),
-    })
+    channels = Bunch(
+        {
+            'atlas_id': np.array([ch['brain_region'] for ch in chans]),
+            'x': np.array([ch['x'] for ch in chans]) / 1e6,
+            'y': np.array([ch['y'] for ch in chans]) / 1e6,
+            'z': np.array([ch['z'] for ch in chans]) / 1e6,
+            'axial_um': np.array([ch['axial'] for ch in chans]),
+            'lateral_um': np.array([ch['lateral'] for ch in chans]),
+        }
+    )
     return channels
 
 

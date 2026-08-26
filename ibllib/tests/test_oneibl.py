@@ -102,14 +102,16 @@ class _GlobusPatcherTest(unittest.TestCase):
         self.root_path = Path(self.tempdir.name).resolve()
         self.addCleanup(self.tempdir.cleanup)
         # Mock the Globus setup process so the parameters aren't overwritten
-        self.pars = iopar.from_dict({
-            'GLOBUS_CLIENT_ID': '123',
-            'refresh_token': '456',
-            'local_endpoint': str(uuid.uuid1()),
-            'local_path': str(self.root_path),
-            'access_token': 'abc',
-            'expires_at_seconds': datetime.datetime.now().timestamp() + 60**2,
-        })
+        self.pars = iopar.from_dict(
+            {
+                'GLOBUS_CLIENT_ID': '123',
+                'refresh_token': '456',
+                'local_endpoint': str(uuid.uuid1()),
+                'local_path': str(self.root_path),
+                'access_token': 'abc',
+                'expires_at_seconds': datetime.datetime.now().timestamp() + 60**2,
+            }
+        )
         # Mock the globus SDK so that no actual tasks are submitted
         globus_sdk_mock = mock.patch('one.remote.globus.globus_sdk')
         self.globus_sdk_mock = globus_sdk_mock.start()

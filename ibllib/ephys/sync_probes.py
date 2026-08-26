@@ -64,12 +64,14 @@ def version3A(ses_path, display=True, type='smooth', tol=2.1, probe_names=None):
         return True, out_files
 
     def get_sync_fronts(auxiliary_name):
-        d = Bunch({
-            'times': [],
-            'nsync': np.zeros(
-                nprobes,
-            ),
-        })
+        d = Bunch(
+            {
+                'times': [],
+                'nsync': np.zeros(
+                    nprobes,
+                ),
+            }
+        )
         # auxiliary_name: frame2ttl or right_camera
         for ind, ephys_file in enumerate(ephys_files):
             sync = alfio.load_object(ephys_file.ap.parent, 'sync', namespace='spikeglx', short_keys=True)

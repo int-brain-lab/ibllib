@@ -155,9 +155,9 @@ class PoseQC(base.QC):
         # find timepoints in windows around stimulus onset
         start_idx, end_idx = self._compute_trial_window_idxs()
         # compute fraction of points in windows that are NaN
-        pose_coords = np.concatenate([
-            self.data['pose_coords'][body_part][0, start_idx[i] : end_idx[i]] for i in range(len(start_idx))
-        ])
+        pose_coords = np.concatenate(
+            [self.data['pose_coords'][body_part][0, start_idx[i] : end_idx[i]] for i in range(len(start_idx))]
+        )
         prop_nan = np.sum(np.isnan(pose_coords)) / pose_coords.shape[0]
         return prop_nan
 

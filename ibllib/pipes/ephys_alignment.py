@@ -318,9 +318,9 @@ class EphysAlignment:
 
             if parent:
                 # Now compute for the parents
-                brain_parent = np.array([
-                    allen['parent_structure_id'][np.where(allen['id'] == br)[0][0]] for br in brain_id_sorted
-                ])
+                brain_parent = np.array(
+                    [allen['parent_structure_id'][np.where(allen['id'] == br)[0][0]] for br in brain_id_sorted]
+                )
                 brain_parent[np.isnan(brain_parent)] = 0
 
                 nearest_bound['parent_id'][iP] = brain_parent[0]

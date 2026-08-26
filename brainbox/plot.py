@@ -777,10 +777,12 @@ def driftmap_color(
 
     sorted_idx = np.argsort(np.argsort(clusters_depths))
 
-    colors = np.vstack([
-        np.repeat(new_color_bins[np.mod(idx, 500), :][np.newaxis, ...], n_spikes, axis=0)
-        for (idx, n_spikes) in zip(sorted_idx, np.unique(spikes_clusters, return_counts=True)[1])
-    ])
+    colors = np.vstack(
+        [
+            np.repeat(new_color_bins[np.mod(idx, 500), :][np.newaxis, ...], n_spikes, axis=0)
+            for (idx, n_spikes) in zip(sorted_idx, np.unique(spikes_clusters, return_counts=True)[1])
+        ]
+    )
 
     max_amp = np.percentile(spikes_amps, 90)
     min_amp = np.percentile(spikes_amps, 10)

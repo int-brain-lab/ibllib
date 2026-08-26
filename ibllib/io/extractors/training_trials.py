@@ -189,9 +189,11 @@ class FeedbackTimes(BaseBpodTrialsExtractor):
             data = raw.load_data(session_path, task_collection=task_collection)
         missed_bnc2 = 0
         rw_times, err_sound_times, merge = [
-            np.zeros([
-                len(data),
-            ])
+            np.zeros(
+                [
+                    len(data),
+                ]
+            )
             for _ in range(3)
         ]
 
@@ -331,9 +333,11 @@ class GoCueTimes(BaseBpodTrialsExtractor):
     var_names = 'goCue_times'
 
     def _extract(self):
-        go_cue_times = np.zeros([
-            len(self.bpod_trials),
-        ])
+        go_cue_times = np.zeros(
+            [
+                len(self.bpod_trials),
+            ]
+        )
         for ind, tr in enumerate(self.bpod_trials):
             if raw.get_port_events(tr, 'BNC2'):
                 bnchigh = tr['behavior_data']['Events timestamps'].get('BNC2High', None)
@@ -416,17 +420,24 @@ class StimFreezeTriggerTimes(BaseBpodTrialsExtractor):
     def _extract(self):
         if version.parse(self.settings['IBLRIG_VERSION'] or '100.0.0') < version.parse('6.2.5'):
             return np.ones(len(self.bpod_trials)) * np.nan
-        freeze_reward = np.array([
-            True if np.all(~np.isnan(tr['behavior_data']['States timestamps']['freeze_reward'][0])) else False
-            for tr in self.bpod_trials
-        ])
-        freeze_error = np.array([
-            True if np.all(~np.isnan(tr['behavior_data']['States timestamps']['freeze_error'][0])) else False
-            for tr in self.bpod_trials
-        ])
-        no_go = np.array([
-            True if np.all(~np.isnan(tr['behavior_data']['States timestamps']['no_go'][0])) else False for tr in self.bpod_trials
-        ])
+        freeze_reward = np.array(
+            [
+                True if np.all(~np.isnan(tr['behavior_data']['States timestamps']['freeze_reward'][0])) else False
+                for tr in self.bpod_trials
+            ]
+        )
+        freeze_error = np.array(
+            [
+                True if np.all(~np.isnan(tr['behavior_data']['States timestamps']['freeze_error'][0])) else False
+                for tr in self.bpod_trials
+            ]
+        )
+        no_go = np.array(
+            [
+                True if np.all(~np.isnan(tr['behavior_data']['States timestamps']['no_go'][0])) else False
+                for tr in self.bpod_trials
+            ]
+        )
         assert np.sum(freeze_error) + np.sum(freeze_reward) + np.sum(no_go) == len(self.bpod_trials)
         stimFreezeTrigger = np.array([])
         for r, e, n, tr in zip(freeze_reward, freeze_error, no_go, self.bpod_trials):
@@ -450,9 +461,9 @@ class StimOffTriggerTimes(BaseBpodTrialsExtractor):
         else:
             stim_off_trigger_state = 'trial_start'
 
-        stimOffTrigger_times = np.array([
-            tr['behavior_data']['States timestamps'][stim_off_trigger_state][0][0] for tr in self.bpod_trials
-        ])
+        stimOffTrigger_times = np.array(
+            [tr['behavior_data']['States timestamps'][stim_off_trigger_state][0][0] for tr in self.bpod_trials]
+        )
         # If pre version 5.0.0 no specific nogo Off trigger was given, just return trial_starts
         if stim_off_trigger_state == 'trial_start':
             return stimOffTrigger_times

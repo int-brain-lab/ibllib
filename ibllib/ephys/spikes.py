@@ -153,20 +153,24 @@ def sync_spike_sorting(ap_file, out_path):
     interp_times = apply_sync(sync_file, spike_samples / _sr(ap_file), forward=True)
     np.save(st_file, interp_times)
     # get the list of output files
-    out_files.extend([
-        f
-        for f in out_path.glob('*.*')
-        if f.name.startswith((
-            'channels.',
-            'drift',
-            'clusters.',
-            'spikes.',
-            'templates.',
-            '_kilosort_',
-            '_phy_spikes_subset',
-            '_ibl_log.info',
-        ))
-    ])
+    out_files.extend(
+        [
+            f
+            for f in out_path.glob('*.*')
+            if f.name.startswith(
+                (
+                    'channels.',
+                    'drift',
+                    'clusters.',
+                    'spikes.',
+                    'templates.',
+                    '_kilosort_',
+                    '_phy_spikes_subset',
+                    '_ibl_log.info',
+                )
+            )
+        ]
+    )
     # the QC files computed during spike sorting stay within the raw ephys data folder
     out_files.extend(list(ap_file.parent.glob('_iblqc_*AP.*.npy')))
     return out_files, 0
