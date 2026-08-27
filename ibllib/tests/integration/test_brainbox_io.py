@@ -21,17 +21,12 @@ br = BrainRegions()
 
 
 class TestSpikeInterface(unittest.TestCase):
-
     def test_spike_interface(self):
         """
         Those are the specifications for the spike interface tests to pass.
         :return:
         """
-        one = ONE(
-            base_url='https://openalyx.internationalbrainlab.org',
-            silent=True,
-            password='international'
-        )
+        one = ONE(base_url='https://openalyx.internationalbrainlab.org', silent=True, password='international')
         pid = '80f6ffdd-f692-450f-ab19-cd6d45bfd73e'
         ssl = SpikeSortingLoader(pid=pid, one=one)
 
@@ -46,13 +41,8 @@ class TestSpikeInterface(unittest.TestCase):
 
 
 class TestReadChannels(unittest.TestCase):
-
     def test_read_channels(self):
-        one = ONE(
-            base_url='https://openalyx.internationalbrainlab.org',
-            silent=True,
-            password='international'
-        )
+        one = ONE(base_url='https://openalyx.internationalbrainlab.org', silent=True, password='international')
         pid = '511afaa5-fdc4-4166-b4c0-4629ec5e652e'
         ssl = SpikeSortingLoader(one=one, pid=pid)
         channels = ssl.load_channels(revision='2024-05-06')
@@ -63,7 +53,6 @@ class TestReadChannels(unittest.TestCase):
 
 
 class TestReadSpikeSorting(IntegrationTest):
-
     required_files = ['brainbox/io/spike_sorting']
     _writable_scope = 'test'
 
@@ -112,16 +101,15 @@ class TestReadSpikeSorting(IntegrationTest):
         assert BUNCH_KEYS.issubset(set(channels.keys()))
 
         h = trace_header(1)
-        raw_channels = bbone.channel_locations_interpolation(
-            alf_channels, {'localCoordinates': np.c_[h['x'], h['y']]})
+        raw_channels = bbone.channel_locations_interpolation(alf_channels, {'localCoordinates': np.c_[h['x'], h['y']]})
         assert set(raw_channels.keys()) == ALF_KEYS
         channels = bbone.channel_locations_interpolation(
-            alf_channels, {'localCoordinates': np.c_[h['x'], h['y']]}, brain_regions=br)
+            alf_channels, {'localCoordinates': np.c_[h['x'], h['y']]}, brain_regions=br
+        )
         assert set(channels.keys()) == BUNCH_KEYS
 
         # this function should also be able to take a bunch formatted dict as input
-        channels = bbone.channel_locations_interpolation(
-            channels, {'localCoordinates': np.c_[h['x'], h['y']]}, brain_regions=br)
+        channels = bbone.channel_locations_interpolation(channels, {'localCoordinates': np.c_[h['x'], h['y']]}, brain_regions=br)
         assert set(channels.keys()) == BUNCH_KEYS
 
     def test_display_spike_sorting(self):
@@ -147,12 +135,14 @@ class TestReadSpikeSorting(IntegrationTest):
         # load spike sorting using collection
         # this is not recommended as the spike sorter property doesn not match the spike sorting loaded
         spikes, clusters, channels = sl.load_spike_sorting(
-            collection=f'alf/{self.pname}/ks2_preproc_tests', enforce_version=False)
+            collection=f'alf/{self.pname}/ks2_preproc_tests', enforce_version=False
+        )
         self._check(spikes['times'], spike_sorter='ks2_preproc_tests')
 
         # makes sure this is the pykilosort that is returned by default1
         spikes, clusters, channels = bbone._load_spike_sorting(
-            eid=self.eid, one=self.one, collection=f'alf/*{self.pname}/*', return_channels=True)
+            eid=self.eid, one=self.one, collection=f'alf/*{self.pname}/*', return_channels=True
+        )
         self._check(spikes[self.pname]['times'])
 
         # Tests for loading of manually curated datasets
@@ -160,8 +150,9 @@ class TestReadSpikeSorting(IntegrationTest):
         # namespace = 'av' it should read in the av clusters objects and replace the spikes.clusters with the av version.
         for namespace in [None, 'av', 'mf']:
             with self.subTest(namespace=namespace):
-                spikes, clusters, channels = sl.load_spike_sorting(enforce_version=False, namespace=namespace,
-                                                                   dataset_types=['clusters.curatedLabels'])
+                spikes, clusters, channels = sl.load_spike_sorting(
+                    enforce_version=False, namespace=namespace, dataset_types=['clusters.curatedLabels']
+                )
                 self._check(spikes['times'], spike_sorter='pykilosort')
                 self._check_spike_clusters(spikes['clusters'], namespace=namespace)
                 self._check_cluster_depths(clusters['depths'], namespace=namespace)
@@ -171,8 +162,7 @@ class TestReadSpikeSorting(IntegrationTest):
                     assert 'curatedLabels' not in clusters.keys()
 
         # Check that it isn't possible to load spikesorting with good_units=True and namespace not None
-        spikes, clusters, channels = sl.load_spike_sorting(enforce_version=False, namespace='av',
-                                                           good_units=True)
+        spikes, clusters, channels = sl.load_spike_sorting(enforce_version=False, namespace='av', good_units=True)
         assert spikes is None
         assert clusters is None
         assert channels is None
@@ -193,7 +183,6 @@ class TestReadSpikeSorting(IntegrationTest):
 
 
 class TestSessionLoader(IntegrationTest):
-
     required_files = ['ephys/choice_world_init/KS022/2019-12-10/001']
 
     @classmethod
@@ -216,10 +205,23 @@ class TestSessionLoader(IntegrationTest):
 
     def test_load_trials_data(self):
         expected = [
-            'stimOff_times', 'goCueTrigger_times', 'intervals_bpod_0', 'intervals_bpod_1',
-            'probabilityLeft', 'contrastRight', 'firstMovement_times', 'goCue_times', 'feedbackType', 'choice',
-            'contrastLeft', 'stimOn_times', 'rewardVolume', 'feedback_times', 'response_times',
-            'intervals_0', 'intervals_1'
+            'stimOff_times',
+            'goCueTrigger_times',
+            'intervals_bpod_0',
+            'intervals_bpod_1',
+            'probabilityLeft',
+            'contrastRight',
+            'firstMovement_times',
+            'goCue_times',
+            'feedbackType',
+            'choice',
+            'contrastLeft',
+            'stimOn_times',
+            'rewardVolume',
+            'feedback_times',
+            'response_times',
+            'intervals_0',
+            'intervals_1',
         ]
         self.sess_loader.load_trials()
         self.assertCountEqual(expected, self.sess_loader.trials.columns)
@@ -234,18 +236,21 @@ class TestSessionLoader(IntegrationTest):
         self.assertIsInstance(self.sess_loader.pose, dict)
         self.assertCountEqual(['leftCamera', 'bodyCamera'], self.sess_loader.pose.keys())
         self.assertIn('times', self.sess_loader.pose['leftCamera'].columns)
-        self.assertCountEqual(['times', 'tail_start_x', 'tail_start_y', 'tail_start_likelihood'],
-                              self.sess_loader.pose['bodyCamera'].columns)
+        self.assertCountEqual(
+            ['times', 'tail_start_x', 'tail_start_y', 'tail_start_likelihood'], self.sess_loader.pose['bodyCamera'].columns
+        )
         self.assertEqual((4000, 4), self.sess_loader.pose['bodyCamera'].shape)
         self.assertEqual((4000, 34), self.sess_loader.pose['leftCamera'].shape)
 
-        all_nan = [c for c in self.sess_loader.pose['leftCamera'].columns if
-                   all(np.isnan(self.sess_loader.pose['leftCamera'][c]))]
+        all_nan = [
+            c for c in self.sess_loader.pose['leftCamera'].columns if all(np.isnan(self.sess_loader.pose['leftCamera'][c]))
+        ]
         self.assertCountEqual(['pupil_bottom_r_x', 'pupil_bottom_r_y'], all_nan)
 
         self.sess_loader.load_pose(likelihood_thr=0.5, views=['left'])
-        all_nan = [c for c in self.sess_loader.pose['leftCamera'].columns if
-                   all(np.isnan(self.sess_loader.pose['leftCamera'][c]))]
+        all_nan = [
+            c for c in self.sess_loader.pose['leftCamera'].columns if all(np.isnan(self.sess_loader.pose['leftCamera'][c]))
+        ]
         self.assertTrue(len(all_nan) == 0)
 
     def test_load_motion_energy(self):
@@ -278,26 +283,31 @@ class TestSessionLoader(IntegrationTest):
         # Make sure data is not reloaded
         with self.assertLogs(_logger, level='DEBUG') as cm:
             self.sess_loader.load_session_data()
-            self.assertEqual([
-                'DEBUG:ibllib:Not loading trials data, is already loaded and reload=False.',
-                'DEBUG:ibllib:Not loading wheel data, is already loaded and reload=False.',
-                'DEBUG:ibllib:Not loading pose data, is already loaded and reload=False.',
-                'DEBUG:ibllib:Not loading motion_energy data, is already loaded and reload=False.',
-                'DEBUG:ibllib:Not loading pupil data, is already loaded and reload=False.',
-                'DEBUG:ibllib:Not loading licks data, is already loaded and reload=False.',
-                'DEBUG:ibllib:Not loading pawstates data, is already loaded and reload=False.'
-
-            ], cm.output)
+            self.assertEqual(
+                [
+                    'DEBUG:ibllib:Not loading trials data, is already loaded and reload=False.',
+                    'DEBUG:ibllib:Not loading wheel data, is already loaded and reload=False.',
+                    'DEBUG:ibllib:Not loading pose data, is already loaded and reload=False.',
+                    'DEBUG:ibllib:Not loading motion_energy data, is already loaded and reload=False.',
+                    'DEBUG:ibllib:Not loading pupil data, is already loaded and reload=False.',
+                    'DEBUG:ibllib:Not loading licks data, is already loaded and reload=False.',
+                    'DEBUG:ibllib:Not loading pawstates data, is already loaded and reload=False.',
+                ],
+                cm.output,
+            )
         # Make sure data IS reloaded
         with self.assertLogs(_logger, level='INFO') as cm:
             self.sess_loader.load_session_data(reload=True)
-            self.assertEqual([
-                'INFO:ibllib:Loading trials data',
-                'INFO:ibllib:Loading wheel data',
-                'INFO:ibllib:Loading pose data',
-                'INFO:ibllib:Loading motion_energy data',
-                'INFO:ibllib:Loading pupil data',
-                'INFO:ibllib:Pupil diameter not available, trying to compute on the fly.',
-                'INFO:ibllib:Loading licks data',
-                'INFO:ibllib:Loading pawstates data',
-            ], cm.output)
+            self.assertEqual(
+                [
+                    'INFO:ibllib:Loading trials data',
+                    'INFO:ibllib:Loading wheel data',
+                    'INFO:ibllib:Loading pose data',
+                    'INFO:ibllib:Loading motion_energy data',
+                    'INFO:ibllib:Loading pupil data',
+                    'INFO:ibllib:Pupil diameter not available, trying to compute on the fly.',
+                    'INFO:ibllib:Loading licks data',
+                    'INFO:ibllib:Loading pawstates data',
+                ],
+                cm.output,
+            )

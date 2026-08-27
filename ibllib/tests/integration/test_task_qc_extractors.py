@@ -4,6 +4,7 @@ NB: FPGA TaskQC extractor is tested in test_ephys_extraction_choiceWorld.
 
 This module uses ZM_1150/2019-05-07/001 ('b1c968ad-4874-468d-b2e4-5ffa9b9964e9').
 """
+
 import unittest.mock
 
 from ibllib.pipes.behavior_tasks import ChoiceWorldTrialsBpod
@@ -15,7 +16,6 @@ one = ONE(**base.TEST_DB)
 
 
 class TestTaskQCObject(base.IntegrationTest):
-
     required_files = ['training/ZM_1150/2019-05-07/001']
 
     @classmethod
@@ -41,15 +41,13 @@ class TestTaskQCObject(base.IntegrationTest):
         assert 'test' in self.qc.one.alyx.base_url
         reset = self.qc.update(spec.QC.NOT_SET, override=True)
         assert reset == spec.QC.NOT_SET, 'failed to reset QC field for test'
-        extended = self.one.alyx.json_field_write('sessions', field_name='extended_qc',
-                                                  uuid=self.eid, data={})
+        extended = self.one.alyx.json_field_write('sessions', field_name='extended_qc', uuid=self.eid, data={})
         assert not extended, 'failed to reset extended QC field for test'
 
         # Test update as False
         outcome, _ = self.qc.run(update=False)
         self.assertEqual(spec.QC.FAIL, outcome)
-        extended = self.one.alyx.rest('sessions', 'read',
-                                      id=self.eid, no_cache=True)['extended_qc']
+        extended = self.one.alyx.rest('sessions', 'read', id=self.eid, no_cache=True)['extended_qc']
         self.assertDictEqual({}, extended, 'unexpected update to extended qc')
         outcome = self.one.alyx.rest('sessions', 'read', id=self.eid, no_cache=True)['qc']
         self.assertEqual(spec.QC.NOT_SET.name, outcome, 'unexpected update to qc')
@@ -57,8 +55,7 @@ class TestTaskQCObject(base.IntegrationTest):
         # Test update as True
         outcome, results = self.qc.run(update=True)
         self.assertEqual(spec.QC.FAIL, outcome)
-        extended = self.one.alyx.rest('sessions', 'read',
-                                      id=self.eid, no_cache=True)['extended_qc']
+        extended = self.one.alyx.rest('sessions', 'read', id=self.eid, no_cache=True)['extended_qc']
         expected = list(results.keys()) + ['task']
         self.assertCountEqual(expected, extended.keys(), 'unexpected update to extended qc')
         qc_field = self.one.alyx.rest('sessions', 'read', id=self.eid, no_cache=True)['qc']
@@ -100,7 +97,7 @@ class TestTaskQCObject(base.IntegrationTest):
             '_task_wheel_move_before_feedback': spec.QC.PASS,
             '_task_wheel_move_during_closed_loop': spec.QC.PASS,
             '_task_wheel_move_during_closed_loop_bpod': spec.QC.PASS,
-            '_task_passed_trial_checks': spec.QC.NOT_SET
+            '_task_passed_trial_checks': spec.QC.NOT_SET,
         }
         for k in outcomes:
             with self.subTest(check=k[6:].replace('_', ' ')):

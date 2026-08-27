@@ -15,8 +15,9 @@ DISPLAY = False
 
 
 def compare_wheel_fpga_behaviour(session_path, display=DISPLAY):
-    task = ChoiceWorldTrialsNidq(session_path, one=ONE(mode='local'),
-                                 collection='raw_behavior_data', sync_collection='raw_ephys_data')
+    task = ChoiceWorldTrialsNidq(
+        session_path, one=ONE(mode='local'), collection='raw_behavior_data', sync_collection='raw_ephys_data'
+    )
     fpga_trials, _ = task.extract_behaviour(save=False, tmax=None)
     bpod_trials = task.extractor.bpod_trials
     fpga_t, fpga_pos = fpga_trials['wheel_timestamps'], fpga_trials['wheel_position']
@@ -27,10 +28,8 @@ def compare_wheel_fpga_behaviour(session_path, display=DISPLAY):
     tmin = max(np.min(fpga_t), np.min(bpod_t))
     tmax = min(np.max(fpga_t), np.max(bpod_t))
     wheel = {'tscale': np.arange(tmin, tmax, 0.01)}
-    wheel['fpga'] = scipy.interpolate.interp1d(
-        fpga_t, fpga_pos)(wheel['tscale'])
-    wheel['bpod'] = scipy.interpolate.interp1d(
-        bpod_t, bpod_pos)(wheel['tscale'])
+    wheel['fpga'] = scipy.interpolate.interp1d(fpga_t, fpga_pos)(wheel['tscale'])
+    wheel['bpod'] = scipy.interpolate.interp1d(bpod_t, bpod_pos)(wheel['tscale'])
     if display:
         plt.figure()
         plt.plot(fpga_t - task.extractor.bpod2fpga(0), fpga_pos, '*')
@@ -40,13 +39,11 @@ def compare_wheel_fpga_behaviour(session_path, display=DISPLAY):
 
 
 class TestWheelExtractionSimpleEphys(base.IntegrationTest):
-
     required_files = ['wheel/ephys/three_clockwise_revolutions']
 
     def setUp(self) -> None:
         super().setUp()
-        self.session_path = \
-            self.data_path.joinpath('wheel', 'ephys', 'three_clockwise_revolutions')
+        self.session_path = self.data_path.joinpath('wheel', 'ephys', 'three_clockwise_revolutions')
         assert self.session_path.exists()
 
     def test_three_clockwise_revolutions_fpga(self):
@@ -57,7 +54,6 @@ class TestWheelExtractionSimpleEphys(base.IntegrationTest):
 
 
 class TestWheelExtractionSessionEphys(base.IntegrationTest):
-
     required_files = ['wheel/ephys/sessions']
 
     def setUp(self) -> None:
@@ -82,7 +78,6 @@ class TestWheelExtractionSessionEphys(base.IntegrationTest):
 
 
 class TestWheelExtractionTraining(base.IntegrationTest):
-
     required_files = ['wheel/training']
 
     def setUp(self) -> None:

@@ -187,8 +187,9 @@ def version3B(ses_path, display=True, type=None, tol=2.5, probe_names=None, rais
             type_probe = type or 'exact'
             # _check_diff_3b filters to rising edges only (polarities == 1); match that here so
             # the diagnosis is computed on the same front subset that triggered the anomaly.
-            label = (classify_sync_anomaly(sync_probe.times[sync_probe.polarities == 1])
-                     or classify_sync_anomaly(sync_nidq.times[sync_nidq.polarities == 1]))
+            label = classify_sync_anomaly(sync_probe.times[sync_probe.polarities == 1]) or classify_sync_anomaly(
+                sync_nidq.times[sync_nidq.polarities == 1]
+            )
             _logger.error(f'{ses_path} probe {ef.path.parts[-1]}: sync anomaly detected: {label}')
             if raise_on_anomaly and label is not None:
                 raise SyncFrontsAnomaly(f'{ses_path} probe {ef.path.parts[-1]}: {label}')
@@ -335,7 +336,7 @@ def classify_sync_anomaly(times, block=20, burst_factor=0.2, glitch_abs_thresh=0
         return None
 
     if dt.size >= block * 3:
-        block_med = np.array([np.median(dt[i:i + block]) for i in range(0, dt.size - block, block)])
+        block_med = np.array([np.median(dt[i : i + block]) for i in range(0, dt.size - block, block)])
         bad = np.where(np.abs(block_med - med) / med > 0.3)[0]
         if bad.size > 0 and bad[-1] >= len(block_med) - 2:  # sustained to the end, not a blip
             return 'dropped_edges'

@@ -997,7 +997,11 @@ def pose_qc_plot(
         if data['wheel']:
             panels.append((
                 plot_wheel_position,
-                {'wheel_position': data['wheel'].position, 'wheel_time': data['wheel'].timestamps, 'trials_df': data['trials']},
+                {
+                    'wheel_position': data['wheel'].position,
+                    'wheel_time': data['wheel'].timestamps,
+                    'trials_df': data['trials'],
+                },
             ))
         else:
             panels.append((None, 'Data missing\nWheel position'))

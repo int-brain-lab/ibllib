@@ -1,4 +1,5 @@
 """Test NI DAQ trials extraction."""
+
 import numpy as np
 import numpy.testing
 
@@ -57,9 +58,7 @@ class TestEphysTaskExtraction(base.IntegrationTest):
 
         # Run extractor
         TrialsTask = trials_task or self.trials_task
-        task = TrialsTask(session_path,
-                          one=ONE(mode='local'), collection='raw_behavior_data',
-                          sync_collection='raw_ephys_data')
+        task = TrialsTask(session_path, one=ONE(mode='local'), collection='raw_behavior_data', sync_collection='raw_ephys_data')
         fpga_trials, _ = task.extract_behaviour(save=True)
         tqc_ephys = task.run_qc(fpga_trials.copy(), update=False, plot_qc=False)
 
@@ -107,9 +106,7 @@ class TestEphysTaskExtraction(base.IntegrationTest):
                 continue  # FIXME explain why this check is skipped
             with self.subTest(check=k):
                 check_diff = (res_bpod[k] or 0) - (res_ephys[k] or 0)
-                self.assertFalse(
-                    np.abs(check_diff) > .2, f'{k} bpod: {res_bpod[k]}, ephys: {res_ephys[k]}'
-                )
+                self.assertFalse(np.abs(check_diff) > 0.2, f'{k} bpod: {res_bpod[k]}, ephys: {res_ephys[k]}')
 
     def _check_task_trial_events(self, trials):
         """Check task-specific trial events."""
@@ -119,8 +116,7 @@ class TestEphysTaskExtraction(base.IntegrationTest):
         self.assertTrue(np.less(trials['stimFreeze_times'][~nogo], trials['stimOff_times'][~nogo]).all())
         # a trial is either an error-nogo or a reward
         self.assertTrue(np.all(np.isnan(trials['valveOpen_times'] * trials['errorCue_times'])))
-        self.assertTrue(np.all(np.logical_xor(np.isnan(trials['valveOpen_times']),
-                                              np.isnan(trials['errorCue_times']))))
+        self.assertTrue(np.all(np.logical_xor(np.isnan(trials['valveOpen_times']), np.isnan(trials['errorCue_times']))))
 
 
 class TestEphysHabituationTaskExtraction(TestEphysTaskExtraction):
@@ -133,11 +129,13 @@ class TestEphysHabituationTaskExtraction(TestEphysTaskExtraction):
 
     trials_task = HabituationTrialsNidq
 
-    alf_files = ['_ibl_trials.intervals.npy',
-                 '_ibl_trials.stimCenter_times.npy',
-                 '_ibl_trials.goCue_times.npy',
-                 '_ibl_trials.feedback_times.npy',
-                 '_ibl_trials.rewardVolume.npy']
+    alf_files = [
+        '_ibl_trials.intervals.npy',
+        '_ibl_trials.stimCenter_times.npy',
+        '_ibl_trials.goCue_times.npy',
+        '_ibl_trials.feedback_times.npy',
+        '_ibl_trials.rewardVolume.npy',
+    ]
     """A subset of expected output datasets."""
 
     def _check_task_trial_events(self, trials):
@@ -146,10 +144,8 @@ class TestEphysHabituationTaskExtraction(TestEphysTaskExtraction):
         Check that the stimOn < stimCenter < stimOff.
         Note that we don't test the first trial as the stimulus on the first trial is messed up!
         """
-        self.assertTrue(
-            np.less(trials['stimOn_times'][1:], trials['stimOff_times'][1:]).all())
-        self.assertTrue(
-            np.less(trials['stimCenter_times'][1:], trials['stimOff_times'][1:]).all())
+        self.assertTrue(np.less(trials['stimOn_times'][1:], trials['stimOff_times'][1:]).all())
+        self.assertTrue(np.less(trials['stimCenter_times'][1:], trials['stimOff_times'][1:]).all())
 
 
 class TestEphysTrialsFPGA(base.IntegrationTest):
@@ -164,9 +160,9 @@ class TestEphysTrialsFPGA(base.IntegrationTest):
     def test_frame2ttl_flicker(self):
         session_path = get_session_path(next(self.data_path.glob(self.required_files[0])))
         # dsets, out_files = ephys_fpga.extract_all(session_path, save=True)
-        task = self.trials_task(session_path,
-                                one=ONE(mode='local'), collection='raw_behavior_data',
-                                sync_collection='raw_ephys_data')
+        task = self.trials_task(
+            session_path, one=ONE(mode='local'), collection='raw_behavior_data', sync_collection='raw_ephys_data'
+        )
         fpga_trials, _ = task.extract_behaviour(save=False)
         # Run the task QC
         qc = task.run_qc(fpga_trials, update=False, plot_qc=False)
@@ -194,9 +190,10 @@ class TestEphysTrialsFPGA(base.IntegrationTest):
         session_path = get_session_path(next(self.data_path.glob(self.required_files[1])))
 
         task = self.trials_task(
-            session_path, one=ONE(mode='local'), collection='raw_behavior_data', sync_collection='raw_ephys_data')
+            session_path, one=ONE(mode='local'), collection='raw_behavior_data', sync_collection='raw_ephys_data'
+        )
         with self.assertLogs('ibllib.io.extractors.ephys_fpga', level='DEBUG') as cm:
-            fpga_trials, _ = task.extract_behaviour(save=False, tmin=305., tmax=5500.)
+            fpga_trials, _ = task.extract_behaviour(save=False, tmin=305.0, tmax=5500.0)
             msg = 'Re-reassigning first valve open event'
             self.assertTrue(any(msg in lg for lg in cm.output))
         trials = fpga_trials['table']
@@ -211,7 +208,7 @@ class TestEphysTrialsFPGA(base.IntegrationTest):
         # Here we'd expect the first trial end to be assigned as trial start and the
         # extractor should undo this after accounting for missing trial start TTL
         sync, chmap = task.extractor.load_sync('raw_ephys_data')
-        selection = np.logical_and(sync['times'] <= 5500., sync['times'] >= 306.5)
+        selection = np.logical_and(sync['times'] <= 5500.0, sync['times'] >= 306.5)
         sync = alfio.AlfBunch({k: v[selection] for k, v in sync.items()})
         with self.assertLogs('ibllib.io.extractors.ephys_fpga', level='DEBUG') as cm:
             # Call build_trials directly to avoid needless re-extraction of Bpod data
@@ -226,7 +223,7 @@ class TestEphysTrialsFPGA(base.IntegrationTest):
         # Finally lets cut off several of the first trials and assert that trial lengths
         # remain consistent with Bpod
         sync, chmap = task.extractor.load_sync('raw_ephys_data')
-        selection = np.logical_and(sync['times'] <= 5500., sync['times'] >= 350.)
+        selection = np.logical_and(sync['times'] <= 5500.0, sync['times'] >= 350.0)
         sync = alfio.AlfBunch({k: v[selection] for k, v in sync.items()})
         trials = task.extractor.build_trials(sync=sync, chmap=chmap)
         bpod_intervals = task.extractor.bpod2fpga(task.extractor.bpod_trials['intervals'][:2, :])
@@ -237,10 +234,9 @@ class TestEphysTrialsFPGA(base.IntegrationTest):
 
 
 class TestEphysTrials_iblrigv8(base.IntegrationTest):
-
     required_files = [
         'ephys/ephys_choice_world_task/KM_014/2024-05-02/001/*',  # iblrig v8 ephys session
-        'ephys/ephys_choice_world_task/CSP004/2019-11-27/001/*'  # non iblrig v8 ephys session
+        'ephys/ephys_choice_world_task/CSP004/2019-11-27/001/*',  # non iblrig v8 ephys session
     ]
 
     def test_contrast_extraction_v8(self):
@@ -249,14 +245,16 @@ class TestEphysTrials_iblrigv8(base.IntegrationTest):
         # Extract trials using task, should be using TrialsTableBiased which does not contain the
         # extractor ProbaContrasts and instead gets ContrastLeft, ContrastRight and ProbabilityLeft from
         # the bpod data itself
-        task = ChoiceWorldTrialsNidq(session_path, one=ONE(mode='local'), collection='raw_task_data_00',
-                                     sync_collection='raw_ephys_data')
+        task = ChoiceWorldTrialsNidq(
+            session_path, one=ONE(mode='local'), collection='raw_task_data_00', sync_collection='raw_ephys_data'
+        )
         fpga_trials, _ = task.extract_behaviour(save=False)
         trials = fpga_trials['table']
 
         # Extract the using the pregenerated session extractor
         out, _ = run_extractor_classes(
-            ProbaContrasts, session_path=task.session_path, save=False, task_collection=task.collection)
+            ProbaContrasts, session_path=task.session_path, save=False, task_collection=task.collection
+        )
 
         # Ensure the values are not the same
         for col in ['contrastLeft', 'contrastRight', 'probabilityLeft']:
@@ -267,13 +265,15 @@ class TestEphysTrials_iblrigv8(base.IntegrationTest):
 
         # Extract trials using task, should be using TrialsTableEphys which uses the pregenerated session number and
         # extractor ProbaContrasts to get ContrastLeft, ContrastRight and ProbabilityLeft
-        task = ChoiceWorldTrialsNidq(session_path, one=ONE(mode='local'), collection='raw_behavior_data',
-                                     sync_collection='raw_ephys_data')
+        task = ChoiceWorldTrialsNidq(
+            session_path, one=ONE(mode='local'), collection='raw_behavior_data', sync_collection='raw_ephys_data'
+        )
         fpga_trials, _ = task.extract_behaviour(save=False)
         trials = fpga_trials['table']
 
         out, _ = run_extractor_classes(
-            ProbaContrasts, session_path=task.session_path, save=False, task_collection=task.collection)
+            ProbaContrasts, session_path=task.session_path, save=False, task_collection=task.collection
+        )
 
         # Ensure the values are the same
         for col in ['contrastLeft', 'contrastRight', 'probabilityLeft']:
@@ -281,7 +281,6 @@ class TestEphysTrials_iblrigv8(base.IntegrationTest):
 
 
 class TestEphysTrials_new_1st_trial(base.IntegrationTest):
-
     required_files = ['ephys/ephys_1st_trial/2025-05-28/001/*']
 
     def test_new_1st_trial(self):
@@ -291,8 +290,9 @@ class TestEphysTrials_new_1st_trial(base.IntegrationTest):
         to the extraction of the first trial."""
         session_path = get_session_path(next(self.data_path.glob(self.required_files[0])))
 
-        task = ChoiceWorldTrialsNidq(session_path, one=ONE(mode='local'), collection='raw_task_data_00',
-                                     sync_collection='raw_ephys_data')
+        task = ChoiceWorldTrialsNidq(
+            session_path, one=ONE(mode='local'), collection='raw_task_data_00', sync_collection='raw_ephys_data'
+        )
         fpga_trials, _ = task.extract_behaviour(save=False)
         trials = fpga_trials['table']
 

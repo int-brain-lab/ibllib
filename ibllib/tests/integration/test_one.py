@@ -2,6 +2,7 @@
 
 Tests include registering chained protocols.
 """
+
 from datetime import datetime
 from tempfile import TemporaryDirectory
 from pathlib import Path
@@ -23,11 +24,10 @@ class TestVideoStreamer(IntegrationTest):
     def setUp(self) -> None:
         super().setUp()
         self.one = ONE(base_url='https://openalyx.internationalbrainlab.org', silent=True)
-        self.eid, = self.one.search(subject='ZM_3003', number=1, date_range='2020-07-28')
+        (self.eid,) = self.one.search(subject='ZM_3003', number=1, date_range='2020-07-28')
 
     def test_video_streamer(self):
-        dset = self.one.alyx.rest('datasets', 'list',
-                                  session=self.eid, name='_iblrig_leftCamera.raw.mp4')[0]
+        dset = self.one.alyx.rest('datasets', 'list', session=self.eid, name='_iblrig_leftCamera.raw.mp4')[0]
         url = next(fr['data_url'] for fr in dset['file_records'] if fr['data_url'])
         frame_id = 5
         vs = VideoStreamer(url)
@@ -42,6 +42,7 @@ class TestVideoStreamer(IntegrationTest):
 
 class TestRegistrationUtils(IntegrationTest):
     """Tests for ibllib.oneibl.registration functions"""
+
     session_path = None
     required_files = ['Subjects_init/ZM_1085/2019-02-12/003']
 
@@ -85,6 +86,7 @@ class TestRegistrationUtils(IntegrationTest):
 
 class TestRegistration(IntegrationTest):
     """Tests for ibllib.oneibl.registration"""
+
     source_path = None
     required_files = ['Subjects_init/ZM_1085/2019-02-12/003']
 
@@ -97,8 +99,7 @@ class TestRegistration(IntegrationTest):
     def setUp(self) -> None:
         super().setUp()
         self.tempdir = TemporaryDirectory()
-        self.session_path = Path(self.tempdir.name).joinpath(
-            'Subjects_init', self.subject, *self.source_path.parts[-2:])
+        self.session_path = Path(self.tempdir.name).joinpath('Subjects_init', self.subject, *self.source_path.parts[-2:])
         shutil.copytree(self.source_path, self.session_path)
         one = ONE(cache_rest=None, **TEST_DB)
         self.client = reg.IBLRegistrationClient(one)
@@ -124,8 +125,10 @@ class TestRegistration(IntegrationTest):
         expected = {
             'users': ['ines'],
             'task_protocol': '_iblrig_tasks_biasedChoiceWorld3.7.0/_iblrig_tasks_biasedChoiceWorld3.7.0',
-            'start_time': '2019-02-12T10:14:20.047259', 'end_time': '2019-02-12T12:27:49.741060',
-            'n_correct_trials': 1578, 'n_trials': 1838
+            'start_time': '2019-02-12T10:14:20.047259',
+            'end_time': '2019-02-12T12:27:49.741060',
+            'n_correct_trials': 1578,
+            'n_trials': 1838,
         }
         subset = {k: v for k, v in info.items() if k in expected}
         self.assertDictEqual(subset, expected)

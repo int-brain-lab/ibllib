@@ -1090,34 +1090,33 @@ class LightningAction(base_tasks.VideoTask):
     @property
     def signature(self):
         signature = {
-            'input_files': [(f'_ibl_{cam}Camera.lightningPose.pqt', 'alf', True) for cam in self.cameras if cam != 'body'] +
-                           [(f'_ibl_{cam}Camera.times.npy', 'alf', True) for cam in self.cameras if cam != 'body'] +
-                           [('_ibl_wheel.position.npy', self.trials_collection, False),
-                            ('_ibl_wheel.timestamps.npy', self.trials_collection, False)],
+            'input_files': [(f'_ibl_{cam}Camera.lightningPose.pqt', 'alf', True) for cam in self.cameras if cam != 'body']
+            + [(f'_ibl_{cam}Camera.times.npy', 'alf', True) for cam in self.cameras if cam != 'body']
+            + [
+                ('_ibl_wheel.position.npy', self.trials_collection, False),
+                ('_ibl_wheel.timestamps.npy', self.trials_collection, False),
+            ],
             'output_files': [
                 (f'_ibl_{cam}Camera.pawstates.pqt', 'alf/lightningaction', True) for cam in self.cameras if cam != 'body'
-            ]
+            ],
         }
 
         return signature
 
     def _check_env(self):
         """Check that scripts are present, env can be activated and get iblvideo version"""
-        assert len(list(self.scripts.rglob('run_litaction.*'))) == 2, \
+        assert len(list(self.scripts.rglob('run_litaction.*'))) == 2, (
             f'Scripts run_litaction.sh and run_litaction.py do not exist in {self.scripts}'
-        assert self.laenv.exists(), f"environment does not exist in assumed location {self.laenv}"
+        )
+        assert self.laenv.exists(), f'environment does not exist in assumed location {self.laenv}'
         command2run = f"source {self.laenv}; python -c 'import iblvideo; print(iblvideo.__version__)'"
         process = subprocess.Popen(
-            command2run,
-            shell=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            executable="/bin/bash"
+            command2run, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, executable='/bin/bash'
         )
         info, error = process.communicate()
         if process.returncode != 0:
-            raise AssertionError(f"environment check failed\n{error.decode('utf-8')}")
-        version = info.decode("utf-8").strip().split('\n')[-1]
+            raise AssertionError(f'environment check failed\n{error.decode("utf-8")}')
+        version = info.decode('utf-8').strip().split('\n')[-1]
         return version
 
     def _run(self, overwrite=True, **kwargs):
@@ -1140,14 +1139,12 @@ class LightningAction(base_tasks.VideoTask):
         # Else, loop over videos
         actual_outputs = []
         for label in self.cameras:
-
             if label == 'body':
                 _logger.info(f'paw states are not available for {label} camera; skipping')
                 continue
 
             # Catch exceptions so that the other cams can still run but set status to Errored
             try:
-
                 # ---------------------------
                 # Run action segmentation
                 # ---------------------------
@@ -1160,21 +1157,23 @@ class LightningAction(base_tasks.VideoTask):
 
                 t0 = time.time()
                 _logger.info(f'Running Lightning Action on {label}Camera.')
-                command2run = f"{self.scripts.joinpath('run_litaction.sh')} {str(self.laenv)} " \
-                              f"{pose_file} {pose_timestamp_file} " \
-                              f"{wheel_file} {wheel_timestamps_file} " \
-                              f"{overwrite}"
+                command2run = (
+                    f'{self.scripts.joinpath("run_litaction.sh")} {str(self.laenv)} '
+                    f'{pose_file} {pose_timestamp_file} '
+                    f'{wheel_file} {wheel_timestamps_file} '
+                    f'{overwrite}'
+                )
                 _logger.info(command2run)
                 process = subprocess.Popen(
                     command2run,
                     shell=True,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
-                    executable="/bin/bash",
+                    executable='/bin/bash',
                 )
                 info, error = process.communicate()
                 if process.returncode != 0:
-                    error_str = error.decode("utf-8").strip()
+                    error_str = error.decode('utf-8').strip()
                     _logger.error(
                         f'Lightning Action failed for {label}Camera.\n\n'
                         f'++++++++ Output of subprocess for debugging ++++++++\n\n'
@@ -1209,6 +1208,7 @@ class PostLightningAction(base_tasks.VideoTask):
 
     This can be run on a single camera view or multiple camera views.
     """
+
     io_charge = 90
     level = 3
     force = True
@@ -1221,13 +1221,16 @@ class PostLightningAction(base_tasks.VideoTask):
     @property
     def signature(self):
         return {
-            'input_files': [(f'_ibl_{cam}Camera.{self.tracker}.pqt', 'alf', True) for cam in self.cameras if cam != 'body'] +
-                           [(f'_ibl_{cam}Camera.times.npy', 'alf', True) for cam in self.cameras if cam != 'body'] +
+            'input_files': [(f'_ibl_{cam}Camera.{self.tracker}.pqt', 'alf', True) for cam in self.cameras if cam != 'body']
+            + [(f'_ibl_{cam}Camera.times.npy', 'alf', True) for cam in self.cameras if cam != 'body']
+            +
             # The trials table is used in the LA QC plot, however this is not an essential dataset
-                           [('_ibl_trials.table.pqt', self.trials_collection, False),
-                            ('_ibl_wheel.position.npy', self.trials_collection, False),
-                            ('_ibl_wheel.timestamps.npy', self.trials_collection, False)],
-            'output_files': []
+            [
+                ('_ibl_trials.table.pqt', self.trials_collection, False),
+                ('_ibl_wheel.position.npy', self.trials_collection, False),
+                ('_ibl_wheel.timestamps.npy', self.trials_collection, False),
+            ],
+            'output_files': [],
         }
 
     def _run(self, overwrite=True, run_qc=True, plot_qc=True):
@@ -1261,9 +1264,13 @@ class PostLightningAction(base_tasks.VideoTask):
                         fig_path = self.session_path.joinpath('snapshot', f'la_qc_plot.{cam}.{paw_pos}_paw.png')
                         fig_path.parent.mkdir(parents=True, exist_ok=True)
                         data = load_pawstates_qc_data(
-                            self.session_path, one=self.one,
-                            camera=cam, paw=paw, tracker=self.tracker,
-                            device_collection=self.device_collection, trials_collection=self.trials_collection,
+                            self.session_path,
+                            one=self.one,
+                            camera=cam,
+                            paw=paw,
+                            tracker=self.tracker,
+                            device_collection=self.device_collection,
+                            trials_collection=self.trials_collection,
                         )
                         fig = pawstates_qc_plot(data, camera=cam, paw=paw, tracker=self.tracker, session_id=session_id)
                         fig.savefig(fig_path, bbox_inches='tight', pad_inches=0.1)

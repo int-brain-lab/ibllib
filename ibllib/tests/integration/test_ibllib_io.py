@@ -16,14 +16,14 @@ from ibllib.io.raw_data_loaders import patch_settings, load_settings
 
 
 class TestVideoIO(base.IntegrationTest):
-
     required_files = ['ephys/choice_world_init/KS022/2019-12-10/001/raw_video_data/_iblrig_leftCamera.raw.mp4']
 
     def setUp(self) -> None:
         super().setUp()
         root = self.data_path  # Path to integration data
-        self.video_path = root.joinpath('ephys', 'choice_world_init', 'KS022', '2019-12-10',
-                                        '001', 'raw_video_data', '_iblrig_leftCamera.raw.mp4')
+        self.video_path = root.joinpath(
+            'ephys', 'choice_world_init', 'KS022', '2019-12-10', '001', 'raw_video_data', '_iblrig_leftCamera.raw.mp4'
+        )
         self.log = logging.getLogger('ibllib')
 
     def test_get_video_frame(self):
@@ -44,9 +44,7 @@ class TestVideoIO(base.IntegrationTest):
         self.assertEqual(frames.dtype, np.dtype(np.uint8))
 
         # Test loading frames with slice
-        expected = np.array([[173, 133, 173, 216, 0],
-                             [182, 133, 22, 241, 19],
-                             [170, 152, 97, 48, 25]], dtype=np.uint8)
+        expected = np.array([[173, 133, 173, 216, 0], [182, 133, 22, 241, 19], [170, 152, 97, 48, 25]], dtype=np.uint8)
         frames = vidio.get_video_frames_preload(self.video_path, n, mask=np.s_[0, :5, 0])
         self.assertTrue(np.all(frames == expected))
         expected_shape = (len(n), 5)
@@ -60,8 +58,7 @@ class TestVideoIO(base.IntegrationTest):
         self.assertEqual(len(frames), 3)
 
         # Test applying function
-        frames = vidio.get_video_frames_preload(self.video_path, n,
-                                                func=lambda x: np.mean(x, axis=2))
+        frames = vidio.get_video_frames_preload(self.video_path, n, func=lambda x: np.mean(x, axis=2))
         expected_shape = (len(n), 1024, 1280)
         self.assertEqual(frames.shape, expected_shape)
 
@@ -81,27 +78,21 @@ class TestVideoIO(base.IntegrationTest):
     def test_get_video_meta(self):
         # Check with local video path
         meta = vidio.get_video_meta(self.video_path)
-        expected = {
-            'length': 158377,
-            'fps': 60,
-            'width': 1280,
-            'height': 1024,
-            'size': 4257349100
-        }
+        expected = {'length': 158377, 'fps': 60, 'width': 1280, 'height': 1024, 'size': 4257349100}
         self.assertTrue(expected.items() <= meta.items())
         self.assertEqual(meta.duration.total_seconds(), 2639.616667)
 
         # Check with remote path
         one = ONE(base_url='https://openalyx.internationalbrainlab.org', silent=True)
-        dset = one.alyx.rest('datasets', 'list', session='fe1fd79f-b051-411f-a0a9-2530a02cc78d',
-                             name='_iblrig_leftCamera.raw.mp4', exists=True)[0]
+        dset = one.alyx.rest(
+            'datasets', 'list', session='fe1fd79f-b051-411f-a0a9-2530a02cc78d', name='_iblrig_leftCamera.raw.mp4', exists=True
+        )[0]
         video_url = next(fr['data_url'] for fr in dset['file_records'] if fr['data_url'])
         meta = vidio.get_video_meta(video_url, one=one)
         self.assertTrue(set(expected.keys()).issubset(meta.keys()))
 
 
 class Read_DAQ_tdms(base.IntegrationTest):
-
     required_files = ['io/tdms_reader/20210421_daqami_analog.tdms', 'io/tdms_reader/20221102_daqami_digital.tdms']
 
     def setUp(self) -> None:
@@ -155,7 +146,8 @@ class TestPatchSettings(base.IntegrationTest):
             new_settings['SUBJECT_NAME'],
             new_settings['SESSION_DATE'],
             int(new_settings['SESSION_NUMBER']),
-            new_settings['SESSION_RAW_DATA_FOLDER'].split('\\')[-1])
+            new_settings['SESSION_RAW_DATA_FOLDER'].split('\\')[-1],
+        )
         self.assertCountEqual(new_data.values(), actual)
         self.assertNotIn('PYBPOD_SUBJECT_EXTRA', new_settings)
 

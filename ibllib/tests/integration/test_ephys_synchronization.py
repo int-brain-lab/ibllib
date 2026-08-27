@@ -9,7 +9,6 @@ from ibllib.tests import base
 
 
 class TestEphysCheckList(base.IntegrationTest):
-
     required_files = ['ephys/sync']
 
     def setUp(self):
@@ -28,8 +27,7 @@ class TestEphysCheckList(base.IntegrationTest):
     def test_sync_3A_single(self):
         ses_path = self.folder3a_single.joinpath('sub', '2019-08-09', '004')
         self.assertTrue(sync_probes.version3A(ses_path, display=False))
-        self.assertTrue(np.all(np.load(list(
-            ses_path.rglob('*.sync.npy'))[0]) == np.array([[0, 0], [1, 1]])))
+        self.assertTrue(np.all(np.load(list(ses_path.rglob('*.sync.npy'))[0]) == np.array([[0, 0], [1, 1]])))
 
     def test_sync_3A(self):
         if not self.folder3a.exists():
@@ -39,8 +37,7 @@ class TestEphysCheckList(base.IntegrationTest):
         for ses_path in self.folder3a.rglob('raw_ephys_data'):
             # we switched to sync using frame2ttl on November 2019
             channel = 12 if '2019-11-05' in str(ses_path) else 2
-            self.assertTrue(sync_probes.version3A(ses_path.parent, type='linear', tol=2,
-                                                  display=False))
+            self.assertTrue(sync_probes.version3A(ses_path.parent, type='linear', tol=2, display=False))
             self.assertTrue(sync_probes.version3A(ses_path.parent, display=True))
             dt = _check_session_sync(ses_path, channel=channel)
             self.assertTrue(np.all(np.abs(dt * 30000) < 2))
@@ -50,9 +47,8 @@ class TestEphysCheckList(base.IntegrationTest):
         if not self.folder3b.exists():
             return
         """ First session is a pass """
-        ses_path = self.folder3b.joinpath("hofer", "raw_ephys_data")
-        self.assertTrue(sync_probes.version3B(ses_path.parent, type='linear', tol=10,
-                                              display=False))
+        ses_path = self.folder3b.joinpath('hofer', 'raw_ephys_data')
+        self.assertTrue(sync_probes.version3B(ses_path.parent, type='linear', tol=10, display=False))
         self.assertTrue(sync_probes.version3B(ses_path.parent, display=False))
         dt = _check_session_sync(ses_path, 6)
         # import matplotlib.pyplot as plt
@@ -67,8 +63,7 @@ class TestEphysCheckList(base.IntegrationTest):
         self.assertTrue(np.all(np.equal(sync_dual_probe0, sync_single_probe0)))
         self.assertTrue(np.all(np.abs(dt * 30000) < 2))
         """ Second session has sync issues """
-        ses_path = self.folder3b.joinpath('cortexlab', 'KS014', '2019-12-03', '001',
-                                          'raw_ephys_data')
+        ses_path = self.folder3b.joinpath('cortexlab', 'KS014', '2019-12-03', '001', 'raw_ephys_data')
         qc, outputs = sync_probes.version3B(ses_path.parent, display=False)
         self.assertFalse(qc)
         self.assertTrue(len(outputs) == 4)
@@ -97,14 +92,14 @@ def _check_session_sync(ses_path, channel):
         tprobe.append(t)
         tinterp.append(tsync)
         # the second step is to make sure sample / time_ref files match time / time_ref files
-        ts_file = ef.ap.parent.joinpath(ef.ap.name.replace('.ap.', '.timestamps.')
-                                        ).with_suffix('.npy')
+        ts_file = ef.ap.parent.joinpath(ef.ap.name.replace('.ap.', '.timestamps.')).with_suffix('.npy')
         fs = spikeglx._get_fs_from_meta(spikeglx.read_meta_data(ef.ap.with_suffix('.meta')))
         tstamp = sync_probes.apply_sync(ts_file, t * fs, forward=True)
         np.testing.assert_array_almost_equal(tstamp, tsync, decimal=11)
     return tinterp[0] - tinterp[1]
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     import unittest
+
     unittest.main(exit=False, verbosity=2)

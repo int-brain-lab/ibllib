@@ -13,7 +13,6 @@ _logger = logging.getLogger('ibllib')
 
 
 class TestPassiveRegisterRaw(base.IntegrationTest):
-
     required_files = ['tasks/choice_world_ephys/steinmetzlab/Subjects/NR_0020/2022-05-12/001']
 
     def setUp(self) -> None:
@@ -39,8 +38,13 @@ class TestPassiveTrials(base.IntegrationTest):
         self.one = ONE(**base.TEST_DB, mode='local')
 
     def test_passive_extract(self):
-        task = PassiveTaskNidq(self.session_path, collection='raw_passive_data', sync_collection='raw_ephys_data',
-                               sync_namespace='spikeglx', one=self.one)
+        task = PassiveTaskNidq(
+            self.session_path,
+            collection='raw_passive_data',
+            sync_collection='raw_ephys_data',
+            sync_namespace='spikeglx',
+            one=self.one,
+        )
         status = task.run()
 
         self.assertEqual(0, status)
@@ -48,25 +52,25 @@ class TestPassiveTrials(base.IntegrationTest):
 
         self.assertEqual(4, len(task.outputs))
 
-        passive_intervals = pd.read_csv(next(o for o in task.outputs
-                                             if '_ibl_passivePeriods.intervalsTable.csv' in o.name))
+        passive_intervals = pd.read_csv(next(o for o in task.outputs if '_ibl_passivePeriods.intervalsTable.csv' in o.name))
         self.assertFalse(np.all(np.isnan(passive_intervals.taskReplay.values)))
 
     @unittest.mock.patch('ibllib.io.raw_data_loaders.load_settings')
     def test_passive_extract_no_task_replay(self, mock_load_settings):
-        mock_load_settings.return_value = {'SKIP_EVENT_REPLAY': True,
-                                           'IBLRIG_VERSION': '6.4.2',
-                                           'PREGENERATED_SESSION_NUM': 3
-                                           }
+        mock_load_settings.return_value = {'SKIP_EVENT_REPLAY': True, 'IBLRIG_VERSION': '6.4.2', 'PREGENERATED_SESSION_NUM': 3}
 
-        task = PassiveTaskNidq(self.session_path, collection='raw_passive_data', sync_collection='raw_ephys_data',
-                               sync_namespace='spikeglx', one=self.one)
+        task = PassiveTaskNidq(
+            self.session_path,
+            collection='raw_passive_data',
+            sync_collection='raw_ephys_data',
+            sync_namespace='spikeglx',
+            one=self.one,
+        )
         status = task.run()
 
         self.assertEqual(-1, status)
 
         self.assertEqual(2, len(task.outputs))
 
-        passive_intervals = pd.read_csv(next(o for o in task.outputs
-                                             if '_ibl_passivePeriods.intervalsTable.csv' in o.name))
+        passive_intervals = pd.read_csv(next(o for o in task.outputs if '_ibl_passivePeriods.intervalsTable.csv' in o.name))
         self.assertTrue(np.all(np.isnan(passive_intervals.taskReplay.values)))

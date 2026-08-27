@@ -532,7 +532,7 @@ class TimelineTrials(FpgaTrials):
 
         values = tl['raw'][:, info['arrayColumn'] - 1]
         timestamps = tl['timestamps']
-        if hold_mode := np.median(values) > 4.:
+        if hold_mode := np.median(values) > 4.0:
             _logger.info('Valve mode: 5V->0V when open')
         else:
             _logger.info('Valve mode: 0V->5V when opening or closing')

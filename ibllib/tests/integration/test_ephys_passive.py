@@ -4,6 +4,7 @@ Basic passive extraction is tested using ephys/passive_extraction/SWC_054/2020-1
 Chained passive protocol extraction is tested with ephys/passive_extraction/ZFM-05496/2022-12-08/001.
 Currently ZFM-05496/2022-12-08/001/raw_task_data_00 is not used.
 """
+
 import unittest
 import logging
 import shutil
@@ -22,7 +23,6 @@ log = logging.getLogger('ibllib')
 
 
 class TestLoadFixtures(base.IntegrationTest):
-
     def _check(self, task_replay, expected_sequence, n_repeat=1, n_removed=0):
 
         self.assertTrue(len(task_replay) == (300 * n_repeat) - n_removed)
@@ -34,7 +34,7 @@ class TestLoadFixtures(base.IntegrationTest):
         self.assertListEqual(list(stims[0:10]), expected_sequence)
 
     def test_load_v7_fixtures(self):
-        """ Test loading of iblrig v7 or less fixtures """
+        """Test loading of iblrig v7 or less fixtures"""
         settings = {
             'IBLRIG_VERSION': '7.6.0',
             'PRELOADED_SESSION_NUM': 3,
@@ -44,7 +44,7 @@ class TestLoadFixtures(base.IntegrationTest):
         self._check(task_replay, ['G', 'N', 'T', 'G', 'G', 'G', 'G', 'N', 'G', 'T'])
 
     def test_load_v8_fixtures(self):
-        """ Test loading of iblrig v8 fixtures """
+        """Test loading of iblrig v8 fixtures"""
         settings = {
             'IBLRIG_VERSION': '8.0.0',
             'SESSION_TEMPLATE_ID': 2,
@@ -54,12 +54,8 @@ class TestLoadFixtures(base.IntegrationTest):
         self._check(task_replay, ['G', 'N', 'G', 'T', 'G', 'T', 'V', 'G', 'N', 'N'])
 
     def test_load_v8_fixtures_repeated(self):
-        """ Test loading of iblrig v8 fixtures with repeated stimuli """
-        settings = {
-            'IBLRIG_VERSION': '8.2.0',
-            'SESSION_TEMPLATE_ID': 4,
-            'NUM_STIM_PRESENTATIONS': 900
-        }
+        """Test loading of iblrig v8 fixtures with repeated stimuli"""
+        settings = {'IBLRIG_VERSION': '8.2.0', 'SESSION_TEMPLATE_ID': 4, 'NUM_STIM_PRESENTATIONS': 900}
 
         task_replay = ephys_passive._load_v8_fixture_df(settings)
         self._check(task_replay, ['G', 'N', 'G', 'V', 'G', 'N', 'G', 'T', 'G', 'G'], n_repeat=3)
@@ -94,7 +90,6 @@ class TestLoadFixtures(base.IntegrationTest):
 
 
 class TestExtractPassivePeriods(base.IntegrationTest):
-
     required_files = ['ephys/passive_extraction/SWC_054/2020-10-10/001']
 
     def setUp(self):
@@ -106,9 +101,9 @@ class TestExtractPassivePeriods(base.IntegrationTest):
         self.sync, self.sync_map = ephys_fpga.get_sync_and_chn_map(self.session_path, 'raw_ephys_data')
 
     def test_get_spacers_good(self):
-        """ Test that spacers are correctly identified in good data"""
+        """Test that spacers are correctly identified in good data"""
 
-        fttl = ephys_fpga.get_sync_fronts(self.sync, self.sync_map["frame2ttl"])
+        fttl = ephys_fpga.get_sync_fronts(self.sync, self.sync_map['frame2ttl'])
         ttl_signal = fttl['times']
         _, spacer_start, spacer_end = ephys_passive._get_spacer_times(ttl_signal, 0, self.sync['times'][-1])
 
@@ -116,8 +111,8 @@ class TestExtractPassivePeriods(base.IntegrationTest):
         self.assertEqual(len(spacer_start), 3)
 
     def test_get_spacers_missing(self):
-        """ Test that spacers missing raise value error"""
-        fttl = ephys_fpga.get_sync_fronts(self.sync, self.sync_map["frame2ttl"])
+        """Test that spacers missing raise value error"""
+        fttl = ephys_fpga.get_sync_fronts(self.sync, self.sync_map['frame2ttl'])
         ttl_signal = fttl['times']
         idx = np.bitwise_and(ttl_signal > 4536, ttl_signal < 4544)
         ttl_signal = ttl_signal[~idx]
@@ -126,7 +121,6 @@ class TestExtractPassivePeriods(base.IntegrationTest):
 
 
 class TestExtractRFMapping(base.IntegrationTest):
-
     required_files = ['ephys/passive_extraction/SWC_054/2020-10-10/001']
 
     def setUp(self):
@@ -138,15 +132,18 @@ class TestExtractRFMapping(base.IntegrationTest):
         self.sync, self.sync_map = ephys_fpga.get_sync_and_chn_map(self.session_path, 'raw_ephys_data')
 
     def test_extract_rf_mapping(self):
-        rf_times = ephys_passive.extract_rfmapping(self.session_path, sync_collection='raw_ephys_data',
-                                                   task_collection='raw_passive_data', sync=self.sync,
-                                                   sync_map=self.sync_map)
+        rf_times = ephys_passive.extract_rfmapping(
+            self.session_path,
+            sync_collection='raw_ephys_data',
+            task_collection='raw_passive_data',
+            sync=self.sync,
+            sync_map=self.sync_map,
+        )
 
         self.assertEqual(len(rf_times), 17999)
 
 
 class TestExtractTaskReplayComponents(base.IntegrationTest):
-
     required_files = ['ephys/passive_extraction/SWC_054/2020-10-10/001']
 
     def setUp(self):
@@ -157,53 +154,50 @@ class TestExtractTaskReplayComponents(base.IntegrationTest):
 
         self.sync, self.sync_map = ephys_fpga.get_sync_and_chn_map(self.session_path, 'raw_ephys_data')
         passivePeriods_df = ephys_passive.extract_passive_periods(
-            self.session_path, 'raw_ephys_data', sync=self.sync, sync_map=self.sync_map)
+            self.session_path, 'raw_ephys_data', sync=self.sync, sync_map=self.sync_map
+        )
         self.treplay = passivePeriods_df.taskReplay.values
         self.task_replay = ephys_passive.load_task_replay_fixtures(self.session_path, 'raw_passive_data')
 
     def test_extract_gabor(self):
-        """ Test extraction of gabor stimuli on good data"""
+        """Test extraction of gabor stimuli on good data"""
 
-        fttl = ephys_fpga.get_sync_fronts(self.sync, self.sync_map['frame2ttl'],
-                                          tmin=self.treplay[0], tmax=self.treplay[-1])
+        fttl = ephys_fpga.get_sync_fronts(self.sync, self.sync_map['frame2ttl'], tmin=self.treplay[0], tmax=self.treplay[-1])
         gabor_df = ephys_passive._extract_passive_gabor(fttl, self.task_replay)
 
         self.assertEqual(len(gabor_df), 179)
-        expected_cols = ["stim_type", "start", "stop", "position", "contrast", "phase"]
+        expected_cols = ['stim_type', 'start', 'stop', 'position', 'contrast', 'phase']
         for col in expected_cols:
             self.assertIn(col, gabor_df.columns)
 
     def test_extract_audio(self):
-        """ Test extraction of audio stimuli on good data"""
+        """Test extraction of audio stimuli on good data"""
 
-        audio = ephys_fpga.get_sync_fronts(self.sync, self.sync_map['audio'],
-                                           tmin=self.treplay[0], tmax=self.treplay[-1])
+        audio = ephys_fpga.get_sync_fronts(self.sync, self.sync_map['audio'], tmin=self.treplay[0], tmax=self.treplay[-1])
         tone_df, noise_df = ephys_passive._extract_passive_audio(audio, self.task_replay, version.Version('8.0.0'))
 
         self.assertEqual(len(noise_df), 40)
         self.assertEqual(len(tone_df), 40)
         self.assertTrue(all(noise_df['stim_type'] == 'N'))
         self.assertTrue(all(tone_df['stim_type'] == 'T'))
-        expected_cols = ["stim_type", "start", "stop"]
+        expected_cols = ['stim_type', 'start', 'stop']
         for col in expected_cols:
             self.assertIn(col, noise_df.columns)
             self.assertIn(col, tone_df.columns)
 
     def test_extract_valve(self):
-        """ Test extraction of valve stimuli on good data"""
+        """Test extraction of valve stimuli on good data"""
 
-        bpod = ephys_fpga.get_sync_fronts(self.sync, self.sync_map['bpod'],
-                                          tmin=self.treplay[0], tmax=self.treplay[-1])
+        bpod = ephys_fpga.get_sync_fronts(self.sync, self.sync_map['bpod'], tmin=self.treplay[0], tmax=self.treplay[-1])
         valve_df = ephys_passive._extract_passive_valve(bpod, self.task_replay)
 
         self.assertEqual(len(valve_df), 40)
-        expected_cols = ["stim_type", "start", "stop"]
+        expected_cols = ['stim_type', 'start', 'stop']
         for col in expected_cols:
             self.assertIn(col, valve_df.columns)
 
 
 class TestExtractTaskReplay(base.IntegrationTest):
-
     def setUp(self):
         super().setUp()
         self.root_folder = self.data_path.joinpath('ephys', 'passive_extraction')
@@ -213,16 +207,22 @@ class TestExtractTaskReplay(base.IntegrationTest):
 
         self.sync, self.sync_map = ephys_fpga.get_sync_and_chn_map(self.session_path, 'raw_ephys_data')
         passivePeriods_df = ephys_passive.extract_passive_periods(
-            self.session_path, 'raw_ephys_data', sync=self.sync, sync_map=self.sync_map)
+            self.session_path, 'raw_ephys_data', sync=self.sync, sync_map=self.sync_map
+        )
         self.treplay = passivePeriods_df.taskReplay.values
         self.task_replay = ephys_passive.load_task_replay_fixtures(self.session_path, 'raw_passive_data')
 
     def test_extract_replay(self):
-        """ Test extraction of full task replay stimuli on good data"""
+        """Test extraction of full task replay stimuli on good data"""
 
         gabor_df, stim_df = ephys_passive.extract_task_replay(
-            self.session_path, sync_collection='raw_ephys_Data', task_collection='raw_passive_data',
-            sync=self.sync, sync_map=self.sync_map, treplay=self.treplay)
+            self.session_path,
+            sync_collection='raw_ephys_Data',
+            task_collection='raw_passive_data',
+            sync=self.sync,
+            sync_map=self.sync_map,
+            treplay=self.treplay,
+        )
 
         self.assertEqual(len(gabor_df), 179)
         expected_cols = ['start', 'stop', 'position', 'contrast', 'phase']
@@ -245,17 +245,23 @@ class TestExtractReplayNoiseMissing(base.IntegrationTest):
 
         self.sync, self.sync_map = ephys_fpga.get_sync_and_chn_map(self.session_path, 'raw_ephys_data')
         passivePeriods_df = ephys_passive.extract_passive_periods(
-            self.session_path, 'raw_ephys_data', sync=self.sync, sync_map=self.sync_map)
+            self.session_path, 'raw_ephys_data', sync=self.sync, sync_map=self.sync_map
+        )
         self.treplay = passivePeriods_df.taskReplay.values
         self.task_replay = ephys_passive.load_task_replay_fixtures(self.session_path, 'raw_task_data_01')
 
     def test_extract_replay_noise_missing(self):
-        """ Test extraction of full task replay stimuli for specific case where no noise stimuli were presented,
+        """Test extraction of full task replay stimuli for specific case where no noise stimuli were presented,
         also Gabor fails"""
 
         gabor_df, stim_df = ephys_passive.extract_task_replay(
-            self.session_path, sync_collection='raw_ephys_Data', task_collection='raw_task_data_01',
-            sync=self.sync, sync_map=self.sync_map, treplay=self.treplay)
+            self.session_path,
+            sync_collection='raw_ephys_Data',
+            task_collection='raw_task_data_01',
+            sync=self.sync,
+            sync_map=self.sync_map,
+            treplay=self.treplay,
+        )
 
         self.assertIsNone(gabor_df)
 
@@ -270,7 +276,6 @@ class TestExtractReplayNoiseMissing(base.IntegrationTest):
 
 
 class TestEphysPassiveExtraction(base.IntegrationTest):
-
     required_files = ['ephys/passive_extraction/SWC_054/2020-10-10/001']
     _writable_scope = 'test'
 
@@ -307,8 +312,8 @@ class TestEphysPassiveExtraction(base.IntegrationTest):
 class TestChainedPassiveExtraction(base.IntegrationTest):
     """Test for the dynamic pipeline extraction of two chained passive protocols.
 
-     Employs the ibllib.pipes.behavior_tasks.PassiveTaskNidq class.
-     """
+    Employs the ibllib.pipes.behavior_tasks.PassiveTaskNidq class.
+    """
 
     required_files = ['ephys/passive_extraction/ZFM-05496/2022-12-08/001']
     _writable_scope = 'test'
@@ -328,7 +333,7 @@ class TestChainedPassiveExtraction(base.IntegrationTest):
             'sync': 'nidq',
             'sync_collection': 'raw_ephys_data',
             'sync_ext': 'bin',
-            'sync_namespace': 'spikeglx'
+            'sync_namespace': 'spikeglx',
         }
         task = PassiveTaskNidq(self.session_path, location='local', **kwargs)
         self.assertEqual(0, task.run())

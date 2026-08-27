@@ -8,8 +8,23 @@ on:
     branches: [ "*" ]
 
 jobs:
+  ruff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: install ruff
+        run: python -m pip install --upgrade pip ruff
+      - name: ruff format
+        run: python -m ruff format --check .
+      - name: ruff check
+        if: always()
+        run: python -m ruff check .
   build:
     name: build (${{ matrix.python-version }}, ${{ matrix.os }})
+    needs: ruff
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false  # Whether to stop execution of other instances
@@ -25,21 +40,18 @@ jobs:
     env:
       ONE_SAVE_ON_DELETE: false
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v7
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v7
       with:
         python-version: ${{ matrix.python-version }}
+        cache: pip
+        cache-dependency-path: requirements.txt
     - name: Install deps
       run: |
         python -m pip install --upgrade pip
-        python -m pip install flake8 ruff flake8-docstrings
         pip install -r requirements.txt
         pip install -e .
-    - name: Flake8 & ruff
-      run: |
-        python -m ruff check .
-        python -m flake8 --select D --ignore E ibllib/qc/camera.py ibllib/qc/task_metrics.py
     - name: Brainbox tests
       run: |
         cd brainbox

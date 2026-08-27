@@ -35,6 +35,7 @@ STATE_MAP = np.vectorize(lambda x: STATE_KEYS[x])
 # Data extraction functions
 # -------------------------------------------------
 
+
 def extract_pawstate_plot_data(data, paw, tracker):
     """
     Extract paw state, marker, and wheel data, and process for plotting
@@ -49,13 +50,20 @@ def extract_pawstate_plot_data(data, paw, tracker):
     df_probs = df_ens.loc[:, df_ens.columns.str.endswith(ORIG_LABELS)]
     df_var = df_ens.loc[:, df_ens.columns.str.endswith('ens_var')]
     data['marker_data'] = extract_marker_data(
-        paw, data[tracker], data['times'], data['wheel'],
+        paw,
+        data[tracker],
+        data['times'],
+        data['wheel'],
     )
     data['data_df'], data['transition_frames'] = gen_data_df(
-        data['marker_data'], df_probs, df_var, data['times'],
+        data['marker_data'],
+        df_probs,
+        df_var,
+        data['times'],
     )
     data['durations_df'], data['durations'] = duration_data(
-        data['data_df'], data['transition_frames'],
+        data['data_df'],
+        data['transition_frames'],
     )
     if data['trials'] is not None:
         data['interval_df'] = interval_data(data['data_df'], data['trials'])
@@ -137,18 +145,27 @@ def gen_data_df(marker_data, probs, ens_vars, cam_times):
     data_df['times'] = cam_times
 
     # Find transition frames
-    any_transition_frames = data_df[
-        (data_df['e_mode'].shift() != data_df['e_mode'])
-    ].index
+    any_transition_frames = data_df[(data_df['e_mode'].shift() != data_df['e_mode'])].index
 
     # Silence frames around transitions
     for noise_frame in any_transition_frames:
-        data_df.loc[noise_frame - SILENCE_WINDOW:noise_frame + SILENCE_WINDOW, 'e_var'] = 0
+        data_df.loc[noise_frame - SILENCE_WINDOW : noise_frame + SILENCE_WINDOW, 'e_var'] = 0
 
     # Reorder columns
-    cols = ['paw_x_pos', 'paw_y_pos', 'paw_x_vel', 'paw_y_vel', 'paw_speed',
-            'wheel_vel', 'wheel_speed', 'wheel_acc', 'times',
-            'e_mode', 'e_var', 'frame_id']
+    cols = [
+        'paw_x_pos',
+        'paw_y_pos',
+        'paw_x_vel',
+        'paw_y_vel',
+        'paw_speed',
+        'wheel_vel',
+        'wheel_speed',
+        'wheel_acc',
+        'times',
+        'e_mode',
+        'e_var',
+        'frame_id',
+    ]
     data_df = data_df[cols]
 
     return data_df, any_transition_frames
@@ -162,13 +179,14 @@ def duration_data(data_df, any_transition_frames):
     :param any_transition_frames: Indices of transition frames
     :returns: Tuple of (state_duration_df, duration_summary)
     """
-    sd_df = data_df[["e_mode", "times", "frame_id"]].copy()
+    sd_df = data_df[['e_mode', 'times', 'frame_id']].copy()
 
     # Filter out noise frames around transitions
     for noise_frame in any_transition_frames:
         last_persisted_state_idx = max(0, noise_frame - SILENCE_WINDOW - 1)
-        sd_df.loc[noise_frame - SILENCE_WINDOW:noise_frame + SILENCE_WINDOW, 'e_mode'] = \
-            sd_df.loc[last_persisted_state_idx, 'e_mode']
+        sd_df.loc[noise_frame - SILENCE_WINDOW : noise_frame + SILENCE_WINDOW, 'e_mode'] = sd_df.loc[
+            last_persisted_state_idx, 'e_mode'
+        ]
 
     # Identify continuous state segments
     sd_df['group'] = (sd_df['e_mode'] != sd_df['e_mode'].shift()).cumsum()
@@ -178,10 +196,7 @@ def duration_data(data_df, any_transition_frames):
     sd_df['frame_duration'] = sd_df['frame_duration'].fillna(1 / 60)  # Handle last frame
 
     # Sum durations within each group
-    durations = sd_df.groupby('group').agg(
-        e_mode=('e_mode', 'first'),
-        duration=('frame_duration', 'sum')
-    ).reset_index(drop=True)
+    durations = sd_df.groupby('group').agg(e_mode=('e_mode', 'first'), duration=('frame_duration', 'sum')).reset_index(drop=True)
 
     return sd_df, durations
 
@@ -194,29 +209,27 @@ def interval_data(data_df, trials_data):
     :param trials_data: Trials data object
     :returns: DataFrame with trial intervals and metadata
     """
-    ct = data_df["times"]
+    ct = data_df['times']
     tr = trials_data
 
-    interval_df = tr[['intervals_0', 'intervals_1']].rename(
-        columns={'intervals_0': 'start', 'intervals_1': 'end'}
-    )
-    interval_df["frame_start"] = np.searchsorted(ct, interval_df["start"]).astype(int)
-    interval_df["frame_end"] = np.searchsorted(ct, interval_df["end"]).astype(int)
-    interval_df["firstMovement_times"] = tr["firstMovement_times"]
-    interval_df["frame_fmt"] = np.searchsorted(ct, interval_df["firstMovement_times"])
-    interval_df["stimOn_times"] = tr["stimOn_times"]
-    interval_df["feedback_times"] = tr["feedback_times"]
-    interval_df["trial_idx"] = np.arange(0, len(interval_df))
-    interval_df["choice_data"] = (tr["feedbackType"] + 1) / 2
-    interval_df["trial_duration"] = interval_df["end"] - interval_df["start"]
+    interval_df = tr[['intervals_0', 'intervals_1']].rename(columns={'intervals_0': 'start', 'intervals_1': 'end'})
+    interval_df['frame_start'] = np.searchsorted(ct, interval_df['start']).astype(int)
+    interval_df['frame_end'] = np.searchsorted(ct, interval_df['end']).astype(int)
+    interval_df['firstMovement_times'] = tr['firstMovement_times']
+    interval_df['frame_fmt'] = np.searchsorted(ct, interval_df['firstMovement_times'])
+    interval_df['stimOn_times'] = tr['stimOn_times']
+    interval_df['feedback_times'] = tr['feedback_times']
+    interval_df['trial_idx'] = np.arange(0, len(interval_df))
+    interval_df['choice_data'] = (tr['feedbackType'] + 1) / 2
+    interval_df['trial_duration'] = interval_df['end'] - interval_df['start']
 
     # Calculate average variance per trial
     def calculate_avg_var(row):
-        frame_start = max(0, int(row["frame_start"]))
-        frame_end = min(len(data_df) - 1, int(row["frame_end"]))
-        return data_df["e_var"].iloc[frame_start:frame_end].mean()
+        frame_start = max(0, int(row['frame_start']))
+        frame_end = min(len(data_df) - 1, int(row['frame_end']))
+        return data_df['e_var'].iloc[frame_start:frame_end].mean()
 
-    interval_df["avg_var"] = interval_df.apply(calculate_avg_var, axis=1)
+    interval_df['avg_var'] = interval_df.apply(calculate_avg_var, axis=1)
 
     return interval_df
 
@@ -230,7 +243,7 @@ def raster_data(interval_df, data_df, fps):
     :param fps: Camera frame rate
     :returns: Tuple of (ensemble_raster, variance_raster)
     """
-    max_frames = (interval_df["frame_end"] - interval_df["frame_start"]).max()
+    max_frames = (interval_df['frame_end'] - interval_df['frame_start']).max()
     ens_raster_holder = np.full((len(interval_df), max_frames), np.nan)
     var_raster_holder = np.full((len(interval_df), max_frames), np.nan)
 
@@ -238,14 +251,14 @@ def raster_data(interval_df, data_df, fps):
     class_to_int = {label: i for i, label in enumerate(STATE_LABELS)}
 
     for idx, row in interval_df.iterrows():
-        start = int(row["frame_fmt"])
-        end = int(row["frame_end"])
+        start = int(row['frame_fmt'])
+        end = int(row['frame_end'])
 
-        trial_data = data_df["e_mode"][start - previous_space:end]
+        trial_data = data_df['e_mode'][start - previous_space : end]
         trial_length = min(len(trial_data), max_frames)
 
         ens_raster_holder[idx, :trial_length] = trial_data.map(class_to_int).values[:trial_length]
-        var_raster_holder[idx, :trial_length] = data_df["e_var"][start - previous_space:end].values[:trial_length]
+        var_raster_holder[idx, :trial_length] = data_df['e_var'][start - previous_space : end].values[:trial_length]
 
     return ens_raster_holder, var_raster_holder
 
@@ -267,31 +280,31 @@ def wheel_data(data_df):
     transitions = {}
 
     transitions['still_to_wheel_turn'] = data_df[
-        (data_df[MODEL_TO_USE].shift() == 'Still') &
-        (data_df[MODEL_TO_USE] == 'Wheel Turn') &
-        (data_df['state_duration'].shift() >= FRAME_COUNTER_DURATION) &
-        (data_df['state_duration_next'] >= FRAME_COUNTER_DURATION)
+        (data_df[MODEL_TO_USE].shift() == 'Still')
+        & (data_df[MODEL_TO_USE] == 'Wheel Turn')
+        & (data_df['state_duration'].shift() >= FRAME_COUNTER_DURATION)
+        & (data_df['state_duration_next'] >= FRAME_COUNTER_DURATION)
     ].index
 
     transitions['wheel_turn_to_still'] = data_df[
-        (data_df[MODEL_TO_USE].shift() == 'Wheel Turn') &
-        (data_df[MODEL_TO_USE] == 'Still') &
-        (data_df['state_duration'].shift() >= FRAME_COUNTER_DURATION) &
-        (data_df['state_duration_next'] >= FRAME_COUNTER_DURATION)
+        (data_df[MODEL_TO_USE].shift() == 'Wheel Turn')
+        & (data_df[MODEL_TO_USE] == 'Still')
+        & (data_df['state_duration'].shift() >= FRAME_COUNTER_DURATION)
+        & (data_df['state_duration_next'] >= FRAME_COUNTER_DURATION)
     ].index
 
     transitions['still_to_move'] = data_df[
-        (data_df[MODEL_TO_USE].shift() == 'Still') &
-        (data_df[MODEL_TO_USE] == 'Move') &
-        (data_df['state_duration'].shift() >= FRAME_COUNTER_DURATION) &
-        (data_df['state_duration_next'] >= FRAME_COUNTER_DURATION)
+        (data_df[MODEL_TO_USE].shift() == 'Still')
+        & (data_df[MODEL_TO_USE] == 'Move')
+        & (data_df['state_duration'].shift() >= FRAME_COUNTER_DURATION)
+        & (data_df['state_duration_next'] >= FRAME_COUNTER_DURATION)
     ].index
 
     transitions['move_to_still'] = data_df[
-        (data_df[MODEL_TO_USE].shift() == 'Move') &
-        (data_df[MODEL_TO_USE] == 'Still') &
-        (data_df['state_duration'].shift() >= FRAME_COUNTER_DURATION) &
-        (data_df['state_duration_next'] >= FRAME_COUNTER_DURATION)
+        (data_df[MODEL_TO_USE].shift() == 'Move')
+        & (data_df[MODEL_TO_USE] == 'Still')
+        & (data_df['state_duration'].shift() >= FRAME_COUNTER_DURATION)
+        & (data_df['state_duration_next'] >= FRAME_COUNTER_DURATION)
     ].index
 
     return transitions
@@ -301,13 +314,12 @@ def wheel_data(data_df):
 # Individual plotting functions
 # -------------------------------------------------
 
+
 def extract_transition_data(data_df, frames, data_col, pre_window=30, post_window=50):
     transition_data = []
     for frame in frames:
         if frame - pre_window >= 0 and frame + post_window < len(data_df):
-            transition_data.append(
-                data_df.iloc[frame - pre_window:frame + post_window][data_col].values
-            )
+            transition_data.append(data_df.iloc[frame - pre_window : frame + post_window][data_col].values)
     return np.array(transition_data)
 
 
@@ -335,9 +347,7 @@ def plot_paw_positions_by_state(ax, frame, data_df, state, state_idx, camera, pa
     # Normalize paw speed for visualization
     state_data = state_data.copy()
     if state_data['paw_speed'].max() > 0:
-        state_data['paw_speed_normalized'] = (
-            np.log(state_data['paw_speed'] + 1e-6) / np.log(state_data['paw_speed'].max() + 1e-6)
-        )
+        state_data['paw_speed_normalized'] = np.log(state_data['paw_speed'] + 1e-6) / np.log(state_data['paw_speed'].max() + 1e-6)
     else:
         state_data['paw_speed_normalized'] = 0
 
@@ -348,27 +358,25 @@ def plot_paw_positions_by_state(ax, frame, data_df, state, state_idx, camera, pa
         state_data['paw_x_pos'],
         state_data['paw_y_pos'],
         c=state_data['paw_speed_normalized'],
-        cmap="plasma",
+        cmap='plasma',
         alpha=0.8,
         marker='+',
         s=0.1,
         vmin=0,
-        vmax=1
+        vmax=1,
     )
 
-    ax.set_title(f"Paw Positions: {state}")
+    ax.set_title(f'Paw Positions: {state}')
     ax.axis('off')
 
     # Add colorbar on last panel
     if state_idx == len(STATE_LABELS) - 1 and len(state_data) > 0:
-        cbaxes = inset_axes(ax, width="5%", height="100%", loc='center right', borderpad=0)
+        cbaxes = inset_axes(ax, width='5%', height='100%', loc='center right', borderpad=0)
         cbar_obj = plt.colorbar(sc, cax=cbaxes, orientation='vertical')
         cbar_obj.outline.set_visible(True)
         cbar_obj.set_ticks([])
-        cbaxes.text(1.1, 0, 'slow', transform=cbaxes.transAxes,
-                    ha='left', va='bottom', color='black', fontsize=12, rotation=90)
-        cbaxes.text(1.1, 1, 'fast', transform=cbaxes.transAxes,
-                    ha='left', va='top', color='black', fontsize=12, rotation=90)
+        cbaxes.text(1.1, 0, 'slow', transform=cbaxes.transAxes, ha='left', va='bottom', color='black', fontsize=12, rotation=90)
+        cbaxes.text(1.1, 1, 'fast', transform=cbaxes.transAxes, ha='left', va='top', color='black', fontsize=12, rotation=90)
 
 
 def plot_state_duration_histogram(ax, durations, state, state_idx, xlim=None):
@@ -387,8 +395,7 @@ def plot_state_duration_histogram(ax, durations, state, state_idx, xlim=None):
         ax.text(0.5, 0.5, f'No {state} data', ha='center', va='center', transform=ax.transAxes)
         return
 
-    sns.histplot(state_data, bins=50, color=COLORS[state_idx], ax=ax,
-                 log_scale=(True, False), fill=True)
+    sns.histplot(state_data, bins=50, color=COLORS[state_idx], ax=ax, log_scale=(True, False), fill=True)
 
     ax.set_title(f'Durations: {state}')
     ax.set_xlabel('Duration (s)')
@@ -432,12 +439,13 @@ def plot_total_duration_bars(ax, durations):
     total_durations['color'] = total_durations['e_mode'].map(color_map)
 
     cols = total_durations['color'].tolist()
-    bp = sns.barplot(data=total_durations, x='e_mode', y='percentage',
-                     hue='e_mode', palette=cols, ax=ax, legend=False, order=STATE_LABELS)
+    bp = sns.barplot(
+        data=total_durations, x='e_mode', y='percentage', hue='e_mode', palette=cols, ax=ax, legend=False, order=STATE_LABELS
+    )
 
     # Add value labels on bars
     for container in bp.containers:
-        bp.bar_label(container, padding=3, fmt="%.1f", label_type='center')
+        bp.bar_label(container, padding=3, fmt='%.1f', label_type='center')
 
     ax.set_xlabel('States')
     ax.set_ylabel('Total Duration (%)')
@@ -451,10 +459,10 @@ def plot_ensemble_variance_histogram(ax, data_df):
     :param ax: Matplotlib axis to plot on
     :param data_df: Processed data DataFrame
     """
-    sns.histplot(data_df["e_var"], bins=50, color='k', log_scale=False, fill=True, ax=ax)
-    ax.set_xlabel("Ensemble Mode Variance")
+    sns.histplot(data_df['e_var'], bins=50, color='k', log_scale=False, fill=True, ax=ax)
+    ax.set_xlabel('Ensemble Mode Variance')
     ax.set_xlim(0, 1)
-    ax.set_ylabel("Frequency")
+    ax.set_ylabel('Frequency')
     ax.set_yscale('log')
 
 
@@ -470,8 +478,8 @@ def plot_state_raster(ax, er, fps):
     cmap = ListedColormap(COLORS)
 
     sns.heatmap(er, cmap=cmap, cbar=False, ax=ax, vmin=0, vmax=len(COLORS) - 1)
-    ax.set_title("Raster of Ensemble Mode States")
-    ax.set_xlabel("Time from first movement onset (s)")
+    ax.set_title('Raster of Ensemble Mode States')
+    ax.set_xlabel('Time from first movement onset (s)')
 
     # Set up y-axis ticks
     num_trials = len(er)
@@ -483,13 +491,13 @@ def plot_state_raster(ax, er, fps):
 
     ax.set_yticks(yt)
     ax.set_yticklabels(yt, rotation=0, fontsize=10)
-    ax.set_ylabel("")
+    ax.set_ylabel('')
 
     # Set up x-axis
     x_ticks = np.linspace(-0.5, 1.5, 9)
     ax.set_xlim(0, xlim)
     ax.set_xticks(np.linspace(0, xlim, 9))
-    ax.set_xticklabels([f"{tick:.1f}s" for tick in x_ticks], rotation=0)
+    ax.set_xticklabels([f'{tick:.1f}s' for tick in x_ticks], rotation=0)
 
     # Add vertical line at first movement onset
     ax.axvline(x=fps / 2, color='black', linestyle='--')
@@ -505,16 +513,16 @@ def plot_variance_raster(ax, vr, fps):
     """
     xlim = 2 * fps  # 2 seconds in frames
 
-    sns.heatmap(vr, cmap="gray", cbar=False, ax=ax)
-    ax.set_title("Raster of Ensemble Mode Variance")
-    ax.set_xlabel("Time from first movement onset (s)")
+    sns.heatmap(vr, cmap='gray', cbar=False, ax=ax)
+    ax.set_title('Raster of Ensemble Mode Variance')
+    ax.set_xlabel('Time from first movement onset (s)')
     ax.set_yticks([])
     ax.set_xlim(0, xlim)
 
     # Set up x-axis
     x_ticks = np.linspace(-0.5, 1.5, 9)
     ax.set_xticks(np.linspace(0, xlim, 9))
-    ax.set_xticklabels([f"{tick:.1f}s" for tick in x_ticks], rotation=0)
+    ax.set_xticklabels([f'{tick:.1f}s' for tick in x_ticks], rotation=0)
 
     # Add vertical line at first movement onset
     ax.axvline(x=fps / 2, color='white', linestyle='--')
@@ -534,12 +542,16 @@ def plot_wheel_speed_transitions(ax, wheel_transitions, data_df, fps, transition
     # Extract data for transitions
     if transition_start == 'still':
         still_to_wheel = extract_transition_data(
-            data_df, wheel_transitions['still_to_wheel_turn'], 'wheel_speed',
+            data_df,
+            wheel_transitions['still_to_wheel_turn'],
+            'wheel_speed',
         )
         wheel_to_still = []
     elif transition_start == 'wheel_turn':
         wheel_to_still = extract_transition_data(
-            data_df, wheel_transitions['wheel_turn_to_still'], 'wheel_speed',
+            data_df,
+            wheel_transitions['wheel_turn_to_still'],
+            'wheel_speed',
         )
         still_to_wheel = []
 
@@ -552,19 +564,19 @@ def plot_wheel_speed_transitions(ax, wheel_transitions, data_df, fps, transition
 
     # Plot individual traces
     for line in still_to_wheel:
-        ax.plot(x, line, color="gray", alpha=alpha)
+        ax.plot(x, line, color='gray', alpha=alpha)
     for line in wheel_to_still:
-        ax.plot(x, line, color="gray", alpha=alpha)
+        ax.plot(x, line, color='gray', alpha=alpha)
 
     # Plot averages
     if len(still_to_wheel) > 0:
-        ax.plot(x, still_to_wheel.mean(axis=0), "k-", label="Still → Wheel Turn", linewidth=2)
+        ax.plot(x, still_to_wheel.mean(axis=0), 'k-', label='Still → Wheel Turn', linewidth=2)
     if len(wheel_to_still) > 0:
-        ax.plot(x, wheel_to_still.mean(axis=0), "k-", label="Wheel Turn → Still", linewidth=2)
+        ax.plot(x, wheel_to_still.mean(axis=0), 'k-', label='Wheel Turn → Still', linewidth=2)
 
     ax.axvline(0, color='k', linestyle='--', alpha=0.5)
-    ax.set_xlabel("Time from Transition (seconds)")
-    ax.set_ylabel("Wheel Speed")
+    ax.set_xlabel('Time from Transition (seconds)')
+    ax.set_ylabel('Wheel Speed')
     ax.legend(loc='upper right')
     ax.grid(True, alpha=0.3)
 
@@ -581,12 +593,12 @@ def plot_paw_speed_transitions(ax, wheel_transitions, data_df, fps):
 
     # Extract data for all transition types
     transitions = {}
-    labels = ["Still → Wheel Turn", "Wheel Turn → Still", "Still → Move", "Move → Still"]
+    labels = ['Still → Wheel Turn', 'Wheel Turn → Still', 'Still → Move', 'Move → Still']
     colors = ['b', 'r', 'g', 'orange']
 
-    for i, (key, label) in enumerate(zip(
-            ['still_to_wheel_turn', 'wheel_turn_to_still', 'still_to_move', 'move_to_still'],
-            labels)):
+    for i, (key, label) in enumerate(
+        zip(['still_to_wheel_turn', 'wheel_turn_to_still', 'still_to_move', 'move_to_still'], labels)
+    ):
         data = extract_transition_data(data_df, wheel_transitions[key], 'paw_speed')
         if len(data) > 0:
             transitions[key] = data
@@ -598,15 +610,15 @@ def plot_paw_speed_transitions(ax, wheel_transitions, data_df, fps):
     x = np.arange(-30, 50, 1) / fps
 
     # Plot average traces
-    for i, (key, label, color) in enumerate(zip(
-            ['still_to_wheel_turn', 'wheel_turn_to_still', 'still_to_move', 'move_to_still'],
-            labels, colors)):
+    for i, (key, label, color) in enumerate(
+        zip(['still_to_wheel_turn', 'wheel_turn_to_still', 'still_to_move', 'move_to_still'], labels, colors)
+    ):
         if key in transitions:
             ax.plot(x, transitions[key].mean(axis=0), color=color, label=label, linewidth=2)
 
-    ax.axvline(0, color='k', linestyle='--', label="State Transition")
-    ax.set_xlabel("Time from Transition (s)")
-    ax.set_ylabel("Paw Speed")
+    ax.axvline(0, color='k', linestyle='--', label='State Transition')
+    ax.set_xlabel('Time from Transition (s)')
+    ax.set_ylabel('Paw Speed')
     ax.legend()
     ax.grid(True, alpha=0.3)
 
@@ -624,7 +636,7 @@ def plot_trial_correctness(ax, interval_df):
     sns.heatmap(binary_data, cmap=binary_cmap, cbar=False, ax=ax)
     ax.set_xticks([])
     ax.set_yticks([])
-    ax.set_ylabel("Incorrect Response", fontsize=12)
+    ax.set_ylabel('Incorrect Response', fontsize=12)
 
 
 def plot_trial_duration(ax, interval_df):
@@ -636,7 +648,7 @@ def plot_trial_duration(ax, interval_df):
     """
     duration_data = np.expand_dims(interval_df['trial_duration'].values, axis=1)
 
-    sns.heatmap(duration_data, cmap="gray", cbar=False, ax=ax)
+    sns.heatmap(duration_data, cmap='gray', cbar=False, ax=ax)
     ax.set_xticks([])
     ax.set_yticks([])
-    ax.set_ylabel("Trial Duration", fontsize=12)
+    ax.set_ylabel('Trial Duration', fontsize=12)

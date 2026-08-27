@@ -206,9 +206,8 @@ class TestMiscPlot(unittest.TestCase):
 
 
 class TestPlotPawstatesQC(unittest.TestCase):
-
     N_FRAMES = 200
-    FPS = 60.
+    FPS = 60.0
     TRACKER = 'lightningPose'
     PAW = 'paw_l'
     CAMERA = 'left'
@@ -229,7 +228,7 @@ class TestPlotPawstatesQC(unittest.TestCase):
         probs = np.full((n, 5), 0.05)
         block = n // 4
         for state_idx in range(1, 5):
-            probs[(state_idx - 1) * block:state_idx * block, state_idx] = 0.8
+            probs[(state_idx - 1) * block : state_idx * block, state_idx] = 0.8
         pawstates = pd.DataFrame(
             probs,
             columns=[f'{cls.PAW}_{label}' for label in ('background', 'still', 'move', 'wheel_turn', 'groom')],
@@ -255,8 +254,13 @@ class TestPlotPawstatesQC(unittest.TestCase):
     def test_all_none_data(self):
         """All panels show a placeholder without raising when data values are None."""
         data = {
-            'frame': None, self.TRACKER: None, 'times': None,
-            'pawstates': None, 'fps': None, 'trials': None, 'wheel': None,
+            'frame': None,
+            self.TRACKER: None,
+            'times': None,
+            'pawstates': None,
+            'fps': None,
+            'trials': None,
+            'wheel': None,
         }
         fig = pawstates_qc_plot(data, camera=self.CAMERA, paw=self.PAW, tracker=self.TRACKER)
         self.assertIsNotNone(fig)
@@ -265,7 +269,10 @@ class TestPlotPawstatesQC(unittest.TestCase):
     def test_with_synthetic_data(self):
         """Figure renders without error when given valid synthetic data."""
         fig = pawstates_qc_plot(
-            self._make_data(), camera=self.CAMERA, paw=self.PAW, tracker=self.TRACKER,
+            self._make_data(),
+            camera=self.CAMERA,
+            paw=self.PAW,
+            tracker=self.TRACKER,
         )
         self.assertIsNotNone(fig)
         self.assertGreater(len(fig.axes), 0)

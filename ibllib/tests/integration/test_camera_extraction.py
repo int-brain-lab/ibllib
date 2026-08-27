@@ -11,6 +11,7 @@ Folders used:
 NB: These tests hit the main Alyx database.  This is required for full coverage of the QC (in
 particular the CameraQC._ensure_required_data method and MotionAlign using eid2ref).
 """
+
 import unittest
 from unittest import mock
 from pathlib import Path
@@ -66,7 +67,7 @@ def _save_qc_frames(qc, **kwargs):
     if wheel_present and qc.label != 'body':
         a, b = qc.data.wheel.period
         mask = np.logical_and(qc.data.timestamps >= a, qc.data.timestamps <= b)
-        wheel_align_frames, = np.where(mask)
+        (wheel_align_frames,) = np.where(mask)
         # Again, the first read is not saved and may be re-read, so repeat the first index
         wheel_align_frames = np.insert(wheel_align_frames, 0, wheel_align_frames[0])
         frame_ids = np.r_[frame_ids, wheel_align_frames]
@@ -81,7 +82,6 @@ def _save_qc_frames(qc, **kwargs):
 
 
 class TestTrainingCameraExtractor(base.IntegrationTest):
-
     required_files = ['camera/FMR007/2021-02-25/001', 'camera/ZFM-01867/2021-03-23/002']
     _writable_scope = 'test'
 
@@ -133,8 +133,7 @@ class TestTrainingCameraExtractor(base.IntegrationTest):
 
         # NB: syncing the timestamps to the audio doesn't work very well but we don't need it to
         # for the extraction, so long as the audio and GPIO fronts match.
-        gpio, audio, _ = camio.groom_pin_state(gpio, audio, ts,
-                                               take='nearest', tolerance=.5, min_diff=5e-3)
+        gpio, audio, _ = camio.groom_pin_state(gpio, audio, ts, take='nearest', tolerance=0.5, min_diff=5e-3)
         # Do some checks
         self.assertEqual(gpio['indices'].size, audio['times'].size)
         expected = np.array([446328, 446812, 446814, 447251, 447253], dtype=int)
@@ -157,8 +156,18 @@ class TestTrainingCameraExtractor(base.IntegrationTest):
         self.assertEqual(ts.size, self.n_frames, 'unexpected size')
         self.assertTrue(not np.isnan(ts).any(), 'nans in timestamps')
         self.assertTrue(np.all(np.diff(ts) > 0), 'timestamps not strictly increasing')
-        expected = [1.27701818, 1.33762424, 1.36792727, 1.3982303, 1.42853333,
-                    1.45883636, 1.48913939, 1.51944242, 1.54974545, 1.58004848]
+        expected = [
+            1.27701818,
+            1.33762424,
+            1.36792727,
+            1.3982303,
+            1.42853333,
+            1.45883636,
+            1.48913939,
+            1.51944242,
+            1.54974545,
+            1.58004848,
+        ]
         np.testing.assert_array_almost_equal(ts[:10], expected)
 
         # Test extraction parameters
@@ -178,7 +187,7 @@ class TestTrainingCameraExtractor(base.IntegrationTest):
             'sync TTLs': 6624,
             'GPIO': 126,
             'cam times': 107913,
-            'assigned sync TTL': 124
+            'assigned sync TTL': 124,
         }
         self.assertEqual(actual, expected, 'unexpected plot')
 
@@ -225,8 +234,7 @@ class TestTrainingCameraExtractor(base.IntegrationTest):
 
         # Verify behaviour when no frame data and fewer timestamps than frames
         self.assertEqual(ts.size, self.n_frames)
-        expected = np.array([15901.65804537, 15934.55278222,
-                             15967.44751906, 16000.3422559, 16033.23699274])
+        expected = np.array([15901.65804537, 15934.55278222, 15967.44751906, 16000.3422559, 16033.23699274])
         np.testing.assert_array_almost_equal(ts[-5:], expected)
 
         # Verify behaviour when no frame data and frames than timestamps
@@ -243,7 +251,10 @@ class TestTrainingCameraExtractorNew(base.IntegrationTest):
     has a purposefully added 1-second delay between starting the camera and start of the first trial - this is not
     normally the case. It has been added here to test the effect of decoupling camera start and first trial on the
     synchronization of the camera timestamps with the Bpod trials."""
-    required_files = ['training/8.28.0/2025-06-12/002/*',]
+
+    required_files = [
+        'training/8.28.0/2025-06-12/002/*',
+    ]
     _writable_scope = 'test'
 
     def setUp(self):
@@ -252,10 +263,10 @@ class TestTrainingCameraExtractorNew(base.IntegrationTest):
         frame_data = raw.load_camera_frameData(session_path, camera='left')
         self.n_frames = len(frame_data)
         bpod_trials = raw.load_data(session_path, task_collection='raw_task_data_00')
-        self.t0_bpod = bpod_trials[0]["behavior_data"]["Trial start timestamp"]
+        self.t0_bpod = bpod_trials[0]['behavior_data']['Trial start timestamp']
         self.ext = camio.CameraTimestampsBpod(session_path)
 
-    @mock.patch("ibllib.io.extractors.camera.cv2.VideoCapture")
+    @mock.patch('ibllib.io.extractors.camera.cv2.VideoCapture')
     def test_extraction_sound_sync(self, mock_vc):
         """In this test the camera timestamps are synchronized by means of the sound TTL recorded by the camera.
         The extractor should be able to handle this and extrapolate the camera triggers that have been missed before
@@ -266,7 +277,7 @@ class TestTrainingCameraExtractorNew(base.IntegrationTest):
         # The first camera timestamp should be BEFORE the start of the first trial.
         self.assertGreater(self.t0_bpod, ts[0])
 
-    @mock.patch("ibllib.io.extractors.camera.raw.load_embedded_frame_data")
+    @mock.patch('ibllib.io.extractors.camera.raw.load_embedded_frame_data')
     @mock.patch('ibllib.io.extractors.camera.cv2.VideoCapture')
     def test_extraction_no_frame_data(self, mock_vc, mock_aux):
         """In this test the camera can not be synchronized by means of the sound TTL. This will lead to a shift of the
@@ -280,18 +291,20 @@ class TestTrainingCameraExtractorNew(base.IntegrationTest):
 
 
 class TestEphysCameraExtractor(base.IntegrationTest):
-
-    required_files = ['camera/SWC_054/2020-10-07/001',
-                      'ephys/ephys_choice_world_task/ibl_witten_27/2021-01-21/001',
-                      'Subjects_init/ZM_1098/2019-01-25/001']
+    required_files = [
+        'camera/SWC_054/2020-10-07/001',
+        'ephys/ephys_choice_world_task/ibl_witten_27/2021-01-21/001',
+        'Subjects_init/ZM_1098/2019-01-25/001',
+    ]
     _writable_scope = 'test'
 
     def setUp(self) -> None:
         super().setUp()
         self.ephys_eid = '6c6983ef-7383-4989-9183-32b1a300d17a'
         self.session_path = self.data_path / 'camera' / 'SWC_054' / '2020-10-07' / '001'
-        self.groom_session_path = self.data_path.joinpath('ephys', 'ephys_choice_world_task',
-                                                          'ibl_witten_27', '2021-01-21', '001')
+        self.groom_session_path = self.data_path.joinpath(
+            'ephys', 'ephys_choice_world_task', 'ibl_witten_27', '2021-01-21', '001'
+        )
         self.n_frames = OrderedDict(left=255617, right=641484, body=128035)
         backend = matplotlib.get_backend()
         matplotlib.use('Agg')  # Use non-interactive backend
@@ -337,9 +350,8 @@ class TestEphysCameraExtractor(base.IntegrationTest):
         fc = raw.load_camera_frame_count(session_path, label).astype(np.float64)
         GPIO_file = session_path.joinpath('raw_video_data', f'_iblrig_{label}Camera.GPIO.bin')
         raw_gpio = np.fromfile(GPIO_file, dtype=np.float64).astype(np.float64)
-        out = np.vstack((bns_ts, cam_ts, fc[:len(cam_ts)], raw_gpio[:len(cam_ts)])).T
-        out.astype(np.float64).tofile(
-            session_path / 'raw_video_data' / f'_iblrig_{label}Camera.frameData.bin')
+        out = np.vstack((bns_ts, cam_ts, fc[: len(cam_ts)], raw_gpio[: len(cam_ts)])).T
+        out.astype(np.float64).tofile(session_path / 'raw_video_data' / f'_iblrig_{label}Camera.frameData.bin')
         return out
 
     def _remove_frameData_file(self, session_path, label='left'):
@@ -366,11 +378,11 @@ class TestEphysCameraExtractor(base.IntegrationTest):
         np.testing.assert_array_almost_equal(audio['times'][-5:], expected)
 
         # Verify behaviour when audio and GPIO match in size
-        _, audio_, _ = camio.groom_pin_state(gpio, audio, ts, take='nearest', tolerance=.5)
+        _, audio_, _ = camio.groom_pin_state(gpio, audio, ts, take='nearest', tolerance=0.5)
         self.assertEqual(audio, audio_)
 
         # Verify behaviour when there are GPIO fronts beyond number of video frames
-        ts_short = ts[:gpio['indices'].max() - 10]
+        ts_short = ts[: gpio['indices'].max() - 10]
         gpio_, *_ = camio.groom_pin_state(gpio, audio, ts_short)
         self.assertFalse(np.any(gpio_['indices'] >= ts.size))
 
@@ -401,26 +413,29 @@ class TestEphysCameraExtractor(base.IntegrationTest):
         self.assertEqual(ts.size, n_frames, 'unexpected size')
         self.assertTrue(not np.isnan(ts).any(), 'nans in timestamps')
         self.assertTrue(np.all(np.diff(ts) > 0), 'timestamps not strictly increasing')
-        expected = np.array([197.76558813, 197.79905145, 197.81578311, 197.83251477,
-                             197.84924643, 197.86597809, 197.88270975, 197.89944141,
-                             197.91617307, 197.93290473])
+        expected = np.array([
+            197.76558813,
+            197.79905145,
+            197.81578311,
+            197.83251477,
+            197.84924643,
+            197.86597809,
+            197.88270975,
+            197.89944141,
+            197.91617307,
+            197.93290473,
+        ])
         np.testing.assert_array_almost_equal(ts[:10], expected)
 
         # Test extraction parameters
-        ts, _ = ext.extract(save=False, sync=sync, chmap=chmap,
-                            display=True, extrapolate_missing=False)
+        ts, _ = ext.extract(save=False, sync=sync, chmap=chmap, display=True, extrapolate_missing=False)
         self.assertEqual(ts.size, n_frames, 'unexpected size')
         self.assertEqual(np.isnan(ts).sum(), 499, 'unexpected number of nans')
         # Verify plots
         figs = [plt.figure(i) for i in plt.get_fignums()]
         lines = figs[0].axes[0].lines
         actual = {ln._label: len(ln._xy) for ln in lines}
-        expected = {
-            'sync TTLs': 3400,
-            'GPIO': 3394,
-            'cam times': 255617,
-            'assigned sync TTL': 3392
-        }
+        expected = {'sync TTLs': 3400, 'GPIO': 3394, 'cam times': 255617, 'assigned sync TTL': 3392}
         self.assertEqual(actual, expected, 'unexpected plot')
 
         lines = figs[1].axes[0].lines
@@ -454,8 +469,10 @@ class TestEphysCameraExtractor(base.IntegrationTest):
 
         # Now test fallback when GPIO or audio data are unusable (i.e. raise an assertion)
         n = 888  # Number of GPIOs (number not important)
-        gpio = {'indices': np.sort(np.random.choice(np.arange(self.n_frames[side]), n)),
-                'polarities': np.insert(np.random.choice([-1, 1], n - 1), 0, -1)}
+        gpio = {
+            'indices': np.sort(np.random.choice(np.arange(self.n_frames[side]), n)),
+            'polarities': np.insert(np.random.choice([-1, 1], n - 1), 0, -1),
+        }
         mock_aux.return_value = (np.arange(self.n_frames[side]), [None, None, None, gpio])
         with self.assertLogs(logging.getLogger('ibllib.io.extractors.camera'), logging.CRITICAL):
             ts, _ = ext.extract(save=False, sync=sync, chmap=chmap)
@@ -464,16 +481,15 @@ class TestEphysCameraExtractor(base.IntegrationTest):
 
     def test_get_video_length(self):
         # Verify using URL
-        url = (one.params.default().HTTP_DATA_SERVER +
-               '/mainenlab/Subjects/ZM_3003/2020-07-28/001/raw_video_data/'
-               '_iblrig_leftCamera.raw.fc670ca4-b693-41ea-976e-a29710d9932a.mp4')
+        url = (
+            one.params.default().HTTP_DATA_SERVER + '/mainenlab/Subjects/ZM_3003/2020-07-28/001/raw_video_data/'
+            '_iblrig_leftCamera.raw.fc670ca4-b693-41ea-976e-a29710d9932a.mp4'
+        )
         length = camio.get_video_length(url)
         self.assertEqual(length, 249229)
 
         # Verify using local path
-        video_path = next(
-            self.data_path.joinpath('Subjects_init/ZM_1098/2019-01-25/001').rglob('*.mp4')
-        )
+        video_path = next(self.data_path.joinpath('Subjects_init/ZM_1098/2019-01-25/001').rglob('*.mp4'))
         length = camio.get_video_length(video_path)
         self.assertEqual(length, 34442)
 
@@ -516,12 +532,12 @@ class TestVideoQC(base.IntegrationTest):
             (self.qc.check_focus, [10] * 18),
             (self.qc.check_brightness, [10] * 3 + [30, 10, 30, 30, 10, 10, 30, 10, 40] + [10] * 3 + [30, 10, 30]),
             (self.qc.check_file_headers, [10] * 18),
-            (self.qc.check_resolution, [10] * 5 + [40, 40, 10, 10, 40, 10, 40] + [10] * 5 + [40])
+            (self.qc.check_resolution, [10] * 5 + [40, 40, 10, 10, 40, 10, 40] + [10] * 5 + [40]),
         )
 
         # For each check get the outcome and determine whether it matches our expected outcome
         # for each video
-        for (check, expected) in video_checks:
+        for check, expected in video_checks:
             name = check.__name__
             outcomes = []
             frame_samples = []
@@ -535,8 +551,7 @@ class TestVideoQC(base.IntegrationTest):
             # This is purely for manual inspection
             if display:  # Check outcomes look reasonable by eye
                 fig, axes = plt.subplots(int(len(self.data) / 4), 4)
-                [self.qc.imshow(frm, ax=ax, title=o.name)
-                 for frm, ax, o in zip(frame_samples, axes.flatten(), outcomes)]
+                [self.qc.imshow(frm, ax=ax, title=o.name) for frm, ax, o in zip(frame_samples, axes.flatten(), outcomes)]
                 fig.suptitle(name)
                 plt.show()
 
@@ -555,25 +570,19 @@ class TestCameraQC(base.IntegrationTest):
         'camera/NR_0020/2022-01-27/001',
         'camera/6c6983ef-7383-4989-9183-32b1a300d17a_frame_samples.npy',
         'camera/7082d576-4eb4-41dc-a16e-8a742829a83a_frame_samples.npy',
-        'camera/451bc9c0-113c-408e-a924-122ffe44306e_frame_samples.npy'
+        'camera/451bc9c0-113c-408e-a924-122ffe44306e_frame_samples.npy',
     ]
     _writable_scope = 'test'
 
     def setUp(self) -> None:
         super().setUp()
         self.incomplete = self.data_path.joinpath('Subjects_init', 'ZM_1098', '2019-01-25', '001')
-        self.ephys = (
-            '6c6983ef-7383-4989-9183-32b1a300d17a',
-            self.data_path.joinpath('camera', 'SWC_054', '2020-10-07', '001')
-        )
-        self.training = (
-            '7082d576-4eb4-41dc-a16e-8a742829a83a',
-            self.data_path.joinpath('camera', 'FMR007', '2021-02-25', '001')
-        )
+        self.ephys = ('6c6983ef-7383-4989-9183-32b1a300d17a', self.data_path.joinpath('camera', 'SWC_054', '2020-10-07', '001'))
+        self.training = ('7082d576-4eb4-41dc-a16e-8a742829a83a', self.data_path.joinpath('camera', 'FMR007', '2021-02-25', '001'))
 
         self.habituation = (
             '451bc9c0-113c-408e-a924-122ffe44306e',
-            self.data_path.joinpath('camera', 'NR_0020', '2022-01-27', '001')
+            self.data_path.joinpath('camera', 'NR_0020', '2022-01-27', '001'),
         )
         self._call_count = -1
         self.frames = np.array([])
@@ -605,8 +614,7 @@ class TestCameraQC(base.IntegrationTest):
         length = 255617
         eid, session_path = self.ephys
         self.frames = np.load(self.data_path / 'camera' / f'{eid}_frame_samples.npy')
-        mock_meta.return_value = \
-            Bunch({'length': length, **CameraQC.video_meta['ephys']['left']})
+        mock_meta.return_value = Bunch({'length': length, **CameraQC.video_meta['ephys']['left']})
         mock_ext().get.return_value = length
         mock_ext().read.side_effect = self.side_effect()
 
@@ -617,8 +625,9 @@ class TestCameraQC(base.IntegrationTest):
         if not video_path.exists():
             video_path.touch()
             self.addCleanup(video_path.unlink, missing_ok=True)
-        qc = camQC.run_all_qc(session_path, cameras=('left',), stream=False, update=False, one=one,
-                              n_samples=n_samples, extract_times=True)
+        qc = camQC.run_all_qc(
+            session_path, cameras=('left',), stream=False, update=False, one=one, n_samples=n_samples, extract_times=True
+        )
         self.assertIsInstance(qc, dict)
         self.assertEqual(qc['left'].type, 'ephys')
         expected = {
@@ -632,7 +641,7 @@ class TestCameraQC(base.IntegrationTest):
             '_videoLeft_position': spec.QC.PASS,
             '_videoLeft_resolution': spec.QC.PASS,
             '_videoLeft_timestamps': spec.QC.PASS,
-            '_videoLeft_wheel_alignment': (spec.QC.WARNING, 7)
+            '_videoLeft_wheel_alignment': (spec.QC.WARNING, 7),
         }
         self.assertEqual(expected, qc['left'].metrics)
 
@@ -650,13 +659,13 @@ class TestCameraQC(base.IntegrationTest):
         length = 107913
         eid, session_path = self.training
         self.frames = np.load(self.data_path / 'camera' / f'{eid}_frame_samples.npy')
-        mock_meta.return_value = \
-            Bunch({'length': length, **CameraQC.video_meta['training']['left']})
+        mock_meta.return_value = Bunch({'length': length, **CameraQC.video_meta['training']['left']})
         mock_ext().get.return_value = length
         mock_ext().read.side_effect = self.side_effect()
 
-        qc = CameraQC(session_path, 'left',
-                      stream=False, n_samples=n_samples, one=self.one, protocol='_iblrig_task_trainingChoiceWorld')
+        qc = CameraQC(
+            session_path, 'left', stream=False, n_samples=n_samples, one=self.one, protocol='_iblrig_task_trainingChoiceWorld'
+        )
         # Add a dummy video path (we stub the VideoCapture class anyway)
         qc.video_path = session_path.joinpath('raw_video_data', '_iblrig_leftCamera.raw.mp4')
         qc.load_data(extract_times=True)
@@ -673,7 +682,7 @@ class TestCameraQC(base.IntegrationTest):
             '_videoLeft_position': spec.QC.PASS,
             '_videoLeft_resolution': spec.QC.PASS,
             '_videoLeft_timestamps': spec.QC.PASS,
-            '_videoLeft_wheel_alignment': (spec.QC.WARNING, 27)
+            '_videoLeft_wheel_alignment': (spec.QC.WARNING, 27),
         }
         self.assertEqual(expected, extended)
 
@@ -689,14 +698,19 @@ class TestCameraQC(base.IntegrationTest):
         length = 66198
         eid, session_path = self.habituation
         self.frames = np.load(self.data_path / 'camera' / f'{eid}_frame_samples.npy')
-        mock_meta.return_value = \
-            Bunch({'length': length, **CameraQC.video_meta['training']['left']})
+        mock_meta.return_value = Bunch({'length': length, **CameraQC.video_meta['training']['left']})
         mock_ext().get.return_value = length
         mock_ext().read.side_effect = self.side_effect()
 
-        qc = CameraQC(session_path, 'left',
-                      stream=False, one=self.one, protocol='_iblrig_task_habituationChoiceWorld',
-                      sync_type='bpod', n_samples=n_samples)
+        qc = CameraQC(
+            session_path,
+            'left',
+            stream=False,
+            one=self.one,
+            protocol='_iblrig_task_habituationChoiceWorld',
+            sync_type='bpod',
+            n_samples=n_samples,
+        )
         # Add a dummy video path (we stub the VideoCapture class anyway)
         qc.video_path = session_path.joinpath('raw_video_data', '_iblrig_leftCamera.raw.mp4')
         qc.load_data(extract_times=True)
@@ -721,8 +735,7 @@ class TestCameraQC(base.IntegrationTest):
         # First, copy files to new collection
         _, session_path = self.ephys
         task_collection = 'raw_task_data_00'
-        shutil.copytree(session_path.joinpath('raw_behavior_data'),
-                        session_path.joinpath(task_collection))
+        shutil.copytree(session_path.joinpath('raw_behavior_data'), session_path.joinpath(task_collection))
         self.addCleanup(shutil.rmtree, session_path.joinpath(task_collection), ignore_errors=True)
         # Second, create and experiment description file
         sess_params = acquisition_description_legacy_session(session_path, save=False)
@@ -744,8 +757,15 @@ class TestCameraQC(base.IntegrationTest):
         self.assertEqual('bpod', qc.sync)
         self.assertEqual(task_collection, qc.sync_collection)
         # Override with kwargs
-        qc = CameraQC(session_path, camera='left', stream=False, one=self.one, n_samples=0,
-                      sync_type='nidq', sync_collection='raw_ephys_data')
+        qc = CameraQC(
+            session_path,
+            camera='left',
+            stream=False,
+            one=self.one,
+            n_samples=0,
+            sync_type='nidq',
+            sync_collection='raw_ephys_data',
+        )
         qc.load_data(load_video=False)
         self.assertEqual('ephys', qc.type)
         self.assertEqual('nidq', qc.sync)
@@ -760,9 +780,7 @@ class TestCameraQC(base.IntegrationTest):
 
 
 class TestWheelMotionNRG(base.IntegrationTest):
-
-    required_files = ['camera/6c6983ef-7383-4989-9183-32b1a300d17a_frame_samples.npy',
-                      'camera/SWC_054/2020-10-07/001']
+    required_files = ['camera/6c6983ef-7383-4989-9183-32b1a300d17a_frame_samples.npy', 'camera/SWC_054/2020-10-07/001']
     _writable_scope = 'test'
 
     def setUp(self) -> None:
@@ -785,9 +803,7 @@ class TestWheelMotionNRG(base.IntegrationTest):
             aln.session_path = self.data_path / 'camera' / 'SWC_054' / '2020-10-07' / '001'
             cam = alfio.load_object(aln.session_path / 'alf', f'{side}Camera')
             aln.data.camera_times = {side: cam['times']}
-            aln.video_paths = {
-                side: aln.session_path / 'raw_video_data' / f'_iblrig_{side}Camera.raw.mp4'
-            }
+            aln.video_paths = {side: aln.session_path / 'raw_video_data' / f'_iblrig_{side}Camera.raw.mp4'}
             aln.data.wheel = alfio.load_object(aln.session_path / 'alf', 'wheel')
 
             # Test value error when invalid period given
@@ -795,8 +811,18 @@ class TestWheelMotionNRG(base.IntegrationTest):
                 aln.align_motion(period=[5000, 5000.01], side=side)
 
             dt_i, c, df = aln.align_motion(period=period, side=side)
-        expected = np.array([0.90278801, 0.68067675, 0.73734772, 0.82648895, 0.80950881,
-                             0.88054471, 0.84264046, 0.302118, 0.94302567, 0.86188695])
+        expected = np.array([
+            0.90278801,
+            0.68067675,
+            0.73734772,
+            0.82648895,
+            0.80950881,
+            0.88054471,
+            0.84264046,
+            0.302118,
+            0.94302567,
+            0.86188695,
+        ])
         np.testing.assert_array_almost_equal(expected, df[:10])
         self.assertEqual(1, dt_i)
         self.assertEqual(18.74374, round(c, 5))
@@ -814,15 +840,13 @@ class TestWheelMotionNRG(base.IntegrationTest):
 
 
 class TestWheelAlignment(base.IntegrationTest):
-
     required_files = ['training/CSHL_003/2019-04-05/001', 'ephys/choice_world_init/KS022/2019-12-10/001']
     _writable_scope = 'test'
 
     def setUp(self) -> None:
         super().setUp()
         self.training_folder = self.data_path.joinpath('training', 'CSHL_003', '2019-04-05', '001')
-        self.ephys_folder = self.data_path.joinpath(
-            'ephys', 'choice_world_init', 'KS022', '2019-12-10', '001')
+        self.ephys_folder = self.data_path.joinpath('ephys', 'choice_world_init', 'KS022', '2019-12-10', '001')
         if not self.ephys_folder.exists():
             raise FileNotFoundError(f'Fixture {self.ephys_folder} does not exist')
         if not self.training_folder.exists():
@@ -834,9 +858,9 @@ class TestWheelAlignment(base.IntegrationTest):
         motion_class.camera_meta['length'] = motion_class.camera_meta['fps'] * 200  # only run on 20s snippet of video
         _ = motion_class.process()
 
-        motion_class.camera_times = motion_class.camera_times[motion_class.tdiff:]
-        np.testing.assert_array_equal(motion_class.shifts[:10], np.array([8., 8., 8., 7., 4., 4., 4., 4., 4., 4.]))
-        np.testing.assert_array_equal(motion_class.shifts_filt[:10], np.array([4., 4., 4., 4., 4., 4., 4., 4., 4., 4.]))
+        motion_class.camera_times = motion_class.camera_times[motion_class.tdiff :]
+        np.testing.assert_array_equal(motion_class.shifts[:10], np.array([8.0, 8.0, 8.0, 7.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0]))
+        np.testing.assert_array_equal(motion_class.shifts_filt[:10], np.array([4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0]))
 
 
 if __name__ == '__main__':

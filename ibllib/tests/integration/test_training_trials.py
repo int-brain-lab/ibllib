@@ -14,10 +14,26 @@ import one.alf.io as alfio
 
 from ibllib.tests import base
 
-TRIAL_KEYS = ['goCue_times', 'probabilityLeft', 'intervals', 'goCueTrigger_times', 'quiescencePeriod',
-              'response_times', 'feedbackType', 'contrastLeft', 'feedback_times',
-              'rewardVolume', 'choice', 'contrastRight', 'stimOn_times', 'firstMovement_times',
-              'stimOnTrigger_times', 'included', 'stimOffTrigger_times', 'stimOff_times']
+TRIAL_KEYS = [
+    'goCue_times',
+    'probabilityLeft',
+    'intervals',
+    'goCueTrigger_times',
+    'quiescencePeriod',
+    'response_times',
+    'feedbackType',
+    'contrastLeft',
+    'feedback_times',
+    'rewardVolume',
+    'choice',
+    'contrastRight',
+    'stimOn_times',
+    'firstMovement_times',
+    'stimOnTrigger_times',
+    'included',
+    'stimOffTrigger_times',
+    'stimOff_times',
+]
 TRIAL_KEYS_TRAINING = TRIAL_KEYS + ['repNum']
 TRIAL_KEYS_TRAINING.pop(TRIAL_KEYS.index('included'))
 
@@ -25,7 +41,6 @@ WHEEL_KEYS = ['position', 'timestamps']
 
 
 class TestHabituation(base.IntegrationTest):
-
     def test_legacy_habituation_session(self):
         session_path = self.data_path.joinpath('Subjects_init/ZM_1098/2019-01-25/001')
         job = btasks.HabituationTrialsBpod(session_path, one=One(mode='local'), collection='raw_behavior_data')
