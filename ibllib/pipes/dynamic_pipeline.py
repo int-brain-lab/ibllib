@@ -580,7 +580,8 @@ def get_photometry_tasks(acquisition_description, **kwargs):
             # FibrePhotometryQC,
         )
 
-        sync_mode = devices['neurophotometrics']['sync_mode']
+        # some old sessions might not have that entry
+        sync_mode = devices['neurophotometrics'].get('sync_mode', 'bpod')
 
         # passive photometry
         task_protocols = acquisition_description['tasks']
