@@ -1,10 +1,12 @@
 """Library implementing the International Brain Laboratory data pipeline."""
 
+import importlib.metadata
 import logging
 import warnings
 import os
 
-__version__ = '3.5.dev+ci1'
+__version__ = importlib.metadata.version('ibllib')  # managed through pyproject.toml, section [project]
+
 warnings.filterwarnings('always', category=DeprecationWarning, module='ibllib')
 
 # if this becomes a full-blown library we should let the logging configuration to the discretion of the dev
