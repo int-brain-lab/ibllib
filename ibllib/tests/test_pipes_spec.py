@@ -37,10 +37,13 @@ def planner(session_path, context=None):
         raise RuntimeError('planner failed')
     parents = [context['tasks'][0]['name']] if context and context.get('tasks') else []
     t0 = type('PlannedTask', (Task00,), {})(session_path, foo='bar', parents=[])
-    return Pipeline(session_path=session_path, tasks={
-        'PlannedTask': t0,
-        'PlannedSpec': TaskSpec('PlannedSpec', 'mpci.foo.Bar', parents=['PlannedTask', *parents], env='mpci'),
-    })
+    return Pipeline(
+        session_path=session_path,
+        tasks={
+            'PlannedTask': t0,
+            'PlannedSpec': TaskSpec('PlannedSpec', 'mpci.foo.Bar', parents=['PlannedTask', *parents], env='mpci'),
+        },
+    )
 
 
 class TestRouting(unittest.TestCase):

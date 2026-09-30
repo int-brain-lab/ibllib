@@ -138,7 +138,8 @@ def job_creator(root_path, one=None, dry=False, rerun=False):
                 # Keep the flag file so that the missing tasks are created on the next run
                 _logger.error(
                     'Failed to plan %s tasks for session %s; keeping flag file to retry',
-                    ', '.join(pipe.planner_errors), session_path.relative_to(root_path),
+                    ', '.join(pipe.planner_errors),
+                    session_path.relative_to(root_path),
                 )
             else:
                 flag_file.unlink()

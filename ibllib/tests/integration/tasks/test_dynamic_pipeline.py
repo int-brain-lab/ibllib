@@ -111,14 +111,18 @@ class TestStandardPipelines(base.IntegrationTest):
         with patch('ibllib.pipes.plan.env_python', return_value=None):
             self.check_pipeline()
         # Plan the mpci tasks in a subprocess, using the current environment as the mpci env
-        with patch.dict('ibllib.pipes.routing.ENV_PATHS', {'mpci': Path(sys.executable).parents[1]}), \
-                patch('ibllib.pipes.plan.plan_in_env', wraps=plan_in_env) as plan_mock:
+        with (
+            patch.dict('ibllib.pipes.routing.ENV_PATHS', {'mpci': Path(sys.executable).parents[1]}),
+            patch('ibllib.pipes.plan.plan_in_env', wraps=plan_in_env) as plan_mock,
+        ):
             self.check_pipeline()
             plan_mock.assert_called_once()
         # If the planner fails, the core tasks are still created and the error is recorded
-        with patch('ibllib.pipes.plan.env_python', return_value=None), \
-                patch('ibllib.pipes.plan.plan', side_effect=RuntimeError('planner failed')), \
-                self.assertLogs('ibllib.pipes.plan', 'ERROR'):
+        with (
+            patch('ibllib.pipes.plan.env_python', return_value=None),
+            patch('ibllib.pipes.plan.plan', side_effect=RuntimeError('planner failed')),
+            self.assertLogs('ibllib.pipes.plan', 'ERROR'),
+        ):
             pipe = dynamic.make_pipeline(self.session_path)
         self.assertEqual({'mesoscope': 'planner failed'}, pipe.planner_errors)
         self.assertEqual(12, len(pipe.tasks))

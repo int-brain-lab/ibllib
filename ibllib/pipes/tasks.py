@@ -719,7 +719,11 @@ class Pipeline(abc.ABC):
                 _logger.warning(
                     '%s: task env "%s" does not match the env "%s" routed from its executable "%s"; '
                     'the task will be run in the "%s" env (see ibllib.pipes.routing)',
-                    spec.name, spec.env, env, spec.executable, env,
+                    spec.name,
+                    spec.env,
+                    env,
+                    spec.executable,
+                    env,
                 )
         return sort_specs(specs)
 
