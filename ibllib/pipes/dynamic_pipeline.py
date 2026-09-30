@@ -517,8 +517,10 @@ def get_audio_tasks(acquisition_description, **kwargs):
     devices = acquisition_description.get('devices', {})
     audio_tasks = OrderedDict()
     if 'microphone' in devices:
-        ((microphone, micro_kwargs),) = devices['microphone'].items()
-        micro_kwargs['device_collection'] = micro_kwargs.pop('collection')
+        ((microphone, micro_info),) = devices['microphone'].items()
+        # Rename the collection key without modifying the acquisition description
+        micro_kwargs = {k: v for k, v in micro_info.items() if k != 'collection'}
+        micro_kwargs['device_collection'] = micro_info['collection']
         if sync_kwargs['sync'] == 'bpod':
             audio_tasks['AudioRegisterRaw'] = type('AudioRegisterRaw', (atasks.AudioSync,), {})(
                 **kwargs, **sync_kwargs, **micro_kwargs, collection=micro_kwargs['device_collection']
@@ -535,8 +537,10 @@ def get_wfield_tasks(acquisition_description, sync_tasks, **kwargs):
     wfield_tasks = OrderedDict()
 
     if 'widefield' in devices:
-        ((_, wfield_kwargs),) = devices['widefield'].items()
-        wfield_kwargs['device_collection'] = wfield_kwargs.pop('collection')
+        ((_, wfield_info),) = devices['widefield'].items()
+        # Rename the collection key without modifying the acquisition description
+        wfield_kwargs = {k: v for k, v in wfield_info.items() if k != 'collection'}
+        wfield_kwargs['device_collection'] = wfield_info['collection']
         wfield_tasks['WideFieldRegisterRaw'] = type('WidefieldRegisterRaw', (wtasks.WidefieldRegisterRaw,), {})(
             **kwargs, **wfield_kwargs
         )
