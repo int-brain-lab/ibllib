@@ -7,9 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [3.5.0] Unreleased
 
+### Added
+- `ibllib.pipes.spec.TaskSpec`: plain-data task specification for creating Alyx tasks without importing the task class
+- `ibllib.pipes.routing`: route tasks to environments by their executable; `ENV_PATHS` maps environment labels to server venvs
+- `ibllib.pipes.plan`: plan the tasks of other repositories (e.g. mpci) in the environment that runs them, via `python -m ibllib.pipes.plan`
+
 ### Changed
 - SpikeSortingLoaders
   - merging clusters with channels doesn't require reading spikes if metrics are available
+- `local_server.task_queue` and `list_queued_envs` determine a task's environment from its executable and only import task classes of the requested environments
+- `dynamic_pipeline.make_pipeline` no longer imports mpci; mesoscope tasks are planned by `mpci.alyx.pipeline:plan` in the mpci env (requires mpci with the `plan` function)
+- `local_server.job_creator` keeps the raw_session.flag file if an external task planner fails, so the missing tasks are created on the next run
+- `Pipeline.create_alyx_tasks` creates tasks in dependency order and computes task levels from the parents
+
+### Removed
+- `dynamic_pipeline.get_mesoscope_tasks`
 
 ## [4.0.1] 2026-05-22
 

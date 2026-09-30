@@ -8,6 +8,10 @@ root of the session (see :func:`dynamic_pipeline.make_pipeline`). If no file exi
 inferring the acquisition hardware from the task protocol. The new session's pipeline tasks are
 then registered for another process (or server) to query.
 
+Tasks from repositories installed in other environments (e.g. mpci) are planned within their own
+environment as plain-data :class:`spec.TaskSpec` objects (see :mod:`plan`), so the job creator
+doesn't need to import them.
+
 Another process calls :func:`local_server.task_queue` to get a list of queued tasks from Alyx, then
 :func:`local_server.tasks_runner` to loop through tasks.  Each task is run by calling
 :func:`tasks.run_alyx_task` with a dictionary of task information, including the Task class and its
