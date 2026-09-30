@@ -124,7 +124,7 @@ class TaskSpec:
             The task specification.
         """
         d = dict(d)
-        if 'time_out_sec' in d:  # Alyx task dict key
+        if 'time_out_sec' in d:  # legacy task dict key
             d.setdefault('time_out_secs', d.pop('time_out_sec'))
         names = {f.name for f in fields(cls)}
         spec = cls(**{k: v for k, v in d.items() if k in names})
@@ -161,7 +161,7 @@ class TaskSpec:
             'ram': self.ram,
             'parents': self.parents if parents is None else parents,
             'level': self.level,
-            'time_out_sec': self.time_out_secs,
+            'time_out_secs': self.time_out_secs,
             'status': 'Waiting',
             'log': None,
             'name': self.name,

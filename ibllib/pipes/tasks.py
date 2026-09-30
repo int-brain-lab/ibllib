@@ -98,6 +98,8 @@ from one.alf.path import ALFPath, ensure_alf_path
 
 _logger = logging.getLogger(__name__)
 TASK_STATUS_SET = {'Waiting', 'Held', 'Started', 'Errored', 'Empty', 'Complete', 'Incomplete', 'Abandoned'}
+MAX_TIME_OUT_SECS = 32767
+"""int: The maximum task time out, as stored in an Alyx SmallIntegerField."""
 
 
 class Task(abc.ABC):
@@ -775,8 +777,14 @@ class Pipeline(abc.ABC):
             return
         tasks_alyx_pre = self.one.alyx.rest('tasks', 'list', session=self.eid, graph=self.name, no_cache=True)
         tasks_alyx = []
+        specs = self.task_specs(tasks_list)
+        # Check all tasks before creating any, as the Alyx field would reject these
+        for spec in specs:
+            assert spec.time_out_secs is None or spec.time_out_secs <= MAX_TIME_OUT_SECS, (
+                f'{spec.name} time_out_secs of {spec.time_out_secs} exceeds maximum of {MAX_TIME_OUT_SECS}'
+            )
         # creates all the tasks in order, such that parents are created before their children
-        for spec in self.task_specs(tasks_list):
+        for spec in specs:
             # get the parents' alyx ids to reference in the database
             parents_ids = [ta['id'] for ta in tasks_alyx if ta['name'] in spec.parents]
             task_dict = spec.to_alyx(parents=parents_ids, **self._alyx_fields())

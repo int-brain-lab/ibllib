@@ -20,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `local_server.job_creator` keeps the raw_session.flag file if an external task planner fails, so the missing tasks are created on the next run
 - `Pipeline.create_alyx_tasks` creates tasks in dependency order and computes task levels from the parents
 
+### Fixed
+- Task time outs are now stored on Alyx: tasks were posted with the key `time_out_sec` instead of the model field `time_out_secs`. `Pipeline.create_alyx_tasks` asserts that time outs don't exceed the Alyx field maximum (32767 s) before creating any tasks
+
 ### Removed
 - `dynamic_pipeline.get_mesoscope_tasks`
 

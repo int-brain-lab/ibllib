@@ -109,11 +109,14 @@ class TestTaskSpec(unittest.TestCase):
         # Alyx task dict
         d = spec.to_alyx(parents=['uuid'], session='eid', graph='Pipeline')
         self.assertEqual((['uuid'], 'eid', 'Pipeline', 'Waiting'), (d['parents'], d['session'], d['graph'], d['status']))
-        self.assertEqual(spec.time_out_secs, d['time_out_sec'])  # NB: key name as posted to Alyx
+        self.assertEqual(spec.time_out_secs, d['time_out_secs'])
         self.assertEqual(spec.parents, spec.to_alyx()['parents'])
         # Alyx task dict (with parent names) to spec; env and job_size are not stored on Alyx
         d = spec.to_alyx(session='eid')
-        d['time_out_sec'] = 10
+        d['time_out_secs'] = 10
+        self.assertEqual(10, TaskSpec.from_dict(d).time_out_secs)
+        # Legacy task dicts (e.g. pipeline_tasks.yaml fixtures) use the key 'time_out_sec'
+        d['time_out_sec'] = d.pop('time_out_secs')
         self.assertEqual(TaskSpec.from_dict(d), TaskSpec(**{**spec.to_dict(), 'env': None, 'time_out_secs': 10}))
 
     def test_sort_specs(self):
@@ -182,6 +185,13 @@ class TestTaskSpec(unittest.TestCase):
         self.assertEqual(1, tasks[1]['level'])
         calls = [c.args[1] for c in one.alyx.rest.call_args_list]
         self.assertEqual(['list', 'partial_update', 'create'], calls)
+        self.assertEqual(Task00.time_out_secs, one.alyx.rest.call_args.kwargs['data']['time_out_secs'])
+        # Time outs greater than the Alyx field maximum raise before any tasks are created
+        one.alyx.rest.reset_mock()
+        pipe.tasks['Task02'] = TaskSpec('Task02', 'mpci.foo.Task', parents=['Task00_foo'], env='mpci', time_out_secs=32768)
+        with self.assertRaises(AssertionError):
+            pipe.create_alyx_tasks()
+        self.assertEqual(['list'], [c.args[1] for c in one.alyx.rest.call_args_list])
 
 
 class TestPlan(unittest.TestCase):
