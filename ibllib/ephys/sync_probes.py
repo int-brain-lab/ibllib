@@ -84,7 +84,7 @@ def version3A(ses_path, display=True, type='smooth', tol=2.1, probe_names=None, 
             # exits if sync label not found for current probe
             if auxiliary_name not in sync_map:
                 return
-            isync = np.in1d(sync['channels'], np.array([sync_map[auxiliary_name]]))
+            isync = np.isin(sync['channels'], np.array([sync_map[auxiliary_name]]))
             # only returns syncs if we get fronts for all probes
             if np.all(~isync):
                 return

@@ -1,18 +1,18 @@
 import sys
+import importlib.util
 import logging
 import shutil
 import tempfile
 from pathlib import Path
-from collections import OrderedDict
 from one.registration import RegistrationClient
 from one.api import ONE
 from ibllib.pipes.local_server import job_creator, tasks_runner
 import ibllib.pipes.dynamic_pipeline as dynamic
-from ibllib.pipes.tasks import Pipeline
+from ibllib.pipes.plan import plan_in_env
 import ibllib.io.session_params as sess_params
 from ibllib.io.raw_data_loaders import patch_settings
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from ibllib.tests import base
 
@@ -98,29 +98,35 @@ class TestStandardPipelines(base.IntegrationTest):
         shutil.copytree(src, self.session_path)
         self.check_pipeline()
 
+    @unittest.skipIf(importlib.util.find_spec('mpci') is None, 'mpci not installed')
     def test_mesoscope(self):
-        """Test that the mesoscope pipeline is created when the mesoscope device is present."""
-        # get_mesoscope_tasks does a local `import mpci.alyx.pipeline`, so faking it requires
-        # sys.modules entries for every level of the dotted path (mpci, mpci.alyx,
-        # mpci.alyx.pipeline), with the parent -> child attributes wired up to match, since the
-        # real import machinery normally does that wiring for us.
-        pipe = Pipeline(session_path=self.session_path, tasks={'MesoscopeRegisterSnapshots': 'mocked_task'})
-        pipeline_mock = MagicMock()
-        pipeline_mock.make_pipeline.return_value = pipe
-        alyx_mock = MagicMock(pipeline=pipeline_mock)
-        mpci_mock = MagicMock(alyx=alyx_mock)
-        fake_modules = {'mpci': mpci_mock, 'mpci.alyx': alyx_mock, 'mpci.alyx.pipeline': pipeline_mock}
-        with patch.dict(sys.modules, fake_modules):
-            experiment_description = {'devices': {'foo': {'bar': 'baz'}}}
-            # Without mesoscope device, the pipeline should not be created
-            ret = dynamic.get_mesoscope_tasks(experiment_description)
-            self.assertEqual(ret, OrderedDict())
-            pipeline_mock.make_pipeline.assert_not_called()
-            # With mesoscope device, the make_pipeline should be called
-            experiment_description['devices']['mesoscope'] = {'collection': 'raw_imaging_data'}
-            ret = dynamic.get_mesoscope_tasks(experiment_description)
-            pipeline_mock.make_pipeline.assert_called_once_with(experiment_description)
-            self.assertEqual(ret, pipe.tasks)
+        """Test that the mesoscope tasks are planned by mpci when the mesoscope device is present."""
+        src = self.data_path.joinpath('mesoscope', 'test', '2023-03-03', '002')
+        self.session_path.mkdir(parents=True)
+        shutil.copy(src / '_ibl_experiment.description.yaml', self.session_path)
+        for folder in src.glob('raw_task_data_*'):
+            shutil.copytree(folder, self.session_path / folder.name)
+        shutil.copy(self.folder_path / 'mesoscope' / 'pipeline_tasks.yaml', self.session_path)
+        # Plan the mpci tasks in the current environment
+        with patch('ibllib.pipes.plan.env_python', return_value=None):
+            self.check_pipeline()
+        # Plan the mpci tasks in a subprocess, using the current environment as the mpci env
+        with (
+            patch.dict('ibllib.pipes.routing.ENV_PATHS', {'mpci': Path(sys.executable).parents[1]}),
+            patch('ibllib.pipes.plan.plan_in_env', wraps=plan_in_env) as plan_mock,
+        ):
+            self.check_pipeline()
+            plan_mock.assert_called_once()
+        # If the planner fails, the core tasks are still created and the error is recorded
+        with (
+            patch('ibllib.pipes.plan.env_python', return_value=None),
+            patch('ibllib.pipes.plan.plan', side_effect=RuntimeError('planner failed')),
+            self.assertLogs('ibllib.pipes.plan', 'ERROR'),
+        ):
+            pipe = dynamic.make_pipeline(self.session_path)
+        self.assertEqual({'mesoscope': 'planner failed'}, pipe.planner_errors)
+        self.assertEqual(12, len(pipe.tasks))
+        self.assertFalse(any(name.startswith('Mesoscope') for name in pipe.tasks))
 
     def test_chained(self):
         """Test pipeline creation when there are multiple task protocols run within a session"""

@@ -1,5 +1,6 @@
 import logging
 import hashlib
+import os
 import unittest
 
 import pandas as pd
@@ -26,7 +27,12 @@ class TestSpikeInterface(unittest.TestCase):
         Those are the specifications for the spike interface tests to pass.
         :return:
         """
-        one = ONE(base_url='https://openalyx.internationalbrainlab.org', silent=True, password='international')
+        one = ONE(
+            base_url='https://openalyx.internationalbrainlab.org',
+            silent=True,
+            username=os.getenv('OPENALYX_USER'),
+            password=os.getenv('OPENALYX_PASSWORD'),
+        )
         pid = '80f6ffdd-f692-450f-ab19-cd6d45bfd73e'
         ssl = SpikeSortingLoader(pid=pid, one=one)
 
@@ -42,7 +48,12 @@ class TestSpikeInterface(unittest.TestCase):
 
 class TestReadChannels(unittest.TestCase):
     def test_read_channels(self):
-        one = ONE(base_url='https://openalyx.internationalbrainlab.org', silent=True, password='international')
+        one = ONE(
+            base_url='https://openalyx.internationalbrainlab.org',
+            silent=True,
+            username=os.getenv('OPENALYX_USER'),
+            password=os.getenv('OPENALYX_PASSWORD'),
+        )
         pid = '511afaa5-fdc4-4166-b4c0-4629ec5e652e'
         ssl = SpikeSortingLoader(one=one, pid=pid)
         channels = ssl.load_channels(revision='2024-05-06')

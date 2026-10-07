@@ -34,6 +34,7 @@ import spikeglx
 import ibllib.io.raw_data_loaders as rawio
 import ibllib.io.session_params as sess_params
 import ibllib.pipes.tasks as mtasks
+from ibllib.pipes.plan import get_external_tasks
 import ibllib.pipes.base_tasks as bstasks
 import ibllib.pipes.widefield_tasks as wtasks
 import ibllib.pipes.sync_tasks as stasks
@@ -516,8 +517,10 @@ def get_audio_tasks(acquisition_description, **kwargs):
     devices = acquisition_description.get('devices', {})
     audio_tasks = OrderedDict()
     if 'microphone' in devices:
-        ((microphone, micro_kwargs),) = devices['microphone'].items()
-        micro_kwargs['device_collection'] = micro_kwargs.pop('collection')
+        ((microphone, micro_info),) = devices['microphone'].items()
+        # Rename the collection key without modifying the acquisition description
+        micro_kwargs = {k: v for k, v in micro_info.items() if k != 'collection'}
+        micro_kwargs['device_collection'] = micro_info['collection']
         if sync_kwargs['sync'] == 'bpod':
             audio_tasks['AudioRegisterRaw'] = type('AudioRegisterRaw', (atasks.AudioSync,), {})(
                 **kwargs, **sync_kwargs, **micro_kwargs, collection=micro_kwargs['device_collection']
@@ -534,8 +537,10 @@ def get_wfield_tasks(acquisition_description, sync_tasks, **kwargs):
     wfield_tasks = OrderedDict()
 
     if 'widefield' in devices:
-        ((_, wfield_kwargs),) = devices['widefield'].items()
-        wfield_kwargs['device_collection'] = wfield_kwargs.pop('collection')
+        ((_, wfield_info),) = devices['widefield'].items()
+        # Rename the collection key without modifying the acquisition description
+        wfield_kwargs = {k: v for k, v in wfield_info.items() if k != 'collection'}
+        wfield_kwargs['device_collection'] = wfield_info['collection']
         wfield_tasks['WideFieldRegisterRaw'] = type('WidefieldRegisterRaw', (wtasks.WidefieldRegisterRaw,), {})(
             **kwargs, **wfield_kwargs
         )
@@ -556,16 +561,6 @@ def get_wfield_tasks(acquisition_description, sync_tasks, **kwargs):
         )
 
     return wfield_tasks
-
-
-def get_mesoscope_tasks(acquisition_description, **kwargs):
-    if 'mesoscope' not in acquisition_description.get('devices', {}):
-        return OrderedDict()
-
-    import mpci.alyx.pipeline
-
-    pipe = mpci.alyx.pipeline.make_pipeline(acquisition_description, **kwargs)
-    return pipe.tasks
 
 
 def get_photometry_tasks(acquisition_description, **kwargs):
@@ -650,7 +645,10 @@ def make_pipeline(session_path, **pkwargs):
     Returns
     -------
     ibllib.pipes.tasks.Pipeline
-        A task pipeline object.
+        A task pipeline object. Tasks from other repositories (see
+        :data:`ibllib.pipes.plan.PLANNERS`) are :class:`ibllib.pipes.spec.TaskSpec` objects, planned
+        in the environment that runs them. If any of these planners fail, the pipeline
+        `planner_errors` attribute maps the device to the error message.
     """
     # NB: this pattern is a pattern for dynamic class creation
     # tasks['SyncPulses'] = type('SyncPulses', (epp.EphysPulses,), {})(session_path=session_path)
@@ -694,17 +692,19 @@ def make_pipeline(session_path, **pkwargs):
     wfield_tasks = get_wfield_tasks(acquisition_description, sync_parent_tasks, **kwargs)
     tasks.update(wfield_tasks)
 
-    # Mesoscope tasks
-    mesoscope_tasks = get_mesoscope_tasks(acquisition_description, **kwargs)
-    tasks.update(mesoscope_tasks)
-
     # photometry tasks
     # photometry_tasks = get_photometry_tasks(acquisition_description, **kwargs)
     # tasks.update(photometry_tasks)
 
+    # Tasks from other repositories (e.g. mesoscope), planned as specs in the env that runs them
+    context = {'tasks': [t.to_spec().to_dict() for t in tasks.values()]}
+    external_tasks, planner_errors = get_external_tasks(acquisition_description, session_path, context=context)
+    tasks.update(external_tasks)
+
     # combine: make pipeline and add tasks
     p = mtasks.Pipeline(session_path=session_path, **pkwargs)
     p.tasks = tasks
+    p.planner_errors = planner_errors
     return p
 
 
