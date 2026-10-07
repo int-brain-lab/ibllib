@@ -7,7 +7,7 @@ flake8>=3.7.8
 globus-sdk>=4.0.0
 graphviz
 ibl-neuropixel>=1.10.0
-ibl-photometry>=0.3.5
+ibl-photometry @ git+https://github.com/int-brain-lab/ibl-photometry.git@develop # to be replaced with ibl-photometry>=0.3.5 once released there
 ibl-style
 iblatlas>=0.5.3
 iblqt>=0.8.2
