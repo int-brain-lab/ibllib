@@ -60,12 +60,20 @@ class TestRouting(unittest.TestCase):
 
     def test_installed_envs(self):
         with tempfile.TemporaryDirectory() as tmp:
-            env_paths = {'foo': Path(tmp, 'foo'), 'bar': Path(tmp, 'bar'), 'baz': Path(tmp, 'baz')}
-            for env in ('foo', 'bar'):
-                env_paths[env].joinpath('bin').mkdir(parents=True)
-                env_paths[env].joinpath('bin', 'python').touch()
-            self.assertEqual([None, 'bar', 'foo'], routing.installed_envs(env_paths))
-            self.assertEqual(env_paths['foo'] / 'bin' / 'python', routing.env_python('foo', env_paths))
+            env_paths = {k: Path(tmp, k) for k in ('foo', 'bar', 'baz', 'win', 'conda')}
+            # POSIX venv, Windows venv and Windows conda env layouts
+            pythons = {
+                'foo': ('bin', 'python'),
+                'bar': ('bin', 'python'),
+                'win': ('Scripts', 'python.exe'),
+                'conda': ('python.exe',),
+            }
+            for env, parts in pythons.items():
+                env_paths[env].joinpath(*parts).parent.mkdir(parents=True, exist_ok=True)
+                env_paths[env].joinpath(*parts).touch()
+            self.assertEqual([None, 'bar', 'conda', 'foo', 'win'], routing.installed_envs(env_paths))
+            for env, parts in pythons.items():
+                self.assertEqual(env_paths[env].joinpath(*parts), routing.env_python(env, env_paths))
             self.assertIsNone(routing.env_python('baz', env_paths))
             self.assertIsNone(routing.env_python('unknown', env_paths))
 
@@ -97,12 +105,13 @@ class TestTaskSpec(unittest.TestCase):
     def test_from_task(self):
         spec = self.t0.to_spec()
         self.assertEqual('Task00_foo', spec.name)
-        self.assertEqual('ibllib.tests.test_pipes_spec.Task00', spec.executable)  # dynamic class base
+        # The dynamic class base (NB: the module name depends on how the tests are run)
+        self.assertEqual(f'{Task00.__module__}.Task00', spec.executable)
         self.assertEqual(executable_name(self.t0), spec.executable)
         self.assertEqual({'foo': 'bar'}, spec.arguments)
         self.assertEqual(([], 0, 90, 'large', None), (spec.parents, spec.level, spec.priority, spec.job_size, spec.env))
         spec = self.t1.to_spec()
-        self.assertEqual('ibllib.tests.test_pipes_spec.Task01', spec.executable)
+        self.assertEqual(f'{Task01.__module__}.Task01', spec.executable)
         self.assertEqual((['Task00_foo'], 1, 'foo'), (spec.parents, spec.level, spec.env))
 
     def test_dicts(self):
@@ -206,7 +215,7 @@ class TestPlan(unittest.TestCase):
         self.session_path = Path(tmp.name, 'subject', '2020-01-01', '001')
         self.target = f'{__name__}:planner'
         # An env that points to the current Python environment, for testing subprocess calls
-        self.env_paths = {'test': Path(sys.executable).parents[1], 'missing': Path(tmp.name, 'missing')}
+        self.env_paths = {'test': Path(sys.prefix), 'missing': Path(tmp.name, 'missing')}
         self.description = {'devices': {'foo': {}}}
 
     def test_to_specs(self):
@@ -223,7 +232,7 @@ class TestPlan(unittest.TestCase):
         self.assertEqual(['PlannedTask', 'CoreTask'], specs[1].parents)
         self.assertEqual({'foo': 'bar'}, specs[0].arguments)
 
-    @unittest.skipIf(not Path(sys.executable).parents[1].joinpath('bin', 'python').exists(), 'not a venv layout')
+    @unittest.skipIf(routing.env_python('test', {'test': Path(sys.prefix)}) is None, 'Python executable not found in sys.prefix')
     def test_plan_in_env(self):
         context = {'tasks': [{'name': 'CoreTask'}]}
         specs = plan.plan_in_env(self.target, 'test', self.session_path, context=context, env_paths=self.env_paths)

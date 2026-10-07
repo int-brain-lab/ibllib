@@ -105,8 +105,9 @@ def env_python(env, env_paths=None):
     """
     if not (path := env_path(env, env_paths)):
         return None
-    python = path / 'bin' / 'python'
-    return python if python.exists() else None
+    # POSIX venv, Windows venv, Windows conda env / base install
+    candidates = (path / 'bin' / 'python', path / 'Scripts' / 'python.exe', path / 'python.exe')
+    return next((python for python in candidates if python.exists()), None)
 
 
 def installed_envs(env_paths=None):

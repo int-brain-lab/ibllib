@@ -38,6 +38,8 @@ INTEGRATION_DATA_DIR = os.environ.get('INTEGRATION_DATA_DIR', '/data')
 COVERALLS_TOKEN = os.environ['COVERALLS_REPO_TOKEN']
 PR_NUMBER = os.environ.get('PR_NUMBER', '')
 JOB_TIMEOUT = int(os.environ.get('JOB_TIMEOUT_SECONDS', '7200'))
+OPENALYX_PASSWORD = os.environ.get('OPENALYX_PASSWORD', '')
+OPENALYX_USER = os.environ.get('OPENALYX_USER', 'intbrainlab')
 # Base image for the Lightning job. python:3.12 verified to ship git/bash/pip.
 # uv (installed at runtime) provides the actual test Python via PY_VERSION, so
 # this base Python version is only used to bootstrap `pip install uv`.
@@ -83,6 +85,8 @@ job = Job.run(
         'PY_VERSION': PY_VERSION,
         'REPO_URL': REPO_URL,
         'INTEGRATION_DATA_DIR': INTEGRATION_DATA_DIR,
+        'OPENALYX_PASSWORD': OPENALYX_PASSWORD,
+        'OPENALYX_USER': OPENALYX_USER,
         # --- Coveralls auth + parallel grouping ---
         'COVERALLS_REPO_TOKEN': COVERALLS_TOKEN,
         'COVERALLS_PARALLEL': 'true',

@@ -201,7 +201,7 @@ def get_external_tasks(acquisition_description, session_path, context=None, plan
         try:
             if env_python(env, env_paths):
                 device_specs = plan_in_env(target, env, session_path, context=context, env_paths=env_paths)
-            elif importlib.util.find_spec(target.split('.', 1)[0]):
+            elif importlib.util.find_spec(target.partition(':')[0].split('.', 1)[0]):  # top-level package
                 _logger.debug('"%s" env not installed; planning %s tasks in current env', env, device)
                 device_specs = plan(target, session_path, context=context)
             else:

@@ -1,3 +1,4 @@
+import os
 import tempfile
 import unittest
 import logging
@@ -11,13 +12,18 @@ _logger = logging.getLogger('ibllib')
 _logger.setLevel(10)
 
 ba = AllenAtlas()
-one = ONE(base_url='https://openalyx.internationalbrainlab.org', silent=True, password='international')
 
 
 class TestReadSpikeSorting(unittest.TestCase):
     def test_spike_sorting_loader(self):
         # insertions = one.alyx.rest('insertions', 'list')
         pid = 'da8dfec1-d265-44e8-84ce-6ae9c109b8bd'
+        one = ONE(
+            base_url='https://openalyx.internationalbrainlab.org',
+            silent=True,
+            username=os.getenv('OPENALYX_USER'),
+            password=os.getenv('OPENALYX_PASSWORD'),
+        )
         ssl = SpikeSortingLoader(pid=pid, one=one, atlas=ba)
         spikes, clusters, channels = ssl.load_spike_sorting()
         SpikeSortingLoader.merge_clusters(spikes, clusters, channels)
@@ -36,7 +42,11 @@ class TestStreamData(unittest.TestCase):
         t0 = 50
         self.td = tempfile.TemporaryDirectory()
         tmp_one = ONE(
-            base_url='https://openalyx.internationalbrainlab.org', password='international', silent=True, cache_dir=self.td.name
+            base_url='https://openalyx.internationalbrainlab.org',
+            username=os.getenv('OPENALYX_USER'),
+            password=os.getenv('OPENALYX_PASSWORD'),
+            silent=True,
+            cache_dir=self.td.name,
         )
 
         sl = SpikeSortingLoader(pid=pid, one=tmp_one)
