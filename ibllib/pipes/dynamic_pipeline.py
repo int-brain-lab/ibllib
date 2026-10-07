@@ -569,52 +569,13 @@ def get_mesoscope_tasks(acquisition_description, **kwargs):
 
 
 def get_photometry_tasks(acquisition_description, **kwargs):
-    devices = acquisition_description.get('devices', {})
-    photometry_tasks = OrderedDict()
+    if 'neurophotometrics' not in acquisition_description.get('devices', {}):
+        return OrderedDict()
 
-    if 'neurophotometrics' in devices:
-        from iblphotometry.tasks import (
-            FibrePhotometryBpodSync,
-            FibrePhotometryDAQSync,
-            FibrePhotometryPassiveChoiceWorld,
-            # FibrePhotometryQC,
-        )
+    import iblphotometry.tasks
 
-        sync_mode = devices['neurophotometrics']['sync_mode']
-
-        # passive photometry
-        task_protocols = acquisition_description['tasks']
-        assert len(task_protocols) == 1, 'chained protocols are not yet supported for photometry extraction'
-        protocol = task_protocols[0]
-        if 'passive' in protocol:
-            photometry_tasks['FibrePhotometryPassiveChoiceWorld'] = type(
-                'FibrePhotometryPassiveChoiceWorld', (FibrePhotometryPassiveChoiceWorld,), {}
-            )(**kwargs)
-
-        # syncing / extraction
-        match sync_mode:
-            case 'bpod':
-                # for synchronization with the BNC inputs of the neurophotometrics receiving the sync pulses
-                # from the individual bpods
-                photometry_tasks['FibrePhotometryBpodSync'] = type('FibrePhotometryBpodSync', (FibrePhotometryBpodSync,), {})(
-                    **kwargs,
-                )
-            case 'daqami':
-                # for synchronization with the DAQami receiving the sync pulses from the individual bpods
-                # as well as the frame clock from the FP3002
-                if 'passive' not in protocol:  # excluding passive session
-                    photometry_tasks['FibrePhotometryDAQSync'] = type('FibrePhotometryDAQSync', (FibrePhotometryDAQSync,), {})(
-                        **kwargs,
-                    )
-            case _:
-                raise ValueError('unknown sync mode')
-
-        # QC
-        # tasks['FibrePhotometryQC'] = type('FibrePhotometryQC', (FibrePhotometryQC,), {})(
-        #     **kwargs, parents=[tasks['FibrePhotometryDAQSync']]  # conditional parents?
-        # )
-
-    return photometry_tasks
+    pipe = iblphotometry.tasks.make_pipeline(acquisition_description, **kwargs)
+    return pipe.tasks
 
 
 def is_active_trials_task(task) -> bool:
