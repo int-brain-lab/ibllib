@@ -574,8 +574,7 @@ def get_photometry_tasks(acquisition_description, **kwargs):
 
     import iblphotometry.tasks
 
-    pipe = iblphotometry.tasks.make_pipeline(acquisition_description, **kwargs)
-    return pipe.tasks
+    return iblphotometry.tasks.get_photometry_tasks(acquisition_description, **kwargs)
 
 
 def is_active_trials_task(task) -> bool:
