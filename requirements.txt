@@ -7,7 +7,6 @@ flake8>=3.7.8
 globus-sdk>=4.0.0
 graphviz
 ibl-neuropixel>=1.10.0
-ibl-photometry>=0.3.2
 ibl-style
 iblatlas>=0.5.3
 iblqt>=0.8.2
