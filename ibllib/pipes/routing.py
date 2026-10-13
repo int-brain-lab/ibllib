@@ -40,7 +40,7 @@ ENV_PATHS = {
     'litpose': _PYTHON / 'envs' / 'litpose',
     'litaction': _PYTHON / 'envs' / 'litaction',
     'iblsorter': _PYTHON / 'SPIKE_SORTING' / 'ibl-sorter' / '.venv',
-    'mpci': _PYTHON / 'envs' / 'suite2p',
+    'mpci': _PYTHON / 'envs' / 'mpci',
     'roicat': _PYTHON / 'envs' / 'roicat',
 }
 """dict of str: Map of environment label to the location of its virtual environment on a server."""
