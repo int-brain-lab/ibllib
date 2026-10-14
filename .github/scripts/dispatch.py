@@ -39,7 +39,7 @@ COVERALLS_TOKEN = os.environ['COVERALLS_REPO_TOKEN']
 PR_NUMBER = os.environ.get('PR_NUMBER', '')
 JOB_TIMEOUT = int(os.environ.get('JOB_TIMEOUT_SECONDS', '7200'))
 OPENALYX_PASSWORD = os.environ.get('OPENALYX_PASSWORD', '')
-OPENALYX_USER = os.environ.get('OPENALYX_USER', 'intbrainlab')
+OPENALYX_USER = os.environ['OPENALYX_USER']
 # Base image for the Lightning job. python:3.12 verified to ship git/bash/pip.
 # uv (installed at runtime) provides the actual test Python via PY_VERSION, so
 # this base Python version is only used to bootstrap `pip install uv`.

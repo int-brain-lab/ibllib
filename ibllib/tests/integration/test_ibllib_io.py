@@ -1,3 +1,4 @@
+import os
 import unittest
 import logging
 import time
@@ -83,7 +84,12 @@ class TestVideoIO(base.IntegrationTest):
         self.assertEqual(meta.duration.total_seconds(), 2639.616667)
 
         # Check with remote path
-        one = ONE(base_url='https://openalyx.internationalbrainlab.org', silent=True)
+        one = ONE(
+            base_url='https://openalyx.internationalbrainlab.org',
+            silent=True,
+            username=os.getenv('OPENALYX_USER'),
+            password=os.getenv('OPENALYX_PASSWORD'),
+        )
         dset = one.alyx.rest(
             'datasets', 'list', session='fe1fd79f-b051-411f-a0a9-2530a02cc78d', name='_iblrig_leftCamera.raw.mp4', exists=True
         )[0]
