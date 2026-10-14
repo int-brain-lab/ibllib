@@ -3,6 +3,7 @@
 Tests include registering chained protocols.
 """
 
+import os
 from datetime import datetime
 from tempfile import TemporaryDirectory
 from pathlib import Path
@@ -23,7 +24,12 @@ from ibllib.tests.base import IntegrationTest, TEST_DB
 class TestVideoStreamer(IntegrationTest):
     def setUp(self) -> None:
         super().setUp()
-        self.one = ONE(base_url='https://openalyx.internationalbrainlab.org', silent=True)
+        self.one = ONE(
+            base_url='https://openalyx.internationalbrainlab.org',
+            silent=True,
+            username=os.getenv('OPENALYX_USER'),
+            password=os.getenv('OPENALYX_PASSWORD'),
+        )
         (self.eid,) = self.one.search(subject='ZM_3003', number=1, date_range='2020-07-28')
 
     def test_video_streamer(self):

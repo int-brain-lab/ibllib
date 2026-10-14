@@ -36,6 +36,7 @@ jobs:
           LIGHTNING_TEAMSPACE: ${{ vars.LIGHTNING_TEAMSPACE }}   # "owner/teamspace"
           INTEGRATION_DATA_DIR: ${{ vars.INTEGRATION_DATA_DIR }}
           OPENALYX_PASSWORD: ${{ secrets.ALYX_PWD }}
+          OPENALYX_USER: ${{ vars.ALYX_USER }}
           REPO_URL: https://github.com/${{ github.repository }}.git
           COVERALLS_REPO_TOKEN: ${{ secrets.COVERALLS_REPO_TOKEN }}
           PY_VERSION: ${{ matrix.python_version }}
