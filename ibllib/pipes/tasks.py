@@ -87,7 +87,9 @@ import ibllib
 from ibllib.oneibl import data_handlers
 from ibllib.oneibl.data_handlers import get_local_data_repository
 from ibllib.oneibl.registration import get_lab
-from iblutil.util import Bunch, flatten, ensure_list
+from ibllib.pipes.spec import TaskSpec, executable_name, sort_specs
+from ibllib.pipes.routing import task_env
+from iblutil.util import flatten, ensure_list
 import one.params
 from one.api import ONE
 from one import webclient
@@ -96,6 +98,8 @@ from one.alf.path import ALFPath, ensure_alf_path
 
 _logger = logging.getLogger(__name__)
 TASK_STATUS_SET = {'Waiting', 'Held', 'Started', 'Errored', 'Empty', 'Complete', 'Incomplete', 'Abandoned'}
+MAX_TIME_OUT_SECS = 32767
+"""int: The maximum task time out, as stored in an Alyx SmallIntegerField."""
 
 
 class Task(abc.ABC):
@@ -196,6 +200,17 @@ class Task(abc.ABC):
     @property
     def name(self):
         return self.__class__.__name__
+
+    def to_spec(self):
+        """
+        Return a plain-data specification of the task for creating it on Alyx.
+
+        Returns
+        -------
+        ibllib.pipes.spec.TaskSpec
+            The task specification.
+        """
+        return TaskSpec.from_task(self)
 
     def path2eid(self):
         """
@@ -660,6 +675,7 @@ class Pipeline(abc.ABC):
                 # eID for newer sessions may not be in cache so use remote query
                 self.eid = one.path2eid(session_path, query_type='remote') if self.one else None
         self.label = self.__module__ + '.' + type(self).__name__
+        self.planner_errors = {}  # map of device to error message for failed external task planners
         self.tasks = tasks or {}
         if not isinstance(self.tasks, OrderedDict):
             self.tasks = OrderedDict(self.tasks)
@@ -673,11 +689,43 @@ class Pipeline(abc.ABC):
         :param obj:
         :return: string containing the full module plus class name
         """
-        if obj.__module__ == 'abc':
-            exec_name = f'{obj.__class__.__base__.__module__}.{obj.__class__.__base__.__name__}'
-        else:
-            exec_name = f'{obj.__module__}.{obj.name}'
-        return exec_name
+        return executable_name(obj)
+
+    def task_specs(self, tasks_list=None):
+        """
+        Return the pipeline tasks as specs, sorted so that parents come before their children.
+
+        Parameters
+        ----------
+        tasks_list : list of dict, TaskSpec or Task, optional
+            The tasks to convert. If None, uses self.tasks, whose values may be Task instances or
+            TaskSpec objects. Task dicts must have parent names, not Alyx IDs.
+
+        Returns
+        -------
+        list of ibllib.pipes.spec.TaskSpec
+            The sorted task specs with computed levels.
+        """
+        specs = []
+        for t in self.tasks.values() if tasks_list is None else tasks_list:
+            if isinstance(t, dict):
+                specs.append(TaskSpec.from_dict(t))
+            elif isinstance(t, TaskSpec):
+                specs.append(t)
+            else:
+                specs.append(t.to_spec())
+        for spec in specs:
+            if (env := task_env(spec.executable)) != spec.env:
+                _logger.warning(
+                    '%s: task env "%s" does not match the env "%s" routed from its executable "%s"; '
+                    'the task will be run in the "%s" env (see ibllib.pipes.routing)',
+                    spec.name,
+                    spec.env,
+                    env,
+                    spec.executable,
+                    env,
+                )
+        return sort_specs(specs)
 
     def make_graph(self, out_dir=None, show=True):
         if not out_dir:
@@ -690,12 +738,11 @@ class Pipeline(abc.ABC):
         e.node('root', label=self.label)
 
         e.attr('node', shape='ellipse')
-        for k in self.tasks:
-            j = self.tasks[k]
+        for j in self.task_specs():
             if len(j.parents) == 0:
                 e.edge('root', j.name)
             else:
-                [e.edge(p.name, j.name) for p in j.parents]
+                [e.edge(p, j.name) for p in j.parents]
 
         m.subgraph(e)
         m.attr(label=r'\n\Pre-processing\n')
@@ -716,8 +763,9 @@ class Pipeline(abc.ABC):
         rerun__status__in : list, str
             To re-run tasks if they already exist, specify one or more statuses strings to will be
             re-run, or '__all__' to re-run all tasks.
-        tasks_list : list
-            The list of tasks to create on Alyx. If None, uses self.tasks.
+        tasks_list : list of dict, TaskSpec or Task
+            The list of tasks to create on Alyx. If None, uses self.tasks. Task dicts must have
+            parent names, not Alyx IDs.
 
         Returns
         -------
@@ -733,56 +781,19 @@ class Pipeline(abc.ABC):
             return
         tasks_alyx_pre = self.one.alyx.rest('tasks', 'list', session=self.eid, graph=self.name, no_cache=True)
         tasks_alyx = []
-        # creates all the tasks by iterating through the ordered dict
-
-        if tasks_list is not None:
-            task_items = tasks_list
-            # need to add in the session eid and the parents
-        else:
-            task_items = self.tasks.values()
-
-        for t in task_items:
+        specs = self.task_specs(tasks_list)
+        # Check all tasks before creating any, as the Alyx field would reject these
+        for spec in specs:
+            assert spec.time_out_secs is None or spec.time_out_secs <= MAX_TIME_OUT_SECS, (
+                f'{spec.name} time_out_secs of {spec.time_out_secs} exceeds maximum of {MAX_TIME_OUT_SECS}'
+            )
+        # creates all the tasks in order, such that parents are created before their children
+        for spec in specs:
             # get the parents' alyx ids to reference in the database
-            if isinstance(t, dict):
-                t = Bunch(t)
-                executable = t.executable
-                arguments = t.arguments
-                t['time_out_secs'] = t['time_out_sec']
-                if len(t.parents) > 0:
-                    pnames = t.parents
-            else:
-                executable = self._get_exec_name(t)
-                arguments = t.kwargs
-                if len(t.parents):
-                    pnames = [p.name for p in t.parents]
-
-            if len(t.parents):
-                parents_ids = [ta['id'] for ta in tasks_alyx if ta['name'] in pnames]
-            else:
-                parents_ids = []
-
-            task_dict = {
-                'executable': executable,
-                'priority': t.priority,
-                'io_charge': t.io_charge,
-                'gpu': t.gpu,
-                'cpu': t.cpu,
-                'ram': t.ram,
-                'module': self.label,
-                'parents': parents_ids,
-                'level': t.level,
-                'time_out_sec': t.time_out_secs,
-                'session': self.eid,
-                'status': 'Waiting',
-                'log': None,
-                'name': t.name,
-                'graph': self.name,
-                'arguments': arguments,
-            }
-            if self.data_repo:
-                task_dict.update({'data_repository': self.data_repo})
+            parents_ids = [ta['id'] for ta in tasks_alyx if ta['name'] in spec.parents]
+            task_dict = spec.to_alyx(parents=parents_ids, **self._alyx_fields())
             # if the task already exists, patch it otherwise, create it
-            talyx = next(filter(lambda x: x['name'] == t.name, tasks_alyx_pre), [])
+            talyx = next(filter(lambda x: x['name'] == spec.name, tasks_alyx_pre), [])
             if len(talyx) == 0:
                 talyx = self.one.alyx.rest('tasks', 'create', data=task_dict)
             elif talyx['status'] in rerun__status__in:
@@ -790,44 +801,20 @@ class Pipeline(abc.ABC):
             tasks_alyx.append(talyx)
         return tasks_alyx
 
+    def _alyx_fields(self):
+        """dict: The pipeline-level fields of each Alyx task dictionary."""
+        fields = {'module': self.label, 'session': self.eid, 'graph': self.name}
+        if self.data_repo:
+            fields['data_repository'] = self.data_repo
+        return fields
+
     def create_tasks_list_from_pipeline(self):
         """
         From a pipeline with tasks, creates a list of dictionaries containing task description that can be used to upload to
         create alyx tasks
         :return:
         """
-        tasks_list = []
-        for k, t in self.tasks.items():
-            # get the parents' alyx ids to reference in the database
-            if len(t.parents):
-                parent_names = [p.name for p in t.parents]
-            else:
-                parent_names = []
-
-            task_dict = {
-                'executable': self._get_exec_name(t),
-                'priority': t.priority,
-                'io_charge': t.io_charge,
-                'gpu': t.gpu,
-                'cpu': t.cpu,
-                'ram': t.ram,
-                'module': self.label,
-                'parents': parent_names,
-                'level': t.level,
-                'time_out_sec': t.time_out_secs,
-                'session': self.eid,
-                'status': 'Waiting',
-                'log': None,
-                'name': t.name,
-                'graph': self.name,
-                'arguments': t.kwargs,
-            }
-            if self.data_repo:
-                task_dict.update({'data_repository': self.data_repo})
-
-            tasks_list.append(task_dict)
-
-        return tasks_list
+        return [spec.to_alyx(**self._alyx_fields()) for spec in self.task_specs()]
 
     def run(self, status__in=('Waiting',), machine=None, clobber=True, **kwargs):
         """

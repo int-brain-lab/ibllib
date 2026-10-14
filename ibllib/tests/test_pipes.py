@@ -46,6 +46,7 @@ class TestLocalServer(unittest.TestCase):
         raw_behaviour_data.parent.joinpath('raw_session.flag').touch()
         fu.populate_task_settings(raw_behaviour_data, patch={'PYBPOD_PROTOCOL': 'ephys_optoChoiceWorld6.0.1'})
 
+    @mock.patch.dict('ibllib.pipes.routing.ROUTES', {'ibllib.tests.test_pipes.EnvTask': 'suite2p'})
     @mock.patch('ibllib.pipes.local_server.get_local_data_repository')
     def test_task_queue(self, lab_repo_mock):
         """Test ibllib.pipes.local_server.task_queue function."""
@@ -54,6 +55,7 @@ class TestLocalServer(unittest.TestCase):
             {'executable': 'ibllib.tests.test_pipes.EnvTask', 'priority': EnvTask.priority},  # 80
             {'executable': 'ibllib.pipes.ephys_tasks.SpikeSorting', 'priority': SpikeSorting.priority},  # 60
             {'executable': 'ibllib.pipes.base_tasks.RegisterRawDataTask', 'priority': RegisterRawDataTask.priority},  # 100
+            {'executable': 'mpci.not_installed.MesoscopeTask', 'priority': 100},  # not importable
         ]
         alyx = mock.Mock(spec=AlyxClient)
         alyx.rest.return_value = tasks
@@ -71,8 +73,41 @@ class TestLocalServer(unittest.TestCase):
         queue = local_server.task_queue(mode='small', lab='foolab', alyx=alyx, env=('suite2p',))
         self.assertEqual([], queue)
         # Expect only register task as it's the only small job
-        queue = local_server.task_queue(mode='small', lab='foolab', alyx=alyx)
+        with mock.patch('ibllib.pipes.tasks.str2class', wraps=local_server.tasks.str2class) as str2class:
+            queue = local_server.task_queue(mode='small', lab='foolab', alyx=alyx)
+            # Only the classes of tasks in the base env should be imported
+            str2class.assert_called_once_with(tasks[2]['executable'])
         self.assertEqual([tasks[2]], queue)
+        # A single env label may be passed
+        queue = local_server.task_queue(lab='foolab', alyx=alyx, env='mpci')
+        self.assertEqual([tasks[3]], queue)
+        # An env's tasks that can't be imported are excluded when filtering by size
+        with self.assertLogs(local_server._logger, 'ERROR'):
+            queue = local_server.task_queue(mode='large', lab='foolab', alyx=alyx, env='mpci')
+        self.assertEqual([], queue)
+        # Check list_queued_envs, which returns the env labels without importing the task classes
+        one = mock.Mock(spec=ONE, alyx=alyx)
+        with mock.patch('ibllib.pipes.tasks.str2class') as str2class:
+            self.assertEqual({None, 'suite2p', 'iblsorter', 'mpci'}, local_server.list_queued_envs(one, lab='foolab'))
+            str2class.assert_not_called()
+
+    @mock.patch('ibllib.pipes.local_server.IBLRegistrationClient')
+    @mock.patch('ibllib.pipes.local_server.make_pipeline')
+    def test_job_creator(self, make_pipeline_mock, _):
+        """Test the job_creator keeps the flag file if any external task planners failed."""
+        make_pipeline_mock.return_value.planner_errors = {'mesoscope': 'Environment "mpci" not installed'}
+        flag_files = sorted(self.tmpdir.rglob('raw_session.flag'))
+        self.assertEqual(2, len(flag_files))
+        with self.assertLogs(local_server._logger, 'ERROR') as log:
+            pipes, _ = local_server.job_creator(self.tmpdir, one=mock.Mock(spec=ONE))
+        self.assertIn('keeping flag file', log.records[-1].getMessage())
+        self.assertEqual(2, len(pipes))
+        self.assertEqual(2, make_pipeline_mock.return_value.create_alyx_tasks.call_count)
+        self.assertTrue(all(f.exists() for f in flag_files))
+        # Without errors, the flag files are removed
+        make_pipeline_mock.return_value.planner_errors = {}
+        local_server.job_creator(self.tmpdir, one=mock.Mock(spec=ONE))
+        self.assertFalse(any(f.exists() for f in flag_files))
 
 
 class TestPipesMisc(unittest.TestCase):

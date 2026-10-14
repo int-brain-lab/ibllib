@@ -39,6 +39,8 @@ jobs:
             python-version: 3.13
     env:
       ONE_SAVE_ON_DELETE: false
+      OPENALYX_USER: intbrainlab
+      OPENALYX_PASSWORD: ${{ secrets.ALYX_PWD }}
     steps:
     - uses: actions/checkout@v7
     - name: Set up Python ${{ matrix.python-version }}

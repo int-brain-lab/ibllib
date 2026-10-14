@@ -155,3 +155,40 @@ class TestMisc(unittest.TestCase):
         self.assertEqual('timeline', dyn._sync_label('nidq', acquisition_software='timeline'))
         self.assertEqual('nidq', dyn._sync_label('nidq', acquisition_software='spikeglx'))
         self.assertEqual('tdms', dyn._sync_label('tdms'))
+
+    def test_get_audio_tasks(self):
+        """Test pipes.dynamic_pipeline.get_audio_tasks function."""
+        description = {
+            'devices': {'microphone': {'microphone': {'collection': 'raw_task_data_00', 'sync_label': 'audio'}}},
+            'sync': {'bpod': {'collection': 'raw_task_data_00'}},
+        }
+        expected = deepcopy(description)
+        session_path = Path('/subject/2020-01-01/001')
+        task = dyn.get_audio_tasks(description, session_path=session_path)['AudioRegisterRaw']
+        self.assertEqual('AudioSync', type(task).__base__.__name__)
+        self.assertEqual('raw_task_data_00', task.kwargs['device_collection'])
+        self.assertEqual('raw_task_data_00', task.kwargs['collection'])
+        self.assertEqual(expected, description, 'acquisition description should not be modified')
+        description['sync'] = {'nidq': {'collection': 'raw_sync_data', 'acquisition_software': 'timeline'}}
+        expected = deepcopy(description)
+        task = dyn.get_audio_tasks(description, session_path=session_path)['AudioRegisterRaw']
+        self.assertEqual('AudioCompress', type(task).__base__.__name__)
+        self.assertEqual({'sync_label': 'audio', 'device_collection': 'raw_task_data_00'}, task.kwargs)
+        self.assertEqual(expected, description, 'acquisition description should not be modified')
+
+    def test_get_wfield_tasks(self):
+        """Test pipes.dynamic_pipeline.get_wfield_tasks function."""
+        description = {
+            'devices': {'widefield': {'widefield': {'collection': 'raw_widefield_data', 'sync_label': 'frame_trigger'}}},
+            'sync': {'nidq': {'collection': 'raw_sync_data', 'acquisition_software': 'spikeglx', 'extension': 'bin'}},
+        }
+        expected = deepcopy(description)
+        session_path = Path('/subject/2020-01-01/001')
+        for _ in range(2):  # previously raised a KeyError on the second call
+            tasks = dyn.get_wfield_tasks(description, [], session_path=session_path)
+            self.assertEqual(expected, description, 'acquisition description should not be modified')
+        expected_names = ['WideFieldRegisterRaw', 'WidefieldCompress', 'WidefieldPreprocess', 'WidefieldSync', 'WidefieldFOV']
+        self.assertEqual(expected_names, list(tasks))
+        kwargs = tasks['WidefieldSync'].kwargs
+        self.assertEqual(('raw_widefield_data', 'frame_trigger'), (kwargs['device_collection'], kwargs['sync_label']))
+        self.assertNotIn('collection', kwargs)

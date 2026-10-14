@@ -22,6 +22,7 @@ from one.alf.path import session_path_parts
 
 from ibllib import __version__ as ibllib_version
 from ibllib.pipes import tasks
+from ibllib.pipes.routing import task_env
 from ibllib.time import date2isostr
 from ibllib.oneibl.registration import IBLRegistrationClient
 from ibllib.oneibl.data_handlers import get_local_data_repository
@@ -133,7 +134,15 @@ def job_creator(root_path, one=None, dry=False, rerun=False):
             else:
                 rerun__status__in = ['Waiting']
             pipe.create_alyx_tasks(rerun__status__in=rerun__status__in)
-            flag_file.unlink()
+            if pipe.planner_errors:
+                # Keep the flag file so that the missing tasks are created on the next run
+                _logger.error(
+                    'Failed to plan %s tasks for session %s; keeping flag file to retry',
+                    ', '.join(pipe.planner_errors),
+                    session_path.relative_to(root_path),
+                )
+            else:
+                flag_file.unlink()
             if pipe is not None:
                 pipes.append(pipe)
         except Exception:
@@ -146,6 +155,9 @@ def job_creator(root_path, one=None, dry=False, rerun=False):
 def list_available_envs(root=Path.home() / 'Documents/PYTHON/envs'):
     """
     List all the envs within `root` dir.
+
+    NB: Environment labels don't necessarily match the venv directory names; use
+    :func:`ibllib.pipes.routing.installed_envs` to list the installed environment labels.
 
     Parameters
     ----------
@@ -164,9 +176,46 @@ def list_available_envs(root=Path.home() / 'Documents/PYTHON/envs'):
         return [None]
 
 
-def list_queued_envs(one=None):
+def _waiting_tasks(alyx, lab=None):
+    """
+    Query the waiting tasks of a lab for the local data repository.
+
+    Parameters
+    ----------
+    alyx : one.webclient.AlyxClient
+        An Alyx instance.
+    lab : str
+        Lab name as per Alyx, otherwise try to infer from local Globus install.
+
+    Returns
+    -------
+    list of dict, None
+        A list of Alyx tasks with a 'Waiting' status, or None if the lab could not be determined.
+    """
+    if lab is None:
+        _logger.debug('Trying to infer lab from globus installation')
+        lab = get_lab_from_endpoint_id(alyx=alyx)
+    if lab is None:
+        _logger.error('No lab provided or found')
+        return  # if the lab is none, this will return empty tasks each time
+    data_repo = get_local_data_repository(alyx)
+    return alyx.rest(
+        'tasks', 'list', status='Waiting', django=f'session__lab__name__in,{lab},data_repository__name,{data_repo}', no_cache=True
+    )
+
+
+def list_queued_envs(one=None, lab=None):
     """
     The set of all envs in the list of waiting tasks.
+
+    The environment of each task is determined from its executable, without importing the task class.
+
+    Parameters
+    ----------
+    one : one.api.OneAlyx
+        An instance of ONE.
+    lab : str
+        Lab name as per Alyx, otherwise try to infer from local Globus install.
 
     Returns
     -------
@@ -174,16 +223,44 @@ def list_queued_envs(one=None):
         All environments required to process waiting tasks.
     """
     one = one or ONE(mode='remote', cache_rest=None)
-    waiting_tasks = task_queue(mode='large', alyx=one.alyx, env=list_available_envs())
-    envs_in_queue = set()
-    for task_exe in map(lambda x: x['executable'], waiting_tasks):
-        envs_in_queue.add(tasks.str2class(task_exe).env)
-    return envs_in_queue
+    return {task_env(t['executable']) for t in _waiting_tasks(one.alyx, lab=lab) or []}
+
+
+def is_job_size(task, mode):
+    """
+    Check whether a task is of a given job size.
+
+    NB: This imports the task class.
+
+    Parameters
+    ----------
+    task : dict
+        An Alyx task dictionary.
+    mode : {'all', 'small', 'large'}
+        The job size to check.
+
+    Returns
+    -------
+    bool
+        True if the task class job size matches the mode (or mode is 'all'). False if the task
+        class could not be imported.
+    """
+    if mode == 'all':
+        return True
+    try:
+        return tasks.str2class(task['executable']).job_size == mode
+    except (ImportError, AttributeError):
+        _logger.error('Task %s not found in this env', task['executable'])
+        return False
 
 
 def task_queue(mode='all', lab=None, alyx=None, env=(None,)):
     """
     Query waiting jobs from the specified Lab
+
+    The environment of each task is determined from its executable (see
+    :func:`ibllib.pipes.routing.task_env`), so only the task classes of the given environments are
+    imported (to determine the job size).
 
     Parameters
     ----------
@@ -193,37 +270,23 @@ def task_queue(mode='all', lab=None, alyx=None, env=(None,)):
         Lab name as per Alyx, otherwise try to infer from local Globus install.
     alyx : one.webclient.AlyxClient
         An Alyx instance.
-    env : list
-        One or more environments to filter by. See :prop:`ibllib.pipes.tasks.Task.env`.
+    env : str, list
+        One or more environment labels to filter by, where None is the base environment. See
+        :data:`ibllib.pipes.routing.ROUTES`.
 
     Returns
     -------
     list of dict
         A list of Alyx tasks associated with `lab` that have a 'Waiting' status.
     """
-
-    def predicate(task):
-        try:
-            classe = tasks.str2class(task['executable'])
-            return (mode == 'all' or classe.job_size == mode) and classe.env in env
-        except ModuleNotFoundError:
-            _logger.error('Task %s not found in this env', task['executable'])
-            return False
-
+    env = (env,) if env is None or isinstance(env, str) else tuple(env)
     alyx = alyx or AlyxClient(cache_rest=None)
-    if lab is None:
-        _logger.debug('Trying to infer lab from globus installation')
-        lab = get_lab_from_endpoint_id(alyx=alyx)
-    if lab is None:
-        _logger.error('No lab provided or found')
-        return  # if the lab is none, this will return empty tasks each time
-    data_repo = get_local_data_repository(alyx)
-    # Filter for tasks
-    waiting_tasks = alyx.rest(
-        'tasks', 'list', status='Waiting', django=f'session__lab__name__in,{lab},data_repository__name,{data_repo}', no_cache=True
-    )
-    # Filter tasks by size
-    filtered_tasks = filter(predicate, waiting_tasks)
+    waiting_tasks = _waiting_tasks(alyx, lab=lab)
+    if waiting_tasks is None:
+        return
+    # Filter tasks by environment, then by size
+    filtered_tasks = (t for t in waiting_tasks if task_env(t['executable']) in env)
+    filtered_tasks = filter(lambda t: is_job_size(t, mode), filtered_tasks)
     # Order tasks by priority
     sorted_tasks = sorted(filtered_tasks, key=lambda d: d['priority'], reverse=True)
 
