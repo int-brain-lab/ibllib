@@ -36,7 +36,7 @@ from ibllib.io.extractors.ephys_fpga import get_main_probe_sync
 import ibllib.io.extractors.camera as camio
 import ibllib.io.raw_data_loaders as raw
 from ibllib.io import session_params
-from ibllib.pipes.dynamic_pipeline import acquisition_description_legacy_session
+from ibllib.pipes.dynamic_pipeline import experiment_description_legacy_session
 import ibllib.qc.camera as camQC
 from ibllib.qc.camera import CameraQC
 import ibllib.io.video as vidio
@@ -738,7 +738,7 @@ class TestCameraQC(base.IntegrationTest):
         shutil.copytree(session_path.joinpath('raw_behavior_data'), session_path.joinpath(task_collection))
         self.addCleanup(shutil.rmtree, session_path.joinpath(task_collection), ignore_errors=True)
         # Second, create and experiment description file
-        sess_params = acquisition_description_legacy_session(session_path, save=False)
+        sess_params = experiment_description_legacy_session(session_path, save=False)
         video_meta = {'fps': 80, 'width': 640, 'height': 512}
         sess_params['devices']['cameras']['left'].update(video_meta)
         sess_params['sync'] = {'bpod': {'collection': task_collection}}  # Change to bpod sync

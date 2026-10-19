@@ -1,4 +1,4 @@
-"""Task pipeline creation from an acquisition description.
+"""Task pipeline creation from an experiment description.
 
 The principal function here is `make_pipeline` which reads an `_ibl_experiment.description.yaml`
 file and determines the set of tasks required to preprocess the session.
@@ -23,6 +23,7 @@ personal projects repo or in :py:mod:`ibllib.io.extractors.bpod_trials` module.
 
 import logging
 import re
+import warnings
 from fnmatch import fnmatch
 from collections import OrderedDict
 from pathlib import Path
@@ -47,39 +48,51 @@ import ibllib.pipes.audio_tasks as atasks
 _logger = logging.getLogger(__name__)
 
 
-def acquisition_description_legacy_session(session_path, save=False):
+def experiment_description_legacy_session(session_path: str | Path, save: bool = False) -> dict:
     """
-    From a legacy session create a dictionary corresponding to the acquisition description.
+    From a legacy session create a dictionary corresponding to the experiment description.
 
     Parameters
     ----------
     session_path : str, pathlib.Path
         A path to a session to describe.
     save : bool
-        If true, saves the acquisition description file to _ibl_experiment.description.yaml.
+        If true, saves the experiment description file to _ibl_experiment.description.yaml.
 
     Returns
     -------
     dict
-        The legacy acquisition description.
+        The legacy experiment description.
     """
     settings = rawio.load_settings(session_path)
     protocol = settings.get('PYBPOD_PROTOCOL', 'UNKNOWN')
-    dict_ad = get_acquisition_description(protocol)
+    experiment_description = get_experiment_description(protocol)
     if save:
-        sess_params.write_params(session_path=session_path, data=dict_ad)
-    return dict_ad
+        sess_params.write_params(session_path=session_path, data=experiment_description)
+    return experiment_description
 
 
-def get_acquisition_description(protocol):
-    """ "
-    This is a set of example acquisition descriptions for experiments
-    -   choice_world_recording
-    -   choice_world_biased
-    -   choice_world_training
-    -   choice_world_habituation
-    -   choice_world_passive
-    That are part of the IBL pipeline
+def get_experiment_description(protocol: str) -> dict:
+    """
+    Return the experiment description of a legacy IBL choice world protocol.
+
+    Ephys protocols include the passive protocol; biased, training and habituation protocols are
+    Bpod-only.
+
+    Parameters
+    ----------
+    protocol : str
+        The task protocol name, e.g. '_iblrig_tasks_ephysChoiceWorld6.4.2'.
+
+    Returns
+    -------
+    dict
+        The experiment description.
+
+    Raises
+    ------
+    ValueError
+        The protocol is not a known legacy choice world protocol.
     """
     if 'ephys' in protocol:  # canonical ephys
         devices = {
@@ -94,7 +107,7 @@ def get_acquisition_description(protocol):
             },
             'microphone': {'microphone': {'collection': 'raw_behavior_data', 'sync_label': None}},
         }
-        acquisition_description = {  # this is the current ephys pipeline description
+        experiment_description = {  # this is the current ephys pipeline description
             'devices': devices,
             'tasks': [
                 {'ephysChoiceWorld': {'collection': 'raw_behavior_data', 'sync_label': 'bpod'}},
@@ -111,7 +124,7 @@ def get_acquisition_description(protocol):
             },
             'microphone': {'microphone': {'collection': 'raw_behavior_data', 'sync_label': None}},
         }
-        acquisition_description = {  # this is the current ephys pipeline description
+        experiment_description = {  # this is the current ephys pipeline description
             'devices': devices,
             'sync': {'bpod': {'collection': 'raw_behavior_data'}},
             'procedures': ['Behavior training/tasks'],
@@ -125,9 +138,9 @@ def get_acquisition_description(protocol):
             key = 'habituationChoiceWorld'
         else:
             raise ValueError(f'Unknown protocol "{protocol}"')
-        acquisition_description['tasks'] = [{key: {'collection': 'raw_behavior_data', 'sync_label': 'bpod'}}]
-    acquisition_description['version'] = '1.0.0'
-    return acquisition_description
+        experiment_description['tasks'] = [{key: {'collection': 'raw_behavior_data', 'sync_label': 'bpod'}}]
+    experiment_description['version'] = '1.0.0'
+    return experiment_description
 
 
 def _sync_label(sync, acquisition_software=None, **_):
@@ -157,9 +170,9 @@ def _sync_label(sync, acquisition_software=None, **_):
     return acquisition_software if (sync == 'nidq' and acquisition_software not in ('spikeglx', None)) else sync
 
 
-def _load_acquisition_description(session_path):
+def _load_experiment_description(session_path):
     """
-    Load a session's acquisition description.
+    Load a session's experiment description.
 
     Attempts to load from the session path and upon failure, attempts to generate one based on the
     task protocol (this only works for legacy pipeline sessions).
@@ -172,24 +185,24 @@ def _load_acquisition_description(session_path):
     Returns
     -------
     dict
-        The acquisition description file.
+        The experiment description file.
     """
-    acquisition_description = sess_params.read_params(session_path)
-    if not acquisition_description:
+    experiment_description = sess_params.read_params(session_path)
+    if not experiment_description:
         try:
             # v7 sessions used a different folder name for task data;
             # v8 sessions should always have a description file
             assert Path(session_path).joinpath('raw_behavior_data').exists()
-            acquisition_description = acquisition_description_legacy_session(session_path)
-            assert acquisition_description
+            experiment_description = experiment_description_legacy_session(session_path)
+            assert experiment_description
         except (AssertionError, ValueError):
             raise ValueError('Experiment description file not found or is empty')
-    return acquisition_description
+    return experiment_description
 
 
-def _get_trials_tasks(session_path, acquisition_description=None, sync_tasks=None, one=None):
+def _get_trials_tasks(session_path, experiment_description=None, sync_tasks=None, one=None):
     """
-    Generate behaviour tasks from acquisition description.
+    Generate behaviour tasks from experiment description.
 
     This returns all behaviour related tasks including TrialsRegisterRaw and TrainingStatus objects.
 
@@ -197,8 +210,8 @@ def _get_trials_tasks(session_path, acquisition_description=None, sync_tasks=Non
     ----------
     session_path : str, pathlib.Path
         A session path.
-    acquisition_description : dict
-        An acquisition description.
+    experiment_description : dict
+        An experiment description.
     sync_tasks : list
         A list of sync tasks to use as behaviour task parents.
     one : One
@@ -209,18 +222,18 @@ def _get_trials_tasks(session_path, acquisition_description=None, sync_tasks=Non
     dict[str, ibllib.pipes.tasks.Task]
         A map of Alyx task name to behaviour task object.
     """
-    if not acquisition_description:
-        acquisition_description = _load_acquisition_description(session_path)
+    if not experiment_description:
+        experiment_description = _load_experiment_description(session_path)
     tasks = OrderedDict()
     sync_tasks = sync_tasks or []
     kwargs = {'session_path': session_path, 'one': one}
 
     # Syncing tasks
-    _, sync_label, _, sync_kwargs = _get_sync_config(acquisition_description)
+    _, sync_label, _, sync_kwargs = _get_sync_config(experiment_description)
 
     # Behavior tasks
     protocol_numbers = set()
-    task_protocols = acquisition_description.get('tasks', [])
+    task_protocols = experiment_description.get('tasks', [])
     for i, (protocol, task_info) in enumerate(chain(*map(dict.items, task_protocols))):
         collection = task_info.get('collection', f'raw_task_data_{i:02}')
         task_kwargs = {'protocol': protocol, 'collection': collection}
@@ -346,20 +359,20 @@ def get_trials_tasks(session_path, one=None, bpod_only=False):
     # Check for an experiment.description file; ensure downloaded if possible
     if one and one.to_eid(session_path):  # to_eid returns None if session not registered
         one.load_datasets(session_path, ['_ibl_experiment.description'], download_only=True, assert_present=False)
-    acquisition_description = _load_acquisition_description(session_path)
-    if bpod_only and acquisition_description:
-        acquisition_description['sync'] = {'bpod': {'collection': 'raw_task_data_*'}}
+    experiment_description = _load_experiment_description(session_path)
+    if bpod_only and experiment_description:
+        experiment_description['sync'] = {'bpod': {'collection': 'raw_task_data_*'}}
     try:
-        trials_tasks = _get_trials_tasks(session_path, acquisition_description, one=one)
+        trials_tasks = _get_trials_tasks(session_path, experiment_description, one=one)
         return [v for k, v in trials_tasks.items() if k.startswith('Trials_')]
     except NotImplementedError as ex:
         _logger.warning('Failed to get trials tasks: %s', ex)
         return []
 
 
-def _get_sync_config(acquisition_description):
-    ((sync, sync_args),) = acquisition_description['sync'].items()
-    sync_args = sync_args.copy()  # ensure acquisition_description unchanged
+def _get_sync_config(experiment_description):
+    ((sync, sync_args),) = experiment_description['sync'].items()
+    sync_args = sync_args.copy()  # ensure experiment_description unchanged
     sync_label = _sync_label(sync, **sync_args)  # get the format of the DAQ data. This informs the extractor task
     sync_args['sync_collection'] = sync_args.pop('collection')  # rename the key so it matches task run arguments
     sync_args['sync_ext'] = sync_args.pop('extension', None)
@@ -368,8 +381,8 @@ def _get_sync_config(acquisition_description):
     return sync, sync_label, sync_args, sync_kwargs
 
 
-def get_sync_tasks(acquisition_description, **kwargs):
-    sync, sync_label, sync_args, sync_kwargs = _get_sync_config(acquisition_description)
+def get_sync_tasks(experiment_description, **kwargs):
+    sync, sync_label, sync_args, sync_kwargs = _get_sync_config(experiment_description)
     sync_tasks = OrderedDict()
     if sync_label == 'nidq' and sync_args['sync_collection'] == 'raw_ephys_data':
         sync_tasks['SyncRegisterRaw'] = type('SyncRegisterRaw', (etasks.EphysSyncRegisterRaw,), {})(**kwargs, **sync_kwargs)
@@ -390,11 +403,11 @@ def get_sync_tasks(acquisition_description, **kwargs):
     return sync_tasks
 
 
-def get_ephys_tasks(acquisition_description, sync_tasks, **kwargs):
+def get_ephys_tasks(experiment_description, sync_tasks, **kwargs):
     session_path = kwargs['session_path']
     ephys_tasks = OrderedDict()
-    _, _, _, sync_kwargs = _get_sync_config(acquisition_description)
-    devices = acquisition_description.get('devices', {})
+    _, _, _, sync_kwargs = _get_sync_config(experiment_description)
+    devices = experiment_description.get('devices', {})
     if 'neuropixel' in devices:
         ephys_kwargs = {'device_collection': 'raw_ephys_data'}
         ephys_tasks['EphysRegisterRaw'] = type('EphysRegisterRaw', (etasks.EphysRegisterRaw,), {})(**kwargs, **ephys_kwargs)
@@ -456,16 +469,16 @@ def get_ephys_tasks(acquisition_description, sync_tasks, **kwargs):
     return ephys_tasks
 
 
-def get_video_tasks(acquisition_description, sync_tasks, behavior_tasks=None, **kwargs):
-    devices = acquisition_description.get('devices', {})
-    sync, _, _, sync_kwargs = _get_sync_config(acquisition_description)
+def get_video_tasks(experiment_description, sync_tasks, behavior_tasks=None, **kwargs):
+    devices = experiment_description.get('devices', {})
+    sync, _, _, sync_kwargs = _get_sync_config(experiment_description)
     video_tasks = OrderedDict()
 
     if 'cameras' in devices:
         cams = list(devices['cameras'].keys())
         subset_cams = [c for c in cams if c in ('left', 'right', 'body', 'belly')]
         video_kwargs = {'device_collection': 'raw_video_data', 'cameras': cams}
-        video_compressed = sess_params.get_video_compressed(acquisition_description)
+        video_compressed = sess_params.get_video_compressed(experiment_description)
 
         if video_compressed:
             # This is for widefield case where the video is already compressed
@@ -512,13 +525,13 @@ def get_video_tasks(acquisition_description, sync_tasks, behavior_tasks=None, **
     return video_tasks
 
 
-def get_audio_tasks(acquisition_description, **kwargs):
-    _, _, _, sync_kwargs = _get_sync_config(acquisition_description)
-    devices = acquisition_description.get('devices', {})
+def get_audio_tasks(experiment_description, **kwargs):
+    _, _, _, sync_kwargs = _get_sync_config(experiment_description)
+    devices = experiment_description.get('devices', {})
     audio_tasks = OrderedDict()
     if 'microphone' in devices:
         ((microphone, micro_info),) = devices['microphone'].items()
-        # Rename the collection key without modifying the acquisition description
+        # Rename the collection key without modifying the experiment description
         micro_kwargs = {k: v for k, v in micro_info.items() if k != 'collection'}
         micro_kwargs['device_collection'] = micro_info['collection']
         if sync_kwargs['sync'] == 'bpod':
@@ -531,14 +544,14 @@ def get_audio_tasks(acquisition_description, **kwargs):
     return audio_tasks
 
 
-def get_wfield_tasks(acquisition_description, sync_tasks, **kwargs):
-    _, _, _, sync_kwargs = _get_sync_config(acquisition_description)
-    devices = acquisition_description.get('devices', {})
+def get_wfield_tasks(experiment_description, sync_tasks, **kwargs):
+    _, _, _, sync_kwargs = _get_sync_config(experiment_description)
+    devices = experiment_description.get('devices', {})
     wfield_tasks = OrderedDict()
 
     if 'widefield' in devices:
         ((_, wfield_info),) = devices['widefield'].items()
-        # Rename the collection key without modifying the acquisition description
+        # Rename the collection key without modifying the experiment description
         wfield_kwargs = {k: v for k, v in wfield_info.items() if k != 'collection'}
         wfield_kwargs['device_collection'] = wfield_info['collection']
         wfield_tasks['WideFieldRegisterRaw'] = type('WidefieldRegisterRaw', (wtasks.WidefieldRegisterRaw,), {})(
@@ -563,8 +576,8 @@ def get_wfield_tasks(acquisition_description, sync_tasks, **kwargs):
     return wfield_tasks
 
 
-def get_photometry_tasks(acquisition_description, **kwargs):
-    devices = acquisition_description.get('devices', {})
+def get_photometry_tasks(experiment_description, **kwargs):
+    devices = experiment_description.get('devices', {})
     photometry_tasks = OrderedDict()
 
     if 'neurophotometrics' in devices:
@@ -578,7 +591,7 @@ def get_photometry_tasks(acquisition_description, **kwargs):
         sync_mode = devices['neurophotometrics']['sync_mode']
 
         # passive photometry
-        task_protocols = acquisition_description['tasks']
+        task_protocols = experiment_description['tasks']
         assert len(task_protocols) == 1, 'chained protocols are not yet supported for photometry extraction'
         protocol = task_protocols[0]
         if 'passive' in protocol:
@@ -655,7 +668,7 @@ def make_pipeline(session_path, **pkwargs):
     if not session_path or not (session_path := Path(session_path)).exists():
         raise ValueError('Session path does not exist')
     tasks = OrderedDict()
-    acquisition_description = _load_acquisition_description(session_path)
+    experiment_description = _load_experiment_description(session_path)
     kwargs = {'session_path': session_path, 'one': pkwargs.get('one')}
 
     # Registers the experiment description file
@@ -664,41 +677,39 @@ def make_pipeline(session_path, **pkwargs):
     )(**kwargs)
 
     # Syncing tasks
-    sync_tasks = get_sync_tasks(acquisition_description, **kwargs)
+    sync_tasks = get_sync_tasks(experiment_description, **kwargs)
     tasks.update(sync_tasks)
     # Only nidq SyncPulses tasks are parents for downstream tasks; SyncRegisterRaw (timeline/tdms)
     # is not a prerequisite for trials/video/ephys tasks.
     sync_parent_tasks = [t for name, t in sync_tasks.items() if name.startswith('SyncPulses')]
 
     # Behavior tasks
-    behavior_tasks = _get_trials_tasks(
-        session_path, acquisition_description, sync_tasks=sync_parent_tasks, one=pkwargs.get('one')
-    )
+    behavior_tasks = _get_trials_tasks(session_path, experiment_description, sync_tasks=sync_parent_tasks, one=pkwargs.get('one'))
     tasks.update(behavior_tasks)
 
     # Ephys tasks
-    ephys_tasks = get_ephys_tasks(acquisition_description, sync_parent_tasks, **kwargs)
+    ephys_tasks = get_ephys_tasks(experiment_description, sync_parent_tasks, **kwargs)
     tasks.update(ephys_tasks)
 
     # Video tasks
-    video_tasks = get_video_tasks(acquisition_description, sync_parent_tasks, behavior_tasks=behavior_tasks, **kwargs)
+    video_tasks = get_video_tasks(experiment_description, sync_parent_tasks, behavior_tasks=behavior_tasks, **kwargs)
     tasks.update(video_tasks)
 
     # Audio tasks
-    audio_tasks = get_audio_tasks(acquisition_description, **kwargs)
+    audio_tasks = get_audio_tasks(experiment_description, **kwargs)
     tasks.update(audio_tasks)
 
     # Widefield tasks
-    wfield_tasks = get_wfield_tasks(acquisition_description, sync_parent_tasks, **kwargs)
+    wfield_tasks = get_wfield_tasks(experiment_description, sync_parent_tasks, **kwargs)
     tasks.update(wfield_tasks)
 
     # photometry tasks
-    # photometry_tasks = get_photometry_tasks(acquisition_description, **kwargs)
+    # photometry_tasks = get_photometry_tasks(experiment_description, **kwargs)
     # tasks.update(photometry_tasks)
 
     # Tasks from other repositories (e.g. mesoscope), planned as specs in the env that runs them
     context = {'tasks': [t.to_spec().to_dict() for t in tasks.values()]}
-    external_tasks, planner_errors = get_external_tasks(acquisition_description, session_path, context=context)
+    external_tasks, planner_errors = get_external_tasks(experiment_description, session_path, context=context)
     tasks.update(external_tasks)
 
     # combine: make pipeline and add tasks
@@ -722,3 +733,25 @@ def load_pipeline_dict(path):
         task_list = yaml.full_load(file)
 
     return task_list
+
+
+def acquisition_description_legacy_session(session_path: str | Path, save: bool = False) -> dict:
+    """Deprecated alias of :func:`experiment_description_legacy_session`."""
+    warnings.warn(
+        'acquisition_description_legacy_session is deprecated and will be removed in a future release, '
+        'use experiment_description_legacy_session instead',
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return experiment_description_legacy_session(session_path, save=save)
+
+
+def get_acquisition_description(protocol: str) -> dict:
+    """Deprecated alias of :func:`get_experiment_description`."""
+    warnings.warn(
+        'get_acquisition_description is deprecated and will be removed in a future release, '
+        'use get_experiment_description instead',
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return get_experiment_description(protocol)
