@@ -4,7 +4,9 @@ List of useful one queries
 """
 
 from one.api import ONE
+# Set up ONE (only needs to be done once)
 ONE.setup(silent=True)  # silent means use default parameters for the IBL public database
+
 one = ONE()
 
 ##################################################################################################
