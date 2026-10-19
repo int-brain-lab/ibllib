@@ -4,7 +4,8 @@ List of useful one queries
 """
 
 from one.api import ONE
-one = ONE(base_url='https://openalyx.internationalbrainlab.org', silent=True)
+ONE.setup(silent=True)  # silent means use default parameters for the IBL public database
+one = ONE()
 
 ##################################################################################################
 # Query session for several subjects
