@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [4.1.0] 2026-10-20
 
 ### Added
 - `ibllib.pipes.spec.TaskSpec`: plain-data task specification for creating Alyx tasks without importing the task class
@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - "experiment description" is now the only term for the `_ibl_experiment.description.yaml` contents (#1145)
   - `dynamic_pipeline` functions renamed: `experiment_description_legacy_session`, `get_experiment_description`
   - parameters named `acquisition_description` renamed to `experiment_description`, `session_params.aggregate_device` parameter `file_acquisition_description` renamed to `file_experiment_description`
+- Switched to uv build with pyproject.toml
 
 ### Deprecated
 - `dynamic_pipeline.acquisition_description_legacy_session` and `dynamic_pipeline.get_acquisition_description`, use `experiment_description_legacy_session` and `get_experiment_description` instead
@@ -30,7 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Task time outs are now stored on Alyx: tasks were posted with the key `time_out_sec` instead of the model field `time_out_secs`. `Pipeline.create_alyx_tasks` asserts that time outs don't exceed the Alyx field maximum (32767 s) before creating any tasks
 
 ### Removed
-- `dynamic_pipeline.get_mesoscope_tasks`
+- Mesoscope pipeline code now found in a separate repository
 
 ## [4.0.1] 2026-05-22
 
