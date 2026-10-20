@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - SpikeSortingLoaders
   - merging clusters with channels doesn't require reading spikes if metrics are available
+- "experiment description" is now the only term for the `_ibl_experiment.description.yaml` contents (#1145)
+  - `dynamic_pipeline` functions renamed: `experiment_description_legacy_session`, `get_experiment_description`
+  - parameters named `acquisition_description` renamed to `experiment_description`, `session_params.aggregate_device` parameter `file_acquisition_description` renamed to `file_experiment_description`
+
+### Deprecated
+- `dynamic_pipeline.acquisition_description_legacy_session` and `dynamic_pipeline.get_acquisition_description`, use `experiment_description_legacy_session` and `get_experiment_description` instead
 - `local_server.task_queue` and `list_queued_envs` determine a task's environment from its executable and only import task classes of the requested environments
 - `dynamic_pipeline.make_pipeline` no longer imports mpci; mesoscope tasks are planned by `mpci.alyx.pipeline:plan` in the mpci env (requires mpci with the `plan` function)
 - `local_server.job_creator` keeps the raw_session.flag file if an external task planner fails, so the missing tasks are created on the next run
