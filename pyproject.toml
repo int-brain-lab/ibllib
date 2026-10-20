@@ -1,0 +1,86 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ibllib"
+description = "IBL libraries"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    {name = "IBL Staff"},
+]
+requires-python = ">=3.10"
+dynamic = ["version"]
+dependencies = [
+    "ONE-api>=3.4.2",
+    "boto3",
+    "click>=7.0.0",
+    "colorlog>=4.0.2",
+    "globus-sdk>=4.0.0",
+    "graphviz",
+    "ibl-neuropixel>=1.10.0",
+    "ibl-photometry>=0.3.2",
+    "ibl-style",
+    "iblatlas>=0.5.3",
+    "iblqt>=0.8.2",
+    "iblutil>=1.13.0",
+    "imagecodecs",  # used to convert tif snapshots to png when registering mesoscope snapshots (also requires skimage)
+    "matplotlib>=3.0.3",
+    "mtscomp>=1.0.1",
+    "nptdms",
+    "numba>=0.56",
+    "numpy>=1.18",
+    "opencv-python-headless",
+    "pandas<3",  # pinned due to segfault bug in 3.0.4: https://github.com/pandas-dev/pandas/issues/66086
+    "phylib>=2.6.3",
+    "psychofit",
+    "pyarrow",
+    "pynrrd>=0.4.0",
+    "pyqt5",
+    "requests>=2.22.0",
+    "scikit-image",  # this is a widefield requirement missing as of July 2023, we may remove it once wfield has this figured out
+    "scikit-learn>=0.22.1",
+    "scipy>=1.7.0",
+    "seaborn>=0.9.0",
+    "sparse",
+    "tqdm>=4.32.1",
+    "slidingRP>=1.1.1",  # steinmetz lab refractory period metrics
+]
+
+[project.urls]
+Homepage = "https://www.internationalbrainlab.com/"
+Repository = "https://github.com/int-brain-lab/ibllib"
+Changelog = "https://github.com/int-brain-lab/ibllib/blob/master/CHANGELOG.md"
+
+[project.scripts]
+task_qc = "ibllib.qc.task_qc_viewer.task_qc:qc_gui_cli"
+
+[project.optional-dependencies]
+wfield = ["wfield==0.3.7", "labcams"]
+
+[dependency-groups]
+dev = [
+    "flake8>=3.7.8",
+    "flake8-docstrings",
+    "pytest",
+    "ruff",
+]
+
+[tool.setuptools.dynamic]
+version = {attr = "ibllib.__version__"}
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+exclude = ["scratch"]
+namespaces = false
+
+[tool.uv]
+required-environments = [
+    "sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "sys_platform == 'win32' and platform_machine == 'AMD64'",
+    "sys_platform == 'darwin' and platform_machine == 'arm64'",
+]
