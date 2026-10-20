@@ -20,3 +20,6 @@ ibllib.egg-info/
 scratch/
 _autosummary/
 brainbox/docs/_build/
+
+# no lock file: CI and users resolve dependencies fresh
+uv.lock
