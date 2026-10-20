@@ -11,7 +11,7 @@ task is a Task instance, TaskSpec or task dictionary. The context is a dictionar
 'tasks', a list of the other (core) pipeline task specs as dicts, whose names may be used as
 parents.
 
-The PLANNERS map determines which planner is called for a given acquisition description device.
+The PLANNERS map determines which planner is called for a given experiment description device.
 
 Examples
 --------
@@ -43,7 +43,7 @@ _logger = logging.getLogger(__name__)
 PLANNERS = {
     'mesoscope': ('mpci', 'mpci.alyx.pipeline:plan'),
 }
-"""dict of tuple: Map of acquisition description device to (environment label, planner target)."""
+"""dict of tuple: Map of experiment description device to (environment label, planner target)."""
 
 
 class PlannerError(Exception):
@@ -164,17 +164,17 @@ def plan_in_env(target, env, session_path, context=None, env_paths=None, timeout
         return [TaskSpec.from_dict(d) for d in json.loads(output_file.read_text())]
 
 
-def get_external_tasks(acquisition_description, session_path, context=None, planners=None, env_paths=None):
+def get_external_tasks(experiment_description, session_path, context=None, planners=None, env_paths=None):
     """
-    Plan the tasks of external repositories for the devices in an acquisition description.
+    Plan the tasks of external repositories for the devices in an experiment description.
 
     For each device in PLANNERS, the planner is called in its environment if installed, otherwise
     in the current environment if the planner module is importable (e.g. on a development machine).
 
     Parameters
     ----------
-    acquisition_description : dict
-        The acquisition description.
+    experiment_description : dict
+        The experiment description.
     session_path : str, pathlib.Path
         The session path.
     context : dict, optional
@@ -193,7 +193,7 @@ def get_external_tasks(acquisition_description, session_path, context=None, plan
         A map of device to error message for any planners that failed.
     """
     planners = PLANNERS if planners is None else planners
-    devices = acquisition_description.get('devices', {})
+    devices = experiment_description.get('devices', {})
     specs, errors = OrderedDict(), {}
     for device, (env, target) in planners.items():
         if device not in devices:
