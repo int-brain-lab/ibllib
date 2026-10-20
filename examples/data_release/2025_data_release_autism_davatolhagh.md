@@ -1,5 +1,8 @@
 # 2025 - Autism Widefield
 
+[Download instructions, tag `2025_Q3_Davatolhagh_et_al_autism`](https://int-brain-lab.github.io/iblenv/notebooks_external/data_download.html#Find-data-associated-with-a-release-or-publication)
+
+
 Widefield data were collected in 5 mice performing the [IBL task](https://pubmed.ncbi.nlm.nih.gov/34011433/). 
 Animals were either wildtype, or from the autism models TRE-GCaMP6s-CAMKII; NRXN KO.
 

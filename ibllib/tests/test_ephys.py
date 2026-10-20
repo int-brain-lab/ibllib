@@ -1,5 +1,6 @@
 # Mock dataset
 import unittest
+from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import numpy as np
@@ -94,7 +95,6 @@ class TestNeuropixel(unittest.TestCase):
 
 class TestFpgaTask(unittest.TestCase):
     def test_impeccable_dataset(self):
-
         fpga2bpod = np.array([11 * 1e-6, -20])  # bpod starts 20 secs before with 10 ppm drift
         fpga_trials = {
             'intervals': np.array([[0, 9.5], [10, 19.5]]),
@@ -227,6 +227,84 @@ class TestDetectBadChannels(unittest.TestCase):
         # eqc = viewseis(data, si=1 / 30000 * 1e3, h=h, title='synth', taxis=0)
         # from ibllib.plots.figures import ephys_bad_channels
         # ephys_bad_channels(data.T, 30000, labels, xfeats)
+
+
+class TestDriftmapSpikeSortingMemmap(unittest.TestCase):
+    """Unit tests for ibllib.ephys.spikes.driftmap_spike_sorting_memmap."""
+
+    rec_len = 300.0  # seconds — short enough to be fast, long enough for meaningful histograms
+    firing_rate = 50  # Hz
+
+    def setUp(self):
+        import matplotlib
+
+        matplotlib.use('Agg')
+        from brainbox.tests.test_metrics import generate_spike_train
+
+        self.tempdir = TemporaryDirectory()
+        self.tmp = Path(self.tempdir.name)
+        np.random.seed(42)
+        self.st = generate_spike_train(firing_rate=self.firing_rate, rec_len_secs=self.rec_len)
+        self.depths = np.random.uniform(0, 3840, self.st.size)
+        np.save(self.tmp.joinpath('spikes.times.npy'), self.st)
+        np.save(self.tmp.joinpath('spikes.depths.npy'), self.depths)
+        # chunk_size smaller than total spikes to guarantee at least 2 chunks
+        self.chunk_size = self.st.size // 3
+        self.tlim = [float(self.st[0]), float(self.st[-1])]
+        self.dlim = [float(self.depths.min()), float(self.depths.max())]
+
+    def tearDown(self):
+        import matplotlib.pyplot as plt
+
+        plt.close('all')
+        self.tempdir.cleanup()
+
+    def _run(self, depths_file='spikes.depths.npy', **kw):
+        kw.setdefault('chunk_size', self.chunk_size)
+        kw.setdefault('tlim', self.tlim)
+        kw.setdefault('dlim', self.dlim)
+        return spikes.driftmap_spike_sorting_memmap(self.tmp.joinpath('spikes.times.npy'), self.tmp.joinpath(depths_file), **kw)
+
+    def test_output_matches_brainbox_driftmap(self):
+        """Chunked histogram is identical to the image produced by brainbox.plot.driftmap."""
+        import matplotlib.pyplot as plt
+        from brainbox.plot import driftmap as bb_driftmap
+
+        t_bin, d_bin = 0.007, 10.0
+
+        r, t_scale, d_scale, _ = self._run(t_bin=t_bin, d_bin=d_bin)
+
+        # brainbox.plot.driftmap stores the bincount2D result as an imshow image on the axis
+        fig, ax = plt.subplots()
+        bb_driftmap(self.st, self.depths, t_bin=t_bin, d_bin=d_bin, ax=ax)
+        r_ref = ax.images[0].get_array()
+
+        np.testing.assert_array_equal(r.astype(np.float64), r_ref)
+
+    def test_spike_count_conserved(self):
+        """Sum of histogram bins equals n_spikes (no spikes lost or double-counted)."""
+        r, _, _, n_spikes = self._run()
+        self.assertEqual(n_spikes, self.st.size)
+        self.assertEqual(int(r.sum()), self.st.size)
+
+    def test_nan_depths_excluded(self):
+        """Spikes with NaN depth are silently skipped and not counted in the histogram."""
+        depths_with_nan = self.depths.copy()
+        n_nan = 100
+        depths_with_nan[np.random.choice(depths_with_nan.size, n_nan, replace=False)] = np.nan
+        np.save(self.tmp.joinpath('spikes.depths_nan.npy'), depths_with_nan)
+
+        r, _, _, n_spikes = self._run(depths_file='spikes.depths_nan.npy')
+
+        self.assertEqual(n_spikes, self.st.size)
+        self.assertEqual(int(r.sum()), self.st.size - n_nan)
+
+    def test_chunking_invariant(self):
+        """Result is independent of chunk_size."""
+        kw = dict(t_bin=0.007, d_bin=10.0)
+        r_one, *_ = self._run(chunk_size=self.st.size + 1, **kw)  # single chunk
+        r_many, *_ = self._run(chunk_size=500, **kw)  # many small chunks
+        np.testing.assert_array_equal(r_one, r_many)
 
 
 if __name__ == '__main__':

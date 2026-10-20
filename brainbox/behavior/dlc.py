@@ -437,8 +437,7 @@ def plot_lick_raster(lick_times, trials_df):
     """
     licks_df = _bin_window_licks(lick_times, trials_df)
     correct_trials = list(licks_df[licks_df['feedbackType'] == 1]['lick_bins'])
-    plt.imshow(correct_trials, aspect='auto',
-               extent=[-0.5, 1.5, len(correct_trials), 0], cmap='gray_r')
+    plt.imshow(correct_trials, aspect='auto', extent=[-0.5, 1.5, len(correct_trials), 0], cmap='gray_r')
     plt.xticks([-0.5, 0, 0.5, 1, 1.5])
     plt.xticks([-0.5, 0, 0.5, 1, 1.5])
     plt.ylabel('trials')

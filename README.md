@@ -28,6 +28,7 @@ We use Semantic Versioning.
 
 Before committing to your branch:
 -   check formating `ruff check`
+-   apply formating `ruff format`
 -   run tests `python -m unittest discover`
 
 Pull request to `develop` or `main`.

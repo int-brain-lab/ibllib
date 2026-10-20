@@ -1,5 +1,8 @@
 # 2025 - Brain Wide Map
 
+[Download instructions, tag `Brainwidemap`](https://int-brain-lab.github.io/iblenv/notebooks_external/data_download.html#Find-data-associated-with-a-release-or-publication)
+
+
 IBL aims to understand the neural basis of decision-making in the mouse by gathering a whole-brain activity map composed of electrophysiological recordings pooled from multiple laboratories.
 We have systematically recorded from nearly all major brain areas with Neuropixels probes, using a grid system for unbiased sampling and replicating each recording site in at least two laboratories.
 These data have been used to construct a brain-wide map of activity at single-spike cellular resolution during a [decision-making task]((https://elifesciences.org/articles/63711)).

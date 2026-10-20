@@ -6,7 +6,7 @@ from collections.abc import Sized
 import numpy as np
 from scipy import interpolate
 
-from ibldsp.utils import sync_timestamps
+from ibldsp.sync import sync_timestamps
 from ibllib.io.extractors.base import BaseBpodTrialsExtractor
 import ibllib.io.raw_data_loaders as raw
 from ibllib.misc import structarr

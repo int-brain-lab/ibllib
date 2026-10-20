@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 from one.api import ONE
 from one.webclient import http_download_file
 
-import ibllib.plots.misc
+import ibllib.plots
 from ibllib.tests import TEST_DB
 from ibllib.tests.fixtures.utils import register_new_session
 from ibllib.plots.snapshot import Snapshot
@@ -193,22 +193,21 @@ class TestLpQcPlot(unittest.TestCase):
 class TestMiscPlot(unittest.TestCase):
     def test_star_plot(self):
         r = np.random.rand(6)
-        ax = ibllib.plots.misc.starplot(['a', 'b', 'c', 'd', 'e', 'f'], r, ylim=[0, 1])
+        ax = ibllib.plots.starplot(['a', 'b', 'c', 'd', 'e', 'f'], r, ylim=[0, 1])
         r = np.random.rand(6)
-        ibllib.plots.misc.starplot(['a', 'b', 'c', 'd', 'e', 'f'], r, ax=ax, color='r')
+        ibllib.plots.starplot(['a', 'b', 'c', 'd', 'e', 'f'], r, ax=ax, color='r')
         plt.close('all')
 
     def test_wiggle(self):
         w = np.random.rand(500, 40) - 0.5
-        ibllib.plots.misc.wiggle(w, fs=30000)
-        ibllib.plots.misc.Traces(w, fs=30000, color='r')
+        ibllib.plots.wiggle(w, fs=30000)
+        ibllib.plots.Traces(w, fs=30000, color='r')
         plt.close('all')
 
 
 class TestPlotPawstatesQC(unittest.TestCase):
-
     N_FRAMES = 200
-    FPS = 60.
+    FPS = 60.0
     TRACKER = 'lightningPose'
     PAW = 'paw_l'
     CAMERA = 'left'
@@ -229,7 +228,7 @@ class TestPlotPawstatesQC(unittest.TestCase):
         probs = np.full((n, 5), 0.05)
         block = n // 4
         for state_idx in range(1, 5):
-            probs[(state_idx - 1) * block:state_idx * block, state_idx] = 0.8
+            probs[(state_idx - 1) * block : state_idx * block, state_idx] = 0.8
         pawstates = pd.DataFrame(
             probs,
             columns=[f'{cls.PAW}_{label}' for label in ('background', 'still', 'move', 'wheel_turn', 'groom')],
@@ -255,8 +254,13 @@ class TestPlotPawstatesQC(unittest.TestCase):
     def test_all_none_data(self):
         """All panels show a placeholder without raising when data values are None."""
         data = {
-            'frame': None, self.TRACKER: None, 'times': None,
-            'pawstates': None, 'fps': None, 'trials': None, 'wheel': None,
+            'frame': None,
+            self.TRACKER: None,
+            'times': None,
+            'pawstates': None,
+            'fps': None,
+            'trials': None,
+            'wheel': None,
         }
         fig = pawstates_qc_plot(data, camera=self.CAMERA, paw=self.PAW, tracker=self.TRACKER)
         self.assertIsNotNone(fig)
@@ -265,7 +269,10 @@ class TestPlotPawstatesQC(unittest.TestCase):
     def test_with_synthetic_data(self):
         """Figure renders without error when given valid synthetic data."""
         fig = pawstates_qc_plot(
-            self._make_data(), camera=self.CAMERA, paw=self.PAW, tracker=self.TRACKER,
+            self._make_data(),
+            camera=self.CAMERA,
+            paw=self.PAW,
+            tracker=self.TRACKER,
         )
         self.assertIsNotNone(fig)
         self.assertGreater(len(fig.axes), 0)

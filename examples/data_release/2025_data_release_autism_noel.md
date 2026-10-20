@@ -1,5 +1,8 @@
 # 2025 - Autism
 
+[Download instructions, tag `2025_Q3_Noel_et_al_Autism`](https://int-brain-lab.github.io/iblenv/notebooks_external/data_download.html#Find-data-associated-with-a-release-or-publication)
+
+
 This is the dataset associated with the publication [A common computational and neural anomaly across mouse models of autism](https://www.nature.com/articles/s41593-025-01965-8).
 
 Electrophysiology, behavioral and video data were collected in mice performing the [IBL task](https://pubmed.ncbi.nlm.nih.gov/34011433/). 
