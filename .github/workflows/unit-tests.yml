@@ -48,16 +48,18 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
     - name: Install deps
-      run: uv sync --locked --group dev
+      run: |
+        uv venv
+        uv pip install -e . --group dev
     - name: Flake8 & ruff
       run: |
-        uv run ruff check .
-        uv run flake8 --select D --ignore E ibllib/qc/camera.py ibllib/qc/task_metrics.py
+        uv run --no-sync ruff check .
+        uv run --no-sync flake8 --select D --ignore E ibllib/qc/camera.py ibllib/qc/task_metrics.py
     - name: Brainbox tests
       run: |
         cd brainbox
-        uv run pytest
+        uv run --no-sync pytest
     - name: ibllib tests
       run: |
         cd ibllib/tests
-        uv run python -m unittest discover
+        uv run --no-sync python -m unittest discover
