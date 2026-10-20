@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.5.0] Unreleased
+## [4.1.0] 2026-10-20
 
 ### Added
 - `ibllib.pipes.spec.TaskSpec`: plain-data task specification for creating Alyx tasks without importing the task class
@@ -24,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Task time outs are now stored on Alyx: tasks were posted with the key `time_out_sec` instead of the model field `time_out_secs`. `Pipeline.create_alyx_tasks` asserts that time outs don't exceed the Alyx field maximum (32767 s) before creating any tasks
 
 ### Removed
-- `dynamic_pipeline.get_mesoscope_tasks`
+- Mesoscope pipeline code now found in the mpci repository
 
 ## [4.0.1] 2026-05-22
 
