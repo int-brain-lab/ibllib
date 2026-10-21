@@ -92,6 +92,7 @@ class TestTaskQCObject(base.IntegrationTest):
             '_task_stimOn_goCue_delays': spec.QC.FAIL,
             '_task_stimulus_move_before_goCue': spec.QC.NOT_SET,
             '_task_trial_length': spec.QC.WARNING,
+            '_task_wheel_discontinuities': spec.QC.PASS,
             '_task_wheel_freeze_during_quiescence': spec.QC.PASS,
             '_task_wheel_integrity': spec.QC.PASS,
             '_task_wheel_move_before_feedback': spec.QC.PASS,

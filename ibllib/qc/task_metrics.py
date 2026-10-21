@@ -1451,6 +1451,36 @@ def check_wheel_integrity(data, re_encoding='X1', enc_res=None, **_):
     return metric, passed
 
 
+def check_wheel_discontinuities(data, **_):
+    """
+    Check the wheel position contains no discontinuities.
+
+    Check that the wheel never moves a full revolution between neighbouring position samples.
+    Such jumps are physically implausible and typically result from unaccounted for over- or
+    underflow of the rotary encoder counter (see
+    :func:`ibllib.io.raw_daq_loaders.correct_counter_discontinuities`).
+
+    Metric:
+        M = absolute difference of neighbouring positions
+
+    Criterion:
+        all(M < 2π)
+
+    Units:
+        radians
+
+    :param data: dict of wheel data with keys ('wheel_position')
+
+    Notes
+    -----
+    - Unlike `check_wheel_integrity`, which returns the proportion of passing samples, this is a
+      session-level check: a single discontinuity fails the session.
+    """
+    metric = np.abs(np.diff(data['wheel_position']))
+    passed = bool(np.all(metric < 2 * np.pi * ephys_fpga.WHEEL_RADIUS_CM))
+    return metric, passed
+
+
 # === Pre-stimulus checks ===
 def check_stimulus_move_before_goCue(data, photodiode=None, **_):
     """
