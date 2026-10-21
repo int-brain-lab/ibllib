@@ -557,6 +557,21 @@ class TestTaskMetrics(TaskQCTestData):
         metric, passed = qcmetrics.check_wheel_integrity(self.data, re_encoding='X1')
         self.assertFalse(passed[idx].any())
 
+    def test_check_wheel_discontinuities(self):
+        metric, passed = qcmetrics.check_wheel_discontinuities(self.data)
+        self.assertIs(passed, True)
+        self.assertEqual(self.data['wheel_position'].size - 1, metric.size)
+
+        # Simulate an unaccounted for counter underflow, i.e. a jump of 2^32 - 2 ticks
+        resolution = 2 * np.pi / 1024
+        self.data['wheel_position'][100:] += (2 ** 32 - 2) * resolution
+        metric, passed = qcmetrics.check_wheel_discontinuities(self.data)
+        self.assertIs(passed, False)
+        self.assertEqual(1, np.sum(metric >= 2 * np.pi))
+        # As a session-level check, a single jump should fail the session
+        outcome = qcmetrics.TaskQC.thresholding(float(passed), qcmetrics.BWM_CRITERIA['default'])
+        self.assertIs(outcome, spec.QC.FAIL)
+
     def test_check_n_trial_events(self):
         metric, passed = qcmetrics.check_n_trial_events(self.data)
         self.assertTrue(np.all(passed == 1.0) and np.all(metric))
