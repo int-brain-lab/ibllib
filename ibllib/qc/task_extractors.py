@@ -59,6 +59,7 @@ class TaskQCExtractor:
         self.raw_data = None
         self.frame_ttls = self.audio_ttls = self.bpod_ttls = None
         self.wheel_encoding = None
+        self.wheel_sample_rate = None  # the DAQ sample rate if the encoder was recorded on a counter channel
 
     @staticmethod
     def rename_data(data):

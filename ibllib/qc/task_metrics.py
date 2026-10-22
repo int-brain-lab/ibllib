@@ -71,6 +71,9 @@ _log = logging.getLogger(__name__)
 # todo the 2 followint parameters should be read from the task parameters for each session
 ITI_DELAY_SECS = 0.5
 FEEDBACK_NOGO_DELAY_SECS = 2
+# The maximum plausible wheel velocity in radians per second. The fastest velocity in 658 sessions
+# acquired with Timeline (cortexlab, 2023-2026) was 26 rad/s
+WHEEL_MAX_VELOCITY = 50
 
 BWM_CRITERIA = {
     'default': {'PASS': 0.99, 'WARNING': 0.90, 'FAIL': 0},  # Note: WARNING was 0.95 prior to Aug 2022
@@ -264,6 +267,7 @@ class TaskQC(base.QC):
             photodiode=self.extractor.frame_ttls,
             audio=self.extractor.audio_ttls,
             re_encoding=self.extractor.wheel_encoding or 'X1',
+            wheel_sample_rate=getattr(self.extractor, 'wheel_sample_rate', None),
             min_qt=self.extractor.settings.get('QUIESCENT_PERIOD') or 0.2,
             audio_output=self.extractor.settings.get('device_sound', {}).get('OUTPUT', 'unknown'),
         )
@@ -1419,41 +1423,58 @@ def check_reward_volume_set(data, **_):
 
 
 @base.return_qc_datasets(['_ibl_wheel.position.npy', '_ibl_wheel.timestamps.npy'])
-def check_wheel_integrity(data, re_encoding='X1', enc_res=None, **_):
+def check_wheel_integrity(data, re_encoding='X1', enc_res=None, wheel_sample_rate=None,
+                          max_velocity=WHEEL_MAX_VELOCITY, **_):
     """
     Check wheel position sampled at the expected resolution.
 
-    Check that the difference between wheel position samples is close to the encoder resolution
-    and that the wheel timestamps strictly increase.
+    Check that the wheel timestamps strictly increase and that the difference between wheel
+    position samples is plausible.
+
+    When the wheel position is extracted from the encoder edges (e.g. FPGA or Bpod), each sample
+    should differ from the last by one encoder tick. When the encoder is recorded on a DAQ
+    counter channel that is sampled at a fixed rate (e.g. Timeline), the counter registers every
+    edge but is only read once per sample, so neighbouring samples may differ by many ticks when
+    the wheel turns quickly (above one tick per sample, e.g. ~1.5 rad/s with X4 encoding at
+    1 kHz). In this case the position is still accurate, so instead the wheel velocity between
+    samples should be physically plausible.
 
     Metric:
-        M = (absolute difference of the positions < 1.5 * encoder resolution)
-        + 1 if (difference of timestamps <= 0) else 0
+        Edge extracted:
+            M = absolute difference of the positions + 1 if (difference of timestamps <= 0) else 0
+        Counter sampled:
+            M = absolute velocity between samples, inf if (difference of timestamps <= 0)
 
     Criterion:
-        M ~= 0
+        Edge extracted: M < 1.5 * encoder resolution
+        Counter sampled: M < max_velocity
 
     Units:
-        arbitrary (radians, sometimes + 1)
+        Edge extracted: arbitrary (radians, sometimes + 1)
+        Counter sampled: radians / second
 
     :param data: dict of wheel data with keys ('wheel_timestamps', 'wheel_position')
     :param re_encoding: the encoding of the wheel data, X1, X2 or X4
     :param enc_res: the rotary encoder resolution (default 1024 ticks per revolution)
-
-    Notes
-    -----
-    - At high velocities some samples are missed due to the scanning frequency of the DAQ.
-      This checks for more than 1 missing sample in a row (i.e. the difference between samples >= 2)
-
+    :param wheel_sample_rate: the sample rate in Hz of the DAQ counter channel that recorded the
+        encoder, or None if the position was extracted from the encoder edges
+    :param max_velocity: the maximum plausible wheel velocity in radians per second (only used if
+        wheel_sample_rate is not None)
     """
+    pos_check = np.abs(np.diff(data['wheel_position']))
+    dt = np.diff(data['wheel_timestamps'])
+    # Timestamps should be strictly increasing
+    ts_check = dt <= 0.0
+    if wheel_sample_rate:
+        # Counter sampled: the velocity between neighbouring samples should be plausible
+        metric = np.divide(pos_check, dt, out=np.full_like(pos_check, np.inf), where=~ts_check)
+        passed = metric < max_velocity
+        return metric, passed
     if isinstance(re_encoding, str):
         re_encoding = int(re_encoding[-1])
     # The expected difference between samples in the extracted units
     resolution = 1 / (enc_res or ephys_fpga.WHEEL_TICKS) * np.pi * 2 * ephys_fpga.WHEEL_RADIUS_CM / re_encoding
     # We expect the difference of neighbouring positions to be close to the resolution
-    pos_check = np.abs(np.diff(data['wheel_position']))
-    # Timestamps should be strictly increasing
-    ts_check = np.diff(data['wheel_timestamps']) <= 0.0
     metric = pos_check + ts_check.astype(float)  # all values should be close to zero
     passed = metric < 1.5 * resolution
     return metric, passed

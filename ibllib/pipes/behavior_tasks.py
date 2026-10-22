@@ -564,6 +564,9 @@ class ChoiceWorldTrialsNidq(ChoiceWorldTrialsBpod):
             qc_extractor.data['wheel_timestamps_bpod'] = wheel_ts_bpod
             qc_extractor.data['wheel_position_bpod'] = self.extractor.bpod_trials['wheel_position']
             qc_extractor.wheel_encoding = 'X4'
+            if timeline := getattr(self.extractor, 'timeline', None):
+                # Timeline records the encoder on a counter channel sampled at a fixed rate
+                qc_extractor.wheel_sample_rate = timeline['meta']['daqSampleRate']
         qc_extractor.frame_ttls = self.extractor.frame2ttl
         qc_extractor.audio_ttls = self.extractor.audio
         qc_extractor.bpod_ttls = self.extractor.bpod
