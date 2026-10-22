@@ -578,6 +578,30 @@ class TestTaskMetrics(TaskQCTestData):
         metric, passed = qcmetrics.check_wheel_integrity(self.data, re_encoding='X1')
         self.assertFalse(passed[idx].any())
 
+    def test_check_wheel_integrity_counter_sampled(self):
+        """Test check_wheel_integrity with an encoder counter sampled at a fixed rate (e.g. Timeline)."""
+        fs = 1000  # DAQ sample rate
+        resolution = 2 * np.pi / 1024 / 4  # X4 encoding
+        # Wheel turning at 3 rad/s, i.e. ~2 ticks per sample, sampled only where the counter changes
+        ts = np.arange(1000) / fs
+        pos = np.round(3 * ts / resolution) * resolution
+        changed = np.r_[True, np.diff(pos) != 0]
+        data = {'wheel_timestamps': ts[changed], 'wheel_position': pos[changed]}
+        # Multi-tick steps fail when assuming edge extracted data
+        _, passed = qcmetrics.check_wheel_integrity(data, re_encoding='X4')
+        self.assertLess(passed.mean(), 0.5)
+        # The steps are accurate for counter sampled data
+        metric, passed = qcmetrics.check_wheel_integrity(data, re_encoding='X4', wheel_sample_rate=fs)
+        self.assertTrue(np.all(passed))
+        np.testing.assert_allclose(np.median(metric), 3, rtol=0.1)  # velocity in rad/s
+
+        # Insert an implausible jump and a non-increasing timestamp
+        data['wheel_position'][100:] += 10 * np.pi
+        data['wheel_timestamps'][200] = data['wheel_timestamps'][199]
+        metric, passed = qcmetrics.check_wheel_integrity(data, re_encoding='X4', wheel_sample_rate=fs)
+        np.testing.assert_array_equal([99, 199], np.flatnonzero(~passed))
+        self.assertEqual(np.inf, metric[199])
+
     def test_check_wheel_discontinuities(self):
         metric, passed = qcmetrics.check_wheel_discontinuities(self.data)
         self.assertIs(passed, True)
