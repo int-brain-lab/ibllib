@@ -2,6 +2,7 @@ import logging
 from abc import abstractmethod
 from pathlib import Path
 from itertools import chain
+from functools import wraps
 
 import numpy as np
 from one.api import ONE
@@ -9,6 +10,40 @@ from one.alf import spec
 
 """dict: custom sign off categories"""
 SIGN_OFF_CATEGORIES = {'neuropixel': ['raw', 'spike_sorting', 'alignment']}
+
+
+def return_qc_datasets(datasets):
+    """
+    Decorator that associates a QC check with the datasets it assesses.
+
+    The decorated function returns the predefined list of dataset names when called with the
+    keyword argument `only_dsets=True`, otherwise it runs as normal. The dataset names are also
+    available as the `datasets` attribute of the decorated function, so that the datasets of a
+    check may be determined without calling it.
+
+    Parameters
+    ----------
+    datasets : list of str
+        The names of the datasets that the check assesses, e.g. '_ibl_wheel.position.npy'.
+
+    Examples
+    --------
+    >>> @return_qc_datasets(['_ibl_wheel.position.npy'])
+    ... def check_wheel(data):
+    ...     return metric, passed
+    >>> check_wheel(only_dsets=True)
+    ['_ibl_wheel.position.npy']
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            only_dsets = kwargs.pop('only_dsets', False)
+            if only_dsets:
+                return datasets
+            return func(*args, **kwargs)
+        wrapper.datasets = list(datasets)
+        return wrapper
+    return decorator
 
 
 class QC:
