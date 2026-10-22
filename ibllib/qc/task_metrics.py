@@ -437,11 +437,18 @@ class TaskQC(base.QC):
             'firstMovement_times': spec.QC.NOT_SET,
         }
         reward_checks = (f'_{namespace}_reward_volumes', f'_{namespace}_reward_volume_set')
-        trials_table_outcomes['rewardVolume']: TaskQC.overall_outcome((outcomes.get(x, spec.QC.NOT_SET) for x in reward_checks))
+        trials_table_outcomes['rewardVolume'] = TaskQC.overall_outcome((outcomes.get(x, spec.QC.NOT_SET) for x in reward_checks))
         dataset_outcomes = {
             '_ibl_trials.stimOff_times': outcomes.get(f'_{namespace}_stimOff_delays', spec.QC.NOT_SET),
             '_ibl_trials.table': trials_table_outcomes,
         }
+        # Checks decorated with `ibllib.qc.base.return_qc_datasets`: map each dataset to the
+        # outcomes of the checks that assess it (the dataset QC is the worst of these)
+        for name, check in TaskQC._get_checks(...).items():
+            if (key := f'_{namespace}_{name[6:]}') not in outcomes:
+                continue
+            for dataset in getattr(check, 'datasets', []):
+                dataset_outcomes.setdefault(PurePosixPath(dataset).stem, {})[key] = outcomes[key]
         return dataset_outcomes
 
 
@@ -1411,6 +1418,7 @@ def check_reward_volume_set(data, **_):
     return metric, passed
 
 
+@base.return_qc_datasets(['_ibl_wheel.position.npy', '_ibl_wheel.timestamps.npy'])
 def check_wheel_integrity(data, re_encoding='X1', enc_res=None, **_):
     """
     Check wheel position sampled at the expected resolution.
@@ -1451,6 +1459,8 @@ def check_wheel_integrity(data, re_encoding='X1', enc_res=None, **_):
     return metric, passed
 
 
+@base.return_qc_datasets(['_ibl_wheel.position.npy', '_ibl_wheelMoves.intervals.npy',
+                           '_ibl_wheelMoves.peakAmplitude.npy'])
 def check_wheel_discontinuities(data, **_):
     """
     Check the wheel position contains no discontinuities.

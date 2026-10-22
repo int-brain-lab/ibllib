@@ -26,6 +26,8 @@ def _create_test_qc_outcomes():
     outcomes['_task_reward_volume_set'] = outcomes['_task_goCue_delays'] = spec.QC.FAIL
     outcomes['_task_errorCue_delays'] = outcomes['_task_stimOff_delays'] = spec.QC.PASS
     outcomes['_task_iti_delays'] = spec.QC.CRITICAL
+    outcomes['_task_wheel_integrity'] = spec.QC.WARNING
+    outcomes['_task_wheel_discontinuities'] = spec.QC.FAIL
     return outcomes
 
 
@@ -86,9 +88,20 @@ class TestAggregateOutcome(unittest.TestCase):
                 'probabilityLeft': spec.QC.NOT_SET,
                 'feedback_times': spec.QC.PASS,
                 'firstMovement_times': spec.QC.NOT_SET,
+                'rewardVolume': spec.QC.FAIL,  # worst of reward_volumes and reward_volume_set
             },
+            # Datasets of checks decorated with ibllib.qc.base.return_qc_datasets
+            '_ibl_wheel.position': {'_task_wheel_discontinuities': spec.QC.FAIL, '_task_wheel_integrity': spec.QC.WARNING},
+            '_ibl_wheel.timestamps': {'_task_wheel_integrity': spec.QC.WARNING},
+            '_ibl_wheelMoves.intervals': {'_task_wheel_discontinuities': spec.QC.FAIL},
+            '_ibl_wheelMoves.peakAmplitude': {'_task_wheel_discontinuities': spec.QC.FAIL},
         }
         self.assertDictEqual(expected, dataset_outcomes)
+        # Checks without outcomes (e.g. habituation QC) should be ignored
+        del outcomes['_task_wheel_integrity']
+        dataset_outcomes = qcmetrics.TaskQC.compute_dataset_qc_status(outcomes)
+        self.assertNotIn('_ibl_wheel.timestamps', dataset_outcomes)
+        self.assertEqual({'_task_wheel_discontinuities'}, dataset_outcomes['_ibl_wheel.position'].keys())
 
 
 class TestDatasetQC(unittest.TestCase):
@@ -98,6 +111,7 @@ class TestDatasetQC(unittest.TestCase):
             {'name': '_ibl_trials.table.pqt', 'qc': 'NOT_SET', 'id': str(uuid4())},
             {'name': '_ibl_other.intervals.npy', 'qc': 'PASS', 'id': str(uuid4())},
             {'name': '_ibl_trials.stimOff_times.npy', 'qc': 'NOT_SET', 'id': str(uuid4())},
+            {'name': '_ibl_wheel.position.npy', 'qc': 'NOT_SET', 'id': str(uuid4())},
         ]
         one = mock.MagicMock()
         one.alyx.get.side_effect = lambda *args, **kwargs: {'qc': spec.QC.NOT_SET.name, 'json': {'extended_qc': None}}
@@ -107,10 +121,17 @@ class TestDatasetQC(unittest.TestCase):
         task_qc_results = (spec.QC.CRITICAL, {}, _create_test_qc_outcomes())  # Inject some toy trials QC results
         with mock.patch.object(qc, 'compute_session_status', return_value=task_qc_results):
             out = qcmetrics.update_dataset_qc(qc, registered_datasets.copy(), one, override=False)
-            self.assertEqual(3, len(out))
-            self.assertEqual(['CRITICAL', 'PASS', 'PASS'], [x['qc'] for x in out])
+            self.assertEqual(4, len(out))
+            self.assertEqual(['CRITICAL', 'PASS', 'PASS', 'FAIL'], [x['qc'] for x in out])
         # Check extended qc
-        extended_qc = one.alyx.json_field_update.call_args.kwargs.get('data', {}).get('extended_qc', {})
+        extended_qcs = {
+            c.kwargs['uuid']: c.kwargs['data']['extended_qc'] for c in one.alyx.json_field_update.call_args_list
+            if 'extended_qc' in c.kwargs.get('data', {})
+        }
+        # The wheel position dataset QC should record which checks determined its value
+        expected = {'_task_wheel_discontinuities': spec.QC.FAIL, '_task_wheel_integrity': spec.QC.WARNING}
+        self.assertEqual(expected, extended_qcs[registered_datasets[3]['id']])
+        extended_qc = extended_qcs[registered_datasets[0]['id']]
         # Check a few of the fields
         self.assertEqual(spec.QC.WARNING, extended_qc.get('stimOn_times'))
         self.assertEqual(spec.QC.CRITICAL, extended_qc.get('intervals'))
