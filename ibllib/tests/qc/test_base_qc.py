@@ -6,7 +6,7 @@ from one.api import ONE
 from one.alf import spec
 
 from ibllib.tests import TEST_DB
-from ibllib.qc.base import QC
+from ibllib.qc.base import QC, return_qc_datasets
 from ibllib.tests.fixtures.utils import register_new_session
 
 one = ONE(**TEST_DB)
@@ -145,6 +145,25 @@ class TestQC(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         one.alyx.rest('sessions', 'delete', id=cls.eid)
+
+
+class TestReturnQCDatasets(unittest.TestCase):
+    """Test for ibllib.qc.base.return_qc_datasets decorator."""
+
+    def test_return_qc_datasets(self):
+        datasets = ['_ibl_wheel.position.npy', '_ibl_wheel.timestamps.npy']
+
+        @return_qc_datasets(datasets)
+        def check_foo(data, threshold=1, **_):
+            """Foo check."""
+            return data, data < threshold
+
+        self.assertEqual(datasets, check_foo(only_dsets=True))
+        self.assertEqual(datasets, check_foo.datasets)
+        self.assertEqual((0, True), check_foo(0, threshold=2, only_dsets=False))
+        self.assertEqual((2, False), check_foo(2))
+        self.assertEqual('check_foo', check_foo.__name__)
+        self.assertEqual('Foo check.', check_foo.__doc__)
 
 
 if __name__ == '__main__':
