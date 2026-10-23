@@ -284,7 +284,7 @@ class TimelineTrials(FpgaTrials):
 
         # Extract valve open times from the DAQ
         valve_driver_ttls = bpod_event_intervals['valve_open']
-        correct = self.bpod_trials['feedbackType'] == 1
+        correct = self.bpod_trials['feedbackType'][ibpod] == 1
         # If there is a reward_valve channel, the voltage across the valve has been recorded and
         # should give a more accurate readout of the valve's activity.
         use_valve_channel = kwargs.get('use_valve_channel', True)
@@ -355,8 +355,9 @@ class TimelineTrials(FpgaTrials):
             long.
             """
             _logger.warning('%i go cue tones missed', start_times.size - go_cue.size)
-            err_trig = self.bpod2fpga(self.bpod_trials['errorCueTrigger_times'])
-            go_trig = self.bpod2fpga(self.bpod_trials['goCueTrigger_times'])
+            # NB: only the Bpod trials synced to the DAQ are used (e.g. some may be outside the DAQ recording)
+            err_trig = self.bpod2fpga(self.bpod_trials['errorCueTrigger_times'][ibpod])
+            go_trig = self.bpod2fpga(self.bpod_trials['goCueTrigger_times'][ibpod])
             assert not np.any(np.isnan(go_trig))
             assert err_trig.size == go_trig.size  # should be length of n trials with NaNs
 
@@ -374,7 +375,7 @@ class TimelineTrials(FpgaTrials):
             # Indices of ups directly following a go trigger, or -1 if none found (or trigger NaN)
             idx = attribute_times(ups, go_trig, tol=0.2, take='after')
             # Trial indices that didn't have detected goCue and now has been assigned an `ups` index
-            assigned = np.where(idx != -1 & missing)[0]  # ignore unassigned
+            assigned = np.where((idx != -1) & missing)[0]  # ignore unassigned
             _go_cue[assigned] = ups[idx[assigned]]
 
             # Remove mis-assigned error tone times (i.e. those that have now been assigned to goCue)
@@ -385,7 +386,7 @@ class TimelineTrials(FpgaTrials):
             # For those trials where go cue was merged with the error cue and therefore mis-assigned,
             # we must re-assign the error cue times as the first HIGH after the error trigger.
             idx = attribute_times(ups, err_trig, tol=0.2, take='after')
-            assigned = np.where(idx != -1 & missing)[0]  # ignore unassigned
+            assigned = np.where((idx != -1) & missing)[0]  # ignore unassigned
             error_cue[assigned] = ups[idx[assigned]]
             out['goCue_times'] = _go_cue
             out['errorCue_times'] = error_cue
