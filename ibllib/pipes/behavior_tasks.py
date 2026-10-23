@@ -11,12 +11,13 @@ from one.api import ONE
 from ibllib.oneibl.registration import get_lab
 from ibllib.oneibl.data_handlers import ServerDataHandler, SDSCDataHandler, ExpectedDataset
 from ibllib.pipes import base_tasks
+from ibllib.io import session_params
 from ibllib.io.raw_data_loaders import load_settings, load_bpod_fronts
 from ibllib.qc.task_extractors import TaskQCExtractor
 from ibllib.qc.task_metrics import HabituationQC, TaskQC, update_dataset_qc
 from ibllib.io.extractors.ephys_passive import PassiveChoiceWorld
 from ibllib.io.extractors.bpod_trials import get_bpod_extractor
-from ibllib.io.extractors.ephys_fpga import FpgaTrials, FpgaTrialsHabituation, get_sync_and_chn_map
+from ibllib.io.extractors.ephys_fpga import FpgaTrials, FpgaTrialsHabituation, get_sync_and_chn_map, get_protocol_entry
 from ibllib.io.extractors.mesoscope import TimelineTrials, TimelineTrialsHabituation
 from ibllib.pipes import training_status
 from ibllib.plots.figures import BehaviourPlots
@@ -501,9 +502,38 @@ class ChoiceWorldTrialsNidq(ChoiceWorldTrialsBpod):
                 ('*wheel.timestamps.npy', self.output_collection, True),
                 ('*wheelMoves.intervals.npy', self.output_collection, True),
                 ('*wheelMoves.peakAmplitude.npy', self.output_collection, True),
+                # Updated if the protocol period was determined without spacers
+                ('_ibl_experiment.description.yaml', '', False),
             ],
         }
         return signature
+
+    def _store_protocol_period(self):
+        """
+        Store the protocol period in the experiment description if determined without spacers.
+
+        When the protocol spacers can't be used to determine the protocol period, the period is
+        estimated from the trial start TTLs (see `FpgaTrials._extract`). The period is then saved
+        to the protocol's experiment description entry as 'protocol_period' so that subsequent
+        extractions use the same period (see `ephys_fpga.get_protocol_period`).
+
+        Returns
+        -------
+        pathlib.Path, None
+            The updated experiment description file, or None if not updated.
+        """
+        period = getattr(self.extractor, 'protocol_period', None)
+        if period is None or self.protocol_number is None:
+            return
+        description = session_params.read_params(self.session_path)
+        protocol, entry = get_protocol_entry(description or {}, self.protocol_number)
+        if entry is None:
+            _logger.error('Protocol %i not found in experiment description; period not stored', self.protocol_number)
+            return
+        entry['protocol_period'] = [None if t is None else float(t) for t in period]
+        _logger.info('Storing protocol %i (%s) period %s in experiment description', self.protocol_number, protocol,
+                     entry['protocol_period'])
+        return session_params.write_params(self.session_path, description)
 
     def _behaviour_criterion(self, update=True, truncate_to_pass=True):
         """
@@ -545,6 +575,8 @@ class ChoiceWorldTrialsNidq(ChoiceWorldTrialsBpod):
             protocol_number=self.protocol_number,
             **kwargs,
         )
+        if save and (description_file := self._store_protocol_period()):
+            files = [*(files or []), description_file]
         return outputs, files
 
     def run_qc(self, trials_data=None, update=False, plot_qc=False, QC=None):
@@ -616,6 +648,8 @@ class ChoiceWorldTrialsTimeline(ChoiceWorldTrialsNidq):
             extractor = get_bpod_extractor(self.session_path, protocol=self.protocol)
             if extractor.save_names:
                 signature['output_files'] = [(fn, self.output_collection, True) for fn in filter(None, extractor.save_names)]
+                # Updated if the protocol period was determined without spacers
+                signature['output_files'].append(('_ibl_experiment.description.yaml', '', False))
         return signature
 
     def extract_behaviour(self, save=True, **kwargs):
@@ -639,6 +673,8 @@ class ChoiceWorldTrialsTimeline(ChoiceWorldTrialsNidq):
             protocol_number=self.protocol_number,
             **kwargs,
         )
+        if save and (description_file := self._store_protocol_period()):
+            out_files = [*(out_files or []), description_file]
 
         return dsets, out_files
 
