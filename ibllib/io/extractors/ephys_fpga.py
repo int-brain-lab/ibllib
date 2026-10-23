@@ -915,10 +915,10 @@ class FpgaTrials(extractors_base.BaseExtractor):
         Check that the number of Bpod trial TTLs within the protocol period matches the Bpod data.
 
         Either the trial start or trial end TTLs are used, whichever count is closest to the number
-        of Bpod trials, as the short trial start TTLs are often missed at low sampling rates. The
-        counts frequently differ slightly due to missed or spurious TTLs, therefore the period is
-        only rejected if the counts differ grossly, e.g. when the period is that of another
-        protocol or an aborted run of the same protocol.
+        of Bpod trials, as the short trial start TTLs are often missed at low sampling rates. TTLs
+        are frequently missed but rarely spurious, therefore the period is rejected if it contains
+        more than a few extra TTLs (e.g. when it includes another protocol), or less than half the
+        expected number (e.g. when it is that of an aborted run of the same protocol).
 
         Parameters
         ----------
@@ -932,8 +932,9 @@ class FpgaTrials(extractors_base.BaseExtractor):
         Returns
         -------
         bool
-            False if the number of trial TTLs within the period differs grossly from the number of
-            Bpod trials. True if the counts are similar, or if the trial TTLs can't be detected.
+            False if the period contains more than max(10, 10%) extra trial TTLs, or fewer than
+            max(10, 50%) of the expected number. True if the counts are similar, or if the trial
+            TTLs can't be detected.
         """
         n_trials = len(self.bpod_trials['intervals'])
         try:
@@ -949,7 +950,8 @@ class FpgaTrials(extractors_base.BaseExtractor):
             _logger.warning('No Bpod trial TTLs detected; protocol period not validated')
             return True
         n_ttl = min(counts, key=lambda x: abs(x - n_trials))
-        if abs(n_ttl - n_trials) > max(10, n_trials / 2):
+        # Missed TTLs are common whereas spurious ones are rare, so we are stricter on extra TTLs
+        if (n_ttl - n_trials) > max(10, n_trials / 10) or (n_trials - n_ttl) > max(10, n_trials / 2):
             _logger.error('Protocol period (%s, %s) contains %i trial TTLs; expected %i', tmin, tmax, n_ttl, n_trials)
             return False
         if abs(n_ttl - n_trials) > n_trials / 10:

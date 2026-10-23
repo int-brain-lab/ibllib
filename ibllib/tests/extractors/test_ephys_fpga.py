@@ -1056,6 +1056,16 @@ class TestProtocolPeriodValidation(unittest.TestCase):
             self.assertTrue(validate(None, None, 120, 201))  # 80 TTLs: moderate mismatch, warning only
         with self.assertLogs(ephys_fpga._logger, 'ERROR'):
             self.assertFalse(validate(None, None, 50, 99))  # period of aborted run
+        # Extra TTLs are treated more strictly than missing ones
+        self.extractor.bpod_trials['intervals'] = np.zeros((90, 2))
+        with self.assertLogs(ephys_fpga._logger, 'WARNING'):
+            self.assertTrue(validate(None, None, 99, 201))  # 10 extra TTLs (11%): warning only
+        self.extractor.bpod_trials['intervals'] = np.zeros((85, 2))
+        with self.assertLogs(ephys_fpga._logger, 'ERROR'):
+            self.assertFalse(validate(None, None, 99, 201))  # 15 extra TTLs
+        self.extractor.bpod_trials['intervals'] = np.zeros((150, 2))
+        with self.assertLogs(ephys_fpga._logger, 'WARNING'):
+            self.assertTrue(validate(None, None, 99, 201))  # 50 missed TTLs (33%)
         with self.assertLogs(ephys_fpga._logger, 'WARNING'):  # no trial TTLs detected
             self.extractor.get_bpod_event_times.return_value = (None, {'trial_end': np.full((0, 2), np.nan)})
             self.assertTrue(validate(None, None, 50, 99))
