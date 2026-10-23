@@ -991,6 +991,47 @@ class TestGetProtocolPeriod(unittest.TestCase):
         bpod = {k: v[keep] for k, v in self.bpod.items()}
         with self.assertRaises(AssertionError):
             ephys_fpga.get_protocol_period(self.session_path, 1, bpod)
+        # Protocol 0 should also fail as the spacers can't be unambiguously assigned to protocols
+        with self.assertRaises(AssertionError):
+            ephys_fpga.get_protocol_period(self.session_path, 0, bpod)
+
+    def test_passive_without_spacer(self):
+        """Test passive protocols run with iblrig v8.1 - v8.18, which did not send spacers."""
+        from unittest import mock
+        from ibllib.io.session_params import read_params, write_params
+        description = read_params(self.session_path)
+        description['tasks'].insert(1, {'_iblrig_tasks_passiveChoiceWorld': {'collection': 'raw_task_data_01'}})
+        description['tasks'][2] = {'task1ChoiceWorld': {'collection': 'raw_task_data_02'}}
+        write_params(self.session_path, description)
+        settings = {'IBLRIG_VERSION': '8.15.5'}
+        with mock.patch('ibllib.io.extractors.ephys_fpga.raw.load_settings', return_value=settings):
+            # The two choice world spacers should be assigned to protocols 0 and 2
+            with self.assertLogs(ephys_fpga._logger, 'WARNING'):
+                start, end = ephys_fpga.get_protocol_period(self.session_path, 2, self.bpod)
+            np.testing.assert_allclose(self.spacer_starts[1], start, atol=1e-2)
+            self.assertIsNone(end)
+            # The passive protocol period can't be determined from the spacers
+            self.assertRaises(AssertionError, ephys_fpga.get_protocol_period, self.session_path, 1, self.bpod)
+            # From iblrig v8.19.0 passive protocols send spacers, so we expect 3 spacers
+            settings['IBLRIG_VERSION'] = '8.19.0'
+            self.assertRaises(AssertionError, ephys_fpga.get_protocol_period, self.session_path, 0, self.bpod)
+
+    def test_stored_protocol_period(self):
+        """Test that a protocol period stored in the experiment description is used."""
+        from types import SimpleNamespace
+        from ibllib.pipes.behavior_tasks import ChoiceWorldTrialsNidq
+        # Simulate a trials task where the period was determined without spacers
+        task = SimpleNamespace(session_path=self.session_path, protocol_number=1,
+                               extractor=SimpleNamespace(protocol_period=(np.float64(95.5), None)))
+        description_file = ChoiceWorldTrialsNidq._store_protocol_period(task)
+        self.assertEqual(self.session_path / '_ibl_experiment.description.yaml', description_file)
+        # The stored period should be used regardless of the spacers
+        self.assertEqual((95.5, None), ephys_fpga.get_protocol_period(self.session_path, 1, {'times': [], 'polarities': []}))
+        start, _ = ephys_fpga.get_protocol_period(self.session_path, 0, self.bpod)
+        np.testing.assert_allclose(self.spacer_starts[0], start, atol=1e-2)
+        # Nothing stored if the period was determined from spacers
+        task.extractor.protocol_period = None
+        self.assertIsNone(ChoiceWorldTrialsNidq._store_protocol_period(task))
 
 
 if __name__ == '__main__':
