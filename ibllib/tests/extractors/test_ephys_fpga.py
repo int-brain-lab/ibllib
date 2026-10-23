@@ -1034,5 +1034,54 @@ class TestGetProtocolPeriod(unittest.TestCase):
         self.assertIsNone(ChoiceWorldTrialsNidq._store_protocol_period(task))
 
 
+class TestProtocolPeriodValidation(unittest.TestCase):
+    """Tests for FpgaTrials._get_protocol_period and FpgaTrials._validate_protocol_period methods."""
+
+    def setUp(self):
+        from unittest import mock
+        n_trials = 100
+        self.extractor = ephys_fpga.FpgaTrials('subject/2020-01-01/001', bpod_trials={'intervals': np.zeros((n_trials, 2))})
+        # One protocol between 100 and 200 s (one trial per second) and an aborted run at 50 s
+        trial_end = np.r_[50.5, 51.5, np.arange(100, 200) + .5]
+        intervals = {'trial_start': np.full((0, 2), np.nan), 'trial_end': np.c_[trial_end, trial_end + 1e-3]}
+        patch = mock.patch.object(self.extractor, 'get_bpod_event_times', return_value=(None, intervals))
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def test_validate_protocol_period(self):
+        validate = self.extractor._validate_protocol_period
+        self.assertTrue(validate(None, None, 99, 201))
+        self.assertTrue(validate(None, None, None, None))  # 2 extra TTLs is acceptable
+        with self.assertLogs(ephys_fpga._logger, 'WARNING'):
+            self.assertTrue(validate(None, None, 120, 201))  # 80 TTLs: moderate mismatch, warning only
+        with self.assertLogs(ephys_fpga._logger, 'ERROR'):
+            self.assertFalse(validate(None, None, 50, 99))  # period of aborted run
+        with self.assertLogs(ephys_fpga._logger, 'WARNING'):  # no trial TTLs detected
+            self.extractor.get_bpod_event_times.return_value = (None, {'trial_end': np.full((0, 2), np.nan)})
+            self.assertTrue(validate(None, None, 50, 99))
+
+    def test_get_protocol_period(self):
+        from unittest import mock
+        get_period = self.extractor._get_protocol_period
+        with mock.patch('ibllib.io.extractors.ephys_fpga.get_protocol_period', return_value=(99, 201)) as m:
+            self.assertEqual((99, 201), get_period(None, None, None, 0))
+            m.assert_called_once()
+        self.assertIsNone(self.extractor.protocol_period)
+        # Strict spacer check fails, unchecked spacers give the aborted run's period, trial starts are valid
+        side_effect = (AssertionError('expected 1 spacers, found 2'), (50, 99))
+        with mock.patch('ibllib.io.extractors.ephys_fpga.get_protocol_period', side_effect=side_effect), \
+                mock.patch.object(self.extractor, '_protocol_period_from_trial_starts', return_value=(97.5, 202.5)), \
+                self.assertLogs(ephys_fpga._logger, 'WARNING'):
+            self.assertEqual((97.5, 202.5), get_period(None, None, None, 0))
+        self.assertEqual((97.5, 202.5), self.extractor.protocol_period)
+        # No valid period
+        side_effect = (AssertionError('expected 1 spacers, found 2'), (50, 99))
+        with mock.patch('ibllib.io.extractors.ephys_fpga.get_protocol_period', side_effect=side_effect), \
+                mock.patch.object(self.extractor, '_protocol_period_from_trial_starts', return_value=(None, None)), \
+                mock.patch.object(self.extractor, 'bpod_trials', {'intervals': np.zeros((30, 2))}), \
+                self.assertLogs(ephys_fpga._logger, 'WARNING'):
+            self.assertRaises(ValueError, get_period, None, None, None, 0)
+
+
 if __name__ == '__main__':
     unittest.main(exit=False, verbosity=2)
