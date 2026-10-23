@@ -577,7 +577,8 @@ def sends_protocol_spacer(session_path, protocol, collection):
     return not (version.parse('8.1.0') <= rig_version < version.parse('8.19.0'))
 
 
-def get_protocol_period(session_path, protocol_number, bpod_sync, exclude_empty_periods=True, include_spacer=True):
+def get_protocol_period(session_path, protocol_number, bpod_sync, exclude_empty_periods=True, include_spacer=True,
+                        strict=True):
     """
     Return the start and end time of the protocol number.
 
@@ -603,6 +604,11 @@ def get_protocol_period(session_path, protocol_number, bpod_sync, exclude_empty_
         When true, the start time returned is the start of the spacer pulse.
         If false, the start time is the end of the spacer pulse and the end time is the start
         of the next spacer pulse.
+    strict : bool
+        If true, the number of detected spacers must match the number expected from the
+        experiment description. If false, the spacers (excluding empty periods) are simply
+        assigned to the protocols in order, which may return the wrong period if a spacer is
+        missing or a protocol was aborted. The period should therefore be validated.
 
     Returns
     -------
@@ -636,7 +642,7 @@ def get_protocol_period(session_path, protocol_number, bpod_sync, exclude_empty_
         valid = np.ones(len(all_spacer_times), dtype=bool)
     spacer_times = all_spacer_times[valid]
     # Ensure that the number of detected spacers matches the number of expected spacers
-    if acquisition_description:
+    if acquisition_description and strict:
         tasks = [next(iter(t.items())) for t in acquisition_description.get('tasks', [])]
         n_tasks = len(tasks)
         assert n_tasks > protocol_number >= 0, f'protocol number must be between 0 and {n_tasks}'
@@ -661,6 +667,8 @@ def get_protocol_period(session_path, protocol_number, bpod_sync, exclude_empty_
     else:
         assert protocol_number < len(spacer_times), f'found only {len(spacer_times)} spacers'
         start = spacer_times[int(protocol_number)]
+        if acquisition_description:
+            _logger.warning('Protocol %i period assigned without checking the number of spacers', protocol_number)
     i = np.where(all_spacer_times == start)[0][0]
     if not include_spacer:
         start += spacer_length
@@ -845,6 +853,109 @@ class FpgaTrials(extractors_base.BaseExtractor):
         """
         return get_sync_and_chn_map(self.session_path, sync_collection)
 
+    def _get_protocol_period(self, sync, chmap, bpod, protocol_number, **kwargs):
+        """
+        Determine and validate the protocol period.
+
+        The protocol spacers (see `get_protocol_period`) are used if their number matches the
+        experiment description. Otherwise the spacers are assigned to the protocols in order,
+        and finally the trial start TTLs are used (see `_protocol_period_from_trial_starts`).
+        Each period is validated by the number of Bpod trial TTLs it contains. If the period was
+        not determined from the spacers, it is recorded in the `protocol_period` attribute so that
+        it may be stored in the experiment description.
+
+        Parameters
+        ----------
+        sync : dict
+            The DAQ sync times, polarities and channels.
+        chmap : dict
+            The DAQ channel map.
+        bpod : dict
+            The Bpod channel sync times and polarities.
+        protocol_number : int
+            The order that the protocol was run in, counted from 0.
+
+        Returns
+        -------
+        float, None
+            The protocol start time.
+        float, None
+            The protocol end time.
+
+        Raises
+        ------
+        ValueError
+            No valid protocol period was found.
+        """
+        def from_spacers(strict):
+            return get_protocol_period(self.session_path, protocol_number, bpod, include_spacer=False, strict=strict)
+
+        methods = (
+            ('spacers', lambda: from_spacers(True)),
+            ('spacers (unchecked)', lambda: from_spacers(False)),
+            ('trial start TTLs', lambda: self._protocol_period_from_trial_starts(sync, chmap, **kwargs)),
+        )
+        for i, (name, method) in enumerate(methods):
+            try:
+                tmin, tmax = method()
+            except (AssertionError, IndexError, ValueError) as ex:
+                # e.g. the spacer was sent before the DAQ recording started, or not sent at all
+                _logger.warning('Failed to find protocol %i period from %s: %s', protocol_number, name, ex)
+                continue
+            if self._validate_protocol_period(sync, chmap, tmin, tmax, **kwargs):
+                if i > 0:
+                    _logger.warning('Protocol %i period determined from %s', protocol_number, name)
+                    # Record the period so that it may be stored in the experiment description
+                    self.protocol_period = (tmin, tmax)
+                return tmin, tmax
+        raise ValueError(f'Failed to find a valid period for protocol {protocol_number}')
+
+    def _validate_protocol_period(self, sync, chmap, tmin, tmax, **kwargs):
+        """
+        Check that the number of Bpod trial TTLs within the protocol period matches the Bpod data.
+
+        Either the trial start or trial end TTLs are used, whichever count is closest to the number
+        of Bpod trials, as the short trial start TTLs are often missed at low sampling rates. The
+        counts frequently differ slightly due to missed or spurious TTLs, therefore the period is
+        only rejected if the counts differ grossly, e.g. when the period is that of another
+        protocol or an aborted run of the same protocol.
+
+        Parameters
+        ----------
+        sync : dict
+            The DAQ sync times, polarities and channels.
+        chmap : dict
+            The DAQ channel map.
+        tmin, tmax : float, None
+            The protocol period. None means unbounded.
+
+        Returns
+        -------
+        bool
+            False if the number of trial TTLs within the period differs grossly from the number of
+            Bpod trials. True if the counts are similar, or if the trial TTLs can't be detected.
+        """
+        n_trials = len(self.bpod_trials['intervals'])
+        try:
+            _, intervals = self.get_bpod_event_times(sync, chmap, **kwargs)
+        except Exception as ex:
+            _logger.warning('Failed to validate protocol period: %s', ex)
+            return True
+        tmin = -np.inf if tmin is None else tmin
+        tmax = np.inf if tmax is None else tmax
+        counts = [np.sum((v[:, 0] >= tmin) & (v[:, 0] <= tmax)) for k, v in intervals.items()
+                  if k in ('trial_start', 'trial_end') and v.size and np.any(np.isfinite(v[:, 0]))]
+        if not counts:
+            _logger.warning('No Bpod trial TTLs detected; protocol period not validated')
+            return True
+        n_ttl = min(counts, key=lambda x: abs(x - n_trials))
+        if abs(n_ttl - n_trials) > max(10, n_trials / 2):
+            _logger.error('Protocol period (%s, %s) contains %i trial TTLs; expected %i', tmin, tmax, n_ttl, n_trials)
+            return False
+        if abs(n_ttl - n_trials) > n_trials / 10:
+            _logger.warning('Protocol period (%s, %s) contains %i trial TTLs; expected %i', tmin, tmax, n_ttl, n_trials)
+        return True
+
     def _protocol_period_from_trial_starts(self, sync, chmap, **kwargs):
         """
         Estimate the protocol period by aligning the Bpod trial start times to the trial start TTLs.
@@ -954,18 +1065,11 @@ class FpgaTrials(extractors_base.BaseExtractor):
         # Get the spacer times for this protocol
         if any(arg in kwargs for arg in ('tmin', 'tmax')):
             tmin, tmax = kwargs.get('tmin'), kwargs.get('tmax')
-        elif (protocol_number := kwargs.get('protocol_number')) is not None:  # look for spacer
-            # The spacers are TTLs generated by Bpod at the start of each protocol
-            try:
-                tmin, tmax = get_protocol_period(self.session_path, protocol_number, bpod, include_spacer=False)
-            except (AssertionError, IndexError, ValueError) as ex:
-                # e.g. the spacer was sent before the DAQ recording started, or not sent at all
-                _logger.warning('Failed to find protocol %i spacer (%s); using trial start TTLs instead', protocol_number, ex)
-                tmin, tmax = self._protocol_period_from_trial_starts(sync, chmap, **kwargs)
-                # Record the period so that it may be stored in the experiment description
-                self.protocol_period = (tmin, tmax)
+        elif kwargs.get('protocol_number') is not None:  # look for spacer
+            tmin, tmax = self._get_protocol_period(sync, chmap, bpod, **kwargs)
         else:
             tmin, tmax = self._protocol_period_from_trial_starts(sync, chmap, **kwargs)
+            self._validate_protocol_period(sync, chmap, tmin, tmax, **kwargs)  # log only
 
         # Remove unnecessary data from sync
         selection = np.logical_and(
