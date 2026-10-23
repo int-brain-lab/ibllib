@@ -957,5 +957,41 @@ class TestFpgaTrials(unittest.TestCase):
         self.assertFalse(extractor._is_trials_object_attribute('foo_bar'))
 
 
+class TestGetProtocolPeriod(unittest.TestCase):
+    """Test for ephys_fpga.get_protocol_period function."""
+
+    def setUp(self):
+        from iblutil.spacer import Spacer
+        from ibllib.io.session_params import write_params
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.session_path = Path(tmp.name, 'subject', '2020-01-01', '001')
+        self.session_path.mkdir(parents=True)
+        tasks = [{f'task{i}ChoiceWorld': {'collection': f'raw_task_data_{i:02}'}} for i in range(2)]
+        write_params(self.session_path, {'version': '1.0.0', 'tasks': tasks})
+        # Two protocols, each starting with a spacer followed by some trial TTLs
+        self.spacer = Spacer()
+        self.spacer_starts = (10., 100.)
+        up = np.concatenate([np.r_[t + self.spacer.times, t + 10 + np.arange(20)] for t in self.spacer_starts])
+        times = np.c_[up, up + self.spacer.tup].flatten()
+        self.bpod = {'times': times, 'polarities': np.tile([1, -1], up.size)}
+
+    def test_get_protocol_period(self):
+        spacer_length = len(self.spacer.generate_template(fs=1000)) / 1000
+        start, end = ephys_fpga.get_protocol_period(self.session_path, 0, self.bpod)
+        np.testing.assert_allclose([self.spacer_starts[0], self.spacer_starts[1]], [start, end], atol=1e-2)
+        start, end = ephys_fpga.get_protocol_period(self.session_path, 1, self.bpod, include_spacer=False)
+        np.testing.assert_allclose(self.spacer_starts[1] + spacer_length, start, atol=1e-2)
+        self.assertIsNone(end)
+
+    def test_missing_spacer(self):
+        """Test that too few detected spacers raises an AssertionError, e.g. when not recorded."""
+        # Remove the second spacer
+        keep = (self.bpod['times'] < self.spacer_starts[1]) | (self.bpod['times'] > self.spacer_starts[1] + 5)
+        bpod = {k: v[keep] for k, v in self.bpod.items()}
+        with self.assertRaises(AssertionError):
+            ephys_fpga.get_protocol_period(self.session_path, 1, bpod)
+
+
 if __name__ == '__main__':
     unittest.main(exit=False, verbosity=2)
