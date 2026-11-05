@@ -10,7 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from iblutil.util import range_str
 
-import ibldsp.utils as dsp
+from ibldsp.sync import sync_timestamps
 from ibllib.plots import squares, vertical_lines
 from ibllib.io.video import assert_valid_label, VideoStreamer
 from iblutil.numerical import within_ranges
@@ -722,7 +722,7 @@ def groom_pin_state(gpio, ttl, ts, tolerance=2.0, display=False, take='first', m
         ttl_ = ttl.copy()
 
     # Align the frame times to DAQ
-    fcn_a2b, drift_ppm = dsp.sync_timestamps(ts[ifronts], ttl_['times'])
+    fcn_a2b, drift_ppm = sync_timestamps(ts[ifronts], ttl_['times'])
     _logger.debug(f'frame ttl alignment drift = {drift_ppm:.2f}ppm')
     # Add times to GPIO dict
     gpio['times'] = fcn_a2b(ts[ifronts])
