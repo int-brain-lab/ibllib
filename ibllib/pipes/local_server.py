@@ -27,7 +27,7 @@ from ibllib.time import date2isostr
 from ibllib.oneibl.registration import IBLRegistrationClient
 from ibllib.oneibl.data_handlers import get_local_data_repository
 from ibllib.io.session_params import read_params
-from ibllib.pipes.dynamic_pipeline import make_pipeline, acquisition_description_legacy_session
+from ibllib.pipes.dynamic_pipeline import make_pipeline, experiment_description_legacy_session
 
 _logger = logging.getLogger(__name__)
 LARGE_TASKS = ['EphysVideoCompress', 'TrainingVideoCompress', 'SpikeSorting', 'EphysDLC', 'MesoscopePreprocess']
@@ -127,7 +127,7 @@ def job_creator(root_path, one=None, dry=False, rerun=False):
             # NB: all sessions now extracted using dynamic pipeline
             if read_params(session_path) is None:
                 # Create legacy experiment description file
-                acquisition_description_legacy_session(session_path, save=True)
+                experiment_description_legacy_session(session_path, save=True)
             pipe = make_pipeline(session_path, one=one)
             if rerun:
                 rerun__status__in = '__all__'

@@ -13,17 +13,17 @@ import ibllib.pipes.behavior_tasks as btasks
 from ibllib.tests.fixtures.utils import populate_task_settings
 
 
-class TestCreateLegacyAcqusitionDescriptions(unittest.TestCase):
+class TestCreateLegacyExperimentDescriptions(unittest.TestCase):
     def test_legacy_biased(self):
         session_path = Path(ibllib.tests.__file__).parent.joinpath('extractors', 'data', 'session_biased_ge5')
-        ad = dyn.acquisition_description_legacy_session(session_path)
+        ad = dyn.experiment_description_legacy_session(session_path)
         protocols = list(chain(*map(dict.keys, ad.get('tasks', []))))
         self.assertCountEqual(['biasedChoiceWorld'], protocols)
         self.assertEqual(1, len(ad['devices']['cameras']))
 
     def test_legacy_ephys(self):
         session_path = Path(ibllib.tests.__file__).parent.joinpath('extractors', 'data', 'session_ephys')
-        ad_ephys = dyn.acquisition_description_legacy_session(session_path)
+        ad_ephys = dyn.experiment_description_legacy_session(session_path)
         self.assertEqual(2, len(ad_ephys['devices']['neuropixel']))
         self.assertEqual(3, len(ad_ephys['devices']['cameras']))
         protocols = list(chain(*map(dict.keys, ad_ephys.get('tasks', []))))
@@ -31,10 +31,25 @@ class TestCreateLegacyAcqusitionDescriptions(unittest.TestCase):
 
     def test_legacy_training(self):
         session_path = Path(ibllib.tests.__file__).parent.joinpath('extractors', 'data', 'session_training_ge5')
-        ad = dyn.acquisition_description_legacy_session(session_path)
+        ad = dyn.experiment_description_legacy_session(session_path)
         protocols = list(chain(*map(dict.keys, ad.get('tasks', []))))
         self.assertCountEqual(['trainingChoiceWorld'], protocols)
         self.assertEqual(1, len(ad['devices']['cameras']))
+
+    def test_deprecated_get_acquisition_description(self):
+        """Test the deprecated name warns at the caller and returns the same description as the new name."""
+        with self.assertWarns(DeprecationWarning) as cm:
+            description = dyn.get_acquisition_description('ephysChoiceWorld')
+        self.assertEqual(__file__, cm.filename)
+        self.assertEqual(dyn.get_experiment_description('ephysChoiceWorld'), description)
+
+    def test_deprecated_acquisition_description_legacy_session(self):
+        """Test the deprecated name warns at the caller and returns the same description as the new name."""
+        session_path = Path(ibllib.tests.__file__).parent.joinpath('extractors', 'data', 'session_biased_ge5')
+        with self.assertWarns(DeprecationWarning) as cm:
+            description = dyn.acquisition_description_legacy_session(session_path)
+        self.assertEqual(__file__, cm.filename)
+        self.assertEqual(dyn.experiment_description_legacy_session(session_path), description)
 
 
 class TestGetTrialsTasks(unittest.TestCase):
@@ -84,7 +99,7 @@ class TestGetTrialsTasks(unittest.TestCase):
         # A session where protocol number is specified
         description = deepcopy(self.description)
         description['tasks'][1]['passiveChoiceWorld']['protocol_number'] = 2
-        fcn_to_patch = 'ibllib.pipes.dynamic_pipeline._load_acquisition_description'
+        fcn_to_patch = 'ibllib.pipes.dynamic_pipeline._load_experiment_description'
         with mock.patch(fcn_to_patch, return_value=description), self.assertLogs(dyn.__name__, 'WARNING') as cm:
             tasks = dyn.get_trials_tasks(self.session_path_dynamic)
         self.assertEqual(2, tasks[1].protocol_number)
@@ -119,7 +134,7 @@ class TestGetTrialsTasks(unittest.TestCase):
         # An ephys session with bpod_only flag
         description = self.description
         description['tasks'].pop()  # remove passiveChoiceWorld task for this test; no Bpod extractor for this protocol
-        with mock.patch('ibllib.pipes.dynamic_pipeline._load_acquisition_description', return_value=description):
+        with mock.patch('ibllib.pipes.dynamic_pipeline._load_experiment_description', return_value=description):
             tasks = dyn.get_trials_tasks(self.session_path_dynamic, bpod_only=True)
         self.assertEqual(1, len(tasks))
         self.assertIsInstance(tasks[0], btasks.ChoiceWorldTrialsBpod)
@@ -168,13 +183,13 @@ class TestMisc(unittest.TestCase):
         self.assertEqual('AudioSync', type(task).__base__.__name__)
         self.assertEqual('raw_task_data_00', task.kwargs['device_collection'])
         self.assertEqual('raw_task_data_00', task.kwargs['collection'])
-        self.assertEqual(expected, description, 'acquisition description should not be modified')
+        self.assertEqual(expected, description, 'experiment description should not be modified')
         description['sync'] = {'nidq': {'collection': 'raw_sync_data', 'acquisition_software': 'timeline'}}
         expected = deepcopy(description)
         task = dyn.get_audio_tasks(description, session_path=session_path)['AudioRegisterRaw']
         self.assertEqual('AudioCompress', type(task).__base__.__name__)
         self.assertEqual({'sync_label': 'audio', 'device_collection': 'raw_task_data_00'}, task.kwargs)
-        self.assertEqual(expected, description, 'acquisition description should not be modified')
+        self.assertEqual(expected, description, 'experiment description should not be modified')
 
     def test_get_wfield_tasks(self):
         """Test pipes.dynamic_pipeline.get_wfield_tasks function."""
@@ -186,7 +201,7 @@ class TestMisc(unittest.TestCase):
         session_path = Path('/subject/2020-01-01/001')
         for _ in range(2):  # previously raised a KeyError on the second call
             tasks = dyn.get_wfield_tasks(description, [], session_path=session_path)
-            self.assertEqual(expected, description, 'acquisition description should not be modified')
+            self.assertEqual(expected, description, 'experiment description should not be modified')
         expected_names = ['WideFieldRegisterRaw', 'WidefieldCompress', 'WidefieldPreprocess', 'WidefieldSync', 'WidefieldFOV']
         self.assertEqual(expected_names, list(tasks))
         kwargs = tasks['WidefieldSync'].kwargs

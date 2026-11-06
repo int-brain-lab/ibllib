@@ -558,8 +558,8 @@ def get_protocol_period(session_path, protocol_number, bpod_sync, exclude_empty_
         valid = np.ones(len(all_spacer_times), dtype=bool)
     spacer_times = all_spacer_times[valid]
     # Ensure that the number of detected spacers matched the number of expected tasks
-    if acquisition_description := session_params.read_params(session_path):
-        n_tasks = len(acquisition_description.get('tasks', []))
+    if experiment_description := session_params.read_params(session_path):
+        n_tasks = len(experiment_description.get('tasks', []))
         assert len(spacer_times) >= protocol_number, (
             f'expected {n_tasks} spacers, found only {len(spacer_times)} - can not return protocol number {protocol_number}.'
         )
