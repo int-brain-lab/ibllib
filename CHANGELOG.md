@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.2] 2026-11-10
+
+### Changed
+- Removed the `pandas<3` pin from `requirements.txt`; the pandas 3.0.4 segfault (pandas-dev/pandas#66086) is fixed in pandas 3.0.5
+
+### Fixed
+- `raw_data_loaders._clean_wheel_dataframe`: convert text columns to numbers when pandas 3 reads them as `str` dtype instead of `object`, so rows with corrupt wheel values are dropped on pandas 3 as they are on pandas 2
+
 ## [4.1.1] 2026-11-06
 
 ### Fixed
