@@ -17,10 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The trials task stores the protocol period in the experiment description when it wasn't determined from the spacers
 - `ephys_fpga.get_protocol_period` asserts the number of spacers detected matches the number expected; passive protocols run with iblrig v8.1.0 - v8.18.x send no spacer
 - `task_metrics.check_wheel_integrity` checks the velocity between samples for encoders sampled on a DAQ counter (Timeline)
+- Removed the `pandas<3` pin from `requirements.txt`; the pandas 3.0.4 segfault (pandas-dev/pandas#66086) is fixed in pandas 3.0.5
 
 ### Fixed
 - `TimelineTrials` go cue reassignment when Bpod trials are missing from the DAQ
 - Trials table rewardVolume QC outcome was never set
+- `raw_data_loaders._clean_wheel_dataframe`: convert text columns to numbers when pandas 3 reads them as `str` dtype instead of `object`, so rows with corrupt wheel values are dropped on pandas 3 as they are on pandas 2
 
 ## [4.1.1] 2026-11-06
 
