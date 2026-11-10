@@ -155,6 +155,22 @@ class TestsRawDataLoaders(unittest.TestCase):
         self.assertIsNone(raw.load_encoder_trial_info(self.session.with_name('empty')))
         self.assertIsNone(raw.load_encoder_trial_info(None))
 
+    def test_load_encoder_positions_non_numeric_value(self):
+        """A row with a non-numeric value in the encoder positions file is dropped, on pandas 2 and 3.
+
+        pandas reads a column that contains text as object dtype (pandas 2) or as str dtype
+        (pandas 3). In both cases the wheel loader should convert the column to numbers and drop
+        the row that can't be converted.
+        """
+        lines = ['1000000 0 ', '11000000 -1 ', 'corrupt -2 ', '21000000 -3 ', '31000000 -4 ']
+        with tempfile.TemporaryDirectory() as tdir:
+            file_path = Path(tdir).joinpath('_iblrig_encoderPositions.raw.ssv')
+            file_path.write_text('\n'.join(lines) + '\n')
+            data = raw._load_encoder_positions_file_ge5(file_path)
+        # the corrupt row is removed and the timestamps are numbers
+        np.testing.assert_array_equal(data['re_ts'], [1e6, 11e6, 21e6, 31e6])
+        np.testing.assert_array_equal(data['re_pos'], [0, -1, -3, -4])
+
     def test_load_camera_ssv_times(self):
         session = Path(__file__).parent.joinpath('extractors', 'data', 'session_ephys')
         with self.assertRaises(ValueError):

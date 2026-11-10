@@ -660,11 +660,20 @@ def load_mic(session_path, task_collection='raw_behavior_data'):
 
 
 def _clean_wheel_dataframe(data, label, path):
+    """
+    Convert the wheel columns to numbers, drop invalid and duplicate rows, and fix timestamp errors.
+
+    :param data: dataframe of rotary encoder positions or events, as read from the ssv file
+    :param label: file name used in the log messages
+    :param path: file path used in the log messages
+    :return: the cleaned dataframe
+    """
     if np.any(data.isna()):
         _logger.warning(label + ' has missing/incomplete records \n %s', path)
     # first step is to re-interpret as numeric objects if not already done
+    # a column that contains text is read as object dtype (pandas 2) or str dtype (pandas 3)
     for col in data.columns:
-        if data[col].dtype == object and col not in ['bns_ts']:
+        if (pd.api.types.is_object_dtype(data[col]) or pd.api.types.is_string_dtype(data[col])) and col not in ['bns_ts']:
             data[col] = pd.to_numeric(data[col], errors='coerce')
     # then drop Nans and duplicates
     data.dropna(inplace=True)
