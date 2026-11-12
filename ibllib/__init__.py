@@ -5,8 +5,7 @@ import logging
 import warnings
 import os
 
-__version__ = importlib.metadata.version('ibllib')  # managed through pyproject.toml, section [project]
-
+__version__ = '4.1.1'
 warnings.filterwarnings('always', category=DeprecationWarning, module='ibllib')
 
 # if this becomes a full-blown library we should let the logging configuration to the discretion of the dev
