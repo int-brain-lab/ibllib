@@ -1,5 +1,6 @@
 """Library implementing the International Brain Laboratory data pipeline."""
 
+import importlib.metadata
 import logging
 import warnings
 import os

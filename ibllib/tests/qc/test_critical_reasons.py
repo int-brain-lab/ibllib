@@ -136,17 +136,16 @@ class TestUserPmtSess(unittest.TestCase):
             if ex.errno != 404:
                 raise ex
 
-        notes = self.one.alyx.rest('notes', 'list', django=f'object_id,{self.sess_id}', no_cache=True)
-        for n in notes:
-            self.one.alyx.rest('notes', 'delete', id=n['id'])
-        text = '"title": "=== EXPERIMENTER REASON(S)'
-        notes = self.one.alyx.rest('notes', 'list', django=f'text__icontains,{text}', no_cache=True)
-        for n in notes:
-            self.one.alyx.rest('notes', 'delete', n['id'])
-        text = 'USING A FAKE SINGLE STRING HERE KSROI283IF982HKJFHWRY'
-        notes = self.one.alyx.rest('notes', 'list', django=f'text__icontains,{text}', no_cache=True)
-        for n in notes:
-            self.one.alyx.rest('notes', 'delete', n['id'])
+        # Only delete notes attached to this test's own session and insertion: matching on note text would also
+        # delete the notes of other test runs sharing the database (e.g. concurrent CI jobs)
+        for object_id in (self.sess_id, self.ins_id):
+            notes = self.one.alyx.rest('notes', 'list', django=f'object_id,{object_id}', no_cache=True)
+            for n in notes:
+                try:
+                    self.one.alyx.rest('notes', 'delete', id=n['id'])
+                except requests.HTTPError as ex:
+                    if ex.errno != 404:
+                        raise ex
 
 
 class TestSignOffNote(unittest.TestCase):

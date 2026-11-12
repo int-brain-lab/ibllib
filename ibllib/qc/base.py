@@ -238,7 +238,7 @@ def sign_off_dict(exp_dec, sign_off_categories=None):
     exp_dec : dict
         A loaded experiment description file.
     sign_off_categories : dict of list
-        A dictionary of custom JSON keys for a given device in the acquisition description file.
+        A dictionary of custom JSON keys for a given device in the experiment description file.
 
     Returns
     -------

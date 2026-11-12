@@ -1,10 +1,10 @@
 """A module for handling experiment description files.
 
-Each device computer adds its piece of information and consolidates into the final acquisition
+Each device computer adds its piece of information and consolidates into the final experiment
 description.
 
 The purpose is 3-fold:
-    - provide modularity in the extraction: the acquisition description allows to dynamically build
+    - provide modularity in the extraction: the experiment description allows to dynamically build
     pipelines.
     - assist the copying of the experimental data from device computers to the server computers, in
     a way that each device is independent from another.
@@ -87,19 +87,19 @@ def _patch_file(data: dict) -> dict:
 
 def write_params(session_path, data) -> Path:
     """
-    Write acquisition description data to the session path.
+    Write experiment description data to the session path.
 
     Parameters
     ----------
     session_path : str, pathlib.Path
         A session path containing an _ibl_experiment.description.yaml file.
     data : dict
-        The acquisition description data to save
+        The experiment description data to save
 
     Returns
     -------
     pathlib.Path
-        The full path to the saved acquisition description.
+        The full path to the saved experiment description.
     """
     yaml_file = Path(session_path).joinpath('_ibl_experiment.description.yaml')
     write_yaml(yaml_file, data)
@@ -208,16 +208,16 @@ def merge_params(a, b, copy=False):
     return a
 
 
-def aggregate_device(file_device, file_acquisition_description, unlink=False):
+def aggregate_device(file_device, file_experiment_description, unlink=False):
     """
-    Add the contents of a device file to the main acquisition description file.
+    Add the contents of a device file to the main experiment description file.
 
     Parameters
     ----------
     file_device : pathlib.Path
         The full path to the device yaml file to add to the main description file.
-    file_acquisition_description : pathlib.Path
-        The full path to the main acquisition description yaml file to add the device file to.
+    file_experiment_description : pathlib.Path
+        The full path to the main experiment description yaml file to add the device file to.
     unlink : bool
         If True, the device file is removed after successfully aggregation.
 
@@ -239,27 +239,27 @@ def aggregate_device(file_device, file_acquisition_description, unlink=False):
         _logger.warning('empty device file "%s"', file_device)
         return
 
-    with FileLock(file_acquisition_description, log=_logger, timeout_action='delete'):
-        # if the acquisition description file already exists, read in the yaml content
-        if file_acquisition_description.exists():
-            acq_desc = read_params(file_acquisition_description)
+    with FileLock(file_experiment_description, log=_logger, timeout_action='delete'):
+        # if the experiment description file already exists, read in the yaml content
+        if file_experiment_description.exists():
+            experiment_description = read_params(file_experiment_description)
         else:
-            acq_desc = {}
+            experiment_description = {}
 
-        # merge the dictionaries (NB: acq_desc modified in place)
-        acq_desc = merge_params(acq_desc, data_device)
+        # merge the dictionaries (NB: experiment_description modified in place)
+        experiment_description = merge_params(experiment_description, data_device)
 
-        with open(file_acquisition_description, 'w') as fp:
-            yaml.safe_dump(acq_desc, fp)
+        with open(file_experiment_description, 'w') as fp:
+            yaml.safe_dump(experiment_description, fp)
 
     # delete the original file if necessary
     if unlink:
         file_device.unlink()
-        stub_folder = file_acquisition_description.with_name('_devices')
+        stub_folder = file_experiment_description.with_name('_devices')
         if stub_folder.exists() and not any(stub_folder.glob('*.*')):
             stub_folder.rmdir()
 
-    return acq_desc
+    return experiment_description
 
 
 def get_cameras(sess_params):

@@ -381,7 +381,14 @@ class TestRegistration(unittest.TestCase):
         np.save(self.rev_path.joinpath('spikes.times.npy'), np.random.random(300))
         np.save(self.rev_path.joinpath('spikes.amps.npy'), np.random.random(300))
 
-        self.today_revision = datetime.datetime.today().strftime('%Y-%m-%d')
+        # The registration client names revisions after today's date. Revisions are global on the server, so use a
+        # random date to avoid clashing with other runs sharing the database (e.g. concurrent CI jobs)
+        fake_today = datetime.datetime(2000, 1, 1) + datetime.timedelta(days=random.randrange(365 * 20))
+        self.today_revision = fake_today.strftime('%Y-%m-%d')
+        fake_datetime = type('FakeDatetime', (datetime.datetime,), {'today': classmethod(lambda cls: fake_today)})
+        patcher_ = mock.patch('one.registration.datetime', mock.Mock(wraps=datetime, datetime=fake_datetime))
+        patcher_.start()
+        self.addCleanup(patcher_.stop)
 
         # Create a revision if doesn't already exist
         try:
@@ -645,14 +652,10 @@ class TestRegistration(unittest.TestCase):
         self.td.cleanup()
         self.one.alyx.rest('revisions', 'delete', id=self.rev['name'])
         self.one.alyx.rest('tags', 'delete', id=self.tag['name'])
-        today_revision = self.one.alyx.rest('revisions', 'list')
-        today_rev = [rev for rev in today_revision if self.today_revision in rev['name']]
-        for rev in today_rev:
-            self.one.alyx.rest('revisions', 'delete', id=rev['name'])
-
-        v1_rev = [rev for rev in today_revision if self.revision in rev['name']]
-        for rev in v1_rev:
-            self.one.alyx.rest('revisions', 'delete', id=rev['name'])
+        # Only delete the revisions created by this test, i.e. the file revision and today's, plus their suffixed versions
+        for rev in self.one.alyx.rest('revisions', 'list'):
+            if rev['name'].startswith((self.today_revision, self.revision)):
+                self.one.alyx.rest('revisions', 'delete', id=rev['name'])
         # Delete weighings
         for w in self.one.alyx.rest('subjects', 'read', id=self.subject)['weighings']:
             self.one.alyx.rest('weighings', 'delete', id=w['url'].split('/')[-1])
