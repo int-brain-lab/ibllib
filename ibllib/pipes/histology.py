@@ -90,6 +90,9 @@ def load_track_csv(file_track, brain_atlas=None, transform_dir=None):
 # See the module docstring for the spaces and coordinate conventions (apmldv, mldvap, ixiyiz, xyz).
 # -------------------------------------------------------------------------------------------------
 _ARA_SHAPE_MLDVAP = (456, 320, 528)  # (columns, rows, slices) = (ML, DV, AP)
+# brainregister parameter file names: current (brainregister-affine_to-target.txt, brainregister-bspline_to-target.txt)
+# and older outputs (TransformParameters.0.txt, TransformParameters.1.txt)
+_TRANSFORM_FILE_PATTERNS = ('brainregister-*.txt', 'TransformParameters*.txt')
 
 
 def _check_atlas_25(brain_atlas):
@@ -211,15 +214,17 @@ class _Sample2AraTransform:
         transform_dir = Path(transform_dir)
         if not transform_dir.is_dir():
             raise FileNotFoundError(f'Transform directory {transform_dir} not found')
+        files = sorted({f for pattern in _TRANSFORM_FILE_PATTERNS for f in transform_dir.glob(pattern)})
         found = {}
-        for file in sorted(transform_dir.glob('*.txt')):
+        for file in files:
             pm = _read_elastix_parameter_file(file)
             if 'Transform' in pm:
                 found.setdefault(pm['Transform'][0], []).append((file, pm))
         if sorted(found) != ['AffineTransform', 'BSplineTransform'] or any(len(v) != 1 for v in found.values()):
             files = {k: [f.name for f, _ in v] for k, v in found.items()}
             raise ValueError(
-                f'{transform_dir} must contain exactly one affine and one bspline elastix parameter file, found {files}'
+                f'{transform_dir} must contain exactly one affine and one bspline elastix parameter file '
+                f'named {" or ".join(_TRANSFORM_FILE_PATTERNS)}, found {files}'
             )
         self.transforms = []
         for kind, cls in [('AffineTransform', _ElastixAffine), ('BSplineTransform', _ElastixBSpline)]:

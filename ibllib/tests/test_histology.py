@@ -189,6 +189,20 @@ class TestSample2AraTransform(unittest.TestCase):
             with self.assertRaises(ValueError):
                 histology.lasagna_ara_to_sample(self.ara_apmldv, td)
 
+    def test_transform_file_names(self):
+        expected = histology.lasagna_ara_to_sample(self.ara_apmldv, self.transform_dir)
+        with tempfile.TemporaryDirectory() as td:
+            # older brainregister outputs: TransformParameters.0.txt (affine), TransformParameters.1.txt (bspline)
+            shutil.copy(self.transform_dir / 'brainregister-affine_to-target.txt', Path(td, 'TransformParameters.0.txt'))
+            shutil.copy(self.transform_dir / 'brainregister-bspline_to-target.txt', Path(td, 'TransformParameters.1.txt'))
+            # other .txt files, even elastix parameter files, are ignored
+            shutil.copy(self.transform_dir / 'brainregister-affine_to-target.txt', Path(td, 'notes.txt'))
+            np.testing.assert_array_equal(histology.lasagna_ara_to_sample(self.ara_apmldv, td), expected)
+            # current and older names mixed: two affine files
+            shutil.copy(self.transform_dir / 'brainregister-affine_to-target.txt', td)
+            with self.assertRaises(ValueError):
+                histology.lasagna_ara_to_sample(self.ara_apmldv, td)
+
     def test_atlas_resolution(self):
         with self.assertRaises(ValueError):
             histology.lasagna_to_ibl(self.ara_apmldv, brain_atlas=atlas.AllenAtlas(res_um=50))
