@@ -1,4 +1,6 @@
 from pathlib import Path
+import shutil
+import tempfile
 import unittest
 
 import numpy as np
@@ -62,6 +64,134 @@ class TestHistology(unittest.TestCase):
         for t in tdata:
             track_file = t['input']
             assert t['output'] == histology._parse_filename(track_file)
+
+
+class TestSample2AraTransform(unittest.TestCase):
+    """
+    Synthetic brainregister sample2ARA parameter files (affine + bspline, fixed = 25 um ARA grid).
+    Expected values computed with transformix (SimpleITK-elastix), including points at / beyond the
+    edges of the bspline grid where the displacement is zero.
+    """
+
+    ARA_MLDVAP = np.array([
+        [327.55, 243.48, 467.88],
+        [355.52, 253.58, 188.88],
+        [190.58, 104.34, 308.58],
+        [378.58, 122.71, 288.37],
+        [153.7, 80.75, 140.03],
+        [70.28, 267.83, 225.18],
+        [341.94, 203.52, 138.69],
+        [111.41, 234.88, 168.53],
+        [0.0, 0.0, 0.0],
+        [455.0, 319.0, 527.0],
+        [-5.5, 160.0, 264.0],
+        [228.0, 330.25, 10.0],
+    ])
+    SAMPLE_MLDVAP = np.array([
+        [315.766123, 233.730672, 496.998882],
+        [338.145779, 232.031787, 212.184286],
+        [173.618186, 109.080041, 343.207508],
+        [355.353786, 115.098122, 317.873022],
+        [133.466978, 84.022924, 172.263323],
+        [63.289704, 264.40041, 252.061039],
+        [322.253399, 186.614419, 163.29388],
+        [102.149702, 229.307379, 196.526479],
+        [-22.17, 16.5365, 35.666],
+        [444.63, 295.8635, 552.434],
+        [-14.745, 170.6505, 297.332],
+        [217.49005, 304.116452, 27.711646],
+    ])
+
+    def setUp(self) -> None:
+        self.transform_dir = Path(__file__).parent.joinpath('fixtures', 'histology', 'sample2ARA')
+        self.ara_apmldv = self.ARA_MLDVAP[:, [2, 0, 1]]
+        self.sample_apmldv = self.SAMPLE_MLDVAP[:, [2, 0, 1]]
+
+    def test_ara_to_sample(self):
+        with self.assertLogs('ibllib.pipes.histology', level='WARNING'):  # some points are outside the ARA volume
+            apmldv = histology.lasagna_ara_to_sample(self.ara_apmldv, self.transform_dir)
+        np.testing.assert_allclose(apmldv, self.sample_apmldv, atol=1e-5)
+
+    def test_sample_to_ara(self):
+        apmldv = histology.lasagna_sample_to_ara(self.sample_apmldv[:10], self.transform_dir)
+        np.testing.assert_allclose(apmldv, self.ara_apmldv[:10], atol=1e-5)
+
+    def test_ibl_round_trip(self):
+        xyz = histology.lasagna_to_ibl(self.ara_apmldv[:8], brain_atlas=brain_atlas)
+        np.testing.assert_allclose(histology.ibl_to_lasagna(xyz, brain_atlas=brain_atlas), self.ara_apmldv[:8], atol=1e-9)
+        mldvap = histology.ibl_ara_to_sample(xyz, self.transform_dir, brain_atlas=brain_atlas)
+        np.testing.assert_allclose(mldvap, self.SAMPLE_MLDVAP[:8], atol=1e-5)
+        xyz_back = histology.ibl_sample_to_ara(mldvap, self.transform_dir, brain_atlas=brain_atlas)
+        np.testing.assert_allclose(xyz_back, xyz, atol=1e-10)
+
+    def test_transform_lasagna_csv(self):
+        with tempfile.TemporaryDirectory() as td:
+            file_in, file_out = Path(td, 'ds_pts.csv'), Path(td, 'ara_pts.csv')
+            np.savetxt(file_in, self.sample_apmldv[:8], delimiter=',')
+            apmldv = histology.transform_lasagna_csv(file_in, file_out, self.transform_dir)
+            np.testing.assert_allclose(apmldv, self.ara_apmldv[:8], atol=1e-5)
+            np.testing.assert_allclose(np.loadtxt(file_out, delimiter=','), self.ara_apmldv[:8], atol=1e-3)
+            # the output file is read as ARA points by load_track_csv, consistent with lasagna_to_ibl
+            xyz = histology.load_track_csv(file_out, brain_atlas=brain_atlas)
+            xyz_ref = histology.lasagna_to_ibl(np.loadtxt(file_out, delimiter=','), brain_atlas=brain_atlas)
+            np.testing.assert_allclose(np.sort(xyz, axis=0), np.sort(xyz_ref, axis=0))
+            with self.assertRaises(ValueError):
+                histology.transform_lasagna_csv(file_in, file_out, self.transform_dir, direction='foo')
+
+    def test_load_track_csv_transform_dir(self):
+        with tempfile.TemporaryDirectory() as td:
+            file_ds, file_ara = Path(td, 'ds_pts.csv'), Path(td, 'ara_pts.csv')
+            histology.write_lasagna_csv(file_ds, self.sample_apmldv[:8])
+            histology.write_lasagna_csv(file_ara, self.ara_apmldv[:8])
+            # a track traced in sample space loads to the same IBL coordinates as the same track in ARA space
+            xyz_ds = histology.load_track_csv(file_ds, brain_atlas=brain_atlas, transform_dir=self.transform_dir)
+            xyz_ara = histology.load_track_csv(file_ara, brain_atlas=brain_atlas)
+            # both files are rounded to 1e-3 voxel: allow 2e-3 voxel (5e-8 m) differences
+            np.testing.assert_allclose(xyz_ds, xyz_ara, rtol=0, atol=5e-8)
+            self.assertTrue(np.all(np.diff(xyz_ds[:, 2]) <= 0))  # sorted along DV, deepest last
+            with self.assertRaises(ValueError):
+                histology.load_track_csv(file_ds, brain_atlas=atlas.AllenAtlas(res_um=50), transform_dir=self.transform_dir)
+            # empty file
+            Path(td, 'empty_pts.csv').touch()
+            xyz = histology.load_track_csv(Path(td, 'empty_pts.csv'), brain_atlas=brain_atlas, transform_dir=self.transform_dir)
+            self.assertEqual(xyz.size, 0)
+
+    def test_read_write_lasagna_csv(self):
+        with tempfile.TemporaryDirectory() as td:
+            file = Path(td, 'pts.csv')
+            histology.write_lasagna_csv(file, self.ara_apmldv)
+            np.testing.assert_allclose(histology.read_lasagna_csv(file), self.ara_apmldv, atol=5e-4)
+            # single point
+            histology.write_lasagna_csv(file, self.ara_apmldv[0])
+            self.assertEqual(histology.read_lasagna_csv(file).shape, (1, 3))
+            # empty file
+            file.write_text('')
+            self.assertEqual(histology.read_lasagna_csv(file).shape, (0, 3))
+            # wrong number of columns
+            file.write_text('1,2\n3,4\n')
+            with self.assertRaises(ValueError):
+                histology.read_lasagna_csv(file)
+            with self.assertRaises(ValueError):
+                histology.write_lasagna_csv(file, np.zeros((4, 2)))
+
+    def test_invalid_transform_dir(self):
+        with tempfile.TemporaryDirectory() as td:
+            with self.assertRaises(FileNotFoundError):
+                histology.lasagna_ara_to_sample(self.ara_apmldv, Path(td, 'missing'))
+            # only the affine file
+            shutil.copy(self.transform_dir / 'brainregister-affine_to-target.txt', td)
+            with self.assertRaises(ValueError):
+                histology.lasagna_ara_to_sample(self.ara_apmldv, td)
+            # ARA2sample like files: the fixed image is the sample, not the ARA
+            shutil.copy(self.transform_dir / 'brainregister-bspline_to-target.txt', td)
+            for f in Path(td).glob('*.txt'):
+                f.write_text(f.read_text().replace('(Size 456 320 528)', '(Size 437 313 494)'))
+            with self.assertRaises(ValueError):
+                histology.lasagna_ara_to_sample(self.ara_apmldv, td)
+
+    def test_atlas_resolution(self):
+        with self.assertRaises(ValueError):
+            histology.lasagna_to_ibl(self.ara_apmldv, brain_atlas=atlas.AllenAtlas(res_um=50))
 
 
 # Load in data for ephys alignment testing
