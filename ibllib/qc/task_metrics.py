@@ -1423,8 +1423,7 @@ def check_reward_volume_set(data, **_):
 
 
 @base.return_qc_datasets(['_ibl_wheel.position.npy', '_ibl_wheel.timestamps.npy'])
-def check_wheel_integrity(data, re_encoding='X1', enc_res=None, wheel_sample_rate=None,
-                          max_velocity=WHEEL_MAX_VELOCITY, **_):
+def check_wheel_integrity(data, re_encoding='X1', enc_res=None, wheel_sample_rate=None, max_velocity=WHEEL_MAX_VELOCITY, **_):
     """
     Check wheel position sampled at the expected resolution.
 
@@ -1480,8 +1479,7 @@ def check_wheel_integrity(data, re_encoding='X1', enc_res=None, wheel_sample_rat
     return metric, passed
 
 
-@base.return_qc_datasets(['_ibl_wheel.position.npy', '_ibl_wheelMoves.intervals.npy',
-                           '_ibl_wheelMoves.peakAmplitude.npy'])
+@base.return_qc_datasets(['_ibl_wheel.position.npy', '_ibl_wheelMoves.intervals.npy', '_ibl_wheelMoves.peakAmplitude.npy'])
 def check_wheel_discontinuities(data, **_):
     """
     Check the wheel position contains no discontinuities.

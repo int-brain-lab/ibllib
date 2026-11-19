@@ -34,6 +34,7 @@ def return_qc_datasets(datasets):
     >>> check_wheel(only_dsets=True)
     ['_ibl_wheel.position.npy']
     """
+
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -41,8 +42,10 @@ def return_qc_datasets(datasets):
             if only_dsets:
                 return datasets
             return func(*args, **kwargs)
+
         wrapper.datasets = list(datasets)
         return wrapper
+
     return decorator
 
 
