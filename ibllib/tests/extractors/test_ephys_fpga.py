@@ -963,6 +963,7 @@ class TestGetProtocolPeriod(unittest.TestCase):
     def setUp(self):
         from iblutil.spacer import Spacer
         from ibllib.io.session_params import write_params
+
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.session_path = Path(tmp.name, 'subject', '2020-01-01', '001')
@@ -971,7 +972,7 @@ class TestGetProtocolPeriod(unittest.TestCase):
         write_params(self.session_path, {'version': '1.0.0', 'tasks': tasks})
         # Two protocols, each starting with a spacer followed by some trial TTLs
         self.spacer = Spacer()
-        self.spacer_starts = (10., 100.)
+        self.spacer_starts = (10.0, 100.0)
         up = np.concatenate([np.r_[t + self.spacer.times, t + 10 + np.arange(20)] for t in self.spacer_starts])
         times = np.c_[up, up + self.spacer.tup].flatten()
         self.bpod = {'times': times, 'polarities': np.tile([1, -1], up.size)}
@@ -999,6 +1000,7 @@ class TestGetProtocolPeriod(unittest.TestCase):
         """Test passive protocols run with iblrig v8.1 - v8.18, which did not send spacers."""
         from unittest import mock
         from ibllib.io.session_params import read_params, write_params
+
         description = read_params(self.session_path)
         description['tasks'].insert(1, {'_iblrig_tasks_passiveChoiceWorld': {'collection': 'raw_task_data_01'}})
         description['tasks'][2] = {'task1ChoiceWorld': {'collection': 'raw_task_data_02'}}
@@ -1020,9 +1022,11 @@ class TestGetProtocolPeriod(unittest.TestCase):
         """Test that a protocol period stored in the experiment description is used."""
         from types import SimpleNamespace
         from ibllib.pipes.behavior_tasks import ChoiceWorldTrialsNidq
+
         # Simulate a trials task where the period was determined without spacers
-        task = SimpleNamespace(session_path=self.session_path, protocol_number=1,
-                               extractor=SimpleNamespace(protocol_period=(np.float64(95.5), None)))
+        task = SimpleNamespace(
+            session_path=self.session_path, protocol_number=1, extractor=SimpleNamespace(protocol_period=(np.float64(95.5), None))
+        )
         description_file = ChoiceWorldTrialsNidq._store_protocol_period(task)
         self.assertEqual(self.session_path / '_ibl_experiment.description.yaml', description_file)
         # The stored period should be used regardless of the spacers
@@ -1039,10 +1043,11 @@ class TestProtocolPeriodValidation(unittest.TestCase):
 
     def setUp(self):
         from unittest import mock
+
         n_trials = 100
         self.extractor = ephys_fpga.FpgaTrials('subject/2020-01-01/001', bpod_trials={'intervals': np.zeros((n_trials, 2))})
         # One protocol between 100 and 200 s (one trial per second) and an aborted run at 50 s
-        trial_end = np.r_[50.5, 51.5, np.arange(100, 200) + .5]
+        trial_end = np.r_[50.5, 51.5, np.arange(100, 200) + 0.5]
         intervals = {'trial_start': np.full((0, 2), np.nan), 'trial_end': np.c_[trial_end, trial_end + 1e-3]}
         patch = mock.patch.object(self.extractor, 'get_bpod_event_times', return_value=(None, intervals))
         patch.start()
@@ -1072,6 +1077,7 @@ class TestProtocolPeriodValidation(unittest.TestCase):
 
     def test_get_protocol_period(self):
         from unittest import mock
+
         get_period = self.extractor._get_protocol_period
         with mock.patch('ibllib.io.extractors.ephys_fpga.get_protocol_period', return_value=(99, 201)) as m:
             self.assertEqual((99, 201), get_period(None, None, None, 0))
@@ -1079,17 +1085,21 @@ class TestProtocolPeriodValidation(unittest.TestCase):
         self.assertIsNone(self.extractor.protocol_period)
         # Strict spacer check fails, unchecked spacers give the aborted run's period, trial starts are valid
         side_effect = (AssertionError('expected 1 spacers, found 2'), (50, 99))
-        with mock.patch('ibllib.io.extractors.ephys_fpga.get_protocol_period', side_effect=side_effect), \
-                mock.patch.object(self.extractor, '_protocol_period_from_trial_starts', return_value=(97.5, 202.5)), \
-                self.assertLogs(ephys_fpga._logger, 'WARNING'):
+        with (
+            mock.patch('ibllib.io.extractors.ephys_fpga.get_protocol_period', side_effect=side_effect),
+            mock.patch.object(self.extractor, '_protocol_period_from_trial_starts', return_value=(97.5, 202.5)),
+            self.assertLogs(ephys_fpga._logger, 'WARNING'),
+        ):
             self.assertEqual((97.5, 202.5), get_period(None, None, None, 0))
         self.assertEqual((97.5, 202.5), self.extractor.protocol_period)
         # No valid period
         side_effect = (AssertionError('expected 1 spacers, found 2'), (50, 99))
-        with mock.patch('ibllib.io.extractors.ephys_fpga.get_protocol_period', side_effect=side_effect), \
-                mock.patch.object(self.extractor, '_protocol_period_from_trial_starts', return_value=(None, None)), \
-                mock.patch.object(self.extractor, 'bpod_trials', {'intervals': np.zeros((30, 2))}), \
-                self.assertLogs(ephys_fpga._logger, 'WARNING'):
+        with (
+            mock.patch('ibllib.io.extractors.ephys_fpga.get_protocol_period', side_effect=side_effect),
+            mock.patch.object(self.extractor, '_protocol_period_from_trial_starts', return_value=(None, None)),
+            mock.patch.object(self.extractor, 'bpod_trials', {'intervals': np.zeros((30, 2))}),
+            self.assertLogs(ephys_fpga._logger, 'WARNING'),
+        ):
             self.assertRaises(ValueError, get_period, None, None, None, 0)
 
 

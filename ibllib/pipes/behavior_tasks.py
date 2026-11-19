@@ -531,8 +531,12 @@ class ChoiceWorldTrialsNidq(ChoiceWorldTrialsBpod):
             _logger.error('Protocol %i not found in experiment description; period not stored', self.protocol_number)
             return
         entry['protocol_period'] = [None if t is None else float(t) for t in period]
-        _logger.info('Storing protocol %i (%s) period %s in experiment description', self.protocol_number, protocol,
-                     entry['protocol_period'])
+        _logger.info(
+            'Storing protocol %i (%s) period %s in experiment description',
+            self.protocol_number,
+            protocol,
+            entry['protocol_period'],
+        )
         return session_params.write_params(self.session_path, description)
 
     def _behaviour_criterion(self, update=True, truncate_to_pass=True):

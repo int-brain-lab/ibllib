@@ -125,7 +125,8 @@ class TestDatasetQC(unittest.TestCase):
             self.assertEqual(['CRITICAL', 'PASS', 'PASS', 'FAIL'], [x['qc'] for x in out])
         # Check extended qc
         extended_qcs = {
-            c.kwargs['uuid']: c.kwargs['data']['extended_qc'] for c in one.alyx.json_field_update.call_args_list
+            c.kwargs['uuid']: c.kwargs['data']['extended_qc']
+            for c in one.alyx.json_field_update.call_args_list
             if 'extended_qc' in c.kwargs.get('data', {})
         }
         # The wheel position dataset QC should record which checks determined its value
@@ -609,7 +610,7 @@ class TestTaskMetrics(TaskQCTestData):
 
         # Simulate an unaccounted for counter underflow, i.e. a jump of 2^32 - 2 ticks
         resolution = 2 * np.pi / 1024
-        self.data['wheel_position'][100:] += (2 ** 32 - 2) * resolution
+        self.data['wheel_position'][100:] += (2**32 - 2) * resolution
         metric, passed = qcmetrics.check_wheel_discontinuities(self.data)
         self.assertIs(passed, False)
         self.assertEqual(1, np.sum(metric >= 2 * np.pi))

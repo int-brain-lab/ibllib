@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [4.2.0] Unreleased
 
+### Added
+- `task_metrics.check_wheel_discontinuities`: flags wheel position jumps of a full revolution or more
+- `qc.base.return_qc_datasets`: decorator associating QC checks with the datasets they assess; the wheel QC checks now set the wheel dataset QC
+- Experiment description task entries may contain a 'protocol_period', used by `ephys_fpga.get_protocol_period` in place of the spacers
+
+### Changed
+- `FpgaTrials` falls back on unchecked spacers, then trial start TTLs, when the protocol spacers can't be used; the protocol period is validated by the number of trial TTLs
+- The trials task stores the protocol period in the experiment description when it wasn't determined from the spacers
+- `ephys_fpga.get_protocol_period` asserts the number of spacers detected matches the number expected; passive protocols run with iblrig v8.1.0 - v8.18.x send no spacer
+- `task_metrics.check_wheel_integrity` checks the velocity between samples for encoders sampled on a DAQ counter (Timeline)
+
+### Fixed
+- `TimelineTrials` go cue reassignment when Bpod trials are missing from the DAQ
+- Trials table rewardVolume QC outcome was never set
+
 ## [4.1.1] 2026-11-06
 
 ### Fixed

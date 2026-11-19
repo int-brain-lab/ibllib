@@ -539,7 +539,7 @@ def get_protocol_entry(acquisition_description, protocol_number):
         The task entry (a reference, i.e. not a copy), or None if not found.
     """
     for i, task in enumerate(acquisition_description.get('tasks', [])):
-        (protocol, info), = task.items()
+        ((protocol, info),) = task.items()
         if (info or {}).get('protocol_number', i) == protocol_number:
             return protocol, info
     return None, None
@@ -577,8 +577,7 @@ def sends_protocol_spacer(session_path, protocol, collection):
     return not (version.parse('8.1.0') <= rig_version < version.parse('8.19.0'))
 
 
-def get_protocol_period(session_path, protocol_number, bpod_sync, exclude_empty_periods=True, include_spacer=True,
-                        strict=True):
+def get_protocol_period(session_path, protocol_number, bpod_sync, exclude_empty_periods=True, include_spacer=True, strict=True):
     """
     Return the start and end time of the protocol number.
 
@@ -661,8 +660,10 @@ def get_protocol_period(session_path, protocol_number, bpod_sync, exclude_empty_
             f'expected {sum(sends)} spacers, found {len(spacer_times)} - can not determine protocol {protocol_number} period'
         )
         if sum(sends) < n_tasks:
-            _logger.warning('Protocol(s) %s not expected to have spacers (passive protocol with iblrig < 8.19.0)',
-                            [n for n, x in enumerate(sends) if not x])
+            _logger.warning(
+                'Protocol(s) %s not expected to have spacers (passive protocol with iblrig < 8.19.0)',
+                [n for n, x in enumerate(sends) if not x],
+            )
         start = spacer_times[sum(sends[:protocol_number])]
     else:
         assert protocol_number < len(spacer_times), f'found only {len(spacer_times)} spacers'
@@ -887,6 +888,7 @@ class FpgaTrials(extractors_base.BaseExtractor):
         ValueError
             No valid protocol period was found.
         """
+
         def from_spacers(strict):
             return get_protocol_period(self.session_path, protocol_number, bpod, include_spacer=False, strict=strict)
 
@@ -944,8 +946,11 @@ class FpgaTrials(extractors_base.BaseExtractor):
             return True
         tmin = -np.inf if tmin is None else tmin
         tmax = np.inf if tmax is None else tmax
-        counts = [np.sum((v[:, 0] >= tmin) & (v[:, 0] <= tmax)) for k, v in intervals.items()
-                  if k in ('trial_start', 'trial_end') and v.size and np.any(np.isfinite(v[:, 0]))]
+        counts = [
+            np.sum((v[:, 0] >= tmin) & (v[:, 0] <= tmax))
+            for k, v in intervals.items()
+            if k in ('trial_start', 'trial_end') and v.size and np.any(np.isfinite(v[:, 0]))
+        ]
         if not counts:
             _logger.warning('No Bpod trial TTLs detected; protocol period not validated')
             return True
