@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ephys_fpga.get_protocol_period` asserts the number of spacers detected matches the number expected; passive protocols run with iblrig v8.1.0 - v8.18.x send no spacer
 - `task_metrics.check_wheel_integrity` checks the velocity between samples for encoders sampled on a DAQ counter (Timeline)
 - Removed the `pandas<3` pin from `requirements.txt`; the pandas 3.0.4 segfault (pandas-dev/pandas#66086) is fixed in pandas 3.0.5
+- Removed uses of the `inplace` and `copy` keywords deprecated in pandas 3 (PDEP-8; to be removed in pandas 4)
 
 ### Fixed
 - `TimelineTrials` go cue reassignment when Bpod trials are missing from the DAQ

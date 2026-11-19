@@ -453,14 +453,14 @@ def spike_sorting_metrics_ks2(ks2_path=None, m=None, save=True, save_path=None):
     file_contamination = ks2_path.joinpath('cluster_ContamPct.tsv')
     if file_contamination.exists():
         contam = pd.read_csv(file_contamination, sep='\t')
-        contam.rename(columns={'ContamPct': 'ks2_contamination_pct'}, inplace=True)
+        contam = contam.rename(columns={'ContamPct': 'ks2_contamination_pct'})
         c = c.set_index('cluster_id', drop=False).join(contam.set_index('cluster_id'))
 
     #  include the ks2 cluster labels if `cluster_KSLabel` file exists
     file_labels = ks2_path.joinpath('cluster_KSLabel.tsv')
     if file_labels.exists():
         ks2_labels = pd.read_csv(file_labels, sep='\t')
-        ks2_labels.rename(columns={'KSLabel': 'ks2_label'}, inplace=True)
+        ks2_labels = ks2_labels.rename(columns={'KSLabel': 'ks2_label'})
         c = c.set_index('cluster_id', drop=False).join(ks2_labels.set_index('cluster_id'))
 
     if save:

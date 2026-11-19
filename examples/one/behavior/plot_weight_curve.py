@@ -21,7 +21,7 @@ if 'weighings' in k:
     # Put the weighings data into a pandas dataframe
     wei = pd.DataFrame(subject_details['weighings'])
     wei['date_time'].apply(isostr2date)
-    wei.sort_values('date_time', inplace=True)
+    wei = wei.sort_values('date_time')
 
     # Plot the weight curve
     # https://alyx.internationalbrainlab.org/admin-actions/water-history/37c8f897-cbcc-4743-bad6-764ccbbfb190
