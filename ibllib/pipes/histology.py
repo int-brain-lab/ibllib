@@ -1,12 +1,57 @@
+"""
+Histology: probe tracks traced in lasagna, conversion to IBL coordinates and registration to Alyx.
+
+Spaces
+------
+- ARA: brainregister's 25 um Allen CCF grid (``coronal_rc_25``, ``sample2ARA/STD_*.tif``), 456 x 320 x 528 voxels;
+  column, row, slice = ML, DV (ventral +), AP (anterior +).
+- sample: an individual brain's downsampled image (``downsampledStacks_25/ds_*.tif``), 25 um voxels, size varies;
+  axes only approximately ML, DV, AP, so points go through the sample2ARA registration (ARA -> sample directly,
+  sample -> ARA by numerical inversion).
+
+Coordinate conventions, (n, 3) arrays named by anatomical column order
+----------------------------------------------------------------------
+=========== ======================================= ============ ======== ===============
+name        what                                    columns      units    AP increases
+=========== ======================================= ============ ======== ===============
+apmldv      lasagna csv (Z,X,Y), either space       AP, ML, DV   voxels   anteriorly
+mldvap      elastix (x, y, z), either space         ML, DV, AP   voxels   anteriorly
+ixiyiz      IBL atlas indices (brain_atlas.bc)      ML, AP, DV   voxels   posteriorly
+xyz         IBL coordinates from bregma, ARA only   ML, AP, DV   m        anteriorly
+=========== ======================================= ============ ======== ===============
+
+Voxel indices are fractional. Images read with tifffile are indexed [slice, row, column] = mldvap[:, ::-1].
+
+Functions
+---------
+=========================== ============================== ====================================
+function                    input                          output
+=========================== ============================== ====================================
+``read_lasagna_csv``        csv file                       ``apmldv`` (either space)
+``write_lasagna_csv``       ``apmldv`` (either space)      csv file
+``lasagna_to_ibl``          ``apmldv`` ARA                 ``xyz``
+``ibl_to_lasagna``          ``xyz``                        ``apmldv`` ARA
+``lasagna_sample_to_ara``   ``apmldv`` sample              ``apmldv`` ARA (inverse transform)
+``lasagna_ara_to_sample``   ``apmldv`` ARA                 ``apmldv`` sample (direct transform)
+``ibl_sample_to_ara``       ``mldvap`` sample              ``xyz`` (inverse transform)
+``ibl_ara_to_sample``       ``xyz``                        ``mldvap`` sample (direct transform)
+``transform_lasagna_csv``   csv file (either space)        csv file (other space)
+``load_track_csv``          csv file (ARA, or sample with  ``xyz``, sorted dorsal to ventral
+                            ``transform_dir``)
+=========================== ============================== ====================================
+"""
+
 from pathlib import Path
 import logging
 
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.ndimage import map_coordinates
 from one.api import ONE
 import one.alf.io as alfio
 
 from neuropixel import TIP_SIZE_UM, trace_header
+import spikeglx
 import iblatlas.atlas as atlas
 from ibllib.ephys.spikes import probes_description as extract_probes
 from ibllib.qc import base
@@ -17,24 +62,362 @@ from ibldsp.utils import fcn_cosine
 _logger = logging.getLogger(__name__)
 
 
-def load_track_csv(file_track, brain_atlas=None):
+def load_track_csv(file_track, brain_atlas=None, transform_dir=None):
     """
-    Loads a lasagna track and convert to IBL-ALlen coordinate framework
-    :param file_track:
-    :return: xyz
-    """
+    Loads a lasagna track and convert to IBL-Allen coordinate framework.
 
-    brain_atlas = brain_atlas or atlas.AllenAtlas(25)
-    # apmldv in the histology file is flipped along y direction
+    :param file_track: lasagna points csv (rows of Z,X,Y voxels = (slice, column, row) ~ (AP, ML, DV))
+    :param brain_atlas: iblatlas.atlas.AllenAtlas at 25 um (default AllenAtlas(25))
+    :param transform_dir: None (default) if the track was traced in ARA space (sample2ARA/STD_*.tif).
+        If the track was traced in the brainregister sample space (downsampledStacks_25/ds_*.tif), the directory
+        containing the sample2ARA affine and bspline elastix parameter files: the points are first transformed to
+        ARA space with the inverse of the sample2ARA registration.
+    :return: (n, 3) xyz IBL coordinates (m), (ML, AP, DV), sorted along the dorso-ventral axis
+    """
     file_track = Path(file_track)
     if file_track.stat().st_size == 0:
         return np.array([])
-    ixiyiz = np.loadtxt(file_track, delimiter=',')[:, [1, 0, 2]]
-    ixiyiz[:, 1] = 527 - ixiyiz[:, 1]
-    ixiyiz = ixiyiz[np.argsort(ixiyiz[:, 2]), :]
-    xyz = brain_atlas.bc.i2xyz(ixiyiz)
-    # xyz[:, 0] = - xyz[:, 0]
-    return xyz
+    brain_atlas = _check_atlas_25(brain_atlas)
+    apmldv = read_lasagna_csv(file_track)
+    if transform_dir is not None:
+        apmldv = lasagna_sample_to_ara(apmldv, transform_dir)
+    apmldv = apmldv[np.argsort(apmldv[:, 2]), :]  # sort by row (DV), dorsal first
+    return lasagna_to_ibl(apmldv, brain_atlas)
+
+
+# -------------------------------------------------------------------------------------------------
+# Lasagna <-> IBL coordinates and brainregister (elastix) sample <-> ARA transforms
+# See the module docstring for the spaces and coordinate conventions (apmldv, mldvap, ixiyiz, xyz).
+# -------------------------------------------------------------------------------------------------
+_ARA_SHAPE_MLDVAP = (456, 320, 528)  # (columns, rows, slices) = (ML, DV, AP)
+# brainregister parameter file names: current (brainregister-affine_to-target.txt, brainregister-bspline_to-target.txt)
+# and older outputs (TransformParameters.0.txt, TransformParameters.1.txt)
+_TRANSFORM_FILE_PATTERNS = ('brainregister-*.txt', 'TransformParameters*.txt')
+
+
+def _check_atlas_25(brain_atlas):
+    brain_atlas = brain_atlas or atlas.AllenAtlas(25)
+    nxyz = tuple(int(n) for n in brain_atlas.bc.nxyz)  # IBL atlas order (ML, AP, DV)
+    if nxyz != (_ARA_SHAPE_MLDVAP[0], _ARA_SHAPE_MLDVAP[2], _ARA_SHAPE_MLDVAP[1]):  # (columns, slices, rows)
+        raise ValueError(f'A 25 um atlas is required (brainregister ARA space), got volume shape {nxyz}')
+    return brain_atlas
+
+
+def lasagna_to_ibl(apmldv, brain_atlas=None):
+    """
+    Convert lasagna points in ARA space to IBL coordinates.
+
+    Equivalent to iblatlas xyz2ccf in 25 um voxels, with the AP axis reversed (brainregister ARA volume
+    is stored posterior to anterior).
+
+    :param apmldv: (n, 3) lasagna Z,X,Y points (slice, column, row) = (AP, ML, DV) in 25 um ARA voxels
+        (e.g. traced on sample2ARA/STD_*.tif)
+    :param brain_atlas: iblatlas.atlas.AllenAtlas at 25 um (default AllenAtlas(25))
+    :return: (n, 3) xyz IBL coordinates (m), (ML, AP, DV)
+    """
+    brain_atlas = _check_atlas_25(brain_atlas)
+    # (slice, column, row) = (AP, ML, DV) -> (column, slice, row) = (ML, AP, DV)
+    ixiyiz = np.atleast_2d(np.asarray(apmldv, dtype=float))[:, [1, 0, 2]]
+    # the ARA slice index runs anterior-wards, the IBL atlas AP index posterior-wards
+    ixiyiz[:, 1] = _ARA_SHAPE_MLDVAP[2] - 1 - ixiyiz[:, 1]
+    return brain_atlas.bc.i2xyz(ixiyiz)
+
+
+def ibl_to_lasagna(xyz, brain_atlas=None):
+    """
+    Convert IBL coordinates to lasagna points in ARA space (inverse of lasagna_to_ibl).
+
+    :param xyz: (n, 3) IBL coordinates (m), (ML, AP, DV), e.g. Alyx xyz_picks / 1e6
+    :param brain_atlas: iblatlas.atlas.AllenAtlas at 25 um (default AllenAtlas(25))
+    :return: (n, 3) lasagna Z,X,Y points (slice, column, row) = (AP, ML, DV) in 25 um ARA voxels (not rounded)
+    """
+    brain_atlas = _check_atlas_25(brain_atlas)
+    # IBL atlas indices (ML, AP, DV)
+    ixiyiz = brain_atlas.bc.xyz2i(np.atleast_2d(np.asarray(xyz, dtype=float)), round=False, mode='wrap')
+    # the IBL atlas AP index runs posterior-wards, the ARA slice index anterior-wards
+    ixiyiz[:, 1] = _ARA_SHAPE_MLDVAP[2] - 1 - ixiyiz[:, 1]
+    # (ML, AP, DV) = (column, slice, row) -> (slice, column, row)
+    return ixiyiz[:, [1, 0, 2]]
+
+
+def _read_elastix_parameter_file(file):
+    """Parse an elastix parameter file into a dict {key: list of str}."""
+    pm = {}
+    with open(file, 'r', errors='replace') as fid:
+        for line in fid:
+            line = line.split('//')[0].strip()
+            if line.startswith('(') and line.endswith(')'):
+                key, _, value = line[1:-1].partition(' ')
+                pm[key] = value.replace('"', '').split()
+    return pm
+
+
+def _pm_floats(pm, key):
+    return np.array(pm[key], dtype=float)
+
+
+class _ElastixAffine:
+    """elastix AffineTransform: T(x) = A (x - c) + c + t"""
+
+    def __init__(self, pm):
+        p = _pm_floats(pm, 'TransformParameters')
+        self.A = p[:9].reshape(3, 3)
+        self.t = p[9:]
+        self.c = _pm_floats(pm, 'CenterOfRotationPoint')
+
+    def __call__(self, x):
+        return (x - self.c) @ self.A.T + self.c + self.t
+
+    def inverse(self, y):
+        return np.linalg.solve(self.A, (y - self.c - self.t).T).T + self.c
+
+
+class _ElastixBSpline:
+    """
+    elastix cubic BSplineTransform: T(x) = x + d(x), with d the cubic B-spline defined by the control point
+    coefficients (TransformParameters, one grid per component, column index varying fastest) on the control
+    point grid. Points and grid parameters are (column, row, slice).
+    As in ITK the displacement is zero where the support of the spline is not fully inside the grid.
+    """
+
+    def __init__(self, pm):
+        if int(pm.get('BSplineTransformSplineOrder', ['3'])[0]) != 3:
+            raise NotImplementedError('Only cubic B-spline transforms are supported')
+        self.grid_size = _pm_floats(pm, 'GridSize').astype(int)
+        self.grid_origin = _pm_floats(pm, 'GridOrigin')
+        self.grid_spacing = _pm_floats(pm, 'GridSpacing')
+        # stored with the column index varying fastest: reshapes to [slice, row, column] per component,
+        # transposed to [column, row, slice] to be indexed with (column, row, slice) points
+        coeffs = _pm_floats(pm, 'TransformParameters').reshape(3, *self.grid_size[::-1])
+        self.coeffs = [c.transpose(2, 1, 0) for c in coeffs]
+
+    def __call__(self, x):
+        u = (x - self.grid_origin) / self.grid_spacing
+        valid = np.all((u >= 1) & (u < self.grid_size - 2), axis=1)
+        d = np.zeros_like(x)
+        if np.any(valid):
+            for k in range(3):
+                # with prefilter=False the input array is used directly as the B-spline coefficients
+                d[valid, k] = map_coordinates(self.coeffs[k], u[valid].T, order=3, prefilter=False, mode='nearest')
+        return x + d
+
+
+class _Sample2AraTransform:
+    """
+    brainregister sample2ARA registration (elastix affine followed by bspline, fixed = ARA, moving = sample).
+    Calling the transform maps ARA voxels to sample voxels; the inverse is solved numerically.
+    Points are in elastix order (mldvap): voxel indices (column, row, slice), = (ML, DV, AP) in ARA space and
+    ~ (ML, DV, AP) in sample space. NB: not the IBL (ML, AP, DV) order.
+    """
+
+    def __init__(self, transform_dir):
+        transform_dir = Path(transform_dir)
+        if not transform_dir.is_dir():
+            raise FileNotFoundError(f'Transform directory {transform_dir} not found')
+        files = sorted({f for pattern in _TRANSFORM_FILE_PATTERNS for f in transform_dir.glob(pattern)})
+        found = {}
+        for file in files:
+            pm = _read_elastix_parameter_file(file)
+            if 'Transform' in pm:
+                found.setdefault(pm['Transform'][0], []).append((file, pm))
+        if sorted(found) != ['AffineTransform', 'BSplineTransform'] or any(len(v) != 1 for v in found.values()):
+            files = {k: [f.name for f, _ in v] for k, v in found.items()}
+            raise ValueError(
+                f'{transform_dir} must contain exactly one affine and one bspline elastix parameter file '
+                f'named {" or ".join(_TRANSFORM_FILE_PATTERNS)}, found {files}'
+            )
+        self.transforms = []
+        for kind, cls in [('AffineTransform', _ElastixAffine), ('BSplineTransform', _ElastixBSpline)]:
+            file, pm = found[kind][0]
+            self._check_parameters(file, pm)
+            self.transforms.append(cls(pm))
+
+    @staticmethod
+    def _check_parameters(file, pm):
+        size = tuple(int(float(s)) for s in pm.get('Size', []))
+        if size != _ARA_SHAPE_MLDVAP:
+            raise ValueError(
+                f'{file}: fixed image size {size} is not the 25 um ARA volume {_ARA_SHAPE_MLDVAP}. '
+                'Is this a sample2ARA transform directory (not ARA2sample)?'
+            )
+        if pm.get('HowToCombineTransforms', ['Compose'])[0] != 'Compose':
+            raise NotImplementedError(f'{file}: only "Compose" is supported for HowToCombineTransforms')
+        for key, expected in [
+            ('Spacing', np.ones(3)),
+            ('Origin', np.zeros(3)),
+            ('Direction', np.eye(3).ravel()),
+            ('GridDirection', np.eye(3).ravel()),
+        ]:
+            if key in pm and not np.allclose(_pm_floats(pm, key), expected):
+                raise NotImplementedError(f'{file}: {key} must be {expected}')
+
+    def __call__(self, mldvap):
+        x = np.atleast_2d(np.asarray(mldvap, dtype=float))
+        for t in self.transforms:  # elastix Compose: T(x) = T_bspline(T_affine(x))
+            x = t(x)
+        return x
+
+    def _jacobian(self, x, h=0.5):
+        jac = np.zeros((x.shape[0], 3, 3))
+        for j in range(3):
+            dx = np.zeros(3)
+            dx[j] = h
+            jac[:, :, j] = (self(x + dx) - self(x - dx)) / (2 * h)
+        return jac
+
+    def inverse(self, mldvap, tol=1e-6, max_iter=100):
+        """Solve T(x) = mldvap for x with Newton iterations, starting from the inverse of the affine part."""
+        y = np.atleast_2d(np.asarray(mldvap, dtype=float))
+        x = self.transforms[0].inverse(y)
+        todo = np.ones(y.shape[0], dtype=bool)
+        for _ in range(max_iter):
+            idx = np.flatnonzero(todo)
+            r = y[idx] - self(x[idx])
+            converged = np.linalg.norm(r, axis=1) < tol
+            todo[idx[converged]] = False
+            if not np.any(todo):
+                break
+            idx, r = idx[~converged], r[~converged]
+            x[idx] += np.linalg.solve(self._jacobian(x[idx]), r[..., np.newaxis])[..., 0]
+        residual = np.linalg.norm(y - self(x), axis=1)
+        if np.any(residual > tol):
+            raise RuntimeError(
+                f'Inverse transform did not converge for {np.sum(residual > tol)} point(s) '
+                f'(max residual {residual.max():.3g} voxels)'
+            )
+        return x
+
+
+def _warn_outside_ara(mldvap):
+    outside = np.any((mldvap < 0) | (mldvap > np.array(_ARA_SHAPE_MLDVAP) - 1), axis=1)
+    if np.any(outside):
+        _logger.warning(f'{np.sum(outside)} / {outside.size} point(s) fall outside the ARA volume')
+
+
+def _sample_to_ara_elastix(mldvap, transform_dir):
+    ara = _Sample2AraTransform(transform_dir).inverse(mldvap)
+    _warn_outside_ara(ara)
+    return ara
+
+
+def _ara_to_sample_elastix(mldvap, transform_dir):
+    mldvap = np.atleast_2d(np.asarray(mldvap, dtype=float))
+    _warn_outside_ara(mldvap)
+    return _Sample2AraTransform(transform_dir)(mldvap)
+
+
+def _lasagna_to_elastix(apmldv):
+    # (slice, column, row) -> (column, row, slice), i.e. (AP, ML, DV) -> (ML, DV, AP)
+    return np.atleast_2d(np.asarray(apmldv, dtype=float))[:, [1, 2, 0]]
+
+
+def _elastix_to_lasagna(mldvap):
+    # (column, row, slice) -> (slice, column, row), i.e. (ML, DV, AP) -> (AP, ML, DV)
+    return np.atleast_2d(np.asarray(mldvap, dtype=float))[:, [2, 0, 1]]
+
+
+def lasagna_sample_to_ara(apmldv, transform_dir):
+    """
+    Transform lasagna points traced in the brainregister sample space to ARA space, using the inverse of the
+    sample2ARA registration (consistent with the sample2ARA/STD_*.tif volumes).
+
+    :param apmldv: (n, 3) lasagna Z,X,Y points (slice, column, row) ~ (AP, ML, DV) in sample voxels
+        (traced on downsampledStacks_25/ds_*.tif)
+    :param transform_dir: directory containing the sample2ARA affine and bspline elastix parameter files
+    :return: (n, 3) lasagna Z,X,Y points (slice, column, row) = (AP, ML, DV) in 25 um ARA voxels (not rounded)
+    """
+    return _elastix_to_lasagna(_sample_to_ara_elastix(_lasagna_to_elastix(apmldv), transform_dir))
+
+
+def lasagna_ara_to_sample(apmldv, transform_dir):
+    """
+    Transform lasagna points in ARA space to the brainregister sample space, applying the sample2ARA
+    registration directly.
+
+    :param apmldv: (n, 3) lasagna Z,X,Y points (slice, column, row) = (AP, ML, DV) in 25 um ARA voxels
+        (e.g. traced on sample2ARA/STD_*.tif)
+    :param transform_dir: directory containing the sample2ARA affine and bspline elastix parameter files
+    :return: (n, 3) lasagna Z,X,Y points (slice, column, row) ~ (AP, ML, DV) in sample voxels (not rounded)
+    """
+    return _elastix_to_lasagna(_ara_to_sample_elastix(_lasagna_to_elastix(apmldv), transform_dir))
+
+
+def ibl_sample_to_ara(mldvap, transform_dir, brain_atlas=None):
+    """
+    Transform points in the brainregister sample space to IBL coordinates, using the inverse of the
+    sample2ARA registration.
+
+    :param mldvap: (n, 3) sample voxel indices in elastix order (column, row, slice) ~ (ML, DV, AP) of
+        downsampledStacks_25/ds_*.tif (NB: not the IBL (ML, AP, DV) order)
+    :param transform_dir: directory containing the sample2ARA affine and bspline elastix parameter files
+    :param brain_atlas: iblatlas.atlas.AllenAtlas at 25 um (default AllenAtlas(25))
+    :return: (n, 3) xyz IBL coordinates (m), (ML, AP, DV)
+    """
+    brain_atlas = _check_atlas_25(brain_atlas)  # check before running the transform
+    return lasagna_to_ibl(_elastix_to_lasagna(_sample_to_ara_elastix(mldvap, transform_dir)), brain_atlas)
+
+
+def ibl_ara_to_sample(xyz, transform_dir, brain_atlas=None):
+    """
+    Transform IBL coordinates to the brainregister sample space, applying the sample2ARA registration directly.
+
+    :param xyz: (n, 3) IBL coordinates (m), (ML, AP, DV), e.g. Alyx xyz_picks / 1e6
+    :param transform_dir: directory containing the sample2ARA affine and bspline elastix parameter files
+    :param brain_atlas: iblatlas.atlas.AllenAtlas at 25 um (default AllenAtlas(25))
+    :return: (n, 3) sample voxel indices in elastix order (column, row, slice) ~ (ML, DV, AP) of
+        downsampledStacks_25/ds_*.tif (NB: not the IBL (ML, AP, DV) order). Index an image read with tifffile
+        (indexed [slice, row, column]) with mldvap[:, ::-1].
+    """
+    return _ara_to_sample_elastix(_lasagna_to_elastix(ibl_to_lasagna(xyz, brain_atlas)), transform_dir)
+
+
+def transform_lasagna_csv(file_in, file_out, transform_dir, direction='sample_to_ara'):
+    """
+    Read a lasagna points csv file, transform the points between sample and ARA space with the sample2ARA
+    registration and write them to a lasagna points csv file.
+
+    :param file_in: lasagna points csv (rows of Z,X,Y voxels = (slice, column, row) ~ (AP, ML, DV))
+    :param file_out: output lasagna points csv
+    :param transform_dir: directory containing the sample2ARA affine and bspline elastix parameter files
+    :param direction: 'sample_to_ara' or 'ara_to_sample'
+    :return: (n, 3) transformed lasagna Z,X,Y points
+    """
+    funcs = {'sample_to_ara': lasagna_sample_to_ara, 'ara_to_sample': lasagna_ara_to_sample}
+    if direction not in funcs:
+        raise ValueError(f'direction must be one of {list(funcs)}, got {direction}')
+    apmldv = funcs[direction](read_lasagna_csv(file_in), transform_dir)
+    write_lasagna_csv(file_out, apmldv)
+    return apmldv
+
+
+def read_lasagna_csv(file):
+    """
+    Read a lasagna points csv file.
+
+    :param file: lasagna points csv, one point per row as Z,X,Y voxels (slice, column, row) ~ (AP, ML, DV)
+    :return: (n, 3) float array of Z,X,Y points; (0, 3) for an empty file
+    """
+    file = Path(file)
+    if file.stat().st_size == 0:
+        return np.empty((0, 3))
+    apmldv = np.atleast_2d(np.loadtxt(file, delimiter=',', dtype=float))
+    if apmldv.shape[1] != 3:
+        raise ValueError(f'{file}: expected 3 values (Z,X,Y) per row, got {apmldv.shape[1]}')
+    return apmldv
+
+
+def write_lasagna_csv(file, apmldv, decimals=3):
+    """
+    Write points to a lasagna points csv file (lasagna rounds the points to whole voxels when loading them).
+
+    :param file: output csv file
+    :param apmldv: (n, 3) Z,X,Y points (slice, column, row) ~ (AP, ML, DV)
+    :param decimals: number of decimals kept in the file
+    """
+    apmldv = np.atleast_2d(np.asarray(apmldv, dtype=float))
+    if apmldv.shape[1] != 3:
+        raise ValueError(f'expected (n, 3) Z,X,Y points, got shape {apmldv.shape}')
+    np.savetxt(file, np.round(apmldv, decimals) + 0.0, delimiter=',', fmt='%g')  # + 0.0 avoids writing -0
 
 
 def get_picked_tracks(histology_path, glob_pattern='*_pts_transformed.csv', brain_atlas=None):
@@ -262,7 +645,77 @@ def register_chronic_track(chronic_id, picks=None, one=None, overwrite=False, ch
     return brain_locations, insertion_histology
 
 
-def register_track(probe_id, picks=None, one=None, overwrite=False, channels=True, brain_atlas=None, endpoint='insertions'):
+def _load_channel_coordinates_from_meta(eid, pname, one):
+    """
+    Load the channel coordinates from the raw spikeglx ap.meta file of a probe insertion.
+
+    :param eid: session id
+    :param pname: probe name
+    :param one: ONE instance
+    :return: (n_channels, 2) array of lateral, axial positions in um, or None if not found
+    """
+    dsets = one.list_datasets(eid, '*.ap.meta', collection=f'raw_ephys_data/{pname}')
+    if len(dsets) != 1:
+        _logger.debug(f'Expected 1 ap.meta file in raw_ephys_data/{pname} for session {eid}, found {len(dsets)}')
+        return None
+    meta_file = one.load_dataset(eid, dsets[0], download_only=True)
+    md = spikeglx.read_meta_data(meta_file)
+    # geometry_from_meta falls back to a default geometry if the channel map is missing, we don't want this
+    if not any(k in md for k in ['snsShankMap', 'snsGeomMap']):
+        _logger.debug(f'No channel map (snsShankMap/snsGeomMap) in {meta_file}')
+        return None
+    geom = spikeglx.geometry_from_meta(md)
+    return np.c_[geom['x'], geom['y']].astype(float)
+
+
+def _load_channel_coordinates_from_sorting(eid, pname, one):
+    """
+    Load the channel coordinates (channels.localCoordinates) of the spike sorting of a probe insertion.
+    The iblsorter output is preferred over pykilosort.
+
+    :param eid: session id
+    :param pname: probe name
+    :param one: ONE instance
+    :return: (n_channels, 2) array of lateral, axial positions in um, or None if no spike sorting is found
+    """
+    for sorter in ['iblsorter', 'pykilosort']:
+        collection = f'alf/{pname}/{sorter}'
+        if len(one.list_datasets(eid, 'channels.localCoordinates.npy', collection=collection)):
+            return one.load_dataset(eid, 'channels.localCoordinates.npy', collection=collection)
+    return None
+
+
+def _load_channel_coordinates(probe_id, one):
+    """
+    Load the channel coordinates of a probe insertion. These are read from the raw spikeglx ap.meta file and
+    if that fails from the channels.localCoordinates of the spike sorting.
+
+    :param probe_id: probe insertion id
+    :param one: ONE instance
+    :return: (n_channels, 2) array of lateral, axial positions in um, or None if neither is found
+    """
+    try:
+        eid, pname = one.pid2eid(probe_id)
+    except Exception:
+        return None
+    for source, loader in [
+        ('ap.meta', _load_channel_coordinates_from_meta),
+        ('channels.localCoordinates', _load_channel_coordinates_from_sorting),
+    ]:
+        try:
+            chn_coords = loader(eid, pname, one)
+        except Exception as err:
+            _logger.warning(f'Loading channel coordinates from {source} failed for {probe_id}: {err}')
+            continue
+        if chn_coords is not None:
+            _logger.info(f'Using channel coordinates from {source} for {probe_id}')
+            return chn_coords
+    return None
+
+
+def register_track(
+    probe_id, picks=None, one=None, overwrite=False, channels=True, brain_atlas=None, endpoint='insertions', chn_coords=None
+):
     """
     Register the user picks to a probe in Alyx
     Here we update Alyx models on the database in 3 steps
@@ -270,6 +723,10 @@ def register_track(probe_id, picks=None, one=None, overwrite=False, channels=Tru
     corresponding probe insertion models
     2) The trajectory computed from the histology track is created or patched
     3) Channel locations are set in the table
+
+    :param chn_coords: (n_channels, 2) array of lateral, axial channel positions in um. If None, they are
+     read from the raw spikeglx ap.meta file, then from the channels.localCoordinates of the spike sorting
+     (iblsorter, then pykilosort). If neither is found, the NP1 geometry is used.
     """
     assert one
     brain_atlas = brain_atlas or atlas.AllenAtlas()
@@ -301,13 +758,12 @@ def register_track(probe_id, picks=None, one=None, overwrite=False, channels=Tru
         insertion_histology = None
         # Here need to change the track qc to critical and also extended qc to zero
     else:
-        try:
-            eid, pname = one.pid2eid(probe_id)
-            chan_pos = one.load_dataset(eid, 'channels.localCoordinates.npy', collection=f'alf/{pname}/pykilosort')
-        except Exception:
-            chan_pos = None
+        if chn_coords is None and endpoint == 'insertions':
+            chn_coords = _load_channel_coordinates(probe_id, one)
+        if chn_coords is None:
+            _logger.warning(f'No channel coordinates found for {probe_id}, using NP1 geometry for histology channels')
 
-        brain_locations, insertion_histology = get_brain_regions(picks, channels_positions=chan_pos, brain_atlas=brain_atlas)
+        brain_locations, insertion_histology = get_brain_regions(picks, channels_positions=chn_coords, brain_atlas=brain_atlas)
         # 1) update the alyx models, first put the picked points in the insertion json
         one.alyx.json_field_update(
             endpoint=endpoint, uuid=probe_id, field_name='json', data={'xyz_picks': np.int32(picks * 1e6).tolist()}
