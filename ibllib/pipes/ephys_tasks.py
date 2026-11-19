@@ -544,7 +544,7 @@ class CellQCMixin:
         file_labels = folder_alf_probe.joinpath('cluster_KSLabel.tsv')
         if file_labels.exists():
             ks2_labels = pd.read_csv(file_labels, sep='\t')
-            ks2_labels.rename(columns={'KSLabel': 'ks2_label'}, inplace=True)
+            ks2_labels = ks2_labels.rename(columns={'KSLabel': 'ks2_label'})
             df_units = pd.concat([df_units, ks2_labels['ks2_label'].reindex(df_units.index)], axis=1)
         # save as parquet file
         df_units.to_parquet(file_metrics := folder_alf_probe.joinpath('clusters.metrics.pqt'))

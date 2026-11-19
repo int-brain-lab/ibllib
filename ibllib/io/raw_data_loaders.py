@@ -676,12 +676,10 @@ def _clean_wheel_dataframe(data, label, path):
         if (pd.api.types.is_object_dtype(data[col]) or pd.api.types.is_string_dtype(data[col])) and col not in ['bns_ts']:
             data[col] = pd.to_numeric(data[col], errors='coerce')
     # then drop Nans and duplicates
-    data.dropna(inplace=True)
-    data.drop_duplicates(keep='first', inplace=True)
-    data.reset_index(inplace=True)
+    data = data.dropna().drop_duplicates(keep='first').reset_index()
     # handle the clock resets when microseconds exceed uint32 max value
     drop_first = False
-    data['re_ts'] = data['re_ts'].astype(np.double, copy=False)
+    data['re_ts'] = data['re_ts'].astype(np.double)
     if any(np.diff(data['re_ts']) < 0):
         ind = np.where(np.diff(data['re_ts']) < 0)[0]
         for i in ind:
@@ -701,10 +699,9 @@ def _clean_wheel_dataframe(data, label, path):
             # if none of those 3 cases apply, raise an error
             else:
                 _logger.error(label + ' Rotary encoder timestamps are not sorted.' + str(path))
-                data.sort_values('re_ts', inplace=True)
-                data.reset_index(inplace=True)
+                data = data.sort_values('re_ts').reset_index()
     if drop_first is not False:
-        data.drop(data.loc[:drop_first].index, inplace=True)
+        data = data.drop(data.loc[:drop_first].index)
         data = data.reindex()
     return data
 
@@ -716,7 +713,7 @@ def _groom_wheel_data_lt5(data, label='file ', path=''):
     nothing excludes getting new ones.
     """
     data = _clean_wheel_dataframe(data, label, path)
-    data.drop(data.loc[data.bns_ts.apply(len) != 33].index, inplace=True)
+    data = data.drop(data.loc[data.bns_ts.apply(len) != 33].index)
     # check if the time scale is in ms
     sess_len_sec = (
         datetime.strptime(data['bns_ts'].iloc[-1][:25], '%Y-%m-%dT%H:%M:%S.%f')

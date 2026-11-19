@@ -304,8 +304,8 @@ def show_session_task_qc(qc_or_session=None, bpod_only=False, local=False, one=N
     else:
         df = qc.frame
     df_pass = pd.DataFrame({k: v for k, v in qc.qc.passed.items() if isinstance(v, np.ndarray) and v.size == n_trials})
-    df_pass.drop('_task_passed_trial_checks', axis=1, errors='ignore', inplace=True)
-    df_pass.rename(columns=lambda x: x.replace('_task', 'passed'), inplace=True)
+    df_pass = df_pass.drop('_task_passed_trial_checks', axis=1, errors='ignore')
+    df_pass = df_pass.rename(columns=lambda x: x.replace('_task', 'passed'))
     df = df.merge(df_pass.astype('boolean'), left_index=True, right_index=True)
     w.updateDataframe(df)
     qt.run_app()
