@@ -1,4 +1,5 @@
 from pathlib import Path
+import tempfile
 import unittest
 
 import numpy as np
@@ -62,6 +63,59 @@ class TestHistology(unittest.TestCase):
         for t in tdata:
             track_file = t['input']
             assert t['output'] == histology._parse_filename(track_file)
+
+
+class TestLoadTrackCsvTransformDir(unittest.TestCase):
+    """load_track_csv with a brainregister transform folder; the mapping itself is tested in ibl-brain-transforms."""
+
+    # sample2ARA fixture points computed with transformix, (ML, DV, AP) voxels
+    ARA_MLDVAP = np.array([
+        [327.55, 243.48, 467.88],
+        [355.52, 253.58, 188.88],
+        [190.58, 104.34, 308.58],
+        [378.58, 122.71, 288.37],
+        [153.7, 80.75, 140.03],
+        [70.28, 267.83, 225.18],
+        [341.94, 203.52, 138.69],
+        [111.41, 234.88, 168.53],
+    ])
+    SAMPLE_MLDVAP = np.array([
+        [315.766123, 233.730672, 496.998882],
+        [338.145779, 232.031787, 212.184286],
+        [173.618186, 109.080041, 343.207508],
+        [355.353786, 115.098122, 317.873022],
+        [133.466978, 84.022924, 172.263323],
+        [63.289704, 264.40041, 252.061039],
+        [322.253399, 186.614419, 163.29388],
+        [102.149702, 229.307379, 196.526479],
+    ])
+
+    def setUp(self) -> None:
+        self.transform_dir = Path(__file__).parent.joinpath('fixtures', 'histology', 'sample2ARA')
+
+    def test_load_track_csv_transform_dir(self):
+        with tempfile.TemporaryDirectory() as td:
+            file_ds, file_ara = Path(td, 'ds_pts.csv'), Path(td, 'ara_pts.csv')
+            # lasagna files are Z,X,Y = (AP, ML, DV)
+            np.savetxt(file_ds, self.SAMPLE_MLDVAP[:, [2, 0, 1]], delimiter=',', fmt='%.6f')
+            np.savetxt(file_ara, self.ARA_MLDVAP[:, [2, 0, 1]], delimiter=',', fmt='%.6f')
+            # a track traced in sample space loads to the same IBL coordinates as the same track in ARA space
+            xyz_ds = histology.load_track_csv(file_ds, brain_atlas=brain_atlas, transform_dir=self.transform_dir)
+            xyz_ara = histology.load_track_csv(file_ara, brain_atlas=brain_atlas)
+            np.testing.assert_allclose(xyz_ds, xyz_ara, rtol=0, atol=1e-9)
+            self.assertTrue(np.all(np.diff(xyz_ds[:, 2]) <= 0))  # sorted along DV, deepest last
+            # points outside the ARA volume are kept, with a warning
+            np.savetxt(file_ara, [[-5.0, 100.0, 100.0], [200.0, 100.0, 100.0]], delimiter=',')
+            with self.assertLogs('ibllib.pipes.histology', level='WARNING'):
+                xyz = histology.load_track_csv(file_ara, brain_atlas=brain_atlas)
+            self.assertEqual(xyz.shape, (2, 3))
+            # only the 25 um atlas is accepted
+            with self.assertRaises(ValueError):
+                histology.load_track_csv(file_ds, brain_atlas=atlas.AllenAtlas(res_um=50), transform_dir=self.transform_dir)
+            # empty file
+            Path(td, 'empty_pts.csv').touch()
+            xyz = histology.load_track_csv(Path(td, 'empty_pts.csv'), brain_atlas=brain_atlas, transform_dir=self.transform_dir)
+            self.assertEqual(xyz.size, 0)
 
 
 # Load in data for ephys alignment testing

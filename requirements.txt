@@ -10,6 +10,7 @@ ibl-neuropixel>=1.10.0
 ibl-photometry>=0.3.2
 ibl-style
 iblatlas>=0.5.3
+ibl-brain-transforms
 iblqt>=0.8.2
 iblutil>=1.13.0
 imagecodecs  # used to convert tif snapshots to png when registering mesoscope snapshots (also requires skimage)

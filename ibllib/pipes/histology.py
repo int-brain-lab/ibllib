@@ -1,3 +1,10 @@
+"""
+Histology: probe tracks traced in lasagna, conversion to IBL coordinates and registration to Alyx.
+
+Point mapping between the brainregister sample and ARA spaces and between lasagna, elastix and IBL coordinates is
+done by ibl-brain-transforms, see https://github.com/int-brain-lab/ibl-brain-transforms.
+"""
+
 from pathlib import Path
 import logging
 
@@ -7,7 +14,10 @@ from one.api import ONE
 import one.alf.io as alfio
 
 from neuropixel import TIP_SIZE_UM, trace_header
+import spikeglx
 import iblatlas.atlas as atlas
+from ibl_brain_transforms.coordinate_systems import convert
+from ibl_brain_transforms.io import read_lasagna_csv, read_transform
 from ibllib.ephys.spikes import probes_description as extract_probes
 from ibllib.qc import base
 
@@ -17,24 +27,49 @@ from ibldsp.utils import fcn_cosine
 _logger = logging.getLogger(__name__)
 
 
-def load_track_csv(file_track, brain_atlas=None):
+def load_track_csv(file_track, brain_atlas=None, transform_dir=None):
     """
-    Loads a lasagna track and convert to IBL-ALlen coordinate framework
-    :param file_track:
-    :return: xyz
-    """
+    Loads a lasagna track and convert to IBL-Allen coordinate framework.
 
-    brain_atlas = brain_atlas or atlas.AllenAtlas(25)
-    # apmldv in the histology file is flipped along y direction
+    :param file_track: lasagna points csv (rows of Z,X,Y voxels = (slice, column, row) ~ (AP, ML, DV))
+    :param brain_atlas: iblatlas.atlas.AllenAtlas at 25 um (default AllenAtlas(25)); other resolutions raise
+    :param transform_dir: None (default) if the track was traced in ARA space (sample2ARA/STD_*.tif).
+        If the track was traced in the brainregister sample space (downsampledStacks_25/ds_*.tif), a brainregister
+        registration folder, sample2ARA/ or ARA2sample/: the points are first mapped to ARA space through it.
+        The two folders are independent registrations and give slightly different results.
+    :return: (n, 3) xyz IBL coordinates (m), (ML, AP, DV), sorted along the dorso-ventral axis
+    """
     file_track = Path(file_track)
     if file_track.stat().st_size == 0:
         return np.array([])
-    ixiyiz = np.loadtxt(file_track, delimiter=',')[:, [1, 0, 2]]
-    ixiyiz[:, 1] = 527 - ixiyiz[:, 1]
-    ixiyiz = ixiyiz[np.argsort(ixiyiz[:, 2]), :]
-    xyz = brain_atlas.bc.i2xyz(ixiyiz)
-    # xyz[:, 0] = - xyz[:, 0]
-    return xyz
+    brain_atlas = _check_atlas_25(brain_atlas)
+    # the transforms take and return elastix (ML, DV, AP) voxels only
+    mldvap = convert(read_lasagna_csv(file_track), 'apmldv', 'mldvap')
+    if transform_dir is not None:
+        mldvap = read_transform(transform_dir).sample2atlas(mldvap, mode='wrap')
+    _warn_outside_ara(mldvap)
+    mldvap = mldvap[np.argsort(mldvap[:, 1]), :]  # sort by DV, dorsal first
+    return convert(mldvap, 'mldvap', 'xyz', brain_atlas=brain_atlas, mode='wrap')
+
+
+# brainregister ARA grid at 25 um, elastix order (columns, rows, slices) = (ML, DV, AP)
+_ARA_SHAPE_MLDVAP = (456, 320, 528)
+
+
+def _check_atlas_25(brain_atlas):
+    """Default to AllenAtlas(25); raise ValueError for any other resolution (brainregister ARA space is 25 um)."""
+    brain_atlas = brain_atlas or atlas.AllenAtlas(25)
+    nxyz = tuple(int(n) for n in brain_atlas.bc.nxyz)  # IBL atlas order (ML, AP, DV)
+    if nxyz != (_ARA_SHAPE_MLDVAP[0], _ARA_SHAPE_MLDVAP[2], _ARA_SHAPE_MLDVAP[1]):
+        raise ValueError(f'A 25 um atlas is required (brainregister ARA space), got volume shape {nxyz}')
+    return brain_atlas
+
+
+def _warn_outside_ara(mldvap):
+    """Log a warning for ARA points (elastix order) outside the ARA volume; they are kept."""
+    outside = np.any((mldvap < 0) | (mldvap > np.array(_ARA_SHAPE_MLDVAP) - 1), axis=1)
+    if np.any(outside):
+        _logger.warning(f'{np.sum(outside)} / {outside.size} point(s) fall outside the ARA volume')
 
 
 def get_picked_tracks(histology_path, glob_pattern='*_pts_transformed.csv', brain_atlas=None):
@@ -262,7 +297,77 @@ def register_chronic_track(chronic_id, picks=None, one=None, overwrite=False, ch
     return brain_locations, insertion_histology
 
 
-def register_track(probe_id, picks=None, one=None, overwrite=False, channels=True, brain_atlas=None, endpoint='insertions'):
+def _load_channel_coordinates_from_meta(eid, pname, one):
+    """
+    Load the channel coordinates from the raw spikeglx ap.meta file of a probe insertion.
+
+    :param eid: session id
+    :param pname: probe name
+    :param one: ONE instance
+    :return: (n_channels, 2) array of lateral, axial positions in um, or None if not found
+    """
+    dsets = one.list_datasets(eid, '*.ap.meta', collection=f'raw_ephys_data/{pname}')
+    if len(dsets) != 1:
+        _logger.debug(f'Expected 1 ap.meta file in raw_ephys_data/{pname} for session {eid}, found {len(dsets)}')
+        return None
+    meta_file = one.load_dataset(eid, dsets[0], download_only=True)
+    md = spikeglx.read_meta_data(meta_file)
+    # geometry_from_meta falls back to a default geometry if the channel map is missing, we don't want this
+    if not any(k in md for k in ['snsShankMap', 'snsGeomMap']):
+        _logger.debug(f'No channel map (snsShankMap/snsGeomMap) in {meta_file}')
+        return None
+    geom = spikeglx.geometry_from_meta(md)
+    return np.c_[geom['x'], geom['y']].astype(float)
+
+
+def _load_channel_coordinates_from_sorting(eid, pname, one):
+    """
+    Load the channel coordinates (channels.localCoordinates) of the spike sorting of a probe insertion.
+    The iblsorter output is preferred over pykilosort.
+
+    :param eid: session id
+    :param pname: probe name
+    :param one: ONE instance
+    :return: (n_channels, 2) array of lateral, axial positions in um, or None if no spike sorting is found
+    """
+    for sorter in ['iblsorter', 'pykilosort']:
+        collection = f'alf/{pname}/{sorter}'
+        if len(one.list_datasets(eid, 'channels.localCoordinates.npy', collection=collection)):
+            return one.load_dataset(eid, 'channels.localCoordinates.npy', collection=collection)
+    return None
+
+
+def _load_channel_coordinates(probe_id, one):
+    """
+    Load the channel coordinates of a probe insertion. These are read from the raw spikeglx ap.meta file and
+    if that fails from the channels.localCoordinates of the spike sorting.
+
+    :param probe_id: probe insertion id
+    :param one: ONE instance
+    :return: (n_channels, 2) array of lateral, axial positions in um, or None if neither is found
+    """
+    try:
+        eid, pname = one.pid2eid(probe_id)
+    except Exception:
+        return None
+    for source, loader in [
+        ('ap.meta', _load_channel_coordinates_from_meta),
+        ('channels.localCoordinates', _load_channel_coordinates_from_sorting),
+    ]:
+        try:
+            chn_coords = loader(eid, pname, one)
+        except Exception as err:
+            _logger.warning(f'Loading channel coordinates from {source} failed for {probe_id}: {err}')
+            continue
+        if chn_coords is not None:
+            _logger.info(f'Using channel coordinates from {source} for {probe_id}')
+            return chn_coords
+    return None
+
+
+def register_track(
+    probe_id, picks=None, one=None, overwrite=False, channels=True, brain_atlas=None, endpoint='insertions', chn_coords=None
+):
     """
     Register the user picks to a probe in Alyx
     Here we update Alyx models on the database in 3 steps
@@ -270,6 +375,10 @@ def register_track(probe_id, picks=None, one=None, overwrite=False, channels=Tru
     corresponding probe insertion models
     2) The trajectory computed from the histology track is created or patched
     3) Channel locations are set in the table
+
+    :param chn_coords: (n_channels, 2) array of lateral, axial channel positions in um. If None, they are
+     read from the raw spikeglx ap.meta file, then from the channels.localCoordinates of the spike sorting
+     (iblsorter, then pykilosort). If neither is found, the NP1 geometry is used.
     """
     assert one
     brain_atlas = brain_atlas or atlas.AllenAtlas()
@@ -301,13 +410,12 @@ def register_track(probe_id, picks=None, one=None, overwrite=False, channels=Tru
         insertion_histology = None
         # Here need to change the track qc to critical and also extended qc to zero
     else:
-        try:
-            eid, pname = one.pid2eid(probe_id)
-            chan_pos = one.load_dataset(eid, 'channels.localCoordinates.npy', collection=f'alf/{pname}/pykilosort')
-        except Exception:
-            chan_pos = None
+        if chn_coords is None and endpoint == 'insertions':
+            chn_coords = _load_channel_coordinates(probe_id, one)
+        if chn_coords is None:
+            _logger.warning(f'No channel coordinates found for {probe_id}, using NP1 geometry for histology channels')
 
-        brain_locations, insertion_histology = get_brain_regions(picks, channels_positions=chan_pos, brain_atlas=brain_atlas)
+        brain_locations, insertion_histology = get_brain_regions(picks, channels_positions=chn_coords, brain_atlas=brain_atlas)
         # 1) update the alyx models, first put the picked points in the insertion json
         one.alyx.json_field_update(
             endpoint=endpoint, uuid=probe_id, field_name='json', data={'xyz_picks': np.int32(picks * 1e6).tolist()}
