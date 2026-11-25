@@ -545,6 +545,27 @@ def load_iti(trials):
     -------
     np.array
         An array of inter-trial intervals, the last value being NaN.
+
+    Notes
+    -----
+    - The intended ITI is 1 s (1.5 s for imagingChoiceWorld), however prior to iblrig v8.30.0
+      this was not the case: the ITI increased over the session from ~1 s to ~1.5 s (iblrig < v8),
+      or was ~1.5 s (iblrig v8.0.0 - v8.15.5) or ~0.5 s (iblrig v8.15.6 - v8.29). See the Alyx data
+      notices 'Task ITI gradually increases', 'Incorrect ITI (1.5s)' and 'Incorrect ITI (0.5s)'.
+      The notices covering a session's datasets may be listed with `one.list_notices(eid)`
+      (ONE >= 3.7.0).
+    - For habituationChoiceWorld trials extracted with ibllib < 2.27.0 (e.g. most sessions
+      acquired with iblrig v6.4.2), the trial intervals begin at the start of the grey screen
+      period, i.e. the previous trial's stimulus offset trigger, rather than at the stimulus onset
+      trigger. For these the output of this function is wrong: values are slightly negative
+      (around -0.05 s) whereas the actual ITI is ~0.95 s.  See the Alyx data notice 'Incorrect
+      habituation trial intervals'.  Re-extracting these trials with ibllib >= 2.27.0 resolves
+      this.
+    - For habituationChoiceWorld there is no quiescent period, so the ITI ends at the next trial's
+      stimulus onset trigger.  Prior to iblrig v8.30.0, the grey screen period was a 1 s Bpod
+      state beginning with the stimulus offset trigger, therefore the ITI is ~0.95 s, i.e. 1 s
+      minus the stimulus offset latency.  The grey screen remains until the next stimulus onset
+      ~1 s after the stimulus offset.
     """
     if not {'intervals', 'stimOff_times'} <= set(trials.keys()):
         raise ValueError('trials must contain keys {"intervals", "stimOff_times"}')
