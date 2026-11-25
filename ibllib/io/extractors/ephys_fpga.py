@@ -1744,11 +1744,18 @@ class FpgaTrialsHabituation(FpgaTrials):
         # Version check: the ITI in TTL was added in a later version
         if not self.settings:
             self.settings = raw.load_settings(session_path=self.session_path, task_collection=task_collection)
-        iblrig_version = version.parse(self.settings.get('IBL_VERSION', '0.0.0'))
-        if version.parse('8.9.3') <= iblrig_version < version.parse('8.12.6'):
+        try:
+            iblrig_version = version.parse(self.settings.get('IBLRIG_VERSION') or '0.0.0')
+        except version.InvalidVersion:
+            iblrig_version = version.Version('0.0.0')
+        if version.parse('8.9.0') <= iblrig_version < version.parse('8.12.6'):
             """A second 1s TTL was added in this version during the 'iti' state, however this is
             unrelated to the trial ITI and is unfortunately the same length as the trial start TTL."""
-            raise NotImplementedError('Ambiguous TTLs in 8.9.3 >= version < 8.12.6')
+            raise NotImplementedError('Ambiguous TTLs in 8.9.0 <= version < 8.12.6')
+
+        if self._has_exit_state():
+            # From iblrig v8.30.0 each trial ends with a 0.5 s TTL, the only TTL of this length
+            self.sync_field = 'itiIn_times'
 
         trials = super()._extract(
             sync=sync, chmap=chmap, sync_collection=sync_collection, task_collection=task_collection, **kwargs
@@ -1756,12 +1763,89 @@ class FpgaTrialsHabituation(FpgaTrials):
 
         return trials
 
+    def _has_exit_state(self) -> bool:
+        """
+        Check whether the habituation trials end with the 'hide_stim' and 'exit_state' states.
+
+        From iblrig v8.30.0 the habituationChoiceWorld state machine follows the same structure as
+        trainingChoiceWorld (see :meth:`HabituationTrials.has_exit_state`). The state names of the
+        raw Bpod data are used if available, otherwise the iblrig version is used.
+
+        Returns
+        -------
+        bool
+            True if the iblrig v8.30.0 habituation state machine was used.
+        """
+        from ibllib.io.extractors.habituation_trials import HabituationTrials
+
+        raw_trials = getattr(getattr(self, 'bpod_extractor', None), 'bpod_trials', None)
+        if raw_trials:
+            return HabituationTrials.has_exit_state(raw_trials)
+        try:
+            iblrig_version = version.parse((self.settings or {}).get('IBLRIG_VERSION') or '0.0.0')
+        except version.InvalidVersion:
+            return False
+        return iblrig_version >= version.parse('8.30.0')
+
+    def _get_bpod_trial_ttls(self, sync, chmap, display=False):
+        """
+        Extract Bpod trial TTLs from sync for the iblrig v8.30.0 habituation state machine.
+
+        Each trial has three Bpod TTLs: one during the 'stim_on' state (lasting until the stimulus
+        is detected by the frame2ttl, up to 100 ms), one during the 'reward' state (lasting the
+        valve open time), and a 0.5 s TTL during the 'exit_state' at the end of the trial. As the
+        first two may be of similar length, they are instead distinguished by their timing: the
+        reward TTL is followed by the 'post_reward' and 'hide_stim' states (~0.6 s) before the
+        'exit_state' TTL, while the trial start TTL precedes the reward by the stimulus delay
+        (~10 s).
+
+        Parameters
+        ----------
+        sync : dict
+            A dictionary with keys ('times', 'polarities', 'channels'), containing the sync pulses
+            and the corresponding channel numbers. Must contain a 'bpod' key.
+        chmap : dict
+            A map of channel names and their corresponding indices.
+        display : bool
+            If true, plots the TTLs with coloured lines delineating the assigned events.
+
+        Returns
+        -------
+        dict
+            A dictionary with keys {'times', 'polarities'} containing Bpod TTL fronts.
+        dict
+            A dictionary of events ('trial_start', 'valve_open', 'trial_end', 'unassigned') and
+            their intervals as an Nx2 array.
+        """
+        max_valve_to_exit = 2.0  # maximum time between valve TTL end and the next exit_state TTL
+        bpod = get_sync_fronts(sync, chmap['bpod'])
+        if bpod.times.size == 0:
+            raise err.SyncBpodFpgaException('No Bpod event found in FPGA. No behaviour extraction. Check channel maps.')
+        ttls = self._assign_events(
+            bpod['times'], bpod['polarities'], {'trial_end': (0.4, np.inf), 'short': (0, 0.4)}, display=display
+        )
+        short, trial_end = ttls['short'], ttls['trial_end']
+        # For each short TTL, the time until the next trial end TTL
+        i_next = np.searchsorted(trial_end[:, 0], short[:, 1])
+        next_end = np.r_[trial_end[:, 0], np.inf][i_next]
+        is_valve = (next_end - short[:, 1]) < max_valve_to_exit
+        bpod_event_intervals = {
+            'trial_start': short[~is_valve, :],
+            'valve_open': short[is_valve, :],
+            'trial_end': trial_end,
+            'unassigned': ttls['unassigned'],
+        }
+        return bpod, bpod_event_intervals
+
     def get_bpod_event_times(self, sync, chmap, bpod_event_ttls=None, display=False, **kwargs):
         """
         Extract Bpod times from sync.
 
         Currently (at least v8.12 and below) there is no trial start or end TTL, only an ITI pulse.
         Also the first trial pulse is incorrectly assigned due to its abnormal length.
+
+        From iblrig v8.30.0 the Bpod TTLs are assigned by `_get_bpod_trial_ttls` unless
+        `bpod_event_ttls` is provided.
 
         Parameters
         ----------
@@ -1780,6 +1864,8 @@ class FpgaTrialsHabituation(FpgaTrials):
         dict
             A dictionary of events (from `bpod_event_ttls`) and their intervals as an Nx2 array.
         """
+        if bpod_event_ttls is None and self._has_exit_state():
+            return self._get_bpod_trial_ttls(sync, chmap, display=display)
         bpod = get_sync_fronts(sync, chmap['bpod'])
         if bpod.times.size == 0:
             raise err.SyncBpodFpgaException('No Bpod event found in FPGA. No behaviour extraction. Check channel maps.')
@@ -1825,6 +1911,8 @@ class FpgaTrialsHabituation(FpgaTrials):
         dict
             A map of trial event timestamps.
         """
+        if self._has_exit_state():
+            return self._build_trials(sync, chmap, display=display, **kwargs)
         # Get the events from the sync.
         # Store the cleaned frame2ttl, audio, and bpod pulses as this will be used for QC
         self.frame2ttl = self.get_stimulus_update_times(sync, chmap, **kwargs)
@@ -1899,6 +1987,85 @@ class FpgaTrialsHabituation(FpgaTrials):
             color_map = TABLEAU_COLORS.keys()
             for (event_name, event_times), c in zip(trials.to_df().items(), cycle(color_map)):
                 plots.vertical_lines(event_times, ymin=0, ymax=ymax, ax=ax, color=c, label=event_name, linewidth=width)
+            ax.legend()
+            ax.set_yticks([0, 1, 2, 3])
+            ax.set_yticklabels(['', 'bpod', 'f2ttl', 'audio'])
+            ax.set_ylim([0, 4])
+
+        return out
+
+    def _build_trials(self, sync, chmap, display=False, **kwargs):
+        """
+        Extract task related event times from the sync for the iblrig v8.30.0 state machine.
+
+        The Bpod clock is synced to the DAQ using the 'exit_state' TTL onsets (itiIn_times). The
+        trial intervals and trigger times are taken from Bpod. Each stimulus, go cue and valve open
+        event is the first DAQ event after its Bpod trigger, and before the next trigger.
+
+        Parameters
+        ----------
+        sync : dict
+            'polarities' of fronts detected on sync trace for all 16 chans and their 'times'
+        chmap : dict
+            Map of channel names and their corresponding index.  Default to constant.
+        display : bool, matplotlib.pyplot.Axes
+            Show the full session sync pulses display.
+
+        Returns
+        -------
+        dict
+            A map of trial event timestamps.
+        """
+        self.frame2ttl = self.get_stimulus_update_times(sync, chmap, **kwargs)
+        self.audio, audio_event_intervals = self.get_audio_event_times(sync, chmap, **kwargs)
+        self.bpod, bpod_event_intervals = self.get_bpod_event_times(sync, chmap, display=display, **kwargs)
+        if not set(bpod_event_intervals.keys()) >= {'trial_start', 'valve_open', 'trial_end'}:
+            raise ValueError(
+                'Expected at least "trial_start", "trial_end", and "valve_open" Bpod events. '
+                '`bpod_event_ttls` kwarg may be incorrect.'
+            )
+
+        fpga_events = alfio.AlfBunch({
+            'intervals_0': bpod_event_intervals['trial_start'][:, 0],
+            'intervals_1': bpod_event_intervals['trial_end'][:, 1],
+            'itiIn_times': bpod_event_intervals['trial_end'][:, 0],
+            'feedback_times': bpod_event_intervals['valve_open'][:, 0],
+            'valveClose_times': bpod_event_intervals['valve_open'][:, 1],
+            'goCue_times': audio_event_intervals['ready_tone'][:, 0],
+        })
+
+        # Sync the Bpod clock to the DAQ.
+        self.bpod2fpga, drift_ppm, ibpod, ifpga = self.sync_bpod_clock(self.bpod_trials, fpga_events, self.sync_field)
+
+        out = alfio.AlfBunch()
+        # Add the Bpod trial events, converting the timestamp fields to FPGA time.
+        out.update({k: self.bpod_trials[k][ibpod] for k in self.bpod_fields})
+        out.update({k: self.bpod2fpga(self.bpod_trials[k][ibpod]) for k in self.bpod_rsync_fields})
+
+        # Assign each DAQ event to the Bpod trial events. These are already in the same order as
+        # the Bpod trials so unlike in the superclass there is no need to index by `ifpga`.
+        def first_after(trigger, events, before):
+            return _assign_events_to_trial(trigger, events, take='first', t_trial_end=before)
+
+        f2ttl_t = self.frame2ttl['times']
+        trials = alfio.AlfBunch({
+            'goCue_times': first_after(out['goCueTrigger_times'], fpga_events['goCue_times'], out['stimCenterTrigger_times']),
+            'feedback_times': first_after(
+                out['stimCenterTrigger_times'], fpga_events['feedback_times'], out['stimOffTrigger_times']
+            ),
+            'stimOn_times': first_after(out['stimOnTrigger_times'], f2ttl_t, out['stimCenterTrigger_times']),
+            'stimCenter_times': first_after(out['stimCenterTrigger_times'], f2ttl_t, out['stimOffTrigger_times']),
+            'stimOff_times': first_after(out['stimOffTrigger_times'], f2ttl_t, out['intervals'][:, 1]),
+        })
+        out.update(trials)
+
+        if display:  # pragma: no cover
+            ax = plt.figure('Bpod FPGA Sync').gca() if isinstance(display, bool) else display
+            plots.squares(self.bpod['times'], self.bpod['polarities'] * 0.4 + 1, ax=ax, color='k')
+            plots.squares(self.frame2ttl['times'], self.frame2ttl['polarities'] * 0.4 + 2, ax=ax, color='k')
+            plots.squares(self.audio['times'], self.audio['polarities'] * 0.4 + 3, ax=ax, color='k')
+            for (event_name, event_times), c in zip(trials.items(), cycle(TABLEAU_COLORS.keys())):
+                plots.vertical_lines(event_times, ymin=0, ymax=5, ax=ax, color=c, label=event_name, linewidth=0.5)
             ax.legend()
             ax.set_yticks([0, 1, 2, 3])
             ax.set_yticklabels(['', 'bpod', 'f2ttl', 'audio'])

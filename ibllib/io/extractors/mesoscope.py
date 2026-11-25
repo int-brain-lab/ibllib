@@ -700,9 +700,12 @@ class TimelineTrialsHabituation(FpgaTrialsHabituation, TimelineTrials):
             valve_open_times = valve_driver_ttls[:, 0]
         # there may be an extra last trial that's not in the Bpod intervals as the extractor ignores the last trial
         valve_open_times = valve_open_times[valve_open_times <= last_trial_end]
-        out['valveOpen_times'] = _assign_events_to_trial(
-            bpod_feedback_times, valve_open_times, take='first', t_trial_end=out['intervals'][:, 1]
-        )
+        if self._has_exit_state():
+            # From iblrig v8.30.0 the valve opens between the stim center and stim off triggers
+            t_start, t_end = out['stimCenterTrigger_times'], out['stimOffTrigger_times']
+        else:
+            t_start, t_end = bpod_feedback_times, out['intervals'][:, 1]
+        out['valveOpen_times'] = _assign_events_to_trial(t_start, valve_open_times, take='first', t_trial_end=t_end)
 
         # Feedback times
         out['feedback_times'] = np.copy(out['valveOpen_times'])

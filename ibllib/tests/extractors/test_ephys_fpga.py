@@ -1,6 +1,7 @@
 """Tests for ephys FPGA sync and FPGA wheel extraction."""
 
 import unittest
+from unittest import mock
 import tempfile
 from pathlib import Path
 import pickle
@@ -955,6 +956,25 @@ class TestFpgaTrials(unittest.TestCase):
         self.assertFalse(extractor._is_trials_object_attribute('foo_bar', variable_length_vars='foo_bar'))
         extractor.save_names = extractor.save_names[:-1] + ('_ibl_foo.bar_times.csv',)
         self.assertFalse(extractor._is_trials_object_attribute('foo_bar'))
+
+
+class TestFpgaTrialsHabituation(unittest.TestCase):
+    """Test FpgaTrialsHabituation class."""
+
+    def test_ambiguous_ttl_versions(self):
+        """Test that extraction raises for versions with two 1 s Bpod TTLs per trial."""
+        extractor = ephys_fpga.FpgaTrialsHabituation('subject/2020-01-01/001')
+        sync, chmap = {'times': np.array([]), 'polarities': np.array([]), 'channels': np.array([])}, {'bpod': 0}
+        for ver in ('8.9.0', '8.10.2', '8.12.5'):
+            extractor.settings = {'IBLRIG_VERSION': ver}
+            with self.subTest(version=ver), self.assertRaises(NotImplementedError):
+                extractor._extract(sync=sync, chmap=chmap)
+        # Other versions should proceed to extraction
+        for ver in ('8.8.2', '8.12.6', '', None, 'foo'):
+            extractor.settings = {'IBLRIG_VERSION': ver}
+            with self.subTest(version=ver), mock.patch.object(ephys_fpga.FpgaTrials, '_extract') as super_extract:
+                extractor._extract(sync=sync, chmap=chmap)
+                super_extract.assert_called_once()
 
 
 class TestGetProtocolPeriod(unittest.TestCase):

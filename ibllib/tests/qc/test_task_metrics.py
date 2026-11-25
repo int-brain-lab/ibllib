@@ -666,23 +666,87 @@ class TestTaskMetrics(TaskQCTestData):
         self.assertEqual(0.75, np.nanmean(passed))
 
     def test_check_iti_delays(self):
-        metric, passed = qcmetrics.check_iti_delays(self.data, subtract_pauses=True)
+        # NB: The test data have a 0.5 s ITI
+        metric, passed = qcmetrics.check_iti_delays(self.data, subtract_pauses=True, iti_delay_secs=0.5)
         # We want the metric to return positive values that are close to 0.1, given the test data
         self.assertTrue(np.allclose(metric[:-1], 1e-2, atol=0.001), 'failed to return correct metric')
         self.assertTrue(np.isnan(metric[-1]), 'last trial should be NaN')
         self.assertTrue(np.all(passed))
         # Paused trials should fail when subtract_pauses is False
         pauses = self.data['pause_duration'][:-1]
-        metric, passed = qcmetrics.check_iti_delays(self.data, subtract_pauses=False)
+        metric, passed = qcmetrics.check_iti_delays(self.data, subtract_pauses=False, iti_delay_secs=0.5)
         self.assertTrue(np.allclose(metric[:-1], pauses + 1e-2, atol=0.001))
         self.assertFalse(np.any(passed[:-1][pauses > 0]))
         # Mess up a trial
         id = 3
         self.data['intervals'][id + 1, 0] += 0.5  # Next trial starts 0.5 sec later
-        metric, passed = qcmetrics.check_iti_delays(self.data, subtract_pauses=True)
+        metric, passed = qcmetrics.check_iti_delays(self.data, subtract_pauses=True, iti_delay_secs=0.5)
         n_trials = len(self.data['stimOff_times']) - 1  # Last trial NaN here
         expected = (n_trials - 1) / n_trials
-        self.assertTrue(expected, np.nanmean(passed))
+        self.assertAlmostEqual(expected, np.nanmean(passed))
+
+    def test_check_iti_delays_expected_duration(self):
+        """Test check_iti_delays with the intended 1 s ITI."""
+        # The test data have a 0.5 s ITI and should fail with the default intended ITI of 1 s
+        _, passed = qcmetrics.check_iti_delays(self.data, subtract_pauses=True)
+        self.assertFalse(np.any(passed[:-1]), 'expected 0.5 s ITI to fail')
+        self.data['intervals'][1:, 0] += 0.5  # Next trials start 0.5 sec later, i.e. ~1 s ITI
+        metric, passed = qcmetrics.check_iti_delays(self.data, subtract_pauses=True)
+        self.assertTrue(np.allclose(metric[:-1], 1e-2, atol=0.001))
+        self.assertTrue(np.all(passed[:-1]))
+        # The tolerance is 10% of the expected ITI, i.e. 100 ms
+        self.data['intervals'][1:, 0] += 0.08
+        _, passed = qcmetrics.check_iti_delays(self.data, subtract_pauses=True)
+        self.assertTrue(np.all(passed[:-1]))
+        self.data['intervals'][1:, 0] += 0.02
+        _, passed = qcmetrics.check_iti_delays(self.data, subtract_pauses=True)
+        self.assertFalse(np.any(passed[:-1]))
+        # imagingChoiceWorld has an intended ITI of 1.5 s
+        self.data['intervals'][1:, 0] += 0.4  # ~1.51 s ITI
+        _, passed = qcmetrics.check_iti_delays(self.data, subtract_pauses=True, iti_delay_secs=1.5)
+        self.assertTrue(np.all(passed[:-1]))
+
+    def test_get_iti_delay_secs(self):
+        """Test get_iti_delay_secs function."""
+        # Prior to v8.30.0 the intended ITI is 1 s, or ITI_DELAY_SECS if longer
+        cases = (
+            ({'IBLRIG_VERSION': '8.29.5', 'ITI_DELAY_SECS': 0.5, 'DEAD_TIME': 0.5}, 1.0),
+            ({'IBLRIG_VERSION': '8.15.5', 'ITI_DELAY_SECS': 1}, 1.0),
+            ({'IBLRIG_VERSION': '8.29.5', 'ITI_DELAY_SECS': 1.5, 'DEAD_TIME': 0.5}, 1.5),  # imagingChoiceWorld
+            ({'IBLRIG_VERSION': '7.2.3'}, 1.0),
+            ({'IBLRIG_VERSION': None, 'ITI_DELAY_SECS': 1.5}, 1.5),
+            # Pre-releases of the fix version, and missing or invalid versions
+            ({'IBLRIG_VERSION': '8.30.0a0', 'ITI_DELAY_SECS': 0.5}, 1.0),
+            ({'IBLRIG_VERSION': '', 'ITI_DELAY_SECS': 0.5}, 1.0),
+            ({'IBLRIG_VERSION': 'foo', 'ITI_DELAY_SECS': 0.5}, 1.0),
+            ({}, 1.0),
+            # From v8.30.0 the ITI_DELAY_SECS parameter is the ITI
+            ({'IBLRIG_VERSION': '8.30.0'}, 1.0),
+            ({'IBLRIG_VERSION': '8.30.0', 'ITI_DELAY_SECS': 1.0}, 1.0),
+            ({'IBLRIG_VERSION': '8.30.1', 'ITI_DELAY_SECS': 1.5}, 1.5),
+            ({'IBLRIG_VERSION': '9.0.0', 'ITI_DELAY_SECS': 0.8}, 0.8),
+        )
+        for settings, expected in cases:
+            with self.subTest(**settings):
+                self.assertEqual(expected, qcmetrics.get_iti_delay_secs(settings))
+
+    def test_compute_iti_delay_secs(self):
+        """Test TaskQC.compute passes the expected ITI to the checks."""
+        qc = qcmetrics.TaskQC('/foo/subject/2020-01-01/001', one=mock.MagicMock(offline=True))
+        settings = {'IBLRIG_VERSION': '8.30.0', 'ITI_DELAY_SECS': 1.5, 'STIM_GAIN': 4.0}
+        qc.extractor = Bunch({
+            'data': self.data,
+            'settings': settings,
+            'frame_ttls': None,
+            'audio_ttls': None,
+            'wheel_encoding': 'X1',
+        })
+        with mock.patch.object(qc, 'get_bpodqc_metrics_frame') as get_metrics:
+            qc.compute()
+            self.assertEqual(1.5, get_metrics.call_args.kwargs['iti_delay_secs'])
+            settings.update(IBLRIG_VERSION='8.29.5', ITI_DELAY_SECS=0.5)
+            qc.compute()
+            self.assertEqual(1.0, get_metrics.call_args.kwargs['iti_delay_secs'])
 
     @unittest.skip('not implemented')
     def test_check_frame_frequency(self):
@@ -752,6 +816,48 @@ class TestHabituationQC(unittest.TestCase):
         _, _, outcomes = self.qc.compute_session_status()
         if self.qc.passed['_task_habituation_time'] is None:
             self.assertEqual(outcomes['_task_habituation_time'], spec.QC.NOT_SET)
+
+    def test_compute_iti_delays(self):
+        """Test the habituation ITI check for the iblrig >= v8.30.0 state machine.
+
+        From this version the grey screen period occurs at the end of the trial and its duration is
+        determined by the ITI_DELAY_SECS task parameter. The next trial begins with the stimulus
+        onset trigger.
+        """
+        data = self.qc.extractor.data
+        n = data['intervals'].shape[0]
+        trigg_delay = 1e-4
+        # Each trial ends with a 0.5 s exit_state, followed by ~0.5 s between trials
+        durations = np.random.normal(size=(n,)) + 12
+        starts = np.r_[0, np.cumsum(durations + 0.51)[:-1]]
+        ends = starts + durations
+        data['intervals'] = np.c_[starts, ends]
+        data['stimOnTrigger_times'] = starts
+        data['stimOn_times'] = starts + 0.15  # stimulus onset delay
+        data['goCueTrigger_times'] = data['stimOn_times']
+        data['goCue_times'] = data['goCueTrigger_times'] + trigg_delay
+        data['stimCenterTrigger_times'] = ends - 1.6
+        data['stimCenter_times'] = data['stimCenterTrigger_times'] + trigg_delay
+        data['feedback_times'] = data['valveOpen_times'] = data['stimCenterTrigger_times'] + 0.5
+        data['stimOffTrigger_times'] = ends - 0.6
+        data['stimOff_times'] = data['itiIn_times'] = ends - 0.5
+
+        # Prior to v8.30.0 the ITI is measured until the next stimulus onset and is expected to be 1 s
+        self.qc.extractor.settings = {'IBLRIG_VERSION': '8.29.0', 'ITI_DELAY_SECS': 0.5}
+        self.qc.compute(namespace='task_00')
+        np.testing.assert_array_almost_equal(np.full(n - 1, 0.16), self.qc.metrics['_task_00_iti_delays'][:-1])
+        np.testing.assert_array_equal(np.r_[np.zeros(n - 1), np.nan], self.qc.passed['_task_00_iti_delays'])
+
+        # From v8.30.0 the ITI is measured until the next trial start and should equal ITI_DELAY_SECS
+        self.qc.extractor.settings = {'IBLRIG_VERSION': '8.30.0', 'ITI_DELAY_SECS': 1.0}
+        self.qc.compute(namespace='task_00')
+        np.testing.assert_array_almost_equal(np.full(n - 1, 0.01), self.qc.metrics['_task_00_iti_delays'][:-1])
+        np.testing.assert_array_equal(np.r_[np.ones(n - 1), np.nan], self.qc.passed['_task_00_iti_delays'])
+        # The criteria should be set for the correct namespace
+        self.assertEqual({'PASS': 0.99, 'WARNING': 0}, self.qc.criteria['_task_00_iti_delays'])
+        _, results, outcomes = self.qc.compute_session_status()
+        self.assertEqual(1.0, results['_task_00_iti_delays'])
+        self.assertEqual(spec.QC.PASS, outcomes['_task_00_iti_delays'])
 
 
 class TestTaskQCWithCustomCriteria(TaskQCTestData):
