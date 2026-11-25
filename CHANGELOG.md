@@ -11,18 +11,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `task_metrics.check_wheel_discontinuities`: flags wheel position jumps of a full revolution or more
 - `qc.base.return_qc_datasets`: decorator associating QC checks with the datasets they assess; the wheel QC checks now set the wheel dataset QC
 - Experiment description task entries may contain a 'protocol_period', used by `ephys_fpga.get_protocol_period` in place of the spacers
+- Support for the habituationChoiceWorld state machine of iblrig v8.30.0 in `HabituationTrials`, `FpgaTrialsHabituation` and `TimelineTrialsHabituation`: trials begin with the stimulus onset and end with the 'hide_stim' and 'exit_state' states
+- `task_metrics.get_iti_delay_secs`: the intended ITI of a session; from iblrig v8.30.0 this is the ITI_DELAY_SECS task parameter, before which it is 1 s (1.5 s for imagingChoiceWorld)
 
 ### Changed
 - `FpgaTrials` falls back on unchecked spacers, then trial start TTLs, when the protocol spacers can't be used; the protocol period is validated by the number of trial TTLs
 - The trials task stores the protocol period in the experiment description when it wasn't determined from the spacers
 - `ephys_fpga.get_protocol_period` asserts the number of spacers detected matches the number expected; passive protocols run with iblrig v8.1.0 - v8.18.x send no spacer
 - `task_metrics.check_wheel_integrity` checks the velocity between samples for encoders sampled on a DAQ counter (Timeline)
+- `check_iti_delays` expects the intended ITI (1 s by default) instead of 0.5 s; sessions acquired with iblrig < v8.30.0 are therefore expected to fail this check (see the 'Incorrect ITI' data notices)
+- From iblrig v8.30.0 the habituation ITI check measures the ITI until the next trial start
+- `HabituationTrials` determines the legacy state names from the states present rather than the iblrig version
 - Removed the `pandas<3` pin from `requirements.txt`; the pandas 3.0.4 segfault (pandas-dev/pandas#66086) is fixed in pandas 3.0.5
 - Removed uses of the `inplace` and `copy` keywords deprecated in pandas 3 (PDEP-8; to be removed in pandas 4)
 
 ### Fixed
 - `TimelineTrials` go cue reassignment when Bpod trials are missing from the DAQ
 - Trials table rewardVolume QC outcome was never set
+- `HabituationQC` ITI check criteria ignored the QC namespace, so the outcome was NOT_SET for protocols other than 'task'; the last trial was counted as passing
+- `FpgaTrialsHabituation` checked the 'IBL_VERSION' setting instead of 'IBLRIG_VERSION', so habituation sessions with ambiguous Bpod TTLs (iblrig v8.9.0 - v8.12.5) were extracted instead of raising
 - `raw_data_loaders._clean_wheel_dataframe`: convert text columns to numbers when pandas 3 reads them as `str` dtype instead of `object`, so rows with corrupt wheel values are dropped on pandas 3 as they are on pandas 2
 
 ## [4.1.1] 2026-11-06

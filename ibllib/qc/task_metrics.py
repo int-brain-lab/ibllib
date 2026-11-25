@@ -68,9 +68,21 @@ from . import base
 
 _log = logging.getLogger(__name__)
 
-# todo the 2 followint parameters should be read from the task parameters for each session
-ITI_DELAY_SECS = 0.5
+ITI_DELAY_SECS = 1.0
+"""float: The intended inter-trial interval (ITI) duration in seconds.
+
+NB: Prior to iblrig v8.30.0 (`ITI_FIX_VERSION`) the actual ITI was ~1-1.5 s (< v8.0.0), ~1.5 s
+(v8.0.0 - v8.15.5) and ~0.5 s (v8.15.6 - v8.29). These sessions are expected to fail
+`check_iti_delays`. Use `get_iti_delay_secs` to determine the intended ITI of a given session.
+"""
 FEEDBACK_NOGO_DELAY_SECS = 2
+ITI_FIX_VERSION = version.Version('8.30.0')
+"""packaging.version.Version: The iblrig version from which the ITI duration equals ITI_DELAY_SECS.
+
+From this version the 'exit_state' lasts 0.5 s and the host computer waits for the remainder of
+the ITI_DELAY_SECS task parameter before starting the next trial. Habituation trials also end with
+the 'hide_stim' and 'exit_state' states.
+"""
 # The maximum plausible wheel velocity in radians per second. The fastest velocity in 658 sessions
 # acquired with Timeline (cortexlab, 2023-2026) was 26 rad/s
 WHEEL_MAX_VELOCITY = 50
@@ -92,6 +104,43 @@ BWM_CRITERIA = {
     'iti_delays': {'NOT_SET': 0},
     'passed_trial_checks': {'NOT_SET': 0},
 }
+
+
+def _iblrig_version(settings) -> version.Version:
+    """Return the iblrig version from the task settings, or 0.0.0 if missing or invalid."""
+    try:
+        return version.parse((settings or {}).get('IBLRIG_VERSION') or '0.0.0')
+    except version.InvalidVersion:
+        return version.Version('0.0.0')
+
+
+def get_iti_delay_secs(settings) -> float:
+    """
+    Return the intended inter-trial interval (ITI) duration for a session.
+
+    The ITI is the period between stimulus offset and the start of the next trial.  From iblrig
+    v8.30.0 (`ITI_FIX_VERSION`) the ITI equals the ITI_DELAY_SECS task parameter (1 s by default).
+
+    Before this the ITI_DELAY_SECS parameter did not determine the ITI duration (see the Alyx data
+    notices 'Incorrect ITI (1.5s)' and 'Incorrect ITI (0.5s)'). The intended ITI of these sessions
+    is 1 s, or ITI_DELAY_SECS if longer (i.e. 1.5 s for imagingChoiceWorld). As the actual ITI
+    differs, these sessions are expected to fail `check_iti_delays`.
+
+    Parameters
+    ----------
+    settings : dict
+        The task settings.
+
+    Returns
+    -------
+    float
+        The intended ITI in seconds.
+    """
+    iti_delay_secs = float((settings or {}).get('ITI_DELAY_SECS') or ITI_DELAY_SECS)
+    if _iblrig_version(settings) >= ITI_FIX_VERSION:
+        return iti_delay_secs
+    # ITI_DELAY_SECS was 1 s (v8.0.0 - v8.15.5) or 0.5 s (v8.15.6 - v8.29) for a 1 s ITI
+    return max(ITI_DELAY_SECS, iti_delay_secs)
 
 
 def compute_session_status_from_dict(results, criteria=None):
@@ -270,6 +319,7 @@ class TaskQC(base.QC):
             wheel_sample_rate=getattr(self.extractor, 'wheel_sample_rate', None),
             min_qt=self.extractor.settings.get('QUIESCENT_PERIOD') or 0.2,
             audio_output=self.extractor.settings.get('device_sound', {}).get('OUTPUT', 'unknown'),
+            iti_delay_secs=get_iti_delay_secs(self.extractor.settings),
         )
 
     def _get_checks(self):
@@ -476,9 +526,9 @@ class HabituationQC(TaskQC):
         passed = {}
 
         # Modify criteria based on version
-        ver = self.extractor.settings.get('IBLRIG_VERSION', '') or '0.0.0'
-        is_v8 = version.parse(ver) >= version.parse('8.0.0')
-        self.criteria['_task_iti_delays'] = {'PASS': 0.99, 'WARNING': 0} if is_v8 else {'NOT_SET': 0}
+        rig_version = _iblrig_version(self.extractor.settings)
+        is_v8 = rig_version >= version.parse('8.0.0')
+        self.criteria[prefix + 'iti_delays'] = {'PASS': 0.99, 'WARNING': 0} if is_v8 else {'NOT_SET': 0}
 
         # Check all reward volumes == 3.0ul
         check = prefix + 'reward_volumes'
@@ -550,12 +600,20 @@ class HabituationQC(TaskQC):
         metrics[check] = metric
 
         # Check that the period of gray screen between stim off and the start of the next trial is
-        # 1s +/- 10%.
+        # 1s +/- 10%. Prior to iblrig v8.30.0 the grey screen period was a 1 s state at the start
+        # of each trial so the next trial's stimulus onset is used. From v8.30.0 the trial ends
+        # with this period and its duration is defined by the ITI_DELAY_SECS task parameter, as in
+        # trainingChoiceWorld (see `check_iti_delays`).
         check = prefix + 'iti_delays'
-        iti = (np.roll(data['stimOn_times'], -1) - data['stimOff_times'])[:-1]
-        metric = np.r_[np.nan_to_num(iti, nan=np.inf), np.nan] - 1.0
-        passed[check] = np.abs(metric) <= 0.1
-        passed[check][-1] = np.nan
+        if rig_version >= ITI_FIX_VERSION:
+            iti_delay_secs = get_iti_delay_secs(self.extractor.settings)
+            iti = data['intervals'][1:, 0] - data['stimOff_times'][:-1]
+        else:
+            iti_delay_secs = ITI_DELAY_SECS
+            iti = (np.roll(data['stimOn_times'], -1) - data['stimOff_times'])[:-1]
+        metric = np.r_[np.nan_to_num(iti, nan=np.inf), np.nan] - iti_delay_secs
+        passed[check] = (np.abs(metric) <= iti_delay_secs / 10).astype(float)
+        passed[check][-1] = np.nan  # Last trial is not counted
         metrics[check] = metric
 
         # Check stim on go cue delay
@@ -708,16 +766,18 @@ def check_iti_delays(
     data, subtract_pauses=False, iti_delay_secs=ITI_DELAY_SECS, feedback_nogo_delay_secs=FEEDBACK_NOGO_DELAY_SECS, **_
 ):
     """
-    Check the open-loop grey screen period is approximately 1 second.
+    Check the open-loop grey screen period is approximately the expected ITI duration.
 
     Check that the period of grey screen between stim off and the start of the next trial is
-    1s +/- 10%.  If the trial was paused during this time, the check will account for that
+    `iti_delay_secs` +/- 10%.  If the trial was paused during this time, the check will account
+    for that. For no-go trials the stimulus offset occurs at the start of the no-go feedback period,
+    so `feedback_nogo_delay_secs` is also subtracted.
 
     Metric:
-        M = stimOff (n) - trialStart (n+1) - 1.
+        M = trialStart (n+1) - stimOff (n) - iti_delay_secs
 
     Criterion:
-        |M| < 0.1
+        |M| < iti_delay_secs / 10
 
     Units:
         seconds [s]
@@ -725,10 +785,15 @@ def check_iti_delays(
     Parameters
     ----------
     data : dict
-        Trial data with keys ('stimOff_times', 'intervals', 'pause_duration').
+        Trial data with keys ('stimOff_times', 'intervals', 'pause_duration', 'choice').
     subtract_pauses: bool
         If True, account for experimenter-initiated pauses between trials; if False, trials where
         the experimenter paused the task may fail this check.
+    iti_delay_secs : float
+        The intended ITI duration in seconds (see `get_iti_delay_secs`). NB: Prior to iblrig
+        v8.30.0 the actual ITI was not 1 s, so these sessions are expected to fail this check.
+    feedback_nogo_delay_secs : float
+        The duration of the no-go feedback period in seconds.
 
     Returns
     -------

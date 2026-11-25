@@ -3,8 +3,6 @@
 import logging
 import numpy as np
 
-from packaging import version
-
 import ibllib.io.raw_data_loaders as raw
 from ibllib.io.extractors.base import BaseBpodTrialsExtractor, run_extractor_classes
 from ibllib.io.extractors.biased_trials import ContrastLR
@@ -43,13 +41,18 @@ class HabituationTrials(BaseBpodTrialsExtractor):
         """
         Extract the Bpod trial events.
 
-        For iblrig versions < 8.13 the Bpod state machine for this task had extremely misleading names!
+        For iblrig versions < 8.17 the Bpod state machine for this task had extremely misleading names!
         The 'iti' state was actually the delay between valve close and trial end (the stimulus is
         still present during this period), and the 'trial_start' state is actually the ITI during
         which there is a 1s Bpod TTL and gray screen period.
 
-        In version 8.13 and later, the 'iti' state was renamed to 'post_reward' and 'trial_start'
-        was renamed to 'iti'.
+        In version 8.17 and later, the 'iti' state was renamed to 'post_reward' and 'trial_start'
+        was renamed to 'iti'. NB: Some development builds reporting earlier versions (e.g. 8.15.5)
+        also use the new names, therefore the state names are used to determine which applies.
+
+        In version 8.30 and later, the grey screen period was moved to the end of the trial: the
+        trial starts at the stimulus onset trigger and ends with the 'hide_stim' and 'exit_state'
+        states, as in trainingChoiceWorld (see `_extract_trial_events`).
 
         Returns
         -------
@@ -82,16 +85,28 @@ class HabituationTrials(BaseBpodTrialsExtractor):
             task_collection=self.task_collection,
         )
 
+        # RewardVolume
+        trial_volume = [x['reward_amount'] for x in self.bpod_trials]
+        out['rewardVolume'] = np.array(trial_volume).astype(np.float64)
+
+        # FeedbackType is always positive
+        out['feedbackType'] = np.ones(len(out['feedback_times']), dtype=np.int8)
+
+        # Phase and position
+        out['position'] = np.array([t['position'] for t in self.bpod_trials])
+        out['phase'] = np.array([t['stim_phase'] for t in self.bpod_trials])
+
+        if self.has_exit_state(self.bpod_trials):
+            out.update(self._extract_trial_events(ttls))
+            return {k: out[k] for k in self.var_names}
+
         """
         The 'trial_start'/'iti' state is in fact the 1s grey screen period, therefore the first
         timestamp is really the end of the previous trial and also the stimOff trigger time. The
-        second timestamp is the true trial start time. This state was renamed in version 8.13.
+        second timestamp is the true trial start time. This state was renamed in version 8.17.
         """
         state_names = self.bpod_trials[0]['behavior_data']['States timestamps'].keys()
-        rig_version = version.parse(self.settings['IBLRIG_VERSION'])
-        legacy_state_machine = 'post_reward' not in state_names and 'trial_start' in state_names
-
-        key = 'iti' if (rig_version >= version.parse('8.13') and not legacy_state_machine) else 'trial_start'
+        key = 'iti' if 'post_reward' in state_names else 'trial_start'
         (_, *ends), starts = zip(*[t['behavior_data']['States timestamps'][key][-1] for t in self.bpod_trials])
 
         # StimOffTrigger times
@@ -154,17 +169,6 @@ class HabituationTrials(BaseBpodTrialsExtractor):
                 stimOn_times[i] = sync[1]
         out['stimOn_times'] = stimOn_times
 
-        # RewardVolume
-        trial_volume = [x['reward_amount'] for x in self.bpod_trials]
-        out['rewardVolume'] = np.array(trial_volume).astype(np.float64)
-
-        # FeedbackType is always positive
-        out['feedbackType'] = np.ones(len(out['feedback_times']), dtype=np.int8)
-
-        # Phase and position
-        out['position'] = np.array([t['position'] for t in self.bpod_trials])
-        out['phase'] = np.array([t['stim_phase'] for t in self.bpod_trials])
-
         # Double-check that the early and late trial events occur within the trial intervals
         idx = ~np.isnan(out['stimOn_times'][:n_trials])
         assert not np.any(out['stimOn_times'][:n_trials][idx] < out['intervals'][idx, 0]), (
@@ -173,3 +177,77 @@ class HabituationTrials(BaseBpodTrialsExtractor):
 
         # Truncate arrays and return in correct order
         return {k: out[k][:n_trials] for k in self.var_names}
+
+    @staticmethod
+    def has_exit_state(bpod_trials) -> bool:
+        """Return True if the trials end with the 'hide_stim' and 'exit_state' states.
+
+        From iblrig v8.30.0 the habituationChoiceWorld state machine follows the same structure as
+        trainingChoiceWorld: each trial begins with the stimulus onset ('stim_on') and ends with
+        the stimulus offset ('hide_stim') followed by a 0.5 s 'exit_state', during which the Bpod
+        TTL is high. The remainder of the ITI happens between state machines.
+
+        Parameters
+        ----------
+        bpod_trials : list of dict
+            The raw Bpod trial data.
+
+        Returns
+        -------
+        bool
+            True if the first trial contains both 'hide_stim' and 'exit_state' states.
+        """
+        state_names = bpod_trials[0]['behavior_data']['States timestamps'].keys()
+        return {'hide_stim', 'exit_state'}.issubset(state_names)
+
+    def _extract_trial_events(self, ttls) -> dict:
+        """
+        Extract the trial events for the iblrig >= v8.30.0 state machine.
+
+        The states of each trial are 'stim_on' (Bpod TTL high until the stimulus is detected),
+        'play_tone', 'stim_center', 'reward' (Bpod TTL high), 'post_reward', 'hide_stim', and
+        'exit_state' (Bpod TTL high for 0.5 s). Unlike previous versions, each trial starts with
+        the stimulus onset trigger and ends after the stimulus offset, so all trial events occur
+        within the Bpod trial and no trials are dropped. Each stimulus event is the first BNC1
+        (frame2ttl) front after its trigger state starts and before the next trigger state.
+
+        Parameters
+        ----------
+        ttls : list of list of float
+            The BNC1 (frame2ttl) event times for each trial.
+
+        Returns
+        -------
+        dict
+            The trial intervals, stimulus event and trigger times, go cue trigger and itiIn times.
+        """
+
+        def state_start(name):
+            return np.array([tr['behavior_data']['States timestamps'][name][0][0] for tr in self.bpod_trials])
+
+        out = {
+            'intervals': np.array([
+                [tr['behavior_data']['Trial start timestamp'], tr['behavior_data']['Trial end timestamp']]
+                for tr in self.bpod_trials
+            ]),
+            'stimOnTrigger_times': state_start('stim_on'),
+            'goCueTrigger_times': state_start('play_tone'),
+            'stimCenterTrigger_times': state_start('stim_center'),
+            'stimOffTrigger_times': state_start('hide_stim'),
+            'itiIn_times': state_start('exit_state'),
+        }
+
+        def first_front(start, end, inclusive=False):
+            """Return the first TTL of each trial occurring after start and before end."""
+            times = np.full(len(ttls), np.nan)
+            for i, (sync, t0, t1) in enumerate(zip(ttls, start, end)):
+                sync = np.asarray(sync)
+                (idx,) = np.where((sync > t0) & ((sync <= t1) if inclusive else (sync < t1)))
+                if idx.size > 0:
+                    times[i] = sync[idx[0]]
+            return times
+
+        out['stimOn_times'] = first_front(out['stimOnTrigger_times'], out['stimCenterTrigger_times'])
+        out['stimCenter_times'] = first_front(out['stimCenterTrigger_times'], out['stimOffTrigger_times'])
+        out['stimOff_times'] = first_front(out['stimOffTrigger_times'], out['intervals'][:, 1], inclusive=True)
+        return out
